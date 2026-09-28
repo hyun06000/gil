@@ -1405,6 +1405,9 @@ rmcp stdio server 최소 spike
       업데이트/rollback record 검사 통과는 실제 version 쌍의 설치·복구 인수와 다름.
 - [ ] unsigned 시험판의 공개 표면 검수·PR/CI·불변 게시 위치·설치 안내를 마치고 승인 후 게시.
       현재 Mac의 기존 공식 설치본과 화면은 사용자 확인, 새 prerelease Host 설치는 아직 미실행.
+- [~] 비공개 `gil-distribution` 원격 인수 — 검수한 CI 후보의 PR·10개 정적 시험·fresh clone의
+      native 17 tools·내장 UI·권한 보존 확인. [장부](../distribution/codex/REMOTE-STAGING-CHECKPOINT-20260928.md).
+      현재 설치본 교체·실제 Host 원격 설치·업데이트/제거/재설치와 공개 게시는 별도 미완료
 - [ ] 후속 macOS 정식 신뢰 채널 — Developer ID·공증 및 실제 marketplace/새 Mac 실행 인수.
       단독 CLI/ZIP에는 staple할 수 없다. Companion `.app`/DMG 검수와 구분한다
       ([native release gate](../distribution/codex/RELEASE-macos.md)); 현재 Developer Program/identity 미준비
