@@ -1397,7 +1397,15 @@ rmcp stdio server 최소 spike
       **서명·공증·정식 게시 미완료**, 비밀을 쓰거나 배포 권한을 부여하지 않음
 - [x] native MCP 읽기 전용 배포 preflight — 도구·정확한 identity 선택·notary 설정·preview 무결성·
       clean source 대응 검사. 통과해도 배포 가능으로 승격하지 않으며 credential 인증·서명은 미실행
-- [ ] macOS native MCP 배포를 닫는다 — Developer ID·공증 및 실제 marketplace/새 Mac 실행 인수.
+- [x] 첫 시험판 정책 확정 — Codex/macOS arm64의 `preview_unsigned` opt-in 채널.
+      Apple 개발자 서명·공증 없이 진행, 새 Mac 검수는 **유예·미통과**. OS 보안 우회 금지.
+- [~] unsigned 시험판 후보 준비 — clean 검수물만 입력, 명시적 prerelease version·경고·고지·
+      무결성 검증과 압축 왕복/native smoke·호환 record 생성. 게시/설치/자동 업데이트 권한은 없음.
+      `0.2.1-preview.1` 로컬 후보는 [장부](../distribution/codex/UNSIGNED-PREVIEW-CHECKPOINT-20260928.md) 참조.
+      업데이트/rollback record 검사 통과는 실제 version 쌍의 설치·복구 인수와 다름.
+- [ ] unsigned 시험판의 공개 표면 검수·PR/CI·불변 게시 위치·설치 안내를 마치고 승인 후 게시.
+      현재 Mac의 기존 공식 설치본과 화면은 사용자 확인, 새 prerelease Host 설치는 아직 미실행.
+- [ ] 후속 macOS 정식 신뢰 채널 — Developer ID·공증 및 실제 marketplace/새 Mac 실행 인수.
       단독 CLI/ZIP에는 staple할 수 없다. Companion `.app`/DMG 검수와 구분한다
       ([native release gate](../distribution/codex/RELEASE-macos.md)); 현재 Developer Program/identity 미준비
 - [ ] 그 뒤 Windows adapter — feasibility build 와 기본 채널 확정
@@ -1430,7 +1438,7 @@ ZIP 최초 MCP 시험의 30초 timeout 1회는 후속 두 시험에서 재현되
 ```text
 닫힘    Rust 단일 MCP · 공유 command/renderer · 17개 tool · 내장 UI · Codex 화면·기본 재시작 UX · 정확 root · manifest
 열림    수동 표시 선택 인수 · Cowork Plugin 화면 · 최초 실행/새 기계 설치 · remote artifact · release pipeline · Windows
-유예    Tauri 전용 회귀검증 (Companion 보존, 변경·재배포 전 재개)
+유예    새 Mac 설치 검수(미통과 명시) · Tauri 전용 회귀검증 (Companion 보존, 변경·재배포 전 재개)
 ```
 
 `ACTION_SURFACE` 는 **1 을 유지한다.** 그 수는 Agent 가 부를 수 있는 domain action 계약의

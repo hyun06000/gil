@@ -2,6 +2,12 @@ name: Codex native marketplace preview (NOT a release)
 
 on:
   workflow_dispatch:
+    inputs:
+      unsigned_preview_version:
+        description: 'Optional X.Y.Z-preview.N candidate; no publication or installation'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -24,13 +30,31 @@ jobs:
           npm ci --prefix mcp-app
           cargo fetch --locked
       - name: Packaging regression tests
-        run: node --test distribution/codex/artifact.test.mjs distribution/codex/release-preflight.test.mjs distribution/compliance/notices.test.mjs
+        run: node --test distribution/codex/artifact.test.mjs distribution/codex/release-preflight.test.mjs distribution/codex/update-policy.test.mjs distribution/codex/unsigned-preview.test.mjs distribution/compliance/notices.test.mjs
       - name: Offline third-party license coverage (no automatic policy refresh)
         run: node distribution/compliance/notices.mjs check
       - name: Prepare fresh output parent
         run: mkdir -p target
       - name: Build embedded UI and native MCP; roundtrip and first-start checks
         run: node distribution/codex/build-preview.mjs target/codex-preview
+      - name: Prepare opt-in unsigned candidate (never publishes)
+        if: inputs.unsigned_preview_version != ''
+        env:
+          GIL_PREVIEW_VERSION: ${{ inputs.unsigned_preview_version }}
+        run: node distribution/codex/unsigned-preview.mjs prepare target/codex-preview/marketplace "$GIL_PREVIEW_VERSION" target/codex-unsigned-candidate
+      - name: Retain unsigned candidate for review only
+        if: inputs.unsigned_preview_version != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
+        with:
+          archive: true
+          name: gil-codex-macos-arm64-UNSIGNED-CANDIDATE-${{ github.sha }}
+          path: |
+            target/codex-unsigned-candidate/*.tar.gz
+            target/codex-unsigned-candidate/SHA256SUMS
+            target/codex-unsigned-candidate/checks.json
+            target/codex-unsigned-candidate/update-record.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Retain development evidence only (not a marketplace publication)
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
         with:
