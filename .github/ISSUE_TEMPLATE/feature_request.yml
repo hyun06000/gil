@@ -1,0 +1,26 @@
+name: 기능 제안 / Feature request
+description: 구현 방법을 몰라도 원하는 사용자 경험을 제안할 수 있습니다.
+title: "[Idea] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        한국어 또는 영어로 제안해 주세요. 비밀, 개인정보, 실제 .gil 기록이나 사적 대화는 넣지 마세요.
+        제안이 곧 구현·출시 일정의 약속은 아닙니다.
+  - type: textarea
+    id: need
+    attributes:
+      label: 어떤 일을 더 쉽게 하고 싶나요? / User need
+      description: 지금 불편한 점과 원하는 결과를 적어 주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: 생각한 방법 / Optional suggestion
+      description: 구현 방식 대신 화면 흐름이나 가상의 사용 예를 적어도 됩니다.
+  - type: textarea
+    id: success
+    attributes:
+      label: 좋아졌다고 판단할 기준 / Expected improvement
+      description: 어떤 상황에서 어떻게 달라지면 좋을까요?

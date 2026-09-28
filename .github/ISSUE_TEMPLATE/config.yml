@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 도움받기 / Help
+    url: https://github.com/hyun06000/gil/blob/main/SUPPORT.md
+    about: 일반 질문과 안전한 문제 제보 방법을 먼저 확인해 주세요.
+  - name: 보안 제보 준비 상태 / Security reporting status
+    url: https://github.com/hyun06000/gil/blob/main/spec/GIL_Security_Reporting_Plan_v0.1.md
+    about: 비공개 제보 창구는 아직 개통되지 않았습니다. 취약점 상세는 일반 issue에 올리지 마세요.

@@ -1,0 +1,43 @@
+name: 문제 제보 / Bug report
+description: 사용 중 겪은 문제를 알려 주세요. 터미널이나 로그는 필수가 아닙니다.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        한국어 또는 영어로 아는 만큼만 적어 주세요. 모르는 항목은 '모름 / Unknown'이어도 됩니다.
+        비밀번호·token·개인 경로·사적 대화·실제 .gil 기록은 첨부하지 마세요.
+        보안 취약점과 악용 방법은 이 양식에 쓰지 마세요. [보안 제보 준비 상태](https://github.com/hyun06000/gil/blob/main/spec/GIL_Security_Reporting_Plan_v0.1.md)를 확인해 주세요.
+  - type: textarea
+    id: problem
+    attributes:
+      label: 하려던 일과 실제 결과 / What happened?
+      description: 기대한 결과와 다른 점을 적어 주세요. 화면 문제라면 그래프가 실제 보였는지도 알려 주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 다시 겪게 되는 순서 / Steps to reproduce
+      description: 누른 버튼이나 입력한 요청을 가상의 내용으로 적어 주세요. 매번 발생하지 않아도 괜찮습니다.
+  - type: input
+    id: environment
+    attributes:
+      label: 사용 환경 / Environment
+      description: 아는 정보만 적어 주세요. OS, 앱 이름과 모드, 앱 및 GIL 버전 등. 파일 경로는 필요 없습니다.
+      placeholder: "예: macOS / Codex / fullscreen / 버전 모름"
+  - type: dropdown
+    id: connection
+    attributes:
+      label: 연결 방식 / Connection
+      options:
+        - 모름 / Unknown
+        - Marketplace Plugin
+        - 직접 MCP 연결 / Direct MCP
+        - 별도 Companion 앱 / Native Companion
+        - 개발용 CLI / Development CLI
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 추가 설명 / Optional evidence
+      description: 첨부는 필수가 아닙니다. 스크린샷은 사적 대화·개인 경로·다른 앱 정보를 가린 뒤 올려 주세요.

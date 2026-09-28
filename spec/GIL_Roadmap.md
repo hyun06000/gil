@@ -1391,7 +1391,9 @@ rmcp stdio server 최소 spike
       원격 게시와 실제 marketplace 설치/새 기계 검수는 남음
 - [~] release pipeline — preview build/압축 왕복/native smoke 및 수동 read-only CI 구성.
       새 `gil`의 clean `fbc4100`에서 GitHub macOS arm64 CI·다운로드 검수 통과
-      ([독립 인수](../distribution/codex/CI-CHECKPOINT-20260928.md)); Node 기반 Actions 경고는 후속 보정 대상.
+      ([독립 인수](../distribution/codex/CI-CHECKPOINT-20260928.md)). Node 20 기반 Actions 경고에 대해
+      checkout/upload-artifact를 Node 24의 v7.0.1 full SHA로 보정했다. PR #1의 clean `19fe57b`에서
+      원격 CI·artifact 검수 통과, annotation·컴파일 경고 0건. 최종 PR head의 CI도 확인한 뒤 병합한다.
       **서명·공증·정식 게시 미완료**, 비밀을 쓰거나 배포 권한을 부여하지 않음
 - [ ] macOS 배포를 닫는다 (Developer ID 서명·공증·staple·`spctl`)
 - [ ] 그 뒤 Windows adapter — feasibility build 와 기본 채널 확정
@@ -1527,7 +1529,11 @@ artifact·release pipeline → 새 기계 설치·업데이트 인수다. Claude
         source/hash/mode 대조 통과 ([독립 증거](../distribution/codex/CI-CHECKPOINT-20260928.md))
   - [ ] Companion·다른 target 고지 검수
 - [ ] 실제 비공개 보안 보고 경로 결정 및 SECURITY 안내
-- [ ] 기여 정책·Code of Conduct·유지관리 연락 경로·issue/PR 안내의 담당자 검수
+      — [준비 계획](GIL_Security_Reporting_Plan_v0.1.md); 공개 시 GitHub PVR로 결정, 실제 창구 미개통
+- [~] main 변경의 PR 의무화 — 운영 지침 적용, 비공개 저장소의 서버 강제 보호는 요금제 제한으로 미완료
+      ([설정 장부](../distribution/compliance/REPOSITORY-GOVERNANCE-20260928.md)); 기존 개발 저장소 비공개 전환 완료
+- [~] 기여 정책·Code of Conduct·유지관리 연락 경로·issue/PR 안내의 담당자 검수
+      — CONTRIBUTING·SUPPORT·issue/PR 양식과 행동 강령 초안 준비. 담당자 검수·민감한 행동 신고 경로는 남음
 - [ ] 새 기계 최초 설치·업데이트·제거/재설치 및 Project 보존
 - [ ] 공개 표면과 미결 검수 후 새 저장소 공개 전환 승인
 - [ ] 정식 release·marketplace 게시 별도 승인

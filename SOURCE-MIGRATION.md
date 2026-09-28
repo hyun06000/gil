@@ -89,7 +89,8 @@ CI는 위 로컬 전체 Core/UI suite와 별개이며, 새 기계나 Host 설치
 - 저장소 공개 전환, release/marketplace 게시.
 - 새 사용자 기계 설치·업데이트·제거/재설치, 실제 Host 화면 재검수.
 - Windows 및 Tauri 전용 회귀시험. Core/모의 Host 시험으로 대신 통과 처리하지 않는다.
-- 기존 공개 이력 삭제·재작성·force push 또는 비공개 전환.
+- 기존 공개 이력 삭제·재작성·force push. 기존 저장소 비공개 전환은 첫 이전에 포함하지 않았으나,
+  2026-09-28 후속 승인으로 별도 수행했다 ([설정 장부](distribution/compliance/REPOSITORY-GOVERNANCE-20260928.md)).
 - 비공개 보안 보고 설정 변경과 확정되지 않은 SECURITY 연락처 게시.
 
 새 저장소는 이미 공개됐던 개인 기록을 회수하는 수단이 아니다. 기존 공개 이력의 정리 대상과
