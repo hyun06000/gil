@@ -1,0 +1,20 @@
+{
+  "name": "gil-preview-macos-arm64",
+  "interface": {
+    "displayName": "Gil Preview Macos Arm64"
+  },
+  "plugins": [
+    {
+      "name": "gil-companion-prototype",
+      "source": {
+        "source": "local",
+        "path": "./plugins/gil-companion-prototype"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

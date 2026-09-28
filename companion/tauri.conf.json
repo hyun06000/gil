@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "GIL Companion",
+  "mainBinaryName": "GIL Companion",
+  "version": "0.1.0",
+  "identifier": "dev.ariadne.gil.companion",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'"
+    },
+    "macOSPrivateApi": false
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "icon": [
+      "icons/icon.icns"
+    ],
+    "category": "DeveloperTool",
+    "shortDescription": "GIL Companion",
+    "longDescription": "계속 떠 있는 읽기 전용 GIL 여정 창",
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "hardenedRuntime": true,
+      "entitlements": "entitlements.plist"
+    }
+  }
+}

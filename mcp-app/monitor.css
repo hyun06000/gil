@@ -1,0 +1,18 @@
+.host-bar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:12px 16px;
+  border-bottom:1px solid var(--line, #8885); font:14px system-ui; }
+.host-bar button { font:inherit; padding:7px 11px; border:1px solid #8885; border-radius:8px;
+  color:inherit; background:transparent; cursor:pointer; }
+.host-bar #expand { background:#5268ef; color:white; border-color:transparent; }
+.host-bar button:disabled { opacity:.45; cursor:default; }
+.host-bar #host-say { flex-basis:100%; }
+.host-bar pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; }
+body[data-display-mode="fullscreen"] .map { max-height:55vh; min-height:220px; }
+/* Host owns the chat composer. The Monitor never draws or intercepts another chat UI. */
+body[data-display-mode="fullscreen"] {
+  /* The Host's overlaid composer is outside this iframe; we cannot measure its
+     DOM. Reserve scrollable tail space, not a fixed overlay or a shorter Report.
+     The bounded viewport-based allowance also works when no inset is advertised. */
+  --gil-composer-space: calc(clamp(200px, 28vh, 320px) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: var(--gil-composer-space);
+}
+body[data-display-mode="fullscreen"] .detail { scroll-margin-bottom: var(--gil-composer-space); }

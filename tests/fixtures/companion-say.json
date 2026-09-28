@@ -1,0 +1,259 @@
+{
+  "values": {
+    "OUTCOME": [
+      "opened_persistent_host",
+      "focused_existing_companion",
+      "started_and_opened_companion",
+      "needs_companion_install",
+      "needs_companion_update",
+      "monitor_unavailable"
+    ],
+    "COMPANION_STATE": [
+      "missing",
+      "stopped",
+      "outdated",
+      "ready"
+    ],
+    "MONITOR_SURFACE": [
+      "persistent_host",
+      "native_companion",
+      "unavailable"
+    ],
+    "AGENT_SURFACE": [
+      "ready",
+      "unavailable"
+    ],
+    "AGENT_CORE_STATE": [
+      "ready",
+      "outdated_agent",
+      "unavailable"
+    ]
+  },
+  "policy": {
+    "probeTimeoutMs": 2000,
+    "readyAttempts": 30,
+    "readyGapMs": 100
+  },
+  "say": {
+    "outcomes": {
+      "opened_persistent_host": "GIL Monitor를 이 Host의 지속형 화면에 열었다.",
+      "focused_existing_companion": "이미 열려 있던 GIL Monitor 창을 앞으로 가져왔다.",
+      "started_and_opened_companion": "GIL Monitor를 열고 응답을 확인했다.",
+      "needs_companion_install": "GIL Monitor가 아직 설치되어 있지 않다. 설치하면 이 여정을 창으로 계속 볼 수 있다. 설치는 승인을 받은 뒤에만 진행한다. Monitor를 열 수 없지만 GIL 기록 작업은 계속할 수 있다.",
+      "needs_companion_update": "설치된 GIL Monitor가 지금 판과 호환되지 않는다. 호환판으로 업데이트해야 열 수 있다. 낡은 판을 대신 열지 않는다. Monitor를 열 수 없지만 GIL 기록 작업은 계속할 수 있다.",
+      "monitor_unavailable": "Monitor를 열 수 없지만 GIL 기록 작업은 계속할 수 있다. 지금 상태는 `gil context`로 이어서 볼 수 있다."
+    },
+    "states": {
+      "missing": {
+        "with_version": "GIL Monitor가 설치되어 있지 않다.",
+        "without_version": "GIL Monitor가 설치되어 있지 않다."
+      },
+      "stopped": {
+        "with_version": "GIL Monitor 호환판 0.1.0이 설치되어 있고 지금은 닫혀 있다.",
+        "without_version": "GIL Monitor 호환판 알 수 없음이 설치되어 있고 지금은 닫혀 있다."
+      },
+      "outdated": {
+        "with_version": "GIL Monitor가 설치되어 있지만 지금 판과 호환되지 않는다.",
+        "without_version": "GIL Monitor가 설치되어 있지만 지금 판과 호환되지 않는다."
+      },
+      "ready": {
+        "with_version": "GIL Monitor 호환판 0.1.0이 열려 있고 응답한다.",
+        "without_version": "GIL Monitor 호환판 알 수 없음이 열려 있고 응답한다."
+      }
+    }
+  },
+  "installation": [
+    {
+      "host": "verified",
+      "companion": "missing",
+      "agent": "ready",
+      "agent_surface": "ready",
+      "monitor_surface": "persistent_host",
+      "complete": true
+    },
+    {
+      "host": "verified",
+      "companion": "missing",
+      "agent": "outdated_agent",
+      "agent_surface": "unavailable",
+      "monitor_surface": "persistent_host",
+      "complete": false
+    },
+    {
+      "host": "verified",
+      "companion": "missing",
+      "agent": "unavailable",
+      "agent_surface": "unavailable",
+      "monitor_surface": "persistent_host",
+      "complete": false
+    },
+    {
+      "host": "verified",
+      "companion": "stopped",
+      "agent": "ready",
+      "agent_surface": "ready",
+      "monitor_surface": "persistent_host",
+      "complete": true
+    },
+    {
+      "host": "verified",
+      "companion": "stopped",
+      "agent": "outdated_agent",
+      "agent_surface": "unavailable",
+      "monitor_surface": "persistent_host",
+      "complete": false
+    },
+    {
+      "host": "verified",
+      "companion": "stopped",
+      "agent": "unavailable",
+      "agent_surface": "unavailable",
+      "monitor_surface": "persistent_host",
+      "complete": false
+    },
+    {
+      "host": "verified",
+      "companion": "outdated",
+      "agent": "ready",
+      "agent_surface": "ready",
+      "monitor_surface": "persistent_host",
+      "complete": true
+    },
+    {
+      "host": "verified",
+      "companion": "outdated",
+      "agent": "outdated_agent",
+      "agent_surface": "unavailable",
+      "monitor_surface": "persistent_host",
+      "complete": false
+    },
+    {
+      "host": "verified",
+      "companion": "outdated",
+      "agent": "unavailable",
+      "agent_surface": "unavailable",
+      "monitor_surface": "persistent_host",
+      "complete": false
+    },
+    {
+      "host": "verified",
+      "companion": "ready",
+      "agent": "ready",
+      "agent_surface": "ready",
+      "monitor_surface": "persistent_host",
+      "complete": true
+    },
+    {
+      "host": "verified",
+      "companion": "ready",
+      "agent": "outdated_agent",
+      "agent_surface": "unavailable",
+      "monitor_surface": "persistent_host",
+      "complete": false
+    },
+    {
+      "host": "verified",
+      "companion": "ready",
+      "agent": "unavailable",
+      "agent_surface": "unavailable",
+      "monitor_surface": "persistent_host",
+      "complete": false
+    },
+    {
+      "host": "unverified",
+      "companion": "missing",
+      "agent": "ready",
+      "agent_surface": "ready",
+      "monitor_surface": "unavailable",
+      "complete": false
+    },
+    {
+      "host": "unverified",
+      "companion": "missing",
+      "agent": "outdated_agent",
+      "agent_surface": "unavailable",
+      "monitor_surface": "unavailable",
+      "complete": false
+    },
+    {
+      "host": "unverified",
+      "companion": "missing",
+      "agent": "unavailable",
+      "agent_surface": "unavailable",
+      "monitor_surface": "unavailable",
+      "complete": false
+    },
+    {
+      "host": "unverified",
+      "companion": "stopped",
+      "agent": "ready",
+      "agent_surface": "ready",
+      "monitor_surface": "native_companion",
+      "complete": true
+    },
+    {
+      "host": "unverified",
+      "companion": "stopped",
+      "agent": "outdated_agent",
+      "agent_surface": "unavailable",
+      "monitor_surface": "native_companion",
+      "complete": false
+    },
+    {
+      "host": "unverified",
+      "companion": "stopped",
+      "agent": "unavailable",
+      "agent_surface": "unavailable",
+      "monitor_surface": "native_companion",
+      "complete": false
+    },
+    {
+      "host": "unverified",
+      "companion": "outdated",
+      "agent": "ready",
+      "agent_surface": "ready",
+      "monitor_surface": "unavailable",
+      "complete": false
+    },
+    {
+      "host": "unverified",
+      "companion": "outdated",
+      "agent": "outdated_agent",
+      "agent_surface": "unavailable",
+      "monitor_surface": "unavailable",
+      "complete": false
+    },
+    {
+      "host": "unverified",
+      "companion": "outdated",
+      "agent": "unavailable",
+      "agent_surface": "unavailable",
+      "monitor_surface": "unavailable",
+      "complete": false
+    },
+    {
+      "host": "unverified",
+      "companion": "ready",
+      "agent": "ready",
+      "agent_surface": "ready",
+      "monitor_surface": "native_companion",
+      "complete": true
+    },
+    {
+      "host": "unverified",
+      "companion": "ready",
+      "agent": "outdated_agent",
+      "agent_surface": "unavailable",
+      "monitor_surface": "native_companion",
+      "complete": false
+    },
+    {
+      "host": "unverified",
+      "companion": "ready",
+      "agent": "unavailable",
+      "agent_surface": "unavailable",
+      "monitor_surface": "native_companion",
+      "complete": false
+    }
+  ]
+}

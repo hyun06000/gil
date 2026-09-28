@@ -1,0 +1,16 @@
+{
+  "rmcp@3.4.0": {
+    "repository": "https://github.com/modelcontextprotocol/rust-sdk",
+    "commit": "fd7811fdaa9fefa1c8034534b4d7a31c97204f89",
+    "crate_path": "crates/rmcp",
+    "review": "Complete recursive tree inspected at this commit: only root LICENSE, no separate NOTICE. Original transition terms retained.",
+    "files": [{"path": "LICENSE", "sha256": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a"}]
+  },
+  "rmcp-macros@3.4.0": {
+    "repository": "https://github.com/modelcontextprotocol/rust-sdk",
+    "commit": "fd7811fdaa9fefa1c8034534b4d7a31c97204f89",
+    "crate_path": "crates/rmcp-macros",
+    "review": "Complete recursive tree inspected at this commit: only root LICENSE, no separate NOTICE. Original transition terms retained.",
+    "files": [{"path": "LICENSE", "sha256": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a"}]
+  }
+}

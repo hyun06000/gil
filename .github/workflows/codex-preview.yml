@@ -1,0 +1,43 @@
+name: Codex native marketplace preview (NOT a release)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos-arm64-preview:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      RUSTUP_TOOLCHAIN: 1.97.1
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Check build machine (never a user installation requirement)
+        run: |
+          test "$(uname -m)" = arm64
+          node -e 'if (Number(process.versions.node.split(".")[0]) < 22) process.exit(1)'
+          rustup toolchain install 1.97.1 --profile minimal --target aarch64-apple-darwin
+          npm ci --prefix mcp-app
+          cargo fetch --locked
+      - name: Packaging regression tests
+        run: node --test distribution/codex/artifact.test.mjs distribution/compliance/notices.test.mjs
+      - name: Offline third-party license coverage (no automatic policy refresh)
+        run: node distribution/compliance/notices.mjs check
+      - name: Prepare fresh output parent
+        run: mkdir -p target
+      - name: Build embedded UI and native MCP; roundtrip and first-start checks
+        run: node distribution/codex/build-preview.mjs target/codex-preview
+      - name: Retain development evidence only (not a marketplace publication)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: gil-codex-macos-arm64-DEVELOPMENT-${{ github.sha }}
+          path: |
+            target/codex-preview/gil-codex-macos-arm64-preview.tar.gz
+            target/codex-preview/SHA256SUMS
+            target/codex-preview/checks.json
+          if-no-files-found: error
+          retention-days: 7

@@ -1,0 +1,1005 @@
+[
+  {
+    "name": "gil_companion_status",
+    "title": "Check GIL Monitor availability",
+    "description": "Report whether a persistent human Monitor surface is available: the agent surface, the monitor surface, and the native Companion handshake state (missing, stopped, outdated, ready). Does not read or write a project.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "agent_surface": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "unavailable"
+          ]
+        },
+        "monitor_surface": {
+          "type": "string",
+          "enum": [
+            "persistent_host",
+            "native_companion",
+            "unavailable"
+          ]
+        },
+        "companion_state": {
+          "type": "string",
+          "enum": [
+            "missing",
+            "stopped",
+            "outdated",
+            "ready"
+          ]
+        },
+        "agent_state": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "outdated_agent",
+            "unavailable"
+          ]
+        },
+        "appVersion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "said": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "agent_surface",
+        "monitor_surface",
+        "companion_state",
+        "agent_state",
+        "appVersion",
+        "said"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "ui": {
+        "visibility": [
+          "model"
+        ]
+      }
+    }
+  },
+  {
+    "name": "show_gil_companion",
+    "title": "Show GIL Monitor",
+    "description": "Open the native GIL Companion fallback, or an explicitly requested separate window. For an in-host fullscreen Monitor, first use gil_monitor_prepare and show_gil_monitor. If the Companion is installed but closed, start it and resume once its handshake answers. Never installs anything.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "result": {
+          "type": "string",
+          "enum": [
+            "opened_persistent_host",
+            "focused_existing_companion",
+            "started_and_opened_companion",
+            "needs_companion_install",
+            "needs_companion_update",
+            "monitor_unavailable"
+          ]
+        },
+        "agent_surface": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "unavailable"
+          ]
+        },
+        "monitor_surface": {
+          "type": "string",
+          "enum": [
+            "persistent_host",
+            "native_companion",
+            "unavailable"
+          ]
+        },
+        "said": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "result",
+        "agent_surface",
+        "monitor_surface",
+        "said"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "ui": {
+        "visibility": [
+          "model",
+          "app"
+        ]
+      },
+      "openai/toolInvocation/invoking": "GIL Monitor 를 여는 중…",
+      "openai/toolInvocation/invoked": "GIL Monitor 를 앞으로 가져왔습니다."
+    }
+  },
+  {
+    "name": "gil_status",
+    "title": "GIL status",
+    "description": "Answer where the journey stands right now, in three lines. Runs the GIL core bundled with this plugin; never a global or repository build.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "project_root": {
+          "type": "string",
+          "description": "Absolute path of the GIL project to act on. The host-verified workspace root, or a path the user named. It is never guessed."
+        }
+      },
+      "required": [
+        "project_root"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "said": {
+          "type": "string"
+        },
+        "problem": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok",
+        "exit_code",
+        "said",
+        "problem"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "ui": {
+        "visibility": [
+          "model"
+        ]
+      }
+    }
+  },
+  {
+    "name": "gil_context",
+    "title": "GIL context",
+    "description": "Restore the working context for a new session or handoff. Runs the GIL core bundled with this plugin; never a global or repository build.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "project_root": {
+          "type": "string",
+          "description": "Absolute path of the GIL project to act on. The host-verified workspace root, or a path the user named. It is never guessed."
+        }
+      },
+      "required": [
+        "project_root"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "said": {
+          "type": "string"
+        },
+        "problem": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok",
+        "exit_code",
+        "said",
+        "problem"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "ui": {
+        "visibility": [
+          "model"
+        ]
+      }
+    }
+  },
+  {
+    "name": "gil_story",
+    "title": "GIL story",
+    "description": "Read the journey so far in human language. Runs the GIL core bundled with this plugin; never a global or repository build.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "project_root": {
+          "type": "string",
+          "description": "Absolute path of the GIL project to act on. The host-verified workspace root, or a path the user named. It is never guessed."
+        }
+      },
+      "required": [
+        "project_root"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "said": {
+          "type": "string"
+        },
+        "problem": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok",
+        "exit_code",
+        "said",
+        "problem"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "ui": {
+        "visibility": [
+          "model"
+        ]
+      }
+    }
+  },
+  {
+    "name": "gil_help",
+    "title": "GIL manual topic",
+    "description": "Open one GIL manual topic, or the topic that fits the current place. Runs the GIL core bundled with this plugin; never a global or repository build.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "project_root": {
+          "type": "string",
+          "description": "Absolute path of the GIL project to act on. The host-verified workspace root, or a path the user named. It is never guessed."
+        },
+        "topic": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "said": {
+          "type": "string"
+        },
+        "problem": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok",
+        "exit_code",
+        "said",
+        "problem"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "ui": {
+        "visibility": [
+          "model"
+        ]
+      }
+    }
+  },
+  {
+    "name": "gil_start",
+    "title": "Start a GIL project",
+    "description": "Create the project and open its first Interview. Runs the GIL core bundled with this plugin; never a global or repository build.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "project_root": {
+          "type": "string",
+          "description": "Absolute path of the GIL project to act on. The host-verified workspace root, or a path the user named. It is never guessed."
+        }
+      },
+      "required": [
+        "project_root"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "said": {
+          "type": "string"
+        },
+        "problem": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok",
+        "exit_code",
+        "said",
+        "problem"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "ui": {
+        "visibility": [
+          "model"
+        ]
+      }
+    }
+  },
+  {
+    "name": "gil_open",
+    "title": "Open the next GIL step",
+    "description": "Open the next step with its action contract on stdin, or open a Cycle of the given kind. GIL decides which applies. Runs the GIL core bundled with this plugin; never a global or repository build.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "project_root": {
+          "type": "string",
+          "description": "Absolute path of the GIL project to act on. The host-verified workspace root, or a path the user named. It is never guessed."
+        },
+        "kind": {
+          "type": "string"
+        },
+        "contract": {
+          "type": "string",
+          "description": "Body text passed to GIL on stdin, exactly as written. GIL validates it."
+        }
+      },
+      "required": [
+        "project_root"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "said": {
+          "type": "string"
+        },
+        "problem": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok",
+        "exit_code",
+        "said",
+        "problem"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "ui": {
+        "visibility": [
+          "model"
+        ]
+      }
+    }
+  },
+  {
+    "name": "gil_close",
+    "title": "Close the current GIL step",
+    "description": "Close the open step with the Report body that the current grammar requires. Runs the GIL core bundled with this plugin; never a global or repository build.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "project_root": {
+          "type": "string",
+          "description": "Absolute path of the GIL project to act on. The host-verified workspace root, or a path the user named. It is never guessed."
+        },
+        "report": {
+          "type": "string",
+          "description": "Body text passed to GIL on stdin, exactly as written. GIL validates it."
+        }
+      },
+      "required": [
+        "project_root"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "said": {
+          "type": "string"
+        },
+        "problem": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok",
+        "exit_code",
+        "said",
+        "problem"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "ui": {
+        "visibility": [
+          "model"
+        ]
+      }
+    }
+  },
+  {
+    "name": "gil_restore",
+    "title": "Restore the GIL world",
+    "description": "Return the working tree to the world this place was opened from. Runs the GIL core bundled with this plugin; never a global or repository build.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "project_root": {
+          "type": "string",
+          "description": "Absolute path of the GIL project to act on. The host-verified workspace root, or a path the user named. It is never guessed."
+        }
+      },
+      "required": [
+        "project_root"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "said": {
+          "type": "string"
+        },
+        "problem": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok",
+        "exit_code",
+        "said",
+        "problem"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "ui": {
+        "visibility": [
+          "model"
+        ]
+      }
+    }
+  },
+  {
+    "name": "gil_revisit",
+    "title": "Revisit after a failure",
+    "description": "Go back to the Cycle the closing Report already settled on. Runs the GIL core bundled with this plugin; never a global or repository build.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "project_root": {
+          "type": "string",
+          "description": "Absolute path of the GIL project to act on. The host-verified workspace root, or a path the user named. It is never guessed."
+        }
+      },
+      "required": [
+        "project_root"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "said": {
+          "type": "string"
+        },
+        "problem": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok",
+        "exit_code",
+        "said",
+        "problem"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "ui": {
+        "visibility": [
+          "model"
+        ]
+      }
+    }
+  },
+  {
+    "name": "gil_cycle",
+    "title": "Open or close a GIL cycle",
+    "description": "Open a cycle of the given kind, or close the current one. Runs the GIL core bundled with this plugin; never a global or repository build.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "project_root": {
+          "type": "string",
+          "description": "Absolute path of the GIL project to act on. The host-verified workspace root, or a path the user named. It is never guessed."
+        },
+        "action": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_root",
+        "action"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "said": {
+          "type": "string"
+        },
+        "problem": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok",
+        "exit_code",
+        "said",
+        "problem"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "ui": {
+        "visibility": [
+          "model"
+        ]
+      }
+    }
+  },
+  {
+    "name": "gil_monitor_prepare",
+    "description": "Prepare the read-only GIL Monitor for an explicitly selected project root and remember that choice in local GIL settings for automatic restart recovery. Then call show_gil_monitor with the returned scope_id. Never guess the root. Does not display an App or write the project.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "project_root": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_root"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "ui": {
+        "visibility": [
+          "model"
+        ]
+      }
+    }
+  },
+  {
+    "name": "show_gil_monitor",
+    "title": "GIL Monitor",
+    "description": "Show the GIL MCP App for a prepared scope. It defaults to horizontal layout and requests fullscreen once when ready and supported; if it stays inline, the user can click 모니터 펼치기. A returned View is not proof of display or persistent success. Keep the native Companion fallback available.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "scope_id": {
+          "type": "string",
+          "pattern": "^project:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "scope_id"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "ui": {
+        "resourceUri": "RESOURCE_URI",
+        "visibility": [
+          "model",
+          "app"
+        ]
+      },
+      "ui/resourceUri": "RESOURCE_URI"
+    }
+  },
+  {
+    "name": "gil_monitor_read",
+    "description": "Read canonical GIL Monitor data. No write, recovery, path or layout operation.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "scope_id": {
+          "type": "string",
+          "pattern": "^project:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "scope_id"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "ui": {
+        "visibility": [
+          "app"
+        ]
+      }
+    }
+  },
+  {
+    "name": "gil_monitor_detail",
+    "description": "Read canonical GIL Monitor data. No write, recovery, path or layout operation.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "scope_id": {
+          "type": "string",
+          "pattern": "^project:[0-9a-f]{64}$"
+        },
+        "step_ref": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "scope_id",
+        "step_ref"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "ui": {
+        "visibility": [
+          "app"
+        ]
+      }
+    }
+  },
+  {
+    "name": "gil_monitor_poll",
+    "description": "Read a change hint and renew the visible Monitor watch lease; no project scan.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "scope_id": {
+          "type": "string",
+          "pattern": "^project:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "scope_id"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "ui": {
+        "visibility": [
+          "app"
+        ]
+      }
+    }
+  }
+]

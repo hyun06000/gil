@@ -1,0 +1,32 @@
+{
+  "name": "gil-companion-prototype",
+  "version": "0.2.0+codex.20260927174145",
+  "description": "Record reasoning with GIL, and keep the journey visible in the GIL Monitor.",
+  "author": {
+    "name": "Ariadne"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "GIL Companion",
+    "shortDescription": "Record your reasoning with GIL and keep the journey visible.",
+    "longDescription": "Carries GIL itself \u2014 open and close steps, read context and status, restore or revisit \u2014 and opens the persistent GIL Monitor so a human can watch the journey. The Monitor is read-only: it never writes to your project.",
+    "developerName": "Ariadne",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "brandColor": "#566FE8",
+    "defaultPrompt": "Open the GIL Monitor MCP App for this project with horizontal layout and request fullscreen so we can keep chatting alongside the graph."
+  },
+  "mcpServers": {
+    "gil-companion": {
+      "command": "./core/darwin-arm64/gil",
+      "args": [
+        "mcp",
+        "--serve"
+      ],
+      "cwd": "."
+    }
+  }
+}
