@@ -97,7 +97,9 @@ GitHub runner 실제 성공은 별개다.
 [checkout v7.0.1](https://github.com/actions/checkout/releases/tag/v7.0.1)과
 [upload-artifact v7.0.1](https://github.com/actions/upload-artifact/releases/tag/v7.0.1)의 Node 24 실행점을
 full SHA로 고정했다. `archive: true`를 명시해 tar·checksum·증거를 기존처럼 하나의 artifact로 묶는다.
-보정 후 원격 CI·다운로드 검수는 아직 미실행이며 경고 해소를 실측했다고 주장하지 않는다.
+보정한 PR #1의 clean `19fe57b`에서 원격 CI·다운로드 검수를 통과했고 annotation 0건으로
+Node 20 경고 해소를 확인했다 ([후속 기록](CI-CHECKPOINT-20260928.md#follow-up-node-24-actions-on-pr-1)).
+이 기록보다 뒤의 commit은 최종 PR head의 CI 성공을 따로 확인한 뒤 병합한다.
 [이전 경계](../../SOURCE-MIGRATION.md)와 새 기계·Host 설치 인수를 구분한다.
 
 새 source 저장소는 현재 비공개 이전 준비 중이다. 공개 전환하면 CI 로그와 다운로드 가능한

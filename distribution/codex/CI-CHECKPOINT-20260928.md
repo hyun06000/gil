@@ -53,7 +53,8 @@ the recorded source/hash evidence. No release, tag, marketplace registration or 
 
 GitHub emitted one workflow annotation: the pinned checkout and upload-artifact Actions target Node 20
 and were forced to run on Node 24. The run succeeded, but maintained Node-24-compatible Action revisions
-still need a separate review and pinned-SHA update. Compiler-warning-free does not mean annotation-free.
+still needed a separate review and pinned-SHA update at this first checkpoint. The follow-up below records
+that correction without erasing the original warning. Compiler-warning-free does not mean annotation-free.
 
 This workflow does **not** rerun the full Core suite or the browser UI suite. The local migration checks
 (Core 1,175, UI 70, Node 104 passed / 4 skipped) remain separate in [SOURCE-MIGRATION](../../SOURCE-MIGRATION.md).
@@ -63,3 +64,31 @@ performed. The earlier unexplained first-launch timeout remains a new-machine ac
 
 The repository remains private. Public conversion, release and marketplace publication require separate
 approval and the remaining [open-source gates](../../spec/GIL_Open_Source_Readiness_v0.1.md).
+
+## Follow-up: Node 24 Actions on PR 1
+
+The first PR, [#1](https://github.com/hyun06000/gil/pull/1), pins official checkout and upload-artifact
+v7.0.1 by full commit SHA. Both immutable action manifests specify `node24`. The workflow remains
+manual-only, read-only, credential-nonpersisting, with seven-day artifacts; explicit `archive: true`
+keeps the tar, checksum and checks together. No direct main push or release publication was used.
+
+- Tested clean PR head: `19fe57baa7487102fb63c452ab35ac6d800f94ef`.
+- [Run 36369496342](https://github.com/hyun06000/gil/actions/runs/36369496342): **success, 1m52s**.
+- Packaging/notice tests: **35 passed, 0 failed, 0 skipped**. Rust compiler warnings **0**;
+  GitHub workflow annotations **0**, including no Node 20 compatibility warning.
+- Clean source: 272 files, snapshot SHA-256
+  `7c91ea9843d8160447fcd1f80159d2158529b2b4ac6a886ec16b758442cbffd4`.
+- Artifact ID `10948817561`, reported expiry `2026-10-05T02:23:15Z`.
+- Tar SHA-256 `dac498d4b6817286729c660535001129f83de2ab7167d7f44adf3552a1ed731a`.
+- Downloaded archive: exact ten-file allowlist, safe paths/types, native mode `0755`, others `0644`;
+  source identity, manifests, catalog, Skill, MIT and all three original notice files matched.
+- Native binary and UI hashes are unchanged from the first CI above. Coverage remains 84 packages plus
+  Rust standard-library notices. Runner native smoke: **17 tools**, first challenge **9 ms**, initialize
+  **8 ms**. Downloaded local smoke: **17 tools**, **585 ms / 7 ms**, isolated state and system-only PATH.
+- Channel remains **development_unsigned**, **publishable: false**. No plugin installation, real Host
+  UI, new-machine/quarantine, signing, notarization, Windows or Tauri acceptance was performed.
+
+This documentation follow-up is later than the tested head. Final PR-head CI must also succeed before
+merging; do not treat the earlier head's run as a check of later commits. Main's server-side PR protection
+is separately blocked by the private-repository plan requirement described in the
+[governance checkpoint](../compliance/REPOSITORY-GOVERNANCE-20260928.md).

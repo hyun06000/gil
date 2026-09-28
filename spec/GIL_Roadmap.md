@@ -1392,7 +1392,8 @@ rmcp stdio server 최소 spike
 - [~] release pipeline — preview build/압축 왕복/native smoke 및 수동 read-only CI 구성.
       새 `gil`의 clean `fbc4100`에서 GitHub macOS arm64 CI·다운로드 검수 통과
       ([독립 인수](../distribution/codex/CI-CHECKPOINT-20260928.md)). Node 20 기반 Actions 경고에 대해
-      checkout/upload-artifact를 Node 24의 v7.0.1 full SHA로 보정했다. 보정 후 원격 CI 검수는 아직 미실행.
+      checkout/upload-artifact를 Node 24의 v7.0.1 full SHA로 보정했다. PR #1의 clean `19fe57b`에서
+      원격 CI·artifact 검수 통과, annotation·컴파일 경고 0건. 최종 PR head의 CI도 확인한 뒤 병합한다.
       **서명·공증·정식 게시 미완료**, 비밀을 쓰거나 배포 권한을 부여하지 않음
 - [ ] macOS 배포를 닫는다 (Developer ID 서명·공증·staple·`spctl`)
 - [ ] 그 뒤 Windows adapter — feasibility build 와 기본 채널 확정
