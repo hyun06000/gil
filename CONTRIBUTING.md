@@ -55,7 +55,7 @@ UI 빌드는 Plugin의 생성 HTML을 갱신한다. 의도하지 않은 차이�
 ```sh
 npm ci --prefix plugins/gil-companion-prototype
 node --test ui/layout.test.mjs mcp-app/*.test.mjs plugins/gil-companion-prototype/*.test.mjs
-node --test distribution/codex/artifact.test.mjs distribution/compliance/notices.test.mjs
+node --test distribution/codex/artifact.test.mjs distribution/codex/release-preflight.test.mjs distribution/compliance/notices.test.mjs
 ```
 
 실제 Project 조작 시험은 독립 임시 폴더에서 한다. GIL 자체 source 저장소에 `gil start`를 실행하거나

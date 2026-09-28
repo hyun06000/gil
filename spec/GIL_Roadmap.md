@@ -1395,7 +1395,11 @@ rmcp stdio server 최소 spike
       checkout/upload-artifact를 Node 24의 v7.0.1 full SHA로 보정했다. PR #1의 clean `19fe57b`에서
       원격 CI·artifact 검수 통과, annotation·컴파일 경고 0건. 최종 PR head의 CI도 확인한 뒤 병합한다.
       **서명·공증·정식 게시 미완료**, 비밀을 쓰거나 배포 권한을 부여하지 않음
-- [ ] macOS 배포를 닫는다 (Developer ID 서명·공증·staple·`spctl`)
+- [x] native MCP 읽기 전용 배포 preflight — 도구·정확한 identity 선택·notary 설정·preview 무결성·
+      clean source 대응 검사. 통과해도 배포 가능으로 승격하지 않으며 credential 인증·서명은 미실행
+- [ ] macOS native MCP 배포를 닫는다 — Developer ID·공증 및 실제 marketplace/새 Mac 실행 인수.
+      단독 CLI/ZIP에는 staple할 수 없다. Companion `.app`/DMG 검수와 구분한다
+      ([native release gate](../distribution/codex/RELEASE-macos.md)); 현재 Developer Program/identity 미준비
 - [ ] 그 뒤 Windows adapter — feasibility build 와 기본 채널 확정
 
 #### 현재 checkpoint — 단일 실행점, 공개 배포 전
@@ -1513,6 +1517,8 @@ artifact·release pipeline → 새 기계 설치·업데이트 인수다. Claude
 상태: `[~] 새 gil 비공개 이전·첫 CI 완료 · 공개·정식 배포 전 검수` (2026-09-28)
 
 사용자 결정: **정식 공개 전에 오픈소스 준비를 완료하고, 새 저장소 이름은 gil로 한다.**
+2026-09-28 배포 직전까지 준비 → 새 `gil` 공개 → 정식 배포 순서를 승인했다.
+미완료 게이트를 생략하는 즉시 공개 승인은 아니다. 비공개 상태의 PR 운영을 유지한다.
 과거 개발 이력을 그대로 옮기지 않고 선별한 현재 코드로 독립적인 첫 commit을 push했다.
 기존 저장소와 개인 기록의 정리 영향 검토는 별도이며, 삭제·이력 재작성·force push를 승인한 것이 아니다.
 소스 공개, preview 검수물 공유, 정식 release/marketplace 게시를 서로 다른 판정으로 관리한다.
@@ -1535,8 +1541,8 @@ artifact·release pipeline → 새 기계 설치·업데이트 인수다. Claude
 - [~] 기여 정책·Code of Conduct·유지관리 연락 경로·issue/PR 안내의 담당자 검수
       — CONTRIBUTING·SUPPORT·issue/PR 양식과 행동 강령 초안 준비. 담당자 검수·민감한 행동 신고 경로는 남음
 - [ ] 새 기계 최초 설치·업데이트·제거/재설치 및 Project 보존
-- [ ] 공개 표면과 미결 검수 후 새 저장소 공개 전환 승인
-- [ ] 정식 release·marketplace 게시 별도 승인
+- [ ] 공개 표면과 배포 준비 게이트 완료 후 조건부 승인에 따른 새 저장소 공개 전환·설정 검증
+- [ ] version·게시 경로·rollback 확정 및 출시 게이트 완료 후 승인된 정식 release·marketplace 게시
 
 [새 소스 이전 장부](../SOURCE-MIGRATION.md)와
 [GIL Open Source Readiness](GIL_Open_Source_Readiness_v0.1.md)에 현재 범위와 미결을 둔다.
