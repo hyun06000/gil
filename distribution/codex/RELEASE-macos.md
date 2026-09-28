@@ -59,7 +59,7 @@ node distribution/codex/unsigned-preview.mjs verify target/codex-unsigned-candid
 ### 1.2 사용자 설치와 복구 안내
 
 최종 기본 UX는 **검증된 marketplace의 GIL Plugin 설치 → 작업 폴더 선택 → 자연어 요청**이다.
-원격 게시 주소는 아직 없으므로 지금 작동하는 공개 설치 명령을 지어내지 않는다. 셸 설치를 도와야
+공개 설치 주소는 아직 없으므로 지금 작동하는 공개 설치 명령을 지어내지 않는다. 셸 설치를 도와야
 한다면 Agent가 제품·출처·고정 version/hash·미공증 사실·로컬 접근 범위를 설명하고 승인을 받는다.
 무검증 `curl | sh`, 보안 검사 해제, Homebrew/Node/Cargo 선행 설치를 기본 UX로 추가하지 않는다.
 
@@ -91,6 +91,14 @@ Host의 공식 Plugin 관리 경로로 복구하며 cache를 손편집하지 않
 게시 시 검수한 HTTPS/Git 출처와 불변 version/ref/hash를 고정하고 사용자에게 미검증 범위를
 계속 보인다. 해시와 receipt는 publisher 신원 확인·악성 코드 검사·새 Mac 인수의 대체가 아니다.
 Git marketplace 등록은 universal public Plugins Directory 심사·등재와도 다르다.
+
+### 1.3 비공개 원격 인수 상태 (2026-09-28)
+
+사용자 승인으로 `hyun06000/gil-distribution`을 비공개 생성했다. 검수한 CI 후보를 PR로 옮겼고,
+GitHub에서 새로 clone한 고정 commit의 파일·권한·native 17 tools·내장 UI를 확인했다.
+[원격 검수 장부](REMOTE-STAGING-CHECKPOINT-20260928.md)를 따른다. 현재 설치된 Plugin은 교체하지
+않았으며 실제 Host 원격 설치·업데이트·제거/재설치·화면 인수는 별도 승인 단계다. 공개 주소나
+배포 완료로 표시하지 않고, 같은 marketplace 이름의 기존 로컬 등록을 조용히 덮지 않는다.
 
 ## 2. 후속 서명 채널의 읽기 전용 preflight
 

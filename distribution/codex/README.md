@@ -3,6 +3,10 @@
 이 디렉터리는 **제작자용 배포 도구**다. 받는 사람에게 Node·Cargo·clone·tar 명령을 요구하는
 설치 설명서가 아니다. 최종 UX는 Host의 Plugin 설치 한 번이며 원격 설치 실측은 아직 남았다.
 
+2026-09-28: 비공개 배포 저장소의 PR·정적 CI·fresh remote clone·native smoke까지 확인했다.
+[원격 검수 장부](REMOTE-STAGING-CHECKPOINT-20260928.md) 참조. 실제 Host의 원격 설치와 공개 게시는
+아직 수행하지 않았고 현재 설치본은 유지했다.
+
 기본 산출물은 `development_unsigned`, `publishable: false`인 **개발 검수물**이다.
 사용자 승인으로 별도 `preview_unsigned` 시험판 채널을 준비한다. 검수한 clean tree에서
 `unsigned-preview.mjs`가 새 version·경고·receipt를 갖춘 후보를 만들며, 기본 개발물을 덮지 않는다.
