@@ -175,6 +175,12 @@ export async function verifyTree(root) {
   assert.deepEqual(receipt.gates, {developer_id: 'not_verified', notarization: 'not_verified',
     clean_machine_install: 'not_verified', marketplace_install: 'not_verified',
     first_launch_timeout: 'unresolved'});
+  await verifyPayload(root, receipt);
+  return receipt;
+}
+
+// Shared byte/allowlist checks, not a channel-policy or publication decision.
+export async function verifyPayload(root, receipt) {
   const files = (await inventory(root)).filter(file => file.path !== 'release.json');
   assert.deepEqual(files.map(file => file.path).sort(), FILES, 'unexpected or missing runtime files');
   assert.deepEqual(files, receipt.files, 'artifact integrity or executable mode changed');
@@ -208,6 +214,6 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const receipt = await verifyTree(resolve(args[0]));
     console.log(json({integrity: 'passed', channel: receipt.channel, publishable: false}));
   } else if (command === 'publish') {
-    throw new Error('Publishing is deliberately not implemented: signing, notarization and installation acceptance are open');
+    throw new Error('Publishing is deliberately not implemented: channel approval and publication acceptance are separate');
   } else throw new Error('Usage: artifact.mjs create <built-binary> <new-directory> | verify <directory>');
 }

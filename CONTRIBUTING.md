@@ -55,7 +55,7 @@ UI 빌드는 Plugin의 생성 HTML을 갱신한다. 의도하지 않은 차이�
 ```sh
 npm ci --prefix plugins/gil-companion-prototype
 node --test ui/layout.test.mjs mcp-app/*.test.mjs plugins/gil-companion-prototype/*.test.mjs
-node --test distribution/codex/artifact.test.mjs distribution/codex/release-preflight.test.mjs distribution/compliance/notices.test.mjs
+node --test distribution/codex/*.test.mjs distribution/compliance/notices.test.mjs
 ```
 
 실제 Project 조작 시험은 독립 임시 폴더에서 한다. GIL 자체 source 저장소에 `gil start`를 실행하거나
@@ -77,3 +77,5 @@ Tauri 포함 workspace 전체 성공이라고 부르지 않는다. 시험마다 
 서명되지 않은 개발 preview는 정식 출시물이 아니다. source 공개, GitHub CI artifact 공유,
 marketplace 게시를 구분하며 [오픈소스 공개 준비 게이트](spec/GIL_Open_Source_Readiness_v0.1.md)를
 정식 출시 전에 닫는다. 비밀·서명 키는 source, 공개 로그 또는 artifact에 포함하지 않는다.
+첫 unsigned 시험판은 별도 승인된 제한 채널이며 [배포 계약](distribution/codex/RELEASE-macos.md)을
+따른다. 새 Mac 인수 유예나 미공증을 통과로 표시하지 않는다.
