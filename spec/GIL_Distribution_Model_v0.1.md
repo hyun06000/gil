@@ -88,8 +88,9 @@ Tauri 전용 창·tray·autostart·native packaging 검증은 후속으로 미�
 새 Companion 배포물을 제공할 때는 영향을 받는 Tauri 검증을 재개한다.
 
 현재 진행 순서는 MCP App의 작업 전환·재시작 수명 → Cowork Plugin 설치 경로 → self-contained
-Plugin의 설치·업데이트 인수다. MCP 실행 파일의 서명·공증과 새 기계 설치 검수는 별도 배포 게이트로
-남으며, Tauri 검증 유예가 그것을 면제하지 않는다.
+Plugin의 설치·업데이트 인수다. 서명·공증과 새 기계 설치 검수는 별도 장부로 남는다.
+2026-09-28 결정으로 첫 Codex/macOS arm64 시험판에는 §6.2a의 제한적 unsigned 채널을 적용하며,
+새 Mac 검수는 통과가 아니라 유예다. Tauri 검증 유예와 이 채널 결정을 혼동하지 않는다.
 
 ---
 
@@ -288,7 +289,8 @@ AI는 설치를 수행하는 주체가 아니라 설치 과정을 끝까지 조�
 - 사용자의 명시적 승인 없이 native binary를 내려받거나 실행하지 않는다.
 - OS의 서명·공증·Store 확인을 우회하지 않는다.
 - 설치 전에 제품명, publisher, 필요한 이유와 로컬 접근 범위를 짧게 설명한다.
-- macOS에서는 Mac App Store 또는 Developer ID로 서명·공증된 배포물을 사용한다.
+- macOS 정식 신뢰 채널은 Mac App Store 또는 Developer ID로 서명·공증된 배포물을 사용한다.
+  첫 Codex/macOS arm64 시험판에 한해 §6.2a의 명시적 동의 기반 unsigned 채널을 허용한다.
 - Windows에서는 Microsoft Store 또는 서명된 installer를 사용한다.
 - 설치 완료를 사용자가 채팅으로 다시 보고하게 하지 않는다. adapter가 재감지하고 원래 요청을
   자동으로 재개한다.
@@ -300,10 +302,11 @@ terminal, JSON 설정과 실행 파일 위치를 다루지 않아도 된다는 �
 
 ### 6.1 macOS 배포물의 상태
 
-배포물은 **이름으로** 상태를 말한다. 서명되지 않은 것을 배포 자리에 두지 않는다.
+배포물은 **이름으로** 상태를 말한다. 아래 표는 Native Companion의 상태이며,
+MCP Plugin 시험판 예외는 §6.2a에 따로 둔다. 개발물을 정식판으로 표시하지 않는다.
 
 ```text
-development                 개발용 bundle — 격리 표식을 손으로 뗀다. 배포 불가
+development                 로컬 개발용 bundle. 사용자 배포 불가
 release_unsigned            packaging 확인용. 배포 불가
 release_signed_unnotarized  공증 전. 배포 불가
 release_signed_notarized    사용자에게 줄 수 있는 것
@@ -338,8 +341,9 @@ Core와 MCP App을 내장한 실행 파일·license만 싣는 built-dist tree를
 증거에는 표시하지만 공개 release로 취급하지 않는다. 압축 왕복 뒤 Node 없는 PATH로 native
 challenge·17 tools·embedded UI bytes를 확인한다. 이것은 Host 설치나 화면 인수를 대신하지 않는다.
 
-현재 pipeline은 `development_unsigned`, `publishable: false`만 만들고 게시 명령은 거절한다.
-서명·공증·새 기계 첫 실행·marketplace 설치 gate는 열린 채다. 첫 실행 timeout을 자동 재시도로
+기본 build pipeline은 `development_unsigned`, `publishable: false`를 만들고 게시 명령은 거절한다.
+검수한 clean tree에서 §6.2a의 시험판 후보를 별도로 준비할 수 있다. 서명·공증·새 기계 검수는
+수행한 것으로 바꾸지 않는다. 첫 실행 timeout을 자동 재시도로
 감추지 않는다. Actions workflow는 수동 실행·읽기 권한만 가지며, 검수 artifact 보관과 정식
 배포 채널 게시를 구분한다. 원격 저장소 생성·공개 게시·서명 자격 증명 사용은 별도 승인 후 진행한다.
 
@@ -352,6 +356,31 @@ Plugin 실행 파일의 서명/공증 성공으로 대체하지 않는다.
 [독립 preview CI와 다운로드 인수](../distribution/codex/CI-CHECKPOINT-20260928.md)를 통과했다.
 [source 이전 경계](../SOURCE-MIGRATION.md)에 새 검증을 구분한다. 원격 runner의 빌드·압축 왕복·
 17 tools·내장 UI bytes 검사는 새 사용자 기계의 설치 성공이나 공개 release/marketplace 게시와 다르다.
+
+### 6.2a 첫 unsigned 시험판 결정 (2026-09-28)
+
+유지관리자는 **Apple Developer ID 서명·공증 없이 Codex/macOS Apple Silicon 시험판을 먼저
+준비하는 것**을 승인했다. 이것은 macOS 보안 기능을 끄거나 모든 Mac의 실행을 보장하는 결정이
+아니다. `unsigned`는 Developer ID 서명·공증을 제공하지 않는다는 뜻이며 linker의 ad-hoc 서명은
+있을 수 있다. Companion DMG·Windows·Intel·Claude 작업 Plugin 화면에 이 예외를 확장하지 않는다.
+
+- `development_unsigned`: 기존 개발 검수물. dirty source 허용, 사용자 배포 금지 유지.
+- `preview_unsigned`: 검수한 clean source 빌드에서 새로 포장하는 opt-in 시험판 후보.
+  버전은 `X.Y.Z-preview.N`, 경고·고지·파일 무결성·호환 범위를 포함한다. stable로 표시하지 않는다.
+- 새 Mac 시험은 `deferred_not_passed`로 기록한다. 기존 Mac의 설치·화면 성공과 분리한다.
+- Agent는 필요한 이유·지원 범위·미공증 사실·로컬 접근 범위를 설명하고 사용자 승인 후 설치를
+  돕는다. 기본 UX는 Plugin 설치이며 Homebrew·Node·Cargo·Companion 설치를 추가 요구하지 않는다.
+- OS가 실행을 차단하면 멈추고 원인을 보고한다. Gatekeeper 해제·quarantine 제거·cache 손편집을
+  설치 방법으로 넣지 않는다. 쉘 다운로드는 모든 macOS 실행 검사를 면제하지 않는다.
+- 공개 source 감사·라이선스 고지·검수한 CI 출처·불변 version/hash·검증된 게시 주소·사용자 안내는
+  계속 필수다. 해시는 변조 검출이지 Apple 신원 확인이나 악성 코드 검사 대체물이 아니다.
+- 자동 업데이트는 허용하지 않는다. 사용자가 승인한 새 version을 고정하고 실제 업데이트 쌍을
+  검수한다. 같은 version의 바이트를 바꾸지 않고, Plugin rollback에 `gil restore`를 쓰지 않는다.
+- staging 도구는 항상 `publishable: false`다. 이는 게시 승인 전 후보라는 뜻이지 이 채널 자체의
+  배포를 영구 금지한다는 뜻은 아니다. 공개 전환·실제 게시·설치본 교체는 별도 승인된 작업이다.
+
+구현과 실행 절차는 [native release gate](../distribution/codex/RELEASE-macos.md),
+관측 증거는 [unsigned 후보 장부](../distribution/codex/UNSIGNED-PREVIEW-CHECKPOINT-20260928.md)를 따른다.
 
 ### 6.3 정식 배포 전 오픈소스 공개 준비 게이트
 
@@ -456,6 +485,7 @@ remote server가 사용자의 로컬 Project 파일을 대신 보관하거나 �
 - Plugin, GIL Core, Companion과 wire schema의 호환 범위를 명시한다.
 - `outdated`를 `missing`으로 말하지 않는다.
 - 자동 업데이트는 서명된 동일 publisher의 배포물만 받는다.
+  §6.2a의 unsigned 시험판에는 자동 업데이트를 적용하지 않고 version별 사용자 승인을 받는다.
 - update 실패 시 마지막 검증 View와 Project 기록을 보존한다.
 - 새 판이 저장 migration을 요구하면 rollback 가능 여부를 설치 전에 밝힌다.
 - 제거는 Companion 설정과 설치물만 지우며 사용자의 Project와 `.gil`을 지우지 않는다.

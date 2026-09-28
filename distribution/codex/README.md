@@ -3,9 +3,11 @@
 이 디렉터리는 **제작자용 배포 도구**다. 받는 사람에게 Node·Cargo·clone·tar 명령을 요구하는
 설치 설명서가 아니다. 최종 UX는 Host의 Plugin 설치 한 번이며 원격 설치 실측은 아직 남았다.
 
-산출물은 `development_unsigned`, `publishable: false`인 **미등록 검수물**이다.
-서명·공증·원격 게시 기능은 없고 `artifact.mjs publish`는 항상 거절한다. 공개 marketplace에
-올리거나 기존 `personal` marketplace를 교체하면 안 된다.
+기본 산출물은 `development_unsigned`, `publishable: false`인 **개발 검수물**이다.
+사용자 승인으로 별도 `preview_unsigned` 시험판 채널을 준비한다. 검수한 clean tree에서
+`unsigned-preview.mjs`가 새 version·경고·receipt를 갖춘 후보를 만들며, 기본 개발물을 덮지 않는다.
+두 제작 경로 모두 원격 게시 기능은 없고 `artifact.mjs publish`는 항상 거절한다. 공개 marketplace
+게시는 별도 승인·검수 단계이며 기존 `personal` marketplace를 자동 교체하지 않는다.
 
 ## 구조와 정본
 
@@ -28,8 +30,9 @@
   checks.json                           압축 왕복·첫 실행·stdio·UI hash 실측
 ```
 
-identity/version을 재발명하지 않는다. 정본의 개발 cachebuster도 보존하며, 정식 version은
-서명·게시 조각에서 확정한다. `catalog.json`은 plugin-creator의 `create_basic_plugin.py`로 생성한
+기본 build는 identity/version을 재발명하지 않는다. 정본의 개발 cachebuster도 보존한다.
+unsigned 후보 제작에서만 출력 version을 명시적 `X.Y.Z-preview.N`으로 정한다.
+`catalog.json`은 plugin-creator의 `create_basic_plugin.py`로 생성한
 template다. 설치된 `personal`과 구별하는 이름은 `gil-preview-macos-arm64`이며 원격 주소도 Host
 등록도 없다. template를 산출물의 `.agents/plugins/marketplace.json`에 복사한다. 소스 저장소의
 `.claude-plugin/marketplace.json`은 별도 개발용 목록으로 그대로 남는다.
@@ -46,7 +49,7 @@ macOS arm64, Rust 1.97.1 + aarch64-apple-darwin target, Node 22 이상과 잠근
 ```sh
 npm ci --prefix mcp-app
 cargo fetch --locked
-node --test distribution/codex/artifact.test.mjs distribution/codex/release-preflight.test.mjs distribution/compliance/notices.test.mjs
+node --test distribution/codex/*.test.mjs distribution/compliance/notices.test.mjs
 mkdir -p target
 node distribution/codex/build-preview.mjs target/codex-preview
 ```
@@ -114,13 +117,15 @@ Actions artifact도 공개 범위에 포함된다. 개발용이라는 표시는 
 
 1. [오픈소스 공개 준비 게이트](../../spec/GIL_Open_Source_Readiness_v0.1.md) 완료와 source 검수·commit,
    재현 build와 독립 CI 성공. dirty preview를 정식 release로 재명명하지 않음.
-2. native MCP 실행 파일의 Developer ID 서명·공증 및 다운로드/Host 실행 경로 검증.
-   Companion DMG와 별도 산출물이다. 단독 CLI와 ZIP에는 staple할 수 없으므로 서명 bytes의
-   공증·온라인 티켓 조회 및 실제 Host 설치 경로를 검수한다. tar.gz는 공증 제출 포맷이 아니다.
-3. 개발 도구 없는 새 Mac에서 marketplace 설치 → fullscreen/채팅/재시작 → 업데이트/제거/재설치,
-   Project 보존과 최초 실행 timeout 없음 확인.
+2. 첫 unsigned 시험판에는 Apple Developer ID·공증이 없음을 고지하고 version/hash·출처를 고정.
+   별도 후보 제작·검증·공식 설치 안내는 [release gate §1](RELEASE-macos.md)을 따른다.
+3. 새 Mac 검수는 사용자 결정으로 유예하고 **미통과**로 표시한다. 기존 Mac의 공식 설치·화면은
+   확인됐지만 새 prerelease Host 설치와 원격 경로·업데이트/제거/재설치 인수는 별도로 남는다.
 4. 승인 후 built-dist 원격 저장소/불변 version·게시 권한·rollback 정책 확정 및 게시.
 5. remote marketplace 등록은 public Plugins Directory 심사·등재와 별개임을 표시.
+
+Developer ID·공증·새 Mac 검수를 갖춘 정식 신뢰 채널은 후속 작업이다. 기존
+`release-preflight.mjs`는 그 서명 채널 점검이며 unsigned 후보의 선행 조건이 아니다.
 
 Intel·universal·Windows는 아직 지원 대상이 아니다. macOS 배포를 닫은 뒤 추가한다.
 

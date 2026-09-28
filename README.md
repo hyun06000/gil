@@ -37,8 +37,10 @@ GIL의 주 사용자는 비개발자다. 인간은 명령과 저장 형식을 �
 상태가 아니다. PiP는 현재 지원을 주장하지 않는다.
 
 소스는 [MIT 라이선스](LICENSE)이며 검수 후 공개할 예정이다. **정식 사용자 배포가 완료됐다는 뜻은 아니다.**
-목표는 marketplace에서 Plugin 한 번 설치로 시작하는 UX이며, 서명·공증·새 기계 설치와 Windows
-인수는 아직 남았다. Claude Desktop 직접 연결의 화면 성공과 작업 Plugin 설치 경로의 UI 차단도
+목표는 marketplace에서 Plugin 한 번 설치로 시작하는 UX다. 첫 배포는 **Apple 개발자 서명·공증 없는
+Codex/macOS Apple Silicon 시험판**으로 준비한다. 새 Mac 검수는 통과가 아니라 유예이며, 정식 신뢰
+채널의 서명·공증과 Windows 인수는 남았다. [시험판 조건](distribution/codex/RELEASE-macos.md)을 따른다.
+Claude Desktop 직접 연결의 화면 성공과 작업 Plugin 설치 경로의 UI 차단도
 구분한다. 자세한 범위는 아래 구현 상태와 Roadmap을 따른다.
 
 전체 명세를 미리 읽지 않은 새 Agent 세션이 `gil context`와 주소 가능한 Help Topic만으로

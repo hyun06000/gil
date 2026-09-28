@@ -8,10 +8,10 @@ import {join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {CORE, MANIFEST, PREFIX, checkLibraries, hash, verifyTree} from './artifact.mjs';
 
-export async function smoke(root, expectedHtml) {
+export async function smoke(root, expectedHtml, verify = verifyTree) {
   assert.equal(process.platform, 'darwin');
   assert.equal(process.arch, 'arm64');
-  await verifyTree(root); // Integrity before executing any artifact.
+  await verify(root); // Integrity and the selected channel policy before executing any artifact.
   const state = await realpath(await mkdtemp(join(tmpdir(), 'gil-dist-smoke-')));
   const binary = join(root, CORE);
   const env = {PATH: '/usr/bin:/bin', GIL_MONITOR_STATE_DIR: join(state, 'bindings')};
