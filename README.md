@@ -40,8 +40,9 @@ GIL의 주 사용자는 비개발자다. 인간은 명령과 저장 형식을 �
 목표는 marketplace에서 Plugin 한 번 설치로 시작하는 UX다. 첫 배포는 **Apple 개발자 서명·공증 없는
 Codex/macOS Apple Silicon 시험판**으로 준비한다. 새 Mac 검수는 통과가 아니라 유예이며, 정식 신뢰
 채널의 서명·공증과 Windows 인수는 남았다. [시험판 조건](distribution/codex/RELEASE-macos.md)을 따른다.
-Claude Desktop 직접 연결의 화면 성공과 작업 Plugin 설치 경로의 UI 차단도
-구분한다. 자세한 범위는 아래 구현 상태와 Roadmap을 따른다.
+Claude Desktop은 폴더 없는 대화에서 Plugin 화면이 확인됐지만, 폴더 연결 뒤의 표시 차단과
+fullscreen의 도구 승인 창 가림이 남아 있다. [호출 경로별 진단](mcp-app/CLAUDE-DESKTOP-ROUTES.md)을
+따르며 Claude 작업 UX 전체의 배포 완료로 세지 않는다. 자세한 범위는 아래 구현 상태와 Roadmap을 따른다.
 
 전체 명세를 미리 읽지 않은 새 Agent 세션이 `gil context`와 주소 가능한 Help Topic만으로
 실제 작업과 GIL Cycle을 완주하는 것을 Claude와 Codex 계열에서 각각 확인했다. 실패한 Cycle에서

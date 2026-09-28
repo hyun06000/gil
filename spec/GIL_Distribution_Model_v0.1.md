@@ -52,6 +52,13 @@ Cowork를 같은 capability로 취급하지 않는다. 이 날 macOS V3 진단�
 `inline + fullscreen`, Code에서 `inline`이었다. PiP는 셋 모두 광고하지 않았다.
 fullscreen은 OS always-on-top/PiP라는 뜻이 아니며, 창의 실제 배치는 Host가 정한다.
 
+2026-09-28 후속 대조: Claude Desktop은 모드 이름만이 아니라 **폴더 연결과 호출 경로**에 따라
+표시가 달랐다. 폴더 없는 대화의 Plugin 화면은 확인됐고, 폴더 연결 뒤에는 공식 예제도 표시되지
+않았다. fullscreen이 다른 도구의 승인 창을 가리는 문제도 남았다
+([진단 장부](../mcp-app/CLAUDE-DESKTOP-ROUTES.md)). 따라서 Cowork로 이동하라는 안내만으로
+지원 표면을 확보했다고 판단하지 않는다. 첫 시험판은 Codex/macOS arm64에 한정하며, Filesystem
+확장 추가나 "항상 허용"을 기본 설치 조건으로 넣지 않는다. Codex 자동 fullscreen은 보존한다.
+
 ```text
 Plugin installed
   → persistent Host surface를 실제로 요청하고 결과를 확인
