@@ -46,7 +46,7 @@ macOS arm64, Rust 1.97.1 + aarch64-apple-darwin target, Node 22 이상과 잠근
 ```sh
 npm ci --prefix mcp-app
 cargo fetch --locked
-node --test distribution/codex/artifact.test.mjs distribution/compliance/notices.test.mjs
+node --test distribution/codex/artifact.test.mjs distribution/codex/release-preflight.test.mjs distribution/compliance/notices.test.mjs
 mkdir -p target
 node distribution/codex/build-preview.mjs target/codex-preview
 ```
@@ -108,11 +108,15 @@ Actions artifact도 공개 범위에 포함된다. 개발용이라는 표시는 
 
 공개 배포 전 필요한 작업:
 
+[native macOS release gate](RELEASE-macos.md)에 준비 → 공개 → 배포 순서와 읽기 전용
+`release-preflight.mjs`를 둔다. 이 점검은 서명·공증이나 게시를 수행하지 않고 항상
+`publishable: false`를 유지한다. 현재 유지관리자 환경은 Developer Program/배포용 identity 미준비다.
+
 1. [오픈소스 공개 준비 게이트](../../spec/GIL_Open_Source_Readiness_v0.1.md) 완료와 source 검수·commit,
    재현 build와 독립 CI 성공. dirty preview를 정식 release로 재명명하지 않음.
 2. native MCP 실행 파일의 Developer ID 서명·공증 및 다운로드/Host 실행 경로 검증.
-   Companion DMG와 별도 산출물이다. tar/CLI 바이너리에 같은 stapling 절차를 적용할 수 있다고
-   전제하지 않고 해당 포맷의 Apple 신뢰 검수 절차부터 확정한다.
+   Companion DMG와 별도 산출물이다. 단독 CLI와 ZIP에는 staple할 수 없으므로 서명 bytes의
+   공증·온라인 티켓 조회 및 실제 Host 설치 경로를 검수한다. tar.gz는 공증 제출 포맷이 아니다.
 3. 개발 도구 없는 새 Mac에서 marketplace 설치 → fullscreen/채팅/재시작 → 업데이트/제거/재설치,
    Project 보존과 최초 실행 timeout 없음 확인.
 4. 승인 후 built-dist 원격 저장소/불변 version·게시 권한·rollback 정책 확정 및 게시.
