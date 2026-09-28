@@ -1475,6 +1475,11 @@ PiP는 확인하지 못했다. Windows·작업 전환·재시작 수명 검수 �
       사용자 동작 성공 보고 (2026-09-28). 프로토콜 응답이 아닌 실제 화면 인수
 - [x] Codex 사용자 실측: 폴더 선택·의도 확인 → 계산기 제작 → 공학용 확장 중 Graph 실시간 갱신 (2026-09-25)
 - [ ] Claude Desktop Cowork의 **Plugin 설치 경로**로 같은 인수 (직접 등록 진단판과 구분)
+- [x] Claude Desktop 호출 경로 대조 기록 — 폴더 없는 대화의 Plugin 표시와 폴더 연결 뒤 공식
+      예제까지 표시되지 않는 결과를 구분. [9/28 진단](../mcp-app/CLAUDE-DESKTOP-ROUTES.md)
+- [ ] Claude 작업 UX 재설계·인수 — 경로 입력 없는 Project 선택, 폴더 접근 권한 경계,
+      fullscreen과 도구 승인 창 병행. #1081 제출은 해결이 아니며 Filesystem 확장·항상 허용을
+      사용자 필수 조건으로 만들지 않음. Host 식별/표시 완화와 새 파일 도구는 별도 검토
       — 2026-09-28 Desktop 2.9939.2 대조군: 작업 세션 computer bridge에서는 새 Plugin·기존
       카운터 모두 데이터만 반환, 같은 기존 카운터의 일반 대화 Desktop 직접 연결은 화면·fullscreen
       성공. Host 함수 분리 시험의 UI metadata 소실은 유력한 메커니즘으로만 기록.

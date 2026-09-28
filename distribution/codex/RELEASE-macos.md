@@ -150,6 +150,10 @@ Plugin 한 번 설치라는 사용자 계약을 조용히 바꾸지 않는다.
 Windows·Intel/universal·Claude 작업 Plugin의 화면 전달·Companion 재배포는 이번 인수와 별개다.
 macOS/Codex를 닫기 전에 이들까지 지원한다고 표시하지 않는다.
 
+Claude Desktop의 [9/28 경로별 진단](../../mcp-app/CLAUDE-DESKTOP-ROUTES.md)은 폴더 없는 대화의
+Plugin 표시를 확인했지만, 폴더 연결 뒤의 차단과 fullscreen의 승인 창 가림은 남겼다. 이 때문에
+이번 Codex 후보의 UI나 실행 계약을 변경하지 않으며 Claude 전체 지원으로 배포 범위를 넓히지 않는다.
+
 ## 근거 (2026-09-28 확인)
 
 - [Apple Developer ID](https://developer.apple.com/developer-id/): 외부 배포의 서명·공증과 인증서 준비.
