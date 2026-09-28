@@ -93,8 +93,12 @@ GitHub runner 실제 성공은 별개다.
 이전 source의 원격 CI 인수는 그 저장소에 보존한다. 새 `gil`의 clean root commit `fbc4100`에서
 수동 CI·artifact 다운로드 검수를 통과했다 ([새 원격 체크포인트](CI-CHECKPOINT-20260928.md)).
 35개 패키징/고지 시험·84개 package 고지·source snapshot·실행 권한·17 tools·내장 UI를 확인했다.
-Node 20 기반 Actions 경고는 후속 보정 대상이다. [이전 경계](../../SOURCE-MIGRATION.md)와
-새 기계·Host 설치 인수를 구분한다.
+첫 실행의 Node 20 기반 Actions 경고는 그 기록에 보존한다. 현재 workflow는 공식
+[checkout v7.0.1](https://github.com/actions/checkout/releases/tag/v7.0.1)과
+[upload-artifact v7.0.1](https://github.com/actions/upload-artifact/releases/tag/v7.0.1)의 Node 24 실행점을
+full SHA로 고정했다. `archive: true`를 명시해 tar·checksum·증거를 기존처럼 하나의 artifact로 묶는다.
+보정 후 원격 CI·다운로드 검수는 아직 미실행이며 경고 해소를 실측했다고 주장하지 않는다.
+[이전 경계](../../SOURCE-MIGRATION.md)와 새 기계·Host 설치 인수를 구분한다.
 
 새 source 저장소는 현재 비공개 이전 준비 중이다. 공개 전환하면 CI 로그와 다운로드 가능한
 Actions artifact도 공개 범위에 포함된다. 개발용이라는 표시는 접근 제한이 아니며, 원격 실행·업로드 전에도

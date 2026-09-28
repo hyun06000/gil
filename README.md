@@ -225,7 +225,8 @@ gil help     Agent가 지금 필요한 규칙 하나를 배운다.
 
 아직 정식 릴리스가 아니다. 다음은 기여자·개발 검수용이며, 비개발자에게 요구하는 설치 절차가
 아니다. Rust 개발 환경에서 저장소의 현재 작업 트리를 직접 설치한다. 일반 사용자의 marketplace
-설치는 준비 중이다. 기여·시험 방법은 [CONTRIBUTING](CONTRIBUTING.md)을 참고한다.
+설치는 준비 중이다. 일반 질문과 문제 제보는 [SUPPORT](SUPPORT.md), 기여·시험 방법은
+[CONTRIBUTING](CONTRIBUTING.md)을 참고한다.
 
 ```bash
 cargo install --path . --force
@@ -350,7 +351,8 @@ layer를 목표로 한다.
 **2026-09-28 — Rust 단일 MCP·Codex fullscreen을 검증했고, marketplace 배포와 오픈소스 공개
 준비 게이트를 진행 중이다. 정식 릴리스·Windows 지원은 아직 아니다.**
 
-앞선 Go 구현과 문서·릴리스는 이 저장소의 옛 branch와 commit history에 남아 있다. 현재 구현은
-Rust로 작성하며, Git wrapper가 아니라 GIL의 개념과 불변식을 먼저 세우는 방향으로 진행한다.
+앞선 Go 구현과 과거 개발 이력은 기존 개발 저장소에 남겨 두었으며, 이 `gil` 저장소에는
+그 branch·tag·commit history를 가져오지 않았다. 현재 구현은 Rust로 작성하며, Git wrapper가
+아니라 GIL의 개념과 불변식을 먼저 세우는 방향으로 진행한다.
 
 MIT License.

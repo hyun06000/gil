@@ -13,6 +13,10 @@
 보존하며, 과거 개인 개발 경로·작업 기록의 정리 대상과 영향은 별도 검토한다.
 새 저장소를 만든 것만으로 기존 공개 사본의 문제가 해결됐다고 말하지 않는다.
 
+2026-09-28 추가 승인으로 기존 개발 저장소도 비공개로 전환했다. 공개 fork·기존 clone의 회수는
+아니다. 두 저장소의 main은 PR 전용 운영으로 바꾸며, 비공개 저장소 보호 규칙은 요금제 제한으로
+서버 적용이 막혀 있다 ([설정 장부](../distribution/compliance/REPOSITORY-GOVERNANCE-20260928.md)).
+
 | 단계 | 현재 범위 | 아직 의미하지 않는 것 |
 |---|---|---|
 | 새 저장소 | 비공개 `hyun06000/gil`, 독립 root commit push | 공개 전환·정식 배포 승인 |
@@ -36,9 +40,14 @@
 - [x] 새 저장소의 독립 macOS arm64 preview CI와 source↔artifact·고지·실행 권한 대조.
   clean `fbc4100`, 35개 시험과 17 tools 검수 ([실행·다운로드 증거](../distribution/codex/CI-CHECKPOINT-20260928.md)).
   전체 Core/UI suite나 Host 설치 시험을 원격에서 수행했다는 뜻은 아니다.
-- [ ] 유지관리자 기여 정책·Code of Conduct·issue/PR 안내 및 연락 경로 검토.
+- [~] 유지관리자 기여 정책·Code of Conduct·issue/PR 안내 및 연락 경로 검토.
+  [기여 안내](../CONTRIBUTING.md)·[SUPPORT](../SUPPORT.md)·issue/PR 양식을 준비했다.
+  [행동 강령](../CODE_OF_CONDUCT.md)은 초안이며 담당자 검토와 민감한 신고 경로는 미결이다.
 - [ ] 실제 비공개 보안 보고 경로 결정 후 SECURITY.md 게시.
-  보안 설정은 자동 변경하지 않고, 없는 이메일·응답 기한을 약속하지 않는다.
+  [준비 계획](GIL_Security_Reporting_Plan_v0.1.md)에서 공개 시 GitHub PVR 사용을 결정했다. 공개 저장소용이므로
+  현재 비공개 저장소에서 개통됐다고 표시하지 않는다. 보안 설정은 자동 변경하지 않고,
+  없는 이메일·응답 기한을 약속하지 않는다.
+- [~] main의 PR 전용 변경 정책 — 개발 지침 반영, GitHub 서버 강제 보호는 Pro 요금제 준비 후 적용.
 - [ ] 미결과 공개 표면 검토 후 저장소 공개 전환 승인.
 - [ ] 서명·공증·새 기계 설치·업데이트·제거/재설치·Project 보존 검수 후 정식 release와
   marketplace 게시 별도 승인. 직접 등록한 MCP 화면 성공은 Plugin 설치 경로 성공이 아니다.
