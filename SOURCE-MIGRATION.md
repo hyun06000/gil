@@ -1,6 +1,6 @@
 # GIL source migration
 
-2026-09-28 · 비공개 준비 · 원격 push/공개/정식 배포 전
+2026-09-28 · 비공개 이전·첫 원격 CI 완료 · 공개/정식 배포 전
 
 ## 범위
 
@@ -74,9 +74,19 @@ Host UI 명세의 Markdown hard break 2개, `src/restore/mod.rs` 끝 빈 줄 1�
 자동 탐지 후보 0은 모든 비밀·개인정보·권리의 부재를 보증하지 않는다.
 과거 Git 이력·외부 artifact·fork/clone은 이번 새 source tree 검사 범위가 아니다.
 
+## 첫 원격 push와 독립 CI
+
+사용자 승인 후 독립 root commit `fbc410062dd79f3e0bcd7c27d86b8d1075b66f52`를
+비공개 `hyun06000/gil/main`에 push했다. 과거 Git 이력과 refs는 옮기지 않았다.
+[새 저장소 CI](distribution/codex/CI-CHECKPOINT-20260928.md)는 35개 패키징/고지 시험,
+84개 package 고지, clean source와 배포물 대응, 압축 왕복·17 tools·내장 UI 검사를 통과했다.
+생성물을 다운로드해 로컬에서도 해시·권한·원문 고지·native 실행을 재검증했다.
+CI는 위 로컬 전체 Core/UI suite와 별개이며, 새 기계나 Host 설치 성공으로 확대하지 않는다.
+결과를 기록하는 후속 commit은 문서만 바꾼다. Node 20 기반 Actions 경고 1건은 체크포인트에 남겼다.
+
 ## 아직 하지 않은 일
 
-- 새 원격 저장소로 push, GitHub CI 실행, 공개 전환, release/marketplace 게시.
+- 저장소 공개 전환, release/marketplace 게시.
 - 새 사용자 기계 설치·업데이트·제거/재설치, 실제 Host 화면 재검수.
 - Windows 및 Tauri 전용 회귀시험. Core/모의 Host 시험으로 대신 통과 처리하지 않는다.
 - 기존 공개 이력 삭제·재작성·force push 또는 비공개 전환.

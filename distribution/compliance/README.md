@@ -78,8 +78,9 @@ plugins/gil-companion-prototype/
 5. 위 시험과 새 artifact의 압축 왕복을 통과시킨다. 원격 CI 실행/업로드는 별도 승인 경계를 따른다.
 
 CI는 **수동 preview workflow**에 연결돼 있다. 이전 source의 실행 증거는 원본 저장소에 보존하며
-새 저장소의 CI 성공으로 옮겨 적지 않는다. 새 source의 검증 범위는
-[SOURCE-MIGRATION.md](../../SOURCE-MIGRATION.md)를 따른다.
+새 저장소의 CI 성공으로 옮겨 적지 않는다. 새 `gil` root commit `fbc4100`의
+[독립 CI 및 다운로드 인수](../codex/CI-CHECKPOINT-20260928.md)에서 84개 package coverage와
+원문 고지 bytes를 재검증했다. 새 source의 범위는 [SOURCE-MIGRATION.md](../../SOURCE-MIGRATION.md)를 따른다.
 이 고지 자동화는 법률적 적합성의 자동 인증이 아니다. Companion/다른 target, 별도 배포 표면과
 과거 이력의 공개 의도 등 [오픈소스 게이트](../../spec/GIL_Open_Source_Readiness_v0.1.md)의 나머지는 열려 있다.
 

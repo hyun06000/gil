@@ -348,14 +348,16 @@ Plugin UI의 설치 한 번이며, preview용 Node·Cargo·압축 명령을 사�
 CLI 바이너리·archive의 Apple 신뢰 검수는 별도로 확정하고 Companion DMG의 stapling 성공을
 Plugin 실행 파일의 서명/공증 성공으로 대체하지 않는다.
 
-이전 source에서 원격 runner 검수를 수행했지만 새 `gil` 저장소의 CI 성공으로 간주하지 않는다.
+이전 source의 원격 runner 검수와 별도로 새 `gil`의 clean `fbc4100`에서
+[독립 preview CI와 다운로드 인수](../distribution/codex/CI-CHECKPOINT-20260928.md)를 통과했다.
 [source 이전 경계](../SOURCE-MIGRATION.md)에 새 검증을 구분한다. 원격 runner의 빌드·압축 왕복·
 17 tools·내장 UI bytes 검사는 새 사용자 기계의 설치 성공이나 공개 release/marketplace 게시와 다르다.
 
 ### 6.3 정식 배포 전 오픈소스 공개 준비 게이트
 
 GIL은 GitHub 소스를 공개하는 오픈소스 프로젝트로 배포한다. 새 정본 `hyun06000/gil`은
-2026-09-28 비공개 빈 저장소로 생성했다. 기존 MIT LICENSE와 저작권 표기는 유지하며,
+2026-09-28 비공개로 생성한 뒤 독립 root commit의 첫 push와 CI를 완료했다.
+기존 MIT LICENSE와 저작권 표기는 유지하며,
 source 검수 후 공개 전환과 정식 사용자 배포를 각각 승인받는다. 이전 저장소의 공개 이력은
 복사하지 않으며 새 저장소 생성이 과거 공개 기록을 제거하는 조치는 아니다.
 

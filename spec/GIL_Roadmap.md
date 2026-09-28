@@ -1390,7 +1390,8 @@ rmcp stdio server 최소 spike
       preview 생성/검증 구현. 상대 catalog·단일 native 실행점·공용 Skill·무결성 receipt,
       원격 게시와 실제 marketplace 설치/새 기계 검수는 남음
 - [~] release pipeline — preview build/압축 왕복/native smoke 및 수동 read-only CI 구성.
-      이전 source의 GitHub macOS arm64 runner 인수는 보존하되 새 `gil` 저장소 CI는 미실행.
+      새 `gil`의 clean `fbc4100`에서 GitHub macOS arm64 CI·다운로드 검수 통과
+      ([독립 인수](../distribution/codex/CI-CHECKPOINT-20260928.md)); Node 기반 Actions 경고는 후속 보정 대상.
       **서명·공증·정식 게시 미완료**, 비밀을 쓰거나 배포 권한을 부여하지 않음
 - [ ] macOS 배포를 닫는다 (Developer ID 서명·공증·staple·`spctl`)
 - [ ] 그 뒤 Windows adapter — feasibility build 와 기본 채널 확정
@@ -1415,8 +1416,9 @@ ZIP 최초 MCP 시험의 30초 timeout 1회는 후속 두 시험에서 재현되
 원격 marketplace·Tauri/Windows 인수를 대신하지 않는다. 상세 실패/재실행 구분은
 `mcp-app/NATIVE-ACCEPTANCE.md`에 남긴다.
 
-이전 source의 원격 preview CI와 고지 동봉 검증은 원본에 보존한다. 새 저장소의 CI·최초 설치
-인수로 재사용하지 않는다. [source 이전 체크포인트](../SOURCE-MIGRATION.md)에 새 검증을 기록한다.
+이전 source의 원격 preview CI와 고지 동봉 검증은 원본에 보존한다. 새 저장소의 인수로 재사용하지
+않으며, `gil`의 `fbc4100`에서 독립 CI 35개 시험·고지·배포물 다운로드 검수를 새로 통과했다.
+[source 이전 체크포인트](../SOURCE-MIGRATION.md)에 새 검증을 기록한다. 최초 설치 인수는 남아 있다.
 다른 환경의 과거 30초 최초 실행 timeout 원인은 해결했다고 주장하지 않는다.
 
 ```text
@@ -1506,10 +1508,10 @@ artifact·release pipeline → 새 기계 설치·업데이트 인수다. Claude
 
 ### M5-G Open-source Release Readiness — 정식 공개 전 필수
 
-상태: `[~] 새 gil 비공개 저장소 준비 · 공개·정식 배포 전 검수` (2026-09-28)
+상태: `[~] 새 gil 비공개 이전·첫 CI 완료 · 공개·정식 배포 전 검수` (2026-09-28)
 
 사용자 결정: **정식 공개 전에 오픈소스 준비를 완료하고, 새 저장소 이름은 gil로 한다.**
-과거 개발 이력을 그대로 옮기지 않고 선별한 현재 코드로 독립적인 첫 commit을 준비한다.
+과거 개발 이력을 그대로 옮기지 않고 선별한 현재 코드로 독립적인 첫 commit을 push했다.
 기존 저장소와 개인 기록의 정리 영향 검토는 별도이며, 삭제·이력 재작성·force push를 승인한 것이 아니다.
 소스 공개, preview 검수물 공유, 정식 release/marketplace 게시를 서로 다른 판정으로 관리한다.
 
@@ -1521,7 +1523,8 @@ artifact·release pipeline → 새 기계 설치·업데이트 인수다. Claude
 - [~] Rust·UI·Plugin·Companion 배포 단위별 의존성 inventory와 필요한 고지 동봉
   - [x] macOS arm64 Core 79 + bundled UI 5 package 및 Rust 표준 라이브러리 고지 구현 보존
   - [x] lock·원문·coverage 변경 및 고지 누락 거절 시험과 수동 CI 배선 보존
-  - [ ] 새 `gil` 저장소 CI·artifact 검수 — 기존 저장소 CI 성공을 재사용하지 않음
+  - [x] 새 `gil` 저장소 CI·artifact 검수 — clean `fbc4100`, 35개 시험·원문 고지·17 tools·
+        source/hash/mode 대조 통과 ([독립 증거](../distribution/codex/CI-CHECKPOINT-20260928.md))
   - [ ] Companion·다른 target 고지 검수
 - [ ] 실제 비공개 보안 보고 경로 결정 및 SECURITY 안내
 - [ ] 기여 정책·Code of Conduct·유지관리 연락 경로·issue/PR 안내의 담당자 검수

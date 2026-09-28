@@ -5,7 +5,7 @@
 ## 1. 결정과 현재 사실
 
 새 정본 저장소의 이름은 **gil**이다. [hyun06000/gil](https://github.com/hyun06000/gil)은
-비공개 빈 저장소로 만들었고, 선별한 현재 소스로 독립적인 첫 Git 이력을 준비한다.
+비공개로 만들었고, 선별한 현재 소스의 독립 root commit을 push한 뒤 첫 CI를 검수했다.
 기존 개발 저장소를 fork하거나 그 branch·tag·과거 commit을 옮기지 않는다.
 [MIT LICENSE](../LICENSE)와 기존 저작권·제3자 고지는 그대로 보존한다.
 
@@ -15,10 +15,10 @@
 
 | 단계 | 현재 범위 | 아직 의미하지 않는 것 |
 |---|---|---|
-| 새 저장소 | 비공개 `hyun06000/gil`, 기존 이력 없는 출발 | 공개 전환·원격 push 승인 |
+| 새 저장소 | 비공개 `hyun06000/gil`, 독립 root commit push | 공개 전환·정식 배포 승인 |
 | 소스 선별 | 현재 코드·시험·명세·고지, 개인 기록과 옛 감사 보고서 제외 | 전체 공개 표면 감사 완료 |
 | 라이선스 | 기존 MIT 및 제3자 원문 고지 보존 | 모든 배포 target의 권리 검수 완료 |
-| 제품 검수 | 이전 구현 인수와 새 checkout 검증을 구분 | 새 저장소 CI·새 기계 설치·정식 출시 |
+| 제품 검수 | 이전 구현 인수·새 checkout 검증·새 CI를 구분 | 새 기계 설치·정식 출시 |
 
 이전 저장소의 CI 실행 번호나 감사 결과를 새 저장소의 성공으로 승계하지 않는다.
 선별 기준과 이번 실행 결과는 [SOURCE-MIGRATION.md](../SOURCE-MIGRATION.md)에 기록한다.
@@ -33,7 +33,9 @@
 - [~] macOS arm64 native Core 79개 + 실제 UI bundle 5개 package 및 Rust 표준 라이브러리
   고지 조립·원문/coverage/lock 변경 거절 구현 보존.
   [고지 검증](../distribution/compliance/README.md)은 Companion·다른 target까지 보증하지 않는다.
-- [ ] 새 저장소의 독립 clean-checkout CI와 source↔artifact·고지·실행 권한 대조.
+- [x] 새 저장소의 독립 macOS arm64 preview CI와 source↔artifact·고지·실행 권한 대조.
+  clean `fbc4100`, 35개 시험과 17 tools 검수 ([실행·다운로드 증거](../distribution/codex/CI-CHECKPOINT-20260928.md)).
+  전체 Core/UI suite나 Host 설치 시험을 원격에서 수행했다는 뜻은 아니다.
 - [ ] 유지관리자 기여 정책·Code of Conduct·issue/PR 안내 및 연락 경로 검토.
 - [ ] 실제 비공개 보안 보고 경로 결정 후 SECURITY.md 게시.
   보안 설정은 자동 변경하지 않고, 없는 이메일·응답 기한을 약속하지 않는다.

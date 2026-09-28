@@ -90,8 +90,11 @@ full commit으로 고정한 Actions를 쓴다. tar와 검증 증거만 7일짜�
 push/tag에 자동 실행하지 않고 release·dist repo·공개 catalog에 게시하지 않는다. workflow 작성과
 GitHub runner 실제 성공은 별개다.
 
-이전 source의 원격 CI 인수는 그 저장소에 보존한다. 이 새 저장소의 clean commit으로는
-아직 원격 CI를 실행하지 않았다. [이전 경계](../../SOURCE-MIGRATION.md)를 확인한다.
+이전 source의 원격 CI 인수는 그 저장소에 보존한다. 새 `gil`의 clean root commit `fbc4100`에서
+수동 CI·artifact 다운로드 검수를 통과했다 ([새 원격 체크포인트](CI-CHECKPOINT-20260928.md)).
+35개 패키징/고지 시험·84개 package 고지·source snapshot·실행 권한·17 tools·내장 UI를 확인했다.
+Node 20 기반 Actions 경고는 후속 보정 대상이다. [이전 경계](../../SOURCE-MIGRATION.md)와
+새 기계·Host 설치 인수를 구분한다.
 
 새 source 저장소는 현재 비공개 이전 준비 중이다. 공개 전환하면 CI 로그와 다운로드 가능한
 Actions artifact도 공개 범위에 포함된다. 개발용이라는 표시는 접근 제한이 아니며, 원격 실행·업로드 전에도
