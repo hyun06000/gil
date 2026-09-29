@@ -1,6 +1,6 @@
 # GIL Open Source Readiness v0.1
 
-상태: 원격 Host 인수·공개 표면 점검 완료, 개인정보 결정 및 게시 게이트 미완료 (2026-09-29)
+상태: 독립 marketplace 전환·기존 Host 인수 완료, 새 Skill 후보 및 공개/게시 게이트 준비 (2026-09-29)
 
 ## 1. 결정과 현재 사실
 
@@ -25,6 +25,12 @@
 승인했다. 새 Mac 검수는 명시적으로 유예하며 통과로 세지 않는다. 공개 표면 감사와 PR·CI·게시
 승인 경계는 유지한다. 정식 신뢰 채널과 Companion 배포 기준은 별개다.
 
+9/29 추가 결정으로 개인정보가 남은 `gil-distribution`은 비공개로 보존하고, 독립 이력의
+`hyun06000/gil-marketplace`를 새 배포 출처로 채택했다. PR #1 병합과 공식 Host의 출처 전환,
+preview.1 동일 bytes·fullscreen·노드 상세를 확인했다
+([새 경로 장부](../distribution/codex/CLEAN-MARKETPLACE-CHECKPOINT-20260929.md)).
+현재 source `gil`과 active marketplace 모두 비공개이며 공개를 실행한 것은 아니다.
+
 | 단계 | 현재 범위 | 아직 의미하지 않는 것 |
 |---|---|---|
 | 새 저장소 | 비공개 `hyun06000/gil`, 준비 후 공개·배포 순서 승인 | 지금 즉시 공개·정식 출시 가능 |
@@ -42,9 +48,13 @@
 - [x] README·CONTRIBUTING·개발 지침에서 개인 bootstrap 및 옛 실행 환경 의존 제거.
 - [~] 선별된 첫 source tree의 비밀·개인정보·fixture·이미지·문서·링크 감사.
   패턴 검색 결과를 전체 보안 감사로 확대하지 않으며, 시험용 유출 방지 문자열과 실제 값을 구분한다.
-  [9/29 감사](../distribution/compliance/PUBLIC-SURFACE-AUDIT-20260929.md): source·distribution 전체
-  도달 가능 이력, CI 로그 8개·artifact 8개·PR/댓글 점검. 비밀 탐지 없음. 배포 commit 작성자/커미터의
-  개인 이메일 공개 여부는 미승인 — 값은 문서에 싣지 않고 공개를 보류한다.
+  [초기 9/29 감사](../distribution/compliance/PUBLIC-SURFACE-AUDIT-20260929.md)의 배포 commit 개인
+  이메일 문제는 옛 저장소 비공개 보존·독립 marketplace 경로로 해결했다. 후속 source/marketplace
+  이력·CI·PR·artifact 감사 범위와 source의 vendor co-author 예외는
+  [새 장부](../distribution/codex/CLEAN-MARKETPLACE-CHECKPOINT-20260929.md)에 구분한다.
+  새로운 source/후보/ref도 검수하며 이전 시점의 검사를 전체 보안 보증으로 확대하지 않는다.
+- [x] 독립 marketplace의 no-reply Git 이력·PR/CI·동일 payload·공식 설치 출처 전환 검수.
+  옛 배포 저장소는 비공개 복구 이력으로 보존하고 force push·삭제하지 않았다.
 - [~] macOS arm64 native Core 79개 + 실제 UI bundle 5개 package 및 Rust 표준 라이브러리
   고지 조립·원문/coverage/lock 변경 거절 구현 보존.
   [고지 검증](../distribution/compliance/README.md)은 Companion·다른 target까지 보증하지 않는다.
@@ -65,13 +75,16 @@
   승인한 동일 bytes를 marketplace 경로에 게시한다. 새 Mac 검수는 유예 상태로 공개 고지한다.
   서명·공증·새 기계 설치를 갖춘 정식 신뢰 채널은 별도 후속 게이트다.
   기존 Mac의 개발판→preview 교체·제거/재설치·Project 보존·화면은
-  [Host 장부](../distribution/codex/HOST-INSTALL-CHECKPOINT-20260929.md)로 확인했다. 공개 게시 주소·설치와
+  [Host 장부](../distribution/codex/HOST-INSTALL-CHECKPOINT-20260929.md)와 위 출처 전환 장부로 확인했다.
+  Companion 선택 사항·Codex-only 범위를 바로잡은 Skill은 새 preview.2로 검수한다. 기존 설치본은
+  preview.1 그대로이며 새 version 인수로 세지 않는다. 공개 게시 주소·설치와
   실제 이전 판 rollback 인수는 미완료이며,
   [native release gate](../distribution/codex/RELEASE-macos.md)를 따른다.
   직접 등록한 MCP 화면 성공은 Plugin 설치 경로 성공이 아니다.
 
 준비된 [게시 순서와 사용자 안내](../distribution/codex/PUBLICATION-PLAN-20260929.md)는 초안이다.
-저장소 공개·보호/PVR 설정·게시를 실행하지 않았고, 검수한 설치본/후보 bytes도 변경하지 않았다.
+저장소 공개·보호/PVR 설정·게시를 실행하지 않았다. Skill source 보정은 기존 설치본/후보의
+덮어쓰기를 승인하지 않으며 새 후보·배포 PR·설치 인수를 각각 거친다.
 
 ## 3. 검증과 승인 경계
 

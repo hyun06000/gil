@@ -1341,7 +1341,8 @@ macOS arm64 하나뿐이다. **Companion** macOS 배포물은 `companion/release
 M5-D 가 닫아 준 것은 **Agent surface 의 Host 동등성**이다. 두 Host 에서 같은 Skill 과 같은 열두
 tool 이 붙고, 껐다 켜도 Journey 가 Project 에 남는다. 닫히지 않은 것은 **받는 사람의 자리**다.
 
-지금의 설치는 둘 다 개발 검증용 임시 구조다.
+M5-E 시작 당시 두 Host의 설치는 개발 검증용 임시 구조였다. 아래는 출발점이며,
+현재 Codex의 비공개 원격 preview 설치는 뒤의 9/29 항목에 기록한다.
 
 ```text
 source clone + make-core.sh   Rust·cargo 를 받는 쪽에 요구한다
@@ -1388,7 +1389,7 @@ rmcp stdio server 최소 spike
       `command`가 같은 bundled Core로 귀결되고 `args`는 `mcp --serve`. 실제 Host 화면 재검수는 별도
 - [~] self-contained remote marketplace artifact — `distribution/codex/`의 macOS arm64 built-dist
       preview 생성/검증 구현. 상대 catalog·단일 native 실행점·공용 Skill·무결성 receipt,
-      원격 게시와 실제 marketplace 설치/새 기계 검수는 남음
+      기존 Mac의 비공개 원격 설치 통과. 공개 비인증 설치·게시와 새 기계 검수는 별개로 남음
 - [~] release pipeline — preview build/압축 왕복/native smoke 및 수동 read-only CI 구성.
       새 `gil`의 clean `fbc4100`에서 GitHub macOS arm64 CI·다운로드 검수 통과
       ([독립 인수](../distribution/codex/CI-CHECKPOINT-20260928.md)). Node 20 기반 Actions 경고에 대해
@@ -1404,12 +1405,20 @@ rmcp stdio server 최소 spike
       `0.2.1-preview.1` 로컬 후보는 [장부](../distribution/codex/UNSIGNED-PREVIEW-CHECKPOINT-20260928.md) 참조.
       업데이트/rollback record 검사 통과는 실제 version 쌍의 설치·복구 인수와 다름.
 - [ ] unsigned 시험판의 공개 표면 검수·PR/CI·불변 게시 위치·설치 안내를 마치고 승인 후 게시.
-      공개 비인증 설치·Git metadata 개인정보 결정은 미완료. [게시 계획](../distribution/codex/PUBLICATION-PLAN-20260929.md).
+      옛 Git 개인정보 이력은 비공개 보존, 새 독립 marketplace 경로로 결정·전환 완료.
+      공개 비인증 설치·보호/PVR·게시 승인 미완료. [게시 계획](../distribution/codex/PUBLICATION-PLAN-20260929.md).
 - [x] 비공개 `gil-distribution` 원격 Git 인수 — 검수한 CI 후보의 PR·10개 정적 시험·fresh clone의
       native 17 tools·내장 UI·권한 보존 확인. [장부](../distribution/codex/REMOTE-STAGING-CHECKPOINT-20260928.md).
 - [x] 기존 Mac의 공식 Host 원격 설치 — 개발판→`0.2.1-preview.1` 교체·제거·재설치,
       7개 설치 파일·17 tools·saved binding 조회·Project 보존 및 사용자 Monitor 화면 확인.
       [9/29 장부](../distribution/codex/HOST-INSTALL-CHECKPOINT-20260929.md); 공개 설치·새 Mac은 별개
+- [x] 비공개 `gil-marketplace` 독립 이력의 PR #1 병합·공식 설치 출처 전환 — no-reply guard,
+      같은 preview.1 payload·17 tools·saved scope·Project 보존·사용자 fullscreen/상세 확인.
+      옛 `gil-distribution`은 비공개 감사/복구 이력으로 보존.
+      [새 경로 장부](../distribution/codex/CLEAN-MARKETPLACE-CHECKPOINT-20260929.md).
+- [~] shipped Skill의 fullscreen 기본·Companion 선택 사항·첫 시험판 Codex-only 범위 보정.
+      source 지침을 수정하되 설치된 preview.1은 그대로 보존. 새 `0.2.1-preview.2`의 clean source
+      PR/CI·receipt·배포 PR·공식 설치 인수는 별도 게이트이며 같은 version의 bytes를 바꾸지 않음.
 - [ ] 이 preview의 완전 Host 재시작 별도 재확인 및 이전 version으로 실제 rollback 쌍 검수
 - [ ] 후속 macOS 정식 신뢰 채널 — Developer ID·공증 및 실제 marketplace/새 Mac 실행 인수.
       단독 CLI/ZIP에는 staple할 수 없다. Companion `.app`/DMG 검수와 구분한다
@@ -1438,12 +1447,13 @@ ZIP 최초 MCP 시험의 30초 timeout 1회는 후속 두 시험에서 재현되
 
 이전 source의 원격 preview CI와 고지 동봉 검증은 원본에 보존한다. 새 저장소의 인수로 재사용하지
 않으며, `gil`의 `fbc4100`에서 독립 CI 35개 시험·고지·배포물 다운로드 검수를 새로 통과했다.
-[source 이전 체크포인트](../SOURCE-MIGRATION.md)에 새 검증을 기록한다. 최초 설치 인수는 남아 있다.
+[source 이전 체크포인트](../SOURCE-MIGRATION.md)에 새 검증을 기록한다. 기존 Mac의 원격 설치는
+위 9/29 장부로 후속 확인했으며 새 Mac 최초 설치 인수는 남아 있다.
 다른 환경의 과거 30초 최초 실행 timeout 원인은 해결했다고 주장하지 않는다.
 
 ```text
-닫힘    Rust 단일 MCP · 공유 command/renderer · 17개 tool · 내장 UI · Codex 화면·기본 재시작 UX · 정확 root · manifest
-열림    수동 표시 선택 인수 · Cowork Plugin 화면 · 최초 실행/새 기계 설치 · remote artifact · release pipeline · Windows
+닫힘    Rust 단일 MCP · 공유 command/renderer · 17개 tool · 내장 UI · Codex 화면·기본 재시작 UX · 정확 root · manifest · 비공개 원격 preview.1 설치
+열림    새 Skill 후보/업데이트 쌍 · 수동 표시 선택 인수 · Cowork Plugin 화면 · 새 기계 설치 · 공개 배포 · Windows
 유예    새 Mac 설치 검수(미통과 명시) · Tauri 전용 회귀검증 (Companion 보존, 변경·재배포 전 재개)
 ```
 
@@ -1533,7 +1543,7 @@ artifact·release pipeline → 새 기계 설치·업데이트 인수다. Claude
 
 ### M5-G Open-source Release Readiness — 정식 공개 전 필수
 
-상태: `[~] 새 gil 비공개 이전·첫 CI 완료 · 공개·정식 배포 전 검수` (2026-09-28)
+상태: `[~] 독립 gil-marketplace 전환 인수 · 새 Skill 후보·공개/게시 게이트 준비` (2026-09-29)
 
 사용자 결정: **정식 공개 전에 오픈소스 준비를 완료하고, 새 저장소 이름은 gil로 한다.**
 2026-09-28 배포 직전까지 준비 → 새 `gil` 공개 → 정식 배포 순서를 승인했다.
@@ -1548,7 +1558,10 @@ artifact·release pipeline → 새 기계 설치·업데이트 인수다. Claude
 - [x] README·CONTRIBUTING·AGENTS/CLAUDE 개발 지침을 새 출발 경계에 맞춤
 - [~] 선별된 source tree의 비밀·개인정보·공개 문서·fixture·이미지 검수와 로컬 회귀시험
       — [9/29 공개 표면 감사](../distribution/compliance/PUBLIC-SURFACE-AUDIT-20260929.md): source·배포
-      전체 이력/CI/PR 표면 점검, 비밀 탐지 없음. 배포 commit 개인 이메일 공개/정리 결정은 미결
+      전체 이력/CI/PR 표면 점검, 비밀 탐지 없음. 옛 배포 commit 개인 이메일은 비공개 보존하고
+      독립 marketplace로 전환. 후속 감사 범위·source vendor co-author 예외는
+      [새 체크포인트](../distribution/codex/CLEAN-MARKETPLACE-CHECKPOINT-20260929.md)에 기록
+- [x] 독립 marketplace의 no-reply 이력·PR/CI·공식 출처 전환과 같은 preview.1 화면 검수
 - [~] Rust·UI·Plugin·Companion 배포 단위별 의존성 inventory와 필요한 고지 동봉
   - [x] macOS arm64 Core 79 + bundled UI 5 package 및 Rust 표준 라이브러리 고지 구현 보존
   - [x] lock·원문·coverage 변경 및 고지 누락 거절 시험과 수동 CI 배선 보존

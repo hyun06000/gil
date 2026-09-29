@@ -64,7 +64,7 @@ Plugin installed
   → persistent Host surface를 실제로 요청하고 결과를 확인
       ├─ persistent_host 확인됨 → 같은 Host에서 Monitor를 연다
       └─ 지원하지 않음·inline에 머묾·수명 계약 미달
-           → 지원 표면(Codex / Claude Desktop Cowork) 또는 Companion을 안내
+           → 이번 시험판의 검수된 표면(Codex/macOS arm64) 또는 선택적 Companion을 안내
                └─ 사용자가 Companion을 선택하면 설치 상태를 확인
                    ├─ 호환판 설치됨 → 열거나 앞으로 가져온다
                    ├─ 설치됐으나 낡음 → update를 제안한다
@@ -94,8 +94,9 @@ Tauri 전용 창·tray·autostart·native packaging 검증은 후속으로 미�
 공용 UI·read model·Project 보존 회귀시험은 계속 수행한다. Companion 구현을 다시 변경하거나
 새 Companion 배포물을 제공할 때는 영향을 받는 Tauri 검증을 재개한다.
 
-현재 진행 순서는 MCP App의 작업 전환·재시작 수명 → Cowork Plugin 설치 경로 → self-contained
-Plugin의 설치·업데이트 인수다. 서명·공증과 새 기계 설치 검수는 별도 장부로 남는다.
+현재 첫 시험판의 진행 경로는 Codex MCP App 수명 → self-contained Plugin의 설치·업데이트 인수다.
+Cowork Plugin 표시는 별도 미결이며 첫 Codex 시험판 지원으로 일반화하지 않는다.
+서명·공증과 새 기계 설치 검수는 별도 장부로 남는다.
 2026-09-28 결정으로 첫 Codex/macOS arm64 시험판에는 §6.2a의 제한적 unsigned 채널을 적용하며,
 새 Mac 검수는 통과가 아니라 유예다. Tauri 검증 유예와 이 채널 결정을 혼동하지 않는다.
 
@@ -343,7 +344,7 @@ Companion DMG와 Rust MCP Plugin은 서로 다른 배포물이다. Plugin은 Hos
 Core와 MCP App을 내장한 실행 파일·license만 싣는 built-dist tree를 만든다. catalog의 `source.path`는
 그 tree root에서 상대경로로 풀고 source checkout이나 설치 시 빌드를 가리키지 않는다.
 
-`distribution/codex/`는 macOS arm64의 **미등록 preview 생성·검증 도구**다. 기존 identity/version은
+`distribution/codex/`는 macOS arm64의 **제작자용 preview 생성·검증 도구**다. 기존 identity/version은
 보존하고, 파일 allowlist·mode·SHA-256·source snapshot을 receipt에 기록한다. dirty source도 preview
 증거에는 표시하지만 공개 release로 취급하지 않는다. 압축 왕복 뒤 Node 없는 PATH로 native
 challenge·17 tools·embedded UI bytes를 확인한다. 이것은 Host 설치나 화면 인수를 대신하지 않는다.
@@ -405,6 +406,13 @@ source 검수 후 공개 전환과 정식 사용자 배포를 각각 승인받�
 Public 저장소의 push·CI 로그·artifact 공유도 외부 공개다. 개발 preview 표시는 접근 통제가
 아니므로 원격 작업 전에 포함 범위와 노출 정보를 검수한다. 정식 출시 승인, 저장소 visibility
 변경, 공개 이력 재작성, 보안 설정 변경은 각각 별도 결정이며 이 문서를 썼다고 실행하지 않는다.
+
+2026-09-29 현재 설치 출처는 독립 no-reply 이력의 비공개 `hyun06000/gil-marketplace`다.
+개인 Git metadata가 남은 옛 `gil-distribution`은 비공개로 보존한다. 승인된 PR 병합·고정 ref의
+공식 설치 출처 전환·기존 preview.1 동일 bytes와 화면 인수는
+[체크포인트](../distribution/codex/CLEAN-MARKETPLACE-CHECKPOINT-20260929.md)에 기록한다.
+공용 Skill도 배포 payload이므로 수정하면 새 후보 version·CI/receipt·설치 인수가 필요하다.
+이 출처 전환을 공개 HTTPS 설치나 새 후보의 인수로 대신하지 않는다.
 
 ---
 

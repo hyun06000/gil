@@ -27,11 +27,13 @@ Mac의 smoke 성공, `spctl` 명령 한 번 또는 gatekeeper 설정 변경을 �
 `xattr` 제거, Gatekeeper 해제, 설치 cache 손편집은 정식 설치 방법이 아니다.
 기존 Mac의 비공개 원격 marketplace 설치와 화면은 확인했다. 공개 비인증 설치와 새 Mac은 아직
 인수하지 않았다. [현재 후보 증거](UNSIGNED-PREVIEW-CHECKPOINT-20260928.md)와
-[Host 설치 장부](HOST-INSTALL-CHECKPOINT-20260929.md)를 구분한다.
+[Host 설치 장부](HOST-INSTALL-CHECKPOINT-20260929.md),
+[독립 marketplace 출처 전환](CLEAN-MARKETPLACE-CHECKPOINT-20260929.md)을 구분한다.
 
 기존 개발 cachebuster를 stable version으로 오인하지 않으며 Plugin identity와 게시 주소를 임의로
 바꾸지 않는다. `unsigned`는 **Apple Developer ID 서명·공증을 제공하지 않음**을 뜻하며, 실행 파일의
-ad-hoc 서명까지 제거한다는 뜻이 아니다. 바이너리·공통 Skill·UI를 바꾸지 않는 packaging 조각이다.
+ad-hoc 서명까지 제거한다는 뜻이 아니다. staging은 입력 binary·Skill·UI bytes를 보존한다.
+source에서 Skill만 바꾸더라도 새 payload이므로 기존 후보를 덮지 않고 새 version으로 검수한다.
 
 ### 1.1 후보 제작 (유지관리자용)
 
@@ -40,14 +42,15 @@ ad-hoc 서명까지 제거한다는 뜻이 아니다. 바이너리·공통 Skill
 인증 도구가 아니다. 출처가 불명확한 binary는 입력하지 않는다.
 
 ```sh
-node distribution/codex/unsigned-preview.mjs prepare target/codex-preview/marketplace 0.2.1-preview.1 target/codex-unsigned-candidate
-node distribution/codex/unsigned-preview.mjs verify target/codex-unsigned-candidate/marketplace
+node distribution/codex/unsigned-preview.mjs prepare target/codex-preview/marketplace 0.2.1-preview.2 target/codex-unsigned-candidate-2
+node distribution/codex/unsigned-preview.mjs verify target/codex-unsigned-candidate-2/marketplace
 ```
 
 - 새 output만 사용한다. 입력·설치 cache를 덮거나 기존 `release.json`의 flag를 뒤집지 않는다.
 - `development_unsigned`의 dirty source는 거절한다. `X.Y.Z-preview.N`만 허용하고 stable·개발
   cachebuster는 거절한다. 입력 개발판보다 version 순서가 높아야 한다.
-  `0.2.1-preview.1`은 기존 `0.2.0+codex.…`보다 높은 후보 식별자이지 공개 tag가 아니다.
+  `0.2.1-preview.1`은 이미 검수·설치된 불변 후보다. 위 preview.2 예시는 새 Skill 후보의 제작
+  절차이지 게시·설치 승인 또는 공개 tag가 아니다.
 - 정본 manifest는 건드리지 않고 출력 manifest의 version만 바꾼다. catalog·Core·Skill·고지는
   byte 그대로 유지한다. 바뀐 설치 metadata는 Host에서 별도 확인해야 한다.
 - 압축 왕복 뒤 Node 없는 PATH로 native challenge·MCP initialize·17 tools·내장 UI를 새로 확인한다.
@@ -101,8 +104,11 @@ GitHub에서 새로 clone한 고정 commit의 파일·권한·native 17 tools·�
 개발판을 preview로 교체하고 제거·재설치·Project 보존·실제 화면을 확인했다.
 [Host 인수 장부](HOST-INSTALL-CHECKPOINT-20260929.md)에 자동 시험, 사용자 실측, sandbox 실패와
 미확인 재시작/rollback 범위를 구분한다. 공개 배포 완료로 표시하지 않는다.
-배포 Git 작성자 metadata의 개인정보 결정과 공개 전환/설치 안내는
-[게시 계획](PUBLICATION-PLAN-20260929.md)을 따른다. 현재 저장소·후보 bytes는 그대로다.
+이후 배포 Git 작성자 개인정보를 공개하지 않기로 하고 독립 이력의 `gil-marketplace`로 전환했다.
+PR #1 병합·공식 설치 출처 전환·preview.1의 같은 bytes와 화면 확인을
+[새 경로 장부](CLEAN-MARKETPLACE-CHECKPOINT-20260929.md)에 기록한다. 옛 `gil-distribution`은
+비공개 감사/복구 이력이다. 공개 전환/설치 안내는 [게시 계획](PUBLICATION-PLAN-20260929.md)을 따른다.
+Skill 보정 뒤의 preview.2는 별도 후보이며 위 preview.1 인수를 그대로 승계하지 않는다.
 
 ## 2. 후속 서명 채널의 읽기 전용 preflight
 
