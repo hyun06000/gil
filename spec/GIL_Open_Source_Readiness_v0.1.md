@@ -1,6 +1,25 @@
 # GIL Open Source Readiness v0.1
 
-상태: 독립 marketplace 전환·기존 Host 인수 완료, 새 Skill 후보 및 공개/게시 게이트 준비 (2026-09-29)
+상태: 공개 source·marketplace 및 unsigned preview.2 HTTPS 설치 검수 완료 (2026-09-30).
+
+## 현재 공개 체크포인트
+
+- [x] 현재 source/marketplace의 도달 가능한 이력·PR·CI·artifact 한정 공개 감사. 보안 전체 보증이 아님.
+- [x] preview.2 source PR/CI·marketplace PR과 공식 설치·사용자 fullscreen/상세 인수.
+- [x] 공식 preview.2→preview.1→preview.2 복구와 Project·저장된 연결 정보 보존.
+- [x] 두 저장소 공개 후 관리자 포함 필수 PR/CI·main 삭제/force push 금지·PVR 적용 및 재조회.
+- [x] 비인증 HTTPS clone·고정 payload·공식 Host HTTPS 설치 및 native 읽기 검수.
+- [x] 사용자 설치/복구·활성 SECURITY·최소 행동 정책 문서화. 별도 비공개 행동 신고함이 없음을 고지.
+- [ ] 새 Mac 최초 설치·Apple 서명/공증의 정식 신뢰 채널. 이번 opt-in preview의 면제 범위와 구분.
+- [ ] 실제 보안 제보/알림 전달 검수. 설정 활성화를 이메일 전달 성공으로 세지 않음.
+
+증거·불변 출처·versioned release 링크는
+[9/30 배포 장부](../distribution/codex/PREVIEW-2-PUBLICATION-20260930.md), 사용자 절차는
+[INSTALL](../distribution/codex/INSTALL.md), 보안 제보는 [SECURITY](../SECURITY.md)를 따른다.
+원래 개발 저장소와 옛 `gil-distribution`은 비공개로 보존했다. 공개 fork/clone을 회수했다는 뜻은 아니다.
+
+아래 1–2절은 **2026-09-29까지의 준비 결정과 게이트 이력**이며 당시의 비공개·미완료 표현을
+현재 상태로 읽지 않는다. 3절의 검증/승인 경계는 계속 적용한다.
 
 ## 1. 결정과 현재 사실
 

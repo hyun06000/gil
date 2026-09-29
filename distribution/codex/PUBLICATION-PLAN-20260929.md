@@ -1,6 +1,10 @@
 # Unsigned preview publication plan — 2026-09-29
 
-Status: **preparation only; source and active marketplace repositories remain private**. This is not a
+Historical plan: the following describes **2026-09-29 preparation**, not the current repository state.
+For public HTTPS installation, enforced settings and preview.2 evidence, see the
+[2026-09-30 checkpoint](PREVIEW-2-PUBLICATION-20260930.md).
+
+Status at that time: **preparation only; source and active marketplace repositories remain private**. This is not a
 public installation URL or announcement. Installed preview.1 remains unchanged. The corrected Skill
 requires a new preview.2 candidate, separate CI/provenance and installation acceptance before publication.
 
