@@ -60,6 +60,15 @@ old cache still existing. Preview.1 ref: `e63963db63f0bfaf11be9d7939873e7a31fe05
 Rollback is not `gil restore` and never removes `.gil`. Earlier basic Host restart UX acceptance is
 separate; perfect restoration of every presentation detail is not promised.
 
+### Follow-up human acceptance — 2026-09-30
+
+The owner reported successfully removing and reinstalling the GIL plugin and then running a project
+on the existing Mac. This is additional end-user workflow acceptance, not a new machine acceptance.
+The documentation update did not independently inspect that installation's version, logs or project
+fingerprints, and does not infer a complete Host restart from reinstalling. The owner plans to recruit
+external preview users; no external participant results are claimed yet. The next work is tracked in
+[Roadmap §2.1](../../spec/GIL_Roadmap.md#21-공개-시험판-이후-실행-계획--2026-09-30).
+
 ## Public-surface review
 
 Before visibility changed, inspected source at `6c59b45` (19 reachable commits, 345 blobs), marketplace

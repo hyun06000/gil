@@ -26,7 +26,7 @@ dogfood로 통과**해야 `[x]`가 된다.
 
 ## 2. 현재 위치
 
-마지막 갱신: **2026-09-19**
+마지막 갱신: **2026-09-30**
 
 ```text
 전체 이정표 10개
@@ -42,23 +42,135 @@ Later    1  성공 가지 Merge
 
 현재 한 문장:
 
-> **사고의 시간선과 결과물의 세계는 format 4에서 연결됐고, 중단 후에도 복구 가능한 방식으로
-> 되돌아갈 수 있다. 그리고 두 계열의 새 Agent 세션이 전체 명세 없이 `gil context`와 주소
-> 가능한 Help Topic만으로 실제 작업과 Cycle을 완주했다. M3·M3.5·M4는 닫혔다.
-> macOS Native Companion과 실제 Project 자동 갱신까지 동작한다. 이제 Monitor를 필수 인간 표면으로
-> 고정하고 MCP fullscreen 우선·Native Companion 유지·비개발자 무터미널 설치를 배포
-> 계약으로 닫는다.**
+> **Codex/macOS Apple Silicon 공개 unsigned preview를 배포했고, 사용자가 Plugin 제거 →
+> 재설치 → 프로젝트 실행까지 성공했음을 확인했다. 이제 외부 시험 사용자 경험을 모으며
+> 시작 UX·시각 보고서·현재 상태 표시를 개선하고, Chain과 심화 Interview, Windows/Codex,
+> 홍보 순으로 진행한다. Anthropic 경험은 별도 Claude 작업 트랙으로 관리한다.**
 
 현재 초점:
 
-- M5의 인간 판독·장시간 관찰 실험을 마친다.
-- MCP fullscreen과 Native Companion을 같은 필수 Monitor의 두 adapter로 정렬한다.
-- macOS·Windows 비개발자가 Plugin 설치에서 Monitor까지 terminal 없이 도달하는 배포 경로를 만든다.
+- 비개발자가 프로젝트 시작과 동시에 fullscreen Monitor로 실제 진행을 관찰하게 한다.
+- 외부 시험 사용자를 모집하고 설치·첫 작업·상태 판독의 불편을 수집한다. 모집과 실제 인수를 구분한다.
+- 아래 다섯 트랙을 실행 우선순위로 삼는다. 기존 M0–M8은 상세 구현·검증 장부로 유지한다.
+- Companion은 선택적 대안으로 보존한다. 새 Mac·서명/공증·Windows·공식 Directory 등재는 미완료다.
 
 바로 다음 목표:
 
-> **M5-D의 capability 판정·Companion 설치 상태·승인 기반 설치 계약을 시험 가능한 adapter 경계로
-> 만들고, Windows feasibility build로 macOS 전용 결합을 조기에 드러낸다.**
+> **T1.1: 사용자의 “GIL 프로젝트를 시작하자” 요청 하나로 프로젝트 시작과 MCP Monitor 표시를
+> 연결한다. 이미 있는 fullscreen 기본 요청을 재사용하되, 도구 응답이 아니라 실제 Graph와
+> 실시간 갱신을 확인한다. 이어서 T1의 시각 자료·현재/진행 상태 표시와 Git 병행 연구를 진행한다.**
+
+### 2.1 공개 시험판 이후 실행 계획 — 2026-09-30
+
+이 절은 사용자가 확정한 **제품 우선순위와 구현 목표**다. 아직 구현되지 않은 기능을 완료로
+표시하거나 기존 규범·저장 형식을 이 로드맵만으로 변경하지 않는다. domain 변경은 해당 명세,
+호환성/이전 방안과 시험을 먼저 확정한다. 이번 갱신 자체는 기능 구현·새 배포가 아니다.
+
+주 실행 순서: **T1 사용자 UX → T2 Interview/Chain → T3 Windows/Codex → T4 홍보**.
+시험 사용자 모집·피드백 수집은 지금부터 시작할 수 있으며, T4의 본격 홍보와 구분한다.
+**T5 Anthropic은 독립 병렬 트랙**으로 Claude 세션에서 수행한다. 이 세션이 그 구현을 맡거나
+다른 세션을 자동 실행하지 않는다. 일정·지원 플랫폼·등재 승인을 미리 약속하지 않는다.
+
+#### 사용자 인수와 외부 시험
+
+- [x] 2026-09-30 기존 Mac에서 사용자 직접 Plugin 제거 → 재설치 → 프로젝트 실행 성공 보고.
+      사용자 경험 인수이며 이번 문서 작업이 설치 로그·설치 버전·프로젝트 지문을 새로 검증한 것은 아니다.
+      새 Mac 최초 설치, 완전 Host 재시작, Windows 성공을 대신하지 않는다.
+- [~] 사용자가 주변 시험 사용자를 모집하기로 함 — 참여 인원과 외부 환경 성공은 아직 확인하지 않음.
+- [ ] 동의한 시험 사용자의 OS/CPU·Host·설치 버전, 안내만으로 설치/첫 작업을 마쳤는지,
+      막힌 단계·현재 상태 이해 여부를 수집한다. 개인 경로·대화·`.gil` 원본 제출은 요구하지 않는다.
+
+#### T1 — 사용자 UX 패치 (M5 후속)
+
+- [ ] **T1.1 시작과 관측을 한 흐름으로:** 선택·승인한 폴더에서 “GIL 프로젝트를 시작하자”라고
+      하면 GIL 시작과 MCP Monitor 열기를 연결하고 fullscreen을 기본 요청한다. 이미 시작된
+      프로젝트는 재초기화하지 않는다. 시작은 성공했지만 화면이 실패한 경우를 따로 안내하고
+      화면 재시도로 프로젝트를 중복 생성하지 않는다. Host가 fullscreen을 거절하면 성공을
+      주장하지 않고 수동 펼치기·지원 표면·선택적 Companion을 안내한다(자동 실행 없음).
+      **합격:** 별도 “Monitor 열어 줘” 요청 없이 실제 그래프·채팅이 보이고 첫 Step부터 갱신된다.
+- [ ] **T1.2 노드 상세의 시각 보고서:** 스크린샷·이미지·차트·시각화 등을 Report가 참조하고
+      Node Detail에서 보여 준다. Agent의 Report 작성 지침·예시에 시각 자료의 적극적 사용을
+      넣되 증거가 없는 그림을 관측처럼 만들지 않는다. caption·alt text·출처와 생성/관측 구분,
+      Project 범위의 안전한 resource 참조, 재시작·이전 버전 조회, 누락·대용량·민감정보 처리를
+      먼저 설계한다. 임의 HTML/script를 실행하지 않는다.
+      **합격:** 실제 자료와 설명이 해당 노드에 보이고 다시 열어도 같은 근거를 읽을 수 있다.
+- [ ] **T1.3 현재 위치와 진행 상태 강화:** 현재 노드·사용자가 선택해 읽는 노드·열린 Step을
+      구분한다. “작업 진행 중”·“사용자 응답 대기”·“연결 끊김/낡은 정보”를 구별하고 색만으로
+      표시하지 않는다. 열린 노드나 살아 있는 watcher만으로 Agent가 실제 실행 중이라고 추측하지
+      않으며, 실행 신호의 출처·수명·만료 규칙을 먼저 정한다.
+      **합격:** 사용자가 현재 위치와 실제 진행/대기/연결 상태를 혼동하지 않고 설명한다.
+- [ ] **T1.4 GIL + Git/GitHub 병행 연구:** GIL의 현재 상태·진행 근거를 GitHub에 공유하는
+      경로를 설계한다. GIL Journey/Artifact와 Git commit/branch/PR의 역할·참조 대응,
+      Git 조작과 dirty/restore 경계, 공유 형식·대상·갱신 방식·권한을 비교한다. `.gil` 전체나
+      시각 자료/사용자 대화를 자동 공개하지 않으며 공개용 투영과 사용자 승인을 둔다.
+      **합격:** 합성 프로젝트의 현재 상태를 승인한 GitHub 대상에서 읽을 수 있고 원본 기록과
+      일치한다. 첫 조각은 연구·설계이며 GitHub 쓰기/자동 push 구현을 완료로 세지 않는다.
+
+#### T2 — 심화 Interview와 Chain (M6)
+
+- [ ] **T2.1 Chain 계층 도입:** 명세에 있으나 현재 실행 모델에 없는 Chain을 실제 노드 계층으로
+      구현한다. identity·Cycle 소유·수명·현재 위치·Report·context·Monitor 묶음과 기존 format 4
+      프로젝트의 호환/이전 방안을 먼저 정한다. UI만 가짜 Chain을 만들어 보여 주지 않는다.
+- [ ] **T2.2 심층 인터뷰와 지속 문서:** 목표·범위/비범위·사용자·제약·가정·위험·대안·성공 기준을
+      충분히 질문하고, 사람이 승인한 Chain 수준 로드맵·기능명세·필요한 사전 분석 문서를
+      결과물로 남긴다. 문서는 근거 Interview와 승인 revision을 추적할 수 있어야 한다.
+      **선행 설계:** Interview는 현재 일반적으로 Artifact를 바꾸지 않고 변경 확정은 Verify의
+      권한이다. Report 원본과 문서 파일의 관계·생성/확정 절차를 명세에서 결정한 뒤 구현하며
+      dirty gate를 문서 생성 때문에 우회하지 않는다.
+- [ ] **T2.3 언제든 재인터뷰 요청:** 사용자가 결과문서를 수정하고 싶으면 추가 Interview로
+      이어갈 수 있게 한다. “언제든”은 요청 시점이지 새 Cycle 개설의 예외가 아니다.
+      **열린 Cycle이 하나라도 있으면 다른 Cycle을 절대로 열지 않는다.** 현재 Cycle을 기존
+      Grammar·Report·Artifact 규칙에 따라 닫은 뒤에만 허용되는 경로로 새 Interview를 연다.
+      열린 Cycle을 일시 중단해 둔 채 다른 Cycle을 열거나, 요청만으로 자동 종료·성공 처리하지 않는다.
+      실패한 Cycle의 자식 금지도 유지한다. 닫힌 Interview/문서는
+      덮어쓰지 않고 새 승인 revision과 변경 이유를 남긴다.
+- [ ] **T2.4 승인된 인터뷰 문서로 실험 범위 제한:** Experiment는 적용되는 승인 문서 revision과
+      요구사항을 근거로 삼는다. 문서에 없는 목표·지침·제약을 임의로 실행하지 않고 추가
+      Interview에서 확인·승인한 뒤 진행한다. 이때도 T2.3의 단일 열린 Cycle 경계를 지킨다.
+      미승인·충돌·낡은 revision을 어떻게 차단하고
+      안내할지 설계하며, 허용된 범위 안의 구현 선택과 새로운 요구사항의 경계도 명시한다.
+      이 계약은 상위 안전·권한 규칙을 무효화하지 않는다.
+
+**합격:** 깊이 있는 인터뷰 → 승인 문서 → 근거를 가진 실험 → 추가 인터뷰 → 새 승인 문서 →
+후속 실험을 새 Agent 세션까지 이어서 수행한다. 미승인 지침의 실행은 막고 과거 문서·실험은 보존한다.
+열린 Cycle이 있는 상태에서 새 Interview/Experiment 개설은 거절되고 기존 상태는 바뀌지 않아야 한다.
+기존 M6의 Closing Interview·인간의 Chain 판정·Chain Report도 그대로 완료 조건에 남긴다.
+
+#### T3 — Windows 설치와 Codex 경험 (M5-D/E/F의 Windows 항목)
+
+- [ ] Windows용 자족형 native Plugin·원격 marketplace 설치/업데이트/제거·복구 경로를 마련한다.
+- [ ] 사용자에게 개발 도구·셸 명령·별도 Companion 설치를 요구하지 않고 macOS/Codex와 같은
+      폴더 선택 → 프로젝트 시작 → fullscreen 가로 DAG·채팅 → 상세/시각 자료 → 실시간 갱신을 제공한다.
+- [ ] 경로·권한·잠금·파일 감시·재시작/재연결·보고서 보존·OS 실행 차단을 실제 Windows에서 검수한다.
+      보안을 끄거나 예외 등록으로 우회하지 않는다. 지원 OS/CPU와 패키지 신뢰 채널은 검수 후 명시한다.
+- [ ] Windows 시험 사용자의 설치 및 작업 경험을 수집하고 차이·실패·해결을 기록한다.
+
+**합격:** 실제 Windows에서 macOS 기준 핵심 사용자 흐름을 통과하고 경험 수집 결과를 정리한다.
+빌드 성공만으로 닫지 않는다. 미완료 Apple 공증·새 Mac 검수·Tauri 검수가 이 트랙의 일괄 선행
+게이트는 아니며 각각 열린 상태로 유지한다. Companion은 보존하고 변경/재배포 때 별도로 검증한다.
+
+#### T4 — 홍보와 공식 마켓플레이스 노출
+
+- [ ] **T4.1 Windows 설치·경험 수집 완료 뒤** 대상 사용자·메시지·데모·설치 안내·지원 경로와
+      채널을 포함한 홍보 전략을 세우고 실행한다. preview와 안정판, 지원/미검수 환경을 구분한다.
+- [ ] **T4.2 홍보 진행 중 OpenAI 협의:** 로컬 기반 MCP App을 공식 플러그인 디렉터리에서
+      발견·설치하게 할 경로와 요구조건을 확인하고 노출 전략을 수립한다. 연락·답변·제출·심사·
+      게시·검색 노출을 각각 기록하며 public Git marketplace 배포를 공식 등재로 세지 않는다.
+      로컬 파일 접근·실행 경계를 보존하고, 등재를 위해 기록을 클라우드로 옮기기로 미리 결정하지 않는다.
+
+**합격:** 홍보는 실제 실행과 유입/설치 피드백으로, 협의는 답변과 합의된 다음 단계로 확인한다.
+공식 등재 완료는 별도로 실제 검색·설치까지 확인해야 한다. 연락처·정책·승인 가능성을 추측하지 않는다.
+
+#### T5 — Anthropic 경험 강화 (독립 Claude 트랙)
+
+- [ ] Claude 담당 세션에서 Plugin marketplace 설치부터 폴더 접근·MCP 화면·fullscreen/승인
+      병행·실시간 갱신·재연결까지 개선하고 실제 사용자 경험을 검수한다.
+- [ ] Desktop 일반 대화·Cowork·Code·터미널 CLI의 관측을 분리하고 한 경로의 성공을 다른
+      경로의 성공으로 일반화하지 않는다. 직접 등록 probe와 Plugin 설치 경로도 구분한다.
+- [ ] 공용 Core·MCP·UI 계약 변경은 별도 branch/PR에서 영향과 Codex 회귀를 확인한 뒤 통합한다.
+
+이 트랙은 T1–T4의 선행 조건도, 현재 세션의 구현 범위도 아니다. 기존 Claude 진단·제보와
+미해결 항목은 M5-F에 유지하며 새 검수 없이 완료로 올리지 않는다.
 
 ---
 
@@ -1228,7 +1340,7 @@ Tauri shell + fixture          (닫힘)
 
 ### M5-D Monitor Availability & Zero-terminal Distribution
 
-상태: `[~] availability 구현 · MCP App 우선, 공개 배포 및 fallback 후속 인수 미완료`
+상태: `[~] MCP App 우선 · Codex/macOS 공개 preview, 다중 플랫폼 및 fallback 후속 인수 미완료`
 
 목표:
 
@@ -1285,11 +1397,12 @@ Tauri shell + fixture          (닫힘)
       Agent surface만 사라지고 Companion 창과 Project·`.gil` 은 남으며, 재활성화한 새 session 에서
       Skill 1개·tool 12개가 돌아오고 `gil_context` 가 같은 존재(`journey:X1@J1`)와 기존 Report 를
       그대로 복원한다. Codex Plugin 은 영향받지 않는다
-- [ ] Host별 Plugin 제거·재설치 — 제거 뒤 Project·`.gil` 보존과 재설치 뒤 여정 잇기는 아직
-      실측하지 않았다 (비활성화·재활성화만 닫혔다)
-- [ ] public marketplace 용 Core binary publication — sidecar 는 로컬에서 짓는 개발 artifact라
-      git 에 없다. **source clone 만으로는 설치가 완성되지 않으며** 받는 쪽에 Rust·cargo 가
-      필요하다. 서명·배포 자리·platform 별 artifact 가 정해져야 비개발자 경로가 닫힌다 → M5-E
+- [~] Host별 Plugin 제거·재설치 — Codex/macOS의 기록 보존은 M5-E의 9/29 설치 검수에서 확인.
+      9/30에는 사용자 직접 제거·재설치·프로젝트 실행 성공을 추가 확인(§2.1).
+      Claude·Windows 인수까지 닫힌 것은 아니다.
+- [~] public marketplace 용 Core binary publication — Codex/macOS arm64 native 단일 실행 파일은
+      공개 Git marketplace preview로 배포됨(M5-E). 받는 쪽의 Rust·cargo는 불필요하다.
+      다른 플랫폼·정식 신뢰 채널·범용 Directory 등재는 남아 있다.
 - [~] `node` 전제 제거 — 기존 Node bridge에서 native manifest로 이전하고 Node 없는 PATH에서
       동작 확인. 개발 도구 없는 새 기계의 설치 경험까지 통과한 것은 아니다 → M5-E
 - [ ] Plugin·Core·Companion·wire compatibility와 update rollback 계약
@@ -1425,7 +1538,7 @@ rmcp stdio server 최소 spike
 - [ ] 후속 macOS 정식 신뢰 채널 — Developer ID·공증 및 실제 marketplace/새 Mac 실행 인수.
       단독 CLI/ZIP에는 staple할 수 없다. Companion `.app`/DMG 검수와 구분한다
       ([native release gate](../distribution/codex/RELEASE-macos.md)); 현재 Developer Program/identity 미준비
-- [ ] 그 뒤 Windows adapter — feasibility build 와 기본 채널 확정
+- [ ] Windows/Codex — §2.1 T3의 설치·동등한 UX·경험 수집. Apple 공증 완료와 별도 추적
 
 #### 현재 checkpoint — 단일 실행점, 공개 unsigned preview 채널
 
@@ -1474,11 +1587,11 @@ Plugin에 MCP App adapter를 더했고, 현재 M5-E에서 두 manifest의 실행
 
 - 두 Host 용으로 tool 표를 두 벌 만드는 것
 - prefix 문자열을 동등성의 기준으로 삼는 것
-- macOS 배포가 닫히기 전에 Windows 를 병행하는 것
+- macOS 검수 결과만으로 Windows 지원을 선언하는 것 — 후속 순서는 §2.1 T3을 따른다
 
 ### M5-F MCP Fullscreen Monitor — Companion 유지
 
-상태: `[~] Codex 화면·기본 재시작 UX 승인 · Claude 작업 Plugin 화면 차단, 공개 배포 전` (2026-09-28)
+상태: `[~] Codex 공개 preview 화면·기본 재시작 UX 승인 · 후속 UX T1, Claude 작업 UX T5 별도` (2026-09-30)
 
 기준 표면은 **Codex / Claude Desktop Cowork**다. 같은 Desktop Code 모드의 `inline` 광고를
 Cowork의 `inline/fullscreen` 광고와 섞지 않는다. macOS V3 진단판은 fullscreen 전환을 확인했고,
@@ -1594,6 +1707,9 @@ artifact·release pipeline → 새 기계 설치·업데이트 인수다. Claude
 
 ### M5 후속 — 선행 domain 계약 뒤 수행
 
+실행 우선순위와 합격 조건은 §2.1 T1을 따른다. 시각 자료의 선행 계약은 유지하되 후순위
+미정 기능이 아니라 다음 사용자 UX 패치 범위로 올린다.
+
 - [ ] 표·차트·이미지·화면 캡처의 안전한 resource reference schema
 - [ ] 시각 자료 caption·alt text·provenance 표시
 - [ ] milestone / stepwise / autonomous 승인 상태와 Checkpoint UI
@@ -1613,14 +1729,24 @@ artifact·release pipeline → 새 기계 설치·업데이트 인수다. Claude
 
 ## 11. M6 — Advanced Interview & Chain Closing
 
-상태: `[ ] 대기`
+상태: `[ ] T1 뒤 우선 구현 — 심화 Interview·Chain·승인 문서 계약 설계부터`
 
 목표:
 
-> Bootstrap Interview Kernel을 일반적인 재인터뷰, 탐색 계획 변경과 Chain Closing으로 확장한다.
+> Bootstrap Interview Kernel을 실제 Chain 계층, 승인된 로드맵·기능명세·사전 분석 문서,
+> 언제든 요청 가능한 재인터뷰, 문서 근거 기반 Experiment와 Chain Closing으로 확장한다.
+
+세부 범위·합격 조건, Artifact 문서화의 설계 미결과 단일 열린 Cycle 불변식은 §2.1 T2를 따른다.
+명세에 있는 Chain과 실행 모델에 실제로 도입한 Chain을 구분한다.
 
 체크리스트:
 
+- [ ] Chain 실제 노드 계층과 Cycle 소유·수명·Report·context·Monitor, 저장 호환/이전 계약 (T2.1)
+- [ ] 심층 질문과 승인된 Chain 로드맵·기능명세·사전 문서, 근거와 revision 추적 (T2.2)
+- [ ] Interview 결과 문서 파일의 Artifact 생성/확정 경계 설계 — Verify·dirty gate와 정합 (T2.2)
+- [ ] 재인터뷰 요청과 개설을 구분: 열린 Cycle이 있으면 새 Cycle 개설 거절,
+      현재 Cycle을 규칙에 따라 닫은 뒤에만 새 Interview 개설 (T2.3)
+- [ ] 승인 문서에 없는 지침을 실험에서 실행하지 않고 재인터뷰로 돌리는 계약·시험 (T2.4)
 - [ ] Bootstrap 이후 새 Interview Cycle
 - [ ] 실험 중 발견한 의문을 다시 Interview로 확인
 - [ ] Interpretation: 응답보다 넓은 의도를 확정하지 않음
@@ -1756,6 +1882,20 @@ scenario/
 ---
 
 ## 15. 결정 로그
+
+### 2026-09-30 — 공개 시험판 이후 우선순위
+
+- 기존 Mac에서 사용자가 Plugin 제거·재설치와 프로젝트 실행 성공을 보고했다. 이번에는
+  사용자 경험만 추가 인수하며 버전·지문·새 Mac·완전 Host 재시작을 독립 검증했다고 쓰지 않는다.
+- 시험 사용자 모집은 지금 진행하고, 본격 홍보는 Windows 설치와 경험 수집 뒤에 진행한다.
+- 주 트랙을 UX 패치 → 심화 Interview/Chain → Windows/Codex → 홍보로 정했다(§2.1).
+- 시작과 fullscreen 관측의 통합, 시각 Report, 현재/진행 상태, Git/GitHub 공유 연구를 T1에 둔다.
+- Chain·승인 문서·재인터뷰·문서 밖 지침 제한을 T2에 둔다. 문서 Artifact의 경계는 규범부터
+  설계한다. 재인터뷰는 언제든 요청할 수 있지만 열린 Cycle을 둔 채 다른 Cycle을 여는 것은
+  절대 금지한다. 현재 Cycle을 규칙에 따라 닫은 뒤에만 새 Interview로 이어간다.
+- OpenAI의 로컬 MCP App 공식 노출 협의는 홍보와 함께 진행하되 등재 성공을 미리 주장하지 않는다.
+- Anthropic은 Claude 세션의 독립 트랙이다. 공용 변경은 PR·회귀검증으로 통합한다.
+- 이번 결정은 로드맵 변경이며 구현·외부 연락·게시·새 release 실행을 뜻하지 않는다.
 
 ### 2026-08-21
 
