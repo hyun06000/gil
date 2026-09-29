@@ -1,6 +1,8 @@
 name: Codex native marketplace preview (NOT a release)
 
 on:
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       unsigned_preview_version:
@@ -22,6 +24,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Check build machine (never a user installation requirement)
         run: |
           test "$(uname -m)" = arm64
@@ -38,16 +41,16 @@ jobs:
       - name: Build embedded UI and native MCP; roundtrip and first-start checks
         run: node distribution/codex/build-preview.mjs target/codex-preview
       - name: Prepare opt-in unsigned candidate (never publishes)
-        if: inputs.unsigned_preview_version != ''
+        if: github.event_name == 'workflow_dispatch' && inputs.unsigned_preview_version != ''
         env:
           GIL_PREVIEW_VERSION: ${{ inputs.unsigned_preview_version }}
         run: node distribution/codex/unsigned-preview.mjs prepare target/codex-preview/marketplace "$GIL_PREVIEW_VERSION" target/codex-unsigned-candidate
       - name: Retain unsigned candidate for review only
-        if: inputs.unsigned_preview_version != ''
+        if: github.event_name == 'workflow_dispatch' && inputs.unsigned_preview_version != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
         with:
           archive: true
-          name: gil-codex-macos-arm64-UNSIGNED-CANDIDATE-${{ github.sha }}
+          name: gil-codex-macos-arm64-UNSIGNED-CANDIDATE-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             target/codex-unsigned-candidate/*.tar.gz
             target/codex-unsigned-candidate/SHA256SUMS
@@ -59,7 +62,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
         with:
           archive: true # Keep the tar, checksum and evidence together; not direct-file publication.
-          name: gil-codex-macos-arm64-DEVELOPMENT-${{ github.sha }}
+          name: gil-codex-macos-arm64-DEVELOPMENT-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             target/codex-preview/gil-codex-macos-arm64-preview.tar.gz
             target/codex-preview/SHA256SUMS

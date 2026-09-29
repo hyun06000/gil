@@ -1,8 +1,8 @@
 # Help and support
 
-GIL은 정식 출시 전 개발·검수 단계다. 현재 저장소는 비공개이며 초대된 사용자만 접근할 수 있다.
+GIL은 공개 opt-in preview 단계다. 안정판이나 상시 지원 서비스가 아니다.
 지원 플랫폼과 검수 범위는 [README](README.md)와 [Roadmap](spec/GIL_Roadmap.md)을 참고한다.
-개발 preview를 일반 사용자가 설치해야 하는 정식 배포판으로 안내하지 않는다.
+첫 채널은 Codex/macOS Apple Silicon의 unsigned preview이며 [설치 안내](distribution/codex/INSTALL.md)를 따른다.
 
 ## 일반 질문·화면 문제·기능 제안
 
@@ -20,10 +20,10 @@ GIL은 정식 출시 전 개발·검수 단계다. 현재 저장소는 비공개
 
 ## 공유하지 말아야 할 것
 
-저장소가 지금 비공개이더라도 나중에 공개될 수 있다. issue, PR, 첨부 파일에 비밀번호·token,
+이 저장소의 issue, PR, 첨부 파일은 공개된다. 비밀번호·token,
 개인 경로·연락처·사적인 대화·실제 `.gil` 기록을 올리지 않는다. 필요한 경우 가상의 내용으로
 만든 작은 재현 사례를 사용한다. 공개해도 되는 자료인지 확신이 없으면 첨부하지 않는다.
 
-취약점 상세와 악용 방법은 일반 issue/PR로 보내지 않는다. 비공개 보안 제보 창구는 아직
-개통되지 않았으며 [준비 계획](spec/GIL_Security_Reporting_Plan_v0.1.md)을 따로 관리한다.
+취약점 상세와 악용 방법은 일반 issue/PR로 보내지 않는다.
+[SECURITY.md](SECURITY.md)의 GitHub 비공개 취약점 제보 경로를 사용한다.
 행동 문제는 [행동 강령](CODE_OF_CONDUCT.md)의 신고 안내를 따른다.

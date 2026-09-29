@@ -1,7 +1,7 @@
 # GIL
 
 제품 source 정본의 새 저장소: [hyun06000/gil](https://github.com/hyun06000/gil).
-현재는 **비공개 시험판 배포 준비 단계**이며 정식 배포판이 아니다. 기존 구현의 코드·계약을 선별해
+현재는 **공개 opt-in unsigned preview 채널**이며 안정판이 아니다. 기존 구현의 코드·계약을 선별해
 독립 Git 이력으로 시작한다. 아래 기존 기능 인수와 새 저장소의 회귀 검증을 구분한다.
 이전 범위와 제외 기준은 [SOURCE-MIGRATION.md](SOURCE-MIGRATION.md)를 본다.
 
@@ -36,17 +36,18 @@ GIL의 주 사용자는 비개발자다. 인간은 명령과 저장 형식을 �
 유지하며, fullscreen 실패를 이유로 자동 실행하지 않는다. inline 카드는 미리보기이지 설치 완료
 상태가 아니다. PiP는 현재 지원을 주장하지 않는다.
 
-소스는 [MIT 라이선스](LICENSE)이며 검수 후 공개할 예정이다. **정식 사용자 배포가 완료됐다는 뜻은 아니다.**
-목표는 marketplace에서 Plugin 한 번 설치로 시작하는 UX다. 첫 배포는 **Apple 개발자 서명·공증 없는
-Codex/macOS Apple Silicon 시험판**으로 준비한다. 새 Mac 검수는 통과가 아니라 유예이며, 정식 신뢰
-채널의 서명·공증과 Windows 인수는 남았다. 기존 Mac에서 비공개 원격 Plugin의 공식 교체·제거·
-재설치와 Project 보존, 실제 Monitor 화면을 확인했다
-([9/29 인수 장부](distribution/codex/HOST-INSTALL-CHECKPOINT-20260929.md)). 이후 개인정보가 담긴 옛
-배포 이력은 비공개로 보존하고, 독립 이력의 `gil-marketplace`로 설치 출처 전환과 화면 인수를
-마쳤다 ([새 경로 장부](distribution/codex/CLEAN-MARKETPLACE-CHECKPOINT-20260929.md)).
-공개 HTTPS 설치·보호/신고 설정·게시는 남아 있다. Companion을 선택 사항으로 명확히 하는
-Skill 보정은 새 후보에서 검수하며, 설치된 `0.2.1-preview.1`을 덮지 않는다.
-[시험판 조건](distribution/codex/RELEASE-macos.md)을 따른다.
+소스는 [MIT 라이선스](LICENSE)로 공개한다. 첫 사용자 채널은 **Apple 개발자 서명·공증 없는
+Codex/macOS Apple Silicon `0.2.1-preview.2`**다. [설치 안내](distribution/codex/INSTALL.md)에 따라
+Codex에게 검증된 marketplace Plugin 설치를 부탁한 뒤 작업 폴더를 선택하면 된다.
+**Node·Cargo·Homebrew·별도 Companion 설치는 필요하지 않다.** 설치 출처는
+[gil-marketplace](https://github.com/hyun06000/gil-marketplace)이며, 범용 Plugins Directory 등재와는 다르다.
+
+새 Mac 검수는 **유예·미통과**다. macOS가 실행을 막으면 보안 설정을 끄지 말고 중단한다.
+기존 Mac의 공식 설치·제거/재설치·preview.1↔preview.2 복구·프로젝트 보존·실제 fullscreen 화면을
+검수했다. 공개 HTTPS 설치와 원본 CI 파일의 증거는
+[9/30 배포 장부](distribution/codex/PREVIEW-2-PUBLICATION-20260930.md)에 둔다.
+정식 신뢰 채널의 Apple 서명·공증, Windows·Intel 지원은 남아 있다.
+[시험판 조건](distribution/codex/RELEASE-macos.md)과 [보안 제보 안내](SECURITY.md)를 따른다.
 Claude Desktop은 폴더 없는 대화에서 Plugin 화면이 확인됐지만, 폴더 연결 뒤의 표시 차단과
 fullscreen의 도구 승인 창 가림이 남아 있다. [호출 경로별 진단](mcp-app/CLAUDE-DESKTOP-ROUTES.md)을
 따르며 Claude 작업 UX 전체의 배포 완료로 세지 않는다. 자세한 범위는 아래 구현 상태와 Roadmap을 따른다.
@@ -358,8 +359,8 @@ layer를 목표로 한다.
 
 ## Project status
 
-**2026-09-29 — Rust 단일 MCP·Codex fullscreen과 비공개 gil-marketplace 설치 출처 전환을 검증했다.
-Skill 보정의 새 후보 및 오픈소스 공개 게이트를 준비 중이며, 공개 릴리스·Windows 지원은 아직 아니다.**
+**2026-09-30 — source와 marketplace 공개, unsigned preview.2의 공식 HTTPS 설치·rollback·
+Project 보존·main 보호/PVR를 확인했다. Codex/macOS Apple Silicon 한정이며 안정판·Windows 지원은 아니다.**
 
 앞선 Go 구현과 과거 개발 이력은 기존 개발 저장소에 남겨 두었으며, 이 `gil` 저장소에는
 그 branch·tag·commit history를 가져오지 않았다. 현재 구현은 Rust로 작성하며, Git wrapper가

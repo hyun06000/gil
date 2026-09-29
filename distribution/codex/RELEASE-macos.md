@@ -1,6 +1,8 @@
 # Native MCP macOS release gates
 
-상태: **기존 Mac 비공개 원격 설치·화면 인수 완료, unsigned 시험판 미게시** (2026-09-29).
+상태: **공개 HTTPS marketplace·preview.2 공식 설치·rollback·보호/PVR 검수 완료** (2026-09-30).
+현재 [설치 안내](INSTALL.md)와 [배포 장부](PREVIEW-2-PUBLICATION-20260930.md)가 정본이다.
+날짜가 붙은 준비 기록은 당시 상태이며 릴리스 게시 여부는 장부의 versioned release 링크로 확인한다.
 첫 인수 대상은 macOS Apple Silicon의 Codex Plugin이다. 이는 제작자 문서이며 사용자에게
 Node·Cargo·clone·터미널 설치를 요구하지 않는다. Companion DMG는 별도 산출물이다.
 
@@ -13,20 +15,20 @@ Node·Cargo·clone·터미널 설치를 요구하지 않는다. Companion DMG는
 
 | 게이트 | 필요한 증거 | 현재 |
 |---|---|---|
-| 선별된 source·MIT·고지·CI | 공개 표면 감사, 검수한 clean commit과 CI artifact 대응 | 부분 완료 |
+| 선별된 source·MIT·고지·CI | 공개 표면 감사, 검수한 clean commit과 CI artifact 대응 | 이번 target의 한정 감사 통과 |
 | 시험판 신뢰 표시 | Developer ID·공증 없음, OS 차단 가능성·승인 경계 표시 | 정책 승인·후보에 포함 |
 | 기존 Mac 설치 | 공식 Plugin 설치본과 fullscreen | 원격 prerelease 교체·제거·재설치 및 화면 사용자 확인 |
 | 새 Mac 설치 | 개발 도구 없는 새 Mac의 최초 실행·fullscreen·재시작 | 유예, 미통과 |
-| 수명·업데이트 | version 쌍의 업데이트·제거/재설치 뒤 Project 보존 | 개발판→preview·제거/재설치 보존 통과, 이전 판 rollback 미실행 |
-| source 공개 | 공개 준비 감사, PVR 개통과 main 보호 적용·재조회, 운영 안내 | 미실행 |
-| 시험판 게시 | 불변 version·검증된 게시 경로·복구 안내, 승인된 동일 bytes 게시 | 미실행 |
+| 수명·업데이트 | version 쌍의 업데이트·제거/재설치 뒤 Project 보존 | 공식 preview.2→preview.1→preview.2 및 합성 4회 쌍 통과 |
+| source 공개 | 공개 준비 감사, PVR 개통과 main 보호 적용·재조회, 운영 안내 | 공개·필수 PR/CI·PVR 활성화 확인 |
+| 시험판 게시 | 불변 version·검증된 게시 경로·복구 안내, 승인된 동일 bytes 게시 | 공개 Git marketplace 설치 통과; versioned release는 장부 링크 확인 |
 | 후속 정식 신뢰 채널 | Developer ID 서명·공증·새 Mac 설치 | 미준비; 첫 시험판 선행 조건 아님 |
 
 새 Mac 인수에는 실제 다운로드/quarantine와 Host 실행 경로를 기록한다. 이미 개발하며 허용한
 Mac의 smoke 성공, `spctl` 명령 한 번 또는 gatekeeper 설정 변경을 설치 인수로 대신하지 않는다.
 `xattr` 제거, Gatekeeper 해제, 설치 cache 손편집은 정식 설치 방법이 아니다.
-기존 Mac의 비공개 원격 marketplace 설치와 화면은 확인했다. 공개 비인증 설치와 새 Mac은 아직
-인수하지 않았다. [현재 후보 증거](UNSIGNED-PREVIEW-CHECKPOINT-20260928.md)와
+기존 Mac의 marketplace 설치와 화면에 이어 공개 비인증 HTTPS 다운로드·공식 설치를 확인했다.
+새 Mac은 미검수다. [초기 후보 증거](UNSIGNED-PREVIEW-CHECKPOINT-20260928.md)와
 [Host 설치 장부](HOST-INSTALL-CHECKPOINT-20260929.md),
 [독립 marketplace 출처 전환](CLEAN-MARKETPLACE-CHECKPOINT-20260929.md)을 구분한다.
 
@@ -63,7 +65,7 @@ node distribution/codex/unsigned-preview.mjs verify target/codex-unsigned-candid
 ### 1.2 사용자 설치와 복구 안내
 
 최종 기본 UX는 **검증된 marketplace의 GIL Plugin 설치 → 작업 폴더 선택 → 자연어 요청**이다.
-공개 설치 주소는 아직 없으므로 지금 작동하는 공개 설치 명령을 지어내지 않는다. 셸 설치를 도와야
+공개 고정 ref와 공식 명령은 [INSTALL.md](INSTALL.md)에 있다. 셸 설치를 도와야
 한다면 Agent가 제품·출처·고정 version/hash·미공증 사실·로컬 접근 범위를 설명하고 승인을 받는다.
 무검증 `curl | sh`, 보안 검사 해제, Homebrew/Node/Cargo 선행 설치를 기본 UX로 추가하지 않는다.
 

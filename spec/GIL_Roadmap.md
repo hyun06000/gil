@@ -1389,7 +1389,7 @@ rmcp stdio server 최소 spike
       `command`가 같은 bundled Core로 귀결되고 `args`는 `mcp --serve`. 실제 Host 화면 재검수는 별도
 - [~] self-contained remote marketplace artifact — `distribution/codex/`의 macOS arm64 built-dist
       preview 생성/검증 구현. 상대 catalog·단일 native 실행점·공용 Skill·무결성 receipt,
-      기존 Mac의 비공개 원격 설치 통과. 공개 비인증 설치·게시와 새 기계 검수는 별개로 남음
+      기존 Mac의 비공개 및 공개 비인증 HTTPS 설치 통과. 새 기계 검수는 유예·미통과
 - [~] release pipeline — preview build/압축 왕복/native smoke 및 수동 read-only CI 구성.
       새 `gil`의 clean `fbc4100`에서 GitHub macOS arm64 CI·다운로드 검수 통과
       ([독립 인수](../distribution/codex/CI-CHECKPOINT-20260928.md)). Node 20 기반 Actions 경고에 대해
@@ -1404,9 +1404,10 @@ rmcp stdio server 최소 spike
       무결성 검증과 압축 왕복/native smoke·호환 record 생성. 게시/설치/자동 업데이트 권한은 없음.
       `0.2.1-preview.1` 로컬 후보는 [장부](../distribution/codex/UNSIGNED-PREVIEW-CHECKPOINT-20260928.md) 참조.
       업데이트/rollback record 검사 통과는 실제 version 쌍의 설치·복구 인수와 다름.
-- [ ] unsigned 시험판의 공개 표면 검수·PR/CI·불변 게시 위치·설치 안내를 마치고 승인 후 게시.
+- [x] unsigned 시험판의 공개 표면 검수·PR/CI·불변 marketplace 위치·설치 안내와 공개 설치.
       옛 Git 개인정보 이력은 비공개 보존, 새 독립 marketplace 경로로 결정·전환 완료.
-      공개 비인증 설치·보호/PVR·게시 승인 미완료. [게시 계획](../distribution/codex/PUBLICATION-PLAN-20260929.md).
+      preview.2 공식 HTTPS 설치·보호/PVR 확인. GitHub versioned release 상태와 출처는
+      [9/30 장부](../distribution/codex/PREVIEW-2-PUBLICATION-20260930.md). 범용 Directory 등재가 아님.
 - [x] 비공개 `gil-distribution` 원격 Git 인수 — 검수한 CI 후보의 PR·10개 정적 시험·fresh clone의
       native 17 tools·내장 UI·권한 보존 확인. [장부](../distribution/codex/REMOTE-STAGING-CHECKPOINT-20260928.md).
 - [x] 기존 Mac의 공식 Host 원격 설치 — 개발판→`0.2.1-preview.1` 교체·제거·재설치,
@@ -1416,16 +1417,20 @@ rmcp stdio server 최소 spike
       같은 preview.1 payload·17 tools·saved scope·Project 보존·사용자 fullscreen/상세 확인.
       옛 `gil-distribution`은 비공개 감사/복구 이력으로 보존.
       [새 경로 장부](../distribution/codex/CLEAN-MARKETPLACE-CHECKPOINT-20260929.md).
-- [~] shipped Skill의 fullscreen 기본·Companion 선택 사항·첫 시험판 Codex-only 범위 보정.
-      source 지침을 수정하되 설치된 preview.1은 그대로 보존. 새 `0.2.1-preview.2`의 clean source
-      PR/CI·receipt·배포 PR·공식 설치 인수는 별도 게이트이며 같은 version의 bytes를 바꾸지 않음.
-- [ ] 이 preview의 완전 Host 재시작 별도 재확인 및 이전 version으로 실제 rollback 쌍 검수
+- [x] shipped Skill의 fullscreen 기본·Companion 선택 사항·Codex-only 범위 보정.
+      새 `0.2.1-preview.2`의 source PR #7/CI·marketplace PR #2·공식 설치와 사용자 화면 확인.
+      같은 version의 bytes를 바꾸지 않음.
+- [x] preview.2→preview.1→preview.2 공식 설치 rollback·기록 보존, 독립 합성 Project의 4회 version 쌍 검수
+- [ ] 이 preview의 완전 Host 재시작 별도 재확인 (기존 기본 UX 인수·MCP 프로세스 시험과 구분)
 - [ ] 후속 macOS 정식 신뢰 채널 — Developer ID·공증 및 실제 marketplace/새 Mac 실행 인수.
       단독 CLI/ZIP에는 staple할 수 없다. Companion `.app`/DMG 검수와 구분한다
       ([native release gate](../distribution/codex/RELEASE-macos.md)); 현재 Developer Program/identity 미준비
 - [ ] 그 뒤 Windows adapter — feasibility build 와 기본 채널 확정
 
-#### 현재 checkpoint — 단일 실행점, 공개 배포 전
+#### 현재 checkpoint — 단일 실행점, 공개 unsigned preview 채널
+
+2026-09-30 공개 HTTPS 경로·preview.2 설치/rollback·main 보호/PVR 검수는
+[현재 장부](../distribution/codex/PREVIEW-2-PUBLICATION-20260930.md)에 있다. 아래 날짜별 검증은 당시 범위다.
 
 최초 transport spike를 지나 17개 도구와 resource를 합쳤다. 빌드 도구가 Node를 사용하는 것과
 설치본이 Node를 요구하는 것을 구분한다. 기존 JS 소스는 비교시험용으로 보존하며 native
@@ -1452,8 +1457,8 @@ ZIP 최초 MCP 시험의 30초 timeout 1회는 후속 두 시험에서 재현되
 다른 환경의 과거 30초 최초 실행 timeout 원인은 해결했다고 주장하지 않는다.
 
 ```text
-닫힘    Rust 단일 MCP · 공유 command/renderer · 17개 tool · 내장 UI · Codex 화면·기본 재시작 UX · 정확 root · manifest · 비공개 원격 preview.1 설치
-열림    새 Skill 후보/업데이트 쌍 · 수동 표시 선택 인수 · Cowork Plugin 화면 · 새 기계 설치 · 공개 배포 · Windows
+닫힘    Rust 단일 MCP · 공유 command/renderer · 17개 tool · 내장 UI · Codex 화면·기본 재시작 UX · 공개 HTTPS preview.2 설치 · Skill 보정 · rollback 쌍
+열림    수동 표시 선택 인수 · 이 version의 완전 Host 재시작 · Cowork Plugin 화면 · 새 기계 설치 · 정식 서명 채널 · Windows
 유예    새 Mac 설치 검수(미통과 명시) · Tauri 전용 회귀검증 (Companion 보존, 변경·재배포 전 재개)
 ```
 
@@ -1543,11 +1548,12 @@ artifact·release pipeline → 새 기계 설치·업데이트 인수다. Claude
 
 ### M5-G Open-source Release Readiness — 정식 공개 전 필수
 
-상태: `[~] 독립 gil-marketplace 전환 인수 · 새 Skill 후보·공개/게시 게이트 준비` (2026-09-29)
+상태: `[~] 공개 source/marketplace · unsigned preview.2 설치/rollback · 보호/PVR 검수 완료` (2026-09-30)
 
 사용자 결정: **정식 공개 전에 오픈소스 준비를 완료하고, 새 저장소 이름은 gil로 한다.**
 2026-09-28 배포 직전까지 준비 → 새 `gil` 공개 → 정식 배포 순서를 승인했다.
-미완료 게이트를 생략하는 즉시 공개 승인은 아니다. 비공개 상태의 PR 운영을 유지한다.
+미완료 게이트를 생략하는 승인은 아니다. 9/30 배포 진행 요청에 따라 한정 감사를 마친 두 저장소만
+공개하고 PR/CI 필수 보호를 적용했다. 아래 초기 비공개 생성 기록과 구분한다.
 과거 개발 이력을 그대로 옮기지 않고 선별한 현재 코드로 독립적인 첫 commit을 push했다.
 기존 저장소와 개인 기록의 정리 영향 검토는 별도이며, 삭제·이력 재작성·force push를 승인한 것이 아니다.
 소스 공개, preview 검수물 공유, 정식 release/marketplace 게시를 서로 다른 판정으로 관리한다.
@@ -1568,22 +1574,23 @@ artifact·release pipeline → 새 기계 설치·업데이트 인수다. Claude
   - [x] 새 `gil` 저장소 CI·artifact 검수 — clean `fbc4100`, 35개 시험·원문 고지·17 tools·
         source/hash/mode 대조 통과 ([독립 증거](../distribution/codex/CI-CHECKPOINT-20260928.md))
   - [ ] Companion·다른 target 고지 검수
-- [ ] 실제 비공개 보안 보고 경로 결정 및 SECURITY 안내
-      — [준비 계획](GIL_Security_Reporting_Plan_v0.1.md); 공개 시 GitHub PVR로 결정, 실제 창구 미개통
-- [~] main 변경의 PR 의무화 — 운영 지침 적용, 비공개 저장소의 서버 강제 보호는 요금제 제한으로 미완료
-      ([설정 장부](../distribution/compliance/REPOSITORY-GOVERNANCE-20260928.md)); 기존 개발 저장소 비공개 전환 완료
-- [~] 기여 정책·Code of Conduct·유지관리 연락 경로·issue/PR 안내의 담당자 검수
-      — CONTRIBUTING·SUPPORT·issue/PR 양식과 행동 강령 초안 준비. 담당자 검수·민감한 행동 신고 경로는 남음
+- [x] GitHub PVR 활성화·소유자 권한 재조회 및 [SECURITY](../SECURITY.md) 연결. 실제 신고/이메일 전달은 미검수
+- [x] 공개 source와 marketplace main의 필수 PR/CI·관리자 적용·force push/삭제 금지 재조회.
+      비공개 기간의 요금제 제한 기록을 현재 상태로 읽지 않음. 기존 개발 저장소는 비공개 유지
+- [x] 기여·SUPPORT·issue/PR·최소 행동 정책: 공개 운영 담당자 명시, 별도 비공개 행동 신고함 미제공 고지
+- [ ] 별도 비공개 행동 신고/재검토 창구의 후속 운영
 - [~] 설치·업데이트·제거/재설치 및 Project 보존 — 기존 Mac의 원격 preview 교체와 제거/재설치
-      보존은 통과. 새 Mac은 유예·미통과이며 실제 이전 판 rollback과 공개 비인증 설치는 남음
-- [ ] 공개 표면과 배포 준비 게이트 완료 후 조건부 승인에 따른 새 저장소 공개 전환·설정 검증
-- [ ] version·게시 경로·rollback 확정 및 출시 게이트 완료 후 승인된 정식 release·marketplace 게시
+      보존은 통과. preview.2↔preview.1 rollback·공개 비인증 설치도 확인. 새 Mac은 유예·미통과
+- [x] 공개 표면 한정 감사 뒤 승인된 두 저장소 공개 전환·보호/PVR 설정 검증
+- [x] unsigned preview의 고정 version/ref·공개 marketplace 설치·rollback 안내 검수.
+      GitHub versioned release의 실제 게시 상태는 [배포 장부](../distribution/codex/PREVIEW-2-PUBLICATION-20260930.md) 링크로 확인
+- [ ] Apple 서명·공증·새 Mac 인수를 포함한 후속 정식 신뢰 채널
 
 [새 소스 이전 장부](../SOURCE-MIGRATION.md)와
 [GIL Open Source Readiness](GIL_Open_Source_Readiness_v0.1.md)에 현재 범위와 미결을 둔다.
 기존 공개 이력의 민감정보 정리 검토는 원본에 보존하고 새 저장소에 복사하지 않는다.
 의심스러운 값 자체를 보고서/issue에 싣지 않는다. 새 저장소 생성은 이미 공개된 사본을
-회수하는 조치가 아니며, 자동 삭제·force push·공개 전환·보안 설정 변경은 하지 않는다.
+회수하는 조치가 아니며, 자동 삭제·force push는 하지 않는다. 공개·보안 설정은 승인된 두 저장소에만 적용했다.
 
 ### M5 후속 — 선행 domain 계약 뒤 수행
 

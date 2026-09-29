@@ -3,7 +3,11 @@
 이 디렉터리는 **제작자용 배포 도구**다. 받는 사람에게 Node·Cargo·clone·tar 명령을 요구하는
 설치 설명서가 아니다. 최종 UX는 Host의 Plugin 설치 한 번이다.
 
-2026-09-29: 기존 Mac의 공식 원격 설치·제거/재설치에 이어, 독립 이력의 비공개
+2026-09-30: 공개 HTTPS 설치·preview.2↔preview.1 rollback·Project 보존과 main 보호/PVR를 확인했다.
+사용자는 [설치 안내](INSTALL.md), 제작자는 [현재 배포 장부](PREVIEW-2-PUBLICATION-20260930.md)를 따른다.
+새 Mac·Apple 서명·공증은 미검수/미제공이다. 다음 9/29 절은 당시 준비 기록이다.
+
+2026-09-29 기록: 기존 Mac의 공식 원격 설치·제거/재설치에 이어, 독립 이력의 비공개
 `hyun06000/gil-marketplace`로 출처 전환과 실제 fullscreen·노드 상세를 확인했다.
 [현재 경로 장부](CLEAN-MARKETPLACE-CHECKPOINT-20260929.md)를 따른다. 옛 `gil-distribution`은
 비공개 감사/복구 이력으로 보존한다. 공개 HTTPS 설치·게시·새 Mac 검수는 별개로 남아 있다.
@@ -95,8 +99,9 @@ smoke child는 PATH `/usr/bin:/bin`과 격리된 Monitor 설정만 받는다. �
 
 ## 파이프라인과 공개 배포 조건
 
-`.github/workflows/codex-preview.yml`은 **수동 전용**, `contents: read`, credential 비보존,
+`.github/workflows/codex-preview.yml`은 **main 대상 PR 및 수동 실행**, `contents: read`, credential 비보존,
 full commit으로 고정한 Actions를 쓴다. tar와 검증 증거만 7일짜리 Actions artifact로 보관한다.
+PR은 정확한 head의 개발 검수물만 만들며 unsigned version 후보는 명시적 수동 입력에서만 만든다.
 push/tag에 자동 실행하지 않고 release·dist repo·공개 catalog에 게시하지 않는다. workflow 작성과
 GitHub runner 실제 성공은 별개다.
 
@@ -112,7 +117,7 @@ Node 20 경고 해소를 확인했다 ([후속 기록](CI-CHECKPOINT-20260928.md
 이 기록보다 뒤의 commit은 최종 PR head의 CI 성공을 따로 확인한 뒤 병합한다.
 [이전 경계](../../SOURCE-MIGRATION.md)와 새 기계·Host 설치 인수를 구분한다.
 
-새 source와 현재 built-dist 저장소는 비공개 공개 준비 중이다. 공개 전환하면 CI 로그와 다운로드 가능한
+source와 active built-dist 저장소는 공개됐다. CI 로그와 다운로드 가능한
 Actions artifact도 공개 범위에 포함된다. 개발용이라는 표시는 접근 제한이 아니며, 원격 실행·업로드 전에도
 민감정보와 포함 파일을 검수한다. 이 pipeline은 정식 release나 marketplace 게시를 하지 않는다.
 

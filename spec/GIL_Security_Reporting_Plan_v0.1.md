@@ -1,7 +1,11 @@
 # GIL Security Reporting Plan v0.1
 
-상태: 준비 · 비공개 보안 제보 창구 미개통 (2026-09-28).
-이 문서는 운영 계획이며 활성화된 SECURITY 정책이 아니다.
+현재 상태 (2026-09-30): 공개된 source와 marketplace의 GitHub PVR 활성화·소유자 권한을 재조회했다.
+활성 정책과 접수 링크는 [SECURITY.md](../SECURITY.md), 증거는
+[배포 장부](../distribution/codex/PREVIEW-2-PUBLICATION-20260930.md)에 있다.
+실제 신고 접수·알림 이메일 전달을 시험한 것은 아니며 없는 응답 기한을 약속하지 않는다.
+
+아래는 **2026-09-28의 준비 계획**이다. 당시의 미개통 상태를 현재 상태로 읽지 않는다.
 
 ## 현재 경계
 
