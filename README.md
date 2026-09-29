@@ -1,7 +1,7 @@
 # GIL
 
 제품 source 정본의 새 저장소: [hyun06000/gil](https://github.com/hyun06000/gil).
-현재는 **비공개 이전 준비 단계**이며 정식 배포판이 아니다. 기존 구현의 코드·계약을 선별해
+현재는 **비공개 시험판 배포 준비 단계**이며 정식 배포판이 아니다. 기존 구현의 코드·계약을 선별해
 독립 Git 이력으로 시작한다. 아래 기존 기능 인수와 새 저장소의 회귀 검증을 구분한다.
 이전 범위와 제외 기준은 [SOURCE-MIGRATION.md](SOURCE-MIGRATION.md)를 본다.
 
@@ -39,7 +39,10 @@ GIL의 주 사용자는 비개발자다. 인간은 명령과 저장 형식을 �
 소스는 [MIT 라이선스](LICENSE)이며 검수 후 공개할 예정이다. **정식 사용자 배포가 완료됐다는 뜻은 아니다.**
 목표는 marketplace에서 Plugin 한 번 설치로 시작하는 UX다. 첫 배포는 **Apple 개발자 서명·공증 없는
 Codex/macOS Apple Silicon 시험판**으로 준비한다. 새 Mac 검수는 통과가 아니라 유예이며, 정식 신뢰
-채널의 서명·공증과 Windows 인수는 남았다. [시험판 조건](distribution/codex/RELEASE-macos.md)을 따른다.
+채널의 서명·공증과 Windows 인수는 남았다. 기존 Mac에서 비공개 원격 Plugin의 공식 교체·제거·
+재설치와 Project 보존, 실제 Monitor 화면을 확인했다
+([9/29 인수 장부](distribution/codex/HOST-INSTALL-CHECKPOINT-20260929.md)). 공개 설치 경로 검증과
+Git 이력 개인정보 결정은 남아 있다. [시험판 조건](distribution/codex/RELEASE-macos.md)을 따른다.
 Claude Desktop은 폴더 없는 대화에서 Plugin 화면이 확인됐지만, 폴더 연결 뒤의 표시 차단과
 fullscreen의 도구 승인 창 가림이 남아 있다. [호출 경로별 진단](mcp-app/CLAUDE-DESKTOP-ROUTES.md)을
 따르며 Claude 작업 UX 전체의 배포 완료로 세지 않는다. 자세한 범위는 아래 구현 상태와 Roadmap을 따른다.

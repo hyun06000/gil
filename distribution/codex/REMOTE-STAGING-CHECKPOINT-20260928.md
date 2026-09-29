@@ -2,6 +2,10 @@
 
 Status: **private Git transport and native protocol accepted; not a public release or Host install**.
 
+This is the historical 9/28 staging boundary. The separately approved later Host installation,
+removal/reinstallation and human screen result are in the
+[9/29 Host checkpoint](HOST-INSTALL-CHECKPOINT-20260929.md); they do not turn this into a public release.
+
 ## Source and approvals
 
 - Source PR [#3](https://github.com/hyun06000/gil/pull/3) was reviewed, passed exact-head CI and merged
