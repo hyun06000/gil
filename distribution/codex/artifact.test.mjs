@@ -172,7 +172,7 @@ test('unchanged inputs yield identical tree receipts; archive roundtrip retains 
   assert.deepEqual(await inventory(f.output), await inventory(extracted));
   assert.match(hash(await readFile(archive)), /^[a-f0-9]{64}$/);
 });
-test('workflow is manual/read-only and preserves archive dotfiles and modes', async () => {
+test('workflow is read-only and preserves archive dotfiles and modes', async () => {
   const workflow = await readFile(join(repository, '.github/workflows/codex-preview.yml'), 'utf8');
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /contents: read/);
@@ -185,6 +185,17 @@ test('workflow is manual/read-only and preserves archive dotfiles and modes', as
   for (const line of workflow.split('\n').filter(line => line.includes('uses:'))) {
     assert.match(line, /@[a-f0-9]{40}(?:\s|$)/, 'third-party actions pinned to full commits');
   }
+});
+
+test('required build runs for every main PR against its exact head without a privileged event', async () => {
+  const workflow = await readFile(join(repository, '.github/workflows/codex-preview.yml'), 'utf8');
+  const events = workflow.slice(workflow.indexOf('\non:'), workflow.indexOf('\npermissions:'));
+  assert.match(events, /pull_request:\n    branches: \[main\]/);
+  assert.doesNotMatch(events, /paths(?:-ignore)?:|pull_request_target:|push:|tags:/);
+  assert.match(workflow, /ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+  assert.match(workflow, /macos-arm64-preview:\n    runs-on:/);
+  assert.match(workflow, /DEVELOPMENT-\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+  assert.doesNotMatch(workflow, /secrets\.|write-all|contents: write|pull-requests: write/);
 });
 test('fresh checkout gets an output parent before the non-overwriting build', async t => {
   const workflow = await readFile(join(repository, '.github/workflows/codex-preview.yml'), 'utf8');

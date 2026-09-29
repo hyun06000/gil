@@ -173,7 +173,8 @@ test('CLI cannot publish or leak caller paths on failure', () => {
 test('candidate CI is opt-in, read-only and passes the version through a quoted environment variable', async () => {
   const workflow = await readFile(join(repository, '.github/workflows/codex-preview.yml'), 'utf8');
   assert.match(workflow, /unsigned_preview_version:/);
-  assert.match(workflow, /if: inputs\.unsigned_preview_version != ''/);
+  const manualOnly = /if: github\.event_name == 'workflow_dispatch' && inputs\.unsigned_preview_version != ''/g;
+  assert.equal([...workflow.matchAll(manualOnly)].length, 2, 'both candidate build and retention require explicit manual opt-in');
   assert.match(workflow, /GIL_PREVIEW_VERSION: \$\{\{ inputs\.unsigned_preview_version \}\}/);
   assert.match(workflow, /prepare target\/codex-preview\/marketplace "\$GIL_PREVIEW_VERSION"/);
   assert.doesNotMatch(workflow, /run:.*\$\{\{ inputs\./);

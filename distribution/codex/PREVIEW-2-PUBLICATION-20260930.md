@@ -83,6 +83,12 @@ Both repositories were changed and read back through GitHub's API:
 - Conversation resolution required; force push and branch deletion disabled.
 - Private Vulnerability Reporting enabled; owner administrative access verified.
 
+The first documentation CI was successful but `workflow_dispatch` did not satisfy GitHub's PR-required
+check. The workflow now also uses ordinary `pull_request` for main, checks out the exact PR head and
+keeps read-only credentials. Candidate generation still requires explicit manual input. Protection was
+not disabled and no synthetic passing status or admin bypass was used. The replacement PR-triggered
+check must pass before merge. See [GitHub's explanation](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks).
+
 See [SECURITY](../../SECURITY.md), [SUPPORT](../../SUPPORT.md) and [conduct policy](../../CODE_OF_CONDUCT.md).
 No fake vulnerability was submitted, no notification email receipt was claimed, and there is no invented
 private conduct inbox, personal email, response deadline or bounty. Enabled settings are not proof of

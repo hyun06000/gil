@@ -99,8 +99,9 @@ smoke child는 PATH `/usr/bin:/bin`과 격리된 Monitor 설정만 받는다. �
 
 ## 파이프라인과 공개 배포 조건
 
-`.github/workflows/codex-preview.yml`은 **수동 전용**, `contents: read`, credential 비보존,
+`.github/workflows/codex-preview.yml`은 **main 대상 PR 및 수동 실행**, `contents: read`, credential 비보존,
 full commit으로 고정한 Actions를 쓴다. tar와 검증 증거만 7일짜리 Actions artifact로 보관한다.
+PR은 정확한 head의 개발 검수물만 만들며 unsigned version 후보는 명시적 수동 입력에서만 만든다.
 push/tag에 자동 실행하지 않고 release·dist repo·공개 catalog에 게시하지 않는다. workflow 작성과
 GitHub runner 실제 성공은 별개다.
 
