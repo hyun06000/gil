@@ -1,11 +1,13 @@
 # Codex native marketplace preview
 
 이 디렉터리는 **제작자용 배포 도구**다. 받는 사람에게 Node·Cargo·clone·tar 명령을 요구하는
-설치 설명서가 아니다. 최종 UX는 Host의 Plugin 설치 한 번이며 원격 설치 실측은 아직 남았다.
+설치 설명서가 아니다. 최종 UX는 Host의 Plugin 설치 한 번이다.
 
-2026-09-28: 비공개 배포 저장소의 PR·정적 CI·fresh remote clone·native smoke까지 확인했다.
-[원격 검수 장부](REMOTE-STAGING-CHECKPOINT-20260928.md) 참조. 실제 Host의 원격 설치와 공개 게시는
-아직 수행하지 않았고 현재 설치본은 유지했다.
+2026-09-29: 기존 Mac의 공식 원격 설치·제거/재설치에 이어, 독립 이력의 비공개
+`hyun06000/gil-marketplace`로 출처 전환과 실제 fullscreen·노드 상세를 확인했다.
+[현재 경로 장부](CLEAN-MARKETPLACE-CHECKPOINT-20260929.md)를 따른다. 옛 `gil-distribution`은
+비공개 감사/복구 이력으로 보존한다. 공개 HTTPS 설치·게시·새 Mac 검수는 별개로 남아 있다.
+Skill 보정은 새 `0.2.1-preview.2` 후보로 검수하며 설치된 preview.1을 덮지 않는다.
 
 기본 산출물은 `development_unsigned`, `publishable: false`인 **개발 검수물**이다.
 사용자 승인으로 별도 `preview_unsigned` 시험판 채널을 준비한다. 검수한 clean tree에서
@@ -37,8 +39,9 @@
 기본 build는 identity/version을 재발명하지 않는다. 정본의 개발 cachebuster도 보존한다.
 unsigned 후보 제작에서만 출력 version을 명시적 `X.Y.Z-preview.N`으로 정한다.
 `catalog.json`은 plugin-creator의 `create_basic_plugin.py`로 생성한
-template다. 설치된 `personal`과 구별하는 이름은 `gil-preview-macos-arm64`이며 원격 주소도 Host
-등록도 없다. template를 산출물의 `.agents/plugins/marketplace.json`에 복사한다. 소스 저장소의
+template다. `personal`과 구별하는 이름은 `gil-preview-macos-arm64`다. template 자체는 원격 주소나
+Host 등록을 생성하지 않는다. 현재의 승인된 비공개 Host 등록은 위 장부에 별도로 기록한다.
+template를 산출물의 `.agents/plugins/marketplace.json`에 복사한다. 소스 저장소의
 `.claude-plugin/marketplace.json`은 별도 개발용 목록으로 그대로 남는다.
 
 UI는 Rust 실행 파일에 내장된다. `server.mjs`, `node_modules`, Cargo source, 독립 `assets`, 설치
@@ -109,7 +112,7 @@ Node 20 경고 해소를 확인했다 ([후속 기록](CI-CHECKPOINT-20260928.md
 이 기록보다 뒤의 commit은 최종 PR head의 CI 성공을 따로 확인한 뒤 병합한다.
 [이전 경계](../../SOURCE-MIGRATION.md)와 새 기계·Host 설치 인수를 구분한다.
 
-새 source 저장소는 현재 비공개 이전 준비 중이다. 공개 전환하면 CI 로그와 다운로드 가능한
+새 source와 현재 built-dist 저장소는 비공개 공개 준비 중이다. 공개 전환하면 CI 로그와 다운로드 가능한
 Actions artifact도 공개 범위에 포함된다. 개발용이라는 표시는 접근 제한이 아니며, 원격 실행·업로드 전에도
 민감정보와 포함 파일을 검수한다. 이 pipeline은 정식 release나 marketplace 게시를 하지 않는다.
 
@@ -123,8 +126,9 @@ Actions artifact도 공개 범위에 포함된다. 개발용이라는 표시는 
    재현 build와 독립 CI 성공. dirty preview를 정식 release로 재명명하지 않음.
 2. 첫 unsigned 시험판에는 Apple Developer ID·공증이 없음을 고지하고 version/hash·출처를 고정.
    별도 후보 제작·검증·공식 설치 안내는 [release gate §1](RELEASE-macos.md)을 따른다.
-3. 새 Mac 검수는 사용자 결정으로 유예하고 **미통과**로 표시한다. 기존 Mac의 공식 설치·화면은
-   확인됐지만 새 prerelease Host 설치와 원격 경로·업데이트/제거/재설치 인수는 별도로 남는다.
+3. 새 Mac 검수는 사용자 결정으로 유예하고 **미통과**로 표시한다. 기존 Mac의 preview.1 원격
+   설치·제거/재설치·새 출처 전환·화면은 확인됐다. 새 후보의 version 쌍과 이전 판 rollback,
+   공개 비인증 설치는 별도 검수한다.
 4. 승인 후 built-dist 원격 저장소/불변 version·게시 권한·rollback 정책 확정 및 게시.
 5. remote marketplace 등록은 public Plugins Directory 심사·등재와 별개임을 표시.
 

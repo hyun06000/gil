@@ -1,8 +1,8 @@
 # Unsigned preview publication plan — 2026-09-29
 
-Status: **preparation only; both repositories remain private**. This is not an active installation URL
-or announcement. Candidate bytes/version are unchanged; runtime, UI, Project storage and installed Plugin
-are not modified by this documentation work.
+Status: **preparation only; source and active marketplace repositories remain private**. This is not a
+public installation URL or announcement. Installed preview.1 remains unchanged. The corrected Skill
+requires a new preview.2 candidate, separate CI/provenance and installation acceptance before publication.
 
 ## Ready evidence
 
@@ -10,30 +10,29 @@ are not modified by this documentation work.
   CI, receipt/archive hashes and distribution ref for `0.2.1-preview.1`.
 - [Host acceptance](HOST-INSTALL-CHECKPOINT-20260929.md) records official replacement, uninstall,
   reinstall, saved-binding reads, Project preservation and the maintainer's visible Monitor approval.
+- [Clean marketplace acceptance](CLEAN-MARKETPLACE-CHECKPOINT-20260929.md) records the independent
+  `gil-marketplace` history, merged/pinned ref, official source switch, same payload and visible acceptance.
 - Root MIT and original third-party notices remain intact. The candidate includes native Core/UI
   coverage and Rust standard-library notices, not a claim for Companion or every target.
 
-## Privacy decision before public visibility
+## Privacy decision — resolved for the active route
 
-The distribution payload commit's author and committer metadata contain a personal email address.
-The current source repository uses GitHub no-reply/service identities. Payload files are a separate
-surface: a clean content scan does not make Git author metadata private.
-The address itself is deliberately not repeated here. No history was rewritten, no ref was forced,
-and no repository was deleted or made public.
-
-The maintainer must either explicitly accept publishing that metadata or authorize a separately
-reviewed cleanup plan. Prefer retaining the present private audit history and preparing a clean
-publication history with a no-reply identity if disclosure is unwanted. That may change Git refs and
-repository/install routing, so it requires renewed provenance and official installation verification;
-it must not silently break an already pinned installation. A new ordinary commit does not remove an
-email from its ancestors, and a force-push alone does not guarantee removal from retained PR refs.
+The old `gil-distribution` payload history includes a personal author/committer email and stays private.
+The maintainer approved an independent **`hyun06000/gil-marketplace`** publication history, PR #1 merge and
+official installation-source switch. All three reachable marketplace commits passed the no-reply guard;
+the installed ref is `e63963db63f0bfaf11be9d7939873e7a31fe05be`. Payload bytes stayed preview.1.
+The source repository remains `hyun06000/gil`. No old ancestry was copied, rewritten or force-pushed;
+no personal address is repeated here. The original repository is preserved for private audit/recovery,
+not queued for public visibility. New candidates must repeat provenance/history checks on their new refs.
 
 ## Ordered publication gates
 
-1. Resolve the metadata decision and review the [open-source readiness gates](../../spec/GIL_Open_Source_Readiness_v0.1.md),
-   including the draft conduct policy's private-contact limitation. Do not invent an email or SLA.
+1. Review the new Skill candidate and remaining [open-source readiness gates](../../spec/GIL_Open_Source_Readiness_v0.1.md),
+   including the draft conduct policy's private-contact limitation. The active-route metadata decision
+   above is complete, not a waiver for new history. Do not invent an email or SLA.
 2. Obtain explicit approval for repository visibility, required-PR protection and GitHub private
-   vulnerability reporting (PVR). Keep the old development repository private. At the approved source
+   vulnerability reporting (PVR). Scope visibility to `gil` and `gil-marketplace`; keep the old development
+   repository and `gil-distribution` private. At the approved source
    transition, apply and read back protection/PVR; only then publish an active SECURITY.md and verified
    reporting link. A planned endpoint or inaccessible private-repository setting is not an open inbox.
 3. Through a reviewed PR, finalize user-facing installation/recovery instructions for the exact
@@ -41,7 +40,8 @@ email from its ancestors, and a force-push alone does not guarantee removal from
    the approved visibility transition. Private SSH success is not a substitute.
 4. Verify source/CI/receipt/Core/UI/legal-file correspondence again. Do not rebuild different bytes
    under `0.2.1-preview.1`, relabel the candidate as signed, or flip `publishable:false` by hand.
-   If packaging/content must change, create and review a new candidate version.
+   The Skill correction therefore uses a new `0.2.1-preview.2` candidate; keep preview.1 intact and
+   require a reviewed distribution PR plus official installation/visible acceptance for the new version.
 5. Obtain/confirm approval for the exact preview publication surface and publish only those reviewed
    bytes, with the unsigned and fresh-Mac limitations below. A custom Git marketplace is not universal
    Plugins Directory approval. Announce only a working, verified public route.

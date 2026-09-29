@@ -4,8 +4,9 @@ import {execFileSync, spawnSync} from 'node:child_process';
 import {chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, unlink, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
-import {CORE, FILES, MANIFEST, PREFIX, createTree, hash, inventory, repository, verifyTree} from './artifact.mjs';
+import {ARCHIVE_FLAGS, CORE, FILES, MANIFEST, PREFIX, createTree, hash, inventory, repository, verifyTree} from './artifact.mjs';
 import {stageUnsigned, verifyUnsignedTree, TRUST} from './unsigned-preview.mjs';
+import {checkTransition} from './update-policy.mjs';
 import {noticeFixture} from '../compliance/test-fixture.mjs';
 
 // Fake Mach-O is only for static packaging tests. It is never executed as a native acceptance test.
@@ -31,7 +32,7 @@ async function fixture(t, dirty = false) {
   if (dirty) await writeFile(join(root, 'unreviewed'), 'dirty');
   const input = join(dir, 'development'), output = join(dir, 'candidate');
   await createTree({root, binary: join(root, 'binary'), output: input});
-  return {dir, input, output, stage: (version = '0.2.1-preview.1') => stageUnsigned({input, output, version})};
+  return {dir, root, input, output, stage: (version = '0.2.1-preview.1') => stageUnsigned({input, output, version})};
 }
 async function rewriteReceipt(root, change) {
   const path = join(root, 'release.json'), receipt = JSON.parse(await readFile(path));
@@ -72,6 +73,53 @@ test('existing input or output is never overwritten', async t => {
   await assert.rejects(f.stage(), {code: 'EEXIST'});
   await assert.rejects(stageUnsigned({input: f.input, output: f.input, version: '0.2.1-preview.2'}), {code: 'EEXIST'});
   assert.deepEqual(await inventory(f.output), before); await verifyTree(f.input);
+});
+test('a Skill-only change is receipted and requires a new version and pair acceptance, even with identical Core bytes', async t => {
+  const f = await fixture(t), previous = await f.stage(), original = await inventory(f.output);
+  const skill = `${PREFIX}/skills/gil-companion/SKILL.md`;
+  const updated = Buffer.from('---\nname: gil-companion\ndescription: fixture\n---\nChanged fixture guidance.\n');
+  // Editing an already staged Skill cannot pass the original receipt.
+  const oldSkill = await readFile(join(f.output, skill));
+  await writeFile(join(f.output, skill), updated);
+  await assert.rejects(verifyUnsignedTree(f.output));
+  await writeFile(join(f.output, skill), oldSkill);
+  await verifyUnsignedTree(f.output);
+
+  // A reviewed source change is packaged through the normal path, not a receipt rewrite.
+  await writeFile(join(f.root, skill), updated);
+  execFileSync('git', ['add', skill], {cwd: f.root, stdio: 'ignore'});
+  execFileSync('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+    'commit', '-qm', 'change fixture Skill'], {cwd: f.root, stdio: 'ignore'});
+  const nextInput = join(f.dir, 'next-development'), nextOutput = join(f.dir, 'next-candidate');
+  await createTree({root: f.root, binary: join(f.root, 'binary'), output: nextInput});
+  const next = await stageUnsigned({input: nextInput, output: nextOutput, version: '0.2.1-preview.2'});
+  assert.notEqual(next.source.snapshot_sha256, previous.source.snapshot_sha256);
+  assert.deepEqual(next.files.find(file => file.path === CORE), previous.files.find(file => file.path === CORE));
+  assert.equal(next.files.find(file => file.path === skill).sha256, hash(updated));
+  for (const file of previous.files.filter(file => ![skill, MANIFEST, 'PREVIEW.md'].includes(file.path))) {
+    assert.deepEqual(next.files.find(item => item.path === file.path), file);
+  }
+  const record = async (root, receipt, name) => {
+    const archive = join(f.dir, name);
+    execFileSync('/usr/bin/tar', ['-czf', archive, ...ARCHIVE_FLAGS, '-C', root, '.'],
+      {env: {...process.env, COPYFILE_DISABLE: '1'}, stdio: 'pipe'});
+    return {schema: 1, plugin: receipt.plugin, platform: receipt.platform, version: receipt.version,
+      source_commit: receipt.source.head, source_snapshot_sha256: receipt.source.snapshot_sha256,
+      archive_sha256: hash(await readFile(archive)), core_sha256: receipt.files.find(file => file.path === CORE).sha256,
+      // Synthetic UI/contract fixtures: no fake native executable is run here.
+      ui_sha256: 'e'.repeat(64), migration: 'none', compatibility: {
+        protocol: {min: 1, max: 1}, action_surface: {min: 1, max: 1}, storage_format: {min: 4, max: 4},
+        monitor_view_schema: {min: 1, max: 1}, node_detail_schema: {min: 1, max: 1}}};
+  };
+  const before = await record(f.output, previous, 'before.tar.gz');
+  const after = await record(nextOutput, next, 'after.tar.gz');
+  assert.notEqual(before.archive_sha256, after.archive_sha256);
+  assert.equal(checkTransition(before, {...after, version: before.version}).reason, 'same_version_has_different_bytes_or_claims');
+  const transition = checkTransition(before, after);
+  assert.equal(transition.status, 'pair_test_required');
+  assert.equal(transition.install_authorized, false); assert.equal(transition.publishable, false);
+  assert.deepEqual(await inventory(f.output), original);
+  await verifyUnsignedTree(f.output); await verifyUnsignedTree(nextOutput);
 });
 test('prerelease version must sort above the input development base, not silently downgrade', async t => {
   const f = await fixture(t);

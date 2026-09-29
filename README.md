@@ -41,8 +41,12 @@ GIL의 주 사용자는 비개발자다. 인간은 명령과 저장 형식을 �
 Codex/macOS Apple Silicon 시험판**으로 준비한다. 새 Mac 검수는 통과가 아니라 유예이며, 정식 신뢰
 채널의 서명·공증과 Windows 인수는 남았다. 기존 Mac에서 비공개 원격 Plugin의 공식 교체·제거·
 재설치와 Project 보존, 실제 Monitor 화면을 확인했다
-([9/29 인수 장부](distribution/codex/HOST-INSTALL-CHECKPOINT-20260929.md)). 공개 설치 경로 검증과
-Git 이력 개인정보 결정은 남아 있다. [시험판 조건](distribution/codex/RELEASE-macos.md)을 따른다.
+([9/29 인수 장부](distribution/codex/HOST-INSTALL-CHECKPOINT-20260929.md)). 이후 개인정보가 담긴 옛
+배포 이력은 비공개로 보존하고, 독립 이력의 `gil-marketplace`로 설치 출처 전환과 화면 인수를
+마쳤다 ([새 경로 장부](distribution/codex/CLEAN-MARKETPLACE-CHECKPOINT-20260929.md)).
+공개 HTTPS 설치·보호/신고 설정·게시는 남아 있다. Companion을 선택 사항으로 명확히 하는
+Skill 보정은 새 후보에서 검수하며, 설치된 `0.2.1-preview.1`을 덮지 않는다.
+[시험판 조건](distribution/codex/RELEASE-macos.md)을 따른다.
 Claude Desktop은 폴더 없는 대화에서 Plugin 화면이 확인됐지만, 폴더 연결 뒤의 표시 차단과
 fullscreen의 도구 승인 창 가림이 남아 있다. [호출 경로별 진단](mcp-app/CLAUDE-DESKTOP-ROUTES.md)을
 따르며 Claude 작업 UX 전체의 배포 완료로 세지 않는다. 자세한 범위는 아래 구현 상태와 Roadmap을 따른다.
@@ -354,8 +358,8 @@ layer를 목표로 한다.
 
 ## Project status
 
-**2026-09-28 — Rust 단일 MCP·Codex fullscreen을 검증했고, marketplace 배포와 오픈소스 공개
-준비 게이트를 진행 중이다. 정식 릴리스·Windows 지원은 아직 아니다.**
+**2026-09-29 — Rust 단일 MCP·Codex fullscreen과 비공개 gil-marketplace 설치 출처 전환을 검증했다.
+Skill 보정의 새 후보 및 오픈소스 공개 게이트를 준비 중이며, 공개 릴리스·Windows 지원은 아직 아니다.**
 
 앞선 Go 구현과 과거 개발 이력은 기존 개발 저장소에 남겨 두었으며, 이 `gil` 저장소에는
 그 branch·tag·commit history를 가져오지 않았다. 현재 구현은 Rust로 작성하며, Git wrapper가

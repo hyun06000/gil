@@ -11,7 +11,8 @@ which a human watches.
 ## Calling GIL
 
 The GIL core ships inside this plugin. Do not look for a global `gil`, a repository build, or
-cargo — they are not what these tools use, and their absence is not a problem.
+cargo — they are not what these tools use, and their absence is not a problem. The installed
+native Plugin does not require Node, npm or Homebrew either.
 
 `gil_start` · `gil_open` · `gil_close` · `gil_restore` · `gil_revisit` ·
 `gil_status` · `gil_story` · `gil_context` · `gil_cycle` · `gil_help`
@@ -46,8 +47,15 @@ persistent Monitor.
 
 Two surfaces can carry it, in this order:
 
-1. **MCP App fullscreen** — Codex, or Claude Desktop **Cowork**, shows the shared Monitor UI alongside the Host's chat composer
-2. **native companion** — the installed desktop app shows the same UI in its own window
+1. **MCP App fullscreen** — the supported Host shows the shared Monitor UI alongside its chat composer
+2. **optional native Companion** — if the user chooses it, a compatible desktop app shows the same UI in its own window
+
+The first unsigned preview's accepted target is **Codex on macOS Apple Silicon**. Its default is
+Plugin-only fullscreen; a separate Companion installation is **not required**. Windows, Intel Macs
+and Claude work-Plugin rendering are not accepted targets of this preview. Historical Claude Desktop
+Cowork/direct-MCP fullscreen demonstrations do not prove that a folder-connected Plugin works there.
+Do not present moving to Cowork as a verified fix. Fresh-Mac installation is deferred, not passed;
+if macOS blocks execution, stop without bypassing its security checks.
 
 For the in-host Monitor, use `gil_monitor_prepare(project_root)` with the user's explicit project
 or a host-verified root, then `show_gil_monitor(scope_id)` with its returned scope. The first tool
@@ -58,16 +66,19 @@ Monitor is ready and the Host advertises support. If it stays inline, the user c
 rendering tools repeatedly to refresh it: the App reads complete Views and exact Step details
 through its own read-only tools. Native Companion is never launched automatically by this App.
 
-The preview is **not** proof of persistent display. The App declares inline/fullscreen and checks
+An inline preview or successful tool response is **not** proof of persistent display. The App declares inline/fullscreen and checks
 the Host's advertised modes, request reply and context events. PiP is not required or claimed.
-On the macOS build tested on 2026-09-23, Claude Desktop Code advertised only inline; guide users
-to Cowork for fullscreen. Do not generalize that result to all builds, or claim Windows is tested.
 
-Keep Companion installed. If fullscreen is unavailable, the user wants an independent window,
-or the Host cannot keep the Monitor visible, use `show_gil_companion`. Its launcher starts a
-closed Companion and confirms its handshake. The App's **별도 창 열기** button uses the same tool.
+If fullscreen is unavailable or the Host cannot keep the Monitor visible, explain the limitation
+and offer the accepted Host route or optional Companion. Do not install or launch Companion merely
+because fullscreen failed. Only after the user chooses an independent native window, use
+`show_gil_companion`; installation or update still requires explicit approval. Its launcher starts
+a closed compatible Companion and confirms its handshake. The App's **별도 창 열기** button is that
+explicit native-window choice and uses the same tool.
 `gil_companion_status` currently reports the native coordinator's availability, not the mode of
-an individual MCP App instance. Never treat it as proof that fullscreen succeeded.
+an individual MCP App instance. A missing Companion is not a reason to block the in-host Monitor;
+do not require `companion_state: ready` before `gil_monitor_prepare` / `show_gil_monitor`.
+Never treat the native coordinator's status as proof that fullscreen succeeded.
 
 ## What the tools report
 
