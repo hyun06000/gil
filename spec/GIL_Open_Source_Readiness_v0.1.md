@@ -1,6 +1,6 @@
 # GIL Open Source Readiness v0.1
 
-상태: 진행 · 새 `gil` 저장소의 공개·정식 배포 전 게이트 (2026-09-28)
+상태: 원격 Host 인수·공개 표면 점검 완료, 개인정보 결정 및 게시 게이트 미완료 (2026-09-29)
 
 ## 1. 결정과 현재 사실
 
@@ -42,6 +42,9 @@
 - [x] README·CONTRIBUTING·개발 지침에서 개인 bootstrap 및 옛 실행 환경 의존 제거.
 - [~] 선별된 첫 source tree의 비밀·개인정보·fixture·이미지·문서·링크 감사.
   패턴 검색 결과를 전체 보안 감사로 확대하지 않으며, 시험용 유출 방지 문자열과 실제 값을 구분한다.
+  [9/29 감사](../distribution/compliance/PUBLIC-SURFACE-AUDIT-20260929.md): source·distribution 전체
+  도달 가능 이력, CI 로그 8개·artifact 8개·PR/댓글 점검. 비밀 탐지 없음. 배포 commit 작성자/커미터의
+  개인 이메일 공개 여부는 미승인 — 값은 문서에 싣지 않고 공개를 보류한다.
 - [~] macOS arm64 native Core 79개 + 실제 UI bundle 5개 package 및 Rust 표준 라이브러리
   고지 조립·원문/coverage/lock 변경 거절 구현 보존.
   [고지 검증](../distribution/compliance/README.md)은 Companion·다른 target까지 보증하지 않는다.
@@ -60,10 +63,15 @@
 - [ ] 미결과 공개 표면 검토를 완료한 뒤 조건부 승인에 따라 공개 전환하고 보호·PVR를 검증한다.
 - [ ] unsigned 시험판의 공개 source 감사·CI 출처·고지·불변 version·설치/복구 안내를 검수한 뒤,
   승인한 동일 bytes를 marketplace 경로에 게시한다. 새 Mac 검수는 유예 상태로 공개 고지한다.
-  서명·공증·새 기계 설치를 갖춘 정식 신뢰 채널은 별도 후속 게이트다. 실제 게시 주소와
-  업데이트·제거/재설치·rollback 인수는 미완료이며,
+  서명·공증·새 기계 설치를 갖춘 정식 신뢰 채널은 별도 후속 게이트다.
+  기존 Mac의 개발판→preview 교체·제거/재설치·Project 보존·화면은
+  [Host 장부](../distribution/codex/HOST-INSTALL-CHECKPOINT-20260929.md)로 확인했다. 공개 게시 주소·설치와
+  실제 이전 판 rollback 인수는 미완료이며,
   [native release gate](../distribution/codex/RELEASE-macos.md)를 따른다.
   직접 등록한 MCP 화면 성공은 Plugin 설치 경로 성공이 아니다.
+
+준비된 [게시 순서와 사용자 안내](../distribution/codex/PUBLICATION-PLAN-20260929.md)는 초안이다.
+저장소 공개·보호/PVR 설정·게시를 실행하지 않았고, 검수한 설치본/후보 bytes도 변경하지 않았다.
 
 ## 3. 검증과 승인 경계
 

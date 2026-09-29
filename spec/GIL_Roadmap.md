@@ -1404,10 +1404,13 @@ rmcp stdio server 최소 spike
       `0.2.1-preview.1` 로컬 후보는 [장부](../distribution/codex/UNSIGNED-PREVIEW-CHECKPOINT-20260928.md) 참조.
       업데이트/rollback record 검사 통과는 실제 version 쌍의 설치·복구 인수와 다름.
 - [ ] unsigned 시험판의 공개 표면 검수·PR/CI·불변 게시 위치·설치 안내를 마치고 승인 후 게시.
-      현재 Mac의 기존 공식 설치본과 화면은 사용자 확인, 새 prerelease Host 설치는 아직 미실행.
-- [~] 비공개 `gil-distribution` 원격 인수 — 검수한 CI 후보의 PR·10개 정적 시험·fresh clone의
+      공개 비인증 설치·Git metadata 개인정보 결정은 미완료. [게시 계획](../distribution/codex/PUBLICATION-PLAN-20260929.md).
+- [x] 비공개 `gil-distribution` 원격 Git 인수 — 검수한 CI 후보의 PR·10개 정적 시험·fresh clone의
       native 17 tools·내장 UI·권한 보존 확인. [장부](../distribution/codex/REMOTE-STAGING-CHECKPOINT-20260928.md).
-      현재 설치본 교체·실제 Host 원격 설치·업데이트/제거/재설치와 공개 게시는 별도 미완료
+- [x] 기존 Mac의 공식 Host 원격 설치 — 개발판→`0.2.1-preview.1` 교체·제거·재설치,
+      7개 설치 파일·17 tools·saved binding 조회·Project 보존 및 사용자 Monitor 화면 확인.
+      [9/29 장부](../distribution/codex/HOST-INSTALL-CHECKPOINT-20260929.md); 공개 설치·새 Mac은 별개
+- [ ] 이 preview의 완전 Host 재시작 별도 재확인 및 이전 version으로 실제 rollback 쌍 검수
 - [ ] 후속 macOS 정식 신뢰 채널 — Developer ID·공증 및 실제 marketplace/새 Mac 실행 인수.
       단독 CLI/ZIP에는 staple할 수 없다. Companion `.app`/DMG 검수와 구분한다
       ([native release gate](../distribution/codex/RELEASE-macos.md)); 현재 Developer Program/identity 미준비
@@ -1544,6 +1547,8 @@ artifact·release pipeline → 새 기계 설치·업데이트 인수다. Claude
 - [x] 현재 코드·시험·명세 선별; Git 이력·개인 bootstrap·옛 감사/CI 보고서 제외
 - [x] README·CONTRIBUTING·AGENTS/CLAUDE 개발 지침을 새 출발 경계에 맞춤
 - [~] 선별된 source tree의 비밀·개인정보·공개 문서·fixture·이미지 검수와 로컬 회귀시험
+      — [9/29 공개 표면 감사](../distribution/compliance/PUBLIC-SURFACE-AUDIT-20260929.md): source·배포
+      전체 이력/CI/PR 표면 점검, 비밀 탐지 없음. 배포 commit 개인 이메일 공개/정리 결정은 미결
 - [~] Rust·UI·Plugin·Companion 배포 단위별 의존성 inventory와 필요한 고지 동봉
   - [x] macOS arm64 Core 79 + bundled UI 5 package 및 Rust 표준 라이브러리 고지 구현 보존
   - [x] lock·원문·coverage 변경 및 고지 누락 거절 시험과 수동 CI 배선 보존
@@ -1556,7 +1561,8 @@ artifact·release pipeline → 새 기계 설치·업데이트 인수다. Claude
       ([설정 장부](../distribution/compliance/REPOSITORY-GOVERNANCE-20260928.md)); 기존 개발 저장소 비공개 전환 완료
 - [~] 기여 정책·Code of Conduct·유지관리 연락 경로·issue/PR 안내의 담당자 검수
       — CONTRIBUTING·SUPPORT·issue/PR 양식과 행동 강령 초안 준비. 담당자 검수·민감한 행동 신고 경로는 남음
-- [ ] 새 기계 최초 설치·업데이트·제거/재설치 및 Project 보존
+- [~] 설치·업데이트·제거/재설치 및 Project 보존 — 기존 Mac의 원격 preview 교체와 제거/재설치
+      보존은 통과. 새 Mac은 유예·미통과이며 실제 이전 판 rollback과 공개 비인증 설치는 남음
 - [ ] 공개 표면과 배포 준비 게이트 완료 후 조건부 승인에 따른 새 저장소 공개 전환·설정 검증
 - [ ] version·게시 경로·rollback 확정 및 출시 게이트 완료 후 승인된 정식 release·marketplace 게시
 

@@ -1,6 +1,6 @@
 # Native MCP macOS release gates
 
-상태: **첫 배포는 opt-in unsigned 시험판으로 준비, 아직 게시하지 않음** (2026-09-28).
+상태: **기존 Mac 비공개 원격 설치·화면 인수 완료, unsigned 시험판 미게시** (2026-09-29).
 첫 인수 대상은 macOS Apple Silicon의 Codex Plugin이다. 이는 제작자 문서이며 사용자에게
 Node·Cargo·clone·터미널 설치를 요구하지 않는다. Companion DMG는 별도 산출물이다.
 
@@ -15,9 +15,9 @@ Node·Cargo·clone·터미널 설치를 요구하지 않는다. Companion DMG는
 |---|---|---|
 | 선별된 source·MIT·고지·CI | 공개 표면 감사, 검수한 clean commit과 CI artifact 대응 | 부분 완료 |
 | 시험판 신뢰 표시 | Developer ID·공증 없음, OS 차단 가능성·승인 경계 표시 | 정책 승인·후보에 포함 |
-| 기존 Mac 설치 | 공식 Plugin 설치본과 fullscreen | 사용자 확인; 새 prerelease 설치와 별개 |
+| 기존 Mac 설치 | 공식 Plugin 설치본과 fullscreen | 원격 prerelease 교체·제거·재설치 및 화면 사용자 확인 |
 | 새 Mac 설치 | 개발 도구 없는 새 Mac의 최초 실행·fullscreen·재시작 | 유예, 미통과 |
-| 수명·업데이트 | version 쌍의 업데이트·제거/재설치 뒤 Project 보존 | record 검사 구현, 실제 Host 쌍은 미완료 |
+| 수명·업데이트 | version 쌍의 업데이트·제거/재설치 뒤 Project 보존 | 개발판→preview·제거/재설치 보존 통과, 이전 판 rollback 미실행 |
 | source 공개 | 공개 준비 감사, PVR 개통과 main 보호 적용·재조회, 운영 안내 | 미실행 |
 | 시험판 게시 | 불변 version·검증된 게시 경로·복구 안내, 승인된 동일 bytes 게시 | 미실행 |
 | 후속 정식 신뢰 채널 | Developer ID 서명·공증·새 Mac 설치 | 미준비; 첫 시험판 선행 조건 아님 |
@@ -25,8 +25,9 @@ Node·Cargo·clone·터미널 설치를 요구하지 않는다. Companion DMG는
 새 Mac 인수에는 실제 다운로드/quarantine와 Host 실행 경로를 기록한다. 이미 개발하며 허용한
 Mac의 smoke 성공, `spctl` 명령 한 번 또는 gatekeeper 설정 변경을 설치 인수로 대신하지 않는다.
 `xattr` 제거, Gatekeeper 해제, 설치 cache 손편집은 정식 설치 방법이 아니다.
-검수용 로컬 marketplace의 공식 설치와 화면은 기존 Mac에서 확인했다. 원격 주소에서 처음 설치하는
-경로와 새 Mac은 아직 인수하지 않았다. [현재 후보 증거](UNSIGNED-PREVIEW-CHECKPOINT-20260928.md)를 본다.
+기존 Mac의 비공개 원격 marketplace 설치와 화면은 확인했다. 공개 비인증 설치와 새 Mac은 아직
+인수하지 않았다. [현재 후보 증거](UNSIGNED-PREVIEW-CHECKPOINT-20260928.md)와
+[Host 설치 장부](HOST-INSTALL-CHECKPOINT-20260929.md)를 구분한다.
 
 기존 개발 cachebuster를 stable version으로 오인하지 않으며 Plugin identity와 게시 주소를 임의로
 바꾸지 않는다. `unsigned`는 **Apple Developer ID 서명·공증을 제공하지 않음**을 뜻하며, 실행 파일의
@@ -92,13 +93,16 @@ Host의 공식 Plugin 관리 경로로 복구하며 cache를 손편집하지 않
 계속 보인다. 해시와 receipt는 publisher 신원 확인·악성 코드 검사·새 Mac 인수의 대체가 아니다.
 Git marketplace 등록은 universal public Plugins Directory 심사·등재와도 다르다.
 
-### 1.3 비공개 원격 인수 상태 (2026-09-28)
+### 1.3 비공개 원격 인수 상태 (2026-09-29)
 
 사용자 승인으로 `hyun06000/gil-distribution`을 비공개 생성했다. 검수한 CI 후보를 PR로 옮겼고,
 GitHub에서 새로 clone한 고정 commit의 파일·권한·native 17 tools·내장 UI를 확인했다.
-[원격 검수 장부](REMOTE-STAGING-CHECKPOINT-20260928.md)를 따른다. 현재 설치된 Plugin은 교체하지
-않았으며 실제 Host 원격 설치·업데이트·제거/재설치·화면 인수는 별도 승인 단계다. 공개 주소나
-배포 완료로 표시하지 않고, 같은 marketplace 이름의 기존 로컬 등록을 조용히 덮지 않는다.
+[원격 검수 장부](REMOTE-STAGING-CHECKPOINT-20260928.md) 이후 별도 승인으로 공식 Host 경로에서
+개발판을 preview로 교체하고 제거·재설치·Project 보존·실제 화면을 확인했다.
+[Host 인수 장부](HOST-INSTALL-CHECKPOINT-20260929.md)에 자동 시험, 사용자 실측, sandbox 실패와
+미확인 재시작/rollback 범위를 구분한다. 공개 배포 완료로 표시하지 않는다.
+배포 Git 작성자 metadata의 개인정보 결정과 공개 전환/설치 안내는
+[게시 계획](PUBLICATION-PLAN-20260929.md)을 따른다. 현재 저장소·후보 bytes는 그대로다.
 
 ## 2. 후속 서명 채널의 읽기 전용 preflight
 
