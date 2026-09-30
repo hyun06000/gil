@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {readFile} from 'node:fs/promises';
-import {inspectPE, noBuildPaths, TARGET} from './candidate.mjs';
+import {inspectPE, noBuildPaths, TARGET, packTar, unpackTar} from './candidate.mjs';
 import {loadBundle, validatePolicy, collect, assertCoverage} from '../compliance/notices.mjs';
 
 function pe(dll = 'KERNEL32.dll') {
@@ -28,6 +28,16 @@ test('machine paths rejected in UTF-8 and UTF-16', () => {
   for (const s of ['C:\\Users\\alice', 'D:\\a\\gil', '/Users/alice', '/home/runner'])
     for (const encoding of ['utf8', 'utf16le']) assert.throws(() => noBuildPaths(Buffer.from(s, encoding)));
   noBuildPaths(Buffer.from('/gil/src/main.rs'));
+});
+test('tar transports archive bytes, never Unicode directory arguments', () => {
+  const calls = [], bytes = Buffer.from([0, 255, 128]);
+  const run = (...args) => { calls.push(args); return bytes; };
+  assert.equal(packTar(run, 'C:\\한글 tree'), bytes);
+  unpackTar(run, bytes, 'C:\\한글 roundtrip');
+  assert.deepEqual(calls, [
+    ['tar.exe', ['-czf', '-', '.'], {cwd: 'C:\\한글 tree', encoding: 'buffer'}],
+    ['tar.exe', ['-xzf', '-'], {cwd: 'C:\\한글 roundtrip', input: bytes}]
+  ]);
 });
 test('Windows has its own pinned notice inventory and original texts', async () => {
   const directory = 'distribution/windows/compliance';

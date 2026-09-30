@@ -11,6 +11,13 @@ const ROOT = resolve(import.meta.dirname, '../..');
 const PROFILE = {directory: 'distribution/windows/compliance', target: TARGET};
 const NAME = 'gil-companion-prototype';
 const PREFIX = `plugins/${NAME}`;
+export function packTar(run, tree) {
+  return run('tar.exe', ['-czf', '-', '.'], {cwd: tree, encoding: 'buffer'});
+}
+export function unpackTar(run, bytes, destination) {
+  // CreateProcessW receives cwd intact; tar's narrow argv must not carry Unicode paths.
+  run('tar.exe', ['-xzf', '-'], {cwd: destination, input: bytes});
+}
 export function inspectPE(bytes) {
   assert.ok(bytes.length >= 256 && bytes.toString('ascii', 0, 2) === 'MZ', 'not a PE executable');
   const pe = bytes.readUInt32LE(0x3c);
@@ -123,9 +130,10 @@ export async function prepare(output) {
   const before = await inventory(tree);
   assert.deepEqual(before.map(x => x.path).sort(), [...files.keys()].sort());
   const archive = join(out, 'gil-windows-x64-candidate.tar.gz');
-  run('tar.exe', ['-czf', archive, '-C', tree, '.']);
+  const archiveBytes = packTar(run, tree);
+  await writeFile(archive, archiveBytes, {flag: 'wx'});
   const extracted = join(out, '한글 roundtrip'); await mkdir(extracted);
-  run('tar.exe', ['-xzf', archive, '-C', extracted]);
+  unpackTar(run, archiveBytes, extracted);
   assert.deepEqual(await inventory(extracted), before, 'archive bytes changed');
   // The driver launches only the extracted executable, with a system-only child PATH.
   const smoke = JSON.parse(run(process.execPath, [join(ROOT, 'distribution/windows/spike.mjs'),

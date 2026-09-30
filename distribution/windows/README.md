@@ -107,6 +107,9 @@ the offline gate remained and CI now fetches the locked target first. Run 366897
 the release but stopped at the DLL allowlist: `bcryptprimitives.dll` was missing from that list.
 It is the Windows [ProcessPrng system library](https://learn.microsoft.com/en-us/windows/win32/seccng/processprng),
 now explicitly tested. No arbitrary DLL directory was permitted.
+Run 36690272236 passed release/import checks but Windows tar converted the Unicode `-C` path
+to question marks. Archive transport now uses stdin/stdout bytes and a Unicode process cwd,
+retaining the same Korean/space-containing extraction and executable path acceptance gate.
 Microsoft documents [static CRT deployment and its update responsibility](https://learn.microsoft.com/en-us/cpp/windows/deployment-in-visual-cpp?view=msvc-170)
 and separate [redistribution terms](https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files?view=msvc-170).
 This candidate does not treat static linking as automatic license approval or an OS trust bypass.
