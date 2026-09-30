@@ -102,7 +102,8 @@ fn private(file: &File) -> io::Result<()> {
     Ok(())
 }
 fn directory(path: &Path) -> io::Result<File> {
-    let file = OpenOptions::new().access_mode(FILE_READ_ATTRIBUTES | READ_CONTROL)
+    // Attribute-only access does not participate in Windows sharing checks.
+    let file = OpenOptions::new().access_mode(GENERIC_READ)
         .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
         .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT).open(path)?;
     ordinary(&file, true)?; Ok(file)
@@ -233,7 +234,7 @@ mod tests {
     fn broadened_file_acl_is_refused_and_bytes_are_preserved() {
         let s = Scratch::new(); let dir = PrivateDir::open(&s.0.join("private"), true).unwrap();
         let path = dir.path.join("record.json"); dir.publish(&path, b"original").unwrap();
-        let file = OpenOptions::new().access_mode(WRITE_DAC).open(&path).unwrap();
+        let file = OpenOptions::new().access_mode(READ_CONTROL | WRITE_DAC).open(&path).unwrap();
         let sddl: Vec<u16> = "D:P(A;;FA;;;WD)\0".encode_utf16().collect();
         unsafe {
             let mut raw = null_mut();
@@ -252,10 +253,14 @@ mod tests {
     fn junctions_are_refused_for_settings_and_project_identity() {
         let s = Scratch::new(); let target = s.0.join("target"); fs::create_dir(&target).unwrap();
         let alias = s.0.join("alias");
-        let command = PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32/cmd.exe");
-        let made = std::process::Command::new(command).args(["/d", "/c", "mklink", "/J"])
-            .arg(&alias).arg(&target).output().unwrap();
-        assert!(made.status.success(), "junction fixture creation must succeed, not silently skip");
+        let command = PathBuf::from(std::env::var_os("SystemRoot").unwrap())
+            .join("System32/WindowsPowerShell/v1.0/powershell.exe");
+        // Paths are environment values, never interpolated into shell source.
+        let made = std::process::Command::new(command).args(["-NoProfile", "-NonInteractive", "-Command",
+            "$ErrorActionPreference='Stop'; New-Item -ItemType Junction -Path $env:GIL_TEST_LINK -Target $env:GIL_TEST_TARGET | Out-Null"])
+            .env("GIL_TEST_LINK", &alias).env("GIL_TEST_TARGET", &target).output().unwrap();
+        assert!(made.status.success(), "junction fixture creation failed: {}",
+            String::from_utf8_lossy(&made.stderr).replace(&s.0.to_string_lossy().to_string(), "<scratch>"));
         assert!(PrivateDir::open(&alias, false).is_err());
         assert!(identity(&alias).is_err());
         assert!(PrivateDir::open(&alias.join("child"), true).is_err());
