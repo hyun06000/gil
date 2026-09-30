@@ -117,3 +117,25 @@ This candidate does not treat static linking as automatic license approval or an
 Do not send a nondeveloper tester these build commands or a CI login requirement. After release gates
 and a stable installation source are ready, give them one Codex prompt and a simple graph/detail/restart
 check. Windows ARM64/Snapdragon is not this candidate's target.
+
+## Downloaded candidate checkpoint — 2026-09-30
+
+Source `7d7aec67b6f5feca03cebfe5d3e9de923bf5c7d3`,
+[Windows candidate run 36690752815](https://github.com/hyun06000/gil/actions/runs/36690752815): passed.
+Native binding/MCP tests 28, packaging tests 7; relocated release binary smoke passed with 17 tools,
+matching embedded UI bytes, read-only Monitor View and active watcher. Same-source Mac PR CI
+[36690756906](https://github.com/hyun06000/gil/actions/runs/36690756906) and Windows PR CI
+[36690756776](https://github.com/hyun06000/gil/actions/runs/36690756776) passed.
+Local Mac packaging/compliance regression: 82 passed, no skips.
+
+Archive: `gil-windows-x64-candidate.tar.gz`, 2,693,120 bytes.
+SHA-256: `1071266e719093cb1d6c23c9641e32972e9f0296db5851b78df0330d384b4d05`.
+Downloaded independently; archive checksum, all 8 extracted file hashes, PE imports and the
+official plugin-creator validator passed. No executable was run on the Mac during this validation.
+Imports: advapi32, api-ms-win-core-synch-l1-2-0, bcryptprimitives, kernel32, ntdll, ws2_32 (all DLLs).
+No external VCRUNTIME/Node dependency was present in the PE import table. This is not a blanket
+claim about every dynamically loaded dependency or every clean Windows installation.
+
+The receipt remains `publishable: false`: no Authenticode signature, actual Windows/Codex install
+and fullscreen not yet tested, no marketplace publication, MSVC runtime redistribution review pending.
+CI retention is seven days; a CI artifact is not the stable nondeveloper installation channel.
