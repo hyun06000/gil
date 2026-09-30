@@ -146,7 +146,19 @@ Later    1  성공 가지 Merge
 
 #### T3 — Windows 설치와 Codex 경험 (M5-D/E/F의 Windows 항목)
 
-- [ ] Windows용 자족형 native Plugin·원격 marketplace 설치/업데이트/제거·복구 경로를 마련한다.
+- [x] Windows x64 제한적 unsigned 테스터 채널의 정책 승인(2026-09-30).
+      재배포 조건과 설치 경로 검수 뒤 게시하며, 보안 우회·Mac 채널 변경·stable 출시를 포함하지 않는다.
+      배포 명세 §6.2b. 실제 게시와 일반 사용자 인수는 아래 항목에 따로 남긴다.
+
+- [~] Windows x64 Core/MCP feasibility: Unix 신호 처리 경계를 분리하고 native CI 실행을 통과했다
+      (2026-09-30). 후속 `55d5ebf` / run 36684755556에서 로컬 고정 NTFS identity·private ACL·
+      재시작 복원·Monitor View·watcher를 검증했다(보안 11 + MCP 17 시험). 설치·실제 화면은 미검증이다.
+      범위·첫 실패와 다음 게이트: `distribution/windows/README.md`. 비지원 저장소는 안전하게 거절한다.
+- [~] Windows용 자족형 native Plugin·원격 marketplace 설치/업데이트/제거·복구 경로를 마련한다.
+      `7d7aec6` / Windows CI 36690752815에서 검수용 unsigned 후보 생성·한글 경로 압축 왕복·
+      추출본 실행을 통과했다. Windows 전용 고지 89개 package, 시스템 DLL import 검사,
+      다운로드 후 8개 파일 hash와 Plugin validator를 확인했다. 원격 설치 출처 게시·일반 계정
+      설치·실제 fullscreen은 아직 미검증이며, MSVC runtime 재배포 조건 검토도 남아 있다.
 - [ ] 사용자에게 개발 도구·셸 명령·별도 Companion 설치를 요구하지 않고 macOS/Codex와 같은
       폴더 선택 → 프로젝트 시작 → fullscreen 가로 DAG·채팅 → 상세/시각 자료 → 실시간 갱신을 제공한다.
 - [ ] 경로·권한·잠금·파일 감시·재시작/재연결·보고서 보존·OS 실행 차단을 실제 Windows에서 검수한다.

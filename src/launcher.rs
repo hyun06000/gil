@@ -22,11 +22,15 @@
 //! 만들지 않는다 — 설치가 안 된 것과 이 platform 이 아직 볼 줄 모르는 것은 다른 사실이다.
 
 use std::path::{Path, PathBuf};
+#[cfg(target_os = "macos")]
 use std::process::{Command, Stdio};
+#[cfg(target_os = "macos")]
 use std::time::Duration;
 
 use crate::capability::{Companion, MonitorIntent, Seen};
-use crate::companion::{ARG, BUNDLE_ID, DescriptorV1, ExpectedV1, InstallationState, PROBE_ARG, RuntimeReplyV1, classify};
+use crate::companion::{DescriptorV1, ExpectedV1, InstallationState, RuntimeReplyV1, classify};
+#[cfg(target_os = "macos")]
+use crate::companion::{ARG, BUNDLE_ID, PROBE_ARG};
 
 /// platform 이 다르면 달라지는 네 동작. 나머지는 전부 platform 중립이다.
 pub trait Platform {
