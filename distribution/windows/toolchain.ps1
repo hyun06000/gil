@@ -5,13 +5,11 @@ $installations = @(& $vswhere -latest -products '*' -requires Microsoft.VisualSt
 if ($LASTEXITCODE -ne 0 -or $installations.Count -ne 1) { throw 'One stable MSVC installation required' }
 $vs = $installations[0]
 if ($vs.isPrerelease -or -not $vs.isComplete) { throw 'Incomplete or preview MSVC refused' }
-$devcmd = Join-Path $vs.installationPath 'Common7/Tools/VsDevCmd.bat'
-$lines = & cmd.exe /d /s /c "`"`"$devcmd`" -no_logo -arch=x64 -host_arch=x64 >nul && set`""
-if ($LASTEXITCODE -ne 0) { throw 'MSVC environment setup failed' }
+$devshell = Join-Path $vs.installationPath 'Common7/Tools/Launch-VsDevShell.ps1'
+# Use Microsoft's PowerShell entry point; never round-trip a spaced path through cmd quoting.
+& $devshell -SkipAutomaticLocation -Arch amd64 -HostArch amd64 | Out-Null
 $selected = @{}
-foreach ($line in $lines) {
-  if ($line -match '^([^=]+)=(.*)$') { $selected[$Matches[1]] = $Matches[2] }
-}
+Get-ChildItem Env: | ForEach-Object { $selected[$_.Name] = $_.Value }
 $link = Join-Path $selected.VCToolsInstallDir 'bin/Hostx64/x64/link.exe'
 $vcVersion = $selected.VCToolsVersion.TrimEnd('\')
 $sdkVersion = $selected.WindowsSDKVersion.TrimEnd('\')

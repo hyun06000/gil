@@ -15,6 +15,10 @@ environment and explicitly passes that link.exe to Cargo. The receipt records VS
 and SHA-256 for link.exe, libcmt.lib, libvcruntime.lib and libucrt.lib, without machine paths.
 This identifies selected inputs; hashes are not a redistribution license or a link map.
 
+First provenance run 36692696766 passed native tests but failed before release build: nested cmd
+quoting broke the spaced Visual Studio path. Use Microsoft's Launch-VsDevShell.ps1 directly;
+do not remove the explicit toolchain selection gate to get a green run.
+
 Official sources reviewed (2026-09-30):
 
 - [Deployment](https://learn.microsoft.com/en-us/cpp/windows/deployment-in-visual-cpp?view=msvc-170):
