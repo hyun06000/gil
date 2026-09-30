@@ -51,3 +51,22 @@ This is engineering release review, not a legal certification.
   exclusions or execution-policy changes. Do not claim success from tool responses alone.
 
 No tester-ready installation prompt is issued until the fixed public source and hash are verified.
+
+## Provenance checkpoint
+
+Source `0c2e8c31d32b59a18d6883a646beaf57a3663aa2` passed
+[Windows candidate CI 36693181563](https://github.com/hyun06000/gil/actions/runs/36693181563).
+The same-source Mac and Windows PR checks passed. Local packaging regression: 75 Mac/common
+checks plus 7 Windows checks, all passed. No Core source changed in this provenance follow-up.
+
+The downloaded archive passed SHA-256 verification:
+`4466ec503561be93fe4167492f9a8952f9de7652a1c9facce700dab9a505cefc`.
+Selected VS Enterprise `18.10.12210.168`, MSVC `14.51.36231`, SDK `10.0.26100.0`,
+runner `win25-vs2026` / `20260922.246.2`, non-prerelease. The immediately preceding passing
+run used a different VS/runner patch; this is why each artifact must carry its own provenance.
+The receipt includes the four input file hashes, archive inventory and native smoke evidence.
+
+Runtime terms/recipient notices remain unresolved; the receipt correctly remains `publishable: false`.
+No marketplace entry, release or user installation was changed. The unsigned policy approval is
+recorded, but it is not a substitute for this review. [Tester checks](TESTER-CHECK.md) are a draft,
+not an installation invitation. No further unsigned-policy approval is needed to continue the review.
