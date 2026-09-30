@@ -76,7 +76,7 @@ Later    1  성공 가지 Merge
 - [x] 2026-09-30 기존 Mac에서 사용자 직접 Plugin 제거 → 재설치 → 프로젝트 실행 성공 보고.
       사용자 경험 인수이며 이번 문서 작업이 설치 로그·설치 버전·프로젝트 지문을 새로 검증한 것은 아니다.
       새 Mac 최초 설치, 완전 Host 재시작, Windows 성공을 대신하지 않는다.
-- [~] 사용자가 주변 시험 사용자를 모집하기로 함 — 참여 인원과 외부 환경 성공은 아직 확인하지 않음.
+- [~] 외부 Apple Silicon Mac/Codex 시험 사용자 1명 확보. 실제 설치·작업 결과는 아직 미확인.
 - [ ] 동의한 시험 사용자의 OS/CPU·Host·설치 버전, 안내만으로 설치/첫 작업을 마쳤는지,
       막힌 단계·현재 상태 이해 여부를 수집한다. 개인 경로·대화·`.gil` 원본 제출은 요구하지 않는다.
 
@@ -92,8 +92,10 @@ Later    1  성공 가지 Merge
       `gil_start` → `gil_monitor_prepare` → `show_gil_monitor` → 첫 `gil_open` 흐름과 경계
       (재초기화 금지·시작/데이터/화면 구분·재시도 시 같은 scope·fullscreen 거절과 inline 존중·
       단일 열린 Cycle·읽기 전용)를 적었다. 같은 stdio 연결의 Rust 통합 시험과 Skill 계약 시험이
-      그 순서와 Core 거절 문구를 지킨다. **미완:** 새 Skill을 실은 Codex 설치 후보의 실제 화면
-      (fullscreen 그래프·채팅 병행·첫 Interview 갱신) 사용자 확인. 도구 응답을 화면 성공으로 세지 않는다.
+      그 순서와 Core 거절 문구를 지킨다. **사용자 확인:** 기존 Mac의 preview.3 로컬 CI 후보에서
+      한 문장 시작·fullscreen Monitor·첫 Interview 노드 표시를 확인했다. **미완:** 기존 프로젝트
+      재요청의 중복 방지 사용자 검수, 외부 새 Mac 검수. T1.1은 [~]를 유지한다.
+      [preview.3 장부](../distribution/codex/PREVIEW-3-PUBLICATION-20260930.md)에서 원격 설치와 구분한다.
 - [ ] **T1.2 노드 상세의 시각 보고서:** 스크린샷·이미지·차트·시각화 등을 Report가 참조하고
       Node Detail에서 보여 준다. Agent의 Report 작성 지침·예시에 시각 자료의 적극적 사용을
       넣되 증거가 없는 그림을 관측처럼 만들지 않는다. caption·alt text·출처와 생성/관측 구분,

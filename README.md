@@ -37,7 +37,7 @@ GIL의 주 사용자는 비개발자다. 인간은 명령과 저장 형식을 �
 상태가 아니다. PiP는 현재 지원을 주장하지 않는다.
 
 소스는 [MIT 라이선스](LICENSE)로 공개한다. 첫 사용자 채널은 **Apple 개발자 서명·공증 없는
-Codex/macOS Apple Silicon `0.2.1-preview.2`**다. [설치 안내](distribution/codex/INSTALL.md)에 따라
+Codex/macOS Apple Silicon `0.2.1-preview.3`**다. [설치 안내](distribution/codex/INSTALL.md)에 따라
 Codex에게 검증된 marketplace Plugin 설치를 부탁한 뒤 작업 폴더를 선택하면 된다.
 **Node·Cargo·Homebrew·별도 Companion 설치는 필요하지 않다.** 설치 출처는
 [gil-marketplace](https://github.com/hyun06000/gil-marketplace)이며, 범용 Plugins Directory 등재와는 다르다.
@@ -45,7 +45,7 @@ Codex에게 검증된 marketplace Plugin 설치를 부탁한 뒤 작업 폴더�
 새 Mac 검수는 **유예·미통과**다. macOS가 실행을 막으면 보안 설정을 끄지 말고 중단한다.
 기존 Mac의 공식 설치·제거/재설치·preview.1↔preview.2 복구·프로젝트 보존·실제 fullscreen 화면을
 검수했다. 공개 HTTPS 설치와 원본 CI 파일의 증거는
-[9/30 배포 장부](distribution/codex/PREVIEW-2-PUBLICATION-20260930.md)에 둔다.
+[preview.3 배포 장부](distribution/codex/PREVIEW-3-PUBLICATION-20260930.md)에 둔다.
 정식 신뢰 채널의 Apple 서명·공증, Windows·Intel 지원은 남아 있다.
 [시험판 조건](distribution/codex/RELEASE-macos.md)과 [보안 제보 안내](SECURITY.md)를 따른다.
 Claude Desktop은 폴더 없는 대화에서 Plugin 화면이 확인됐지만, 폴더 연결 뒤의 표시 차단과
