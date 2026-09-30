@@ -48,7 +48,7 @@ export function inspectPE(bytes) {
     imports.push(bytes.toString('ascii', name, end).toLowerCase());
   }
   assert.ok(terminated, 'unterminated import table');
-  const allowed = new Set(['kernel32.dll', 'ntdll.dll', 'advapi32.dll', 'bcrypt.dll',
+  const allowed = new Set(['kernel32.dll', 'ntdll.dll', 'advapi32.dll', 'bcrypt.dll', 'bcryptprimitives.dll',
     'userenv.dll', 'ws2_32.dll', 'ole32.dll', 'shell32.dll', 'user32.dll', 'crypt32.dll',
     'secur32.dll', 'iphlpapi.dll', 'normaliz.dll', 'ucrtbase.dll']);
   for (const name of imports) assert.ok(allowed.has(name) || /^api-ms-win-[a-z0-9-]+\.dll$/.test(name),

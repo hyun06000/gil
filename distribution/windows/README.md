@@ -102,6 +102,15 @@ Static MSVC runtime redistribution review is a separate pending gate, not certif
 Authenticode, downloaded-file security prompts, ordinary-user Codex install and visible fullscreen
 also remain unverified. Never advise users to disable Defender/SmartScreen or change execution policy.
 
+Packaging failures retained: run 36689441583 lacked prefetched workspace metadata dependencies;
+the offline gate remained and CI now fetches the locked target first. Run 36689772910 then built
+the release but stopped at the DLL allowlist: `bcryptprimitives.dll` was missing from that list.
+It is the Windows [ProcessPrng system library](https://learn.microsoft.com/en-us/windows/win32/seccng/processprng),
+now explicitly tested. No arbitrary DLL directory was permitted.
+Microsoft documents [static CRT deployment and its update responsibility](https://learn.microsoft.com/en-us/cpp/windows/deployment-in-visual-cpp?view=msvc-170)
+and separate [redistribution terms](https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files?view=msvc-170).
+This candidate does not treat static linking as automatic license approval or an OS trust bypass.
+
 Do not send a nondeveloper tester these build commands or a CI login requirement. After release gates
 and a stable installation source are ready, give them one Codex prompt and a simple graph/detail/restart
 check. Windows ARM64/Snapdragon is not this candidate's target.

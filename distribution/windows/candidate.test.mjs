@@ -13,6 +13,8 @@ function pe(dll = 'KERNEL32.dll') {
   b.writeUInt32LE(0x1080, 524); b.write(dll, 640); return b;
 }
 test('x64 PE system imports accepted', () => assert.deepEqual(inspectPE(pe()), ['kernel32.dll']));
+test('Windows ProcessPrng system library accepted', () =>
+  assert.deepEqual(inspectPE(pe('bcryptprimitives.dll')), ['bcryptprimitives.dll']));
 test('external runtime and unknown imports refused', () => {
   for (const name of ['VCRUNTIME140.dll', 'node.dll', 'unexpected.dll']) assert.throws(() => inspectPE(pe(name)));
 });
