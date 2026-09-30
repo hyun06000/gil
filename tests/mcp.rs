@@ -19,7 +19,7 @@ fn gil() -> PathBuf {
     if at.ends_with("deps") {
         at.pop();
     }
-    at.join("gil")
+    at.join(format!("gil{}", std::env::consts::EXE_SUFFIX))
 }
 
 fn scratch(name: &str) -> PathBuf {

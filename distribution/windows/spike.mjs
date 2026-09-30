@@ -85,17 +85,19 @@ try {
   const before = await readFile(join(root, '.gil', 'state.yaml'));
   assert.equal((await call('gil_start', {project_root: root})).structuredContent.ok, false);
   assert.deepEqual(await readFile(join(root, '.gil', 'state.yaml')), before);
-  if (process.platform === 'win32') {
-    // Explicit pending security gate, not acceptance of a working Windows Monitor.
-    const monitor = await call('gil_monitor_prepare', {project_root: root});
-    assert.equal(monitor.isError, true);
-    assert.equal(monitor.structuredContent.code, 'resume_unavailable');
-    assert.deepEqual(await readFile(join(root, '.gil', 'state.yaml')), before);
-  }
+  const monitor = await call('gil_monitor_prepare', {project_root: root});
+  assert.notEqual(monitor.isError, true);
+  const scope = monitor.structuredContent.scope_id;
+  assert.match(scope, /^project:[a-f0-9]{64}$/);
+  const view = await call('show_gil_monitor', {scope_id: scope});
+  assert.notEqual(view.isError, true);
+  assert.ok(view.structuredContent.view);
+  assert.equal(view.structuredContent.watching, true);
+  assert.deepEqual(await readFile(join(root, '.gil', 'state.yaml')), before);
   if (fault) throw fault;
   console.log(JSON.stringify({platform: process.platform, arch: process.arch,
     native_core: 'passed', mcp_tools: tools.length, embedded_ui: 'hash verified',
-    windows_monitor: 'pending identity and private-settings implementation',
+    monitor: 'prepare and read-only View passed; OS watcher active',
     fullscreen: 'not tested', installation: 'not tested'}));
 } finally {
   for (const one of pending.values()) clearTimeout(one.timer);
