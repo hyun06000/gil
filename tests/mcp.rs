@@ -570,3 +570,140 @@ fn stdout_carries_json_rpc_frames_and_nothing_else() {
 
     std::fs::remove_dir_all(&at).ok();
 }
+
+// ── T1.1 시작과 관측을 한 흐름으로 ──────────────────────────────────────────
+//
+// Skill 이 「GIL 프로젝트를 시작하자」 한 요청에 잇는 도구 차례를 **같은 stdio 연결**에서
+// 그대로 밟는다. 여기서 재는 것은 배선의 성질 넷이다.
+//
+//   1. start → prepare → show 가 한 연결에서 이어지고, 첫 View 는 열린 Interview 하나다
+//   2. 이미 시작된 자리의 두 번째 start 는 거절되고 기록은 byte 로 같다 — 재초기화 없음
+//   3. 화면 재시도(prepare/show 반복)는 같은 scope 를 돌려주고 binding 도 하나뿐이다
+//   4. 시작 실패와 App 조회의 typed 거절은 서로 다른 답이며, 어느 쪽도 Project 를 만들거나 바꾸지 않는다
+//
+// 이것은 **stdio 도구 연쇄**의 시험이다. 실제 Host 의 카드 렌더링·fullscreen 전환·화면 표시는
+// 여기서 재지 않는다 — 그것은 App 진입점 시험(`mcp-app/display.test.mjs`)과 사용자 화면
+// 확인이 따로 맡는다. 아래 5의 알 수 없는 scope 거절도 Host 렌더링 실패의 시험이 아니다.
+
+fn agent_call(client: &mut Client, name: &str, arguments: serde_json::Value) -> serde_json::Value {
+    client.request("tools/call", serde_json::json!({ "name": name, "arguments": arguments }))["result"].clone()
+}
+
+fn binding_files(settings: &Path) -> usize {
+    std::fs::read_dir(settings.join("bindings")).map(|dir| dir.filter_map(Result::ok)
+        .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "json")).count()).unwrap_or(0)
+}
+
+#[test]
+fn starting_a_project_leads_to_one_monitor_scope_and_the_first_interview_updates_it() {
+    let at = scratch("start-and-watch");
+    let root = at.join("project");
+    std::fs::create_dir(&root).unwrap();
+    let settings = at.join("settings");
+    let mut mcp = Client::serve_with(&settings); mcp.initialize();
+
+    // 1. 시작 — Skill 의 첫 걸음. 요청한 root 의 receipt 를 그대로 받는다.
+    let started = agent_call(&mut mcp, "gil_start", serde_json::json!({ "project_root": root }));
+    assert_eq!(started["isError"], false, "{started}");
+    assert_eq!(started["structuredContent"]["ok"], true);
+    let receipt = started["structuredContent"]["said"].as_str().unwrap();
+    assert!(receipt.starts_with("프로젝트를 시작했다.\n현재: cycle:C1 · interview\n"), "{receipt}");
+    assert!(receipt.contains("실행\n  gil open\n"), "{receipt}");
+    let state = std::fs::read(root.join(gil::STATE_PATH)).unwrap();
+    assert_eq!(binding_files(&settings), 0, "시작만으로는 Monitor binding 을 만들지 않는다");
+
+    // 2. 준비 → 표시 — 같은 연결, 별도 요청 없음. 첫 View 는 Step 이 없는 열린 Interview 다.
+    let prepared = agent_call(&mut mcp, "gil_monitor_prepare", serde_json::json!({ "project_root": root }));
+    assert_ne!(prepared["isError"], true, "{prepared}");
+    let scope = prepared["structuredContent"]["scope_id"].clone();
+    assert_eq!(prepared["structuredContent"]["label"], "project");
+    let shown = agent_call(&mut mcp, "show_gil_monitor", serde_json::json!({ "scope_id": scope }));
+    assert_ne!(shown["isError"], true, "{shown}");
+    assert!(shown["content"][0]["text"].as_str().unwrap().contains("fullscreen을 한 번 자동 요청"), "{shown}");
+    let view = &shown["structuredContent"]["view"];
+    assert_eq!(view["schema_version"], 1);
+    assert_eq!(view["current"]["cycle_ref"], "cycle:C1");
+    assert!(view["current"]["step_ref"].is_null());
+    assert_eq!(view["timeline"].as_array().unwrap().len(), 1);
+    assert_eq!(view["timeline"][0]["kind"], "interview");
+    assert_eq!(view["timeline"][0]["state"], "open");
+    assert_eq!(view["timeline"][0]["steps"], serde_json::json!([]));
+    assert_eq!(shown["structuredContent"]["scope_id"], scope);
+    assert!(!shown.to_string().contains(at.to_str().unwrap()), "App 응답에 경로가 새어 나왔다");
+    let first_hint = shown["structuredContent"]["revision"].as_str().unwrap().to_owned();
+    let watching = shown["structuredContent"]["watching"] == true;
+    assert_eq!(binding_files(&settings), 1);
+
+    // 3. 두 번째 start — 이미 걷고 있다. 거절이며 기록은 byte 로 같다.
+    let again = agent_call(&mut mcp, "gil_start", serde_json::json!({ "project_root": root }));
+    assert_eq!(again["isError"], true, "{again}");
+    assert_eq!(again["structuredContent"]["ok"], false);
+    let problem = again["structuredContent"]["problem"].as_str().unwrap();
+    assert!(problem.contains("여기서 새로 시작할 수 없다.") && problem.contains("이미 걷고 있다"), "{problem}");
+    assert!(problem.contains("gil status"), "복구 안내가 없다: {problem}");
+    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(), state, "거절된 start 가 기록을 바꿨다");
+
+    // 4. 화면 재시도 — prepare/show 를 다시 불러도 같은 scope, binding 하나, 기록 불변.
+    let retried = agent_call(&mut mcp, "gil_monitor_prepare", serde_json::json!({ "project_root": root }));
+    assert_eq!(retried["structuredContent"]["scope_id"], scope, "재시도가 새 scope 를 만들었다");
+    let reshown = agent_call(&mut mcp, "show_gil_monitor", serde_json::json!({ "scope_id": scope }));
+    assert_ne!(reshown["isError"], true, "{reshown}");
+    assert_eq!(reshown["structuredContent"]["view"]["timeline"], view["timeline"]);
+    assert_eq!(binding_files(&settings), 1, "재시도가 binding 을 늘렸다");
+    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(), state);
+
+    // 5. App 조회의 typed 거절(알 수 없는 scope)은 Project 를 만지지 않는다 — 그 뒤 start 도 여전히
+    //    거절이다. Host 가 카드를 그리지 못한 경우를 흉내 내는 것이 아니다.
+    let lost = agent_call(&mut mcp, "show_gil_monitor", serde_json::json!({ "scope_id": format!("project:{}", "0".repeat(64)) }));
+    assert_eq!(lost["isError"], true);
+    assert_eq!(lost["structuredContent"]["code"], "reconnect_required");
+    assert!(lost["structuredContent"].get("ok").is_none(), "Monitor 거절이 Agent 동작의 모양을 흉내 냈다");
+    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(), state);
+    let still = agent_call(&mut mcp, "gil_start", serde_json::json!({ "project_root": root }));
+    assert_eq!(still["structuredContent"]["ok"], false);
+    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(), state);
+
+    // 6. 시작 실패는 화면 이전에 끝난다 — 없는 자리는 start 도 prepare 도 거절이고 binding 은 그대로다.
+    let nowhere = at.join("missing");
+    let failed = agent_call(&mut mcp, "gil_start", serde_json::json!({ "project_root": nowhere }));
+    assert_eq!(failed["structuredContent"]["ok"], false);
+    assert_eq!(failed["structuredContent"]["problem"], "Project 자리를 열 수 없다");
+    assert!(!nowhere.exists(), "실패한 start 가 폴더를 만들었다");
+    let unprepared = agent_call(&mut mcp, "gil_monitor_prepare", serde_json::json!({ "project_root": nowhere }));
+    assert_eq!(unprepared["isError"], true);
+    assert_eq!(unprepared["structuredContent"]["code"], "unreadable");
+    assert_eq!(binding_files(&settings), 1);
+
+    // 7. 첫 Interview Step — Skill 의 셋째 걸음. 렌더 도구를 다시 부르지 않아도 View 가 바뀐다.
+    let opened = agent_call(&mut mcp, "gil_open", serde_json::json!({ "project_root": root, "kind": "question",
+        "contract": "objective: 사용자의 목표를 확인한다\nnext_action: 무엇을 만들고 싶은지 묻는다\ndone_when: 사용자의 원문 응답을 얻는다\n" }));
+    assert_eq!(opened["structuredContent"]["ok"], true, "{opened}");
+    let updated = agent_call(&mut mcp, "gil_monitor_read", serde_json::json!({ "scope_id": scope }));
+    assert_ne!(updated["isError"], true, "{updated}");
+    let now = &updated["structuredContent"]["view"];
+    assert_eq!(now["current"]["step_ref"], "step:C1/S1");
+    assert_eq!(now["timeline"][0]["steps"][0]["step_ref"], "step:C1/S1");
+    assert_eq!(now["timeline"][0]["steps"][0]["state"], "open");
+    assert_eq!(now["timeline"][0]["steps"][0]["kind"], "question");
+    assert_eq!(now["current_will"]["objective"], "사용자의 목표를 확인한다");
+
+    // 8. 변화 hint — watcher 가 서 있으면 첫 Step 의 기록이 유한한 시간 안에 새 revision 이 된다.
+    //    OS 사건이 막힌 환경이면 hint 없이도 위 완전 재조회가 이미 새 사실을 읽었다(§8.3).
+    //    어느 분기를 밟았는지는 `--nocapture` 로 보이게 적는다.
+    if watching {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        let mut hint = first_hint.clone();
+        while hint == first_hint && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            let polled = agent_call(&mut mcp, "gil_monitor_poll", serde_json::json!({ "scope_id": scope }));
+            hint = polled["structuredContent"]["revision"].as_str().unwrap().to_owned();
+        }
+        assert_ne!(hint, first_hint, "첫 Step 을 열었는데 30초 안에 변화 hint 가 오지 않았다");
+        eprintln!("watcher branch: live — 실제 OS 감시가 첫 Step 의 hint 를 냈다");
+    } else {
+        eprintln!("watcher branch: unavailable — hint 없이 완전 재조회로만 갱신을 확인했다");
+    }
+
+    assert!(mcp.eof().0.success());
+    std::fs::remove_dir_all(at).unwrap();
+}

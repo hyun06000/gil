@@ -62,6 +62,14 @@ Cowork의 fullscreen이며 Companion은 Windows·독립 창·Host 미지원 fall
 
 `gil_monitor_prepare(project_root)` → `show_gil_monitor(scope_id)` → 가로보기 + fullscreen 자동 요청.
 App 연결과 Monitor 준비가 끝난 뒤, Host가 지원을 광고하면 인스턴스당 한 번만 요청한다.
+
+사용자가 선택한 폴더에서 “GIL 프로젝트를 시작하자”라고 하면 Skill이 `gil_start` 성공 뒤 같은
+root로 위 두 도구를 이어 부르고 첫 Interview Step을 연다(T1.1). 별도 “Monitor 열어 줘” 요청이나
+Companion 설치를 요구하지 않는다. 이미 시작된 폴더의 `gil_start`는 Core가 「이미 걷고 있다」로
+거절하며 기록을 바꾸지 않는다. 화면 재시도는 일시적 오류에 한해 prepare/show를 한 번만 다시 부르고
+같은 scope를 받으며, 화면 표시는 사용자가 확인하기 전까지 미확인으로 보고한다.
+`tests/mcp.rs`의 시작 흐름 시험과 `skill.test.mjs`가 이 순서·거절 문구·경계를 지킨다.
+도구 응답은 화면 성공이 아니며, 새 Skill을 실은 설치본의 Codex 화면 인수는 별도다.
 자동 요청이 거절·무시되거나 inline을 반환하면 **모니터 펼치기**를 직접 누를 수 있다.
 사용자가 대화 안으로 돌아온 뒤에는 자동으로 다시 펼치지 않으며 Companion도 자동 실행하지 않는다.
 준비 도구는 exact-root read-only 검증 후 scope와 이름만 돌려준다. 렌더 도구의 input·HTML·App
