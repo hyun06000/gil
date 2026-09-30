@@ -146,6 +146,9 @@ Later    1  성공 가지 Merge
 
 #### T3 — Windows 설치와 Codex 경험 (M5-D/E/F의 Windows 항목)
 
+- [~] Windows x64 Core/MCP feasibility: Unix 신호 처리 컴파일 경계를 분리하고 native CI 시험을 준비한다.
+      교차 컴파일은 실행 검수가 아니다. Windows runner 실행·Monitor identity/ACL·설치·화면은 미검증이다.
+      범위와 다음 게이트: `distribution/windows/README.md`. Windows Monitor의 안전한 거절은 유지한다.
 - [ ] Windows용 자족형 native Plugin·원격 marketplace 설치/업데이트/제거·복구 경로를 마련한다.
 - [ ] 사용자에게 개발 도구·셸 명령·별도 Companion 설치를 요구하지 않고 macOS/Codex와 같은
       폴더 선택 → 프로젝트 시작 → fullscreen 가로 DAG·채팅 → 상세/시각 자료 → 실시간 갱신을 제공한다.

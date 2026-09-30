@@ -769,6 +769,7 @@ impl MonitorServer {
     ///
     /// ③ 이후의 모든 되돌리기는 [`Restore`] 와 [`Turn`] 의 `Drop` 이 한다. 그래서 중간에
     /// 무엇이 실패하든, panic 으로 풀려 나가든 순서가 빠지지 않는다.
+    #[cfg(unix)]
     pub fn wait(&mut self) -> Result<(), String> {
         // ① 신호를 소유할 수 있는 것은 한 번에 하나뿐이다.
         let _turn = Turn::take().ok_or_else(|| {
@@ -788,6 +789,13 @@ impl MonitorServer {
         self.0.close();
         Ok(())
         // ⑥⑦ 은 `Drop` 이 한다 — 선언의 역순이라 SIGTERM · SIGINT 차례로 돌아간다.
+    }
+
+    // The legacy loopback server's signal policy is Unix-only. Native MCP stdio
+    // has its own lifetime and must still compile; do not emulate signal safety.
+    #[cfg(not(unix))]
+    pub fn wait(&mut self) -> Result<(), String> {
+        Err("이 환경의 loopback Monitor 신호 대기는 아직 지원하지 않는다".to_string())
     }
 }
 
@@ -819,11 +827,13 @@ impl Drop for Turn {
 }
 
 /// **빌린 action 하나.** 떨어지면 돌려준다.
+#[cfg(unix)]
 struct Restore {
     signal: libc::c_int,
     old: libc::sigaction,
 }
 
+#[cfg(unix)]
 impl Drop for Restore {
     fn drop(&mut self) {
         // SAFETY: `old` 는 바로 이 신호에서 `sigaction` 이 채워 준 값이다.
@@ -834,6 +844,7 @@ impl Drop for Restore {
 }
 
 /// 두 신호를 같은 자리로 모은다 — **하나라도 실패하면 아무것도 바꾸지 않은 셈이 된다.**
+#[cfg(unix)]
 fn arm(first: libc::c_int, second: libc::c_int) -> Result<(Restore, Restore), String> {
     let first = install(first)?;
     // 여기서 실패하면 `first` 가 이 함수를 빠져나가며 떨어지고, 첫 신호는 곧바로 제자리로
@@ -846,6 +857,7 @@ fn arm(first: libc::c_int, second: libc::c_int) -> Result<(Restore, Restore), St
 ///
 /// `signal()` 이 아니라 `sigaction()` 을 쓰는 까닭은 두 가지다. 옛 action 을 온전히
 /// 돌려받을 수 있고, 성공했는지 물어볼 수 있다.
+#[cfg(unix)]
 fn install(signal: libc::c_int) -> Result<Restore, String> {
     // SAFETY: 두 구조체 모두 이 호출이 채운다. 실패하면 `old` 를 쓰지 않는다.
     unsafe {
