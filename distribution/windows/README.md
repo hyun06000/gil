@@ -1,6 +1,6 @@
 # Windows native feasibility — not a release
 
-First target: Windows x64 / MSVC. ARM64 and supported end-user OS versions are not yet accepted.
+First target: Windows x64 / MSVC, local fixed NTFS drives. ARM64 and supported end-user OS versions are not yet accepted.
 This maintainer CI builds the native Core/MCP executable and runs a dependency-free Node test driver.
 Node, npm and Rust are CI tools, not proposed end-user installation requirements.
 No executable is published and no marketplace entry or existing Mac installation is changed.
@@ -14,7 +14,7 @@ The legacy loopback Monitor's Unix signal wait remains unsupported on Windows; M
 
 ## Remaining gates
 
-- Validate the Windows identity/private settings implementation on the native runner (below).
+- Validate on an ordinary tester account and Codex (hosted native runner passed; below).
 - Port Unix-specific test helpers and run the full relevant Windows regression suite.
 - Native plugin packaging, execution trust, remote marketplace installation/update/removal.
 - Real Windows/Codex fullscreen horizontal graph, details, watcher, locks and restart acceptance.
@@ -41,7 +41,8 @@ separately. Do not disable OS security or relax binding privacy checks to make t
 
 ## Monitor implementation candidate
 
-- Local drive paths on NTFS only. UNC, ReFS/FAT and any reparse-point component are refused.
+- Local fixed drive paths on NTFS only. Mapped network/removable drives, UNC, ReFS/FAT and any
+  reparse-point component are refused. Unsupported root drives are checked before creating settings.
 - Stable `.gil` directory volume serial + 64-bit NTFS file index + creation time; existing binding
   schema and Unix identity remain unchanged. `state.yaml` replacement does not change identity.
 - Directory handles pin ancestors against rename/delete during storage operations. Read records
@@ -61,3 +62,25 @@ separately. Do not disable OS security or relax binding privacy checks to make t
 References: [NTFS file identity](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/ns-fileapi-by_handle_file_information),
 [file security](https://learn.microsoft.com/en-us/windows/win32/fileio/file-security-and-access-rights),
 [MoveFileExW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw).
+
+## Native Monitor checkpoint — 2026-09-30
+
+Source `55d5ebf` passed [Windows CI 36684755556](https://github.com/hyun06000/gil/actions/runs/36684755556):
+11 binding/security tests + 17 MCP integration tests, no failures or skips, native build without warnings.
+The smoke received a complete read-only Monitor View with `watching: true`. This includes process
+restart/restoration, stale-scope refusal, first Step hint, protected ACL, junction rejection and
+rename-guard tests; it does not include real Codex rendering. Mac CI
+[36684755606](https://github.com/hyun06000/gil/actions/runs/36684755606) also passed.
+
+First failures and fixes are retained in PR #12, not erased by a green rerun:
+
+- A Unix-only slash expectation in a receipt test was changed to the native relative path.
+- An attribute-only directory handle did not enforce the intended sharing guard. It now requests
+  read access; the real rename refusal assertion passed unchanged.
+- The ACL mutation test needed READ_CONTROL as well as WRITE_DAC; junction fixture creation now uses
+  PowerShell with paths passed through environment values, never source interpolation. Neither test skips.
+- Mac's initial sandbox MCP run missed a watcher hint. The unrestricted MCP rerun and full
+  `cargo test --locked -p gil` / `cargo build --locked -p gil --all-targets` passed.
+
+Still open: Windows dependency-notice inventory, installable artifact/trust checks, ordinary-user
+installation, real Codex fullscreen and tester acceptance. No Windows package has been released.
