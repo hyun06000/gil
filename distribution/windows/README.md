@@ -29,4 +29,12 @@ separately. Do not disable OS security or relax binding privacy checks to make t
 - macOS → `x86_64-pc-windows-msvc` `cargo check --locked -p gil --bin gil`: passed, no warnings.
 - macOS native build and the shared smoke driver: passed (17 tools, embedded UI hash,
   start/status and duplicate-start byte preservation).
-- Windows native runner, installation and visible fullscreen: **not run**.
+- Windows x64 native runner: **passed** on source commit `3fd7e57`;
+  [CI run 36679663944](https://github.com/hyun06000/gil/actions/runs/36679663944).
+  Build completed without warnings. The executable answered its native challenge, exposed 17 MCP
+  tools, served hash-matching embedded UI, started/read a temporary Project, refused duplicate start
+  without changing state bytes, and refused Monitor preparation with `resume_unavailable` as expected.
+- Existing macOS CI also passed:
+  [run 36679663787](https://github.com/hyun06000/gil/actions/runs/36679663787).
+- Windows installation and visible fullscreen: **not run**. The full Windows Rust suite is not part
+  of this smoke gate; the outstanding platform security work remains unchanged.
