@@ -8,6 +8,8 @@ use windows_sys::Win32::{Foundation::*, Security::{*, Authorization::*},
     Storage::FileSystem::*, System::Threading::*};
 
 fn refused() -> io::Error { io::Error::new(io::ErrorKind::PermissionDenied, "unsafe Windows binding storage") }
+// WinBase.h DRIVE_FIXED (avoid importing the unrelated WindowsProgramming API surface).
+const LOCAL_FIXED_DRIVE: u32 = 3;
 fn wide(path: &Path) -> io::Result<Vec<u16>> {
     let mut text: Vec<u16> = path.as_os_str().encode_wide().collect();
     if text.contains(&0) { return Err(refused()); }
@@ -115,6 +117,12 @@ fn chain(path: &Path, create: bool) -> io::Result<Vec<File>> {
             Component::Prefix(_) => { at.push(part); continue; },
             Component::ParentDir | Component::CurDir => return Err(refused()),
             _ => at.push(part),
+        }
+        if matches!(part, Component::RootDir) {
+            let root = wide(&at)?;
+            // Reject mapped network/removable drives and unsupported filesystems BEFORE mkdir.
+            if unsafe { GetDriveTypeW(root.as_ptr()) } != LOCAL_FIXED_DRIVE { return Err(refused()); }
+            ntfs(&directory(&at)?)?;
         }
         let file = match directory(&at) {
             Ok(file) => file,
