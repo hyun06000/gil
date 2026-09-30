@@ -206,14 +206,18 @@ GIL은 모델의 비공개 chain-of-thought를 저장하려는 시스템이 아�
 
 ### 다음
 
-- Human Monitor 판독 실험 2 — 참여하지 않은 사용자가 30초 안에 현재 실험·성공 기준·다음
-  행동을 설명할 수 있는가 (실험 1은 실패했고, 원인은 정보 부족이 아니라 평평한 시각
-  우선순위였다)
-- Interview Cycle과 Chain
-- 백엔드·데이터 분석·프론트엔드·기획서 작성 시나리오
-- Claude 작업 Plugin의 UI 전달 차단 해소 후 marketplace 경로 인수
-- 정식 배포 전 오픈소스 공개 준비 검수 (Git 이력·민감정보·의존성 고지·기여/보안 안내)
-- 터미널 없는 macOS·Windows 설치, 서명·업데이트·clean-machine 검증
+- 사용자 UX: 프로젝트 시작과 fullscreen Monitor 연결, 노드 상세의 시각 자료,
+  현재 노드·진행 상태 표시, GIL + Git/GitHub 병행·현재 상태 공유 연구
+- 심화 Interview와 실제 Chain: 승인된 로드맵·기능명세·사전 문서, 추가 인터뷰를 통한
+  수정, 승인 문서에 없는 지침을 실험에서 실행하지 않는 경계.
+  열린 Cycle을 둔 채 다른 Cycle은 열지 않으며, 재인터뷰도 현재 Cycle을 규칙에 따라 닫은 뒤 개설
+- Windows/Codex 설치와 macOS 기준 핵심 UX 동등성, 실제 사용자 경험 수집
+- Windows 설치·경험 수집 뒤 홍보, 홍보 중 OpenAI와 로컬 MCP App 공식 디렉터리 노출 경로 협의
+- 독립 Claude 트랙: Anthropic 설치·화면·작업 경험 강화와 공용 변경의 회귀검증
+
+2026-09-30 사용자가 기존 Mac에서 Plugin 제거·재설치·프로젝트 실행 성공을 보고했다.
+외부 시험 사용자 모집을 시작하되 실제 외부 인수와 혼동하지 않는다. 새 Mac·서명/공증·
+Windows·공식 디렉터리 등재는 여전히 미완료다. 기존 판독 실험과 시나리오 검증도 유지한다.
 
 상세 진행 상황과 합격 조건은 [GIL Living Roadmap](spec/GIL_Roadmap.md)에서 추적한다.
 
@@ -235,8 +239,8 @@ gil help     Agent가 지금 필요한 규칙 하나를 배운다.
 ## 개발자용 CLI 사용
 
 아직 정식 릴리스가 아니다. 다음은 기여자·개발 검수용이며, 비개발자에게 요구하는 설치 절차가
-아니다. Rust 개발 환경에서 저장소의 현재 작업 트리를 직접 설치한다. 일반 사용자의 marketplace
-설치는 준비 중이다. 일반 질문과 문제 제보는 [SUPPORT](SUPPORT.md), 기여·시험 방법은
+아니다. Rust 개발 환경에서 저장소의 현재 작업 트리를 직접 설치한다. 일반 사용자는
+[공개 preview 설치 안내](distribution/codex/INSTALL.md)를 따른다. 일반 질문과 문제 제보는 [SUPPORT](SUPPORT.md), 기여·시험 방법은
 [CONTRIBUTING](CONTRIBUTING.md)을 참고한다.
 
 ```bash
