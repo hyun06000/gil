@@ -7,7 +7,7 @@ $vs = $installations[0]
 if ($vs.isPrerelease -or -not $vs.isComplete) { throw 'Incomplete or preview MSVC refused' }
 $devshell = Join-Path $vs.installationPath 'Common7/Tools/Launch-VsDevShell.ps1'
 # Use Microsoft's PowerShell entry point; never round-trip a spaced path through cmd quoting.
-& $devshell -SkipAutomaticLocation -Arch amd64 -HostArch amd64 | Out-Null
+& $devshell -SkipAutomaticLocation -Arch amd64 -HostArch amd64 6>$null | Out-Null
 $selected = @{}
 Get-ChildItem Env: | ForEach-Object { $selected[$_.Name] = $_.Value }
 $link = Join-Path $selected.VCToolsInstallDir 'bin/Hostx64/x64/link.exe'
