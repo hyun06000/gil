@@ -459,7 +459,8 @@ fn starting_receipt_uses_the_requested_root_not_the_servers_directory() {
         "name": "gil_start", "arguments": {"project_root": mcp_root}
     }));
     assert_eq!(reply["result"]["structuredContent"]["said"], String::from_utf8(cli.stdout).unwrap());
-    assert!(text_of(&reply).ends_with("기록: .gil/state.yaml\n"));
+    let relative = Path::new(".gil").join("state.yaml");
+    assert!(text_of(&reply).ends_with(&format!("기록: {}\n", relative.display())));
     mcp.eof();
     std::fs::remove_dir_all(base).unwrap();
 }

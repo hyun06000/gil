@@ -34,7 +34,9 @@ jobs:
       - name: Binding security and native MCP integration
         shell: pwsh
         run: |
-          cargo +1.97.1 test --locked -p gil --test windows_bindings --test mcp --target x86_64-pc-windows-msvc
+          cargo +1.97.1 test --locked -p gil --test windows_bindings --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo +1.97.1 test --locked -p gil --test mcp --target x86_64-pc-windows-msvc
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Native protocol and read-only Monitor
         shell: pwsh
