@@ -3,6 +3,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      prepare_candidate:
+        description: 'Build an unsigned review artifact; never publish or install'
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -11,8 +16,13 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        env:
+          GIT_CONFIG_COUNT: 1
+          GIT_CONFIG_KEY_0: core.autocrlf
+          GIT_CONFIG_VALUE_0: 'false'
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Install maintainer toolchain
         shell: pwsh
         run: |
@@ -43,3 +53,28 @@ jobs:
         run: |
           node distribution/windows/spike.mjs target/x86_64-pc-windows-msvc/debug/gil.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Candidate packaging regression
+        shell: pwsh
+        run: |
+          node --test distribution/windows/candidate.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Prepare unsigned review candidate
+        if: github.event_name == 'workflow_dispatch' && inputs.prepare_candidate
+        shell: pwsh
+        env:
+          RUSTUP_TOOLCHAIN: 1.97.1
+        run: |
+          node distribution/windows/candidate.mjs target/windows-candidate
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Retain review artifact only
+        if: github.event_name == 'workflow_dispatch' && inputs.prepare_candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          archive: true
+          name: gil-windows-x64-REVIEW-${{ github.sha }}
+          path: |
+            target/windows-candidate/gil-windows-x64-candidate.tar.gz
+            target/windows-candidate/SHA256SUMS
+            target/windows-candidate/checks.json
+          if-no-files-found: error
+          retention-days: 7

@@ -3,7 +3,8 @@
 First target: Windows x64 / MSVC, local fixed NTFS drives. ARM64 and supported end-user OS versions are not yet accepted.
 This maintainer CI builds the native Core/MCP executable and runs a dependency-free Node test driver.
 Node, npm and Rust are CI tools, not proposed end-user installation requirements.
-No executable is published and no marketplace entry or existing Mac installation is changed.
+No release is published and no active marketplace entry or existing Mac installation is changed.
+An opt-in workflow dispatch can retain an unsigned review artifact for seven days.
 
 `windows-spike.yml` checks native handshake, MCP initialize/list/resource bytes, project start/status,
 duplicate-start refusal and record preservation in a temporary Unicode/space-containing path.
@@ -84,3 +85,23 @@ First failures and fixes are retained in PR #12, not erased by a green rerun:
 
 Still open: Windows dependency-notice inventory, installable artifact/trust checks, ordinary-user
 installation, real Codex fullscreen and tester acceptance. No Windows package has been released.
+
+## Unsigned packaging candidate (not tester installation approval)
+
+Dispatch `windows-spike.yml` on the reviewed branch with `prepare_candidate=true`.
+`candidate.mjs` checks a separate pinned Windows notice policy (89 packages), builds with a static
+CRT and remapped build paths, inspects x64 PE imports, assembles a native-only plugin and an isolated
+`gil-preview-windows-x64` catalog, and verifies every file after archive extraction. The extracted
+binary must pass the native smoke with no Node/Cargo on its child PATH. The workflow only retains
+the archive, SHA256SUMS and evidence; it never pushes a catalog, installs, or creates a release.
+
+The source-level runtime/build dependency graph and original legal texts are recorded separately
+under `compliance/`. Shared notice validation defaults remain macOS-only; selecting Windows is explicit.
+The stdlib notice is the complete compiler distribution notice already reviewed for Rust 1.97.1.
+Static MSVC runtime redistribution review is a separate pending gate, not certified by Cargo coverage.
+Authenticode, downloaded-file security prompts, ordinary-user Codex install and visible fullscreen
+also remain unverified. Never advise users to disable Defender/SmartScreen or change execution policy.
+
+Do not send a nondeveloper tester these build commands or a CI login requirement. After release gates
+and a stable installation source are ready, give them one Codex prompt and a simple graph/detail/restart
+check. Windows ARM64/Snapdragon is not this candidate's target.
