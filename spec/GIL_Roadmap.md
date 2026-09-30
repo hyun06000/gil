@@ -146,6 +146,10 @@ Later    1  성공 가지 Merge
 
 #### T3 — Windows 설치와 Codex 경험 (M5-D/E/F의 Windows 항목)
 
+- [x] Windows x64 제한적 unsigned 테스터 채널의 정책 승인(2026-09-30).
+      재배포 조건과 설치 경로 검수 뒤 게시하며, 보안 우회·Mac 채널 변경·stable 출시를 포함하지 않는다.
+      배포 명세 §6.2b. 실제 게시와 일반 사용자 인수는 아래 항목에 따로 남긴다.
+
 - [~] Windows x64 Core/MCP feasibility: Unix 신호 처리 경계를 분리하고 native CI 실행을 통과했다
       (2026-09-30). 후속 `55d5ebf` / run 36684755556에서 로컬 고정 NTFS identity·private ACL·
       재시작 복원·Monitor View·watcher를 검증했다(보안 11 + MCP 17 시험). 설치·실제 화면은 미검증이다.

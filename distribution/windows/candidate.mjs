@@ -96,7 +96,10 @@ export async function prepare(output) {
   assert.equal(run('git', ['status', '--porcelain', '--untracked-files=no']).trim(), '', 'dirty source refused');
   const out = resolve(output);
   await mkdir(out); // Refuse overwriting an old candidate.
-  const env = {...process.env, CARGO_ENCODED_RUSTFLAGS: [
+  const selected = JSON.parse(run('pwsh', ['-NoProfile', '-File', join(ROOT, 'distribution/windows/toolchain.ps1')]));
+  assert.equal(selected.receipt.prerelease, false);
+  assert.ok(selected.environment.CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER);
+  const env = {...process.env, ...selected.environment, CARGO_ENCODED_RUSTFLAGS: [
     '-Ctarget-feature=+crt-static', `--remap-path-prefix=${ROOT}=/gil`,
     `--remap-path-prefix=${process.env.USERPROFILE}=/builder`,
     ...(process.env.CARGO_HOME ? [`--remap-path-prefix=${process.env.CARGO_HOME}=/cargo`] : [])
@@ -142,7 +145,7 @@ export async function prepare(output) {
   await writeFile(join(out, 'SHA256SUMS'), `${digest}  gil-windows-x64-candidate.tar.gz\n`, {flag: 'wx'});
   const checks = {schema: 1, source: head, target: TARGET, version: manifest.version,
     publishable: false, channel: 'windows_unsigned_review_candidate', archive_sha256: digest,
-    imports, notice_packages: policy.packages.length, files: before, smoke,
+    imports, toolchain: selected.receipt, notice_packages: policy.packages.length, files: before, smoke,
     gates: {archive_roundtrip: 'passed', native_relocated_execution: 'passed',
       authenticode: 'not signed', ordinary_user_codex_install: 'not tested',
       fullscreen: 'not tested', marketplace_publication: 'not performed',

@@ -1,5 +1,8 @@
 # Windows native feasibility — not a release
 
+The limited Windows x64 unsigned tester policy is now approved; publication remains gated on
+runtime redistribution review and a verified install source. See [release readiness](RELEASE-READINESS.md).
+
 First target: Windows x64 / MSVC, local fixed NTFS drives. ARM64 and supported end-user OS versions are not yet accepted.
 This maintainer CI builds the native Core/MCP executable and runs a dependency-free Node test driver.
 Node, npm and Rust are CI tools, not proposed end-user installation requirements.
