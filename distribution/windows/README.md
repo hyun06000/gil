@@ -33,6 +33,20 @@ runtime-notice and visible Monitor criteria before claiming equivalent end-user 
 Runner reference: [GitHub-hosted runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
 (`windows-11-arm` for ARM64, `windows-2025` for x64).
 
+Source `c762634` passed [native packaging run 37542348090](https://github.com/hyun06000/gil/actions/runs/37542348090):
+both CPUs passed binding/security and MCP tests, 9 packaging tests, release build, PE checks,
+Unicode archive roundtrip and relocated native execution. Both exposed 17 tools, verified embedded
+UI bytes and returned a read-only Monitor View with an active watcher. Local regression: 24
+Windows/common-notice tests plus 60 Mac packaging tests, all passed without skips.
+Downloaded archives independently matched SHA256SUMS and their receipts:
+
+- ARM64: 2,519,040 bytes, `437f0a8db18ebe7efef660f806fbaf505bb17a540e953e8fe9bea1e8e55abf71`.
+- x64: 2,693,120 bytes, `1030de5e2b0f026571f8c519ed0405551039bf02f064211fe9dbee1a8c895106`.
+
+Both selected stable VS Enterprise 18.10.12217.157 / MSVC 14.51.36231 / SDK 10.0.26100.0;
+architecture-specific input hashes are in each receipt. Both receipts remain `publishable: false`.
+Ordinary-user install, visible fullscreen and runtime redistribution review remain open.
+
 Source `975eb9e` passed [native matrix run 37532673397](https://github.com/hyun06000/gil/actions/runs/37532673397):
 each CPU passed 11 binding/security tests and 17 MCP integration tests (zero failures/ignored),
 then the same 17-tool, embedded-UI hash and read-only Monitor smoke with an active OS watcher.
