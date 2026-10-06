@@ -1,13 +1,20 @@
 # GIL preview 설치
 
 대상: **macOS Apple Silicon의 Codex** · `0.2.1-preview.3`.
-Apple Developer ID 서명·공증은 없으며, 개발 도구 없는 새 Mac 검수는 아직 하지 않았다.
+Apple Developer ID 서명·공증은 없다. 개발 도구 없는 Mac VM의 설치·실사용은
+2026-10-07 사용자 검수로 확인했으며, 모든 Mac의 동작을 보장하는 것은 아니다.
+2026-10-07 깨끗한 Mac VM에서 Git 경로가 Apple Command Line Tools 부재로 실패했다.
+개발 도구가 없는 환경은 먼저 [Git 없는 설치 검수](GITLESS-INSTALL.md)를 따른다.
+이 경로는 기존 공개 배포물을 그대로 사용한다. VM에서 설치·fullscreen·그래프 갱신·상세·
+되돌아감이 확인됐으며 앱 완전 종료 뒤 복원은 아직 검수하지 않았다.
 macOS가 실행을 막으면 중단한다. Gatekeeper 해제·quarantine 제거·설치 cache 수정으로 우회하지 않는다.
 Windows·Intel Mac·Claude 작업 모드는 이번 배포의 지원 대상이 아니다.
 
-## Codex에게 설치를 부탁하기
+## Git을 이미 사용할 수 있는 환경에서 설치하기
 
 아래 요청을 Codex에 전달한다. 사용자에게 Node·npm·Cargo·Homebrew 설치나 소스 빌드를 요구하지 않는다.
+먼저 Codex에서 빈 작업 폴더를 선택해 **로컬 명령을 실행할 수 있는 새 대화**를 연다.
+이 경로는 Git을 요구한다. Git이 없다면 개발 도구를 추가 설치하지 말고 위 Git 없는 경로를 사용한다.
 
 > GIL의 unsigned preview 0.2.1-preview.3를 설치해 줘.
 > 공식 Plugin 관리 기능으로 https://github.com/hyun06000/gil-marketplace.git 을
