@@ -22,10 +22,12 @@ Keep evidence separate: macOS ARM64 native, Windows ARM64 native, Windows x64 na
 x64-on-ARM emulation. Passing one is not evidence of another. The UTM GUI tests remain human
 acceptance; CI cannot establish fullscreen, node details or host restart behavior on that VM.
 
-Packaging remains x64-only for now: PE inspection, runtime inventory and the candidate assembler
-are not yet ARM64-aware. Only the x64 matrix entry may prepare a review archive. Adding native
-ARM64 CI does not authorize a release, establish runtime redistribution terms, or make that
-archive a native ARM64 installer. Both architectures must meet the same installation, integrity,
+The candidate assembler now selects native ARM64 or x64 profiles for PE inspection, toolchain,
+notice inventory, catalog and executable path. Both matrix entries may prepare review archives.
+ARM64 has an independently resolved 89-package inventory: the architecture-specific windows
+import-library crate differs; the original legal-text hashes are shared and verified.
+This does not authorize a release or establish runtime redistribution terms.
+Both architectures must meet the same installation, integrity,
 runtime-notice and visible Monitor criteria before claiming equivalent end-user support.
 
 Runner reference: [GitHub-hosted runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
@@ -130,8 +132,8 @@ installation, real Codex fullscreen and tester acceptance. No Windows package ha
 
 Dispatch `windows-spike.yml` on the reviewed branch with `prepare_candidate=true`.
 `candidate.mjs` checks a separate pinned Windows notice policy (89 packages), builds with a static
-CRT and remapped build paths, inspects x64 PE imports, assembles a native-only plugin and an isolated
-`gil-preview-windows-x64` catalog, and verifies every file after archive extraction. The extracted
+CRT and remapped build paths, inspects the matching native PE imports, assembles a native-only plugin
+and an isolated `gil-preview-windows-{x64,arm64}` catalog, and verifies every file after extraction. The extracted
 binary must pass the native smoke with no Node/Cargo on its child PATH. The workflow only retains
 the archive, SHA256SUMS and evidence; it never pushes a catalog, installs, or creates a release.
 
@@ -156,7 +158,7 @@ This candidate does not treat static linking as automatic license approval or an
 
 Do not send a nondeveloper tester these build commands or a CI login requirement. After release gates
 and a stable installation source are ready, give them one Codex prompt and a simple graph/detail/restart
-check. Windows ARM64/Snapdragon is not this candidate's target.
+check. Native ARM64 and x64 candidates are separate archives; do not substitute one for the other.
 
 ## Downloaded candidate checkpoint — 2026-09-30
 
