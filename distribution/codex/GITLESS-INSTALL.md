@@ -69,8 +69,20 @@ codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 - 도구와 hook이 없는 별도 진단용 Plugin으로 공식 marketplace 등록 → 설치 → Plugin 제거 →
   marketplace 제거에 성공했다. 기존 GIL의 설치 출처나 cache는 교체하지 않았다.
 - 위 대조는 개발 Mac에서 **Git 실행을 금지한 시험**이지 Command Line Tools가 물리적으로 없는 VM의
-  설치 인수를 대신하지 않는다. 실제 GIL VM 설치·최초 실행·fullscreen·노드 상세는 사용자 검수 대기다.
+  설치 인수를 대신하지 않는다. 이어진 실제 VM 검수 결과는 아래에 별도로 기록한다.
 - 제품 payload·version·hash·저장 형식·MCP 도구와 공개 release asset은 변경하지 않았다.
+
+### Mac VM 사용자 인수 — 2026-10-07
+
+개발 도구가 없는 UTM Mac-test에서 사용자가 Git 없는 경로로 설치 성공을 보고했다.
+새 대화에서 계산기를 만들고 수정하는 동안 fullscreen의 가로 그래프와 채팅을 함께 사용했고,
+노드 갱신·요약/상세·되돌아감과 이후 분기의 정상 동작을 확인했다. 제공된 화면에서도 펼친
+Monitor, 가로 그래프, 되돌아감 화살표와 선택 노드의 요약/상세가 확인된다.
+
+이는 사용자 관측에 근거한 해당 VM의 설치·사용 인수다. VM의 실제 파일 hash·OS build를
+유지관리자가 원격으로 다시 수집한 것은 아니며 모든 Mac 지원으로 일반화하지 않는다.
+앱을 완전히 종료하지 않았으므로 **완전 종료 뒤 복원은 미검증**이다. 업데이트·제거/재설치,
+Windows VM·Intel 실기기 검수, Apple 서명·공증도 이 관측으로 닫지 않는다.
 
 ## 이번에 드러난 설치 안내 결함
 
