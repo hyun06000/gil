@@ -3,11 +3,33 @@
 The limited Windows x64 unsigned tester policy is now approved; publication remains gated on
 runtime redistribution review and a verified install source. See [release readiness](RELEASE-READINESS.md).
 
-First target: Windows x64 / MSVC, local fixed NTFS drives. ARM64 and supported end-user OS versions are not yet accepted.
+Native test targets: Windows ARM64 and x64 / MSVC, local fixed NTFS drives.
+ARM64 installation and supported end-user OS versions are not yet accepted.
 This maintainer CI builds the native Core/MCP executable and runs a dependency-free Node test driver.
 Node, npm and Rust are CI tools, not proposed end-user installation requirements.
 No release is published and no active marketplace entry or existing Mac installation is changed.
 An opt-in workflow dispatch can retain an unsigned review artifact for seven days.
+
+## VM-first validation — 2026-10-07
+
+Prioritize the user's Apple Silicon macOS VM and Windows ARM64 VM. Defer physical Intel/AMD x64
+acceptance, not x64 regression coverage. The Windows matrix builds the same source, runs the same
+binding/security and MCP integration tests, and uses the same native protocol/Monitor smoke on
+both CPUs. Native OS and Node architecture assertions reject accidental emulation. No feature,
+tool schema, storage format or security rule is forked by CPU.
+
+Keep evidence separate: macOS ARM64 native, Windows ARM64 native, Windows x64 native, and any
+x64-on-ARM emulation. Passing one is not evidence of another. The UTM GUI tests remain human
+acceptance; CI cannot establish fullscreen, node details or host restart behavior on that VM.
+
+Packaging remains x64-only for now: PE inspection, runtime inventory and the candidate assembler
+are not yet ARM64-aware. Only the x64 matrix entry may prepare a review archive. Adding native
+ARM64 CI does not authorize a release, establish runtime redistribution terms, or make that
+archive a native ARM64 installer. Both architectures must meet the same installation, integrity,
+runtime-notice and visible Monitor criteria before claiming equivalent end-user support.
+
+Runner reference: [GitHub-hosted runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
+(`windows-11-arm` for ARM64, `windows-2025` for x64). CI results are pending until both jobs run.
 
 `windows-spike.yml` checks native handshake, MCP initialize/list/resource bytes, project start/status,
 duplicate-start refusal and record preservation in a temporary Unicode/space-containing path.

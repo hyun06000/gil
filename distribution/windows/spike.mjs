@@ -9,6 +9,7 @@ import {join, resolve} from 'node:path';
 const binary = resolve(process.argv[2] || '');
 assert.ok(process.argv[2], 'Usage: node spike.mjs <native-gil-binary>');
 assert.ok(['win32', 'darwin'].includes(process.platform));
+assert.ok(['x64', 'arm64'].includes(process.arch), 'Unsupported native test architecture');
 const state = await mkdtemp(join(tmpdir(), 'gil-native-spike-'));
 const root = join(state, '한글 project');
 await mkdir(root);
