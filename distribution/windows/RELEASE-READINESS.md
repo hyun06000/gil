@@ -1,8 +1,12 @@
-# Windows x64 tester channel — release gates
+# Windows tester channels — release gates
 
 2026-09-30: maintainer approved a limited unsigned tester channel and publication after redistribution
 and installation-route checks. This is not stable support or successful ordinary-user acceptance.
 The existing Mac marketplace/default branch and installed plugin must remain unchanged.
+
+2026-10-07: native Windows ARM64 VM validation now takes priority; physical Intel/AMD x64
+acceptance is deferred, not removed. Both architectures use the same functional/security gates.
+ARM64 review packaging is not itself publication approval or successful VM installation.
 
 ## Runtime review
 
@@ -10,7 +14,7 @@ The previous candidate was built on GitHub's `windows-2025-vs2026` image,
 version `20260925.250.1` (run 36690752815). Its receipt did not identify the selected MSVC libraries.
 Do not infer the selected compiler from the image's inventory alone or apply VS 2022 terms by habit.
 
-`toolchain.ps1` now selects a complete non-prerelease MSVC installation, initializes its x64 build
+`toolchain.ps1` now selects a complete non-prerelease MSVC installation, initializes its native architecture build
 environment and explicitly passes that link.exe to Cargo. The receipt records VS/MSVC/SDK versions
 and SHA-256 for link.exe, libcmt.lib, libvcruntime.lib and libucrt.lib, without machine paths.
 This identifies selected inputs; hashes are not a redistribution license or a link map.
@@ -43,7 +47,7 @@ This is engineering release review, not a legal certification.
 - Use an isolated Windows catalog/ref, not the Mac default catalog. Verify anonymous HTTPS access
   and the official Codex installation route; CI's seven-day artifact is not the tester channel.
 - No Node, Cargo, administrator rights, Companion or security-policy changes for testers.
-- Verify x64 Intel/AMD first; ARM64/Snapdragon is not accepted. Use a new local fixed NTFS folder,
+- Verify native ARM64 on Win-test first; Intel/AMD x64 remains a separate later acceptance. Use a new local fixed NTFS folder,
   outside OneDrive/junction/network paths. Do not use valuable existing projects for first acceptance.
 - Tester checks: install, start + Monitor, fullscreen with chat, node details, live updates, restart,
   disable/re-enable and uninstall/reinstall preserving Project records. Separate each observation.
