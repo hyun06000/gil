@@ -54,7 +54,10 @@ This is engineering release review, not a legal certification.
 - If OS/Host blocks installation, stop and record the message. Do not suggest Defender/SmartScreen
   exclusions or execution-policy changes. Do not claim success from tool responses alone.
 
-No tester-ready installation prompt is issued until the fixed public source and hash are verified.
+No external-tester installation prompt is issued until the fixed public source and hash are verified.
+The maintainer's own ARM64 VM can follow the separate pinned
+[internal acceptance procedure](MAINTAINER-VM-CHECK.md). It uses the existing CI artifact,
+does not publish or endorse redistribution, and leaves all external-release gates open.
 
 ## Provenance checkpoint
 
