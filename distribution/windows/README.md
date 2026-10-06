@@ -29,7 +29,22 @@ archive a native ARM64 installer. Both architectures must meet the same installa
 runtime-notice and visible Monitor criteria before claiming equivalent end-user support.
 
 Runner reference: [GitHub-hosted runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
-(`windows-11-arm` for ARM64, `windows-2025` for x64). CI results are pending until both jobs run.
+(`windows-11-arm` for ARM64, `windows-2025` for x64).
+
+Source `975eb9e` passed [native matrix run 37532673397](https://github.com/hyun06000/gil/actions/runs/37532673397):
+each CPU passed 11 binding/security tests and 17 MCP integration tests (zero failures/ignored),
+then the same 17-tool, embedded-UI hash and read-only Monitor smoke with an active OS watcher.
+No compiler warnings were found in the run log. x64 packaging regression also passed 7 tests.
+Installation and visible fullscreen remain untested on both Windows VMs and physical machines.
+Local shared UI/Plugin regression passed 79 tests with 4 existing missing-sidecar skips; packaging
+regression passed 7. Initial local missing-module failures were resolved by installing the locked
+development dependencies in the isolated checkout, without modifying source or lockfiles.
+
+Separate release follow-up: the existing locked UI dependencies report one high npm advisory;
+the legacy JS Plugin development tree reports four (one critical, one high, two moderate).
+Affected-code reachability has not been established. Those node_modules are not included in the
+native shipping payload, but green functional tests are not security clearance. Review dependency
+exposure before a new publication; this architecture change does not silently update dependencies.
 
 `windows-spike.yml` checks native handshake, MCP initialize/list/resource bytes, project start/status,
 duplicate-start refusal and record preservation in a temporary Unicode/space-containing path.
