@@ -4,9 +4,11 @@
 and installation-route checks. This is not stable support or successful ordinary-user acceptance.
 The existing Mac marketplace/default branch and installed plugin must remain unchanged.
 
-2026-10-07: native Windows ARM64 VM validation now takes priority; physical Intel/AMD x64
-acceptance is deferred, not removed. Both architectures use the same functional/security gates.
-ARM64 review packaging is not itself publication approval or successful VM installation.
+2026-10-07 update: the ARM64 VM is disk-space constrained; a Windows friend can perform ordinary-user
+acceptance. Detect the architecture automatically rather than requiring a hardware questionnaire.
+Both architectures retain the same functional/security gates; native CI is not GUI acceptance.
+The maintainer approved a proportionate unsigned open-source preview process: an individual
+GitHub/Microsoft support reply is not a required release permit. Applicable notices still matter.
 
 ## Runtime review
 
@@ -41,8 +43,9 @@ label every byte of the linked executable MIT. Cargo notice coverage does not se
 This is engineering release review, not a legal certification.
 
 The specific unanswered hosted-build entitlement questions are now in
-[an unsent support inquiry](RUNTIME-INQUIRY-DRAFT.md). Do not infer a paid subscription
-requirement or a prohibition from the absence of confirmation. Obtain approval before sending it.
+[the support inquiry record](RUNTIME-INQUIRY-DRAFT.md). GitHub closed the submitted request on
+support-eligibility grounds without answering it. Do not infer a paid subscription requirement,
+permission or prohibition from that closure. Do not wait indefinitely for individual support approval.
 
 ## Automatic installation preflight
 
@@ -60,7 +63,7 @@ This is the target-selection component, not a completed installer or release app
 - Use an isolated Windows catalog/ref, not the Mac default catalog. Verify anonymous HTTPS access
   and the official Codex installation route; CI's seven-day artifact is not the tester channel.
 - No Node, Cargo, administrator rights, Companion or security-policy changes for testers.
-- Verify native ARM64 on Win-test first; Intel/AMD x64 remains a separate later acceptance. Use a new local fixed NTFS folder,
+- Verify actual Windows/Codex installation on the available tester machine and record its native architecture. Use a new local fixed NTFS folder,
   outside OneDrive/junction/network paths. Do not use valuable existing projects for first acceptance.
 - Tester checks: install, start + Monitor, fullscreen with chat, node details, live updates, restart,
   disable/re-enable and uninstall/reinstall preserving Project records. Separate each observation.

@@ -1,4 +1,4 @@
-# Hosted Windows build entitlement — inquiry draft, not sent
+# Hosted Windows build entitlement — inquiry record
 
 This draft identifies the remaining question rather than claiming that a paid Visual Studio
 subscription is required or that redistribution is prohibited. The available evidence does
@@ -29,8 +29,14 @@ We are asking about resulting application binaries, not redistribution of the ho
 
 ## Status
 
-Not sent. External correspondence requires maintainer approval. Public Windows release stays
-pending; native CI success and CPU auto-detection do not resolve license applicability.
+Submitted to GitHub Support with maintainer approval on 2026-10-07. GitHub closed the inquiry
+because the account/request is served through self-service resources. It did not answer the
+licensing questions. This is neither redistribution permission nor a prohibition. Private support
+account information is not included here. No automatic repost or reopening is authorized.
+
+The maintainer subsequently clarified that an individual Support response is not a release
+prerequisite. Use applicable published terms and preserve required notices; focus preview gates
+on concrete security, integrity and installation checks. Do not claim legal certification.
 
 Official references examined:
 - https://learn.microsoft.com/en-us/visualstudio/releases/2026/redistribution
