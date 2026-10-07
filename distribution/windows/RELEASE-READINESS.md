@@ -40,6 +40,19 @@ required recipient terms/notices and hosted build entitlement. Preserve Microsof
 label every byte of the linked executable MIT. Cargo notice coverage does not settle these items.
 This is engineering release review, not a legal certification.
 
+The specific unanswered hosted-build entitlement questions are now in
+[an unsent support inquiry](RUNTIME-INQUIRY-DRAFT.md). Do not infer a paid subscription
+requirement or a prohibition from the absence of confirmation. Obtain approval before sending it.
+
+## Automatic installation preflight
+
+`install-target.psm1` detects native Windows CPU architecture from the read-only
+[Win32_Processor Architecture property](https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-processor):
+9 selects x64, 12 selects ARM64. It does not use the architecture of the PowerShell process.
+Missing, unsupported or inconsistent results stop without installing. It returns no user paths,
+serial numbers or CPU identifiers and performs no download, configuration write or install.
+This is the target-selection component, not a completed installer or release approval.
+
 ## Publication and acceptance
 
 - Keep the candidate receipt `publishable: false` until the preceding review is resolved and a
