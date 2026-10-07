@@ -1,5 +1,14 @@
 # Windows tester channels — release gates
 
+## Current checkpoint — 2026-10-07
+
+The limited Windows unsigned tester release is now published at
+https://github.com/hyun06000/gil/releases/tag/windows-preview-f0ecfbd . Both public archive hashes
+and INSTALL.md were rechecked through anonymous HTTPS downloads. Use [INSTALL.md](INSTALL.md),
+not the older CI-only procedure. See [publication evidence](PUBLICATION-f0ecfbd.md).
+The historical pending notes below describe earlier candidates, not an instruction to wait for
+GitHub support. Ordinary-user Windows installation/fullscreen are still acceptance work.
+
 2026-09-30: maintainer approved a limited unsigned tester channel and publication after redistribution
 and installation-route checks. This is not stable support or successful ordinary-user acceptance.
 The existing Mac marketplace/default branch and installed plugin must remain unchanged.
