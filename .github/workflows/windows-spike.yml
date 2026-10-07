@@ -41,6 +41,9 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Automatic installer target detection
+        shell: powershell
+        run: ./distribution/windows/install-target.test.ps1
       - name: Install maintainer toolchain
         shell: pwsh
         run: |
@@ -50,6 +53,11 @@ jobs:
           rustup toolchain install 1.97.1 --profile minimal --target $env:GIL_NATIVE_TARGET
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo fetch --locked --target $env:GIL_NATIVE_TARGET
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # Packaging tests independently resolve both locked notice inventories offline.
+          cargo fetch --locked --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo fetch --locked --target aarch64-pc-windows-msvc
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build embedded UI
         shell: pwsh
@@ -76,13 +84,12 @@ jobs:
           node distribution/windows/spike.mjs "target/$env:GIL_NATIVE_TARGET/debug/gil.exe"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Candidate packaging regression
-        if: matrix.arch == 'x64'
         shell: pwsh
         run: |
           node --test distribution/windows/candidate.test.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Prepare unsigned review candidate
-        if: matrix.arch == 'x64' && github.event_name == 'workflow_dispatch' && inputs.prepare_candidate
+        if: github.event_name == 'workflow_dispatch' && inputs.prepare_candidate
         shell: pwsh
         env:
           RUSTUP_TOOLCHAIN: 1.97.1
@@ -90,13 +97,13 @@ jobs:
           node distribution/windows/candidate.mjs target/windows-candidate
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Retain review artifact only
-        if: matrix.arch == 'x64' && github.event_name == 'workflow_dispatch' && inputs.prepare_candidate
+        if: github.event_name == 'workflow_dispatch' && inputs.prepare_candidate
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           archive: true
-          name: gil-windows-x64-REVIEW-${{ github.sha }}
+          name: gil-windows-${{ matrix.arch }}-REVIEW-${{ github.sha }}
           path: |
-            target/windows-candidate/gil-windows-x64-candidate.tar.gz
+            target/windows-candidate/gil-windows-${{ matrix.arch }}-candidate.tar.gz
             target/windows-candidate/SHA256SUMS
             target/windows-candidate/checks.json
           if-no-files-found: error

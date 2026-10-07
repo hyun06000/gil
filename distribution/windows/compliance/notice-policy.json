@@ -4,9 +4,9 @@
   "inputs": {
     "Cargo.toml": "5edb5312b644ba36c497e796f26172b3923c1903df3ed5aef6307f01a51756c8",
     "Cargo.lock": "bb7e44afa7c798012b58d767d211022c261c5cd9d3e18139baaa02c36458eae2",
-    "mcp-app/package-lock.json": "6d185bec47af2e76a00d9d440117ba48d28116e282cd1d509078357a59e0c1d4",
+    "mcp-app/package-lock.json": "9c6170c797cb227eb236692c8087cfddfe09ceea0fa212df4417cf91712d83b6",
     "mcp-app/build.mjs": "00013682e3e300f5e5945f5fbadd2fb5d2e5c65797d1596511546da6261f5c3d",
-    "plugins/gil-companion-prototype/assets/monitor.html": "0aaf30e3c62d63fdc45919d01ece01c1ea2ac2464bf572e72b4a4d4b87b52688"
+    "plugins/gil-companion-prototype/assets/monitor.html": "0d6fae97b7a8a4782337df39672b1532fbb965913ec8a1c8bd4e84d010a62794"
   },
   "toolchain": {
     "release": "1.97.1",
@@ -1564,11 +1564,11 @@
     {
       "ecosystem": "npm",
       "name": "@modelcontextprotocol/client",
-      "version": "2.0.0",
+      "version": "2.3.1",
       "role": "bundled-ui",
-      "declared_license": "MIT",
-      "source": "https://www.npmjs.com/package/@modelcontextprotocol/client/v/2.0.0",
-      "integrity": "sha512-8f1OghQ2rjzIOfqgUCP+8GiUWqRs89njoWLNqAe8kWmDePv3s1fZXseej+QXemssEuuOvLLmLO/kqM3IQHtISw==",
+      "declared_license": "Apache-2.0",
+      "source": "https://www.npmjs.com/package/@modelcontextprotocol/client/v/2.3.1",
+      "integrity": "sha512-mIGZXpHsjnZ6lD+gD/WCMpR5k8yVQQ8nNFH1N0Srf7AvnwTUMYD6pvTY8ng2+He5FfV7YMZLmrjL7cLa/cc3dQ==",
       "files": [
         {
           "path": "LICENSE",
@@ -1579,11 +1579,11 @@
     {
       "ecosystem": "npm",
       "name": "@modelcontextprotocol/core",
-      "version": "2.0.0",
+      "version": "2.3.1",
       "role": "bundled-ui",
-      "declared_license": "MIT",
-      "source": "https://www.npmjs.com/package/@modelcontextprotocol/core/v/2.0.0",
-      "integrity": "sha512-pJCEwGG7Lfr/+PQp9ZTwKXNeO5wzbfKL7H3MYpCorM4oFBoQrdjnBgEoqG+RjhsvS1FKrDbKux+M1HhlnGWqcA==",
+      "declared_license": "Apache-2.0",
+      "source": "https://www.npmjs.com/package/@modelcontextprotocol/core/v/2.3.1",
+      "integrity": "sha512-laVmIhPGpWi7rG9q+0UigblRN0Hws/Yjlb6qLFtVqryXVLkc4h+yN8z731POD2LnAGQlFe7/tXhUm7Bi0YB91g==",
       "files": [
         {
           "path": "LICENSE",
