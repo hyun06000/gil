@@ -41,6 +41,9 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Automatic installer target detection
+        shell: powershell
+        run: ./distribution/windows/install-target.test.ps1
       - name: Install maintainer toolchain
         shell: pwsh
         run: |
