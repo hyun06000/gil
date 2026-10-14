@@ -299,7 +299,8 @@ AI는 설치를 수행하는 주체가 아니라 설치 과정을 끝까지 조�
 - 설치 전에 제품명, publisher, 필요한 이유와 로컬 접근 범위를 짧게 설명한다.
 - macOS 정식 신뢰 채널은 Mac App Store 또는 Developer ID로 서명·공증된 배포물을 사용한다.
   첫 Codex/macOS arm64 시험판에 한해 §6.2a의 명시적 동의 기반 unsigned 채널을 허용한다.
-- Windows에서는 Microsoft Store 또는 서명된 installer를 사용한다.
+- Windows 정식 신뢰 채널은 Microsoft Store 또는 서명된 installer를 사용한다.
+  Windows x64 테스터 시험판은 §6.2b의 별도 승인된 unsigned 예외를 따른다.
 - 설치 완료를 사용자가 채팅으로 다시 보고하게 하지 않는다. adapter가 재감지하고 원래 요청을
   자동으로 재개한다.
 - 설치·업데이트가 실패하면 Project와 `.gil`을 바꾸지 않고 text 사용과 재시도 경로를 제공한다.
@@ -389,6 +390,26 @@ Plugin 실행 파일의 서명/공증 성공으로 대체하지 않는다.
 
 구현과 실행 절차는 [native release gate](../distribution/codex/RELEASE-macos.md),
 관측 증거는 [unsigned 후보 장부](../distribution/codex/UNSIGNED-PREVIEW-CHECKPOINT-20260928.md)를 따른다.
+
+### 6.2b Windows x64 unsigned 테스터 시험판 (2026-09-30)
+
+유지관리자는 Windows x64에서도 서명 없는 제한적 opt-in 테스터 시험판을 준비하고,
+재배포 조건·무결성·설치 경로 검수를 마친 뒤 게시하는 것을 승인했다. 이는 §6.2a의 Mac
+예외와 별개 결정이며 정식 Windows 지원·Authenticode 검수·실제 Codex 화면 인수를 뜻하지 않는다.
+
+- Windows x64/Intel·AMD, 로컬 고정 NTFS 폴더가 범위다. ARM64/Snapdragon·네트워크·
+  removable·reparse-point 경로는 이 채널의 지원 대상이 아니다.
+- 서명 없는 native 실행 파일과 로컬 파일 접근 범위를 먼저 알리고 사용자 동의 후 설치한다.
+  Defender/SmartScreen 해제, 예외 등록, execution policy 변경, 관리자 권한을 요구하지 않는다.
+  OS가 차단하면 우회하지 않고 중단한다. SHA-256은 publisher 신원 확인을 대신하지 않는다.
+- 사용자에게 Node·npm·Rust·Cargo·별도 Companion 설치를 요구하지 않는다. 검수된 immutable
+  ref/version/hash와 공식 Plugin 설치 경로를 사용한다. Mac catalog와 설치본을 덮어쓰지 않는다.
+- source/Cargo 고지 외에 실제 Microsoft toolchain과 runtime의 출처·재배포 조건도 검토한다.
+  CI 성공이나 static CRT 사용만으로 이 게이트를 통과시키지 않는다.
+- 일반 사용자 계정의 설치·fullscreen·노드 상세·watcher·재시작은 테스터 인수 항목이다.
+  미실행 항목은 그대로 표시하며 새 빈 시험 폴더를 쓴다. 공개 stable 출시로 표현하지 않는다.
+- 게시 증거와 테스터 결과는 별도 기록한다. 자동 업데이트·사용자 설치본 교체·Mac 채널 변경은
+  이번 승인에 포함되지 않는다. 재배포 조건이 미해결이면 게시하지 않는다.
 
 ### 6.3 정식 배포 전 오픈소스 공개 준비 게이트
 

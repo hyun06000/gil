@@ -596,6 +596,17 @@ Companion의 보존·검증 재개 조건은 Distribution Model §3.1을 따른�
 - 설정 제거/Plugin 제거 연동, 표현 상태의 Host 간 복원, Windows OS identity·설치 검수는 별도다.
   Unix가 아닌 환경에서 약한 identity로 자동 복원을 가장하지 않으며 Companion을 유지한다.
 
+##### Windows local NTFS adapter (2026-09-30 구현 후보)
+
+- `.gil` 디렉터리의 volume serial·64-bit NTFS file index·생성 시각으로 identity를 만든다.
+  기존 binding schema와 Unix scope 의미는 유지한다. UNC·비NTFS·reparse-point 경로는 거절한다.
+- `%LOCALAPPDATA%/GIL/monitor-bindings-v1`의 새 폴더·파일은 현재 사용자 SID만 허용하는
+  protected DACL로 생성한다. 기존 ACL은 고치지 않고 owner/DACL을 handle에서 확인한다.
+- 설정 접근 동안 ancestor directory handle로 rename/delete를 막고, reparse point를 따라가지 않는다.
+  바이트 flush 후 같은 디렉터리의 덮어쓰기 없는 move로 공개하며 손상 기록을 보존한다.
+- native CI의 persistence·거절 시험과 실제 Windows/Codex 설치·fullscreen 인수는 구분한다.
+  이 구현 후보만으로 Windows 사용자 지원이나 전체 Windows 회귀 통과를 선언하지 않는다.
+
 ### 9.2 2026-09-08 Host surface 예비 진단 (이전 관찰)
 
 Codex Desktop의 inline Plugin UI에서 fixture 기반 GIL Companion을 열고

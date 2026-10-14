@@ -1,12 +1,20 @@
 //! Local, durable Monitor consent. One immutable file per explicitly prepared scope.
 //! Never stored in the Project, plugin cache, tool result, or iframe storage.
-use std::fs::{self, File, OpenOptions};
+use std::fs;
+#[cfg(not(windows))]
+use std::fs::{File, OpenOptions};
+#[cfg(not(windows))]
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::AtomicU64;
+#[cfg(any(not(windows), test))]
+use std::sync::atomic::Ordering;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use super::monitor::Refusal;
+#[cfg(windows)]
+#[path = "bindings_windows.rs"]
+mod windows;
 
 const SCHEMA: u32 = 1;
 const MAX_BYTES: u64 = 16_384;
@@ -30,7 +38,13 @@ impl Identity {
             Ok(Self { device: meta.dev(), inode: meta.ino(),
                 created_ns: meta.created().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_nanos()) })
         }
-        #[cfg(not(unix))] {
+        #[cfg(windows)] {
+            let (device, inode, created_ns) = windows::identity(&root.join(".gil")).map_err(|_| {
+                Refusal::new("resume_unavailable", "이 Project 의 안전한 Windows identity 를 확인할 수 없다 — 로컬 NTFS 폴더가 필요하다")
+            })?;
+            Ok(Self { device, inode, created_ns: Some(created_ns) })
+        }
+        #[cfg(not(any(unix, windows)))] {
             // Do not substitute a timestamp/label for an OS identity. Windows identity
             // and installation acceptance remain a separate distribution checkpoint.
             Err(Refusal::new("resume_unavailable", "이 환경의 안전한 Project 자동 복원은 아직 지원하지 않는다 — Companion 을 사용한다"))
@@ -102,12 +116,14 @@ impl Store {
             .ok_or_else(unknown)?;
         Ok(self.dir.as_ref().ok_or_else(unreadable)?.join(format!("{hex}.json")))
     }
+    #[cfg(not(windows))]
     fn private(meta: &fs::Metadata) -> bool {
         #[cfg(unix)] { use std::os::unix::fs::MetadataExt;
             meta.uid() == unsafe { libc::geteuid() } && meta.mode() & 0o077 == 0
         }
         #[cfg(not(unix))] { let _ = meta; false }
     }
+    #[cfg(not(windows))]
     fn check_dir(&self) -> Result<(), Refusal> {
         let meta = fs::symlink_metadata(self.dir.as_ref().ok_or_else(unreadable)?).map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound { unknown() } else { unreadable() }
@@ -117,6 +133,14 @@ impl Store {
     }
     pub fn load(&self, scope: &str) -> Result<Binding, Refusal> {
         let path = self.path(scope)?;
+        #[cfg(windows)]
+        let bytes = {
+            let dir = windows::PrivateDir::open(self.dir.as_ref().ok_or_else(unreadable)?, false)
+                .map_err(|e| if e.kind() == std::io::ErrorKind::NotFound { unknown() } else { unreadable() })?;
+            dir.read(&path, MAX_BYTES).map_err(|e| if e.kind() == std::io::ErrorKind::NotFound { unknown() } else { damaged() })?
+        };
+        #[cfg(not(windows))]
+        let bytes = {
         self.check_dir()?;
         let mut options = OpenOptions::new(); options.read(true);
         #[cfg(unix)] { use std::os::unix::fs::OpenOptionsExt; options.custom_flags(libc::O_NOFOLLOW); }
@@ -126,6 +150,8 @@ impl Store {
         let meta = file.metadata().map_err(|_| unreadable())?;
         if !meta.is_file() || !Self::private(&meta) || meta.len() > MAX_BYTES { return Err(damaged()); }
         let mut bytes = Vec::new(); file.take(MAX_BYTES + 1).read_to_end(&mut bytes).map_err(|_| unreadable())?;
+        bytes
+        };
         if bytes.len() as u64 > MAX_BYTES { return Err(damaged()); }
         let peek: serde_json::Value = serde_json::from_slice(&bytes).map_err(|_| damaged())?;
         if peek.get("schema_version").and_then(|v| v.as_u64()) != Some(u64::from(SCHEMA)) {
@@ -151,6 +177,18 @@ impl Store {
         let mut resolved = parent.canonicalize().map_err(|_| unwritable())?;
         for part in suffix.into_iter().rev() { resolved.push(part); }
         if resolved.starts_with(&binding.root) { return Err(unwritable()); }
+        #[cfg(windows)] {
+            let guard = windows::PrivateDir::open(dir, true).map_err(|_| unwritable())?;
+            if dir.canonicalize().map_err(|_| unwritable())?.starts_with(&binding.root) { return Err(unwritable()); }
+            if path.try_exists().map_err(|_| unreadable())? {
+                return if self.load(&scope)? == *binding { Ok(()) } else { Err(damaged()) };
+            }
+            let bytes = serde_json::to_vec(binding).map_err(|_| unwritable())?;
+            if bytes.len() as u64 > MAX_BYTES { return Err(unwritable()); }
+            if guard.publish(&path, &bytes).map_err(|_| unwritable())? { return Ok(()); }
+            return if self.load(&scope)? == *binding { Ok(()) } else { Err(damaged()) };
+        }
+        #[cfg(not(windows))] {
         let mut builder = fs::DirBuilder::new(); builder.recursive(true);
         #[cfg(unix)] { use std::os::unix::fs::DirBuilderExt; builder.mode(0o700); }
         builder.create(dir).map_err(|_| unwritable())?;
@@ -182,10 +220,11 @@ impl Store {
         drop(file);
         let _ = fs::remove_file(&tmp); // only the unique file created by this call
         result
+        }
     }
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod tests {
     use super::*;
     struct Scratch(PathBuf);
@@ -204,14 +243,17 @@ mod tests {
 
     #[test]
     fn a_fresh_store_restores_only_the_requested_binding_with_private_permissions() {
+        #[cfg(unix)]
         use std::os::unix::fs::PermissionsExt;
         let s = Scratch::new(); let a = s.project("a/same-name"); let b = s.project("b/same-name");
         s.store().save(&a).unwrap(); s.store().save(&b).unwrap();
         assert_ne!(a.scope(), b.scope());
         let restored = s.store().load(&a.scope()).unwrap(); assert_eq!(restored, a);
         restored.validate().unwrap();
-        assert_eq!(fs::metadata(s.store().dir.unwrap()).unwrap().permissions().mode() & 0o777, 0o700);
-        assert_eq!(fs::metadata(s.store().path(&a.scope()).unwrap()).unwrap().permissions().mode() & 0o777, 0o600);
+        #[cfg(unix)] {
+            assert_eq!(fs::metadata(s.store().dir.unwrap()).unwrap().permissions().mode() & 0o777, 0o700);
+            assert_eq!(fs::metadata(s.store().path(&a.scope()).unwrap()).unwrap().permissions().mode() & 0o777, 0o600);
+        }
         assert_eq!(fs::read_dir(s.0.join("settings")).unwrap().count(), 2);
     }
 
@@ -265,9 +307,11 @@ mod tests {
         let dir = binding.root.join("new/settings");
         assert_eq!(Store::at(dir.clone()).save(&binding).unwrap_err().code, "settings_unwritable");
         assert!(!binding.root.join("new").exists());
-        std::os::unix::fs::symlink(&binding.root, s.0.join("alias")).unwrap();
-        assert_eq!(Store::at(s.0.join("alias/other/settings")).save(&binding).unwrap_err().code, "settings_unwritable");
-        assert!(!binding.root.join("other").exists());
+        #[cfg(unix)] {
+            std::os::unix::fs::symlink(&binding.root, s.0.join("alias")).unwrap();
+            assert_eq!(Store::at(s.0.join("alias/other/settings")).save(&binding).unwrap_err().code, "settings_unwritable");
+            assert!(!binding.root.join("other").exists());
+        }
     }
 
     #[test]
@@ -284,6 +328,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn symlinks_and_nonprivate_records_are_not_trusted() {
         use std::os::unix::fs::{symlink, PermissionsExt};
         let s = Scratch::new(); let binding = s.project("project"); s.store().save(&binding).unwrap();

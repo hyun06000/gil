@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {readFile, readdir, lstat} from 'node:fs/promises';
-import {dirname, join, relative, resolve} from 'node:path';
+import {dirname, join, relative, resolve, parse, sep} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 
 export const TARGET = 'aarch64-apple-darwin';
@@ -38,8 +38,9 @@ function localPath(value) {
   return value;
 }
 export async function regular(path) {
-  let at = '/';
-  for (const part of resolve(path).split('/').filter(Boolean)) {
+  const absolute = resolve(path);
+  let at = parse(absolute).root;
+  for (const part of relative(at, absolute).split(sep).filter(Boolean)) {
     at = join(at, part);
     assert.equal((await lstat(at)).isSymbolicLink(), false, 'symlink notice input refused');
   }
@@ -65,10 +66,11 @@ export async function legalFiles(root) {
   return files.sort((a, b) => order(a.path, b.path));
 }
 
-export async function collect(root = repository, {cargo = 'cargo', rustc = 'rustc'} = {}) {
+export async function collect(root = repository, {cargo = 'cargo', rustc = 'rustc', target = TARGET} = {}) {
+  assert.ok([TARGET, 'x86_64-pc-windows-msvc'].includes(target), 'unreviewed target');
   const run = (cmd, args) => execFileSync(cmd, args, {cwd: root, encoding: 'utf8', maxBuffer: 64e6, timeout: 120000});
-  const metadata = JSON.parse(run(cargo, ['metadata', '--locked', '--offline', '--format-version', '1', '--filter-platform', TARGET]));
-  const tree = edges => new Set(run(cargo, ['tree', '--locked', '--offline', '--target', TARGET,
+  const metadata = JSON.parse(run(cargo, ['metadata', '--locked', '--offline', '--format-version', '1', '--filter-platform', target]));
+  const tree = edges => new Set(run(cargo, ['tree', '--locked', '--offline', '--target', target,
     '-p', 'gil', '--edges', edges, '--prefix', 'none', '--format', '{p}']).split('\n')
     .map(s => s.match(/^(\S+) v([^\s]+)/)).filter(Boolean).map(m => `${m[1]}@${m[2]}`));
   const all = tree('normal,build'), normal = tree('normal,no-proc-macro');
@@ -113,7 +115,7 @@ export async function collect(root = repository, {cargo = 'cargo', rustc = 'rust
     assert.ok(pkg?.name, 'cannot identify bundled dependency');
     const id = `${pkg.name}@${pkg.version}`;
     if (!used.has(id)) {
-      const locked = lock.packages[relative(app, dir)];
+      const locked = lock.packages[relative(app, dir).split(sep).join('/')];
       assert.equal(pkg.version, locked?.version, 'installed npm version differs from lock');
       assert.ok(locked.integrity, 'npm dependency has no pinned integrity');
       const files = await legalFiles(dir);
@@ -129,11 +131,12 @@ export async function collect(root = repository, {cargo = 'cargo', rustc = 'rust
   const release = verbose.match(/^release: (.+)$/m)?.[1], commit = verbose.match(/^commit-hash: (.+)$/m)?.[1];
   assert.ok(release && /^[a-f0-9]{40}$/.test(commit), 'unidentified Rust toolchain');
   const inputs = Object.fromEntries(await Promise.all(INPUTS.map(async p => [p, sha256(await regular(join(root, p)))])));
-  return {schema: 1, target: TARGET, inputs, toolchain: {release, commit}, packages};
+  return {schema: 1, target, inputs, toolchain: {release, commit}, packages};
 }
 
-export function validatePolicy(policy) {
-  assert.equal(policy.schema, 1); assert.equal(policy.target, TARGET);
+export function validatePolicy(policy, target = TARGET) {
+  assert.ok([TARGET, 'x86_64-pc-windows-msvc'].includes(target));
+  assert.equal(policy.schema, 1); assert.equal(policy.target, target);
   assert.deepEqual(Object.keys(policy.inputs).sort(), [...INPUTS].sort());
   for (const hash of Object.values(policy.inputs)) assert.match(hash, /^[a-f0-9]{64}$/);
   assert.ok(policy.packages.length > 0, 'empty notice inventory refused');
@@ -152,14 +155,14 @@ export function validatePolicy(policy) {
   assert.match(policy.stdlib.sha256, /^[a-f0-9]{64}$/);
   assert.ok(policy.stdlib.source.startsWith('https://static.rust-lang.org/'));
 }
-export function assertCoverage(policy, observed) {
-  validatePolicy(policy);
+export function assertCoverage(policy, observed, target = TARGET) {
+  validatePolicy(policy, target);
   const {stdlib, ...expected} = policy;
   assert.deepEqual(observed, expected, 'notice coverage changed; review dependencies/legal texts then update policy explicitly');
 }
-export async function loadBundle(root = repository) {
-  const base = join(root, DIRECTORY), policy = JSON.parse(await regular(join(base, 'notice-policy.json')));
-  validatePolicy(policy);
+export async function loadBundle(root = repository, {directory = DIRECTORY, target = TARGET} = {}) {
+  const base = join(root, directory), policy = JSON.parse(await regular(join(base, 'notice-policy.json')));
+  validatePolicy(policy, target);
   for (const [path, expected] of Object.entries(policy.inputs)) {
     assert.equal(sha256(await regular(join(root, path))), expected, `notice policy stale: ${path}`);
   }
