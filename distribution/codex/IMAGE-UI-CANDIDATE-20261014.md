@@ -100,3 +100,65 @@ increment as a stacked PR against that branch so its 27 prerequisite commits are
 as new image-report changes. Do not merge or rewrite the prerequisite branches. Dispatch default
 and visual-authoring macOS workflows explicitly for the new head: the pull-request trigger is
 main-only, and default-only CI does not validate the image-writing contract.
+
+## Clean CI and real Host acceptance follow-up
+
+The preceding development-only limits are historical. Source `e51e7018907e1324af973b86fee1de7ff0161e67`
+is now committed in [PR #16](https://github.com/hyun06000/gil/pull/16). Both exact-head runs passed:
+[default](https://github.com/hyun06000/gil/actions/runs/38520372682) and
+[visual-authoring](https://github.com/hyun06000/gil/actions/runs/38520375664).
+The unchanged parallel watcher test passed on CI; its earlier intermittent failure remains recorded
+above and its root cause is not claimed fixed. PR #16 is stacked, so its empty PR check rollup
+must not be described as an automatically triggered main-branch check pass.
+
+Downloaded visual artifact 11873283111 has inner archive SHA-256
+`034807aa266076b2afd58fdb729fd68f09302fa705ee2e46aa5daaab5439e287`.
+Its exact installed executable, not a local rebuild, served the real Codex Monitor. Cycle rectangle
+selection, shared image/caption/provenance and 1200×700 enlargement/preview return were observed.
+The user explicitly confirmed image and chat together. CSP remained unchanged; the existing
+verified-byte data PNG fallback displayed when Blob PNG was blocked.
+
+Isolated official Plugin replacement old→CI→old→CI returned 17→24→17→24 tools. Synthetic
+format-4/5 trees, shared-image references and reports were preserved across replacement and
+process restart. Production Plugin bytes were unchanged. Full Desktop quit/relaunch is not
+claimed from a server reconnect. No real project was migrated.
+
+### Next preview decision and publication boundary
+
+The maintainer chose **another preview before stable release**, not a new unsigned stable policy.
+`0.2.1-preview.4` is a local staging candidate (no existing marketplace tag with that name at
+the check). Scope remains macOS Apple Silicon / Codex / visual-authoring; no new Windows or
+Claude image-authoring acceptance is inferred. Developer ID/notarization remain absent.
+Clean CI Core/Skill/UI bytes are preserved; only approved packaging metadata and notices are
+versioned by the existing preview staging tool. `publishable: false` remains intact.
+
+Before requesting publication approval:
+
+1. Verify preview.4 staging inventory, native smoke and explicit preview.3↔preview.4 installation
+   pair in isolation. Format-5 refusal by preview.3 is expected, not data loss or permission to
+   downgrade storage. Migration still needs separate backup and apply consent.
+2. Review the stacked source chain: PR #12 → #13 → #15 → #16; PR #14 is a separate main-based
+   Gitless installer fix. Do not silently merge prerequisites or claim main contains this code.
+   Confirm required checks against the intended integration head after approved merges.
+3. Present the fixed preview version, source head, hashes, release/marketplace destinations,
+   support limits and rollback warning for publication and merge approval. Do not overwrite tags.
+4. After approval only, publish the verified bytes and validate anonymous download and official
+   installation. Release creation, marketplace update, announcement and stable support are not
+   completed by this local acceptance.
+
+Existing user installation and project records remain out of scope. These documentation updates
+do not imply another commit, push, merge or public release.
+
+### Preview.4 local staging and version-pair result
+
+The preview staging tool passed inventory verification, archive round-trip and 24-tool native
+smoke. Candidate archive SHA-256:
+`33e12319cb19224fe69df12ed4f857d8a36b006ed4f006f6e6eb542ae671dcd3`.
+The original CI Core and Skill file hashes/modes are unchanged; embedded UI remains the digest
+above. A new isolated official Plugin profile passed preview.3 → preview.4 → preview.3 →
+preview.4 with tool counts 17 → 24 → 17 → 24. Synthetic format-4/5 file hashes and modes,
+Verify/Cycle image references and reports, production Plugin inventory and current user config
+were unchanged. This is an explicit approved replacement test, **not automatic update permission**.
+The compatibility change intentionally requires review. No storage downgrade or migration occurred.
+Desktop UI was observed with the same CI payload before the packaging version changed; no claim
+is made that a published preview.4 has already been downloaded or installed by a user.

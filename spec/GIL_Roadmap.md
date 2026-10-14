@@ -329,6 +329,15 @@ Later    1  성공 가지 Merge
       현재 dirty 개발 후보는 공개하지 않는다. 남은 필수 묶음은 검수 source PR/CI,
       채널·버전·지원 범위 확정, 동일 clean CI bytes의 격리 Host/업데이트 인수와 게시 승인이다.
       기존 설치본 교체·사용자 Project 이관·커밋·push·원격 CI·게시를 하지 않았다.
+      **clean CI·Host 인수(2026-10-14):** PR #16의 `e51e701`에서 기본 CI
+      `38520372682`와 작성 CI `38520375664`가 성공했다. 작성 CI 원본을 격리 설치하고
+      이전→후보→이전→후보, 서버 재시작, format-4/5 기록·공유 이미지 보존을 확인했다.
+      실제 설치된 CI 실행 파일로 C2 사각형 보고서·이미지 확대/복귀를 확인했고 사용자가
+      이미지·설명·출처와 채팅 동시 표시를 승인했다. 기존 설치본·사용자 기록은 유지한다.
+      이는 개발 version 쌍 인수이며 최종 배포 version 인수와 구분한다. 사용자는 안정판
+      채널 추가 대신 새 preview 선행을 선택했다. macOS arm64/Codex 작성 profile의
+      `0.2.1-preview.4`를 로컬 staging하며 공개 tag·게시·병합은 별도 승인받는다.
+      [CI·출시 준비 장부](../distribution/codex/IMAGE-UI-CANDIDATE-20261014.md)를 따른다.
       **진행 우선순위 재정리(2026-10-13):** 다음 기능 검수는 독립 합성 format-5 Project에서
       Verify PNG 확정 → Report 참조 목록 → scope/Report 제한 이미지 응답 → Monitor 상세의
       이미지·caption·alt·출처 표시 → 재시작 후 재조회로 한다. 기존 사용자 Project는 자동
