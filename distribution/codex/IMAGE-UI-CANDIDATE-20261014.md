@@ -4,6 +4,39 @@ Date: 2026-10-14. Scope: macOS Apple Silicon, Codex, `visual-authoring`.
 Status: isolated development candidate verified; **not published or approved for publication**.
 The installed public Plugin and user projects have not been replaced or migrated.
 
+## Source integration and watcher follow-up
+
+The maintainer approved ordered PR merges, not publication. PRs #12, #13, #15, #14 and
+#16 were merged in that order, each after exact-head macOS and Windows checks passed.
+Main `e202c8c971f73c210d2a387c18fe69f752d856d7` passed the visual-authoring run
+[38539603780](https://github.com/hyun06000/gil/actions/runs/38539603780) and Windows x64/ARM64
+run [38539607502](https://github.com/hyun06000/gil/actions/runs/38539607502).
+Default run [38539600472](https://github.com/hyun06000/gil/actions/runs/38539600472) failed
+`looking_does_not_make_more_hints` (2 observations versus 1). Integration is not accepted on
+the strength of the two passing runs alone. Required checks and administrator enforcement
+were not bypassed; no release, marketplace update or installed Plugin replacement occurred.
+
+Investigation isolated two test confounders: a 250 ms quiet interval did not drain delayed
+startup events, and the 3-second reconciliation deadline could elapse during CI scheduling.
+Removing those confounders was not sufficient evidence of a working noise filter: a first
+negative control with the filter bypassed still passed because observation's lock access did
+not itself generate filesystem writes on this Mac.
+
+Adding explicit synthetic `.gil` writes exposed a reproducible product defect with the normal
+filter: FSEvents emitted canonical `/private/var` paths while the filter root used `/var`.
+Internal events therefore missed the `.gil` prefix and triggered extra observations (6 versus
+3, reproduced as 7 versus 3). This is a demonstrated alias/filter defect, not proof that it
+alone caused every earlier intermittent failure.
+
+The follow-up canonicalizes the macOS watch root before both registration and filtering;
+other OS backends keep their existing path convention. The test now positively checks real
+file-change delivery, requires sustained startup quiet, requests one observation, injects
+internal noise and still asserts exactly one observation. A lexical root alias forces the
+macOS regression even when CI's temp directory has no `/var` alias. A timeout or continued
+noise fails rather than being silently accepted. Production debounce, reconciliation, access
+boundaries, project records and report formats are unchanged. Exact-head CI of this follow-up
+remains required before merge and publication remains separately gated.
+
 ## Candidate and UI
 
 The release-mode native executable embeds the UI accepted in the preceding Codex session:

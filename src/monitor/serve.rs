@@ -2018,6 +2018,18 @@ mod tests {
         std::path::PathBuf,
         Arc<std::sync::atomic::AtomicUsize>,
     ) {
+        live_watching(label, pace, Path::to_path_buf)
+    }
+
+    fn live_watching(
+        label: &str,
+        pace: Pace,
+        watch_path: impl FnOnce(&Path) -> std::path::PathBuf,
+    ) -> (
+        Monitor,
+        std::path::PathBuf,
+        Arc<std::sync::atomic::AtomicUsize>,
+    ) {
         let root = std::env::temp_dir().join(format!("gil-live-{label}"));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("자리를 만든다");
@@ -2034,7 +2046,8 @@ mod tests {
             ProjectObserver::new(rules, &state),
             Arc::clone(&looks),
         ));
-        let window = serve(observer, pace, wall_clock(), Some(&root)).expect("창을 연다");
+        let watch = watch_path(&root);
+        let window = serve(observer, pace, wall_clock(), Some(&watch)).expect("창을 연다");
         (window, root, looks)
     }
 
@@ -2226,15 +2239,60 @@ mod tests {
     fn looking_does_not_make_more_hints() {
         // **이 시험이 없으면 고리를 못 본다.** 관측이 `.gil` 을 만지고, 그 사건이 hint 가
         // 되고, hint 가 관측을 부르면 창은 영원히 프로젝트를 다시 연다.
-        let (_window, _root, looks) = live("no-self-loop", brisk());
-        // 시작의 잡음이 가라앉기를 기다린 뒤에 잰다.
-        let quiet = settle(&looks);
-        // reconciliation(3초) 이 오기 전까지 조용해야 한다. 고리가 있으면 debounce(100ms)
-        // 마다 한 번씩 늘어나 열다섯 번쯤이 된다.
+        // 정상 reconciliation을 자기 호출로 세지 않는다. CI의 thread scheduling에는
+        // 「3초 전에 assert까지 도착한다」는 보장이 없다.
+        let (window, root, looks) = live_watching("no-self-loop", only_the_watcher(), |root| {
+            // CI 임시 폴더에 /var 별칭이 없어도 FSEvents의 정규 경로와 다르게 만든다.
+            #[cfg(target_os = "macos")]
+            {
+                root.join(".gil/..")
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                root.to_path_buf()
+            }
+        });
+        let started = Instant::now();
+        // 실제 watcher가 살아 있음을 먼저 확인한다. 감시가 꺼져서 조용한 것은 통과가 아니다.
+        std::fs::write(root.join("b.txt"), "감시 확인").expect("세계를 흔든다");
+        assert!(until(Duration::from_secs(5), || world_says(&window) == "dirty"));
+
+        // 한 번의 250ms 무변화는 FSEvents 시작 사건을 모두 받았다는 증거가 아니다.
+        // 연속 1.5초 조용함을 요구하고, 고리가 계속되면 이 단계 자체가 실패한다.
+        let mut quiet = looks.load(Ordering::SeqCst);
+        let mut unchanged_since = Instant::now();
+        assert!(
+            until(Duration::from_secs(10), || {
+                let now = looks.load(Ordering::SeqCst);
+                if now != quiet {
+                    quiet = now;
+                    unchanged_since = Instant::now();
+                }
+                unchanged_since.elapsed() >= Duration::from_millis(1500)
+            }),
+            "감시가 조용해지지 않았다 — 관측 고리 또는 계속되는 외부 사건"
+        );
+
+        // 잡음이 끝난 뒤 의도적으로 한 번 관측한다. 그 관측의 .gil 접근이 새 hint를
+        // 만들면 아래의 정확히 한 번 assertion이 실패해야 한다.
+        window.hint();
+        assert!(until(Duration::from_secs(5), || looks.load(Ordering::SeqCst)
+            > quiet));
+        // 잠금 접근이 OS마다 변경 사건을 내지는 않는다. 실제 .gil 쓰기도 흘려서
+        // 필터가 고장 났는데 우연히 조용하여 통과하는 경우를 막는다.
+        for n in 0..5 {
+            std::fs::write(root.join(".gil/monitor-noise-check"), n.to_string())
+                .expect("합성 내부 잡음을 만든다");
+            std::thread::sleep(Duration::from_millis(100));
+        }
         std::thread::sleep(Duration::from_millis(1500));
+        assert!(
+            started.elapsed() < Duration::from_secs(600),
+            "시험이 reconciliation 기한을 넘었다"
+        );
         assert_eq!(
             looks.load(Ordering::SeqCst),
-            quiet,
+            quiet + 1,
             "관측이 스스로를 다시 불렀다 — .gil 사건이 hint 로 새고 있다"
         );
     }

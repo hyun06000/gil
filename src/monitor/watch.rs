@@ -45,6 +45,14 @@ pub fn watch_hints(
 ) -> Result<Watching, String> {
     use notify::{RecursiveMode, Watcher};
 
+    // FSEvents reports canonical paths (e.g. /private/var, not /var). Compare and
+    // register in that same namespace so internal .gil events remain filtered.
+    // Other backends retain their existing path convention (not Windows verbatim paths).
+    #[cfg(target_os = "macos")]
+    let canonical_root = root.canonicalize().map_err(|said| said.to_string())?;
+    #[cfg(target_os = "macos")]
+    let root = canonical_root.as_path();
+
     let gil = root.join(crate::artifact::GIL_DIR);
     let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
         let Ok(event) = event else {
