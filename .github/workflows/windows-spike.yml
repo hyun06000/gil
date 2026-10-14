@@ -11,11 +11,27 @@ on:
 permissions:
   contents: read
 jobs:
-  windows-x64:
-    runs-on: windows-2025
+  windows-native:
+    name: Windows native (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-2025
+            machine: AMD64
+            target: x86_64-pc-windows-msvc
+          - arch: arm64
+            runner: windows-11-arm
+            machine: ARM64
+            target: aarch64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     env:
       RUSTUP_TOOLCHAIN: 1.97.1
+      GIL_NATIVE_TARGET: ${{ matrix.target }}
+      GIL_NATIVE_MACHINE: ${{ matrix.machine }}
+      GIL_NATIVE_ARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         env:
@@ -28,10 +44,12 @@ jobs:
       - name: Install maintainer toolchain
         shell: pwsh
         run: |
-          if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw 'Expected x64 runner' }
-          rustup toolchain install 1.97.1 --profile minimal --target x86_64-pc-windows-msvc
+          if ($env:PROCESSOR_ARCHITECTURE -ne $env:GIL_NATIVE_MACHINE) { throw 'Expected native runner architecture' }
+          node -e "if (process.arch !== process.env.GIL_NATIVE_ARCH) process.exit(1)"
+          if ($LASTEXITCODE -ne 0) { throw 'Node must run natively, not under emulation' }
+          rustup toolchain install 1.97.1 --profile minimal --target $env:GIL_NATIVE_TARGET
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cargo fetch --locked --target x86_64-pc-windows-msvc
+          cargo fetch --locked --target $env:GIL_NATIVE_TARGET
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build embedded UI
         shell: pwsh
@@ -43,27 +61,28 @@ jobs:
       - name: Build native Core and MCP
         shell: pwsh
         run: |
-          cargo +1.97.1 build --locked -p gil --bin gil --target x86_64-pc-windows-msvc
+          cargo +1.97.1 build --locked -p gil --bin gil --target $env:GIL_NATIVE_TARGET
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Binding security and native MCP integration
         shell: pwsh
         run: |
-          cargo +1.97.1 test --locked -p gil --test windows_bindings --target x86_64-pc-windows-msvc
+          cargo +1.97.1 test --locked -p gil --test windows_bindings --target $env:GIL_NATIVE_TARGET
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cargo +1.97.1 test --locked -p gil --test mcp --target x86_64-pc-windows-msvc
+          cargo +1.97.1 test --locked -p gil --test mcp --target $env:GIL_NATIVE_TARGET
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Native protocol and read-only Monitor
         shell: pwsh
         run: |
-          node distribution/windows/spike.mjs target/x86_64-pc-windows-msvc/debug/gil.exe
+          node distribution/windows/spike.mjs "target/$env:GIL_NATIVE_TARGET/debug/gil.exe"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Candidate packaging regression
+        if: matrix.arch == 'x64'
         shell: pwsh
         run: |
           node --test distribution/windows/candidate.test.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Prepare unsigned review candidate
-        if: github.event_name == 'workflow_dispatch' && inputs.prepare_candidate
+        if: matrix.arch == 'x64' && github.event_name == 'workflow_dispatch' && inputs.prepare_candidate
         shell: pwsh
         env:
           RUSTUP_TOOLCHAIN: 1.97.1
@@ -71,7 +90,7 @@ jobs:
           node distribution/windows/candidate.mjs target/windows-candidate
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Retain review artifact only
-        if: github.event_name == 'workflow_dispatch' && inputs.prepare_candidate
+        if: matrix.arch == 'x64' && github.event_name == 'workflow_dispatch' && inputs.prepare_candidate
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           archive: true
