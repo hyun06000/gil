@@ -1,8 +1,23 @@
-# Windows x64 tester channel — release gates
+# Windows tester channels — release gates
+
+## Current checkpoint — 2026-10-07
+
+The limited Windows unsigned tester release is now published at
+https://github.com/hyun06000/gil/releases/tag/windows-preview-f0ecfbd . Both public archive hashes
+and INSTALL.md were rechecked through anonymous HTTPS downloads. Use [INSTALL.md](INSTALL.md),
+not the older CI-only procedure. See [publication evidence](PUBLICATION-f0ecfbd.md).
+The historical pending notes below describe earlier candidates, not an instruction to wait for
+GitHub support. Ordinary-user Windows installation/fullscreen are still acceptance work.
 
 2026-09-30: maintainer approved a limited unsigned tester channel and publication after redistribution
 and installation-route checks. This is not stable support or successful ordinary-user acceptance.
 The existing Mac marketplace/default branch and installed plugin must remain unchanged.
+
+2026-10-07 update: the ARM64 VM is disk-space constrained; a Windows friend can perform ordinary-user
+acceptance. Detect the architecture automatically rather than requiring a hardware questionnaire.
+Both architectures retain the same functional/security gates; native CI is not GUI acceptance.
+The maintainer approved a proportionate unsigned open-source preview process: an individual
+GitHub/Microsoft support reply is not a required release permit. Applicable notices still matter.
 
 ## Runtime review
 
@@ -10,7 +25,7 @@ The previous candidate was built on GitHub's `windows-2025-vs2026` image,
 version `20260925.250.1` (run 36690752815). Its receipt did not identify the selected MSVC libraries.
 Do not infer the selected compiler from the image's inventory alone or apply VS 2022 terms by habit.
 
-`toolchain.ps1` now selects a complete non-prerelease MSVC installation, initializes its x64 build
+`toolchain.ps1` now selects a complete non-prerelease MSVC installation, initializes its native architecture build
 environment and explicitly passes that link.exe to Cargo. The receipt records VS/MSVC/SDK versions
 and SHA-256 for link.exe, libcmt.lib, libvcruntime.lib and libucrt.lib, without machine paths.
 This identifies selected inputs; hashes are not a redistribution license or a link map.
@@ -36,6 +51,20 @@ required recipient terms/notices and hosted build entitlement. Preserve Microsof
 label every byte of the linked executable MIT. Cargo notice coverage does not settle these items.
 This is engineering release review, not a legal certification.
 
+The specific unanswered hosted-build entitlement questions are now in
+[the support inquiry record](RUNTIME-INQUIRY-DRAFT.md). GitHub closed the submitted request on
+support-eligibility grounds without answering it. Do not infer a paid subscription requirement,
+permission or prohibition from that closure. Do not wait indefinitely for individual support approval.
+
+## Automatic installation preflight
+
+`install-target.psm1` detects native Windows CPU architecture from the read-only
+[Win32_Processor Architecture property](https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-processor):
+9 selects x64, 12 selects ARM64. It does not use the architecture of the PowerShell process.
+Missing, unsupported or inconsistent results stop without installing. It returns no user paths,
+serial numbers or CPU identifiers and performs no download, configuration write or install.
+This is the target-selection component, not a completed installer or release approval.
+
 ## Publication and acceptance
 
 - Keep the candidate receipt `publishable: false` until the preceding review is resolved and a
@@ -43,14 +72,17 @@ This is engineering release review, not a legal certification.
 - Use an isolated Windows catalog/ref, not the Mac default catalog. Verify anonymous HTTPS access
   and the official Codex installation route; CI's seven-day artifact is not the tester channel.
 - No Node, Cargo, administrator rights, Companion or security-policy changes for testers.
-- Verify x64 Intel/AMD first; ARM64/Snapdragon is not accepted. Use a new local fixed NTFS folder,
+- Verify actual Windows/Codex installation on the available tester machine and record its native architecture. Use a new local fixed NTFS folder,
   outside OneDrive/junction/network paths. Do not use valuable existing projects for first acceptance.
 - Tester checks: install, start + Monitor, fullscreen with chat, node details, live updates, restart,
   disable/re-enable and uninstall/reinstall preserving Project records. Separate each observation.
 - If OS/Host blocks installation, stop and record the message. Do not suggest Defender/SmartScreen
   exclusions or execution-policy changes. Do not claim success from tool responses alone.
 
-No tester-ready installation prompt is issued until the fixed public source and hash are verified.
+No external-tester installation prompt is issued until the fixed public source and hash are verified.
+The maintainer's own ARM64 VM can follow the separate pinned
+[internal acceptance procedure](MAINTAINER-VM-CHECK.md). It uses the existing CI artifact,
+does not publish or endorse redistribution, and leaves all external-release gates open.
 
 ## Provenance checkpoint
 

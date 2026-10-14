@@ -7,8 +7,14 @@ import {fileURLToPath} from 'node:url';
 import {collect, assertCoverage, loadBundle, sha256, regular} from '../compliance/notices.mjs';
 
 export const TARGET = 'x86_64-pc-windows-msvc';
+export function profileForArch(arch) {
+  assert.ok(['x64', 'arm64'].includes(arch), 'unsupported Windows architecture');
+  return {arch, target: arch === 'x64' ? TARGET : 'aarch64-pc-windows-msvc',
+    machine: arch === 'x64' ? 0x8664 : 0xaa64,
+    linkerKey: arch === 'x64' ? 'CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER' : 'CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER',
+    policyName: arch === 'x64' ? 'notice-policy.json' : 'notice-policy-arm64.json'};
+}
 const ROOT = resolve(import.meta.dirname, '../..');
-const PROFILE = {directory: 'distribution/windows/compliance', target: TARGET};
 const NAME = 'gil-companion-prototype';
 const PREFIX = `plugins/${NAME}`;
 export function packTar(run, tree) {
@@ -18,12 +24,13 @@ export function unpackTar(run, bytes, destination) {
   // CreateProcessW receives cwd intact; tar's narrow argv must not carry Unicode paths.
   run('tar.exe', ['-xzf', '-'], {cwd: destination, input: bytes});
 }
-export function inspectPE(bytes) {
+export function inspectPE(bytes, arch = 'x64') {
+  const profile = profileForArch(arch);
   assert.ok(bytes.length >= 256 && bytes.toString('ascii', 0, 2) === 'MZ', 'not a PE executable');
   const pe = bytes.readUInt32LE(0x3c);
   assert.ok(pe + 264 <= bytes.length, 'truncated PE');
   assert.equal(bytes.readUInt32LE(pe), 0x4550, 'bad PE signature');
-  assert.equal(bytes.readUInt16LE(pe + 4), 0x8664, 'not Windows x64');
+  assert.equal(bytes.readUInt16LE(pe + 4), profile.machine, `not Windows ${arch}`);
   assert.equal(bytes.readUInt16LE(pe + 24), 0x20b, 'not PE32+');
   const count = bytes.readUInt16LE(pe + 6), optional = bytes.readUInt16LE(pe + 20);
   const sections = pe + 24 + optional;
@@ -85,10 +92,12 @@ export async function inventory(root, prefix = '') {
 }
 export async function prepare(output) {
   assert.equal(process.platform, 'win32', 'native Windows execution required');
-  assert.equal(process.arch, 'x64');
-  const policy = JSON.parse(await regular(join(ROOT, PROFILE.directory, 'notice-policy.json')));
-  assertCoverage(policy, await collect(ROOT, {target: TARGET}), TARGET);
-  const notices = await loadBundle(ROOT, PROFILE);
+  const profile = profileForArch(process.arch);
+  const {arch, target, policyName} = profile;
+  const noticeProfile = {directory: 'distribution/windows/compliance', target, policyName};
+  const policy = JSON.parse(await regular(join(ROOT, noticeProfile.directory, policyName)));
+  assertCoverage(policy, await collect(ROOT, {target}), target);
+  const notices = await loadBundle(ROOT, noticeProfile);
   const run = (command, args, options = {}) => execFileSync(command, args,
     {cwd: ROOT, encoding: 'utf8', timeout: 900000, maxBuffer: 32e6, ...options});
   const head = run('git', ['rev-parse', 'HEAD']).trim();
@@ -96,29 +105,30 @@ export async function prepare(output) {
   assert.equal(run('git', ['status', '--porcelain', '--untracked-files=no']).trim(), '', 'dirty source refused');
   const out = resolve(output);
   await mkdir(out); // Refuse overwriting an old candidate.
-  const selected = JSON.parse(run('pwsh', ['-NoProfile', '-File', join(ROOT, 'distribution/windows/toolchain.ps1')]));
+  const selected = JSON.parse(run('pwsh', ['-NoProfile', '-File', join(ROOT, 'distribution/windows/toolchain.ps1'), '-Architecture', arch]));
   assert.equal(selected.receipt.prerelease, false);
-  assert.ok(selected.environment.CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER);
+  assert.equal(selected.receipt.architecture, arch);
+  assert.ok(selected.environment[profile.linkerKey]);
   const env = {...process.env, ...selected.environment, CARGO_ENCODED_RUSTFLAGS: [
     '-Ctarget-feature=+crt-static', `--remap-path-prefix=${ROOT}=/gil`,
     `--remap-path-prefix=${process.env.USERPROFILE}=/builder`,
     ...(process.env.CARGO_HOME ? [`--remap-path-prefix=${process.env.CARGO_HOME}=/cargo`] : [])
   ].join('\x1f')};
-  run('cargo', ['build', '--locked', '--release', '-p', 'gil', '--bin', 'gil', '--target', TARGET], {env, stdio: 'inherit'});
-  const binary = await regular(join(ROOT, 'target', TARGET, 'release', 'gil.exe'));
-  const imports = inspectPE(binary); noBuildPaths(binary);
+  run('cargo', ['build', '--locked', '--release', '-p', 'gil', '--bin', 'gil', '--target', target], {env, stdio: 'inherit'});
+  const binary = await regular(join(ROOT, 'target', target, 'release', 'gil.exe'));
+  const imports = inspectPE(binary, arch); noBuildPaths(binary);
   const manifest = JSON.parse(await regular(join(ROOT, PREFIX, '.codex-plugin/plugin.json')));
   assert.equal(manifest.name, NAME);
-  manifest.version = `0.2.1-preview.3+windows.${head.slice(0, 12)}`;
-  manifest.mcpServers = {'gil-companion': {command: './core/windows-x64/gil.exe', args: ['mcp', '--serve'], cwd: '.'}};
+  manifest.version = `0.2.1-preview.3+windows.${arch}.${head.slice(0, 12)}`;
+  manifest.mcpServers = {'gil-companion': {command: `./core/windows-${arch}/gil.exe`, args: ['mcp', '--serve'], cwd: '.'}};
   const catalog = JSON.parse(await regular(join(ROOT, 'distribution/codex/catalog.json')));
-  catalog.name = 'gil-preview-windows-x64';
-  catalog.interface.displayName = 'GIL Windows x64 — review candidate';
+  catalog.name = `gil-preview-windows-${arch}`;
+  catalog.interface.displayName = `GIL Windows ${arch} — review candidate`;
   const json = value => Buffer.from(JSON.stringify(value, null, 2) + '\n');
   const files = new Map([
     ['.agents/plugins/marketplace.json', json(catalog)],
     [`${PREFIX}/.codex-plugin/plugin.json`, json(manifest)],
-    [`${PREFIX}/core/windows-x64/gil.exe`, binary],
+    [`${PREFIX}/core/windows-${arch}/gil.exe`, binary],
     [`${PREFIX}/skills/gil-companion/SKILL.md`, await regular(join(ROOT, PREFIX, 'skills/gil-companion/SKILL.md'))],
     [`${PREFIX}/LICENSE`, await regular(join(ROOT, 'LICENSE'))],
     ...[...notices].map(([name, bytes]) => [`${PREFIX}/${name}`, bytes])
@@ -132,7 +142,8 @@ export async function prepare(output) {
   }
   const before = await inventory(tree);
   assert.deepEqual(before.map(x => x.path).sort(), [...files.keys()].sort());
-  const archive = join(out, 'gil-windows-x64-candidate.tar.gz');
+  const archiveName = `gil-windows-${arch}-candidate.tar.gz`;
+  const archive = join(out, archiveName);
   const archiveBytes = packTar(run, tree);
   await writeFile(archive, archiveBytes, {flag: 'wx'});
   const extracted = join(out, '한글 roundtrip'); await mkdir(extracted);
@@ -140,10 +151,10 @@ export async function prepare(output) {
   assert.deepEqual(await inventory(extracted), before, 'archive bytes changed');
   // The driver launches only the extracted executable, with a system-only child PATH.
   const smoke = JSON.parse(run(process.execPath, [join(ROOT, 'distribution/windows/spike.mjs'),
-    join(extracted, PREFIX, 'core/windows-x64/gil.exe')]));
+    join(extracted, PREFIX, `core/windows-${arch}/gil.exe`)]));
   const digest = sha256(await readFile(archive));
-  await writeFile(join(out, 'SHA256SUMS'), `${digest}  gil-windows-x64-candidate.tar.gz\n`, {flag: 'wx'});
-  const checks = {schema: 1, source: head, target: TARGET, version: manifest.version,
+  await writeFile(join(out, 'SHA256SUMS'), `${digest}  ${archiveName}\n`, {flag: 'wx'});
+  const checks = {schema: 1, source: head, target, architecture: arch, version: manifest.version,
     publishable: false, channel: 'windows_unsigned_review_candidate', archive_sha256: digest,
     imports, toolchain: selected.receipt, notice_packages: policy.packages.length, files: before, smoke,
     gates: {archive_roundtrip: 'passed', native_relocated_execution: 'passed',

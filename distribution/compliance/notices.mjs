@@ -67,7 +67,7 @@ export async function legalFiles(root) {
 }
 
 export async function collect(root = repository, {cargo = 'cargo', rustc = 'rustc', target = TARGET} = {}) {
-  assert.ok([TARGET, 'x86_64-pc-windows-msvc'].includes(target), 'unreviewed target');
+  assert.ok([TARGET, 'x86_64-pc-windows-msvc', 'aarch64-pc-windows-msvc'].includes(target), 'unreviewed target');
   const run = (cmd, args) => execFileSync(cmd, args, {cwd: root, encoding: 'utf8', maxBuffer: 64e6, timeout: 120000});
   const metadata = JSON.parse(run(cargo, ['metadata', '--locked', '--offline', '--format-version', '1', '--filter-platform', target]));
   const tree = edges => new Set(run(cargo, ['tree', '--locked', '--offline', '--target', target,
@@ -135,7 +135,7 @@ export async function collect(root = repository, {cargo = 'cargo', rustc = 'rust
 }
 
 export function validatePolicy(policy, target = TARGET) {
-  assert.ok([TARGET, 'x86_64-pc-windows-msvc'].includes(target));
+  assert.ok([TARGET, 'x86_64-pc-windows-msvc', 'aarch64-pc-windows-msvc'].includes(target));
   assert.equal(policy.schema, 1); assert.equal(policy.target, target);
   assert.deepEqual(Object.keys(policy.inputs).sort(), [...INPUTS].sort());
   for (const hash of Object.values(policy.inputs)) assert.match(hash, /^[a-f0-9]{64}$/);
@@ -160,8 +160,9 @@ export function assertCoverage(policy, observed, target = TARGET) {
   const {stdlib, ...expected} = policy;
   assert.deepEqual(observed, expected, 'notice coverage changed; review dependencies/legal texts then update policy explicitly');
 }
-export async function loadBundle(root = repository, {directory = DIRECTORY, target = TARGET} = {}) {
-  const base = join(root, directory), policy = JSON.parse(await regular(join(base, 'notice-policy.json')));
+export async function loadBundle(root = repository, {directory = DIRECTORY, target = TARGET, policyName = 'notice-policy.json'} = {}) {
+  assert.ok(['notice-policy.json', 'notice-policy-arm64.json'].includes(policyName));
+  const base = join(root, directory), policy = JSON.parse(await regular(join(base, policyName)));
   validatePolicy(policy, target);
   for (const [path, expected] of Object.entries(policy.inputs)) {
     assert.equal(sha256(await regular(join(root, path))), expected, `notice policy stale: ${path}`);
