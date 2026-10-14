@@ -3,8 +3,10 @@
 이 디렉터리는 **제작자용 배포 도구**다. 받는 사람에게 Node·Cargo·clone·tar 명령을 요구하는
 설치 설명서가 아니다. 최종 UX는 Host의 Plugin 설치 한 번이다.
 
-2026-09-30: 공개 HTTPS 설치·preview.2↔preview.1 rollback·Project 보존과 main 보호/PVR를 확인했다.
-사용자는 [설치 안내](INSTALL.md), 제작자는 [현재 배포 장부](PREVIEW-2-PUBLICATION-20260930.md)를 따른다.
+2026-10-14: `0.2.1-preview.4`(visual-authoring, 이미지 보고서)를 unsigned prerelease로 게시했다.
+사용자는 [설치 안내](INSTALL.md), 제작자는 [현재 배포 장부](PREVIEW-4-PUBLICATION-20261014.md)를 따른다.
+2026-09-30: 공개 HTTPS 설치·preview.2↔preview.1 rollback·Project 보존과 main 보호/PVR를 확인했다
+([당시 장부](PREVIEW-2-PUBLICATION-20260930.md)).
 새 Mac·Apple 서명·공증은 미검수/미제공이다. 다음 9/29 절은 당시 준비 기록이다.
 
 2026-09-29 기록: 기존 Mac의 공식 원격 설치·제거/재설치에 이어, 독립 이력의 비공개
