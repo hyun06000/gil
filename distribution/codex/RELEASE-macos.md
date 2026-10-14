@@ -64,6 +64,14 @@ node distribution/codex/unsigned-preview.mjs verify target/codex-unsigned-candid
 
 ### 1.2 사용자 설치와 복구 안내
 
+2026-10-14 이미지 작성 후보는 clean source에서 `prepare` 끝에 `--visual-authoring`을
+명시한다. CI도 `runtime_profile: visual-authoring`을 별도로 선택한다. 새 receipt schema 3은
+surface 2/format 4..5/requires_review를 담고 실제 24개 도구와 대조한다. 기본 후보 schema 2와
+기본 빌드는 유지한다. dirty source 차단·미서명 고지·게시 별도 승인도 유지한다.
+기존 Project는 설치만으로 이관되지 않는다. 백업·복구 확인 승인과 계획 적용 승인을 따로
+받는다. Plugin을 구형으로 되돌려도 format 5 기록이 format 4로 바뀌지는 않는다.
+이 계약은 preview 후보 제작이며 stable 공개 버전/지원 범위·정확한 CI bytes 게시 승인은 별개다.
+
 최종 기본 UX는 **검증된 marketplace의 GIL Plugin 설치 → 작업 폴더 선택 → 자연어 요청**이다.
 공개 고정 ref와 공식 명령은 [INSTALL.md](INSTALL.md)에 있다. 셸 설치를 도와야
 한다면 Agent가 제품·출처·고정 version/hash·미공증 사실·로컬 접근 범위를 설명하고 승인을 받는다.

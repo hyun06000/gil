@@ -91,5 +91,5 @@ test('CLI refuses malformed or missing inputs without printing their paths', () 
   }
 });
 test('read-only preview CI includes the policy regression', async () => {
-  assert.match(await readFile(join(repository,'.github/workflows/codex-preview.yml'),'utf8'), /distribution\/codex\/update-policy\.test\.mjs/);
+  assert.match(await readFile(join(repository,'.github/workflows/codex-preview.yml'),'utf8'), /distribution\/codex\/\*\.test\.mjs/);
 });

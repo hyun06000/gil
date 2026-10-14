@@ -6,11 +6,377 @@
 //! 1. **같은 글자** — 같은 Project 에서 CLI 와 MCP 의 `said` 가 byte 로 같다
 //! 2. **정확 경로** — 자식 자리를 받고 부모 Project 로 물러서지 않는다
 //! 3. **깨끗한 stdout** — JSON-RPC frame 말고는 한 글자도 없다
-//! 4. **명시적 tool 표** — 기존 12개 + 읽기 전용 MCP App 5개, UI 쓰기 문은 없다
+//! 4. **명시적 tool 표** — 기존 12개 + 읽기 전용 MCP App 7개, UI 쓰기 문은 없다
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+mod common;
+
+#[cfg(all(target_os="macos",target_arch="aarch64",feature="visual-authoring"))]
+#[test]
+fn migration_stdio_two_approvals_backup_apply_restart_and_preservation() {
+    use serde_json::{Value,json};
+    use std::{collections::BTreeMap,fs,os::unix::fs::{MetadataExt,PermissionsExt}};
+    fn tree(root:&Path)->BTreeMap<PathBuf,(u32,Vec<u8>)> {
+        fn walk(root:&Path,dir:&Path,out:&mut BTreeMap<PathBuf,(u32,Vec<u8>)>) {
+            for e in fs::read_dir(dir).unwrap() {
+                let p=e.unwrap().path();let m=fs::symlink_metadata(&p).unwrap();
+                assert!(!m.file_type().is_symlink());
+                out.insert(p.strip_prefix(root).unwrap().into(),(m.mode()&0o7777,if m.is_file(){fs::read(&p).unwrap()}else{Vec::new()}));
+                if m.is_dir(){walk(root,&p,out)}
+            }
+        }
+        let mut out=BTreeMap::new();walk(root,root,&mut out);out
+    }
+    fn logical(bytes:&[u8])->serde_norway::Value {
+        let mut v:serde_norway::Value=serde_norway::from_slice(bytes).unwrap();
+        for k in ["format","visuals"] {v.as_mapping_mut().unwrap().remove(serde_norway::Value::from(k));}v
+    }
+    for closed in [false,true] {
+        let base=scratch(if closed{"migration-closed"}else{"migration-open"}).canonicalize().unwrap();
+        let root=base.join("프로젝트 🧭");fs::create_dir(&root).unwrap();
+        common::sow_world(&root);
+        let mut s=gil::ProjectSession::start(common::spec(),root.join(gil::STATE_PATH)).unwrap();
+        let p=if closed {common::graph_with_one_closed_cycle("success")}else{
+            let mut p=common::bootstrap_from(s.project().clone());common::up_to_verify(&mut p);p
+        };
+        *s.project_mut()=p;s.commit().unwrap();drop(s);
+        fs::write(root.join("미확정 변경.txt"),"공백과 한글\n다음 줄\n").unwrap();
+        fs::write(root.join(".gil/unreferenced"),b"retain even unreferenced").unwrap();
+        fs::create_dir(root.join(".git")).unwrap();
+        fs::write(root.join(".git/local-note"),b"git is not skipped").unwrap();
+        fs::write(root.join("run.sh"),b"synthetic executable").unwrap();
+        fs::set_permissions(root.join("run.sh"),fs::Permissions::from_mode(0o755)).unwrap();
+        let before=tree(&root);let backup=base.join("private-backup");
+        let mut mcp=Client::serve_with(&base.join("settings"));mcp.initialize();
+        let check=monitor_call(&mut mcp,"gil_migration_check",json!({"project_root":root}));
+        assert_eq!(check["structuredContent"]["storage_format"],4,"{check}");
+        assert_eq!(check["structuredContent"]["cycle_open"],!closed);
+        assert_eq!(tree(&root),before);
+        let denied=json!({"project_root":root,"backup_root":backup,"backup_approved":false});
+        assert_eq!(monitor_call(&mut mcp,"gil_migration_prepare",denied)["structuredContent"]["code"],"approval_required");
+        assert!(!backup.exists());assert_eq!(tree(&root),before);
+        let missing=mcp.request("tools/call",json!({"name":"gil_migration_prepare","arguments":{"project_root":root,"backup_root":backup}}));
+        assert!(missing["error"].is_object());assert!(!backup.exists());
+        let prepared=monitor_call(&mut mcp,"gil_migration_prepare",json!({"project_root":root,"backup_root":backup,"backup_approved":true}));
+        assert_ne!(prepared["isError"],true,"{prepared}");
+        let plan=prepared["structuredContent"]["plan_sha256"].clone();assert!(plan.is_string());
+        assert_eq!(tree(&root),before);assert_eq!(tree(&backup.join("restored")),before);
+        let original=tree(&backup.join("original"));
+        for (rel,(_,bytes)) in &before {assert_eq!(&original[rel].1,bytes);}
+        let mut apply=json!({"project_root":root,"backup_root":backup,"plan_sha256":plan,"apply_approved":false});
+        assert_eq!(monitor_call(&mut mcp,"gil_migration_apply",apply.clone())["structuredContent"]["code"],"approval_required");
+        assert_eq!(tree(&root),before);
+        apply["apply_approved"]=json!(true);
+        let mut bad=apply.clone();bad["plan_sha256"]=json!("0".repeat(64));
+        assert_eq!(monitor_call(&mut mcp,"gil_migration_apply",bad)["isError"],true);
+        // Another valid project cannot borrow this approval/plan.
+        let other=base.join("other");fs::create_dir(&other).unwrap();started(&other);
+        let other_before=tree(&other);let mut wrong=apply.clone();wrong["project_root"]=json!(other);
+        assert_eq!(monitor_call(&mut mcp,"gil_migration_apply",wrong)["isError"],true);assert_eq!(tree(&other),other_before);
+        // Drift invalidates the old preparation, not a reason to erase new files.
+        fs::write(root.join("new-evidence"),b"new work").unwrap();
+        assert_eq!(monitor_call(&mut mcp,"gil_migration_apply",apply.clone())["isError"],true);
+        assert_eq!(fs::read(root.join("new-evidence")).unwrap(),b"new work");
+        let backup2=base.join("fresh-private-backup");
+        let prepared=monitor_call(&mut mcp,"gil_migration_prepare",json!({"project_root":root,"backup_root":backup2,"backup_approved":true}));
+        assert_ne!(prepared["isError"],true,"{prepared}");
+        // Simulated fresh human consent after inspecting the new result.
+        apply["backup_root"]=json!(backup2);apply["plan_sha256"]=prepared["structuredContent"]["plan_sha256"].clone();
+        let current=tree(&root);
+        let got=monitor_call(&mut mcp,"gil_migration_apply",apply.clone());
+        assert_eq!(got["structuredContent"]["preserved"],true,"{got}");
+        let after=tree(&root);
+        assert_eq!(logical(&current[Path::new(gil::STATE_PATH)].1),logical(&after[Path::new(gil::STATE_PATH)].1));
+        for (rel,value) in &current {if rel!=Path::new(gil::STATE_PATH){assert_eq!(&after[rel],value);}}
+        assert_eq!(tree(&backup.join("original")),original);
+        assert_eq!(tree(&backup2.join("restored")),current);
+        // Simulated lost apply receipt: fresh server only reads the durable result.
+        mcp.eof();let mut mcp=Client::serve_with(&base.join("restart-settings"));mcp.initialize();
+        let mut status=apply.clone();status.as_object_mut().unwrap().remove("apply_approved");
+        let got=monitor_call(&mut mcp,"gil_migration_status",status);
+        assert_eq!(got["structuredContent"]["state"],"applied_state_present");
+        assert_eq!(got["structuredContent"]["preserved"],true);
+        assert_eq!(tree(&root),after);
+        assert_eq!(monitor_call(&mut mcp,"gil_migration_apply",apply)["isError"],true);
+        assert_eq!(tree(&root),after);mcp.eof();
+        let _:Value=check;
+        // Retain synthetic originals and backups as evidence; no destructive cleanup.
+    }
+}
+
+#[cfg(all(unix, feature = "visual-authoring"))]
+#[test]
+fn authoring_stdio_close_reuse_confirmation_and_rejections() {
+    use serde_json::{Value, json};
+    use gil::{CycleKind, NodeKind};
+    fn report(kind: NodeKind) -> String {
+        let r=common::full_report(&common::spec(),CycleKind::Experiment,kind);
+        r.field_names().map(|k| format!("{k}: {}\n",r.get(k).unwrap())).collect()
+    }
+    let root=scratch("authoring-new-wire");
+    let mut mcp=Client::serve_with(&scratch("authoring-settings")); mcp.initialize();
+    assert_eq!(monitor_call(&mut mcp,"gil_start",json!({"project_root":root}))["structuredContent"]["storage_format"],5);
+    let mut p=common::bootstrap_from(gil::load(common::spec(),root.join(gil::STATE_PATH)).unwrap());
+    common::up_to_verify(&mut p);
+    gil::save(&p,root.join(gil::STATE_PATH)).unwrap();
+    let mut png=Vec::new();
+    png::Encoder::new(&mut png,1,1).write_header().unwrap().write_image_data(&[91]).unwrap();
+    std::fs::write(root.join("합성.png"),&png).unwrap();
+    let owner=json!({"kind":"step","ref":"step:C2/S3"});
+    let read_args=json!({"project_root":root,"owner":owner});
+    let initial=monitor_call(&mut mcp,"gil_report_visuals",read_args.clone());
+    assert_eq!(initial["structuredContent"]["confirmed"],false);
+    let args=json!({"project_root":root,"report":report(NodeKind::Verify),"expected_owner":owner,
+        "visuals":{"attachments":[{"key":"screen","path":"합성.png","source_kind":"generated","source_description":"synthetic only"}],
+        "uses":[{"source":{"kind":"new","key":"screen"},"caption":"<script>not executable</script>","alt":"gray pixel","purpose":"wire check"}],"declaration":{"state":"attached"}}});
+    let before=std::fs::read(root.join(gil::STATE_PATH)).unwrap();
+    for (path,value) in [
+        ("/expected_owner/ref",json!("step:C2/S2")),
+        ("/visuals/attachments/0/path",json!("../outside.png")),
+        ("/report",json!("bad: report")),
+    ] {
+        let mut bad=args.clone(); *bad.pointer_mut(path).unwrap()=value;
+        let got=monitor_call(&mut mcp,"gil_close",bad);
+        assert_eq!(got["isError"],true,"{got}");
+        assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),before);
+    }
+    let mut malformed=args.clone(); malformed["visuals"]["surprise"]=json!(true);
+    assert!(mcp.request("tools/call",json!({"name":"gil_close","arguments":malformed}))["error"].is_object());
+    let mut orphan=args.clone(); orphan["visuals"]["uses"]=json!([]);
+    assert!(mcp.request("tools/call",json!({"name":"gil_close","arguments":orphan}))["error"].is_object());
+    std::fs::write(root.join("broken.png"),b"not png").unwrap();
+    let mut broken=args.clone(); broken["visuals"]["attachments"][0]["path"]=json!("broken.png");
+    assert_eq!(monitor_call(&mut mcp,"gil_close",broken)["isError"],true);
+    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),before);
+    std::fs::remove_file(root.join("broken.png")).unwrap();
+    let receipt=monitor_call(&mut mcp,"gil_close",args.clone());
+    assert_ne!(receipt["isError"],true,"{receipt}");
+    let committed=receipt["structuredContent"].clone();
+    assert_eq!(committed["confirmed"],true);
+    assert_eq!(committed["display_confirmed"],false);
+    assert_eq!(committed["visuals"]["state"],"attached");
+    let after=std::fs::read(root.join(gil::STATE_PATH)).unwrap();
+    assert_eq!(monitor_call(&mut mcp,"gil_close",args)["structuredContent"]["code"],"owner_mismatch");
+    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),after);
+    // Treat the receipt as lost: new process reads the durable result, never repeats close.
+    mcp.eof(); let mut mcp=Client::serve_with(&scratch("authoring-restart")); mcp.initialize();
+    assert_eq!(monitor_call(&mut mcp,"gil_report_visuals",read_args.clone())["structuredContent"],committed);
+    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),after);
+    let stored=&committed["visuals"]["uses"][0];
+    let mut use_args=json!({"project_root":root,"report":report(NodeKind::Analysis),"expected_owner":{"kind":"step","ref":"step:C2/S4"},
+        "visuals":{"attachments":[],"uses":[{"source":{"kind":"stored","owner":owner,"asset_id":stored["asset_id"],"sha256":stored["sha256"]},"caption":"Analysis-specific caption","alt":"same pixel","purpose":"reuse"}]}});
+    {
+        let mut s=gil::ProjectSession::open(common::spec(),root.join(gil::STATE_PATH)).unwrap();
+        s.open_action_step(NodeKind::Analysis,common::plan(NodeKind::Analysis)).unwrap(); s.commit().unwrap();
+    }
+    let open=std::fs::read(root.join(gil::STATE_PATH)).unwrap();
+    let mut wrong=use_args.clone(); wrong["visuals"]["uses"][0]["source"]["sha256"]=json!("0".repeat(64));
+    assert_eq!(monitor_call(&mut mcp,"gil_close",wrong)["structuredContent"]["code"],"visual_unavailable");
+    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),open);
+    // Non-Verify still obeys the world dirty gate.
+    std::fs::write(root.join("dirty.txt"),b"dirty").unwrap();
+    assert_eq!(monitor_call(&mut mcp,"gil_close",use_args.clone())["isError"],true);
+    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),open);
+    std::fs::remove_file(root.join("dirty.txt")).unwrap();
+    std::fs::create_dir(root.join(".gil/state.yaml.writing")).unwrap();
+    assert_eq!(monitor_call(&mut mcp,"gil_close",use_args.clone())["isError"],true);
+    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),open);
+    let confirmation=monitor_call(&mut mcp,"gil_report_visuals",json!({"project_root":root,"owner":use_args["expected_owner"]}));
+    assert_eq!(confirmation["structuredContent"]["confirmed"],false);
+    std::fs::remove_dir(root.join(".gil/state.yaml.writing")).unwrap();
+    let reused=monitor_call(&mut mcp,"gil_close",use_args.clone());
+    assert_ne!(reused["isError"],true,"{reused}");
+    assert_eq!(reused["structuredContent"]["visuals"]["uses"][0]["caption"],"Analysis-specific caption");
+    assert_eq!(reused["structuredContent"]["visuals"]["uses"][0]["origin_step_ref"],"step:C2/S3");
+    // Reuse through Outcome, Cycle close, then the next Cycle's Define via the same wire.
+    let outcome_ref;
+    {
+        let mut s=gil::ProjectSession::open(common::spec(),root.join(gil::STATE_PATH)).unwrap();
+        outcome_ref=s.open_action_step(NodeKind::Outcome,common::plan(NodeKind::Outcome)).unwrap().step; s.commit().unwrap();
+    }
+    let outcome=common::full_report(&common::spec(),CycleKind::Experiment,NodeKind::Outcome).with("verdict","success");
+    use_args["report"]=json!(outcome.field_names().map(|k|format!("{k}: {}\n",outcome.get(k).unwrap())).collect::<String>());
+    use_args["expected_owner"]=json!({"kind":"step","ref":outcome_ref.to_string()});
+    assert_ne!(monitor_call(&mut mcp,"gil_close",use_args.clone())["isError"],true);
+    let cycle_body={
+        let s=gil::ProjectSession::open_read_only(common::spec(),root.join(gil::STATE_PATH)).unwrap();
+        let r=common::cycle_report(s.project().current_cycle(),"success",common::step_id(s.project(),outcome_ref));
+        r.field_names().map(|k|format!("{k}: {}\n",r.get(k).unwrap())).collect::<String>()
+    };
+    use_args["report"]=json!(cycle_body);
+    use_args["expected_owner"]=json!({"kind":"cycle","ref":"cycle:C2"});
+    let cycle=monitor_call(&mut mcp,"gil_close",use_args.clone());
+    assert_ne!(cycle["isError"],true,"{cycle}");
+    assert_eq!(cycle["structuredContent"]["visuals"]["uses"][0]["sha256"],stored["sha256"]);
+    {
+        let mut s=gil::ProjectSession::open(common::spec(),root.join(gil::STATE_PATH)).unwrap();
+        s.open_child_cycle(CycleKind::Experiment).unwrap();
+        s.open_action_step(NodeKind::Define,common::plan(NodeKind::Define)).unwrap(); s.commit().unwrap();
+    }
+    use_args["expected_owner"]=json!({"kind":"step","ref":"step:C3/S1"});
+    use_args["report"]=json!(report(NodeKind::Define));
+    let next=monitor_call(&mut mcp,"gil_close",use_args.clone());
+    assert_ne!(next["isError"],true,"{next}");
+    assert_eq!(next["structuredContent"]["visuals"]["uses"][0]["origin_step_ref"],"step:C2/S3");
+    // Source deletion cannot change the persisted report image (read-only operation).
+    std::fs::remove_file(root.join("합성.png")).unwrap();
+    let prepared=monitor_call(&mut mcp,"gil_monitor_prepare",json!({"project_root":root}));
+    let bytes=monitor_call(&mut mcp,"gil_monitor_report_image",json!({"scope_id":prepared["structuredContent"]["scope_id"],"owner":owner,"asset_id":stored["asset_id"],"offset":0}));
+    assert_eq!(bytes["structuredContent"]["sha256"],stored["sha256"]);
+    let legacy=common::scratch("authoring-legacy"); let mut p=common::bootstrap(); common::up_to_verify(&mut p);
+    gil::save(&p,legacy.join(gil::STATE_PATH)).unwrap();
+    let legacy_before=std::fs::read(legacy.join(gil::STATE_PATH)).unwrap();
+    use_args["project_root"]=json!(legacy);
+    assert_eq!(monitor_call(&mut mcp,"gil_close",use_args)["structuredContent"]["code"],"visual_upgrade_required");
+    assert_eq!(std::fs::read(legacy.join(gil::STATE_PATH)).unwrap(),legacy_before);
+    let _: Value=monitor_call(&mut mcp,"gil_report_visuals",read_args);
+    mcp.eof();
+}
+
+#[cfg(all(unix, feature = "visual-authoring"))]
+#[test]
+fn authoring_declarations_and_failed_commit_keep_reports_open() {
+    use serde_json::json;
+    let mut mcp=Client::serve_with(&scratch("authoring-declarations")); mcp.initialize();
+    for state in ["not_needed","missing","attached"] {
+        let root=scratch(&format!("authoring-new-{state}"));
+        let started=monitor_call(&mut mcp,"gil_start",json!({"project_root":root}));
+        assert_eq!(started["structuredContent"]["storage_format"],5,"{started}");
+        let p=gil::load(common::spec(),root.join(gil::STATE_PATH)).unwrap();
+        let mut p=common::bootstrap_from(p); common::up_to_verify(&mut p);
+        gil::save(&p,root.join(gil::STATE_PATH)).unwrap();
+        let mut png=Vec::new(); png::Encoder::new(&mut png,1,1).write_header().unwrap().write_image_data(&[2]).unwrap();
+        std::fs::write(root.join("a.png"),png).unwrap();
+        let report=common::full_report(&common::spec(),gil::CycleKind::Experiment,gil::NodeKind::Verify);
+        let body=report.field_names().map(|k|format!("{k}: {}\n",report.get(k).unwrap())).collect::<String>();
+        let owner=json!({"kind":"step","ref":"step:C2/S3"});
+        let mut args=json!({"project_root":root,"report":body,"expected_owner":owner,
+            "visuals":{"attachments":[],"uses":[],"declaration":{"state":state}}});
+        if state=="not_needed" { args["visuals"]["declaration"]["reason"]=json!("numeric assertion only"); }
+        else {
+            args["visuals"]["attachments"]=json!([{"key":"a","path":"a.png","source_kind":"generated","source_description":"synthetic"}]);
+            args["visuals"]["uses"]=json!([{"source":{"kind":"new","key":"a"},"caption":"one","alt":"pixel","purpose":"test"}]);
+            if state=="missing" {
+                args["visuals"]["declaration"]["reason"]=json!("second capture unavailable");
+                args["visuals"]["declaration"]["follow_up"]=json!("next Cycle after normal close");
+            }
+        }
+        let before=std::fs::read(root.join(gil::STATE_PATH)).unwrap();
+        // Default text path also cannot bypass the mandatory format-5 declaration.
+        assert_eq!(monitor_call(&mut mcp,"gil_close",json!({"project_root":root,"report":body}))["isError"],true);
+        assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),before);
+        std::fs::create_dir(root.join(".gil/state.yaml.writing")).unwrap();
+        assert_eq!(monitor_call(&mut mcp,"gil_close",args.clone())["isError"],true);
+        assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),before);
+        let read=monitor_call(&mut mcp,"gil_report_visuals",json!({"project_root":root,"owner":owner}));
+        assert_eq!(read["structuredContent"]["confirmed"],false,"{read}");
+        std::fs::remove_dir(root.join(".gil/state.yaml.writing")).unwrap();
+        let result=monitor_call(&mut mcp,"gil_close",args);
+        assert_eq!(result["structuredContent"]["confirmed"],true,"{result}");
+        assert_eq!(result["structuredContent"]["visuals"]["state"],state);
+        assert_eq!(result["structuredContent"]["visuals"]["uses"].as_array().unwrap().len(),if state=="not_needed" {0} else {1});
+    }
+    mcp.eof();
+}
+
+#[cfg(all(unix, feature = "visual-authoring"))]
+#[test]
+fn authoring_competing_closes_publish_only_one_report() {
+    use serde_json::json;
+    let root=common::scratch("authoring-race");
+    let mut p=common::bootstrap(); common::up_to_verify(&mut p);
+    gil::save(&p.prepare_visual_upgrade().unwrap(),root.join(gil::STATE_PATH)).unwrap();
+    let report=common::full_report(&common::spec(),gil::CycleKind::Experiment,gil::NodeKind::Verify);
+    let body=report.field_names().map(|k|format!("{k}: {}\n",report.get(k).unwrap())).collect::<String>();
+    let args=json!({"project_root":root,"report":body,"expected_owner":{"kind":"step","ref":"step:C2/S3"},
+        "visuals":{"attachments":[],"uses":[],"declaration":{"state":"not_needed","reason":"synthetic race"}}});
+    let barrier=std::sync::Arc::new(std::sync::Barrier::new(2));
+    let handles:Vec<_>=(0..2).map(|i| {
+        let args=args.clone(); let barrier=barrier.clone();
+        std::thread::spawn(move || {
+            let mut mcp=Client::serve_with(&scratch(&format!("authoring-race-{i}"))); mcp.initialize();
+            barrier.wait();
+            let got=monitor_call(&mut mcp,"gil_close",args); mcp.eof(); got
+        })
+    }).collect();
+    let results:Vec<_>=handles.into_iter().map(|h|h.join().unwrap()).collect();
+    assert_eq!(results.iter().filter(|r|r["structuredContent"]["confirmed"]==true).count(),1,"{results:?}");
+    assert_eq!(results.iter().filter(|r|r["isError"]==true).count(),1,"{results:?}");
+    let session=gil::ProjectSession::open_read_only(common::spec(),root.join(gil::STATE_PATH)).unwrap();
+    assert!(session.project().current_cycle().step_now_open().is_none());
+}
+
+#[test]
+#[cfg(unix)]
+fn visual_report_tools_read_exact_bytes_and_refuse_unlinked_assets_over_stdio() {
+    use gil::visual_report::{VisualDeclaration, VisualUse, image::VisualAttachment, registry::SourceKind};
+    use base64::Engine;
+    let root = common::scratch("visual-wire");
+    let mut p = common::bootstrap();
+    common::up_to_verify(&mut p);
+    gil::save(&p.prepare_visual_upgrade().unwrap(), root.join(gil::STATE_PATH)).unwrap();
+    let mut bytes = Vec::new();
+    // Incompressible deterministic pixels force several wire chunks.
+    let mut seed = 17u32;
+    let pixels: Vec<u8> = (0..1024*1024).map(|_| { seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5; seed as u8 }).collect();
+    png::Encoder::new(&mut bytes, 1024, 1024).write_header().unwrap().write_image_data(&pixels).unwrap();
+    assert!(bytes.len() > 262144);
+    std::fs::write(root.join("image.png"), &bytes).unwrap();
+    let mut session = gil::ProjectSession::open(common::spec(), root.join(gil::STATE_PATH)).unwrap();
+    let report = common::full_report(session.project().current_cycle().rules(), gil::CycleKind::Experiment, gil::NodeKind::Verify);
+    session.close_verify_with_images_and_commit(report, vec![VisualAttachment {path:"image.png".into(),source_kind:SourceKind::Generated,source_description:"synthetic".into()}], |ids| VisualDeclaration::Attached { uses:vec![VisualUse {asset:ids[0],caption:"wire test".into(),alt:"noise".into(),purpose:"transport".into()}] }).unwrap();
+    drop(session);
+    std::fs::remove_file(root.join("image.png")).unwrap();
+    let before = std::fs::read(root.join(gil::STATE_PATH)).unwrap();
+    let settings = scratch("visual-wire-settings");
+    let mut mcp = Client::serve_with(&settings); mcp.initialize();
+    let prepared = monitor_call(&mut mcp, "gil_monitor_prepare", serde_json::json!({"project_root":root}));
+    let scope = prepared["structuredContent"]["scope_id"].clone();
+    let owner = serde_json::json!({"kind":"step","ref":"step:C2/S3"});
+    let list = monitor_call(&mut mcp,"gil_monitor_report_visuals",serde_json::json!({"scope_id":scope,"owner":owner}));
+    assert_eq!(list["structuredContent"]["state"], "attached");
+    let asset = list["structuredContent"]["uses"][0]["asset_id"].clone();
+    let digest = list["structuredContent"]["uses"][0]["sha256"].clone();
+    let args = serde_json::json!({"scope_id":scope,"owner":owner,"asset_id":asset,"offset":0});
+    let mut offset = 0;
+    let mut received = Vec::new();
+    loop {
+        let mut args = args.clone(); args["offset"] = serde_json::json!(offset);
+        let got = monitor_call(&mut mcp,"gil_monitor_report_image",args);
+        assert_ne!(got["isError"], true, "{got}");
+        let data = &got["structuredContent"];
+        assert_eq!(data["sha256"],digest);
+        assert_eq!(data["offset"],offset);
+        let chunk = base64::engine::general_purpose::STANDARD.decode(data["data_base64"].as_str().unwrap()).unwrap();
+        assert!(chunk.len() <= 262144);
+        received.extend(chunk);
+        if data["next_offset"].is_null() { break; }
+        offset = data["next_offset"].as_u64().unwrap();
+    }
+    assert_eq!(received, bytes);
+    for (key,value) in [("offset",serde_json::json!(1)),("offset",serde_json::json!(-1)),("asset_id",serde_json::json!("01")),("owner",serde_json::json!({"kind":"step","ref":"step:C2/S3","path":"secret"})),("path",serde_json::json!("secret"))] {
+        let mut bad=args.clone(); bad[key]=value;
+        let reply=mcp.request("tools/call",serde_json::json!({"name":"gil_monitor_report_image","arguments":bad}));
+        assert!(reply["error"].is_object(),"{reply}");
+    }
+    let mut wrong=args.clone(); wrong["owner"]["ref"]=serde_json::json!("step:C2/S1");
+    assert_eq!(monitor_call(&mut mcp,"gil_monitor_report_image",wrong)["structuredContent"]["code"],"visual_unavailable");
+    let mut unknown=args.clone(); unknown["scope_id"]=serde_json::json!(format!("project:{}","f".repeat(64)));
+    assert_eq!(monitor_call(&mut mcp,"gil_monitor_report_image",unknown)["structuredContent"]["code"],"reconnect_required");
+    mcp.eof();
+    let mut fresh=Client::serve_with(&settings); fresh.initialize();
+    let got=monitor_call(&mut fresh,"gil_monitor_report_image",args);
+    assert_eq!(got["structuredContent"]["sha256"],digest);
+    let hex=digest.as_str().unwrap();
+    let blob=root.join(".gil/artifacts/blobs/sha256").join(&hex[..2]).join(&hex[2..]);
+    std::fs::write(blob,b"corrupt").unwrap();
+    let bad=monitor_call(&mut fresh,"gil_monitor_report_image",serde_json::json!({"scope_id":scope,"owner":owner,"asset_id":asset,"offset":0}));
+    assert_eq!(bad["structuredContent"]["code"],"visual_unavailable");
+    fresh.eof();
+    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),before);
+}
 
 fn gil() -> PathBuf {
     // 시험이 부르는 것은 **지금 지은 그 binary** 다.
@@ -172,16 +538,28 @@ fn initialize_succeeds_and_says_who_is_answering() {
 }
 
 #[test]
-fn tools_list_preserves_seventeen_tools_and_the_read_only_app_boundary() {
+fn tools_list_preserves_nineteen_tools_and_the_read_only_app_boundary() {
     let mut mcp = Client::serve();
     mcp.initialize();
     let got = mcp.request("tools/list", serde_json::json!({}));
     let tools = got["result"]["tools"].as_array().expect("tools");
     let mut names: Vec<_> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     names.sort();
-    assert_eq!(names, ["gil_close", "gil_companion_status", "gil_context", "gil_cycle", "gil_help", "gil_monitor_detail", "gil_monitor_poll", "gil_monitor_prepare", "gil_monitor_read", "gil_open", "gil_restore", "gil_revisit", "gil_start", "gil_status", "gil_story", "show_gil_companion", "show_gil_monitor"]);
+    let mut expected=vec!["gil_close", "gil_companion_status", "gil_context", "gil_cycle", "gil_help", "gil_monitor_detail", "gil_monitor_poll", "gil_monitor_prepare", "gil_monitor_read", "gil_monitor_report_image", "gil_monitor_report_visuals", "gil_open", "gil_restore", "gil_revisit", "gil_start", "gil_status", "gil_story", "show_gil_companion", "show_gil_monitor"];
+    if cfg!(feature="visual-authoring") {
+        expected.extend(["gil_report_visuals", "gil_migration_check", "gil_migration_prepare", "gil_migration_apply", "gil_migration_status"]);
+        expected.sort();
+    }
+    assert_eq!(names, expected);
+    for tool in tools.iter().filter(|t| t["name"]=="gil_report_visuals") {
+        assert_eq!(tool["annotations"]["readOnlyHint"],true);
+        assert_eq!(tool["_meta"]["ui"]["visibility"],serde_json::json!(["model"]));
+    }
     for tool in tools.iter().filter(|t| t["name"].as_str().unwrap().starts_with("gil_monitor_") || t["name"] == "show_gil_monitor") {
         assert_eq!(tool["annotations"]["readOnlyHint"], true);
+    }
+    for tool in tools.iter().filter(|t| t["name"].as_str().unwrap().starts_with("gil_monitor_report_")) {
+        assert_eq!(tool["_meta"]["ui"]["visibility"],serde_json::json!(["app"]));
     }
     mcp.eof();
 }
@@ -595,6 +973,64 @@ fn binding_files(settings: &Path) -> usize {
         .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "json")).count()).unwrap_or(0)
 }
 
+#[cfg(all(feature="visual-authoring", target_os="macos", target_arch="aarch64"))]
+#[test]
+fn visual_start_preserves_existing_and_partial_records_and_survives_response_loss() {
+    use serde_json::json;
+    fn files(root: &Path) -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
+        fn walk(root:&Path, path:&Path, out:&mut std::collections::BTreeMap<PathBuf,Vec<u8>>) {
+            for entry in std::fs::read_dir(path).unwrap() {
+                let path=entry.unwrap().path();
+                if path.is_dir() { walk(root,&path,out); }
+                else { out.insert(path.strip_prefix(root).unwrap().to_owned(),std::fs::read(path).unwrap()); }
+            }
+        }
+        let mut out=std::collections::BTreeMap::new(); walk(root,root,&mut out); out
+    }
+    let base=scratch("n3-preserve");
+    let settings=base.join("settings");
+    let mut mcp=Client::serve_with(&settings); mcp.initialize();
+    for kind in ["legacy", "visual", "partial", "unknown", "no-lock"] {
+        let root=base.join(kind); std::fs::create_dir(&root).unwrap();
+        if kind=="visual" {
+            assert_eq!(monitor_call(&mut mcp,"gil_start",json!({"project_root":root}))["structuredContent"]["ok"],true);
+        } else if kind=="legacy" {
+            let s=gil::ProjectSession::start(common::spec(),root.join(gil::STATE_PATH)).unwrap(); s.commit().unwrap();
+        } else {
+            std::fs::create_dir(root.join(".gil")).unwrap();
+            std::fs::write(root.join(".gil/state.yaml.writing"),b"partial evidence").unwrap();
+            if kind=="unknown" {
+                std::fs::write(root.join(gil::STATE_PATH),b"format: 999\n").unwrap();
+                std::fs::write(root.join(".gil/project.lock"),b"").unwrap();
+            }
+            if kind=="no-lock" { std::fs::write(root.join(gil::STATE_PATH),b"unreadable old record").unwrap(); }
+        }
+        // Even a read must not reap these unfinished objects.
+        std::fs::create_dir_all(root.join(".gil/artifacts/tmp")).unwrap();
+        std::fs::write(root.join(".gil/artifacts/tmp/unfinished"),b"keep evidence").unwrap();
+        let before=files(&root);
+        let refusal=monitor_call(&mut mcp,"gil_start",json!({"project_root":root}));
+        assert_eq!(refusal["structuredContent"]["ok"],false,"{refusal}");
+        for name in ["gil_status","gil_context"] {
+            let got=monitor_call(&mut mcp,name,json!({"project_root":root}));
+            assert_eq!(got["structuredContent"]["ok"],matches!(kind,"legacy"|"visual"),"{kind}: {got}");
+        }
+        assert_eq!(files(&root),before,"{kind}");
+    }
+    let root=base.join("response-lost"); std::fs::create_dir(&root).unwrap();
+    assert_eq!(monitor_call(&mut mcp,"gil_start",json!({"project_root":root}))["structuredContent"]["ok"],true);
+    let before=files(&root);
+    mcp.eof(); // Caller loses the receipt; new server must inspect, not restart.
+    let mut mcp=Client::serve_with(&settings); mcp.initialize();
+    assert_eq!(monitor_call(&mut mcp,"gil_status",json!({"project_root":root}))["structuredContent"]["ok"],true);
+    let prepared=monitor_call(&mut mcp,"gil_monitor_prepare",json!({"project_root":root}));
+    let shown=monitor_call(&mut mcp,"show_gil_monitor",json!({"scope_id":prepared["structuredContent"]["scope_id"]}));
+    assert_eq!(shown["structuredContent"]["view"]["timeline"].as_array().unwrap().len(),1);
+    assert!(shown["structuredContent"]["view"]["current"]["step_ref"].is_null());
+    assert_eq!(files(&root),before);
+    mcp.eof();
+}
+
 #[test]
 fn starting_a_project_leads_to_one_monitor_scope_and_the_first_interview_updates_it() {
     let at = scratch("start-and-watch");
@@ -611,6 +1047,11 @@ fn starting_a_project_leads_to_one_monitor_scope_and_the_first_interview_updates
     assert!(receipt.starts_with("프로젝트를 시작했다.\n현재: cycle:C1 · interview\n"), "{receipt}");
     assert!(receipt.contains("실행\n  gil open\n"), "{receipt}");
     let state = std::fs::read(root.join(gil::STATE_PATH)).unwrap();
+    assert!(state.starts_with(if cfg!(feature="visual-authoring") { b"format: 5\n" } else { b"format: 4\n" }));
+    if cfg!(feature="visual-authoring") {
+        assert_eq!(started["structuredContent"]["storage_format"],5);
+        assert_eq!(started["structuredContent"]["display_confirmed"],false);
+    }
     assert_eq!(binding_files(&settings), 0, "시작만으로는 Monitor binding 을 만들지 않는다");
 
     // 2. 준비 → 표시 — 같은 연결, 별도 요청 없음. 첫 View 는 Step 이 없는 열린 Interview 다.

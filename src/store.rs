@@ -44,7 +44,7 @@ use crate::rules::RuleSet;
 use crate::walk::{NodeId, RestoreError, StepNode, WalkState};
 use crate::will::Will;
 
-/// 이 크레이트가 읽고 쓰는 저장 형식의 번호.
+/// 기존 Project와 기본 생성에 사용하는 저장 형식의 번호.
 ///
 /// 0 은 걷기 하나, 1 은 Cycle 하나, 2 는 Cycle Graph, 3 은 Project State, 4 는 그 위에
 /// **Artifact 시간선**이 함께 눕는다 — Snapshot registry 와 Cycle 의 Entry/Exit,
@@ -52,6 +52,9 @@ use crate::will::Will;
 /// 모양이 바뀔 때마다 올린다 —
 /// 그래야 앞 형식을 만났을 때 파서 오류가 아니라 **앞 형식이라고** 말할 수 있다.
 pub const FORMAT: u32 = 4;
+
+/// 명시적으로 전환한 Project의 시각 Report 저장 형식. 기본 생성은 여전히 format 4다.
+pub const VISUAL_FORMAT: u32 = 5;
 
 /// **사람에게 보일 때의 자리.** 절대 경로를 적지 않는다.
 ///
@@ -127,36 +130,68 @@ pub const LEGACY_WALK_PATH: &str = ".gil/walk.yaml";
 /// 잠금을 쥐지 않은 자리에서는 이 함수를 부를 수 없다. 잠금을 「잊지 않기로 한다」는
 /// 규율은 반드시 언젠가 잊히므로, 규율 대신 타입에 맡긴다.
 pub(crate) fn save_within(
-    _lock: &ProjectLock,
+    lock: &ProjectLock,
     project: &Project,
     path: impl AsRef<Path>,
 ) -> Result<(), StoreError> {
-    save(project, path)
+    let path = path.as_ref();
+    let check = || lock.validate(&path.with_file_name(crate::lock::LOCK_FILE))
+        .map_err(|source| StoreError::Write { path: said_path(path), source });
+    check()?;
+    save(project, path)?;
+    check()
 }
 
 /// 잠금을 쥔 채로만 부를 수 있는 읽기. [`save_within`] 과 같은 이유로 guard 를 받는다.
 pub(crate) fn load_within(
-    _lock: &ProjectLock,
+    lock: &ProjectLock,
     rules: RuleSet,
     path: impl AsRef<Path>,
 ) -> Result<Project, StoreError> {
-    load(rules, path)
+    let path = path.as_ref();
+    let check = || lock.validate(&path.with_file_name(crate::lock::LOCK_FILE))
+        .map_err(|source| StoreError::Read { path: said_path(path), source });
+    check()?;
+    let project = load(rules, path)?;
+    check()?;
+    Ok(project)
+}
+
+/// Encode without filesystem mutation, shared by save and explicit migration.
+pub(crate) fn encode(project: &Project) -> Result<Vec<u8>, StoreError> {
+    let mut stored = StoredState::from(project);
+    if let Some(state) = project.visual_state() {
+        let graph = crate::visual_report::project::ProjectVisualGraph::new(project, &state.boundary)
+            .map_err(|err| StoreError::VisualState(format!("{err:?}")))?;
+        let registry = crate::visual_report::registry::codec::to_stored(&state.registry, &graph)
+            .map_err(|err| StoreError::VisualState(format!("{err:?}")))?;
+        stored.format = VISUAL_FORMAT;
+        stored.visuals = Some(StoredVisualState {
+            boundary: state.boundary.heads.iter()
+                .map(|(owner, revision)| StoredVisualBoundary {
+                    existence_ref: owner.to_string(),
+                    revision: *revision,
+                }).collect(),
+            registry,
+        });
+    }
+    Ok(serde_norway::to_string(&stored).map_err(StoreError::Encode)?.into_bytes())
 }
 
 /// 지금 상태를 파일에 눕힌다. 부모 디렉터리가 없으면 만든다.
+/// 먼저 옆자리에 쓰고 제자리로 옮긴다.
 ///
-/// 먼저 옆자리에 쓰고 제자리로 옮긴다 — 쓰다 죽어도 반쯤 쓰인 상태가 남지 않는다.
-///
-/// # 이 함수는 프로젝트를 잠그지 않는다
-///
-/// 저층 함수다. 두 프로세스가 이것을 나란히 부르면 한쪽의 변경이 조용히 사라진다.
-/// GIL 명령끼리의 직렬화는 [`ProjectSession`](crate::ProjectSession) 이 지며, CLI 는 전부
-/// 그것을 지난다. 라이브러리를 직접 쓰는 코드가 이 길로 가면 그 보장은 적용되지 않는다
-/// (Artifact Model §10.6).
+/// 이 저층 함수는 프로젝트를 잠그지 않는다. GIL 명령의 직렬화는
+/// [`ProjectSession`](crate::ProjectSession)이 맡는다 (Artifact Model §10.6).
 pub fn save(project: &Project, path: impl AsRef<Path>) -> Result<(), StoreError> {
     let path = path.as_ref();
-    let stored = StoredState::from(project);
-    let text = serde_norway::to_string(&stored).map_err(StoreError::Encode)?;
+    let encoded = encode(project)?;
+
+    #[cfg(unix)]
+    if project.visual_state().is_some() {
+        return crate::visual_report::state_file::write(path, &encoded)
+            .map_err(|source| StoreError::Write { path: said_path(path), source });
+    }
 
     if let Some(parent) = path.parent()
         && !parent.as_os_str().is_empty()
@@ -178,7 +213,7 @@ pub fn save(project: &Project, path: impl AsRef<Path>) -> Result<(), StoreError>
             path: said_path(&temp),
             source,
         })?;
-        file.write_all(text.as_bytes())
+        file.write_all(&encoded)
             .and_then(|()| file.flush())
             .and_then(|()| file.sync_all())
             .map_err(|source| StoreError::Write {
@@ -228,7 +263,11 @@ fn sync_dir(_at: Option<&Path>) -> Result<(), StoreError> {
 /// [`ProjectSession::open`](crate::ProjectSession::open) 을 쓴다.
 pub fn load(rules: RuleSet, path: impl AsRef<Path>) -> Result<Project, StoreError> {
     let path = path.as_ref();
-    let text = fs::read_to_string(path).map_err(|source| match source.kind() {
+    #[cfg(unix)]
+    let read = crate::internal_fs::read_state(path);
+    #[cfg(not(unix))]
+    let read = fs::read_to_string(path);
+    let text = read.map_err(|source| match source.kind() {
         io::ErrorKind::NotFound => StoreError::NotFound {
             path: said_path(path),
         },
@@ -241,21 +280,21 @@ pub fn load(rules: RuleSet, path: impl AsRef<Path>) -> Result<Project, StoreErro
     // **형식을 먼저 읽는다.** 구조를 통째로 해석한 뒤에 보면, 모양이 바뀐 앞 형식은
     // "앞 형식이다" 가 아니라 파서 오류로 도착한다 — 사람이 무엇을 해야 할지 모른다.
     let head: StoredFormat = serde_norway::from_str(&text).map_err(StoreError::Decode)?;
-    match head.format.cmp(&FORMAT) {
-        std::cmp::Ordering::Less => {
+    match head.format {
+        FORMAT | VISUAL_FORMAT => {}
+        found if found < FORMAT => {
             return Err(StoreError::PreviousFormat {
                 found: head.format,
                 current: FORMAT,
                 path: said_path(path),
             });
         }
-        std::cmp::Ordering::Greater => {
+        _ => {
             return Err(StoreError::UnknownFormat {
                 found: head.format,
-                known: FORMAT,
+                known: VISUAL_FORMAT,
             });
         }
-        std::cmp::Ordering::Equal => {}
     }
 
     let stored: StoredState = serde_norway::from_str(&text).map_err(StoreError::Decode)?;
@@ -320,6 +359,10 @@ impl StoredState {
     ///
     /// 두 축을 각자 세운 뒤 [`Project::restore`] 가 **서로 맞물리는지**를 잰다.
     fn into_project(self, rules: RuleSet) -> Result<Project, StoreError> {
+        if (self.format == VISUAL_FORMAT) != self.visuals.is_some() {
+            return Err(StoreError::VisualState("저장 형식과 시각 registry가 일치하지 않는다".into()));
+        }
+        let visuals = self.visuals;
         let artifacts = self.artifacts.into_registry()?;
 
         let current: ExistenceRef = read_ref(&self.current_existence_ref, "current_existence_ref")?;
@@ -337,7 +380,7 @@ impl StoredState {
         }
 
         let cycles = Cycles::restore(rules, self.cycles.into_state()?).map_err(StoreError::NotValid)?;
-        Project::restore(
+        let mut project = Project::restore(
             cycles,
             existences,
             states,
@@ -345,7 +388,24 @@ impl StoredState {
             self.next_will_id,
             artifacts,
         )
-        .map_err(StoreError::NotWhole)
+        .map_err(StoreError::NotWhole)?;
+        if let Some(visuals) = visuals {
+            use crate::visual_report::project::{MigrationBoundary, ProjectVisualGraph, VisualState};
+            let mut heads = BTreeMap::new();
+            for entry in visuals.boundary {
+                let owner = read_ref(&entry.existence_ref, "visuals.boundary.existence_ref")?;
+                if heads.insert(owner, entry.revision).is_some() {
+                    return Err(StoreError::VisualState("중복 이관 경계".into()));
+                }
+            }
+            let boundary = MigrationBoundary { heads };
+            let graph = ProjectVisualGraph::new(&project, &boundary)
+                .map_err(|err| StoreError::VisualState(format!("{err:?}")))?;
+            let registry = crate::visual_report::registry::codec::from_stored(visuals.registry, &graph)
+                .map_err(|err| StoreError::VisualState(format!("{err:?}")))?;
+            project.visual_state = Some(VisualState { boundary, registry });
+        }
+        Ok(project)
     }
 }
 
@@ -496,6 +556,22 @@ struct StoredState {
     /// 그것을 지고, 여기 눕는 것은 **이름과 그 세계의 manifest 주소**뿐이다.
     artifacts: StoredArtifacts,
     cycles: StoredCycles,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    visuals: Option<StoredVisualState>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StoredVisualState {
+    boundary: Vec<StoredVisualBoundary>,
+    registry: crate::visual_report::registry::codec::StoredRegistry,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StoredVisualBoundary {
+    existence_ref: String,
+    revision: u32,
 }
 
 /// Snapshot registry 가 눕는 꼴.
@@ -689,6 +765,7 @@ impl From<&Project> for StoredState {
         let (cycles, existences, states, current) = project.parts();
         StoredState {
             format: FORMAT,
+            visuals: None,
             next_will_id: project.next_will_id(),
             current_existence_ref: current.to_string(),
             existences: existences
@@ -880,6 +957,7 @@ impl From<StoredStatus> for NodeStatus {
 /// 저장이 실패한 이유.
 #[derive(Debug)]
 pub enum StoreError {
+    VisualState(String),
     /// 저장된 것이 아직 없다. 잘못이 아니라 **아직 시작하지 않았다**는 사실이다.
     NotFound { path: String },
     /// 앞 형식의 파일을 만났다. 읽지 않고, 있다는 사실을 말한다.
@@ -925,6 +1003,7 @@ pub enum StoreError {
 impl fmt::Display for StoreError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            StoreError::VisualState(reason) => write!(f, "시각 Report 저장 상태가 맞지 않다: {reason}"),
             StoreError::NotFound { path } => {
                 write!(f, "저장된 것이 없다: {path}")
             }
@@ -1012,7 +1091,8 @@ impl std::error::Error for StoreError {
             | StoreError::PreviousFormat { .. }
             | StoreError::DigestNotCanonical { .. }
             | StoreError::Manifest { .. }
-            | StoreError::JourneyWithoutState => None,
+            | StoreError::JourneyWithoutState
+            | StoreError::VisualState(_) => None,
         }
     }
 }

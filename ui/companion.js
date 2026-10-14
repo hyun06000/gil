@@ -19,6 +19,7 @@ import {
   place, projectSelection, revisitRoute, radiusOf, cycleBounds, horizontalEdge, horizontalCard,
   cardArrow, ROW_H, NODE_R, SELECTED_NODE_R, BOX_W,
 } from "./layout.js";
+import { cycleReportDetail } from './cycle-report.js';
 
 const SUPPORTED_SCHEMA = 1;
 
@@ -51,7 +52,7 @@ const status = el(".status span");
 const seats = new Map();
 const seatOf = (scopeId) => {
   if (!seats.has(scopeId)) {
-    seats.set(scopeId, { selectedStep: null, collapsed: new Set(), detail: null });
+    seats.set(scopeId, { selectedStep: null, selectedCycle: null, collapsed: new Set(), detail: null });
   }
   return seats.get(scopeId);
 };
@@ -233,7 +234,7 @@ function drawCycles() {
     const bounds = cycleBounds(current.plan, cycle);
     if (!bounds) continue;
     const box = document.createElement("div");
-    // **경계는 클릭을 가로막지 않는다** — pointer event 를 통과시킨다(§6.1 · 규칙 4).
+    // The report hit area sits behind Step nodes; folding is a separate control.
     box.className = "bound";
     box.dataset.cycle = cycle.ref;
     box.dataset.relation = cycle.relation;
@@ -241,6 +242,13 @@ function drawCycles() {
     box.style.top = `${bounds.y}px`;
     box.style.width = `${bounds.width}px`;
     box.style.height = `${bounds.height}px`;
+    const report = document.createElement('button');
+    report.type = 'button';
+    report.className = 'cycle-report-hit';
+    report.setAttribute('aria-label', `${cycleName(cycle.ref, cycle.kind)} 사이클 보고서`);
+    report.setAttribute('aria-selected', String(current.seat.selectedCycle === cycle.ref));
+    report.onclick = () => selectCycle(cycle.ref);
+    box.appendChild(report);
     const name = document.createElement("span");
     name.className = "bound-name";
     name.textContent = shortId(cycle.ref);
@@ -297,7 +305,7 @@ function drawNodes() {
       );
       button.onclick = () => selectStep(node.ref);
     }
-    const chosen = seat.selectedStep &&
+    const chosen = node.ref === seat.selectedCycle || seat.selectedStep &&
       (node.ref === seat.selectedStep ||
         (node.kind === "cycle" && node.ref === cycleOfStep(seat.selectedStep)));
     button.setAttribute("aria-selected", String(Boolean(chosen)));
@@ -322,15 +330,23 @@ function drawCard() {
   stage.style.minWidth = `${current.plan.width}px`;
   stage.style.height = `${current.plan.height}px`;
   const seat = current.seat;
-  if (!seat.selectedStep) return;
-  const anchor = projectSelection(current.plan, seat.selectedStep, cycleOfStep(seat.selectedStep));
+  if (!seat.selectedStep && !seat.selectedCycle) return;
+  let anchor = seat.selectedCycle
+    ? current.plan.nodes.find(n => n.kind === 'cycle' && n.ref === seat.selectedCycle)
+    : projectSelection(current.plan, seat.selectedStep, cycleOfStep(seat.selectedStep));
+  if (!anchor && seat.selectedCycle) {
+    const cycle = current.plan.cycles.find(c => c.ref === seat.selectedCycle);
+    const bounds = cycle && cycleBounds(current.plan, cycle);
+    if (bounds) anchor = {kind:'boundary', x:bounds.x + bounds.width / 2,
+      y:bounds.y + bounds.height, right:bounds.x + bounds.width};
+  }
   if (!anchor) return;
 
   const card = document.createElement("div");
   card.className = "card"; // pointer-events 는 CSS 가 꺼 둔다(§6.1-6).
   const folded = anchor.kind === "cycle";
-  const anchorRadius = folded ? radiusOf(anchor) : SELECTED_NODE_R;
-  const stepCycle = cycleOfStep(seat.selectedStep);
+  const anchorRadius = anchor.kind === 'boundary' ? 0 : folded ? radiusOf(anchor) : SELECTED_NODE_R;
+  const stepCycle = seat.selectedCycle || cycleOfStep(seat.selectedStep);
   const one = cycleOf(stepCycle);
   const step = one && one.steps.find((s) => s.step_ref === seat.selectedStep);
   const head = document.createElement("small");
@@ -345,6 +361,11 @@ function drawCard() {
     : folded
       ? "접힌 Cycle 안의 자리다. 펼치면 그 Step 으로 돌아간다."
       : "아직 닫히지 않아 요약이 없다.";
+  if (seat.selectedCycle) {
+    head.textContent = `${cycleName(stepCycle, one.kind)} · ${one.state === 'open' ? '진행 중' : '닫힘'}`;
+    name.textContent = `사이클 보고서 · ${stepCycle}`;
+    said.textContent = one.report?.handoff_summary || '아직 닫히지 않아 최종 보고서가 없다.';
+  }
   card.append(head, name, said);
   cardLayer.appendChild(card);
 
@@ -371,7 +392,7 @@ function drawCard() {
   const cardW = card.offsetWidth || 190;
   // 경계 상자와 그 오른쪽 위의 접기 control 을 지나서 놓는다.
   const gap = BOX_W / 2 + 30;
-  const x = anchor.x + gap;
+  const x = anchor.right ? anchor.right + 30 : anchor.x + gap;
   const y = Math.max(4, anchor.y - card.offsetHeight / 2);
   card.style.left = `${x}px`;
   card.style.top = `${y}px`;
@@ -385,7 +406,7 @@ function drawCard() {
   arrow.setAttribute("width", reach);
   arrow.setAttribute("height", current.plan.height);
   const tipX = x - 5;
-  const fromX = anchor.x + anchorRadius;
+  const fromX = anchor.right || anchor.x + anchorRadius;
   const midY = y + card.offsetHeight / 2;
   drawCardArrow(arrow, [fromX, anchor.y], [tipX, midY]);
   cardLayer.appendChild(arrow);
@@ -428,7 +449,7 @@ function giveBackTheirPlace(stood) {
     }
   } else if (stood.cycle) {
     seat = pick(`.node.cycle[data-cycle="${CSS.escape(stood.cycle)}"]`) ||
-      pick(`.bound[data-cycle="${CSS.escape(stood.cycle)}"] .fold`);
+      pick(`.bound[data-cycle="${CSS.escape(stood.cycle)}"] .cycle-report-hit`);
   }
   if (seat) seat.focus({ preventScroll: true });
 }
@@ -452,7 +473,7 @@ function leastScroll(start, end, at, room) {
  * 나가지 않는다.
  */
 function revealSelection() {
-  if (!current || !current.seat.selectedStep) return;
+  if (!current || (!current.seat.selectedStep && !current.seat.selectedCycle)) return;
   const anchor = layer.querySelector('[aria-selected="true"]');
   if (!anchor) return;
   const card = cardLayer.querySelector(".card");
@@ -535,26 +556,42 @@ function renderIntro() {
     `${view.current.cycle_ref} · ${view.current.step_ref || "Cycle 경계"} · 읽기 전용`;
 }
 
+let disposeVisuals = () => {};
 function renderDetail(node) {
+  disposeVisuals(); disposeVisuals = () => {};
   detail.innerHTML = "";
   if (!node) {
     const empty = document.createElement("p");
     empty.className = "empty";
-    empty.textContent = "Step 을 고르면 그 자리의 Report 를 보여 준다.";
+    empty.textContent = "노드 또는 사이클 보고서를 선택하면 그 보고서를 보여 준다.";
     detail.appendChild(empty);
     return;
   }
   const head = document.createElement("small");
-  head.textContent =
-    `${node.cycle_ref} · ${word(STEP_KIND, node.kind)} · ${node.state === "open" ? "열림" : "닫힘"}`;
+  const reportOwner = node.owner || {kind:'step',ref:node.step_ref};
+  const isCycle = reportOwner.kind === 'cycle';
+  head.textContent = isCycle
+    ? `${cycleName(node.cycle_ref,node.kind)} · 사이클 보고서 · ${node.state === 'open' ? '열림' : '닫힘'}`
+    : `${node.cycle_ref} · ${word(STEP_KIND, node.kind)} · ${node.state === "open" ? "열림" : "닫힘"}`;
   const name = document.createElement("h2");
-  name.textContent = node.step_ref;
+  name.textContent = reportOwner.ref;
   detail.append(head, name);
+  if (isCycle) {
+    const note = document.createElement('p');
+    note.textContent = '보고서 요약 — 판정·인계·당시 다음 방향. 세부 관측은 각 Step 보고서에서 확인합니다.';
+    detail.append(note);
+  }
+  const attachVisuals = () => {
+    if (current && typeof window.GIL_HOST.mountVisuals === 'function') {
+      disposeVisuals = window.GIL_HOST.mountVisuals(detail, current.scopeId, reportOwner);
+    }
+  };
   if (!node.report) {
     const empty = document.createElement("p");
     empty.className = "empty";
     empty.textContent = "아직 닫히지 않아 Report 가 없다.";
     detail.appendChild(empty);
+    attachVisuals();
     return;
   }
   const list = document.createElement("dl");
@@ -566,6 +603,7 @@ function renderDetail(node) {
     list.append(label, value);
   }
   detail.appendChild(list);
+  attachVisuals();
 }
 
 // ── 사람이 누르는 것 ────────────────────────────────────────────────
@@ -575,6 +613,7 @@ async function selectStep(stepRef) {
   const owner = current;
   const { seat, scopeId } = owner;
   const request = ++detailRequest;
+  seat.selectedCycle = null;
   // 같은 scope 로 돌아와도 이전 화면의 요청은 끝난 것이다. 같은 Step 의 중복 조회도
   // 최신 요청만 화면에 닿는다 — 성공뿐 아니라 거절 글에도 같은 경계를 적용한다.
   const isCurrent = () => current === owner && seat.selectedStep === stepRef && request === detailRequest;
@@ -595,6 +634,19 @@ async function selectStep(stepRef) {
     say(`상세를 읽지 못했다 — ${why(error)}` +
       (seat.detail ? " · 마지막으로 확인한 보고서를 표시하고 있다. 최신 내용은 확인하지 못했다." : ""), "detail");
   }
+}
+
+function selectCycle(cycleRef) {
+  if (!current) return;
+  ++detailRequest; // Invalidate every in-flight Step detail request.
+  const cycle = cycleOf(cycleRef);
+  const seat = current.seat;
+  seat.selectedStep = null;
+  seat.selectedCycle = cycle ? cycleRef : null;
+  seat.detail = cycle ? cycleReportDetail(cycle) : null;
+  if (noticeOwner === 'detail') clearNotice();
+  renderGraph();
+  renderDetail(seat.detail);
 }
 
 function collapseCycle(cycleRef) {
@@ -679,6 +731,10 @@ async function readOnce() {
     renderIntro();
     renderGraph();
 
+    if (current.seat.selectedCycle) {
+      selectCycle(current.seat.selectedCycle);
+      return;
+    }
     // 고른 Step 이 새 View 에도 있으면 그 자리의 상세를 다시 읽는다. 없어졌으면 **다른
     // Step 을 추측하지 않고** 선택과 상세를 비운다(§7). 접힘은 그대로 둔다 — 그것은
     // 이 창의 표현 상태이지 Project 의 사실이 아니다.
@@ -798,7 +854,8 @@ async function showScope(scopeId) {
   emptyState.hidden = true;
   renderIntro();
   renderGraph();
-  renderDetail(current.seat.detail);
+  if (current.seat.selectedCycle) selectCycle(current.seat.selectedCycle);
+  else renderDetail(current.seat.detail);
 }
 
 /**
@@ -934,12 +991,14 @@ window.addEventListener("resize", () => {
 
 // 시험이 들여다보는 자리 — 화면이 말하는 것을 프로그램으로도 물을 수 있게.
 window.GIL_COMPANION = {
+  clearVisuals: () => disposeVisuals(),
   scopeId: () => current && current.scopeId,
   plan: () => current && current.plan,
   setOrientation,
   seats,
   showScope,
   selectStep,
+  selectCycle,
   collapseCycle,
   expandCycle,
   revealSelection,

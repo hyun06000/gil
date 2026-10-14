@@ -109,5 +109,5 @@ test('missing or duplicated check records cannot pass the preflight', async () =
 });
 test('preflight regression is included in the existing read-only preview CI', async () => {
   const workflow = await readFile(join(repository, '.github/workflows/codex-preview.yml'), 'utf8');
-  assert.match(workflow, /distribution\/codex\/release-preflight\.test\.mjs/);
+  assert.match(workflow, /distribution\/codex\/\*\.test\.mjs/);
 });

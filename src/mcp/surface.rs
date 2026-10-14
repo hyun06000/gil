@@ -14,8 +14,19 @@ pub fn uri() -> &'static str {
 
 pub fn tools() -> &'static [Tool] {
     static TOOLS: OnceLock<Vec<Tool>> = OnceLock::new();
-    TOOLS.get_or_init(|| serde_json::from_str(&include_str!("tools.json").replace("RESOURCE_URI", uri()))
-        .expect("checked-in public tool catalog"))
+    TOOLS.get_or_init(|| {
+        let tools: Vec<Tool> = serde_json::from_str(&include_str!("tools.json").replace("RESOURCE_URI", uri()))
+            .expect("checked-in public tool catalog");
+        #[cfg(feature = "visual-authoring")]
+        let tools = {
+            let mut tools = super::migration::catalog(super::authoring::catalog(tools));
+            if let Some(start) = tools.iter_mut().find(|t| t.name == "gil_start") {
+                start.description = Some("Development image-report creation: creates format 5 on supported macOS Apple Silicon local storage. Requires the user's explicitly selected absolute project_root. Existing records/remnants are preserved, never migrated or retried automatically. Success commits one Interview, zero Steps; does not open or confirm the Monitor. Unsupported platforms refuse, never fall back to format 4.".into());
+            }
+            tools
+        };
+        tools
+    })
 }
 
 pub fn resource() -> Resource {
@@ -31,6 +42,21 @@ pub fn contents() -> ResourceContents {
 /// The frozen inputs contain only string properties. Domain grammar stays in Core.
 /// Monitor inputs are strict, as in the previous JS adapter. Other inputs ignore extras.
 pub fn valid_input(tool: &Tool, input: &Value) -> bool {
+    #[cfg(feature = "visual-authoring")]
+    if tool.name.starts_with("gil_migration_") {
+        return super::migration::valid(tool.name.as_ref(), input);
+    }
+    #[cfg(feature = "visual-authoring")]
+    if tool.name == "gil_report_visuals" || (tool.name == "gil_close" && input.get("visuals").is_some()) {
+        return super::authoring::valid(tool.name.as_ref(), input);
+    }
+    // Older/default builds must never silently discard a visual close request.
+    if tool.name == "gil_close" && (input.get("visuals").is_some() || input.get("expected_owner").is_some()) {
+        return false;
+    }
+    if matches!(tool.name.as_ref(), "gil_monitor_report_visuals" | "gil_monitor_report_image") {
+        return super::visuals::valid(input, tool.name == "gil_monitor_report_image");
+    }
     let Some(object) = input.as_object() else { return false; };
     let schema = &tool.input_schema;
     let Some(properties) = schema.get("properties").and_then(Value::as_object) else { return false; };
@@ -53,6 +79,13 @@ pub fn valid_input(tool: &Tool, input: &Value) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn visual_authoring_is_explicit_and_never_silently_dropped() {
+        let close=tools().iter().find(|t| t.name=="gil_close").unwrap();
+        assert!(!valid_input(close,&json!({"project_root":"/synthetic","expected_owner":{"kind":"step","ref":"step:C2/S3"}})));
+        assert!(!valid_input(close,&json!({"project_root":"/synthetic","visuals":{}})));
+        assert_eq!(tools().iter().any(|t| t.name=="gil_report_visuals"),cfg!(feature="visual-authoring"));
+    }
     #[test]
     fn embedded_resource_matches_the_built_shared_bundle() {
         let manifest: Value = serde_json::from_str(include_str!("../../plugins/gil-companion-prototype/assets/monitor.json")).unwrap();

@@ -1,0 +1,49 @@
+{
+  "read": {
+    "type": "object", "additionalProperties": false,
+    "properties": {
+      "project_root": {"type":"string", "description":"Exact absolute project root explicitly selected by the user."},
+      "owner": {"type":"object","additionalProperties":false,"properties":{"kind":{"enum":["step","cycle"]},"ref":{"type":"string"}},"required":["kind","ref"]}
+    },
+    "required":["project_root","owner"]
+  },
+  "close": {
+    "type":"object", "additionalProperties":false,
+    "properties": {
+      "project_root":{"type":"string"},
+      "report":{"type":"string","description":"Original Report body; never interpreted as attachment instructions."},
+      "expected_owner":{"$ref":"#/$defs/owner"},
+      "visuals":{
+        "type":"object","additionalProperties":false,
+        "properties": {
+          "attachments":{"type":"array","maxItems":8,"items":{
+            "type":"object","additionalProperties":false,
+            "properties":{"key":{"$ref":"#/$defs/text"},"path":{"$ref":"#/$defs/text"},"source_kind":{"enum":["captured","generated","provided"]},"source_description":{"$ref":"#/$defs/text"}},
+            "required":["key","path","source_kind","source_description"]
+          }},
+          "uses":{"type":"array","maxItems":8,"items":{
+            "type":"object","additionalProperties":false,
+            "properties":{
+              "source":{"oneOf":[
+                {"type":"object","additionalProperties":false,"properties":{"kind":{"const":"new"},"key":{"$ref":"#/$defs/text"}},"required":["kind","key"]},
+                {"type":"object","additionalProperties":false,"properties":{"kind":{"const":"stored"},"owner":{"$ref":"#/$defs/owner"},"asset_id":{"type":"string","pattern":"^[1-9][0-9]*$"},"sha256":{"type":"string","pattern":"^[0-9a-f]{64}$"}},"required":["kind","owner","asset_id","sha256"]}
+              ]},
+              "caption":{"$ref":"#/$defs/text"},"alt":{"$ref":"#/$defs/text"},"purpose":{"$ref":"#/$defs/text"}
+            },"required":["source","caption","alt","purpose"]
+          }},
+          "declaration":{"oneOf":[
+            {"type":"object","additionalProperties":false,"properties":{"state":{"const":"attached"}},"required":["state"]},
+            {"type":"object","additionalProperties":false,"properties":{"state":{"const":"not_needed"},"reason":{"$ref":"#/$defs/text"}},"required":["state","reason"]},
+            {"type":"object","additionalProperties":false,"properties":{"state":{"const":"missing"},"reason":{"$ref":"#/$defs/text"},"follow_up":{"$ref":"#/$defs/text"}},"required":["state","reason","follow_up"]}
+          ]}
+        },"required":["attachments","uses"]
+      }
+    },
+    "required":["project_root"],
+    "dependencies":{"visuals":["expected_owner","report"],"expected_owner":["visuals","report"]},
+    "$defs": {
+      "text":{"type":"string","minLength":1,"maxLength":4096},
+      "owner":{"type":"object","additionalProperties":false,"properties":{"kind":{"enum":["step","cycle"]},"ref":{"type":"string"}},"required":["kind","ref"]}
+    }
+  }
+}

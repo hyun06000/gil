@@ -16,3 +16,15 @@ body[data-display-mode="fullscreen"] {
   padding-bottom: var(--gil-composer-space);
 }
 body[data-display-mode="fullscreen"] .detail { scroll-margin-bottom: var(--gil-composer-space); }
+.report-visuals { border-top:1px solid #8885; margin-top:24px; padding-top:12px; overflow-wrap:anywhere; }
+.report-visuals button { margin:4px; padding:8px 12px; font:inherit; cursor:pointer; }
+.report-visuals figure { margin:16px 0; }
+.report-visuals img { display:block; max-width:100%; max-height:65vh; object-fit:contain; }
+.report-visuals figcaption { font-weight:600; margin-top:10px; white-space:pre-wrap; }
+.report-visuals p { white-space:pre-wrap; }
+.report-visuals .visual-viewport { max-width:100%; overflow:auto; }
+.report-visuals .visual-image-trigger { display:block; margin:0; padding:0; border:0; background:transparent; max-width:100%; cursor:zoom-in; }
+.report-visuals .visual-viewport.is-original { max-height:75vh; overscroll-behavior:contain; }
+.report-visuals .is-original .visual-image-trigger { max-width:none; width:max-content; cursor:zoom-out; }
+.report-visuals .is-original img { max-width:none; max-height:none; width:auto; height:auto; }
+.report-visuals .visual-image-trigger:focus-visible, .report-visuals .visual-viewport:focus-visible { outline:2px solid currentColor; outline-offset:-2px; }

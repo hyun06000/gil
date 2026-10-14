@@ -35,6 +35,88 @@ const GIL: &str = env!("CARGO_BIN_EXE_gil");
 const CRASH: &str = "GIL_RESTORE_CRASH";
 const MEDDLE: &str = "GIL_RESTORE_MEDDLE";
 
+#[cfg(unix)]
+#[test]
+fn cleanup_checks_every_entry_before_deleting_any_backup_or_control() {
+    use std::os::unix::fs::symlink;
+    for case in ["unknown", "linked-backup", "nested-unknown"] {
+        let (dir, _, _) = shaken(&format!("cleanup-preflight-{case}"));
+        crash_at(&dir, "before-cleanup");
+        let transaction = fs::read_dir(dir.join(".gil/restore")).unwrap()
+            .map(|e| e.unwrap().path()).find(|p| p.file_name().unwrap().to_string_lossy().starts_with("cleanup-")).unwrap();
+        let before = world_of(&transaction);
+        let state = state_bytes(&dir);
+        let world = world_of(&dir);
+        let outside = bare(&format!("cleanup-preflight-outside-{case}"));
+        write(&outside, "0", "external sentinel");
+        match case {
+            "unknown" => write(&transaction, "zzz-unknown", "preserve"),
+            "nested-unknown" => write(&transaction, "backup/zzz-unknown", "preserve"),
+            _ => {
+                fs::rename(transaction.join("backup"), outside.join("held-backup")).unwrap();
+                symlink(&outside, transaction.join("backup")).unwrap();
+            }
+        }
+        refused(&dir, &["status"]);
+        assert_eq!(read(&outside, "0"), "external sentinel");
+        assert_eq!(state_bytes(&dir), state);
+        assert_eq!(world_of(&dir), world);
+        for (path, bytes) in before {
+            let original = if case == "linked-backup" && path.starts_with("backup/") {
+                outside.join(path.replacen("backup/", "held-backup/", 1))
+            } else { transaction.join(path) };
+            assert_eq!(fs::read(original).unwrap(), bytes);
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn rollback_refuses_linked_destination_before_any_write() {
+    use std::os::unix::fs::symlink;
+    for parent_link in [false, true] {
+        let label = format!("destination-link-{parent_link}");
+        let dir = started(&label, &[("a.txt", "original a"), ("nested/z.txt", "original z")]);
+        write(&dir, "a.txt", "dirty a");
+        write(&dir, "nested/z.txt", "dirty z");
+        crash_at(&dir, "after-prepare");
+        let state = state_bytes(&dir);
+        let outside = bare(&format!("{label}-outside"));
+        write(&outside, "z.txt", "external sentinel");
+        if parent_link {
+            fs::rename(dir.join("nested"), dir.join("held-nested")).unwrap();
+            symlink(&outside, dir.join("nested")).unwrap();
+        } else {
+            fs::rename(dir.join("nested/z.txt"), dir.join("held-z.txt")).unwrap();
+            symlink(outside.join("z.txt"), dir.join("nested/z.txt")).unwrap();
+        }
+        refused(&dir, &["status"]);
+        assert_eq!(read(&dir, "a.txt"), "dirty a");
+        assert_eq!(read(&outside, "z.txt"), "external sentinel");
+        assert_eq!(state_bytes(&dir), state);
+        assert!(dir.join(".gil/restore/active/PLAN").is_file());
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn rollback_never_deletes_through_a_linked_parent() {
+    use std::os::unix::fs::symlink;
+    let dir = started("destination-create-link", &[("nested/target.txt", "snapshot")]);
+    fs::remove_file(dir.join("nested/target.txt")).unwrap();
+    crash_at(&dir, "before-commit");
+    let state = state_bytes(&dir);
+    let outside = bare("destination-create-link-outside");
+    write(&outside, "target.txt", "external sentinel");
+    fs::rename(dir.join("nested"), dir.join("held-nested")).unwrap();
+    symlink(&outside, dir.join("nested")).unwrap();
+    refused(&dir, &["status"]);
+    assert_eq!(read(&outside, "target.txt"), "external sentinel");
+    assert_eq!(read(&dir, "held-nested/target.txt"), "snapshot");
+    assert_eq!(state_bytes(&dir), state);
+    assert!(dir.join(".gil/restore/active/PLAN").is_file());
+}
+
 // ── 연장 ───────────────────────────────────────────────────────────────────
 
 fn rules() -> RuleSet {
@@ -540,6 +622,64 @@ fn recovery_runs_before_the_state_is_read() {
     refused(&dir, &["status"]);
     assert_eq!(world_of(&dir), before, "복구가 state 읽기 뒤에 돌았다");
     assert!(leftovers(&dir).is_empty());
+}
+
+#[test]
+fn corrupt_backup_refuses_before_any_rollback_write() {
+    let (dir, _, _) = shaken("recovery-corrupt-backup");
+    crash_at(&dir, "after-first-apply");
+    let before = world_of(&dir);
+    let state = state_bytes(&dir);
+    let mut backups: Vec<_> = fs::read_dir(dir.join(".gil/restore/active/backup")).unwrap()
+        .map(|entry| entry.unwrap().path()).collect();
+    backups.sort();
+    fs::write(backups.last().unwrap(), b"corrupt backup").unwrap();
+    refused(&dir, &["status"]);
+    assert_eq!(world_of(&dir), before);
+    assert_eq!(state_bytes(&dir), state);
+    assert!(dir.join(".gil/restore/active/PLAN").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn linked_backup_or_backup_directory_refuses_without_working_tree_changes() {
+    use std::os::unix::fs::symlink;
+    for kind in 0..3 {
+        let (dir, _, _) = shaken(&format!("recovery-linked-backup-{kind}"));
+        crash_at(&dir, "after-first-apply");
+        let backup = dir.join(".gil/restore/active/backup");
+        let from = if kind == 2 { backup } else { fs::read_dir(&backup).unwrap().next().unwrap().unwrap().path() };
+        let held = dir.join("held-backup");
+        fs::rename(&from, &held).unwrap();
+        if kind == 1 { fs::hard_link(&held, &from).unwrap(); } else { symlink(&held, &from).unwrap(); }
+        // Record the world after constructing the synthetic external backup fixture.
+        let before = world_of(&dir);
+        refused(&dir, &["status"]);
+        assert_eq!(world_of(&dir), before);
+        assert!(held.exists());
+        assert!(dir.join(".gil/restore/active/PLAN").exists());
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn linked_plan_or_commit_marker_cannot_authorize_recovery_or_cleanup() {
+    use std::os::unix::fs::symlink;
+    for control in ["PLAN", "COMMITTED"] {
+        let (dir, _, _) = shaken(&format!("recovery-linked-control-{control}"));
+        crash_at(&dir, "after-first-apply");
+        let at = dir.join(".gil/restore/active").join(control);
+        let held = dir.join("held-control");
+        if control == "PLAN" { fs::rename(&at, &held).unwrap(); }
+        else { fs::write(&held, b"forged marker").unwrap(); }
+        symlink(&held, &at).unwrap();
+        let before = world_of(&dir);
+        let bytes = fs::read(&held).unwrap();
+        refused(&dir, &["status"]);
+        assert_eq!(world_of(&dir), before);
+        assert_eq!(fs::read(held).unwrap(), bytes);
+        assert!(dir.join(".gil/restore/active").exists());
+    }
 }
 
 #[test]

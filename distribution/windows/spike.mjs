@@ -5,6 +5,7 @@ import {createHash, randomUUID} from 'node:crypto';
 import {mkdtemp, mkdir, readFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
+import {checkDefaultTools} from '../codex/tool-contract.mjs';
 
 const binary = resolve(process.argv[2] || '');
 assert.ok(process.argv[2], 'Usage: node spike.mjs <native-gil-binary>');
@@ -73,7 +74,7 @@ try {
     clientInfo: {name: 'gil-windows-spike', version: '1'}});
   child.stdin.write(JSON.stringify({jsonrpc: '2.0', method: 'notifications/initialized'}) + '\n');
   const {tools} = await request('tools/list', {});
-  assert.equal(tools.length, 17);
+  checkDefaultTools(tools);
   const uri = tools.find(t => t.name === 'show_gil_monitor')._meta.ui.resourceUri;
   const {contents} = await request('resources/read', {uri});
   assert.equal(contents[0].mimeType, 'text/html;profile=mcp-app');

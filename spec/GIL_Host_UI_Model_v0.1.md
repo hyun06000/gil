@@ -280,7 +280,9 @@ pan과 zoom은 renderer 내부의 연속적인 viewport 상태라 wire intent �
    새 Cycle의 첫 Step에서 실패 Cycle로 향하는 선을 그리면 관계를 반대로 표현한 것이므로 금지한다.
 5. Step kind는 색으로 보조 구분하되 색만으로 뜻을 전달하지 않는다. Cycle은 Step 묶음을 감싸는
    점선 경계와 이름으로 표시한다.
-6. 정확히 하나의 Step을 선택한다. 선택한 node 옆에는 짧은 요약 카드를 띄우고, node 중심에서
+6. 정확히 하나의 Step 또는 Cycle 보고서를 선택한다. 펼친 Cycle의 사각형을 누르면 Cycle
+   보고서를 고른다. Step 클릭과 접기/펼치기는 별도 조작이며 선택을 가로채지 않는다.
+   선택한 node/경계 옆에는 짧은 요약 카드를 띄우고, node/경계에서
    카드까지 굵고 반투명한 화살표를 직접 연결한다. 카드는 pointer event를 가로채 node 선택을
    막지 않는다.
 7. 요약 카드는 Graph 안의 위치 관계를 설명한다. 전체 Report는 별도의 detail inspector에 계속

@@ -6,6 +6,7 @@ import {chmod, lstat, mkdir, readFile, readdir, writeFile} from 'node:fs/promise
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {OUTPUTS as NOTICE_FILES, loadBundle, validatePolicy} from '../compliance/notices.mjs';
+import {compatibility} from './compatibility.mjs';
 
 export const NAME = 'gil-companion-prototype';
 export const PREFIX = `plugins/${NAME}`;
@@ -25,7 +26,8 @@ const preview = `# GIL Codex native marketplace — DEVELOPMENT PREVIEW ONLY
 macOS arm64 only. NOT a public release; NOT Developer ID signed/notarized by this pipeline.
 Do not publish this tree or register it as a user distribution channel.
 No Node/npm/Cargo/source checkout is required by the installed MCP runtime.
-The Rust executable contains Core, 17 MCP tools and the Monitor UI.
+The Rust executable contains Core, the default MCP tool surface and the Monitor UI.
+Visual report reads are included; experimental visual-authoring is not enabled.
 Companion is not bundled or automatically launched; it remains an optional separate fallback.
 Third-party licenses/notices are included beside LICENSE; standard library notices have their own HTML file.
 This catalog is a packaging test, not evidence of marketplace installation or fullscreen display.
@@ -119,7 +121,8 @@ export async function sourceSnapshot(root) {
     files: rows.length, snapshot_sha256: hash(JSON.stringify(rows))};
 }
 
-export async function createTree({root = repository, binary, output}) {
+export async function createTree({root = repository, binary, output, profile = 'default'}) {
+  assert.ok(['default', 'visual-authoring'].includes(profile));
   const destination = resolve(output);
   // Existing paths, including dangling symlinks, are never replaced. Failure leaves no receipt.
   await mkdir(destination, {recursive: false, mode: 0o755});
@@ -140,7 +143,9 @@ export async function createTree({root = repository, binary, output}) {
   checkManifest(JSON.parse(content.get(MANIFEST)));
   checkCatalog(JSON.parse(content.get(CATALOG)));
   checkMachO(content.get(CORE));
-  content.set('PREVIEW.md', Buffer.from(preview));
+  content.set('PREVIEW.md', Buffer.from(profile === 'default' ? preview : preview.replace(
+    'Visual report reads are included; experimental visual-authoring is not enabled.',
+    'EXPERIMENTAL visual-authoring enabled. Synthetic projects only; no automatic migration. Public candidate staging requires explicit profile, clean source and separate review.')));
   // Locked inputs and original legal-text hashes are checked before any notice can be packaged.
   for (const [name, bytes] of await loadBundle(root)) {
     checkNoLocalPaths(bytes);
@@ -156,6 +161,8 @@ export async function createTree({root = repository, binary, output}) {
   const receipt = {schema: 1, channel: 'development_unsigned', publishable: false,
     platform: 'darwin-arm64', plugin: NAME, version: JSON.parse(content.get(MANIFEST)).version,
     source, binary_origin: 'supplied_binary; source correspondence requires build pipeline evidence',
+    compatibility: compatibility(profile), migration: profile === 'default' ? 'none' : 'requires_review',
+    ...(profile === 'visual-authoring' ? {development_features:['visual-authoring']} : {}),
     gates: {developer_id: 'not_verified', notarization: 'not_verified',
       clean_machine_install: 'not_verified', marketplace_install: 'not_verified',
       first_launch_timeout: 'unresolved'}, files: await inventory(destination)};
@@ -172,6 +179,10 @@ export async function verifyTree(root) {
   assert.equal(receipt.publishable, false, 'preview cannot promote itself to release');
   assert.equal(receipt.platform, 'darwin-arm64');
   assert.equal(receipt.plugin, NAME);
+  const profile = receipt.development_features === undefined ? 'default' : 'visual-authoring';
+  if (profile !== 'default') assert.deepEqual(receipt.development_features, ['visual-authoring']);
+  assert.deepEqual(receipt.compatibility, compatibility(profile));
+  assert.equal(receipt.migration, profile === 'default' ? 'none' : 'requires_review');
   assert.deepEqual(receipt.gates, {developer_id: 'not_verified', notarization: 'not_verified',
     clean_machine_install: 'not_verified', marketplace_install: 'not_verified',
     first_launch_timeout: 'unresolved'});

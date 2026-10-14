@@ -7,11 +7,21 @@ import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {CORE, MANIFEST, PREFIX, checkLibraries, hash, verifyTree} from './artifact.mjs';
+import {checkDefaultTools, checkAuthoringTools} from './tool-contract.mjs';
+import {checkCore, compatibility} from './compatibility.mjs';
 
-export async function smoke(root, expectedHtml, verify = verifyTree) {
+export async function smoke(root, expectedHtml, verify = verifyTree, profile = 'default') {
+  assert.ok(['default', 'visual-authoring'].includes(profile));
   assert.equal(process.platform, 'darwin');
   assert.equal(process.arch, 'arm64');
-  await verify(root); // Integrity and the selected channel policy before executing any artifact.
+  const receipt = await verify(root); // Integrity before executing any artifact.
+  if (receipt.channel === 'development_unsigned') {
+    assert.deepEqual(receipt.development_features ?? [], profile === 'default' ? [] : ['visual-authoring']);
+    assert.deepEqual(receipt.compatibility, compatibility(profile));
+  } else if (receipt.channel === 'preview_unsigned') {
+    assert.equal(receipt.runtime_profile ?? 'default', profile);
+    if (receipt.schema === 3) assert.deepEqual(receipt.compatibility, compatibility(profile));
+  }
   const state = await realpath(await mkdtemp(join(tmpdir(), 'gil-dist-smoke-')));
   const binary = join(root, CORE);
   const env = {PATH: '/usr/bin:/bin', GIL_MONITOR_STATE_DIR: join(state, 'bindings')};
@@ -33,6 +43,7 @@ export async function smoke(root, expectedHtml, verify = verifyTree) {
     assert.equal(core.schema_version, 1);
     assert.equal(core.os, 'macos');
     assert.equal(core.arch, 'aarch64');
+    checkCore(core, profile);
     const firstMs = Math.round(performance.now() - started);
     const entry = JSON.parse(await readFile(join(root, MANIFEST))).mcpServers['gil-companion'];
     const cwd = join(root, PREFIX, entry.cwd);
@@ -82,8 +93,7 @@ export async function smoke(root, expectedHtml, verify = verifyTree) {
     child.stdin.write(JSON.stringify({jsonrpc: '2.0', method: 'notifications/initialized'}) + '\n');
     const initMs = Math.round(performance.now() - at);
     const {tools} = await request('tools/list', {});
-    assert.equal(tools.length, 17);
-    assert.equal(new Set(tools.map(t => t.name)).size, 17);
+    (profile === 'default' ? checkDefaultTools : checkAuthoringTools)(tools);
     const show = tools.find(t => t.name === 'show_gil_monitor');
     const uri = show?._meta?.ui?.resourceUri;
     assert.match(uri, /^ui:\/\/gil-monitor\/[a-f0-9]{20}\.html$/);

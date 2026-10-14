@@ -7,9 +7,33 @@ import {dirname, join} from 'node:path';
 import {ARCHIVE_FLAGS, CATALOG, CORE, FILES, MANIFEST, PREFIX, checkCatalog, checkManifest, checkMachO, checkLibraries,
   checkNoLocalPaths, createTree, hash, inventory, repository, verifyTree} from './artifact.mjs';
 import {noticeFixture} from '../compliance/test-fixture.mjs';
+import {stageUnsigned} from './unsigned-preview.mjs';
 
 const manifest = JSON.parse(await readFile(join(repository, MANIFEST)));
 const catalog = JSON.parse(await readFile(join(import.meta.dirname, 'catalog.json')));
+
+test('experimental authoring package is labelled and refused without explicit staging opt-in', async t => {
+  const f = await fixture(t);
+  const receipt = await createTree({root:f.root, output:f.output, binary:f.binary, profile:'visual-authoring'});
+  assert.deepEqual(receipt.development_features, ['visual-authoring']);
+  assert.match(await readFile(join(f.output,'PREVIEW.md'),'utf8'), /EXPERIMENTAL visual-authoring enabled/);
+  await assert.rejects(stageUnsigned({input:f.output, output:join(f.temporary,'public'), version:'0.9.0-preview.1'}), /explicitly match/);
+  await assert.rejects(readFile(join(f.temporary,'public','release.json')), {code:'ENOENT'});
+});
+test('receipt profile, action surface, storage range and migration declaration must agree', async t => {
+ const f=await fixture(t);
+ const receipt=await createTree({root:f.root,output:f.output,binary:f.binary,profile:'visual-authoring'});
+ assert.deepEqual(receipt.compatibility.action_surface,{min:2,max:2});
+ assert.deepEqual(receipt.compatibility.storage_format,{min:4,max:5});
+ assert.equal(receipt.migration,'requires_review');
+ for(const mutate of [r=>delete r.compatibility,r=>r.migration='none',r=>delete r.development_features,
+  r=>r.compatibility.action_surface.max=1,r=>r.development_features=['unknown']]){
+  const changed=structuredClone(receipt);mutate(changed);
+  await writeFile(join(f.output,'release.json'),JSON.stringify(changed));
+  await assert.rejects(verifyTree(f.output));
+ }
+});
+
 function macho() {
   const bytes = Buffer.alloc(40);
   bytes.writeUInt32LE(0xfeedfacf, 0); bytes.writeUInt32LE(0x0100000c, 4); bytes.writeUInt32LE(2, 12);
@@ -200,7 +224,7 @@ test('required build runs for every main PR against its exact head without a pri
 test('fresh checkout gets an output parent before the non-overwriting build', async t => {
   const workflow = await readFile(join(repository, '.github/workflows/codex-preview.yml'), 'utf8');
   const preparation = 'run: mkdir -p target';
-  const build = 'run: node distribution/codex/build-preview.mjs target/codex-preview';
+  const build = 'node distribution/codex/build-preview.mjs target/codex-preview';
   assert.ok(workflow.includes(preparation) && workflow.includes(build));
   assert.ok(workflow.indexOf(preparation) < workflow.indexOf(build));
   const fresh = await realpath(await mkdtemp(join(tmpdir(), 'gil-ci-fresh-')));

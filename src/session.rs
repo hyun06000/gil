@@ -42,6 +42,10 @@ use crate::rules::RuleSet;
 use crate::store::{self, LEGACY_WALK_PATH, StoreError};
 use crate::will::ActionContract;
 
+#[cfg(feature = "visual-authoring")]
+#[path = "visual_start.rs"]
+mod visual_start;
+
 /// `.gil/` 안에서 **초기화를 막지 않는** 이름들.
 ///
 /// 이전에 중단된 `gil start` 나 미참조 객체가 남긴 내부 흔적이다. 이것들만 있는 `.gil` 은
@@ -67,6 +71,8 @@ impl ProjectSession {
         let gil = gil_dir(&state_path)?;
 
         let lock = ProjectLock::acquire(&gil).map_err(SessionError::from)?;
+
+        preflight_state(&state_path)?;
 
         // **잠금 → 복구 → 잔해 회수 → state 읽기.** 순서가 전부다.
         //
@@ -114,6 +120,8 @@ impl ProjectSession {
         // 잠금은 여기서도 먼저다. 읽는 도중에 남이 상태를 갈아 끼우면, 읽어 낸 것은
         // 아무 시점의 사실도 아니게 된다.
         let lock = ProjectLock::acquire(&gil).map_err(SessionError::from)?;
+
+        preflight_state(&state_path)?;
 
         // **되돌리지 않는다. 있다는 사실만 말한다.**
         if let Some(found) =
@@ -192,6 +200,22 @@ impl ProjectSession {
     /// 이 프로젝트의 루트 — Artifact 세계가 사는 자리.
     pub fn root(&self) -> Result<PathBuf, SessionError> {
         project_root(&gil_dir(&self.state_path)?)
+    }
+
+    /// Experimental Report-scoped image read. The caller must separately establish Host scope
+    /// authorization. No arbitrary file path/digest is accepted and no state is changed.
+    /// Unix only until equivalent Windows handle checks are verified.
+    pub fn read_report_image(
+        &self,
+        owner: crate::visual_report::registry::ReportOwner,
+        asset: crate::visual_report::VisualAssetId,
+    ) -> Result<crate::visual_report::image::VerifiedImage, SessionError> {
+        let error = |message| SessionError::Action(ActionError::Visual(message));
+        let metadata = self.project.visual_state()
+            .and_then(|state| state.registry().asset_for_report(owner, asset))
+            .ok_or_else(|| error("이 Project의 해당 Report에 연결된 시각 자료가 아니다".into()))?
+            .metadata();
+        crate::visual_report::file::read_stored(&self.root()?, metadata).map_err(error)
     }
 
     fn store(&self) -> Result<ObjectStore, SessionError> {
@@ -353,6 +377,91 @@ impl ProjectSession {
         self.project
             .close_verify_step(report, world)
             .map_err(SessionError::Action)
+    }
+
+    /// Experimental format-5 entry point. The opt-in visual-authoring MCP uses it;
+    /// the default CLI/MCP surface does not expose attachment writes.
+    /// Unlike close_step, this method commits before returning a successful receipt.
+    /// A failed commit can leave unreferenced blobs, never a partially closed Report.
+    pub fn close_verify_with_images_and_commit(
+        &mut self,
+        report: Report,
+        attachments: Vec<crate::visual_report::image::VisualAttachment>,
+        declaration: impl FnOnce(&[crate::visual_report::VisualAssetId]) -> crate::visual_report::VisualDeclaration,
+    ) -> Result<Closed, SessionError> {
+        use crate::visual_report::{file::AttachmentFile, project::ProjectVisualGraph};
+        use crate::visual_report::registry::{ReportOwner, ReportVisuals};
+        let error = |reason: String| SessionError::Action(ActionError::Visual(reason));
+        self.project.no_pending_revisit().map_err(SessionError::Action)?;
+        if !self.can_confirm_artifact() {
+            return Err(error("이미지는 열린 Verify에서만 확정한다".into()));
+        }
+        let state = self.project.visual_state().ok_or_else(|| error("명시적 시각 Report 이관이 먼저 필요하다".into()))?;
+        if attachments.len() > 8 { return Err(error("한 번에 첨부할 수 있는 자료는 8개까지다".into())); }
+        let root = self.root()?;
+        let mut files = Vec::new();
+        let mut metadata = Vec::new();
+        let mut paths = std::collections::BTreeSet::new();
+        let mut total = 0usize;
+        for input in &attachments {
+            if !paths.insert(input.path.clone()) { return Err(error("같은 첨부 경로를 두 번 지정했다".into())); }
+            let file = AttachmentFile::read(&root, &input.path).map_err(error)?;
+            total += file.image.bytes().len();
+            if total > 32 * 1024 * 1024 { return Err(error("첨부 전체 용량이 32 MiB를 넘었다".into())); }
+            metadata.push(file.image.metadata(input.source_kind, input.source_description.clone()).map_err(|e| error(e.to_string()))?);
+            files.push(file);
+        }
+        let cycle = self.project.current_cycle();
+        let owner = ReportOwner::Step(cycle.step_ref(cycle.step_now_open().expect("Verify is open")));
+        let graph = ProjectVisualGraph::new(&self.project, &state.boundary).map_err(|e| error(format!("{e:?}")))?;
+        let registry = graph.prepare_close(&state.registry, owner, metadata.clone(), |ids| ReportVisuals::Verify(declaration(ids)))
+            .map_err(|e| error(format!("{e:?}")))?;
+        for file in &mut files { file.revalidate().map_err(error)?; }
+        let objects = self.store()?;
+        let world = capture(&root, &objects)?;
+        let manifest = objects.read_manifest(&world).map_err(|_| error("확정할 세계를 읽지 못했다".into()))?;
+        for ((file, input), meta) in files.iter_mut().zip(&attachments).zip(&metadata) {
+            file.revalidate().map_err(error)?;
+            let path = crate::visual_report::file::relative(&input.path).map_err(error)?;
+            // Tracked files must agree with this Verify's world. Attachment is not scope expansion.
+            if let Some(digest) = manifest.get(&path) {
+                if *digest != artifact::digest_from_raw(meta.digest) { return Err(error("첨부와 Snapshot의 파일 내용이 다르다".into())); }
+            }
+        }
+        let mut next = self.project.clone();
+        let receipt = next.close_verify_with_registry(report, world, registry).map_err(SessionError::Action)?;
+        for file in &files { objects.put_visual(&file.image).map_err(|e| error(e.to_string()))?; }
+        for file in &mut files { file.revalidate().map_err(error)?; }
+        store::save_within(&self._lock, &next, &self.state_path).map_err(SessionError::Store)?;
+        self.project = next;
+        Ok(receipt)
+    }
+
+    /// Close a non-Verify Report with existing references, preserving the dirty gate.
+    /// Work on a candidate so a failed save does not publish an in-memory partial close.
+    #[cfg(feature = "visual-authoring")]
+    pub(crate) fn close_references_and_commit(
+        &mut self, report: Report, uses: Vec<crate::visual_report::VisualUse>,
+    ) -> Result<(), SessionError> {
+        use crate::visual_report::registry::ReportVisuals;
+        self.project.no_pending_revisit().map_err(SessionError::Action)?;
+        let cycle = self.project.current_cycle();
+        let mut next = self.project.clone();
+        if let Some(opened) = cycle.step_now_open() {
+            let kind = cycle.steps().node(opened).expect("open node").kind;
+            if kind == crate::NodeKind::Verify {
+                return Err(SessionError::Action(ActionError::Visual("Verify에는 시각 선언이 필요하다".into())));
+            }
+            self.require_clean(Gate::Step(cycle.step_ref(opened), kind))?;
+            next.close_step_with_visuals(report, None, ReportVisuals::References(uses))
+                .map_err(SessionError::Action)?;
+        } else {
+            self.require_clean(Gate::Cycle(cycle.id().to_ref()))?;
+            next.close_cycle_with_visuals(report, uses).map_err(SessionError::Action)?;
+        }
+        store::save_within(&self._lock, &next, &self.state_path).map_err(SessionError::Store)?;
+        self.project = next;
+        Ok(())
     }
 
     /// Cycle 을 닫는다 — **새 세계를 만들지 않는다.**
@@ -629,6 +738,58 @@ fn capture(root: &Path, store: &ObjectStore) -> Result<crate::ManifestAddress, S
 ///
 /// 모르는 것을 지우지 않는다. 그리고 **살아 있는 다른 GIL 프로세스의 임시 파일을 지울 수
 /// 없다** — 이 함수는 프로젝트 잠금을 쥔 채로만 불리고, 잠금을 쥔 명령은 한 번에 하나다.
+/// Refuse linked/special control files before recovery or temporary-object cleanup.
+/// Absence remains the responsibility of the existing recovery/load protocol.
+fn preflight_state(path: &Path) -> Result<(), SessionError> {
+    #[cfg(unix)]
+    match crate::internal_fs::file(path, false) {
+        Ok(_) => (),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
+        Err(source) => return Err(SessionError::Store(StoreError::Read {
+            path: store::said_path(path), source,
+        })),
+    }
+    #[cfg(not(unix))] let _ = path;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn reap_tmp(store: &ObjectStore) -> Result<(), SessionError> {
+    use crate::internal_fs as guarded;
+    let tmp = store.tmp();
+    let error = |source: std::io::Error| SessionError::Unreadable {
+        path: tmp.display().to_string(), source: source.to_string(),
+    };
+    let gil = store.root().parent().expect("Artifact store has a .gil parent");
+    let dir = guarded::directory(gil, false).map_err(error)?;
+    let opened = guarded::child_dir(&dir, c"artifacts")
+        .and_then(|at| guarded::child_dir(&at, c"tmp"));
+    let dir = match opened {
+        Ok(dir) => dir,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(error(e)),
+    };
+    let names = guarded::names(&dir).map_err(error)?;
+    let mut files = Vec::new();
+    // Validate all entries before deleting any. Unknown names and special files are preserved.
+    for name in names {
+        let text = name.to_str().map_err(|_| SessionError::StrangeTemp { path: tmp.display().to_string() })?;
+        let strange = || SessionError::StrangeTemp { path: tmp.join(text).display().to_string() };
+        if !ObjectStore::is_temp_name(text) { return Err(strange()); }
+        let file = guarded::regular_at(&dir, &name).map_err(|_| strange())?;
+        files.push((name, file));
+    }
+    for (name, held) in files {
+        let now = guarded::regular_at(&dir, &name).map_err(error)?;
+        if !guarded::same(&held, &now).map_err(error)? {
+            return Err(error(std::io::Error::other("temporary object identity changed")));
+        }
+        guarded::unlink_at(&dir, &name).map_err(error)?;
+    }
+    dir.sync_all().map_err(error)
+}
+
+#[cfg(not(unix))]
 fn reap_tmp(store: &ObjectStore) -> Result<(), SessionError> {
     let tmp = store.tmp();
     let entries = match fs::read_dir(&tmp) {
@@ -1218,6 +1379,39 @@ mod tests {
 pub struct ReadOnlySession(ProjectSession);
 
 impl ReadOnlySession {
+    #[cfg(feature = "visual-authoring")]
+    pub(crate) fn status_said(&self) -> String {
+        crate::where_now(&self.0, false)
+    }
+    /// Explicit, potentially expensive audit of every Snapshot's manifest and referenced blob.
+    /// Unlike ordinary state loading, streams all blob bytes and checks their content digests.
+    /// Does not recover, delete, observe working files, or certify a backup's completeness.
+    /// Visual assets not referenced by Snapshots require their own report/image audit.
+    pub fn verify_snapshot_objects(&self) -> Result<(), SessionError> {
+        let check = || self.0._lock.validate(&self.0.state_path.with_file_name(LOCK_FILE))
+            .map_err(|source| SessionError::Object { said: source.to_string() });
+        check()?;
+        let store = self.0.store()?;
+        for (world, address) in self.project().snapshots() {
+            let manifest = store.read_manifest(address)
+                .map_err(|source| SessionError::Manifest { world, said: source.to_string() })?;
+            for entry in manifest.entries() {
+                store.read_blob(&entry.content, &mut std::io::sink())
+                    .map_err(|source| SessionError::Object { said: source.to_string() })?;
+            }
+        }
+        check()
+    }
+
+    /// Same Report boundary as the write-capable Session, without recovery or commit authority.
+    pub fn read_report_image(
+        &self,
+        owner: crate::visual_report::registry::ReportOwner,
+        asset: crate::visual_report::VisualAssetId,
+    ) -> Result<crate::visual_report::image::VerifiedImage, SessionError> {
+        self.0.read_report_image(owner, asset)
+    }
+
     /// 검증된 Project. **빌려줄 뿐 바꿀 수 없다.**
     pub fn project(&self) -> &Project {
         self.0.project()

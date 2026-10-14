@@ -1,4 +1,5 @@
 // Transport adapter only: no layout, .gil parsing, domain joins, or filesystem paths.
+import { mountVisuals } from './visuals.mjs';
 export const RETRY_MS = [2000, 4000, 8000, 16000, 30000, 60000];
 export const retryAfter = (failures) => RETRY_MS[Math.min(Math.max(failures - 1, 0), RETRY_MS.length - 1)];
 export const RECONCILE_MS = 300_000;
@@ -52,6 +53,16 @@ export function makeHost(app, initial, { now = Date.now } = {}) {
       : { code: 'watch_unavailable', said: '자동 갱신을 시작하지 못했다 — 수동 새로고침과 5분 재조회를 사용한다' });
   };
   return {
+    mountVisuals(container, wanted, owner) {
+      if (wanted !== scope) throw {code:'unknown_scope'};
+      // Visual errors stay in their own panel, not the graph connection state.
+      const visualCall = async (name, args) => unwrap(await app.callServerTool({name, arguments:{scope_id:scope,...args}}));
+      const dispose = mountVisuals(container,scope,owner,visualCall);
+      const onConnection = (error) => { if (error) dispose(); };
+      if (!listeners.has('gil://connection')) listeners.set('gil://connection',new Set());
+      listeners.get('gil://connection').add(onConnection);
+      return () => { dispose(); listeners.get('gil://connection').delete(onConnection); };
+    },
     listProjects: async () => [{ scope_id: scope, label: initial.label }],
     opening: async () => ({ last_selected: scope }),
     async loadView(wanted) {

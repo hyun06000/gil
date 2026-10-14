@@ -76,7 +76,9 @@ pub fn full_report(rules: &RuleSet, cycle: CycleKind, kind: NodeKind) -> Report 
 
 /// Cycle 을 닫는 규칙을 전부 채운 Cycle Report. **Step 과 같은 방식으로 채운다.**
 pub fn full_cycle_report(rules: &RuleSet, kind: CycleKind) -> Report {
-    let cycle = rules.cycle_rules(kind).expect("선언된 Cycle Kind 여야 한다");
+    let cycle = rules
+        .cycle_rules(kind)
+        .expect("선언된 Cycle Kind 여야 한다");
     fill(&cycle.close_requires, &cycle.field_constraints)
 }
 
@@ -252,8 +254,7 @@ pub fn project_step(project: &mut Project, kind: NodeKind, contract: ActionContr
         project.cycles().current().kind(),
         kind,
     );
-    close_here(project, report)
-        .unwrap_or_else(|err| panic!("{kind} 를 닫지 못했다: {err}"));
+    close_here(project, report).unwrap_or_else(|err| panic!("{kind} 를 닫지 못했다: {err}"));
     opened.step
 }
 
@@ -288,7 +289,10 @@ pub fn cycle_step(cycle: &mut Cycle, kind: NodeKind) -> NodeId {
     cycle
         .open_step(kind)
         .unwrap_or_else(|err| panic!("{kind} 를 열지 못했다: {err}"));
-    let id = cycle.steps().current().expect("연 뒤에는 서 있는 자리가 있다");
+    let id = cycle
+        .steps()
+        .current()
+        .expect("연 뒤에는 서 있는 자리가 있다");
     let report = full_report(cycle.rules(), cycle.kind(), kind);
     close_cycle_step(cycle, kind, report)
         .unwrap_or_else(|err| panic!("{kind} 를 닫지 못했다: {err}"));
@@ -314,7 +318,10 @@ pub fn cycle_report(cycle: &Cycle, verdict: &str, outcome: NodeId) -> Report {
         .with("outcome_ref", cycle.step_ref(outcome).to_string())
         .with("handoff_summary", "다음 Cycle 이 알아야 할 것");
     let allowed = cycle_allowed_here(cycle.rules(), cycle.kind(), ACTION, &report);
-    report.insert(ACTION, allowed.first().expect("갈 곳이 하나는 있다").clone());
+    report.insert(
+        ACTION,
+        allowed.first().expect("갈 곳이 하나는 있다").clone(),
+    );
     report.insert(REASON, "왜 그 방향인지");
     // 되돌아가겠다면 갈 곳을 함께 적는다 — **구조에서 고른다.** 이 Cycle 의 부모는 언제나
     // 조상이고, 자식을 열겠다고 적었기에 이 Cycle 이 났다. 그래서 늘 유효한 대상이다.
@@ -340,7 +347,6 @@ pub fn bootstrap() -> Project {
 /// **세계를 바꾸지 않는다** — Interview 의 어느 자리도 Artifact 를 확정할 권한이 없으므로,
 /// 이 길을 지나는 동안 registry 는 `A1` 하나 그대로다.
 pub fn bootstrap_from(mut project: Project) -> Project {
-
     for kind in [
         NodeKind::Question,
         NodeKind::Interpretation,
@@ -386,7 +392,11 @@ pub fn bootstrap_from(mut project: Project) -> Project {
         .with(REASON, "승인된 Synthesis 를 얻었다");
     project.close_action_step(report).expect("판정을 닫는다");
 
-    let mut report = cycle_report(project.cycles().current(), "success", step_id(&project, outcome));
+    let mut report = cycle_report(
+        project.cycles().current(),
+        "success",
+        step_id(&project, outcome),
+    );
     report.insert(ACTION, "open_child");
     project.close_cycle(report).expect("Interview 를 닫는다");
 
@@ -441,7 +451,13 @@ pub fn walk_to_the_exit(project: &mut Project, verdict: &str) -> NodeId {
     let cycle = project.cycles().current();
     let mut report =
         full_report(cycle.rules(), cycle.kind(), NodeKind::Outcome).with("verdict", verdict);
-    let allowed = allowed_here(cycle.rules(), cycle.kind(), NodeKind::Outcome, ACTION, &report);
+    let allowed = allowed_here(
+        cycle.rules(),
+        cycle.kind(),
+        NodeKind::Outcome,
+        ACTION,
+        &report,
+    );
     report.insert(ACTION, allowed.last().expect("갈 곳이 하나는 있다").clone());
     if report.get(ACTION) == Some("revisit") {
         let target = cycle
@@ -490,7 +506,9 @@ pub fn allowed_here(
     field: &str,
     report: &Report,
 ) -> Vec<String> {
-    let step = rules.rules(cycle, kind).expect("선언된 Step Kind 여야 한다");
+    let step = rules
+        .rules(cycle, kind)
+        .expect("선언된 Step Kind 여야 한다");
     let constraint = step
         .field_constraints
         .get(field)

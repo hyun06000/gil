@@ -116,5 +116,5 @@ test('real policy preserves MCP transition terms rather than replacing them with
 });
 test('actual locked Core and bundled UI match reviewed offline coverage', async () => {
   const result = await check(repository);
-  assert.equal(result.packages, 84); assert.equal(result.files.length, 3);
+  assert.equal(result.packages, 93); assert.equal(result.files.length, 3);
 });

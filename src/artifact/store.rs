@@ -40,6 +40,10 @@ use super::codec::{self, CodecError};
 use super::registry::ManifestAddress;
 use super::{CHUNK, ContentDigest, DigestAlgorithm, Manifest};
 
+#[cfg(unix)]
+#[path = "store_unix.rs"]
+mod unix;
+
 /// 루트 `.gil/` 아래 창고가 놓이는 자리.
 const ARTIFACTS: &str = "artifacts";
 const BLOBS: &str = "blobs";
@@ -174,6 +178,12 @@ impl ObjectStore {
     ///
     /// 지원하지 않는 파일 시스템에서는 **rename 으로 물러서지 않는다.** 보장을 약화하는
     /// fallback 을 두느니 [`ObjectError::PublishUnsupported`] 로 거절한다.
+    #[cfg(unix)]
+    fn put(&self, kind: ObjectKind, reader: impl Read) -> Result<ContentDigest, ObjectError> {
+        unix::put(self, kind, reader)
+    }
+
+    #[cfg(not(unix))]
     fn put(&self, kind: ObjectKind, mut reader: impl Read) -> Result<ContentDigest, ObjectError> {
         let tmp_dir = self.root.join(TMP);
         create_dir(&tmp_dir)?;
@@ -289,8 +299,10 @@ impl ObjectStore {
         digest: &ContentDigest,
         out: &mut impl Write,
     ) -> Result<(), ObjectError> {
-        let path = self.object_path(ObjectKind::Blob, digest);
-        let mut file = open(&path, ObjectKind::Blob, digest)?;
+        #[cfg(unix)]
+        let mut file = unix::read_object(self, ObjectKind::Blob, digest)?;
+        #[cfg(not(unix))]
+        let mut file = open(&self.object_path(ObjectKind::Blob, digest), ObjectKind::Blob, digest)?;
 
         let mut hasher = Sha256::new();
         let mut chunk = vec![0u8; CHUNK];
@@ -323,8 +335,10 @@ impl ObjectStore {
     /// manifest 를 되읽는다 — 주소를 다시 견주고, 그 다음 schema 를 검증한다.
     pub(crate) fn read_manifest(&self, at: &ManifestAddress) -> Result<Manifest, ObjectError> {
         let digest = at.digest();
-        let path = self.object_path(ObjectKind::Manifest, digest);
-        let mut file = open(&path, ObjectKind::Manifest, digest)?;
+        #[cfg(unix)]
+        let mut file = unix::read_object(self, ObjectKind::Manifest, digest)?;
+        #[cfg(not(unix))]
+        let mut file = open(&self.object_path(ObjectKind::Manifest, digest), ObjectKind::Manifest, digest)?;
 
         let mut bytes = Vec::new();
         file.read_to_end(&mut bytes)

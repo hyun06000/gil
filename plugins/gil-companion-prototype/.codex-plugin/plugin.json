@@ -17,7 +17,7 @@
       "Write"
     ],
     "brandColor": "#566FE8",
-    "defaultPrompt": "Open the GIL Monitor MCP App for this project with horizontal layout and request fullscreen so we can keep chatting alongside the graph."
+    "defaultPrompt": "Open this project's GIL Monitor horizontally and request fullscreen so we can chat alongside the graph."
   },
   "mcpServers": {
     "gil-companion": {

@@ -37,6 +37,12 @@
 //! 다르면 앞으로 가지 않고 되돌린다.
 
 pub mod plan;
+#[cfg(unix)]
+mod guard;
+#[cfg(unix)]
+mod destination;
+#[cfg(unix)]
+mod cleanup;
 
 use std::fmt;
 use std::fs::{self, File};
@@ -358,7 +364,11 @@ fn forward(
 /// 이 자리가 계획을 세울 때 본 그대로인가.
 fn still_as_planned(root: &Path, step: &Step) -> Result<(), RestoreFailure> {
     let at = root.join(step.path.as_str());
-    let found = current_digest(&at).map_err(|source| RestoreFailure::Io {
+    #[cfg(unix)]
+    let read = destination::World::open(root).and_then(|world| world.digest(&step.path));
+    #[cfg(not(unix))]
+    let read = current_digest(&at);
+    let found = read.map_err(|source| RestoreFailure::Io {
         stage: Stage::Apply,
         doing: "적용 직전에 지금 상태를 확인하지",
         path: at.display().to_string(),
@@ -376,6 +386,7 @@ fn still_as_planned(root: &Path, step: &Step) -> Result<(), RestoreFailure> {
 }
 
 /// 지금 그 자리의 지문. 없으면 `None`. **일반 파일이 아니면 오류다.**
+#[cfg(not(unix))]
 fn current_digest(at: &Path) -> io::Result<Option<ContentDigest>> {
     let kind = match fs::symlink_metadata(at) {
         Ok(data) => data.file_type(),
@@ -395,6 +406,32 @@ fn current_digest(at: &Path) -> io::Result<Option<ContentDigest>> {
 /// 작업 파일은 사람이 곧 고칠 파일이다. 그것이 immutable blob 과 inode 를 나눠 쓰면, 다음
 /// 편집이 **창고 안의 객체를 함께 고친다** — 그 순간 그 주소의 내용이 주소와 달라지고,
 /// 그 세계를 가리키는 모든 Snapshot 이 거짓이 된다. 그래서 언제나 **복사한다.**
+#[cfg(unix)]
+fn apply(root: &Path, store: &ObjectStore, step: &Step, made: &mut Vec<PathBuf>) -> Result<(), RestoreFailure> {
+    let error = |source: io::Error| RestoreFailure::Io {
+        stage: Stage::Apply, doing: "목표 파일을 안전하게 적용하지",
+        path: root.join(step.path.as_str()).display().to_string(), said: source.to_string(),
+    };
+    let world = destination::World::open(root).map_err(error)?;
+    match &step.operation {
+        Operation::Delete { .. } => {
+            world.remove(&step.path).map_err(error)?;
+            let mut path = Path::new(step.path.as_str()).parent();
+            while let Some(dir) = path {
+                let Some(entry) = dir.to_str().and_then(crate::artifact::EntryPath::parse) else { break; };
+                if world.remove_empty_dir(&entry).is_err() { break; }
+                path = dir.parent();
+            }
+            Ok(())
+        }
+        Operation::Replace { target, mode, .. } => world.publish(&step.path, Some(*mode), target, made,
+            |sink| store.read_blob(target, sink).map(|_| ()).map_err(io::Error::other)).map_err(error),
+        Operation::Create { target } => world.publish(&step.path, None, target, made,
+            |sink| store.read_blob(target, sink).map(|_| ()).map_err(io::Error::other)).map_err(error),
+    }
+}
+
+#[cfg(not(unix))]
 fn apply(
     root: &Path,
     store: &ObjectStore,
@@ -419,6 +456,7 @@ fn apply(
 }
 
 /// 목표 blob 을 그 자리에 놓는다 — 흘려 복사하고, 지문을 다시 재고, 제자리로 옮긴다.
+#[cfg(not(unix))]
 fn place(
     store: &ObjectStore,
     at: &Path,
@@ -479,13 +517,31 @@ fn rollback(
 ) -> Result<(), RestoreFailure> {
     failpoint::fail_at("in-rollback", Stage::Rollback)?;
     let backup = active.join(BACKUP);
+    #[cfg(unix)]
+    let destinations = destination::World::open(root).map_err(|e| destination_error(root, e))?;
+    #[cfg(unix)]
+    for step in plan.steps() {
+        destinations.check(&step.path).map_err(|e| destination_error(root, e))?;
+    }
+    // Check every backup before changing even the first working-tree entry.
+    for step in plan.steps() {
+        if let Some(id) = step.operation.backup() {
+            let mut source = open_backup(active, id).map_err(|e| backup_error(&backup, e))?;
+            verify_backup(&mut source, step.operation.before().expect("backup has before digest"))
+                .map_err(|e| backup_error(&backup, e))?;
+        }
+    }
 
     for step in plan.steps() {
         let at = root.join(step.path.as_str());
         match &step.operation {
             // 없던 파일이었다 — 다시 없앤다.
             Operation::Create { .. } => {
-                match fs::remove_file(&at) {
+                #[cfg(unix)]
+                let removed = destinations.remove(&step.path);
+                #[cfg(not(unix))]
+                let removed = fs::remove_file(&at);
+                match removed {
                     Ok(()) => {}
                     Err(source) if source.kind() == io::ErrorKind::NotFound => {}
                     Err(source) => {
@@ -501,7 +557,16 @@ fn rollback(
             // 있던 파일이었다 — 보관해 둔 원본과 권한을 되살린다.
             Operation::Replace { backup: id, mode, .. }
             | Operation::Delete { backup: id, mode, .. } => {
-                restore_one(&backup.join(id.to_string()), &at, *mode)?;
+                // Reopen safely and verify copied bytes again; don't retain one descriptor
+                // per changed file across an arbitrarily large Project.
+                let mut source = open_backup(active, *id).map_err(|e| backup_error(&backup, e))?;
+                #[cfg(unix)]
+                destinations.restore(&mut source, &step.path, *mode,
+                    step.operation.before().expect("backup has before digest"))
+                    .map_err(|e| destination_error(&at, e))?;
+                #[cfg(not(unix))]
+                restore_one(&mut source, &at, *mode,
+                    step.operation.before().expect("backup has before digest"))?;
             }
         }
     }
@@ -511,18 +576,64 @@ fn rollback(
     ours.sort_by_key(|path| std::cmp::Reverse(path.components().count()));
     for dir in ours {
         if dir.starts_with(root) && dir != root {
+            #[cfg(unix)]
+            if let Some(path) = dir.strip_prefix(root).ok().and_then(|p| p.to_str()).and_then(crate::artifact::EntryPath::parse) {
+                let _ = destinations.remove_empty_dir(&path);
+            }
+            #[cfg(not(unix))]
             let _ = fs::remove_dir(dir);
         }
     }
     Ok(())
 }
 
-fn restore_one(from: &Path, to: &Path, mode: u32) -> Result<(), RestoreFailure> {
+fn open_backup(active: &Path, id: u64) -> io::Result<File> {
+    #[cfg(unix)] { guard::backup(active, id) }
+    #[cfg(not(unix))] { File::open(active.join(BACKUP).join(id.to_string())) }
+}
+
+fn backup_error(path: &Path, source: io::Error) -> RestoreFailure {
+    RestoreFailure::Io { stage: Stage::Rollback, doing: "보관 원본의 무결성을 확인하지",
+        path: path.display().to_string(), said: source.to_string() }
+}
+
+fn verify_backup(source: &mut File, expected: &ContentDigest) -> io::Result<()> {
+    use io::{Read, Seek, SeekFrom};
+    use sha2::{Digest, Sha256};
+    source.seek(SeekFrom::Start(0))?;
+    let mut hash = Sha256::new();
+    let mut bytes = [0u8; 65536];
+    loop {
+        let n = source.read(&mut bytes)?;
+        if n == 0 { break; }
+        hash.update(&bytes[..n]);
+    }
+    source.seek(SeekFrom::Start(0))?;
+    if crate::artifact::digest_from_raw(hash.finalize().into()) != *expected {
+        return Err(io::Error::other("backup content differs from recovery plan"));
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn destination_error(path: &Path, source: io::Error) -> RestoreFailure {
+    RestoreFailure::Io { stage: Stage::Rollback, doing: "복원 목적지의 경계를 확인하지",
+        path: path.display().to_string(), said: source.to_string() }
+}
+
+#[cfg(not(unix))]
+fn restore_one(from: &mut File, to: &Path, mode: u32, expected: &ContentDigest) -> Result<(), RestoreFailure> {
     let parent = to.parent().expect("프로젝트 상대 경로에는 부모가 있다");
     make_dir(parent, Stage::Rollback)?;
 
     let temp = temp_beside(to);
-    copy_out(from, &temp).map_err(|source| RestoreFailure::Io {
+    let copied = (|| -> io::Result<()> {
+        let mut sink = File::options().read(true).write(true).create_new(true).open(&temp)?;
+        io::copy(from, &mut sink)?;
+        sink.sync_all()?;
+        verify_backup(&mut sink, expected)
+    })();
+    copied.map_err(|source| RestoreFailure::Io {
         stage: Stage::Rollback,
         doing: "보관해 둔 원본을 되살리지",
         path: to.display().to_string(),
@@ -599,6 +710,30 @@ fn finish(area: &Area, active: &Path) -> Result<(), RestoreFailure> {
 ///
 /// `recover` 와 [`left_behind`] 가 이 한 자리를 함께 쓴다. 「무엇이 남았는가」를 두 군데서
 /// 세면 한쪽이 낡아, 복구하는 쪽과 복구가 필요하다고 말하는 쪽의 판단이 갈린다.
+#[cfg(unix)]
+fn area_entries(area: &Area) -> Result<Vec<(String, PathBuf)>, RestoreFailure> {
+    use crate::internal_fs as guarded;
+    let error = |source: io::Error| RestoreFailure::Io {
+        stage: Stage::Recovery, doing: "restore 영역을 안전하게 들여다보지",
+        path: area.root().display().to_string(), said: source.to_string(),
+    };
+    let gil = guarded::directory(area.root().parent().expect("restore has .gil parent"), false).map_err(error)?;
+    let dir = match guarded::child_dir(&gil, c"restore") {
+        Ok(dir) => dir,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(error(e)),
+    };
+    let mut found = Vec::new();
+    for name in guarded::names(&dir).map_err(error)? {
+        let text = name.to_str().map_err(|_| RestoreFailure::StrangeArea { path: area.root().display().to_string() })?;
+        // Reject linked transaction roots before any path-based rollback/cleanup starts.
+        guarded::child_dir(&dir, &name).map_err(|_| RestoreFailure::StrangeArea { path: area.root().join(text).display().to_string() })?;
+        found.push((text.to_owned(), area.root().join(text)));
+    }
+    Ok(found)
+}
+
+#[cfg(not(unix))]
 fn area_entries(area: &Area) -> Result<Vec<(String, PathBuf)>, RestoreFailure> {
     let entries = match fs::read_dir(area.root()) {
         Ok(entries) => entries,
@@ -669,11 +804,29 @@ pub(crate) fn recover(root: &Path, gil: &Path) -> Result<(), RestoreFailure> {
 
 fn recover_active(root: &Path, area: &Area, active: &Path) -> Result<(), RestoreFailure> {
     // 표식이 있으면 **되돌리지 않는다.** forward 는 이미 확정됐다.
-    if active.join(COMMITTED).exists() {
+    #[cfg(unix)]
+    let committed = match guard::control(active, COMMITTED) {
+        Ok(_) => true,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => false,
+        Err(e) => return Err(backup_error(active, e)),
+    };
+    #[cfg(not(unix))]
+    let committed = active.join(COMMITTED).exists();
+    if committed {
         return finish(area, active);
     }
 
-    let bytes = fs::read(active.join(PLAN)).map_err(|source| RestoreFailure::Io {
+    #[cfg(unix)]
+    let read = (|| -> io::Result<Vec<u8>> {
+        use io::Read;
+        let mut file = guard::control(active, PLAN)?;
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes)?;
+        Ok(bytes)
+    })();
+    #[cfg(not(unix))]
+    let read = fs::read(active.join(PLAN));
+    let bytes = read.map_err(|source| RestoreFailure::Io {
         stage: Stage::Recovery,
         doing: "남은 transaction 의 계획을 읽지",
         path: active.join(PLAN).display().to_string(),
@@ -716,6 +869,15 @@ fn recover_active(root: &Path, area: &Area, active: &Path) -> Result<(), Restore
 // ── 파일 연장 ──────────────────────────────────────────────────────────────
 
 /// GIL 이 만든 구조만 지운다. **모르는 것이 있으면 지우지 않고 거절한다.**
+#[cfg(unix)]
+fn remove_canonical(at: &Path, _kind: Kind) -> Result<(), RestoreFailure> {
+    cleanup::remove(at).map_err(|source| RestoreFailure::Io {
+        stage: Stage::Cleanup, doing: "검증된 transaction 잔여물을 안전하게 지우지",
+        path: at.display().to_string(), said: source.to_string(),
+    })
+}
+
+#[cfg(not(unix))]
 fn remove_canonical(at: &Path, kind: Kind) -> Result<(), RestoreFailure> {
     let strange = |path: &Path| RestoreFailure::StrangeArea {
         path: path.display().to_string(),
@@ -767,6 +929,7 @@ fn remove_canonical(at: &Path, kind: Kind) -> Result<(), RestoreFailure> {
 }
 
 /// 보관 자리에는 **불투명한 서수 이름의 일반 파일**만 있다.
+#[cfg(not(unix))]
 fn remove_backups(at: &Path) -> Result<(), RestoreFailure> {
     let entries = fs::read_dir(at).map_err(|source| RestoreFailure::Io {
         stage: Stage::Cleanup,
@@ -796,6 +959,7 @@ fn remove_backups(at: &Path) -> Result<(), RestoreFailure> {
     Ok(())
 }
 
+#[cfg(not(unix))]
 fn remove_file(at: &Path) -> Result<(), RestoreFailure> {
     fs::remove_file(at).map_err(|source| RestoreFailure::Io {
         stage: Stage::Cleanup,
@@ -805,6 +969,7 @@ fn remove_file(at: &Path) -> Result<(), RestoreFailure> {
     })
 }
 
+#[cfg(not(unix))]
 fn remove_dir(at: &Path) -> Result<(), RestoreFailure> {
     fs::remove_dir(at).map_err(|source| RestoreFailure::Io {
         stage: Stage::Cleanup,
@@ -818,6 +983,7 @@ fn remove_dir(at: &Path) -> Result<(), RestoreFailure> {
 ///
 /// **빈 디렉터리는 Artifact 세계가 아니다**(§3.4). 그래서 남겨 두어도 세계는 같지만,
 /// 복원한 자리에 빈 껍데기가 쌓이는 것은 사람이 보기에 되돌아간 것이 아니다.
+#[cfg(not(unix))]
 fn prune_empty(root: &Path, from: &Path) {
     let mut cursor = from.parent();
     while let Some(dir) = cursor {
@@ -832,6 +998,7 @@ fn prune_empty(root: &Path, from: &Path) {
 }
 
 /// 옆자리 임시 이름 — **같은 폴더 안**이라 rename 이 파일 시스템을 넘지 않는다.
+#[cfg(not(unix))]
 fn temp_beside(at: &Path) -> PathBuf {
     let mut name = std::ffi::OsString::from(at.file_name().unwrap_or_default());
     name.push(format!(
@@ -929,22 +1096,6 @@ fn sync_dir(at: &Path, stage: Stage) -> Result<(), RestoreFailure> {
 #[cfg(not(unix))]
 fn sync_dir(_at: &Path, _stage: Stage) -> Result<(), RestoreFailure> {
     Ok(())
-}
-
-#[cfg(unix)]
-fn set_mode(at: &Path, mode: Option<u32>) -> Result<(), RestoreFailure> {
-    use std::os::unix::fs::PermissionsExt;
-    let Some(mode) = mode else {
-        // 새로 만드는 파일은 시스템 기본 권한을 쓴다 — Snapshot 에 권한이 없으므로
-        // 「원래 권한」이라 부를 것이 없다.
-        return Ok(());
-    };
-    fs::set_permissions(at, fs::Permissions::from_mode(mode)).map_err(|source| RestoreFailure::Io {
-        stage: Stage::Apply,
-        doing: "권한을 되살리지",
-        path: at.display().to_string(),
-        said: source.to_string(),
-    })
 }
 
 #[cfg(not(unix))]
