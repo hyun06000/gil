@@ -319,12 +319,12 @@ fn the_file_shows_the_graph_that_owns_the_walks() {
 fn an_unknown_format_is_refused_instead_of_guessed() {
     let path = scratch("format-unknown").join(gil::STATE_PATH);
     save(&graph_with_a_branch(), &path).unwrap();
-    edit_file(&path, |file| file["format"] = Value::from(gil::FORMAT + 1));
+    edit_file(&path, |file| file["format"] = Value::from(gil::VISUAL_FORMAT + 1));
 
     match load(spec(), &path) {
         Err(StoreError::UnknownFormat { found, known }) => {
-            assert_eq!(found, gil::FORMAT + 1);
-            assert_eq!(known, gil::FORMAT);
+            assert_eq!(found, gil::VISUAL_FORMAT + 1);
+            assert_eq!(known, gil::VISUAL_FORMAT);
         }
         other => panic!("모르는 형식을 짐작해 읽었다: {other:?}"),
     }

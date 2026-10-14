@@ -289,8 +289,60 @@ fn start(ctx: &Invocation<'_>) -> Result<String, String> {
     })?;
     write(&session)?;
 
+    Ok(start_receipt(ctx, &session))
+}
+
+/// Development Agent entry: exact root, no migration, no recovery of creation remnants.
+#[cfg(feature = "visual-authoring")]
+pub(crate) fn start_visual_action(root: &Path) -> Result<String, String> {
+    let ctx = Invocation { root: Root::Exact(root), input: Input::Body("") };
+    let gil = root.join(".gil");
+    match std::fs::symlink_metadata(&gil) {
+        Ok(dir) => {
+            // Do not create a lock just to inspect partial/unknown storage.
+            let regular = |name| std::fs::symlink_metadata(gil.join(name))
+                .is_ok_and(|m| m.is_file());
+            if dir.is_dir() && regular("state.yaml") && regular("project.lock") {
+                ProjectSession::open_read_only(rules()?, gil.join("state.yaml"))
+                    .map_err(|e| format!("기존 기록을 확인하지 못했다. 모두 보존하고 시작을 반복하지 않는다.\n{e}"))?;
+                return Err("여기서 새로 시작할 수 없다. 이미 걷고 있다.\n기존 기록을 보존한다. gil status / gil context로 현재 자리에서 이어간다.\n".into());
+            }
+            return Err("기존 .gil 흔적이 있다. 기록 여부를 확정할 수 없다. 모두 보존하고 시작을 반복하거나 삭제·이관하지 않는다.".into());
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {},
+        Err(e) => return Err(format!("기록 여부를 확인하지 못했다. 모두 보존하고 시작을 반복하지 않는다.\n{e}")),
+    }
+    let session = ProjectSession::start_visual(rules()?, root)
+        .map_err(|e| format!("시작 완료 여부를 확인해야 한다. 남은 기록을 보존하고 시작을 반복하지 않는다.\n{e}"))?;
+    Ok(start_receipt(&ctx, &session))
+}
+
+/// Safe post-start inspection: no recovery, temporary-object reaping, or bootstrap lock.
+#[cfg(feature = "visual-authoring")]
+pub(crate) fn visual_read_action(root: &Path, command: &str) -> Result<String, String> {
+    let gil = root.join(".gil");
+    match std::fs::symlink_metadata(&gil) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(crate::RootError::NoProjectHere.to_string()),
+        Ok(dir) if dir.is_dir() => {},
+        _ => return Err("기록 여부를 확인할 수 없다. 기존 흔적을 보존하고 시작을 반복하지 않는다.".into()),
+    }
+    for name in ["state.yaml", "project.lock"] {
+        if !std::fs::symlink_metadata(gil.join(name)).is_ok_and(|m| m.is_file()) {
+            return Err("기록 여부를 확인할 수 없다. 기존 흔적을 보존하고 시작을 반복하지 않는다.".into());
+        }
+    }
+    let session = ProjectSession::open_read_only(rules()?, gil.join("state.yaml"))
+        .map_err(|e| e.to_string())?;
+    match command {
+        "status" => Ok(session.status_said()),
+        "context" => Ok(context(session.project())),
+        _ => Err("허용되지 않은 읽기".into()),
+    }
+}
+
+fn start_receipt(ctx: &Invocation<'_>, session: &ProjectSession) -> String {
     let cycle = session.project().cycles().current();
-    Ok(format!(
+    format!(
         "프로젝트를 시작했다.\n\
          현재: {} · {}\n\n\
          다음\n  \
@@ -301,7 +353,7 @@ fn start(ctx: &Invocation<'_>) -> Result<String, String> {
         cycle.id().to_ref(),
         cycle.kind(),
         ctx.said_path(session.state_path())
-    ))
+    )
 }
 
 /// 지금 이 자리가 무엇을 여는 자리인가.

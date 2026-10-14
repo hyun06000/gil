@@ -10,6 +10,11 @@ mod bindings;
 mod actions;
 mod native;
 mod surface;
+mod visuals;
+#[cfg(feature = "visual-authoring")]
+mod authoring;
+#[cfg(feature = "visual-authoring")]
+mod migration;
 use monitor::Monitor;
 
 #[derive(Debug, Clone)]
@@ -26,6 +31,16 @@ impl GilServer {
         crate::command::action(&["status".into()], Some(std::path::Path::new(root)), "")
     }
     async fn dispatch(&self, name: String, input: Value) -> CallToolResult {
+        #[cfg(feature = "visual-authoring")]
+        if name.starts_with("gil_migration_") {
+            return tokio::task::spawn_blocking(move || migration::call(&name, input)).await
+                .unwrap_or_else(|_| actions::refusal("이관 결과가 불확실하다. 기록과 백업을 보존하고 gil_migration_status만 읽는다. 자동 재시도하지 않는다."));
+        }
+        #[cfg(feature = "visual-authoring")]
+        if name == "gil_report_visuals" || (name == "gil_close" && input.get("visuals").is_some()) {
+            return tokio::task::spawn_blocking(move || authoring::call(&name, input)).await
+                .unwrap_or_else(|_| actions::refusal("확정 여부를 알 수 없다. gil_report_visuals로 확인하고 close를 반복하지 않는다."));
+        }
         if actions::NAMES.contains(&name.as_str()) {
             return tokio::task::spawn_blocking(move || actions::call(&name, &input)).await
                 .unwrap_or_else(|_| actions::refusal("GIL 동작을 끝내지 못했다. 상태를 확인한 뒤 이어간다."));
@@ -39,9 +54,12 @@ impl GilServer {
         }
         let monitor = self.monitor.clone();
         let show = name == "show_gil_monitor";
+        let visual = matches!(name.as_str(), "gil_monitor_report_visuals" | "gil_monitor_report_image");
         let mut got = monitor::run(move || {
             let scope = input["scope_id"].as_str().unwrap_or_default();
             match name.as_str() {
+                "gil_monitor_report_visuals" => visuals::call(&monitor, &input, false),
+                "gil_monitor_report_image" => visuals::call(&monitor, &input, true),
                 "gil_monitor_prepare" => monitor.prepare(input["project_root"].as_str().unwrap_or_default()),
                 "gil_monitor_read" | "show_gil_monitor" => monitor.view(scope),
                 "gil_monitor_detail" => monitor.detail(scope, input["step_ref"].as_str().unwrap_or_default()),
@@ -49,6 +67,7 @@ impl GilServer {
                 _ => Err(monitor::Refusal::new("unavailable", "알 수 없는 Monitor 동작")),
             }
         }).await;
+        if visual { got = visuals::bounded(got); }
         if show && got.is_error != Some(true) {
             got.content = vec![ContentBlock::text("GIL Monitor 데이터를 준비했다. App은 가로보기로 시작하고 지원되는 Host에 fullscreen을 한 번 자동 요청한다. 그대로라면 모니터 펼치기를 누른다. 이 응답만으로 화면 표시나 지속 표시 성공을 판정하지 않는다.")];
         }
@@ -123,11 +142,16 @@ mod tests {
 
     /// 기존 status 와 명시적으로 추가한 read-only Monitor 문만 있다.
     #[test]
-    fn the_complete_seventeen_tool_surface_is_registered() {
+    fn the_complete_nineteen_tool_surface_is_registered() {
         let tools = surface::tools();
         let mut names: Vec<&str> = tools.iter().map(|one| one.name.as_ref()).collect();
         names.sort();
-        assert_eq!(names, vec!["gil_close", "gil_companion_status", "gil_context", "gil_cycle", "gil_help", "gil_monitor_detail", "gil_monitor_poll", "gil_monitor_prepare", "gil_monitor_read", "gil_open", "gil_restore", "gil_revisit", "gil_start", "gil_status", "gil_story", "show_gil_companion", "show_gil_monitor"]);
+        let mut expected = vec!["gil_close", "gil_companion_status", "gil_context", "gil_cycle", "gil_help", "gil_monitor_detail", "gil_monitor_poll", "gil_monitor_prepare", "gil_monitor_read", "gil_monitor_report_image", "gil_monitor_report_visuals", "gil_open", "gil_restore", "gil_revisit", "gil_start", "gil_status", "gil_story", "show_gil_companion", "show_gil_monitor"];
+        if cfg!(feature = "visual-authoring") {
+            expected.extend(["gil_report_visuals", "gil_migration_check", "gil_migration_prepare", "gil_migration_apply", "gil_migration_status"]);
+            expected.sort();
+        }
+        assert_eq!(names, expected);
     }
 
     #[test]

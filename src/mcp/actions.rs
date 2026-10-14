@@ -47,6 +47,27 @@ pub fn call(name: &str, input: &Value) -> CallToolResult {
         }
     }
     let mut args = vec![command.to_owned()];
+    #[cfg(feature = "visual-authoring")]
+    if matches!(name, "gil_status" | "gil_context") {
+        return match crate::command::visual_read_action(Path::new(root.expect("validated root")), command) {
+            Ok(said) => result(true, Some(0), said, String::new()),
+            Err(problem) => result(false, Some(1), String::new(), format!("{problem}\n")),
+        };
+    }
+    #[cfg(feature = "visual-authoring")]
+    if name == "gil_start" {
+        return match crate::command::start_visual_action(Path::new(root.expect("validated root"))) {
+            Ok(said) => {
+                let mut out = result(true, Some(0), said, String::new());
+                if let Some(fields) = out.structured_content.as_mut().and_then(Value::as_object_mut) {
+                    fields.insert("storage_format".into(), json!(5));
+                    fields.insert("display_confirmed".into(), json!(false));
+                }
+                out
+            }
+            Err(problem) => result(false, Some(1), String::new(), format!("{problem}\n")),
+        };
+    }
     let slots: &[(&str, &str, bool)] = match name {
         "gil_help" => &[("topic", "주제", false)],
         "gil_open" => &[("kind", "Cycle 종류", false)],

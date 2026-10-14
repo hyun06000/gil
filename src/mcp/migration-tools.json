@@ -1,0 +1,144 @@
+[
+  {
+    "name": "gil_migration_check",
+    "description": "Read-only development format-4 migration preflight. Explicit canonical root only. No recovery or writes. Synthetic macOS arm64 local projects only.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "project_root": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_root"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "_meta": {
+      "ui": {
+        "visibility": [
+          "model"
+        ]
+      }
+    }
+  },
+  {
+    "name": "gil_migration_prepare",
+    "description": "After the human approves copying this project to this new private local backup_root, prepare backup, candidate and independent restoration checks. Does not apply. Report plan and ask separately for apply approval. Never repeat automatically.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "project_root": {
+          "type": "string"
+        },
+        "backup_root": {
+          "type": "string"
+        },
+        "backup_approved": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "project_root",
+        "backup_root",
+        "backup_approved"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "_meta": {
+      "ui": {
+        "visibility": [
+          "model"
+        ]
+      }
+    }
+  },
+  {
+    "name": "gil_migration_apply",
+    "description": "Only after showing the preparation result and receiving fresh human approval for this exact project, backup and plan: apply format 5. apply_approved is the Agent's assertion, not authentication. Preserve remnants on failure; read gil_migration_status, never automatically repeat or roll back.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "project_root": {
+          "type": "string"
+        },
+        "backup_root": {
+          "type": "string"
+        },
+        "plan_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "apply_approved": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "project_root",
+        "backup_root",
+        "plan_sha256",
+        "apply_approved"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "_meta": {
+      "ui": {
+        "visibility": [
+          "model"
+        ]
+      }
+    }
+  },
+  {
+    "name": "gil_migration_status",
+    "description": "Read-only migration state and whole-tree preservation against an explicit plan. After lost apply response use this, not apply. Changed records may be legitimate later work; preserve all. No recovery or cleanup.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "project_root": {
+          "type": "string"
+        },
+        "backup_root": {
+          "type": "string"
+        },
+        "plan_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "project_root",
+        "backup_root",
+        "plan_sha256"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "_meta": {
+      "ui": {
+        "visibility": [
+          "model"
+        ]
+      }
+    }
+  }
+]

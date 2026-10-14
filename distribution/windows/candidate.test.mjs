@@ -59,7 +59,7 @@ test('Windows has its own pinned notice inventory and original texts', async () 
   const policy = JSON.parse(await readFile(new URL('./compliance/notice-policy.json', import.meta.url)));
   validatePolicy(policy, TARGET);
   assert.throws(() => validatePolicy(policy));
-  assert.equal(policy.packages.length, 89);
+  assert.equal(policy.packages.length, 98);
   const bundle = await loadBundle(undefined, {directory, target: TARGET});
   assert.equal(bundle.size, 3);
   assert.match(bundle.get('THIRD-PARTY-NOTICES.txt').toString(), /windows-sys@0.61.2/);
@@ -71,7 +71,7 @@ test('ARM64 notice inventory is independently resolved and uses verified origina
   const policy = JSON.parse(await readFile(new URL('./compliance/' + policyName, import.meta.url)));
   validatePolicy(policy, target);
   assert.throws(() => validatePolicy(policy, TARGET));
-  assert.equal(policy.packages.length, 89);
+  assert.equal(policy.packages.length, 98);
   assert.ok(policy.packages.some(p => p.name === 'windows_aarch64_msvc'));
   assert.ok(!policy.packages.some(p => p.name === 'windows_x86_64_msvc'));
   const bundle = await loadBundle(undefined, {directory: 'distribution/windows/compliance', target, policyName});

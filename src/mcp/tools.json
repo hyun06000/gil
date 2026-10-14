@@ -1,4 +1,148 @@
 [
+{
+  "name": "gil_monitor_report_visuals",
+  "description": "Read stored visual references for one Step or Cycle Report.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "scope_id": {
+        "type": "string",
+        "pattern": "^project:[0-9a-f]{64}$"
+      },
+      "owner": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "step"
+              },
+              "ref": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "ref"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "cycle"
+              },
+              "ref": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "ref"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "required": [
+      "scope_id",
+      "owner"
+    ],
+    "additionalProperties": false
+  },
+  "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "openWorldHint": false
+  },
+  "_meta": {
+    "ui": {
+      "visibility": [
+        "app"
+      ]
+    }
+  }
+},
+{
+  "name": "gil_monitor_report_image",
+  "description": "Read one verified PNG chunk linked to this Report. No paths or external URLs.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "scope_id": {
+        "type": "string",
+        "pattern": "^project:[0-9a-f]{64}$"
+      },
+      "owner": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "step"
+              },
+              "ref": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "ref"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "cycle"
+              },
+              "ref": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "ref"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "asset_id": {
+        "type": "string",
+        "pattern": "^[1-9][0-9]*$"
+      },
+      "offset": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 16777215,
+        "multipleOf": 262144
+      }
+    },
+    "required": [
+      "scope_id",
+      "owner",
+      "asset_id",
+      "offset"
+    ],
+    "additionalProperties": false
+  },
+  "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "openWorldHint": false
+  },
+  "_meta": {
+    "ui": {
+      "visibility": [
+        "app"
+      ]
+    }
+  }
+},
   {
     "name": "gil_companion_status",
     "title": "Check GIL Monitor availability",

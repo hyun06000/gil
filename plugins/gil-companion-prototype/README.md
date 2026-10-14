@@ -70,11 +70,25 @@ Companion 설치를 요구하지 않는다. 이미 시작된 폴더의 `gil_star
 같은 scope를 받으며, 화면 표시는 사용자가 확인하기 전까지 미확인으로 보고한다.
 `tests/mcp.rs`의 시작 흐름 시험과 `skill.test.mjs`가 이 순서·거절 문구·경계를 지킨다.
 도구 응답은 화면 성공이 아니며, 새 Skill을 실은 설치본의 Codex 화면 인수는 별도다.
+개발 `visual-authoring` 후보의 `gil_start`는 지원되는 macOS Apple Silicon 로컬 폴더에서
+최초 format 5를 만든다. 기존 기록/부분 흔적은 보존하며 시작 오류나 응답 유실 때 자동 재시도하지
+않는다. 이 후보의 status/context는 recovery/reap 없는 읽기로 확인한다. 기본 빌드와 CLI의
+format 4 생성 및 기존 설치본은 변경하지 않았다. 자세한 인수 범위는
+[신규 생성 N3 계약](../../spec/GIL_Visual_Report_Migration_v0.1.md#7-n3-agent-시작-도구-연결-2026-10-14-개발-후보)을 따른다.
+같은 개발 후보에는 승인 이관 check/prepare/apply/status가 별도로 있다. 백업 복사 승인과
+결과 요약 후의 원본 적용 승인을 구분하고, 합성 macOS arm64 Project에서만 검수한다.
+실패하면 원본·백업·잔여물을 보존하고 읽기 상태 확인으로 멈춘다. 계획 hash/boolean은 사람을
+인증하는 장치가 아니다. [승인 이관 wire](../../spec/GIL_Visual_Report_Migration_v0.1.md#58-승인-이관-mcp-wire-2026-10-14-개발-후보)를 따른다.
 자동 요청이 거절·무시되거나 inline을 반환하면 **모니터 펼치기**를 직접 누를 수 있다.
 사용자가 대화 안으로 돌아온 뒤에는 자동으로 다시 펼치지 않으며 Companion도 자동 실행하지 않는다.
 준비 도구는 exact-root read-only 검증 후 scope와 이름만 돌려준다. 렌더 도구의 input·HTML·App
 조회에는 경로가 없다. App-only `gil_monitor_read`·`gil_monitor_detail`·`gil_monitor_poll`은 기존
-canonical View·Detail과 hint counter를 사용한다. 기존 12개 도구는 유지되며 전체 목록은 17개다.
+canonical View·Detail과 hint counter를 사용한다. 기본 목록은 이미지 읽기 2개를 포함해 19개다.
+개발 `visual-authoring` 목록은 작성 확인 1개와 승인 이관 4개를 더한 24개이며 공개 배포 대상이 아니다.
+macOS arm64 작성 후보는 action surface 2와 저장 형식 4..5를 선언한다. 기본 빌드는
+surface 1/format 4를 유지한다. 패키지 receipt와 실제 Core probe가 어긋나면 검수를 거절하며,
+이미지 후보의 업데이트/롤백은 별도 계약·이관 검토를 요구한다. 설치나 조회가 기존 Project를
+자동 이관하지 않는다. 공개 staging 차단은 유지한다(이관 명세 §11).
 
 `mcp-app`가 `ui/index.html`·`companion.css`·`companion.js`·`layout.js`를 재사용해 HTML 하나로 묶는다.
 `npm ci --prefix mcp-app` 후 `npm run build --prefix mcp-app`로 재생성한다. SDK·esbuild는 개발용이고

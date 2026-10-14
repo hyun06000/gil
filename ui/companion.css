@@ -98,11 +98,16 @@ button, select { font: inherit; color: inherit; }
 .node.cycle[data-verdict="failure"] { border-color: #c8645b; }
 .node.cycle[aria-selected="true"] { border-color: #566fe8; border-style: solid; }
 
-/* Cycle 경계 — 점선 상자와 이름. **클릭을 가로막지 않는다.** */
+/* Cycle report hit target is behind Step nodes; fold remains independent. */
 .bound {
   position: absolute; border: 1px dashed light-dark(#c9cfc8, #4a504a); border-radius: 8px;
   pointer-events: none;
 }
+.cycle-report-hit { position:absolute; inset:0; width:100%; height:100%; border:0;
+  border-radius:7px; background:transparent; cursor:pointer; pointer-events:auto; padding:0; }
+.cycle-report-hit:hover { background:#566fe80c; }
+.cycle-report-hit[aria-selected="true"] { outline:2px solid #566fe8; background:#566fe810; }
+.cycle-report-hit:focus-visible { outline:2px solid #566fe8; outline-offset:2px; }
 .bound[data-relation="revisit_source"], .bound[data-relation="abandoned"],
 .bound[data-relation="other"] { border-color: light-dark(#dfc4c1, #6b4f4c); }
 /* 이름은 왼쪽 위, control 은 오른쪽 위. 식별자가 길어져도 서로 닿지 않게 이름이 쓸 수

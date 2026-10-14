@@ -5,7 +5,7 @@
 // 여기서 지키는 것은 그 문서가 실제 도구 표·Core 의 거절 문구·Monitor 거절 code 에 어긋나지
 // 않고, 도구 응답을 화면 성공으로 단정하는 문장이 다시 들어오지 않는다는 사실이다.
 //
-//   1. Skill 이 부르는 도구 이름은 전부 실제 17개 tool 표에 있다.
+//   1. Skill 이 부르는 도구 이름은 전부 실제 19개 tool 표에 있다.
 //   2. 시작 요청 하나가 start → prepare → show → 첫 Interview 순서로 이어진다.
 //   3. 시작 성공·Monitor 데이터 준비·실제 화면을 가르고, 화면은 사용자 확인 전까지 미확인이다.
 //   4. 이미 시작된 Project 의 거절 문구가 Core 가 실제로 말하는 글자와 같다.
@@ -52,14 +52,52 @@ test("Skill 의 identity 는 그대로이고 description 이 시작 요청을 �
 });
 
 test("Skill 이 부르는 도구 이름은 전부 실제 tool 표에 있다", () => {
-  assert.equal(TOOLS.length, 17);
+  assert.equal(TOOLS.length, 19);
   const named = new Set([...SKILL.matchAll(/`((?:gil|show_gil)_[a-z_]+)(?:\(|`)/g)].map((m) => m[1]));
   for (const name of named) {
+    if (name.startsWith("gil_migration_")) {
+      const catalog=JSON.parse(readFileSync(join(REPO,"src","mcp","migration-tools.json"),"utf8"));
+      assert.ok(catalog.some(t=>t.name===name));
+      assert.ok(section("## Existing projects — separately approved image migration").includes(name));
+      continue;
+    }
+    if (name === "gil_report_visuals") {
+      assert.ok(section("## Visual reports — capability-gated authoring").includes(name));
+      continue; // Explicit opt-in authoring route, never a promise about the default catalog.
+    }
     assert.ok(TOOLS.includes(name), `Skill 이 없는 도구를 부른다 — ${name}`);
   }
   for (const owed of ["gil_start", "gil_monitor_prepare", "show_gil_monitor", "gil_open", "gil_context"]) {
     assert.ok(named.has(owed), `시작 흐름에 필요한 도구가 문서에 없다 — ${owed}`);
   }
+});
+
+test("시각 작성은 실제 확장 schema와 조회 도구를 모두 확인하고 이관을 금지한다", () => {
+  const flow = section("## Visual reports — capability-gated authoring");
+  const schema = JSON.parse(readFileSync(join(REPO, "src/mcp/authoring-schema.json"), "utf8"));
+  for (const key of ["visuals", "expected_owner"]) {
+    assert.ok(schema.close.properties[key]);
+    assert.ok(flow.includes(`\`${key}\``));
+  }
+  assert.match(flow, /Otherwise stop/);
+  assert.match(flow, /or migrate an existing Project/);
+  assert.match(flow, /visual_upgrade_required/);
+  assert.match(flow, /closed|Closed/);
+});
+
+test("시각 작성 지침은 관측·세 선언·불확실 close·재사용·표시를 구분한다", () => {
+  const flow = section("## Visual reports — capability-gated authoring");
+  const schema = JSON.parse(readFileSync(join(REPO, "src/mcp/authoring-schema.json"), "utf8"));
+  for (const variant of schema.close.properties.visuals.properties.declaration.oneOf) {
+    assert.ok(flow.includes(`\`${variant.properties.state.const}\``));
+  }
+  assert.match(flow, /Code that could generate a picture is not an attached picture/);
+  assert.match(flow, /not automatically repeat\s+close/);
+  assert.match(flow, /not merely\s+`confirmed: true`/);
+  assert.match(flow, /This is a citation, not a new/);
+  assert.match(flow, /Storage confirmation is not display confirmation/);
+  assert.match(flow, /Never keep one Cycle open/);
+  assert.match(flow, /ask before sensitive capture or transmission/);
 });
 
 test("Skill 이 드는 Monitor 거절 code 는 전부 Rust adapter 가 실제로 내는 것이다", () => {
@@ -133,7 +171,9 @@ test("이미 시작된 Project 의 거절 문구는 Core 가 실제로 말하는
 test("시작 실패는 기존 기록이 없다는 증거가 아니며 원본을 보존한다", () => {
   const flow = section(START);
   assert.match(flow, /A start failure is not a display failure, and not proof that no record exists/);
-  assert.match(flow, /this start request did not create anything/);
+  assert.match(flow, /creation is not confirmed by this answer/);
+  assert.doesNotMatch(flow, /this start request did not create anything/);
+  assert.match(flow, /Never automatically retry `gil_start`/);
   assert.match(flow, /Do not conclude that the folder has no GIL record/);
   assert.match(flow, /do not clear, move or convert it/);
   assert.match(flow, /whether an earlier record exists is unknown from this\s+answer/);

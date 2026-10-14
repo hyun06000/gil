@@ -11,7 +11,8 @@ import {check as checkNotices} from '../compliance/notices.mjs';
 assert.equal(process.platform, 'darwin');
 assert.equal(process.arch, 'arm64', 'only tested architecture may be packaged');
 const [destination, ...extra] = process.argv.slice(2);
-assert.ok(destination && extra.length === 0, 'Usage: node distribution/codex/build-preview.mjs <new-output-directory>');
+assert.ok(destination && (extra.length === 0 || (extra.length === 1 && extra[0] === '--visual-authoring')), 'Usage: build-preview.mjs <new-output-directory> [--visual-authoring]');
+const profile = extra.length ? 'visual-authoring' : 'default';
 const output = resolve(destination);
 await mkdir(output, {recursive: false}); // Existing output is never overwritten.
 const run = (command, args, env = process.env) => new Promise((resolve, reject) => {
@@ -28,12 +29,12 @@ const target = join(repository, 'target/plugin-core-build');
 const cargoHome = process.env.CARGO_HOME || join(homedir(), '.cargo');
 const rustflags = `--remap-path-prefix=${cargoHome}=/cargo --remap-path-prefix=${repository}=/gil`;
 assert.ok(!/\s/.test(repository + cargoHome), 'build roots containing whitespace need encoded rustflags support');
-await run('cargo', ['build', '--locked', '--release', '-p', 'gil', '--target', 'aarch64-apple-darwin'], {
+await run('cargo', ['build', '--locked', '--release', '-p', 'gil', '--target', 'aarch64-apple-darwin', ...(profile === 'visual-authoring' ? ['--features', 'visual-authoring'] : [])], {
   ...process.env, RUSTFLAGS: rustflags, CARGO_TARGET_DIR: target,
 });
 assert.deepEqual(await sourceSnapshot(repository), source, 'source changed during build');
 const marketplace = join(output, 'marketplace');
-const receipt = await createTree({binary: join(target, 'aarch64-apple-darwin/release/gil'), output: marketplace});
+const receipt = await createTree({binary: join(target, 'aarch64-apple-darwin/release/gil'), output: marketplace, profile});
 assert.deepEqual(receipt.source, source);
 const archive = join(output, 'gil-codex-macos-arm64-preview.tar.gz');
 // tar retains dot-directories and executable bits; upload-artifact's raw file mode loss cannot damage it.
@@ -44,11 +45,11 @@ try {
   await run('/usr/bin/tar', ['-xzf', archive, '-C', extracted]);
   await verifyTree(extracted);
   assert.deepEqual(await inventory(extracted), await inventory(marketplace), 'archive roundtrip changed files/modes');
-  const check = await smoke(extracted, join(repository, 'plugins/gil-companion-prototype/assets/monitor.html'));
+  const check = await smoke(extracted, join(repository, 'plugins/gil-companion-prototype/assets/monitor.html'), verifyTree, profile);
   const archiveHash = hash(await readFile(archive));
   await writeFile(join(output, 'SHA256SUMS'), `${archiveHash}  gil-codex-macos-arm64-preview.tar.gz\n`, {flag: 'wx'});
   await writeFile(join(output, 'checks.json'), JSON.stringify({channel: 'development_unsigned', publishable: false,
-    source, third_party_notices: notices, archive_sha256: archiveHash, roundtrip: 'passed', smoke: check}, null, 2) + '\n', {flag: 'wx'});
+    source, profile, third_party_notices: notices, archive_sha256: archiveHash, roundtrip: 'passed', smoke: check}, null, 2) + '\n', {flag: 'wx'});
   console.log(JSON.stringify({channel: 'development_unsigned', publishable: false,
     archive_sha256: archiveHash, roundtrip: 'passed', tools: check.tools, source_dirty: source.dirty}));
 } finally {

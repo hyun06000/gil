@@ -91,6 +91,13 @@ test("Codex manifest 의 Skill 자리가 공용 Skill 을 가리킨다", () => {
     "claude-code: skills 자리를 적었다 — Claude Code 는 skills/ 를 스스로 훑는다");
 });
 
+test("Codex 시작 프롬프트는 Host의 128자 제한 안에 있다", () => {
+  const prompt = read(HOSTS[0].manifest).interface.defaultPrompt;
+  assert.equal(typeof prompt, "string");
+  assert.ok(prompt.trim().length > 0);
+  assert.ok([...prompt].length <= 128, "Host가 시작 프롬프트를 무시한다");
+});
+
 test("두 manifest 가 같은 plugin 이름을 말한다", () => {
   const names = HOSTS.map(({ manifest }) => read(manifest).name);
   assert.equal(new Set(names).size, 1, `Host 마다 이름이 다르다 — ${names.join(" vs ")}`);

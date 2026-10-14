@@ -5,12 +5,20 @@ import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { resolve, extname } from 'node:path';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.GIL_PLAYWRIGHT_MODULE || 'playwright');
 const ui = resolve(import.meta.dirname, '../ui');
-const html = await readFile(resolve(ui, '../plugins/gil-companion-prototype/assets/monitor.html'), 'utf8');
+let html = await readFile(resolve(ui, '../plugins/gil-companion-prototype/assets/monitor.html'), 'utf8');
+const dataOnly = process.env.GIL_TEST_DATA_PNG === '1';
+const blockAll = process.env.GIL_TEST_BLOCK_IMAGES === '1';
+if (dataOnly) html=html.replace('<head>', '<head><meta http-equiv="Content-Security-Policy" content="img-src data:">');
+if (blockAll) html=html.replace('<head>', '<head><meta http-equiv="Content-Security-Policy" content="img-src &#39;none&#39;">');
 const view = JSON.parse(await readFile(resolve(ui, 'fixtures/reading-one/view.json'), 'utf8'));
 const details = JSON.parse(await readFile(resolve(ui, 'fixtures/reading-one/details.json'), 'utf8'));
+let pngBase64='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aP1sAAAAASUVORK5CYII=';
+const pngBytes=Buffer.from(pngBase64,'base64');
+const visualItem={asset_id:'1',caption:'<script>visual injection</script>',alt:'합성 픽셀',purpose:'표시 시험',origin_step_ref:'step:C2/S3',source_kind:'generated',source_description:'합성 fixture',mime_type:'image/png',byte_length:pngBytes.length,width:1,height:1,sha256:createHash('sha256').update(pngBytes).digest('hex')};
 details['step:C3/S1'].report.fields.push({ name: 'unsafe', value: '<script>window.evil=1</script>' });
 details['step:C3/S1'].report.fields.push({ name: 'long_report', value: Array.from({length:32}, (_,i)=>`보고서 ${i+1}행 — 전체 내용을 보존한다.`).join('\n') });
 const server = createServer(async (req, res) => {
@@ -29,7 +37,9 @@ const errors = []; page.on('pageerror', e => errors.push(e.message));
 const base = `http://127.0.0.1:${server.address().port}`;
 try {
   await page.goto(base);
-  await page.evaluate(({ html, view, details }) => {
+  pngBase64=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=480;c.height=240;const x=c.getContext('2d');x.fillStyle='#edf1ff';x.fillRect(0,0,480,240);x.fillStyle='#4256c9';x.font='26px sans-serif';x.fillText('GIL · Visual report fixture',24,52);for(let i=0;i<4;i++) {x.fillRect(30+i*110,180-i*25,64,30+i*25);}return c.toDataURL('image/png').split(',')[1];});
+  Object.assign(visualItem,{byte_length:Buffer.from(pngBase64,'base64').length,width:480,height:240,sha256:createHash('sha256').update(Buffer.from(pngBase64,'base64')).digest('hex')});
+  await page.evaluate(({ html, view, details, visualItem, pngBase64 }) => {
     const scope = 'project:' + 'a'.repeat(64);
     window.requests = []; window.revision = '1'; window.view = view;
     const frame = document.createElement('iframe'); frame.style.cssText = 'width:100%;height:850px;border:0';
@@ -52,6 +62,16 @@ try {
         else if (window.failResume) post({ id: p.id, result: { isError: true, content: [], structuredContent: { code: 'project_missing', said: '시험 폴더 없음' } } });
         else if (p.params.arguments.scope_id !== scope) post({ id: p.id, error: { code: -32602, message: 'scope' } });
         else if (p.params.name === 'gil_monitor_detail') post({ id: p.id, result: { content: [], structuredContent: { scope_id: scope, detail: details[p.params.arguments.step_ref] } } });
+        else if (p.params.name === 'gil_monitor_report_visuals') {
+          const reuse=p.params.arguments.owner.ref==='step:C3/S2';
+          const uses=[reuse?{...visualItem,caption:'다음 보고서에서 같은 이미지 인용'}:visualItem];
+          if(window.multipleVisuals) uses.push({...visualItem,asset_id:'2',caption:'두 번째 이미지 설명'});
+          post({id:p.id,result:{content:[],structuredContent:{schema_version:1,scope_id:scope,owner:p.params.arguments.owner,state:reuse?'references':'attached',uses}}});
+        }
+        else if (p.params.name === 'gil_monitor_report_image') {
+          const reply=()=>post({id:p.id,result:{content:[],structuredContent:{schema_version:1,scope_id:scope,owner:p.params.arguments.owner,asset_id:p.params.arguments.asset_id,mime_type:'image/png',sha256:visualItem.sha256,total_bytes:visualItem.byte_length,offset:0,next_offset:null,data_base64:window.corruptVisual?'AAAA':pngBase64}}});
+          if(window.holdVisual)window.pendingVisual=reply;else reply();
+        }
         else post({ id: p.id, result: envelope() });
       } else if (p.id !== undefined) post({ id: p.id, result: {} });
     });
@@ -62,11 +82,21 @@ try {
       frame.srcdoc = html;
     };
     frame.srcdoc = html; document.body.append(frame);
-  }, { html, view, details });
+  }, { html, view, details, visualItem, pngBase64 });
   const frame = page.frameLocator('iframe');
   await frame.locator('[data-step="step:C3/S1"]').waitFor({ timeout: 20000 });
+  await page.frames()[1].evaluate(()=>{window.visualURLs=new Set();const create=URL.createObjectURL.bind(URL),revoke=URL.revokeObjectURL.bind(URL);URL.createObjectURL=b=>{const u=create(b);window.visualURLs.add(u);return u;};URL.revokeObjectURL=u=>{window.visualURLs.delete(u);revoke(u);};});
   await frame.locator('[data-step="step:C3/S1"]').click();
   await frame.locator('.detail').getByText('<script>window.evil=1</script>', { exact: true }).waitFor();
+  if (blockAll) {
+    await frame.locator('.report-visuals [role="status"]').filter({hasText:'[data_png/failed]'}).waitFor();
+    assert.equal(await frame.locator('.report-visuals img').count(),0);
+    assert.equal(await page.frames()[1].evaluate(()=>window.visualURLs.size),0);
+    assert.match(await frame.locator('.detail').innerText(),/보고서 32행/);
+    console.log('CSP img-src none: both representations refused, no image/Blob leak, report retained PASS');
+  } else {
+  await frame.locator('.report-visuals img').waitFor();
+  if(dataOnly) assert.match(await frame.getByLabel('이미지 표시 진단').innerText(),/CSP img-src 차단 확인.*data PNG: 표시 성공/);
   assert.equal(await page.frames()[1].evaluate(() => window.evil), undefined);
   const before = await frame.locator('#host-evidence').textContent();
   const instance = JSON.parse(before).instance;
@@ -91,7 +121,7 @@ try {
       await new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)));
       window.scrollTo(0,document.scrollingElement.scrollHeight);
     });
-    const last=await frame.locator('.detail dd').last().boundingBox();
+    const last=await frame.locator('.report-visuals figure p').last().boundingBox();
     const composer=await page.locator('#mock-composer').boundingBox();
     assert.ok(last.y+last.height<=composer.y-16,`${width}×${height}: Report tail must clear the Host composer`);
     assert.ok(last.y+last.height>20,'Report tail is still in the viewport');
@@ -131,17 +161,68 @@ try {
   await frame.locator('.world').filter({ hasText: 'clean' }).waitFor({ timeout: 12000 });
   await frame.locator('[data-step="step:C3/S1"]').click();
   await frame.locator('.detail').getByText('<script>window.evil=1</script>', { exact: true }).waitFor();
-  const lastReport = await frame.locator('.detail').innerText();
+  await frame.locator('.report-visuals img').waitFor();
+  assert.equal(await frame.locator('.report-visuals img').getAttribute('alt'),'합성 픽셀');
+  assert.equal(await frame.locator('.report-visuals figcaption').innerText(),'<script>visual injection</script>');
+  assert.ok((await frame.locator('.report-visuals').innerText()).includes('원래 Verify: step:C2/S3'));
+  await frame.locator('.report-visuals').screenshot({path:'/private/tmp/gil-report-visuals-g3.png'});
+  assert.equal(await frame.getByRole('button',{name:'Cycle 보고서 자료',exact:true}).count(),0);
+  assert.equal(await frame.getByRole('button',{name:'이 Step 자료',exact:true}).count(),0);
+  assert.ok(await page.evaluate(()=>window.requests.filter(p=>p.params?.name==='gil_monitor_report_visuals').every(p=>p.params.arguments.owner.kind==='step' && p.params.arguments.owner.ref==='step:C3/S1')));
+  await page.evaluate(()=>{window.multipleVisuals=true;});
+  await frame.locator('[data-step="step:C3/S1"]').click();
+  await frame.locator('.report-visuals figcaption').filter({hasText:'두 번째 이미지 설명'}).waitFor();
+  assert.equal(await frame.locator('.report-visuals img').count(),2);
+  assert.equal(await frame.getByRole('button',{name:/^자료 \d/}).count(),0);
+  assert.equal(await frame.locator('.report-visuals button:not(.visual-image-trigger)').count(),0);
+  const image=frame.locator('.visual-image-trigger').first();
+  await image.click();
+  assert.equal(await image.getAttribute('aria-expanded'),'true');
+  await image.click();
+  assert.equal(await image.getAttribute('aria-expanded'),'false');
+  const cycle=frame.locator('.cycle-report-hit').first();
+  await cycle.click({position:{x:5,y:5}});
+  await frame.locator('.card b').filter({hasText:'사이클 보고서'}).waitFor();
+  assert.equal(await frame.locator('.cycle-reports').count(),0);
+  await frame.locator('.report-visuals figcaption').filter({hasText:'두 번째 이미지 설명'}).waitFor();
+  assert.ok(await page.evaluate(()=>window.requests.some(p=>p.params?.name==='gil_monitor_report_visuals' && p.params.arguments.owner.kind==='cycle')));
+  await frame.locator('.report-visuals').screenshot({path:'/private/tmp/gil-ui-polish-gallery.png'});
+  await frame.locator('.map').screenshot({path:'/private/tmp/gil-ui-polish-cycle.png'});
+  await page.evaluate(()=>{window.multipleVisuals=false;});
+  console.log('Ordered gallery, image-only zoom, graph Cycle report and summary card PASS');
+  await page.evaluate(()=>{window.corruptVisual=true;});
+  await frame.locator('[data-step="step:C3/S1"]').click();
+  await frame.locator('.report-visuals [role="status"]').filter({hasText:'이미지를 읽지 못했습니다'}).waitFor();
+  assert.equal(await frame.locator('.report-visuals img').count(),0);
+  // The frame was reloaded earlier; install URL accounting for subsequent lifetimes.
+  await page.frames()[1].evaluate(()=>{window.visualURLs=new Set();const create=URL.createObjectURL.bind(URL),revoke=URL.revokeObjectURL.bind(URL);URL.createObjectURL=b=>{const u=create(b);window.visualURLs.add(u);return u;};URL.revokeObjectURL=u=>{window.visualURLs.delete(u);revoke(u);};});
+  await page.evaluate(()=>{window.corruptVisual=false;window.holdVisual=true;});
+  await frame.locator('[data-step="step:C3/S1"]').click();
+  await page.waitForFunction(()=>typeof window.pendingVisual==='function');
+  await page.evaluate(()=>{window.holdVisual=false;});
+  await page.frames()[1].evaluate(()=>window.GIL_COMPANION.selectStep('step:C3/S2'));
+  await frame.locator('.detail h2').filter({hasText:'step:C3/S2'}).waitFor();
+  await page.evaluate(()=>window.pendingVisual());
+  await frame.locator('.report-visuals img').waitFor();
+  assert.equal(await frame.locator('.detail h2').innerText(),'step:C3/S2');
+  assert.equal(await frame.locator('.report-visuals figcaption').innerText(),'다음 보고서에서 같은 이미지 인용');
+  assert.match(await frame.locator('.report-visuals').innerText(),/원래 Verify: step:C2\/S3/);
+  assert.equal(await frame.locator('.report-visuals img').count(),1);
+  assert.equal(await page.frames()[1].evaluate(()=>window.visualURLs.size),dataOnly ? 0 : 1);
+  await page.frames()[1].evaluate(()=>window.GIL_COMPANION.selectStep('step:C3/S1'));
+  await frame.locator('.report-visuals img').waitFor();
+  const lastReport = await frame.locator('.detail dl').innerText();
   await page.evaluate(() => { window.failResume = true; });
   await frame.locator('[data-step="step:C3/S1"]').click();
   await frame.locator('#host-say').filter({ hasText: '프로젝트 폴더를 찾을 수 없습니다' }).waitFor();
   assert.equal(await frame.locator('[data-step="step:C3/S1"]').count(), 1, 'last graph survives');
   await frame.locator('.notice').filter({ hasText: '상세를 읽지 못했다' }).waitFor();
-  assert.equal(await frame.locator('.detail').innerText(), lastReport, 'last verified report survives a failed reread of the same step');
+  assert.equal(await page.frames()[1].evaluate(()=>window.visualURLs.size),0);
+  assert.equal(await frame.locator('.detail dl').innerText(), lastReport, 'last verified report survives a failed reread of the same step');
   await page.evaluate(() => { window.failResume = false; window.revision = 'new-server:3'; window.view.world.state = 'dirty'; });
   await frame.locator('.world').filter({ hasText: 'dirty' }).waitFor({ timeout: 12000 });
   await frame.locator('.notice[data-shown="false"]').waitFor({ state: 'attached' });
-  assert.equal(await frame.locator('.detail').innerText(), lastReport, 'same report is available after automatic recovery');
+  assert.equal(await frame.locator('.detail dl').innerText(), lastReport, 'same report is available after automatic recovery');
   const calls = await page.evaluate(() => window.requests.filter(p => p.method === 'tools/call'));
   assert.ok(calls.some(c => c.params.name === 'gil_monitor_read'));
   assert.ok(calls.every(c => !('project_root' in c.params.arguments)));
@@ -153,4 +234,5 @@ try {
   const bad = results.filter(r => !r.ok);
   assert.deepEqual(bad, []);
   console.log(`Shared native/fixture UI selftest: ${results.length}/${results.length} PASS`);
+  }
 } finally { await browser.close(); server.close(); }

@@ -10,7 +10,7 @@ import {checkTransition} from './update-policy.mjs';
 import {noticeFixture} from '../compliance/test-fixture.mjs';
 
 // Fake Mach-O is only for static packaging tests. It is never executed as a native acceptance test.
-async function fixture(t, dirty = false) {
+async function fixture(t, dirty = false, profile = 'default') {
   const dir = await realpath(await mkdtemp(join(tmpdir(), 'gil-unsigned-unit-')));
   t.after(() => rm(dir, {recursive: true, force: true}));
   const root = join(dir, 'source'); await mkdir(root);
@@ -31,7 +31,7 @@ async function fixture(t, dirty = false) {
   git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'fixture');
   if (dirty) await writeFile(join(root, 'unreviewed'), 'dirty');
   const input = join(dir, 'development'), output = join(dir, 'candidate');
-  await createTree({root, binary: join(root, 'binary'), output: input});
+  await createTree({root, binary: join(root, 'binary'), output: input, profile});
   return {dir, root, input, output, stage: (version = '0.2.1-preview.1') => stageUnsigned({input, output, version})};
 }
 async function rewriteReceipt(root, change) {
@@ -180,5 +180,45 @@ test('candidate CI is opt-in, read-only and passes the version through a quoted 
   assert.doesNotMatch(workflow, /run:.*\$\{\{ inputs\./);
   assert.match(workflow, /contents: read/);
   assert.doesNotMatch(workflow, /contents: write|secrets\.|gh release|git push|codex plugin add/);
-  assert.match(workflow, /distribution\/codex\/unsigned-preview\.test\.mjs/);
+  assert.match(workflow, /distribution\/codex\/\*\.test\.mjs/);
+  assert.match(workflow, /runtime_profile:/);
+  assert.match(workflow, /visual-authoring\) cargo test --locked -p gil --features visual-authoring/);
+  assert.match(workflow, /GIL_RUNTIME_PROFILE: \$\{\{ inputs\.runtime_profile \|\| 'default' \}\}/);
+  assert.match(workflow, /visual-authoring\) node distribution\/codex\/unsigned-preview\.mjs.*--visual-authoring/);
+});
+
+test('image candidate requires explicit matching profile and keeps bytes and migration boundaries', async t => {
+  const f = await fixture(t, false, 'visual-authoring');
+  await assert.rejects(f.stage(), /explicitly match/);
+  await assert.rejects(stageUnsigned({...f, version:'0.3.0-preview.1', profile:'unknown'}), /unknown/);
+  const before = await inventory(f.input);
+  const result = await stageUnsigned({...f, version:'0.3.0-preview.1', profile:'visual-authoring'});
+  assert.equal(result.schema, 3);
+  assert.equal(result.runtime_profile, 'visual-authoring');
+  assert.equal(result.migration, 'requires_review');
+  assert.deepEqual(result.compatibility.action_surface, {min:2,max:2});
+  assert.deepEqual(result.compatibility.storage_format, {min:4,max:5});
+  assert.equal(result.publishable, false);
+  for(const file of before.filter(f=>![MANIFEST,'PREVIEW.md','release.json'].includes(f.path)))
+    assert.deepEqual(result.files.find(f=>f.path===file.path),file);
+  assert.deepEqual(await inventory(f.input),before);
+  const warning=await readFile(join(f.output,'PREVIEW.md'),'utf8');
+  assert.match(warning,/NOT automatically converted/);
+  assert.match(warning,/Downgrading the Plugin does not downgrade project records/);
+  const saved=await readFile(join(f.output,'release.json'));
+  for(const change of [r=>r.migration='none',r=>r.runtime_profile='default',
+    r=>r.compatibility.storage_format.max=4,r=>delete r.compatibility,r=>r.publishable=true]) {
+    await writeFile(join(f.output,'release.json'),saved);
+    await rewriteReceipt(f.output,change);
+    await assert.rejects(verifyUnsignedTree(f.output));
+  }
+  await writeFile(join(f.output,'release.json'),saved);
+  await verifyUnsignedTree(f.output);
+});
+test('image opt-in cannot bypass dirty source or upgrade a default binary by declaration', async t => {
+  const dirty=await fixture(t,true,'visual-authoring');
+  await assert.rejects(stageUnsigned({...dirty,version:'0.3.0-preview.1',profile:'visual-authoring'}),/dirty/);
+  const plain=await fixture(t);
+  await assert.rejects(stageUnsigned({...plain,version:'0.3.0-preview.1',profile:'visual-authoring'}),/explicitly match/);
+  for(const f of [dirty,plain]) await assert.rejects(readFile(join(f.output,'release.json')),{code:'ENOENT'});
 });

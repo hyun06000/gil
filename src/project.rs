@@ -54,6 +54,7 @@ const FIRST_WILL: u32 = 1;
 /// 한 프로젝트의 상태 전부.
 #[derive(Debug, Clone)]
 pub struct Project {
+    pub(crate) visual_state: Option<crate::visual_report::project::VisualState>,
     cycles: Cycles,
     existences: BTreeMap<u32, Existence>,
     existence_states: BTreeMap<u32, ExistenceState>,
@@ -96,6 +97,7 @@ impl Project {
             .expect("빈 registry 의 첫 발급은 A1 이다");
 
         Project {
+            visual_state: None,
             cycles: Cycles::start(rules, existence, first),
             existences: BTreeMap::from([(
                 FIRST_EXISTENCE,
@@ -268,6 +270,7 @@ impl Project {
         artifacts: SnapshotRegistry,
     ) -> Result<Project, ProjectError> {
         let project = Project {
+            visual_state: None,
             cycles,
             existences,
             existence_states,
@@ -763,7 +766,7 @@ impl Project {
     /// Will 의 `done` 은 행동을 수행했다는 뜻이지 가설이 성공했다는 뜻이 아니다
     /// (Will Model §6) — 실패를 관측하고 닫는 Verify 도 제 행동은 끝낸 것이다.
     pub fn close_action_step(&mut self, report: Report) -> Result<Closed, ActionError> {
-        self.close_step_with(report, None)
+        self.close_step_with(report, None, None, None)
     }
 
     /// **Verify 를 닫으며 관측한 세계를 확정한다.**
@@ -784,13 +787,32 @@ impl Project {
         report: Report,
         world: ManifestAddress,
     ) -> Result<Closed, ActionError> {
-        self.close_step_with(report, Some(world))
+        self.close_step_with(report, Some(world), None, None)
+    }
+
+    /// typed 시각 선언/기존 참조를 같은 도메인 close에 포함한다. 이미지 생성 등록은 아직 미노출.
+    pub fn close_step_with_visuals(
+        &mut self,
+        report: Report,
+        world: Option<ManifestAddress>,
+        visuals: crate::visual_report::registry::ReportVisuals,
+    ) -> Result<Closed, ActionError> {
+        self.close_step_with(report, world, Some(visuals), None)
+    }
+
+    pub(crate) fn close_verify_with_registry(
+        &mut self, report: Report, world: ManifestAddress,
+        registry: crate::visual_report::registry::VisualRegistry,
+    ) -> Result<Closed, ActionError> {
+        self.close_step_with(report, Some(world), None, Some(registry))
     }
 
     fn close_step_with(
         &mut self,
         report: Report,
         world: Option<ManifestAddress>,
+        visuals: Option<crate::visual_report::registry::ReportVisuals>,
+        prepared: Option<crate::visual_report::registry::VisualRegistry>,
     ) -> Result<Closed, ActionError> {
         self.no_pending_revisit()?;
         let mut next = self.clone();
@@ -837,6 +859,13 @@ impl Project {
         let number = existence.journey().next_revision();
         let journey = JourneyRef::new(owner, number);
 
+        let visual_candidate = match prepared {
+            Some(candidate) => Some(candidate),
+            None => self.prepare_visual_close(
+                crate::visual_report::registry::ReportOwner::Step(target), visuals,
+            )?,
+        };
+
         // ⑨ 세계에 이름을 준다 — **복제본 위에서.** 거절되면 이름도 나지 않는다.
         //    같은 세계면 이미 있는 이름을 그대로 돌려받는다(Artifact Model §13).
         let confirmed = match world {
@@ -866,6 +895,7 @@ impl Project {
         // ⑩ 그리고 그 판으로 옮겨 선다.
         existence.stand_at(journey);
 
+        next.apply_visual_close(visual_candidate)?;
         *self = next;
         Ok(Closed {
             step: target,
@@ -881,6 +911,14 @@ impl Project {
     /// (Will Model §5). 그래서 닫힐 때 확정할 새 Journey 내용이 없고, 지금 서 있는 판을
     /// 그대로 provenance 로 적는다(Existence Model §4).
     pub fn close_cycle(&mut self, report: Report) -> Result<ClosedCycle, ActionError> {
+        self.close_cycle_with_visuals(report, vec![])
+    }
+
+    pub fn close_cycle_with_visuals(
+        &mut self,
+        report: Report,
+        uses: Vec<crate::visual_report::VisualUse>,
+    ) -> Result<ClosedCycle, ActionError> {
         let mut next = self.clone();
         let owner = next.current_existence;
         let cycle = next.cycles.current();
@@ -909,6 +947,14 @@ impl Project {
         }
 
         let journey = next.current_existence().current_journey();
+        let visuals = if self.visual_state.is_some() || !uses.is_empty() {
+            Some(crate::visual_report::registry::ReportVisuals::References(uses))
+        } else {
+            None
+        };
+        let visual_candidate = self.prepare_visual_close(
+            crate::visual_report::registry::ReportOwner::Cycle(id), visuals,
+        )?;
         // **어느 종류의 Cycle 이 거절했는지 함께 말한다.** 성공하면 `ClosedCycle` 이 kind 를
         // 알려 주는데 거절할 때만 잃을 이유가 없다 — 그리고 Interview 와 Experiment 는
         // 사람이 할 일이 다르다.
@@ -924,6 +970,7 @@ impl Project {
                 }
             })?;
 
+        next.apply_visual_close(visual_candidate)?;
         *self = next;
         Ok(ClosedCycle {
             cycle: id,
@@ -936,6 +983,7 @@ impl Project {
 /// 통합 transaction 이 거절한 이유.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ActionError {
+    Visual(String),
     /// 닫을 실행형 자리가 없다.
     NothingOpen,
     /// Snapshot registry 가 이름을 주지 못했다.
@@ -1000,6 +1048,7 @@ impl From<CycleError> for ActionError {
 impl std::fmt::Display for ActionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            ActionError::Visual(reason) => write!(f, "시각 Report를 확정하지 못했다: {reason}"),
             ActionError::Registry(source) => write!(f, "{source}"),
             ActionError::NothingOpen => write!(f, "지금 열려 있는 실행형 자리가 없다"),
             ActionError::WillAlreadyActive { will, target } => write!(

@@ -435,7 +435,7 @@ check("14. UI 에 쓰기 길이 없다 — .gil·Artifact·Journey·Will 을 건
   // ② 사람이 누를 수 있는 것은 **읽는 손잡이**뿐이다.
   // `목록에서 빼기` 도 읽는 손잡이다 — 이 창의 설정에서 한 칸을 지울 뿐, Project 의
   // 파일은 하나도 건드리지 않는다(§9.1.2). Rust 시험이 그 바이트를 지킨다.
-  const allowed = [".node", ".fold", ".scope .open", ".scope .refresh", ".scope .forget"];
+  const allowed = [".node", ".fold", ".cycle-report-hit", ".scope .open", ".scope .refresh", ".scope .forget"];
   for (const button of all("button")) {
     if (!allowed.some((one) => button.matches(one)))
       throw new Error(`쓰기로 보이는 button 이 있다: .${button.className}`);
@@ -443,7 +443,7 @@ check("14. UI 에 쓰기 길이 없다 — .gil·Artifact·Journey·Will 을 건
   if (all("form, input, textarea").length) throw new Error("입력 요소가 있다");
   const selects = all("select");
   if (selects.length !== 1 || selects[0].id !== "scope")
-    throw new Error("Project 고르개 말고 다른 입력이 있다");
+    throw new Error("Project 고르개 외 입력이 있다");
 
   // ③ 데이터를 얻으러 간 곳은 fixture 뿐이다. bundle 이 제 파일을 들이는 것은 요청이 아니다.
   const fixture = /\/fixtures\/(projects\.json|[\w-]+\/(view|details)\.json)$/;
@@ -2437,6 +2437,46 @@ export async function selfcheck() {
 
   return got;
 }
+
+check('71. Cycle 보고서는 Step 선택과 분리되며 owner와 원문을 유지한다', async () => {
+  await show('fixture:reading-one');
+  const view=await REAL_HOST.loadView('fixture:reading-one');
+  const cycle=view.timeline.find(c=>c.report);
+  if(!cycle)throw new Error('closed Cycle fixture missing');
+  const calls=[];
+  await withHost(stubHost({mountVisuals:(_el,scope,owner)=>{calls.push({scope,owner});return ()=>{};}}),async()=>{
+    C().expandCycle(cycle.cycle_ref);
+    at(`.bound[data-cycle="${cycle.cycle_ref}"] .cycle-report-hit`).click();
+    if(at('.detail h2').textContent!==cycle.cycle_ref)throw new Error('wrong Cycle');
+    if(!at('.detail').textContent.includes(cycle.report.handoff_summary))throw new Error('missing handoff');
+    if(C().seats.get('fixture:reading-one').selectedStep!==null)throw new Error('Step still selected');
+    if(calls.at(-1).owner.kind!=='cycle')throw new Error('wrong visual owner');
+    if(!at('.card').textContent.includes(cycle.report.handoff_summary))throw new Error('missing Cycle summary card');
+    if(at('.cycle-reports'))throw new Error('dropdown remains');
+    at(`.bound[data-cycle="${cycle.cycle_ref}"] .fold`).click();
+    if(at('.detail h2').textContent!==cycle.cycle_ref)throw new Error('fold changed report');
+    C().expandCycle(cycle.cycle_ref);
+    await C().refresh();
+    if(at('.detail h2').textContent!==cycle.cycle_ref)throw new Error('refresh lost Cycle');
+    await C().selectStep(cycle.steps[0].step_ref);
+    if(C().seats.get('fixture:reading-one').selectedCycle!==null)throw new Error('Cycle remained selected');
+    if(calls.at(-1).owner.kind!=='step')throw new Error('Step owner not restored');
+  });
+});
+check('72. 늦은 Step 응답은 Cycle 보고서를 덮지 않는다', async () => {
+  await show('fixture:reading-one');
+  const view=await REAL_HOST.loadView('fixture:reading-one');
+  const cycle=view.timeline.find(c=>c.report),step=cycle.steps[0].step_ref;
+  const source=await REAL_HOST.loadDetail('fixture:reading-one',step);
+  let release; const gate=new Promise(r=>{release=r;});
+  await withHost(stubHost({loadDetail:async()=>{await gate;return source;}}),async()=>{
+    const pending=C().selectStep(step);
+    C().selectCycle(cycle.cycle_ref);release();await pending;
+    if(at('.detail h2').textContent!==cycle.cycle_ref)throw new Error('stale Step won');
+    C().selectCycle('cycle:missing');
+    if(at('.detail h2'))throw new Error('missing Cycle kept old report');
+  });
+});
 
 window.GIL_SELFTEST = {
   run, selfcheck, place,

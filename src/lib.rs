@@ -121,6 +121,8 @@ pub mod launcher;
 // 다니기 시작하고, 그러면 잠금을 언제 잡는지가 라이브러리의 몫이 아니게 된다. 밖에서
 // 볼 수 있는 것은 잠금을 이미 쥔 트랜잭션([`ProjectSession`]) 하나다.
 mod lock;
+#[cfg(unix)]
+mod internal_fs;
 // Manual 은 **도구의 지식**이다 — 프로젝트 상태가 아니라 함께 실린 Topic 을 읽는다.
 // 밖으로 나가는 것은 조회 문 하나와 그 오류뿐이고, 주소 타입과 index 는 안에 남는다.
 mod manual;
@@ -129,6 +131,13 @@ mod node;
 mod project;
 mod refs;
 mod report;
+// Let unit fault tests reuse the same synthetic fixtures as integration tests.
+#[cfg(test)]
+extern crate self as gil;
+pub mod visual_report;
+/// Development-only, explicit visual-format migration. Not a Plugin command.
+#[cfg(unix)]
+pub mod visual_migration;
 mod restore;
 pub mod mcp;
 pub mod command;
@@ -194,7 +203,7 @@ pub use session::{
 pub use root::{RootError, open_project_root};
 pub use status::where_now;
 pub use story::story;
-pub use store::{FORMAT, LEGACY_WALK_PATH, STATE_PATH, StoreError, load, said_path, save};
+pub use store::{FORMAT, VISUAL_FORMAT, LEGACY_WALK_PATH, STATE_PATH, StoreError, load, said_path, save};
 pub use validate::{GrammarError, Subject};
 pub use walk::{NextDirectionError, NodeId, RestoreError, StepNode, Walk, WalkError};
 pub use will::{ActionContract, ContractError, DONE_WHEN, NEXT_ACTION, OBJECTIVE, Will};

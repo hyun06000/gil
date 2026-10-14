@@ -10,6 +10,14 @@ on:
         required: false
         default: ''
         type: string
+      runtime_profile:
+        description: 'Candidate runtime contract; no automatic migration, installation or publication'
+        required: true
+        default: default
+        type: choice
+        options:
+          - default
+          - visual-authoring
 
 permissions:
   contents: read
@@ -31,20 +39,44 @@ jobs:
           node -e 'if (Number(process.versions.node.split(".")[0]) < 22) process.exit(1)'
           rustup toolchain install 1.97.1 --profile minimal --target aarch64-apple-darwin
           npm ci --prefix mcp-app
+          npm ci --prefix plugins/gil-companion-prototype
           cargo fetch --locked
+      - name: Core and shared UI regression for selected profile
+        env:
+          GIL_RUNTIME_PROFILE: ${{ inputs.runtime_profile || 'default' }}
+        run: |
+          case "$GIL_RUNTIME_PROFILE" in
+            default) cargo test --locked -p gil ;;
+            visual-authoring) cargo test --locked -p gil --features visual-authoring ;;
+            *) exit 2 ;;
+          esac
+          node --test ui/layout.test.mjs mcp-app/*.test.mjs plugins/gil-companion-prototype/*.test.mjs
       - name: Packaging regression tests
-        run: node --test distribution/codex/artifact.test.mjs distribution/codex/release-preflight.test.mjs distribution/codex/update-policy.test.mjs distribution/codex/unsigned-preview.test.mjs distribution/compliance/notices.test.mjs
+        run: node --test distribution/codex/*.test.mjs distribution/compliance/notices.test.mjs
       - name: Offline third-party license coverage (no automatic policy refresh)
         run: node distribution/compliance/notices.mjs check
       - name: Prepare fresh output parent
         run: mkdir -p target
       - name: Build embedded UI and native MCP; roundtrip and first-start checks
-        run: node distribution/codex/build-preview.mjs target/codex-preview
+        env:
+          GIL_RUNTIME_PROFILE: ${{ inputs.runtime_profile || 'default' }}
+        run: |
+          case "$GIL_RUNTIME_PROFILE" in
+            default) node distribution/codex/build-preview.mjs target/codex-preview ;;
+            visual-authoring) node distribution/codex/build-preview.mjs target/codex-preview --visual-authoring ;;
+            *) exit 2 ;;
+          esac
       - name: Prepare opt-in unsigned candidate (never publishes)
         if: github.event_name == 'workflow_dispatch' && inputs.unsigned_preview_version != ''
         env:
           GIL_PREVIEW_VERSION: ${{ inputs.unsigned_preview_version }}
-        run: node distribution/codex/unsigned-preview.mjs prepare target/codex-preview/marketplace "$GIL_PREVIEW_VERSION" target/codex-unsigned-candidate
+          GIL_RUNTIME_PROFILE: ${{ inputs.runtime_profile || 'default' }}
+        run: |
+          case "$GIL_RUNTIME_PROFILE" in
+            default) node distribution/codex/unsigned-preview.mjs prepare target/codex-preview/marketplace "$GIL_PREVIEW_VERSION" target/codex-unsigned-candidate ;;
+            visual-authoring) node distribution/codex/unsigned-preview.mjs prepare target/codex-preview/marketplace "$GIL_PREVIEW_VERSION" target/codex-unsigned-candidate --visual-authoring ;;
+            *) exit 2 ;;
+          esac
       - name: Retain unsigned candidate for review only
         if: github.event_name == 'workflow_dispatch' && inputs.unsigned_preview_version != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24

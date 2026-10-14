@@ -155,6 +155,36 @@ impl Monitor {
         Ok(json!({ "scope_id": scope, "detail": detail }))
     }
 
+    pub(crate) fn report_visuals(&self, scope: &str, owner: crate::visual_report::registry::ReportOwner) -> Result<Value, Refusal> {
+        let session = self.session(scope)?;
+        let detail = session.project().report_visuals_v1(owner)
+            .map_err(|_| Refusal::new("not_found", "그 Report는 이 Project에 없다"))?;
+        let mut value = serde_json::to_value(detail).map_err(|_| Refusal::new("unavailable", "보고서를 표시하지 못했다"))?;
+        value["scope_id"] = json!(scope);
+        if serde_json::to_vec(&value).map_err(|_| Refusal::new("unavailable", "보고서를 표시하지 못했다"))?.len() > 1024*1024 {
+            return Err(Refusal::new("response_too_large", "시각 자료 목록이 응답 한도를 넘었다"));
+        }
+        self.root(scope)?;
+        Ok(value)
+    }
+
+    /// Verified object read used by the App-only chunk tool.
+    /// Scope selects the Project; an asset ID alone never grants access to another Report.
+    #[allow(dead_code)]
+    pub(crate) fn report_image(
+        &self,
+        scope: &str,
+        owner: crate::visual_report::registry::ReportOwner,
+        asset: crate::visual_report::VisualAssetId,
+    ) -> Result<crate::visual_report::image::VerifiedImage, Refusal> {
+        let session = self.session(scope)?;
+        let image = session.read_report_image(owner, asset)
+            .map_err(|_| Refusal::new("visual_unavailable", "이 Report의 시각 자료를 검증하여 읽지 못했다"))?;
+        // Keep the read-only lock through the final consent/identity check. Return no paths.
+        self.root(scope)?;
+        Ok(image)
+    }
+
     fn expire(&self, now: Instant) {
         if let Ok(mut entries) = self.entries.lock() {
             for e in entries.values_mut() {
@@ -200,6 +230,36 @@ mod tests {
         assert_eq!(m.prepare("../private").unwrap_err().code, "invalid_root");
         assert_eq!(m.view("project:unknown").unwrap_err().code, "reconnect_required");
         assert_eq!(m.detail("project:unknown", "step:C1/S1").unwrap_err().code, "reconnect_required");
+        let owner = crate::visual_report::registry::ReportOwner::Step("step:C1/S1".parse().unwrap());
+        let asset = crate::visual_report::VisualAssetId::new(std::num::NonZeroU64::new(1).unwrap());
+        assert_eq!(m.report_image("project:unknown", owner, asset).unwrap_err().code, "reconnect_required");
+    }
+
+    #[test]
+    fn image_scope_rejects_unlinked_assets_and_replaced_project() {
+        use crate::visual_report::{VisualAssetId, registry::ReportOwner};
+        let at = std::env::temp_dir().join(format!("gil-image-scope-{}", std::process::id()));
+        std::fs::create_dir(&at).unwrap();
+        let root = at.join("project");
+        std::fs::create_dir(&root).unwrap();
+        let session = ProjectSession::start(RuleSet::builtin().unwrap(), root.join(crate::STATE_PATH)).unwrap();
+        session.commit().unwrap();
+        drop(session);
+        let m = Monitor::with_store(Store::at(at.join("consent")));
+        let prepared = m.prepare(root.to_str().unwrap()).unwrap();
+        let scope = prepared["scope_id"].as_str().unwrap();
+        let owner = ReportOwner::Step("step:C1/S1".parse().unwrap());
+        let asset = VisualAssetId::new(std::num::NonZeroU64::new(1).unwrap());
+        let before = std::fs::read(root.join(crate::STATE_PATH)).unwrap();
+        let err = m.report_image(scope, owner, asset).unwrap_err();
+        assert_eq!(err.code, "visual_unavailable");
+        assert!(!err.said.contains(root.to_str().unwrap()));
+        assert_eq!(std::fs::read(root.join(crate::STATE_PATH)).unwrap(), before);
+        std::fs::rename(root.join(".gil"), at.join("original-gil")).unwrap();
+        std::fs::create_dir(root.join(".gil")).unwrap();
+        assert_eq!(m.report_image(scope, owner, asset).unwrap_err().code, "project_moved");
+        // Synthetic test tree only.
+        std::fs::remove_dir_all(at).unwrap();
     }
     #[test]
     fn lease_expiry_allows_a_fresh_watch_without_retaining_app_state() {

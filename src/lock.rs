@@ -31,7 +31,9 @@
 //! 않을 수 있다(§10.6).
 
 use std::fmt;
-use std::fs::{self, File, TryLockError};
+use std::fs::{File, TryLockError};
+#[cfg(any(not(unix), test))]
+use std::fs;
 use std::path::{Path, PathBuf};
 
 /// 루트 `.gil/` 안에서 잠금이 사는 자리. **내용은 쓰지 않는다.**
@@ -51,9 +53,11 @@ pub(crate) const LOCK_FILE: &str = "project.lock";
 pub(crate) struct ProjectLock {
     /// 잠금이 걸린 그 handle. **이것이 닫히면 잠금도 없다.**
     ///
-    /// 여기 있는 것은 이것뿐이다 — 경로를 함께 들고 다니면 그 경로가 잠금의 상태를
-    /// 말하는 것처럼 읽힌다. 잠금을 말하는 것은 handle 하나다.
+    /// 잠금 권한은 이 handle이 진다. Unix에서는 부모 directory handle도 유지해
+    /// 경로 교체를 검사하지만, 파일 이름만으로 잠금 권한을 추정하지 않는다.
     file: File,
+    #[cfg(unix)]
+    directory: File,
 }
 
 impl ProjectLock {
@@ -71,6 +75,11 @@ impl ProjectLock {
     /// 디렉터리를 먼저 만들고 잠근다. **그 다음에** 무엇이 이미 있는지 본다 — 잠그기 전에
     /// 보면 두 `gil start` 가 나란히 "비어 있다" 를 읽고 각자 다른 최초 상태를 세운다.
     pub(crate) fn bootstrap(gil_dir: &Path) -> Result<ProjectLock, LockError> {
+        #[cfg(unix)]
+        crate::internal_fs::directory(gil_dir, true).map_err(|source| LockError::Unavailable {
+            path: gil_dir.to_path_buf(), doing: "내부 저장소 자리를 만들지", source: source.to_string(),
+        })?;
+        #[cfg(not(unix))]
         fs::create_dir_all(gil_dir).map_err(|source| LockError::Unavailable {
             path: gil_dir.to_path_buf(),
             doing: "내부 저장소 자리를 만들지",
@@ -82,6 +91,11 @@ impl ProjectLock {
     fn hold(path: PathBuf) -> Result<ProjectLock, LockError> {
         // 파일은 **없으면 만들고, 있으면 그대로 쓴다.** 매번 만들고 지우면 그 자체가
         // 경쟁이 되고, 지우는 쪽이 남의 잠금을 들고 있는 파일을 치우게 된다.
+        #[cfg(unix)]
+        let (directory, file) = crate::internal_fs::file(&path, true).map_err(|source| LockError::Unavailable {
+            path: path.clone(), doing: "잠금 파일을 열지", source: source.to_string(),
+        })?;
+        #[cfg(not(unix))]
         let file = File::options()
             .read(true)
             .write(true)
@@ -95,7 +109,13 @@ impl ProjectLock {
             })?;
 
         match file.try_lock() {
-            Ok(()) => Ok(ProjectLock { file }),
+            Ok(()) => {
+                let lock = ProjectLock { file, #[cfg(unix)] directory };
+                lock.validate(&path).map_err(|source| LockError::Unavailable {
+                    path, doing: "잠근 프로젝트 identity를 확인하지", source: source.to_string(),
+                })?;
+                Ok(lock)
+            },
             // 진짜 경쟁이다 — 다른 GIL 명령이 쥐고 있다.
             Err(TryLockError::WouldBlock) => Err(LockError::Busy { path }),
             // 잠금 자체를 걸 수 없는 자리다(파일 시스템이 지원하지 않는 등). 경쟁과 **구분해**
@@ -106,6 +126,17 @@ impl ProjectLock {
                 source: source.to_string(),
             }),
         }
+    }
+
+    pub(crate) fn validate(&self, lock_path: &Path) -> std::io::Result<()> {
+        #[cfg(unix)] {
+            let (directory, file) = crate::internal_fs::file(lock_path, false)?;
+            if !crate::internal_fs::same(&self.directory, &directory)? || !crate::internal_fs::same(&self.file, &file)? {
+                return Err(std::io::Error::other("locked Project identity changed"));
+            }
+        }
+        #[cfg(not(unix))] let _ = lock_path;
+        Ok(())
     }
 
 }

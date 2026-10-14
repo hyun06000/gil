@@ -56,6 +56,11 @@ export function validateRecord(record) {
       && range.min >= 1 && range.max >= range.min, 'invalid compatibility range');
   }
   assert.ok(['none', 'requires_review'].includes(record.migration), 'migration statement required');
+  // Surface 2 is the reviewed image-authoring contract, never a no-migration rollback promise.
+  if (equal(record.compatibility.action_surface, {min: 2, max: 2})) {
+    assert.deepEqual(record.compatibility.storage_format, {min: 4, max: 5}, 'image storage contract mismatch');
+    assert.equal(record.migration, 'requires_review', 'image records require explicit migration review');
+  }
   return record;
 }
 

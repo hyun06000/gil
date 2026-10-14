@@ -21,13 +21,22 @@ Skill 보정은 새 `0.2.1-preview.2` 후보로 검수하며 설치된 preview.1
 
 ## 구조와 정본
 
+2026-10-14 작성 후보: 기본 profile은 **19 tools / action surface 1 / format 4**,
+`build-preview.mjs <새 output> --visual-authoring`은 **24 tools / surface 2 / format 4..5**다.
+후자는 macOS arm64 합성 검수 후보이며 clean source에서 명시적인
+`unsigned-preview.mjs prepare ... --visual-authoring`으로만 공개용 후보 staging에 들어간다.
+이는 게시 승인이 아니다. 기본 profile은 바뀌지 않고 dirty source 차단도 유지한다.
+`release.json`의 compatibility/migration 선언과 fresh Core probe·도구 전체 schema가
+일치해야 smoke가 통과한다. 작성 후보는 `migration: requires_review`를 강제하며 구형과의
+자동 업데이트/롤백을 승인하지 않는다. 이전 개발 receipt는 새 계약으로 재빌드한다.
+
 ```text
 새 output/
   marketplace/                          장차 built-dist 저장소 root가 될 구조
     .agents/plugins/marketplace.json     root 기준 상대 source.path
     plugins/gil-companion-prototype/
       .codex-plugin/plugin.json          기존 정본 byte 그대로
-      core/darwin-arm64/gil              Core + 17 tools + 내장 MCP App
+      core/darwin-arm64/gil              Core + profile별 19/24 tools + 내장 MCP App
       skills/gil-companion/SKILL.md       공용 Skill 그대로
       LICENSE
       THIRD-PARTY-NOTICES.txt             제3자 package 출처·원문 고지
@@ -70,7 +79,7 @@ output 부모는 있어야 하고 마지막 디렉터리는 **새 이름**이어
 다시 실행할 때 새 output 이름을 쓴다. 이전 실패를 재실행 성공으로 덮지 않는다.
 
 UI build → 오프라인 제3자 고지 coverage → remap된 Rust build → catalog/allowlist → archive → 새 디렉터리 압축 해제 → 파일·권한
-동치 → system dylib만 연결됨 확인 → 새 challenge → 17 tools → embedded resource/HTML hash 순서다.
+동치 → system dylib만 연결됨 확인 → 새 challenge/호환성 대조 → 19/24 tools schema → embedded resource/HTML hash 순서다.
 tar owner/group은 root/wheel로 고정하고 ACL·xattr·resource-fork는 싣지 않는다. 파일별 hash/권한
 재현과 archive 자체의 bit-for-bit 재현은 다르다. archive timestamp 정규화는 아직 하지 않는다.
 정본의 platform Core나

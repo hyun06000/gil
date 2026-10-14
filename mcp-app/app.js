@@ -129,7 +129,7 @@ app.ontoolresult = async (result) => {
     maybeFullscreen();
   } catch (err) { modes(err?.said || 'Monitor 데이터를 받지 못했습니다. Project 를 지정해 다시 열어 주세요.'); }
 };
-function stop() { stopped = true; initialDisplay.cancel(); clearTimeout(timer); }
+function stop() { stopped = true; initialDisplay.cancel(); clearTimeout(timer); window.GIL_COMPANION?.clearVisuals?.(); }
 function resume() {
   if (stopped || suspended || document.hidden) return;
   refreshOnReturn = true;
