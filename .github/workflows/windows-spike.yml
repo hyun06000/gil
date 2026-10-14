@@ -11,11 +11,27 @@ on:
 permissions:
   contents: read
 jobs:
-  windows-x64:
-    runs-on: windows-2025
+  windows-native:
+    name: Windows native (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-2025
+            machine: AMD64
+            target: x86_64-pc-windows-msvc
+          - arch: arm64
+            runner: windows-11-arm
+            machine: ARM64
+            target: aarch64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     env:
       RUSTUP_TOOLCHAIN: 1.97.1
+      GIL_NATIVE_TARGET: ${{ matrix.target }}
+      GIL_NATIVE_MACHINE: ${{ matrix.machine }}
+      GIL_NATIVE_ARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         env:
@@ -25,13 +41,23 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Automatic installer target detection
+        shell: powershell
+        run: ./distribution/windows/install-target.test.ps1
       - name: Install maintainer toolchain
         shell: pwsh
         run: |
-          if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw 'Expected x64 runner' }
-          rustup toolchain install 1.97.1 --profile minimal --target x86_64-pc-windows-msvc
+          if ($env:PROCESSOR_ARCHITECTURE -ne $env:GIL_NATIVE_MACHINE) { throw 'Expected native runner architecture' }
+          node -e "if (process.arch !== process.env.GIL_NATIVE_ARCH) process.exit(1)"
+          if ($LASTEXITCODE -ne 0) { throw 'Node must run natively, not under emulation' }
+          rustup toolchain install 1.97.1 --profile minimal --target $env:GIL_NATIVE_TARGET
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo fetch --locked --target $env:GIL_NATIVE_TARGET
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # Packaging tests independently resolve both locked notice inventories offline.
           cargo fetch --locked --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo fetch --locked --target aarch64-pc-windows-msvc
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build embedded UI
         shell: pwsh
@@ -43,19 +69,19 @@ jobs:
       - name: Build native Core and MCP
         shell: pwsh
         run: |
-          cargo +1.97.1 build --locked -p gil --bin gil --target x86_64-pc-windows-msvc
+          cargo +1.97.1 build --locked -p gil --bin gil --target $env:GIL_NATIVE_TARGET
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Binding security and native MCP integration
         shell: pwsh
         run: |
-          cargo +1.97.1 test --locked -p gil --test windows_bindings --target x86_64-pc-windows-msvc
+          cargo +1.97.1 test --locked -p gil --test windows_bindings --target $env:GIL_NATIVE_TARGET
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cargo +1.97.1 test --locked -p gil --test mcp --target x86_64-pc-windows-msvc
+          cargo +1.97.1 test --locked -p gil --test mcp --target $env:GIL_NATIVE_TARGET
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Native protocol and read-only Monitor
         shell: pwsh
         run: |
-          node distribution/windows/spike.mjs target/x86_64-pc-windows-msvc/debug/gil.exe
+          node distribution/windows/spike.mjs "target/$env:GIL_NATIVE_TARGET/debug/gil.exe"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Candidate packaging regression
         shell: pwsh
@@ -75,9 +101,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           archive: true
-          name: gil-windows-x64-REVIEW-${{ github.sha }}
+          name: gil-windows-${{ matrix.arch }}-REVIEW-${{ github.sha }}
           path: |
-            target/windows-candidate/gil-windows-x64-candidate.tar.gz
+            target/windows-candidate/gil-windows-${{ matrix.arch }}-candidate.tar.gz
             target/windows-candidate/SHA256SUMS
             target/windows-candidate/checks.json
           if-no-files-found: error

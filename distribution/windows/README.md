@@ -3,11 +3,64 @@
 The limited Windows x64 unsigned tester policy is now approved; publication remains gated on
 runtime redistribution review and a verified install source. See [release readiness](RELEASE-READINESS.md).
 
-First target: Windows x64 / MSVC, local fixed NTFS drives. ARM64 and supported end-user OS versions are not yet accepted.
+Native test targets: Windows ARM64 and x64 / MSVC, local fixed NTFS drives.
+ARM64 installation and supported end-user OS versions are not yet accepted.
 This maintainer CI builds the native Core/MCP executable and runs a dependency-free Node test driver.
 Node, npm and Rust are CI tools, not proposed end-user installation requirements.
 No release is published and no active marketplace entry or existing Mac installation is changed.
 An opt-in workflow dispatch can retain an unsigned review artifact for seven days.
+
+## VM-first validation — 2026-10-07
+
+Prioritize the user's Apple Silicon macOS VM and Windows ARM64 VM. Defer physical Intel/AMD x64
+acceptance, not x64 regression coverage. The Windows matrix builds the same source, runs the same
+binding/security and MCP integration tests, and uses the same native protocol/Monitor smoke on
+both CPUs. Native OS and Node architecture assertions reject accidental emulation. No feature,
+tool schema, storage format or security rule is forked by CPU.
+
+Keep evidence separate: macOS ARM64 native, Windows ARM64 native, Windows x64 native, and any
+x64-on-ARM emulation. Passing one is not evidence of another. The UTM GUI tests remain human
+acceptance; CI cannot establish fullscreen, node details or host restart behavior on that VM.
+
+The candidate assembler now selects native ARM64 or x64 profiles for PE inspection, toolchain,
+notice inventory, catalog and executable path. Both matrix entries may prepare review archives.
+ARM64 has an independently resolved 89-package inventory: the architecture-specific windows
+import-library crate differs; the original legal-text hashes are shared and verified.
+This does not authorize a release or establish runtime redistribution terms.
+Both architectures must meet the same installation, integrity,
+runtime-notice and visible Monitor criteria before claiming equivalent end-user support.
+
+Runner reference: [GitHub-hosted runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
+(`windows-11-arm` for ARM64, `windows-2025` for x64).
+
+Source `c762634` passed [native packaging run 37542348090](https://github.com/hyun06000/gil/actions/runs/37542348090):
+both CPUs passed binding/security and MCP tests, 9 packaging tests, release build, PE checks,
+Unicode archive roundtrip and relocated native execution. Both exposed 17 tools, verified embedded
+UI bytes and returned a read-only Monitor View with an active watcher. Local regression: 24
+Windows/common-notice tests plus 60 Mac packaging tests, all passed without skips.
+Downloaded archives independently matched SHA256SUMS and their receipts:
+
+- ARM64: 2,519,040 bytes, `437f0a8db18ebe7efef660f806fbaf505bb17a540e953e8fe9bea1e8e55abf71`.
+- x64: 2,693,120 bytes, `1030de5e2b0f026571f8c519ed0405551039bf02f064211fe9dbee1a8c895106`.
+
+Both selected stable VS Enterprise 18.10.12217.157 / MSVC 14.51.36231 / SDK 10.0.26100.0;
+architecture-specific input hashes are in each receipt. Both receipts remain `publishable: false`.
+Ordinary-user install, visible fullscreen and runtime redistribution review remain open.
+
+Source `975eb9e` passed [native matrix run 37532673397](https://github.com/hyun06000/gil/actions/runs/37532673397):
+each CPU passed 11 binding/security tests and 17 MCP integration tests (zero failures/ignored),
+then the same 17-tool, embedded-UI hash and read-only Monitor smoke with an active OS watcher.
+No compiler warnings were found in the run log. x64 packaging regression also passed 7 tests.
+Installation and visible fullscreen remain untested on both Windows VMs and physical machines.
+Local shared UI/Plugin regression passed 79 tests with 4 existing missing-sidecar skips; packaging
+regression passed 7. Initial local missing-module failures were resolved by installing the locked
+development dependencies in the isolated checkout, without modifying source or lockfiles.
+
+Separate release follow-up: the existing locked UI dependencies report one high npm advisory;
+the legacy JS Plugin development tree reports four (one critical, one high, two moderate).
+Affected-code reachability has not been established. Those node_modules are not included in the
+native shipping payload, but green functional tests are not security clearance. Review dependency
+exposure before a new publication; this architecture change does not silently update dependencies.
 
 `windows-spike.yml` checks native handshake, MCP initialize/list/resource bytes, project start/status,
 duplicate-start refusal and record preservation in a temporary Unicode/space-containing path.
@@ -93,8 +146,8 @@ installation, real Codex fullscreen and tester acceptance. No Windows package ha
 
 Dispatch `windows-spike.yml` on the reviewed branch with `prepare_candidate=true`.
 `candidate.mjs` checks a separate pinned Windows notice policy (89 packages), builds with a static
-CRT and remapped build paths, inspects x64 PE imports, assembles a native-only plugin and an isolated
-`gil-preview-windows-x64` catalog, and verifies every file after archive extraction. The extracted
+CRT and remapped build paths, inspects the matching native PE imports, assembles a native-only plugin
+and an isolated `gil-preview-windows-{x64,arm64}` catalog, and verifies every file after extraction. The extracted
 binary must pass the native smoke with no Node/Cargo on its child PATH. The workflow only retains
 the archive, SHA256SUMS and evidence; it never pushes a catalog, installs, or creates a release.
 
@@ -119,7 +172,7 @@ This candidate does not treat static linking as automatic license approval or an
 
 Do not send a nondeveloper tester these build commands or a CI login requirement. After release gates
 and a stable installation source are ready, give them one Codex prompt and a simple graph/detail/restart
-check. Windows ARM64/Snapdragon is not this candidate's target.
+check. Native ARM64 and x64 candidates are separate archives; do not substitute one for the other.
 
 ## Downloaded candidate checkpoint — 2026-09-30
 
