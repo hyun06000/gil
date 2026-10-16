@@ -58,8 +58,14 @@ release, not by rewriting the receipt.
   registered the public tag `v0.2.1-preview.4` and installed the Plugin; the seven installed files matched
   staging bytes/modes, the cached marketplace commit was `e3ce1be5…`, static `verify.mjs` passed, and the
   installed executable answered 24 tools with format-4/format-5 synthetic projects and shared image reads.
-- Production preview.3 installation, protected configuration fingerprints and real user projects were
-  not modified or used at any step.
+- Production preview.3 installation (seven files) and real user projects were not modified or used at
+  any step; protected Skill/record fingerprints stayed unchanged. **One approved configuration change
+  did occur:** the owner's temporary Codex MCP connection used for Desktop acceptance was repointed from
+  the earlier development executable to the isolated preview.4 install (command path and Monitor state
+  directory only), after a 0600 backup of the previous configuration. No other setting, the production
+  Plugin entry or any project record was changed.
+- The Git-less (no developer tools) installation path documented in `GITLESS-INSTALL.md` remains
+  preview.3-only; preview.4 was not verified through it.
 
 **Not verified for preview.4:** fresh Mac / VM installation (the 2026-10-07 VM check was preview.3),
 full Desktop quit/relaunch restore, the expanded (fullscreen) Monitor switch with this executable,
