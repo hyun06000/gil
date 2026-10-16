@@ -8,8 +8,9 @@ Apple Developer ID 서명·공증은 없다. 개발 도구 없는 Mac VM의 설�
 2026-10-07 깨끗한 Mac VM에서 Git 경로가 Apple Command Line Tools 부재로 실패했다.
 개발 도구가 없는 환경은 [Git 없는 설치](GITLESS-INSTALL.md)를 따른다. 이 경로는 2026-10-16에
 preview.4 공개 archive(URL·크기·SHA-256 고정)로 갱신했고 개발 Mac의 격리 profile에서 다운로드·검증·
-해제·공식 설치·손상/중단/기존 설치 분기를 로컬 검수했다. **깨끗한 Mac VM 검수는 아직 preview.3
-(2026-10-07)만 있고 preview.4는 미검수**다. 아래 Git 사용 고정 tag 설치 검증과는 별개의 경로다.
+해제·공식 설치·손상/중단/기존 설치 분기를 로컬 검수했다. 개발 도구 없는 Mac VM에서는 **추가 권한 요청
+뒤 설치·Monitor 표시 성공, 최초 프롬프트만으로는 설치 미완**이었다(권한 문구를 보강한 현재 판의 단독
+완료는 미확인). 아래 Git 사용 고정 tag 설치 검증과는 별개의 경로다.
 macOS가 실행을 막으면 중단한다. Gatekeeper 해제·quarantine 제거·설치 cache 수정으로 우회하지 않는다.
 Windows·Intel Mac·Claude 작업 모드는 이번 배포의 지원 대상이 아니다.
 
