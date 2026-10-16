@@ -1,12 +1,15 @@
 # GIL preview 설치
 
-대상: **macOS Apple Silicon의 Codex** · `0.2.1-preview.3`.
+대상: **macOS Apple Silicon의 Codex** · `0.2.1-preview.4` (2026-10-14 게시, unsigned prerelease).
 Apple Developer ID 서명·공증은 없다. 개발 도구 없는 Mac VM의 설치·실사용은
-2026-10-07 사용자 검수로 확인했으며, 모든 Mac의 동작을 보장하는 것은 아니다.
+2026-10-07 **preview.3** 사용자 검수로 확인했으며, preview.4는 새 Mac·VM에서 아직 검수하지 않았고
+모든 Mac의 동작을 보장하는 것은 아니다. preview.4의 이미지 보고서 범위와 이관·복구 주의는
+[배포 장부](PREVIEW-4-PUBLICATION-20261014.md)를 따른다.
 2026-10-07 깨끗한 Mac VM에서 Git 경로가 Apple Command Line Tools 부재로 실패했다.
-개발 도구가 없는 환경은 먼저 [Git 없는 설치 검수](GITLESS-INSTALL.md)를 따른다.
-이 경로는 기존 공개 배포물을 그대로 사용한다. VM에서 설치·fullscreen·그래프 갱신·상세·
-되돌아감이 확인됐으며 앱 완전 종료 뒤 복원은 아직 검수하지 않았다.
+개발 도구가 없는 환경의 [Git 없는 설치 검수](GITLESS-INSTALL.md)는 **아직 preview.3 전용**이다.
+그 문서의 다운로드 URL·버전·검수 결과는 preview.3 배포물 기준이며, preview.4의 Git 없는 설치는
+검수하지 않았다. 아래 preview.4 설치 검증(Git 사용, 고정 tag)과는 별개의 경로다.
+preview.3 VM에서는 설치·fullscreen·그래프 갱신·상세·되돌아감이 확인됐고 앱 완전 종료 뒤 복원은 미검수다.
 macOS가 실행을 막으면 중단한다. Gatekeeper 해제·quarantine 제거·설치 cache 수정으로 우회하지 않는다.
 Windows·Intel Mac·Claude 작업 모드는 이번 배포의 지원 대상이 아니다.
 
@@ -14,14 +17,16 @@ Windows·Intel Mac·Claude 작업 모드는 이번 배포의 지원 대상이 �
 
 아래 요청을 Codex에 전달한다. 사용자에게 Node·npm·Cargo·Homebrew 설치나 소스 빌드를 요구하지 않는다.
 먼저 Codex에서 빈 작업 폴더를 선택해 **로컬 명령을 실행할 수 있는 새 대화**를 연다.
-이 경로는 Git을 요구한다. Git이 없다면 개발 도구를 추가 설치하지 말고 위 Git 없는 경로를 사용한다.
+이 경로는 Git을 요구한다. Git이 없다면 개발 도구를 추가 설치하지 않는다. 위 Git 없는 경로는
+현재 preview.3만 제공하므로, preview.4가 필요하면 Git 없는 preview.4 검수가 끝날 때까지 기다린다.
 
-> GIL의 unsigned preview 0.2.1-preview.3를 설치해 줘.
+> GIL의 unsigned preview 0.2.1-preview.4를 설치해 줘.
 > 공식 Plugin 관리 기능으로 https://github.com/hyun06000/gil-marketplace.git 을
-> commit 8445dbdb30c9cfe16a77245adcc4da56c9655b46 에 고정해서 등록하고,
+> 고정 tag v0.2.1-preview.4 (commit e3ce1be57f1a2b6829b89258e703a6cabc1b77eb) 에 등록하고,
 > gil-companion-prototype@gil-preview-macos-arm64 를 설치해 줘.
-> 기존 GIL 설치가 있다면 중복 등록하지 말고 출처와 버전을 먼저 확인해 줘.
-> 내 프로젝트를 초기화하거나 기록을 바꾸지는 마.
+> tag가 존재하고 설치된 버전이 preview.4인지 확인해 줘.
+> 기존 GIL 설치가 있다면 중복 등록하지 말고 출처와 버전을 먼저 확인하고 교체 전에 물어봐 줘.
+> 내 프로젝트를 초기화하거나 이관하거나 기록을 바꾸지는 마.
 
 이는 검수된 Git marketplace 설치다. 범용 Plugins Directory 검색 목록에 등재됐다는 뜻은 아니다.
 소스 저장소 `hyun06000/gil`이 아니라 **`hyun06000/gil-marketplace`가 설치 출처**다.
@@ -51,11 +56,14 @@ unsigned preview는 자동으로 최신 main을 따라가지 않는다. 새 버�
 제거는 Codex의 Plugin 관리 화면에서 한다. **프로젝트 폴더나 `.gil`을 지우지 않는다.**
 화면이 사라져도 프로젝트의 Journey가 삭제됐다는 뜻은 아니다. 다시 설치한 뒤 같은 폴더를 고른다.
 
-이전 검증판은 `0.2.1-preview.2`, marketplace commit
-`076bb49719ffd94225c2c0adf479607e42fb09e2`다. 복구가 필요하면 Codex에게 현재 설치를 확인한 뒤
-같은 marketplace를 이 commit으로 교체해 달라고 요청한다. 이는 **Plugin 버전 복구**이지
+이전 검증판은 `0.2.1-preview.3`, tag `v0.2.1-preview.3` / marketplace commit
+`8445dbdb30c9cfe16a77245adcc4da56c9655b46`다. 복구가 필요하면 Codex에게 현재 설치를 확인한 뒤
+같은 marketplace를 이 tag로 교체해 달라고 요청한다. 이는 **Plugin 버전 복구**이지
 프로젝트 Artifact를 되돌리는 `gil restore`가 아니다. 사용자 동의 없이 실행하지 않는다.
-과거 preview.2 → preview.1 → preview.2 복구는 확인했다. preview.3의 왕복 복구 검수는 아직 미완이다.
+**주의:** preview.4로 새로 만든 이미지 Project는 저장 형식 5이며, preview.3는 형식 5를 읽지 못한다
+("저장 형식 5 … 모른다" 거절). 이는 기록 손실이 아니며 Plugin을 되돌려도 기록은 되돌아가지 않는다.
+설치만으로 기존 Project가 이관되지는 않는다. 이관은 Project마다 백업·복구 확인 승인과 적용 승인을 따로 받는다.
+격리 profile에서 preview.3 → preview.4 → preview.3 → preview.4 교체 쌍은 확인했다(합성 Project 기준).
 
 오류가 나면 OS/CPU, Codex 버전, Plugin 버전과 실제 화면을 아는 만큼만
 [GIL Issues](https://github.com/hyun06000/gil/issues)에 알려 준다. 개인 경로·대화·token·`.gil` 기록은
@@ -67,15 +75,19 @@ unsigned preview는 자동으로 최신 main을 따라가지 않는다. 새 버�
 새 설치의 명령 형태는 다음과 같고, 기존 marketplace가 있으면 먼저 등록 상태와 동의를 확인한다.
 
 ```sh
-codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref 8445dbdb30c9cfe16a77245adcc4da56c9655b46 --json
+codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.4 --json
 codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 ```
+
+2026-10-15 확인: 저장된 Git 인증정보·Codex 로그인 없이 새 격리 profile에서 위 tag로 설치됐고,
+설치된 7개 파일의 bytes·권한이 검수본과 같았다.
 
 공식 CLI가 실패하면 설치 cache나 Host 설정을 손으로 고쳐 성공처럼 만들지 않는다.
 [Codex 공식 Plugin 안내](https://developers.openai.com/plugins/build/plugins)를 따른다.
 
-원본 CI archive의 SHA-256:
-`f484c09919c3c58e722ef12a466158bcb478e56bada2e216b7cbbcdfc3102d1c`.
+게시된 preview.4 archive의 SHA-256:
+`b2c40ec3933a32ac3a74f56910f89555bb6b6428fd6d47959b3913513e47cdb4`
+(원본 CI archive `330587c5ef0cd7ba2aabdbf756e5caf24ab5599673ac37cb02143a1661cd999f`에서 version·PREVIEW.md만 staging).
 이 값은 GitHub가 생성하는 Source ZIP의 해시가 아니다. 해시는 파일 일관성이지 Apple 서명·
 공증이나 publisher 인증의 대체물이 아니다. 공개 게시 상태와 증거는
-[배포 장부](PREVIEW-3-PUBLICATION-20260930.md)를 확인한다.
+[배포 장부](PREVIEW-4-PUBLICATION-20261014.md)를 확인한다. 이전 판은 [preview.3 장부](PREVIEW-3-PUBLICATION-20260930.md).
