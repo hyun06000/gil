@@ -6,10 +6,10 @@ Apple Developer ID 서명·공증은 없다. 개발 도구 없는 Mac VM의 설�
 모든 Mac의 동작을 보장하는 것은 아니다. preview.4의 이미지 보고서 범위와 이관·복구 주의는
 [배포 장부](PREVIEW-4-PUBLICATION-20261014.md)를 따른다.
 2026-10-07 깨끗한 Mac VM에서 Git 경로가 Apple Command Line Tools 부재로 실패했다.
-개발 도구가 없는 환경의 [Git 없는 설치 검수](GITLESS-INSTALL.md)는 **아직 preview.3 전용**이다.
-그 문서의 다운로드 URL·버전·검수 결과는 preview.3 배포물 기준이며, preview.4의 Git 없는 설치는
-검수하지 않았다. 아래 preview.4 설치 검증(Git 사용, 고정 tag)과는 별개의 경로다.
-preview.3 VM에서는 설치·fullscreen·그래프 갱신·상세·되돌아감이 확인됐고 앱 완전 종료 뒤 복원은 미검수다.
+개발 도구가 없는 환경은 [Git 없는 설치](GITLESS-INSTALL.md)를 따른다. 이 경로는 2026-10-16에
+preview.4 공개 archive(URL·크기·SHA-256 고정)로 갱신했고 개발 Mac의 격리 profile에서 다운로드·검증·
+해제·공식 설치·손상/중단/기존 설치 분기를 로컬 검수했다. **깨끗한 Mac VM 검수는 아직 preview.3
+(2026-10-07)만 있고 preview.4는 미검수**다. 아래 Git 사용 고정 tag 설치 검증과는 별개의 경로다.
 macOS가 실행을 막으면 중단한다. Gatekeeper 해제·quarantine 제거·설치 cache 수정으로 우회하지 않는다.
 Windows·Intel Mac·Claude 작업 모드는 이번 배포의 지원 대상이 아니다.
 
@@ -17,8 +17,7 @@ Windows·Intel Mac·Claude 작업 모드는 이번 배포의 지원 대상이 �
 
 아래 요청을 Codex에 전달한다. 사용자에게 Node·npm·Cargo·Homebrew 설치나 소스 빌드를 요구하지 않는다.
 먼저 Codex에서 빈 작업 폴더를 선택해 **로컬 명령을 실행할 수 있는 새 대화**를 연다.
-이 경로는 Git을 요구한다. Git이 없다면 개발 도구를 추가 설치하지 않는다. 위 Git 없는 경로는
-현재 preview.3만 제공하므로, preview.4가 필요하면 Git 없는 preview.4 검수가 끝날 때까지 기다린다.
+이 경로는 Git을 요구한다. Git이 없다면 개발 도구를 추가 설치하지 말고 위 Git 없는 경로를 사용한다.
 
 > GIL의 unsigned preview 0.2.1-preview.4를 설치해 줘.
 > 공식 Plugin 관리 기능으로 https://github.com/hyun06000/gil-marketplace.git 을
