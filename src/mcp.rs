@@ -90,7 +90,7 @@ impl ServerHandler for GilServer {
     async fn call_tool(&self, request: CallToolRequestParams, _: RequestContext<RoleServer>) -> Result<CallToolResponse, ErrorData> {
         let tool = self.get_tool(&request.name).ok_or_else(|| ErrorData::invalid_params("Unknown GIL tool", None))?;
         let input = Value::Object(request.arguments.unwrap_or_default());
-        if !surface::valid_input(&tool, &input) { return Err(ErrorData::invalid_params("Invalid GIL tool arguments", None)); }
+        if !surface::valid_input(&tool, &input) { return Err(ErrorData::invalid_params(surface::rejection(&tool, &input), None)); }
         Ok(self.dispatch(request.name.into_owned(), input).await.into())
     }
     async fn list_resources(&self, _: Option<PaginatedRequestParams>, _: RequestContext<RoleServer>) -> Result<ListResourcesResult, ErrorData> {

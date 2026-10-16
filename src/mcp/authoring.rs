@@ -369,7 +369,7 @@ pub fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
     // Legacy receipts remain unchanged; typed close returns its durable Report projection.
     raw.as_object_mut().unwrap().remove("outputSchema");
     raw["description"] = json!(
-        "Close the current Report. Development visual-authoring accepts typed visuals and expected_owner together, only on explicit format-5 projects. After an uncertain response use gil_report_visuals; never automatically repeat close. No migration."
+        "Close the current Report. Two input shapes only. Ordinary close {project_root, report}: every step of a format-4 project (including its Verify), and format-5 non-Verify steps that cite no stored images. Typed close {project_root, report, expected_owner:{kind,ref}, visuals:{attachments,uses,declaration}} with expected_owner and visuals ALWAYS together: every format-5 Verify (with attachments/uses and declaration attached, or empty arrays and declaration not_needed (reason) / missing (reason, follow_up) when there are no images), and any format-5 non-Verify step or Cycle report that cites stored images (uses with source kind stored, empty attachments, no declaration). Sending expected_owner without visuals, or visuals without expected_owner, is rejected with -32602 naming the missing field; that call is not executed and nothing is closed — read gil_status/gil_context for the actual open step, then send one corrected call. After an uncertain or lost response use gil_report_visuals; never automatically repeat close. No migration."
     );
     *close = serde_json::from_value(raw).unwrap();
     tools.push(serde_json::from_value(json!({"name":"gil_report_visuals",

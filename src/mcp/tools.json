@@ -702,7 +702,7 @@
   {
     "name": "gil_close",
     "title": "Close the current GIL step",
-    "description": "Close the open step with the Report body that the current grammar requires. Runs the GIL core bundled with this plugin; never a global or repository build.",
+    "description": "Close the open step with the Report body that the current grammar requires. Input is exactly {project_root, report}; this text-only GIL rejects 'visuals'/'expected_owner' with -32602 instead of silently dropping them, and closes nothing on a rejection. Runs the GIL core bundled with this plugin; never a global or repository build.",
     "inputSchema": {
       "type": "object",
       "properties": {

@@ -106,6 +106,51 @@ fn migration_stdio_two_approvals_backup_apply_restart_and_preservation() {
     }
 }
 
+/// A format-5 Verify without images must close with the typed shape carrying a `not_needed` (or
+/// `missing`) declaration; the ordinary text close of that Verify is refused and converts nothing.
+#[cfg(all(unix, feature = "visual-authoring"))]
+#[test]
+fn format5_verify_without_images_uses_typed_close_with_a_declaration() {
+    use serde_json::json;
+    use gil::{CycleKind, NodeKind};
+    let root=scratch("verify-no-images");
+    let mut mcp=Client::serve_with(&scratch("verify-no-images-settings")); mcp.initialize();
+    assert_eq!(monitor_call(&mut mcp,"gil_start",json!({"project_root":root}))["structuredContent"]["storage_format"],5);
+    let mut p=common::bootstrap_from(gil::load(common::spec(),root.join(gil::STATE_PATH)).unwrap());
+    common::up_to_verify(&mut p);
+    gil::save(&p,root.join(gil::STATE_PATH)).unwrap();
+    let r=common::full_report(&common::spec(),CycleKind::Experiment,NodeKind::Verify);
+    let report: String=r.field_names().map(|k| format!("{k}: {}\n",r.get(k).unwrap())).collect();
+    let before=std::fs::read(root.join(gil::STATE_PATH)).unwrap();
+    // The ordinary text close is the wrong shape for a format-5 Verify: refused, nothing written.
+    let text=monitor_call(&mut mcp,"gil_close",json!({"project_root":root,"report":report}));
+    assert_eq!(text["isError"],true,"{text}");
+    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),before);
+    // Half-typed shape is a schema rejection that names the missing field.
+    let half=mcp.request("tools/call",json!({"name":"gil_close","arguments":{"project_root":root,"report":report,
+        "expected_owner":{"kind":"step","ref":"step:C2/S3"}}}));
+    assert_eq!(half["error"]["code"],-32602);
+    assert!(half["error"]["message"].as_str().unwrap().contains("not_needed/missing"),"{half}");
+    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),before);
+    // A `missing` declaration without follow_up is refused by the schema too.
+    let bad=mcp.request("tools/call",json!({"name":"gil_close","arguments":{"project_root":root,"report":report,
+        "expected_owner":{"kind":"step","ref":"step:C2/S3"},
+        "visuals":{"attachments":[],"uses":[],"declaration":{"state":"missing","reason":"no renderer"}}}}));
+    assert_eq!(bad["error"]["code"],-32602);
+    // The correct shape for an image-less Verify: typed close, empty arrays, not_needed with a reason.
+    let closed=monitor_call(&mut mcp,"gil_close",json!({"project_root":root,"report":report,
+        "expected_owner":{"kind":"step","ref":"step:C2/S3"},
+        "visuals":{"attachments":[],"uses":[],"declaration":{"state":"not_needed","reason":"numeric assertions only"}}}));
+    assert_eq!(closed["structuredContent"]["ok"],true,"{closed}");
+    assert_eq!(closed["structuredContent"]["confirmed"],true);
+    assert_eq!(closed["structuredContent"]["visuals"]["state"],"not_needed");
+    assert_eq!(closed["structuredContent"]["visuals"]["uses"].as_array().unwrap().len(),0);
+    let read=monitor_call(&mut mcp,"gil_report_visuals",json!({"project_root":root,"owner":{"kind":"step","ref":"step:C2/S3"}}));
+    assert_eq!(read["structuredContent"]["confirmed"],true);
+    assert_eq!(read["structuredContent"]["visuals"]["state"],"not_needed");
+    mcp.eof();
+}
+
 #[cfg(all(unix, feature = "visual-authoring"))]
 #[test]
 fn authoring_stdio_close_reuse_confirmation_and_rejections() {
@@ -146,6 +191,17 @@ fn authoring_stdio_close_reuse_confirmation_and_rejections() {
     assert!(mcp.request("tools/call",json!({"name":"gil_close","arguments":malformed}))["error"].is_object());
     let mut orphan=args.clone(); orphan["visuals"]["uses"]=json!([]);
     assert!(mcp.request("tools/call",json!({"name":"gil_close","arguments":orphan}))["error"].is_object());
+    // The VM failure: expected_owner without visuals (and the mirror case) must be a -32602 that names
+    // the missing field, echoes no input, and closes nothing.
+    for drop in ["visuals","expected_owner"] {
+        let mut half=args.clone(); half.as_object_mut().unwrap().remove(drop);
+        let err=mcp.request("tools/call",json!({"name":"gil_close","arguments":half}));
+        assert_eq!(err["error"]["code"],-32602,"{err}");
+        let message=err["error"]["message"].as_str().unwrap();
+        assert!(message.contains(&format!("without '{drop}'")),"{message}");
+        assert!(message.contains("Nothing was closed") && !message.contains(root.to_str().unwrap()),"{message}");
+        assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),before);
+    }
     std::fs::write(root.join("broken.png"),b"not png").unwrap();
     let mut broken=args.clone(); broken["visuals"]["attachments"][0]["path"]=json!("broken.png");
     assert_eq!(monitor_call(&mut mcp,"gil_close",broken)["isError"],true);
@@ -397,6 +453,44 @@ fn scratch(name: &str) -> PathBuf {
     let _ = std::fs::remove_dir_all(&at);
     std::fs::create_dir_all(&at).expect("자리");
     at
+}
+
+/// A half-typed close (expected_owner without visuals) is the exact call that failed in the field.
+/// It must be refused with a -32602 that names the missing field, must close nothing, and the agent
+/// must be able to recover with read-only status plus one corrected ordinary close.
+#[test]
+fn half_typed_close_is_rejected_with_the_missing_field_and_recovery_is_an_ordinary_close() {
+    use serde_json::json;
+    use gil::{CycleKind, NodeKind};
+    let at = scratch("half-typed-close");
+    started(&at);
+    let mut mcp = Client::serve_with(&scratch("half-typed-close-settings"));
+    mcp.initialize();
+    // The field situation: the first Interview step C1/S1 is open when the half-typed close arrives.
+    let opened = monitor_call(&mut mcp, "gil_open", json!({"project_root": at, "kind": "question",
+        "contract": "objective: 사용자의 목표를 확인한다\nnext_action: 무엇을 만들고 싶은지 묻는다\ndone_when: 사용자의 원문 응답을 얻는다\n"}));
+    assert_eq!(opened["structuredContent"]["ok"], true, "{opened}");
+    let before = std::fs::read(at.join(gil::STATE_PATH)).unwrap();
+    let wrong = json!({"project_root": at, "report": "question: 무엇을 만들까\n",
+        "expected_owner": {"kind": "step", "ref": "step:C1/S1"}});
+    let err = mcp.request("tools/call", json!({"name": "gil_close", "arguments": wrong}));
+    assert_eq!(err["error"]["code"], -32602, "{err}");
+    let message = err["error"]["message"].as_str().unwrap();
+    assert!(message.contains("visuals") && message.contains("expected_owner"), "{message}");
+    assert!(message.contains("Nothing was closed"), "{message}");
+    assert!(!message.contains(at.to_str().unwrap()), "input values must not be echoed");
+    assert_eq!(std::fs::read(at.join(gil::STATE_PATH)).unwrap(), before, "a rejected close must not touch the project");
+    // Recovery path: read-only status/context show C1/S1 still open, then one corrected ordinary close.
+    let status = monitor_call(&mut mcp, "gil_status", json!({"project_root": at}));
+    assert_eq!(status["structuredContent"]["ok"], true, "{status}");
+    assert!(status["structuredContent"]["said"].as_str().unwrap().contains("C1/S1"), "{status}");
+    let r = common::full_report(&common::spec(), CycleKind::Interview, NodeKind::Question);
+    let report: String = r.field_names().map(|k| format!("{k}: {}\n", r.get(k).unwrap())).collect();
+    let closed = monitor_call(&mut mcp, "gil_close", json!({"project_root": at, "report": report}));
+    assert_eq!(closed["structuredContent"]["ok"], true, "{closed}");
+    assert_ne!(std::fs::read(at.join(gil::STATE_PATH)).unwrap(), before);
+    mcp.eof();
+    std::fs::remove_dir_all(at).unwrap();
 }
 
 /// 진짜 Project 하나를 만든다 — CLI 로. 시험이 저장 형식을 손으로 짓지 않는다.
