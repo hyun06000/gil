@@ -36,6 +36,49 @@ Ordinary text actions answer with `ok`, `exit_code`, `said` (what GIL printed) a
 refused with). **`ok` is the only success signal.** Read `said`/`problem` as GIL's own words and
 pass them on; do not reword them into a verdict of your own.
 
+## Closing a step — two input shapes, never half of one
+
+`gil_close` accepts exactly two shapes. Pick the one the open step requires; do not mix fields.
+
+- **Ordinary close** — every step of a format-4 project **including its Verify**, and every
+  non-Verify step (Interview question/interpretation/synthesis, Experiment define/hypothesis/
+  analysis/outcome) of a format-5 project that cites no stored images:
+  `{"project_root": "<absolute root>", "report": "<fields the current grammar asks for>"}`.
+  Nothing else. `report` is the stdin body; GIL validates its fields.
+- **Typed close** — the **open Verify of a format-5 project, always**, whether or not images exist,
+  **and any format-5 non-Verify step or Cycle report that cites stored images** (empty
+  `attachments`, `uses` with `source.kind: "stored"`, no `declaration`): `{"project_root": ..., "report": ...,
+  "expected_owner": {"kind": "step", "ref": "step:C2/S3"}, "visuals": {"attachments": [...],
+  "uses": [...], "declaration": {...}}}`. `expected_owner` and `visuals` always travel together.
+  A Verify without images still uses this shape with empty `attachments`/`uses` and a
+  `declaration` of `not_needed` (with a reason) or `missing` (with reason and `follow_up`);
+  GIL refuses an ordinary text close of a format-5 Verify, and never treats that refusal as
+  permission to convert the project. Details are in the visual reports section below.
+
+Sending `expected_owner` without `visuals` (or `visuals` without `expected_owner`) is a schema
+rejection (JSON-RPC `-32602`). GIL's message names the missing field and says nothing was closed.
+A `-32602` on any GIL action means exactly one thing: **that call was not executed**. It does
+not tell you what state the project is in — that is a separate question answered only by reading:
+
+1. Do not retry the same call, and do not switch to a different tool to force progress.
+2. Read the current state with `gil_status` / `gil_context`: which Cycle and step are open (if
+   any), and what the grammar for that step asks for (`gil_help`, the loaded `gil_close` schema).
+3. Send **one** corrected call in the shape that step requires.
+4. Only after GIL answers `ok` may you move to the next step.
+
+An input rejection is not an uncertain response: nothing reached the project, so correcting and
+re-sending is the right move. The no-automatic-retry rule below still applies to **uncertain**
+responses (lost connection, busy, no answer) after a well-formed close.
+
+**Never implement around an Interview or around a refused close.** What you may do while a step
+is open is what that step allows: an open Interview step is for asking, interpreting and proposing
+— do not create or edit the user's deliverable (for example `index.html`) while the Interview is
+still open, and do not treat a rejected or refused close as if the step had been closed. An open
+**Verify** is where ordinary implementation, test runs, screenshots and chart generation happen;
+that work is the Verify's content and is reported in its close. If a close is blocked, say so and
+ask rather than skipping the step, and never record steps or reports after the fact to make
+skipped work look like it followed the loop.
+
 **Run GIL actions on one project one at a time.** GIL takes a short exclusive lock on the
 project while it works, so two calls fired in parallel — even two reads like `gil_status` and
 `gil_context` — will have one of them refused. Wait for each answer before sending the next.

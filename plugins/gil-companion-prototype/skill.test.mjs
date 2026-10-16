@@ -208,3 +208,29 @@ test("fullscreen 거절·inline 선택·단일 열린 Cycle·읽기 전용 경�
   assert.match(SKILL, /Native Companion is never launched automatically/);
   assert.match(SKILL, /A user returning inline or choosing vertical must not be overridden/);
 });
+
+test("close 입력 형태와 -32602 뒤 절차 — 열린 Verify 의 정상 구현은 막지 않는다", () => {
+  const closing = section("## Closing a step — two input shapes, never half of one");
+  // 두 형태가 구분되고, 이미지 없는 format-5 Verify 도 typed close 를 쓴다.
+  assert.match(closing, /\*\*Ordinary close\*\*/); assert.match(closing, /\*\*Typed close\*\*/);
+  assert.match(closing, /open Verify of a format-5 project, always/);
+  assert.match(closing, /format-4 project \*\*including its Verify\*\*/, "format-4 Verify 는 ordinary close 다");
+  assert.match(closing, /any format-5 non-Verify step or Cycle report that cites stored images/, "기존 이미지 인용 예외가 없다");
+  assert.match(closing, /empty `attachments`\/`uses` and a\s+`declaration` of `not_needed`[^.]*or `missing`/);
+  assert.match(closing, /refuses an ordinary text close of a format-5 Verify/);
+  // -32602 는 「그 호출이 실행되지 않았다」이지 Step 상태의 단정이 아니다. 상태는 조회로 확인한다.
+  assert.match(closing, /that call was not executed/);
+  assert.match(closing, /does\s+not tell you what state the project is in/);
+  assert.match(closing, /gil_status` \/ `gil_context`/);
+  assert.doesNotMatch(closing, /the project is untouched, the\s+step is still open/, "모든 -32602 를 열린 Step 으로 일반화하면 안 된다");
+  // 열린 Step 전체의 파일 작성 금지는 없다. 인터뷰·거절 무시 구현만 금지하고, 열린 Verify 의 구현·검증·이미지 생성은 허용한다.
+  assert.doesNotMatch(closing, /While a step is open[\s\S]*?do not create or edit the user's deliverable/);
+  assert.match(closing, /open Interview step is for asking, interpreting and proposing/);
+  assert.match(closing, /do not create or edit the user's deliverable[\s\S]*?while the Interview is\s+still open/);
+  assert.match(closing, /open\s+\*\*Verify\*\* is where ordinary implementation, test runs, screenshots and chart generation happen/);
+  assert.match(closing, /do not treat a rejected or refused close as if the step had been closed/);
+  assert.match(closing, /never record steps or reports after the fact/);
+  // 불확실 응답 뒤 close 무조건 재시도 금지는 그대로다.
+  assert.match(closing, /no-automatic-retry rule below still applies to \*\*uncertain\*\*\s+responses/);
+  assert.match(section("## Visual reports — capability-gated authoring"), /do not automatically repeat\s+close\*\*, even for a busy\/connection error/);
+});

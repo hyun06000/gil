@@ -76,9 +76,49 @@ pub fn valid_input(tool: &Tool, input: &Value) -> bool {
     true
 }
 
+/// Static, safe explanation for a schema rejection (-32602). It names the missing or misplaced
+/// field so the caller can correct the call, never echoes input values, and states that nothing
+/// was closed. Field grammar itself stays with Core; this only describes the wire shape.
+pub fn rejection(tool: &Tool, input: &Value) -> &'static str {
+    if tool.name != "gil_close" {
+        return "Invalid GIL tool arguments";
+    }
+    let owner = input.get("expected_owner").is_some();
+    let visuals = input.get("visuals").is_some();
+    if !cfg!(feature = "visual-authoring") && (owner || visuals) {
+        return "gil_close: this GIL accepts only the text contract {project_root, report}; 'visuals' and 'expected_owner' are not supported here and were not silently dropped. Nothing was closed. Send the ordinary close, or use an image-capable GIL; never migrate or convert records to work around this.";
+    }
+    match (owner, visuals) {
+        (true, false) => "gil_close: 'expected_owner' was given without 'visuals'. This call was not executed. Nothing was closed. Ordinary close takes exactly {project_root, report}: every step of a format-4 project including its Verify, and format-5 non-Verify steps that cite no stored images. Typed close takes {project_root, report, expected_owner:{kind,ref}, visuals:{attachments,uses,declaration}} together: every format-5 Verify (empty arrays and declaration not_needed/missing when there are no images) and any format-5 report that cites stored images. Read gil_status/gil_context for the actual open step, then send one corrected call in the shape that step requires.",
+        (false, true) => "gil_close: 'visuals' was given without 'expected_owner' {kind, ref}. This call was not executed. Nothing was closed. Ordinary close takes exactly {project_root, report} (all format-4 steps including Verify; format-5 non-Verify steps without stored-image citations); typed close takes {project_root, report, expected_owner, visuals} together (every format-5 Verify, even without images, and any format-5 report citing stored images). Read gil_status/gil_context for the actual open step, then send one corrected call.",
+        (true, true) => "gil_close: 'expected_owner' and 'visuals' are present but malformed. Owner ref looks like step:C2/S3 or cycle:C2; declaration must not be null; a Verify needs exactly one declaration (attached with uses, not_needed with a reason and no uses, missing with reason and follow_up); at most 8 attachments/uses with unique keys; report up to 256 KiB. Nothing was closed; correct the call instead of repeating it.",
+        (false, false) => "gil_close: invalid arguments. Expected {project_root (absolute string), report (string)}. Nothing was closed.",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn rejections_name_the_missing_field_without_echoing_input() {
+        let close=tools().iter().find(|t| t.name=="gil_close").unwrap();
+        let secret="/synthetic/someone/private";
+        let owner_only=json!({"project_root":secret,"report":"x","expected_owner":{"kind":"step","ref":"step:C1/S1"}});
+        let visuals_only=json!({"project_root":secret,"report":"x","visuals":{}});
+        for input in [&owner_only,&visuals_only] {
+            assert!(!valid_input(close,input));
+            let said=rejection(close,input);
+            assert!(said.contains("visuals") && said.contains("expected_owner") && said.contains("Nothing was closed"),"{said}");
+            assert!(!said.contains(secret));
+        }
+        if cfg!(feature="visual-authoring") {
+            assert!(rejection(close,&owner_only).contains("without 'visuals'"));
+            assert!(rejection(close,&visuals_only).contains("without 'expected_owner'"));
+        } else {
+            assert!(rejection(close,&owner_only).contains("text contract"));
+        }
+        assert_eq!(rejection(tools().iter().find(|t| t.name=="gil_status").unwrap(),&json!({})),"Invalid GIL tool arguments");
+    }
     #[test]
     fn visual_authoring_is_explicit_and_never_silently_dropped() {
         let close=tools().iter().find(|t| t.name=="gil_close").unwrap();
