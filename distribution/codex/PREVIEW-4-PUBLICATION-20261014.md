@@ -64,8 +64,11 @@ release, not by rewriting the receipt.
   the earlier development executable to the isolated preview.4 install (command path and Monitor state
   directory only), after a 0600 backup of the previous configuration. No other setting, the production
   Plugin entry or any project record was changed.
-- The Git-less (no developer tools) installation path documented in `GITLESS-INSTALL.md` remains
-  preview.3-only; preview.4 was not verified through it.
+- The Git-less (no developer tools) installation path in `GITLESS-INSTALL.md` was updated on 2026-10-16
+  to the published preview.4 archive (pinned URL, size and SHA-256) and verified locally in isolated
+  profiles (download, verification, safe extraction, official local-marketplace install, corrupted and
+  interrupted downloads, existing-installation approval flow). A clean-Mac VM check of this preview.4
+  path is still pending; the preview.3 VM result does not carry over.
 
 **Not verified for preview.4:** fresh Mac / VM installation (the 2026-10-07 VM check was preview.3),
 full Desktop quit/relaunch restore, the expanded (fullscreen) Monitor switch with this executable,
