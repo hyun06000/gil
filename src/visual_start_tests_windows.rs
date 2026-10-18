@@ -509,8 +509,10 @@ impl TestAccount {
         let stdout = out_dir.join(format!("out-{}-{n}.txt", std::process::id()));
         let stderr = out_dir.join(format!("err-{}-{n}.txt", std::process::id()));
         fs::write(&batch, format!("@echo off\r\nwhoami\r\n{command}\r\nexit /b %ERRORLEVEL%\r\n")).unwrap();
+        // SecureString built without the PowerShell Security module, which Windows PowerShell
+        // could not load on the runner (CI run 39129041207).
         let script = "try { \
-            $secure = ConvertTo-SecureString $env:GIL_TEST_PASS -AsPlainText -Force; \
+            $secure = New-Object System.Security.SecureString; foreach ($ch in $env:GIL_TEST_PASS.ToCharArray()) { $secure.AppendChar($ch) }; \
             $credential = New-Object System.Management.Automation.PSCredential($env:GIL_TEST_USER, $secure); \
             $process = Start-Process -FilePath $env:GIL_TEST_CMD -ArgumentList @('/c', $env:GIL_TEST_BAT) -Credential $credential -WorkingDirectory $env:GIL_TEST_CWD -PassThru -Wait -RedirectStandardOutput $env:GIL_TEST_OUT -RedirectStandardError $env:GIL_TEST_ERR; \
             exit $process.ExitCode \
