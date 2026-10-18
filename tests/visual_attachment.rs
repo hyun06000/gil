@@ -43,9 +43,13 @@ mod links {
     }
     #[cfg(windows)]
     pub fn remove(link: &Path) {
+        use std::os::windows::fs::MetadataExt;
         let meta = std::fs::symlink_metadata(link).unwrap();
         assert!(meta.is_symlink());
-        if meta.is_dir() { std::fs::remove_dir(link).unwrap() } else { std::fs::remove_file(link).unwrap() }
+        // `is_dir()` is false for every symlink; a junction/directory link carries the
+        // directory attribute and must be removed as a directory entry (CI run 39125352678).
+        let directory = meta.file_attributes() & 0x10 != 0;
+        if directory { std::fs::remove_dir(link).unwrap() } else { std::fs::remove_file(link).unwrap() }
     }
 }
 
