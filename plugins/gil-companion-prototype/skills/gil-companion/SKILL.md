@@ -36,6 +36,22 @@ Ordinary text actions answer with `ok`, `exit_code`, `said` (what GIL printed) a
 refused with). **`ok` is the only success signal.** Read `said`/`problem` as GIL's own words and
 pass them on; do not reword them into a verdict of your own.
 
+**After `ok: false`, handle the refusal before anything else.** A refused action did not move the
+project: never treat it as success, and never go on to the next step, the next Cycle or
+implementation on the strength of it. **Do not assume the transition succeeded on a refused call**;
+the position is whatever GIL reports, and another worker may have changed it, so when the
+position is in doubt read `gil_status` / `gil_context` first. Then act by the kind of refusal:
+
+- **Correctable input** (a field in the wrong format, a missing `kind` or contract, a report that
+  the grammar asks to rewrite — the refusal's 이유 and 지금 해야 할 일 say what to fix): send **one
+  corrected call of the same action**, and only if that action is still valid at the current
+  position. Do not send a different action instead.
+- **Permission, compatibility or approval refusals** (unsupported platform or storage format,
+  `visual_upgrade_required`, an action the user has not approved, a locked or unreadable folder):
+  do not repeat the call. Explain GIL's words and what the user would have to decide.
+- **Busy, lost connection or an uncertain close** keep their own rules in this document (wait for
+  the call in flight; never repeat `gil_start`; never automatically repeat a visual close).
+
 ## Closing a step — two input shapes, never half of one
 
 `gil_close` accepts exactly two shapes. Pick the one the open step requires; do not mix fields.
@@ -152,6 +168,15 @@ Keep these boundaries:
   and that the optional native Companion exists — and open the Companion only if they choose it.
 - **The user's inline choice wins.** If they return the Monitor to inline or pick vertical, do not
   request fullscreen again and do not call `show_gil_monitor` again to force it.
+- **Synthesis waits for the human.** After opening a Synthesis, present the concrete `statement`
+  you intend to record — what will be built, for whom, within which limits — and ask the user
+  whether it is right; then **end your turn and wait for their answer**. `approved: yes` is a
+  record of the user's own reply to that statement in that Synthesis: never derive it from an
+  earlier request to build something, from silence, from the user's absence, or from your own
+  judgement that the scope is obvious. Until the user answers, the Synthesis and its Interview stay
+  open; do not close them, do not open an Experiment or any other Cycle, and do not start
+  implementing. If the user says no or changes the proposal, record their words and revise within
+  the same Interview.
 - **One open Cycle at a time.** `gil_start` opens the first Interview, and that is the only open
   Cycle. Do not open another Interview or Experiment while it is open, do not close it merely to
   satisfy a request, and do not leave it suspended to open a new one; close it through its own

@@ -209,6 +209,31 @@ test("fullscreen 거절·inline 선택·단일 열린 Cycle·읽기 전용 경�
   assert.match(SKILL, /A user returning inline or choosing vertical must not be overridden/);
 });
 
+test("ok:false 뒤 처리 — 성공 추정 금지, 사유 읽기, 보정 가능 입력만 같은 동작 1회, 권한·호환 거절은 반복하지 않는다", () => {
+  const body = SKILL;
+  assert.match(body, /\*\*After `ok: false`, handle the refusal before anything else\.\*\*/);
+  assert.match(body, /never treat it as success, and never go on to the next step, the next Cycle or\s+implementation/);
+  assert.match(body, /\*\*Do not assume the transition succeeded on a refused call\*\*/);
+  assert.doesNotMatch(body, /Only `ok: true` moves the position/, "위치 이동을 ok:true 로만 설명하는 문장은 쓰지 않는다");
+  assert.match(body, /another worker may have changed it, so when the\s+position is in doubt read `gil_status` \/ `gil_context` first/);
+  assert.match(body, /\*\*Correctable input\*\*[\s\S]*?send \*\*one\s+corrected call of the same action\*\*, and only if that action is still valid at the current\s+position/);
+  assert.match(body, /Do not send a different action instead/);
+  assert.match(body, /\*\*Permission, compatibility or approval refusals\*\*[\s\S]*?do not repeat the call/);
+  assert.match(body, /\*\*Busy, lost connection or an uncertain close\*\* keep their own rules/);
+  // 기존 별도 규칙은 그대로다.
+  assert.match(body, /Never automatically retry `gil_start`/);
+  assert.match(section("## Visual reports — capability-gated authoring"), /do not automatically repeat\s+close\*\*, even for a busy\/connection error/);
+});
+
+test("Synthesis 는 사람의 승인을 기다린다 — approved:yes 를 이전 요청·침묵·Agent 판단으로 적지 않는다 (Cycle Model §16)", () => {
+  const flow = section("## Starting a project and watching it — one request");
+  assert.match(flow, /\*\*Synthesis waits for the human\.\*\*/);
+  assert.match(flow, /present the concrete `statement`[\s\S]*?ask the user\s+whether it is right; then \*\*end your turn and wait for their answer\*\*/);
+  assert.match(flow, /never derive it from an\s+earlier request to build something, from silence, from the user's absence, or from your own\s+judgement/);
+  assert.match(flow, /Until the user answers, the Synthesis and its Interview stay\s+open; do not close them, do not open an Experiment or any other Cycle, and do not start\s+implementing/);
+  assert.match(flow, /If the user says no or changes the proposal, record their words and revise within\s+the same Interview/);
+});
+
 test("close 입력 형태와 -32602 뒤 절차 — 열린 Verify 의 정상 구현은 막지 않는다", () => {
   const closing = section("## Closing a step — two input shapes, never half of one");
   // 두 형태가 구분되고, 이미지 없는 format-5 Verify 도 typed close 를 쓴다.
