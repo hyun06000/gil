@@ -55,11 +55,20 @@ from source but identical in contract; no storage, grammar or tool-contract chan
   pass locally. Git-less script pinned to the preview.5 asset URL/size/hash; 7 tests pass against the
   staged archive; the public URL does not exist until the release is published.
 
+## User acceptance on the installed public preview.5 — 2026-10-18
+After the production Plugin was replaced through official Plugin management with the public tag
+`v0.2.1-preview.5` (installed files equal to the release archive) and the temporary check servers were
+disabled, the owner ran a **new project** in a new Codex Desktop conversation and reported, in their
+own words, that all of the following passed: the Synthesis approval wait, node progression, the image
+report and its interactions, the expanded (fullscreen) Monitor with chat side by side, and restore
+after a **full application quit and relaunch**. This is the owner's direct observation on their
+existing Mac; it closes the fullscreen and full-restart items for preview.5 on that machine. It is not
+a fresh-Mac/VM result, not an external tester result, and not Windows acceptance. The maintainer did
+not collect screenshots, OS build or project fingerprints for this report.
+
 ## Not verified / limits
-Fresh Mac or VM installation of preview.5; expanded (fullscreen) Monitor switch; full Desktop
-quit/relaunch restore (an MCP server reconnect is not a Desktop restart); external testers; Developer
-ID signing/notarization; Windows or Claude image-report hosts; public anonymous download of a
-preview.5 release (none exists yet). `update-policy.mjs` blocks preview.4 ↔ preview.5 as
+Fresh Mac or VM installation of preview.5 (Git and Git-less paths); external testers; Developer ID
+signing/notarization; Windows or Claude image-report hosts; migration of real user projects. `update-policy.mjs` blocks preview.4 ↔ preview.5 as
 `explicit_contract_and_migration_review_required` because `migration: requires_review` is declared.
 
 ## Pins applied after publication (this follow-up)
