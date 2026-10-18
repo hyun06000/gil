@@ -147,29 +147,44 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
 
 | ID | 시나리오 | 시험 | 결과 |
 | --- | --- | --- | --- |
-| W1-1 | 빈 폴더·기존 Git 폴더에서 최초 format 5, Interview 하나/Step 0, 기존 파일 불변, `.writing` 잔여 없음 | `session::visual_start::tests::first_publication_is_visual_and_existing_git_files_are_unchanged` | 기록 대기 |
-| W1-2 | 기존 format 4/5, 빈 `.gil`, 중단 잔여물, `.gil` 파일, junction, 미지 형식 → 거절·불변 | `…::existing_records_and_even_empty_or_partial_storage_are_not_reused` | 기록 대기 |
-| W1-3 | 동시 start 는 하나만 성공 | `…::exclusive_reservation_allows_only_one_concurrent_creator` | 기록 대기 |
-| W1-4 | 상대 경로·없는 폴더·파일·쓰기 거부 폴더 → `.gil` 없음 | `…::denied_or_invalid_folder_does_not_create_storage` | 기록 대기 |
-| W1-5 | 9 개 checkpoint 각각에서 디스크 고갈 → 공개 전 부재/공개 후 완전, 작업 파일 보존, 재시도 거절 | `…::failures_before_and_after_publication_preserve_work_and_remaining_storage` | 기록 대기 |
-| W1-6 | 공개 직전 다른 writer 의 `state.yaml` 을 덮어쓰지 않음 | `…::concurrent_state_entry_is_not_overwritten_at_publication` | 기록 대기 |
-| W1-7 | `.gil` 이름 변경은 보유 중 거부, 잠금/임시 항목 교체는 감지·보존 | `…::changed_directory_lock_or_temporary_entry_is_preserved_and_refused` | 기록 대기 |
-| W1-8 | capture 가 거절하는 링크가 있으면 커밋 없음·원본 보존 | `…::capture_refusal_preserves_source_and_does_not_commit_or_hide_the_problem` | 기록 대기 |
-| W1-9 | 5 개 checkpoint 에서 프로세스 강제 종료 → 부재 또는 완전 상태, 증거 보존 | `…::killed_creator_leaves_absent_or_complete_state_and_preserves_evidence` | 기록 대기 |
-| W2-1 | 첨부 확정 후 blob·registry·state 바이트가 응답 전에 영속 | `tests/visual_attachment.rs::attachment_close_persists_report_provenance_and_bytes_before_receipt` | 기록 대기 |
-| W2-2 | 준비 중 파일 수정·동일 바이트 교체 → 논리 close 없음 | `…::file_changed_during_preparation_refuses_without_logical_close`, `…::replacing_file_with_identical_bytes_still_changes_identity` | 기록 대기 |
-| W2-3 | 파일 symlink·디렉터리 junction·hardlink·unsafe 이름 거절 | `…::source_links_parent_links_hardlinks_and_unsafe_names_are_refused` | 기록 대기 |
-| W2-4 | 디렉터리·중복 입력 거절 | `…::directory_fifo_and_duplicate_input_do_not_become_attachments` (Windows 는 FIFO 대신 디렉터리·중복만) | 기록 대기 |
-| W2-5 | 내부 구성 요소마다 symlink/junction/hardlink 거절, 손상·다른 정상 PNG 거절 | `…::stored_read_refuses_links_at_every_internal_component`, `…::stored_read_rejects_missing_corrupt_and_valid_but_wrong_bytes` | 기록 대기 |
-| W2-6 | state 임시 이름의 기존 파일/링크를 truncate 하지 않음, 링크된 `.gil` 부모 거절, 목적지 링크 교체 시 대상 보존 | `…::visual_state_temp_never_truncates_preexisting_files_or_links`, `…::visual_state_refuses_linked_internal_parent_without_writing_target`, `…::visual_state_replaces_target_link_not_its_referent` | 기록 대기 |
-| W3-1 | 저장 이미지를 다른 Report 에서 인용(보고서별 caption, origin 유지), 잘못된 sha256 거절 | `tests/mcp.rs::authoring_stdio_close_reuse_confirmation_and_rejections` | 기록 대기 |
-| W3-2 | 선언 3 종과 실패한 commit 이 Report 를 열어 둠, 경쟁 close 는 하나만 | `…::authoring_declarations_and_failed_commit_keep_reports_open`, `…::authoring_competing_closes_publish_only_one_report` | 기록 대기 |
-| W4-1 | 원본 삭제 뒤 재시작·읽기 전용 열기에서 projection 과 이미지 바이트 동일, state 불변 | `tests/visual_attachment.rs::display_projection_survives_reopen_and_source_deletion`, `…::read_only_session_reads_preserved_image_without_recovery_or_state_write` | 기록 대기 |
-| W4-2 | 새 서버 프로세스가 기존 기록·잔여물을 복구·재시작 없이 읽음, 응답 유실 뒤 상태 보존 | `tests/mcp.rs::visual_start_preserves_existing_and_partial_records_and_survives_response_loss` | 기록 대기 |
-| W4-3 | 큰 이미지 바이트가 stdio 로 정확히 전달되고 손상 객체는 거절 | `tests/mcp.rs::visual_report_tools_read_exact_bytes_and_refuse_unlinked_assets_over_stdio` | 기록 대기 |
-| W5-1 | 작성 profile 네이티브 smoke: 24 도구 계약, 새 start → `storage_format: 5`, 재시작 뒤 status·Monitor View | `distribution/windows/spike.mjs` (`GIL_RUNTIME_PROFILE=visual-authoring`) | 기록 대기 |
-| W5-2 | 기본 profile 회귀 불변: 19 도구, 기존 binding/MCP 시험 | 기존 `windows-spike.yml` 기본 job | 기록 대기 |
-| W5-3 | Mac 회귀 불변: `cargo test --locked -p gil` default·visual-authoring, JS·패키징 시험 | 기존 `codex-preview.yml` | 기록 대기 |
+| W1-1 | 빈 폴더·기존 Git 폴더에서 최초 format 5, Interview 하나/Step 0, 기존 파일 불변, `.writing` 잔여 없음 | `session::visual_start::tests::first_publication_is_visual_and_existing_git_files_are_unchanged` | 통과 x64·ARM64 (lib 필터, run 39126103310 (head 09882352)) |
+| W1-2 | 기존 format 4/5, 빈 `.gil`, 중단 잔여물, `.gil` 파일, junction, 미지 형식 → 거절·불변 | `…::existing_records_and_even_empty_or_partial_storage_are_not_reused` | 통과 x64·ARM64 (lib 필터, run 39126103310 (head 09882352)); kind 5 는 junction |
+| W1-3 | 동시 start 는 하나만 성공 | `…::exclusive_reservation_allows_only_one_concurrent_creator` | 통과 x64·ARM64 (lib 필터, run 39126103310 (head 09882352)) |
+| W1-4 | 상대 경로·없는 폴더·파일·쓰기 거부 폴더 → `.gil` 없음 | `…::denied_or_invalid_folder_does_not_create_storage` | 통과 x64·ARM64 (lib 필터, run 39126103310 (head 09882352)); 쓰기 거부는 `icacls` Everyone deny(AD,WD) |
+| W1-5 | 9 개 checkpoint 각각에서 디스크 고갈 → 공개 전 부재/공개 후 완전, 작업 파일 보존, 재시도 거절 | `…::failures_before_and_after_publication_preserve_work_and_remaining_storage` | 통과 x64·ARM64 (lib 필터, run 39126103310 (head 09882352)); 고갈은 checkpoint 에 주입한 `ERROR_DISK_FULL`(실제 디스크 고갈 아님) |
+| W1-6 | 공개 직전 다른 writer 의 `state.yaml` 을 덮어쓰지 않음 | `…::concurrent_state_entry_is_not_overwritten_at_publication` | 통과 x64·ARM64 (lib 필터, run 39126103310 (head 09882352)); 배타 rename 이 기존 항목에서 실패함을 관측 |
+| W1-7 | `.gil` 이름 변경은 보유 중 거부, 잠금/임시 항목 교체는 감지·보존 | `…::changed_directory_lock_or_temporary_entry_is_preserved_and_refused` | 통과 x64·ARM64 (lib 필터, run 39126103310 (head 09882352)); `.gil` rename 은 열린 잠금 때문에 OS 가 거부, 잠금 교체는 identity 로 감지 |
+| W1-8 | capture 가 거절하는 링크가 있으면 커밋 없음·원본 보존 | `…::capture_refusal_preserves_source_and_does_not_commit_or_hide_the_problem` | 통과 x64·ARM64 (lib 필터, run 39126103310 (head 09882352)); 링크는 junction |
+| W1-9 | 5 개 checkpoint 에서 프로세스 강제 종료 → 부재 또는 완전 상태, 증거 보존 | `…::killed_creator_leaves_absent_or_complete_state_and_preserves_evidence` | 통과 x64·ARM64 (lib 필터, run 39126103310 (head 09882352)); 종료는 `std::process::abort`(전원 차단 아님) |
+| W2-1 | 첨부 확정 후 blob·registry·state 바이트가 응답 전에 영속 | `tests/visual_attachment.rs::attachment_close_persists_report_provenance_and_bytes_before_receipt` | 통과 x64·ARM64 (`visual_attachment` 22/22, run 39126103310 (head 09882352)) |
+| W2-2 | 준비 중 파일 수정·동일 바이트 교체 → 논리 close 없음 | `…::file_changed_during_preparation_refuses_without_logical_close`, `…::replacing_file_with_identical_bytes_still_changes_identity` | 통과 x64·ARM64 (`visual_attachment` 22/22, run 39126103310 (head 09882352)) |
+| W2-3 | 파일 symlink·디렉터리 junction·hardlink·unsafe 이름 거절 | `…::source_links_parent_links_hardlinks_and_unsafe_names_are_refused` | 통과 x64·ARM64 (`visual_attachment` 22/22, run 39126103310 (head 09882352)); 파일 symlink 는 runner 의 symlink 권한으로 생성 |
+| W2-4 | 디렉터리·중복 입력 거절 | `…::directory_fifo_and_duplicate_input_do_not_become_attachments` (Windows 는 FIFO 대신 디렉터리·중복만) | 통과 x64·ARM64 (`visual_attachment` 22/22, run 39126103310 (head 09882352)) (FIFO 대신 junction·디렉터리·중복) |
+| W2-5 | 내부 구성 요소마다 symlink/junction/hardlink 거절, 손상·다른 정상 PNG 거절 | `…::stored_read_refuses_links_at_every_internal_component`, `…::stored_read_rejects_missing_corrupt_and_valid_but_wrong_bytes` | 통과 x64·ARM64 (`visual_attachment` 22/22, run 39126103310 (head 09882352)); 3차 run 39125709523 까지는 fixture 의 junction 제거 오류로 실패, 거절 자체는 그때도 관측 |
+| W2-6 | state 임시 이름의 기존 파일/링크를 truncate 하지 않음, 링크된 `.gil` 부모 거절, 목적지 링크 교체 시 대상 보존 | `…::visual_state_temp_never_truncates_preexisting_files_or_links`, `…::visual_state_refuses_linked_internal_parent_without_writing_target`, `…::visual_state_replaces_target_link_not_its_referent` | 통과 x64·ARM64 (`visual_attachment` 22/22, run 39126103310 (head 09882352)); 목적지 symlink 항목 교체 후 대상 보존 확인 |
+| W3-1 | 저장 이미지를 다른 Report 에서 인용(보고서별 caption, origin 유지), 잘못된 sha256 거절 | `tests/mcp.rs::authoring_stdio_close_reuse_confirmation_and_rejections` | 통과 x64·ARM64 (`--test mcp` 24/24, run 39126103310 (head 09882352)) |
+| W3-2 | 선언 3 종과 실패한 commit 이 Report 를 열어 둠, 경쟁 close 는 하나만 | `…::authoring_declarations_and_failed_commit_keep_reports_open`, `…::authoring_competing_closes_publish_only_one_report` | 통과 x64·ARM64 (`--test mcp` 24/24, run 39126103310 (head 09882352)) |
+| W4-1 | 원본 삭제 뒤 재시작·읽기 전용 열기에서 projection 과 이미지 바이트 동일, state 불변 | `tests/visual_attachment.rs::display_projection_survives_reopen_and_source_deletion`, `…::read_only_session_reads_preserved_image_without_recovery_or_state_write` | 통과 x64·ARM64 (`visual_attachment` 22/22, run 39126103310 (head 09882352)) |
+| W4-2 | 새 서버 프로세스가 기존 기록·잔여물을 복구·재시작 없이 읽음, 응답 유실 뒤 상태 보존 | `tests/mcp.rs::visual_start_preserves_existing_and_partial_records_and_survives_response_loss` | 통과 x64·ARM64 (`--test mcp` 24/24, run 39126103310 (head 09882352)) |
+| W4-3 | 큰 이미지 바이트가 stdio 로 정확히 전달되고 손상 객체는 거절 | `tests/mcp.rs::visual_report_tools_read_exact_bytes_and_refuse_unlinked_assets_over_stdio` | 통과 x64·ARM64 (`--test mcp` 24/24, run 39126103310 (head 09882352)) (default profile 19/19 에서도 실행) |
+| W5-1 | 작성 profile 네이티브 smoke: 24 도구 계약, 새 start → `storage_format: 5`, 재시작 뒤 status·Monitor View | `distribution/windows/spike.mjs` (`GIL_RUNTIME_PROFILE=visual-authoring`) | 통과 x64·ARM64 (`spike.mjs` visual-authoring: 24 도구, descriptor surface 2 / format max 5, `storage_format: 5`, `format: 5` 상태 파일, 재시작 뒤 status·View, run 39126103310 (head 09882352)) |
+| W5-2 | 기본 profile 회귀 불변: 19 도구, 기존 binding/MCP 시험 | 기존 `windows-spike.yml` 기본 job | 통과 x64·ARM64 (default: binding 11, mcp 19, spike 19 도구·format 4·재시작, candidate 9, run 39126103310 (head 09882352)) |
+| W5-3 | Mac 회귀 불변: `cargo test --locked -p gil` default·visual-authoring, JS·패키징 시험 | 기존 `codex-preview.yml` | 통과 (macOS run 39126103325, default 와 visual-authoring 전체 시험·JS·패키징) |
+| W2-7 | 객체 저장 경계: no-clobber 확정, 확정 후 재판독 검증, tmp 잔여 없음, 동시 확정자 합의, 손상 객체 거절; 잠금 identity·경쟁·부재 | lib 필터 `artifact::store::tests::*`(31), `lock::tests::*`(7) | 통과 x64·ARM64 (lib 필터 118 통과 / 0 실패 / 1 ignored = `crash_child` 진입점, run 39126103310 (head 09882352)) |
+
+### 6.1 runner 실행 결과 요약 (2026-10-18, PR hyun06000/gil#25)
+
+- 1차 run 39125038859 (head 217376c4): 4 job 실패. 원인 1개 — `FileRenameInfoEx` 에 `RootDirectory`
+  상대 이름을 넘겨 `ERROR_INVALID_PARAMETER`. 수정: 전체 경로 + 디렉터리 identity 재확인.
+- 2차 run 39125352678 (head 2832e05d): default 2 job 통과, authoring 2 job 은 mcp 24/24 통과 뒤
+  `visual_attachment` fixture(junction 제거) 오류로 실패. 수정: fixture 만.
+- 3차 run 39125709523 (head 5ffd9d1d): authoring 2 job 이 lib 필터 1 개 실패 — **Core 결함**:
+  junction root 가 `canonicalize` 로 풀려 생성 허용. 수정: 선택 경로를 먼저 no-follow 로 열어 거절.
+- 4차 run 39126103310 (head 09882352): **4 job 모두 통과.** 건너뛴 시험 없음(ignored 1 = 자식
+  진입점). 이 표의 통과는 모두 4차의 실제 실행이다.
+- 실행되지 않은 것: 실제 디스크 고갈·전원 차단, ADS 를 직접 만드는 시험(이름 규칙 거절은
+  `visual_report::file::tests::path_contract_is_shared_across_platforms` 로 실행), 비-NTFS·
+  네트워크 드라이브 거절(runner 에 없음), §8 항목 1 의 ACL 시나리오, Host 화면·설치.
 
 ## 7. 증거 구분
 

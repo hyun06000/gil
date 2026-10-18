@@ -212,3 +212,7 @@ checkpoints, lock and object-store boundaries), then `spike.mjs` with
 The default entries are unchanged and remain the only ones that package a review candidate.
 A green authoring job is runner evidence for the contract table; it is not an installable
 Windows authoring candidate, a version-label decision or a Codex screen acceptance.
+
+Evidence: PR #25 run 39126103310 (head 09882352) passed all four jobs after three fix rounds
+(rename call form, a test fixture, and a real Core defect: a junction root was accepted after
+canonicalization). `.gil` ACL inheritance remains an open release blocker (contract §8).

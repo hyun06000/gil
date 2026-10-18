@@ -699,5 +699,9 @@ Windows 지원 계약 `GIL_Windows_Visual_Support_Contract_v0.1.md`에 따라 §
 
 검증(2026-10-18): Mac 교차 `cargo check --target x86_64-pc-windows-msvc --all-targets`
 default·visual-authoring 통과(기존 Unix 전용 시험 3곳에 `cfg(unix)` 게이트 추가). Windows
-runner 실행 결과·Mac 회귀 결과는 복귀 보고서와 Roadmap T3에 run id와 함께 기록한다.
-runner 통과도 실제 PC·Host 화면 인수가 아니다.
+runner(PR #25, run 39126103310, head 09882352): x64·ARM64 × default·visual-authoring 4 job 통과 —
+authoring job 은 binding 11, mcp 24, `visual_attachment` 22, `visual_start` 1, `visual_store` 8,
+lib 필터 118(ignored 1 = abort 자식 진입점), 24-도구 smoke·format 5·재시작. 앞선 3회의 실패와
+수정(rename 호출 형식, fixture, junction root 거절)은 Windows 지원 계약 §6.1 에 있다. macOS
+run 39126103325 통과. runner 통과도 실제 PC·Host 화면 인수가 아니며, `.gil` ACL 상속은
+계약 §8 의 출시 차단 항목으로 남는다.
