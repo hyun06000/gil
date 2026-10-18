@@ -344,6 +344,7 @@ fn authoring_competing_closes_publish_only_one_report() {
     let root=common::scratch("authoring-race");
     let mut p=common::bootstrap(); common::up_to_verify(&mut p);
     gil::save(&p.prepare_visual_upgrade().unwrap(),root.join(gil::STATE_PATH)).unwrap();
+    common::private_storage(&root);
     let report=common::full_report(&common::spec(),gil::CycleKind::Experiment,gil::NodeKind::Verify);
     let body=report.field_names().map(|k|format!("{k}: {}\n",report.get(k).unwrap())).collect::<String>();
     let args=json!({"project_root":root,"report":body,"expected_owner":{"kind":"step","ref":"step:C2/S3"},
@@ -373,6 +374,7 @@ fn visual_report_tools_read_exact_bytes_and_refuse_unlinked_assets_over_stdio() 
     let mut p = common::bootstrap();
     common::up_to_verify(&mut p);
     gil::save(&p.prepare_visual_upgrade().unwrap(), root.join(gil::STATE_PATH)).unwrap();
+    common::private_storage(&root);
     let mut bytes = Vec::new();
     // Incompressible deterministic pixels force several wire chunks.
     let mut seed = 17u32;

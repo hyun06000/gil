@@ -71,6 +71,7 @@ fn setup(label: &str) -> (PathBuf, ProjectSession) {
         root.join(gil::STATE_PATH),
     )
     .unwrap();
+    common::private_storage(&root);
     fs::write(root.join("screen.png"), png()).unwrap();
     let session = ProjectSession::open(common::spec(), root.join(gil::STATE_PATH)).unwrap();
     (root, session)
@@ -623,6 +624,7 @@ fn non_verify_and_legacy_projects_refuse_before_reading_files() {
         root.join(gil::STATE_PATH),
     )
     .unwrap();
+    common::private_storage(&root);
     let mut session = ProjectSession::open(common::spec(), root.join(gil::STATE_PATH)).unwrap();
     assert!(
         session

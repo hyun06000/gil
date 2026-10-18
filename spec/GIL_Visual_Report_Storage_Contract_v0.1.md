@@ -703,5 +703,10 @@ runner(PR #25, run 39126103310, head 09882352): x64·ARM64 × default·visual-au
 authoring job 은 binding 11, mcp 24, `visual_attachment` 22, `visual_start` 1, `visual_store` 8,
 lib 필터 118(ignored 1 = abort 자식 진입점), 24-도구 smoke·format 5·재시작. 앞선 3회의 실패와
 수정(rename 호출 형식, fixture, junction root 거절)은 Windows 지원 계약 §6.1 에 있다. macOS
-run 39126103325 통과. runner 통과도 실제 PC·Host 화면 인수가 아니며, `.gil` ACL 상속은
-계약 §8 의 출시 차단 항목으로 남는다.
+run 39126103325 통과. runner 통과도 실제 PC·Host 화면 인수가 아니다.
+
+보완(2026-10-18): `.gil` 은 생성 시 소유자 전용 보호 DACL(현재 사용자·SYSTEM, 상속 가능,
+상위 상속 차단)로 태어나고 생성 직후·재열기마다 핸들로 실효 DACL 을 검증한다. 기존 Project 의
+ACL 은 자동 변경하지 않으며 넓어진 format-5 저장소는 거절한다. 전체 경로 rename 의 보안 검토와
+회귀시험, 다른 로컬 계정의 실제 접근 시험, UNC·매핑 드라이브 거절 시험을 추가했다(Windows
+지원 계약 §6 W6/W7, §8, §9; runner 결과는 거기에 기록).

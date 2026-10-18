@@ -203,16 +203,6 @@ pub(crate) fn open_dir(path: &Path, share: u32, create: bool) -> io::Result<File
     Ok(dir)
 }
 
-/// Exclusive directory reservation: an entry of any kind under that name is an error.
-#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
-pub(crate) fn create_dir_exclusive(path: &Path) -> io::Result<()> {
-    let name = wide(path)?;
-    if unsafe { CreateDirectoryW(name.as_ptr(), null_mut()) } == 0 {
-        return Err(io::Error::last_os_error());
-    }
-    Ok(())
-}
-
 /// Open or create a file entry itself; the result is never a directory or reparse point.
 pub(crate) fn open_file(path: &Path, access: u32, share: u32, disposition: u32) -> io::Result<File> {
     let file = open_raw(path, access, share, disposition, FILE_ATTRIBUTE_NORMAL)?;
@@ -446,4 +436,341 @@ pub(crate) fn read_state(path: &Path) -> io::Result<String> {
         return Err(refused());
     }
     Ok(text)
+}
+
+// ── Owner-only Project storage (Windows contract §4 W1/W4, §8) ───────────────────────────
+//
+// `.gil` of an image Project is born with an explicit protected DACL: the current user and
+// SYSTEM have full access with container+object inheritance, nothing else, no inherited ACEs.
+// That is the Windows equivalent of the Unix `0o700` reservation: other local accounts cannot
+// read or change the records, whatever the surrounding folder inherits. Existing Projects are
+// never repaired; a weakened DACL is refused when a format-5 Project is opened.
+
+use windows_sys::Win32::Security::{
+    ACCESS_ALLOWED_ACE, ACE_HEADER, ACL, CONTAINER_INHERIT_ACE, DACL_SECURITY_INFORMATION,
+    EqualSid, GetAce, GetSecurityDescriptorControl, GetTokenInformation, OBJECT_INHERIT_ACE,
+    OWNER_SECURITY_INFORMATION, PSID, SE_DACL_PROTECTED, SECURITY_ATTRIBUTES, TOKEN_QUERY,
+    TOKEN_USER, TokenUser,
+};
+use windows_sys::Win32::Security::Authorization::{
+    ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW,
+    ConvertStringSidToSidW, GetSecurityInfo, SE_FILE_OBJECT,
+};
+use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+use windows_sys::Win32::Foundation::{CloseHandle, LocalFree};
+
+struct Local(*mut c_void);
+impl Drop for Local {
+    fn drop(&mut self) {
+        unsafe {
+            LocalFree(self.0);
+        }
+    }
+}
+struct Token(windows_sys::Win32::Foundation::HANDLE);
+impl Drop for Token {
+    fn drop(&mut self) {
+        unsafe {
+            CloseHandle(self.0);
+        }
+    }
+}
+
+// usize storage supplies TOKEN_USER alignment. Its embedded SID points into this buffer.
+fn user() -> io::Result<Vec<usize>> {
+    unsafe {
+        let mut handle = null_mut();
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut handle) == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let token = Token(handle);
+        let mut bytes = 0;
+        GetTokenInformation(token.0, TokenUser, null_mut(), 0, &mut bytes);
+        if bytes < size_of::<TOKEN_USER>() as u32 || bytes > 65536 {
+            return Err(refused());
+        }
+        let mut buf = vec![0usize; (bytes as usize).div_ceil(size_of::<usize>())];
+        if GetTokenInformation(token.0, TokenUser, buf.as_mut_ptr().cast(), bytes, &mut bytes) == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(buf)
+    }
+}
+fn sid(buf: &[usize]) -> PSID {
+    unsafe { (*(buf.as_ptr().cast::<TOKEN_USER>())).User.Sid }
+}
+fn sid_text(sid: PSID) -> io::Result<String> {
+    unsafe {
+        let mut text = null_mut();
+        if ConvertSidToStringSidW(sid, &mut text) == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let _text = Local(text.cast());
+        let mut len = 0;
+        while *text.add(len) != 0 {
+            len += 1;
+        }
+        String::from_utf16(std::slice::from_raw_parts(text, len)).map_err(|_| refused())
+    }
+}
+fn system_sid() -> io::Result<Local> {
+    let text: Vec<u16> = "S-1-5-18\0".encode_utf16().collect();
+    unsafe {
+        let mut sid = null_mut();
+        if ConvertStringSidToSidW(text.as_ptr(), &mut sid) == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(Local(sid))
+    }
+}
+/// `O:<user>D:P(A;OICI;FA;;;<user>)(A;OICI;FA;;;SY)`
+fn private_descriptor() -> io::Result<Local> {
+    let user = user()?;
+    let name = sid_text(sid(&user))?;
+    let sddl: Vec<u16> = format!("O:{name}D:P(A;OICI;FA;;;{name})(A;OICI;FA;;;SY)\0")
+        .encode_utf16()
+        .collect();
+    unsafe {
+        let mut sd = null_mut();
+        if ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.as_ptr(), 1, &mut sd, null_mut()) == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(Local(sd))
+    }
+}
+
+/// Exclusive reservation of an owner-only directory: an entry of any kind under that name is
+/// an error, and the DACL exists before any record is written into it.
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) fn create_dir_exclusive_private(path: &Path) -> io::Result<()> {
+    let sd = private_descriptor()?;
+    let attributes = SECURITY_ATTRIBUTES {
+        nLength: size_of::<SECURITY_ATTRIBUTES>() as u32,
+        lpSecurityDescriptor: sd.0,
+        bInheritHandle: 0,
+    };
+    let name = wide(path)?;
+    if unsafe { CreateDirectoryW(name.as_ptr(), &attributes) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+/// Open a directory entry with `DELETE` access so a just-created, still empty reservation can be
+/// removed through the handle when its DACL does not verify. Never follows a reparse point.
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) fn open_dir_deletable(path: &Path) -> io::Result<File> {
+    let dir = open_raw(path, READ | DELETE, SHARE_ALL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS)?;
+    ordinary(&dir, true)?;
+    Ok(dir)
+}
+
+/// The directory behind this handle is owner-only: owned by the current user, protected DACL,
+/// exactly two inheritable full-access allow ACEs (current user, SYSTEM), nothing else.
+/// This reads the effective security descriptor, not a path or a string we wrote ourselves.
+pub(crate) fn private_dir(file: &File) -> io::Result<()> {
+    let user = user()?;
+    let system = system_sid()?;
+    unsafe {
+        let (mut owner, mut acl, mut sd) = (null_mut(), null_mut(), null_mut());
+        let error = GetSecurityInfo(
+            file.as_raw_handle(),
+            SE_FILE_OBJECT,
+            OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+            &mut owner,
+            null_mut(),
+            &mut acl,
+            null_mut(),
+            &mut sd,
+        );
+        if error != 0 {
+            return Err(io::Error::from_raw_os_error(error as i32));
+        }
+        let sd = Local(sd);
+        let (mut control, mut revision) = (0, 0);
+        if owner.is_null()
+            || EqualSid(owner, sid(&user)) == 0
+            || acl.is_null()
+            || (*acl.cast::<ACL>()).AceCount != 2
+            || GetSecurityDescriptorControl(sd.0, &mut control, &mut revision) == 0
+            || control & SE_DACL_PROTECTED == 0
+        {
+            return Err(refused());
+        }
+        let (mut saw_user, mut saw_system) = (false, false);
+        for index in 0..2 {
+            let mut ace = null_mut();
+            if GetAce(acl, index, &mut ace) == 0 || ace.is_null() {
+                return Err(refused());
+            }
+            let header = &*ace.cast::<ACE_HEADER>();
+            if header.AceType != 0
+                || header.AceFlags != (OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE) as u8
+                || (header.AceSize as usize) < size_of::<ACCESS_ALLOWED_ACE>()
+            {
+                return Err(refused());
+            }
+            let allow = &*ace.cast::<ACCESS_ALLOWED_ACE>();
+            if allow.Mask != FILE_ALL_ACCESS {
+                return Err(refused());
+            }
+            let allowed: PSID = std::ptr::addr_of!(allow.SidStart).cast_mut().cast();
+            if EqualSid(allowed, sid(&user)) != 0 {
+                saw_user = true;
+            } else if EqualSid(allowed, system.0) != 0 {
+                saw_system = true;
+            } else {
+                return Err(refused());
+            }
+        }
+        if !(saw_user && saw_system) {
+            return Err(refused());
+        }
+    }
+    Ok(())
+}
+
+/// Reopening an image Project: its `.gil` must still be owner-only. Nothing is repaired.
+pub(crate) fn require_private_gil(gil: &Path) -> io::Result<()> {
+    let dir = open_dir(gil, SHARE_ALL, false)?;
+    private_dir(&dir).map_err(|_| {
+        io::Error::other(
+            "이미지 Project 저장소(.gil)의 접근 권한이 소유자 전용(현재 사용자·SYSTEM, 상속 차단)이 아니다. \
+             자동으로 고치지 않는다. 기록을 보존한 채 권한을 확인한다",
+        )
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    //! Windows contract §6 W7-*: the full-path rename stays bound to the pinned directory.
+    use super::*;
+    use std::fs;
+    use windows_sys::Win32::Storage::FileSystem::CREATE_NEW;
+
+    fn scratch(label: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("gil-winfs-{label}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        root.canonicalize().unwrap()
+    }
+    fn junction(link: &Path, target: &Path) {
+        let shell = PathBuf::from(std::env::var_os("SystemRoot").unwrap())
+            .join("System32/WindowsPowerShell/v1.0/powershell.exe");
+        let made = std::process::Command::new(shell)
+            .args(["-NoProfile", "-NonInteractive", "-Command",
+                "$ErrorActionPreference='Stop'; New-Item -ItemType Junction -Path $env:GIL_TEST_LINK -Target $env:GIL_TEST_TARGET | Out-Null"])
+            .env("GIL_TEST_LINK", link)
+            .env("GIL_TEST_TARGET", target)
+            .output()
+            .unwrap();
+        assert!(made.status.success(), "junction fixture creation failed");
+    }
+
+    #[test]
+    fn pinned_chain_blocks_rename_and_delete_of_every_component_until_released() {
+        let root = scratch("pin");
+        let deep = root.join("a").join("b").join("c");
+        fs::create_dir_all(&deep).unwrap();
+        let chain = Chain::open(&deep).unwrap();
+        for path in [root.join("a"), root.join("a/b"), deep.clone()] {
+            let moved = path.with_extension("moved");
+            assert!(fs::rename(&path, &moved).is_err(), "{path:?} renamed while pinned");
+            assert!(!moved.exists());
+        }
+        assert!(fs::remove_dir(&deep).is_err(), "pinned leaf removed");
+        // A sibling the chain does not hold is not affected: the pin is per entry.
+        fs::create_dir(root.join("free")).unwrap();
+        fs::rename(root.join("free"), root.join("free.moved")).unwrap();
+        drop(chain);
+        fs::rename(&deep, deep.with_extension("moved")).unwrap();
+    }
+
+    #[test]
+    fn rename_refuses_a_directory_replaced_behind_an_unpinned_handle() {
+        let root = scratch("swap");
+        let dir_path = root.join("gil");
+        fs::create_dir(&dir_path).unwrap();
+        let held = root.join("held");
+        fs::create_dir(&held).unwrap();
+        let file_path = held.join("state.writing");
+        let file = open_file(&file_path, READ_WRITE_DELETE, SHARE_ALL, CREATE_NEW).unwrap();
+        // A handle that shares deletion (like the lock's directory handle) does not pin.
+        let unpinned = open_dir(&dir_path, SHARE_ALL, false).unwrap();
+        fs::rename(&dir_path, root.join("gil.old")).unwrap();
+        fs::create_dir(&dir_path).unwrap();
+        // The replacement at the same path is a different entry: refused before any rename.
+        assert!(rename(&file, &unpinned, &dir_path, OsStr::new("state"), false).is_err());
+        assert!(!dir_path.join("state").exists());
+        assert!(!root.join("gil.old").join("state").exists());
+        assert!(file_path.exists());
+    }
+
+    #[test]
+    fn exclusive_rename_fails_on_any_existing_entry_and_replace_swaps_only_the_entry() {
+        let root = scratch("exclusive");
+        let dir_path = root.join("gil");
+        fs::create_dir(&dir_path).unwrap();
+        let chain = Chain::open(&dir_path).unwrap();
+        let victim = root.join("victim.txt");
+        fs::write(&victim, b"keep").unwrap();
+        let target_dir = root.join("target-dir");
+        fs::create_dir(&target_dir).unwrap();
+        for (kind, make) in [
+            ("file", Box::new(|at: &Path| fs::write(at, b"existing").unwrap()) as Box<dyn Fn(&Path)>),
+            ("directory", Box::new(|at: &Path| fs::create_dir(at).unwrap())),
+            ("junction", Box::new(|at: &Path| junction(at, &target_dir))),
+        ] {
+            let target = dir_path.join("state");
+            make(&target);
+            let temp = dir_path.join("state.writing");
+            let file = open_file(&temp, READ_WRITE_DELETE, SHARE_ALL, CREATE_NEW).unwrap();
+            assert!(rename(&file, chain.dir(), chain.path(), OsStr::new("state"), false).is_err(), "{kind}");
+            assert!(temp.exists(), "{kind}: temporary vanished");
+            let meta = fs::symlink_metadata(&target).unwrap();
+            match kind {
+                "file" => assert_eq!(fs::read(&target).unwrap(), b"existing"),
+                "directory" => assert!(meta.is_dir()),
+                _ => assert!(meta.is_symlink()),
+            }
+            delete(&file).unwrap();
+            drop(file);
+            if meta.is_symlink() { fs::remove_dir(&target).unwrap() } else if meta.is_dir() { fs::remove_dir(&target).unwrap() } else { fs::remove_file(&target).unwrap() }
+        }
+        // Replacing: a file symlink at the destination is swapped as an entry; its target is kept.
+        let target = dir_path.join("state");
+        match std::os::windows::fs::symlink_file(&victim, &target) {
+            Ok(()) => {
+                let temp = dir_path.join("state.writing");
+                let file = open_file(&temp, READ_WRITE_DELETE, SHARE_ALL, CREATE_NEW).unwrap();
+                use std::io::Write;
+                (&file).write_all(b"published").unwrap();
+                rename(&file, chain.dir(), chain.path(), OsStr::new("state"), true).unwrap();
+                assert_eq!(fs::read(&victim).unwrap(), b"keep");
+                assert!(!fs::symlink_metadata(&target).unwrap().is_symlink());
+                assert_eq!(fs::read(&target).unwrap(), b"published");
+                assert!(!temp.exists());
+            }
+            Err(e) => panic!("file symlink fixture needs the symlink privilege: {e}"),
+        }
+    }
+
+    #[test]
+    fn control_file_refuses_a_hard_linked_or_linked_record() {
+        let root = scratch("control");
+        fs::create_dir(root.join(".gil")).unwrap();
+        let state = root.join(".gil/state.yaml");
+        fs::write(&state, b"format: 5\n").unwrap();
+        assert!(control_file(&state, false).is_ok());
+        fs::hard_link(&state, root.join("twin")).unwrap();
+        assert!(control_file(&state, false).is_err(), "two links accepted");
+        fs::remove_file(root.join("twin")).unwrap();
+        assert!(control_file(&state, false).is_ok());
+        let outside = root.join("outside.yaml");
+        fs::write(&outside, b"format: 5\n").unwrap();
+        fs::remove_file(&state).unwrap();
+        std::os::windows::fs::symlink_file(&outside, &state).expect("symlink privilege");
+        assert!(control_file(&state, false).is_err(), "symlink followed");
+        assert!(read_state(&state).is_err());
+    }
 }

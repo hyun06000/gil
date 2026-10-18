@@ -408,3 +408,253 @@ fn killed_creator_leaves_absent_or_complete_state_and_preserves_evidence() {
         assert_eq!(inventory(&root), before);
     }
 }
+
+// ── Windows contract §6 W6-*: owner-only storage, actual cross-account access, non-local roots ──
+
+fn system32(tool: &str) -> PathBuf {
+    PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32").join(tool)
+}
+/// `icacls` listing of one entry, for assertions about what is *not* repaired.
+fn acl_listing(path: &Path) -> String {
+    let out = std::process::Command::new(system32("icacls.exe")).arg(path).output().unwrap();
+    String::from_utf8_lossy(&out.stdout).to_string()
+}
+fn open_private_check(path: &Path) -> std::io::Result<()> {
+    let dir = crate::windows_fs::open_dir(path, crate::windows_fs::SHARE_ALL, false)?;
+    crate::windows_fs::private_dir(&dir)
+}
+
+#[test]
+fn new_gil_is_owner_only_with_a_protected_inheritable_dacl_and_children_inherit_it() {
+    let root = scratch();
+    drop(ProjectSession::start_visual(rules(), &root).unwrap());
+    let gil = root.join(".gil");
+    // Effective security descriptor read through a handle: owner = current user, protected,
+    // exactly two inheritable full-access ACEs (user, SYSTEM). This is the structural check;
+    // actual cross-account access is a separate test.
+    open_private_check(&gil).unwrap();
+    let listing = acl_listing(&gil);
+    assert!(listing.contains("NT AUTHORITY\\SYSTEM:(OI)(CI)(F)"), "{listing}");
+    assert!(!listing.contains("BUILTIN\\Users") && !listing.contains("Authenticated Users") && !listing.contains("Everyone"), "{listing}");
+    // Records created inside inherit only from that DACL (no entry grants anyone else).
+    for child in [gil.join("state.yaml"), gil.join("project.lock"), gil.join("artifacts")] {
+        let listing = acl_listing(&child);
+        assert!(listing.contains("(I)"), "{child:?}: {listing}");
+        assert!(!listing.contains("BUILTIN\\Users") && !listing.contains("Authenticated Users") && !listing.contains("Everyone"), "{child:?}: {listing}");
+    }
+    // Reopening passes the same check and changes nothing.
+    assert!(ProjectSession::open_read_only(rules(), gil.join("state.yaml")).is_ok());
+}
+
+#[test]
+fn weakened_gil_dacl_is_refused_on_reopen_and_never_repaired() {
+    let root = scratch();
+    drop(ProjectSession::start_visual(rules(), &root).unwrap());
+    let gil = root.join(".gil");
+    let state = gil.join("state.yaml");
+    let before = fs::read(&state).unwrap();
+    // A later grant to Everyone (as a sync tool or a user might apply) widens the records.
+    let out = std::process::Command::new(system32("icacls.exe"))
+        .arg(&gil).args(["/grant", "*S-1-1-0:(OI)(CI)R"]).output().unwrap();
+    assert!(out.status.success());
+    let widened = acl_listing(&gil);
+    assert!(widened.contains("Everyone"), "{widened}");
+    assert!(open_private_check(&gil).is_err());
+    let refused = match ProjectSession::open_read_only(rules(), &state) {
+        Ok(_) => panic!("widened .gil was accepted"),
+        Err(e) => e.to_string(),
+    };
+    assert!(refused.contains("소유자 전용"), "{refused}");
+    assert!(ProjectSession::open(rules(), &state).is_err());
+    // Nothing repaired, nothing rewritten.
+    assert_eq!(acl_listing(&gil), widened);
+    assert_eq!(fs::read(&state).unwrap(), before);
+    // A text-only (format 4) Project is not subject to this check.
+    let legacy = scratch();
+    ProjectSession::start(rules(), legacy.join(crate::STATE_PATH)).unwrap().commit().unwrap();
+    let out = std::process::Command::new(system32("icacls.exe"))
+        .arg(legacy.join(".gil")).args(["/grant", "*S-1-1-0:(OI)(CI)R"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(ProjectSession::open_read_only(rules(), legacy.join(crate::STATE_PATH)).is_ok());
+}
+
+/// Deletes the temporary local account even when an assertion fails.
+struct TestAccount {
+    name: String,
+    password: String,
+}
+impl TestAccount {
+    fn create() -> Self {
+        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let name = format!("giltest{}", nanos % 1_000_000_000);
+        let password = format!("Gil!{}aZ{}", nanos % 100_000_000, std::process::id());
+        let out = std::process::Command::new(system32("net.exe"))
+            .args(["user", &name, &password, "/add", "/y", "/expires:never"])
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "the other-account access check could not run on this host (net user /add failed): {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        Self { name, password }
+    }
+    /// Run one `cmd /c` line as the other account. Output lands in `out_dir`, which must be
+    /// writable by that account. Returns (exit code, stdout, stderr).
+    fn run(&self, command: &str, out_dir: &Path) -> (i32, String, String) {
+        let stdout = out_dir.join(format!("out-{}.txt", std::process::id()));
+        let stderr = out_dir.join(format!("err-{}.txt", std::process::id()));
+        let _ = fs::remove_file(&stdout);
+        let _ = fs::remove_file(&stderr);
+        let script = "$ErrorActionPreference='Stop'; \
+            $secure = ConvertTo-SecureString $env:GIL_TEST_PASS -AsPlainText -Force; \
+            $credential = New-Object System.Management.Automation.PSCredential($env:GIL_TEST_USER, $secure); \
+            $process = Start-Process -FilePath $env:GIL_TEST_CMD -ArgumentList @('/c', $env:GIL_TEST_LINE) -Credential $credential -WorkingDirectory $env:GIL_TEST_CWD -PassThru -Wait -WindowStyle Hidden -RedirectStandardOutput $env:GIL_TEST_OUT -RedirectStandardError $env:GIL_TEST_ERR; \
+            exit $process.ExitCode";
+        let out = std::process::Command::new(powershell())
+            .args(["-NoProfile", "-NonInteractive", "-Command", script])
+            .env("GIL_TEST_USER", &self.name)
+            .env("GIL_TEST_PASS", &self.password)
+            .env("GIL_TEST_CMD", system32("cmd.exe"))
+            .env("GIL_TEST_LINE", command)
+            .env("GIL_TEST_CWD", out_dir)
+            .env("GIL_TEST_OUT", &stdout)
+            .env("GIL_TEST_ERR", &stderr)
+            .output()
+            .unwrap();
+        let launcher_stderr = String::from_utf8_lossy(&out.stderr).to_string();
+        let code = out.status.code().unwrap_or(-1);
+        let read = |p: &Path| fs::read(p).map(|b| String::from_utf8_lossy(&b).to_string()).unwrap_or_default();
+        let (o, e) = (read(&stdout), read(&stderr));
+        assert!(
+            !launcher_stderr.contains("cannot be run due to the error"),
+            "the other-account logon could not run on this host: {launcher_stderr}"
+        );
+        (code, o, e)
+    }
+}
+impl Drop for TestAccount {
+    fn drop(&mut self) {
+        let _ = std::process::Command::new(system32("net.exe"))
+            .args(["user", &self.name, "/delete"])
+            .output();
+    }
+}
+/// Removes the broad folder on the system drive root even when an assertion fails.
+struct BroadFolder(PathBuf);
+impl BroadFolder {
+    fn create() -> Self {
+        let drive = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into());
+        let path = PathBuf::from(format!("{drive}\\gil-acl-{}-{}", std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos() % 1_000_000));
+        fs::create_dir(&path).unwrap();
+        // Explicitly broad: every authenticated user may read, create and modify below here.
+        let out = std::process::Command::new(system32("icacls.exe"))
+            .arg(&path).args(["/grant", "*S-1-5-11:(OI)(CI)M"]).output().unwrap();
+        assert!(out.status.success());
+        Self(path)
+    }
+}
+impl Drop for BroadFolder {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+#[test]
+fn another_local_account_cannot_read_or_write_gil_records_under_a_broad_folder() {
+    let broad = BroadFolder::create();
+    fs::write(broad.0.join("control.txt"), b"readable by any authenticated user\r\n").unwrap();
+    let root = broad.0.join("project");
+    fs::create_dir(&root).unwrap();
+    fs::write(root.join("notes.txt"), b"project file\r\n").unwrap();
+    drop(ProjectSession::start_visual(rules(), &root).unwrap());
+    let gil = root.join(".gil");
+    let state = gil.join("state.yaml");
+    assert!(acl_listing(&root).contains("Authenticated Users"), "fixture must be broad");
+    let account = TestAccount::create();
+    let q = |p: &Path| format!("\"{}\"", p.display());
+    // Control: the account works and the broad folder really is readable and writable by it.
+    let (code, out, err) = account.run(&format!("type {}", q(&broad.0.join("control.txt"))), &broad.0);
+    assert_eq!(code, 0, "control read failed: {err}");
+    assert!(out.contains("readable by any authenticated user"), "{out}");
+    let (code, _, err) = account.run(&format!("echo other>{}", q(&broad.0.join("other-wrote.txt"))), &broad.0);
+    assert_eq!(code, 0, "control write failed: {err}");
+    assert!(broad.0.join("other-wrote.txt").exists());
+    let (code, out, _) = account.run(&format!("type {}", q(&root.join("notes.txt"))), &broad.0);
+    assert_eq!(code, 0, "the surrounding project folder is broad by construction: {out}");
+    // The records: no read, no listing, no write, no delete for the other account.
+    let (code, out, err) = account.run(&format!("type {}", q(&state)), &broad.0);
+    assert_ne!(code, 0, "state.yaml readable by another account: {out}");
+    assert!(err.contains("Access is denied") || err.contains("denied"), "{err}");
+    assert!(!out.contains("format:"), "{out}");
+    let (code, out, _) = account.run(&format!("dir {}", q(&gil)), &broad.0);
+    assert_ne!(code, 0, ".gil listable by another account: {out}");
+    let (code, _, _) = account.run(&format!("echo probe>{}", q(&gil.join("probe.txt"))), &broad.0);
+    assert_ne!(code, 0);
+    assert!(!gil.join("probe.txt").exists(), "another account wrote into .gil");
+    let (code, _, _) = account.run(&format!("del /f /q {}", q(&state)), &broad.0);
+    assert!(code != 0 || state.exists(), "another account deleted state.yaml");
+    assert!(state.exists());
+    // The owner still reads the Project as before.
+    assert!(ProjectSession::open_read_only(rules(), &state).is_ok());
+    drop(account);
+}
+
+/// Deletes the local share and the mapped drive even when an assertion fails.
+struct MappedShare {
+    share: String,
+    letter: Option<String>,
+}
+impl MappedShare {
+    fn create(dir: &Path) -> Self {
+        let share = format!("gilacl{}", std::process::id());
+        let out = std::process::Command::new(system32("net.exe"))
+            .args(["share", &format!("{share}={}", dir.display()), "/grant:everyone,FULL"])
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "the network-root check could not run on this host (net share failed): {}",
+            String::from_utf8_lossy(&out.stdout));
+        let mut made = Self { share, letter: None };
+        for letter in ["Y:", "X:", "W:", "V:", "U:", "T:"] {
+            if Path::new(&format!("{letter}\\")).exists() { continue; }
+            let out = std::process::Command::new(system32("net.exe"))
+                .args(["use", letter, &format!("\\\\localhost\\{}", made.share)])
+                .output()
+                .unwrap();
+            if out.status.success() { made.letter = Some(letter.to_string()); break; }
+        }
+        assert!(made.letter.is_some(), "the network-root check could not map a drive on this host");
+        made
+    }
+}
+impl Drop for MappedShare {
+    fn drop(&mut self) {
+        if let Some(letter) = &self.letter {
+            let _ = std::process::Command::new(system32("net.exe")).args(["use", letter, "/delete", "/y"]).output();
+        }
+        let _ = std::process::Command::new(system32("net.exe")).args(["share", &self.share, "/delete", "/y"]).output();
+    }
+}
+
+#[test]
+fn unc_and_mapped_network_roots_are_refused_without_creating_storage() {
+    let base = scratch();
+    let real = base.join("project");
+    fs::create_dir(&real).unwrap();
+    let mapped = MappedShare::create(&base);
+    // UNC form of the same folder: not a drive-letter path at all.
+    let unc = PathBuf::from(format!("\\\\localhost\\{}\\project", mapped.share));
+    assert!(fs::metadata(&unc).map(|m| m.is_dir()).unwrap_or(false), "share not reachable: {unc:?}");
+    assert!(ProjectSession::start_visual(rules(), &unc).is_err());
+    assert!(!real.join(".gil").exists(), "UNC root created storage");
+    // Mapped network drive: a drive letter whose type is not DRIVE_FIXED.
+    let drive = PathBuf::from(format!("{}\\project", mapped.letter.as_ref().unwrap()));
+    assert!(fs::metadata(&drive).map(|m| m.is_dir()).unwrap_or(false), "mapped drive not reachable: {drive:?}");
+    assert!(ProjectSession::start_visual(rules(), &drive).is_err());
+    assert!(!real.join(".gil").exists(), "mapped network root created storage");
+    // The same folder through its local fixed path is accepted.
+    drop(ProjectSession::start_visual(rules(), &real).unwrap());
+    assert_initial(&real);
+    drop(mapped);
+}

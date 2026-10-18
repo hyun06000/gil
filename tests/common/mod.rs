@@ -516,3 +516,30 @@ pub fn allowed_here(
     let (allowed, _) = constraint.allowed_here(|other| report.get(other));
     allowed.to_vec()
 }
+
+/// Windows: give a fixture-created `.gil` the owner-only DACL that `start_visual` establishes
+/// (current user + SYSTEM, inheritable, protected), so opening the format-5 Project passes the
+/// storage ACL check (Windows contract §4 W4). This is test setup; the product never repairs
+/// an existing Project's ACL. Unix: nothing to do.
+#[allow(dead_code)]
+pub fn private_storage(root: &Path) {
+    #[cfg(windows)]
+    {
+        let system32 = PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32");
+        let who = std::process::Command::new(system32.join("whoami.exe")).output().unwrap();
+        assert!(who.status.success());
+        let account = String::from_utf8(who.stdout).unwrap().trim().to_string();
+        let out = std::process::Command::new(system32.join("icacls.exe"))
+            .arg(root.join(".gil"))
+            .args(["/inheritance:r", "/grant:r"])
+            .arg(format!("{account}:(OI)(CI)F"))
+            .arg("*S-1-5-18:(OI)(CI)F")
+            .arg("/setowner")
+            .arg(&account)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "icacls: {}", String::from_utf8_lossy(&out.stdout));
+    }
+    #[cfg(not(windows))]
+    let _ = root;
+}

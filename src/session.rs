@@ -83,6 +83,7 @@ impl ProjectSession {
         reap_tmp(&ObjectStore::at(&gil))?;
 
         let project = store::load_within(&lock, rules, &state_path).map_err(SessionError::Store)?;
+        private_visual_storage(&gil, &project)?;
 
         Ok(ProjectSession {
             project,
@@ -136,6 +137,7 @@ impl ProjectSession {
         // 지우는 것은 쓰기다.
 
         let project = store::load_within(&lock, rules, &state_path).map_err(SessionError::Store)?;
+        private_visual_storage(&gil, &project)?;
 
         Ok(ReadOnlySession(ProjectSession {
             project,
@@ -738,6 +740,20 @@ fn capture(root: &Path, store: &ObjectStore) -> Result<crate::ManifestAddress, S
 ///
 /// 모르는 것을 지우지 않는다. 그리고 **살아 있는 다른 GIL 프로세스의 임시 파일을 지울 수
 /// 없다** — 이 함수는 프로젝트 잠금을 쥔 채로만 불리고, 잠금을 쥔 명령은 한 번에 하나다.
+/// Windows: an image Project's `.gil` must still be owner-only when reopened (Windows contract
+/// §4 W4). Never repaired here; format-4 Projects and other platforms are not checked.
+fn private_visual_storage(gil: &Path, project: &Project) -> Result<(), SessionError> {
+    #[cfg(windows)]
+    if project.visual_state().is_some() {
+        crate::windows_fs::require_private_gil(gil).map_err(|source| SessionError::Store(StoreError::Read {
+            path: store::said_path(gil), source,
+        }))?;
+    }
+    #[cfg(not(windows))]
+    let _ = (gil, project);
+    Ok(())
+}
+
 /// Refuse linked/special control files before recovery or temporary-object cleanup.
 /// Absence remains the responsibility of the existing recovery/load protocol.
 fn preflight_state(path: &Path) -> Result<(), SessionError> {
