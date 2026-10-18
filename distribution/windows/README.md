@@ -215,6 +215,9 @@ Windows authoring candidate, a version-label decision or a Codex screen acceptan
 
 Evidence: PR #25 run 39126103310 (head 09882352) passed all four jobs after three fix rounds
 (rename call form, a test fixture, and a real Core defect: a junction root was accepted after
-canonicalization). `.gil` ACL: new image Projects are now born owner-only and verified on reopen
-(contract §8); the inherited ACL of the published text preview is reviewed in
+canonicalization). The follow-up (owner-only `.gil`, actual cross-account access test, UNC and
+mapped-drive refusal, rename security review) passed all four jobs in run 39129885115
+(head b84a6322) after six more rounds; contract §6.1 lists each failure and fix, including one
+further Core defect (a reservation handle retained DELETE access and collided with the pinned
+opens). The inherited ACL of the published text preview is reviewed in
 [ACL-IMPACT-20261018.md](ACL-IMPACT-20261018.md).

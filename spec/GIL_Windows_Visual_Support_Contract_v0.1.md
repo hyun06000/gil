@@ -184,15 +184,15 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
 | W5-3 | Mac 회귀 불변: `cargo test --locked -p gil` default·visual-authoring, JS·패키징 시험 | 기존 `codex-preview.yml` | 통과 (macOS run 39126103325, default 와 visual-authoring 전체 시험·JS·패키징) |
 | W2-7 | 객체 저장 경계: no-clobber 확정, 확정 후 재판독 검증, tmp 잔여 없음, 동시 확정자 합의, 손상 객체 거절; 잠금 identity·경쟁·부재 | lib 필터 `artifact::store::tests::*`(31), `lock::tests::*`(7) | 통과 x64·ARM64 (lib 필터 118 통과 / 0 실패 / 1 ignored = `crash_child` 진입점, run 39126103310 (head 09882352)) |
 
-| W6-1 | 새 `.gil` 이 소유자 전용(소유자·보호·사용자/SYSTEM 상속 ACE 둘)이고 하위 기록이 그것만 상속 — **구조 검사**(핸들로 읽은 실효 DACL + `icacls` 목록) | `session::visual_start::tests::new_gil_is_owner_only_with_a_protected_inheritable_dacl_and_children_inherit_it` | 기록 대기 |
-| W6-2 | 넓어진 `.gil` DACL 은 재열기에서 거절, 복구·재작성 없음; format-4 Project 는 영향 없음 | `…::weakened_gil_dacl_is_refused_on_reopen_and_never_repaired` | 기록 대기 |
-| W6-3 | **실제 접근 시험**: `Authenticated Users` Modify 를 상속하는 시스템 드라이브 루트 폴더에서, 임시 로컬 계정이 제어 파일·프로젝트 파일은 읽고 쓰지만 `.gil/state.yaml` 읽기·`.gil` 열거·쓰기·삭제는 거부 | `…::another_local_account_cannot_read_or_write_gil_records_under_a_broad_folder` (`net user` + `Start-Process -Credential`) | 기록 대기 |
-| W6-4 | UNC 경로와 매핑된 네트워크 드라이브(`net share` + `net use`)는 생성 거절·저장소 없음, 같은 폴더의 로컬 고정 경로는 허용 | `…::unc_and_mapped_network_roots_are_refused_without_creating_storage` | 기록 대기 |
+| W6-1 | 새 `.gil` 이 소유자 전용(소유자·보호·사용자/SYSTEM 상속 ACE 둘)이고 하위 기록이 그것만 상속 — **구조 검사**(핸들로 읽은 실효 DACL + `icacls` 목록) | `session::visual_start::tests::new_gil_is_owner_only_with_a_protected_inheritable_dacl_and_children_inherit_it` | 통과 x64·ARM64 (lib 필터 126/126, ignored 1 = `crash_child`, run 39129885115 (head b84a6322)); 자식 `(I)` 표시는 설명자를 `SetSecurityInfo` 로 정규화한 뒤에만 나타났다(9·10 차) |
+| W6-2 | 넓어진 `.gil` DACL 은 재열기에서 거절, 복구·재작성 없음; format-4 Project 는 영향 없음 | `…::weakened_gil_dacl_is_refused_on_reopen_and_never_repaired` | 통과 x64·ARM64 (lib 필터 126/126, ignored 1 = `crash_child`, run 39129885115 (head b84a6322)) |
+| W6-3 | **실제 접근 시험**: `Authenticated Users` Modify 를 상속하는 시스템 드라이브 루트 폴더에서, 임시 로컬 계정이 제어 파일·프로젝트 파일은 읽고 쓰지만 `.gil/state.yaml` 읽기·`.gil` 열거·쓰기·삭제는 거부 | `…::another_local_account_cannot_read_or_write_gil_records_under_a_broad_folder` (`net user` + `Start-Process -Credential`) | 통과 x64·ARM64 (lib 필터 126/126, ignored 1 = `crash_child`, run 39129885115 (head b84a6322)); 임시 계정이 제어 파일·프로젝트 파일은 읽고 썼으나 `state.yaml` type / `.gil` dir 은 exit≠0·Access is denied, `echo >` 는 파일 미생성·denied(cmd 는 ERRORLEVEL 0), del 뒤 state.yaml 잔존. **실제 접근 결과이며 ACL 문자열 검사(W6-1)와 구분** |
+| W6-4 | UNC 경로와 매핑된 네트워크 드라이브(`net share` + `net use`)는 생성 거절·저장소 없음, 같은 폴더의 로컬 고정 경로는 허용 | `…::unc_and_mapped_network_roots_are_refused_without_creating_storage` | 통과 x64·ARM64 (lib 필터 126/126, ignored 1 = `crash_child`, run 39129885115 (head b84a6322)); `net share` + `net use` 매핑, UNC 모두 거절·`.gil` 없음, 로컬 경로는 생성 |
 | W6-5 | FAT/exFAT 등 비-NTFS 볼륨 거절 | runner 에 그런 볼륨이 없어 **실행 불가**(코드 경로: `local_fixed_ntfs` 의 파일 시스템 이름 검사) | 미실행 |
-| W7-1 | pin 된 체인의 모든 구성 요소는 보유 중 이름 변경·삭제가 OS 에서 거부되고 해제 뒤 가능 | `windows_fs::tests::pinned_chain_blocks_rename_and_delete_of_every_component_until_released` | 기록 대기 |
-| W7-2 | pin 하지 않은 핸들 뒤에서 디렉터리가 교체되면 rename 은 identity 재확인으로 거절, 어느 쪽에도 쓰지 않음 | `…::rename_refuses_a_directory_replaced_behind_an_unpinned_handle` | 기록 대기 |
-| W7-3 | 배타 rename 은 파일·디렉터리·junction 어떤 기존 항목에서도 실패하고 임시 파일을 보존; 교체 rename 은 symlink 항목만 바꾸고 대상 보존 | `…::exclusive_rename_fails_on_any_existing_entry_and_replace_swaps_only_the_entry` | 기록 대기 |
-| W7-4 | 공개 뒤 두 번째 hardlink 나 symlink 가 생긴 제어 파일은 읽기에서 거절 | `…::control_file_refuses_a_hard_linked_or_linked_record` | 기록 대기 |
+| W7-1 | pin 된 체인의 모든 구성 요소는 보유 중 이름 변경·삭제가 OS 에서 거부되고 해제 뒤 가능 | `windows_fs::tests::pinned_chain_blocks_rename_and_delete_of_every_component_until_released` | 통과 x64·ARM64 (lib 필터 126/126, ignored 1 = `crash_child`, run 39129885115 (head b84a6322)) |
+| W7-2 | pin 하지 않은 핸들 뒤에서 디렉터리가 교체되면 rename 은 identity 재확인으로 거절, 어느 쪽에도 쓰지 않음 | `…::rename_refuses_a_directory_replaced_behind_an_unpinned_handle` | 통과 x64·ARM64 (lib 필터 126/126, ignored 1 = `crash_child`, run 39129885115 (head b84a6322)) |
+| W7-3 | 배타 rename 은 파일·디렉터리·junction 어떤 기존 항목에서도 실패하고 임시 파일을 보존; 교체 rename 은 symlink 항목만 바꾸고 대상 보존 | `…::exclusive_rename_fails_on_any_existing_entry_and_replace_swaps_only_the_entry` | 통과 x64·ARM64 (lib 필터 126/126, ignored 1 = `crash_child`, run 39129885115 (head b84a6322)); 파일 symlink 교체는 runner 의 symlink 권한으로 실행 |
+| W7-4 | 공개 뒤 두 번째 hardlink 나 symlink 가 생긴 제어 파일은 읽기에서 거절 | `…::control_file_refuses_a_hard_linked_or_linked_record` | 통과 x64·ARM64 (lib 필터 126/126, ignored 1 = `crash_child`, run 39129885115 (head b84a6322)) |
 
 ### 6.1 runner 실행 결과 요약 (2026-10-18, PR hyun06000/gil#25)
 
@@ -204,9 +204,20 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
   junction root 가 `canonicalize` 로 풀려 생성 허용. 수정: 선택 경로를 먼저 no-follow 로 열어 거절.
 - 4차 run 39126103310 (head 09882352): **4 job 모두 통과.** 건너뛴 시험 없음(ignored 1 = 자식
   진입점). 이 표의 통과는 모두 4차의 실제 실행이다.
+- 보완 라운드(2026-10-18, ACL·실제 접근·rename 검토): 6 차 run 39127711288 — Core 결함
+  (예약 `.gil` 을 DELETE 접근 핸들로 보유해 이후 pin 열기와 공유 위반) + fixture icacls 오류;
+  7 차 run 39128080405 — fixture DACL 이 정확한 설명자와 불일치(`adopt_private_storage` 로 교체,
+  거절 사유 메시지 추가); 8 차 run 39128571227 — 124/126, 자식 ACE inherited 미표시(`D:P` 만),
+  다른 계정 launcher 인용 문제; 9·10 차 run 39129041207/39129436214 — `AI` 만으로는 부족,
+  `SetSecurityInfo` 정규화로 해결, Windows PowerShell Security 모듈 로드 불가 → .NET
+  SecureString; 11 차 run 39129490528 — 125/126, cmd 리다이렉션 ERRORLEVEL 판정 문제;
+  **12 차 run 39129885115 (head b84a6322): 4 job 모두 통과**, authoring job 당 binding 11,
+  mcp 24, `visual_attachment` 22, `visual_start` 1, `visual_store` 8, lib 필터 126(ignored 1),
+  작성 smoke·재시작. 이 표의 W6/W7 과 다시 실행된 W1–W5 는 모두 12 차 실행 결과다.
 - 실행되지 않은 것: 실제 디스크 고갈·전원 차단, ADS 를 직접 만드는 시험(이름 규칙 거절은
   `visual_report::file::tests::path_contract_is_shared_across_platforms` 로 실행), 비-NTFS·
-  네트워크 드라이브 거절(runner 에 없음), §8 항목 1 의 ACL 시나리오, Host 화면·설치.
+  네트워크 드라이브 거절은 12 차에서 UNC·매핑 드라이브로 실행(비-NTFS 볼륨은 여전히 없음),
+  Host 화면·설치, `icacls` 수작업 DACL 과 정확한 설명자의 차이 진단.
 
 ## 7. 증거 구분
 
@@ -217,7 +228,7 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
 
 ## 8. 미해결·후속
 
-1. **`.gil` 의 ACL — 계약 확정·구현(2026-10-18 보완), runner 증거는 §6 W6 에 기록.**
+1. **`.gil` 의 ACL — 계약 확정·구현·runner 검증(2026-10-18 보완, §6 W6-1…W6-4, run 39129885115).**
 
    *보호 대상.* 같은 기계의 **다른 사용자 계정**(표준 사용자, 다른 관리자의 비승격 토큰 포함)
    이 Project 기록을 읽거나 바꾸거나 열거하지 못한다. 접근 주체는 현재 사용자 SID 와 SYSTEM

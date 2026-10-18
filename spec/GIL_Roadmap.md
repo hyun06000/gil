@@ -458,10 +458,13 @@ Later    1  성공 가지 Merge
 - [~] **T3.1 Windows 이미지 Report 작성 경계(단계 1, 2026-10-18):** 새 format-5 생성·Verify 첨부·
       저장 이미지 인용·재시작 보존의 Windows 핸들 기반 구현(`src/windows_fs.rs`, 저장 계약 §25)과
       계약·인수표 `spec/GIL_Windows_Visual_Support_Contract_v0.1.md`. 이관은 Windows에서 계속 거절.
-      Windows CI에 `visual-authoring` profile matrix 추가. runner 4 job 통과(PR #25, run
-      39126103310, 계약 §6.1; 앞선 3회 실패·수정 포함). 실제 PC·Host 화면 인수·설치·게시·
-      버전 표기·MSVC 재배포 검토는 남고, `.gil` ACL 상속(계약 §8)은 작성 후보 출시 차단 항목이다.
-      runner 통과를 Windows 지원 완료로 표기하지 않는다.
+      Windows CI에 `visual-authoring` profile matrix 추가. 보완(같은 날): `.gil` 소유자 전용
+      보호 DACL 계약·구현·재열기 검증, 다른 로컬 계정 실제 접근 시험, UNC·매핑 드라이브 거절,
+      전체 경로 rename 보안 검토·회귀(계약 §6 W6/W7·§8·§9). runner 4 job 통과(PR #25, 최종 run
+      39129885115; 중간 라운드의 실패·수정은 계약 §6.1). 기존 text preview의 상속 ACL 영향은
+      `distribution/windows/ACL-IMPACT-20261018.md`. 실제 PC·Host 화면 인수·설치·게시·버전
+      표기·MSVC 재배포 검토·비-NTFS 거절 실행은 남는다. runner 통과를 Windows 지원 완료로
+      표기하지 않는다.
 - [ ] 경로·권한·잠금·파일 감시·재시작/재연결·보고서 보존·OS 실행 차단을 실제 Windows에서 검수한다.
       보안을 끄거나 예외 등록으로 우회하지 않는다. 지원 OS/CPU와 패키지 신뢰 채널은 검수 후 명시한다.
 - [ ] Windows 시험 사용자의 설치 및 작업 경험을 수집하고 차이·실패·해결을 기록한다.

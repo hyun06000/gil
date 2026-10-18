@@ -709,4 +709,7 @@ run 39126103325 통과. runner 통과도 실제 PC·Host 화면 인수가 아니
 상위 상속 차단)로 태어나고 생성 직후·재열기마다 핸들로 실효 DACL 을 검증한다. 기존 Project 의
 ACL 은 자동 변경하지 않으며 넓어진 format-5 저장소는 거절한다. 전체 경로 rename 의 보안 검토와
 회귀시험, 다른 로컬 계정의 실제 접근 시험, UNC·매핑 드라이브 거절 시험을 추가했다(Windows
-지원 계약 §6 W6/W7, §8, §9; runner 결과는 거기에 기록).
+지원 계약 §6 W6/W7, §8, §9). runner: PR #25 run 39129885115(head b84a6322) x64·ARM64 ×
+default·visual-authoring 4 job 통과, authoring lib 필터 126/126(ignored 1). 중간 6 라운드의
+실패와 수정(Core 결함 1건: 예약 핸들의 DELETE 접근 공유 위반; 나머지는 설명자 정규화·fixture·
+launcher·판정)은 계약 §6.1 에 있다.
