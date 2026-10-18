@@ -191,8 +191,11 @@ mod reserve {
             // Any existing entry (file, directory, link, remnant) fails here; nothing is reused.
             // The reservation is born owner-only (current user + SYSTEM, protected DACL).
             win::create_dir_exclusive_private(&gil)?;
+            // Normalize through SetSecurityInfo so the descriptor carries the auto-inherit
+            // control and children are flagged inherited (CI run 39129041207), then verify the
+            // effective descriptor through a handle.
             let deletable = win::open_dir_deletable(&gil)?;
-            if let Err(problem) = win::private_dir(&deletable) {
+            if let Err(problem) = win::set_private_dacl(&gil).and_then(|()| win::private_dir(&deletable)) {
                 // Ours, exclusive and still empty: remove it through the handle (never a name
                 // that could have been replaced) and refuse. Nothing else was written.
                 let _ = win::delete(&deletable);
