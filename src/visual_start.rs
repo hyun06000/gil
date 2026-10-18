@@ -207,13 +207,14 @@ mod reserve {
             let name = OsStr::new(".gil");
             // 1. Exclusive creation with the owner-only descriptor; the handle is to the object
             //    this call created. Any existing entry fails here untouched.
-            let fresh = win::create_private_dir_at(parent.dir(), name)?;
+            let stage = |at: &'static str| move |e: std::io::Error| std::io::Error::new(e.kind(), format!("{at}: {e}"));
+            let fresh = win::create_private_dir_at(parent.dir(), name).map_err(stage("reserve/create"))?;
             #[cfg(test)]
             if let Some(observe) = hooks::BEFORE_NORMALIZE.with(|c| c.get()) {
                 observe(&fresh);
             }
             // 2. Normalize and verify through the same handle.
-            let verified = win::set_private_dacl_on(&fresh).and_then(|()| win::private_dir(&fresh));
+            let verified = win::set_private_dacl_on(&fresh).map_err(stage("reserve/normalize")).and_then(|()| win::private_dir(&fresh).map_err(stage("reserve/verify")));
             #[cfg(test)]
             let verified = if hooks::FAIL_VERIFY.with(|c| c.get()) {
                 Err(std::io::Error::other("injected verification failure"))
@@ -227,16 +228,16 @@ mod reserve {
                     "생성한 .gil 의 접근 권한이 소유자 전용으로 확인되지 않아 제거하고 거절했다: {problem}"
                 )));
             }
-            let born = win::id(&fresh)?;
+            let born = win::id(&fresh).map_err(stage("reserve/identity"))?;
             // 4. Handle transition (detection, not prevention). `fresh` holds DELETE access, which
             //    would collide with the delete-unshared pins used by the lock and state writes.
-            let keep = win::reopen(&fresh, win::READ, win::SHARE_ALL)?;
+            let keep = win::reopen(&fresh, win::READ, win::SHARE_ALL).map_err(stage("reserve/reopen"))?;
             drop(fresh);
             #[cfg(test)]
             if let Some(act) = hooks::DURING_TRANSITION.with(|c| c.get()) {
                 act(&root.join(".gil"));
             }
-            let pinned = win::open_dir_at(parent.dir(), name, win::SHARE_PINNED)?;
+            let pinned = win::open_dir_at(parent.dir(), name, win::SHARE_PINNED).map_err(stage("reserve/pin"))?;
             if win::id(&pinned)? != born || win::id(&keep)? != born {
                 // Replaced while no delete-denying handle was held: refuse. Nothing was written,
                 // nothing is cleaned by name, and the object now under the name is not modified.

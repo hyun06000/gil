@@ -26,6 +26,11 @@ fn anchor(store: &ObjectStore, create: bool) -> io::Result<win::Chain> {
     chain.push(OsStr::new(ARTIFACTS), create)?;
     Ok(chain)
 }
+/// `.gil` (one level above the pinned `artifacts`) is owner-only: that is what marks an image
+/// Project's storage, and only there are the child-entry ACL checks applied (contract §8 1a).
+fn owner_only_regime(root: &win::Chain) -> bool {
+    root.above(1).is_some_and(|gil| win::private_dir(gil).is_ok())
+}
 fn stable(store: &ObjectStore, root: &win::Chain) -> io::Result<()> {
     if win::id(anchor(store, false)?.dir())? == win::id(root.dir())? {
         Ok(())
@@ -67,9 +72,12 @@ pub(super) fn read_object(
         if !win::Stamp::of(&file)?.is_single_regular() {
             return Err(boundary());
         }
-        // Contract §8 item 3: a widened object or shard directory is refused when it is read.
-        win::inherited_only(&file, false)?;
-        win::inherited_only(parent.dir(), true)?;
+        // Owner-only regime (image Projects, whose .gil is owner-only): a widened object or shard
+        // directory is refused when read. Other storages keep their inherited ACLs untouched.
+        if owner_only_regime(&root) {
+            win::inherited_only(&file, false)?;
+            win::inherited_only(parent.dir(), true)?;
+        }
         stable(store, &root)?;
         check_parent(&root, kind, &hex, &parent)?;
         Ok(file)
@@ -170,8 +178,10 @@ pub(super) fn put(
     #[cfg(not(test))]
     let _ = linked;
     let mut final_file = win::open_file(&target, win::READ, win::SHARE_ALL, OPEN_EXISTING).map_err(err)?;
-    // The published object must carry only the inherited owner-only ACEs (contract §8 item 3).
-    win::inherited_only(&final_file, false).map_err(err)?;
+    // Under the owner-only regime the published object must carry only the inherited ACEs.
+    if owner_only_regime(&root) {
+        win::inherited_only(&final_file, false).map_err(err)?;
+    }
     // Concurrent publishers may temporarily retain a second link; don't reject that valid race.
     let mut hash = Sha256::new();
     loop {

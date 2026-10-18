@@ -278,7 +278,10 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
 
 1a. **하위 항목 합격 조건(2026-10-19 확정, `windows_fs::inherited_only`).** `.gil` 아래의 파일과
    디렉터리는 핸들로 읽은 실효 보안 설명자가 다음을 모두 만족해야 한다.
-   - 소유자 = 현재 사용자 SID.
+   - 소유자 = 현재 사용자 SID, 또는 이 프로세스 토큰의 기본 소유자(`TokenOwner`: 승격된 관리자
+     계정에서는 `BUILTIN\Administrators` — OS 가 상속으로 만든 항목에 자동으로 붙이는 소유자).
+     `.gil` 자신은 명시 설명자로 만들므로 소유자 = 현재 사용자만 허용한다(15 차 runner 에서
+     관리자 계정의 하위 항목 소유자가 Administrators 로 확인됨).
    - DACL 이 존재한다(NULL DACL = 모두에게 전체 접근 → 거절). `SE_DACL_PROTECTED` 가 **없다**
      (상속을 끊은 항목은 거절).
    - ACE 가 정확히 둘이고 모두 `ACCESS_ALLOWED_ACE_TYPE`. deny·audit·object·callback ACE 는 거절.
@@ -287,6 +290,9 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
    - 마스크 = `FILE_ALL_ACCESS`. 주체는 현재 사용자와 SYSTEM 각 하나.
    - 실제 소유자의 접근 가능성: 위 조건에서 소유자 ACE 가 전체 접근을 주고 deny ACE 가 없으므로
      소유자는 언제나 읽고 쓸 수 있다. 소유자 ACE 가 빠지거나 deny 가 섞이면 거절한다.
+   적용 범위(체제): 이 검사는 `.gil` 이 소유자 전용인 저장소(이미지 Project)에만 적용한다.
+   `.gil` 이 상속 ACL 인 format-4 저장소는 어떤 하위 검사도 받지 않는다(기존 Windows 동작 보존;
+   15 차 runner 에서 무조건 검사가 format-4 `gil start` 를 깨뜨린 것을 바로잡음).
    검사 시점: 재열기 때 제어·구조 항목, 객체는 읽을 때와 확정 직후. **보장하지 않는 것:** 외부에서
    권한을 넓힌 **미사용 blob 의 즉시 탐지**(다음 읽기까지 감지되지 않음), 이미 일어난 노출의
    복구, 소유자·관리자·`WRITE_DAC` 보유 프로세스가 검사 사이에 바꾸는 것의 방지. Windows 의

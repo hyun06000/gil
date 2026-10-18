@@ -214,8 +214,12 @@ fn open(root: &Path, text: &str) -> Result<File, String> {
         })
         .collect();
     let (last, dirs) = parts.split_last().ok_or_else(refused)?;
-    for part in dirs {
+    let mut owner_only_regime = false;
+    for (index, part) in dirs.iter().enumerate() {
         chain.push(part, false).map_err(|_| refused())?;
+        if index == 0 && part.eq_ignore_ascii_case(".gil") {
+            owner_only_regime = win::private_dir(chain.dir()).is_ok();
+        }
     }
     let at = chain.child(last).map_err(|_| refused())?;
     let file = win::open_file(&at, win::READ, win::SHARE_ALL, windows_sys::Win32::Storage::FileSystem::OPEN_EXISTING)
@@ -223,8 +227,8 @@ fn open(root: &Path, text: &str) -> Result<File, String> {
     if !win::Stamp::of(&file).map_err(|_| refused())?.is_single_regular() {
         return Err(refused());
     }
-    // Stored objects under .gil must still carry only the inherited owner-only ACEs.
-    if parts.first().is_some_and(|p| p.eq_ignore_ascii_case(".gil")) {
+    // Under the owner-only regime, stored objects must still carry only the inherited ACEs.
+    if owner_only_regime {
         win::inherited_only(&file, false).map_err(|_| refused())?;
     }
     Ok(file)

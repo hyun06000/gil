@@ -245,6 +245,10 @@ impl Chain {
     pub(crate) fn dir(&self) -> &File {
         self.pins.last().expect("a chain always holds its last directory")
     }
+    /// The pinned directory `levels` above the last one, if the chain is that deep.
+    pub(crate) fn above(&self, levels: usize) -> Option<&File> {
+        self.pins.len().checked_sub(levels + 1).and_then(|i| self.pins.get(i))
+    }
     pub(crate) fn path(&self) -> &Path {
         &self.path
     }
@@ -499,6 +503,32 @@ fn user() -> io::Result<Vec<usize>> {
 fn sid(buf: &[usize]) -> PSID {
     unsafe { (*(buf.as_ptr().cast::<TOKEN_USER>())).User.Sid }
 }
+/// The SID the OS assigns as owner to objects this process creates without an explicit owner
+/// (`TokenOwner`): the user itself, or the Administrators group for elevated administrators.
+fn default_owner() -> io::Result<Vec<usize>> {
+    use windows_sys::Win32::Security::{TOKEN_OWNER, TokenOwner};
+    unsafe {
+        let mut handle = null_mut();
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut handle) == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let token = Token(handle);
+        let mut bytes = 0;
+        GetTokenInformation(token.0, TokenOwner, null_mut(), 0, &mut bytes);
+        if bytes < size_of::<TOKEN_OWNER>() as u32 || bytes > 65536 {
+            return Err(refused());
+        }
+        let mut buf = vec![0usize; (bytes as usize).div_ceil(size_of::<usize>())];
+        if GetTokenInformation(token.0, TokenOwner, buf.as_mut_ptr().cast(), bytes, &mut bytes) == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(buf)
+    }
+}
+fn owner_sid(buf: &[usize]) -> PSID {
+    use windows_sys::Win32::Security::TOKEN_OWNER;
+    unsafe { (*(buf.as_ptr().cast::<TOKEN_OWNER>())).Owner }
+}
 fn sid_text(sid: PSID) -> io::Result<String> {
     unsafe {
         let mut text = null_mut();
@@ -650,13 +680,16 @@ pub(crate) fn set_private_dacl_on(dir: &File) -> io::Result<()> {
     Ok(())
 }
 
-/// Acceptance for every entry *below* `.gil` (Windows contract §8 item 3): owned by the current
-/// user; a DACL is present (a NULL DACL grants everyone); not protected; exactly two allow ACEs,
+/// Acceptance for every entry *below* `.gil` (Windows contract §8 item 1a): owned by the current
+/// user or by the token's default owner (the Administrators group for an elevated administrator,
+/// which is what the OS assigns to entries created by inheritance); a DACL is present (a NULL
+/// DACL grants everyone); not protected; exactly two allow ACEs,
 /// both inherited (`INHERITED_ACE`; directories also carry OI|CI, files nothing else), both
 /// `FILE_ALL_ACCESS`, one for the current user and one for SYSTEM. Deny, audit, object or
 /// callback ACEs and any other principal fail. The error names the first failing condition.
 pub(crate) fn inherited_only(file: &File, directory: bool) -> io::Result<()> {
     let user = user()?;
+    let default_owner = default_owner()?;
     let system = system_sid()?;
     let what = if directory { "directory" } else { "file" };
     let fail = |why: &str| io::Error::other(format!("owner-only storage check failed on a {what}: {why}"));
@@ -681,8 +714,10 @@ pub(crate) fn inherited_only(file: &File, directory: bool) -> io::Result<()> {
             return Err(io::Error::from_raw_os_error(error as i32));
         }
         let sd = Local(sd);
-        if owner.is_null() || EqualSid(owner, sid(&user)) == 0 {
-            return Err(fail("owner is not the current user"));
+        if owner.is_null()
+            || (EqualSid(owner, sid(&user)) == 0 && EqualSid(owner, owner_sid(&default_owner)) == 0)
+        {
+            return Err(fail("owner is neither the current user nor this token's default owner"));
         }
         if acl.is_null() {
             return Err(fail("NULL DACL (everyone has access)"));
