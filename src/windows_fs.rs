@@ -523,11 +523,13 @@ fn system_sid() -> io::Result<Local> {
         Ok(Local(sid))
     }
 }
-/// `O:<user>D:P(A;OICI;FA;;;<user>)(A;OICI;FA;;;SY)`
+/// `O:<user>D:PAI(A;OICI;FA;;;<user>)(A;OICI;FA;;;SY)` — protected (no parent inheritance),
+/// auto-inherited so entries created below carry the INHERITED_ACE flag (CI run 39128571227
+/// showed children without it when only `P` was set), two inheritable full-access ACEs.
 fn private_descriptor() -> io::Result<Local> {
     let user = user()?;
     let name = sid_text(sid(&user))?;
-    let sddl: Vec<u16> = format!("O:{name}D:P(A;OICI;FA;;;{name})(A;OICI;FA;;;SY)\0")
+    let sddl: Vec<u16> = format!("O:{name}D:PAI(A;OICI;FA;;;{name})(A;OICI;FA;;;SY)\0")
         .encode_utf16()
         .collect();
     unsafe {

@@ -499,36 +499,41 @@ impl TestAccount {
         );
         Self { name, password }
     }
-    /// Run one `cmd /c` line as the other account. Output lands in `out_dir`, which must be
-    /// writable by that account. Returns (exit code, stdout, stderr).
+    /// Run one command line as the other account through a batch file in `out_dir` (which that
+    /// account can read and write). Returns (exit code, stdout, stderr); the launcher's own
+    /// output is folded into the panic message when the logon itself cannot run here.
     fn run(&self, command: &str, out_dir: &Path) -> (i32, String, String) {
-        let stdout = out_dir.join(format!("out-{}.txt", std::process::id()));
-        let stderr = out_dir.join(format!("err-{}.txt", std::process::id()));
-        let _ = fs::remove_file(&stdout);
-        let _ = fs::remove_file(&stderr);
-        let script = "$ErrorActionPreference='Stop'; \
+        static SERIAL: AtomicU64 = AtomicU64::new(0);
+        let n = SERIAL.fetch_add(1, Ordering::Relaxed);
+        let batch = out_dir.join(format!("job-{}-{n}.cmd", std::process::id()));
+        let stdout = out_dir.join(format!("out-{}-{n}.txt", std::process::id()));
+        let stderr = out_dir.join(format!("err-{}-{n}.txt", std::process::id()));
+        fs::write(&batch, format!("@echo off\r\nwhoami\r\n{command}\r\nexit /b %ERRORLEVEL%\r\n")).unwrap();
+        let script = "try { \
             $secure = ConvertTo-SecureString $env:GIL_TEST_PASS -AsPlainText -Force; \
             $credential = New-Object System.Management.Automation.PSCredential($env:GIL_TEST_USER, $secure); \
-            $process = Start-Process -FilePath $env:GIL_TEST_CMD -ArgumentList @('/c', $env:GIL_TEST_LINE) -Credential $credential -WorkingDirectory $env:GIL_TEST_CWD -PassThru -Wait -WindowStyle Hidden -RedirectStandardOutput $env:GIL_TEST_OUT -RedirectStandardError $env:GIL_TEST_ERR; \
-            exit $process.ExitCode";
+            $process = Start-Process -FilePath $env:GIL_TEST_CMD -ArgumentList @('/c', $env:GIL_TEST_BAT) -Credential $credential -WorkingDirectory $env:GIL_TEST_CWD -PassThru -Wait -RedirectStandardOutput $env:GIL_TEST_OUT -RedirectStandardError $env:GIL_TEST_ERR; \
+            exit $process.ExitCode \
+            } catch { Write-Error ($_ | Out-String); exit 99 }";
         let out = std::process::Command::new(powershell())
             .args(["-NoProfile", "-NonInteractive", "-Command", script])
             .env("GIL_TEST_USER", &self.name)
             .env("GIL_TEST_PASS", &self.password)
             .env("GIL_TEST_CMD", system32("cmd.exe"))
-            .env("GIL_TEST_LINE", command)
+            .env("GIL_TEST_BAT", &batch)
             .env("GIL_TEST_CWD", out_dir)
             .env("GIL_TEST_OUT", &stdout)
             .env("GIL_TEST_ERR", &stderr)
             .output()
             .unwrap();
-        let launcher_stderr = String::from_utf8_lossy(&out.stderr).to_string();
+        let launcher = format!("launcher stdout: {} / stderr: {}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
         let code = out.status.code().unwrap_or(-1);
+        assert_ne!(code, 99, "the other-account logon could not run on this host: {launcher}");
         let read = |p: &Path| fs::read(p).map(|b| String::from_utf8_lossy(&b).to_string()).unwrap_or_default();
         let (o, e) = (read(&stdout), read(&stderr));
         assert!(
-            !launcher_stderr.contains("cannot be run due to the error"),
-            "the other-account logon could not run on this host: {launcher_stderr}"
+            o.to_lowercase().contains(&self.name.to_lowercase()),
+            "the command did not run as {}: code {code}, stdout {o:?}, stderr {e:?}, {launcher}", self.name
         );
         (code, o, e)
     }
