@@ -191,15 +191,22 @@ mod reserve {
             // Any existing entry (file, directory, link, remnant) fails here; nothing is reused.
             // The reservation is born owner-only (current user + SYSTEM, protected DACL).
             win::create_dir_exclusive_private(&gil)?;
-            let dir = win::open_dir_deletable(&gil)?;
-            if let Err(problem) = win::private_dir(&dir) {
+            let deletable = win::open_dir_deletable(&gil)?;
+            if let Err(problem) = win::private_dir(&deletable) {
                 // Ours, exclusive and still empty: remove it through the handle (never a name
                 // that could have been replaced) and refuse. Nothing else was written.
-                let _ = win::delete(&dir);
+                let _ = win::delete(&deletable);
                 return Err(std::io::Error::other(format!(
                     "생성한 .gil 의 접근 권한이 소유자 전용으로 확인되지 않아 제거하고 거절했다: {problem}"
                 )));
             }
+            // Keep only a read handle: a retained DELETE access would collide with the pinned
+            // (delete-unshared) opens of the lock and state writes (CI run 39127711288).
+            let dir = win::open_dir(&gil, win::SHARE_ALL, false)?;
+            if win::id(&dir)? != win::id(&deletable)? {
+                return Err(win::refused());
+            }
+            drop(deletable);
             let reserved = win::id(&dir)?;
             let parent_id = win::id(parent.dir())?;
             Ok(Self { root, parent, _dir: dir, reserved, parent_id })
