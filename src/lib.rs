@@ -126,6 +126,13 @@ mod internal_fs;
 /// Windows handle-based equivalents of the Unix internal boundaries (Windows contract v0.1).
 #[cfg(windows)]
 mod windows_fs;
+/// Windows: give an existing Project's `.gil` the owner-only descriptor that new image Projects
+/// are born with (Windows contract §8). Explicit and caller-driven only: no command, tool or
+/// Session path calls this, and GIL never changes an existing Project's ACL on its own.
+#[cfg(windows)]
+pub fn adopt_private_storage(gil: &std::path::Path) -> std::io::Result<()> {
+    windows_fs::set_private_dacl(gil)
+}
 // Manual 은 **도구의 지식**이다 — 프로젝트 상태가 아니라 함께 실린 Topic 을 읽는다.
 // 밖으로 나가는 것은 조회 문 하나와 그 오류뿐이고, 주소 타입과 index 는 안에 남는다.
 mod manual;

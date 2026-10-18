@@ -233,7 +233,12 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
 
    *실패 시 동작.* 보호 DACL 로 생성하지 못하면 아무것도 만들지 않는다. 생성 뒤 검증에 실패하면
    방금 만든 빈 예약 디렉터리만 보유 핸들로 지우고 거절한다. 재열기 검증 실패는 거절이며
-   기록·ACL 을 바꾸지 않는다. **기존 사용자 Project 의 ACL 은 어떤 경우에도 자동 변경하지 않는다.**
+   기록·ACL 을 바꾸지 않는다. 거절 메시지는 어긋난 첫 조건(소유자, 상속, ACE 수·플래그·마스크·
+   주체)을 말한다. **기존 사용자 Project 의 ACL 은 어떤 경우에도 자동 변경하지 않는다.**
+   명시적 채택 경로로 `gil::adopt_private_storage(gil)`(라이브러리 함수, CLI·MCP·Session 어디에도
+   연결되지 않음)만 두며, 시험 fixture 가 같은 설명자를 얻는 데 쓴다. `icacls` 로 손수 만든
+   DACL 은 설명자가 정확히 같을 때만 통과한다(6 차 runner 에서 `icacls … (OI)(CI)F` 결과는
+   거절됐다 — 차이의 정밀 진단은 남은 항목).
 
    *범위 밖·남는 것.* (a) 기존 Windows format-4 `gil start` 경로(`lock::bootstrap` 의
    `create_dir_all`)와 이미 게시된 tester preview `windows-preview-f0ecfbd` 는 여전히 상속 ACL

@@ -568,9 +568,11 @@ pub(crate) fn open_dir_deletable(path: &Path) -> io::Result<File> {
 /// The directory behind this handle is owner-only: owned by the current user, protected DACL,
 /// exactly two inheritable full-access allow ACEs (current user, SYSTEM), nothing else.
 /// This reads the effective security descriptor, not a path or a string we wrote ourselves.
+/// The error names the first condition that failed, so a user can see what to change by hand.
 pub(crate) fn private_dir(file: &File) -> io::Result<()> {
     let user = user()?;
     let system = system_sid()?;
+    let fail = |why: &str| io::Error::other(format!("owner-only storage check failed: {why}"));
     unsafe {
         let (mut owner, mut acl, mut sd) = (null_mut(), null_mut(), null_mut());
         let error = GetSecurityInfo(
@@ -587,32 +589,42 @@ pub(crate) fn private_dir(file: &File) -> io::Result<()> {
             return Err(io::Error::from_raw_os_error(error as i32));
         }
         let sd = Local(sd);
+        if owner.is_null() || EqualSid(owner, sid(&user)) == 0 {
+            return Err(fail("owner is not the current user"));
+        }
+        if acl.is_null() {
+            return Err(fail("no DACL (everyone has access)"));
+        }
         let (mut control, mut revision) = (0, 0);
-        if owner.is_null()
-            || EqualSid(owner, sid(&user)) == 0
-            || acl.is_null()
-            || (*acl.cast::<ACL>()).AceCount != 2
-            || GetSecurityDescriptorControl(sd.0, &mut control, &mut revision) == 0
-            || control & SE_DACL_PROTECTED == 0
-        {
-            return Err(refused());
+        if GetSecurityDescriptorControl(sd.0, &mut control, &mut revision) == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if control & SE_DACL_PROTECTED == 0 {
+            return Err(fail("DACL still inherits from the parent folder"));
+        }
+        let count = (*acl.cast::<ACL>()).AceCount;
+        if count != 2 {
+            return Err(fail(&format!("{count} ACEs instead of the two expected (user, SYSTEM)")));
         }
         let (mut saw_user, mut saw_system) = (false, false);
         for index in 0..2 {
             let mut ace = null_mut();
             if GetAce(acl, index, &mut ace) == 0 || ace.is_null() {
-                return Err(refused());
+                return Err(fail("unreadable ACE"));
             }
             let header = &*ace.cast::<ACE_HEADER>();
-            if header.AceType != 0
-                || header.AceFlags != (OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE) as u8
-                || (header.AceSize as usize) < size_of::<ACCESS_ALLOWED_ACE>()
-            {
-                return Err(refused());
+            if header.AceType != 0 {
+                return Err(fail(&format!("ACE {index} is not an access-allowed ACE")));
+            }
+            if header.AceFlags != (OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE) as u8 {
+                return Err(fail(&format!("ACE {index} flags {:#x} are not exactly OI|CI", header.AceFlags)));
+            }
+            if (header.AceSize as usize) < size_of::<ACCESS_ALLOWED_ACE>() {
+                return Err(fail("truncated ACE"));
             }
             let allow = &*ace.cast::<ACCESS_ALLOWED_ACE>();
             if allow.Mask != FILE_ALL_ACCESS {
-                return Err(refused());
+                return Err(fail(&format!("ACE {index} mask {:#x} is not full access", allow.Mask)));
             }
             let allowed: PSID = std::ptr::addr_of!(allow.SidStart).cast_mut().cast();
             if EqualSid(allowed, sid(&user)) != 0 {
@@ -620,14 +632,48 @@ pub(crate) fn private_dir(file: &File) -> io::Result<()> {
             } else if EqualSid(allowed, system.0) != 0 {
                 saw_system = true;
             } else {
-                return Err(refused());
+                return Err(fail(&format!("ACE {index} grants another principal ({})", sid_text(allowed).unwrap_or_default())));
             }
         }
         if !(saw_user && saw_system) {
-            return Err(refused());
+            return Err(fail("user or SYSTEM ACE missing"));
         }
     }
     Ok(())
+}
+
+/// Explicitly give an existing directory the same owner-only descriptor new reservations are
+/// born with (owner, protected DACL, inheritance to children). Nothing in GIL calls this on its
+/// own; it exists for an explicit, caller-driven adoption and for test fixtures.
+pub(crate) fn set_private_dacl(path: &Path) -> io::Result<()> {
+    use windows_sys::Win32::Security::{GetSecurityDescriptorDacl, GetSecurityDescriptorOwner, PROTECTED_DACL_SECURITY_INFORMATION};
+    use windows_sys::Win32::Security::Authorization::SetSecurityInfo;
+    use windows_sys::Win32::Storage::FileSystem::{READ_CONTROL, WRITE_DAC, WRITE_OWNER};
+    let dir = open_raw(path, READ | READ_CONTROL | WRITE_DAC | WRITE_OWNER, SHARE_ALL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS)?;
+    ordinary(&dir, true)?;
+    let sd = private_descriptor()?;
+    unsafe {
+        let (mut present, mut defaulted, mut dacl, mut owner) = (0, 0, null_mut(), null_mut());
+        if GetSecurityDescriptorDacl(sd.0, &mut present, &mut dacl, &mut defaulted) == 0
+            || GetSecurityDescriptorOwner(sd.0, &mut owner, &mut defaulted) == 0
+            || present == 0
+        {
+            return Err(refused());
+        }
+        let error = SetSecurityInfo(
+            dir.as_raw_handle(),
+            SE_FILE_OBJECT,
+            OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+            owner,
+            null_mut(),
+            dacl,
+            null_mut(),
+        );
+        if error != 0 {
+            return Err(io::Error::from_raw_os_error(error as i32));
+        }
+    }
+    private_dir(&dir)
 }
 
 /// Reopening an image Project: its `.gil` must still be owner-only. Nothing is repaired.

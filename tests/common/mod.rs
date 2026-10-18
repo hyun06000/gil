@@ -524,28 +524,7 @@ pub fn allowed_here(
 #[allow(dead_code)]
 pub fn private_storage(root: &Path) {
     #[cfg(windows)]
-    {
-        let system32 = PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32");
-        let who = std::process::Command::new(system32.join("whoami.exe")).output().unwrap();
-        assert!(who.status.success());
-        let account = String::from_utf8(who.stdout).unwrap().trim().to_string();
-        // `/setowner` is a standalone icacls mode: two invocations.
-        let out = std::process::Command::new(system32.join("icacls.exe"))
-            .arg(root.join(".gil"))
-            .args(["/inheritance:r", "/grant:r"])
-            .arg(format!("{account}:(OI)(CI)F"))
-            .arg("*S-1-5-18:(OI)(CI)F")
-            .output()
-            .unwrap();
-        assert!(out.status.success(), "icacls grant: {} {}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
-        let out = std::process::Command::new(system32.join("icacls.exe"))
-            .arg(root.join(".gil"))
-            .arg("/setowner")
-            .arg(&account)
-            .output()
-            .unwrap();
-        assert!(out.status.success(), "icacls setowner: {} {}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
-    }
+    gil::adopt_private_storage(&root.join(".gil")).expect("fixture .gil takes the owner-only descriptor");
     #[cfg(not(windows))]
     let _ = root;
 }
