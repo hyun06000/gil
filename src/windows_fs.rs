@@ -913,16 +913,46 @@ pub(crate) fn open_dir_at(parent: &File, name: &OsStr, share: u32) -> io::Result
     nt_dir_at(parent, name, READ, share, FILE_OPEN, std::ptr::null())
 }
 
-/// A second handle to the same object with different access and sharing, obtained without a name.
+/// A second handle to the same object with different access and sharing, obtained without a
+/// name: `NtCreateFile` with `RootDirectory` = the original handle and an empty object name
+/// reopens that object itself (Win32 `ReOpenFile` refused directory handles on the runner,
+/// CI run 39161844632).
 #[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
 pub(crate) fn reopen(file: &File, access: u32, share: u32) -> io::Result<File> {
-    let raw = unsafe {
-        ReOpenFile(file.as_raw_handle(), access, share, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+    let unicode = UNICODE_STRING { Length: 0, MaximumLength: 0, Buffer: null_mut() };
+    let attributes = OBJECT_ATTRIBUTES {
+        Length: size_of::<OBJECT_ATTRIBUTES>() as u32,
+        RootDirectory: file.as_raw_handle(),
+        ObjectName: &unicode,
+        Attributes: OBJ_CASE_INSENSITIVE,
+        SecurityDescriptor: std::ptr::null(),
+        SecurityQualityOfService: std::ptr::null(),
     };
-    if raw == INVALID_HANDLE_VALUE {
-        return Err(io::Error::last_os_error());
+    let mut handle = null_mut();
+    let mut block: IO_STATUS_BLOCK = unsafe { zeroed() };
+    let status = unsafe {
+        NtCreateFile(
+            &mut handle,
+            access | SYNCHRONIZE,
+            &attributes,
+            &mut block,
+            std::ptr::null(),
+            FILE_ATTRIBUTE_NORMAL,
+            share,
+            FILE_OPEN,
+            FILE_DIRECTORY_FILE | NT_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT,
+            std::ptr::null(),
+            0,
+        )
+    };
+    if status < 0 {
+        return Err(nt_error(status));
     }
-    Ok(unsafe { File::from_raw_handle(raw) })
+    let again = unsafe { File::from_raw_handle(handle) };
+    if id(&again)? != id(file)? {
+        return Err(refused());
+    }
+    Ok(again)
 }
 
 #[cfg(test)]
