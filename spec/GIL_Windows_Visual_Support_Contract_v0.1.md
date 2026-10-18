@@ -223,10 +223,10 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
 | W8-4 | 핸들 전환 중 교체(주입): 거절, 심어진 디렉터리 내용·ACL 불변, 기록 없음, 우리 예약은 옮겨진 이름 아래 보존 | `…::handle_transition_swap_is_detected_and_refused_without_touching_either_object` | 통과 x64·ARM64 (lib 필터 131/131, ignored 1 = `crash_child`, run 39162630706 (head 19508d50)); 심어진 디렉터리는 상속 ACL·내용 그대로, 기록 없음, 원 예약은 옮겨진 이름 아래 소유자 전용·빈 채 보존 |
 | W8-5 | 넓어진 blob 은 재열기에서 미감지(한계)·읽기에서 거절, 넓어진 `state.yaml` 은 재열기 거절, 상속 끊긴 `artifacts/blobs` 는 재열기 거절, 어느 것도 복구 없음 | `…::widened_child_entries_are_refused_on_reopen_or_on_read_but_never_repaired` | 통과 x64·ARM64 (lib 필터 131/131, ignored 1 = `crash_child`, run 39162630706 (head 19508d50)); 넓어진 blob: 재열기 미감지(한계)·읽기 거절, 넓어진 `state.yaml`: 재열기 거절, 상속 끊긴 `artifacts/manifests`: 재열기 거절, 복구 없음 |
 
-| W9-1 | 소유자 전용 계약에서 `.gil` 이 넓어지면 객체 읽기·쓰기가 검사를 건너뛰지 않고 거절(임시 파일 미생성); 같은 바이트를 상속 계약(format 4)으로 읽는 것은 영향 없음; 재열기 거절·무수정 | `session::visual_start::tests::widened_gil_never_skips_object_checks_under_the_owner_only_contract` | 기록 대기 |
-| W9-2 | ACL 조회 오류(소유자를 SYSTEM 으로 바꾸고 READ_CONTROL 거부)는 거절이지 상속 계약으로의 전환이 아님; 읽기·쓰기·트리 검증·재열기 모두 거절, 저장소 불변 | `…::acl_query_error_is_a_refusal_not_a_downgrade_to_the_inherited_contract` | 기록 대기 |
-| W9-3 | 복구 대기 기록·임시 객체·`.writing` 이 있는 상태에서 ACL 거절 시 그 기록·파일·잠금 파일 불변; 넓힘을 걷으면 같은 열기가 복구 단계에 도달; 임시 객체만 있는 Project 는 거절 중 보존·통과 뒤 정리 | `…::acl_refusal_happens_before_recovery_and_reaping_and_leaves_them_untouched` | 기록 대기 |
-| W9-4 | format-4 기존 흐름: `.gil` 이 넓어져도 열기·정리·객체 읽기/쓰기·읽기 전용 열기 그대로 | `…::format_four_projects_keep_the_inherited_contract_and_their_flow` + default job 전체 | 기록 대기 |
+| W9-1 | 소유자 전용 계약에서 `.gil` 이 넓어지면 객체 읽기·쓰기가 검사를 건너뛰지 않고 거절(임시 파일 미생성); 같은 바이트를 상속 계약(format 4)으로 읽는 것은 영향 없음; 재열기 거절·무수정 | `session::visual_start::tests::widened_gil_never_skips_object_checks_under_the_owner_only_contract` | 통과 x64·ARM64 (lib 필터 135/135, ignored 1 = `crash_child`, run 39165028169 (head 7b538d7b)) |
+| W9-2 | ACL 조회 오류(소유자를 SYSTEM 으로 바꾸고 READ_CONTROL 거부)는 거절이지 상속 계약으로의 전환이 아님; 읽기·쓰기·트리 검증·재열기 모두 거절, 저장소 불변 | `…::acl_query_error_is_a_refusal_not_a_downgrade_to_the_inherited_contract` | 통과 x64·ARM64 (lib 필터 135/135, ignored 1 = `crash_child`, run 39165028169 (head 7b538d7b)); `GENERIC_READ` 열기 자체가 거부돼 조회 오류로 거절됨, 저장소 inventory 불변 |
+| W9-3 | 복구 대기 기록·임시 객체·`.writing` 이 있는 상태에서 ACL 거절 시 그 기록·파일·잠금 파일 불변; 넓힘을 걷으면 같은 열기가 복구 단계에 도달; 임시 객체만 있는 Project 는 거절 중 보존·통과 뒤 정리 | `…::acl_refusal_happens_before_recovery_and_reaping_and_leaves_them_untouched` | 통과 x64·ARM64 (lib 필터 135/135, ignored 1 = `crash_child`, run 39165028169 (head 7b538d7b)); 거절 메시지는 ACL 게이트, inventory(복구 기록·tmp·`.writing`·`project.lock`·state) 동일, 넓힘 제거 뒤 복구 단계 도달, tmp 전용 Project 는 통과 뒤 정리 |
+| W9-4 | format-4 기존 흐름: `.gil` 이 넓어져도 열기·정리·객체 읽기/쓰기·읽기 전용 열기 그대로 | `…::format_four_projects_keep_the_inherited_contract_and_their_flow` + default job 전체 | 통과 x64·ARM64 (lib 필터 135/135, ignored 1 = `crash_child`, run 39165028169 (head 7b538d7b)); default job(mcp 19, spike format 4, candidate 9)도 통과 |
 
 ### 6.1 runner 실행 결과 요약 (2026-10-18, PR hyun06000/gil#25)
 
@@ -257,6 +257,11 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
   19508d50): 4 job 모두 통과**, authoring job 당 binding 11, mcp 24, `visual_attachment` 22,
   `visual_start` 1, `visual_store` 8, lib 필터 131(ignored 1), 작성 smoke·재시작. W6/W7/W8 의
   13 개 시험이 두 CPU 에서 실행됐다.
+- 명시적 계약·무수정 순서 라운드(2026-10-19): 20 차 run 39164657855 — Core 통과, `visual_store`
+  fixture(상속 ACL `.gil` 에 저장한 format-5 상태)가 새 계약대로 거절됨 → fixture 보정;
+  **21 차 run 39165028169 (head 7b538d7b): 4 job 모두 통과**, authoring job 당 binding 11,
+  mcp 24, `visual_attachment` 22, `visual_start` 1, `visual_store` 8, lib 필터 135(ignored 1),
+  작성 smoke·재시작. W9-1…W9-4 가 두 CPU 에서 실행됐다.
 - 실행되지 않은 것: 실제 디스크 고갈·전원 차단, ADS 를 직접 만드는 시험(이름 규칙 거절은
   `visual_report::file::tests::path_contract_is_shared_across_platforms` 로 실행), 비-NTFS·
   네트워크 드라이브 거절은 12 차에서 UNC·매핑 드라이브로 실행(비-NTFS 볼륨은 여전히 없음),
