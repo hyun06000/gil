@@ -168,11 +168,19 @@ mod reserve {
 
     impl Reserved {
         pub(super) fn take(root: &Path) -> std::io::Result<Self> {
+            // The user-selected path itself must not pass through any reparse point
+            // (Distribution §6.2b; CI run 39125709523 showed canonicalize() resolving a junction
+            // root into its target). Only then is the canonical form used for the chain.
+            let selected = win::Chain::open(root)?;
             let root = root.canonicalize()?;
             if !std::fs::metadata(&root)?.is_dir() {
                 return Err(std::io::Error::other("프로젝트 폴더가 아니다"));
             }
             let parent = win::Chain::open(&root)?;
+            if win::id(parent.dir())? != win::id(selected.dir())? {
+                return Err(win::refused());
+            }
+            drop(selected);
             win::local_fixed_ntfs(&root, parent.dir()).map_err(|_| {
                 std::io::Error::new(
                     std::io::ErrorKind::Unsupported,
