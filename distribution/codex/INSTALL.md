@@ -1,6 +1,9 @@
 # GIL preview 설치
 
 대상: **macOS Apple Silicon의 Codex** · `0.2.1-preview.4` (2026-10-14 게시, unsigned prerelease).
+다음 후보 `0.2.1-preview.5`(source `c7db94ea`, companion Skill 보정)는 **준비 중이며 아직 게시되지 않았다** —
+tag·Release가 공개되기 전에는 설치 가능한 버전이 아니며 아래 안내는 preview.4 기준이다.
+준비 상태는 [preview.5 장부](PREVIEW-5-PUBLICATION-20261018.md)를 본다.
 Apple Developer ID 서명·공증은 없다. 개발 도구 없는 Mac VM의 설치·실사용은
 2026-10-07 **preview.3** 사용자 검수로 확인했으며, preview.4는 새 Mac·VM에서 아직 검수하지 않았고
 모든 Mac의 동작을 보장하는 것은 아니다. preview.4의 이미지 보고서 범위와 이관·복구 주의는
