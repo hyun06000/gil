@@ -54,7 +54,7 @@ fn create(
     let state_path = gil.join("state.yaml");
     identity().map_err(error)?;
     initializable(&gil, &state_path)?;
-    let objects = ObjectStore::at(&gil);
+    let objects = ObjectStore::owner_only(&gil);
     let world = capture(&root, &objects)?;
     checkpoint("captured").map_err(error)?;
     // This is an in-memory initial boundary, not migration of a persisted format-4 state.

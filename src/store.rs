@@ -305,7 +305,7 @@ pub fn load(rules: RuleSet, path: impl AsRef<Path>) -> Result<Project, StoreErro
     // **구조가 맞물린 뒤에 객체를 본다.** registry 가 깨진 채로 디스크를 뒤지면 잘못된
     // 자리를 열어 보게 된다.
     if let Some(gil) = path.parent() {
-        verify_manifests(&project, &ObjectStore::at(gil))?;
+        verify_manifests(&project, &ObjectStore::for_project(gil, &project))?;
     }
     Ok(project)
 }

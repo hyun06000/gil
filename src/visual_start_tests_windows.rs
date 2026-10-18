@@ -785,8 +785,8 @@ fn widened_child_entries_are_refused_on_reopen_or_on_read_but_never_repaired() {
     drop(ProjectSession::start_visual(rules(), &root).unwrap());
     let gil = root.join(".gil");
     let state = gil.join("state.yaml");
-    // Two blobs through the real store (owner-only by inheritance).
-    let store = ObjectStore::at(&gil);
+    // Two blobs through the real store under the explicit owner-only contract.
+    let store = ObjectStore::owner_only(&gil);
     let used = store.put_blob(&b"blob to widen"[..]).unwrap();
     let other = store.put_blob(&b"blob left alone"[..]).unwrap();
     let hex = |bytes: &[u8]| -> String {
@@ -835,4 +835,151 @@ fn widened_child_entries_are_refused_on_reopen_or_on_read_but_never_repaired() {
         Err(e) => e.to_string(),
     };
     assert!(refused.contains("artifacts/manifests"), "{refused}");
+}
+
+// ── Windows contract §6 W9-*: explicit storage contract and read-only verification order ──────
+
+fn grant_everyone_read(path: &Path) {
+    let out = std::process::Command::new(system32("icacls.exe")).arg(path).args(["/grant", "*S-1-1-0:(R)"]).output().unwrap();
+    assert!(out.status.success(), "icacls grant: {}", String::from_utf8_lossy(&out.stdout));
+}
+fn revoke_everyone(path: &Path) {
+    let out = std::process::Command::new(system32("icacls.exe")).arg(path).args(["/remove:g", "*S-1-1-0"]).output().unwrap();
+    assert!(out.status.success(), "icacls remove: {}", String::from_utf8_lossy(&out.stdout));
+}
+
+#[test]
+fn widened_gil_never_skips_object_checks_under_the_owner_only_contract() {
+    use crate::artifact::ObjectStore;
+    let root = scratch();
+    drop(ProjectSession::start_visual(rules(), &root).unwrap());
+    let gil = root.join(".gil");
+    let protected = ObjectStore::owner_only(&gil);
+    let digest = protected.put_blob(&b"stored before widening"[..]).unwrap();
+    grant_everyone_read(&gil);
+    // The contract is explicit: a widened .gil is a refusal for reads and for writes.
+    let mut sink = Vec::new();
+    assert!(protected.read_blob(&digest, &mut sink).is_err(), "read must not skip the check");
+    assert!(sink.is_empty());
+    let tmp_before = fs::read_dir(gil.join("artifacts/tmp")).map(|d| d.count()).unwrap_or(0);
+    assert!(protected.put_blob(&b"new bytes after widening"[..]).is_err(), "write must not skip the check");
+    assert_eq!(fs::read_dir(gil.join("artifacts/tmp")).map(|d| d.count()).unwrap_or(0), tmp_before, "no temporary created");
+    // The same bytes through the inherited (format-4) contract are not subject to the check.
+    let mut sink = Vec::new();
+    ObjectStore::at(&gil).read_blob(&digest, &mut sink).unwrap();
+    assert_eq!(sink, b"stored before widening");
+    // Reopening the image Project is refused as well; nothing is repaired.
+    let listing = acl_listing(&gil);
+    assert!(ProjectSession::open_read_only(rules(), gil.join("state.yaml")).is_err());
+    assert_eq!(acl_listing(&gil), listing);
+}
+
+/// Restores ownership and removes the deny ACE even when an assertion fails.
+struct UnreadableSecurity(PathBuf, String);
+impl UnreadableSecurity {
+    fn new(dir: &Path) -> Self {
+        let who = std::process::Command::new(system32("whoami.exe")).output().unwrap();
+        let account = String::from_utf8(who.stdout).unwrap().trim().to_string();
+        // Owner → SYSTEM (owners are implicitly granted READ_CONTROL), then deny READ_CONTROL.
+        for args in [vec!["/setowner", "*S-1-5-18"], vec!["/deny", &format!("{account}:(RC)")]] {
+            let out = std::process::Command::new(system32("icacls.exe")).arg(dir).args(&args).output().unwrap();
+            assert!(out.status.success(), "icacls {args:?}: {}", String::from_utf8_lossy(&out.stdout));
+        }
+        Self(dir.to_owned(), account)
+    }
+}
+impl Drop for UnreadableSecurity {
+    fn drop(&mut self) {
+        let _ = std::process::Command::new(system32("icacls.exe")).arg(&self.0).args(["/remove:d", &self.1]).output();
+        let _ = std::process::Command::new(system32("icacls.exe")).arg(&self.0).args(["/setowner", &self.1]).output();
+    }
+}
+
+#[test]
+fn acl_query_error_is_a_refusal_not_a_downgrade_to_the_inherited_contract() {
+    use crate::artifact::ObjectStore;
+    let root = scratch();
+    drop(ProjectSession::start_visual(rules(), &root).unwrap());
+    let gil = root.join(".gil");
+    let protected = ObjectStore::owner_only(&gil);
+    let digest = protected.put_blob(&b"readable while verifiable"[..]).unwrap();
+    let before = inventory(&root);
+    {
+        let _unreadable = UnreadableSecurity::new(&gil);
+        let mut sink = Vec::new();
+        assert!(protected.read_blob(&digest, &mut sink).is_err(), "a security query error must refuse");
+        assert!(sink.is_empty());
+        assert!(protected.put_blob(&b"must not be published"[..]).is_err());
+        assert!(crate::windows_fs::verify_storage_tree(&gil).is_err());
+        assert!(ProjectSession::open_read_only(rules(), gil.join("state.yaml")).is_err());
+        assert!(ProjectSession::open(rules(), gil.join("state.yaml")).is_err());
+    }
+    assert_eq!(inventory(&root), before, "nothing published or cleaned while unverifiable");
+}
+
+#[test]
+fn acl_refusal_happens_before_recovery_and_reaping_and_leaves_them_untouched() {
+    let root = scratch();
+    drop(ProjectSession::start_visual(rules(), &root).unwrap());
+    let gil = root.join(".gil");
+    let state = gil.join("state.yaml");
+    // Pending material of every kind: an unfinished temporary object, a half-written state,
+    // and a recovery record that `open` would otherwise act on first.
+    fs::create_dir_all(gil.join("artifacts/tmp")).unwrap();
+    fs::write(gil.join("artifacts/tmp").join(format!("{}-7", std::process::id())), b"unfinished object").unwrap();
+    fs::write(gil.join("state.yaml.writing"), b"format: 5\nhalf").unwrap();
+    fs::create_dir_all(gil.join("restore/active")).unwrap();
+    fs::write(gil.join("restore/active/PLAN"), b"bogus plan").unwrap();
+    grant_everyone_read(&state);
+    let before = inventory(&root);
+    let refused = match ProjectSession::open(rules(), &state) {
+        Ok(_) => panic!("widened state.yaml was accepted"),
+        Err(e) => e.to_string(),
+    };
+    assert!(refused.contains("소유자 전용"), "refusal must be the ACL gate, not recovery: {refused}");
+    assert_eq!(inventory(&root), before, "recovery records, temporaries and the lock file must be untouched");
+    // Once the widening is removed the same open reaches the recovery step (whatever it says).
+    revoke_everyone(&state);
+    let after_gate = match ProjectSession::open(rules(), &state) {
+        Ok(_) => "opened".to_string(),
+        Err(e) => e.to_string(),
+    };
+    assert!(!after_gate.contains("소유자 전용"), "{after_gate}");
+    // A second Project with only a temporary: refused untouched while widened, reaped once not.
+    let root2 = scratch();
+    drop(ProjectSession::start_visual(rules(), &root2).unwrap());
+    let gil2 = root2.join(".gil");
+    let temp = gil2.join("artifacts/tmp").join(format!("{}-9", std::process::id()));
+    fs::create_dir_all(temp.parent().unwrap()).unwrap();
+    fs::write(&temp, b"unfinished").unwrap();
+    grant_everyone_read(&gil2.join("state.yaml"));
+    assert!(ProjectSession::open(rules(), gil2.join("state.yaml")).is_err());
+    assert_eq!(fs::read(&temp).unwrap(), b"unfinished", "temporary must survive the refusal");
+    revoke_everyone(&gil2.join("state.yaml"));
+    drop(ProjectSession::open(rules(), gil2.join("state.yaml")).unwrap());
+    assert!(!temp.exists(), "after the gate passes, reaping proceeds as before");
+}
+
+#[test]
+fn format_four_projects_keep_the_inherited_contract_and_their_flow() {
+    use crate::artifact::ObjectStore;
+    let root = scratch();
+    fs::write(root.join("note.txt"), b"text project").unwrap();
+    ProjectSession::start(rules(), root.join(crate::STATE_PATH)).unwrap().commit().unwrap();
+    let gil = root.join(".gil");
+    grant_everyone_read(&gil);
+    // No ACL gate for format 4: open, reap, read and write all work as before.
+    let temp = gil.join("artifacts/tmp").join(format!("{}-11", std::process::id()));
+    fs::create_dir_all(temp.parent().unwrap()).unwrap();
+    fs::write(&temp, b"leftover").unwrap();
+    let session = ProjectSession::open(rules(), root.join(crate::STATE_PATH)).unwrap();
+    assert!(!temp.exists(), "format-4 reaping unchanged");
+    assert!(session.project().visual_state().is_none());
+    drop(session);
+    let store = ObjectStore::at(&gil);
+    let digest = store.put_blob(&b"format-4 bytes"[..]).unwrap();
+    let mut sink = Vec::new();
+    store.read_blob(&digest, &mut sink).unwrap();
+    assert_eq!(sink, b"format-4 bytes");
+    assert!(ProjectSession::open_read_only(rules(), root.join(crate::STATE_PATH)).is_ok());
 }

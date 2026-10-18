@@ -70,7 +70,11 @@ impl ProjectSession {
         let state_path = state_path.as_ref().to_path_buf();
         let gil = gil_dir(&state_path)?;
 
+        // Windows image Projects: the storage ACL is verified **before** the lock file may be
+        // created and before any recovery or reaping (contract §4 W4 5).
+        let protected = private_storage_before_lock(&gil, &state_path)?;
         let lock = ProjectLock::acquire(&gil).map_err(SessionError::from)?;
+        private_storage_after_lock(&gil, protected)?;
 
         preflight_state(&state_path)?;
 
@@ -119,8 +123,10 @@ impl ProjectSession {
         let gil = gil_dir(&state_path)?;
 
         // 잠금은 여기서도 먼저다. 읽는 도중에 남이 상태를 갈아 끼우면, 읽어 낸 것은
-        // 아무 시점의 사실도 아니게 된다.
+        // 아무 시점의 사실도 아니게 된다. (Windows 이미지 Project: 그 전에 ACL 을 읽기만으로 검증.)
+        let protected = private_storage_before_lock(&gil, &state_path)?;
         let lock = ProjectLock::acquire(&gil).map_err(SessionError::from)?;
+        private_storage_after_lock(&gil, protected)?;
 
         preflight_state(&state_path)?;
 
@@ -217,11 +223,11 @@ impl ProjectSession {
             .and_then(|state| state.registry().asset_for_report(owner, asset))
             .ok_or_else(|| error("이 Project의 해당 Report에 연결된 시각 자료가 아니다".into()))?
             .metadata();
-        crate::visual_report::file::read_stored(&self.root()?, metadata).map_err(error)
+        crate::visual_report::file::read_stored(&self.root()?, metadata, true).map_err(error)
     }
 
     fn store(&self) -> Result<ObjectStore, SessionError> {
-        Ok(ObjectStore::at(&gil_dir(&self.state_path)?))
+        Ok(ObjectStore::for_project(&gil_dir(&self.state_path)?, &self.project))
     }
 }
 
@@ -740,9 +746,54 @@ fn capture(root: &Path, store: &ObjectStore) -> Result<crate::ManifestAddress, S
 ///
 /// 모르는 것을 지우지 않는다. 그리고 **살아 있는 다른 GIL 프로세스의 임시 파일을 지울 수
 /// 없다** — 이 함수는 프로젝트 잠금을 쥔 채로만 불리고, 잠금을 쥔 명령은 한 번에 하나다.
-/// Windows: an image Project's `.gil` and the control/structure entries below it must still
-/// carry only the owner-only ACEs when reopened (Windows contract §4 W4, §8 item 3). Blobs are
-/// checked when read. Never repaired here; format-4 Projects and other platforms are not checked.
+/// Windows, before the lock: read only the `format:` line of the state file through a no-follow
+/// handle (no lock file creation, no recovery, no reaping) and, for format 5, verify the whole
+/// storage ACL tree read-only. Returns whether the owner-only contract applies.
+/// "No modification" here means: no entry under `.gil` is created, deleted, renamed or written
+/// before this passes. The only entry the lock may then create is `project.lock` when absent;
+/// it inherits the verified `.gil` DACL and is checked again after the lock.
+fn private_storage_before_lock(gil: &Path, state_path: &Path) -> Result<bool, SessionError> {
+    #[cfg(windows)]
+    {
+        let protected = match crate::windows_fs::peek_format(state_path) {
+            Ok(format) => format == Some(crate::VISUAL_FORMAT),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+            Err(source) => return Err(SessionError::Store(StoreError::Read {
+                path: store::said_path(state_path), source,
+            })),
+        };
+        if protected {
+            crate::windows_fs::verify_storage_tree(gil).map_err(|source| SessionError::Store(StoreError::Read {
+                path: store::said_path(gil), source,
+            }))?;
+        }
+        Ok(protected)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (gil, state_path);
+        Ok(false)
+    }
+}
+
+/// Windows, after the lock and still before recovery/reaping: the same read-only verification
+/// again under the lock (covers `project.lock`, which the lock may have just created, and any
+/// change between the peek and the lock). A failure releases the lock and touches nothing else.
+fn private_storage_after_lock(gil: &Path, protected: bool) -> Result<(), SessionError> {
+    #[cfg(windows)]
+    if protected {
+        crate::windows_fs::verify_storage_tree(gil).map_err(|source| SessionError::Store(StoreError::Read {
+            path: store::said_path(gil), source,
+        }))?;
+    }
+    #[cfg(not(windows))]
+    let _ = (gil, protected);
+    Ok(())
+}
+
+/// Windows: final gate after loading — the loaded Project's format decides the contract, so a
+/// format-5 state whose peek was missed (e.g. state.yaml absent at peek time) is still verified.
+/// Never repaired here; format-4 Projects and other platforms are not checked.
 fn private_visual_storage(gil: &Path, project: &Project) -> Result<(), SessionError> {
     #[cfg(windows)]
     if project.visual_state().is_some() {

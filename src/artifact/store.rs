@@ -83,18 +83,54 @@ impl fmt::Display for ObjectKind {
     }
 }
 
+/// 이 창고의 접근 권한 계약 — **호출자가 명시한다**, 디스크에서 추론하지 않는다
+/// (Windows 지원 계약 §8 1a). Unix 구현은 이 값을 쓰지 않는다(0o700 경계가 따로 있다).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Protection {
+    /// 기존 format-4 저장소: 상속 ACL 그대로, 어떤 ACL 검사도 하지 않는다.
+    Inherited,
+    /// 이미지 Project(format 5): `.gil` 은 소유자 전용이어야 하고 객체·shard 는 상속 ACE 만
+    /// 가져야 한다. 조회 오류를 포함해 어떤 검사 실패도 거절이다.
+    OwnerOnly,
+}
+
 /// `.gil/artifacts/` 하나.
 #[derive(Debug, Clone)]
 pub(crate) struct ObjectStore {
     root: PathBuf,
+    #[cfg_attr(not(windows), allow(dead_code))]
+    protection: Protection,
 }
 
 impl ObjectStore {
-    /// 그 프로젝트의 `.gil` 아래 창고.
+    /// 그 프로젝트의 `.gil` 아래 창고 — 기존(format-4) 접근 계약.
     pub(crate) fn at(gil_dir: &Path) -> ObjectStore {
         ObjectStore {
             root: gil_dir.join(ARTIFACTS),
+            protection: Protection::Inherited,
         }
+    }
+
+    /// 이미지 Project 의 창고: 소유자 전용 계약을 **명시적으로** 요구한다.
+    pub(crate) fn owner_only(gil_dir: &Path) -> ObjectStore {
+        ObjectStore {
+            root: gil_dir.join(ARTIFACTS),
+            protection: Protection::OwnerOnly,
+        }
+    }
+
+    /// Project 의 형식에 맞는 계약: format 5(시각 상태 있음)는 소유자 전용, 그 밖에는 기존.
+    pub(crate) fn for_project(gil_dir: &Path, project: &crate::Project) -> ObjectStore {
+        if project.visual_state().is_some() {
+            Self::owner_only(gil_dir)
+        } else {
+            Self::at(gil_dir)
+        }
+    }
+
+    #[cfg_attr(not(windows), allow(dead_code))]
+    pub(crate) fn protection(&self) -> Protection {
+        self.protection
     }
 
     /// 창고 자신의 자리 — `.gil/artifacts/`.

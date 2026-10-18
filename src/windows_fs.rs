@@ -430,6 +430,18 @@ pub(crate) fn same(a: &File, b: &File) -> io::Result<bool> {
     Ok(id(a)? == id(b)?)
 }
 
+/// Read only the first line of the state file through the no-follow control-file handle and
+/// return its `format:` number. Creates nothing. Used before the lock to decide the contract.
+pub(crate) fn peek_format(path: &Path) -> io::Result<Option<u32>> {
+    use std::io::Read;
+    let (_dir, mut held) = control_file(path, false)?;
+    let mut head = [0u8; 64];
+    let n = held.read(&mut head)?;
+    let text = String::from_utf8_lossy(&head[..n]);
+    let first = text.lines().next().unwrap_or("");
+    Ok(first.strip_prefix("format:").and_then(|v| v.trim().parse().ok()))
+}
+
 pub(crate) fn read_state(path: &Path) -> io::Result<String> {
     use std::io::Read;
     let (dir, mut held) = control_file(path, false)?;
