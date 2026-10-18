@@ -31,7 +31,11 @@ fn close_verify(p: &mut Project, visuals: ReportVisuals) {
         .unwrap();
 }
 fn path(label: &str) -> std::path::PathBuf {
-    common::scratch(label).join(gil::STATE_PATH)
+    let root = common::scratch(label);
+    // Format-5 states are loaded under the explicit owner-only contract on Windows; the fixture
+    // `.gil` therefore takes the owner-only descriptor (a no-op elsewhere and for format 4).
+    common::private_storage(&root);
+    root.join(gil::STATE_PATH)
 }
 
 #[test]
