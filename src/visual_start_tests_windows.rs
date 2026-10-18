@@ -822,15 +822,17 @@ fn widened_child_entries_are_refused_on_reopen_or_on_read_but_never_repaired() {
     assert!(refused.contains("소유자 전용") && refused.contains("state.yaml"), "{refused}");
     assert_eq!(acl_listing(&state), widened_state_acl);
     assert_eq!(fs::read(&state).unwrap(), before);
-    // 3. A structure directory that stops inheriting is refused too.
+    // 3. A structure directory that stops inheriting is refused too (`artifacts/manifests` always
+    //    exists after creation; `artifacts/blobs` does not for an empty folder, CI run 39162190894).
     let root2 = scratch();
     drop(ProjectSession::start_visual(rules(), &root2).unwrap());
-    let blobs = root2.join(".gil/artifacts/blobs");
-    let out = std::process::Command::new(system32("icacls.exe")).arg(&blobs).args(["/inheritance:d"]).output().unwrap();
-    assert!(out.status.success());
+    let manifests = root2.join(".gil/artifacts/manifests");
+    assert!(manifests.is_dir());
+    let out = std::process::Command::new(system32("icacls.exe")).arg(&manifests).args(["/inheritance:d"]).output().unwrap();
+    assert!(out.status.success(), "icacls: {} {}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
     let refused = match ProjectSession::open_read_only(rules(), root2.join(crate::STATE_PATH)) {
-        Ok(_) => panic!("protected artifacts/blobs was accepted"),
+        Ok(_) => panic!("protected artifacts/manifests was accepted"),
         Err(e) => e.to_string(),
     };
-    assert!(refused.contains("artifacts/blobs"), "{refused}");
+    assert!(refused.contains("artifacts/manifests"), "{refused}");
 }
