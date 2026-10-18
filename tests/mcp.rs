@@ -108,7 +108,7 @@ fn migration_stdio_two_approvals_backup_apply_restart_and_preservation() {
 
 /// A format-5 Verify without images must close with the typed shape carrying a `not_needed` (or
 /// `missing`) declaration; the ordinary text close of that Verify is refused and converts nothing.
-#[cfg(all(unix, feature = "visual-authoring"))]
+#[cfg(all(any(unix, windows), feature = "visual-authoring"))]
 #[test]
 fn format5_verify_without_images_uses_typed_close_with_a_declaration() {
     use serde_json::json;
@@ -151,7 +151,7 @@ fn format5_verify_without_images_uses_typed_close_with_a_declaration() {
     mcp.eof();
 }
 
-#[cfg(all(unix, feature = "visual-authoring"))]
+#[cfg(all(any(unix, windows), feature = "visual-authoring"))]
 #[test]
 fn authoring_stdio_close_reuse_confirmation_and_rejections() {
     use serde_json::{Value, json};
@@ -291,7 +291,7 @@ fn authoring_stdio_close_reuse_confirmation_and_rejections() {
     mcp.eof();
 }
 
-#[cfg(all(unix, feature = "visual-authoring"))]
+#[cfg(all(any(unix, windows), feature = "visual-authoring"))]
 #[test]
 fn authoring_declarations_and_failed_commit_keep_reports_open() {
     use serde_json::json;
@@ -337,7 +337,7 @@ fn authoring_declarations_and_failed_commit_keep_reports_open() {
     mcp.eof();
 }
 
-#[cfg(all(unix, feature = "visual-authoring"))]
+#[cfg(all(any(unix, windows), feature = "visual-authoring"))]
 #[test]
 fn authoring_competing_closes_publish_only_one_report() {
     use serde_json::json;
@@ -365,7 +365,7 @@ fn authoring_competing_closes_publish_only_one_report() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn visual_report_tools_read_exact_bytes_and_refuse_unlinked_assets_over_stdio() {
     use gil::visual_report::{VisualDeclaration, VisualUse, image::VisualAttachment, registry::SourceKind};
     use base64::Engine;
@@ -1067,7 +1067,7 @@ fn binding_files(settings: &Path) -> usize {
         .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "json")).count()).unwrap_or(0)
 }
 
-#[cfg(all(feature="visual-authoring", target_os="macos", target_arch="aarch64"))]
+#[cfg(all(feature="visual-authoring", any(all(target_os="macos", target_arch="aarch64"), windows)))]
 #[test]
 fn visual_start_preserves_existing_and_partial_records_and_survives_response_loss() {
     use serde_json::json;

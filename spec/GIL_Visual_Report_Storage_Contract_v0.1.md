@@ -668,3 +668,36 @@ Windows 실행 경로는 기존 구현을 유지하며 native 안전성 검수 �
 Windows x64 library cross-check 통과. 배포 관련 84 통과/0 실패, whitespace 정상.
 최종 Core 실행에는 새 경계 시험 2개와 복원 집중 시험 32개가 포함된다. GUI·Windows native
 실행은 미검증이며 커밋·push·설치·배포하지 않았다. 별도 영구 체크포인트를 보관한다.
+
+## 25. Windows 핸들 기반 경계 — 단계 1 (2026-10-18)
+
+Windows 지원 계약 `GIL_Windows_Visual_Support_Contract_v0.1.md`에 따라 §13–§20의 Unix 경계에
+대응하는 Windows 구현을 추가했다. Unix 코드와 저장 형식·도구 schema·도구 이름은 바꾸지 않았다.
+
+- 공용 원시 연산 `src/windows_fs.rs`: 각 구성 요소를 `FILE_FLAG_OPEN_REPARSE_POINT`로 항목
+  자체로 열고 reparse 속성이면 거절, 조상 디렉터리 핸들 보유(이름 변경·삭제 공유 거부),
+  `FileIdInfo`(volume + 128-bit id) identity, `FileBasicInfo` 시각 포함 `Stamp`, `CREATE_NEW`
+  임시 파일, 보유 디렉터리 핸들 상대 `FileRenameInfoEx`(POSIX, 배타/교체), 핸들 삭제
+  `FileDispositionInfoEx`, `CreateHardLinkW` no-clobber, 디렉터리 `FlushFileBuffers`,
+  새 생성 전용 `DRIVE_FIXED` + NTFS 게이트.
+- 첨부(`visual_report/file.rs`): Windows `open`은 root와 상대 경로의 모든 구성 요소를 pin한
+  뒤 마지막 항목을 열고 일반 파일·링크 수 1을 요구한다. `same`은 `Stamp` 전체 일치다.
+  공유 모드는 Unix처럼 제한하지 않고 변경은 `Stamp`·바이트 재검증으로 감지한다.
+- state 저장(`state_file.rs`): Unix와 같은 checkpoint 이름으로 `.writing` 배타 생성 → flush →
+  재판독 → 이름 재확인 → `.gil` 핸들 상대 rename(`write_new`는 교체 없음) → 디렉터리 flush.
+  실패한 임시 파일은 보존한다.
+- 객체 저장(`artifact/store_windows.rs`): `.gil/artifacts`를 pin한 뒤 tmp에 배타 생성, 목적지
+  체인 pin, `CreateHardLinkW`로 확정, 임시 항목은 보유 핸들로만 삭제, 확정 객체 재판독.
+  읽기도 같은 체인으로 열고 reparse·디렉터리를 거절한다.
+- Session 입구(`lock.rs`, `session.rs` preflight, `store::load`): 잠금·상태 파일을 pin된 `.gil`
+  아래에서 항목 자체로 열고 일반 파일·링크 수 1을 요구하며 identity를 전후 비교한다.
+  `.gil` 핸들은 Unix descriptor처럼 삭제를 공유한다(이름 변경은 identity 비교로 감지).
+- `visual_start.rs`: 예약을 플랫폼 모듈로 분리했다. Windows는 `CreateDirectoryW` 배타 예약,
+  항목 자체 열기, root/`.gil` identity, 부모 flush. macOS 동작은 그대로다.
+- 제외: 이관(`visual_migration`·`gil_migration_*`는 Windows에서 계속 거절), `reap_tmp`·복구·
+  rollback의 Windows 핸들 경계, `.gil` 보호 DACL 적용 여부(계약 §8).
+
+검증(2026-10-18): Mac 교차 `cargo check --target x86_64-pc-windows-msvc --all-targets`
+default·visual-authoring 통과(기존 Unix 전용 시험 3곳에 `cfg(unix)` 게이트 추가). Windows
+runner 실행 결과·Mac 회귀 결과는 복귀 보고서와 Roadmap T3에 run id와 함께 기록한다.
+runner 통과도 실제 PC·Host 화면 인수가 아니다.

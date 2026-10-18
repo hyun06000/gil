@@ -123,6 +123,9 @@ pub mod launcher;
 mod lock;
 #[cfg(unix)]
 mod internal_fs;
+/// Windows handle-based equivalents of the Unix internal boundaries (Windows contract v0.1).
+#[cfg(windows)]
+mod windows_fs;
 // Manual 은 **도구의 지식**이다 — 프로젝트 상태가 아니라 함께 실린 Topic 을 읽는다.
 // 밖으로 나가는 것은 조회 문 하나와 그 오류뿐이고, 주소 타입과 index 는 안에 남는다.
 mod manual;

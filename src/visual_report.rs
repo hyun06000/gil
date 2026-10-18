@@ -11,7 +11,7 @@ pub mod display;
 pub mod registry;
 pub mod image;
 pub(crate) mod file;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub(crate) mod state_file;
 
 /// Project 안의 논리 ID. digest·파일 경로·접근 권한이 아니다.

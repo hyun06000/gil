@@ -5,33 +5,51 @@ on:
   workflow_dispatch:
     inputs:
       prepare_candidate:
-        description: 'Build an unsigned review artifact; never publish or install'
+        description: 'Build an unsigned review artifact (default profile only); never publish or install'
         type: boolean
         default: false
 permissions:
   contents: read
 jobs:
   windows-native:
-    name: Windows native (${{ matrix.arch }})
+    name: Windows native (${{ matrix.label }})
     strategy:
       fail-fast: false
       matrix:
         include:
           - arch: x64
+            profile: default
+            label: x64
             runner: windows-2025
             machine: AMD64
             target: x86_64-pc-windows-msvc
           - arch: arm64
+            profile: default
+            label: arm64
+            runner: windows-11-arm
+            machine: ARM64
+            target: aarch64-pc-windows-msvc
+          # Image-report authoring profile (Windows contract v0.1 §6). Never packaged here.
+          - arch: x64
+            profile: visual-authoring
+            label: x64, visual-authoring
+            runner: windows-2025
+            machine: AMD64
+            target: x86_64-pc-windows-msvc
+          - arch: arm64
+            profile: visual-authoring
+            label: arm64, visual-authoring
             runner: windows-11-arm
             machine: ARM64
             target: aarch64-pc-windows-msvc
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       RUSTUP_TOOLCHAIN: 1.97.1
       GIL_NATIVE_TARGET: ${{ matrix.target }}
       GIL_NATIVE_MACHINE: ${{ matrix.machine }}
       GIL_NATIVE_ARCH: ${{ matrix.arch }}
+      GIL_RUNTIME_PROFILE: ${{ matrix.profile }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         env:
@@ -66,30 +84,41 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node mcp-app/build.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Build native Core and MCP
+      - name: Build native Core and MCP for the selected profile
         shell: pwsh
         run: |
-          cargo +1.97.1 build --locked -p gil --bin gil --target $env:GIL_NATIVE_TARGET
+          $features = if ($env:GIL_RUNTIME_PROFILE -eq 'visual-authoring') { @('--features', 'visual-authoring') } elseif ($env:GIL_RUNTIME_PROFILE -eq 'default') { @() } else { throw 'unknown profile' }
+          cargo +1.97.1 build --locked -p gil --bin gil --target $env:GIL_NATIVE_TARGET @features
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Binding security and native MCP integration
         shell: pwsh
         run: |
-          cargo +1.97.1 test --locked -p gil --test windows_bindings --target $env:GIL_NATIVE_TARGET
+          $features = if ($env:GIL_RUNTIME_PROFILE -eq 'visual-authoring') { @('--features', 'visual-authoring') } else { @() }
+          cargo +1.97.1 test --locked -p gil --test windows_bindings --target $env:GIL_NATIVE_TARGET @features
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cargo +1.97.1 test --locked -p gil --test mcp --target $env:GIL_NATIVE_TARGET
+          cargo +1.97.1 test --locked -p gil --test mcp --target $env:GIL_NATIVE_TARGET @features
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Native protocol and read-only Monitor
+      - name: Image-report storage boundaries (Windows contract v0.1 §6)
+        if: matrix.profile == 'visual-authoring'
+        shell: pwsh
+        run: |
+          cargo +1.97.1 test --locked -p gil --features visual-authoring --target $env:GIL_NATIVE_TARGET --test visual_attachment --test visual_start --test visual_store
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo +1.97.1 test --locked -p gil --features visual-authoring --target $env:GIL_NATIVE_TARGET --lib -- session::visual_start lock:: artifact::store visual_report:: windows_fs agent::
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Native protocol, read-only Monitor and process restart
         shell: pwsh
         run: |
           node distribution/windows/spike.mjs "target/$env:GIL_NATIVE_TARGET/debug/gil.exe"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Candidate packaging regression
+        if: matrix.profile == 'default'
         shell: pwsh
         run: |
           node --test distribution/windows/candidate.test.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Prepare unsigned review candidate
-        if: github.event_name == 'workflow_dispatch' && inputs.prepare_candidate
+        if: github.event_name == 'workflow_dispatch' && inputs.prepare_candidate && matrix.profile == 'default'
         shell: pwsh
         env:
           RUSTUP_TOOLCHAIN: 1.97.1
@@ -97,7 +126,7 @@ jobs:
           node distribution/windows/candidate.mjs target/windows-candidate
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Retain review artifact only
-        if: github.event_name == 'workflow_dispatch' && inputs.prepare_candidate
+        if: github.event_name == 'workflow_dispatch' && inputs.prepare_candidate && matrix.profile == 'default'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           archive: true

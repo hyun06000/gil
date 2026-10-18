@@ -749,7 +749,15 @@ fn preflight_state(path: &Path) -> Result<(), SessionError> {
             path: store::said_path(path), source,
         })),
     }
-    #[cfg(not(unix))] let _ = path;
+    #[cfg(windows)]
+    match crate::windows_fs::control_file(path, false) {
+        Ok(_) => (),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
+        Err(source) => return Err(SessionError::Store(StoreError::Read {
+            path: store::said_path(path), source,
+        })),
+    }
+    #[cfg(not(any(unix, windows)))] let _ = path;
     Ok(())
 }
 

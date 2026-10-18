@@ -21,7 +21,8 @@ pub const PROTOCOL_VERSION: u32 = 1;
 pub const ACTION_SURFACE: u32 = if cfg!(feature = "visual-authoring") { 2 } else { 1 };
 /// Full image authoring is accepted only on the reviewed local macOS arm64 target.
 pub const IMAGE_STORAGE_SUPPORTED: bool = cfg!(all(
-    feature = "visual-authoring", target_os = "macos", target_arch = "aarch64"
+    feature = "visual-authoring",
+    any(all(target_os = "macos", target_arch = "aarch64"), target_os = "windows")
 ));
 pub const PRODUCT: &str = "gil_core";
 

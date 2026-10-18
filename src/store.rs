@@ -187,7 +187,7 @@ pub fn save(project: &Project, path: impl AsRef<Path>) -> Result<(), StoreError>
     let path = path.as_ref();
     let encoded = encode(project)?;
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     if project.visual_state().is_some() {
         return crate::visual_report::state_file::write(path, &encoded)
             .map_err(|source| StoreError::Write { path: said_path(path), source });
@@ -265,7 +265,9 @@ pub fn load(rules: RuleSet, path: impl AsRef<Path>) -> Result<Project, StoreErro
     let path = path.as_ref();
     #[cfg(unix)]
     let read = crate::internal_fs::read_state(path);
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    let read = crate::windows_fs::read_state(path);
+    #[cfg(not(any(unix, windows)))]
     let read = fs::read_to_string(path);
     let text = read.map_err(|source| match source.kind() {
         io::ErrorKind::NotFound => StoreError::NotFound {

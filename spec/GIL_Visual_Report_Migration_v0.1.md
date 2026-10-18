@@ -225,7 +225,9 @@ Define를 선택하여 과거 본문·성공 조건·시각 자료 미기재 안
 - Agent가 설치된 Core의 capability, 도구 schema, 실제 OS/파일 시스템, 프로젝트 상태를
   확인한다. 사용자에게 CPU·format 번호·asset ID·plan 해시 입력을 요구하지 않는다.
 - 첫 작성 후보 지원 범위는 검수된 macOS Apple Silicon 로컬 파일 시스템이다. Windows는
-  현재 읽기/쓰기 파일 경계와 이관이 미검수이므로 이미지 기능 동등성을 주장하지 않는다.
+  새 format-5 생성·첨부·인용·재시작 보존을 `GIL_Windows_Visual_Support_Contract_v0.1.md`
+  (로컬 고정 NTFS) 기준으로 검수하며, 기존 기록의 이관은 계속 미지원이다. runner 통과 전에는
+  이미지 기능 동등성을 주장하지 않는다.
   미지원 시 보안 설정을 끄거나 파일 링크를 제거하는 우회 설치를 안내하지 않는다.
 - 사용자 선택 폴더가 정본이다. 경로가 없으면 Host 폴더 선택을 안내하고, 부모 프로젝트나
   최근 사용 폴더를 추측하지 않는다. 기존 Git 폴더도 새 GIL 프로젝트 대상일 수 있다.
@@ -354,8 +356,9 @@ state 하나뿐이며 기존 객체·작업 파일·보고서는 불변이다. �
 지원되는 작성 배포 후보는 descriptor에서 format 4..5 지원을 사실대로 선언하고 최초 생성은
 5를 사용한다. protocol/descriptor schema는 의미 변경이 없는 한 1을 유지하되, typed close와
 승인 이관 동작이 포함된 **action surface는 2**로 식별한다. 현재 `visual-authoring` 빌드에
-적용했으며 macOS arm64에서만 저장 범위 4..5를 선언한다. 기본 빌드는 surface 1/format 4를
-유지한다. 미검수 플랫폼의 feature 빌드는 새 도구 표면을 2로 구분하되 저장 범위를 넓히지 않는다.
+적용했으며 macOS arm64와 Windows(2026-10-18 단계 1, Windows 지원 계약 §5)에서 저장 범위
+4..5를 선언한다. 기본 빌드는 surface 1/format 4를 유지한다. 미검수 플랫폼의 feature 빌드는
+새 도구 표면을 2로 구분하되 저장 범위를 넓히지 않는다.
 기존 format-4 텍스트 호출은 유지한다. 구형 consumer가 1만 받는다면 명시적 비호환으로 멈추게
 하고 몰래 1로 위장하지 않는다. update policy/Skill/패키징/이전 실제 binary 시험을 함께 갱신한다.
 읽기만 되거나 플랫폼 파일 안전성이 미검수인 빌드는 위 완전한 작성 capability를 광고하지 않는다.

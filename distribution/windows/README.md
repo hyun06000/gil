@@ -195,3 +195,20 @@ claim about every dynamically loaded dependency or every clean Windows installat
 The receipt remains `publishable: false`: no Authenticode signature, actual Windows/Codex install
 and fullscreen not yet tested, no marketplace publication, MSVC runtime redistribution review pending.
 CI retention is seven days; a CI artifact is not the stable nondeveloper installation channel.
+
+## Image-report authoring profile — stage 1 (2026-10-18)
+
+The `visual-authoring` Cargo feature now has Windows implementations of the storage boundaries
+that were Unix-only (new format-5 creation, Verify attachment, stored-image reuse, reopen after
+restart). Scope, threat list and acceptance table: `spec/GIL_Windows_Visual_Support_Contract_v0.1.md`;
+storage details: storage contract §25. Migration of existing format-4 records stays refused on
+Windows (`unsupported_platform`).
+
+`windows-spike.yml` now runs a four-entry matrix: x64/ARM64 × default/visual-authoring. The
+authoring entries build with the feature, run the binding/MCP tests plus `visual_attachment`,
+`visual_start`, `visual_store` and the filtered library unit tests (creation fault/abort
+checkpoints, lock and object-store boundaries), then `spike.mjs` with
+`GIL_RUNTIME_PROFILE=visual-authoring` (24-tool contract, `storage_format: 5`, restart).
+The default entries are unchanged and remain the only ones that package a review candidate.
+A green authoring job is runner evidence for the contract table; it is not an installable
+Windows authoring candidate, a version-label decision or a Codex screen acceptance.

@@ -21,7 +21,7 @@ pub fn tools() -> &'static [Tool] {
         let tools = {
             let mut tools = super::migration::catalog(super::authoring::catalog(tools));
             if let Some(start) = tools.iter_mut().find(|t| t.name == "gil_start") {
-                start.description = Some("Development image-report creation: creates format 5 on supported macOS Apple Silicon local storage. Requires the user's explicitly selected absolute project_root. Existing records/remnants are preserved, never migrated or retried automatically. Success commits one Interview, zero Steps; does not open or confirm the Monitor. Unsupported platforms refuse, never fall back to format 4.".into());
+                start.description = Some("Development image-report creation: creates format 5 on verified local storage (macOS Apple Silicon; Windows local fixed NTFS). Requires the user's explicitly selected absolute project_root. Existing records/remnants are preserved, never migrated or retried automatically. Success commits one Interview, zero Steps; does not open or confirm the Monitor. Unsupported platforms/volumes refuse, never fall back to format 4. Migrating existing format-4 records stays macOS-only.".into());
             }
             tools
         };

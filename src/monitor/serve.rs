@@ -2444,6 +2444,11 @@ mod tests {
     }
 
 
+    /// Unix signal waits only; the loopback Monitor's signal wait is unsupported on Windows.
+    #[cfg(unix)]
+    mod signals {
+    use super::*;
+
     // ── ⑩ 신호는 프로세스의 것이다 ────────────────────────────────────────
     //
     // 이 절의 시험들은 **process 전체를 공유한다.** 처리기가 걸려 있지 않은 순간에 신호를
@@ -2663,5 +2668,6 @@ mod tests {
             .is_ok(),
             "기다림이 끝났는데 잠금이 남았다"
         );
+    }
     }
 }

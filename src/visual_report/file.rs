@@ -1,16 +1,41 @@
-//! Explicit relative attachment paths. Unix resolution is descriptor-relative and no-follow.
-//! Non-Unix ingestion fails closed until an equivalent handle-based implementation is tested.
+//! Explicit relative attachment paths. Unix resolution is descriptor-relative and no-follow;
+//! Windows opens every component as the entry itself under pinned ancestors (Windows contract §4).
+//! Other platforms fail closed until an equivalent handle-based implementation is tested.
 use super::image::VerifiedImage;
 use crate::artifact::EntryPath;
-use std::fs::{File, Metadata};
+use std::fs::File;
 use std::io::{Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+
+/// What must stay equal between the retained handle and its current name.
+#[cfg(unix)]
+type Stamp = std::fs::Metadata;
+#[cfg(windows)]
+type Stamp = crate::windows_fs::Stamp;
+#[cfg(not(any(unix, windows)))]
+type Stamp = ();
+
+fn stamp(file: &File) -> Result<Stamp, String> {
+    #[cfg(unix)]
+    {
+        file.metadata().map_err(|_| refused())
+    }
+    #[cfg(windows)]
+    {
+        crate::windows_fs::Stamp::of(file).map_err(|_| refused())
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = file;
+        Err(refused())
+    }
+}
 
 pub(crate) struct AttachmentFile {
     root: PathBuf,
     relative: String,
     file: File,
-    before: Metadata,
+    before: Stamp,
     pub(crate) image: VerifiedImage,
 }
 
@@ -47,7 +72,7 @@ impl AttachmentFile {
     fn read_at(root: &Path, text: &str) -> Result<Self, String> {
         let root = root.canonicalize().map_err(|_| refused())?;
         let mut file = open(&root, text)?;
-        let before = file.metadata().map_err(|_| refused())?;
+        let before = stamp(&file)?;
         let image = VerifiedImage::read(&mut file).map_err(|e| e.to_string())?;
         let held = Self {
             root,
@@ -60,10 +85,8 @@ impl AttachmentFile {
         Ok(held)
     }
     fn check_metadata(&self) -> Result<(), String> {
-        let now = self.file.metadata().map_err(|_| refused())?;
-        let named = open(&self.root, &self.relative)?
-            .metadata()
-            .map_err(|_| refused())?;
+        let now = stamp(&self.file)?;
+        let named = stamp(&open(&self.root, &self.relative)?)?;
         if same(&self.before, &now) && same(&self.before, &named) {
             Ok(())
         } else {
@@ -109,7 +132,7 @@ pub(crate) fn read_stored(
 }
 
 #[cfg(unix)]
-fn same(a: &Metadata, b: &Metadata) -> bool {
+fn same(a: &Stamp, b: &Stamp) -> bool {
     use std::os::unix::fs::MetadataExt;
     a.is_file()
         && b.is_file()
@@ -123,8 +146,12 @@ fn same(a: &Metadata, b: &Metadata) -> bool {
         && a.ctime() == b.ctime()
         && a.ctime_nsec() == b.ctime_nsec()
 }
-#[cfg(not(unix))]
-fn same(_: &Metadata, _: &Metadata) -> bool {
+#[cfg(windows)]
+fn same(a: &Stamp, b: &Stamp) -> bool {
+    a == b && a.is_single_regular()
+}
+#[cfg(not(any(unix, windows)))]
+fn same(_: &Stamp, _: &Stamp) -> bool {
     false
 }
 
@@ -171,7 +198,34 @@ fn open(root: &Path, text: &str) -> Result<File, String> {
     }
     Ok(dir)
 }
-#[cfg(not(unix))]
+/// Windows: pin each directory of the canonical root and of the relative path without following
+/// reparse points, then open the final entry itself. Sharing is not restricted (like Unix);
+/// changes are detected through `Stamp` and the byte re-read instead.
+#[cfg(windows)]
+fn open(root: &Path, text: &str) -> Result<File, String> {
+    use crate::windows_fs as win;
+    use std::path::Component;
+    let mut chain = win::Chain::open(root).map_err(|_| refused())?;
+    let parts: Vec<_> = Path::new(text)
+        .components()
+        .filter_map(|c| match c {
+            Component::Normal(p) => Some(p),
+            _ => None,
+        })
+        .collect();
+    let (last, dirs) = parts.split_last().ok_or_else(refused)?;
+    for part in dirs {
+        chain.push(part, false).map_err(|_| refused())?;
+    }
+    let at = chain.child(last).map_err(|_| refused())?;
+    let file = win::open_file(&at, win::READ, win::SHARE_ALL, windows_sys::Win32::Storage::FileSystem::OPEN_EXISTING)
+        .map_err(|_| refused())?;
+    if !win::Stamp::of(&file).map_err(|_| refused())?.is_single_regular() {
+        return Err(refused());
+    }
+    Ok(file)
+}
+#[cfg(not(any(unix, windows)))]
 fn open(_: &Path, _: &str) -> Result<File, String> {
     Err("이 플랫폼의 안전한 이미지 첨부 경로는 아직 검수되지 않았다".into())
 }
@@ -204,7 +258,7 @@ mod tests {
         }
         assert!(relative("화면 자료/결과.png").is_ok());
     }
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     #[test]
     fn unsupported_platform_never_opens_a_source_file() {
         assert!(open(Path::new("C:/project"), "screen.png").is_err());

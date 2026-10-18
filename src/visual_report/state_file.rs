@@ -1,4 +1,5 @@
 //! Format-5 state publication. Does not harden Artifact capture or Session opening.
+//! Unix: descriptor-relative no-follow writes. Windows: pinned-handle writes (contract §4).
 use std::path::Path;
 
 pub(crate) fn write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
@@ -8,8 +9,7 @@ pub(crate) fn write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 /// First publication must never replace a concurrently created state entry.
 #[cfg(all(
     feature = "visual-authoring",
-    target_os = "macos",
-    target_arch = "aarch64"
+    any(all(target_os = "macos", target_arch = "aarch64"), windows)
 ))]
 pub(crate) fn write_new(
     path: &Path,
@@ -19,6 +19,7 @@ pub(crate) fn write_new(
     write_inner(path, bytes, true, checkpoint)
 }
 
+#[cfg(unix)]
 fn write_inner(
     path: &Path,
     bytes: &[u8],
@@ -163,6 +164,74 @@ fn write_inner(
         dir.sync_all()?;
         checkpoint("directory_synced")?;
         parent_still_named()
+    })();
+    // Keep a failed temporary file for inspection; never delete a possibly replaced entry.
+    result
+}
+
+/// Windows: same checkpoints and preservation rules as Unix. `.gil` is pinned (no rename or
+/// delete while held), the temporary is created exclusively, verified by re-read and by
+/// identity, then renamed relative to the pinned directory handle.
+#[cfg(windows)]
+fn write_inner(
+    path: &Path,
+    bytes: &[u8],
+    exclusive: bool,
+    checkpoint: &mut impl FnMut(&str) -> std::io::Result<()>,
+) -> std::io::Result<()> {
+    use crate::windows_fs as win;
+    use std::ffi::{OsStr, OsString};
+    use std::io::{Read, Seek, SeekFrom, Write};
+    use windows_sys::Win32::Storage::FileSystem::{CREATE_NEW, OPEN_EXISTING};
+    let invalid = || std::io::Error::other("visual state storage boundary refused");
+    let parent = path.parent().ok_or_else(invalid)?;
+    if parent.file_name() != Some(OsStr::new(".gil")) {
+        return Err(invalid());
+    }
+    let root = parent.parent().ok_or_else(invalid)?.canonicalize()?;
+    let name = path.file_name().ok_or_else(invalid)?;
+    let mut temp = OsString::from(name);
+    temp.push(".writing");
+    // No creation through a possibly linked internal directory; it must already exist.
+    let mut chain = win::Chain::open(&root)?;
+    chain.push(OsStr::new(".gil"), false)?;
+    let temp_path = chain.child(&temp)?;
+    // CREATE_NEW never truncates a pre-existing file, symlink, hard link or directory.
+    let mut file = win::open_file(&temp_path, win::READ_WRITE_DELETE, win::SHARE_ALL, CREATE_NEW)?;
+    let result = (|| {
+        if exclusive {
+            let split = bytes.len() / 2;
+            file.write_all(&bytes[..split])?;
+            checkpoint("partial_write")?;
+            file.write_all(&bytes[split..])?;
+        } else {
+            file.write_all(bytes)?;
+        }
+        file.flush()?;
+        file.sync_all()?;
+        checkpoint("file_synced")?;
+        file.seek(SeekFrom::Start(0))?;
+        let mut observed = Vec::new();
+        (&mut file)
+            .take(bytes.len() as u64 + 1)
+            .read_to_end(&mut observed)?;
+        if observed != bytes {
+            return Err(invalid());
+        }
+        let named = win::open_file(&temp_path, win::READ, win::SHARE_ALL, OPEN_EXISTING)?;
+        let (a, b) = (win::Stamp::of(&file)?, win::Stamp::of(&named)?);
+        if a.id != b.id || !a.is_single_regular() || !b.is_single_regular() {
+            return Err(invalid());
+        }
+        chain.still_named()?;
+        checkpoint("before_publish")?;
+        // Relative to the pinned directory handle: destination entries are replaced (ordinary
+        // save) or refused (exclusive creation), never followed.
+        win::rename(&file, chain.dir(), name, !exclusive)?;
+        checkpoint("after_publish")?;
+        win::flush_dir(chain.path(), chain.dir())?;
+        checkpoint("directory_synced")?;
+        chain.still_named()
     })();
     // Keep a failed temporary file for inspection; never delete a possibly replaced entry.
     result

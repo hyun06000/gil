@@ -43,6 +43,9 @@ use super::{CHUNK, ContentDigest, DigestAlgorithm, Manifest};
 #[cfg(unix)]
 #[path = "store_unix.rs"]
 mod unix;
+#[cfg(windows)]
+#[path = "store_windows.rs"]
+mod windows;
 
 /// 루트 `.gil/` 아래 창고가 놓이는 자리.
 const ARTIFACTS: &str = "artifacts";
@@ -183,7 +186,13 @@ impl ObjectStore {
         unix::put(self, kind, reader)
     }
 
-    #[cfg(not(unix))]
+    /// Windows: pinned-handle, no-reparse publication with the same no-clobber hard link.
+    #[cfg(windows)]
+    fn put(&self, kind: ObjectKind, reader: impl Read) -> Result<ContentDigest, ObjectError> {
+        windows::put(self, kind, reader)
+    }
+
+    #[cfg(not(any(unix, windows)))]
     fn put(&self, kind: ObjectKind, mut reader: impl Read) -> Result<ContentDigest, ObjectError> {
         let tmp_dir = self.root.join(TMP);
         create_dir(&tmp_dir)?;
@@ -301,7 +310,9 @@ impl ObjectStore {
     ) -> Result<(), ObjectError> {
         #[cfg(unix)]
         let mut file = unix::read_object(self, ObjectKind::Blob, digest)?;
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        let mut file = windows::read_object(self, ObjectKind::Blob, digest)?;
+        #[cfg(not(any(unix, windows)))]
         let mut file = open(&self.object_path(ObjectKind::Blob, digest), ObjectKind::Blob, digest)?;
 
         let mut hasher = Sha256::new();
@@ -337,7 +348,9 @@ impl ObjectStore {
         let digest = at.digest();
         #[cfg(unix)]
         let mut file = unix::read_object(self, ObjectKind::Manifest, digest)?;
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        let mut file = windows::read_object(self, ObjectKind::Manifest, digest)?;
+        #[cfg(not(any(unix, windows)))]
         let mut file = open(&self.object_path(ObjectKind::Manifest, digest), ObjectKind::Manifest, digest)?;
 
         let mut bytes = Vec::new();
@@ -382,7 +395,7 @@ fn sync_dir(at: &Path) -> Result<(), ObjectError> {
         })
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn sync_dir(_at: &Path) -> Result<(), ObjectError> {
     // 이 플랫폼에서는 표준 라이브러리로 디렉터리를 fsync 할 수 없다. 하지 않는다.
     Ok(())
@@ -414,6 +427,7 @@ mod meddle {
 }
 
 /// 이 오류가 「이 파일 시스템은 hard link 를 못 건다」는 뜻인가.
+#[cfg_attr(windows, allow(dead_code))]
 fn unsupported(source: &io::Error) -> bool {
     matches!(
         source.kind(),
@@ -421,6 +435,7 @@ fn unsupported(source: &io::Error) -> bool {
     )
 }
 
+#[cfg_attr(windows, allow(dead_code))]
 fn create_dir(at: &Path) -> Result<(), ObjectError> {
     fs::create_dir_all(at).map_err(|source| ObjectError::Io {
         doing: "객체 폴더를 만들지",
@@ -428,6 +443,7 @@ fn create_dir(at: &Path) -> Result<(), ObjectError> {
     })
 }
 
+#[cfg_attr(windows, allow(dead_code))]
 fn open(path: &Path, kind: ObjectKind, digest: &ContentDigest) -> Result<File, ObjectError> {
     File::open(path).map_err(|source| match source.kind() {
         io::ErrorKind::NotFound => ObjectError::Missing {
@@ -442,6 +458,7 @@ fn open(path: &Path, kind: ObjectKind, digest: &ContentDigest) -> Result<File, O
 }
 
 /// 이미 있는 객체를 흘려 읽어 지문을 다시 잰다.
+#[cfg_attr(windows, allow(dead_code))]
 fn digest_of_file(
     path: &Path,
     kind: ObjectKind,

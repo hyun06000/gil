@@ -455,6 +455,11 @@ Later    1  성공 가지 Merge
       설치·실제 fullscreen은 아직 미검증이며, MSVC runtime 재배포 조건 검토도 남아 있다.
 - [ ] 사용자에게 개발 도구·셸 명령·별도 Companion 설치를 요구하지 않고 macOS/Codex와 같은
       폴더 선택 → 프로젝트 시작 → fullscreen 가로 DAG·채팅 → 상세/시각 자료 → 실시간 갱신을 제공한다.
+- [~] **T3.1 Windows 이미지 Report 작성 경계(단계 1, 2026-10-18):** 새 format-5 생성·Verify 첨부·
+      저장 이미지 인용·재시작 보존의 Windows 핸들 기반 구현(`src/windows_fs.rs`, 저장 계약 §25)과
+      계약·인수표 `spec/GIL_Windows_Visual_Support_Contract_v0.1.md`. 이관은 Windows에서 계속 거절.
+      Windows CI에 `visual-authoring` profile matrix 추가. runner 결과는 별도 기록하며 실제 PC·
+      Host 화면 인수·설치·게시·버전 표기·MSVC 재배포 검토는 남는다.
 - [ ] 경로·권한·잠금·파일 감시·재시작/재연결·보고서 보존·OS 실행 차단을 실제 Windows에서 검수한다.
       보안을 끄거나 예외 등록으로 우회하지 않는다. 지원 OS/CPU와 패키지 신뢰 채널은 검수 후 명시한다.
 - [ ] Windows 시험 사용자의 설치 및 작업 경험을 수집하고 차이·실패·해결을 기록한다.

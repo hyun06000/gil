@@ -337,6 +337,7 @@ fn a_lock_contention_gets_no_topic() {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn the_refusals_that_have_no_recovery_topic_get_none() {
     // 프로젝트 없음.
