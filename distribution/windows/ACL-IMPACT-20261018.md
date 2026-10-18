@@ -16,18 +16,23 @@ separate and already owner-only (`bindings_windows.rs`); they are not affected.
 
 ## Who can read or change those records
 
-It depends only on the selected folder's inherited DACL:
+It depends only on the DACL the selected folder actually carries at the time `.gil` is created,
+never on where the folder is. The location examples below describe Windows **defaults**; group
+policy, a shared or domain-joined machine, a folder that was moved or copied, or any explicit
+grant made earlier can change the effective DACL, so none of these rows is a guarantee:
 
-| Project folder location | Inherited DACL (default Windows) | Other local standard account |
+| Project folder location (default Windows DACL as an example) | Typical inherited DACL | Other local standard account |
 | --- | --- | --- |
-| under `C:\Users\<user>\…` (Desktop, Documents, …) | user, SYSTEM, Administrators | no access |
+| under `C:\Users\<user>\…` (Desktop, Documents, …) | user, SYSTEM, Administrators | usually no access; **not verified for any particular machine** |
 | a folder created directly under `C:\` by a user | `Authenticated Users` Modify (subfolders and files), `Users` Read & execute | **read and modify** |
 | `C:\Users\Public\…`, shared data folders, other volumes with permissive roots | typically `Everyone`/`Users` broad | **read**, often modify |
 | OneDrive/junction/network paths | unsupported by the channel (refused or undefined) | n/a |
 
-In the broad cases the records are no more protected than the project files next to them, with
-one addition: blobs keep past contents that the current files may no longer show.
-Administrators and SYSTEM can read in every case; that matches the Unix root position.
+The risk is therefore deployment-conditional: it exists wherever the effective DACL grants
+another account access, and it is absent only where the effective DACL does not. In the broad
+cases the records are no more protected than the project files next to them, with one addition:
+blobs keep past contents that the current files may no longer show. Administrators and SYSTEM
+can read in every case; that matches the Unix root position.
 
 ## Is this a confirmed exposure?
 
@@ -48,8 +53,10 @@ with a broad inherited DACL on a machine that has other local accounts.
 
 ## Options for the maintainer (none executed here)
 
-1. Documentation only: tell testers to use a folder under their own profile and to avoid
-   folders created directly under the system drive root or shared folders. The published
+1. Documentation only: tell testers that the preview's records inherit the selected folder's
+   DACL, to check that DACL (for example with `icacls`) rather than rely on the folder's
+   location, and to avoid folders whose DACL grants other accounts access (folders created
+   directly under the system drive root and shared folders are the common cases). The published
    `INSTALL.md` is pinned to the release; updating it is a separate publication decision.
 2. Next Windows preview: give the format-4 bootstrap (`lock::bootstrap`, non-Unix branch) the
    same owner-only DACL as format 5. This changes text-Project behavior and needs the same
