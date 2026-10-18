@@ -207,11 +207,11 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
 | W7-3 | 배타 rename 은 파일·디렉터리·junction 어떤 기존 항목에서도 실패하고 임시 파일을 보존; 교체 rename 은 symlink 항목만 바꾸고 대상 보존 | `…::exclusive_rename_fails_on_any_existing_entry_and_replace_swaps_only_the_entry` | 통과 x64·ARM64 (lib 필터 126/126, ignored 1 = `crash_child`, run 39129885115 (head b84a6322)); 파일 symlink 교체는 runner 의 symlink 권한으로 실행 |
 | W7-4 | 공개 뒤 두 번째 hardlink 나 symlink 가 생긴 제어 파일은 읽기에서 거절 | `…::control_file_refuses_a_hard_linked_or_linked_record` | 통과 x64·ARM64 (lib 필터 126/126, ignored 1 = `crash_child`, run 39129885115 (head b84a6322)) |
 
-| W8-1 | `NtCreateFile` 직후·정규화 전 실효 DACL 이 이미 소유자 전용(소유자·보호·user/SYSTEM ACE 둘) | `session::visual_start::tests::reservation_is_owner_only_before_normalization_and_nothing_else_is_written` (시험 훅, 제품 빌드 미노출) | 기록 대기 |
-| W8-2 | 기존 파일·디렉터리·junction 충돌 시 그 항목의 내용·ACL 불변, 정리 분기 미진입 | `…::existing_entry_collision_leaves_that_entry_and_its_acl_untouched` | 기록 대기 |
-| W8-3 | 검증 실패(주입) 시 방금 만든 예약만 제거, 형제 항목·작업 파일 불변, 재시도 가능 | `…::verification_failure_removes_only_the_fresh_reservation` | 기록 대기 |
-| W8-4 | 핸들 전환 중 교체(주입): 거절, 심어진 디렉터리 내용·ACL 불변, 기록 없음, 우리 예약은 옮겨진 이름 아래 보존 | `…::handle_transition_swap_is_detected_and_refused_without_touching_either_object` | 기록 대기 |
-| W8-5 | 넓어진 blob 은 재열기에서 미감지(한계)·읽기에서 거절, 넓어진 `state.yaml` 은 재열기 거절, 상속 끊긴 `artifacts/blobs` 는 재열기 거절, 어느 것도 복구 없음 | `…::widened_child_entries_are_refused_on_reopen_or_on_read_but_never_repaired` | 기록 대기 |
+| W8-1 | `NtCreateFile` 직후·정규화 전 실효 DACL 이 이미 소유자 전용(소유자·보호·user/SYSTEM ACE 둘) | `session::visual_start::tests::reservation_is_owner_only_before_normalization_and_nothing_else_is_written` (시험 훅, 제품 빌드 미노출) | 통과 x64·ARM64 (lib 필터 131/131, ignored 1 = `crash_child`, run 39162630706 (head 19508d50)); `NtCreateFile` 직후 `private_dir` 통과(소유자·보호 비트·ACE 둘) |
+| W8-2 | 기존 파일·디렉터리·junction 충돌 시 그 항목의 내용·ACL 불변, 정리 분기 미진입 | `…::existing_entry_collision_leaves_that_entry_and_its_acl_untouched` | 통과 x64·ARM64 (lib 필터 131/131, ignored 1 = `crash_child`, run 39162630706 (head 19508d50)); 파일·디렉터리·junction 모두 내용·`icacls` 목록 불변, 정리 분기 미진입 |
+| W8-3 | 검증 실패(주입) 시 방금 만든 예약만 제거, 형제 항목·작업 파일 불변, 재시도 가능 | `…::verification_failure_removes_only_the_fresh_reservation` | 통과 x64·ARM64 (lib 필터 131/131, ignored 1 = `crash_child`, run 39162630706 (head 19508d50)); 주입 실패 뒤 `.gil` 부재·형제/작업 파일 불변·재생성 성공 |
+| W8-4 | 핸들 전환 중 교체(주입): 거절, 심어진 디렉터리 내용·ACL 불변, 기록 없음, 우리 예약은 옮겨진 이름 아래 보존 | `…::handle_transition_swap_is_detected_and_refused_without_touching_either_object` | 통과 x64·ARM64 (lib 필터 131/131, ignored 1 = `crash_child`, run 39162630706 (head 19508d50)); 심어진 디렉터리는 상속 ACL·내용 그대로, 기록 없음, 원 예약은 옮겨진 이름 아래 소유자 전용·빈 채 보존 |
+| W8-5 | 넓어진 blob 은 재열기에서 미감지(한계)·읽기에서 거절, 넓어진 `state.yaml` 은 재열기 거절, 상속 끊긴 `artifacts/blobs` 는 재열기 거절, 어느 것도 복구 없음 | `…::widened_child_entries_are_refused_on_reopen_or_on_read_but_never_repaired` | 통과 x64·ARM64 (lib 필터 131/131, ignored 1 = `crash_child`, run 39162630706 (head 19508d50)); 넓어진 blob: 재열기 미감지(한계)·읽기 거절, 넓어진 `state.yaml`: 재열기 거절, 상속 끊긴 `artifacts/manifests`: 재열기 거절, 복구 없음 |
 
 ### 6.1 runner 실행 결과 요약 (2026-10-18, PR hyun06000/gil#25)
 
@@ -233,6 +233,15 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
   **12 차 run 39129885115 (head b84a6322): 4 job 모두 통과**, authoring job 당 binding 11,
   mcp 24, `visual_attachment` 22, `visual_start` 1, `visual_store` 8, lib 필터 126(ignored 1),
   작성 smoke·재시작. 이 표의 W6/W7 과 다시 실행된 W1–W5 는 모두 12 차 실행 결과다.
+- 설계안 A 라운드(2026-10-19): 15 차 run 39161287667 — 확정 직후 하위 ACL 검사를 모든 저장소에
+  적용해 format-4 `gil start` 가 깨짐(관리자 토큰의 하위 항목 소유자 = Administrators) → 체제
+  한정·토큰 기본 소유자 허용; 16 차 run 39161844632 — default 2 job 통과, authoring 은
+  `reserve/reopen: Access is denied`(Win32 `ReOpenFile` 이 디렉터리 핸들 거부) → `NtCreateFile`
+  빈 이름 재열기; 17 차 run 39162190894 — mcp 24/24, lib 130/131, W8-1…W8-4 통과, W8-5 3 부
+  fixture 오류(빈 폴더 Project 에 `artifacts/blobs` 없음); **18 차 run 39162630706 (head
+  19508d50): 4 job 모두 통과**, authoring job 당 binding 11, mcp 24, `visual_attachment` 22,
+  `visual_start` 1, `visual_store` 8, lib 필터 131(ignored 1), 작성 smoke·재시작. W6/W7/W8 의
+  13 개 시험이 두 CPU 에서 실행됐다.
 - 실행되지 않은 것: 실제 디스크 고갈·전원 차단, ADS 를 직접 만드는 시험(이름 규칙 거절은
   `visual_report::file::tests::path_contract_is_shared_across_platforms` 로 실행), 비-NTFS·
   네트워크 드라이브 거절은 12 차에서 UNC·매핑 드라이브로 실행(비-NTFS 볼륨은 여전히 없음),
@@ -247,7 +256,7 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
 
 ## 8. 미해결·후속
 
-1. **`.gil` 의 ACL — 계약 확정·구현·runner 검증(2026-10-18 보완, §6 W6-1…W6-4, run 39129885115).**
+1. **`.gil` 의 ACL — 계약 확정·구현·runner 검증(2026-10-18 보완 §6 W6-1…W6-4 run 39129885115; 2026-10-19 설계안 A §6 W8-1…W8-5 run 39162630706).**
 
    *보호 대상.* 같은 기계의 **다른 사용자 계정**(표준 사용자, 다른 관리자의 비승격 토큰 포함)
    이 Project 기록을 읽거나 바꾸거나 열거하지 못한다. 접근 주체는 현재 사용자 SID 와 SYSTEM

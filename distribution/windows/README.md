@@ -221,3 +221,10 @@ mapped-drive refusal, rename security review) passed all four jobs in run 391298
 further Core defect (a reservation handle retained DELETE access and collided with the pinned
 opens). The inherited ACL of the published text preview is reviewed in
 [ACL-IMPACT-20261018.md](ACL-IMPACT-20261018.md).
+
+2026-10-19 (design A, contract §4 W1 3 and §8 1a): the reservation is created and first held by
+one `NtCreateFile` call, child entries have an explicit inherited-ACL acceptance that applies
+only to owner-only storages (format-4 Projects are unchanged), and the library no longer exposes
+an ACL adoption function. Run 39162630706 (head 19508d50) passed all four jobs after three
+rounds; contract §6.1 lists them. The handle transition after creation is detection, not
+prevention.
