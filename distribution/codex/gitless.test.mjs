@@ -11,10 +11,10 @@ const checker = new URL('./check-archive-members.sh', import.meta.url).pathname;
 const source = readFileSync(script, 'utf8');
 const checkerSource = readFileSync(checker, 'utf8');
 const PIN = {
-  version: '0.2.1-preview.4',
-  sha256: 'b2c40ec3933a32ac3a74f56910f89555bb6b6428fd6d47959b3913513e47cdb4',
-  bytes: 3132578,
-  url: 'https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.4/gil-codex-macos-arm64-0.2.1-preview.4.tar.gz',
+  version: '0.2.1-preview.5',
+  sha256: '64ab183502161b81459d7a3e96fb73f62d624b75b39bb667da44212de46632e4',
+  bytes: 3132841,
+  url: 'https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.5/gil-codex-macos-arm64-0.2.1-preview.5.tar.gz',
 };
 const darwinArm = process.platform === 'darwin' && process.arch === 'arm64';
 const run = (args, env = {}) => spawnSync('/bin/sh', [script, ...args], {encoding: 'utf8', env: {...process.env, ...env}});
@@ -24,7 +24,7 @@ test('preparation pins the published preview.4 bytes and does not install or wea
   assert.match(source, new RegExp(`expected_bytes=${PIN.bytes}`));
   assert.ok(source.includes(`url=${PIN.url}`));
   assert.ok(source.includes(`version=${PIN.version}`));
-  assert.doesNotMatch(source, /preview\.3/, 'no stale preview.3 pin may remain');
+  assert.doesNotMatch(source, /preview\.[34]\b/, 'no stale preview.3/4 pin may remain');
   assert.ok(source.indexOf('SHA-256 mismatch') < source.indexOf('/usr/bin/tar -xzpf'));
   assert.ok(source.indexOf('check-archive-members.sh') < source.indexOf('/usr/bin/tar -xzpf'), 'members are inspected before extraction');
   assert.ok(source.indexOf('SHA-256 mismatch') < source.indexOf('check-archive-members.sh'), 'hash gate precedes member inspection');
@@ -137,14 +137,14 @@ test('the exact published archive prepares a complete local marketplace root', {
     mkdirSync(join(root, 'Application Support', 'GIL'), {recursive: true});
     const r = run(['--destination', dest, '--archive', archive]);
     assert.equal(r.status, 0, r.stderr);
-    assert.match(r.stdout, /Verified and prepared unsigned preview 0\.2\.1-preview\.4\. NOT installed yet\./);
+    assert.match(r.stdout, /Verified and prepared unsigned preview 0\.2\.1-preview\.5\. NOT installed yet\./);
     assert.match(r.stdout, new RegExp(`GIL_MARKETPLACE_ROOT=${dest.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
     assert.equal(statSync(dest).mode & 0o777, 0o700);
     assert.equal(statSync(join(dest, 'plugins/gil-companion-prototype/core/darwin-arm64/gil')).mode & 0o777, 0o755);
     assert.equal(statSync(join(dest, 'release.json')).mode & 0o777, 0o644);
     assert.equal(statSync(join(dest, 'plugins/gil-companion-prototype/skills/gil-companion/SKILL.md')).mode & 0o777, 0o644);
     assert.ok(existsSync(join(dest, '.agents/plugins/marketplace.json')));
-    assert.match(readFileSync(join(dest, 'plugins/gil-companion-prototype/.codex-plugin/plugin.json'), 'utf8'), /"version": "0\.2\.1-preview\.4"/);
+    assert.match(readFileSync(join(dest, 'plugins/gil-companion-prototype/.codex-plugin/plugin.json'), 'utf8'), /"version": "0\.2\.1-preview\.5"/);
     assert.match(readFileSync(join(dest, 'release.json'), 'utf8'), /"publishable": false/);
     // Running again against the same destination must refuse.
     assert.match(run(['--destination', dest, '--archive', archive]).stderr, /already exists/);

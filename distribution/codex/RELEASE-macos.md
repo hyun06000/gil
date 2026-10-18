@@ -1,9 +1,8 @@
 # Native MCP macOS release gates
 
-상태: **0.2.1-preview.4(이미지 보고서) unsigned prerelease 게시·고정 tag 익명 설치 확인** (2026-10-15).
-다음 후보 **0.2.1-preview.5**(source c7db94ea, Skill 보정)는 로컬 staging·격리 검수까지 끝났고 게시 승인 대기다
-([preview.5 장부](PREVIEW-5-PUBLICATION-20261018.md)).
-현재 [설치 안내](INSTALL.md)와 [배포 장부](PREVIEW-4-PUBLICATION-20261014.md)가 정본이다.
+상태: **0.2.1-preview.5(companion Skill 보정) unsigned prerelease 게시·고정 tag 익명 설치 확인** (2026-10-18).
+현재 [설치 안내](INSTALL.md)와 [배포 장부](PREVIEW-5-PUBLICATION-20261018.md)가 정본이다.
+이전: preview.4 게시·익명 설치 확인(2026-10-15, [장부](PREVIEW-4-PUBLICATION-20261014.md)).
 이전: preview.2 공식 설치·rollback·보호/PVR 검수(2026-09-30, [장부](PREVIEW-2-PUBLICATION-20260930.md)).
 날짜가 붙은 준비 기록은 당시 상태이며 릴리스 게시 여부는 장부의 versioned release 링크로 확인한다.
 첫 인수 대상은 macOS Apple Silicon의 Codex Plugin이다. 이는 제작자 문서이며 사용자에게
