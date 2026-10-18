@@ -180,8 +180,34 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
 
 ## 8. 미해결·후속
 
-1. `.gil` 의 ACL: Unix `0o700` 에 대응하는 보호 DACL 을 Project 기록에도 적용할지. 단계 1 은
-   기존 Windows format-4 와 같은 상속 ACL 을 유지한다(사용자 폴더 정책과 백업 도구 호환 때문).
+1. **`.gil` 의 ACL — 미해결, 작성 후보 출시 차단 항목.** 단계 1 은 기존 Windows format-4
+   `gil start` 와 같은 **상속 ACL** 로 `.gil` 을 만든다(`CreateDirectoryW` 기본 보안 속성).
+
+   *계약이 보호하려는 대상.* Unix 의 `.gil` `0o700` 은 **같은 기계의 다른 사용자 계정**(그룹·
+   기타)이 Project 기록을 읽거나 바꾸지 못하게 한다. root 와 같은 사용자의 다른 프로세스는
+   보호 대상이 아니다. Windows 동등 계약은 "현재 사용자(및 SYSTEM·관리자)만 `.gil` 에 접근할
+   수 있다"이며, 보호 범위는 다른 표준 사용자 계정까지다. 관리자는 Unix 의 root 에 대응한다.
+
+   *현재 구현이 계약을 충족하는가.* **조건부로만 충족한다.** 사용자 프로필 아래 폴더
+   (`C:\Users\<이름>\…`)는 상속 DACL 이 해당 사용자·SYSTEM·Administrators 로 제한되므로
+   동등하다. 그러나 상속 ACL 이 넓은 위치(예: `C:\` 바로 아래에 만든 폴더는 기본적으로
+   `Authenticated Users` 에 하위 폴더·파일 Modify 를 상속한다, 공용 폴더, 관리자가 넓게 연
+   작업 폴더)에서는 **다른 로컬 계정이 `.gil` 을 읽고 바꿀 수 있어** Unix 계약보다 약하다.
+   이미지 Report 는 화면 캡처를 담으므로 노출 범위가 텍스트 기록보다 넓다.
+
+   *같은 성질의 기존 경로.* 이 약점은 단계 1 이 새로 만든 것이 아니다. 기존 Windows format-4
+   `gil start`(`lock::bootstrap` 의 `create_dir_all`)와 이미 게시된 Windows tester preview
+   (`windows-preview-f0ecfbd`)도 같은 상속 ACL 이다. Monitor binding 설정은 별도로 보호
+   DACL(`bindings_windows.rs`)을 쓴다.
+
+   *선택지(결정 전까지 구현하지 않음).* (a) 생성 시 `.gil` 에 소유자 전용 보호 DACL 적용
+   (binding 설정과 같은 `O:<sid>D:P(A;;FA;;;<sid>)`; 백업·동기화 도구 호환과 기존 Project 의
+   ACL 불일치 처리 필요), (b) 상속 ACL 이 다른 계정에 접근을 주면 생성 거절 + 안내,
+   (c) 사용자 프로필 아래 폴더만 허용. 어느 쪽이든 Unix 코드와 저장 형식은 바뀌지 않는다.
+
+   *판정.* 계약을 모든 폴더에서 충족하지 못하므로 **Windows 이미지 작성 후보의 게시 전
+   차단 항목**으로 둔다. 기존 텍스트 전용 Windows preview 에도 같은 사실을 별도 보고한다.
+   runner 시험은 이 항목을 검증하지 않는다(사용자 프로필 아래 임시 폴더에서만 실행).
 2. 디렉터리 `FlushFileBuffers` 의 실제 내구성 범위(저장 컨트롤러 캐시)는 README 와 같이 단정하지
    않는다.
 3. cloud placeholder(OneDrive 등) reparse tag 는 "reparse 거절" 규칙으로 함께 거절된다.

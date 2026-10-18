@@ -291,12 +291,23 @@ pub(crate) fn flush_dir(path: &Path, pinned: &File) -> io::Result<()> {
     flush(&dir)
 }
 
-/// Rename the open file to `to` inside `dir` (NT handle-relative, POSIX semantics).
-/// Without `replace` an existing entry of any kind fails; with it the entry is replaced,
-/// never followed. The file handle needs `DELETE` access.
-pub(crate) fn rename(file: &File, dir: &File, to: &OsStr, replace: bool) -> io::Result<()> {
+/// Rename the open file to `to` inside the pinned directory `dir` (POSIX semantics). The Win32
+/// wrapper rejects a `RootDirectory`-relative name (ERROR_INVALID_PARAMETER, CI run 39125038859),
+/// so the destination is the full path under `dir_path`, like `std::fs::rename`; the pinned
+/// ancestors cannot be renamed or replaced while this runs, and `dir` is re-checked by identity.
+/// Without `replace` an existing entry of any kind fails; with it the entry is replaced, never
+/// followed. The file handle needs `DELETE` access.
+pub(crate) fn rename(file: &File, dir: &File, dir_path: &Path, to: &OsStr, replace: bool) -> io::Result<()> {
     plain_name(to)?;
-    let name: Vec<u16> = to.encode_wide().collect();
+    let named = open_dir(dir_path, SHARE_ALL, false)?;
+    if id(&named)? != id(dir)? {
+        return Err(refused());
+    }
+    let mut name: Vec<u16> = dir_path.join(to).as_os_str().encode_wide().collect();
+    if name.contains(&0) {
+        return Err(refused());
+    }
+    name.push(0);
     let name_bytes = name.len() * size_of::<u16>();
     let total = size_of::<FILE_RENAME_INFO>() + name_bytes;
     let mut buffer = vec![0u64; total.div_ceil(size_of::<u64>())];
@@ -304,8 +315,9 @@ pub(crate) fn rename(file: &File, dir: &File, to: &OsStr, replace: bool) -> io::
         let record = buffer.as_mut_ptr().cast::<FILE_RENAME_INFO>();
         (*record).Anonymous.Flags =
             RENAME_POSIX_SEMANTICS | if replace { RENAME_REPLACE_IF_EXISTS } else { 0 };
-        (*record).RootDirectory = dir.as_raw_handle();
-        (*record).FileNameLength = name_bytes as u32;
+        (*record).RootDirectory = null_mut();
+        // Length excludes the terminating NUL that the buffer still carries.
+        (*record).FileNameLength = (name_bytes - size_of::<u16>()) as u32;
         std::ptr::copy_nonoverlapping(
             name.as_ptr(),
             std::ptr::addr_of_mut!((*record).FileName).cast::<u16>(),

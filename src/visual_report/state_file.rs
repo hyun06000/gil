@@ -227,7 +227,7 @@ fn write_inner(
         checkpoint("before_publish")?;
         // Relative to the pinned directory handle: destination entries are replaced (ordinary
         // save) or refused (exclusive creation), never followed.
-        win::rename(&file, chain.dir(), name, !exclusive)?;
+        win::rename(&file, chain.dir(), chain.path(), name, !exclusive)?;
         checkpoint("after_publish")?;
         win::flush_dir(chain.path(), chain.dir())?;
         checkpoint("directory_synced")?;
