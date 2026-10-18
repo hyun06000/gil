@@ -597,9 +597,11 @@ fn another_local_account_cannot_read_or_write_gil_records_under_a_broad_folder()
     assert!(!out.contains("format:"), "{out}");
     let (code, out, _) = account.run(&format!("dir {}", q(&gil)), &broad.0);
     assert_ne!(code, 0, ".gil listable by another account: {out}");
-    let (code, _, _) = account.run(&format!("echo probe>{}", q(&gil.join("probe.txt"))), &broad.0);
-    assert_ne!(code, 0);
+    // cmd keeps ERRORLEVEL 0 when a redirection target cannot be opened (CI run 39129490528):
+    // the evidence is the absent file and the denial on stderr, not the exit code.
+    let (_, _, err) = account.run(&format!("echo probe>{}", q(&gil.join("probe.txt"))), &broad.0);
     assert!(!gil.join("probe.txt").exists(), "another account wrote into .gil");
+    assert!(err.contains("denied"), "write into .gil was not an access denial: {err}");
     let (code, _, _) = account.run(&format!("del /f /q {}", q(&state)), &broad.0);
     assert!(code != 0 || state.exists(), "another account deleted state.yaml");
     assert!(state.exists());
