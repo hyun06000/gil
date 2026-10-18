@@ -5,6 +5,8 @@
 #![allow(dead_code)]
 
 use std::path::{Path, PathBuf};
+#[cfg(windows)]
+mod windows_acl;
 
 use std::collections::BTreeMap;
 
@@ -524,7 +526,7 @@ pub fn allowed_here(
 #[allow(dead_code)]
 pub fn private_storage(root: &Path) {
     #[cfg(windows)]
-    gil::adopt_private_storage(&root.join(".gil")).expect("fixture .gil takes the owner-only descriptor");
+    windows_acl::apply_owner_only(&root.join(".gil")).expect("fixture .gil takes the owner-only descriptor");
     #[cfg(not(windows))]
     let _ = root;
 }

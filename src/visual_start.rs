@@ -149,14 +149,32 @@ mod reserve {
     }
 }
 
-/// Windows: local fixed NTFS only; `CreateDirectoryW` is the exclusive reservation and the
-/// reserved entry is opened as itself (never a reparse point). The root's ancestors stay pinned
-/// for the creation, and identity is the volume serial plus file id of both entries.
+/// Windows (design A): the reservation is created and first held by one `NtCreateFile` call
+/// relative to the pinned Project root, so there is no name resolution between creating `.gil`
+/// and holding it. Normalization, verification and failure cleanup use that same handle. The
+/// handle transition that follows (DELETE access → read-only pinned handle) is detection, not
+/// prevention: nothing is written during it, and a mismatch refuses without touching either object.
 #[cfg(windows)]
 mod reserve {
     use crate::windows_fs as win;
     use std::ffi::OsStr;
     use std::path::{Path, PathBuf};
+
+    /// Test-only fault and observation points. Not compiled into product builds.
+    #[cfg(test)]
+    pub(crate) mod hooks {
+        use std::cell::Cell;
+        use std::fs::File;
+        use std::path::Path;
+        thread_local! {
+            /// Observe the freshly created reservation before normalization.
+            pub static BEFORE_NORMALIZE: Cell<Option<fn(&File)>> = const { Cell::new(None) };
+            /// Force the post-normalization verification to fail.
+            pub static FAIL_VERIFY: Cell<bool> = const { Cell::new(false) };
+            /// Act on the name while no delete-denying handle is held (handle transition).
+            pub static DURING_TRANSITION: Cell<Option<fn(&Path)>> = const { Cell::new(None) };
+        }
+    }
 
     pub(super) struct Reserved {
         pub(super) root: PathBuf,
@@ -169,8 +187,7 @@ mod reserve {
     impl Reserved {
         pub(super) fn take(root: &Path) -> std::io::Result<Self> {
             // The user-selected path itself must not pass through any reparse point
-            // (Distribution §6.2b; CI run 39125709523 showed canonicalize() resolving a junction
-            // root into its target). Only then is the canonical form used for the chain.
+            // (Distribution §6.2b); only then is the canonical form used for the chain.
             let selected = win::Chain::open(root)?;
             let root = root.canonicalize()?;
             if !std::fs::metadata(&root)?.is_dir() {
@@ -187,32 +204,49 @@ mod reserve {
                     "이미지 프로젝트 생성은 로컬 고정 NTFS 드라이브에서만 검수됐다",
                 )
             })?;
-            let gil = parent.child(OsStr::new(".gil"))?;
-            // Any existing entry (file, directory, link, remnant) fails here; nothing is reused.
-            // The reservation is born owner-only (current user + SYSTEM, protected DACL).
-            win::create_dir_exclusive_private(&gil)?;
-            // Normalize through SetSecurityInfo so the descriptor carries the auto-inherit
-            // control and children are flagged inherited (CI run 39129041207), then verify the
-            // effective descriptor through a handle.
-            let deletable = win::open_dir_deletable(&gil)?;
-            if let Err(problem) = win::set_private_dacl(&gil).and_then(|()| win::private_dir(&deletable)) {
-                // Ours, exclusive and still empty: remove it through the handle (never a name
-                // that could have been replaced) and refuse. Nothing else was written.
-                let _ = win::delete(&deletable);
+            let name = OsStr::new(".gil");
+            // 1. Exclusive creation with the owner-only descriptor; the handle is to the object
+            //    this call created. Any existing entry fails here untouched.
+            let fresh = win::create_private_dir_at(parent.dir(), name)?;
+            #[cfg(test)]
+            if let Some(observe) = hooks::BEFORE_NORMALIZE.with(|c| c.get()) {
+                observe(&fresh);
+            }
+            // 2. Normalize and verify through the same handle.
+            let verified = win::set_private_dacl_on(&fresh).and_then(|()| win::private_dir(&fresh));
+            #[cfg(test)]
+            let verified = if hooks::FAIL_VERIFY.with(|c| c.get()) {
+                Err(std::io::Error::other("injected verification failure"))
+            } else {
+                verified
+            };
+            if let Err(problem) = verified {
+                // 3. Only the object behind `fresh` (ours, exclusive, empty) is removed; never a name.
+                let _ = win::delete(&fresh);
                 return Err(std::io::Error::other(format!(
                     "생성한 .gil 의 접근 권한이 소유자 전용으로 확인되지 않아 제거하고 거절했다: {problem}"
                 )));
             }
-            // Keep only a read handle: a retained DELETE access would collide with the pinned
-            // (delete-unshared) opens of the lock and state writes (CI run 39127711288).
-            let dir = win::open_dir(&gil, win::SHARE_ALL, false)?;
-            if win::id(&dir)? != win::id(&deletable)? {
-                return Err(win::refused());
+            let born = win::id(&fresh)?;
+            // 4. Handle transition (detection, not prevention). `fresh` holds DELETE access, which
+            //    would collide with the delete-unshared pins used by the lock and state writes.
+            let keep = win::reopen(&fresh, win::READ, win::SHARE_ALL)?;
+            drop(fresh);
+            #[cfg(test)]
+            if let Some(act) = hooks::DURING_TRANSITION.with(|c| c.get()) {
+                act(&root.join(".gil"));
             }
-            drop(deletable);
-            let reserved = win::id(&dir)?;
+            let pinned = win::open_dir_at(parent.dir(), name, win::SHARE_PINNED)?;
+            if win::id(&pinned)? != born || win::id(&keep)? != born {
+                // Replaced while no delete-denying handle was held: refuse. Nothing was written,
+                // nothing is cleaned by name, and the object now under the name is not modified.
+                return Err(std::io::Error::other(
+                    "예약한 .gil 이 핸들 전환 중 다른 항목으로 바뀌었다. 아무것도 쓰거나 지우지 않고 거절한다",
+                ));
+            }
+            drop(keep);
             let parent_id = win::id(parent.dir())?;
-            Ok(Self { root, parent, _dir: dir, reserved, parent_id })
+            Ok(Self { root, parent, _dir: pinned, reserved: born, parent_id })
         }
         pub(super) fn identity(&self) -> std::io::Result<()> {
             let named = win::open_dir(&self.root.join(".gil"), win::SHARE_ALL, false)?;

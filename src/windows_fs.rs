@@ -448,8 +448,8 @@ pub(crate) fn read_state(path: &Path) -> io::Result<String> {
 
 use windows_sys::Win32::Security::{
     ACCESS_ALLOWED_ACE, ACE_HEADER, ACL, CONTAINER_INHERIT_ACE, DACL_SECURITY_INFORMATION,
-    EqualSid, GetAce, GetSecurityDescriptorControl, GetTokenInformation, OBJECT_INHERIT_ACE,
-    OWNER_SECURITY_INFORMATION, PSID, SE_DACL_PROTECTED, SECURITY_ATTRIBUTES, TOKEN_QUERY,
+    EqualSid, GetAce, GetSecurityDescriptorControl, GetTokenInformation, INHERITED_ACE, OBJECT_INHERIT_ACE,
+    OWNER_SECURITY_INFORMATION, PSID, SE_DACL_PROTECTED, TOKEN_QUERY,
     TOKEN_USER, TokenUser,
 };
 use windows_sys::Win32::Security::Authorization::{
@@ -541,32 +541,6 @@ fn private_descriptor() -> io::Result<Local> {
     }
 }
 
-/// Exclusive reservation of an owner-only directory: an entry of any kind under that name is
-/// an error, and the DACL exists before any record is written into it.
-#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
-pub(crate) fn create_dir_exclusive_private(path: &Path) -> io::Result<()> {
-    let sd = private_descriptor()?;
-    let attributes = SECURITY_ATTRIBUTES {
-        nLength: size_of::<SECURITY_ATTRIBUTES>() as u32,
-        lpSecurityDescriptor: sd.0,
-        bInheritHandle: 0,
-    };
-    let name = wide(path)?;
-    if unsafe { CreateDirectoryW(name.as_ptr(), &attributes) } == 0 {
-        return Err(io::Error::last_os_error());
-    }
-    Ok(())
-}
-
-/// Open a directory entry with `DELETE` access so a just-created, still empty reservation can be
-/// removed through the handle when its DACL does not verify. Never follows a reparse point.
-#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
-pub(crate) fn open_dir_deletable(path: &Path) -> io::Result<File> {
-    let dir = open_raw(path, READ | DELETE, SHARE_ALL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS)?;
-    ordinary(&dir, true)?;
-    Ok(dir)
-}
-
 /// The directory behind this handle is owner-only: owned by the current user, protected DACL,
 /// exactly two inheritable full-access allow ACEs (current user, SYSTEM), nothing else.
 /// This reads the effective security descriptor, not a path or a string we wrote ourselves.
@@ -644,15 +618,13 @@ pub(crate) fn private_dir(file: &File) -> io::Result<()> {
     Ok(())
 }
 
-/// Explicitly give an existing directory the same owner-only descriptor new reservations are
-/// born with (owner, protected DACL, inheritance to children). Nothing in GIL calls this on its
-/// own; it exists for an explicit, caller-driven adoption and for test fixtures.
-pub(crate) fn set_private_dacl(path: &Path) -> io::Result<()> {
+/// Apply the owner-only descriptor to the object behind this handle (owner, protected DACL,
+/// inheritance to children). Used only on a reservation handle during creation and by in-crate
+/// tests; nothing adopts an existing Project's storage on its own.
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) fn set_private_dacl_on(dir: &File) -> io::Result<()> {
     use windows_sys::Win32::Security::{GetSecurityDescriptorDacl, GetSecurityDescriptorOwner, PROTECTED_DACL_SECURITY_INFORMATION};
     use windows_sys::Win32::Security::Authorization::SetSecurityInfo;
-    use windows_sys::Win32::Storage::FileSystem::{READ_CONTROL, WRITE_DAC, WRITE_OWNER};
-    let dir = open_raw(path, READ | READ_CONTROL | WRITE_DAC | WRITE_OWNER, SHARE_ALL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS)?;
-    ordinary(&dir, true)?;
     let sd = private_descriptor()?;
     unsafe {
         let (mut present, mut defaulted, mut dacl, mut owner) = (0, 0, null_mut(), null_mut());
@@ -675,18 +647,247 @@ pub(crate) fn set_private_dacl(path: &Path) -> io::Result<()> {
             return Err(io::Error::from_raw_os_error(error as i32));
         }
     }
-    private_dir(&dir)
+    Ok(())
 }
 
-/// Reopening an image Project: its `.gil` must still be owner-only. Nothing is repaired.
-pub(crate) fn require_private_gil(gil: &Path) -> io::Result<()> {
-    let dir = open_dir(gil, SHARE_ALL, false)?;
-    private_dir(&dir).map_err(|_| {
-        io::Error::other(
+/// Acceptance for every entry *below* `.gil` (Windows contract §8 item 3): owned by the current
+/// user; a DACL is present (a NULL DACL grants everyone); not protected; exactly two allow ACEs,
+/// both inherited (`INHERITED_ACE`; directories also carry OI|CI, files nothing else), both
+/// `FILE_ALL_ACCESS`, one for the current user and one for SYSTEM. Deny, audit, object or
+/// callback ACEs and any other principal fail. The error names the first failing condition.
+pub(crate) fn inherited_only(file: &File, directory: bool) -> io::Result<()> {
+    let user = user()?;
+    let system = system_sid()?;
+    let what = if directory { "directory" } else { "file" };
+    let fail = |why: &str| io::Error::other(format!("owner-only storage check failed on a {what}: {why}"));
+    let expected_flags = if directory {
+        (OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE | INHERITED_ACE) as u8
+    } else {
+        INHERITED_ACE as u8
+    };
+    unsafe {
+        let (mut owner, mut acl, mut sd) = (null_mut(), null_mut(), null_mut());
+        let error = GetSecurityInfo(
+            file.as_raw_handle(),
+            SE_FILE_OBJECT,
+            OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+            &mut owner,
+            null_mut(),
+            &mut acl,
+            null_mut(),
+            &mut sd,
+        );
+        if error != 0 {
+            return Err(io::Error::from_raw_os_error(error as i32));
+        }
+        let sd = Local(sd);
+        if owner.is_null() || EqualSid(owner, sid(&user)) == 0 {
+            return Err(fail("owner is not the current user"));
+        }
+        if acl.is_null() {
+            return Err(fail("NULL DACL (everyone has access)"));
+        }
+        let (mut control, mut revision) = (0, 0);
+        if GetSecurityDescriptorControl(sd.0, &mut control, &mut revision) == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if control & SE_DACL_PROTECTED != 0 {
+            return Err(fail("DACL is protected instead of inherited from .gil"));
+        }
+        let count = (*acl.cast::<ACL>()).AceCount;
+        if count != 2 {
+            return Err(fail(&format!("{count} ACEs instead of the two inherited ones (user, SYSTEM)")));
+        }
+        let (mut saw_user, mut saw_system) = (false, false);
+        for index in 0..2 {
+            let mut ace = null_mut();
+            if GetAce(acl, index, &mut ace) == 0 || ace.is_null() {
+                return Err(fail("unreadable ACE"));
+            }
+            let header = &*ace.cast::<ACE_HEADER>();
+            if header.AceType != 0 {
+                return Err(fail(&format!("ACE {index} type {} is not access-allowed", header.AceType)));
+            }
+            if header.AceFlags != expected_flags {
+                return Err(fail(&format!("ACE {index} flags {:#x} are not the inherited flags {expected_flags:#x}", header.AceFlags)));
+            }
+            if (header.AceSize as usize) < size_of::<ACCESS_ALLOWED_ACE>() {
+                return Err(fail("truncated ACE"));
+            }
+            let allow = &*ace.cast::<ACCESS_ALLOWED_ACE>();
+            if allow.Mask != FILE_ALL_ACCESS {
+                return Err(fail(&format!("ACE {index} mask {:#x} is not full access", allow.Mask)));
+            }
+            let allowed: PSID = std::ptr::addr_of!(allow.SidStart).cast_mut().cast();
+            if EqualSid(allowed, sid(&user)) != 0 {
+                saw_user = true;
+            } else if EqualSid(allowed, system.0) != 0 {
+                saw_system = true;
+            } else {
+                return Err(fail(&format!("ACE {index} grants another principal ({})", sid_text(allowed).unwrap_or_default())));
+            }
+        }
+        if !(saw_user && saw_system) {
+            return Err(fail("user or SYSTEM ACE missing"));
+        }
+    }
+    Ok(())
+}
+
+/// Reopening an image Project: `.gil` must still be owner-only and the control and structure
+/// entries below it must still carry only the inherited owner-only ACEs. Blobs are checked when
+/// they are read, not here (contract §8 item 3: an unused blob widened from outside is not
+/// detected until it is read). Nothing is repaired.
+pub(crate) fn verify_storage_tree(gil: &Path) -> io::Result<()> {
+    let wrap = |e: io::Error| {
+        io::Error::other(format!(
             "이미지 Project 저장소(.gil)의 접근 권한이 소유자 전용(현재 사용자·SYSTEM, 상속 차단)이 아니다. \
-             자동으로 고치지 않는다. 기록을 보존한 채 권한을 확인한다",
+             자동으로 고치지 않는다. 기록을 보존한 채 권한을 확인한다: {e}"
+        ))
+    };
+    if gil.file_name() != Some(OsStr::new(".gil")) {
+        return Err(refused());
+    }
+    let root = gil.parent().ok_or_else(refused)?.canonicalize()?;
+    let mut chain = Chain::open(&root)?;
+    chain.push(OsStr::new(".gil"), false)?;
+    private_dir(chain.dir()).map_err(wrap)?;
+    for name in ["state.yaml", "project.lock"] {
+        match open_file(&chain.child(OsStr::new(name))?, READ, SHARE_ALL, OPEN_EXISTING) {
+            Ok(file) => inherited_only(&file, false).map_err(|e| wrap(io::Error::other(format!("{name}: {e}"))))?,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
+        }
+    }
+    for parts in [
+        &["artifacts"][..],
+        &["artifacts", "blobs"],
+        &["artifacts", "blobs", "sha256"],
+        &["artifacts", "manifests"],
+        &["artifacts", "manifests", "sha256"],
+        &["artifacts", "tmp"],
+        &["restore"],
+    ] {
+        let mut below = Chain::open(chain.path())?;
+        let mut present = true;
+        for part in parts {
+            match below.push(OsStr::new(part), false) {
+                Ok(()) => {}
+                Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                    present = false;
+                    break;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        if present {
+            inherited_only(below.dir(), true).map_err(|e| wrap(io::Error::other(format!("{}: {e}", parts.join("/")))))?;
+        }
+    }
+    Ok(())
+}
+
+// ── Handle-first reservation (Windows contract §4 W1, design A) ──────────────────────────────
+
+use windows_sys::Wdk::Foundation::OBJECT_ATTRIBUTES;
+use windows_sys::Wdk::Storage::FileSystem::{
+    FILE_CREATE, FILE_DIRECTORY_FILE, FILE_OPEN, FILE_OPEN_REPARSE_POINT as NT_OPEN_REPARSE_POINT,
+    FILE_SYNCHRONOUS_IO_NONALERT, NtCreateFile,
+};
+use windows_sys::Win32::Foundation::{OBJ_CASE_INSENSITIVE, UNICODE_STRING};
+use windows_sys::Win32::System::IO::IO_STATUS_BLOCK;
+
+fn nt_error(status: i32) -> io::Error {
+    match status as u32 {
+        0xC000_0035 => io::Error::new(io::ErrorKind::AlreadyExists, "object name collision"),
+        0xC000_0022 => io::Error::new(io::ErrorKind::PermissionDenied, "access denied"),
+        0xC000_0034 | 0xC000_003A => io::Error::new(io::ErrorKind::NotFound, "object not found"),
+        0xC000_0043 => io::Error::from_raw_os_error(32),
+        other => io::Error::other(format!("NTSTATUS {other:#010x}")),
+    }
+}
+
+/// One relative component under an already held directory handle: the kernel resolves only
+/// `name` inside `parent`, never a path, and the handle to the created or opened object is the
+/// result of that same call. Reparse points are opened as themselves and then refused.
+fn nt_dir_at(
+    parent: &File,
+    name: &OsStr,
+    access: u32,
+    share: u32,
+    disposition: u32,
+    descriptor: *const c_void,
+) -> io::Result<File> {
+    plain_name(name)?;
+    let mut buffer: Vec<u16> = name.encode_wide().collect();
+    let bytes = u16::try_from(buffer.len() * size_of::<u16>()).map_err(|_| refused())?;
+    let unicode = UNICODE_STRING { Length: bytes, MaximumLength: bytes, Buffer: buffer.as_mut_ptr() };
+    let attributes = OBJECT_ATTRIBUTES {
+        Length: size_of::<OBJECT_ATTRIBUTES>() as u32,
+        RootDirectory: parent.as_raw_handle(),
+        ObjectName: &unicode,
+        Attributes: OBJ_CASE_INSENSITIVE,
+        SecurityDescriptor: descriptor.cast(),
+        SecurityQualityOfService: std::ptr::null(),
+    };
+    let mut handle = null_mut();
+    let mut block: IO_STATUS_BLOCK = unsafe { zeroed() };
+    // SAFETY: all pointers outlive the call; a successful handle is owned exactly once.
+    let status = unsafe {
+        NtCreateFile(
+            &mut handle,
+            access | SYNCHRONIZE,
+            &attributes,
+            &mut block,
+            std::ptr::null(),
+            FILE_ATTRIBUTE_NORMAL,
+            share,
+            disposition,
+            FILE_DIRECTORY_FILE | NT_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT,
+            std::ptr::null(),
+            0,
         )
-    })
+    };
+    if status < 0 {
+        return Err(nt_error(status));
+    }
+    let file = unsafe { File::from_raw_handle(handle) };
+    ordinary(&file, true)?;
+    Ok(file)
+}
+
+/// Exclusive, owner-only creation of `name` under the pinned `parent`, returning the handle of
+/// the object this call created. Any existing entry of any kind fails the call before it is
+/// touched. The handle carries DELETE so a failed verification can remove this object only.
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) fn create_private_dir_at(parent: &File, name: &OsStr) -> io::Result<File> {
+    let sd = private_descriptor()?;
+    nt_dir_at(
+        parent,
+        name,
+        READ | READ_CONTROL | WRITE_DAC | WRITE_OWNER | DELETE,
+        SHARE_PINNED,
+        FILE_CREATE,
+        sd.0,
+    )
+}
+
+/// Open the existing `name` under the pinned `parent` (one relative component, no reparse).
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) fn open_dir_at(parent: &File, name: &OsStr, share: u32) -> io::Result<File> {
+    nt_dir_at(parent, name, READ, share, FILE_OPEN, std::ptr::null())
+}
+
+/// A second handle to the same object with different access and sharing, obtained without a name.
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) fn reopen(file: &File, access: u32, share: u32) -> io::Result<File> {
+    let raw = unsafe {
+        ReOpenFile(file.as_raw_handle(), access, share, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+    };
+    if raw == INVALID_HANDLE_VALUE {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(unsafe { File::from_raw_handle(raw) })
 }
 
 #[cfg(test)]

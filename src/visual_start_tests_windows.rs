@@ -667,3 +667,170 @@ fn unc_and_mapped_network_roots_are_refused_without_creating_storage() {
     assert_initial(&real);
     drop(mapped);
 }
+
+// ── Windows contract §6 W8-*: handle-first reservation (design A) ─────────────────────────────
+
+use super::reserve::hooks;
+
+fn ace_summary(file: &fs::File) -> String {
+    // Principals and flags as icacls would list them are asserted elsewhere; here the product
+    // checks are reused on the handle so the assertion is the effective descriptor.
+    match crate::windows_fs::private_dir(file) {
+        Ok(()) => "owner-only".into(),
+        Err(e) => e.to_string(),
+    }
+}
+
+#[test]
+fn reservation_is_owner_only_before_normalization_and_nothing_else_is_written() {
+    thread_local! { static SEEN: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) }; }
+    fn observe(file: &fs::File) {
+        SEEN.with(|s| s.borrow_mut().push(ace_summary(file)));
+    }
+    hooks::BEFORE_NORMALIZE.with(|c| c.set(Some(observe)));
+    let root = scratch();
+    let result = ProjectSession::start_visual(rules(), &root);
+    hooks::BEFORE_NORMALIZE.with(|c| c.set(None));
+    result.unwrap();
+    let seen = SEEN.with(|s| s.borrow().clone());
+    assert_eq!(seen.len(), 1, "the reservation hook must run exactly once");
+    // Straight out of NtCreateFile, before SetSecurityInfo: owner, protected bit and the two
+    // ACEs must already be in place (so there is no moment with an inherited, wider DACL).
+    assert_eq!(seen[0], "owner-only", "pre-normalization descriptor: {}", seen[0]);
+    assert_initial(&root);
+}
+
+#[test]
+fn existing_entry_collision_leaves_that_entry_and_its_acl_untouched() {
+    for kind in ["file", "directory", "junction"] {
+        let root = scratch();
+        let gil = root.join(".gil");
+        let target = root.join("elsewhere");
+        fs::create_dir(&target).unwrap();
+        match kind {
+            "file" => fs::write(&gil, b"not ours").unwrap(),
+            "directory" => {
+                fs::create_dir(&gil).unwrap();
+                fs::write(gil.join("keep.txt"), b"keep").unwrap();
+            }
+            _ => junction(&gil, &target),
+        }
+        // Give the colliding entry a distinctive DACL so any change would show.
+        let out = std::process::Command::new(system32("icacls.exe"))
+            .arg(&gil).args(["/grant", "*S-1-1-0:(R)"]).output().unwrap();
+        assert!(out.status.success(), "{kind}");
+        let before_acl = acl_listing(&gil);
+        let before = inventory(&root);
+        let err = ProjectSession::start_visual(rules(), &root).unwrap_err().to_string();
+        assert!(!err.contains("제거하고 거절"), "{kind}: collision must fail before any cleanup: {err}");
+        assert_eq!(inventory(&root), before, "{kind}");
+        assert_eq!(acl_listing(&gil), before_acl, "{kind}: colliding entry's ACL changed");
+        if kind == "junction" {
+            assert_eq!(fs::read_dir(&target).unwrap().count(), 0);
+        }
+    }
+}
+
+#[test]
+fn verification_failure_removes_only_the_fresh_reservation() {
+    let root = scratch();
+    let sibling = root.join("sibling");
+    fs::create_dir(&sibling).unwrap();
+    fs::write(sibling.join("keep.txt"), b"keep").unwrap();
+    fs::write(root.join("work.txt"), b"work").unwrap();
+    let before = inventory(&root);
+    hooks::FAIL_VERIFY.with(|c| c.set(true));
+    let result = ProjectSession::start_visual(rules(), &root);
+    hooks::FAIL_VERIFY.with(|c| c.set(false));
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("제거하고 거절"), "{err}");
+    assert!(!root.join(".gil").exists(), "the fresh reservation must be gone");
+    assert_eq!(inventory(&root), before, "only the reservation may disappear");
+    // The folder is usable again afterwards.
+    drop(ProjectSession::start_visual(rules(), &root).unwrap());
+    assert_initial(&root);
+}
+
+#[test]
+fn handle_transition_swap_is_detected_and_refused_without_touching_either_object() {
+    fn swap(gil: &Path) {
+        // No delete-denying handle is held at this moment: a same-user writer can move the
+        // reservation away and plant another directory under the name.
+        let held = gil.with_file_name("held-reservation");
+        fs::rename(gil, &held).unwrap();
+        fs::create_dir(gil).unwrap();
+        fs::write(gil.join("planted.txt"), b"planted").unwrap();
+    }
+    let root = scratch();
+    hooks::DURING_TRANSITION.with(|c| c.set(Some(swap)));
+    let result = ProjectSession::start_visual(rules(), &root);
+    hooks::DURING_TRANSITION.with(|c| c.set(None));
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("핸들 전환"), "{err}");
+    // The planted directory is neither deleted nor changed: inherited ACL, contents intact.
+    let planted = root.join(".gil");
+    assert_eq!(fs::read(planted.join("planted.txt")).unwrap(), b"planted");
+    assert!(open_private_check(&planted).is_err(), "planted directory must keep its inherited ACL");
+    assert!(!planted.join("state.yaml").exists() && !planted.join("project.lock").exists(), "nothing written");
+    // Our reservation survives under the other name, owner-only and empty: not cleaned by name.
+    let held = root.join("held-reservation");
+    assert!(open_private_check(&held).is_ok(), "our reservation keeps its descriptor");
+    assert_eq!(fs::read_dir(&held).unwrap().count(), 0);
+}
+
+#[test]
+fn widened_child_entries_are_refused_on_reopen_or_on_read_but_never_repaired() {
+    use crate::artifact::ObjectStore;
+    let root = scratch();
+    drop(ProjectSession::start_visual(rules(), &root).unwrap());
+    let gil = root.join(".gil");
+    let state = gil.join("state.yaml");
+    // Two blobs through the real store (owner-only by inheritance).
+    let store = ObjectStore::at(&gil);
+    let used = store.put_blob(&b"blob to widen"[..]).unwrap();
+    let other = store.put_blob(&b"blob left alone"[..]).unwrap();
+    let hex = |bytes: &[u8]| -> String {
+        use sha2::{Digest, Sha256};
+        Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
+    };
+    let blob_path = |h: &str| gil.join("artifacts/blobs/sha256").join(&h[..2]).join(&h[2..]);
+    let used_path = blob_path(&hex(b"blob to widen"));
+    assert!(used_path.exists(), "published blob path");
+    let _ = &other;
+    assert!(ProjectSession::open_read_only(rules(), &state).is_ok());
+    // 1. A widened blob is not noticed by reopening (documented limit) but refused when read.
+    let out = std::process::Command::new(system32("icacls.exe")).arg(&used_path).args(["/grant", "*S-1-1-0:(R)"]).output().unwrap();
+    assert!(out.status.success());
+    let widened_blob_acl = acl_listing(&used_path);
+    assert!(ProjectSession::open_read_only(rules(), &state).is_ok(), "an unused widened blob is not detected at reopen (contract §8 item 3)");
+    let mut sink = Vec::new();
+    assert!(store.read_blob(&used, &mut sink).is_err(), "widened blob must be refused on read");
+    assert!(sink.is_empty());
+    let mut sink = Vec::new();
+    store.read_blob(&other, &mut sink).unwrap();
+    assert_eq!(sink, b"blob left alone");
+    assert_eq!(acl_listing(&used_path), widened_blob_acl, "no repair");
+    // 2. A widened control file is refused at reopen; nothing is repaired or rewritten.
+    let before = fs::read(&state).unwrap();
+    let out = std::process::Command::new(system32("icacls.exe")).arg(&state).args(["/grant", "*S-1-1-0:(R)"]).output().unwrap();
+    assert!(out.status.success());
+    let widened_state_acl = acl_listing(&state);
+    let refused = match ProjectSession::open_read_only(rules(), &state) {
+        Ok(_) => panic!("widened state.yaml was accepted"),
+        Err(e) => e.to_string(),
+    };
+    assert!(refused.contains("소유자 전용") && refused.contains("state.yaml"), "{refused}");
+    assert_eq!(acl_listing(&state), widened_state_acl);
+    assert_eq!(fs::read(&state).unwrap(), before);
+    // 3. A structure directory that stops inheriting is refused too.
+    let root2 = scratch();
+    drop(ProjectSession::start_visual(rules(), &root2).unwrap());
+    let blobs = root2.join(".gil/artifacts/blobs");
+    let out = std::process::Command::new(system32("icacls.exe")).arg(&blobs).args(["/inheritance:d"]).output().unwrap();
+    assert!(out.status.success());
+    let refused = match ProjectSession::open_read_only(rules(), root2.join(crate::STATE_PATH)) {
+        Ok(_) => panic!("protected artifacts/blobs was accepted"),
+        Err(e) => e.to_string(),
+    };
+    assert!(refused.contains("artifacts/blobs"), "{refused}");
+}

@@ -223,6 +223,10 @@ fn open(root: &Path, text: &str) -> Result<File, String> {
     if !win::Stamp::of(&file).map_err(|_| refused())?.is_single_regular() {
         return Err(refused());
     }
+    // Stored objects under .gil must still carry only the inherited owner-only ACEs.
+    if parts.first().is_some_and(|p| p.eq_ignore_ascii_case(".gil")) {
+        win::inherited_only(&file, false).map_err(|_| refused())?;
+    }
     Ok(file)
 }
 #[cfg(not(any(unix, windows)))]

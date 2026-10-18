@@ -63,10 +63,10 @@ with a broad inherited DACL on a machine that has other local accounts.
    acceptance table; existing Projects would stay as they are.
 3. A read-only diagnosis (for example in `gil status` on Windows) that says whether `.gil` grants
    access to accounts other than the owner and SYSTEM, without changing anything.
-4. An explicit adoption step for a user who wants to tighten an existing Project. The library
-   has `gil::adopt_private_storage(<.gil>)` (not wired to any command or tool); a hand-made
-   `icacls` DACL is accepted only when it matches the exact descriptor, which the CI fixture
-   showed is not the case for a naive `(OI)(CI)F` grant. Any such change is the user's action.
+4. An explicit, separately approved adoption step for a user who wants to tighten an existing
+   Project. The product currently has no such API (the earlier library function was removed on
+   2026-10-19); a hand-made `icacls` DACL is accepted only when it matches the exact descriptor,
+   which the CI fixture showed is not the case for a naive `(OI)(CI)F` grant.
 
 Release classification: for the Windows **authoring** candidate the new-Project contract is
 implemented and runner-verified; it is no longer an open item for that candidate. For the

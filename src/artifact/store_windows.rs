@@ -67,6 +67,9 @@ pub(super) fn read_object(
         if !win::Stamp::of(&file)?.is_single_regular() {
             return Err(boundary());
         }
+        // Contract §8 item 3: a widened object or shard directory is refused when it is read.
+        win::inherited_only(&file, false)?;
+        win::inherited_only(parent.dir(), true)?;
         stable(store, &root)?;
         check_parent(&root, kind, &hex, &parent)?;
         Ok(file)
@@ -167,6 +170,8 @@ pub(super) fn put(
     #[cfg(not(test))]
     let _ = linked;
     let mut final_file = win::open_file(&target, win::READ, win::SHARE_ALL, OPEN_EXISTING).map_err(err)?;
+    // The published object must carry only the inherited owner-only ACEs (contract §8 item 3).
+    win::inherited_only(&final_file, false).map_err(err)?;
     // Concurrent publishers may temporarily retain a second link; don't reject that valid race.
     let mut hash = Sha256::new();
     loop {

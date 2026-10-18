@@ -83,12 +83,21 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
 1. 절대 경로(`C:\…` 또는 `\\?\C:\…`)만 받는다. canonicalize 뒤 폴더 핸들을 no-follow 로
    열고 reparse 가 아닌 디렉터리인지 확인한다.
 2. 드라이브 종류 `DRIVE_FIXED`, 볼륨 NTFS 가 아니면 생성 전에 거절한다.
-3. `CreateDirectoryW(root\.gil, 보호 DACL)` 로 배타 예약한다. 어떤 항목이든 이미 있으면
-   거절한다(빈 디렉터리·중단 잔여물·링크 포함). 생성 뒤 `.gil` 을 no-follow 로 열고 실효
-   보안 설명자를 검증한다(소유자 = 현재 사용자, `SE_DACL_PROTECTED`, 상속 가능한 전체 접근
-   허용 ACE 정확히 둘: 현재 사용자·SYSTEM, 그 밖에 없음). **검증 실패 시** 방금 만든 빈 예약
-   디렉터리만 보유 핸들로 삭제하고 거절한다(이름으로 다시 풀지 않으므로 바꿔치기된 항목을
-   지우지 않는다). 그 뒤의 어떤 실패도 저장소를 보존한다. 이어서 identity 를 기록한다.
+3. **핸들 우선 예약(설계안 A, 2026-10-19).** pin 된 Project root 핸들을 `RootDirectory` 로
+   `NtCreateFile(".gil", FILE_CREATE, FILE_DIRECTORY_FILE|FILE_OPEN_REPARSE_POINT, 보호 DACL)` 을
+   한 번 호출한다. 성공하면 **그 호출이 만든 객체의 핸들**이 돌아오므로 생성과 최초 핸들 획득
+   사이에 이름 재해석이 없다. 어떤 항목이든 이미 있으면 그 항목을 건드리기 전에 실패한다(빈
+   디렉터리·잔여물·파일·링크 포함; 그 항목의 ACL·내용 불변). 정규화(`SetSecurityInfo`)·검증
+   (소유자 = 현재 사용자, `SE_DACL_PROTECTED`, 상속 가능한 전체 접근 허용 ACE 정확히 둘:
+   현재 사용자·SYSTEM)·**검증 실패 시 삭제**는 모두 그 핸들로 수행한다 — 삭제되는 것은 구성상
+   그 호출이 만든 비어 있는 객체뿐이며 이름은 다시 풀지 않는다.
+   **핸들 전환(감지 후 거절, 방지 아님).** 그 핸들은 DELETE 접근을 가져 이후 잠금·상태 쓰기의
+   pin 열기(삭제 미공유)와 충돌하므로, `ReOpenFile` 로 같은 객체의 읽기 핸들을 얻고 원래 핸들을
+   닫은 뒤 root 핸들 상대 `NtCreateFile(".gil", FILE_OPEN)` 로 삭제 미공유 핸들을 다시 연다.
+   세 핸들의 identity 가 같을 때만 진행한다. 다르면 거절하며, 이름으로 아무것도 지우지 않고
+   이름 아래의 객체도 바꾸지 않는다(우리 예약 객체는 옮겨진 이름 아래 비어 있는 채 남는다).
+   이 전환 동안 기록은 쓰지 않는다. 전환이 끝난 뒤에는 그 핸들이 생성 내내 `.gil` 의 이름
+   변경·삭제를 OS 공유 규칙으로 막는다. 그 뒤의 어떤 실패도 저장소를 보존한다.
 4. 이후 단계는 macOS 와 같다: 잠금, `initializable`, world capture, `prepare_visual_upgrade`,
    encode, `state_file::write_new`, 완료 checkpoint. 각 checkpoint 에서 `.gil` 과 root 의
    identity 와 잠금 identity 를 다시 확인한다.
@@ -137,9 +146,13 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
 3. `store::load` 는 no-follow 핸들로 읽고 읽기 전후 identity 를 비교한다.
 4. 재시작 뒤 `open_read_only` 로 연 Project 의 보고서·선언·이미지 바이트는 저장 전과 같아야 한다.
 5. format-5 Project 를 열 때(`open`·`open_read_only` 모두) `.gil` 의 실효 DACL 이 3 의 조건을
-   그대로 만족해야 한다. 넓어졌으면 거절하고 **아무것도 고치지 않는다**(기존 사용자 기록의
-   ACL 자동 변경 금지). format-4 Project 와 다른 플랫폼은 이 검사를 받지 않는다. macOS 에서
-   만든 format-5 기록을 Windows 로 복사한 경우도 같은 이유로 사용자가 권한을 정한 뒤에만 열린다.
+   그대로 만족하고, 그 아래의 제어·구조 항목(`state.yaml`, `project.lock`, `artifacts`,
+   `artifacts/blobs`, `artifacts/blobs/sha256`, `artifacts/manifests`, `artifacts/manifests/sha256`,
+   `artifacts/tmp`, `restore` — 있는 것만)이 §8 항목 3 의 하위 합격 조건을 만족해야 한다.
+   blob·manifest 객체는 읽을 때(그리고 확정 직후) 같은 조건으로 검사한다. 어긋나면 거절하고
+   **아무것도 고치지 않는다**(기존 사용자 기록의 ACL 자동 변경 금지). format-4 Project 와 다른
+   플랫폼은 이 검사를 받지 않는다. macOS 에서 만든 format-5 기록을 Windows 로 복사한 경우도
+   같은 이유로 열리지 않는다(채택 기능 없음).
 
 ## 5. capability 와 도구 표면
 
@@ -194,6 +207,12 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
 | W7-3 | 배타 rename 은 파일·디렉터리·junction 어떤 기존 항목에서도 실패하고 임시 파일을 보존; 교체 rename 은 symlink 항목만 바꾸고 대상 보존 | `…::exclusive_rename_fails_on_any_existing_entry_and_replace_swaps_only_the_entry` | 통과 x64·ARM64 (lib 필터 126/126, ignored 1 = `crash_child`, run 39129885115 (head b84a6322)); 파일 symlink 교체는 runner 의 symlink 권한으로 실행 |
 | W7-4 | 공개 뒤 두 번째 hardlink 나 symlink 가 생긴 제어 파일은 읽기에서 거절 | `…::control_file_refuses_a_hard_linked_or_linked_record` | 통과 x64·ARM64 (lib 필터 126/126, ignored 1 = `crash_child`, run 39129885115 (head b84a6322)) |
 
+| W8-1 | `NtCreateFile` 직후·정규화 전 실효 DACL 이 이미 소유자 전용(소유자·보호·user/SYSTEM ACE 둘) | `session::visual_start::tests::reservation_is_owner_only_before_normalization_and_nothing_else_is_written` (시험 훅, 제품 빌드 미노출) | 기록 대기 |
+| W8-2 | 기존 파일·디렉터리·junction 충돌 시 그 항목의 내용·ACL 불변, 정리 분기 미진입 | `…::existing_entry_collision_leaves_that_entry_and_its_acl_untouched` | 기록 대기 |
+| W8-3 | 검증 실패(주입) 시 방금 만든 예약만 제거, 형제 항목·작업 파일 불변, 재시도 가능 | `…::verification_failure_removes_only_the_fresh_reservation` | 기록 대기 |
+| W8-4 | 핸들 전환 중 교체(주입): 거절, 심어진 디렉터리 내용·ACL 불변, 기록 없음, 우리 예약은 옮겨진 이름 아래 보존 | `…::handle_transition_swap_is_detected_and_refused_without_touching_either_object` | 기록 대기 |
+| W8-5 | 넓어진 blob 은 재열기에서 미감지(한계)·읽기에서 거절, 넓어진 `state.yaml` 은 재열기 거절, 상속 끊긴 `artifacts/blobs` 는 재열기 거절, 어느 것도 복구 없음 | `…::widened_child_entries_are_refused_on_reopen_or_on_read_but_never_repaired` | 기록 대기 |
+
 ### 6.1 runner 실행 결과 요약 (2026-10-18, PR hyun06000/gil#25)
 
 - 1차 run 39125038859 (head 217376c4): 4 job 실패. 원인 1개 — `FileRenameInfoEx` 에 `RootDirectory`
@@ -246,10 +265,10 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
    방금 만든 빈 예약 디렉터리만 보유 핸들로 지우고 거절한다. 재열기 검증 실패는 거절이며
    기록·ACL 을 바꾸지 않는다. 거절 메시지는 어긋난 첫 조건(소유자, 상속, ACE 수·플래그·마스크·
    주체)을 말한다. **기존 사용자 Project 의 ACL 은 어떤 경우에도 자동 변경하지 않는다.**
-   명시적 채택 경로로 `gil::adopt_private_storage(gil)`(라이브러리 함수, CLI·MCP·Session 어디에도
-   연결되지 않음)만 두며, 시험 fixture 가 같은 설명자를 얻는 데 쓴다. `icacls` 로 손수 만든
-   DACL 은 설명자가 정확히 같을 때만 통과한다(6 차 runner 에서 `icacls … (OI)(CI)F` 결과는
-   거절됐다 — 차이의 정밀 진단은 남은 항목).
+   제품에는 기존 저장소의 ACL 을 바꾸는 API 가 없다(2026-10-19 에 공개 `adopt_private_storage`
+   제거). 시험 fixture 는 시험 코드(`tests/common/windows_acl.rs`)에서 같은 설명자를 적용한다.
+   `icacls` 로 손수 만든 DACL 은 설명자가 정확히 같을 때만 통과한다(6 차 runner 에서
+   `icacls … (OI)(CI)F` 결과는 거절됐다 — 차이의 정밀 진단은 남은 항목).
 
    *범위 밖·남는 것.* (a) 기존 Windows format-4 `gil start` 경로(`lock::bootstrap` 의
    `create_dir_all`)와 이미 게시된 tester preview `windows-preview-f0ecfbd` 는 여전히 상속 ACL
@@ -257,6 +276,22 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
    대한 제품 변경은 별도 결정이다. (b) 비-NTFS 볼륨은 DACL 이 없으므로 새 생성이 거절된다
    (W6-5 는 runner 에서 실행 불가). (c) Monitor binding 설정은 전부터 별도 보호 DACL 이다.
 
+1a. **하위 항목 합격 조건(2026-10-19 확정, `windows_fs::inherited_only`).** `.gil` 아래의 파일과
+   디렉터리는 핸들로 읽은 실효 보안 설명자가 다음을 모두 만족해야 한다.
+   - 소유자 = 현재 사용자 SID.
+   - DACL 이 존재한다(NULL DACL = 모두에게 전체 접근 → 거절). `SE_DACL_PROTECTED` 가 **없다**
+     (상속을 끊은 항목은 거절).
+   - ACE 가 정확히 둘이고 모두 `ACCESS_ALLOWED_ACE_TYPE`. deny·audit·object·callback ACE 는 거절.
+   - 플래그: 디렉터리는 정확히 `OBJECT_INHERIT|CONTAINER_INHERIT|INHERITED_ACE`, 파일은 정확히
+     `INHERITED_ACE`. `INHERIT_ONLY`·`NO_PROPAGATE` 나 명시(비상속) ACE 는 거절.
+   - 마스크 = `FILE_ALL_ACCESS`. 주체는 현재 사용자와 SYSTEM 각 하나.
+   - 실제 소유자의 접근 가능성: 위 조건에서 소유자 ACE 가 전체 접근을 주고 deny ACE 가 없으므로
+     소유자는 언제나 읽고 쓸 수 있다. 소유자 ACE 가 빠지거나 deny 가 섞이면 거절한다.
+   검사 시점: 재열기 때 제어·구조 항목, 객체는 읽을 때와 확정 직후. **보장하지 않는 것:** 외부에서
+   권한을 넓힌 **미사용 blob 의 즉시 탐지**(다음 읽기까지 감지되지 않음), 이미 일어난 노출의
+   복구, 소유자·관리자·`WRITE_DAC` 보유 프로세스가 검사 사이에 바꾸는 것의 방지. Windows 의
+   기본 "Bypass traverse checking" 권한 때문에 넓어진 하위 파일은 디렉터리 보호와 무관하게
+   경로를 아는 계정이 읽을 수 있다 — GIL 은 다음 사용에서 거절할 뿐이다.
 2. 디렉터리 `FlushFileBuffers` 의 실제 내구성 범위(저장 컨트롤러 캐시)는 README 와 같이 단정하지
    않는다.
 3. cloud placeholder(OneDrive 등) reparse tag 는 "reparse 거절" 규칙으로 함께 거절된다.
@@ -289,3 +324,7 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
   이 링크 수 1 을 요구해 거절한다(W7-4). Unix 와 같은 fail-closed 다.
 - **남는 한계.** 같은 사용자 권한의 writer 가 목적지 항목을 두고 벌이는 경쟁과, 전원 차단
   시 디렉터리 flush 의 실제 내구성은 이 검토로 닫히지 않는다(§3 7, §8 2).
+
+2026-10-19 보완: 예약이 `NtCreateFile` 핸들 우선 방식으로 바뀌어 생성→최초 핸들 구간은 이름
+재해석 없이 한 호출이 됐다. 핸들 전환(DELETE 핸들 → 읽기 핸들 → root 상대 pin 핸들)은 identity
+대조로 **감지 후 거절**하며 방지가 아니다(§4 W1 3). 상태 쓰기의 rename 경계(이 절)는 바뀌지 않았다.
