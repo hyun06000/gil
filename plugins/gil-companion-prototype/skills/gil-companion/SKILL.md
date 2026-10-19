@@ -253,6 +253,8 @@ updating a Plugin. Use it only when all four `gil_migration_check`, `gil_migrati
 `gil_migration_apply`, `gil_migration_status` tools are connected and the user asks to enable
 image reports in an existing project. Current development tools are for synthetic macOS arm64
 local projects only; do not offer them for real user records or bypass a refusal with shell/YAML.
+On Windows these four tools refuse with `unsupported_platform`: a new image Project can be
+created there on a local fixed NTFS folder, but existing format-4 records are not migrated.
 
 Read `gil_migration_check` first. Stop other writers without closing or discarding open work.
 Explain that old GIL cannot use the new records. Propose a new, private, local backup folder

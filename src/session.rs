@@ -823,9 +823,10 @@ fn private_storage_after_lock(gil: &Path, state_path: &Path, before: u32) -> Res
     Ok(())
 }
 
-/// Windows: final gate after loading — the loaded Project's format decides the contract, so a
-/// format-5 state whose peek was missed (e.g. state.yaml absent at peek time) is still verified.
-/// Never repaired here; format-4 Projects and other platforms are not checked.
+/// Windows: final gate after loading. The declared format was already classified before and
+/// after the lock and the ACL tree verified for format 5; this re-checks the tree against the
+/// Project the loader actually produced, so the contract never depends on the pre-load
+/// classification alone. Never repaired here; format-4 Projects and other platforms are not checked.
 fn private_visual_storage(gil: &Path, project: &Project) -> Result<(), SessionError> {
     #[cfg(windows)]
     if project.visual_state().is_some() {

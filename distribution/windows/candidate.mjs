@@ -17,6 +17,30 @@ export function profileForArch(arch) {
 const ROOT = resolve(import.meta.dirname, '../..');
 const NAME = 'gil-companion-prototype';
 const PREFIX = `plugins/${NAME}`;
+/// Runtime profile of the candidate (`GIL_RUNTIME_PROFILE`): the default tester build, or the
+/// image-report authoring development build. The authoring candidate is never a public preview:
+/// its version and marketplace name cannot collide with `gil-preview-windows-<arch>`.
+export function runtimeProfile(name = process.env.GIL_RUNTIME_PROFILE || 'default') {
+  assert.ok(['default', 'visual-authoring'].includes(name), 'unknown runtime profile');
+  return name;
+}
+export function labels(profile, arch, head) {
+  assert.match(head, /^[a-f0-9]{40}$/);
+  profileForArch(arch);
+  const short = head.slice(0, 12);
+  if (runtimeProfile(profile) === 'visual-authoring') return {
+    version: `0.2.1-dev.visual-authoring+windows.${arch}.${short}`,
+    marketplace: `gil-dev-windows-visual-${arch}`,
+    displayName: `GIL Windows ${arch} — image-authoring development candidate (not a release)`,
+    channel: 'windows_unsigned_development_candidate_visual_authoring',
+    cargoFeatures: ['--features', 'visual-authoring'], tools: 24, storage_format: 5};
+  return {
+    version: `0.2.1-preview.3+windows.${arch}.${short}`,
+    marketplace: `gil-preview-windows-${arch}`,
+    displayName: `GIL Windows ${arch} — review candidate`,
+    channel: 'windows_unsigned_review_candidate',
+    cargoFeatures: [], tools: 19, storage_format: 4};
+}
 export function packTar(run, tree) {
   return run('tar.exe', ['-czf', '-', '.'], {cwd: tree, encoding: 'buffer'});
 }
@@ -102,6 +126,8 @@ export async function prepare(output) {
     {cwd: ROOT, encoding: 'utf8', timeout: 900000, maxBuffer: 32e6, ...options});
   const head = run('git', ['rev-parse', 'HEAD']).trim();
   assert.match(head, /^[a-f0-9]{40}$/);
+  const runtime = runtimeProfile();
+  const label = labels(runtime, arch, head);
   assert.equal(run('git', ['status', '--porcelain', '--untracked-files=no']).trim(), '', 'dirty source refused');
   const out = resolve(output);
   await mkdir(out); // Refuse overwriting an old candidate.
@@ -114,16 +140,16 @@ export async function prepare(output) {
     `--remap-path-prefix=${process.env.USERPROFILE}=/builder`,
     ...(process.env.CARGO_HOME ? [`--remap-path-prefix=${process.env.CARGO_HOME}=/cargo`] : [])
   ].join('\x1f')};
-  run('cargo', ['build', '--locked', '--release', '-p', 'gil', '--bin', 'gil', '--target', target], {env, stdio: 'inherit'});
+  run('cargo', ['build', '--locked', '--release', '-p', 'gil', '--bin', 'gil', '--target', target, ...label.cargoFeatures], {env, stdio: 'inherit'});
   const binary = await regular(join(ROOT, 'target', target, 'release', 'gil.exe'));
   const imports = inspectPE(binary, arch); noBuildPaths(binary);
   const manifest = JSON.parse(await regular(join(ROOT, PREFIX, '.codex-plugin/plugin.json')));
   assert.equal(manifest.name, NAME);
-  manifest.version = `0.2.1-preview.3+windows.${arch}.${head.slice(0, 12)}`;
+  manifest.version = label.version;
   manifest.mcpServers = {'gil-companion': {command: `./core/windows-${arch}/gil.exe`, args: ['mcp', '--serve'], cwd: '.'}};
   const catalog = JSON.parse(await regular(join(ROOT, 'distribution/codex/catalog.json')));
-  catalog.name = `gil-preview-windows-${arch}`;
-  catalog.interface.displayName = `GIL Windows ${arch} — review candidate`;
+  catalog.name = label.marketplace;
+  catalog.interface.displayName = label.displayName;
   const json = value => Buffer.from(JSON.stringify(value, null, 2) + '\n');
   const files = new Map([
     ['.agents/plugins/marketplace.json', json(catalog)],
@@ -142,7 +168,7 @@ export async function prepare(output) {
   }
   const before = await inventory(tree);
   assert.deepEqual(before.map(x => x.path).sort(), [...files.keys()].sort());
-  const archiveName = `gil-windows-${arch}-candidate.tar.gz`;
+  const archiveName = runtime === 'visual-authoring' ? `gil-windows-${arch}-visual-authoring-candidate.tar.gz` : `gil-windows-${arch}-candidate.tar.gz`;
   const archive = join(out, archiveName);
   const archiveBytes = packTar(run, tree);
   await writeFile(archive, archiveBytes, {flag: 'wx'});
@@ -151,16 +177,21 @@ export async function prepare(output) {
   assert.deepEqual(await inventory(extracted), before, 'archive bytes changed');
   // The driver launches only the extracted executable, with a system-only child PATH.
   const smoke = JSON.parse(run(process.execPath, [join(ROOT, 'distribution/windows/spike.mjs'),
-    join(extracted, PREFIX, `core/windows-${arch}/gil.exe`)]));
+    join(extracted, PREFIX, `core/windows-${arch}/gil.exe`)], {env: {...process.env, GIL_RUNTIME_PROFILE: runtime}}));
+  assert.equal(smoke.profile, runtime);
+  assert.equal(smoke.mcp_tools, label.tools);
+  assert.equal(smoke.stored_format, label.storage_format);
   const digest = sha256(await readFile(archive));
   await writeFile(join(out, 'SHA256SUMS'), `${digest}  ${archiveName}\n`, {flag: 'wx'});
-  const checks = {schema: 1, source: head, target, architecture: arch, version: manifest.version,
-    publishable: false, channel: 'windows_unsigned_review_candidate', archive_sha256: digest,
+  const checks = {schema: 2, source: head, target, architecture: arch, version: manifest.version,
+    runtime_profile: runtime, marketplace: label.marketplace, mcp_tools: label.tools, storage_format: label.storage_format,
+    publishable: false, channel: label.channel, archive_sha256: digest,
     imports, toolchain: selected.receipt, notice_packages: policy.packages.length, files: before, smoke,
     gates: {archive_roundtrip: 'passed', native_relocated_execution: 'passed',
       authenticode: 'not signed', ordinary_user_codex_install: 'not tested',
       fullscreen: 'not tested', marketplace_publication: 'not performed',
-      msvc_runtime_redistribution_review: 'pending'}};
+      msvc_runtime_redistribution_review: 'pending',
+      ...(runtime === 'visual-authoring' ? {image_authoring_pc_acceptance: 'not tested', format4_migration_on_windows: 'unsupported (refused)'} : {})}};
   await writeFile(join(out, 'checks.json'), json(checks), {flag: 'wx'});
   console.log(JSON.stringify(checks, null, 2));
 }
