@@ -228,3 +228,13 @@ only to owner-only storages (format-4 Projects are unchanged), and the library n
 an ACL adoption function. Run 39162630706 (head 19508d50) passed all four jobs after three
 rounds; contract §6.1 lists them. The handle transition after creation is detection, not
 prevention.
+
+### Development candidate packaging (2026-10-19)
+
+`candidate.mjs` honors `GIL_RUNTIME_PROFILE`. With `visual-authoring` it builds the feature,
+labels the plugin `0.2.1-dev.visual-authoring+windows.<arch>.<head12>` under the marketplace
+`gil-dev-windows-visual-<arch>`, packages `gil-windows-<arch>-visual-authoring-candidate.tar.gz`
+and requires the native smoke to report 24 tools and storage format 5 (`checks.json` schema 2).
+A `prepare_candidate` dispatch now retains one profile-labeled artifact per matrix entry. The
+isolated PC check for such a candidate is [DEV-CANDIDATE-CHECK.md](DEV-CANDIDATE-CHECK.md); the
+public tester channel and its labels are unchanged.
