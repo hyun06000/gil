@@ -235,10 +235,10 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
 | W9-3 | 복구 대기 기록·임시 객체·`.writing` 이 있는 상태에서 ACL 거절 시 그 기록·파일·잠금 파일 불변; 넓힘을 걷으면 같은 열기가 복구 단계에 도달; 임시 객체만 있는 Project 는 거절 중 보존·통과 뒤 정리 | `…::acl_refusal_happens_before_recovery_and_reaping_and_leaves_them_untouched` | 통과 x64·ARM64 (lib 필터 135/135, ignored 1 = `crash_child`, run 39165028169 (head 7b538d7b)); 거절 메시지는 ACL 게이트, inventory(복구 기록·tmp·`.writing`·`project.lock`·state) 동일, 넓힘 제거 뒤 복구 단계 도달, tmp 전용 Project 는 통과 뒤 정리 |
 | W9-4 | format-4 기존 흐름: `.gil` 이 넓어져도 열기·정리·객체 읽기/쓰기·읽기 전용 열기 그대로 | `…::format_four_projects_keep_the_inherited_contract_and_their_flow` + default job 전체 | 통과 x64·ARM64 (lib 필터 135/135, ignored 1 = `crash_child`, run 39165028169 (head 7b538d7b)); default job(mcp 19, spike format 4, candidate 9)도 통과 |
 
-| W10-1 | 첫 줄 주석·빈 줄이 앞선 유효한 format-5 YAML 은 로더와 같이 열리고 읽기 전용 열기는 파일을 바꾸지 않음 | `session::visual_start::tests::format_five_state_with_leading_comment_and_blank_lines_opens_like_the_loader` | 기록 대기 |
-| W10-2 | 형식 미확인 4 종(파일 부재·선언 없음·미지 형식·비-UTF-8)은 복구 기록·tmp·`.writing`·잠금 파일을 둔 채 거절·불변 | `…::unclear_format_is_refused_before_recovery_and_reaping_with_everything_preserved` | 기록 대기 |
-| W10-3 | 판별–잠금 사이 형식 변경(5→4, 4→5): 거절·불변, 4→5 는 정리 없이 거절 | `…::format_change_between_classification_and_lock_is_refused_untouched` (시험 훅) | 기록 대기 |
-| W10-4 | format-4 정상 복구·정리 유지(주석 앞선 format-4 도 4 로 판별) | `…::format_four_recovery_and_reaping_still_run_after_classification` | 기록 대기 |
+| W10-1 | 첫 줄 주석·빈 줄이 앞선 유효한 format-5 YAML 은 로더와 같이 열리고 읽기 전용 열기는 파일을 바꾸지 않음 | `session::visual_start::tests::format_five_state_with_leading_comment_and_blank_lines_opens_like_the_loader` | 통과 x64·ARM64 (lib 필터 139/139, ignored 1 = `crash_child`, run 39223870974 (head 49dcd9ba)) |
+| W10-2 | 형식 미확인 4 종(파일 부재·선언 없음·미지 형식·비-UTF-8)은 복구 기록·tmp·`.writing`·잠금 파일을 둔 채 거절·불변 | `…::unclear_format_is_refused_before_recovery_and_reaping_with_everything_preserved` | 통과 x64·ARM64 (lib 필터 139/139, ignored 1 = `crash_child`, run 39223870974 (head 49dcd9ba)); 4 종 모두 inventory 동일 |
+| W10-3 | 판별–잠금 사이 형식 변경(5→4, 4→5): 거절·불변, 4→5 는 정리 없이 거절 | `…::format_change_between_classification_and_lock_is_refused_untouched` (시험 훅) | 통과 x64·ARM64 (lib 필터 139/139, ignored 1 = `crash_child`, run 39223870974 (head 49dcd9ba)); 5→4·4→5 모두 "잠금 전" 거절, 4→5 는 tmp 보존 |
+| W10-4 | format-4 정상 복구·정리 유지(주석 앞선 format-4 도 4 로 판별) | `…::format_four_recovery_and_reaping_still_run_after_classification` | 통과 x64·ARM64 (lib 필터 139/139, ignored 1 = `crash_child`, run 39223870974 (head 49dcd9ba)) |
 
 ### 6.1 runner 실행 결과 요약 (2026-10-18, PR hyun06000/gil#25)
 
@@ -274,6 +274,9 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
   **21 차 run 39165028169 (head 7b538d7b): 4 job 모두 통과**, authoring job 당 binding 11,
   mcp 24, `visual_attachment` 22, `visual_start` 1, `visual_store` 8, lib 필터 135(ignored 1),
   작성 smoke·재시작. W9-1…W9-4 가 두 CPU 에서 실행됐다.
+- 형식 판별 보정 라운드(2026-10-19): **23 차 run 39223870974 (head 49dcd9ba): 첫 실행에서 4 job
+  모두 통과**, authoring job 당 binding 11, mcp 24, `visual_attachment` 22, `visual_start` 1,
+  `visual_store` 8, lib 필터 139(ignored 1), 작성 smoke·재시작. W10-1…W10-4 가 두 CPU 에서 실행됐다.
 - 실행되지 않은 것: 실제 디스크 고갈·전원 차단, ADS 를 직접 만드는 시험(이름 규칙 거절은
   `visual_report::file::tests::path_contract_is_shared_across_platforms` 로 실행), 비-NTFS·
   네트워크 드라이브 거절은 12 차에서 UNC·매핑 드라이브로 실행(비-NTFS 볼륨은 여전히 없음),
