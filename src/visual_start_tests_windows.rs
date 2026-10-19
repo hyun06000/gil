@@ -983,3 +983,113 @@ fn format_four_projects_keep_the_inherited_contract_and_their_flow() {
     assert_eq!(sink, b"format-4 bytes");
     assert!(ProjectSession::open_read_only(rules(), root.join(crate::STATE_PATH)).is_ok());
 }
+
+// ── Windows contract §6 W10-*: declared-format classification before recovery ────────────────
+
+use crate::session::open_hooks;
+
+/// Pending material of every kind that `open` would otherwise act on.
+fn plant_pending(gil: &Path) {
+    fs::create_dir_all(gil.join("artifacts/tmp")).unwrap();
+    fs::write(gil.join("artifacts/tmp").join(format!("{}-21", std::process::id())), b"unfinished object").unwrap();
+    fs::write(gil.join("state.yaml.writing"), b"format: 5\nhalf").unwrap();
+    fs::create_dir_all(gil.join("restore/active")).unwrap();
+    fs::write(gil.join("restore/active/PLAN"), b"bogus plan").unwrap();
+}
+
+#[test]
+fn format_five_state_with_leading_comment_and_blank_lines_opens_like_the_loader() {
+    let root = scratch();
+    drop(ProjectSession::start_visual(rules(), &root).unwrap());
+    let state = root.join(crate::STATE_PATH);
+    let original = fs::read(&state).unwrap();
+    let mut decorated = b"# written by a tool\n\n# format is not on the first line\n\n".to_vec();
+    decorated.extend_from_slice(&original);
+    fs::write(&state, &decorated).unwrap();
+    let read = ProjectSession::open_read_only(rules(), &state).unwrap();
+    assert!(read.project().visual_state().is_some());
+    drop(read);
+    assert_eq!(fs::read(&state).unwrap(), decorated, "a read-only open rewrites nothing");
+    drop(ProjectSession::open(rules(), &state).unwrap());
+}
+
+#[test]
+fn unclear_format_is_refused_before_recovery_and_reaping_with_everything_preserved() {
+    for case in ["absent", "undeclared", "unknown", "unreadable"] {
+        let root = scratch();
+        drop(ProjectSession::start_visual(rules(), &root).unwrap());
+        let gil = root.join(".gil");
+        let state = gil.join("state.yaml");
+        match case {
+            "absent" => fs::remove_file(&state).unwrap(),
+            "undeclared" => fs::write(&state, b"# nothing declared\nvisuals: {}\n").unwrap(),
+            "unknown" => fs::write(&state, b"# comment\nformat: 99\n").unwrap(),
+            _ => fs::write(&state, [0xff, 0xfe, b'f', b'o', b'r', b'm', b'a', b't', b':', b' ', b'5', b'\n']).unwrap(),
+        }
+        plant_pending(&gil);
+        let before = inventory(&root);
+        assert!(ProjectSession::open(rules(), &state).is_err(), "{case}");
+        assert!(ProjectSession::open_read_only(rules(), &state).is_err(), "{case}");
+        assert_eq!(inventory(&root), before, "{case}: recovery record, temporaries, .writing and lock must be untouched");
+    }
+}
+
+#[test]
+fn format_change_between_classification_and_lock_is_refused_untouched() {
+    // 5 → 4 (textual): the declared format differs under the lock.
+    fn downgrade(state: &Path) {
+        let text = fs::read_to_string(state).unwrap().replacen("format: 5", "format: 4", 1);
+        fs::write(state, text).unwrap();
+    }
+    let root = scratch();
+    drop(ProjectSession::start_visual(rules(), &root).unwrap());
+    let gil = root.join(".gil");
+    plant_pending(&gil);
+    open_hooks::BETWEEN_CLASSIFY_AND_LOCK.with(|c| c.set(Some(downgrade)));
+    let result = ProjectSession::open(rules(), gil.join("state.yaml"));
+    open_hooks::BETWEEN_CLASSIFY_AND_LOCK.with(|c| c.set(None));
+    let before = inventory(&root); // captured after the hook rewrote state.yaml
+    let err = result.err().map(|e| e.to_string()).expect("changed format must refuse");
+    assert!(err.contains("잠금 전"), "{err}");
+    assert_eq!(inventory(&root), before);
+    // 4 → 5: a text Project rewritten as format 5 between classification and lock must get
+    // the ACL verification under the lock (its .gil inherits, so it is refused) and no reaping.
+    fn upgrade(state: &Path) {
+        let text = fs::read_to_string(state).unwrap().replacen("format: 4", "format: 5", 1);
+        fs::write(state, text).unwrap();
+    }
+    let root4 = scratch();
+    ProjectSession::start(rules(), root4.join(crate::STATE_PATH)).unwrap().commit().unwrap();
+    let gil4 = root4.join(".gil");
+    let temp = gil4.join("artifacts/tmp").join(format!("{}-23", std::process::id()));
+    fs::create_dir_all(temp.parent().unwrap()).unwrap();
+    fs::write(&temp, b"unfinished").unwrap();
+    open_hooks::BETWEEN_CLASSIFY_AND_LOCK.with(|c| c.set(Some(upgrade)));
+    let result = ProjectSession::open(rules(), gil4.join("state.yaml"));
+    open_hooks::BETWEEN_CLASSIFY_AND_LOCK.with(|c| c.set(None));
+    let err = result.err().map(|e| e.to_string()).expect("format change must refuse");
+    assert!(err.contains("잠금 전"), "{err}");
+    assert_eq!(fs::read(&temp).unwrap(), b"unfinished", "no reaping before the gate");
+}
+
+#[test]
+fn format_four_recovery_and_reaping_still_run_after_classification() {
+    let root = scratch();
+    fs::write(root.join("note.txt"), b"text project").unwrap();
+    ProjectSession::start(rules(), root.join(crate::STATE_PATH)).unwrap().commit().unwrap();
+    let gil = root.join(".gil");
+    let temp = gil.join("artifacts/tmp").join(format!("{}-25", std::process::id()));
+    fs::create_dir_all(temp.parent().unwrap()).unwrap();
+    fs::write(&temp, b"leftover").unwrap();
+    // A leading comment on a format-4 state is classified like the loader does: still format 4.
+    let state = gil.join("state.yaml");
+    let mut text = b"# tool comment\n\n".to_vec();
+    text.extend_from_slice(&fs::read(&state).unwrap());
+    fs::write(&state, &text).unwrap();
+    let session = ProjectSession::open(rules(), &state).unwrap();
+    assert!(session.project().visual_state().is_none());
+    assert!(!temp.exists(), "format-4 reaping unchanged");
+    drop(session);
+    // No pending recovery record: the read-only path reports none.
+    assert!(ProjectSession::open_read_only(rules(), &state).is_ok());
+}

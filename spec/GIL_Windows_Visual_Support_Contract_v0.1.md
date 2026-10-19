@@ -145,16 +145,23 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
 2. `preflight_state` 는 상태 파일이 링크·디렉터리·특수 항목이면 복구·정리 전에 거절한다.
 3. `store::load` 는 no-follow 핸들로 읽고 읽기 전후 identity 를 비교한다.
 4. 재시작 뒤 `open_read_only` 로 연 Project 의 보고서·선언·이미지 바이트는 저장 전과 같아야 한다.
-5. **재열기 순서와 "무수정"의 범위(2026-10-19 보완).** `open`·`open_read_only` 는 다음 순서다.
-   (a) 잠금 전에 `state.yaml` 의 첫 줄(`format:`)만 no-follow 제어 파일 핸들로 읽는다 — 생성
-   없음(`windows_fs::peek_format`). (b) format 5 이면 `verify_storage_tree` 로 `.gil` 과 제어·구조
-   항목(`state.yaml`, `project.lock`, `artifacts`, `artifacts/blobs`, `artifacts/blobs/sha256`,
-   `artifacts/manifests`, `artifacts/manifests/sha256`, `artifacts/tmp`, `restore` — 있는 것만)을
-   읽기만으로 검증한다; 실패하면 잠금도 잡지 않고 거절. (c) 잠금을 잡는다 — 이때 `project.lock`
-   이 없으면 만들어진다(검증된 `.gil` 의 DACL 을 상속). (d) 잠금 아래에서 (b) 를 다시 한다
-   (`project.lock` 과 peek–잠금 사이의 변경 포함); 실패하면 잠금을 놓고 거절. (e) 그 뒤에만
-   `preflight_state` → 복구(`restore::recover`) → 임시 객체 정리(`reap_tmp`) → 상태 읽기 →
-   로드된 Project 의 형식으로 마지막 게이트(peek 때 `state.yaml` 이 없던 경우를 메운다).
+5. **재열기 순서와 "무수정"의 범위(2026-10-19 보완·2 차 보정).** `open`·`open_read_only` 는
+   다음 순서다. (a) 잠금 전에 `state.yaml` 전체를 no-follow 제어 파일 핸들로 읽어 **로더와 같은
+   판별**(`store::declared_format`: YAML 을 `StoredFormat` 으로 해석하므로 첫 줄 주석·빈 줄이
+   있어도 같다)로 선언 형식을 가른다 — 생성 없음. **판별 방침:** `format: 4` 또는 `5` 만 통과한다.
+   파일 부재·읽기 실패(링크·특수 파일·비-UTF-8 포함)·선언 없음·앞 형식·미지 형식은 어느 것도
+   format 4 로 간주하지 않으며, 복구·정리 없이 기록을 보존한 채 거절한다(로더가 내는 것과 같은
+   오류). 복구 대기 기록이 있어도 형식을 안전하게 판별할 수 없으면 복구를 시도하지 않는다 —
+   헤더 판별(이 단계)과 복구 가능성 판단(복구 모듈)은 분리돼 있고 전자가 먼저다.
+   (b) format 5 이면 `verify_storage_tree` 로 `.gil` 과 제어·구조 항목(`state.yaml`,
+   `project.lock`, `artifacts`, `artifacts/blobs`, `artifacts/blobs/sha256`, `artifacts/manifests`,
+   `artifacts/manifests/sha256`, `artifacts/tmp`, `restore` — 있는 것만)을 읽기만으로 검증한다;
+   실패하면 잠금도 잡지 않고 거절. (c) 잠금을 잡는다 — 이때 `project.lock` 이 없으면 만들어진다
+   (검증된 `.gil` 의 DACL 을 상속). (d) 잠금 아래에서 (a) 를 다시 하고 **잠금 전 판별과 같아야**
+   한다(다르면 거절), format 5 이면 (b) 를 다시 한다(`project.lock` 과 판별–잠금 사이의 변경
+   포함); 실패하면 잠금을 놓고 거절. (e) 그 뒤에만 `preflight_state` → 복구(`restore::recover`) →
+   임시 객체 정리(`reap_tmp`) → 상태 읽기 → 로드된 Project 의 형식으로 마지막 게이트.
+   format 4 는 (a)·(d) 의 판별만 거치고 ACL 검사 없이 기존 복구·정리 흐름으로 간다.
    **무수정의 범위:** (d) 를 통과하기 전에 `.gil` 아래의 어떤 항목도 만들거나 지우거나 이름을
    바꾸거나 쓰지 않는다 — 복구 기록(`restore/*`), 임시 객체(`artifacts/tmp/*`), `.writing`,
    `state.yaml` 모두 그대로다. 유일한 예외는 (c) 의 `project.lock` 생성(없을 때만)이며, 그 파일의
@@ -227,6 +234,11 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
 | W9-2 | ACL 조회 오류(소유자를 SYSTEM 으로 바꾸고 READ_CONTROL 거부)는 거절이지 상속 계약으로의 전환이 아님; 읽기·쓰기·트리 검증·재열기 모두 거절, 저장소 불변 | `…::acl_query_error_is_a_refusal_not_a_downgrade_to_the_inherited_contract` | 통과 x64·ARM64 (lib 필터 135/135, ignored 1 = `crash_child`, run 39165028169 (head 7b538d7b)); `GENERIC_READ` 열기 자체가 거부돼 조회 오류로 거절됨, 저장소 inventory 불변 |
 | W9-3 | 복구 대기 기록·임시 객체·`.writing` 이 있는 상태에서 ACL 거절 시 그 기록·파일·잠금 파일 불변; 넓힘을 걷으면 같은 열기가 복구 단계에 도달; 임시 객체만 있는 Project 는 거절 중 보존·통과 뒤 정리 | `…::acl_refusal_happens_before_recovery_and_reaping_and_leaves_them_untouched` | 통과 x64·ARM64 (lib 필터 135/135, ignored 1 = `crash_child`, run 39165028169 (head 7b538d7b)); 거절 메시지는 ACL 게이트, inventory(복구 기록·tmp·`.writing`·`project.lock`·state) 동일, 넓힘 제거 뒤 복구 단계 도달, tmp 전용 Project 는 통과 뒤 정리 |
 | W9-4 | format-4 기존 흐름: `.gil` 이 넓어져도 열기·정리·객체 읽기/쓰기·읽기 전용 열기 그대로 | `…::format_four_projects_keep_the_inherited_contract_and_their_flow` + default job 전체 | 통과 x64·ARM64 (lib 필터 135/135, ignored 1 = `crash_child`, run 39165028169 (head 7b538d7b)); default job(mcp 19, spike format 4, candidate 9)도 통과 |
+
+| W10-1 | 첫 줄 주석·빈 줄이 앞선 유효한 format-5 YAML 은 로더와 같이 열리고 읽기 전용 열기는 파일을 바꾸지 않음 | `session::visual_start::tests::format_five_state_with_leading_comment_and_blank_lines_opens_like_the_loader` | 기록 대기 |
+| W10-2 | 형식 미확인 4 종(파일 부재·선언 없음·미지 형식·비-UTF-8)은 복구 기록·tmp·`.writing`·잠금 파일을 둔 채 거절·불변 | `…::unclear_format_is_refused_before_recovery_and_reaping_with_everything_preserved` | 기록 대기 |
+| W10-3 | 판별–잠금 사이 형식 변경(5→4, 4→5): 거절·불변, 4→5 는 정리 없이 거절 | `…::format_change_between_classification_and_lock_is_refused_untouched` (시험 훅) | 기록 대기 |
+| W10-4 | format-4 정상 복구·정리 유지(주석 앞선 format-4 도 4 로 판별) | `…::format_four_recovery_and_reaping_still_run_after_classification` | 기록 대기 |
 
 ### 6.1 runner 실행 결과 요약 (2026-10-18, PR hyun06000/gil#25)
 
