@@ -53,6 +53,10 @@ pub fn valid_input(tool: &Tool, input: &Value) -> bool {
     if tool.name == "gil_report_visuals" || (tool.name == "gil_close" && input.get("visuals").is_some()) {
         return super::authoring::valid(tool.name.as_ref(), input);
     }
+    #[cfg(all(feature = "visual-authoring", windows))]
+    if tool.name == super::workspace::NAME {
+        return super::workspace::valid(input);
+    }
     // Older/default builds must never silently discard a visual close request.
     if tool.name == "gil_close" && (input.get("visuals").is_some() || input.get("expected_owner").is_some()) {
         return false;

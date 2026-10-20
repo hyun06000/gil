@@ -23,6 +23,20 @@ pub fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
     tools
 }
 
+/// Wire shape (-32602 on mismatch): `name` string and `confirm` boolean are required; `parent`
+/// and `approved_path` are optional strings; nothing else is accepted.
+pub fn valid(input: &Value) -> bool {
+    let Some(object) = input.as_object() else { return false; };
+    if !object.get("name").is_some_and(Value::is_string) || !object.get("confirm").is_some_and(Value::is_boolean) {
+        return false;
+    }
+    object.iter().all(|(key, value)| match key.as_str() {
+        "name" | "confirm" => true,
+        "parent" | "approved_path" => value.is_string(),
+        _ => false,
+    })
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Request {

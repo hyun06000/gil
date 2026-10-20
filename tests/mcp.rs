@@ -1287,7 +1287,7 @@ fn unsupported_location_is_refused_before_creation_and_workspace_prep_needs_appr
 
     // Workspace preparation: plan first (creates nothing), then confirm (creates exactly that).
     let parent = base.join("gil-projects");
-    let plan = monitor_call(&mut mcp, "gil_prepare_workspace", json!({"name": "새 작업 폴더", "parent": parent, "confirm": false}));
+    let plan = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "새 작업 폴더", "parent": parent, "confirm": false}));
     assert_eq!(plan["structuredContent"]["ok"], true, "{plan}");
     assert_eq!(plan["structuredContent"]["stage"], "planned");
     assert_eq!(plan["structuredContent"]["creates_parent"], true);
@@ -1296,16 +1296,16 @@ fn unsupported_location_is_refused_before_creation_and_workspace_prep_needs_appr
     assert_eq!(planned, parent.join("새 작업 폴더"));
     assert!(!parent.exists(), "a plan creates nothing");
     // The default parent (no `parent` given) is %USERPROFILE%\gil-projects.
-    let default = monitor_call(&mut mcp, "gil_prepare_workspace", json!({"name": "기본", "confirm": false}));
+    let default = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "기본", "confirm": false}));
     assert_eq!(default["structuredContent"]["path"], parent.join("기본").display().to_string(), "{default}");
     assert!(!parent.exists());
     // confirm:true without the approved path, or with a different one, creates nothing.
-    let unbound = monitor_call(&mut mcp, "gil_prepare_workspace", json!({"name": "새 작업 폴더", "parent": parent, "confirm": true}));
+    let unbound = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "새 작업 폴더", "parent": parent, "confirm": true}));
     assert_eq!(unbound["structuredContent"]["code"], "invalid_request", "{unbound}");
-    let other = monitor_call(&mut mcp, "gil_prepare_workspace", json!({"name": "새 작업 폴더", "parent": parent, "confirm": true, "approved_path": parent.join("다른 폴더").display().to_string()}));
+    let other = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "새 작업 폴더", "parent": parent, "confirm": true, "approved_path": parent.join("다른 폴더").display().to_string()}));
     assert_eq!(other["structuredContent"]["code"], "path_mismatch", "{other}");
     assert!(!parent.exists(), "nothing is created without the exact approved path");
-    let made = monitor_call(&mut mcp, "gil_prepare_workspace", json!({"name": "새 작업 폴더", "parent": parent, "confirm": true, "approved_path": shown}));
+    let made = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "새 작업 폴더", "parent": parent, "confirm": true, "approved_path": shown}));
     assert_eq!(made["structuredContent"]["ok"], true, "{made}");
     assert_eq!(made["structuredContent"]["stage"], "prepared");
     assert_eq!(made["structuredContent"]["created_by_this_call"], json!([parent.display().to_string(), shown]));
@@ -1314,39 +1314,39 @@ fn unsupported_location_is_refused_before_creation_and_workspace_prep_needs_appr
     assert!(made["structuredContent"]["said"].as_str().unwrap().contains("다른 동기화 제품의 유무는 확인하지 않는다"), "{made}");
     // Same name again: refused, nothing changed, nothing substituted.
     std::fs::write(planned.join("note.txt"), b"user file").unwrap();
-    let dup = monitor_call(&mut mcp, "gil_prepare_workspace", json!({"name": "새 작업 폴더", "parent": parent, "confirm": true, "approved_path": shown}));
+    let dup = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "새 작업 폴더", "parent": parent, "confirm": true, "approved_path": shown}));
     assert_eq!(dup["structuredContent"]["code"], "exists", "{dup}");
     assert_eq!(dup["structuredContent"]["created_by_this_call"], json!([]));
     assert_eq!(std::fs::read(planned.join("note.txt")).unwrap(), b"user file");
     assert_eq!(std::fs::read_dir(&parent).unwrap().count(), 1, "no alternative name was created");
     // Under the synthetic OneDrive root, outside the user profile, or with an unsafe name:
     // refused without creating.
-    let inside = monitor_call(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": onedrive, "confirm": true, "approved_path": onedrive.join("x").display().to_string()}));
+    let inside = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": onedrive, "confirm": true, "approved_path": onedrive.join("x").display().to_string()}));
     assert_eq!(inside["structuredContent"]["code"], "unsupported_location", "{inside}");
     assert_eq!(inside["structuredContent"]["evidence"], "declared_by_environment");
     assert!(!onedrive.join("x").exists());
     let outside = std::env::temp_dir().join("gil-ws-outside-profile");
-    let out = monitor_call(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": outside, "confirm": false}));
+    let out = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": outside, "confirm": false}));
     assert_eq!(out["structuredContent"]["code"], "outside_allowed_range", "{out}");
     assert!(!outside.exists());
     for bad in ["a\\b", "..", "CON", "name.", "a:b"] {
-        let got = monitor_call(&mut mcp, "gil_prepare_workspace", json!({"name": bad, "parent": parent, "confirm": true, "approved_path": parent.join(bad).display().to_string()}));
+        let got = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": bad, "parent": parent, "confirm": true, "approved_path": parent.join(bad).display().to_string()}));
         assert_eq!(got["structuredContent"]["ok"], false, "{bad}: {got}");
     }
-    let dotted = monitor_call(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": base.join("gil-projects").join("..").join("gil-projects"), "confirm": false}));
+    let dotted = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": base.join("gil-projects").join("..").join("gil-projects"), "confirm": false}));
     assert_eq!(dotted["structuredContent"]["ok"], false, "{dotted}");
     // Korean and spaces in both parent and name.
     let korean = base.join("내 프로젝트 폴더");
     std::fs::create_dir(&korean).unwrap();
-    let kplan = monitor_call(&mut mcp, "gil_prepare_workspace", json!({"name": "작업 1 (검수)", "parent": korean, "confirm": false}));
+    let kplan = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "작업 1 (검수)", "parent": korean, "confirm": false}));
     assert_eq!(kplan["structuredContent"]["creates_parent"], false, "{kplan}");
     let kpath = kplan["structuredContent"]["path"].as_str().unwrap().to_owned();
-    let kmade = monitor_call(&mut mcp, "gil_prepare_workspace", json!({"name": "작업 1 (검수)", "parent": korean, "confirm": true, "approved_path": kpath}));
+    let kmade = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "작업 1 (검수)", "parent": korean, "confirm": true, "approved_path": kpath}));
     assert_eq!(kmade["structuredContent"]["ok"], true, "{kmade}");
     assert!(korean.join("작업 1 (검수)").is_dir());
     assert_eq!(kmade["structuredContent"]["created_by_this_call"], json!([korean.join("작업 1 (검수)").display().to_string()]));
     // A missing grandparent is a check failure, not a reason to create more.
-    let deep = monitor_call(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": base.join("missing").join("deeper"), "confirm": false}));
+    let deep = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": base.join("missing").join("deeper"), "confirm": false}));
     assert_eq!(deep["structuredContent"]["code"], "parent_missing", "{deep}");
     assert!(!base.join("missing").exists());
     // The parent is replaced by a junction between plan and confirm: the re-check right before
@@ -1355,11 +1355,11 @@ fn unsupported_location_is_refused_before_creation_and_workspace_prep_needs_appr
     let elsewhere = base.join("elsewhere");
     std::fs::create_dir_all(&elsewhere).unwrap();
     std::fs::create_dir(&swapped).unwrap();
-    let splan = monitor_call(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": swapped, "confirm": false}));
+    let splan = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": swapped, "confirm": false}));
     assert_eq!(splan["structuredContent"]["ok"], true, "{splan}");
     std::fs::remove_dir(&swapped).unwrap();
     junction(&swapped, &elsewhere);
-    let sconf = monitor_call(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": swapped, "confirm": true, "approved_path": splan["structuredContent"]["path"]}));
+    let sconf = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": swapped, "confirm": true, "approved_path": splan["structuredContent"]["path"]}));
     assert_eq!(sconf["structuredContent"]["code"], "unsupported_location", "{sconf}");
     assert_eq!(sconf["structuredContent"]["location_kind"], "reparse_point");
     assert_eq!(sconf["structuredContent"]["evidence"], "observed");
@@ -1371,9 +1371,9 @@ fn unsupported_location_is_refused_before_creation_and_workspace_prep_needs_appr
     std::fs::create_dir(&locked).unwrap();
     {
         let _deny = DenyCreate::new(&locked);
-        let lplan = monitor_call(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": locked, "confirm": false}));
+        let lplan = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": locked, "confirm": false}));
         assert_eq!(lplan["structuredContent"]["ok"], true, "a plan does not need write access: {lplan}");
-        let lconf = monitor_call(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": locked, "confirm": true, "approved_path": lplan["structuredContent"]["path"]}));
+        let lconf = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": locked, "confirm": true, "approved_path": lplan["structuredContent"]["path"]}));
         assert_eq!(lconf["structuredContent"]["code"], "permission_denied", "{lconf}");
         assert_eq!(lconf["structuredContent"]["created_by_this_call"], json!([]));
     }
@@ -1383,6 +1383,15 @@ fn unsupported_location_is_refused_before_creation_and_workspace_prep_needs_appr
     assert_eq!(started["structuredContent"]["ok"], true, "{started}");
     assert_eq!(started["structuredContent"]["storage_format"], 5);
     mcp.eof();
+}
+
+/// Like `monitor_call`, but a JSON-RPC error (for example a -32602 schema rejection) fails with
+/// the whole frame instead of yielding `null`.
+#[cfg(all(windows, feature = "visual-authoring"))]
+fn tool_result(client: &mut Client, name: &str, arguments: serde_json::Value) -> serde_json::Value {
+    let got = client.request("tools/call", serde_json::json!({ "name": name, "arguments": arguments }));
+    assert!(got.get("error").is_none(), "{name} answered a JSON-RPC error: {got}");
+    got["result"].clone()
 }
 
 /// Junction fixture (no privilege required); paths travel as environment values.
