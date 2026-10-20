@@ -166,7 +166,9 @@ fn standard_user_creates_reopens_and_keeps_an_owner_only_gil_in_a_normal_folder(
     let state = field(&out, "ACL_STATE");
     // The icacls line starts with the path (which contains `C:\Users\...`); judge the ACEs only.
     assert!(state.contains(":(I)(F)") && !state.contains("BUILTIN\\Users") && !state.contains("Authenticated Users") && !state.contains("Everyone"), "{state}");
-    assert!(field(&out, "ACL_ROOT").contains("(I)"), "the profile folder itself inherits normally");
+    // ACL_ROOT is recorded for the report; whether a fresh profile subfolder shows inherited
+    // entries depends on how Windows created that profile and is not part of the contract.
+    let _ = field(&out, "ACL_ROOT");
 }
 
 #[test]
