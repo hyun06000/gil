@@ -19,9 +19,12 @@ pub fn tools() -> &'static [Tool] {
             .expect("checked-in public tool catalog");
         #[cfg(feature = "visual-authoring")]
         let tools = {
-            let mut tools = super::migration::catalog(super::authoring::catalog(tools));
+            let tools = super::migration::catalog(super::authoring::catalog(tools));
+            #[cfg(windows)]
+            let tools = super::workspace::catalog(tools);
+            let mut tools = tools;
             if let Some(start) = tools.iter_mut().find(|t| t.name == "gil_start") {
-                start.description = Some("Development image-report creation: creates format 5 on verified local storage (macOS Apple Silicon; Windows local fixed NTFS). Requires the user's explicitly selected absolute project_root. Existing records/remnants are preserved, never migrated or retried automatically. Success commits one Interview, zero Steps; does not open or confirm the Monitor. Unsupported platforms/volumes refuse, never fall back to format 4. Migrating existing format-4 records stays macOS-only.".into());
+                start.description = Some("Development image-report creation: creates format 5 on verified local storage (macOS Apple Silicon; Windows local fixed NTFS). Requires the user's explicitly selected absolute project_root. Existing records/remnants are preserved, never migrated or retried automatically. Success commits one Interview, zero Steps; does not open or confirm the Monitor. Unsupported platforms/volumes refuse, never fall back to format 4. On Windows the selected location is checked before anything is created: OneDrive/cloud-sync roots, network or removable drives, non-NTFS volumes, reparse points and unverifiable locations refuse with code unsupported_location and nothing is created; see gil_prepare_workspace. Migrating existing format-4 records stays macOS-only.".into());
             }
             tools
         };

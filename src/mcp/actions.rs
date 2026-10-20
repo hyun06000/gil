@@ -54,6 +54,14 @@ pub fn call(name: &str, input: &Value) -> CallToolResult {
             Err(problem) => result(false, Some(1), String::new(), format!("{problem}\n")),
         };
     }
+    #[cfg(all(feature = "visual-authoring", windows))]
+    if name == "gil_start" {
+        // Support-scope check before any record exists (Windows contract §4 W1 0).
+        let selected = Path::new(root.expect("validated root"));
+        if let Err(location) = crate::windows_fs::unsupported_location(selected) {
+            return super::workspace::start_refusal(selected, &location);
+        }
+    }
     #[cfg(feature = "visual-authoring")]
     if name == "gil_start" {
         return match crate::command::start_visual_action(Path::new(root.expect("validated root"))) {

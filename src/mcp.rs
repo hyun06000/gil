@@ -15,6 +15,8 @@ mod visuals;
 mod authoring;
 #[cfg(feature = "visual-authoring")]
 mod migration;
+#[cfg(all(feature = "visual-authoring", windows))]
+mod workspace;
 use monitor::Monitor;
 
 #[derive(Debug, Clone)]
@@ -35,6 +37,11 @@ impl GilServer {
         if name.starts_with("gil_migration_") {
             return tokio::task::spawn_blocking(move || migration::call(&name, input)).await
                 .unwrap_or_else(|_| actions::refusal("이관 결과가 불확실하다. 기록과 백업을 보존하고 gil_migration_status만 읽는다. 자동 재시도하지 않는다."));
+        }
+        #[cfg(all(feature = "visual-authoring", windows))]
+        if name == workspace::NAME {
+            return tokio::task::spawn_blocking(move || workspace::call(input)).await
+                .unwrap_or_else(|_| actions::refusal("작업 폴더 준비 결과가 불확실하다. 폴더 존재 여부를 확인하고 반복하지 않는다."));
         }
         #[cfg(feature = "visual-authoring")]
         if name == "gil_report_visuals" || (name == "gil_close" && input.get("visuals").is_some()) {

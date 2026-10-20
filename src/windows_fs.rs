@@ -955,6 +955,359 @@ pub(crate) fn reopen(file: &File, access: u32, share: u32) -> io::Result<File> {
     Ok(again)
 }
 
+
+// ── Location support for new image Projects (Windows contract §4 W1 0, §8 1b) ────────────────
+//
+// Checked **before** anything is created. Detection has known misses and false positives
+// (contract §8 1b); an undetectable or unverifiable location is a refusal, never "safe". A plain
+// inherited parent ACL is not a reason to refuse: the new `.gil` gets its own protected DACL.
+
+/// WinBase.h `DRIVE_REMOTE`.
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+const NETWORK_DRIVE: u32 = 4;
+/// Cloud-files (placeholder / hydration) attributes set by sync providers such as OneDrive
+/// Files On-Demand: RECALL_ON_OPEN, PINNED, UNPINNED, RECALL_ON_DATA_ACCESS.
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+const CLOUD_ATTRIBUTES: u32 = 0x4_0000 | 0x8_0000 | 0x10_0000 | 0x40_0000;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) enum LocationKind {
+    /// Under a root named by the OneDrive / OneDriveConsumer / OneDriveCommercial variables.
+    OneDriveEnv,
+    /// The folder or an ancestor carries cloud-files attributes (a sync provider is active there).
+    CloudFiles,
+    /// UNC path or a drive whose type is remote.
+    Network,
+    /// A drive that is not a local fixed drive (removable, CD, RAM disk, unknown).
+    NotFixed,
+    /// Local fixed drive whose file system is not NTFS.
+    NotNtfs,
+    /// A reparse point (junction, symlink, mount point, other provider) in the selected path.
+    Reparse,
+    /// The checks themselves could not be completed; not treated as supported.
+    Unverifiable,
+}
+
+/// What a refusal rests on (contract §8 1b): an attribute or type the OS reported for this
+/// path, a value the environment declares (which may be stale), or a check that failed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) enum Evidence {
+    Observed,
+    Declared,
+    CheckFailed,
+}
+
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+impl Evidence {
+    pub(crate) fn code(self) -> &'static str {
+        match self {
+            Self::Observed => "observed",
+            Self::Declared => "declared_by_environment",
+            Self::CheckFailed => "check_failed",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) struct UnsupportedLocation {
+    pub kind: LocationKind,
+    pub detail: String,
+}
+
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+impl UnsupportedLocation {
+    pub(crate) fn evidence(&self) -> Evidence {
+        match self.kind {
+            LocationKind::OneDriveEnv => Evidence::Declared,
+            LocationKind::Unverifiable => Evidence::CheckFailed,
+            _ => Evidence::Observed,
+        }
+    }
+}
+
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+impl LocationKind {
+    pub(crate) fn code(self) -> &'static str {
+        match self {
+            Self::OneDriveEnv => "onedrive",
+            Self::CloudFiles => "cloud_files",
+            Self::Network => "network",
+            Self::NotFixed => "not_fixed_drive",
+            Self::NotNtfs => "not_ntfs",
+            Self::Reparse => "reparse_point",
+            Self::Unverifiable => "unverifiable",
+        }
+    }
+    /// Short notice for a non-developer: support scope, never a claim about the cause of an error.
+    pub(crate) fn notice(self) -> &'static str {
+        match self {
+            Self::OneDriveEnv => "선택한 폴더는 OneDrive 설정이 백업 위치로 선언한 폴더 안에 있습니다. 현재 GIL 검수판은 이 위치에서 기록 보존을 보장하지 못합니다. OneDrive 설정은 그대로 두고, 이 PC의 별도 작업 폴더를 준비할까요?",
+            Self::CloudFiles => "선택한 폴더는 클라우드 동기화(파일 온디맨드) 위치입니다. 현재 GIL 검수판은 이 위치에서 기록 보존을 보장하지 못합니다. 동기화 설정은 그대로 두고, 이 PC의 별도 작업 폴더를 준비할까요?",
+            Self::Network => "선택한 폴더는 네트워크 경로입니다. 현재 GIL 검수판은 이 PC의 로컬 고정 NTFS 폴더만 지원합니다. 이 PC의 별도 작업 폴더를 준비할까요?",
+            Self::NotFixed => "선택한 폴더는 이동식 드라이브이거나 고정 드라이브가 아닙니다. 현재 GIL 검수판은 이 PC의 로컬 고정 NTFS 폴더만 지원합니다. 별도 작업 폴더를 준비할까요?",
+            Self::NotNtfs => "선택한 폴더의 드라이브는 NTFS가 아닙니다. 현재 GIL 검수판은 로컬 고정 NTFS 폴더만 지원합니다. 별도 작업 폴더를 준비할까요?",
+            Self::Reparse => "선택한 경로에 링크(junction·symlink)가 포함돼 있습니다. 현재 GIL 검수판은 링크를 거치지 않는 로컬 폴더만 지원합니다. 별도 작업 폴더를 준비할까요?",
+            Self::Unverifiable => "선택한 폴더가 지원 범위인지 확인하지 못했습니다. 확인되지 않은 위치에는 기록을 만들지 않습니다. 이 PC의 별도 작업 폴더를 준비할까요?",
+        }
+    }
+}
+
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+fn unsupported(kind: LocationKind, detail: impl Into<String>) -> UnsupportedLocation {
+    UnsupportedLocation { kind, detail: detail.into() }
+}
+
+/// Roots the environment declares as OneDrive. Absent or non-canonicalizable values are
+/// ignored (a documented miss); a stale value with synchronization turned off is a documented
+/// false positive. Other sync products are not represented here.
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) fn sync_roots_from_env() -> Vec<PathBuf> {
+    ["OneDrive", "OneDriveConsumer", "OneDriveCommercial"]
+        .iter()
+        .filter_map(|key| std::env::var_os(key))
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .filter_map(|p| p.canonicalize().ok())
+        .collect()
+}
+
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+fn same_component(a: &OsStr, b: &OsStr) -> bool {
+    a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase()
+}
+/// `path` equals `root` or lies below it, compared component-wise and case-insensitively.
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) fn under(path: &Path, root: &Path) -> bool {
+    let (mut p, mut r) = (path.components(), root.components());
+    loop {
+        match (p.next(), r.next()) {
+            (_, None) => return true,
+            (None, Some(_)) => return false,
+            (Some(a), Some(b)) => {
+                if !same_component(a.as_os_str(), b.as_os_str()) {
+                    return false;
+                }
+            }
+        }
+    }
+}
+
+/// Classify a selected folder. `Ok(())` means every check passed; any error means refuse.
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) fn classify_location(root: &Path, sync_roots: &[PathBuf]) -> Result<(), UnsupportedLocation> {
+    if matches!(root.components().next(), Some(Component::Prefix(p)) if matches!(p.kind(), Prefix::UNC(..) | Prefix::VerbatimUNC(..))) {
+        return Err(unsupported(LocationKind::Network, "UNC path"));
+    }
+    let canonical = root
+        .canonicalize()
+        .map_err(|e| unsupported(LocationKind::Unverifiable, format!("canonicalize: {e}")))?;
+    if let Err(e) = absolute(&canonical) {
+        return Err(unsupported(LocationKind::Unverifiable, format!("not a drive path: {e}")));
+    }
+    for sync in sync_roots {
+        if under(&canonical, sync) {
+            return Err(unsupported(LocationKind::OneDriveEnv, format!("under {}", sync.display())));
+        }
+    }
+    let drive: PathBuf = canonical.components().take(2).collect();
+    let drive_text = wide(&drive).map_err(|e| unsupported(LocationKind::Unverifiable, e.to_string()))?;
+    match unsafe { GetDriveTypeW(drive_text.as_ptr()) } {
+        LOCAL_FIXED_DRIVE => {}
+        NETWORK_DRIVE => return Err(unsupported(LocationKind::Network, "remote drive")),
+        other => return Err(unsupported(LocationKind::NotFixed, format!("drive type {other}"))),
+    }
+    // Walk every component as the entry itself: reparse points and cloud attributes anywhere
+    // in the selected path count, and a failed query is unverifiable, not safe.
+    let mut at = PathBuf::new();
+    let mut last: Option<File> = None;
+    for part in canonical.components() {
+        at.push(part);
+        if matches!(part, Component::Prefix(_)) {
+            continue;
+        }
+        let dir = open_raw(&at, READ, SHARE_ALL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS)
+            .map_err(|e| unsupported(LocationKind::Unverifiable, format!("{}: {e}", at.display())))?;
+        let flags = info(&dir)
+            .map_err(|e| unsupported(LocationKind::Unverifiable, format!("{}: {e}", at.display())))?
+            .dwFileAttributes;
+        if flags & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return Err(unsupported(LocationKind::Reparse, at.display().to_string()));
+        }
+        if flags & FILE_ATTRIBUTE_DIRECTORY == 0 {
+            return Err(unsupported(LocationKind::Unverifiable, format!("{} is not a directory", at.display())));
+        }
+        if flags & CLOUD_ATTRIBUTES != 0 {
+            return Err(unsupported(LocationKind::CloudFiles, format!("{} attributes {flags:#x}", at.display())));
+        }
+        last = Some(dir);
+    }
+    let dir = last.ok_or_else(|| unsupported(LocationKind::Unverifiable, "empty path"))?;
+    let mut filesystem = [0u16; 32];
+    unsafe {
+        if GetVolumeInformationByHandleW(dir.as_raw_handle(), null_mut(), 0, null_mut(), null_mut(), null_mut(), filesystem.as_mut_ptr(), filesystem.len() as u32) == 0 {
+            return Err(unsupported(LocationKind::Unverifiable, format!("volume query: {}", io::Error::last_os_error())));
+        }
+    }
+    if filesystem[..5] != [78, 84, 70, 83, 0] {
+        return Err(unsupported(LocationKind::NotNtfs, String::from_utf16_lossy(&filesystem).trim_end_matches('\0').to_string()));
+    }
+    Ok(())
+}
+
+/// Environment-aware check used by `gil_start` and by the reservation itself.
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) fn unsupported_location(root: &Path) -> Result<(), UnsupportedLocation> {
+    classify_location(root, &sync_roots_from_env())
+}
+
+// ── Approved local workspace preparation (Windows contract §4 W1 0) ──────────────────────────
+
+#[derive(Debug, Clone)]
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) struct WorkspacePlan {
+    pub parent: PathBuf,
+    pub path: PathBuf,
+    /// The parent itself does not exist yet and would be created under its (supported) parent.
+    pub creates_parent: bool,
+}
+
+#[derive(Debug)]
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) enum WorkspaceRefusal {
+    InvalidName,
+    ParentNotAbsolute,
+    /// The parent is not under `%USERPROFILE%` (or the profile is unknown): this is not a tool
+    /// for creating folders anywhere.
+    OutsideAllowed(PathBuf),
+    ParentMissing(PathBuf),
+    Unsupported(UnsupportedLocation),
+    Exists(PathBuf),
+    /// The plan no longer matches what the checks say right before creation.
+    PlanChanged,
+    Io(io::Error),
+}
+
+/// A failed creation: what refused it, and every entry this call made (each with whether it
+/// still exists at the time of the report). Entries that existed before are never touched.
+#[derive(Debug)]
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) struct WorkspaceFailure {
+    pub refusal: WorkspaceRefusal,
+    pub created: Vec<(PathBuf, bool)>,
+}
+
+/// The allowed range for new workspaces: the user profile, canonicalized.
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) fn allowed_workspace_root() -> io::Result<PathBuf> {
+    let profile = std::env::var_os("USERPROFILE").filter(|v| !v.is_empty()).ok_or_else(refused)?;
+    PathBuf::from(profile).canonicalize()
+}
+
+/// `%USERPROFILE%\gil-projects`: the default place for a new local workspace.
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) fn default_workspace_parent() -> io::Result<PathBuf> {
+    let profile = std::env::var_os("USERPROFILE").filter(|v| !v.is_empty()).ok_or_else(refused)?;
+    Ok(PathBuf::from(profile).join("gil-projects"))
+}
+
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+fn workspace_name_ok(name: &OsStr) -> bool {
+    let text = name.to_string_lossy();
+    if plain_name(name).is_err() || text.ends_with(['.', ' ']) || text.chars().any(char::is_control) {
+        return false;
+    }
+    let upper = text.to_ascii_uppercase();
+    let stem = upper.split('.').next().unwrap_or("");
+    !(matches!(stem, "CON" | "PRN" | "AUX" | "NUL")
+        || (stem.len() == 4 && (stem.starts_with("COM") || stem.starts_with("LPT")) && stem.as_bytes()[3].is_ascii_digit()))
+}
+
+/// Decide exactly what would be created, creating nothing. Shown to the user before approval.
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) fn plan_workspace(parent: &Path, name: &OsStr) -> Result<WorkspacePlan, WorkspaceRefusal> {
+    if !workspace_name_ok(name) {
+        return Err(WorkspaceRefusal::InvalidName);
+    }
+    if !parent.is_absolute() {
+        return Err(WorkspaceRefusal::ParentNotAbsolute);
+    }
+    if parent.components().any(|c| matches!(c, Component::ParentDir | Component::CurDir)) {
+        return Err(WorkspaceRefusal::ParentNotAbsolute);
+    }
+    let allowed = allowed_workspace_root().map_err(|_| WorkspaceRefusal::OutsideAllowed(parent.to_path_buf()))?;
+    let creates_parent = match std::fs::symlink_metadata(parent) {
+        Ok(meta) if meta.is_dir() && !meta.is_symlink() => false,
+        Ok(_) => return Err(WorkspaceRefusal::Unsupported(unsupported(LocationKind::Reparse, parent.display().to_string()))),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => true,
+        Err(e) => return Err(WorkspaceRefusal::Io(e)),
+    };
+    let checked = if creates_parent {
+        let above = parent.parent().ok_or(WorkspaceRefusal::ParentNotAbsolute)?;
+        match std::fs::symlink_metadata(above) {
+            Ok(meta) if meta.is_dir() && !meta.is_symlink() => above.to_path_buf(),
+            Ok(_) => return Err(WorkspaceRefusal::Unsupported(unsupported(LocationKind::Reparse, above.display().to_string()))),
+            Err(_) => return Err(WorkspaceRefusal::ParentMissing(above.to_path_buf())),
+        }
+    } else {
+        parent.to_path_buf()
+    };
+    // Allowed range: the existing part, canonicalized (the location check below refuses any
+    // reparse point in it), must lie under the user profile.
+    let canonical = checked.canonicalize().map_err(WorkspaceRefusal::Io)?;
+    if !under(&canonical, &allowed) {
+        return Err(WorkspaceRefusal::OutsideAllowed(parent.to_path_buf()));
+    }
+    unsupported_location(&checked).map_err(WorkspaceRefusal::Unsupported)?;
+    let path = parent.join(name);
+    match std::fs::symlink_metadata(&path) {
+        Ok(_) => return Err(WorkspaceRefusal::Exists(path)),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(WorkspaceRefusal::Io(e)),
+    }
+    Ok(WorkspacePlan { parent: parent.to_path_buf(), path, creates_parent })
+}
+
+/// Create exactly the planned folder(s), each exclusively (an entry appearing in between is a
+/// refusal, never reused), with the ordinary inherited ACL of a user folder. The Project's own
+/// `.gil` gets its protected DACL later, at `gil_start`. The plan is re-derived right before
+/// creation (location, ancestors, conflicts); any difference refuses without creating.
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) fn create_workspace(plan: &WorkspacePlan) -> Result<Vec<PathBuf>, WorkspaceFailure> {
+    let mut created: Vec<PathBuf> = Vec::new();
+    let outcome = (|| -> Result<(), WorkspaceRefusal> {
+        let name = plan.path.file_name().ok_or(WorkspaceRefusal::InvalidName)?;
+        let now = plan_workspace(&plan.parent, name)?;
+        if now.path != plan.path || now.parent != plan.parent || now.creates_parent != plan.creates_parent {
+            return Err(WorkspaceRefusal::PlanChanged);
+        }
+        let mut make = |at: &Path| -> Result<(), WorkspaceRefusal> {
+            let text = wide(at).map_err(WorkspaceRefusal::Io)?;
+            if unsafe { CreateDirectoryW(text.as_ptr(), null_mut()) } == 0 {
+                let e = io::Error::last_os_error();
+                return Err(if e.kind() == io::ErrorKind::AlreadyExists { WorkspaceRefusal::Exists(at.to_path_buf()) } else { WorkspaceRefusal::Io(e) });
+            }
+            created.push(at.to_path_buf());
+            Ok(())
+        };
+        if plan.creates_parent {
+            make(&plan.parent)?;
+        }
+        make(&plan.path)?;
+        // The result must itself pass the location check (no reparse, local fixed NTFS, no sync root).
+        unsupported_location(&plan.path).map_err(WorkspaceRefusal::Unsupported)
+    })();
+    match outcome {
+        Ok(()) => Ok(created),
+        Err(refusal) => Err(WorkspaceFailure {
+            refusal,
+            created: created.into_iter().map(|p| { let remains = std::fs::symlink_metadata(&p).is_ok(); (p, remains) }).collect(),
+        }),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     //! Windows contract §6 W7-*: the full-path rename stays bound to the pinned directory.

@@ -204,6 +204,14 @@ mod reserve {
                     "이미지 프로젝트 생성은 로컬 고정 NTFS 드라이브에서만 검수됐다",
                 )
             })?;
+            // Support-scope check before anything is created (contract §4 W1 0): sync roots,
+            // cloud-files attributes, network/removable drives, reparse points, or unverifiable.
+            if let Err(location) = win::unsupported_location(&root) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    format!("지원하지 않는 위치({})라 기록을 만들지 않았다: {}", location.kind.code(), location.detail),
+                ));
+            }
             let name = OsStr::new(".gil");
             // 1. Exclusive creation with the owner-only descriptor; the handle is to the object
             //    this call created. Any existing entry fails here untouched.
