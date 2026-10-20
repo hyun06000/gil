@@ -127,6 +127,32 @@ platform is not permission to fall back to a shell or silently create a text-onl
    The Monitor reads the project on its own, so the graph updates from this first step on without
    any further rendering call.
 
+**Unsupported location at start (Windows development surface).** If `gil_start` answers
+`ok: false` with `code: unsupported_location`, nothing was created. Pass on its `said` as it is —
+it is a support-scope notice (for example “선택한 폴더는 OneDrive 설정이 백업 위치로 선언한 폴더 안에
+있습니다. 현재 GIL 검수판은 이 위치에서 기록 보존을 보장하지 못합니다. OneDrive 설정은 그대로 두고,
+이 PC의 별도 작업 폴더를 준비할까요?”), not a statement that OneDrive or that folder caused an error.
+Its `evidence` says what the refusal rests on (`observed` by the OS, `declared_by_environment`, or
+`check_failed`); never upgrade a declared or failed check into “this is OneDrive”. Do not retry
+`gil_start` there, do not change OneDrive or sync settings, and do not touch any existing project
+files, `.gil` or permissions. Then, only if the user says yes:
+
+1. `gil_prepare_workspace(name, confirm: false)` (parent defaults to `%USERPROFILE%\gil-projects`
+   and must stay under the user profile; use the selected folder's name unless the user names
+   another). Show the exact `path` it returns and pass on its `said`, which states what was
+   checked (outside the roots OneDrive declares, no cloud-sync attributes) and that other sync
+   products are not detected. Then **end your turn** and wait for the user's reply; a plan is not
+   an approval, and neither is silence.
+2. Only after the user approves that exact path: `gil_prepare_workspace(name, confirm: true,
+   approved_path: <the path string from step 1>)` creates it. Any refusal (`exists`,
+   `unsupported_location`, `permission_denied`, `parent_missing`, `path_mismatch`, `plan_changed`,
+   `outside_allowed_range`) changes nothing: report it and stop, including the
+   `created_by_this_call` list if one is present; never pick a different folder on your own, never
+   elevate, never adjust permissions.
+3. Creating the folder is not connecting it. Ask the user to select the new folder as the working
+   folder in the app, then wait. Only when that folder is the explicitly selected working folder
+   call `gil_start` there; never claim it is connected because the path exists.
+
 Report three things separately and never fold them into one "done":
 
 - **Start** — `gil_start` answered `ok`. Its `said` is GIL's receipt; pass it on.

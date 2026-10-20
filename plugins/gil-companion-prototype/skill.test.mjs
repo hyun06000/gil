@@ -65,6 +65,14 @@ test("Skill 이 부르는 도구 이름은 전부 실제 tool 표에 있다", ()
       assert.ok(section("## Visual reports — capability-gated authoring").includes(name));
       continue; // Explicit opt-in authoring route, never a promise about the default catalog.
     }
+    if (name === "gil_prepare_workspace") {
+      // Windows development surface only (src/mcp/workspace.rs); mentioned solely in the
+      // unsupported-location paragraph, which is entered only after that refusal code.
+      const paragraph = SKILL.slice(SKILL.indexOf("**Unsupported location at start"), SKILL.indexOf("Report three things separately"));
+      assert.ok(paragraph.includes(name));
+      assert.ok(!SKILL.replace(paragraph, "").includes(name), "gil_prepare_workspace must not appear in the normal start flow");
+      continue;
+    }
     assert.ok(TOOLS.includes(name), `Skill 이 없는 도구를 부른다 — ${name}`);
   }
   for (const owed of ["gil_start", "gil_monitor_prepare", "show_gil_monitor", "gil_open", "gil_context"]) {
@@ -258,4 +266,20 @@ test("close 입력 형태와 -32602 뒤 절차 — 열린 Verify 의 정상 구�
   // 불확실 응답 뒤 close 무조건 재시도 금지는 그대로다.
   assert.match(closing, /no-automatic-retry rule below still applies to \*\*uncertain\*\*\s+responses/);
   assert.match(section("## Visual reports — capability-gated authoring"), /do not automatically repeat\s+close\*\*, even for a busy\/connection error/);
+});
+
+test('unsupported location at start: notice, approval-gated workspace preparation, no auto-connect', () => {
+  const skill = readFileSync(new URL('./skills/gil-companion/SKILL.md', import.meta.url), 'utf8');
+  const section = skill.slice(skill.indexOf('**Unsupported location at start'), skill.indexOf('Report three things separately'));
+  assert.ok(section.length > 200);
+  assert.match(section, /code: unsupported_location/);
+  assert.match(section, /not a statement that OneDrive[\s\S]*caused an error/);
+  assert.match(section, /gil_prepare_workspace\(name, confirm: false\)/);
+  assert.match(section, /gil_prepare_workspace\(name, confirm: true,\s+approved_path:/);
+  assert.match(section, /\*\*end your turn\*\* and wait/);
+  assert.match(section, /other sync\s+products are not detected/);
+  assert.match(section, /outside the roots OneDrive declares, no cloud-sync attributes/);
+  assert.match(section, /Creating the folder is not connecting it/);
+  assert.match(section, /never claim it is connected because the path exists/);
+  assert.match(section, /never\s+elevate, never adjust permissions/);
 });
