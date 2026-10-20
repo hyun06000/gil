@@ -18,8 +18,9 @@ fn powershell() -> PathBuf {
 struct SharedFolder(PathBuf);
 impl SharedFolder {
     fn create() -> Self {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let drive = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into());
-        let path = PathBuf::from(format!("{drive}\\gil-ordinary-{}", std::process::id()));
+        let path = PathBuf::from(format!("{drive}\\gil-ordinary-{}-{}", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
         fs::create_dir(&path).unwrap();
         let out = std::process::Command::new(system32("icacls.exe")).arg(&path).args(["/grant", "*S-1-5-11:(OI)(CI)M"]).output().unwrap();
         assert!(out.status.success());
@@ -45,8 +46,10 @@ impl Account {
         Self { name, password }
     }
     /// Run a PowerShell script file as this user (script text is loaded from the file and
-    /// executed as a script block, so no execution-policy change is needed).
-    fn run_script(&self, script: &Path, out_dir: &Path, env: &[(&str, &Path)]) -> (i32, String, String) {
+    /// executed as a script block, so no execution-policy change is needed). A `-Credential`
+    /// process gets the other user's environment, not ours, so every value travels as a
+    /// positional script argument embedded in the inner command line (ASCII paths only).
+    fn run_script(&self, script: &Path, out_dir: &Path, args: &[&str]) -> (i32, String, String) {
         let stdout = out_dir.join("ou-stdout.txt");
         let stderr = out_dir.join("ou-stderr.txt");
         let _ = fs::remove_file(&stdout);
@@ -55,22 +58,24 @@ impl Account {
             $secure = New-Object System.Security.SecureString; \
             foreach ($ch in $env:GIL_TEST_PASS.ToCharArray()) { $secure.AppendChar($ch) }; \
             $credential = New-Object System.Management.Automation.PSCredential($env:GIL_TEST_USER, $secure); \
-            $inner = '& ([scriptblock]::Create((Get-Content -Raw -LiteralPath $env:GIL_TEST_SCRIPT)))'; \
+            $inner = $env:GIL_TEST_INNER; \
             $process = Start-Process -FilePath $env:GIL_TEST_PS -ArgumentList @('-NoProfile', '-NonInteractive', '-Command', $inner) -Credential $credential -WorkingDirectory $env:GIL_TEST_CWD -PassThru -Wait -RedirectStandardOutput $env:GIL_TEST_OUT -RedirectStandardError $env:GIL_TEST_ERR; \
             exit $process.ExitCode \
             } catch { Write-Error ($_ | Out-String); exit 99 }";
+        for text in std::iter::once(script.to_str().unwrap()).chain(args.iter().copied()) {
+            assert!(text.is_ascii() && !text.contains('\''), "inner command values must be plain ASCII: {text}");
+        }
+        let quoted: Vec<String> = args.iter().map(|a| format!("'{a}'")).collect();
+        let inner = format!("& ([scriptblock]::Create((Get-Content -Raw -LiteralPath '{}'))) {}", script.display(), quoted.join(" "));
         let mut command = std::process::Command::new(powershell());
         command.args(["-NoProfile", "-NonInteractive", "-Command", launcher])
             .env("GIL_TEST_USER", &self.name)
             .env("GIL_TEST_PASS", &self.password)
             .env("GIL_TEST_PS", powershell())
-            .env("GIL_TEST_SCRIPT", script)
+            .env("GIL_TEST_INNER", inner)
             .env("GIL_TEST_CWD", out_dir)
             .env("GIL_TEST_OUT", &stdout)
             .env("GIL_TEST_ERR", &stderr);
-        for (k, v) in env {
-            command.env(k, v);
-        }
         let out = command.output().unwrap();
         let code = out.status.code().unwrap_or(-1);
         assert_ne!(code, 99, "the standard-user logon could not run on this host: {}", String::from_utf8_lossy(&out.stderr));
@@ -89,11 +94,12 @@ impl Drop for Account {
 /// MODE=normal: create → status → context. MODE=reinherit: create, then re-enable inheritance on
 /// .gil the way an external agent would, then status.
 const DRIVER: &str = r#"
+param($Exe, $Mode)
 $ErrorActionPreference = 'Stop'
-$root = Join-Path $env:USERPROFILE ('gil-synthetic-' + $env:GIL_MODE)
+$root = Join-Path $env:USERPROFILE ('gil-synthetic-' + $Mode)
 New-Item -ItemType Directory -Path $root | Out-Null
 $psi = New-Object System.Diagnostics.ProcessStartInfo
-$psi.FileName = $env:GIL_EXE
+$psi.FileName = $Exe
 $psi.Arguments = 'mcp --serve'
 $psi.WorkingDirectory = $root
 $psi.UseShellExecute = $false
@@ -109,7 +115,7 @@ $null = Recv
 Send @{jsonrpc='2.0'; method='notifications/initialized'}
 Send @{jsonrpc='2.0'; id=2; method='tools/call'; params=@{name='gil_start'; arguments=@{project_root=$root}}}
 $start = Recv
-if ($env:GIL_MODE -eq 'reinherit') {
+if ($Mode -eq 'reinherit') {
   & icacls (Join-Path $root '.gil') /inheritance:e | Out-Null
 }
 Send @{jsonrpc='2.0'; id=3; method='tools/call'; params=@{name='gil_status'; arguments=@{project_root=$root}}}
@@ -145,7 +151,7 @@ fn field<'a>(out: &'a str, key: &str) -> &'a str {
 #[test]
 fn standard_user_creates_reopens_and_keeps_an_owner_only_gil_in_a_normal_folder() {
     let (shared, exe, script, account) = setup();
-    let (code, out, err) = account.run_script(&script, &shared.0, &[("GIL_EXE", &exe), ("GIL_MODE", Path::new("normal"))]);
+    let (code, out, err) = account.run_script(&script, &shared.0, &[exe.to_str().unwrap(), "normal"]);
     assert_eq!(code, 0, "driver failed: {err}\n{out}");
     assert!(!field(&out, "GROUPS").to_lowercase().contains("s-1-5-32-544") || field(&out, "GROUPS").contains("Deny"), "the account must not be an effective administrator: {}", field(&out, "GROUPS"));
     let start = field(&out, "START");
@@ -165,7 +171,7 @@ fn standard_user_creates_reopens_and_keeps_an_owner_only_gil_in_a_normal_folder(
 #[test]
 fn inheritance_re_enabled_after_creation_reproduces_the_reopen_refusal() {
     let (shared, exe, script, account) = setup();
-    let (code, out, err) = account.run_script(&script, &shared.0, &[("GIL_EXE", &exe), ("GIL_MODE", Path::new("reinherit"))]);
+    let (code, out, err) = account.run_script(&script, &shared.0, &[exe.to_str().unwrap(), "reinherit"]);
     assert_eq!(code, 0, "driver failed: {err}\n{out}");
     let start = field(&out, "START");
     assert!(start.contains("\"ok\":true") && start.contains("\"storage_format\":5"), "{start}");
