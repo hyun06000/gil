@@ -1,7 +1,7 @@
 # Windows image-authoring development candidate — isolated PC check (direct file transfer)
 
 This is a maintainer-owned review candidate, **not** the public Windows tester preview and not a
-release. It carries the `visual-authoring` runtime profile (24 tools, new image Projects stored as
+release. It carries the `visual-authoring` runtime profile (25 tools on Windows, new image Projects stored as
 format 5). Nothing here is published; the archive reaches the test PC only by direct file transfer
 from the maintainer, who records the exact hashes in the candidate record for that head.
 
@@ -11,7 +11,7 @@ Identity (always read from `checks.json` and the maintainer's record, never assu
   prerelease tag is what distinguishes it from `0.2.1-preview.N` public builds.
 - Marketplace: `gil-dev-windows-visual-<arch>` (never `gil-preview-windows-<arch>`).
 - Archive: `gil-windows-<arch>-visual-authoring-candidate.tar.gz`; `checks.json` says
-  `runtime_profile: visual-authoring`, `mcp_tools: 24`, `storage_format: 5`, `publishable: false`,
+  `runtime_profile: visual-authoring`, `mcp_tools: 25`, `storage_format: 5`, `publishable: false`,
   the source head, the toolchain receipt and every payload file's SHA-256.
 - x64 and ARM64 are separate archives; never substitute one for the other or run under emulation.
 
@@ -45,8 +45,8 @@ settings, or to touch any existing project.
    No `--ref` for a local root. Do not edit Codex config or caches by hand. If the CLI cannot
    install, use the app's official Plugin UI for that source; do not invent commands.
 6. In a **new conversation**, confirm the connected `gil_start` description mentions image-report
-   creation (format 5, Windows local fixed NTFS) and that 24 GIL tools are listed, including
-   `gil_report_visuals` and the four `gil_migration_*` tools. Then ask the user to select a new empty
+   creation (format 5, Windows local fixed NTFS) and that 25 GIL tools are listed, including
+   `gil_report_visuals`, `gil_prepare_workspace` and the four `gil_migration_*` tools. Then ask the user to select a new empty
    synthetic folder, start GIL there, open the Monitor, and run a short interview → experiment →
    verify flow that attaches one generated PNG. Reuse that image in a later report. Fully restart
    Codex and confirm the report and image are still shown.

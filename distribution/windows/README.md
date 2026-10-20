@@ -208,7 +208,7 @@ Windows (`unsupported_platform`).
 authoring entries build with the feature, run the binding/MCP tests plus `visual_attachment`,
 `visual_start`, `visual_store` and the filtered library unit tests (creation fault/abort
 checkpoints, lock and object-store boundaries), then `spike.mjs` with
-`GIL_RUNTIME_PROFILE=visual-authoring` (24-tool contract, `storage_format: 5`, restart).
+`GIL_RUNTIME_PROFILE=visual-authoring` (25-tool contract on Windows: the 24 authoring tools plus `gil_prepare_workspace`, `storage_format: 5`, restart).
 The default entries are unchanged and remain the only ones that package a review candidate.
 A green authoring job is runner evidence for the contract table; it is not an installable
 Windows authoring candidate, a version-label decision or a Codex screen acceptance.
@@ -234,7 +234,7 @@ prevention.
 `candidate.mjs` honors `GIL_RUNTIME_PROFILE`. With `visual-authoring` it builds the feature,
 labels the plugin `0.2.1-dev.visual-authoring+windows.<arch>.<head12>` under the marketplace
 `gil-dev-windows-visual-<arch>`, packages `gil-windows-<arch>-visual-authoring-candidate.tar.gz`
-and requires the native smoke to report 24 tools and storage format 5 (`checks.json` schema 2).
+and requires the native smoke to report 25 tools and storage format 5 (`checks.json` schema 2).
 A `prepare_candidate` dispatch now retains one profile-labeled artifact per matrix entry. The
 isolated PC check for such a candidate is [DEV-CANDIDATE-CHECK.md](DEV-CANDIDATE-CHECK.md); the
 public tester channel and its labels are unchanged.

@@ -80,6 +80,46 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
 
 ### W1 `start_visual`
 
+0. **위치 지원 검사(2026-10-21, 기록 생성 전).** `gil_start` 와 `start_visual` 은 `.gil` 이나
+   어떤 기록도 만들기 전에 선택 폴더를 `windows_fs::classify_location` 으로 가른다: UNC·원격
+   드라이브(`network`), 고정 드라이브 아님(`not_fixed_drive`), NTFS 아님(`not_ntfs`), 경로 구성
+   요소의 reparse point(`reparse_point`), cloud-files 속성(RECALL_ON_OPEN/PINNED/UNPINNED/
+   RECALL_ON_DATA_ACCESS)을 가진 구성 요소(`cloud_files`), `OneDrive`/`OneDriveConsumer`/
+   `OneDriveCommercial` 환경 변수가 가리키는 루트 아래(`onedrive`), 검사 자체 실패
+   (`unverifiable`). 어느 것이든 `code: unsupported_location` 으로 거절하며 아무것도 만들지
+   않는다. **탐지 불가는 안전 확인이 아니다.** 일반적인 부모 ACL 상속만으로는 거절하지 않는다
+   (새 `.gil` 은 3 에서 자기 보호 DACL 을 받는다). 이 검사는 지원 범위 안내이며 어떤 위치가
+   오류의 원인이라는 판정이 아니다(§8 1b). 거절 응답의 `said` 는 비개발자용 한 문장이고
+   `suggested_parent` 는 승인 기반 작업 폴더 준비(아래)의 기본 상위 폴더다.
+   거절 응답은 `evidence` 로 근거의 종류를 밝힌다: `observed`(OS 가 이 경로에 대해 보고한 속성·
+   드라이브 종류·reparse·UNC), `declared_by_environment`(OneDrive 환경 변수가 선언한 루트; 변수가
+   오래됐을 수 있다), `check_failed`(검사 실패). 선언·실패를 "OneDrive 다"로 격상하지 않는다.
+   **승인 기반 로컬 작업 폴더 준비** `gil_prepare_workspace{name, parent?, confirm, approved_path?}`
+   (Windows 작성 표면 전용). 계약:
+   - 허용 범위: `parent` 는 `%USERPROFILE%` 아래여야 하고(기본 `%USERPROFILE%\gil-projects`), 한
+     호출이 만드는 것은 없는 상위 한 단계와 폴더 자신뿐이다. 임의 경로 생성 도구가 아니다
+     (`outside_allowed_range`).
+   - `confirm:false` 는 만들 정확한 경로만 보여 주고 아무것도 만들지 않는다(쓰기 권한도 필요 없다).
+   - `confirm:true` 는 계획이 보여 준 경로 문자열을 `approved_path` 로 함께 받아야 하며 다르면
+     `path_mismatch` 로 무생성 거절한다. 이것은 요청을 사용자가 본 경로에 묶는 장치이지 인간 승인의
+     검증이 아니다: Core 는 사용자가 실제로 승인했는지 알 수 없고, Agent 가 경로와 백업 범위를
+     설명한 뒤 턴을 끝내고 기다렸는지는 Skill 회귀·화면 검수가 따로 확인한다(§6 W12-6).
+   - 생성 직전 계획을 다시 도출해 위치·조상·충돌을 재검사하고, 계획과 다르면 `plan_changed` 로
+     무생성 거절한다. 상위와 폴더는 각각 배타 생성한다(기존 항목 재사용·덮어쓰기·다른 이름 대체
+     없음, 충돌 `exists`·권한 거절 `permission_denied`·위치 미확인은 무변경 거절, 관리자 실행·권한
+     변경 없음).
+   - 실패 시 기존 항목은 건드리지 않으며, 응답의 `created_by_this_call` 이 이번 호출이 만든 항목과
+     각각의 잔존 여부를 그대로 보고한다(지우지 않는다).
+   - 만든 폴더는 일반 사용자 폴더(상속 ACL)다. 응답은 "확인한 범위에서 OneDrive 가 선언한 백업
+     위치 밖이고 클라우드 동기화 속성이 없다"고만 말하며 다른 동기화 제품의 부재를 보장하지 않는다.
+   - 폴더 생성은 앱의 작업 폴더 선택이 아니다: 사용자가 그 폴더를 선택·연결한 뒤에만 `gil_start` 를
+     부른다(Skill).
+   **action surface 판단(2026-10-21).** `gil_prepare_workspace` 는 Windows 작성 표면에만 추가되는
+   도구이고 기본 표면(action surface 1, 19 tools)에는 없다. 작성 표면은 2 를 유지한다: 추가는
+   가산적이며 기존 도구의 schema·의미가 바뀌지 않고, 이 도구를 모르는 Agent 도 `gil_start` 의
+   구조화 거절을 그대로 보고할 수 있다. 플랫폼별 도구 수는 Windows 작성 25 / macOS 작성 24 /
+   기본 19 이며 catalog·`tool-contract.mjs`·`candidate.mjs` 라벨·`checks.json` receipt·smoke·Skill
+   회귀가 같은 수를 본다.
 1. 절대 경로(`C:\…` 또는 `\\?\C:\…`)만 받는다. canonicalize 뒤 폴더 핸들을 no-follow 로
    열고 reparse 가 아닌 디렉터리인지 확인한다.
 2. 드라이브 종류 `DRIVE_FIXED`, 볼륨 NTFS 가 아니면 생성 전에 거절한다.
@@ -240,6 +280,14 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
 | W10-3 | 판별–잠금 사이 형식 변경(5→4, 4→5): 거절·불변, 4→5 는 정리 없이 거절 | `…::format_change_between_classification_and_lock_is_refused_untouched` (시험 훅) | 통과 x64·ARM64 (lib 필터 139/139, ignored 1 = `crash_child`, run 39223870974 (head 49dcd9ba)); 5→4·4→5 모두 "잠금 전" 거절, 4→5 는 tmp 보존 |
 | W10-4 | format-4 정상 복구·정리 유지(주석 앞선 format-4 도 4 로 판별) | `…::format_four_recovery_and_reaping_still_run_after_classification` | 통과 x64·ARM64 (lib 필터 139/139, ignored 1 = `crash_child`, run 39223870974 (head 49dcd9ba)) |
 
+| W12-1 | 합성 OneDrive 루트(환경 변수) 아래 `gil_start` → `unsupported_location`/`onedrive` 거절, `.gil`·기존 파일 불변; 같은 서버에서 루트 밖 폴더는 정상 시작 | `tests/mcp.rs::unsupported_location_is_refused_before_creation_and_workspace_prep_needs_approval` | 기록 대기(미push) |
+| W12-2 | `gil_prepare_workspace` 계획은 무생성(기본 상위 포함), `approved_path` 없음/불일치는 무생성 거절, 승인 생성은 정확히 그 경로(상위 포함)·빈 폴더·`created_by_this_call` 정확, 같은 이름 재요청은 `exists` 무변경·대체 이름 없음, 동기화 루트 아래·프로필 밖·불안전 이름·`..` 은 무생성 거절, 한글·공백 상위/이름, 없는 조상 `parent_missing`, 계획 뒤 상위가 junction 으로 바뀌면 생성 직전 재검사가 `reparse_point`(observed) 거절·대상 무변경, 생성 거부 ACL 은 `permission_denied`·무생성, 준비된 폴더에서 명시 root 로 `gil_start` 성공 | 같은 시험 | 기록 대기(미push) |
+| W12-6 | Agent 가 경로와 백업 확인 범위를 설명한 뒤 턴을 끝내고 기다리는지, 승인 뒤에도 앱 선택 전에는 `gil_start` 를 부르지 않는지 | Skill 회귀(`skill.test.mjs`, 문구) + 화면 검수 | 문구 회귀만 실행; 화면 미검수 |
+| W12-7 | 생성 뒤 거절(상위만 만들고 폴더 실패 등)에서 `created_by_this_call` 잔존 보고 | 코드 검토 | 합성 재현 없음(미검수) |
+| W12-3 | 탐지 한계 명시: 없는 경로를 가리키는 변수는 누락(허용), 동기화 안 된 폴더를 가리키는 변수는 오탐(거절·무생성) | `…::onedrive_variable_misses_and_false_positives_are_what_the_contract_says` | 기록 대기(미push) |
+| W12-4 | Core 방어: `start_visual` 자체도 위치 검사로 거절(네트워크·reparse 는 기존 W6-4·W1-2 가 실행) | `visual_start.rs` reserve | W6-4·W1-2 로 부분 실행 |
+| W12-5 | 실제 OneDrive 환경에서 사전 거절·안내·폴더 준비·선택 후 시작 | 사용자 PC | 미실행 |
+
 ### 6.1 runner 실행 결과 요약 (2026-10-18, PR hyun06000/gil#25)
 
 - 1차 run 39125038859 (head 217376c4): 4 job 실패. 원인 1개 — `FileRenameInfoEx` 에 `RootDirectory`
@@ -346,6 +394,17 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
    복구, 소유자·관리자·`WRITE_DAC` 보유 프로세스가 검사 사이에 바꾸는 것의 방지. Windows 의
    기본 "Bypass traverse checking" 권한 때문에 넓어진 하위 파일은 디렉터리 보호와 무관하게
    경로를 아는 계정이 읽을 수 있다 — GIL 은 다음 사용에서 거절할 뿐이다.
+1b. **위치 탐지의 누락과 오탐(2026-10-21).** 이것은 배포 명세 §6.2b(OneDrive·네트워크·removable·
+   reparse 경로는 채널 지원 대상 아님)의 정합이지 "동기화 폴더는 반드시 권한을 바꾼다"는 원인
+   설명이 아니다. 현장(2026-10-21)에서 확인된 것은 OneDrive 리디렉션 폴더에서 생성·첫 재열기는
+   통과한 뒤 이후 재열기에서 `.gil` 의 상속 차단이 사라져 거절된 사실과, OneDrive 밖 새 폴더에서는
+   정상이었다는 대조뿐이며 인과는 미확정이다.
+   - 환경 변수 방식: 다른 동기화 제품, 변수 미설정, 다른 사용자 계정의 OneDrive, 변수와 다른 실제
+     리디렉션 경로를 **놓친다**; 동기화를 끈 채 변수만 남은 경우를 **오탐**한다.
+   - cloud-files 속성 방식: Files On-Demand 가 꺼졌거나 "항상 이 기기에 보관" 인 폴더를 **놓친다**;
+     OneDrive 가 아닌 cloud filter 제품을 OneDrive 로 **오탐**한다(안내 문구는 "클라우드 동기화").
+   - 드라이브 종류·NTFS·reparse 검사는 OS 답에 따른다; 질의 실패는 `unverifiable` 로 거절한다.
+   실제 OneDrive 환경에서의 검증과 합성 탐지 시험(환경 변수·경로 fixture)은 구분한다.
 2. 디렉터리 `FlushFileBuffers` 의 실제 내구성 범위(저장 컨트롤러 캐시)는 README 와 같이 단정하지
    않는다.
 3. cloud placeholder(OneDrive 등) reparse tag 는 "reparse 거절" 규칙으로 함께 거절된다.
