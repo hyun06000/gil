@@ -81,7 +81,8 @@ pub fn call(input: Value) -> CallToolResult {
     };
     let plan = match win::plan_workspace(&parent, OsStr::new(&request.name)) {
         Ok(plan) => plan,
-        Err(refusal) => return refuse(refusal),
+        // With confirm:true every refusal states what this call created: nothing, here.
+        Err(refusal) => return if request.confirm { with_created(refuse(refusal), &[]) } else { refuse(refusal) },
     };
     // Checked, not guaranteed: outside the roots OneDrive declares and without cloud-files
     // attributes. Other synchronization products are not detected (contract §8 1b).
@@ -96,8 +97,8 @@ pub fn call(input: Value) -> CallToolResult {
     // confirm:true binds the request to the path the user saw; it is the Agent's assertion of
     // approval, which this tool cannot verify.
     match request.approved_path.as_deref() {
-        None => return fail("invalid_request", "confirm:true 에는 계획이 보여 준 정확한 경로를 approved_path 로 함께 보내야 한다(아무것도 만들지 않았다)."),
-        Some(approved) if approved != shown => return fail("path_mismatch", format!("approved_path 가 계획한 경로와 다르다: 승인 {approved} / 계획 {shown} (아무것도 만들지 않았다).")),
+        None => return with_created(fail("invalid_request", "confirm:true 에는 계획이 보여 준 정확한 경로를 approved_path 로 함께 보내야 한다."), &[]),
+        Some(approved) if approved != shown => return with_created(fail("path_mismatch", format!("approved_path 가 계획한 경로와 다르다: 승인 {approved} / 계획 {shown}.")), &[]),
         Some(_) => {}
     }
     match win::create_workspace(&plan) {
@@ -105,21 +106,24 @@ pub fn call(input: Value) -> CallToolResult {
             "parent": plan.parent.display().to_string(), "created_parent": plan.creates_parent,
             "created_by_this_call": created.iter().map(|p| p.display().to_string()).collect::<Vec<_>>(),
             "said": format!("새 작업 폴더를 만들었다: {}. 이제 Codex 앱에서 이 폴더를 작업 폴더로 선택해 달라고 안내하고 기다린다. {}", plan.path.display(), note)})),
-        Err(failure) => {
-            let mut out = refuse(failure.refusal);
-            if let Some(fields) = out.structured_content.as_mut().and_then(Value::as_object_mut) {
-                let created: Vec<Value> = failure.created.iter().map(|(p, remains)| json!({"path": p.display().to_string(), "remains": remains})).collect();
-                let remaining = failure.created.iter().filter(|(_, r)| *r).count();
-                if let Some(said) = fields.get("said").and_then(Value::as_str) {
-                    let said = if created.is_empty() { format!("{said} 이번 호출은 아무것도 만들지 않았다.") }
-                        else { format!("{said} 이번 호출이 만든 항목 {}개 중 {}개가 남아 있다(기존 항목은 건드리지 않았다).", created.len(), remaining) };
-                    fields.insert("said".into(), json!(said));
-                }
-                fields.insert("created_by_this_call".into(), Value::Array(created));
-            }
-            out
-        }
+        Err(failure) => with_created(refuse(failure.refusal), &failure.created),
     }
+}
+
+/// A confirm:true refusal always reports exactly what this call created and whether each entry
+/// still exists; existing entries are never touched and nothing created is removed.
+fn with_created(mut out: CallToolResult, created: &[(std::path::PathBuf, bool)]) -> CallToolResult {
+    if let Some(fields) = out.structured_content.as_mut().and_then(Value::as_object_mut) {
+        let list: Vec<Value> = created.iter().map(|(p, remains)| json!({"path": p.display().to_string(), "remains": remains})).collect();
+        let remaining = created.iter().filter(|(_, r)| *r).count();
+        if let Some(said) = fields.get("said").and_then(Value::as_str) {
+            let said = if list.is_empty() { format!("{said} 이번 호출은 아무것도 만들지 않았다.") }
+                else { format!("{said} 이번 호출이 만든 항목 {}개 중 {}개가 남아 있다(기존 항목은 건드리지 않았다).", list.len(), remaining) };
+            fields.insert("said".into(), json!(said));
+        }
+        fields.insert("created_by_this_call".into(), Value::Array(list));
+    }
+    out
 }
 
 fn refuse(refusal: win::WorkspaceRefusal) -> CallToolResult {
