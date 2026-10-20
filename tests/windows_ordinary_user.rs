@@ -164,7 +164,8 @@ fn standard_user_creates_reopens_and_keeps_an_owner_only_gil_in_a_normal_folder(
     assert!(gil.contains("NT AUTHORITY\\SYSTEM:(OI)(CI)(F)"), "{gil}");
     assert!(!gil.contains("Authenticated Users") && !gil.contains("BUILTIN\\Users") && !gil.contains("Administrators"), "{gil}");
     let state = field(&out, "ACL_STATE");
-    assert!(state.contains("(I)") && !state.contains("Users"), "{state}");
+    // The icacls line starts with the path (which contains `C:\Users\...`); judge the ACEs only.
+    assert!(state.contains(":(I)(F)") && !state.contains("BUILTIN\\Users") && !state.contains("Authenticated Users") && !state.contains("Everyone"), "{state}");
     assert!(field(&out, "ACL_ROOT").contains("(I)"), "the profile folder itself inherits normally");
 }
 
