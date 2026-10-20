@@ -280,11 +280,11 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
 | W10-3 | 판별–잠금 사이 형식 변경(5→4, 4→5): 거절·불변, 4→5 는 정리 없이 거절 | `…::format_change_between_classification_and_lock_is_refused_untouched` (시험 훅) | 통과 x64·ARM64 (lib 필터 139/139, ignored 1 = `crash_child`, run 39223870974 (head 49dcd9ba)); 5→4·4→5 모두 "잠금 전" 거절, 4→5 는 tmp 보존 |
 | W10-4 | format-4 정상 복구·정리 유지(주석 앞선 format-4 도 4 로 판별) | `…::format_four_recovery_and_reaping_still_run_after_classification` | 통과 x64·ARM64 (lib 필터 139/139, ignored 1 = `crash_child`, run 39223870974 (head 49dcd9ba)) |
 
-| W12-1 | 합성 OneDrive 루트(환경 변수) 아래 `gil_start` → `unsupported_location`/`onedrive` 거절, `.gil`·기존 파일 불변; 같은 서버에서 루트 밖 폴더는 정상 시작 | `tests/mcp.rs::unsupported_location_is_refused_before_creation_and_workspace_prep_needs_approval` | 기록 대기(미push) |
-| W12-2 | `gil_prepare_workspace` 계획은 무생성(기본 상위 포함), `approved_path` 없음/불일치는 무생성 거절, 승인 생성은 정확히 그 경로(상위 포함)·빈 폴더·`created_by_this_call` 정확, 같은 이름 재요청은 `exists` 무변경·대체 이름 없음, 동기화 루트 아래·프로필 밖·불안전 이름·`..` 은 무생성 거절, 한글·공백 상위/이름, 없는 조상 `parent_missing`, 계획 뒤 상위가 junction 으로 바뀌면 생성 직전 재검사가 `reparse_point`(observed) 거절·대상 무변경, 생성 거부 ACL 은 `permission_denied`·무생성, 준비된 폴더에서 명시 root 로 `gil_start` 성공 | 같은 시험 | 기록 대기(미push) |
+| W12-1 | 합성 OneDrive 루트(환경 변수) 아래 `gil_start` → `unsupported_location`/`onedrive` 거절, `.gil`·기존 파일 불변; 같은 서버에서 루트 밖 폴더는 정상 시작 | `tests/mcp.rs::unsupported_location_is_refused_before_creation_and_workspace_prep_needs_approval` | 통과: run 39490520619 (x64·arm64, head `8335d644…`) |
+| W12-2 | `gil_prepare_workspace` 계획은 무생성(기본 상위 포함), `approved_path` 없음/불일치는 무생성 거절, 승인 생성은 정확히 그 경로(상위 포함)·빈 폴더·`created_by_this_call` 정확, 같은 이름 재요청은 `exists` 무변경·대체 이름 없음, 동기화 루트 아래·프로필 밖·불안전 이름·`..` 은 무생성 거절, 한글·공백 상위/이름, 없는 조상 `parent_missing`, 계획 뒤 상위가 junction 으로 바뀌면 생성 직전 재검사가 `reparse_point`(observed) 거절·대상 무변경, 생성 거부 ACL 은 `permission_denied`·무생성, 준비된 폴더에서 명시 root 로 `gil_start` 성공 | 같은 시험 | 통과: run 39490520619 (x64·arm64, head `8335d644…`) |
 | W12-6 | Agent 가 경로와 백업 확인 범위를 설명한 뒤 턴을 끝내고 기다리는지, 승인 뒤에도 앱 선택 전에는 `gil_start` 를 부르지 않는지 | Skill 회귀(`skill.test.mjs`, 문구) + 화면 검수 | 문구 회귀만 실행; 화면 미검수 |
 | W12-7 | 생성 뒤 거절(상위만 만들고 폴더 실패 등)에서 `created_by_this_call` 잔존 보고 | 코드 검토 | 합성 재현 없음(미검수) |
-| W12-3 | 탐지 한계 명시: 없는 경로를 가리키는 변수는 누락(허용), 동기화 안 된 폴더를 가리키는 변수는 오탐(거절·무생성) | `…::onedrive_variable_misses_and_false_positives_are_what_the_contract_says` | 기록 대기(미push) |
+| W12-3 | 탐지 한계 명시: 없는 경로를 가리키는 변수는 누락(허용), 동기화 안 된 폴더를 가리키는 변수는 오탐(거절·무생성) | `…::onedrive_variable_misses_and_false_positives_are_what_the_contract_says` | 통과: run 39490520619 (x64·arm64, head `8335d644…`) |
 | W12-4 | Core 방어: `start_visual` 자체도 위치 검사로 거절(네트워크·reparse 는 기존 W6-4·W1-2 가 실행) | `visual_start.rs` reserve | W6-4·W1-2 로 부분 실행 |
 | W12-5 | 실제 OneDrive 환경에서 사전 거절·안내·폴더 준비·선택 후 시작 | 사용자 PC | 미실행 |
 
