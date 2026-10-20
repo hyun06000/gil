@@ -104,7 +104,7 @@ jobs:
         run: |
           cargo +1.97.1 test --locked -p gil --features visual-authoring --target $env:GIL_NATIVE_TARGET --test visual_attachment --test visual_start --test visual_store --test windows_ordinary_user
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cargo +1.97.1 test --locked -p gil --features visual-authoring --target $env:GIL_NATIVE_TARGET --lib -- session::visual_start lock:: artifact::store visual_report:: windows_fs agent::
+          cargo +1.97.1 test --locked -p gil --features visual-authoring --target $env:GIL_NATIVE_TARGET --lib -- session::visual_start lock:: artifact::store visual_report:: windows_fs agent:: mcp::workspace::
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Native protocol, read-only Monitor and process restart
         shell: pwsh

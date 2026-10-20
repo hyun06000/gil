@@ -1160,8 +1160,32 @@ pub(crate) fn classify_location(root: &Path, sync_roots: &[PathBuf]) -> Result<(
 /// Environment-aware check used by `gil_start` and by the reservation itself.
 #[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
 pub(crate) fn unsupported_location(root: &Path) -> Result<(), UnsupportedLocation> {
+    #[cfg(test)]
+    if workspace_hooks::UNVERIFIABLE.with(Cell::get) {
+        return Err(unsupported(LocationKind::Unverifiable, "injected check failure"));
+    }
     classify_location(root, &sync_roots_from_env())
 }
+
+/// Test-only fault injection for the workspace flow (contract §6 W12-7). Not compiled into
+/// product builds.
+#[cfg(test)]
+pub(crate) mod workspace_hooks {
+    use std::cell::{Cell, RefCell};
+    use std::path::PathBuf;
+    thread_local! {
+        /// Replace `%USERPROFILE%` as the allowed range for this thread.
+        pub static ALLOWED_ROOT: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
+        /// Every location check fails (unverifiable) while set.
+        pub static UNVERIFIABLE: Cell<bool> = const { Cell::new(false) };
+        /// Fail the workspace folder creation right after the parent was created (once).
+        pub static FAIL_AFTER_PARENT: Cell<bool> = const { Cell::new(false) };
+        /// Make only the post-creation location check fail (once).
+        pub static UNVERIFIABLE_AFTER_CREATE: Cell<bool> = const { Cell::new(false) };
+    }
+}
+#[cfg(test)]
+use std::cell::Cell;
 
 // ── Approved local workspace preparation (Windows contract §4 W1 0) ──────────────────────────
 
@@ -1202,6 +1226,10 @@ pub(crate) struct WorkspaceFailure {
 /// The allowed range for new workspaces: the user profile, canonicalized.
 #[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
 pub(crate) fn allowed_workspace_root() -> io::Result<PathBuf> {
+    #[cfg(test)]
+    if let Some(root) = workspace_hooks::ALLOWED_ROOT.with(|c| c.borrow().clone()) {
+        return root.canonicalize();
+    }
     let profile = std::env::var_os("USERPROFILE").filter(|v| !v.is_empty()).ok_or_else(refused)?;
     PathBuf::from(profile).canonicalize()
 }
@@ -1295,7 +1323,15 @@ pub(crate) fn create_workspace(plan: &WorkspacePlan) -> Result<Vec<PathBuf>, Wor
         if plan.creates_parent {
             make(&plan.parent)?;
         }
+        #[cfg(test)]
+        if workspace_hooks::FAIL_AFTER_PARENT.with(Cell::take) {
+            return Err(WorkspaceRefusal::Io(io::Error::new(io::ErrorKind::PermissionDenied, "injected after parent")));
+        }
         make(&plan.path)?;
+        #[cfg(test)]
+        if workspace_hooks::UNVERIFIABLE_AFTER_CREATE.with(Cell::take) {
+            return Err(WorkspaceRefusal::Unsupported(unsupported(LocationKind::Unverifiable, "injected after creation")));
+        }
         // The result must itself pass the location check (no reparse, local fixed NTFS, no sync root).
         unsupported_location(&plan.path).map_err(WorkspaceRefusal::Unsupported)
     })();

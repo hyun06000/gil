@@ -148,3 +148,117 @@ fn refuse(refusal: win::WorkspaceRefusal) -> CallToolResult {
         Io(e) => fail("io_error", format!("폴더를 만들지 못했다: {e}")),
     }
 }
+
+/// Contract §6 W12-7: late failures report exactly what this call created, matching the file
+/// system; an unverifiable location refuses plan and creation without touching anything.
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::windows_fs::workspace_hooks as hooks;
+    use serde_json::json;
+    use std::collections::BTreeMap;
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn scratch(label: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("gil-workspace-{label}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        hooks::ALLOWED_ROOT.with(|c| *c.borrow_mut() = Some(root.clone()));
+        root
+    }
+    fn content(out: &CallToolResult) -> Value {
+        out.structured_content.clone().unwrap()
+    }
+    fn snapshot(root: &Path) -> BTreeMap<PathBuf, Option<Vec<u8>>> {
+        let mut out = BTreeMap::new();
+        fn walk(dir: &Path, out: &mut BTreeMap<PathBuf, Option<Vec<u8>>>) {
+            for entry in fs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() { out.insert(path.clone(), None); walk(&path, out); }
+                else { out.insert(path.clone(), Some(fs::read(&path).unwrap())); }
+            }
+        }
+        walk(root, &mut out);
+        out
+    }
+    fn plan(parent: &Path, name: &str) -> String {
+        let got = content(&call(json!({"name": name, "parent": parent, "confirm": false})));
+        assert_eq!(got["ok"], true, "{got}");
+        got["path"].as_str().unwrap().to_owned()
+    }
+    fn confirm(parent: &Path, name: &str, approved: &str) -> Value {
+        content(&call(json!({"name": name, "parent": parent, "confirm": true, "approved_path": approved})))
+    }
+
+    #[test]
+    fn child_failure_after_parent_creation_reports_the_parent_as_remaining() {
+        let base = scratch("after-parent");
+        let parent = base.join("상위 새 폴더");
+        let shown = plan(&parent, "작업");
+        assert!(!parent.exists());
+        hooks::FAIL_AFTER_PARENT.with(|c| c.set(true));
+        let got = confirm(&parent, "작업", &shown);
+        assert_eq!(got["ok"], false, "{got}");
+        assert_eq!(got["code"], "permission_denied");
+        assert_eq!(got["created_by_this_call"], json!([{"path": parent.display().to_string(), "remains": true}]), "{got}");
+        assert!(got["said"].as_str().unwrap().contains("1개 중 1개가 남아 있다"), "{got}");
+        // The report matches the file system: the parent exists and is empty, the folder does not.
+        assert!(parent.is_dir());
+        assert_eq!(fs::read_dir(&parent).unwrap().count(), 0);
+        assert!(!PathBuf::from(&shown).exists());
+        assert!(!hooks::FAIL_AFTER_PARENT.with(std::cell::Cell::get), "the injected failure fired exactly once");
+        // A second approved attempt on the now-existing parent creates only the folder.
+        let again = confirm(&parent, "작업", &shown);
+        assert_eq!(again["ok"], true, "{again}");
+        assert_eq!(again["created_by_this_call"], json!([shown]));
+    }
+
+    #[test]
+    fn unverifiable_location_refuses_plan_and_creation_without_touching_anything() {
+        let base = scratch("unverifiable");
+        let parent = base.join("기존 상위");
+        fs::create_dir(&parent).unwrap();
+        fs::write(parent.join("keep.txt"), b"user file").unwrap();
+        fs::create_dir(parent.join("other")).unwrap();
+        let before = snapshot(&base);
+        hooks::UNVERIFIABLE.with(|c| c.set(true));
+        let planned = content(&call(json!({"name": "새 폴더", "parent": parent, "confirm": false})));
+        assert_eq!(planned["ok"], false, "{planned}");
+        assert_eq!(planned["code"], "unsupported_location");
+        assert_eq!(planned["location_kind"], "unverifiable");
+        assert_eq!(planned["evidence"], "check_failed");
+        assert!(planned["said"].as_str().unwrap().contains("확인하지 못했습니다"), "{planned}");
+        let forced = confirm(&parent, "새 폴더", &parent.join("새 폴더").display().to_string());
+        assert_eq!(forced["code"], "unsupported_location", "{forced}");
+        assert_eq!(forced["created_by_this_call"], json!([]));
+        // Also with a missing parent: nothing is created either.
+        let missing = base.join("없는 상위");
+        let deeper = confirm(&missing, "x", &missing.join("x").display().to_string());
+        assert_eq!(deeper["code"], "unsupported_location", "{deeper}");
+        assert_eq!(deeper["created_by_this_call"], json!([]));
+        hooks::UNVERIFIABLE.with(|c| c.set(false));
+        assert_eq!(snapshot(&base), before, "an unverifiable location changes nothing");
+        // Once verifiable again the same plan proceeds.
+        let shown = plan(&parent, "새 폴더");
+        assert_eq!(confirm(&parent, "새 폴더", &shown)["ok"], true);
+    }
+
+    #[test]
+    fn unverifiable_result_after_creation_reports_both_entries_as_remaining() {
+        let base = scratch("after-create");
+        let parent = base.join("gil-projects");
+        let shown = plan(&parent, "작업");
+        hooks::UNVERIFIABLE_AFTER_CREATE.with(|c| c.set(true));
+        let got = confirm(&parent, "작업", &shown);
+        assert_eq!(got["ok"], false, "{got}");
+        assert_eq!(got["code"], "unsupported_location");
+        assert_eq!(got["location_kind"], "unverifiable");
+        assert_eq!(got["created_by_this_call"], json!([
+            {"path": parent.display().to_string(), "remains": true},
+            {"path": shown, "remains": true}]), "{got}");
+        assert!(got["said"].as_str().unwrap().contains("2개 중 2개가 남아 있다"), "{got}");
+        assert!(parent.is_dir() && PathBuf::from(&shown).is_dir());
+        assert_eq!(fs::read_dir(PathBuf::from(&shown)).unwrap().count(), 0);
+    }
+}
