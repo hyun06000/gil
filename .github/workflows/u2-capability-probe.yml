@@ -1,0 +1,50 @@
+name: U2 capability probe (synthetic)
+on:
+  pull_request:
+    paths:
+      - 'distribution/runtime-update/**'
+      - '.github/workflows/u2-capability-probe.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    name: U2 probe (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: windows-x64
+            runner: windows-2025
+            arch: x64
+          - label: windows-arm64
+            runner: windows-11-arm
+            arch: arm64
+          - label: macos-arm64
+            runner: macos-15
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Runner identity (read only; ordinary runner token, not the Codex Desktop environment)
+        shell: bash
+        run: |
+          node --version
+          node -e "if (process.arch !== process.env.EXPECTED_ARCH) { console.error('arch', process.arch); process.exit(1) }"
+          echo "runner user: $(whoami)"
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+      - name: Probe tests in isolated temp folders
+        shell: bash
+        run: node --test distribution/runtime-update/gil-u2-probe.test.mjs
+      - name: Keep run evidence (stdout, stderr, result JSON, exit codes)
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: u2-probe-evidence-${{ matrix.label }}-${{ github.sha }}
+          path: target/u2-probe-evidence
+          if-no-files-found: warn
