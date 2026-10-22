@@ -33,7 +33,7 @@ native 계약, unsigned 채널의 버전별 승인, 저장·이관 계약은 유
 | E4 | Windows `10.0.26300` x64, Node `v24.19.0`, CLI `0.163.0-alpha.10.2`, 사용자 전달 현장 보고 | 아래 A–E 재연결 관측, 격리 config/read 파싱·서버/command/args 일치, 두 별도 App Server stdin 종료 후 exit 0 | 후속 임시 폴더 접근 불가로 실행기·config 사후 해시와 개별 MCP 종료 미확인. 실제 Desktop UI·GIL·배포 원자성 미검수 |
 
 | E5 | 사용자 전달 프롬프트 방식(2026-10-23, Windows) | — | 전달한 probe 코드의 해시가 PC에서 불일치해 **시험 미실행, 원인 미확인**. 이 전달 방식(긴 시험 코드·PowerShell 실행 전달)은 중단한다 |
-| E6 | 저장소 내 자동 시험 `distribution/runtime-update/gil-u2-probe.test.mjs` + workflow `u2-capability-probe.yml` (2026-10-23 준비, **CI 미실행·승인 대기**) | Mac 로컬(node v26.5.0) 6 시험 통과: 정상 경로(배타 생성·충돌 보존, write/fsync/재읽기, 파일 rename 교체, 새 프로세스 선택값 읽기, 전후 digest, 자식 종료), rename 실패 주입(원본 보존·v1 유지·exit 1), 연산 예외 주입(실패가 성공으로 보고되지 않음), 쓰기 불가 작업 폴더(exit 2·무생성) | Windows x64·ARM64 runner 결과; Codex Desktop 제한 토큰·샌드박스·실제 MCP 연결·지속 저장소 접근(재현 안 함); 실제 rename 실패(주입임); 원자성·전원 차단 내구성 |
+| E6 | 저장소 내 자동 시험 `distribution/runtime-update/gil-u2-probe.test.mjs` + workflow `u2-capability-probe.yml`, head `6d65840a…`, [run 39845527374](https://github.com/hyun06000/gil/actions/runs/39845527374) (pull_request; artifact 이름·INDEX.json 의 commit = head) | windows-2025 x64(node v22.23.3)·windows-11-arm arm64(node v24.22.0)·macos-15(node v22.23.2) 각 10 시험 통과: 정상 경로(배타 생성·EEXIST 보존, write/fsync/재읽기, **파일 rename 교체 성공**(`fs.renameSync`, runner 관리자 토큰), 별도 프로세스 identity dev/ino·marker 일치, 새 프로세스 v2 읽기, 자식 exit 0·종료 확인), rename 실패 주입(원본 보존·v1 유지·exit 1), 연산 예외 주입·identity blind·지연 종료/garbage 서버·손상 결과(실패가 성공으로 보고되지 않음, 원문 증거 보존), 쓰기 불가 폴더(exit 2·무생성)·읽기 거부(error≠absent) — fixture 전제(EPERM)와 토큰 활성 권한(SeBackup/SeRestore 없음) 기록. 첫 실행 run 39843768112 는 Git Bash 단계에서 ACL deny 가 비강제(Windows 2 job 실패) → pwsh 로 전환·전제 검사 추가 후 통과(원인은 MSYS 가 관리자 토큰의 backup/restore 권한을 활성화한다는 추정; 그 실행에서는 권한 목록 미기록) | Codex Desktop 제한 토큰·샌드박스·실제 MCP 연결·지속 저장소 접근(재현 안 함); 사용자 PC 의 E3 디렉터리 rename EPERM 환경에서 파일 rename 이 되는지(미관측); 실제 rename 실패(주입임); 원자성·전원 차단 내구성; 경합 |
 
 E4 세부 관측:
 
@@ -133,7 +133,7 @@ E4 보고에 포함된 합성 소스 SHA-256은 v1
 | --- | --- | --- |
 | U0 근거 정리 | CI/Mac 직접 실행/Windows 사용자 보고/미확인을 분리 | 이 문서 반영. E4 원본·사후 검증 부족 유지 |
 | U1 제품 설계 | native 실행기, 소유 저장 위치, 공식 Host 경계, Core/Skill 호환, 초기 도입·자기 갱신·실패 상태 확정 | [U1 결정안](GIL_Runtime_Update_Design_v0.1.md) 작성. 저장소/Host/신뢰/초기 도입 미결, 진행 중 |
-| U2 안전 배포 | 실제 대상 권한에서 불변 버전 공개·선택 원자성·경합/중단/실패 보존·신뢰 검증 | 미완. E1/E3/E4를 합쳐 통과로 세지 않음. E6 자동 probe(파일 수준 연산·실패 보존·새 프로세스 관측)는 준비됐고 CI 실행은 승인 대기; 통과해도 제한 토큰·원자성·내구성은 별도 |
+| U2 안전 배포 | 실제 대상 권한에서 불변 버전 공개·선택 원자성·경합/중단/실패 보존·신뢰 검증 | 미완. E1/E3/E4를 합쳐 통과로 세지 않음. E6 자동 probe 가 Windows x64·ARM64·macOS runner 에서 통과(run 39845527374); 제한 토큰·실제 PC 의 파일 rename·원자성·내구성·경합은 별도 |
 | U3 실제 GIL 격리 | 합성 Project로 Core 두 판·Skill·저장/이미지·잠금·재연결·응답 유실·rollback 검증 | 미실행 |
 | U4 Desktop 종단 | 공식 Plugin으로 최초 설치/교체, 한 문장 요청·승인·적용 상태·UI/채팅·프로세스 정리, 셸 조작 불요 | 미실행 |
 | U5 채널 인수 | OS/CPU별 지원표·서명/고지·설치·제거·복구·외부 비개발자 인수 뒤 별도 게시 승인 | 미완 |
