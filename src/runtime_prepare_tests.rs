@@ -80,6 +80,16 @@ fn partial_first_run(digest: &str, n: usize) -> Vec<String> {
     if let Some(l) = v.iter_mut().find(|l| **l == SUPERSEDED) { *l = "store.json".into(); }
     v
 }
+/// A directory taken from under its name is refused at the final name re-check (Unix,
+/// `Stage::Reobserve`) or already at the directory flush, which on Windows re-opens the pinned
+/// directory by path and verifies its identity (`Stage::Complete`, reason "flush"). Both are
+/// refusals with accurate object reports; the branch taken is printed for the log.
+fn assert_refused_by_name_check(e: &Refusal, what: &str) {
+    let ok = matches!(e.stage, Stage::Reobserve) || (matches!(e.stage, Stage::Complete) && e.reason.contains("flush"));
+    assert!(ok, "{what}: {e:?}");
+    println!("OBSERVED {what}: refused at {:?} ({})", e.stage, e.reason);
+}
+thread_local! { static SWAP_REFUSED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
 fn presence_of<'a>(objects: &'a [Object], label: &str) -> &'a Presence { &objects.iter().find(|o| o.label == label).unwrap_or_else(|| panic!("{label} not reported in {objects:?}")).presence }
 /// Everything created must be reported as the same object, except the initializing record this
 /// call itself replaced.
@@ -395,10 +405,21 @@ fn a_swapped_versions_directory_is_refused_at_reobservation_and_everything_is_re
     let src = fx.source("core-a", &a);
     let b = bytes_b(); let src_b = fx.source("core-b", &b);
     prepare(&fx.root, &Request { version: V2, expected_sha256: &sha(&b), source: &src_b }).unwrap();
+    SWAP_REFUSED.with(|c| c.set(false));
     hooks::AFTER_VERSION_DIR.with(|c| c.set(Some(swap_versions_for_link)));
-    let e = prepare(&fx.root, &Request { version: V1, expected_sha256: &d, source: &src }).unwrap_err();
+    let r = prepare(&fx.root, &Request { version: V1, expected_sha256: &d, source: &src });
     hooks::reset();
-    assert_eq!(e.stage, Stage::Reobserve, "{e:?}");
+    if SWAP_REFUSED.with(|c| c.get()) {
+        // Windows refuses to rename versions/ while a handle is open beneath it: the swap never
+        // happened, so the preparation must simply complete (branch printed for the log).
+        println!("OBSERVED versions/ swap: the OS refused the rename while a handle was held beneath it; no swap happened");
+        let r = r.unwrap();
+        assert_eq!(r.outcome, Outcome::Prepared); assert_all_same(&r.objects);
+        assert!(fx.has(&format!("{}/{COMPLETE_FILE}", vdir(V1, &d))));
+        return;
+    }
+    let e = r.unwrap_err();
+    assert_refused_by_name_check(&e, "versions/ swapped for a link");
     assert_eq!(e.created, vec![reserve(V1), vdir(V1, &d), format!("{}/{CORE_FILE}", vdir(V1, &d)), format!("{}/{COMPLETE_FILE}", vdir(V1, &d))]);
     assert_all_same(&e.objects);
     assert!(fx.base.join("versions-moved").join(version_dirname(V1, &d)).join(COMPLETE_FILE).exists());
@@ -417,7 +438,7 @@ fn created_objects_are_reported_by_identity_not_by_name() {
     hooks::AFTER_VERSION_DIR.with(|c| c.set(Some(replace_version_dir_under_its_name)));
     let e = prepare(&fx.root, &Request { version: V1, expected_sha256: &d, source: &src }).unwrap_err();
     hooks::reset();
-    assert_eq!(e.stage, Stage::Reobserve, "{e:?}");
+    assert_refused_by_name_check(&e, "version directory replaced under its name");
     assert_eq!(*presence_of(&e.objects, &vdir(V1, &d)), Presence::Replaced, "{e:?}");
     assert_eq!(*presence_of(&e.objects, &format!("{}/{CORE_FILE}", vdir(V1, &d))), Presence::SameObject);
     assert_eq!(*presence_of(&e.objects, &format!("{}/{COMPLETE_FILE}", vdir(V1, &d))), Presence::SameObject);
@@ -432,7 +453,7 @@ fn created_objects_are_reported_by_identity_not_by_name() {
     hooks::AFTER_VERSION_DIR.with(|c| c.set(Some(move_version_dir_away)));
     let e = prepare(&fx.root, &Request { version: V1, expected_sha256: &d, source: &src }).unwrap_err();
     hooks::reset();
-    assert_eq!(e.stage, Stage::Reobserve, "{e:?}"); assert!(e.reason.contains("vanished"), "{e:?}");
+    assert_refused_by_name_check(&e, "version directory moved away");
     assert_eq!(*presence_of(&e.objects, &vdir(V1, &d)), Presence::Absent, "{e:?}");
     assert_eq!(*presence_of(&e.objects, &format!("{}/{COMPLETE_FILE}", vdir(V1, &d))), Presence::SameObject);
     assert!(e.created.contains(&vdir(V1, &d)) && !e.remaining.contains(&vdir(V1, &d)));
@@ -607,7 +628,13 @@ fn restore_protection(path: &Path, _executable: bool) { icacls(&["/reset"], path
 #[cfg(windows)]
 fn swap_versions_for_link(root: &Path) {
     let v = root.join(VERSIONS_DIR); let base = root.parent().unwrap().to_path_buf();
-    fs::rename(&v, base.join("versions-moved")).unwrap();
+    if let Err(e) = fs::rename(&v, base.join("versions-moved")) {
+        // CI run 39873558592: "Access is denied" — the OS refuses to rename a directory with an
+        // open handle beneath it. Recorded; the test asserts the no-swap outcome.
+        println!("OBSERVED versions/ rename refused by the OS: {e}");
+        SWAP_REFUSED.with(|c| c.set(true));
+        return;
+    }
     fs::create_dir(base.join("elsewhere")).unwrap();
     let powershell = PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32/WindowsPowerShell/v1.0/powershell.exe");
     let made = std::process::Command::new(powershell)
