@@ -103,10 +103,15 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
    대화 중인 사용자와 같은지는 별개의 사실이며 이 검사가 보장하지 않는다(`location_check.registry_hive`
    에 그대로 적는다). 상태: `queried{roots, stale, key_present}`(정상 조회; `key_present:false` 는
    선택적 등록 키 자체가 없음 = 등록 없음, stale 은 폴더가 없는 오래된 등록으로 기록만 함) /
-   `absent`(하이브가 로드되지 않음; 답 없음으로 보고하고 계속) / `failed`(접근 거부, 부분 열거 실패,
-   REG_SZ/REG_EXPAND_SZ 가 아닌 값, 이 프로세스에서 확장할 수 없는 `%VAR%`, 빈 값). **조회 실패는
-   등록 없음이 아니다**: 어느 소스든 `failed` 면 `unverifiable` 로 거절한다. 없는 선택적 키·값·하이브는
-   실패가 아니다. 값은 폴더가 있으면 canonicalize 해 구성 요소 단위·대소문자
+   `absent`(서버 실행 계정의 하이브가 로드되지 않음 = 조회 자체가 불가능) / `failed`(접근 거부, 부분
+   열거 실패, REG_SZ/REG_EXPAND_SZ 가 아닌 값, 이 프로세스에서 확장할 수 없는 `%VAR%`, 빈 값).
+   **조회 실패·조회 불가능은 등록 없음이 아니다**(2026-10-23 개정): 어느 소스든 `failed` 또는 `absent`
+   면 `unverifiable` 로 무생성 거절하며, 이는 `gil_start`·`start_visual`·`gil_prepare_workspace` 의
+   계획과 생성에 똑같이 적용된다. 없는 선택적 키·값은 정상 조회(`key_present:false`)이고 실패가 아니다.
+   `unverifiable` 거절은 별도 작업 폴더 준비를 제안하지 않는다(같은 이유로 거절되므로 확인의 대체가
+   될 수 없다; 응답에 `suggested_parent` 없음, `next` 는 보고 후 중단). **한계:** 서버가 하이브가
+   로드되지 않은 계정으로 실행되면 정상 로컬 폴더도 차단된다. 이는 의도된 보수적 판정이며,
+   `location_check`/거절 `detail` 에 "not loaded" 로 드러난다. 값은 폴더가 있으면 canonicalize 해 구성 요소 단위·대소문자
    무시로 비교하므로 `…\OneDrive` 와 `…\OneDriveBackup` 은 구분되고 중첩 루트·한글·공백은 그대로
    다룬다. 알려진 폴더 리디렉션은 리디렉션 대상이 등록 루트 아래일 때만 잡히며, 그렇지 않은
    리디렉션은 잡지 않는다(누락으로 기록).
@@ -303,6 +308,7 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
 | W12-2 | `gil_prepare_workspace` 계획은 무생성(기본 상위 포함), `approved_path` 없음/불일치는 무생성 거절, 승인 생성은 정확히 그 경로(상위 포함)·빈 폴더·`created_by_this_call` 정확, 같은 이름 재요청은 `exists` 무변경·대체 이름 없음, 동기화 루트 아래·프로필 밖·불안전 이름·`..` 은 무생성 거절, 한글·공백 상위/이름, 없는 조상 `parent_missing`, 계획 뒤 상위가 junction 으로 바뀌면 생성 직전 재검사가 `reparse_point`(observed) 거절·대상 무변경, 생성 거부 ACL 은 `permission_denied`·무생성, 준비된 폴더에서 명시 root 로 `gil_start` 성공 | 같은 시험 | 통과: run 39490520619 (x64·arm64, head `8335d644…`) |
 | W12-6 | Agent 가 경로와 백업 확인 범위를 설명한 뒤 턴을 끝내고 기다리는지, 승인 뒤에도 앱 선택 전에는 `gil_start` 를 부르지 않는지 | Skill 회귀(`skill.test.mjs`, 문구) + 화면 검수 | 문구 회귀만 실행; 화면 미검수 |
 | W12-8 | OneDrive 환경 변수 없이 사용자 하이브 등록(`SyncEngines\Providers\GilTest\…\MountPoint`)만 있을 때 그 아래 `gil_start` → `unsupported_location`/`sync_root`/`declared_by_registry` 무생성 거절, 작업 폴더 준비도 거절, 루트 밖 정상 시작의 `location_check` 에 소스 3개·`queried`·한계 문장; 단위: 발견/등록 없음/하이브 실패/값 해석 실패(REG_DWORD·미확장 `%VAR%`)/오래된 등록/여러 계정/경로 경계/중첩/한글·공백/`%TEMP%` 확장/토큰 하이브 일치 | `tests/mcp.rs::registry_declared_sync_root_…`(CI 한정 `GIL_TEST_REAL_REGISTRY=1`), `…::successful_start_reports_…`, `src/windows_fs.rs::sync_root_tests` | 통과: run 39763350705 (x64·arm64, head `d3b54f5…`; 일반 사용자 driver 포함) |
+| W12-10 | 서버 실행 계정의 하이브 미로드(`absent`) → `gil_start`·작업 폴더 계획 모두 `unverifiable`/`check_failed` 무생성 거절, 작업 폴더 제안 없음, 하이브 복귀 후 같은 폴더 통과; 일반 사용자 driver: 프로필 로드 모드는 `queried` 만 허용(absent/failed 금지), 프로필 미로드 모드는 독립 관측한 하이브 상태에 따라 거절(무생성·`not loaded`·`suggested_parent` 없음) 또는 정상 시작을 각각 검증 | `src/windows_fs.rs::sync_root_tests::a_hive_that_is_not_loaded_…`, `tests/windows_ordinary_user.rs::without_a_loaded_profile_…` | 기록 대기(미push) |
 | W12-9 | start 성공 뒤 `.gil` 보호 상실(시험 폴더에 상속 재활성화) → `gil_help`/`gil_status`/`gil_context` 가 `code: storage_protection_lost`·`records_preserved`·"권한·상속·소유권·보안 설정 변경을 요청하지 않는다"·"동기화 폴더라고 단정하지 않고" 로 거절, 기록·ACL 불변, 같은 자리 재시작 거절 | `tests/mcp.rs::reopen_after_protection_loss_…` | 통과: run 39763350705 (x64·arm64, head `d3b54f5…`; 일반 사용자 driver 포함) |
 | W12-7 | 상위 생성 뒤 폴더 생성 실패 주입 → `permission_denied`·`created_by_this_call`=[상위, remains:true]가 실제 파일 상태와 일치, 재승인 시 폴더만 생성; 위치 확인 실패(`unverifiable`, `check_failed`) 주입 → 계획·생성 모두 무생성 거절, 기존 항목 스냅샷 불변, 해제 뒤 정상; 생성 뒤 확인 실패 주입 → 두 항목 remains:true 보고·실존. 훅은 `cfg(test)` 전용(제품 빌드 미포함) | `src/mcp/workspace.rs::tests` (lib, `mcp::workspace::` 필터) | 통과: run 39497051365 (x64·arm64, head `4584dfe4…`); 후보 dispatch 39497946422 |
 | W12-3 | 탐지 한계 명시: 없는 경로를 가리키는 변수는 누락(허용), 동기화 안 된 폴더를 가리키는 변수는 오탐(거절·무생성) | `…::onedrive_variable_misses_and_false_positives_are_what_the_contract_says` | 통과: run 39490520619 (x64·arm64, head `8335d644…`) |
