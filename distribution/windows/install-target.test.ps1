@@ -94,9 +94,15 @@ foreach ($candidate in @(
 $guide = Get-Content -Raw -Encoding UTF8 (Join-Path $PSScriptRoot 'DEV-CANDIDATE-CHECK.md')
 if ($guide -notmatch '(?s)<!-- gil-cpu-detect:begin -->\s*```powershell\r?\n(.*?)```\s*<!-- gil-cpu-detect:end -->') { throw 'guidance block not found' }
 $block = ($Matches[1] -split "`r?`n" | ForEach-Object { $_ -replace '^   ', '' }) -join "`n"
-function Invoke-Host([string]$exe, [string]$script) {
+# The guidance block is inline, so it runs under any execution policy without a file or a policy
+# change; that is exactly what the user's PC needs and what the no-flag runs prove. Loading the
+# module *file* is a harness convenience only, so those runs get a process-scoped Bypass (the
+# runner's policy is not changed). Child stderr is data here, never a terminating error.
+function Invoke-Host([string]$exe, [string]$script, [switch]$AllowFileScripts) {
+    $ErrorActionPreference = 'Continue'
     $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($script))
-    $out = & $exe -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1 | ForEach-Object { "$_" }
+    $policy = @(); if ($AllowFileScripts) { $policy = @('-ExecutionPolicy', 'Bypass') }
+    $out = & $exe -NoProfile -NonInteractive @policy -EncodedCommand $encoded 2>&1 | ForEach-Object { "$_" }
     @{ exit = $LASTEXITCODE; lines = @($out) }
 }
 $preludes = [ordered]@{
@@ -110,11 +116,12 @@ $preludes = [ordered]@{
 $moduleScript = "Import-Module '$modulePath' -Force; try { Get-GilInstallTarget | ConvertTo-Json -Compress } catch { 'REFUSED: ' + `$_.Exception.Message; exit 3 }"
 foreach ($exe in $hosts) {
     $machine = Get-PeMachine $exe
-    $results.hosts += @{ exe = ($exe -replace [regex]::Escape($env:SystemDrive), '<sys>'); machine = $machine }
+    $policyRun = Invoke-Host $exe 'Get-ExecutionPolicy'
+    $results.hosts += @{ exe = ($exe -replace [regex]::Escape($env:SystemDrive), '<sys>'); machine = $machine; execution_policy = ($policyRun.lines -join ' ') }
     foreach ($name in $preludes.Keys) {
         $prelude = $preludes[$name]
         # Module
-        $run = Invoke-Host $exe ($prelude + "`n" + $moduleScript)
+        $run = Invoke-Host $exe ($prelude + "`n" + $moduleScript) -AllowFileScripts
         $last = $run.lines[-1]
         $case = @{ host = $machine; prelude = $name; kind = 'module'; last = $last }
         switch ($name) {
@@ -123,7 +130,7 @@ foreach ($exe in $hosts) {
                 if ($run.exit -ne 3 -or $last -notmatch "^REFUSED: .*$needle" -or $last -notmatch 'ARM 기반 프로세서') { throw "[$machine/$name/module] expected refusal with the minimal question, got: $last" }
             }
             default {
-                if ($run.exit -ne 0) { throw "[$machine/$name/module] exit $($run.exit): $($run.lines -join ' | ')" }
+                if ($run.exit -ne 0) { throw "[$machine/$name/module] $exe exit $($run.exit): $($run.lines -join ' | ')" }
                 $t = $last | ConvertFrom-Json
                 if ($t.architecture -ne $native) { throw "[$machine/$name/module] architecture $($t.architecture) != $native" }
                 if ($t.process_architecture -ne $machine) { throw "[$machine/$name/module] process view $($t.process_architecture) != host $machine" }
@@ -142,7 +149,7 @@ foreach ($exe in $hosts) {
             'all_refused'   { if ($last -ne 'UNDETERMINED -> stop and ask') { throw "[$machine/$name/guidance] $last" } }
             'contradiction' { if ($last -ne 'CONTRADICTION: arm64,x64 -> stop and ask') { throw "[$machine/$name/guidance] $last" } }
             default {
-                if ($last -ne "NATIVE CPU: $native") { throw "[$machine/$name/guidance] $last | $sourcesLine" }
+                if ($last -ne "NATIVE CPU: $native") { throw "[$machine/$name/guidance] $exe exit $($run.exit): $($run.lines -join ' | ')" }
                 if ($sourcesLine -notmatch '^sources: ' -or $sourcesLine -notmatch "PROCESSOR_ARCHITECTURE=") { throw "[$machine/$name/guidance] sources line missing: $sourcesLine" }
                 if ($name -like 'cim_*' -and $sourcesLine -notmatch 'cim=n/a' ) { throw "[$machine/$name/guidance] cim must be n/a: $sourcesLine" }
                 if ($name -eq 'registry_refused' -and $sourcesLine -notmatch 'sysenv=n/a cpuid=n/a') { throw "[$machine/$name/guidance] registry must be n/a: $sourcesLine" }
