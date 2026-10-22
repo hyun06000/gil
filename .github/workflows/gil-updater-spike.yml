@@ -1,0 +1,46 @@
+name: GIL deletion-free updater experiment
+on:
+  push:
+    branches: [experiment/deletion-free-updater-20261023]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            arch: x64
+            target: x86_64-pc-windows-msvc
+          - runner: windows-11-arm
+            arch: arm64
+            target: aarch64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
+    env:
+      RUSTUP_TOOLCHAIN: 1.97.1
+      GIL_REQUIRE_WINDOWS: '1'
+      GIL_EXPECT_ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Prepare native fixture compiler
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --target ${{ matrix.target }}
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Pure launcher regressions
+        shell: pwsh
+        working-directory: experiments/gil-updater-spike
+        run: |
+          node --test launcher.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Native executable side-by-side lifecycle
+        shell: pwsh
+        working-directory: experiments/gil-updater-spike
+        run: |
+          node run-native.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
