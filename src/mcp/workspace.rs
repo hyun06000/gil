@@ -256,7 +256,7 @@ mod tests {
         assert_eq!(planned["code"], "unsupported_location");
         assert_eq!(planned["location_kind"], "unverifiable");
         assert_eq!(planned["evidence"], "check_failed");
-        assert!(planned["said"].as_str().unwrap().contains("확인하지 못했습니다"), "{planned}");
+        assert!(planned["said"].as_str().unwrap().contains("확인할 수 없었습니다") && planned["said"].as_str().unwrap().contains("확인을 대신하지 않습니다"), "{planned}");
         let forced = confirm(&parent, "새 폴더", &parent.join("새 폴더").display().to_string());
         assert_eq!(forced["code"], "unsupported_location", "{forced}");
         assert_eq!(forced["created_by_this_call"], json!([]));
