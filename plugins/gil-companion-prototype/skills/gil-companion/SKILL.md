@@ -137,7 +137,10 @@ it is a support-scope notice (for example “선택한 폴더는 OneDrive 설정
 Its `evidence` says what the refusal rests on (`observed` by the OS, `declared_by_environment`, or
 `check_failed`); never upgrade a declared or failed check into “this is OneDrive”. Do not retry
 `gil_start` there, do not change OneDrive or sync settings, and do not touch any existing project
-files, `.gil` or permissions. Then, only if the user says yes:
+files, `.gil` or permissions. **If `evidence` is `check_failed`** (`location_kind: unverifiable`),
+the check itself could not run: report GIL's words and stop — do not offer `gil_prepare_workspace`
+(it is refused for the same reason) and do not present a local folder as a substitute for the
+check. Otherwise, only if the user says yes:
 
 1. `gil_prepare_workspace(name, confirm: false)` (parent defaults to `%USERPROFILE%\gil-projects`
    and must stay under the user profile; use the selected folder's name unless the user names
