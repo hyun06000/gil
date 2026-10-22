@@ -100,6 +100,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo +1.97.1 test --locked -p gil --test mcp --target $env:GIL_NATIVE_TARGET @features
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Runtime update state judge (pure; both profiles)
+        shell: pwsh
+        run: |
+          $features = if ($env:GIL_RUNTIME_PROFILE -eq 'visual-authoring') { @('--features', 'visual-authoring') } else { @() }
+          # The judge is pure (no file access, no execution); the count must show 18 executed tests.
+          cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET @features --lib -- runtime_state::
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Image-report storage boundaries (Windows contract v0.1 §6)
         if: matrix.profile == 'visual-authoring'
         shell: pwsh

@@ -74,6 +74,38 @@ E4 보고에 포함된 합성 소스 SHA-256은 v1
 - **사용자 Project:** 업데이트 승인과 Project 쓰기/이관 승인은 다르다. 실제 자료로 probe하지 않고
   파일 교체 때문에 `.gil` ACL·기록·저장 형식을 바꾸지 않는다.
 
+- **bootstrap·진단 상태(2026-10-23 결정, 2차 보정):** 번들 Core의 bootstrap 실행은 **선택 이력이 없는 상태**
+  (최초 사용, 또는 **유효한** `store.json`으로 초기화/준비 중·준비 완료·미선택이 확인되고 선택 의도 기록
+  `intent.json`이 없는 경우)에서만 허용한다. 루트가 있는데 `store.json`이 없거나 손상된 불명확 상태, 선택
+  의도가 기록됐는데 유효 selection이 없는 상태는 `damaged`로 진단 전용이다. 선택 공개 전에 의도를
+  내구화하고 이력 갱신 뒤에 제거하는 기록 순서로 selection 교체와 이력 갱신 사이 중단을 보수적으로 다룬다.
+  판정 규칙: intent가 없으면 selection generation과 `last_generation`이 같아야 `selected`; 유효 intent가
+  있으면 selection이 intent와 generation·버전·digest에서 일치하고 intent가 `last_generation+1`
+  (이력 갱신 전) 또는 `last_generation`(정리 전)일 때만 `selected`(+중단 흔적); 그 밖의 intent 손상·대상
+  불일치·설명되지 않는 generation 차이는 `damaged`. 정본 구현은 파일 접근 없는 순수 판정기
+  (`src/runtime_state.rs`)다. 선택 이력
+  뒤의 소실·손상·버전 부재(`damaged`)와 접근 거부·보호 검사 실패(`blocked`)에서는 일반 GIL Core를 자동 실행하지
+  않고 진단 전용 상태로 뜬다. Project 도구는 두 상태 모두 금지하고 자동 rollback도 금지한다. `damaged`에서
+  보호 검사가 통과한 경우에만 명시적 승인 아래 같은 prepare/select 도구로 복구하며, `blocked`에서는 복구
+  도구를 제공하지 않고 검사를 우회하지 않는다. 상태표·기록 순서는 구현 설계안 §1.1~1.2를 정본으로 한다
+  (루트 전체 삭제는 초기화와 동치, 한계로 명시).
+- **선택 교체 직렬화:** `selection.lock` OS 잠금 아래에서 재읽기→generation 검증→파일 교체를 수행한다. 잠금
+  실패는 무변경 거절이며 stale lock 강제 회수를 하지 않는다.
+- **저장소 보호:** 두 검사를 분리한다 — 현재 토큰의 접근 가능성(AccessCheck; Core 파일은 실행 권한 포함)과
+  허용되지 않은 주체의 권한 부재(기존 `.gil` 보호 DACL 검증의 재사용: 허용 SID 2개·ACE 수·상속 플래그·보호
+  비트). AccessCheck 한 번으로 후자를 증명하지 않으며 기본 상속 ACL·읽기 전용 속성만으로 안전을 주장하지
+  않는다. macOS는 실행 파일(0500)과 데이터 파일(0600) 모드를 구분하고 확장 ACL 부재를 요구하며, 조상 경로는
+  reparse/symlink·소유자·모드까지만 검사한다(조상 ACL은 한계). reparse·hardlink를 거절하고, 검증 후
+  교체 경쟁은 핀 고정 핸들로 방어하되 같은 사용자 권한의 코드·관리자 ACL 변경은 범위 밖이다. 기존 사용자 폴더
+  ACL은 자동 수정하지 않는다.
+- **후보 실행 전 신뢰 게이트:** descriptor 조회도 실행이다. archive 내부 receipt와 호출자가 준 hash만으로
+  publisher 신뢰가 성립하지 않는다. unsigned 개발 채널에서는 고정 출처 패턴·전체 digest 3중 일치(사용자 승인값·
+  `SHA256SUMS`·receipt)·승인 기록·정적 검사를 모두 통과한 뒤에만 제한된 descriptor 실행을 허용하며, 이는
+  인증이 아님을 명시한다. 서명 채널은 별도.
+- **미검증 유지:** 저장소 쓰기를 서버 도구가 하더라도 서버의 접근 권한·다운로드 파일 읽기·저장소 지속성은
+  prerelease 실측 전까지 미검증이다. 최초 도입의 공식 Plugin 교체 문제는 미해결이다. 합성 두 버전 시험과 실제
+  GIL 두 버전의 의미·저장 호환 시험(U3)은 분리한다.
+
 `config/mcpServer/reload` 반환 성공이나 manifest의 최신 버전 표시는 새 Core 실행의 증거가 아니다.
 새 연결이 보고하는 실행 버전/빌드 식별과 실제 도구 응답으로 확인한다. PID는 시험 보조 증거다.
 별도 App Server의 새 thread를 실제 Desktop의 모든 새 대화 동작으로 일반화하지 않는다.
