@@ -48,7 +48,9 @@ position is in doubt read `gil_status` / `gil_context` first. Then act by the ki
   position. Do not send a different action instead.
 - **Permission, compatibility or approval refusals** (unsupported platform or storage format,
   `visual_upgrade_required`, an action the user has not approved, a locked or unreadable folder):
-  do not repeat the call. Explain GIL's words and what the user would have to decide.
+  do not repeat the call. Explain GIL's words and what the user would have to decide. **Never ask
+  the user to change ACLs, inheritance, ownership or security settings**, and never change them
+  yourself: GIL does not repair records, and a permission error alone does not say why it happened.
 - **Busy, lost connection or an uncertain close** keep their own rules in this document (wait for
   the call in flight; never repeat `gil_start`; never automatically repeat a visual close).
 
@@ -152,6 +154,15 @@ files, `.gil` or permissions. Then, only if the user says yes:
 3. Creating the folder is not connecting it. Ask the user to select the new folder as the working
    folder in the app, then wait. Only when that folder is the explicitly selected working folder
    call `gil_start` there; never claim it is connected because the path exists.
+
+**Storage protection lost on reopen (Windows, `code: storage_protection_lost`).** A later call
+(`gil_status`, `gil_help`, `gil_open`, …) can refuse because the `.gil` folder's protection is no
+longer verified. The records are preserved and GIL changed nothing. Pass on its `said`; do not
+ask the user to change ACLs, inheritance, ownership or security settings; do not conclude from the
+permission error that the folder is a sync folder, and do not replace this Project with a new one
+or start again in the same place. Only if the user chooses to continue somewhere else, follow the
+unsupported-location steps above (`gil_prepare_workspace`, approval of the exact path, selection
+in the app) — the existing records stay where they are.
 
 Report three things separately and never fold them into one "done":
 

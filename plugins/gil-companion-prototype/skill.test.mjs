@@ -68,6 +68,8 @@ test("Skill 이 부르는 도구 이름은 전부 실제 tool 표에 있다", ()
     if (name === "gil_prepare_workspace") {
       // Windows development surface only (src/mcp/workspace.rs); mentioned solely in the
       // unsupported-location paragraph, which is entered only after that refusal code.
+      // Allowed only in the unsupported-location paragraph and the protection-lost paragraph
+      // that hands over to it; never in the normal start flow.
       const paragraph = SKILL.slice(SKILL.indexOf("**Unsupported location at start"), SKILL.indexOf("Report three things separately"));
       assert.ok(paragraph.includes(name));
       assert.ok(!SKILL.replace(paragraph, "").includes(name), "gil_prepare_workspace must not appear in the normal start flow");
