@@ -24,6 +24,12 @@ fn icacls(args: &[&str], target: &Path) {
     let out = std::process::Command::new(system32("icacls.exe")).arg(target).args(args).output().unwrap();
     assert!(out.status.success(), "icacls {args:?} on {}: {} {}", target.display(), String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
 }
+/// `icacls` listing of one entry, quoted in assertion messages so a CI failure shows the DACL
+/// the fixture actually produced (CI run 39865476127: a /grant + /remove:g pair left 4 ACEs).
+fn acl(path: &Path) -> String {
+    let out = std::process::Command::new(system32("icacls.exe")).arg(path).output().unwrap();
+    format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr))
+}
 /// Junction fixture (no privilege required). Paths travel as environment values, never as
 /// shell source.
 fn junction(link: &Path, target: &Path) {
@@ -179,9 +185,11 @@ fn w_protection_failures_block_and_stop_the_descent() {
     // an extra explicit ACE on a record: DACL structure check fails, record not read
     icacls(&["/grant", "*S-1-1-0:(R)"], &fx.root.join("store.json"));
     let (o, v) = observe_checked(&fx);
-    assert!(blocked_with(&o, "store.json protection") && blocked_with(&o, "(not read)"), "{o:?}");
+    assert!(blocked_with(&o, "store.json protection") && blocked_with(&o, "3 ACEs") && blocked_with(&o, "(not read)"), "{o:?}\n{}", acl(&fx.root.join("store.json")));
     assert!(matches!(v.state, State::Blocked { .. })); assert_eq!(v.run, Run::None);
-    icacls(&["/remove:g", "*S-1-1-0"], &fx.root.join("store.json"));
+    icacls(&["/reset"], &fx.root.join("store.json")); // back to the inherited-only ACEs
+    let o = observe(&fx.root);
+    assert!(o.observation.blocked.is_empty(), "{o:?}\n{}", acl(&fx.root.join("store.json")));
     // versions/ with a protected (non-inherited) DACL: the candidate below is not read
     icacls(&["/inheritance:d"], &fx.root.join("versions"));
     let o = observe(&fx.root);
@@ -190,14 +198,17 @@ fn w_protection_failures_block_and_stop_the_descent() {
     // complete marker with an extra ACE: Core not read
     icacls(&["/grant", "*S-1-1-0:(R)"], &fx.version_dir(&d).join("complete"));
     let o = observe(&fx.root);
-    assert!(blocked_with(&o, "complete protection") && blocked_with(&o, "(Core not read)") && !checked(&o, "digest equals"), "{o:?}");
-    icacls(&["/remove:g", "*S-1-1-0"], &fx.version_dir(&d).join("complete"));
+    assert!(blocked_with(&o, "complete protection") && blocked_with(&o, "3 ACEs") && blocked_with(&o, "(Core not read)") && !checked(&o, "digest equals"), "{o:?}\n{}", acl(&fx.version_dir(&d).join("complete")));
+    icacls(&["/reset"], &fx.version_dir(&d).join("complete"));
+    let o = observe(&fx.root);
+    assert!(o.observation.blocked.is_empty(), "{o:?}\n{}", acl(&fx.version_dir(&d).join("complete")));
     // Core with an extra ACE: not hashed
     icacls(&["/grant", "*S-1-1-0:(RX)"], &fx.version_dir(&d).join(CORE_FILE));
     let o = observe(&fx.root);
-    assert!(blocked_with(&o, "gil.exe protection") && blocked_with(&o, "(not hashed)"), "{o:?}");
-    icacls(&["/remove:g", "*S-1-1-0"], &fx.version_dir(&d).join(CORE_FILE));
-    assert!(observe(&fx.root).observation.blocked.is_empty(), "{:?}", observe(&fx.root));
+    assert!(blocked_with(&o, "gil.exe protection") && blocked_with(&o, "3 ACEs") && blocked_with(&o, "(not hashed)"), "{o:?}\n{}", acl(&fx.version_dir(&d).join(CORE_FILE)));
+    icacls(&["/reset"], &fx.version_dir(&d).join(CORE_FILE));
+    let o = observe(&fx.root);
+    assert!(o.observation.blocked.is_empty(), "{o:?}\n{}", acl(&fx.version_dir(&d).join(CORE_FILE)));
     // the root loses its protected DACL: nothing below is read (last: inheritance from the temp
     // directory propagates into the tree, so the fixture is only re-protected for cleanup)
     icacls(&["/inheritance:e"], &fx.root);
@@ -275,8 +286,10 @@ fn w_a_change_during_observation_is_detected_and_blocks() {
     hooks::set(Some(grant));
     let o = observe(&fx.root);
     hooks::set(None);
-    assert!(blocked_with(&o, "store.json changed during observation") && blocked_with(&o, "store.json protection changed during observation"), "{o:?}");
-    icacls(&["/remove:g", "*S-1-1-0"], &fx.root.join("store.json"));
+    assert!(blocked_with(&o, "store.json changed during observation") && blocked_with(&o, "store.json protection changed during observation"), "{o:?}\n{}", acl(&fx.root.join("store.json")));
+    icacls(&["/reset"], &fx.root.join("store.json"));
+    let o = observe(&fx.root);
+    assert!(o.observation.blocked.is_empty(), "{o:?}\n{}", acl(&fx.root.join("store.json")));
     // versions/ swapped for a junction between the store read and the version read: the
     // junction is refused and the root-entry identity recorded first differs
     fn swap(root: &Path) {
@@ -291,7 +304,8 @@ fn w_a_change_during_observation_is_detected_and_blocks() {
     assert!(!checked(&o, "digest equals"));
     fs::remove_dir(fx.root.join("versions")).unwrap();
     fs::rename(fx.base.join("versions-moved"), fx.root.join("versions")).unwrap();
-    assert!(observe(&fx.root).observation.blocked.is_empty(), "{:?}", observe(&fx.root));
+    let o = observe(&fx.root);
+    assert!(o.observation.blocked.is_empty(), "{o:?}\n{}", acl(&fx.root.join("versions")));
 }
 #[test]
 fn w_an_ancestor_swapped_during_observation_never_reads_the_other_tree() {
