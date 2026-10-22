@@ -25,7 +25,12 @@ fn icacls(args: &[&str], target: &Path) {
     assert!(out.status.success(), "icacls {args:?} on {}: {} {}", target.display(), String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
 }
 /// `icacls` listing of one entry, quoted in assertion messages so a CI failure shows the DACL
-/// the fixture actually produced (CI run 39865476127: a /grant + /remove:g pair left 4 ACEs).
+/// the fixture actually produced. Observed on the runners (CI run 39866451531): `/grant
+/// Everyone:(R)` on a file below a protected-DACL root writes the extra ACE *and* explicit
+/// copies of the two inherited ACEs (5 ACEs: Everyone, user, SYSTEM, user(I), SYSTEM(I)), and
+/// `/remove:g` takes only the Everyone ACE back out (4 left, CI run 39865476127). The product
+/// check refuses any count other than the two inherited ACEs, so the fixture asserts that
+/// refusal and restores the inherited-only state with `/reset`.
 fn acl(path: &Path) -> String {
     let out = std::process::Command::new(system32("icacls.exe")).arg(path).output().unwrap();
     format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr))
@@ -185,7 +190,7 @@ fn w_protection_failures_block_and_stop_the_descent() {
     // an extra explicit ACE on a record: DACL structure check fails, record not read
     icacls(&["/grant", "*S-1-1-0:(R)"], &fx.root.join("store.json"));
     let (o, v) = observe_checked(&fx);
-    assert!(blocked_with(&o, "store.json protection") && blocked_with(&o, "3 ACEs") && blocked_with(&o, "(not read)"), "{o:?}\n{}", acl(&fx.root.join("store.json")));
+    assert!(blocked_with(&o, "store.json protection") && blocked_with(&o, "ACEs instead of the two inherited ones") && blocked_with(&o, "(not read)"), "{o:?}\n{}", acl(&fx.root.join("store.json")));
     assert!(matches!(v.state, State::Blocked { .. })); assert_eq!(v.run, Run::None);
     icacls(&["/reset"], &fx.root.join("store.json")); // back to the inherited-only ACEs
     let o = observe(&fx.root);
@@ -198,14 +203,14 @@ fn w_protection_failures_block_and_stop_the_descent() {
     // complete marker with an extra ACE: Core not read
     icacls(&["/grant", "*S-1-1-0:(R)"], &fx.version_dir(&d).join("complete"));
     let o = observe(&fx.root);
-    assert!(blocked_with(&o, "complete protection") && blocked_with(&o, "3 ACEs") && blocked_with(&o, "(Core not read)") && !checked(&o, "digest equals"), "{o:?}\n{}", acl(&fx.version_dir(&d).join("complete")));
+    assert!(blocked_with(&o, "complete protection") && blocked_with(&o, "ACEs instead of the two inherited ones") && blocked_with(&o, "(Core not read)") && !checked(&o, "digest equals"), "{o:?}\n{}", acl(&fx.version_dir(&d).join("complete")));
     icacls(&["/reset"], &fx.version_dir(&d).join("complete"));
     let o = observe(&fx.root);
     assert!(o.observation.blocked.is_empty(), "{o:?}\n{}", acl(&fx.version_dir(&d).join("complete")));
     // Core with an extra ACE: not hashed
     icacls(&["/grant", "*S-1-1-0:(RX)"], &fx.version_dir(&d).join(CORE_FILE));
     let o = observe(&fx.root);
-    assert!(blocked_with(&o, "gil.exe protection") && blocked_with(&o, "3 ACEs") && blocked_with(&o, "(not hashed)"), "{o:?}\n{}", acl(&fx.version_dir(&d).join(CORE_FILE)));
+    assert!(blocked_with(&o, "gil.exe protection") && blocked_with(&o, "ACEs instead of the two inherited ones") && blocked_with(&o, "(not hashed)"), "{o:?}\n{}", acl(&fx.version_dir(&d).join(CORE_FILE)));
     icacls(&["/reset"], &fx.version_dir(&d).join(CORE_FILE));
     let o = observe(&fx.root);
     assert!(o.observation.blocked.is_empty(), "{o:?}\n{}", acl(&fx.version_dir(&d).join(CORE_FILE)));
