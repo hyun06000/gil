@@ -113,7 +113,18 @@ jobs:
           $features = if ($env:GIL_RUNTIME_PROFILE -eq 'visual-authoring') { @('--features', 'visual-authoring') } else { @() }
           # Reads only its own temp fixtures (protected-DACL root, icacls, hard links, junctions); the
           # count must show 13 executed tests (3 shared parser tests + 10 Windows fixture tests).
-          cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET @features --lib -- runtime_observe::
+          # --nocapture: the ancestor-swap test prints which branch the host took (OS refused the
+          # rename / re-walk blocked); the printed line is the evidence, not the pass alone.
+          cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET @features --lib -- runtime_observe:: --nocapture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Runtime store initialization and candidate preparation (isolated fixtures; both profiles)
+        shell: pwsh
+        run: |
+          $features = if ($env:GIL_RUNTIME_PROFILE -eq 'visual-authoring') { @('--features', 'visual-authoring') } else { @() }
+          # Creates its own temp stores only (protected-DACL roots, reservations, synthetic Core
+          # bytes); never executes a candidate. 15 tests exist; one (linked source) is Unix-only,
+          # so the count here must show 14 executed tests.
+          cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET @features --lib -- runtime_prepare::
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Image-report storage boundaries (Windows contract v0.1 §6)
         if: matrix.profile == 'visual-authoring'

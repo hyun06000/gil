@@ -941,6 +941,19 @@ pub(crate) fn create_private_dir_at(parent: &File, name: &OsStr) -> io::Result<F
     )
 }
 
+/// Exclusive creation of a plain subdirectory under the held `parent` (inherits the parent's
+/// DACL; `FILE_CREATE` fails on any existing entry).
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) fn create_dir_at(parent: &File, name: &OsStr) -> io::Result<File> {
+    nt_open_at(parent, name, READ, SHARE_ALL, FILE_CREATE, std::ptr::null(), Some(true))
+}
+
+/// Exclusive creation of a regular file under the held `parent` (inherits the parent's DACL).
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) fn create_file_at(parent: &File, name: &OsStr, access: u32, share: u32) -> io::Result<File> {
+    nt_open_at(parent, name, access, share, FILE_CREATE, std::ptr::null(), Some(false))
+}
+
 /// Open the existing `name` under the pinned `parent` (one relative component, no reparse).
 #[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
 pub(crate) fn open_dir_at(parent: &File, name: &OsStr, share: u32) -> io::Result<File> {

@@ -80,6 +80,10 @@ pub const LIMITS: &[&str] = &[
 
 static VERSION_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[A-Za-z0-9][A-Za-z0-9.+_-]{0,119}$").unwrap());
 static SHA256_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[0-9a-f]{64}$").unwrap());
+pub(crate) fn valid_version(s: &str) -> bool { VERSION_RE.is_match(s) }
+pub(crate) fn valid_sha256(s: &str) -> bool { SHA256_RE.is_match(s) }
+/// `versions/<version>-<sha12>`: the directory name a selection or preparation refers to.
+pub(crate) fn version_dirname(version: &str, sha256: &str) -> String { format!("{version}-{}", &sha256[..12]) }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Observed {
@@ -191,11 +195,17 @@ impl Observer {
             Record::Absent => Record::Absent,
             Record::Invalid => Record::Invalid,
         };
-        // 5. Referenced version: protection of versions/ and the version directory, complete
+        // 5. versions/ whenever present (a link or an unprotected directory there is refused even
+        //    without a selection), then the referenced version: version directory, complete
         //    marker, Core digest.
+        let versions = match platform::stamp_entry(&root_dir, VERSIONS_DIR) {
+            Ok(Some(_)) => self.open_checked_dir(&root_dir, VERSIONS_DIR, "versions/"),
+            Ok(None) => None,
+            Err(e) => { self.block(format!("versions/: {e}")); None }
+        };
         let selection = match selection {
             Record::Valid(raw) => {
-                let complete = self.version_complete(&root_dir, &raw);
+                let complete = match &versions { Some(v) => self.version_complete(v, &raw), None => { self.traces.push("versions/ absent or refused".into()); false } };
                 Record::Valid(Selection { generation: raw.generation, version: raw.version, sha256: raw.sha256, version_complete: complete })
             }
             Record::Absent => Record::Absent,
@@ -248,14 +258,13 @@ impl Observer {
         }
     }
 
-    /// `versions/<version>-<sha12>/{complete, CORE_FILE}` with the Core digest equal to the
-    /// selection's digest. Missing pieces are "incomplete" (→ damaged); access or protection
-    /// failures block and stop the descent.
-    fn version_complete(&mut self, root: &platform::Dir, sel: &RawSelection) -> bool {
-        let dirname = format!("{}-{}", sel.version, &sel.sha256[..12]);
-        let Some(versions) = self.open_checked_dir(root, VERSIONS_DIR, "versions/") else { return false };
+    /// `versions/<version>-<sha12>/{complete, CORE_FILE}` under the already opened and checked
+    /// `versions/`, with the Core digest equal to the selection's digest. Missing pieces are
+    /// "incomplete" (→ damaged); access or protection failures block and stop the descent.
+    fn version_complete(&mut self, versions: &platform::Dir, sel: &RawSelection) -> bool {
+        let dirname = version_dirname(&sel.version, &sel.sha256);
         let label = format!("versions/{dirname}");
-        let Some(vdir) = self.open_checked_dir(&versions, &dirname, &label) else { return false };
+        let Some(vdir) = self.open_checked_dir(versions, &dirname, &label) else { return false };
         // complete: existence marker; protection checked, content not interpreted.
         match platform::open_regular(&vdir, COMPLETE_FILE) {
             Ok(Some(marker)) => {
@@ -399,7 +408,7 @@ mod dir_names {
 
 // ───────────────────────── platform primitives (read-only) ─────────────────────────
 #[cfg(unix)]
-mod platform {
+pub(crate) mod platform {
     use std::ffi::CString;
     use std::fs::File;
     use std::io;
@@ -413,12 +422,19 @@ mod platform {
         /// A second handle to the same open directory (dup), used to keep a directory both held
         /// for re-checks and usable for relative opens. Failure is reported, never a panic.
         pub fn clone_handle(&self) -> io::Result<Dir> { Ok(Dir(self.0.try_clone()?)) }
+        pub(crate) fn as_file(&self) -> &File { &self.0 }
+        pub(crate) fn from_file(file: File) -> Dir { Dir(file) }
     }
     /// Everything compared for change detection.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct Stamp { dev: u64, ino: u64, mode: u32, uid: u32, gid: u32, nlink: u64, size: u64, mtime: i128, ctime: i128 }
+    /// Device + inode (Unix) or volume + file id (Windows): the identity of one object,
+    /// independent of its contents, size or timestamps.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct ObjectId(pub u64, pub u128);
     impl Stamp {
         pub fn size(&self) -> u64 { self.size }
+        pub fn object_id(&self) -> ObjectId { ObjectId(self.dev, self.ino as u128) }
         fn of(m: &std::fs::Metadata) -> Self {
             Stamp { dev: m.dev(), ino: m.ino(), mode: m.mode(), uid: m.uid(), gid: m.gid(), nlink: m.nlink(), size: m.size(),
                 mtime: m.mtime() as i128 * 1_000_000_000 + m.mtime_nsec() as i128, ctime: m.ctime() as i128 * 1_000_000_000 + m.ctime_nsec() as i128 }
@@ -546,7 +562,7 @@ mod platform {
 }
 
 #[cfg(windows)]
-mod platform {
+pub(crate) mod platform {
     use crate::windows_fs as win;
     use std::ffi::OsStr;
     use std::fs::File;
@@ -563,12 +579,16 @@ mod platform {
     pub struct Dir(File);
     impl Dir {
         pub fn clone_handle(&self) -> io::Result<Dir> { Ok(Dir(self.0.try_clone()?)) }
+        pub(crate) fn as_file(&self) -> &File { &self.0 }
+        pub(crate) fn from_file(file: File) -> Dir { Dir(file) }
     }
     /// Everything compared for change detection: volume + 128-bit id, size, link count,
     /// attributes, creation / last-write / change time (`windows_fs::Stamp`).
     pub type Stamp = win::Stamp;
-    pub trait StampSize { fn size(&self) -> u64; }
-    impl StampSize for Stamp { fn size(&self) -> u64 { self.size } }
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct ObjectId(pub u64, pub u128);
+    pub trait StampSize { fn size(&self) -> u64; fn object_id(&self) -> ObjectId; }
+    impl StampSize for Stamp { fn size(&self) -> u64 { self.size } fn object_id(&self) -> ObjectId { ObjectId(self.id.volume, self.id.file) } }
 
     fn not_found(e: &io::Error) -> bool { e.kind() == io::ErrorKind::NotFound }
     pub fn owner_text() -> String {

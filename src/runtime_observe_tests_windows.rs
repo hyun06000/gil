@@ -333,6 +333,9 @@ fn w_an_ancestor_swapped_during_observation_never_reads_the_other_tree() {
     let o = observe(&fx.root);
     hooks::set(None);
     let swapped = SWAPPED.with(|c| c.get()).expect("hook ran");
+    // Printed so a --nocapture run shows which branch this host actually exercised; neither
+    // branch alone is evidence for the other.
+    println!("OBSERVED ancestor-swap branch: {} (blocked = {:?})", if swapped { "rename succeeded, re-walk must block" } else { "OS refused the rename of a directory with open handles beneath it" }, o.observation.blocked);
     assert_eq!(o.observation.store, Record::Valid(Store { phase: Phase::Prepared, last_generation: 7 }), "{o:?}");
     assert_eq!(o.observation.intent, Record::Absent, "B's intent.json must not have been read: {o:?}");
     if swapped {

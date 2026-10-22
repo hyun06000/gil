@@ -388,6 +388,22 @@ fn a_failed_handle_duplicate_is_blocked_without_panic() {
     assert!(observe(&fx.root).observation.blocked.is_empty());
 }
 #[test]
+fn a_linked_or_unprotected_versions_directory_blocks_even_without_a_selection() {
+    let fx = Fixture::under("versions-nosel", "a"); fx.root_dir().store("prepared", 0);
+    let elsewhere = fx.base.join("elsewhere"); fs::create_dir(&elsewhere).unwrap();
+    std::os::unix::fs::symlink(&elsewhere, fx.root.join("versions")).unwrap();
+    let (o, v) = observe_checked(&fx);
+    assert!(blocked_with(&o, "versions/"), "{o:?}"); assert!(matches!(v.state, State::Blocked { .. }));
+    fs::remove_file(fx.root.join("versions")).unwrap();
+    fs::create_dir(fx.root.join("versions")).unwrap();
+    fs::set_permissions(fx.root.join("versions"), fs::Permissions::from_mode(0o755)).unwrap();
+    let o = observe(&fx.root);
+    assert!(blocked_with(&o, "versions/ protection"), "{o:?}");
+    fs::set_permissions(fx.root.join("versions"), fs::Permissions::from_mode(0o700)).unwrap();
+    let (o, v) = observe_checked(&fx);
+    assert!(o.observation.blocked.is_empty() && checked(&o, "versions/ protection"), "{o:?}"); assert_eq!(v.state, State::Prepared);
+}
+#[test]
 fn compared_items_and_limits_are_stated() {
     assert!(COMPARED.iter().any(|l| l.contains("root directory listing")));
     assert!(COMPARED.iter().any(|l| l.contains("protection checks")));
