@@ -50,6 +50,12 @@ impl Account {
     /// process gets the other user's environment, not ours, so every value travels as a
     /// positional script argument embedded in the inner command line (ASCII paths only).
     fn run_script(&self, script: &Path, out_dir: &Path, args: &[&str]) -> (i32, String, String) {
+        self.run_script_with_profile(script, out_dir, args, true)
+    }
+    /// `load_profile` decides whether the standard user's registry hive is loaded for the
+    /// process (`Start-Process -LoadUserProfile`). Without it the hive may be absent, which is
+    /// exactly the "cannot query the sync-root sources" state the Core must refuse.
+    fn run_script_with_profile(&self, script: &Path, out_dir: &Path, args: &[&str], load_profile: bool) -> (i32, String, String) {
         let stdout = out_dir.join("ou-stdout.txt");
         let stderr = out_dir.join("ou-stderr.txt");
         let _ = fs::remove_file(&stdout);
@@ -59,7 +65,8 @@ impl Account {
             foreach ($ch in $env:GIL_TEST_PASS.ToCharArray()) { $secure.AppendChar($ch) }; \
             $credential = New-Object System.Management.Automation.PSCredential($env:GIL_TEST_USER, $secure); \
             $inner = $env:GIL_TEST_INNER; \
-            $process = Start-Process -FilePath $env:GIL_TEST_PS -ArgumentList @('-NoProfile', '-NonInteractive', '-Command', $inner) -Credential $credential -WorkingDirectory $env:GIL_TEST_CWD -PassThru -Wait -RedirectStandardOutput $env:GIL_TEST_OUT -RedirectStandardError $env:GIL_TEST_ERR; \
+            $extra = @{}; if ($env:GIL_TEST_LOAD_PROFILE -eq '1') { $extra['LoadUserProfile'] = $true }; \
+            $process = Start-Process -FilePath $env:GIL_TEST_PS -ArgumentList @('-NoProfile', '-NonInteractive', '-Command', $inner) -Credential $credential -WorkingDirectory $env:GIL_TEST_CWD -PassThru -Wait -RedirectStandardOutput $env:GIL_TEST_OUT -RedirectStandardError $env:GIL_TEST_ERR @extra; \
             exit $process.ExitCode \
             } catch { Write-Error ($_ | Out-String); exit 99 }";
         for text in std::iter::once(script.to_str().unwrap()).chain(args.iter().copied()) {
@@ -75,7 +82,8 @@ impl Account {
             .env("GIL_TEST_INNER", inner)
             .env("GIL_TEST_CWD", out_dir)
             .env("GIL_TEST_OUT", &stdout)
-            .env("GIL_TEST_ERR", &stderr);
+            .env("GIL_TEST_ERR", &stderr)
+            .env("GIL_TEST_LOAD_PROFILE", if load_profile { "1" } else { "0" });
         let out = command.output().unwrap();
         let code = out.status.code().unwrap_or(-1);
         assert_ne!(code, 99, "the standard-user logon could not run on this host: {}", String::from_utf8_lossy(&out.stderr));
@@ -98,6 +106,8 @@ param($Exe, $Mode)
 $ErrorActionPreference = 'Stop'
 $root = Join-Path $env:USERPROFILE ('gil-synthetic-' + $Mode)
 New-Item -ItemType Directory -Path $root | Out-Null
+$sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$hiveLoaded = Test-Path -LiteralPath ("Registry::HKEY_USERS\" + $sid)
 $psi = New-Object System.Diagnostics.ProcessStartInfo
 $psi.FileName = $Exe
 $psi.Arguments = 'mcp --serve'
@@ -125,6 +135,8 @@ $context = Recv
 $p.StandardInput.Close()
 $null = $p.WaitForExit(15000)
 "WHOAMI=" + (whoami)
+"HIVE_LOADED=" + $hiveLoaded
+"ROOT_ENTRIES=" + ((Get-ChildItem -LiteralPath $root -Force | ForEach-Object { $_.Name }) -join ';')
 "GROUPS=" + ((whoami /groups /fo csv /nh) -join ';')
 "START=" + $start
 "STATUS=" + $status
@@ -155,13 +167,14 @@ fn standard_user_creates_reopens_and_keeps_an_owner_only_gil_in_a_normal_folder(
     assert_eq!(code, 0, "driver failed: {err}\n{out}");
     assert!(!field(&out, "GROUPS").to_lowercase().contains("s-1-5-32-544") || field(&out, "GROUPS").contains("Deny"), "the account must not be an effective administrator: {}", field(&out, "GROUPS"));
     let start = field(&out, "START");
+    // The driver was started with the user's profile loaded, so its hive is readable and the
+    // location check must answer `queried` for every source (this reproduces a standard-user
+    // token with a loaded hive, not the Codex app's own server environment).
+    assert_eq!(field(&out, "HIVE_LOADED"), "True", "fixture: the profile hive must be loaded in this mode");
     assert!(start.contains("\"ok\":true") && start.contains("\"storage_format\":5"), "{start}");
-    // The location check ran as this standard user: every source answered queried or absent
-    // (the account's hive may not be loaded under -Credential), never failed. This reproduces a
-    // standard-user token, not the Codex app's own restricted server environment.
     assert!(start.contains("\"location_check\"") && start.contains("\"registry_hive\""), "{start}");
-    assert!(!start.contains("\"status\":\"failed\""), "no source may fail for a standard user: {start}");
-    assert!(start.contains("\"status\":\"queried\"") || start.contains("\"status\":\"absent\""), "{start}");
+    assert!(!start.contains("\"status\":\"failed\"") && !start.contains("\"status\":\"absent\""), "{start}");
+    assert!(start.contains("\"status\":\"queried\""), "{start}");
     assert!(field(&out, "STATUS").contains("\"ok\":true"), "{}", field(&out, "STATUS"));
     assert!(field(&out, "CONTEXT").contains("\"ok\":true"), "{}", field(&out, "CONTEXT"));
     assert!(field(&out, "STATE_HEAD").starts_with("format: 5"), "{}", field(&out, "STATE_HEAD"));
@@ -182,6 +195,7 @@ fn inheritance_re_enabled_after_creation_reproduces_the_reopen_refusal() {
     let (shared, exe, script, account) = setup();
     let (code, out, err) = account.run_script(&script, &shared.0, &[exe.to_str().unwrap(), "reinherit"]);
     assert_eq!(code, 0, "driver failed: {err}\n{out}");
+    assert_eq!(field(&out, "HIVE_LOADED"), "True");
     let start = field(&out, "START");
     assert!(start.contains("\"ok\":true") && start.contains("\"storage_format\":5"), "{start}");
     let status = field(&out, "STATUS");
@@ -195,4 +209,33 @@ fn inheritance_re_enabled_after_creation_reproduces_the_reopen_refusal() {
     assert!(gil.contains("(I)"), "the external re-inheritance is visible on .gil: {gil}");
     // The records were preserved, not repaired or deleted.
     assert!(field(&out, "STATE_HEAD").starts_with("format: 5"), "{}", field(&out, "STATE_HEAD"));
+}
+
+/// Without the user's profile, the account's registry hive may not be loaded. The expected
+/// result depends on that observed state: hive absent → `gil_start` refuses as unverifiable and
+/// creates nothing (even in an ordinary local folder — a documented limit); hive loaded anyway →
+/// the normal start with `queried` sources. Either way the response must match the state.
+#[test]
+fn without_a_loaded_profile_the_start_matches_the_observed_hive_state() {
+    let (shared, exe, script, account) = setup();
+    let (code, out, err) = account.run_script_with_profile(&script, &shared.0, &[exe.to_str().unwrap(), "noprofile"], false);
+    assert_eq!(code, 0, "driver failed: {err}\n{out}");
+    let start = field(&out, "START");
+    let entries = field(&out, "ROOT_ENTRIES");
+    match field(&out, "HIVE_LOADED") {
+        "False" => {
+            assert!(start.contains("\"ok\":false") && start.contains("\"code\":\"unsupported_location\""), "hive absent must refuse: {start}");
+            assert!(start.contains("\"location_kind\":\"unverifiable\"") && start.contains("\"evidence\":\"check_failed\""), "{start}");
+            assert!(start.contains("not loaded"), "the detail names the unloaded hive: {start}");
+            assert!(start.contains("확인을 대신하지 않습니다") && !start.contains("suggested_parent"), "no workspace substitute may be offered: {start}");
+            assert!(!entries.contains(".gil"), "nothing may be created: {entries}");
+            assert!(field(&out, "STATUS").contains("\"ok\":false"), "{}", field(&out, "STATUS"));
+        }
+        "True" => {
+            assert!(start.contains("\"ok\":true") && start.contains("\"status\":\"queried\"") && !start.contains("\"status\":\"absent\""), "{start}");
+            assert!(entries.contains(".gil"), "{entries}");
+        }
+        other => panic!("unexpected HIVE_LOADED={other}\n{out}"),
+    }
+    eprintln!("noprofile mode observed HIVE_LOADED={}", field(&out, "HIVE_LOADED"));
 }

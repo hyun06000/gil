@@ -74,13 +74,21 @@ pub fn location_check(report: &win::LocationReport) -> Value {
 
 /// Structured refusal for `gil_start` on an unsupported location: nothing was created.
 pub fn start_refusal(selected: &Path, location: &win::UnsupportedLocation) -> CallToolResult {
-    let suggested = win::default_workspace_parent().map(|p| p.display().to_string()).unwrap_or_default();
     let said = format!("{} (아직 아무것도 만들지 않았습니다.)", location.kind.notice());
-    let mut out = CallToolResult::structured(json!({"ok": false, "code": "unsupported_location",
+    let mut fields = json!({"ok": false, "code": "unsupported_location",
         "location_kind": location.kind.code(), "evidence": location.evidence().code(), "detail": location.detail,
-        "selected": selected.display().to_string(), "suggested_parent": suggested,
-        "next": "Explain the support-scope notice in `said` and, only with the user's approval, call gil_prepare_workspace(confirm:false) to show the exact path, then confirm:true. Then ask the user to select the new folder in the app and wait; never call gil_start on it until it is the selected working folder.",
-        "said": said}));
+        "selected": selected.display().to_string(), "said": said});
+    let object = fields.as_object_mut().expect("object");
+    if location.kind == win::LocationKind::Unverifiable {
+        // The check itself did not run: preparing a workspace would be refused for the same
+        // reason, so it must not be offered as a substitute for verification.
+        object.insert("next".into(), json!("The location check itself could not run. Report GIL's words and stop: do not offer gil_prepare_workspace (it is refused for the same reason), do not retry gil_start, do not change any setting. The user decides how to proceed."));
+    } else {
+        let suggested = win::default_workspace_parent().map(|p| p.display().to_string()).unwrap_or_default();
+        object.insert("suggested_parent".into(), json!(suggested));
+        object.insert("next".into(), json!("Explain the support-scope notice in `said` and, only with the user's approval, call gil_prepare_workspace(confirm:false) to show the exact path, then confirm:true. Then ask the user to select the new folder in the app and wait; never call gil_start on it until it is the selected working folder."));
+    }
+    let mut out = CallToolResult::structured(fields);
     out.is_error = Some(true);
     out
 }

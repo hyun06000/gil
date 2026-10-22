@@ -1064,7 +1064,7 @@ impl LocationKind {
             Self::NotFixed => "선택한 폴더는 이동식 드라이브이거나 고정 드라이브가 아닙니다. 현재 GIL 검수판은 이 PC의 로컬 고정 NTFS 폴더만 지원합니다. 별도 작업 폴더를 준비할까요?",
             Self::NotNtfs => "선택한 폴더의 드라이브는 NTFS가 아닙니다. 현재 GIL 검수판은 로컬 고정 NTFS 폴더만 지원합니다. 별도 작업 폴더를 준비할까요?",
             Self::Reparse => "선택한 경로에 링크(junction·symlink)가 포함돼 있습니다. 현재 GIL 검수판은 링크를 거치지 않는 로컬 폴더만 지원합니다. 별도 작업 폴더를 준비할까요?",
-            Self::Unverifiable => "선택한 폴더가 지원 범위인지 확인하지 못했습니다. 확인되지 않은 위치에는 기록을 만들지 않습니다. 이 PC의 별도 작업 폴더를 준비할까요?",
+            Self::Unverifiable => "선택한 폴더가 지원 범위인지 확인할 수 없었습니다(확인 수단 자체가 동작하지 않았습니다). 확인되지 않은 상태에서는 어떤 위치에도 기록을 만들지 않으며, 별도 작업 폴더를 준비하는 것으로 확인을 대신하지 않습니다.",
         }
     }
 }
@@ -1090,8 +1090,9 @@ pub(crate) enum SourceStatus {
     /// (recorded, not matched — a documented miss); `key_present` is false when the optional
     /// registration key does not exist at all (nothing registered, not a failure).
     Queried { roots: usize, stale: usize, key_present: bool },
-    /// The place to look does not exist (for the registry: the hive of the account this server
-    /// runs as is not loaded). Reported and treated as no answer, never as a failure.
+    /// The place to look cannot be queried at all (for the registry: the hive of the account
+    /// this server runs as is not loaded). Unlike an absent optional key, this is "could not
+    /// check", so the location is unverifiable and nothing is created anywhere.
     Absent(String),
     /// Access denied, partial enumeration, or a value that could not be interpreted.
     Failed(String),
@@ -1307,6 +1308,10 @@ mod registry {
         if super::workspace_hooks::REGISTRY_FAIL.with(Cell::get) {
             return Err("injected hive failure".into());
         }
+        #[cfg(test)]
+        if super::workspace_hooks::REGISTRY_ABSENT.with(Cell::get) {
+            return Ok(None);
+        }
         let token = super::user().map_err(|e| format!("process token: {e}"))?;
         let sid = super::sid_text(super::sid(&token)).map_err(|e| format!("token SID: {e}"))?;
         open(HKEY_USERS, &sid)
@@ -1376,9 +1381,16 @@ pub(crate) fn under(path: &Path, root: &Path) -> bool {
 /// at; any error means refuse. A source that could not be queried refuses as unverifiable.
 #[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
 pub(crate) fn classify_location(root: &Path, sync_roots: &SyncRoots) -> Result<LocationReport, UnsupportedLocation> {
-    if let Some(failed) = sync_roots.reports.iter().find(|r| matches!(r.status, SourceStatus::Failed(_))) {
-        let SourceStatus::Failed(why) = &failed.status else { unreachable!() };
-        return Err(unsupported(LocationKind::Unverifiable, format!("sync root source {} could not be queried: {why}", failed.source)));
+    for report in &sync_roots.reports {
+        match &report.status {
+            SourceStatus::Failed(why) => {
+                return Err(unsupported(LocationKind::Unverifiable, format!("sync root source {} could not be queried: {why}", report.source)));
+            }
+            SourceStatus::Absent(what) => {
+                return Err(unsupported(LocationKind::Unverifiable, format!("sync root source {} cannot be queried: {what}", report.source)));
+            }
+            SourceStatus::Queried { .. } => {}
+        }
     }
     if matches!(root.components().next(), Some(Component::Prefix(p)) if matches!(p.kind(), Prefix::UNC(..) | Prefix::VerbatimUNC(..))) {
         return Err(unsupported(LocationKind::Network, "UNC path"));
@@ -1470,8 +1482,10 @@ pub(crate) mod workspace_hooks {
         pub static UNVERIFIABLE_AFTER_CREATE: Cell<bool> = const { Cell::new(false) };
         /// Read both registry sources under this subkey of the user hive instead of `Software`.
         pub static REGISTRY_BASE: RefCell<Option<String>> = const { RefCell::new(None) };
-        /// Pretend the user hive cannot be opened.
+        /// Pretend the user hive cannot be opened (access denied).
         pub static REGISTRY_FAIL: Cell<bool> = const { Cell::new(false) };
+        /// Pretend the user hive is not loaded (absent).
+        pub static REGISTRY_ABSENT: Cell<bool> = const { Cell::new(false) };
     }
 }
 #[cfg(test)]
@@ -1675,6 +1689,7 @@ mod sync_root_tests {
         fn drop(&mut self) {
             workspace_hooks::REGISTRY_BASE.with(|c| *c.borrow_mut() = None);
             workspace_hooks::REGISTRY_FAIL.with(|c| c.set(false));
+            workspace_hooks::REGISTRY_ABSENT.with(|c| c.set(false));
             unsafe {
                 // Only this run's key; the shared `Software\\GilTest` parent goes only when empty.
                 RegDeleteTreeW(HKEY_CURRENT_USER, w(&self.base).as_ptr());
@@ -1761,6 +1776,32 @@ mod sync_root_tests {
         assert_eq!(refused.kind, LocationKind::Unverifiable);
         assert_eq!(refused.evidence(), Evidence::CheckFailed);
         assert!(refused.detail.contains("could not be queried"), "{}", refused.detail);
+    }
+
+    #[test]
+    fn a_hive_that_is_not_loaded_is_unverifiable_unlike_an_absent_optional_key() {
+        let s = Scratch::new("hive-absent");
+        workspace_hooks::REGISTRY_ABSENT.with(|c| c.set(true));
+        let roots = sync_roots();
+        assert!(matches!(status(&roots, SOURCE_SYNC_ENGINES), SourceStatus::Absent(ref what) if what.contains("not loaded")));
+        assert!(matches!(status(&roots, SOURCE_ONEDRIVE_ACCOUNTS), SourceStatus::Absent(_)));
+        let refused = classify_location(&s.dir, &roots).unwrap_err();
+        assert_eq!(refused.kind, LocationKind::Unverifiable);
+        assert_eq!(refused.evidence(), Evidence::CheckFailed);
+        assert!(refused.detail.contains("cannot be queried") && refused.detail.contains("not loaded"), "{}", refused.detail);
+        assert!(LocationKind::Unverifiable.notice().contains("확인을 대신하지 않습니다"));
+        // Workspace planning and creation are refused the same way, creating nothing.
+        workspace_hooks::ALLOWED_ROOT.with(|c| *c.borrow_mut() = Some(s.dir.clone()));
+        let parent = s.dir.join("gil-projects");
+        match plan_workspace(&parent, OsStr::new("x")) {
+            Err(WorkspaceRefusal::Unsupported(l)) => assert_eq!(l.kind, LocationKind::Unverifiable),
+            other => panic!("plan must be unverifiable: {other:?}"),
+        }
+        assert!(!parent.exists());
+        workspace_hooks::ALLOWED_ROOT.with(|c| *c.borrow_mut() = None);
+        // The same folder passes once the hive is readable again (nothing registered).
+        workspace_hooks::REGISTRY_ABSENT.with(|c| c.set(false));
+        assert!(classify_location(&s.dir, &sync_roots()).is_ok());
     }
 
     #[test]
