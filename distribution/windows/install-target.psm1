@@ -1,4 +1,4 @@
-# Read-only installer preflight. Never select from the shell process architecture:
+﻿# Read-only installer preflight. Never select from the shell process architecture:
 # an x86 or x64 shell can run under emulation on an ARM64 OS.
 #
 # The native OS architecture is read from up to three independent read-only sources, none of

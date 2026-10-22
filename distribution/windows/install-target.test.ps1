@@ -1,4 +1,4 @@
-# Installer target detection: decision table, live sources, fault injection (CIM refused, cmdlet
+﻿# Installer target detection: decision table, live sources, fault injection (CIM refused, cmdlet
 # absent, registry refused, everything refused, contradiction) and emulation (x86 WOW host, any
 # non-native pwsh found). The guidance block from DEV-CANDIDATE-CHECK.md is extracted and run
 # under the same conditions so the published text is what is tested.
