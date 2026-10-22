@@ -119,6 +119,8 @@ mod existence;
 pub mod launcher;
 /// Runtime update: pure store-state judge (no I/O, no execution).
 pub mod runtime_state;
+/// Runtime update: read-only observation of an explicitly given store path.
+pub mod runtime_observe;
 // **잠금 자체는 공개 계약이 아니다.** guard 타입을 내보내면 밖의 코드가 그것을 들고
 // 다니기 시작하고, 그러면 잠금을 언제 잡는지가 라이브러리의 몫이 아니게 된다. 밖에서
 // 볼 수 있는 것은 잠금을 이미 쥔 트랜잭션([`ProjectSession`]) 하나다.

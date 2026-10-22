@@ -107,6 +107,14 @@ jobs:
           # The judge is pure (no file access, no execution); the count must show 18 executed tests.
           cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET @features --lib -- runtime_state::
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Runtime store read-only observer (isolated fixtures; both profiles)
+        shell: pwsh
+        run: |
+          $features = if ($env:GIL_RUNTIME_PROFILE -eq 'visual-authoring') { @('--features', 'visual-authoring') } else { @() }
+          # Reads only its own temp fixtures (protected-DACL root, icacls, hard links, junctions); the
+          # count must show 13 executed tests (3 shared parser tests + 10 Windows fixture tests).
+          cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET @features --lib -- runtime_observe::
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Image-report storage boundaries (Windows contract v0.1 §6)
         if: matrix.profile == 'visual-authoring'
         shell: pwsh

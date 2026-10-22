@@ -54,7 +54,7 @@ fn plain_name(name: &OsStr) -> io::Result<()> {
     Ok(())
 }
 
-fn open_raw(path: &Path, access: u32, share: u32, disposition: u32, flags: u32) -> io::Result<File> {
+pub(crate) fn open_raw(path: &Path, access: u32, share: u32, disposition: u32, flags: u32) -> io::Result<File> {
     let name = wide(path)?;
     // SAFETY: nul-terminated name; no security attributes; the handle is owned exactly once.
     let raw = unsafe {
@@ -481,7 +481,7 @@ impl Drop for Token {
 }
 
 // usize storage supplies TOKEN_USER alignment. Its embedded SID points into this buffer.
-fn user() -> io::Result<Vec<usize>> {
+pub(crate) fn user() -> io::Result<Vec<usize>> {
     unsafe {
         let mut handle = null_mut();
         if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut handle) == 0 {
@@ -500,7 +500,7 @@ fn user() -> io::Result<Vec<usize>> {
         Ok(buf)
     }
 }
-fn sid(buf: &[usize]) -> PSID {
+pub(crate) fn sid(buf: &[usize]) -> PSID {
     unsafe { (*(buf.as_ptr().cast::<TOKEN_USER>())).User.Sid }
 }
 /// The SID the OS assigns as owner to objects this process creates without an explicit owner
@@ -529,7 +529,7 @@ fn owner_sid(buf: &[usize]) -> PSID {
     use windows_sys::Win32::Security::TOKEN_OWNER;
     unsafe { (*(buf.as_ptr().cast::<TOKEN_OWNER>())).Owner }
 }
-fn sid_text(sid: PSID) -> io::Result<String> {
+pub(crate) fn sid_text(sid: PSID) -> io::Result<String> {
     unsafe {
         let mut text = null_mut();
         if ConvertSidToStringSidW(sid, &mut text) == 0 {
@@ -832,7 +832,7 @@ pub(crate) fn verify_storage_tree(gil: &Path) -> io::Result<()> {
 
 use windows_sys::Wdk::Foundation::OBJECT_ATTRIBUTES;
 use windows_sys::Wdk::Storage::FileSystem::{
-    FILE_CREATE, FILE_DIRECTORY_FILE, FILE_OPEN, FILE_OPEN_REPARSE_POINT as NT_OPEN_REPARSE_POINT,
+    FILE_CREATE, FILE_DIRECTORY_FILE, FILE_NON_DIRECTORY_FILE, FILE_OPEN, FILE_OPEN_REPARSE_POINT as NT_OPEN_REPARSE_POINT,
     FILE_SYNCHRONOUS_IO_NONALERT, NtCreateFile,
 };
 use windows_sys::Win32::Foundation::{OBJ_CASE_INSENSITIVE, UNICODE_STRING};
@@ -859,6 +859,25 @@ fn nt_dir_at(
     disposition: u32,
     descriptor: *const c_void,
 ) -> io::Result<File> {
+    nt_open_at(parent, name, access, share, disposition, descriptor, Some(true))
+}
+
+/// What a relative open may return: a directory, a non-directory, or either (`None`); a reparse
+/// point is always opened as itself and refused.
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) fn open_entry_at(parent: &File, name: &OsStr, access: u32, share: u32, kind: Option<bool>) -> io::Result<File> {
+    nt_open_at(parent, name, access, share, FILE_OPEN, std::ptr::null(), kind)
+}
+
+fn nt_open_at(
+    parent: &File,
+    name: &OsStr,
+    access: u32,
+    share: u32,
+    disposition: u32,
+    descriptor: *const c_void,
+    kind: Option<bool>,
+) -> io::Result<File> {
     plain_name(name)?;
     let mut buffer: Vec<u16> = name.encode_wide().collect();
     let bytes = u16::try_from(buffer.len() * size_of::<u16>()).map_err(|_| refused())?;
@@ -884,7 +903,9 @@ fn nt_dir_at(
             FILE_ATTRIBUTE_NORMAL,
             share,
             disposition,
-            FILE_DIRECTORY_FILE | NT_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT,
+            match kind { Some(true) => FILE_DIRECTORY_FILE, Some(false) => FILE_NON_DIRECTORY_FILE, None => 0 }
+                | NT_OPEN_REPARSE_POINT
+                | FILE_SYNCHRONOUS_IO_NONALERT,
             std::ptr::null(),
             0,
         )
@@ -893,7 +914,14 @@ fn nt_dir_at(
         return Err(nt_error(status));
     }
     let file = unsafe { File::from_raw_handle(handle) };
-    ordinary(&file, true)?;
+    match kind {
+        Some(directory) => ordinary(&file, directory)?,
+        None => {
+            if info(&file)?.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+                return Err(refused());
+            }
+        }
+    }
     Ok(file)
 }
 
