@@ -52,6 +52,26 @@ fn fail(code: &str, said: impl Into<String>) -> CallToolResult {
     out
 }
 
+/// The `location_check` field of a successful `gil_start`: what was looked at, per source, and
+/// the documented limits. Statuses are facts about this process's queries, not about the machine.
+pub fn location_check(report: &win::LocationReport) -> Value {
+    let sources: Vec<Value> = report.sources.iter().map(|r| match &r.status {
+        win::SourceStatus::Queried { roots, stale, key_present } => json!({"source": r.source, "status": "queried", "roots": roots, "stale": stale, "key_present": key_present}),
+        win::SourceStatus::Absent(what) => json!({"source": r.source, "status": "absent", "detail": what}),
+        win::SourceStatus::Failed(why) => json!({"source": r.source, "status": "failed", "detail": why}),
+    }).collect();
+    json!({
+        "sync_root_sources": sources,
+        "registry_hive": "the hive of the account this server runs as (process token); not asserted to be the person in the chat",
+        "path_components_checked": report.components_checked,
+        "reparse_points": "none observed",
+        "cloud_attributes": "none observed",
+        "drive": report.drive,
+        "filesystem": report.filesystem,
+        "limits": win::LocationReport::LIMITS,
+    })
+}
+
 /// Structured refusal for `gil_start` on an unsupported location: nothing was created.
 pub fn start_refusal(selected: &Path, location: &win::UnsupportedLocation) -> CallToolResult {
     let suggested = win::default_workspace_parent().map(|p| p.display().to_string()).unwrap_or_default();

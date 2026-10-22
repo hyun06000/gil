@@ -156,6 +156,12 @@ fn standard_user_creates_reopens_and_keeps_an_owner_only_gil_in_a_normal_folder(
     assert!(!field(&out, "GROUPS").to_lowercase().contains("s-1-5-32-544") || field(&out, "GROUPS").contains("Deny"), "the account must not be an effective administrator: {}", field(&out, "GROUPS"));
     let start = field(&out, "START");
     assert!(start.contains("\"ok\":true") && start.contains("\"storage_format\":5"), "{start}");
+    // The location check ran as this standard user: every source answered queried or absent
+    // (the account's hive may not be loaded under -Credential), never failed. This reproduces a
+    // standard-user token, not the Codex app's own restricted server environment.
+    assert!(start.contains("\"location_check\"") && start.contains("\"registry_hive\""), "{start}");
+    assert!(!start.contains("\"status\":\"failed\""), "no source may fail for a standard user: {start}");
+    assert!(start.contains("\"status\":\"queried\"") || start.contains("\"status\":\"absent\""), "{start}");
     assert!(field(&out, "STATUS").contains("\"ok\":true"), "{}", field(&out, "STATUS"));
     assert!(field(&out, "CONTEXT").contains("\"ok\":true"), "{}", field(&out, "CONTEXT"));
     assert!(field(&out, "STATE_HEAD").starts_with("format: 5"), "{}", field(&out, "STATE_HEAD"));
@@ -181,8 +187,10 @@ fn inheritance_re_enabled_after_creation_reproduces_the_reopen_refusal() {
     let status = field(&out, "STATUS");
     assert!(status.contains("\"ok\":false"), "{status}");
     assert!(status.contains("DACL still inherits from the parent folder"), "exact PC symptom expected: {status}");
-    assert!(status.contains("소유자 전용"), "{status}");
-    assert!(field(&out, "CONTEXT").contains("\"ok\":false"));
+    assert!(status.contains("\"code\":\"storage_protection_lost\"") && status.contains("\"records_preserved\":true"), "stable code as a standard user: {status}");
+    assert!(status.contains("변경을 요청하지 않는다"), "{status}");
+    let context = field(&out, "CONTEXT");
+    assert!(context.contains("\"ok\":false") && context.contains("\"code\":\"storage_protection_lost\""), "{context}");
     let gil = field(&out, "ACL_GIL");
     assert!(gil.contains("(I)"), "the external re-inheritance is visible on .gil: {gil}");
     // The records were preserved, not repaired or deleted.

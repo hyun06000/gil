@@ -769,6 +769,10 @@ pub(crate) fn inherited_only(file: &File, directory: bool) -> io::Result<()> {
     Ok(())
 }
 
+/// Stable code carried in the reopen refusal when `.gil`'s protection is no longer verified; the
+/// MCP layer lifts it into the structured response so the Skill can apply one rule to it.
+pub(crate) const PROTECTION_LOST_CODE: &str = "storage_protection_lost";
+
 /// Reopening an image Project: `.gil` must still be owner-only and the control and structure
 /// entries below it must still carry only the inherited owner-only ACEs. Blobs are checked when
 /// they are read, not here (contract §8 item 3: an unused blob widened from outside is not
@@ -776,8 +780,10 @@ pub(crate) fn inherited_only(file: &File, directory: bool) -> io::Result<()> {
 pub(crate) fn verify_storage_tree(gil: &Path) -> io::Result<()> {
     let wrap = |e: io::Error| {
         io::Error::other(format!(
-            "이미지 Project 저장소(.gil)의 접근 권한이 소유자 전용(현재 사용자·SYSTEM, 상속 차단)이 아니다. \
-             자동으로 고치지 않는다. 기록을 보존한 채 권한을 확인한다: {e}"
+            "[{PROTECTION_LOST_CODE}] 이미지 Project 저장소(.gil)의 보호(소유자 전용: 현재 사용자·SYSTEM, 상속 차단)가 더 이상 확인되지 않는다. \
+             자동으로 고치지 않으며, 사용자에게 권한·상속·소유권·보안 설정 변경을 요청하지 않는다. 기존 기록은 그대로 보존한다. \
+             권한 오류만으로 동기화 폴더라고 단정하지 않고, 이 Project 를 새 Project 로 대체하지 않는다. \
+             이 위치가 지원 범위(동기화 폴더 밖의 로컬 고정 NTFS)인지 확인하고, 사용자가 원해서 승인할 때만 별도 작업 폴더를 준비해 거기서 새로 시작한다: {e}"
         ))
     };
     if gil.file_name() != Some(OsStr::new(".gil")) {
@@ -975,6 +981,9 @@ const CLOUD_ATTRIBUTES: u32 = 0x4_0000 | 0x8_0000 | 0x10_0000 | 0x40_0000;
 pub(crate) enum LocationKind {
     /// Under a root named by the OneDrive / OneDriveConsumer / OneDriveCommercial variables.
     OneDriveEnv,
+    /// Under a sync root the user's registry hive declares (Explorer sync-engine registration or
+    /// an OneDrive account's user folder); independent of the process environment.
+    SyncRoot,
     /// The folder or an ancestor carries cloud-files attributes (a sync provider is active there).
     CloudFiles,
     /// UNC path or a drive whose type is remote.
@@ -996,6 +1005,7 @@ pub(crate) enum LocationKind {
 pub(crate) enum Evidence {
     Observed,
     Declared,
+    DeclaredByRegistry,
     CheckFailed,
 }
 
@@ -1005,6 +1015,7 @@ impl Evidence {
         match self {
             Self::Observed => "observed",
             Self::Declared => "declared_by_environment",
+            Self::DeclaredByRegistry => "declared_by_registry",
             Self::CheckFailed => "check_failed",
         }
     }
@@ -1022,6 +1033,7 @@ impl UnsupportedLocation {
     pub(crate) fn evidence(&self) -> Evidence {
         match self.kind {
             LocationKind::OneDriveEnv => Evidence::Declared,
+            LocationKind::SyncRoot => Evidence::DeclaredByRegistry,
             LocationKind::Unverifiable => Evidence::CheckFailed,
             _ => Evidence::Observed,
         }
@@ -1033,6 +1045,7 @@ impl LocationKind {
     pub(crate) fn code(self) -> &'static str {
         match self {
             Self::OneDriveEnv => "onedrive",
+            Self::SyncRoot => "sync_root",
             Self::CloudFiles => "cloud_files",
             Self::Network => "network",
             Self::NotFixed => "not_fixed_drive",
@@ -1045,6 +1058,7 @@ impl LocationKind {
     pub(crate) fn notice(self) -> &'static str {
         match self {
             Self::OneDriveEnv => "선택한 폴더는 OneDrive 설정이 백업 위치로 선언한 폴더 안에 있습니다. 현재 GIL 검수판은 이 위치에서 기록 보존을 보장하지 못합니다. OneDrive 설정은 그대로 두고, 이 PC의 별도 작업 폴더를 준비할까요?",
+            Self::SyncRoot => "선택한 폴더는 이 PC에 등록된 동기화 루트(OneDrive 등 동기화 엔진이 등록한 폴더) 안에 있습니다. 현재 GIL 검수판은 이 위치에서 기록 보존을 보장하지 못합니다. 동기화 설정은 그대로 두고, 이 PC의 별도 작업 폴더를 준비할까요?",
             Self::CloudFiles => "선택한 폴더는 클라우드 동기화(파일 온디맨드) 위치입니다. 현재 GIL 검수판은 이 위치에서 기록 보존을 보장하지 못합니다. 동기화 설정은 그대로 두고, 이 PC의 별도 작업 폴더를 준비할까요?",
             Self::Network => "선택한 폴더는 네트워크 경로입니다. 현재 GIL 검수판은 이 PC의 로컬 고정 NTFS 폴더만 지원합니다. 이 PC의 별도 작업 폴더를 준비할까요?",
             Self::NotFixed => "선택한 폴더는 이동식 드라이브이거나 고정 드라이브가 아닙니다. 현재 GIL 검수판은 이 PC의 로컬 고정 NTFS 폴더만 지원합니다. 별도 작업 폴더를 준비할까요?",
@@ -1060,18 +1074,281 @@ fn unsupported(kind: LocationKind, detail: impl Into<String>) -> UnsupportedLoca
     UnsupportedLocation { kind, detail: detail.into() }
 }
 
-/// Roots the environment declares as OneDrive. Absent or non-canonicalizable values are
-/// ignored (a documented miss); a stale value with synchronization turned off is a documented
-/// false positive. Other sync products are not represented here.
+/// One declared synchronization root and where it was declared.
+#[derive(Debug, Clone)]
 #[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
-pub(crate) fn sync_roots_from_env() -> Vec<PathBuf> {
-    ["OneDrive", "OneDriveConsumer", "OneDriveCommercial"]
+pub(crate) struct SyncRoot {
+    pub path: PathBuf,
+    pub source: &'static str,
+}
+
+/// How one source answered. A failed or partially failed query is never "nothing registered".
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) enum SourceStatus {
+    /// Queried normally: `roots` usable roots, `stale` declared roots whose folder does not exist
+    /// (recorded, not matched — a documented miss); `key_present` is false when the optional
+    /// registration key does not exist at all (nothing registered, not a failure).
+    Queried { roots: usize, stale: usize, key_present: bool },
+    /// The place to look does not exist (for the registry: the hive of the account this server
+    /// runs as is not loaded). Reported and treated as no answer, never as a failure.
+    Absent(String),
+    /// Access denied, partial enumeration, or a value that could not be interpreted.
+    Failed(String),
+}
+
+#[derive(Debug, Clone)]
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) struct SourceReport {
+    pub source: &'static str,
+    pub status: SourceStatus,
+}
+
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) struct SyncRoots {
+    pub roots: Vec<SyncRoot>,
+    pub reports: Vec<SourceReport>,
+}
+
+pub(crate) const SOURCE_ENV: &str = "environment:OneDrive*";
+pub(crate) const SOURCE_SYNC_ENGINES: &str = "registry:SyncEngines\\Providers\\*\\*\\MountPoint";
+pub(crate) const SOURCE_ONEDRIVE_ACCOUNTS: &str = "registry:Microsoft\\OneDrive\\Accounts\\*\\UserFolder";
+
+/// Collect declared roots from every source. Declared paths are canonicalized when their folder
+/// exists; absent folders count as stale.
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+fn collect(out: &mut SyncRoots, source: &'static str, declared: Result<Declared, String>) {
+    match declared {
+        Err(why) => out.reports.push(SourceReport { source, status: SourceStatus::Failed(why) }),
+        Ok(Declared { values, key_present }) => {
+            let (mut roots, mut stale) = (0, 0);
+            for value in values {
+                match PathBuf::from(&value).canonicalize() {
+                    Ok(path) => { out.roots.push(SyncRoot { path, source }); roots += 1; }
+                    Err(_) => stale += 1,
+                }
+            }
+            out.reports.push(SourceReport { source, status: SourceStatus::Queried { roots, stale, key_present } });
+        }
+    }
+}
+
+/// What a source handed back before path resolution; `key_present` is false when the optional
+/// registration key does not exist (nothing registered).
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) struct Declared {
+    pub values: Vec<String>,
+    pub key_present: bool,
+}
+
+/// `OneDrive` / `OneDriveConsumer` / `OneDriveCommercial` of **this process**. An MCP server may
+/// run with a minimal environment, so an empty answer here says nothing about the machine.
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+fn env_declared_roots() -> Result<Declared, String> {
+    let values: Vec<String> = ["OneDrive", "OneDriveConsumer", "OneDriveCommercial"]
         .iter()
         .filter_map(|key| std::env::var_os(key))
         .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
-        .filter_map(|p| p.canonicalize().ok())
-        .collect()
+        .map(|v| v.to_string_lossy().into_owned())
+        .collect();
+    let key_present = !values.is_empty();
+    Ok(Declared { values, key_present })
+}
+
+/// Every source, with its status. Used by `gil_start` and by the reservation itself.
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) fn sync_roots() -> SyncRoots {
+    let mut out = SyncRoots::default();
+    collect(&mut out, SOURCE_ENV, env_declared_roots());
+    match registry::user_hive() {
+        Err(why) => {
+            out.reports.push(SourceReport { source: SOURCE_SYNC_ENGINES, status: SourceStatus::Failed(why.clone()) });
+            out.reports.push(SourceReport { source: SOURCE_ONEDRIVE_ACCOUNTS, status: SourceStatus::Failed(why) });
+        }
+        Ok(None) => {
+            let what = "the registry hive of the account this server runs as is not loaded".to_string();
+            out.reports.push(SourceReport { source: SOURCE_SYNC_ENGINES, status: SourceStatus::Absent(what.clone()) });
+            out.reports.push(SourceReport { source: SOURCE_ONEDRIVE_ACCOUNTS, status: SourceStatus::Absent(what) });
+        }
+        Ok(Some(hive)) => {
+            collect(&mut out, SOURCE_SYNC_ENGINES, registry::sync_engine_mount_points(&hive));
+            collect(&mut out, SOURCE_ONEDRIVE_ACCOUNTS, registry::onedrive_user_folders(&hive));
+        }
+    }
+    out
+}
+
+/// What a passed check actually looked at, for the `location_check` report. It states evidence
+/// and limits; it never claims that no synchronization exists.
+#[derive(Debug, Clone)]
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+pub(crate) struct LocationReport {
+    pub sources: Vec<SourceReport>,
+    pub components_checked: usize,
+    pub drive: &'static str,
+    pub filesystem: String,
+}
+
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+impl LocationReport {
+    /// Documented detection limits (contract §8 1b), repeated with every pass.
+    pub(crate) const LIMITS: &'static str = "확인한 소스에서 동기화 루트가 발견되지 않았고 경로 구성 요소에 reparse·클라우드 속성이 없었다는 뜻이다. 다른 동기화 제품, 등록되지 않은 동기화, Files On-Demand 가 꺼진 폴더, 이 프로세스에 전달되지 않은 환경 변수는 보이지 않는다. 동기화가 없음을 보장하지 않는다.";
+}
+
+/// Registry sources, read from the hive of **the account this server runs as** (the process
+/// token's SID under `HKEY_USERS`), not from whatever `HKEY_CURRENT_USER` maps to. Whether that
+/// account is the person in the chat is a separate question this code does not answer. Basis: `Software\SyncEngines\Providers` is the
+/// Explorer sync-root registration described in Microsoft's cloud storage provider integration
+/// guidance (navigation pane / sync root registration); `Software\Microsoft\OneDrive\Accounts\*\UserFolder`
+/// is an OneDrive client convention, not a documented interface. Both are read-only here.
+#[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+mod registry {
+    use super::*;
+    use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_MORE_DATA, ERROR_NO_MORE_ITEMS, ERROR_SUCCESS};
+    use windows_sys::Win32::System::Registry::{HKEY, HKEY_USERS, KEY_READ, REG_EXPAND_SZ, REG_SZ, RegCloseKey, RegEnumKeyExW, RegOpenKeyExW, RegQueryValueExW};
+
+    pub(super) struct Key(HKEY);
+    impl Key {
+        #[cfg(test)]
+        pub(super) fn raw(&self) -> HKEY { self.0 }
+    }
+    impl Drop for Key {
+        fn drop(&mut self) {
+            unsafe { RegCloseKey(self.0); }
+        }
+    }
+
+    fn wide(text: &str) -> Vec<u16> {
+        text.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+
+    /// `Ok(None)` only when the key does not exist; every other failure is an error.
+    pub(super) fn open(parent: HKEY, sub: &str) -> Result<Option<Key>, String> {
+        let mut out: HKEY = null_mut();
+        let status = unsafe { RegOpenKeyExW(parent, wide(sub).as_ptr(), 0, KEY_READ, &mut out) };
+        match status {
+            ERROR_SUCCESS => Ok(Some(Key(out))),
+            ERROR_FILE_NOT_FOUND => Ok(None),
+            code => Err(format!("open {sub}: error {code}")),
+        }
+    }
+
+    pub(super) fn subkeys(key: &Key) -> Result<Vec<String>, String> {
+        let mut names = Vec::new();
+        let mut index = 0;
+        loop {
+            let mut name = [0u16; 256];
+            let mut len = name.len() as u32;
+            let status = unsafe { RegEnumKeyExW(key.0, index, name.as_mut_ptr(), &mut len, null_mut(), null_mut(), null_mut(), null_mut()) };
+            match status {
+                ERROR_SUCCESS => names.push(String::from_utf16_lossy(&name[..len as usize])),
+                ERROR_NO_MORE_ITEMS => return Ok(names),
+                code => return Err(format!("enumerate subkeys: error {code} at index {index}")),
+            }
+            index += 1;
+        }
+    }
+
+    /// `Ok(None)` only when the value does not exist. A value that is not REG_SZ/REG_EXPAND_SZ,
+    /// or whose `%VAR%` references cannot be expanded from this process, is an error.
+    pub(super) fn string_value(key: &Key, name: &str) -> Result<Option<String>, String> {
+        let name_w = wide(name);
+        let mut kind = 0u32;
+        let mut bytes = 0u32;
+        let status = unsafe { RegQueryValueExW(key.0, name_w.as_ptr(), null_mut(), &mut kind, null_mut(), &mut bytes) };
+        match status {
+            ERROR_SUCCESS | ERROR_MORE_DATA => {}
+            ERROR_FILE_NOT_FOUND => return Ok(None),
+            code => return Err(format!("read {name}: error {code}")),
+        }
+        if kind != REG_SZ && kind != REG_EXPAND_SZ {
+            return Err(format!("read {name}: unexpected value type {kind}"));
+        }
+        let mut data = vec![0u8; bytes as usize + 2];
+        let mut got = bytes;
+        let status = unsafe { RegQueryValueExW(key.0, name_w.as_ptr(), null_mut(), &mut kind, data.as_mut_ptr(), &mut got) };
+        if status != ERROR_SUCCESS {
+            return Err(format!("read {name}: error {status}"));
+        }
+        let units: Vec<u16> = data[..got as usize].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).take_while(|&u| u != 0).collect();
+        let text = String::from_utf16(&units).map_err(|_| format!("read {name}: not valid UTF-16"))?;
+        let text = if kind == REG_EXPAND_SZ { expand(&text)? } else { text };
+        if text.trim().is_empty() {
+            return Err(format!("read {name}: empty value"));
+        }
+        Ok(Some(text))
+    }
+
+    /// `%VAR%` expansion from this process's environment; anything left unexpanded is an error
+    /// (a minimal server environment must not silently turn a declared root into nonsense).
+    fn expand(text: &str) -> Result<String, String> {
+        let mut out = String::new();
+        let mut rest = text;
+        while let Some(start) = rest.find('%') {
+            out.push_str(&rest[..start]);
+            let after = &rest[start + 1..];
+            let Some(end) = after.find('%') else { return Err(format!("unterminated %VAR% in {text}")); };
+            let var = &after[..end];
+            match std::env::var_os(var) {
+                Some(value) if !value.is_empty() => out.push_str(&value.to_string_lossy()),
+                _ => return Err(format!("%{var}% is not set in this process")),
+            }
+            rest = &after[end + 1..];
+        }
+        out.push_str(rest);
+        Ok(out)
+    }
+
+    /// The hive of the account this server runs as: `Ok(None)` when it is not loaded (absent),
+    /// `Err` when the token or the open fails (access denied and the like).
+    pub(super) fn user_hive() -> Result<Option<Key>, String> {
+        #[cfg(test)]
+        if super::workspace_hooks::REGISTRY_FAIL.with(Cell::get) {
+            return Err("injected hive failure".into());
+        }
+        let token = super::user().map_err(|e| format!("process token: {e}"))?;
+        let sid = super::sid_text(super::sid(&token)).map_err(|e| format!("token SID: {e}"))?;
+        open(HKEY_USERS, &sid)
+    }
+
+    /// Test-only relocation of both registry sources under a scratch key.
+    fn base(sub: &str) -> String {
+        #[cfg(test)]
+        if let Some(prefix) = super::workspace_hooks::REGISTRY_BASE.with(|c| c.borrow().clone()) {
+            return format!("{prefix}\\{sub}");
+        }
+        format!("Software\\{sub}")
+    }
+
+    /// `Software\SyncEngines\Providers\<provider>\<id>\MountPoint` for every registration.
+    pub(super) fn sync_engine_mount_points(hive: &Key) -> Result<Declared, String> {
+        let Some(providers) = open(hive.0, &base("SyncEngines\\Providers"))? else { return Ok(Declared { values: Vec::new(), key_present: false }); };
+        let mut out = Vec::new();
+        for provider in subkeys(&providers)? {
+            let Some(entries) = open(providers.0, &provider)? else { return Err(format!("provider {provider} vanished during enumeration")); };
+            for id in subkeys(&entries)? {
+                let Some(entry) = open(entries.0, &id)? else { return Err(format!("registration {provider}\\{id} vanished during enumeration")); };
+                if let Some(mount) = string_value(&entry, "MountPoint").map_err(|e| format!("{provider}\\{id}: {e}"))? {
+                    out.push(mount);
+                }
+            }
+        }
+        Ok(Declared { values: out, key_present: true })
+    }
+
+    /// `Software\Microsoft\OneDrive\Accounts\<account>\UserFolder` for every account.
+    pub(super) fn onedrive_user_folders(hive: &Key) -> Result<Declared, String> {
+        let Some(accounts) = open(hive.0, &base("Microsoft\\OneDrive\\Accounts"))? else { return Ok(Declared { values: Vec::new(), key_present: false }); };
+        let mut out = Vec::new();
+        for account in subkeys(&accounts)? {
+            let Some(entry) = open(accounts.0, &account)? else { return Err(format!("account {account} vanished during enumeration")); };
+            if let Some(folder) = string_value(&entry, "UserFolder").map_err(|e| format!("{account}: {e}"))? {
+                out.push(folder);
+            }
+        }
+        Ok(Declared { values: out, key_present: true })
+    }
 }
 
 #[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
@@ -1095,9 +1372,14 @@ pub(crate) fn under(path: &Path, root: &Path) -> bool {
     }
 }
 
-/// Classify a selected folder. `Ok(())` means every check passed; any error means refuse.
+/// Classify a selected folder. `Ok(report)` means every check passed and says what was looked
+/// at; any error means refuse. A source that could not be queried refuses as unverifiable.
 #[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
-pub(crate) fn classify_location(root: &Path, sync_roots: &[PathBuf]) -> Result<(), UnsupportedLocation> {
+pub(crate) fn classify_location(root: &Path, sync_roots: &SyncRoots) -> Result<LocationReport, UnsupportedLocation> {
+    if let Some(failed) = sync_roots.reports.iter().find(|r| matches!(r.status, SourceStatus::Failed(_))) {
+        let SourceStatus::Failed(why) = &failed.status else { unreachable!() };
+        return Err(unsupported(LocationKind::Unverifiable, format!("sync root source {} could not be queried: {why}", failed.source)));
+    }
     if matches!(root.components().next(), Some(Component::Prefix(p)) if matches!(p.kind(), Prefix::UNC(..) | Prefix::VerbatimUNC(..))) {
         return Err(unsupported(LocationKind::Network, "UNC path"));
     }
@@ -1107,9 +1389,10 @@ pub(crate) fn classify_location(root: &Path, sync_roots: &[PathBuf]) -> Result<(
     if let Err(e) = absolute(&canonical) {
         return Err(unsupported(LocationKind::Unverifiable, format!("not a drive path: {e}")));
     }
-    for sync in sync_roots {
-        if under(&canonical, sync) {
-            return Err(unsupported(LocationKind::OneDriveEnv, format!("under {}", sync.display())));
+    for sync in &sync_roots.roots {
+        if under(&canonical, &sync.path) {
+            let kind = if sync.source == SOURCE_ENV { LocationKind::OneDriveEnv } else { LocationKind::SyncRoot };
+            return Err(unsupported(kind, format!("under {} ({})", sync.path.display(), sync.source)));
         }
     }
     let drive: PathBuf = canonical.components().take(2).collect();
@@ -1123,6 +1406,7 @@ pub(crate) fn classify_location(root: &Path, sync_roots: &[PathBuf]) -> Result<(
     // in the selected path count, and a failed query is unverifiable, not safe.
     let mut at = PathBuf::new();
     let mut last: Option<File> = None;
+    let mut components_checked = 0usize;
     for part in canonical.components() {
         at.push(part);
         if matches!(part, Component::Prefix(_)) {
@@ -1142,6 +1426,7 @@ pub(crate) fn classify_location(root: &Path, sync_roots: &[PathBuf]) -> Result<(
         if flags & CLOUD_ATTRIBUTES != 0 {
             return Err(unsupported(LocationKind::CloudFiles, format!("{} attributes {flags:#x}", at.display())));
         }
+        components_checked += 1;
         last = Some(dir);
     }
     let dir = last.ok_or_else(|| unsupported(LocationKind::Unverifiable, "empty path"))?;
@@ -1151,20 +1436,21 @@ pub(crate) fn classify_location(root: &Path, sync_roots: &[PathBuf]) -> Result<(
             return Err(unsupported(LocationKind::Unverifiable, format!("volume query: {}", io::Error::last_os_error())));
         }
     }
+    let filesystem_name = String::from_utf16_lossy(&filesystem).trim_end_matches('\0').to_string();
     if filesystem[..5] != [78, 84, 70, 83, 0] {
-        return Err(unsupported(LocationKind::NotNtfs, String::from_utf16_lossy(&filesystem).trim_end_matches('\0').to_string()));
+        return Err(unsupported(LocationKind::NotNtfs, filesystem_name));
     }
-    Ok(())
+    Ok(LocationReport { sources: sync_roots.reports.clone(), components_checked, drive: "fixed", filesystem: filesystem_name })
 }
 
 /// Environment-aware check used by `gil_start` and by the reservation itself.
 #[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
-pub(crate) fn unsupported_location(root: &Path) -> Result<(), UnsupportedLocation> {
+pub(crate) fn unsupported_location(root: &Path) -> Result<LocationReport, UnsupportedLocation> {
     #[cfg(test)]
     if workspace_hooks::UNVERIFIABLE.with(Cell::get) {
         return Err(unsupported(LocationKind::Unverifiable, "injected check failure"));
     }
-    classify_location(root, &sync_roots_from_env())
+    classify_location(root, &sync_roots())
 }
 
 /// Test-only fault injection for the workspace flow (contract §6 W12-7). Not compiled into
@@ -1182,6 +1468,10 @@ pub(crate) mod workspace_hooks {
         pub static FAIL_AFTER_PARENT: Cell<bool> = const { Cell::new(false) };
         /// Make only the post-creation location check fail (once).
         pub static UNVERIFIABLE_AFTER_CREATE: Cell<bool> = const { Cell::new(false) };
+        /// Read both registry sources under this subkey of the user hive instead of `Software`.
+        pub static REGISTRY_BASE: RefCell<Option<String>> = const { RefCell::new(None) };
+        /// Pretend the user hive cannot be opened.
+        pub static REGISTRY_FAIL: Cell<bool> = const { Cell::new(false) };
     }
 }
 #[cfg(test)]
@@ -1333,7 +1623,7 @@ pub(crate) fn create_workspace(plan: &WorkspacePlan) -> Result<Vec<PathBuf>, Wor
             return Err(WorkspaceRefusal::Unsupported(unsupported(LocationKind::Unverifiable, "injected after creation")));
         }
         // The result must itself pass the location check (no reparse, local fixed NTFS, no sync root).
-        unsupported_location(&plan.path).map_err(WorkspaceRefusal::Unsupported)
+        unsupported_location(&plan.path).map(|_| ()).map_err(WorkspaceRefusal::Unsupported)
     })();
     match outcome {
         Ok(()) => Ok(created),
@@ -1342,6 +1632,160 @@ pub(crate) fn create_workspace(plan: &WorkspacePlan) -> Result<Vec<PathBuf>, Wor
             created: created.into_iter().map(|p| { let remains = std::fs::symlink_metadata(&p).is_ok(); (p, remains) }).collect(),
         }),
     }
+}
+
+#[cfg(test)]
+mod sync_root_tests {
+    //! Windows contract §4 W1 0 / §8 1b: sync roots from the user hive, with found / none /
+    //! failed kept apart. Registry fixtures live under a scratch key of the current user's hive
+    //! and are removed afterwards; nothing outside it is touched.
+    use super::*;
+    use std::fs;
+    use windows_sys::Win32::Foundation::ERROR_SUCCESS;
+    use windows_sys::Win32::System::Registry::{HKEY, HKEY_CURRENT_USER, KEY_ALL_ACCESS, REG_DWORD, REG_EXPAND_SZ, REG_OPTION_NON_VOLATILE, REG_SZ, RegCloseKey, RegCreateKeyExW, RegDeleteKeyW, RegDeleteTreeW, RegSetValueExW};
+
+    fn w(s: &str) -> Vec<u16> { s.encode_utf16().chain(std::iter::once(0)).collect() }
+    struct Scratch { base: String, dir: PathBuf }
+    impl Scratch {
+        fn new(label: &str) -> Self {
+            static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+            let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let base = format!("Software\\GilTest\\sync-{label}-{}-{n}", std::process::id());
+            let dir = std::env::temp_dir().join(format!("gil-sync-{label}-{}-{n}", std::process::id()));
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(&dir).unwrap();
+            workspace_hooks::REGISTRY_BASE.with(|c| *c.borrow_mut() = Some(base.clone()));
+            Self { base, dir }
+        }
+        fn set(&self, sub: &str, name: &str, kind: u32, data: &[u8]) {
+            unsafe {
+                let mut key: HKEY = null_mut();
+                let path = w(&format!("{}\\{sub}", self.base));
+                assert_eq!(RegCreateKeyExW(HKEY_CURRENT_USER, path.as_ptr(), 0, null_mut(), REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, null_mut(), &mut key, null_mut()), ERROR_SUCCESS);
+                assert_eq!(RegSetValueExW(key, w(name).as_ptr(), 0, kind, data.as_ptr(), data.len() as u32), ERROR_SUCCESS);
+                RegCloseKey(key);
+            }
+        }
+        fn set_sz(&self, sub: &str, name: &str, value: &str, kind: u32) {
+            let units: Vec<u8> = w(value).iter().flat_map(|u| u.to_le_bytes()).collect();
+            self.set(sub, name, kind, &units);
+        }
+    }
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            workspace_hooks::REGISTRY_BASE.with(|c| *c.borrow_mut() = None);
+            workspace_hooks::REGISTRY_FAIL.with(|c| c.set(false));
+            unsafe {
+                // Only this run's key; the shared `Software\\GilTest` parent goes only when empty.
+                RegDeleteTreeW(HKEY_CURRENT_USER, w(&self.base).as_ptr());
+                RegDeleteKeyW(HKEY_CURRENT_USER, w("Software\\GilTest").as_ptr());
+            }
+            let _ = fs::remove_dir_all(&self.dir);
+        }
+    }
+    fn status(roots: &SyncRoots, source: &str) -> SourceStatus {
+        roots.reports.iter().find(|r| r.source == source).map(|r| r.status.clone()).expect(source)
+    }
+
+    #[test]
+    fn registered_sync_engine_root_refuses_below_it_and_only_below_it() {
+        let s = Scratch::new("engine");
+        let root = s.dir.join("내 동기화 폴더 (회사)");
+        let sibling = s.dir.join("내 동기화 폴더 (회사)-backup");
+        fs::create_dir_all(root.join("바탕 화면").join("test3")).unwrap();
+        fs::create_dir_all(&sibling).unwrap();
+        s.set_sz("SyncEngines\\Providers\\GilTestProvider\\{id-1}", "MountPoint", &format!("{}\\", root.display()), REG_SZ);
+        let roots = sync_roots();
+        assert_eq!(status(&roots, SOURCE_SYNC_ENGINES), SourceStatus::Queried { roots: 1, stale: 0, key_present: true });
+        assert_eq!(status(&roots, SOURCE_ONEDRIVE_ACCOUNTS), SourceStatus::Queried { roots: 0, stale: 0, key_present: false });
+        let refused = classify_location(&root.join("바탕 화면").join("test3"), &roots).unwrap_err();
+        assert_eq!(refused.kind, LocationKind::SyncRoot);
+        assert_eq!(refused.evidence(), Evidence::DeclaredByRegistry);
+        assert!(refused.detail.contains(SOURCE_SYNC_ENGINES), "{}", refused.detail);
+        assert_eq!(classify_location(&root, &roots).unwrap_err().kind, LocationKind::SyncRoot, "the root itself counts");
+        let passed = classify_location(&sibling, &roots).expect("a sibling with a longer name is outside the root");
+        assert_eq!(passed.sources.len(), 3);
+        assert!(passed.components_checked >= 3);
+    }
+
+    #[test]
+    fn onedrive_accounts_with_a_stale_and_an_expandable_entry_are_reported_apart() {
+        let s = Scratch::new("accounts");
+        let live = s.dir.join("OneDrive - 개인");
+        fs::create_dir_all(live.join("문서")).unwrap();
+        s.set_sz("Microsoft\\OneDrive\\Accounts\\Personal", "UserFolder", &live.display().to_string(), REG_SZ);
+        s.set_sz("Microsoft\\OneDrive\\Accounts\\Business1", "UserFolder", &s.dir.join("gone").display().to_string(), REG_SZ);
+        // An expandable value resolved through this process's environment (%TEMP% is set).
+        let rel = live.strip_prefix(std::env::temp_dir()).unwrap().display().to_string();
+        s.set_sz("SyncEngines\\Providers\\P\\{id}", "MountPoint", &format!("%TEMP%\\{rel}"), REG_EXPAND_SZ);
+        let roots = sync_roots();
+        assert_eq!(status(&roots, SOURCE_ONEDRIVE_ACCOUNTS), SourceStatus::Queried { roots: 1, stale: 1, key_present: true });
+        assert_eq!(status(&roots, SOURCE_SYNC_ENGINES), SourceStatus::Queried { roots: 1, stale: 0, key_present: true });
+        assert_eq!(classify_location(&live.join("문서"), &roots).unwrap_err().kind, LocationKind::SyncRoot);
+        assert!(classify_location(&s.dir, &roots).is_ok(), "the parent of a root is not under it");
+    }
+
+    #[test]
+    fn nested_roots_and_a_root_declared_twice_still_refuse_once() {
+        let s = Scratch::new("nested");
+        let outer = s.dir.join("outer sync");
+        let inner = outer.join("inner sync");
+        fs::create_dir_all(inner.join("p")).unwrap();
+        s.set_sz("SyncEngines\\Providers\\A\\{1}", "MountPoint", &outer.display().to_string(), REG_SZ);
+        s.set_sz("SyncEngines\\Providers\\B\\{2}", "MountPoint", &inner.display().to_string(), REG_SZ);
+        s.set_sz("Microsoft\\OneDrive\\Accounts\\X", "UserFolder", &outer.display().to_string().to_uppercase(), REG_SZ);
+        let roots = sync_roots();
+        assert_eq!(roots.roots.len(), 3);
+        assert_eq!(classify_location(&inner.join("p"), &roots).unwrap_err().kind, LocationKind::SyncRoot);
+    }
+
+    #[test]
+    fn nothing_registered_is_queried_normally_not_a_failure() {
+        let s = Scratch::new("none");
+        let roots = sync_roots();
+        assert_eq!(status(&roots, SOURCE_SYNC_ENGINES), SourceStatus::Queried { roots: 0, stale: 0, key_present: false }, "an absent optional key is not a failure");
+        assert_eq!(status(&roots, SOURCE_ONEDRIVE_ACCOUNTS), SourceStatus::Queried { roots: 0, stale: 0, key_present: false });
+        let report = classify_location(&s.dir, &roots).expect("no signal passes");
+        assert!(LocationReport::LIMITS.contains("보장하지 않는다"));
+        assert_eq!(report.drive, "fixed");
+    }
+
+    #[test]
+    fn a_hive_that_cannot_be_opened_refuses_as_unverifiable() {
+        let s = Scratch::new("hive-fail");
+        workspace_hooks::REGISTRY_FAIL.with(|c| c.set(true));
+        let roots = sync_roots();
+        assert!(matches!(status(&roots, SOURCE_SYNC_ENGINES), SourceStatus::Failed(_)));
+        assert!(matches!(status(&roots, SOURCE_ONEDRIVE_ACCOUNTS), SourceStatus::Failed(_)));
+        let refused = classify_location(&s.dir, &roots).unwrap_err();
+        assert_eq!(refused.kind, LocationKind::Unverifiable);
+        assert_eq!(refused.evidence(), Evidence::CheckFailed);
+        assert!(refused.detail.contains("could not be queried"), "{}", refused.detail);
+    }
+
+    #[test]
+    fn a_value_that_cannot_be_interpreted_is_a_failure_not_an_empty_answer() {
+        let s = Scratch::new("badvalue");
+        s.set("SyncEngines\\Providers\\P\\{1}", "MountPoint", REG_DWORD, &1u32.to_le_bytes());
+        let roots = sync_roots();
+        assert!(matches!(status(&roots, SOURCE_SYNC_ENGINES), SourceStatus::Failed(ref why) if why.contains("unexpected value type")));
+        assert_eq!(classify_location(&s.dir, &roots).unwrap_err().kind, LocationKind::Unverifiable);
+        let s2 = Scratch::new("unexpandable");
+        s2.set_sz("Microsoft\\OneDrive\\Accounts\\P", "UserFolder", "%GIL_TEST_VARIABLE_THAT_IS_NOT_SET%\\OneDrive", REG_EXPAND_SZ);
+        let roots = sync_roots();
+        assert!(matches!(status(&roots, SOURCE_ONEDRIVE_ACCOUNTS), SourceStatus::Failed(ref why) if why.contains("not set in this process")));
+        assert_eq!(classify_location(&s2.dir, &roots).unwrap_err().kind, LocationKind::Unverifiable);
+    }
+
+    #[test]
+    fn the_hive_read_is_the_process_tokens_user_hive() {
+        let s = Scratch::new("hive");
+        s.set_sz("Probe", "Marker", "written-through-HKCU", REG_SZ);
+        let hive = registry::user_hive().expect("no failure").expect("the hive of the account the tests run as is loaded");
+        let probe = registry::open(hive_key(&hive), &format!("{}\\Probe", s.base)).unwrap().expect("visible through HKEY_USERS\\<token SID>");
+        assert_eq!(registry::string_value(&probe, "Marker").unwrap().as_deref(), Some("written-through-HKCU"));
+    }
+    fn hive_key(k: &registry::Key) -> windows_sys::Win32::System::Registry::HKEY { k.raw() }
 }
 
 #[cfg(test)]

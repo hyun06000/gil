@@ -50,6 +50,8 @@ jobs:
       GIL_NATIVE_MACHINE: ${{ matrix.machine }}
       GIL_NATIVE_ARCH: ${{ matrix.arch }}
       GIL_RUNTIME_PROFILE: ${{ matrix.profile }}
+      # The runner's own user hive may carry a GilTest sync-root registration during the test.
+      GIL_TEST_REAL_REGISTRY: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         env:
