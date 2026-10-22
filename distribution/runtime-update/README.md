@@ -19,6 +19,11 @@ changes are made on fresh isolated temp folders/files owned by the tests, restor
 the restore's exit code recorded in `unwritable/acl-restore.json` and asserted. Evidence of every
 run is copied to `target/u2-probe-evidence/` for the CI artifact.
 
+Run the suite from PowerShell or cmd on Windows, not from an MSYS/Git-Bash shell: such a shell
+enables the administrator token's backup/restore privileges, which bypass DACL denies and make the
+permission fixtures non-enforcing (observed in CI run 39843768112). The fixtures check their own
+precondition and record the token's enabled privileges in `*/fixture.json`.
+
 Limits: an ordinary runner token and filesystem. The Codex Desktop restricted token, sandbox, real
 MCP connection and persistent-store access are **not** reproduced. Rename failure is injected, not
 observed. A green run is not a GIL update success and not an atomicity or power-loss durability

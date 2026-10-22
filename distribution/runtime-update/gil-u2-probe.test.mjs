@@ -41,6 +41,20 @@ function run(label, env = {}, cwd = isolated(label)) {
   return { cwd, code: r.status, signal: r.signal, spawn_error: meta.spawn_error, parse_error: meta.parse_error, out, err, result, dir };
 }
 const digestRole = (file) => JSON.parse(spawnSync(process.execPath, [PROBE, '--digest', file], { encoding: 'utf8', windowsHide: true }).stdout);
+// The test process's own token privileges (read only). A token with backup/restore privileges
+// enabled (for example a child of an MSYS shell running as administrator) bypasses DACL denies,
+// which would make the ACL fixtures below non-enforcing; that state is recorded and asserted.
+function tokenPrivileges() {
+  if (process.platform !== 'win32') return { platform: process.platform, privileges: null };
+  const whoami = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'whoami.exe');
+  const r = spawnSync(whoami, ['/priv', '/fo', 'csv', '/nh'], { encoding: 'utf8', windowsHide: true });
+  const enabled = (r.stdout ?? '').split(/\r?\n/).filter((l) => /Enabled/.test(l)).map((l) => l.split(',')[0].replace(/"/g, ''));
+  return { platform: 'win32', exit_code: r.status, enabled, raw: r.stdout ?? r.stderr };
+}
+function recordFixture(label, record) {
+  fs.mkdirSync(path.join(EVIDENCE, label), { recursive: true });
+  fs.writeFileSync(path.join(EVIDENCE, label, 'fixture.json'), JSON.stringify(record, null, 1));
+}
 const FAST = { GIL_U2_PROBE_SELFTEST_CALL_TIMEOUT_MS: '1500', GIL_U2_PROBE_SELFTEST_EXIT_WAIT_MS: '1500' };
 const entries = (dir) => fs.readdirSync(dir, { withFileTypes: true });
 const probeFolder = (cwd) => entries(cwd).filter((e) => e.isDirectory() && e.name.startsWith('gil-u2-probe-')).map((e) => path.join(cwd, e.name));
@@ -129,6 +143,15 @@ test('stop condition: an unwritable working directory stops with exit 2 and crea
   }
   try {
     if (process.platform !== 'win32' && process.getuid?.() === 0) return; // root ignores modes
+    // Precondition: the deny must actually be enforced for this test's own token before the
+    // harness is judged. If it is not, the fixture is reported as non-enforcing (with the token's
+    // enabled privileges) instead of silently passing or skipping.
+    let direct = null;
+    try { const fd = fs.openSync(path.join(cwd, 'fixture-direct-probe.txt'), 'wx'); fs.closeSync(fd); direct = 'created (deny NOT enforced)'; }
+    catch (e) { direct = e.code; }
+    record.precondition = { direct_create_attempt: direct, token: tokenPrivileges() };
+    recordFixture('unwritable', record);
+    assert.ok(direct === 'EPERM' || direct === 'EACCES', `fixture must be enforced for this token: ${JSON.stringify(record.precondition)}`);
     const r = run('unwritable', {}, cwd);
     assert.equal(r.code, 2, r.out + r.err);
     assert.equal(r.result.stop.where, 'test_area');
@@ -143,6 +166,7 @@ test('stop condition: an unwritable working directory stops with exit 2 and crea
     }
     fs.mkdirSync(path.join(EVIDENCE, 'unwritable'), { recursive: true });
     fs.writeFileSync(path.join(EVIDENCE, 'unwritable', 'acl-restore.json'), JSON.stringify(record, null, 1));
+    try { fs.rmSync(path.join(cwd, 'fixture-direct-probe.txt'), { force: true }); } catch {}
     assert.equal(record.restored.exit_code, 0, `ACL restore must succeed on the isolated folder: ${JSON.stringify(record.restored)}`);
   }
 });
@@ -152,17 +176,24 @@ test('digest: ENOENT is absent, a read error is an error, never absent or preser
   assert.deepEqual(digestRole(path.join(dir, 'missing.bin')), { state: 'absent', digest: null, error: 'ENOENT' });
   const f = path.join(dir, 'locked.bin'); fs.writeFileSync(f, 'x');
   const icacls = process.platform === 'win32' ? path.join(process.env.SystemRoot, 'System32', 'icacls.exe') : null;
+  const record = { file: 'fresh file in an isolated temp folder created by this test', applied: null, restored: null, precondition: null, digest_role: null };
   let denied = null;
-  if (icacls) { const d = spawnSync(icacls, [f, '/deny', '*S-1-1-0:(R)'], { encoding: 'utf8' }); assert.equal(d.status, 0, d.stderr); }
-  else if (process.getuid?.() !== 0) fs.chmodSync(f, 0o000);
+  if (icacls) { const d = spawnSync(icacls, [f, '/deny', '*S-1-1-0:(R)'], { encoding: 'utf8' }); record.applied = { command: 'icacls <file> /deny *S-1-1-0:(R)', exit_code: d.status, stderr: d.stderr }; assert.equal(d.status, 0, d.stderr); }
+  else if (process.getuid?.() !== 0) { fs.chmodSync(f, 0o000); record.applied = { command: 'chmod 0000 <file>', exit_code: 0 }; }
   try {
     if (icacls || process.getuid?.() !== 0) {
-      denied = digestRole(f);
+      // Precondition: the read deny must be enforced for this test's own token.
+      let direct = null;
+      try { fs.readFileSync(f); direct = 'read (deny NOT enforced)'; } catch (e) { direct = e.code; }
+      record.precondition = { direct_read_attempt: direct, token: tokenPrivileges() };
+      denied = digestRole(f); record.digest_role = denied;
+      recordFixture('digest-read-error', record);
+      assert.ok(direct === 'EPERM' || direct === 'EACCES', `fixture must be enforced for this token: ${JSON.stringify(record.precondition)}`);
       assert.equal(denied.state, 'error', JSON.stringify(denied)); assert.equal(denied.digest, null); assert.notEqual(denied.error, 'ENOENT');
     }
   } finally {
-    if (icacls) { const u = spawnSync(icacls, [f, '/remove:d', '*S-1-1-0'], { encoding: 'utf8' }); assert.equal(u.status, 0, u.stderr); }
-    else fs.chmodSync(f, 0o644);
+    if (icacls) { const u = spawnSync(icacls, [f, '/remove:d', '*S-1-1-0'], { encoding: 'utf8' }); record.restored = { command: 'icacls <file> /remove:d *S-1-1-0', exit_code: u.status, stderr: u.stderr }; recordFixture('digest-read-error', record); assert.equal(u.status, 0, u.stderr); }
+    else { fs.chmodSync(f, 0o644); record.restored = { command: 'chmod 0644 <file>', exit_code: 0 }; recordFixture('digest-read-error', record); }
   }
   // Harness level: a read error on the selection file fails the preservation check instead of
   // being counted as absent or preserved.
@@ -215,7 +246,7 @@ test('wrapper: a malformed result block still leaves raw stdout/stderr and exit 
 });
 
 test('evidence index for the artifact', () => {
-  const index = { schema: 'gil-u2-probe-evidence/1', node: process.version, platform: `${process.platform}/${process.arch}`, cases: fs.readdirSync(EVIDENCE), limits: ['ordinary runner token and filesystem; the Codex Desktop restricted token, sandbox, real MCP connection and persistent-store access are not reproduced', 'success is not a GIL update success and not an atomicity or power-loss durability guarantee', 'rename failure, read errors, blind identity, slow/garbage servers and the corrupt result are injected, not observed', 'the only permission changes are on fresh isolated temp folders/files of these tests and are restored (see unwritable/acl-restore.json)'] };
+  const index = { schema: 'gil-u2-probe-evidence/1', node: process.version, platform: `${process.platform}/${process.arch}`, commit: process.env.GIL_PROBE_COMMIT ?? null, token: tokenPrivileges(), cases: fs.readdirSync(EVIDENCE), limits: ['ordinary runner token and filesystem; the Codex Desktop restricted token, sandbox, real MCP connection and persistent-store access are not reproduced', 'success is not a GIL update success and not an atomicity or power-loss durability guarantee', 'rename failure, read errors, blind identity, slow/garbage servers and the corrupt result are injected, not observed', 'the only permission changes are on fresh isolated temp folders/files of these tests and are restored (see unwritable/acl-restore.json)'] };
   fs.writeFileSync(path.join(EVIDENCE, 'INDEX.json'), JSON.stringify(index, null, 1));
   assert.ok(['normal', 'rename-fails', 'read-error', 'identity-blind', 'server-slow-exit', 'server-garbage', 'corrupt-result', 'unwritable'].every((c) => index.cases.includes(c)));
 });

@@ -47,7 +47,9 @@ const identityComplete = (v) => !!(v && v.realpath && v.realpath_error === null 
 const who = () => {
   const out = { username: os.userInfo().username, env_USERNAME: process.env.USERNAME ?? null, env_USERDOMAIN: process.env.USERDOMAIN ?? null, pid: process.pid, ppid: process.ppid };
   if (process.platform === 'win32') {
-    try { out.whoami_user = execFileSync('whoami', ['/user', '/fo', 'csv', '/nh'], { encoding: 'utf8', timeout: 10000 }).trim(); }
+    // Absolute path: under an MSYS/Git-Bash PATH a different `whoami` would answer.
+    const whoami = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'whoami.exe');
+    try { out.whoami_user = execFileSync(whoami, ['/user', '/fo', 'csv', '/nh'], { encoding: 'utf8', timeout: 10000 }).trim(); }
     catch (e) { out.whoami_user = `unavailable:${e.code ?? e.message}`; }
   }
   return out;
