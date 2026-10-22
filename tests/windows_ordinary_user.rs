@@ -171,6 +171,7 @@ fn standard_user_creates_reopens_and_keeps_an_owner_only_gil_in_a_normal_folder(
     // location check must answer `queried` for every source (this reproduces a standard-user
     // token with a loaded hive, not the Codex app's own server environment).
     assert_eq!(field(&out, "HIVE_LOADED"), "True", "fixture: the profile hive must be loaded in this mode");
+    eprintln!("OBSERVED mode=normal HIVE_LOADED={} BRANCH=started", field(&out, "HIVE_LOADED"));
     assert!(start.contains("\"ok\":true") && start.contains("\"storage_format\":5"), "{start}");
     assert!(start.contains("\"location_check\"") && start.contains("\"registry_hive\""), "{start}");
     assert!(!start.contains("\"status\":\"failed\"") && !start.contains("\"status\":\"absent\""), "{start}");
@@ -196,6 +197,7 @@ fn inheritance_re_enabled_after_creation_reproduces_the_reopen_refusal() {
     let (code, out, err) = account.run_script(&script, &shared.0, &[exe.to_str().unwrap(), "reinherit"]);
     assert_eq!(code, 0, "driver failed: {err}\n{out}");
     assert_eq!(field(&out, "HIVE_LOADED"), "True");
+    eprintln!("OBSERVED mode=reinherit HIVE_LOADED={} BRANCH=started-then-protection-lost", field(&out, "HIVE_LOADED"));
     let start = field(&out, "START");
     assert!(start.contains("\"ok\":true") && start.contains("\"storage_format\":5"), "{start}");
     let status = field(&out, "STATUS");
@@ -222,6 +224,10 @@ fn without_a_loaded_profile_the_start_matches_the_observed_hive_state() {
     assert_eq!(code, 0, "driver failed: {err}\n{out}");
     let start = field(&out, "START");
     let entries = field(&out, "ROOT_ENTRIES");
+    // Printed with --nocapture in CI so the log records which state was actually observed; no
+    // environment is manipulated to force either branch.
+    let branch = match field(&out, "HIVE_LOADED") { "False" => "refused-unverifiable", "True" => "started", other => other };
+    eprintln!("OBSERVED mode=noprofile HIVE_LOADED={} BRANCH={branch}", field(&out, "HIVE_LOADED"));
     match field(&out, "HIVE_LOADED") {
         "False" => {
             assert!(start.contains("\"ok\":false") && start.contains("\"code\":\"unsupported_location\""), "hive absent must refuse: {start}");
@@ -237,5 +243,4 @@ fn without_a_loaded_profile_the_start_matches_the_observed_hive_state() {
         }
         other => panic!("unexpected HIVE_LOADED={other}\n{out}"),
     }
-    eprintln!("noprofile mode observed HIVE_LOADED={}", field(&out, "HIVE_LOADED"));
 }
