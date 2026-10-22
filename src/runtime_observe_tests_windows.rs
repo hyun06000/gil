@@ -1,7 +1,8 @@
 //! Windows fixture tests for the read-only observer. Runs only on a Windows host; a Mac
 //! cross-compile of this file is not evidence of its behaviour. Fixtures are built here
-//! (separately from the observer): the root gets the product's owner-only protected DACL
-//! (`windows_fs::set_private_dacl_on`) and children inherit it; protection failures, links,
+//! (separately from the observer): the root is created the product's way, exclusively and with
+//! the owner-only protected DACL (`windows_fs::create_private_dir_at`), and children inherit
+//! it; protection failures, links,
 //! junctions and denies are made with `icacls`, `fs::hard_link` and a PowerShell junction, and
 //! removed again before the fixture is deleted. A snapshot of names, attributes, sizes and
 //! contents is compared before and after each observation.
@@ -37,6 +38,21 @@ fn junction(link: &Path, target: &Path) {
     assert!(made.status.success(), "junction fixture creation failed: {}", String::from_utf8_lossy(&made.stderr));
 }
 fn owner() -> String { platform::owner_text() }
+/// Exclusive creation with the owner-only protected DACL, exactly as the product reserves a
+/// root (`create_private_dir_at`: the handle it returns carries WRITE_DAC/WRITE_OWNER; a
+/// read-only `open_dir` handle cannot set a DACL, CI run 39864263398).
+fn protected_dir(dir: &Path) {
+    let parent = win::open_dir(dir.parent().unwrap(), win::SHARE_ALL, false).unwrap();
+    let made = win::create_private_dir_at(&parent, dir.file_name().unwrap()).unwrap();
+    win::private_dir(&made).unwrap();
+}
+/// Re-apply the protected DACL to an existing directory through a handle opened with the
+/// rights `SetSecurityInfo` needs (fixture cleanup only).
+fn reprotect(dir: &Path) {
+    use windows_sys::Win32::Storage::FileSystem::{FILE_FLAG_BACKUP_SEMANTICS, OPEN_EXISTING, WRITE_DAC, WRITE_OWNER};
+    let handle = win::open_raw(dir, win::READ | WRITE_DAC | WRITE_OWNER, win::SHARE_ALL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS).unwrap();
+    win::set_private_dacl_on(&handle).unwrap();
+}
 fn store_json(phase: &str, last_generation: u64) -> String {
     format!(r#"{{"schema":"{STORE_SCHEMA}","phase":"{phase}","last_generation":{last_generation},"owner":"{}","created":"t"}}"#, owner())
 }
@@ -53,12 +69,7 @@ impl Fixture {
         Self { root: parent.join("runtime-v1"), base }
     }
     /// The root with the product's owner-only protected DACL; children inherit it.
-    fn root_dir(&self) -> &Self {
-        fs::create_dir(&self.root).unwrap();
-        let handle = win::open_dir(&self.root, win::SHARE_ALL, false).unwrap();
-        win::set_private_dacl_on(&handle).unwrap();
-        self
-    }
+    fn root_dir(&self) -> &Self { protected_dir(&self.root); self }
     fn write(&self, rel: &str, bytes: &[u8]) -> PathBuf {
         let p = self.root.join(rel);
         if let Some(d) = p.parent() { fs::create_dir_all(d).unwrap(); }
@@ -171,19 +182,11 @@ fn w_protection_failures_block_and_stop_the_descent() {
     assert!(blocked_with(&o, "store.json protection") && blocked_with(&o, "(not read)"), "{o:?}");
     assert!(matches!(v.state, State::Blocked { .. })); assert_eq!(v.run, Run::None);
     icacls(&["/remove:g", "*S-1-1-0"], &fx.root.join("store.json"));
-    // the root loses its protected DACL: nothing below is read
-    icacls(&["/inheritance:e"], &fx.root);
-    let o = observe(&fx.root);
-    assert!(blocked_with(&o, "root protection") && blocked_with(&o, "nothing below the root was read") && !checked(&o, "store.json"), "{o:?}");
-    let handle = win::open_dir(&fx.root, win::SHARE_ALL, false).unwrap();
-    win::set_private_dacl_on(&handle).unwrap(); drop(handle);
-    assert!(observe(&fx.root).observation.blocked.is_empty(), "{:?}", observe(&fx.root));
     // versions/ with a protected (non-inherited) DACL: the candidate below is not read
     icacls(&["/inheritance:d"], &fx.root.join("versions"));
     let o = observe(&fx.root);
     assert!(blocked_with(&o, "versions/ protection") && blocked_with(&o, "nothing below was read") && !checked(&o, "complete") && !checked(&o, "digest equals"), "{o:?}");
-    icacls(&["/inheritance:e"], &fx.root.join("versions"));
-    icacls(&["/remove:g", "*S-1-5-32-544", "*S-1-5-18", &format!("*{}", owner().trim_start_matches("sid:"))], &fx.root.join("versions"));
+    icacls(&["/reset"], &fx.root.join("versions")); // back to inherited-only ACEs
     // complete marker with an extra ACE: Core not read
     icacls(&["/grant", "*S-1-1-0:(R)"], &fx.version_dir(&d).join("complete"));
     let o = observe(&fx.root);
@@ -195,6 +198,12 @@ fn w_protection_failures_block_and_stop_the_descent() {
     assert!(blocked_with(&o, "gil.exe protection") && blocked_with(&o, "(not hashed)"), "{o:?}");
     icacls(&["/remove:g", "*S-1-1-0"], &fx.version_dir(&d).join(CORE_FILE));
     assert!(observe(&fx.root).observation.blocked.is_empty(), "{:?}", observe(&fx.root));
+    // the root loses its protected DACL: nothing below is read (last: inheritance from the temp
+    // directory propagates into the tree, so the fixture is only re-protected for cleanup)
+    icacls(&["/inheritance:e"], &fx.root);
+    let o = observe(&fx.root);
+    assert!(blocked_with(&o, "root protection") && blocked_with(&o, "nothing below the root was read") && !checked(&o, "store.json"), "{o:?}");
+    reprotect(&fx.root);
 }
 #[test]
 fn w_reparse_points_and_hard_links_are_blocked() {
@@ -289,9 +298,8 @@ fn w_an_ancestor_swapped_during_observation_never_reads_the_other_tree() {
     // A at <base>\a\runtime-v1 (prepared, 7); B at <base>\b\runtime-v1 with an invalid intent.
     let fx = Fixture::under("swap-ancestor", "a"); fx.root_dir().store("prepared", 7);
     let b_root = fx.base.join("b").join("runtime-v1");
-    fs::create_dir_all(&b_root).unwrap();
-    let handle = win::open_dir(&b_root, win::SHARE_ALL, false).unwrap();
-    win::set_private_dacl_on(&handle).unwrap(); drop(handle);
+    fs::create_dir(fx.base.join("b")).unwrap();
+    protected_dir(&b_root);
     fs::write(b_root.join("store.json"), store_json("prepared", 9)).unwrap();
     fs::write(b_root.join("intent.json"), b"not json: reading B would make intent Invalid").unwrap();
     thread_local! { static SWAPPED: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) }; }
