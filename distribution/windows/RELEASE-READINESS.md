@@ -58,11 +58,19 @@ permission or prohibition from that closure. Do not wait indefinitely for indivi
 
 ## Automatic installation preflight
 
-`install-target.psm1` detects native Windows CPU architecture from the read-only
-[Win32_Processor Architecture property](https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-processor):
-9 selects x64, 12 selects ARM64. It does not use the architecture of the PowerShell process.
-Missing, unsupported or inconsistent results stop without installing. It returns no user paths,
-serial numbers or CPU identifiers and performs no download, configuration write or install.
+`install-target.psm1` detects native Windows CPU architecture from up to three read-only
+sources that need no administrator rights: the
+[Win32_Processor Architecture property](https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-processor)
+(9 selects x64, 12 selects ARM64; CIM access can be refused by policy, which is then simply "no
+answer"), the machine `PROCESSOR_ARCHITECTURE` value under `HKLM\SYSTEM\...\Session Manager\Environment`
+(not WOW64-redirected) and the family prefix of `HKLM\HARDWARE\DESCRIPTION\System\CentralProcessor\0\Identifier`.
+Agreeing sources decide; it never uses the architecture of the PowerShell process (an x86 or x64
+shell may run emulated on ARM64) and reports that process view separately as `emulated`.
+Unsupported, inconsistent or absent results stop without installing and carry one minimal
+question for the person (whether Settings › System › About says "ARM-based processor"). It returns
+no user paths, serial numbers or CPU identifier strings and performs no download, configuration
+write or install. Field record 2026-10-22: a standard-user PC refused CIM access, and the
+single-source guidance had no fallback; this is the fix.
 This is the target-selection component, not a completed installer or release approval.
 
 ## Publication and acceptance

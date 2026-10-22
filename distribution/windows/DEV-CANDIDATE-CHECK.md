@@ -25,8 +25,34 @@ settings, or to touch any existing project.
 1. Read-only preflight: `codex plugin list --json`, `codex plugin marketplace list --json`. If any
    GIL plugin or GIL marketplace is already registered, **stop and report it; wait for the
    maintainer's approval** before registering anything. Never remove or overwrite it yourself.
-2. Native CPU: `Get-CimInstance Win32_Processor` → `Architecture` 9 = x64, 12 = ARM64. Anything
-   else, or more than one distinct value: stop.
+2. Native CPU, from read-only sources that need no administrator rights, no setting change and
+   no working CIM client. Run this block as it is (PowerShell 5.1 or 7, any shell host) and use
+   only its last line:
+
+   <!-- gil-cpu-detect:begin -->
+   ```powershell
+   $ErrorActionPreference = 'Continue'; $src = [ordered]@{}; $notes = @()
+   try { $a = @(Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop | ForEach-Object { [int]$_.Architecture } | Sort-Object -Unique)
+         if ($a.Count -eq 1 -and $a[0] -eq 9) { $src.cim = 'x64' } elseif ($a.Count -eq 1 -and $a[0] -eq 12) { $src.cim = 'arm64' } else { $src.cim = $null; $notes += 'cim: unsupported or mixed value' } }
+   catch { $src.cim = $null; $notes += 'cim unavailable (refused or missing)' }
+   try { $e = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment' -Name PROCESSOR_ARCHITECTURE -ErrorAction Stop).PROCESSOR_ARCHITECTURE
+         if ($e -eq 'AMD64') { $src.sysenv = 'x64' } elseif ($e -eq 'ARM64') { $src.sysenv = 'arm64' } else { $src.sysenv = $null; $notes += 'sysenv: unsupported value' } }
+   catch { $src.sysenv = $null; $notes += 'sysenv unavailable' }
+   try { $i = (Get-ItemProperty -Path 'HKLM:\HARDWARE\DESCRIPTION\System\CentralProcessor\0' -Name Identifier -ErrorAction Stop).Identifier
+         if ($i -match '^ARM') { $src.cpuid = 'arm64' } elseif ($i -match '^(Intel64|AMD64|EM64T)') { $src.cpuid = 'x64' } else { $src.cpuid = $null; $notes += 'cpuid: unsupported value' } }
+   catch { $src.cpuid = $null; $notes += 'cpuid unavailable' }
+   $found = @($src.Values | Where-Object { $_ } | Sort-Object -Unique)
+   'sources: ' + (($src.GetEnumerator() | ForEach-Object { "$($_.Key)=$(if ($_.Value) { $_.Value } else { 'n/a' })" }) -join ' ') + " | process: PROCESSOR_ARCHITECTURE=$($env:PROCESSOR_ARCHITECTURE) PROCESSOR_ARCHITEW6432=$($env:PROCESSOR_ARCHITEW6432) host=$($PSVersionTable.PSVersion)" + $(if ($notes) { ' | ' + ($notes -join '; ') } else { '' })
+   if ($found.Count -eq 1) { "NATIVE CPU: $($found[0])" } elseif ($found.Count -gt 1) { "CONTRADICTION: $($found -join ',') -> stop and ask" } else { 'UNDETERMINED -> stop and ask' }
+   ```
+   <!-- gil-cpu-detect:end -->
+
+   `NATIVE CPU: x64` or `NATIVE CPU: arm64` decides, even when the `process:` part says
+   `AMD64` or `x86` (that is only this shell, which may run under emulation on an ARM64 PC).
+   `cim unavailable` alone is not a reason to stop: the registry sources answer without CIM.
+   On `CONTRADICTION` or `UNDETERMINED`, do not guess and do not run anything as administrator;
+   ask the person exactly one thing — whether Windows Settings › System › About › "System type"
+   says "ARM-based processor" — and continue only with their answer.
 3. The archive arrives by direct transfer into a fresh user-owned folder on the local fixed NTFS
    drive (not OneDrive, network or a reparse-point path). Before extracting, verify
    `Get-FileHash -Algorithm SHA256` against the hash the maintainer gave you for that CPU; then
