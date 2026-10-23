@@ -38,8 +38,13 @@ struct Account {
 }
 impl Account {
     fn create() -> Self {
+        // Unique per process *and* per call: the three tests of this binary run on parallel
+        // threads, and the Windows clock ticks coarsely enough that two of them read the same
+        // nanosecond value (CI run 39921435283: "The account already exists"). Names stay
+        // within the 20-character limit: "gilou" + ≤ 5 + 1 + ≤ 6 digits.
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-        let name = format!("gilou{}", nanos % 1_000_000_000);
+        let name = format!("gilou{}{}{}", std::process::id() % 100_000, NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % 10, nanos % 1_000_000);
         let password = format!("Gil!{}bY{}", nanos % 100_000_000, std::process::id());
         let out = std::process::Command::new(system32("net.exe")).args(["user", &name, &password, "/add", "/y", "/expires:never"]).output().unwrap();
         assert!(out.status.success(), "cannot create a standard user here: {}", String::from_utf8_lossy(&out.stderr));
