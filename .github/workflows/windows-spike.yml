@@ -137,6 +137,15 @@ jobs:
           # held-handle observation blocked the swapped root.
           cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET @features --lib -- runtime_select:: runtime_lock:: --nocapture
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Runtime isolated launch mechanism (synthetic cmd.exe copies; both profiles)
+        shell: pwsh
+        run: |
+          $features = if ($env:GIL_RUNTIME_PROFILE -eq 'visual-authoring') { @('--features', 'visual-authoring') } else { @() }
+          # Runs synthetic copies of cmd.exe from temp stores only (never a GIL Core). Of the 14
+          # tests, 6 are shared, 6 Unix-only and 2 Windows-only: the count here must show 8.
+          # --nocapture: the pin-refusal, timeout and exit-confirmation lines are the evidence.
+          cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET @features --lib -- runtime_launch:: --nocapture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Image-report storage boundaries (Windows contract v0.1 §6)
         if: matrix.profile == 'visual-authoring'
         shell: pwsh
