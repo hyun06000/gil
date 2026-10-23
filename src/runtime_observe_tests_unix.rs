@@ -404,6 +404,25 @@ fn a_linked_or_unprotected_versions_directory_blocks_even_without_a_selection() 
     assert!(o.observation.blocked.is_empty() && checked(&o, "versions/ protection"), "{o:?}"); assert_eq!(v.state, State::Prepared);
 }
 #[test]
+fn a_held_root_handle_is_observed_itself_and_a_root_swapped_at_its_path_blocks() {
+    let fx = Fixture::under("held", "a"); fx.root_dir().store("prepared", 0);
+    let held = platform::walk(&fx.root).unwrap().unwrap();
+    let (o, v) = super::observe_and_judge_held(&fx.root, &held);
+    assert!(o.observation.blocked.is_empty() && checked(&o, "held handle"), "{o:?}");
+    assert_eq!(v.state, State::Prepared);
+    // another store planted at the path: the held object is still what is read; blocked
+    fs::rename(&fx.root, fx.base.join("original")).unwrap();
+    fs::create_dir(&fx.root).unwrap(); fs::set_permissions(&fx.root, fs::Permissions::from_mode(0o700)).unwrap();
+    fs::write(fx.root.join("store.json"), store_json("initializing", 0)).unwrap();
+    fs::set_permissions(fx.root.join("store.json"), fs::Permissions::from_mode(0o600)).unwrap();
+    let (o, v) = super::observe_and_judge_held(&fx.root, &held);
+    assert_eq!(o.observation.store, Record::Valid(Store { phase: Phase::Prepared, last_generation: 0 }), "values must come from the held object: {o:?}");
+    assert!(blocked_with(&o, "root replaced at its path"), "{o:?}");
+    assert!(matches!(v.state, State::Blocked { .. }));
+    // a path-based observation sees the impostor (and is a different observation)
+    assert_eq!(observe(&fx.root).observation.store, Record::Valid(Store { phase: Phase::Initializing, last_generation: 0 }));
+}
+#[test]
 fn compared_items_and_limits_are_stated() {
     assert!(COMPARED.iter().any(|l| l.contains("root directory listing")));
     assert!(COMPARED.iter().any(|l| l.contains("protection checks")));

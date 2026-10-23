@@ -34,6 +34,7 @@ use crate::runtime_state::{Phase, Record, State, Verdict};
 use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::{self, Read, Write};
+pub(crate) use pfs::{create_file_deletable, flush_dir_handle, flush_file_handle, replace_record};
 use std::path::{Path, PathBuf};
 #[cfg(windows)]
 use platform::StampSize as _;
@@ -92,6 +93,8 @@ pub struct Report {
     pub objects: Vec<Object>,
     pub before: Verdict,
     pub after: Verdict,
+    /// Informational notes (for example "record left alone: updated by another call").
+    pub notes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -108,6 +111,8 @@ pub struct Refusal {
     pub objects: Vec<Object>,
     pub before: Option<Verdict>,
     pub after: Option<Verdict>,
+    /// Informational notes (for example "record left alone: updated by another call").
+    pub notes: Vec<String>,
 }
 
 #[cfg(test)]
@@ -127,8 +132,14 @@ pub(crate) mod hooks {
         pub static AFTER_RESERVED: Cell<Option<fn(&Path)>> = const { Cell::new(None) };
         /// Runs after the fast-path scan found nothing, before the reservation is taken.
         pub static BEFORE_RESERVATION: Cell<Option<fn(&Path)>> = const { Cell::new(None) };
+        /// Runs right before the prepared-record step (after the version is complete, before the
+        /// selection lock is taken for the record update).
+        pub static BEFORE_RECORD: Cell<Option<fn(&Path)>> = const { Cell::new(None) };
+        /// Runs inside the record step's lock lifetime, after store.json was re-read and before it
+        /// is replaced.
+        pub static UNDER_RECORD_LOCK: Cell<Option<fn(&Path)>> = const { Cell::new(None) };
     }
-    pub fn reset() { FAIL_AFTER.with(|c| c.set(None)); FAIL_FLUSH.with(|c| c.set(false)); FAIL_WRITE.with(|c| c.set(false)); FAIL_NOTE_DUP.with(|c| c.set(false)); AFTER_VERSION_DIR.with(|c| c.set(None)); AFTER_RESERVED.with(|c| c.set(None)); BEFORE_RESERVATION.with(|c| c.set(None)); }
+    pub fn reset() { FAIL_AFTER.with(|c| c.set(None)); FAIL_FLUSH.with(|c| c.set(false)); FAIL_WRITE.with(|c| c.set(false)); FAIL_NOTE_DUP.with(|c| c.set(false)); AFTER_VERSION_DIR.with(|c| c.set(None)); AFTER_RESERVED.with(|c| c.set(None)); BEFORE_RESERVATION.with(|c| c.set(None)); BEFORE_RECORD.with(|c| c.set(None)); UNDER_RECORD_LOCK.with(|c| c.set(None)); }
 }
 
 fn checkpoint(point: Point) -> io::Result<()> {
@@ -156,14 +167,12 @@ fn write_all(file: &mut &File, bytes: &[u8]) -> io::Result<()> {
 /// A held directory with the path it was opened by (the path is used only for Windows
 /// directory flushes and record renames, both of which re-check the pinned identity).
 struct Held { dir: platform::Dir, path: PathBuf }
-impl Held {
-    fn dup(&self) -> io::Result<Held> { Ok(Held { dir: self.dir.clone_handle()?, path: self.path.clone() }) }
-}
+
 /// One object created by this call: its name under a held parent (duplicated for reporting;
 /// `None` when that duplicate failed — the creation is still recorded) and its identity.
 struct Created { label: String, parent: Option<platform::Dir>, name: String, id: Option<platform::ObjectId> }
 
-struct Tx { created: Vec<Created>, before: Option<Verdict>, root: PathBuf }
+struct Tx { created: Vec<Created>, before: Option<Verdict>, root: PathBuf, traces: Vec<String> }
 impl Tx {
     /// Record a creation. The identity comes from the handle of the created object; the parent
     /// handle is duplicated for the later re-check. Neither failure drops the record.
@@ -191,11 +200,11 @@ impl Tx {
     fn remaining(&self) -> Vec<String> { self.objects().into_iter().filter(|o| o.presence == Presence::SameObject).map(|o| o.label).collect() }
     fn refuse(&self, stage: Stage, reason: impl Into<String>) -> Refusal {
         let after = if self.created.is_empty() && self.before.is_some() { None } else { Some(observe_and_judge(&self.root).1) };
-        Refusal { stage, reason: reason.into(), created: self.labels(), remaining: self.remaining(), objects: self.objects(), before: self.before.clone(), after }
+        Refusal { stage, reason: reason.into(), created: self.labels(), remaining: self.remaining(), objects: self.objects(), before: self.before.clone(), after, notes: self.traces.clone() }
     }
 }
 
-fn store_json(phase: &str, last_generation: u64) -> Vec<u8> {
+pub(crate) fn store_json(phase: &str, last_generation: u64) -> Vec<u8> {
     let created = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     format!(r#"{{"schema":"{STORE_SCHEMA}","phase":"{phase}","last_generation":{last_generation},"owner":"{}","created":"{created}"}}"#, platform::owner_text()).into_bytes()
 }
@@ -214,7 +223,7 @@ enum Scan { Nothing, AlreadyPreparedVerified }
 /// Initialize (on verified first use) and prepare one candidate version. See the module docs
 /// for the scope and the refusal rules.
 pub fn prepare(root: &Path, req: &Request) -> Result<Report, Refusal> {
-    let mut tx = Tx { created: vec![], before: None, root: root.to_path_buf() };
+    let mut tx = Tx { created: vec![], before: None, root: root.to_path_buf(), traces: vec![] };
     if !observe::valid_version(req.version) { return Err(tx.refuse(Stage::Request, "version identifier refused")); }
     if !observe::valid_sha256(req.expected_sha256) { return Err(tx.refuse(Stage::Request, "expected digest must be 64 lowercase hex characters")); }
     let target = version_dirname(req.version, req.expected_sha256);
@@ -361,8 +370,31 @@ pub fn prepare(root: &Path, req: &Request) -> Result<Report, Refusal> {
             held_version_dir = Some(vdir);
         }
     }
-    // 10. initializing → prepared, by exclusive store.json.new and rename.
+    // 10. initializing → prepared, by exclusive store.json.new and rename — under the selection
+    //     lock, after re-reading the phase: a selection may have completed meanwhile (and raised
+    //     last_generation), in which case the record is left alone. Without this, a preparation
+    //     that observed `initializing` early could overwrite a newer history.
+    #[cfg(test)]
+    if let Some(f) = hooks::BEFORE_RECORD.with(|c| c.get()) { f(root); }
+    let mut record_skipped = false;
     if phase == Phase::Initializing {
+        // One lock lifetime covers the re-read and the replacement: nothing can complete a
+        // selection (or another record) between them. The lock is not waited for: a held lock
+        // refuses this step, and the objects already created stay and are reported.
+        let _lock = match crate::runtime_lock::acquire(&root_held.dir, crate::runtime_lock::Wait::NonBlocking) {
+            Ok(l) => l,
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => return Err(tx.refuse(Stage::PreparedRecord, "selection lock is held by another selection or record update; the prepared version and the initializing record stay as created, the prepared record was not written")),
+            Err(e) => return Err(tx.refuse(Stage::PreparedRecord, format!("selection lock: {e}"))),
+        };
+        let current = read_store(&root_held.dir).map_err(|e| tx.refuse(Stage::PreparedRecord, format!("store.json re-read under lock: {e}")))?;
+        match current {
+            Some((Phase::Initializing, 0)) => {}
+            Some((p, g)) => { record_skipped = true; tx.traces.push(format!("store.json already {p:?} with last_generation {g} (updated by another call); record left alone")); }
+            None => return Err(tx.refuse(Stage::PreparedRecord, "store.json not readable as a store record under lock; nothing replaced")),
+        }
+        #[cfg(test)]
+        if let Some(f) = hooks::UNDER_RECORD_LOCK.with(|c| c.get()) { f(root); }
+        if !record_skipped {
         let new = match pfs::create_file_deletable(&root_held.dir, STORE_NEW) {
             Ok(f) => f,
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => return Err(tx.refuse(Stage::PreparedRecord, format!("{STORE_NEW} exists from an interrupted record replacement; kept, needs approved recovery"))),
@@ -372,14 +404,14 @@ pub fn prepare(root: &Path, req: &Request) -> Result<Report, Refusal> {
         write_all(&mut &new, &store_json("prepared", last_generation)).map_err(|e| tx.refuse(Stage::PreparedRecord, format!("{STORE_NEW} write: {e}")))?;
         flush_file(&new).map_err(|e| tx.refuse(Stage::PreparedRecord, format!("{STORE_NEW} flush: {e}")))?;
         checkpoint(Point::NewStoreWritten).map_err(|e| tx.refuse(Stage::PreparedRecord, e.to_string()))?;
-        let root_dup = root_held.dup().map_err(|e| tx.refuse(Stage::PreparedRecord, e.to_string()))?;
-        pfs::replace_record(&root_dup, &new, STORE_NEW, "store.json").map_err(|e| tx.refuse(Stage::PreparedRecord, format!("record rename: {e}")))?;
+        pfs::replace_record(&root_held.dir, &root_held.path, &new, STORE_NEW, "store.json").map_err(|e| tx.refuse(Stage::PreparedRecord, format!("record rename: {e}")))?;
         // The initializing record this call may have created is now the replaced object at that
         // name; the new record takes the name. Both stay in the report with accurate presence.
         if let Some(old) = tx.created.iter_mut().find(|c| c.label == "store.json") { old.label = "store.json (initializing record, replaced by this call)".into(); }
         if let Some(last) = tx.created.last_mut() { last.label = "store.json (record replaced: initializing → prepared)".into(); last.name = "store.json".into(); }
         drop(new);
         flush_dir(&root_held).map_err(|e| tx.refuse(Stage::PreparedRecord, format!("root flush: {e}")))?;
+        }
     }
     // 11. The held directories and this call's reservation must still be the objects at their
     //     names (a link or another object planted meanwhile is refused; nothing was written
@@ -405,15 +437,18 @@ pub fn prepare(root: &Path, req: &Request) -> Result<Report, Refusal> {
             Err(e) => return Err(tx.refuse(Stage::Reobserve, format!("{VERSIONS_DIR}/{name} re-check: {e}"))),
         }
     }
-    // 12. Re-observe: the result must be what the state table predicts.
-    let (_, after) = observe_and_judge(root);
+    // 12. Re-observe through the held root handle (the path is only confirmed to still name
+    //     it): the result must be what the state table predicts.
+    let (_, after) = observe::observe_and_judge_held(root, &root_held.dir);
     let expected_ok = match (&before.state, &after.state) {
         (State::FirstUse | State::Initializing | State::Prepared, State::Prepared) => true,
         (State::Selected { generation: a, .. }, State::Selected { generation: b, .. }) => a == b,
+        // another call completed the record and a selection ran meanwhile (record left alone)
+        (State::FirstUse | State::Initializing, State::Selected { .. }) if record_skipped => true,
         _ => false,
     };
     if !expected_ok { return Err(tx.refuse(Stage::Reobserve, format!("post-observation {:?} is not the predicted state", after.state))); }
-    Ok(Report { outcome: if already { Outcome::AlreadyPrepared } else { Outcome::Prepared }, version_dir: format!("{VERSIONS_DIR}/{target}"), created: tx.labels(), objects: tx.objects(), before, after })
+    Ok(Report { outcome: if already { Outcome::AlreadyPrepared } else { Outcome::Prepared }, version_dir: format!("{VERSIONS_DIR}/{target}"), created: tx.labels(), objects: tx.objects(), before, after, notes: tx.traces.clone() })
 }
 
 /// Scan `versions/` for the requested version. Any entry of another digest, any incomplete
@@ -428,27 +463,55 @@ fn scan_versions(tx: &mut Tx, versions: &Held, req: &Request, target: &str) -> R
         let Some((version, _)) = split_dirname(&name) else { continue };
         if version != req.version { continue; }
         if name != target { return Err(tx.refuse(Stage::Uniqueness, format!("version {} already has a preparation with different bytes ({VERSIONS_DIR}/{name}); kept, not replaced", req.version))); }
-        let existing = match platform::open_subdir(&versions.dir, &name) { Ok(Some(d)) => d, Ok(None) => continue, Err(e) => return Err(tx.refuse(Stage::Uniqueness, format!("{VERSIONS_DIR}/{name}: {e}"))) };
-        platform::check_dir(&existing).map_err(|e| tx.refuse(Stage::Uniqueness, format!("{VERSIONS_DIR}/{name} protection: {e}; kept")))?;
-        let marker = match platform::open_regular(&existing, COMPLETE_FILE) {
-            Ok(Some(f)) => f,
-            Ok(None) => return Err(tx.refuse(Stage::Uniqueness, format!("{VERSIONS_DIR}/{name} is an incomplete preparation (no {COMPLETE_FILE}); kept, needs approved recovery"))),
-            Err(e) => return Err(tx.refuse(Stage::Uniqueness, format!("{VERSIONS_DIR}/{name}/{COMPLETE_FILE}: {e}"))),
-        };
-        let stamp = platform::stamp_file(&marker).map_err(|e| tx.refuse(Stage::Uniqueness, format!("{VERSIONS_DIR}/{name}/{COMPLETE_FILE} identity: {e}")))?;
-        platform::check_data(&marker, &stamp).map_err(|e| tx.refuse(Stage::Uniqueness, format!("{VERSIONS_DIR}/{name}/{COMPLETE_FILE} protection: {e}; kept, not accepted as prepared")))?;
-        drop(marker);
-        let core = match platform::open_executable(&existing, CORE_FILE) { Ok(Some(f)) => f, Ok(None) => return Err(tx.refuse(Stage::Uniqueness, format!("{VERSIONS_DIR}/{name}/{CORE_FILE} absent although complete is present; kept"))), Err(e) => return Err(tx.refuse(Stage::Uniqueness, format!("{VERSIONS_DIR}/{name}/{CORE_FILE}: {e}"))) };
-        let stamp = platform::stamp_file(&core).map_err(|e| tx.refuse(Stage::Uniqueness, format!("{VERSIONS_DIR}/{name}/{CORE_FILE} identity: {e}")))?;
-        platform::check_exec(&core, &stamp).map_err(|e| tx.refuse(Stage::Uniqueness, format!("{VERSIONS_DIR}/{name}/{CORE_FILE} protection: {e}; kept, not accepted as prepared")))?;
-        let digest = hash_file(&core).map_err(|e| tx.refuse(Stage::Uniqueness, format!("{VERSIONS_DIR}/{name}/{CORE_FILE} read: {e}")))?;
-        if digest != req.expected_sha256 { return Err(tx.refuse(Stage::Uniqueness, format!("{VERSIONS_DIR}/{name} is complete but its {CORE_FILE} digest differs from the expected digest; kept, needs approved recovery"))); }
-        verified = true;
+        match verify_complete_candidate(&versions.dir, &name, req.expected_sha256) {
+            Ok(()) => verified = true,
+            Err(Candidate::Absent) => continue,
+            Err(Candidate::Incomplete) => return Err(tx.refuse(Stage::Uniqueness, format!("{VERSIONS_DIR}/{name} is an incomplete preparation (no {COMPLETE_FILE}); kept, needs approved recovery"))),
+            Err(Candidate::DigestDiffers) => return Err(tx.refuse(Stage::Uniqueness, format!("{VERSIONS_DIR}/{name} is complete but its {CORE_FILE} digest differs from the expected digest; kept, needs approved recovery"))),
+            Err(Candidate::Refused(why)) => return Err(tx.refuse(Stage::Uniqueness, format!("{VERSIONS_DIR}/{name} {why}; kept, not accepted as prepared"))),
+        }
     }
     Ok(if verified { Scan::AlreadyPreparedVerified } else { Scan::Nothing })
 }
 
-fn hash_file(file: &File) -> io::Result<String> {
+/// Why a complete candidate directory is not accepted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Candidate { Absent, Incomplete, DigestDiffers, Refused(String) }
+
+/// The checks an existing `versions/<name>` must pass to count as a prepared candidate — the
+/// same ones a fresh preparation gets: directory protection; `complete` present, protected,
+/// single link; Core present, protected, single link, execute right (Windows: FILE_EXECUTE
+/// open), digest equal to `expected_sha256`. Shared by the preparation and selection layers.
+pub(crate) fn verify_complete_candidate(versions: &platform::Dir, name: &str, expected_sha256: &str) -> Result<(), Candidate> {
+    let existing = match platform::open_subdir(versions, name) { Ok(Some(d)) => d, Ok(None) => return Err(Candidate::Absent), Err(e) => return Err(Candidate::Refused(format!("open: {e}"))) };
+    platform::check_dir(&existing).map_err(|e| Candidate::Refused(format!("protection: {e}")))?;
+    let marker = match platform::open_regular(&existing, COMPLETE_FILE) { Ok(Some(f)) => f, Ok(None) => return Err(Candidate::Incomplete), Err(e) => return Err(Candidate::Refused(format!("{COMPLETE_FILE}: {e}"))) };
+    let stamp = platform::stamp_file(&marker).map_err(|e| Candidate::Refused(format!("{COMPLETE_FILE} identity: {e}")))?;
+    platform::check_data(&marker, &stamp).map_err(|e| Candidate::Refused(format!("{COMPLETE_FILE} protection: {e}")))?;
+    drop(marker);
+    let core = match platform::open_executable(&existing, CORE_FILE) { Ok(Some(f)) => f, Ok(None) => return Err(Candidate::Refused(format!("{CORE_FILE} absent although complete is present"))), Err(e) => return Err(Candidate::Refused(format!("{CORE_FILE}: {e}"))) };
+    let stamp = platform::stamp_file(&core).map_err(|e| Candidate::Refused(format!("{CORE_FILE} identity: {e}")))?;
+    platform::check_exec(&core, &stamp).map_err(|e| Candidate::Refused(format!("{CORE_FILE} protection: {e}")))?;
+    let digest = hash_file(&core).map_err(|e| Candidate::Refused(format!("{CORE_FILE} read: {e}")))?;
+    if digest != expected_sha256 { return Err(Candidate::DigestDiffers); }
+    Ok(())
+}
+
+/// `store.json` phase and last_generation read through the held root (None when the record is
+/// absent or not a valid store record).
+pub(crate) fn read_store(root: &platform::Dir) -> io::Result<Option<(Phase, u64)>> {
+    let file = match platform::open_regular(root, "store.json")? { Some(f) => f, None => return Ok(None) };
+    let mut bytes = Vec::new();
+    (&file).take(observe::MAX_RECORD_BYTES + 1).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > observe::MAX_RECORD_BYTES { return Ok(None); }
+    let v: serde_json::Value = match serde_json::from_slice(&bytes) { Ok(v) => v, Err(_) => return Ok(None) };
+    if v.get("schema").and_then(|s| s.as_str()) != Some(STORE_SCHEMA) { return Ok(None); }
+    let phase = match v.get("phase").and_then(|s| s.as_str()) { Some("initializing") => Phase::Initializing, Some("prepared") => Phase::Prepared, _ => return Ok(None) };
+    let Some(g) = v.get("last_generation").and_then(|g| g.as_u64()) else { return Ok(None) };
+    Ok(Some((phase, g)))
+}
+
+pub(crate) fn hash_file(file: &File) -> io::Result<String> {
     let mut hasher = Sha256::new();
     let mut reader = file;
     let mut buf = vec![0u8; 1 << 16];
@@ -475,7 +538,10 @@ mod pfs {
     pub fn finish_executable(file: &File) -> io::Result<()> { ifs::chmod(file, 0o500) }
     pub fn fsync_file(file: &File) -> io::Result<()> { file.sync_all() }
     pub fn fsync_dir(dir: &Dir, _path: &Path) -> io::Result<()> { ifs::fsync(dir.as_file()) }
-    pub fn replace_record(root: &super::Held, _new: &File, from: &str, to: &str) -> io::Result<()> { ifs::rename_at(root.dir.as_file(), &cstr(from)?, &cstr(to)?) }
+    pub fn flush_file_handle(file: &File) -> io::Result<()> { fsync_file(file) }
+    pub fn flush_dir_handle(dir: &Dir, path: &Path) -> io::Result<()> { fsync_dir(dir, path) }
+    /// `from` → `to` inside the held root (POSIX replace); `new` is the handle of `from`.
+    pub fn replace_record(root: &Dir, _root_path: &Path, _new: &File, from: &str, to: &str) -> io::Result<()> { ifs::rename_at(root.as_file(), &cstr(from)?, &cstr(to)?) }
     /// The source is opened without following links and must be a regular file with one link.
     pub fn open_source(path: &Path) -> io::Result<File> {
         let file = std::fs::OpenOptions::new().read(true).custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC).open(path)
@@ -507,7 +573,10 @@ mod pfs {
     pub fn finish_executable(_file: &File) -> io::Result<()> { Ok(()) }
     pub fn fsync_file(file: &File) -> io::Result<()> { win::flush(file) }
     pub fn fsync_dir(dir: &Dir, path: &Path) -> io::Result<()> { win::flush_dir(path, dir.as_file()) }
-    pub fn replace_record(root: &super::Held, new: &File, _from: &str, to: &str) -> io::Result<()> { win::rename(new, root.dir.as_file(), &root.path, OsStr::new(to), true) }
+    pub fn flush_file_handle(file: &File) -> io::Result<()> { fsync_file(file) }
+    pub fn flush_dir_handle(dir: &Dir, path: &Path) -> io::Result<()> { fsync_dir(dir, path) }
+    /// Rename the open `new` (which must carry DELETE) over `to` inside the pinned root.
+    pub fn replace_record(root: &Dir, root_path: &Path, new: &File, _from: &str, to: &str) -> io::Result<()> { win::rename(new, root.as_file(), root_path, OsStr::new(to), true) }
     pub fn open_source(path: &Path) -> io::Result<File> {
         let file = win::open_file(path, win::READ, win::SHARE_ALL, OPEN_EXISTING)?;
         if !win::Stamp::of(&file)?.is_single_regular() { return Err(io::Error::other(format!("{} is not a regular file with one link", path.display()))); }

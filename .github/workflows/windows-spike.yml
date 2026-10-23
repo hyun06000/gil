@@ -124,7 +124,18 @@ jobs:
           # Creates its own temp stores only (protected-DACL roots, reservations, synthetic Core
           # bytes); never executes a candidate. 15 tests exist; one (linked source) is Unix-only,
           # so the count here must show 14 executed tests.
-          cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET @features --lib -- runtime_prepare::
+          # --nocapture: the swap/move/replace fixtures print the refusal point the host took.
+          cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET @features --lib -- runtime_prepare:: --nocapture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Runtime store selection transition (isolated fixtures; both profiles)
+        shell: pwsh
+        run: |
+          $features = if ($env:GIL_RUNTIME_PROFILE -eq 'visual-authoring') { @('--features', 'visual-authoring') } else { @() }
+          # intent → selection → history under the OS lock on temp stores only; the candidate is
+          # never executed. 10 tests, none platform-conditional: the count must show 10.
+          # --nocapture: the root-swap fixture prints whether the OS refused the rename or the
+          # held-handle observation blocked the swapped root.
+          cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET @features --lib -- runtime_select:: runtime_lock:: --nocapture
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Image-report storage boundaries (Windows contract v0.1 §6)
         if: matrix.profile == 'visual-authoring'

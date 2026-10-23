@@ -94,10 +94,22 @@ pub struct Observed {
     pub owner: String,
 }
 
-pub fn observe(root: &Path) -> Observed {
+pub fn observe(root: &Path) -> Observed { observe_with(root, None) }
+
+/// Observation of the store behind an already **held** root handle (duplicated, never
+/// re-resolved from the path): every record is read relative to that object, and the path is
+/// walked only at the end to confirm it still names that same object (otherwise blocked). A
+/// writer that holds the handle and the selection lock therefore judges, writes and
+/// re-observes one and the same store object.
+pub(crate) fn observe_with(root: &Path, held: Option<&platform::Dir>) -> Observed {
     let mut ob = Observer { blocked: vec![], checks: vec![], traces: vec![], owner: platform::owner_text(), held: vec![], pre: vec![] };
-    let observation = ob.run(root);
+    let observation = ob.run_with(root, held);
     Observed { observation, checks: ob.checks, owner: ob.owner }
+}
+pub(crate) fn observe_and_judge_held(root: &Path, held: &platform::Dir) -> (Observed, crate::runtime_state::Verdict) {
+    let observed = observe_with(root, Some(held));
+    let verdict = crate::runtime_state::judge(&observed.observation);
+    (observed, verdict)
 }
 
 /// Observation followed by the pure judge. Still not an execution permission.
@@ -152,19 +164,25 @@ impl Observer {
     }
     fn empty(&self, root_exists: bool) -> Observation { self.finish(root_exists, Record::Absent, Record::Absent, Record::Absent) }
 
-    fn run(&mut self, root: &Path) -> Observation {
+    fn run_with(&mut self, root: &Path, held: Option<&platform::Dir>) -> Observation {
         // 0. Path shape (absolute, no `.`/`..`; Windows: drive-letter path only).
         if let Err(e) = platform::check_path_shape(root) {
             self.block(format!("root path refused ({e}): {}", root.display()));
             return self.empty(false);
         }
-        // 1. Handle-relative walk from the volume root; ancestors checked on their handles.
-        let root_dir = match platform::walk(root) {
-            Ok(Some(d)) => d,
-            Ok(None) => { self.pass("path walk: step-by-step handle-relative, no links followed; root not found (verified first-use candidate)"); return self.empty(false); }
-            Err(e) => { self.block(format!("path walk: {e}")); return self.empty(false); }
+        // 1. The root: a duplicate of the caller's held handle, or a handle-relative walk from
+        //    the volume root with the ancestors checked on their handles.
+        let root_dir = match held {
+            Some(h) => match h.clone_handle() {
+                Ok(d) => { self.pass("root: the caller's held handle (duplicated), not re-resolved from the path"); d }
+                Err(e) => { self.block(format!("held root handle duplicate: {e}")); return self.empty(true); }
+            },
+            None => match platform::walk(root) {
+                Ok(Some(d)) => { self.pass("path walk: step-by-step handle-relative, no links followed; root opened as a directory and held"); d }
+                Ok(None) => { self.pass("path walk: step-by-step handle-relative, no links followed; root not found (verified first-use candidate)"); return self.empty(false); }
+                Err(e) => { self.block(format!("path walk: {e}")); return self.empty(false); }
+            },
         };
-        self.pass("path walk: step-by-step handle-relative, no links followed; root opened as a directory and held");
         let root_stamp = match platform::stamp_dir(&root_dir) { Ok(s) => s, Err(e) => { self.block(format!("root identity: {e}")); return self.empty(true); } };
         let listing_before = match platform::list_names(&root_dir) { Ok(l) => l, Err(e) => { self.block(format!("root listing: {e}")); return self.empty(true); } };
         // 2. Identity of the root entries before anything is read.
