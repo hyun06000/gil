@@ -2,13 +2,20 @@
 
 **Not a GIL release, not a product build, not an installer.** This folder holds the crate's
 App Server integration test as a prebuilt test executable, the test-only synthetic-Core
-testbed and a driver that runs the test inside one folder. Running it changes nothing on the
-PC: no installation, no registration, no edit under `.codex`, no setting, permission or policy
-change, no process ended, no retry. The folder is left as it is for inspection.
+testbed and a driver that runs the test inside one folder. It creates and changes test files
+inside that folder and cleans up its temporary integration fixtures. Existing GIL installs,
+plugin caches, user settings and projects are not modified. No installation, registration,
+security-policy change or retry is performed. The harness may terminate only an App Server
+it started and owns through a child handle; forced or unconfirmed termination is not PASS.
+Downloaded files and evidence remain for inspection.
 
 ## What runs
 
 `gil-runtime-verify.exe --root <folder>` (the folder this archive was extracted into):
+
+An existing relative folder such as `--root .` is supported. The driver resolves it to an
+absolute path before deriving `work`, temporary directories, evidence and child executable
+paths. Changing the integration process's working directory must not reinterpret those paths.
 
 1. Creates `<folder>\work\` (refused if it exists: a folder is used once; make a new one).
 2. Verifies this bundle's files against `bundle.json` and checks that the bundle is built for
@@ -41,6 +48,27 @@ run (folder unusable, bundle mismatch, wrong CPU, CLI not obtained or not matchi
 - Unsigned executables (no Authenticode). `runtime_integration.exe` embeds build-tree paths
   as compile-time defaults; the driver overrides them with run-time environment variables.
 - Nothing here wires the product manifest, MCP servers, a trust gate or recovery.
+
+## Agent result collection
+
+Keep the complete execution-tool response, including the session identifier and exit code;
+do not forward only its output text. If the tool returns a running session, poll that same
+session until completion. Do not launch the driver a second time to recover output. Report
+the exit code, full SUMMARY and REPORT-JSON blocks. If the session can no longer be recovered,
+read this run's `work/evidence/verify-report.json` and stdout/stderr logs without rerunning;
+state explicitly when the driver exit code or process termination remains unconfirmed.
+No CIM/WMI lookup or process-name termination is needed to collect the original session.
+
+## Relative-root regression (2026-10-25)
+
+The published `runtime-verify-deb0e6b` driver passed relative `work/tmp` to an integration
+process whose working directory was already `work`. The user's `--root .` invocation thus
+failed at temporary-directory canonicalization (Windows error 3) before v1/v2 observations.
+The old CI self-test used an absolute root and did not exercise that invocation. This is a
+driver/bootstrap defect, not evidence of GIL update failure or of OneDrive incompatibility.
+Source regression tests cover both root forms and spaces/non-ASCII paths. The Windows
+packaged self-test uses `--root .`; a passing result from the same source commit is required
+before publication.
 
 Third-party notices for the Rust dependencies linked into these executables:
 `THIRD-PARTY-NOTICES.txt`, `THIRD-PARTY-NOTICES.json`, `RUST-STDLIB-NOTICES.html`. GIL: `LICENSE`.

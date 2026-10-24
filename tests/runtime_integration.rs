@@ -256,16 +256,31 @@ impl Drop for Harness {
     }
 }
 fn evidence_dir() -> PathBuf { std::env::var_os("GIL_RUNTIME_INTEGRATION_EVIDENCE_DIR").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target").join("runtime-integration-evidence")) }
-fn new_harness(cli: PathBuf, base: PathBuf) -> Harness {
-    let codex_home = base.join("codex-home"); fs::create_dir_all(&codex_home).unwrap();
-    Harness { cli, root: base.join("runtime-v1"), codex_home, base, log: vec![], servers: vec![], cores: vec![], terminations: vec![], outcome: "RUNNING", error: None, evidence_dir: evidence_dir(), saved: None }
+fn new_harness(cli: PathBuf, base: PathBuf) -> Result<Harness, String> {
+    let codex_home = base.join("codex-home");
+    fs::create_dir_all(&codex_home).map_err(|e| format!("create isolated home {}: {e}", codex_home.display()))?;
+    Ok(Harness { cli, root: base.join("runtime-v1"), codex_home, base, log: vec![], servers: vec![], cores: vec![], terminations: vec![], outcome: "RUNNING", error: None, evidence_dir: evidence_dir(), saved: None })
 }
-fn fresh_base(label: &str) -> PathBuf {
-    let base = fs::canonicalize(std::env::temp_dir()).unwrap().join(format!("gil-runtime-integration-{label}-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
-    fs::create_dir_all(&base).unwrap();
+fn fresh_base_in(parent: &Path, label: &str) -> Result<PathBuf, String> {
+    let parent = fs::canonicalize(parent).map_err(|e| format!("resolve temporary directory {}: {e}", parent.display()))?;
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_nanos();
+    let base = parent.join(format!("gil-runtime-integration-{label}-{}-{stamp}", std::process::id()));
+    fs::create_dir(&base).map_err(|e| format!("create temporary directory {}: {e}", base.display()))?;
     #[cfg(unix)]
-    { use std::os::unix::fs::PermissionsExt; fs::set_permissions(&base, fs::Permissions::from_mode(0o700)).unwrap(); }
-    base
+    { use std::os::unix::fs::PermissionsExt; fs::set_permissions(&base, fs::Permissions::from_mode(0o700)).map_err(|e| format!("protect {}: {e}", base.display()))?; }
+    Ok(base)
+}
+fn fresh_base(label: &str) -> Result<PathBuf, String> { fresh_base_in(&std::env::temp_dir(), label) }
+fn bootstrap(cli: PathBuf, label: &str) -> Result<Harness, String> {
+    let result = fresh_base(label).and_then(|base| new_harness(cli, base));
+    if let Err(reason) = &result {
+        let evidence = json!({"outcome":"BLOCKED", "stage":"bootstrap", "error":reason, "observed":[], "terminations":[]});
+        let dir = evidence_dir();
+        let saved = fs::create_dir_all(&dir).and_then(|()| fs::write(dir.join(format!("bootstrap-{}-{label}-BLOCKED.json", std::process::id())), evidence.to_string()));
+        println!("OUTCOME: BLOCKED (bootstrap: {reason})\n{evidence}");
+        if let Err(e) = saved { eprintln!("EVIDENCE NOT WRITTEN: {e}"); }
+    }
+    result
 }
 
 fn thread_start(h: &mut Harness, server: usize) -> Result<String, String> {
@@ -343,7 +358,10 @@ fn flow(h: &mut Harness) -> Result<(), String> {
 fn existing_connection_keeps_v1_while_v2_is_selected_and_the_origin_of_v2_processes_is_recorded() {
     let cli = std::env::var_os("GIL_CODEX_CLI").map(PathBuf::from).or_else(|| DEFAULT_CLI.map(PathBuf::from));
     let required = std::env::var_os("GIL_RUNTIME_INTEGRATION_REQUIRE").is_some();
-    let mut h = new_harness(cli.clone().unwrap_or_default(), fresh_base("flow"));
+    let mut h = match bootstrap(cli.clone().unwrap_or_default(), "flow") {
+        Ok(h) => h,
+        Err(reason) => { assert!(!required, "required bootstrap blocked: {reason}"); return; }
+    };
     match &cli {
         Some(c) if c.is_file() => {}
         other => {
@@ -370,6 +388,33 @@ fn existing_connection_keeps_v1_while_v2_is_selected_and_the_origin_of_v2_proces
 }
 
 // ── regression tests for the harness itself (no app-server, no unrelated process is ended) ──
+#[test]
+fn missing_temp_parent_is_a_contextual_error_without_fallback_creation() {
+    let base = fresh_base("bootstrap-regression").expect("test fixture");
+    let missing = base.join("missing");
+    let error = fresh_base_in(&missing, "never-started").unwrap_err();
+    assert!(error.contains("resolve temporary directory") && error.contains("missing"), "{error}");
+    assert!(!missing.exists());
+    let blocker = base.join("file"); fs::write(&blocker, b"unchanged").unwrap();
+    assert!(new_harness(PathBuf::new(), blocker.clone()).err().unwrap().contains("create isolated home"));
+    assert_eq!(fs::read(blocker).unwrap(), b"unchanged");
+    let evidence = base.join("evidence");
+    let output = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "existing_connection_keeps_v1_while_v2_is_selected_and_the_origin_of_v2_processes_is_recorded", "--nocapture"])
+        .env("TEMP", &missing).env("TMP", &missing).env("TMPDIR", &missing)
+        .env("GIL_RUNTIME_INTEGRATION_REQUIRE", "1")
+        .env("GIL_RUNTIME_INTEGRATION_EVIDENCE_DIR", &evidence).output().unwrap();
+    assert!(!output.status.success(), "a required blocked run must fail");
+    assert!(String::from_utf8_lossy(&output.stdout).contains("OUTCOME: BLOCKED (bootstrap:"));
+    let files: Vec<_> = fs::read_dir(&evidence).unwrap().map(|e| e.unwrap().path()).collect();
+    assert_eq!(files.len(), 1);
+    let record: Value = serde_json::from_slice(&fs::read(&files[0]).unwrap()).unwrap();
+    assert_eq!(record["outcome"], "BLOCKED");
+    assert_eq!(record["stage"], "bootstrap");
+    assert_eq!(record["terminations"], json!([]));
+    assert!(!missing.exists());
+    fs::remove_dir_all(base).unwrap();
+}
 #[cfg(unix)]
 #[test]
 fn liveness_distinguishes_alive_gone_and_unknown() {
@@ -395,9 +440,9 @@ fn a_core_the_test_does_not_hold_a_handle_for_is_never_ended_even_with_the_same_
     // testbed in core mode), stands in for a stranger with the same image name: the harness
     // learns its pid as if it were a Core, finds it alive after the wait, records Unconfirmed
     // and leaves it running. The test ends it afterwards through its own handle.
+    let mut h = bootstrap(PathBuf::new(), "stranger").expect("bootstrap evidence reported");
     let mut stranger = Command::new(testbed()).args(["core", "stranger"]).stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().expect("spawn testbed core");
     let pid = stranger.id();
-    let mut h = new_harness(PathBuf::new(), fresh_base("stranger"));
     h.cores.push(Identity { version: "stranger".into(), pid, instance: "-".into(), exe: testbed(), argv: vec![] });
     let started = Instant::now();
     h.cleanup();
@@ -414,9 +459,9 @@ fn a_core_the_test_does_not_hold_a_handle_for_is_never_ended_even_with_the_same_
 }
 #[test]
 fn an_unsaveable_evidence_location_is_reported_and_never_shown_as_pass() {
-    let base = fresh_base("evidence");
+    let mut h = bootstrap(PathBuf::new(), "evidence").expect("bootstrap evidence reported");
+    let base = h.base.clone();
     let blocker = base.join("not-a-directory"); fs::write(&blocker, b"file in the way").unwrap();
-    let mut h = new_harness(PathBuf::new(), base.clone());
     h.evidence_dir = blocker.join("evidence"); // create_dir_all must fail: a parent is a file
     h.outcome = "PASS"; h.log.push("harness regression: evidence save failure".into());
     let saved = h.save_evidence();

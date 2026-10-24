@@ -232,9 +232,11 @@ jobs:
           if (-not $env:GIL_CODEX_CLI -or -not (Test-Path -LiteralPath $env:GIL_CODEX_CLI -PathType Leaf)) { throw 'GIL_CODEX_CLI must name the verified codex.exe from the previous step' }
           # A real Codex App Server over stdio with an isolated CODEX_HOME whose only MCP server is
           # the test-only launcher driver; the synthetic Cores are overlay-marked copies of the
-          # testbed exe in a temp store (never a GIL Core, never the runner's own ~/.codex). 4 tests
+          # testbed exe in a temp store (never a GIL Core, never the runner's own ~/.codex). 5 tests
           # must run: the main flow prints OUTCOME: PASS with the evidence path, and --nocapture
           # keeps every version/pid/instance line and the app-server stderr in this log.
+          cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET --features $features --lib runtime_verify -- --nocapture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET --features $features --test runtime_integration -- --nocapture
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $pass = @(Get-ChildItem -LiteralPath target\runtime-integration-evidence -File -Filter 'run-*-PASS.json')
@@ -286,12 +288,15 @@ jobs:
           # Exactly what a user's Agent does: one new folder, extract the archive there, run the
           # driver with --root; the driver fetches the pinned CLI from the npm registry by itself.
           $name = "gil-runtime-verify-windows-$env:GIL_NATIVE_ARCH"
-          $folder = Join-Path $env:RUNNER_TEMP ("gil-runtime-verify-selftest-" + [guid]::NewGuid().ToString('N'))
+          $folder = Join-Path $env:RUNNER_TEMP ("gil-runtime-verify 한글 selftest-" + [guid]::NewGuid().ToString('N'))
           New-Item -ItemType Directory -Path $folder | Out-Null
           tar.exe -xzf "target/runtime-verify/$name.tar.gz" -C $folder
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & (Join-Path $folder "$name\gil-runtime-verify.exe") --root $folder
-          $code = $LASTEXITCODE
+          Push-Location -LiteralPath $folder
+          try {
+            & (Join-Path $folder "$name\gil-runtime-verify.exe") --root .
+            $code = $LASTEXITCODE
+          } finally { Pop-Location }
           Copy-Item -LiteralPath (Join-Path $folder 'work\evidence\verify-report.json') -Destination "target/runtime-verify/selftest-report-$env:GIL_NATIVE_ARCH.json"
           if ($code -ne 0) { throw "self-test exit $code (0 = PASS is required)" }
           $report = Get-Content -Raw -LiteralPath "target/runtime-verify/selftest-report-$env:GIL_NATIVE_ARCH.json" | ConvertFrom-Json

@@ -4,8 +4,9 @@
 //! version downloaded from its official npm registry URL into that folder (integrity-checked
 //! against the value recorded here — a download check, never a publisher-signature check) or an
 //! existing executable the caller names (recorded with its version and marked when it differs
-//! from the CI pin). Nothing outside the folder is read for state or written; nothing is
-//! installed, registered, retried or deleted; the folder is used once (`work/` must not exist).
+//! from the CI pin). Existing GIL state is not modified. Test files are created/changed and
+//! temporary fixtures cleaned inside the folder; nothing is installed, registered or retried.
+//! The folder is used once (`work/` must not exist).
 //!
 //! The outcome is `PASS` / `FAIL` / `BLOCKED` with the raw test output streamed to the console
 //! as it happens and saved under `work/evidence/`, so a later turn that has lost the folder
@@ -30,7 +31,7 @@ pub const LIMITS: [&str; 6] = [
     "separate App Server test over stdio with synthetic Cores in an isolated CODEX_HOME: not an observation of the Codex Desktop daemon and not a GIL installation update",
     "npm tarball integrity equals the value recorded from the registry on 2026-10-24: a download-integrity check, not a verification of the publisher's signature on the CLI",
     "an existing CLI is used as found and only recorded; its behaviour may differ from the pinned version the CI observed",
-    "nothing is installed, registered, changed or deleted; the folder is left for the user to inspect or remove",
+    "test files are created/changed and temporary fixtures cleaned inside the folder; existing GIL, plugin cache, settings and projects are not modified; downloads and evidence remain",
     "a FAIL or BLOCKED result is final for this run: the driver never retries and asks for no setting, permission or policy change",
     "pid, instance id and fixed arguments come from the synthetic Core's own answers; liveness after the app-server's end is observed, never forced",
 ];
@@ -105,7 +106,7 @@ impl Outcome {
     pub fn exit_code(self) -> u8 { match self { Outcome::Pass => 0, Outcome::Fail => 1, Outcome::Blocked => 2 } }
 }
 /// PASS only when the test process exited 0 **and** exactly one PASS evidence file exists; a
-/// non-zero exit is BLOCKED when the harness itself said so (no CLI), otherwise FAIL.
+/// non-zero exit is BLOCKED when the harness itself said so (e.g. bootstrap/CLI), otherwise FAIL.
 pub fn decide(exit_ok: bool, stdout: &str, pass_files: usize) -> (Outcome, String) {
     let blocked = stdout.lines().any(|l| l.trim_start().starts_with("OUTCOME: BLOCKED"));
     match (exit_ok, pass_files, blocked) {
@@ -169,7 +170,10 @@ pub fn run(opts: &Options) -> (Outcome, Value) {
 
 fn drive(opts: &Options, report: &mut Value) -> Result<(Outcome, String), Blocked> {
     // 1. one folder, used once
-    let root = &opts.root;
+    // Resolve before constructing child paths: the integration process changes cwd to work/.
+    let root = fs::canonicalize(&opts.root).map_err(|e| Blocked(format!("root does not exist or cannot be resolved: {}: {e}", opts.root.display())))?;
+    report["requested_root"] = json!(opts.root.display().to_string());
+    report["root"] = json!(root.display().to_string());
     if !root.is_dir() { return blocked(format!("root folder does not exist or is not a directory: {}", root.display())); }
     let work = root.join("work");
     match fs::create_dir(&work) {
@@ -185,8 +189,10 @@ fn drive(opts: &Options, report: &mut Value) -> Result<(Outcome, String), Blocke
     // 2. this bundle: files next to the driver, hashed against its manifest
     let me = std::env::current_exe().and_then(fs::canonicalize).map_err(|e| Blocked(format!("own executable path: {e}")))?;
     let here = me.parent().ok_or_else(|| Blocked("own executable has no parent folder".into()))?.to_path_buf();
-    let test_exe = opts.test_exe.clone().unwrap_or_else(|| here.join(TEST_EXE));
-    let testbed = opts.testbed.clone().unwrap_or_else(|| here.join(TESTBED_EXE));
+    let test_exe = fs::canonicalize(opts.test_exe.clone().unwrap_or_else(|| here.join(TEST_EXE)))
+        .map_err(|e| Blocked(format!("bundle manifest executable path (integration): {e}")))?;
+    let testbed = fs::canonicalize(opts.testbed.clone().unwrap_or_else(|| here.join(TESTBED_EXE)))
+        .map_err(|e| Blocked(format!("bundle manifest executable path (testbed): {e}")))?;
     let manifest_path = here.join(BUNDLE_MANIFEST);
     let manifest: Value = serde_json::from_slice(&fs::read(&manifest_path).map_err(|e| Blocked(format!("bundle manifest {}: {e}", manifest_path.display())))?).map_err(|e| Blocked(format!("bundle manifest is not JSON: {e}")))?;
     let mut files = Vec::new();
@@ -264,10 +270,7 @@ fn drive(opts: &Options, report: &mut Value) -> Result<(Outcome, String), Blocke
 
     // 4. the integration test, streamed and saved
     let tmp = work.join("tmp");
-    let mut cmd = Command::new(&test_exe);
-    cmd.arg("--nocapture").current_dir(&work).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped())
-        .env("GIL_CODEX_CLI", &cli_path).env("GIL_RUNTIME_INTEGRATION_REQUIRE", "1").env("GIL_RUNTIME_INTEGRATION_EVIDENCE_DIR", &evidence).env("GIL_RUNTIME_TESTBED", &testbed)
-        .env("TEMP", &tmp).env("TMP", &tmp).env("TMPDIR", &tmp).env_remove("GIL_RUNTIME_INTEGRATION_INJECT_FAIL");
+    let mut cmd = integration_command(&test_exe, &work, &cli_path, &testbed);
     step(report, "test", format!("running {} --nocapture with GIL_RUNTIME_INTEGRATION_REQUIRE=1, evidence in {}, temp in {}", test_exe.display(), evidence.display(), tmp.display()));
     let mut child = cmd.spawn().map_err(|e| Blocked(format!("cannot start the test executable {}: {e}", test_exe.display())))?;
     let (out, err) = (child.stdout.take().unwrap(), child.stderr.take().unwrap());
@@ -303,6 +306,16 @@ fn drive(opts: &Options, report: &mut Value) -> Result<(Outcome, String), Blocke
     Ok((outcome, why))
 }
 
+fn integration_command(test_exe: &Path, work: &Path, cli: &Path, testbed: &Path) -> Command {
+    let mut cmd = Command::new(test_exe);
+    let tmp = work.join("tmp");
+    cmd.arg("--nocapture").current_dir(work).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped())
+        .env("GIL_CODEX_CLI", cli).env("GIL_RUNTIME_INTEGRATION_REQUIRE", "1")
+        .env("GIL_RUNTIME_INTEGRATION_EVIDENCE_DIR", work.join("evidence")).env("GIL_RUNTIME_TESTBED", testbed)
+        .env("TEMP", &tmp).env("TMP", &tmp).env("TMPDIR", &tmp).env_remove("GIL_RUNTIME_INTEGRATION_INJECT_FAIL");
+    cmd
+}
+
 fn cli_version(exe: &Path) -> Result<String, Blocked> {
     let out = Command::new(exe).arg("--version").stdin(Stdio::null()).output().map_err(|e| Blocked(format!("run {} --version: {e}", exe.display())))?;
     if !out.status.success() { return blocked(format!("{} --version exited {}: {}", exe.display(), out.status, String::from_utf8_lossy(&out.stderr).trim())); }
@@ -313,7 +326,8 @@ fn hex(b: &[u8]) -> String { b.iter().map(|x| format!("{x:02x}")).collect() }
 /// Save the report inside the folder (best effort, reported) and print the summary block that
 /// must reach the conversation even if the folder disappears later.
 pub fn finish(root: &Path, outcome: Outcome, mut report: Value) -> u8 {
-    let path = root.join("work").join("evidence").join("verify-report.json");
+    let resolved = report["root"].as_str().map(PathBuf::from).unwrap_or_else(|| root.to_path_buf());
+    let path = resolved.join("work").join("evidence").join("verify-report.json");
     if report["work_created"] != json!(true) {
         // A folder this run did not create (used before, absent) keeps whatever it holds.
         report["report_saved"] = json!(null);
@@ -341,6 +355,44 @@ pub fn finish(root: &Path, outcome: Outcome, mut report: Value) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn child_paths_survive_a_working_directory_change() {
+        const ROLE: &str = "GIL_VERIFY_PATH_TEST_ROLE";
+        let name = "runtime_verify::tests::child_paths_survive_a_working_directory_change";
+        match std::env::var(ROLE).as_deref() {
+            Ok("driver") => {
+                let requested = std::env::var_os("GIL_VERIFY_PATH_TEST_ROOT").unwrap();
+                let (outcome, report) = run(&Options { root: requested.into(), cli: CliSource::Pinned, test_exe: None, testbed: None });
+                // No bundle is installed by this unit test; preparation stops before any CLI download.
+                assert_eq!(outcome, Outcome::Blocked);
+                let root = PathBuf::from(report["root"].as_str().unwrap());
+                assert!(root.is_absolute());
+                let me = fs::canonicalize(std::env::current_exe().unwrap()).unwrap();
+                let output = integration_command(&me, &root.join("work"), &me, &me)
+                    .args(["--exact", name]).env(ROLE, "child").output().unwrap();
+                assert!(output.status.success(), "{} {}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+            }
+            Ok("child") => {
+                for key in ["TEMP", "TMP", "TMPDIR", "GIL_RUNTIME_INTEGRATION_EVIDENCE_DIR", "GIL_CODEX_CLI", "GIL_RUNTIME_TESTBED"] {
+                    let path = PathBuf::from(std::env::var_os(key).unwrap());
+                    assert!(path.is_absolute() && path.exists(), "{key}: {}", path.display());
+                }
+                assert_eq!(fs::canonicalize(std::env::temp_dir()).unwrap(), fs::canonicalize(std::env::current_dir().unwrap().join("tmp")).unwrap());
+            }
+            _ => {
+                let base = std::env::temp_dir().join(format!("gil-path 한글 space-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+                for mode in ["relative", "absolute"] {
+                    let dir = base.join(mode); fs::create_dir_all(&dir).unwrap();
+                    let output = Command::new(std::env::current_exe().unwrap()).args(["--exact", name, "--nocapture"])
+                        .current_dir(&dir).env(ROLE, "driver")
+                        .env("GIL_VERIFY_PATH_TEST_ROOT", if mode == "relative" { Path::new(".") } else { &dir }).output().unwrap();
+                    assert!(output.status.success(), "{} {}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+                    assert!(!dir.join("work/work").exists());
+                }
+                fs::remove_dir_all(base).unwrap();
+            }
+        }
+    }
     #[test]
     fn integrity_strings_decode_to_64_bytes_and_match_sha512() {
         let want = decode_integrity(pinned("windows", "x86_64").unwrap().integrity).unwrap();
