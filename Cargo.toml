@@ -11,6 +11,14 @@ members = ["companion"]
 [features]
 # Development-only authoring surface; no default format change or migration.
 visual-authoring = []
+# Test-only entry points for the runtime update layers (launcher driver + synthetic MCP Core).
+# Never enabled for product builds; the binary below exists only with this feature.
+runtime-testbed = []
+
+[[bin]]
+name = "gil-runtime-testbed"
+path = "src/bin/gil-runtime-testbed.rs"
+required-features = ["runtime-testbed"]
 
 [dependencies]
 base64 = "=0.22.1"

@@ -146,6 +146,106 @@ jobs:
           # --nocapture: the pin-refusal, timeout and exit-confirmation lines are the evidence.
           cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET @features --lib -- runtime_launch:: --nocapture
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Pinned Codex CLI in a runner-only prefix (no global install; integrity check, not a publisher signature)
+        shell: pwsh
+        env:
+          GIL_CODEX_PIN: 0.163.0-alpha.11.1
+          # Registry metadata read with `npm view` on 2026-10-24 (version, tarball URL, integrity,
+          # platform-package aliases). npm verifies the downloaded tarballs against the registry's
+          # integrity; this step compares that result with the values recorded here. Neither is a
+          # verification of the publisher's signature on codex.exe.
+          GIL_CODEX_MAIN_INTEGRITY: sha512-QMij7qvP91hQyLX9qxxCeraIIDlv0Mt4Cut7NolhB6xlvZjny73PH5iFQPJT+Y8XuP9ML4vC6kYy3HlqcLlaRA==
+          GIL_CODEX_X64_INTEGRITY: sha512-58wBlhzI4n1eLtmvMb1mgwH1T2SaYyCrLD6HDwB0l8WI7wn4Cb17l870POeTSTLSMuDKZZbu60TpTGuM2qYHtA==
+          GIL_CODEX_ARM64_INTEGRITY: sha512-U05HBXdAPTP5gHgnkyIaPT8mp5Xuf2Q6c1NVhxUK4GfOgj1TQ65Vlkj1hHNcZwZg7FLznnsCYvTBjIuKaKzPqQ==
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $arch = $env:GIL_NATIVE_ARCH
+          $prefix = Join-Path $env:RUNNER_TEMP 'codex-cli'
+          New-Item -ItemType Directory -Path $prefix | Out-Null
+          # Local prefix only: nothing under npm's global root, no PATH change, no lifecycle scripts.
+          # npm installs the one platform package whose os/cpu match this runner (never "latest").
+          npm install --prefix $prefix --no-audit --no-fund --ignore-scripts "@openai/codex@$env:GIL_CODEX_PIN"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $pkgDir = Join-Path $prefix "node_modules\@openai\codex-win32-$arch"
+          if (-not (Test-Path -LiteralPath $pkgDir -PathType Container)) { throw "platform package missing: $pkgDir" }
+          $otherArch = if ($arch -eq 'x64') { 'arm64' } else { 'x64' }
+          foreach ($stray in @("codex-win32-$otherArch", 'codex-linux-x64', 'codex-linux-arm64', 'codex-darwin-x64', 'codex-darwin-arm64')) {
+            if (Test-Path -LiteralPath (Join-Path $prefix "node_modules\@openai\$stray")) { throw "unexpected platform package installed: $stray" }
+          }
+          $main = Get-Content -Raw -LiteralPath (Join-Path $prefix 'node_modules\@openai\codex\package.json') | ConvertFrom-Json
+          $plat = Get-Content -Raw -LiteralPath (Join-Path $pkgDir 'package.json') | ConvertFrom-Json
+          if ($main.name -ne '@openai/codex' -or $main.version -ne $env:GIL_CODEX_PIN) { throw "main package is $($main.name)@$($main.version)" }
+          if ($plat.name -ne '@openai/codex' -or $plat.version -ne "$($env:GIL_CODEX_PIN)-win32-$arch" -or @($plat.os) -notcontains 'win32' -or @($plat.cpu) -notcontains $arch) { throw "platform package is $($plat.name)@$($plat.version) os=$($plat.os) cpu=$($plat.cpu)" }
+          # npm records what it resolved and verified in the lockfile (the hidden one when no package-lock.json is written).
+          $lockPath = @((Join-Path $prefix 'package-lock.json'), (Join-Path $prefix 'node_modules\.package-lock.json')) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+          if (-not $lockPath) { throw 'npm wrote no lockfile; resolved URLs and integrity cannot be checked' }
+          $lock = Get-Content -Raw -LiteralPath $lockPath | ConvertFrom-Json
+          $mainLock = $lock.packages.('node_modules/@openai/codex')
+          $platLock = $lock.packages.("node_modules/@openai/codex-win32-$arch")
+          $expectedPlat = if ($arch -eq 'x64') { $env:GIL_CODEX_X64_INTEGRITY } else { $env:GIL_CODEX_ARM64_INTEGRITY }
+          if ($mainLock.resolved -ne "https://registry.npmjs.org/@openai/codex/-/codex-$($env:GIL_CODEX_PIN).tgz") { throw "main package resolved to $($mainLock.resolved)" }
+          if ($mainLock.integrity -ne $env:GIL_CODEX_MAIN_INTEGRITY) { throw "main tarball integrity $($mainLock.integrity) differs from the recorded value" }
+          if ($platLock.resolved -ne "https://registry.npmjs.org/@openai/codex/-/codex-$($env:GIL_CODEX_PIN)-win32-$arch.tgz") { throw "platform package resolved to $($platLock.resolved)" }
+          if ($platLock.integrity -ne $expectedPlat) { throw "platform tarball integrity $($platLock.integrity) differs from the recorded value" }
+          # The real executable, not npm's codex.cmd/codex.js wrapper: exactly one codex.exe in the platform package.
+          $exes = @(Get-ChildItem -LiteralPath $pkgDir -Recurse -File -Filter 'codex.exe')
+          if ($exes.Count -ne 1) { throw "expected exactly one codex.exe under the platform package, found $($exes.Count): $($exes.FullName -join '; ')" }
+          $exe = $exes[0].FullName
+          if ((Get-Item -LiteralPath $exe).LinkType) { throw 'codex.exe is a link' }
+          # PE machine field: built for this runner's CPU, so the App Server does not run under emulation.
+          $fs = [System.IO.File]::OpenRead($exe)
+          try {
+            $br = New-Object System.IO.BinaryReader($fs)
+            $fs.Position = 0x3C; $peOffset = $br.ReadUInt32()
+            $fs.Position = $peOffset; if ($br.ReadUInt32() -ne 0x00004550) { throw 'codex.exe is not a PE image' }
+            $machine = $br.ReadUInt16()
+          } finally { $fs.Dispose() }
+          $expectedMachine = if ($arch -eq 'x64') { 0x8664 } else { 0xAA64 }
+          if ($machine -ne $expectedMachine) { throw ('PE machine 0x{0:X4} differs from expected 0x{1:X4}' -f $machine, $expectedMachine) }
+          $version = (& $exe --version | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) { throw "codex.exe --version exited $LASTEXITCODE" }
+          if ($version -ne "codex-cli $($env:GIL_CODEX_PIN)") { throw "codex.exe reports '$version'" }
+          $evidenceDir = Join-Path $env:GITHUB_WORKSPACE 'target\runtime-integration-evidence'
+          New-Item -ItemType Directory -Path $evidenceDir -Force | Out-Null
+          $evidence = Join-Path $evidenceDir "codex-cli-$arch-$($env:GIL_RUNTIME_PROFILE).json"
+          [ordered]@{
+            note = 'npm tarball integrity compared with registry metadata read on 2026-10-24: a download-integrity check, not a verification of the publisher signature on codex.exe'
+            pin = "@openai/codex@$($env:GIL_CODEX_PIN)"
+            install = 'npm install --prefix <RUNNER_TEMP>/codex-cli --no-audit --no-fund --ignore-scripts (no global install)'
+            runner_image = $env:ImageOS; arch = $arch; target = $env:GIL_NATIVE_TARGET
+            node = (node --version); npm = (npm --version)
+            main_package = [ordered]@{ name = $main.name; version = $main.version; resolved = $mainLock.resolved; integrity = $mainLock.integrity }
+            platform_package = [ordered]@{ name = $plat.name; version = $plat.version; os = @($plat.os); cpu = @($plat.cpu); resolved = $platLock.resolved; integrity = $platLock.integrity }
+            codex_exe = [ordered]@{ path_under_prefix = $exe.Substring($prefix.Length).TrimStart('\'); bytes = (Get-Item -LiteralPath $exe).Length; sha256 = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant(); pe_machine = ('0x{0:X4}' -f $machine); version_output = $version }
+          } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $evidence -Encoding utf8
+          Get-Content -LiteralPath $evidence
+          "GIL_CODEX_CLI=$exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Runtime App Server integration (runtime-testbed feature; required; isolated CODEX_HOME and store)
+        shell: pwsh
+        env:
+          # BLOCKED (no CLI) fails instead of returning; the test is compiled only with the feature.
+          GIL_RUNTIME_INTEGRATION_REQUIRE: '1'
+        run: |
+          $features = if ($env:GIL_RUNTIME_PROFILE -eq 'visual-authoring') { 'runtime-testbed,visual-authoring' } else { 'runtime-testbed' }
+          if (-not $env:GIL_CODEX_CLI -or -not (Test-Path -LiteralPath $env:GIL_CODEX_CLI -PathType Leaf)) { throw 'GIL_CODEX_CLI must name the verified codex.exe from the previous step' }
+          # A real Codex App Server over stdio with an isolated CODEX_HOME whose only MCP server is
+          # the test-only launcher driver; the synthetic Cores are overlay-marked copies of the
+          # testbed exe in a temp store (never a GIL Core, never the runner's own ~/.codex). 4 tests
+          # must run: the main flow prints OUTCOME: PASS with the evidence path, and --nocapture
+          # keeps every version/pid/instance line and the app-server stderr in this log.
+          cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET --features $features --test runtime_integration -- --nocapture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $pass = @(Get-ChildItem -LiteralPath target\runtime-integration-evidence -File -Filter 'run-*-PASS.json')
+          if ($pass.Count -ne 1) { throw "expected one PASS evidence file from the main flow, found $($pass.Count)" }
+          Get-Content -LiteralPath $pass[0].FullName
+      - name: Retain runtime integration evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: gil-runtime-integration-${{ matrix.arch }}-${{ matrix.profile }}-${{ github.sha }}
+          path: target/runtime-integration-evidence/
+          if-no-files-found: error
+          retention-days: 7
       - name: Image-report storage boundaries (Windows contract v0.1 §6)
         if: matrix.profile == 'visual-authoring'
         shell: pwsh
