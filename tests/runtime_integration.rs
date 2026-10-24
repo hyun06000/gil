@@ -282,7 +282,12 @@ fn flow(h: &mut Harness) -> Result<(), String> {
     let a = h.start_server("A")?;
     let init = h.servers[a].request("initialize", json!({"clientInfo": {"name": "gil-runtime-integration", "version": "0"}}), Duration::from_secs(30))?;
     h.note(format!("initialize: codexHome={} userAgent={}", init["codexHome"], init["userAgent"]));
-    if init["codexHome"].as_str().map(PathBuf::from) != Some(h.codex_home.clone()) { return Err(format!("the app-server must run on the isolated home, got {}", init["codexHome"])); }
+    // The same directory, not the same spelling: Windows reports the home without the `\\?\`
+    // verbatim prefix that our canonicalized temp path carries, so both sides are canonicalized.
+    let reported = init["codexHome"].as_str().map(PathBuf::from).ok_or_else(|| format!("initialize returned no codexHome: {init}"))?;
+    let reported_id = fs::canonicalize(&reported).map_err(|e| format!("canonicalize reported codexHome {}: {e}", reported.display()))?;
+    let isolated_id = fs::canonicalize(&h.codex_home).map_err(|e| format!("canonicalize isolated codex_home {}: {e}", h.codex_home.display()))?;
+    if reported_id != isolated_id { return Err(format!("the app-server must run on the isolated home {}, got {}", h.codex_home.display(), reported.display())); }
     let t1 = thread_start(h, a)?;
     let status = h.servers[a].request("mcpServerStatus/list", json!({"threadId": t1, "serverName": SERVER}), Duration::from_secs(60))?;
     let entry = status["data"].as_array().and_then(|d| d.iter().find(|s| s["name"] == SERVER)).cloned().unwrap_or(Value::Null);
