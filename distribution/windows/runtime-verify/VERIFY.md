@@ -16,6 +16,8 @@ Downloaded files and evidence remain for inspection.
 An existing relative folder such as `--root .` is supported. The driver resolves it to an
 absolute path before deriving `work`, temporary directories, evidence and child executable
 paths. Changing the integration process's working directory must not reinterpret those paths.
+The system download/archive tools receive ASCII filenames relative to an explicitly set
+working directory, so non-ASCII parent paths need not pass through their narrow argv handling.
 
 1. Creates `<folder>\work\` (refused if it exists: a folder is used once; make a new one).
 2. Verifies this bundle's files against `bundle.json` and checks that the bundle is built for

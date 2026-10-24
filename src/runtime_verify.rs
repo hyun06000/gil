@@ -236,20 +236,20 @@ fn drive(opts: &Options, report: &mut Value) -> Result<(Outcome, String), Blocke
             let pin = pinned(std::env::consts::OS, std::env::consts::ARCH).ok_or_else(|| Blocked(format!("no pinned CLI source is recorded for {}/{}: pass --cli <codex executable>", std::env::consts::OS, std::env::consts::ARCH)))?;
             let (curl, tar) = (system_tool("curl"), system_tool("tar"));
             for t in [&curl, &tar] { if !t.is_file() { return blocked(format!("system tool missing: {}", t.display())); } }
-            let tgz = work.join("cli").join(pin.tarball_name());
+            let dest = work.join("cli");
+            let tgz = dest.join(pin.tarball_name());
             let url = pin.tarball_url();
             step(report, "cli", format!("downloading the pinned platform package from {url} (official npm registry) into {}", tgz.display()));
-            let out = Command::new(&curl).args(["--fail", "--silent", "--show-error", "--location", "--output"]).arg(&tgz).arg(&url).output().map_err(|e| Blocked(format!("run curl: {e}")))?;
+            let out = download_command(&curl, &dest, &pin).output().map_err(|e| Blocked(format!("run curl: {e}")))?;
             if !out.status.success() { return blocked(format!("download failed ({}): {}; not retried", out.status, String::from_utf8_lossy(&out.stderr).trim())); }
             let (sha512, sha256, bytes) = digests(&tgz).map_err(Blocked)?;
             let want = decode_integrity(pin.integrity).map_err(Blocked)?;
             if sha512 != want { return blocked(format!("tarball integrity differs from the recorded value (got sha512 {}, {bytes} bytes); nothing extracted or run", hex(&sha512))); }
             step(report, "cli", format!("tarball {bytes} bytes, sha512 matches the recorded integrity (download check, not a signature), sha256 {sha256}"));
-            let list = Command::new(&tar).arg("-tzf").arg(&tgz).output().map_err(|e| Blocked(format!("run tar -t: {e}")))?;
+            let list = archive_command(&tar, &dest, &pin, None).output().map_err(|e| Blocked(format!("run tar -t: {e}")))?;
             if !list.status.success() { return blocked(format!("tar listing failed: {}", String::from_utf8_lossy(&list.stderr).trim())); }
             let member = select_member(&String::from_utf8_lossy(&list.stdout), pin.triple, pin.exe_name).map_err(Blocked)?;
-            let dest = work.join("cli");
-            let ex = Command::new(&tar).arg("-xzf").arg(&tgz).arg("-C").arg(&dest).arg(&member).output().map_err(|e| Blocked(format!("run tar -x: {e}")))?;
+            let ex = archive_command(&tar, &dest, &pin, Some(&member)).output().map_err(|e| Blocked(format!("run tar -x: {e}")))?;
             if !ex.status.success() { return blocked(format!("tar extraction failed: {}", String::from_utf8_lossy(&ex.stderr).trim())); }
             let exe = dest.join(member.replace('/', std::path::MAIN_SEPARATOR_STR));
             if !exe.is_file() { return blocked(format!("extracted member is missing: {}", exe.display())); }
@@ -306,6 +306,21 @@ fn drive(opts: &Options, report: &mut Value) -> Result<(Outcome, String), Blocke
     Ok((outcome, why))
 }
 
+// Windows tools may use narrow argv for filesystem paths. Keep all path-bearing arguments
+// ASCII and pass the absolute Unicode destination through CreateProcessW's cwd instead.
+fn download_command(curl: &Path, dest: &Path, pin: &Pinned) -> Command {
+    let mut cmd = Command::new(curl);
+    cmd.current_dir(dest).args(["--fail", "--silent", "--show-error", "--location", "--output"])
+        .arg(pin.tarball_name()).arg(pin.tarball_url());
+    cmd
+}
+fn archive_command(tar: &Path, dest: &Path, pin: &Pinned, member: Option<&str>) -> Command {
+    let mut cmd = Command::new(tar);
+    cmd.current_dir(dest).arg(if member.is_some() { "-xzf" } else { "-tzf" }).arg(pin.tarball_name());
+    if let Some(member) = member { cmd.arg(member); }
+    cmd
+}
+
 fn integration_command(test_exe: &Path, work: &Path, cli: &Path, testbed: &Path) -> Command {
     let mut cmd = Command::new(test_exe);
     let tmp = work.join("tmp");
@@ -355,6 +370,23 @@ pub fn finish(root: &Path, outcome: Outcome, mut report: Value) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn external_tools_receive_ascii_names_and_a_separate_unicode_working_directory() {
+        let dest = std::env::temp_dir().join("한글 path").join("cli");
+        for arch in ["x86_64", "aarch64"] {
+            let pin = pinned("windows", arch).unwrap();
+            let member = format!("package/vendor/{}/bin/codex.exe", pin.triple);
+            for cmd in [download_command(Path::new("curl"), &dest, &pin),
+                archive_command(Path::new("tar"), &dest, &pin, None),
+                archive_command(Path::new("tar"), &dest, &pin, Some(&member))] {
+                assert_eq!(cmd.get_current_dir(), Some(dest.as_path()));
+                let args: Vec<_> = cmd.get_args().map(|a| a.to_str().unwrap()).collect();
+                assert!(args.iter().all(|a| a.is_ascii()), "{args:?}");
+                assert!(!args.contains(&"-C"));
+                assert!(args.contains(&pin.tarball_name().as_str()));
+            }
+        }
+    }
     #[test]
     fn child_paths_survive_a_working_directory_change() {
         const ROLE: &str = "GIL_VERIFY_PATH_TEST_ROLE";

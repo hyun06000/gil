@@ -290,10 +290,11 @@ jobs:
           $name = "gil-runtime-verify-windows-$env:GIL_NATIVE_ARCH"
           $folder = Join-Path $env:RUNNER_TEMP ("gil-runtime-verify 한글 selftest-" + [guid]::NewGuid().ToString('N'))
           New-Item -ItemType Directory -Path $folder | Out-Null
-          tar.exe -xzf "target/runtime-verify/$name.tar.gz" -C $folder
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item -LiteralPath "target/runtime-verify/$name.tar.gz" -Destination (Join-Path $folder "$name.tar.gz")
           Push-Location -LiteralPath $folder
           try {
+            tar.exe -xzf "$name.tar.gz"
+            if ($LASTEXITCODE -ne 0) { throw "bundle extraction failed: $LASTEXITCODE" }
             & (Join-Path $folder "$name\gil-runtime-verify.exe") --root .
             $code = $LASTEXITCODE
           } finally { Pop-Location }
