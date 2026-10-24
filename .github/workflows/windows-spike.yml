@@ -179,9 +179,11 @@ jobs:
           # npm records what it resolved and verified in the lockfile (the hidden one when no package-lock.json is written).
           $lockPath = @((Join-Path $prefix 'package-lock.json'), (Join-Path $prefix 'node_modules\.package-lock.json')) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
           if (-not $lockPath) { throw 'npm wrote no lockfile; resolved URLs and integrity cannot be checked' }
-          $lock = Get-Content -Raw -LiteralPath $lockPath | ConvertFrom-Json
-          $mainLock = $lock.packages.('node_modules/@openai/codex')
-          $platLock = $lock.packages.("node_modules/@openai/codex-win32-$arch")
+          # -AsHashtable: the lockfile's root entry is keyed by an empty name, which ConvertFrom-Json otherwise refuses.
+          $lock = Get-Content -Raw -LiteralPath $lockPath | ConvertFrom-Json -AsHashtable
+          $mainLock = $lock['packages']['node_modules/@openai/codex']
+          $platLock = $lock['packages']["node_modules/@openai/codex-win32-$arch"]
+          if (-not $mainLock -or -not $platLock) { throw "lockfile $lockPath has no entry for the main or the platform package" }
           $expectedPlat = if ($arch -eq 'x64') { $env:GIL_CODEX_X64_INTEGRITY } else { $env:GIL_CODEX_ARM64_INTEGRITY }
           if ($mainLock.resolved -ne "https://registry.npmjs.org/@openai/codex/-/codex-$($env:GIL_CODEX_PIN).tgz") { throw "main package resolved to $($mainLock.resolved)" }
           if ($mainLock.integrity -ne $env:GIL_CODEX_MAIN_INTEGRITY) { throw "main tarball integrity $($mainLock.integrity) differs from the recorded value" }
