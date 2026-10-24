@@ -84,7 +84,11 @@ export async function prepare(output) {
     files.set(fileName, bytes);
   }
   const driver = files.get('gil-runtime-verify.exe');
-  assert.ok(driver.includes(Buffer.from(`codex-${CODEX_CLI_PIN}-win32-${arch}.tgz`)), 'driver pin differs from CODEX_CLI_PIN');
+  // The driver composes the tarball name at run time; its constants are the pin, the npm platform
+  // alias for this CPU and the registry base, each a separate literal in the image.
+  for (const literal of [CODEX_CLI_PIN, `win32-${arch}`, 'https://registry.npmjs.org/@openai/codex/-/']) {
+    assert.ok(driver.includes(Buffer.from(literal)), `driver lacks the literal ${literal} (pin differs from CODEX_CLI_PIN?)`);
+  }
   files.set('VERIFY.md', await regular(join(ROOT, 'distribution/windows/runtime-verify/VERIFY.md')));
   files.set('LICENSE', await regular(join(ROOT, 'LICENSE')));
   for (const [noticeName, bytes] of notices) files.set(noticeName, bytes);
