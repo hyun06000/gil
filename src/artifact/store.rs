@@ -43,6 +43,9 @@ use super::{CHUNK, ContentDigest, DigestAlgorithm, Manifest};
 #[cfg(unix)]
 #[path = "store_unix.rs"]
 mod unix;
+#[cfg(windows)]
+#[path = "store_windows.rs"]
+mod windows;
 
 /// 루트 `.gil/` 아래 창고가 놓이는 자리.
 const ARTIFACTS: &str = "artifacts";
@@ -80,18 +83,54 @@ impl fmt::Display for ObjectKind {
     }
 }
 
+/// 이 창고의 접근 권한 계약 — **호출자가 명시한다**, 디스크에서 추론하지 않는다
+/// (Windows 지원 계약 §8 1a). Unix 구현은 이 값을 쓰지 않는다(0o700 경계가 따로 있다).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Protection {
+    /// 기존 format-4 저장소: 상속 ACL 그대로, 어떤 ACL 검사도 하지 않는다.
+    Inherited,
+    /// 이미지 Project(format 5): `.gil` 은 소유자 전용이어야 하고 객체·shard 는 상속 ACE 만
+    /// 가져야 한다. 조회 오류를 포함해 어떤 검사 실패도 거절이다.
+    OwnerOnly,
+}
+
 /// `.gil/artifacts/` 하나.
 #[derive(Debug, Clone)]
 pub(crate) struct ObjectStore {
     root: PathBuf,
+    #[cfg_attr(not(windows), allow(dead_code))]
+    protection: Protection,
 }
 
 impl ObjectStore {
-    /// 그 프로젝트의 `.gil` 아래 창고.
+    /// 그 프로젝트의 `.gil` 아래 창고 — 기존(format-4) 접근 계약.
     pub(crate) fn at(gil_dir: &Path) -> ObjectStore {
         ObjectStore {
             root: gil_dir.join(ARTIFACTS),
+            protection: Protection::Inherited,
         }
+    }
+
+    /// 이미지 Project 의 창고: 소유자 전용 계약을 **명시적으로** 요구한다.
+    pub(crate) fn owner_only(gil_dir: &Path) -> ObjectStore {
+        ObjectStore {
+            root: gil_dir.join(ARTIFACTS),
+            protection: Protection::OwnerOnly,
+        }
+    }
+
+    /// Project 의 형식에 맞는 계약: format 5(시각 상태 있음)는 소유자 전용, 그 밖에는 기존.
+    pub(crate) fn for_project(gil_dir: &Path, project: &crate::Project) -> ObjectStore {
+        if project.visual_state().is_some() {
+            Self::owner_only(gil_dir)
+        } else {
+            Self::at(gil_dir)
+        }
+    }
+
+    #[cfg_attr(not(windows), allow(dead_code))]
+    pub(crate) fn protection(&self) -> Protection {
+        self.protection
     }
 
     /// 창고 자신의 자리 — `.gil/artifacts/`.
@@ -183,7 +222,13 @@ impl ObjectStore {
         unix::put(self, kind, reader)
     }
 
-    #[cfg(not(unix))]
+    /// Windows: pinned-handle, no-reparse publication with the same no-clobber hard link.
+    #[cfg(windows)]
+    fn put(&self, kind: ObjectKind, reader: impl Read) -> Result<ContentDigest, ObjectError> {
+        windows::put(self, kind, reader)
+    }
+
+    #[cfg(not(any(unix, windows)))]
     fn put(&self, kind: ObjectKind, mut reader: impl Read) -> Result<ContentDigest, ObjectError> {
         let tmp_dir = self.root.join(TMP);
         create_dir(&tmp_dir)?;
@@ -301,7 +346,9 @@ impl ObjectStore {
     ) -> Result<(), ObjectError> {
         #[cfg(unix)]
         let mut file = unix::read_object(self, ObjectKind::Blob, digest)?;
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        let mut file = windows::read_object(self, ObjectKind::Blob, digest)?;
+        #[cfg(not(any(unix, windows)))]
         let mut file = open(&self.object_path(ObjectKind::Blob, digest), ObjectKind::Blob, digest)?;
 
         let mut hasher = Sha256::new();
@@ -337,7 +384,9 @@ impl ObjectStore {
         let digest = at.digest();
         #[cfg(unix)]
         let mut file = unix::read_object(self, ObjectKind::Manifest, digest)?;
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        let mut file = windows::read_object(self, ObjectKind::Manifest, digest)?;
+        #[cfg(not(any(unix, windows)))]
         let mut file = open(&self.object_path(ObjectKind::Manifest, digest), ObjectKind::Manifest, digest)?;
 
         let mut bytes = Vec::new();
@@ -382,7 +431,7 @@ fn sync_dir(at: &Path) -> Result<(), ObjectError> {
         })
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn sync_dir(_at: &Path) -> Result<(), ObjectError> {
     // 이 플랫폼에서는 표준 라이브러리로 디렉터리를 fsync 할 수 없다. 하지 않는다.
     Ok(())
@@ -414,6 +463,7 @@ mod meddle {
 }
 
 /// 이 오류가 「이 파일 시스템은 hard link 를 못 건다」는 뜻인가.
+#[cfg_attr(windows, allow(dead_code))]
 fn unsupported(source: &io::Error) -> bool {
     matches!(
         source.kind(),
@@ -421,6 +471,7 @@ fn unsupported(source: &io::Error) -> bool {
     )
 }
 
+#[cfg_attr(windows, allow(dead_code))]
 fn create_dir(at: &Path) -> Result<(), ObjectError> {
     fs::create_dir_all(at).map_err(|source| ObjectError::Io {
         doing: "객체 폴더를 만들지",
@@ -428,6 +479,7 @@ fn create_dir(at: &Path) -> Result<(), ObjectError> {
     })
 }
 
+#[cfg_attr(windows, allow(dead_code))]
 fn open(path: &Path, kind: ObjectKind, digest: &ContentDigest) -> Result<File, ObjectError> {
     File::open(path).map_err(|source| match source.kind() {
         io::ErrorKind::NotFound => ObjectError::Missing {
@@ -442,6 +494,7 @@ fn open(path: &Path, kind: ObjectKind, digest: &ContentDigest) -> Result<File, O
 }
 
 /// 이미 있는 객체를 흘려 읽어 지문을 다시 잰다.
+#[cfg_attr(windows, allow(dead_code))]
 fn digest_of_file(
     path: &Path,
     kind: ObjectKind,

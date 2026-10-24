@@ -195,3 +195,46 @@ claim about every dynamically loaded dependency or every clean Windows installat
 The receipt remains `publishable: false`: no Authenticode signature, actual Windows/Codex install
 and fullscreen not yet tested, no marketplace publication, MSVC runtime redistribution review pending.
 CI retention is seven days; a CI artifact is not the stable nondeveloper installation channel.
+
+## Image-report authoring profile — stage 1 (2026-10-18)
+
+The `visual-authoring` Cargo feature now has Windows implementations of the storage boundaries
+that were Unix-only (new format-5 creation, Verify attachment, stored-image reuse, reopen after
+restart). Scope, threat list and acceptance table: `spec/GIL_Windows_Visual_Support_Contract_v0.1.md`;
+storage details: storage contract §25. Migration of existing format-4 records stays refused on
+Windows (`unsupported_platform`).
+
+`windows-spike.yml` now runs a four-entry matrix: x64/ARM64 × default/visual-authoring. The
+authoring entries build with the feature, run the binding/MCP tests plus `visual_attachment`,
+`visual_start`, `visual_store` and the filtered library unit tests (creation fault/abort
+checkpoints, lock and object-store boundaries), then `spike.mjs` with
+`GIL_RUNTIME_PROFILE=visual-authoring` (25-tool contract on Windows: the 24 authoring tools plus `gil_prepare_workspace`, `storage_format: 5`, restart).
+The default entries are unchanged and remain the only ones that package a review candidate.
+A green authoring job is runner evidence for the contract table; it is not an installable
+Windows authoring candidate, a version-label decision or a Codex screen acceptance.
+
+Evidence: PR #25 run 39126103310 (head 09882352) passed all four jobs after three fix rounds
+(rename call form, a test fixture, and a real Core defect: a junction root was accepted after
+canonicalization). The follow-up (owner-only `.gil`, actual cross-account access test, UNC and
+mapped-drive refusal, rename security review) passed all four jobs in run 39129885115
+(head b84a6322) after six more rounds; contract §6.1 lists each failure and fix, including one
+further Core defect (a reservation handle retained DELETE access and collided with the pinned
+opens). The inherited ACL of the published text preview is reviewed in
+[ACL-IMPACT-20261018.md](ACL-IMPACT-20261018.md).
+
+2026-10-19 (design A, contract §4 W1 3 and §8 1a): the reservation is created and first held by
+one `NtCreateFile` call, child entries have an explicit inherited-ACL acceptance that applies
+only to owner-only storages (format-4 Projects are unchanged), and the library no longer exposes
+an ACL adoption function. Run 39162630706 (head 19508d50) passed all four jobs after three
+rounds; contract §6.1 lists them. The handle transition after creation is detection, not
+prevention.
+
+### Development candidate packaging (2026-10-19)
+
+`candidate.mjs` honors `GIL_RUNTIME_PROFILE`. With `visual-authoring` it builds the feature,
+labels the plugin `0.2.1-dev.visual-authoring+windows.<arch>.<head12>` under the marketplace
+`gil-dev-windows-visual-<arch>`, packages `gil-windows-<arch>-visual-authoring-candidate.tar.gz`
+and requires the native smoke to report 25 tools and storage format 5 (`checks.json` schema 2).
+A `prepare_candidate` dispatch now retains one profile-labeled artifact per matrix entry. The
+isolated PC check for such a candidate is [DEV-CANDIDATE-CHECK.md](DEV-CANDIDATE-CHECK.md); the
+public tester channel and its labels are unchanged.

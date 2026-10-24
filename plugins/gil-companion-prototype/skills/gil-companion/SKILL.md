@@ -48,7 +48,9 @@ position is in doubt read `gil_status` / `gil_context` first. Then act by the ki
   position. Do not send a different action instead.
 - **Permission, compatibility or approval refusals** (unsupported platform or storage format,
   `visual_upgrade_required`, an action the user has not approved, a locked or unreadable folder):
-  do not repeat the call. Explain GIL's words and what the user would have to decide.
+  do not repeat the call. Explain GIL's words and what the user would have to decide. **Never ask
+  the user to change ACLs, inheritance, ownership or security settings**, and never change them
+  yourself: GIL does not repair records, and a permission error alone does not say why it happened.
 - **Busy, lost connection or an uncertain close** keep their own rules in this document (wait for
   the call in flight; never repeat `gil_start`; never automatically repeat a visual close).
 
@@ -126,6 +128,44 @@ platform is not permission to fall back to a shell or silently create a text-onl
 3. Follow the start receipt: `gil_open` the first Interview step and ask the user what they want.
    The Monitor reads the project on its own, so the graph updates from this first step on without
    any further rendering call.
+
+**Unsupported location at start (Windows development surface).** If `gil_start` answers
+`ok: false` with `code: unsupported_location`, nothing was created. Pass on its `said` as it is —
+it is a support-scope notice (for example “선택한 폴더는 OneDrive 설정이 백업 위치로 선언한 폴더 안에
+있습니다. 현재 GIL 검수판은 이 위치에서 기록 보존을 보장하지 못합니다. OneDrive 설정은 그대로 두고,
+이 PC의 별도 작업 폴더를 준비할까요?”), not a statement that OneDrive or that folder caused an error.
+Its `evidence` says what the refusal rests on (`observed` by the OS, `declared_by_environment`, or
+`check_failed`); never upgrade a declared or failed check into “this is OneDrive”. Do not retry
+`gil_start` there, do not change OneDrive or sync settings, and do not touch any existing project
+files, `.gil` or permissions. **If `evidence` is `check_failed`** (`location_kind: unverifiable`),
+the check itself could not run: report GIL's words and stop — do not offer `gil_prepare_workspace`
+(it is refused for the same reason) and do not present a local folder as a substitute for the
+check. Otherwise, only if the user says yes:
+
+1. `gil_prepare_workspace(name, confirm: false)` (parent defaults to `%USERPROFILE%\gil-projects`
+   and must stay under the user profile; use the selected folder's name unless the user names
+   another). Show the exact `path` it returns and pass on its `said`, which states what was
+   checked (outside the roots OneDrive declares, no cloud-sync attributes) and that other sync
+   products are not detected. Then **end your turn** and wait for the user's reply; a plan is not
+   an approval, and neither is silence.
+2. Only after the user approves that exact path: `gil_prepare_workspace(name, confirm: true,
+   approved_path: <the path string from step 1>)` creates it. Any refusal (`exists`,
+   `unsupported_location`, `permission_denied`, `parent_missing`, `path_mismatch`, `plan_changed`,
+   `outside_allowed_range`) changes nothing: report it and stop, including the
+   `created_by_this_call` list if one is present; never pick a different folder on your own, never
+   elevate, never adjust permissions.
+3. Creating the folder is not connecting it. Ask the user to select the new folder as the working
+   folder in the app, then wait. Only when that folder is the explicitly selected working folder
+   call `gil_start` there; never claim it is connected because the path exists.
+
+**Storage protection lost on reopen (Windows, `code: storage_protection_lost`).** A later call
+(`gil_status`, `gil_help`, `gil_open`, …) can refuse because the `.gil` folder's protection is no
+longer verified. The records are preserved and GIL changed nothing. Pass on its `said`; do not
+ask the user to change ACLs, inheritance, ownership or security settings; do not conclude from the
+permission error that the folder is a sync folder, and do not replace this Project with a new one
+or start again in the same place. Only if the user chooses to continue somewhere else, follow the
+unsupported-location steps above (`gil_prepare_workspace`, approval of the exact path, selection
+in the app) — the existing records stay where they are.
 
 Report three things separately and never fold them into one "done":
 
@@ -253,6 +293,8 @@ updating a Plugin. Use it only when all four `gil_migration_check`, `gil_migrati
 `gil_migration_apply`, `gil_migration_status` tools are connected and the user asks to enable
 image reports in an existing project. Current development tools are for synthetic macOS arm64
 local projects only; do not offer them for real user records or bypass a refusal with shell/YAML.
+On Windows these four tools refuse with `unsupported_platform`: a new image Project can be
+created there on a local fixed NTFS folder, but existing format-4 records are not migrated.
 
 Read `gil_migration_check` first. Stop other writers without closing or discarding open work.
 Explain that old GIL cannot use the new records. Propose a new, private, local backup folder

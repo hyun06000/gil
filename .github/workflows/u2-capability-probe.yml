@@ -1,0 +1,56 @@
+name: U2 capability probe (synthetic)
+on:
+  pull_request:
+    paths:
+      - 'distribution/runtime-update/**'
+      - '.github/workflows/u2-capability-probe.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    name: U2 probe (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: windows-x64
+            runner: windows-2025
+            arch: x64
+          - label: windows-arm64
+            runner: windows-11-arm
+            arch: arm64
+          - label: macos-arm64
+            runner: macos-15
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      # pwsh, not bash: an MSYS/Git-Bash step runs as a child of a shell that enables the
+      # administrator token's backup/restore privileges, which bypass DACL denies and made the
+      # ACL fixtures non-enforcing in run 39843768112. The same holds for the local-run advice.
+      - name: Runner identity (read only; ordinary runner token, not the Codex Desktop environment)
+        shell: pwsh
+        run: |
+          node --version
+          node -e "if (process.arch !== process.env.EXPECTED_ARCH) { console.error('arch', process.arch); process.exit(1) }"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($IsWindows) { & "$env:SystemRoot\System32\whoami.exe" /user /fo csv /nh } else { whoami }
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+      - name: Probe tests in isolated temp folders
+        shell: pwsh
+        run: node --test distribution/runtime-update/gil-u2-probe.test.mjs
+        env:
+          GIL_PROBE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Keep run evidence (stdout, stderr, result JSON, exit codes)
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: u2-probe-evidence-${{ matrix.label }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: target/u2-probe-evidence
+          if-no-files-found: warn

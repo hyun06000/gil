@@ -455,9 +455,59 @@ Later    1  성공 가지 Merge
       설치·실제 fullscreen은 아직 미검증이며, MSVC runtime 재배포 조건 검토도 남아 있다.
 - [ ] 사용자에게 개발 도구·셸 명령·별도 Companion 설치를 요구하지 않고 macOS/Codex와 같은
       폴더 선택 → 프로젝트 시작 → fullscreen 가로 DAG·채팅 → 상세/시각 자료 → 실시간 갱신을 제공한다.
+- [~] **T3.1 Windows 이미지 Report 작성 경계(단계 1, 2026-10-18):** 새 format-5 생성·Verify 첨부·
+      저장 이미지 인용·재시작 보존의 Windows 핸들 기반 구현(`src/windows_fs.rs`, 저장 계약 §25)과
+      계약·인수표 `spec/GIL_Windows_Visual_Support_Contract_v0.1.md`. 이관은 Windows에서 계속 거절.
+      Windows CI에 `visual-authoring` profile matrix 추가. 보완(같은 날): `.gil` 소유자 전용
+      보호 DACL 계약·구현·재열기 검증, 다른 로컬 계정 실제 접근 시험, UNC·매핑 드라이브 거절,
+      전체 경로 rename 보안 검토·회귀(계약 §6 W6/W7·§8·§9). runner 4 job 통과(PR #25, 최종 run
+      39129885115; 중간 라운드의 실패·수정은 계약 §6.1). 기존 text preview의 상속 ACL 영향은
+      `distribution/windows/ACL-IMPACT-20261018.md`. 실제 PC·Host 화면 인수·설치·게시·버전
+      표기·MSVC 재배포 검토·비-NTFS 거절 실행은 남는다. runner 통과를 Windows 지원 완료로
+      표기하지 않는다.
 - [ ] 경로·권한·잠금·파일 감시·재시작/재연결·보고서 보존·OS 실행 차단을 실제 Windows에서 검수한다.
       보안을 끄거나 예외 등록으로 우회하지 않는다. 지원 OS/CPU와 패키지 신뢰 채널은 검수 후 명시한다.
-- [ ] Windows 시험 사용자의 설치 및 작업 경험을 수집하고 차이·실패·해결을 기록한다.
+- [~] Windows 시험 사용자의 설치 및 작업 경험을 수집하고 차이·실패·해결을 기록한다.
+      2026-10-23까지 설치/교체 실패, OneDrive 경로 재열기 거절과 외부 로컬 폴더 정상 대조,
+      별도 App Server 재연결 관측을 사용자 보고로 수집했다. 전체 작업·외부 비개발자 인수는 미완이다.
+
+##### T3.2 — 삭제 없는 Core 선택과 비개발자 업데이트 (2026-10-23)
+
+명세: [Runtime Update 계약안](GIL_Runtime_Update_Contract_v0.1.md), 배포 명세 §9.1.
+**설계 방향과 합성 관측이 있는 단계이며 제품 구현 완료가 아니다.**
+
+- [x] 합성 native fixture 가능성 확인: 별도 실험 branch의 commit `3d48127`, Windows x64·ARM64
+      [CI 39820399631](https://github.com/hyun06000/gil/actions/runs/39820399631)에서 각 10+6 시험.
+      옛 프로세스 유지·새 판 선택·옛 bytes 보존. 실제 GIL/Host 시험과 분리한다.
+- [x] 별도 App Server의 **재연결 관측 수집**: Mac 직접 실행과 Windows 사용자 보고 모두
+      최초 v1 → 선택 후 기존 v1 → reload 후 기존 v1 → 새 thread v2 → 별도 서버 재시작 v2.
+      Windows CLI `0.163.0-alpha.10.2`, Node `v24.19.0`, x64. 완료는 이 관측 수집에 한정한다.
+- [!] Windows 현장 증거 완결성: 실행기/config 사후 해시·개별 MCP 종료는 임시 폴더 후속
+      접근 불가로 미확인. 두 App Server exit 0만 보고됐다. 전체 보존·정리 인수로 세지 않는다.
+- [!] 제한 환경의 배포 원시 연산: 디렉터리 rename EPERM(빈/파일 포함 모두). 이후 재연결
+      시험은 최종 디렉터리 직접 생성·선택 파일 일반 쓰기만 사용했다. 원자적 업데이트 통과가 아니다.
+- [~] **U1 제품 설계:** native 실행기·소유 저장 위치·공식 Host 경계·Core/Skill/저장 호환·
+      초기 도입과 실행기 자체 갱신을 확정한다. 현재 계약은 요구사항/미결정을 정리한 초안이다.
+      **U1 구체화:** [설계 결정안](GIL_Runtime_Update_Design_v0.1.md)에 native 실행기·bundled
+      bootstrap·동일 cohort Core-only 전환·실패 상태와 소스 대조를 적었다. 기존 macOS
+      `update-policy`를 Windows 업데이터로 재사용하지 않는다. 저장소/Host 허용·신뢰/승인 규격·
+      초기 도입은 미결이므로 U1은 [~]다. 다음은 격리 capability probe의 위치·연산·증거 설계다.
+- [ ] **U2 안전 배포:** 현재 제한 토큰에서 지원되는 공개 연산, 검증된 선택의 원자성·중단·
+      경합·권한·출처 확인과 실패 시 기존 상태 보존. 일반 덮어쓰기를 제품 구현으로 채택하지 않는다.
+      **2026-10-23:** 사용자 전달 코드 방식은 해시 불일치로 미실행(원인 미확인)·중단. 저장소 내
+      자동 probe 시험(`distribution/runtime-update/`, Windows x64·ARM64·macOS workflow, 증거 artifact)을
+      준비해 Mac 로컬 6 시험 통과; CI 실행은 별도 승인. 통과해도 제한 토큰·실제 MCP·지속 저장소·
+      원자성·내구성은 미검증으로 남는다.
+- [ ] **U3 실제 GIL 격리:** 합성 Project로 두 Core와 Skill·이미지·저장·잠금·응답 유실·
+      rollback 확인. 현재 사용자 설치본/Project는 사용하지 않는다.
+- [ ] **U4 실제 Desktop/초기 설치:** 공식 경로로 도입·교체·제거, 사용자 승인·적용 대기 표시·
+      실제 새 연결과 UI·채팅·프로세스 종료 확인. 사용자의 PowerShell·ACL 수정·보안 해제 불요.
+- [ ] **U5 채널 인수:** OS/CPU별 검수와 비개발자 경험, 신뢰/고지/복구 검수 뒤 별도 게시 승인.
+
+**순서:** U1 → U2 → U3 → U4 → U5. 합성 시험을 반복해 제품 인수를 대신하지 않는다.
+기존 대화 즉시 업데이트, 무승인 자동 갱신, 기존 제거 오류 해결은 주장하지 않는다.
+이 트랙은 OneDrive 탐지·Agent 승인 대기(W12-5/6), 깨끗한 기계 설치, 서명·공증,
+기존 text preview ACL 대응 등 기존 잔여를 닫지 않는다.
 
 **합격:** 실제 Windows에서 macOS 기준 핵심 사용자 흐름을 통과하고 경험 수집 결과를 정리한다.
 빌드 성공만으로 닫지 않는다. 미완료 Apple 공증·새 Mac 검수·Tauri 검수가 이 트랙의 일괄 선행

@@ -108,7 +108,7 @@ fn migration_stdio_two_approvals_backup_apply_restart_and_preservation() {
 
 /// A format-5 Verify without images must close with the typed shape carrying a `not_needed` (or
 /// `missing`) declaration; the ordinary text close of that Verify is refused and converts nothing.
-#[cfg(all(unix, feature = "visual-authoring"))]
+#[cfg(all(any(unix, windows), feature = "visual-authoring"))]
 #[test]
 fn format5_verify_without_images_uses_typed_close_with_a_declaration() {
     use serde_json::json;
@@ -151,7 +151,7 @@ fn format5_verify_without_images_uses_typed_close_with_a_declaration() {
     mcp.eof();
 }
 
-#[cfg(all(unix, feature = "visual-authoring"))]
+#[cfg(all(any(unix, windows), feature = "visual-authoring"))]
 #[test]
 fn authoring_stdio_close_reuse_confirmation_and_rejections() {
     use serde_json::{Value, json};
@@ -291,7 +291,7 @@ fn authoring_stdio_close_reuse_confirmation_and_rejections() {
     mcp.eof();
 }
 
-#[cfg(all(unix, feature = "visual-authoring"))]
+#[cfg(all(any(unix, windows), feature = "visual-authoring"))]
 #[test]
 fn authoring_declarations_and_failed_commit_keep_reports_open() {
     use serde_json::json;
@@ -337,13 +337,14 @@ fn authoring_declarations_and_failed_commit_keep_reports_open() {
     mcp.eof();
 }
 
-#[cfg(all(unix, feature = "visual-authoring"))]
+#[cfg(all(any(unix, windows), feature = "visual-authoring"))]
 #[test]
 fn authoring_competing_closes_publish_only_one_report() {
     use serde_json::json;
     let root=common::scratch("authoring-race");
     let mut p=common::bootstrap(); common::up_to_verify(&mut p);
     gil::save(&p.prepare_visual_upgrade().unwrap(),root.join(gil::STATE_PATH)).unwrap();
+    common::private_storage(&root);
     let report=common::full_report(&common::spec(),gil::CycleKind::Experiment,gil::NodeKind::Verify);
     let body=report.field_names().map(|k|format!("{k}: {}\n",report.get(k).unwrap())).collect::<String>();
     let args=json!({"project_root":root,"report":body,"expected_owner":{"kind":"step","ref":"step:C2/S3"},
@@ -365,7 +366,7 @@ fn authoring_competing_closes_publish_only_one_report() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn visual_report_tools_read_exact_bytes_and_refuse_unlinked_assets_over_stdio() {
     use gil::visual_report::{VisualDeclaration, VisualUse, image::VisualAttachment, registry::SourceKind};
     use base64::Engine;
@@ -373,6 +374,7 @@ fn visual_report_tools_read_exact_bytes_and_refuse_unlinked_assets_over_stdio() 
     let mut p = common::bootstrap();
     common::up_to_verify(&mut p);
     gil::save(&p.prepare_visual_upgrade().unwrap(), root.join(gil::STATE_PATH)).unwrap();
+    common::private_storage(&root);
     let mut bytes = Vec::new();
     // Incompressible deterministic pixels force several wire chunks.
     let mut seed = 17u32;
@@ -532,7 +534,14 @@ impl Client {
     }
 
     fn serve_with(settings: &Path) -> Self {
-        let mut kid = Command::new(gil())
+        Self::serve_with_env(settings, &[])
+    }
+
+    /// Extra environment for the server process (e.g. a synthetic `OneDrive` root).
+    fn serve_with_env(settings: &Path, env: &[(&str, &Path)]) -> Self {
+        let mut command = Command::new(gil());
+        for (key, value) in env { command.env(key, value); }
+        let mut kid = command
             .args(["mcp", "--serve"])
             // No Node, cargo, repository executable, or global gil on PATH.
             .env("PATH", "/usr/bin:/bin")
@@ -642,6 +651,7 @@ fn tools_list_preserves_nineteen_tools_and_the_read_only_app_boundary() {
     let mut expected=vec!["gil_close", "gil_companion_status", "gil_context", "gil_cycle", "gil_help", "gil_monitor_detail", "gil_monitor_poll", "gil_monitor_prepare", "gil_monitor_read", "gil_monitor_report_image", "gil_monitor_report_visuals", "gil_open", "gil_restore", "gil_revisit", "gil_start", "gil_status", "gil_story", "show_gil_companion", "show_gil_monitor"];
     if cfg!(feature="visual-authoring") {
         expected.extend(["gil_report_visuals", "gil_migration_check", "gil_migration_prepare", "gil_migration_apply", "gil_migration_status"]);
+        if cfg!(windows) { expected.push("gil_prepare_workspace"); }
         expected.sort();
     }
     assert_eq!(names, expected);
@@ -1067,7 +1077,7 @@ fn binding_files(settings: &Path) -> usize {
         .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "json")).count()).unwrap_or(0)
 }
 
-#[cfg(all(feature="visual-authoring", target_os="macos", target_arch="aarch64"))]
+#[cfg(all(feature="visual-authoring", any(all(target_os="macos", target_arch="aarch64"), windows)))]
 #[test]
 fn visual_start_preserves_existing_and_partial_records_and_survives_response_loss() {
     use serde_json::json;
@@ -1242,4 +1252,332 @@ fn starting_a_project_leads_to_one_monitor_scope_and_the_first_interview_updates
 
     assert!(mcp.eof().0.success());
     std::fs::remove_dir_all(at).unwrap();
+}
+
+/// Windows contract §4 W1 0 / §6 W12: the location is checked before `gil_start` creates
+/// anything, and a new local workspace is prepared only after approval, never connected.
+#[cfg(all(windows, feature = "visual-authoring"))]
+#[test]
+fn unsupported_location_is_refused_before_creation_and_workspace_prep_needs_approval() {
+    use serde_json::json;
+    let base = scratch("ws-location");
+    let settings = base.join("settings");
+    // A synthetic OneDrive root: the environment names it, nothing is synchronized. The user
+    // profile is the test base, so the allowed range for new workspaces is the base.
+    let onedrive = base.join("OneDrive");
+    std::fs::create_dir_all(onedrive.join("문서 test")).unwrap();
+    std::fs::write(onedrive.join("문서 test").join("existing.txt"), b"keep").unwrap();
+    let mut mcp = Client::serve_with_env(&settings, &[("OneDrive", &onedrive), ("USERPROFILE", &base)]); mcp.initialize();
+    let selected = onedrive.join("문서 test");
+    let before: Vec<_> = std::fs::read_dir(&selected).unwrap().map(|e| e.unwrap().file_name()).collect();
+    let refused = monitor_call(&mut mcp, "gil_start", json!({"project_root": selected}));
+    assert_eq!(refused["structuredContent"]["ok"], false, "{refused}");
+    assert_eq!(refused["structuredContent"]["code"], "unsupported_location");
+    assert_eq!(refused["structuredContent"]["location_kind"], "onedrive");
+    assert_eq!(refused["structuredContent"]["evidence"], "declared_by_environment", "an environment variable is a declaration, not an observed attribute");
+    assert!(refused["structuredContent"]["said"].as_str().unwrap().contains("OneDrive 설정이 백업 위치로 선언한"), "{refused}");
+    assert_eq!(refused["structuredContent"]["suggested_parent"], base.join("gil-projects").display().to_string());
+    assert!(!selected.join(".gil").exists(), "nothing may be created on refusal");
+    let after: Vec<_> = std::fs::read_dir(&selected).unwrap().map(|e| e.unwrap().file_name()).collect();
+    assert_eq!(after, before);
+    // A supported folder outside that root starts normally (same server, same environment).
+    let fine = base.join("정상 폴더");
+    std::fs::create_dir(&fine).unwrap();
+    assert_eq!(monitor_call(&mut mcp, "gil_start", json!({"project_root": fine}))["structuredContent"]["ok"], true);
+
+    // Workspace preparation: plan first (creates nothing), then confirm (creates exactly that).
+    let parent = base.join("gil-projects");
+    let plan = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "새 작업 폴더", "parent": parent, "confirm": false}));
+    assert_eq!(plan["structuredContent"]["ok"], true, "{plan}");
+    assert_eq!(plan["structuredContent"]["stage"], "planned");
+    assert_eq!(plan["structuredContent"]["creates_parent"], true);
+    let shown = plan["structuredContent"]["path"].as_str().unwrap().to_owned();
+    let planned = std::path::PathBuf::from(&shown);
+    assert_eq!(planned, parent.join("새 작업 폴더"));
+    assert!(!parent.exists(), "a plan creates nothing");
+    // The default parent (no `parent` given) is %USERPROFILE%\gil-projects.
+    let default = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "기본", "confirm": false}));
+    assert_eq!(default["structuredContent"]["path"], parent.join("기본").display().to_string(), "{default}");
+    assert!(!parent.exists());
+    // confirm:true without the approved path, or with a different one, creates nothing.
+    let unbound = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "새 작업 폴더", "parent": parent, "confirm": true}));
+    assert_eq!(unbound["structuredContent"]["code"], "invalid_request", "{unbound}");
+    let other = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "새 작업 폴더", "parent": parent, "confirm": true, "approved_path": parent.join("다른 폴더").display().to_string()}));
+    assert_eq!(other["structuredContent"]["code"], "path_mismatch", "{other}");
+    assert!(!parent.exists(), "nothing is created without the exact approved path");
+    let made = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "새 작업 폴더", "parent": parent, "confirm": true, "approved_path": shown}));
+    assert_eq!(made["structuredContent"]["ok"], true, "{made}");
+    assert_eq!(made["structuredContent"]["stage"], "prepared");
+    assert_eq!(made["structuredContent"]["created_by_this_call"], json!([parent.display().to_string(), shown]));
+    assert!(planned.is_dir());
+    assert_eq!(std::fs::read_dir(&planned).unwrap().count(), 0, "the workspace is empty: no .gil until gil_start");
+    assert!(made["structuredContent"]["said"].as_str().unwrap().contains("다른 동기화 제품의 유무는 확인하지 않는다"), "{made}");
+    // Same name again: refused, nothing changed, nothing substituted.
+    std::fs::write(planned.join("note.txt"), b"user file").unwrap();
+    let dup = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "새 작업 폴더", "parent": parent, "confirm": true, "approved_path": shown}));
+    assert_eq!(dup["structuredContent"]["code"], "exists", "{dup}");
+    assert_eq!(dup["structuredContent"]["created_by_this_call"], json!([]));
+    assert_eq!(std::fs::read(planned.join("note.txt")).unwrap(), b"user file");
+    assert_eq!(std::fs::read_dir(&parent).unwrap().count(), 1, "no alternative name was created");
+    // Under the synthetic OneDrive root, outside the user profile, or with an unsafe name:
+    // refused without creating.
+    let inside = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": onedrive, "confirm": true, "approved_path": onedrive.join("x").display().to_string()}));
+    assert_eq!(inside["structuredContent"]["code"], "unsupported_location", "{inside}");
+    assert_eq!(inside["structuredContent"]["evidence"], "declared_by_environment");
+    assert!(!onedrive.join("x").exists());
+    let outside = std::env::temp_dir().join("gil-ws-outside-profile");
+    let out = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": outside, "confirm": false}));
+    assert_eq!(out["structuredContent"]["code"], "outside_allowed_range", "{out}");
+    assert!(!outside.exists());
+    for bad in ["a\\b", "..", "CON", "name.", "a:b"] {
+        let got = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": bad, "parent": parent, "confirm": true, "approved_path": parent.join(bad).display().to_string()}));
+        assert_eq!(got["structuredContent"]["ok"], false, "{bad}: {got}");
+    }
+    let dotted = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": base.join("gil-projects").join("..").join("gil-projects"), "confirm": false}));
+    assert_eq!(dotted["structuredContent"]["ok"], false, "{dotted}");
+    // Korean and spaces in both parent and name.
+    let korean = base.join("내 프로젝트 폴더");
+    std::fs::create_dir(&korean).unwrap();
+    let kplan = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "작업 1 (검수)", "parent": korean, "confirm": false}));
+    assert_eq!(kplan["structuredContent"]["creates_parent"], false, "{kplan}");
+    let kpath = kplan["structuredContent"]["path"].as_str().unwrap().to_owned();
+    let kmade = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "작업 1 (검수)", "parent": korean, "confirm": true, "approved_path": kpath}));
+    assert_eq!(kmade["structuredContent"]["ok"], true, "{kmade}");
+    assert!(korean.join("작업 1 (검수)").is_dir());
+    assert_eq!(kmade["structuredContent"]["created_by_this_call"], json!([korean.join("작업 1 (검수)").display().to_string()]));
+    // A missing grandparent is a check failure, not a reason to create more.
+    let deep = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": base.join("missing").join("deeper"), "confirm": false}));
+    assert_eq!(deep["structuredContent"]["code"], "parent_missing", "{deep}");
+    assert!(!base.join("missing").exists());
+    // The parent is replaced by a junction between plan and confirm: the re-check right before
+    // creation refuses, and the junction target receives nothing.
+    let swapped = base.join("swapped");
+    let elsewhere = base.join("elsewhere");
+    std::fs::create_dir_all(&elsewhere).unwrap();
+    std::fs::create_dir(&swapped).unwrap();
+    let splan = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": swapped, "confirm": false}));
+    assert_eq!(splan["structuredContent"]["ok"], true, "{splan}");
+    std::fs::remove_dir(&swapped).unwrap();
+    junction(&swapped, &elsewhere);
+    let sconf = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": swapped, "confirm": true, "approved_path": splan["structuredContent"]["path"]}));
+    assert_eq!(sconf["structuredContent"]["code"], "unsupported_location", "{sconf}");
+    assert_eq!(sconf["structuredContent"]["location_kind"], "reparse_point");
+    assert_eq!(sconf["structuredContent"]["evidence"], "observed");
+    assert_eq!(std::fs::read_dir(&elsewhere).unwrap().count(), 0, "the junction target received nothing");
+    assert!(std::fs::symlink_metadata(&swapped).unwrap().file_type().is_symlink(), "the junction itself is untouched");
+    // Directory creation denied in the parent: refused as permission_denied, nothing created,
+    // no elevation.
+    let locked = base.join("locked");
+    std::fs::create_dir(&locked).unwrap();
+    {
+        let _deny = DenyCreate::new(&locked);
+        let lplan = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": locked, "confirm": false}));
+        assert_eq!(lplan["structuredContent"]["ok"], true, "a plan does not need write access: {lplan}");
+        let lconf = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": locked, "confirm": true, "approved_path": lplan["structuredContent"]["path"]}));
+        assert_eq!(lconf["structuredContent"]["code"], "permission_denied", "{lconf}");
+        assert_eq!(lconf["structuredContent"]["created_by_this_call"], json!([]));
+    }
+    assert_eq!(std::fs::read_dir(&locked).unwrap().count(), 0);
+    // Starting in the prepared folder works once it is the explicitly given root.
+    let started = monitor_call(&mut mcp, "gil_start", json!({"project_root": planned}));
+    assert_eq!(started["structuredContent"]["ok"], true, "{started}");
+    assert_eq!(started["structuredContent"]["storage_format"], 5);
+    mcp.eof();
+}
+
+/// Like `monitor_call`, but a JSON-RPC error (for example a -32602 schema rejection) fails with
+/// the whole frame instead of yielding `null`.
+#[cfg(all(windows, feature = "visual-authoring"))]
+fn tool_result(client: &mut Client, name: &str, arguments: serde_json::Value) -> serde_json::Value {
+    let got = client.request("tools/call", serde_json::json!({ "name": name, "arguments": arguments }));
+    assert!(got.get("error").is_none(), "{name} answered a JSON-RPC error: {got}");
+    got["result"].clone()
+}
+
+/// Windows contract §6 W12-8: a declared sync root in the user hive refuses `gil_start` before
+/// anything is created, with no OneDrive environment variable at all. The registration is made
+/// with the official `reg.exe` under a GilTest provider of the current user's hive and removed
+/// afterwards; it runs only where `GIL_TEST_REAL_REGISTRY=1` says the hive may be used (CI).
+#[cfg(all(windows, feature = "visual-authoring"))]
+#[test]
+fn registry_declared_sync_root_refuses_start_without_environment_variables() {
+    use serde_json::json;
+    if std::env::var_os("GIL_TEST_REAL_REGISTRY").as_deref() != Some(std::ffi::OsStr::new("1")) {
+        eprintln!("skipped: GIL_TEST_REAL_REGISTRY != 1"); return;
+    }
+    let base = scratch("ws-registry");
+    let root = base.join("동기화 루트 (등록)");
+    std::fs::create_dir_all(root.join("바탕 화면").join("test3")).unwrap();
+    std::fs::write(root.join("바탕 화면").join("test3").join("keep.txt"), b"user file").unwrap();
+    // One provider key per run, so cleanup removes exactly what this run created.
+    let provider = format!("HKCU\\Software\\SyncEngines\\Providers\\GilTest-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
+    let key = format!("{provider}\\{{registration}}");
+    let reg = PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32/reg.exe");
+    struct Cleanup(PathBuf, String);
+    impl Drop for Cleanup { fn drop(&mut self) { let _ = Command::new(&self.0).args(["delete", &self.1, "/f"]).output(); } }
+    let _cleanup = Cleanup(reg.clone(), provider.clone());
+    let added = Command::new(&reg).args(["add", &key, "/v", "MountPoint", "/t", "REG_SZ", "/d", &root.display().to_string(), "/f"]).output().unwrap();
+    assert!(added.status.success(), "reg add failed: {}", String::from_utf8_lossy(&added.stderr));
+    // The server gets no OneDrive* variable (the test harness never sets one).
+    let mut mcp = Client::serve_with_env(&base.join("settings"), &[("USERPROFILE", &base)]); mcp.initialize();
+    let selected = root.join("바탕 화면").join("test3");
+    let before: Vec<_> = std::fs::read_dir(&selected).unwrap().map(|e| e.unwrap().file_name()).collect();
+    let refused = monitor_call(&mut mcp, "gil_start", json!({"project_root": selected}));
+    assert_eq!(refused["structuredContent"]["code"], "unsupported_location", "{refused}");
+    assert_eq!(refused["structuredContent"]["location_kind"], "sync_root");
+    assert_eq!(refused["structuredContent"]["evidence"], "declared_by_registry");
+    assert!(refused["structuredContent"]["said"].as_str().unwrap().contains("등록된 동기화 루트"), "{refused}");
+    assert!(!selected.join(".gil").exists(), "nothing may be created");
+    let after: Vec<_> = std::fs::read_dir(&selected).unwrap().map(|e| e.unwrap().file_name()).collect();
+    assert_eq!(after, before);
+    // Preparing a workspace under the registered root is refused the same way; outside it works.
+    let inside = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": root, "confirm": false}));
+    assert_eq!(inside["structuredContent"]["code"], "unsupported_location", "{inside}");
+    let outside = base.join("로컬 폴더");
+    std::fs::create_dir(&outside).unwrap();
+    let started = monitor_call(&mut mcp, "gil_start", json!({"project_root": outside}));
+    assert_eq!(started["structuredContent"]["ok"], true, "{started}");
+    let check = &started["structuredContent"]["location_check"];
+    let sources = check["sync_root_sources"].as_array().unwrap();
+    assert_eq!(sources.len(), 3, "{check}");
+    assert!(sources.iter().any(|s| s["source"].as_str().unwrap().contains("SyncEngines") && s["status"] == "queried" && s["roots"].as_u64().unwrap() >= 1), "{check}");
+    mcp.eof();
+}
+
+/// A passed location check reports its evidence and limits on every successful start.
+#[cfg(all(windows, feature = "visual-authoring"))]
+#[test]
+fn successful_start_reports_what_the_location_check_looked_at_without_guaranteeing_anything() {
+    use serde_json::json;
+    let base = scratch("ws-check");
+    let folder = base.join("정상");
+    std::fs::create_dir(&folder).unwrap();
+    let mut mcp = Client::serve_with_env(&base.join("settings"), &[("USERPROFILE", &base)]); mcp.initialize();
+    let started = monitor_call(&mut mcp, "gil_start", json!({"project_root": folder}));
+    assert_eq!(started["structuredContent"]["ok"], true, "{started}");
+    let check = &started["structuredContent"]["location_check"];
+    let sources = check["sync_root_sources"].as_array().unwrap();
+    assert_eq!(sources.len(), 3, "{check}");
+    for s in sources { assert!(matches!(s["status"].as_str(), Some("queried") | Some("absent") | Some("failed")), "{s}"); }
+    assert!(sources.iter().all(|s| s["status"] == "queried"), "registry sources must be queryable in the test process: {check}");
+    assert!(check["registry_hive"].as_str().unwrap().contains("account this server runs as"), "{check}");
+    assert_eq!(check["filesystem"], "NTFS");
+    assert!(check["path_components_checked"].as_u64().unwrap() >= 2);
+    let limits = check["limits"].as_str().unwrap();
+    assert!(limits.contains("보장하지 않는다") && !limits.contains("동기화 없음을 보장한다"), "{limits}");
+    mcp.eof();
+}
+
+/// Windows contract §6 W12-9: after a successful start, a reopen that no longer finds `.gil`
+/// protected refuses with a stable code, preserves everything and tells the Agent not to ask for
+/// permission changes. The loss is simulated on the test's own folder by re-enabling inheritance.
+#[cfg(all(windows, feature = "visual-authoring"))]
+#[test]
+fn reopen_after_protection_loss_refuses_with_code_and_changes_nothing() {
+    use serde_json::json;
+    let base = scratch("ws-protection");
+    let folder = base.join("프로젝트");
+    std::fs::create_dir(&folder).unwrap();
+    let mut mcp = Client::serve_with_env(&base.join("settings"), &[("USERPROFILE", &base)]); mcp.initialize();
+    assert_eq!(monitor_call(&mut mcp, "gil_start", json!({"project_root": folder}))["structuredContent"]["ok"], true);
+    assert_eq!(monitor_call(&mut mcp, "gil_help", json!({"project_root": folder}))["structuredContent"]["ok"], true, "reopen works while protected");
+    let gil = folder.join(".gil");
+    let icacls = PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32/icacls.exe");
+    let snapshot = |label: &str| -> (Vec<(PathBuf, u64)>, String) {
+        let mut files: Vec<(PathBuf, u64)> = walkdir(&gil);
+        files.sort();
+        let acl = String::from_utf8_lossy(&Command::new(&icacls).arg(&gil).output().unwrap().stdout).to_string();
+        eprintln!("{label}: {} entries", files.len());
+        (files, acl)
+    };
+    fn walkdir(dir: &Path) -> Vec<(PathBuf, u64)> {
+        let mut out = Vec::new();
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let entry = entry.unwrap();
+            let meta = entry.metadata().unwrap();
+            if meta.is_dir() { out.extend(walkdir(&entry.path())); } else { out.push((entry.path(), meta.len())); }
+        }
+        out
+    }
+    // Simulate the field condition on this test's own .gil: inheritance enabled again.
+    let enabled = Command::new(&icacls).arg(&gil).args(["/inheritance:e"]).output().unwrap();
+    assert!(enabled.status.success(), "fixture: {}", String::from_utf8_lossy(&enabled.stderr));
+    let (files_before, acl_before) = snapshot("before");
+    for tool in ["gil_help", "gil_status", "gil_context", "gil_story"] {
+        let refused = monitor_call(&mut mcp, tool, json!({"project_root": folder}));
+        assert_eq!(refused["structuredContent"]["ok"], false, "{tool}: {refused}");
+        assert_eq!(refused["structuredContent"]["code"], "storage_protection_lost", "{tool}: {refused}");
+        assert_eq!(refused["structuredContent"]["records_preserved"], true);
+        assert!(refused["structuredContent"]["preservation_scope"].as_str().unwrap().contains("project.lock"), "{refused}");
+        let problem = refused["structuredContent"]["problem"].as_str().unwrap();
+        assert!(problem.contains("권한·상속·소유권·보안 설정 변경을 요청하지 않는다"), "{tool}: {problem}");
+        assert!(problem.contains("동기화 폴더라고 단정하지 않고"), "{tool}: {problem}");
+        assert!(refused["structuredContent"]["next"].as_str().unwrap().contains("Do not ask the user to change ACLs"), "{refused}");
+    }
+    // Nothing was repaired, removed or replaced. The lock file is compared by presence only:
+    // the stated scope allows it to be opened or updated.
+    let (files_after, acl_after) = snapshot("after");
+    let without_lock = |files: &[(PathBuf, u64)]| files.iter().filter(|(p, _)| p.file_name() != Some(std::ffi::OsStr::new("project.lock"))).cloned().collect::<Vec<_>>();
+    assert_eq!(without_lock(&files_after), without_lock(&files_before), "records must stay exactly as they were");
+    assert!(files_after.iter().any(|(p, _)| p.file_name() == Some(std::ffi::OsStr::new("project.lock"))));
+    assert_eq!(acl_after, acl_before, "GIL must not touch the ACL");
+    // Starting again in the same place is refused too (existing records are never replaced).
+    let again = monitor_call(&mut mcp, "gil_start", json!({"project_root": folder}));
+    assert_eq!(again["structuredContent"]["ok"], false, "{again}");
+    assert_eq!(walkdir(&gil).len(), files_before.len());
+    mcp.eof();
+}
+
+/// Junction fixture (no privilege required); paths travel as environment values.
+#[cfg(all(windows, feature = "visual-authoring"))]
+fn junction(link: &Path, target: &Path) {
+    let powershell = PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32/WindowsPowerShell/v1.0/powershell.exe");
+    let made = Command::new(powershell)
+        .args(["-NoProfile", "-NonInteractive", "-Command",
+            "$ErrorActionPreference='Stop'; New-Item -ItemType Junction -Path $env:GIL_TEST_LINK -Target $env:GIL_TEST_TARGET | Out-Null"])
+        .env("GIL_TEST_LINK", link).env("GIL_TEST_TARGET", target).output().unwrap();
+    assert!(made.status.success(), "junction fixture creation failed: {}", String::from_utf8_lossy(&made.stderr));
+}
+
+/// Deny directory creation for everyone (including administrators) while held.
+#[cfg(all(windows, feature = "visual-authoring"))]
+struct DenyCreate(PathBuf);
+#[cfg(all(windows, feature = "visual-authoring"))]
+impl DenyCreate {
+    fn new(dir: &Path) -> Self {
+        let icacls = PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32/icacls.exe");
+        let out = Command::new(icacls).arg(dir).args(["/deny", "*S-1-1-0:(AD,WD)"]).output().unwrap();
+        assert!(out.status.success(), "icacls deny failed");
+        Self(dir.to_owned())
+    }
+}
+#[cfg(all(windows, feature = "visual-authoring"))]
+impl Drop for DenyCreate {
+    fn drop(&mut self) {
+        let icacls = PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32/icacls.exe");
+        let _ = Command::new(icacls).arg(&self.0).args(["/remove:d", "*S-1-1-0"]).output();
+    }
+}
+
+/// Detection limits are explicit: an unset or invalid OneDrive variable is a miss (the folder is
+/// accepted), and a stale variable is a false positive (refused) — neither is a safety claim.
+#[cfg(all(windows, feature = "visual-authoring"))]
+#[test]
+fn onedrive_variable_misses_and_false_positives_are_what_the_contract_says() {
+    use serde_json::json;
+    let base = scratch("ws-detection");
+    let folder = base.join("synced-but-unnamed");
+    std::fs::create_dir(&folder).unwrap();
+    // Variable points nowhere: a miss — the folder is accepted (no other signal exists here).
+    let mut mcp = Client::serve_with_env(&base.join("s1"), &[("OneDrive", Path::new("C:\\nonexistent-gil-onedrive-root"))]); mcp.initialize();
+    assert_eq!(monitor_call(&mut mcp, "gil_start", json!({"project_root": folder}))["structuredContent"]["ok"], true);
+    mcp.eof();
+    // Variable names an ordinary folder that is not synchronized: a false positive — refused.
+    let stale = base.join("stale-root");
+    std::fs::create_dir_all(stale.join("p")).unwrap();
+    let mut mcp = Client::serve_with_env(&base.join("s2"), &[("OneDriveConsumer", &stale)]); mcp.initialize();
+    let got = monitor_call(&mut mcp, "gil_start", json!({"project_root": stale.join("p")}));
+    assert_eq!(got["structuredContent"]["code"], "unsupported_location", "{got}");
+    assert!(!stale.join("p").join(".gil").exists());
+    mcp.eof();
 }

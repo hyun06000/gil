@@ -18,6 +18,26 @@ pub fn refusal(said: impl Into<String>) -> CallToolResult {
     result(false, None, String::new(), said.into())
 }
 
+/// A refusal whose text carries a stable bracketed code (for example the Windows reopen refusal
+/// `[storage_protection_lost]`) gets that code as a structured field, so the Skill can apply one
+/// rule to it instead of reading prose.
+fn annotate_code(mut out: CallToolResult, problem: &str) -> CallToolResult {
+    #[cfg(windows)]
+    if problem.contains(&format!("[{}]", crate::windows_fs::PROTECTION_LOST_CODE)) {
+        if let Some(fields) = out.structured_content.as_mut().and_then(Value::as_object_mut) {
+            fields.insert("code".into(), json!(crate::windows_fs::PROTECTION_LOST_CODE));
+            // Exact meaning: no record was modified, repaired, removed or replaced, and no
+            // recovery or reaping ran. The check runs before the lock is taken; if it fails only
+            // on the re-check after the lock, `project.lock` may have been opened or updated.
+            fields.insert("records_preserved".into(), json!(true));
+            fields.insert("preservation_scope".into(), json!("No record was modified, repaired, removed or replaced and no recovery or reaping ran. The check precedes the lock; if it failed on the re-check after the lock, only .gil/project.lock may have been opened or updated."));
+            fields.insert("next".into(), json!("Do not ask the user to change ACLs, inheritance, ownership or security settings; GIL never repairs records. Do not conclude that this is a sync folder from a permission error alone, and do not replace this Project with a new one. Report GIL's words; only if the user chooses to continue elsewhere, offer gil_prepare_workspace with their approval."));
+        }
+    }
+    let _ = problem;
+    out
+}
+
 fn positional(value: Option<&str>, what: &str, required: bool) -> Result<Option<String>, String> {
     let Some(value) = value.filter(|v| !v.is_empty()) else {
         return if required { Err(format!("{what} 가 필요하다")) } else { Ok(None) };
@@ -51,9 +71,21 @@ pub fn call(name: &str, input: &Value) -> CallToolResult {
     if matches!(name, "gil_status" | "gil_context") {
         return match crate::command::visual_read_action(Path::new(root.expect("validated root")), command) {
             Ok(said) => result(true, Some(0), said, String::new()),
-            Err(problem) => result(false, Some(1), String::new(), format!("{problem}\n")),
+            Err(problem) => annotate_code(result(false, Some(1), String::new(), format!("{problem}\n")), &problem),
         };
     }
+    #[cfg(all(feature = "visual-authoring", windows))]
+    let location_check = {
+        // Support-scope check before any record exists (Windows contract §4 W1 0). A pass is
+        // reported with its evidence and limits; it is never a "no synchronization" guarantee.
+        let selected = Path::new(root.expect("validated root"));
+        if name == "gil_start" {
+            match crate::windows_fs::unsupported_location(selected) {
+                Err(location) => return super::workspace::start_refusal(selected, &location),
+                Ok(report) => Some(super::workspace::location_check(&report)),
+            }
+        } else { None }
+    };
     #[cfg(feature = "visual-authoring")]
     if name == "gil_start" {
         return match crate::command::start_visual_action(Path::new(root.expect("validated root"))) {
@@ -62,10 +94,12 @@ pub fn call(name: &str, input: &Value) -> CallToolResult {
                 if let Some(fields) = out.structured_content.as_mut().and_then(Value::as_object_mut) {
                     fields.insert("storage_format".into(), json!(5));
                     fields.insert("display_confirmed".into(), json!(false));
+                    #[cfg(windows)]
+                    if let Some(check) = location_check { fields.insert("location_check".into(), check); }
                 }
                 out
             }
-            Err(problem) => result(false, Some(1), String::new(), format!("{problem}\n")),
+            Err(problem) => annotate_code(result(false, Some(1), String::new(), format!("{problem}\n")), &problem),
         };
     }
     let slots: &[(&str, &str, bool)] = match name {
@@ -90,7 +124,7 @@ pub fn call(name: &str, input: &Value) -> CallToolResult {
     match crate::command::action(&args, root.map(Path::new), body) {
         Ok(said) => result(true, Some(0), said, String::new()),
         // The old CLI stderr boundary used eprintln!; preserve its final newline.
-        Err(problem) => result(false, Some(1), String::new(), format!("{problem}\n")),
+        Err(problem) => annotate_code(result(false, Some(1), String::new(), format!("{problem}\n")), &problem),
     }
 }
 

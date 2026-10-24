@@ -5,6 +5,8 @@
 #![allow(dead_code)]
 
 use std::path::{Path, PathBuf};
+#[cfg(windows)]
+mod windows_acl;
 
 use std::collections::BTreeMap;
 
@@ -515,4 +517,16 @@ pub fn allowed_here(
         .expect("값 제약이 걸린 칸이어야 한다");
     let (allowed, _) = constraint.allowed_here(|other| report.get(other));
     allowed.to_vec()
+}
+
+/// Windows: give a fixture-created `.gil` the owner-only DACL that `start_visual` establishes
+/// (current user + SYSTEM, inheritable, protected), so opening the format-5 Project passes the
+/// storage ACL check (Windows contract §4 W4). This is test setup; the product never repairs
+/// an existing Project's ACL. Unix: nothing to do.
+#[allow(dead_code)]
+pub fn private_storage(root: &Path) {
+    #[cfg(windows)]
+    windows_acl::apply_owner_only(&root.join(".gil")).expect("fixture .gil takes the owner-only descriptor");
+    #[cfg(not(windows))]
+    let _ = root;
 }

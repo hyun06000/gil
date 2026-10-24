@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {readFile} from 'node:fs/promises';
-import {inspectPE, noBuildPaths, TARGET, packTar, unpackTar, profileForArch} from './candidate.mjs';
+import {inspectPE, noBuildPaths, TARGET, packTar, unpackTar, profileForArch, labels, runtimeProfile} from './candidate.mjs';
 import {loadBundle, validatePolicy, collect, assertCoverage} from '../compliance/notices.mjs';
 
 function pe(dll = 'KERNEL32.dll') {
@@ -77,4 +77,24 @@ test('ARM64 notice inventory is independently resolved and uses verified origina
   const bundle = await loadBundle(undefined, {directory: 'distribution/windows/compliance', target, policyName});
   assert.equal(bundle.size, 3);
   assertCoverage(policy, await collect(undefined, {target}), target);
+});
+test('authoring development candidate is labeled apart from the public preview channel', () => {
+  const head = 'f'.repeat(40);
+  const dev = labels('visual-authoring', 'x64', head), tester = labels('default', 'x64', head);
+  assert.equal(dev.version, `0.2.1-dev.visual-authoring+windows.x64.${'f'.repeat(12)}`);
+  assert.equal(dev.marketplace, 'gil-dev-windows-visual-x64');
+  assert.match(dev.displayName, /development candidate/);
+  assert.deepEqual(dev.cargoFeatures, ['--features', 'visual-authoring']);
+  assert.equal(dev.tools, 25); assert.equal(dev.storage_format, 5);
+  assert.equal(tester.marketplace, 'gil-preview-windows-x64');
+  assert.equal(tester.tools, 19); assert.equal(tester.storage_format, 4);
+  assert.deepEqual(tester.cargoFeatures, []);
+  assert.notEqual(dev.marketplace, tester.marketplace);
+  assert.ok(!dev.version.includes('preview'), 'development candidate must not look like a preview');
+  assert.equal(labels('visual-authoring', 'arm64', head).marketplace, 'gil-dev-windows-visual-arm64');
+  assert.throws(() => labels('visual-authoring', 'ia32', head));
+  assert.throws(() => labels('nightly', 'x64', head));
+  assert.throws(() => labels('default', 'x64', 'abc'));
+  assert.equal(runtimeProfile('default'), 'default');
+  assert.throws(() => runtimeProfile('release'));
 });

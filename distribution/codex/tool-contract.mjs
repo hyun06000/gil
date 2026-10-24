@@ -7,8 +7,17 @@ const expected = JSON.parse(readFileSync(new URL('../../src/mcp/tools.json', imp
 const authoring = JSON.parse(readFileSync(new URL('../../src/mcp/authoring-schema.json', import.meta.url)));
 const migration = JSON.parse(readFileSync(new URL('../../src/mcp/migration-tools.json', import.meta.url)));
 
-export function checkAuthoringTools(tools) {
-  assert.equal(tools.length, 24);
+export function checkAuthoringTools(tools, platform = process.platform) {
+  // Windows adds gil_prepare_workspace (approved local workspace preparation); macOS has 24.
+  assert.equal(tools.length, platform === 'win32' ? 25 : 24);
+  const workspace = tools.find(t => t.name === 'gil_prepare_workspace');
+  if (platform === 'win32') {
+    assert.ok(workspace, 'Windows authoring surface carries gil_prepare_workspace');
+    assert.deepEqual(workspace._meta?.ui?.visibility, ['model']);
+    assert.equal(workspace.inputSchema.additionalProperties, false);
+    assert.deepEqual(workspace.inputSchema.required, ['name', 'confirm']);
+    assert.equal(workspace.annotations.readOnlyHint, false);
+  } else assert.equal(workspace, undefined, 'macOS authoring surface is unchanged');
   for (const contract of migration) {
     const actual=tools.find(t=>t.name===contract.name);
     assert.ok(actual);
@@ -24,7 +33,7 @@ export function checkAuthoringTools(tools) {
   const close = tools.find(t => t.name === 'gil_close');
   assert.deepEqual(close.inputSchema, authoring.close);
   assert.equal(close.outputSchema, undefined);
-  const normalized = structuredClone(tools.filter(t => t.name !== 'gil_report_visuals' && !migration.some(m=>m.name===t.name)));
+  const normalized = structuredClone(tools.filter(t => t.name !== 'gil_report_visuals' && t.name !== 'gil_prepare_workspace' && !migration.some(m=>m.name===t.name)));
   normalized.find(t => t.name === 'gil_close').inputSchema = expected.find(t => t.name === 'gil_close').inputSchema;
   checkDefaultTools(normalized);
 }
