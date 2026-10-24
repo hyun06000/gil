@@ -2,7 +2,7 @@
   "schema": 1,
   "target": "aarch64-apple-darwin",
   "inputs": {
-    "Cargo.toml": "d20a8d0c96f131f79fcabf88e0ed9062797104772f5cee86a3a6dc514e4ae21d",
+    "Cargo.toml": "1cdc602105259893734c4aa0b3a6ca39b9f46366247b527729d480732ea7da5e",
     "Cargo.lock": "197c097b1181d69d535cd5f5e7e545cf0ff764dd4854532513f357c47c7cac1d",
     "mcp-app/package-lock.json": "9c6170c797cb227eb236692c8087cfddfe09ceea0fa212df4417cf91712d83b6",
     "mcp-app/build.mjs": "00013682e3e300f5e5945f5fbadd2fb5d2e5c65797d1596511546da6261f5c3d",

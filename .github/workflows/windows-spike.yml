@@ -43,7 +43,7 @@ jobs:
             machine: ARM64
             target: aarch64-pc-windows-msvc
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       RUSTUP_TOOLCHAIN: 1.97.1
       GIL_NATIVE_TARGET: ${{ matrix.target }}
@@ -267,8 +267,48 @@ jobs:
       - name: Candidate packaging regression
         shell: pwsh
         run: |
-          node --test distribution/windows/candidate.test.mjs
+          node --test distribution/windows/candidate.test.mjs distribution/windows/verify-bundle.test.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Isolated verification bundle (test-only executables; never published or installed)
+        if: matrix.profile == 'default'
+        shell: pwsh
+        env:
+          RUSTUP_TOOLCHAIN: 1.97.1
+        run: |
+          # Release build of the integration test executable + the two test-only bins, packed per
+          # native CPU with bundle.json, VERIFY.md and the notices; roundtrip-checked. No product binary.
+          node distribution/windows/verify-bundle.mjs target/runtime-verify
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Self-test of the bundle from its own archive (pinned CLI downloaded by the driver)
+        if: matrix.profile == 'default'
+        shell: pwsh
+        run: |
+          # Exactly what a user's Agent does: one new folder, extract the archive there, run the
+          # driver with --root; the driver fetches the pinned CLI from the npm registry by itself.
+          $name = "gil-runtime-verify-windows-$env:GIL_NATIVE_ARCH"
+          $folder = Join-Path $env:RUNNER_TEMP ("gil-runtime-verify-selftest-" + [guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $folder | Out-Null
+          tar.exe -xzf "target/runtime-verify/$name.tar.gz" -C $folder
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & (Join-Path $folder "$name\gil-runtime-verify.exe") --root $folder
+          $code = $LASTEXITCODE
+          Copy-Item -LiteralPath (Join-Path $folder 'work\evidence\verify-report.json') -Destination "target/runtime-verify/selftest-report-$env:GIL_NATIVE_ARCH.json"
+          if ($code -ne 0) { throw "self-test exit $code (0 = PASS is required)" }
+          $report = Get-Content -Raw -LiteralPath "target/runtime-verify/selftest-report-$env:GIL_NATIVE_ARCH.json" | ConvertFrom-Json
+          if ($report.outcome -ne 'PASS' -or $report.cli.source -ne 'pinned' -or -not $report.cli.matches_ci_pin) { throw "self-test report is not a pinned PASS: $($report.outcome) $($report.cli.source)" }
+      - name: Retain verification bundle (review artifact; not a release)
+        if: matrix.profile == 'default' && !cancelled()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          archive: true
+          name: gil-runtime-verify-${{ matrix.arch }}-${{ github.sha }}
+          path: |
+            target/runtime-verify/*.tar.gz
+            target/runtime-verify/SHA256SUMS-*
+            target/runtime-verify/checks-*.json
+            target/runtime-verify/selftest-report-*.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Prepare unsigned review candidate (profile-labeled; never published or installed)
         if: github.event_name == 'workflow_dispatch' && inputs.prepare_candidate
         shell: pwsh

@@ -31,6 +31,13 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, channel};
 use std::time::{Duration, Instant};
 
 const TESTBED: &str = env!("CARGO_BIN_EXE_gil-runtime-testbed");
+/// The testbed executable: `GIL_RUNTIME_TESTBED` when set (a prebuilt bundle run outside the
+/// build tree), else the one Cargo built next to this test. Must exist as a file.
+fn testbed() -> String {
+    let p = std::env::var_os("GIL_RUNTIME_TESTBED").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(TESTBED));
+    assert!(p.is_file(), "testbed executable missing: {}", p.display());
+    p.display().to_string()
+}
 #[cfg(target_os = "macos")]
 const DEFAULT_CLI: Option<&str> = Some("/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex");
 #[cfg(not(target_os = "macos"))]
@@ -45,9 +52,9 @@ fn sha(b: &[u8]) -> String { format!("{:x}", Sha256::digest(b)) }
 /// Synthetic Core bytes for a version: Unix a script that execs the testbed; Windows a copy of
 /// the testbed executable with the overlay version marker (a distinct executable per version).
 #[cfg(unix)]
-fn core_bytes(version: &str) -> Vec<u8> { format!("#!/bin/sh\nexec '{TESTBED}' core {version} \"$@\"\n").into_bytes() }
+fn core_bytes(version: &str) -> Vec<u8> { format!("#!/bin/sh\nexec '{}' core {version} \"$@\"\n", testbed()).into_bytes() }
 #[cfg(windows)]
-fn core_bytes(version: &str) -> Vec<u8> { let mut b = fs::read(TESTBED).expect("testbed exe"); b.extend_from_slice(&gil::runtime_testbed::overlay_marker(version)); b }
+fn core_bytes(version: &str) -> Vec<u8> { let mut b = fs::read(testbed()).expect("testbed exe"); b.extend_from_slice(&gil::runtime_testbed::overlay_marker(version)); b }
 fn make_executable(p: &Path) {
     #[cfg(unix)]
     { use std::os::unix::fs::PermissionsExt; fs::set_permissions(p, fs::Permissions::from_mode(0o500)).unwrap(); }
@@ -271,8 +278,8 @@ fn flow(h: &mut Harness) -> Result<(), String> {
     let root = h.root.clone(); let base = h.base.clone();
     let bundled = base.join(if cfg!(windows) { "bundled-core.exe" } else { "bundled-core" });
     fs::write(&bundled, core_bytes("bundled")).unwrap(); make_executable(&bundled);
-    fs::write(h.codex_home.join("config.toml"), format!("# isolated runtime-integration home; the only MCP server is the test-only launcher driver\n[mcp_servers.{SERVER}]\ncommand = {}\nargs = [\"launcher\", {}, {}]\n", toml_literal(Path::new(TESTBED)), toml_literal(&root), toml_literal(&bundled))).unwrap();
-    h.note(format!("isolated CODEX_HOME {} ; store {} ; testbed {}", h.codex_home.display(), root.display(), TESTBED));
+    fs::write(h.codex_home.join("config.toml"), format!("# isolated runtime-integration home; the only MCP server is the test-only launcher driver\n[mcp_servers.{SERVER}]\ncommand = {}\nargs = [\"launcher\", {}, {}]\n", toml_literal(Path::new(&testbed())), toml_literal(&root), toml_literal(&bundled))).unwrap();
+    h.note(format!("isolated CODEX_HOME {} ; store {} ; testbed {}", h.codex_home.display(), root.display(), testbed()));
     // v1 through the crate's own layers
     let v1 = core_bytes(V1); let src1 = base.join("src-v1"); fs::write(&src1, &v1).unwrap();
     prep::prepare(&root, &Request { version: V1, expected_sha256: &sha(&v1), source: &src1 }).map_err(|e| format!("prepare v1: {e:?}"))?;
@@ -388,10 +395,10 @@ fn a_core_the_test_does_not_hold_a_handle_for_is_never_ended_even_with_the_same_
     // testbed in core mode), stands in for a stranger with the same image name: the harness
     // learns its pid as if it were a Core, finds it alive after the wait, records Unconfirmed
     // and leaves it running. The test ends it afterwards through its own handle.
-    let mut stranger = Command::new(TESTBED).args(["core", "stranger"]).stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().expect("spawn testbed core");
+    let mut stranger = Command::new(testbed()).args(["core", "stranger"]).stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().expect("spawn testbed core");
     let pid = stranger.id();
     let mut h = new_harness(PathBuf::new(), fresh_base("stranger"));
-    h.cores.push(Identity { version: "stranger".into(), pid, instance: "-".into(), exe: TESTBED.into(), argv: vec![] });
+    h.cores.push(Identity { version: "stranger".into(), pid, instance: "-".into(), exe: testbed(), argv: vec![] });
     let started = Instant::now();
     h.cleanup();
     assert!(started.elapsed() >= Duration::from_secs(15), "the harness must have waited the full window");

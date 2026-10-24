@@ -20,6 +20,11 @@ name = "gil-runtime-testbed"
 path = "src/bin/gil-runtime-testbed.rs"
 required-features = ["runtime-testbed"]
 
+[[bin]]
+name = "gil-runtime-verify"
+path = "src/bin/gil-runtime-verify.rs"
+required-features = ["runtime-testbed"]
+
 [dependencies]
 base64 = "=0.22.1"
 libc = "0.2.189"
