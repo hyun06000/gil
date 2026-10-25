@@ -232,15 +232,28 @@ jobs:
           if (-not $env:GIL_CODEX_CLI -or -not (Test-Path -LiteralPath $env:GIL_CODEX_CLI -PathType Leaf)) { throw 'GIL_CODEX_CLI must name the verified codex.exe from the previous step' }
           # A real Codex App Server over stdio with an isolated CODEX_HOME whose only MCP server is
           # the test-only launcher driver; the synthetic Cores are overlay-marked copies of the
-          # testbed exe in a temp store (never a GIL Core, never the runner's own ~/.codex). 5 tests
+          # testbed exe in a temp store (never a GIL Core, never the runner's own ~/.codex). 7 tests
           # must run: the main flow prints OUTCOME: PASS with the evidence path, and --nocapture
           # keeps every version/pid/instance line and the app-server stderr in this log.
           cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET --features $features --lib runtime_verify -- --nocapture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET --features $features --lib runtime_diagnostics -- --nocapture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET --features $features --lib diagnostics_survive_prepare_failure_and_keep_stage_order -- --nocapture
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET --features $features --test runtime_integration -- --nocapture
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $pass = @(Get-ChildItem -LiteralPath target\runtime-integration-evidence -File -Filter 'run-*-PASS.json')
           if ($pass.Count -ne 1) { throw "expected one PASS evidence file from the main flow, found $($pass.Count)" }
+          $record = Get-Content -LiteralPath $pass[0].FullName -Raw | ConvertFrom-Json
+          $samples = @($record.protection_evidence)
+          if ($samples.Count -ne 45) { throw "expected 45 protection samples, found $($samples.Count)" }
+          foreach ($sample in $samples) {
+            if ($sample.basis -ne 'held_handle' -or $sample.identity.state -ne 'observed' -or $sample.protection.state -ne 'observed' -or -not $sample.protection.sddl) { throw 'incomplete protection sample' }
+            if ($sample.protection.ace_count -ne 2) { throw 'unexpected fixture ACE count' }
+            if ($sample.object -eq 'root' -and -not $sample.protection.dacl_protected) { throw 'fixture root lost DACL protection' }
+          }
+          Write-Output "PROTECTION EVIDENCE: $($samples.Count) held-handle samples; owner/DACL collected; root protected; 2 ACEs each"
           Get-Content -LiteralPath $pass[0].FullName
       - name: Retain runtime integration evidence
         if: ${{ !cancelled() }}

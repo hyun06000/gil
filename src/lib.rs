@@ -132,6 +132,8 @@ pub mod runtime_launch;
 /// Runtime update: test-only driver and synthetic MCP Core behind the `runtime-testbed` feature (not in product builds).
 #[cfg(feature = "runtime-testbed")]
 pub mod runtime_testbed;
+#[cfg(feature = "runtime-testbed")]
+pub mod runtime_diagnostics;
 /// Runtime update: isolated verification driver for a prebuilt bundle behind the `runtime-testbed` feature (not in product builds).
 #[cfg(feature = "runtime-testbed")]
 pub mod runtime_verify;

@@ -198,6 +198,7 @@ fn wait_until_gone(pid: u32, limit: Duration) -> Liveness {
 
 /// Everything the test created, with cleanup and evidence on drop (also on a panic).
 struct Harness {
+    protection_evidence: gil::runtime_diagnostics::Session,
     case: String, evidence_id: String,
     cli: PathBuf, base: PathBuf, codex_home: PathBuf, root: PathBuf,
     log: Vec<String>, servers: Vec<AppServer>, cores: Vec<Identity>, terminations: Vec<Termination>,
@@ -244,7 +245,7 @@ impl Harness {
     }
     fn evidence(&self) -> Value {
         let terminations: Vec<Value> = self.terminations.iter().map(|t| json!({"kind": t.kind, "pid": t.pid, "how": format!("{:?}", t.how), "detail": t.detail})).collect();
-        json!({"case": self.case, "kind": if self.case == "flow" { "integration" } else { "harness-regression" }, "evidence_id": self.evidence_id, "outcome": self.outcome, "error": self.error, "cli": self.cli.display().to_string(), "codex_home": self.codex_home.display().to_string(), "store": self.root.display().to_string(), "observed": self.log, "terminations": terminations, "verdict_after": if self.root.exists() { format!("{:?}", observe_and_judge(&self.root).1.state) } else { "no store".into() }})
+        json!({"case": self.case, "kind": if self.case == "flow" { "integration" } else { "harness-regression" }, "evidence_id": self.evidence_id, "outcome": self.outcome, "error": self.error, "cli": self.cli.display().to_string(), "codex_home": self.codex_home.display().to_string(), "store": self.root.display().to_string(), "observed": self.log, "protection_evidence":self.protection_evidence.snapshot(), "protection_evidence_limits":"sequential held-handle samples, not atomic; no changing actor identified; SIDs may be personal; diagnostic errors are not absence", "terminations": terminations, "verdict_after": if self.root.exists() { format!("{:?}", observe_and_judge(&self.root).1.state) } else { "no store".into() }})
     }
     /// Save the evidence once. A failure is returned and printed (stderr: the error; stdout: the
     /// evidence itself) and never turned into "written" or PASS.
@@ -290,7 +291,7 @@ fn write_new_evidence(path: &Path, value: &Value) -> Result<(), String> {
 fn new_harness(cli: PathBuf, base: PathBuf) -> Result<Harness, String> {
     let codex_home = base.join("codex-home");
     fs::create_dir_all(&codex_home).map_err(|e| format!("create isolated home {}: {e}", codex_home.display()))?;
-    Ok(Harness { case: "harness-regression".into(), evidence_id: evidence_id(), cli, root: base.join("runtime-v1"), codex_home, base, log: vec![], servers: vec![], cores: vec![], terminations: vec![], outcome: "RUNNING", error: None, evidence_dir: evidence_dir(), saved: None })
+    Ok(Harness { protection_evidence: gil::runtime_diagnostics::Session::new(), case: "harness-regression".into(), evidence_id: evidence_id(), cli, root: base.join("runtime-v1"), codex_home, base, log: vec![], servers: vec![], cores: vec![], terminations: vec![], outcome: "RUNNING", error: None, evidence_dir: evidence_dir(), saved: None })
 }
 fn fresh_base_in(parent: &Path, label: &str) -> Result<PathBuf, String> {
     let parent = fs::canonicalize(parent).map_err(|e| format!("resolve temporary directory {}: {e}", parent.display()))?;
@@ -489,6 +490,9 @@ fn evidence_from_parallel_cases_is_unique_exclusive_and_keeps_failure_details() 
             h.evidence_dir = dir; h.outcome = "FAIL";
             h.error = Some(format!("prepare v2: injected failure {i}"));
             h.log.push("v1 connected".into());
+            let source = h.base.join("diagnostic-source");
+            fs::write(&source, b"synthetic; never executed").unwrap();
+            prep::prepare(&h.root, &Request { version: V1, expected_sha256: &sha(b"synthetic; never executed"), source: &source }).unwrap();
             let path = h.save_evidence().unwrap();
             assert_eq!(h.save_evidence().unwrap(), path);
             path
@@ -501,6 +505,7 @@ fn evidence_from_parallel_cases_is_unique_exclusive_and_keeps_failure_details() 
         let record: Value = serde_json::from_slice(&bytes).unwrap();
         assert!(record["error"].as_str().unwrap().starts_with("prepare v2:"));
         assert_eq!(record["observed"], json!(["v1 connected"]));
+        assert!(!record["protection_evidence"].as_array().unwrap().is_empty());
         assert!(write_new_evidence(path, &json!({"overwritten":true})).is_err());
         assert_eq!(fs::read(path).unwrap(), bytes);
     }

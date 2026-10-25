@@ -11,6 +11,24 @@ use std::sync::{Arc, Barrier, Mutex};
 
 const V1: &str = "0.2.1-dev.a";
 const V2: &str = "0.2.2-dev.b";
+#[cfg(feature = "runtime-testbed")]
+#[test]
+fn diagnostics_survive_prepare_failure_and_keep_stage_order() {
+    let fx = Fixture::new("diagnostic-failure");
+    let data = bytes_a(); let digest = sha(&data);
+    let source = fx.source("source", &data);
+    let session = crate::runtime_diagnostics::Session::new();
+    hooks::FAIL_AFTER.with(|c| c.set(Some(Point::Verified)));
+    let err = prepare(&fx.root, &Request { version: V1, expected_sha256: &digest, source: &source }).unwrap_err();
+    hooks::reset();
+    assert_eq!(err.stage, Stage::Verify);
+    let records = session.snapshot();
+    let stages: Vec<_> = records.iter().filter(|r| r["object"] == "root").map(|r| r["stage"].as_str().unwrap()).collect();
+    assert_eq!(stages, ["root_created", "root_opened", "versions_opened", "version_created", "core_created", "copy_flushed", "rehash_finished", "before_protection_check", "protection_passed"]);
+    assert!(records.iter().all(|r| r["basis"] == "held_handle" && r["protection"]["state"] == "observed"));
+    assert!(!fx.root.join(vdir(V1, &digest)).join(COMPLETE_FILE).exists());
+    assert_eq!(fs::read(fx.root.join(vdir(V1, &digest)).join(CORE_FILE)).unwrap(), data);
+}
 fn sha(bytes: &[u8]) -> String { format!("{:x}", Sha256::digest(bytes)) }
 fn bytes_a() -> Vec<u8> { b"synthetic core A (never executed)\n".repeat(4000) }
 fn bytes_b() -> Vec<u8> { b"synthetic core B (never executed)\n".repeat(4000) }

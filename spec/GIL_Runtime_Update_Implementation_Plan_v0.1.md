@@ -242,6 +242,28 @@ Core-only 교체는 다음이 **모두** 같을 때만 허용한다(descriptor v
 
 ## 11. 검수 하네스 종료 판정·실패 증거 보정 (2026-10-25, 로컬)
 
+### 후속: 준비 중 보호 상태 증거 (2026-10-25, 미게시)
+
+Windows 현장 보고는 v2 복사·재hash 뒤 Core의 4 ACE 거절과 실패 후 루트의 상속 차단
+해제를 함께 기록했다. 변경 주체와 OneDrive 인과는 미확정이다. 이를 고치는 대신,
+`runtime-testbed` feature 전용 `runtime_diagnostics` 세션이 준비 계층의 기존 핸들을
+읽는다. 일반 제품 빌드에는 수집 모듈/호출이 없고, 보호 검사·판정·권한 설정은 바꾸지 않는다.
+
+- 루트 생성/열기, versions 열기, 버전 디렉터리 생성, Core 생성, 복사 flush,
+  재hash, 보호 검사 직전·통과·거절에서 루트/해당 부모/Core를 순차 표본화한다.
+  객체별 sequence·시각·volume/device + file ID/inode·stamp를 보존한다.
+- Windows는 `GetSecurityInfo`로 owner와 DACL만 조회한다(SACL/권한 확대 없음).
+  owner SID·control·DACL protected·ACE count 및 ACE의 type/flags/rights/trustee를 담은
+  SDDL을 기록한다. Unix는 uid/gid/mode만 기록하며 확장 ACL 수집은 하지 않는다.
+- 읽기 실패는 error이며 absent/정상으로 바꾸지 않는다. 표본은 판정 입력이 아니고,
+  실패 시에도 통합 증거와 최종 REPORT-JSON의 `protection_evidence`에 보존된다.
+  하네스가 임시 폴더를 정리한 뒤 해당 경로를 재조회할 필요가 없도록 한다.
+- 핸들 기준 표본과 기존 경로 기준 `verdict_after`는 구분한다. 표본 간·identity와
+  DACL 읽기 사이의 변화, 표본 이후 변화는 놓칠 수 있으며 원자적 관측이나 변경 주체의
+  식별을 주장하지 않는다. SDDL/SID에는 사용자 식별 정보가 있을 수 있어 공개 전 가린다.
+- Mac 회귀와 Windows 교차 컴파일까지만 수행한다. 실제 Windows DACL 조회·현장 변경
+  구간은 Windows CI 및 별도 승인된 현장 실행 전까지 미검증이다.
+
 사용자 PC의 `runtime-verify-b28e2e3` 보고는 v1 준비·선택·MCP 응답까지 확인했고,
 v2 준비의 보호 검사 거절을 보고했다. 첨부된 요약에는 오류 전문이 없었다.
 보호 플래그 변경 주체 및 OneDrive 인과는 미확정이며, 이 보정은 DACL 검사나 저장소를 고치지 않는다.

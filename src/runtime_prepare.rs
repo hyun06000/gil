@@ -40,6 +40,13 @@ use std::path::{Path, PathBuf};
 use platform::StampSize as _;
 
 pub const STORE_NEW: &str = "store.json.new";
+// Testbed-only read-only evidence. No observer is active in ordinary product builds.
+macro_rules! evidence {
+    ($stage:expr, $( $label:expr => $file:expr ),+ $(,)?) => {{
+        #[cfg(feature = "runtime-testbed")]
+        { $(crate::runtime_diagnostics::sample($stage, $label, $file);)+ }
+    }};
+}
 /// Upper bound for a candidate Core copy (synthetic or real); larger sources are refused.
 pub const MAX_CORE_BYTES: u64 = 256 * 1024 * 1024;
 /// `versions/~reserve-<version>`: exclusive per-version reservation held while a directory for
@@ -245,6 +252,7 @@ pub fn prepare(root: &Path, req: &Request) -> Result<Report, Refusal> {
         let parent_held = Held { dir: parent_dir, path: parent.to_path_buf() };
         let made = pfs::create_root_dir(&parent_held.dir, name).map_err(|e| tx.refuse(Stage::Root, format!("root creation: {e}")))?;
         let held = Held { dir: made, path: root.to_path_buf() };
+        evidence!("root_created", "root" => held.dir.as_file());
         tx.note("<root>", &parent_held, name, id_of_dir(&held.dir));
         flush_dir(&parent_held).map_err(|e| tx.refuse(Stage::Root, format!("parent flush: {e}")))?;
         checkpoint(Point::RootCreated).map_err(|e| tx.refuse(Stage::Root, e.to_string()))?;
@@ -262,6 +270,7 @@ pub fn prepare(root: &Path, req: &Request) -> Result<Report, Refusal> {
     } else {
         match platform::walk(root) { Ok(Some(d)) => Held { dir: d, path: root.to_path_buf() }, Ok(None) => return Err(tx.refuse(Stage::Root, "root vanished after observation")), Err(e) => return Err(tx.refuse(Stage::Root, format!("root walk: {e}"))) }
     };
+    evidence!("root_opened", "root" => root_held.dir.as_file());
     platform::check_root(&root_held.dir).map_err(|e| tx.refuse(Stage::Root, format!("root protection: {e}")))?;
     // 3. versions/
     let versions = match platform::open_subdir(&root_held.dir, VERSIONS_DIR) {
@@ -284,6 +293,7 @@ pub fn prepare(root: &Path, req: &Request) -> Result<Report, Refusal> {
         },
         Err(e) => return Err(tx.refuse(Stage::Versions, format!("versions/: {e}"))),
     };
+    evidence!("versions_opened", "root" => root_held.dir.as_file(), "versions" => versions.dir.as_file());
     platform::check_dir(&versions.dir).map_err(|e| tx.refuse(Stage::Versions, format!("versions/ protection: {e}")))?;
     // 4. Fast path: an existing complete, verified preparation needs no reservation.
     let mut already = matches!(scan_versions(&mut tx, &versions, req, &target)?, Scan::AlreadyPreparedVerified);
@@ -322,6 +332,7 @@ pub fn prepare(root: &Path, req: &Request) -> Result<Report, Refusal> {
                 Err(e) => return Err(tx.refuse(Stage::VersionDir, format!("{VERSIONS_DIR}/{target} creation: {e}"))),
             };
             let vlabel = format!("{VERSIONS_DIR}/{target}");
+            evidence!("version_created", "root" => root_held.dir.as_file(), "versions" => versions.dir.as_file(), &vlabel => vdir.dir.as_file());
             tx.note(&vlabel, &versions, &target, id_of_dir(&vdir.dir));
             flush_dir(&versions).map_err(|e| tx.refuse(Stage::VersionDir, format!("versions/ flush: {e}")))?;
             platform::check_dir(&vdir.dir).map_err(|e| tx.refuse(Stage::VersionDir, format!("{vlabel} protection after creation: {e}")))?;
@@ -333,6 +344,7 @@ pub fn prepare(root: &Path, req: &Request) -> Result<Report, Refusal> {
             let size = source.metadata().map_err(|e| tx.refuse(Stage::Copy, e.to_string()))?.len();
             if size > MAX_CORE_BYTES { return Err(tx.refuse(Stage::Copy, format!("source of {size} bytes exceeds {MAX_CORE_BYTES}"))); }
             let core = pfs::create_file(&vdir.dir, CORE_FILE).map_err(|e| tx.refuse(Stage::Copy, format!("{vlabel}/{CORE_FILE} creation: {e}")))?;
+            evidence!("core_created", "root" => root_held.dir.as_file(), "versions" => versions.dir.as_file(), &vlabel => vdir.dir.as_file(), &format!("{vlabel}/{CORE_FILE}") => &core);
             tx.note(&format!("{vlabel}/{CORE_FILE}"), &vdir, CORE_FILE, id_of_file(&core));
             let mut hasher = Sha256::new();
             let mut buf = vec![0u8; 1 << 16];
@@ -347,16 +359,23 @@ pub fn prepare(root: &Path, req: &Request) -> Result<Report, Refusal> {
             }
             checkpoint(Point::CoreWritten).map_err(|e| tx.refuse(Stage::Copy, e.to_string()))?;
             flush_file(&core).map_err(|e| tx.refuse(Stage::Copy, format!("{vlabel}/{CORE_FILE} flush: {e}")))?;
+            evidence!("copy_flushed", "root" => root_held.dir.as_file(), "versions" => versions.dir.as_file(), &vlabel => vdir.dir.as_file(), &format!("{vlabel}/{CORE_FILE}") => &core);
             checkpoint(Point::CoreFlushed).map_err(|e| tx.refuse(Stage::Copy, e.to_string()))?;
             let source_digest = format!("{:x}", hasher.finalize());
             if source_digest != req.expected_sha256 { return Err(tx.refuse(Stage::Verify, format!("source digest {} differs from the expected digest {}; partial copy kept without {COMPLETE_FILE}", &source_digest[..12], &req.expected_sha256[..12]))); }
             drop(core);
             let written = match platform::open_regular(&vdir.dir, CORE_FILE) { Ok(Some(f)) => f, Ok(None) => return Err(tx.refuse(Stage::Verify, format!("{vlabel}/{CORE_FILE} vanished before re-read"))), Err(e) => return Err(tx.refuse(Stage::Verify, format!("{vlabel}/{CORE_FILE} re-open: {e}"))) };
             let written_digest = hash_file(&written).map_err(|e| tx.refuse(Stage::Verify, format!("{vlabel}/{CORE_FILE} re-read: {e}")))?;
+            evidence!("rehash_finished", "root" => root_held.dir.as_file(), "versions" => versions.dir.as_file(), &vlabel => vdir.dir.as_file(), &format!("{vlabel}/{CORE_FILE}") => &written);
             if written_digest != req.expected_sha256 { return Err(tx.refuse(Stage::Verify, format!("re-read digest {} differs from the expected digest; partial copy kept without {COMPLETE_FILE}", &written_digest[..12]))); }
             pfs::finish_executable(&written).map_err(|e| tx.refuse(Stage::Verify, format!("{vlabel}/{CORE_FILE} mode: {e}")))?;
             let stamp = platform::stamp_file(&written).map_err(|e| tx.refuse(Stage::Verify, e.to_string()))?;
-            platform::check_exec(&written, &stamp).map_err(|e| tx.refuse(Stage::Verify, format!("{vlabel}/{CORE_FILE} protection: {e}")))?;
+            evidence!("before_protection_check", "root" => root_held.dir.as_file(), &format!("{vlabel}/{CORE_FILE}") => &written);
+            platform::check_exec(&written, &stamp).map_err(|e| {
+                evidence!("protection_refused", "root" => root_held.dir.as_file(), "versions" => versions.dir.as_file(), &vlabel => vdir.dir.as_file(), &format!("{vlabel}/{CORE_FILE}") => &written);
+                tx.refuse(Stage::Verify, format!("{vlabel}/{CORE_FILE} protection: {e}"))
+            })?;
+            evidence!("protection_passed", "root" => root_held.dir.as_file(), &format!("{vlabel}/{CORE_FILE}") => &written);
             drop(written);
             checkpoint(Point::Verified).map_err(|e| tx.refuse(Stage::Verify, e.to_string()))?;
             // 9. complete marker, only now.
