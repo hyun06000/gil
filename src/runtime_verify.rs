@@ -275,35 +275,79 @@ fn drive(opts: &Options, report: &mut Value) -> Result<(Outcome, String), Blocke
     let mut child = cmd.spawn().map_err(|e| Blocked(format!("cannot start the test executable {}: {e}", test_exe.display())))?;
     let (out, err) = (child.stdout.take().unwrap(), child.stderr.take().unwrap());
     let tee = |reader: Box<dyn std::io::Read + Send>, path: PathBuf, to_err: bool| std::thread::spawn(move || {
-        let mut file = fs::File::create(&path).ok();
+        let mut errors = Vec::new();
+        let mut file = match fs::File::create(&path) { Ok(f) => Some(f), Err(e) => { errors.push(format!("create {}: {e}", path.display())); None } };
         let mut lines = Vec::new();
-        for l in BufReader::new(reader).lines().map_while(Result::ok) {
+        for line in BufReader::new(reader).lines() {
+            let l = match line { Ok(l) => l, Err(e) => { errors.push(format!("read {}: {e}", path.display())); break; } };
             if to_err { eprintln!("{l}"); } else { println!("{l}"); }
-            if let Some(f) = file.as_mut() { let _ = writeln!(f, "{l}"); }
+            if let Some(f) = file.as_mut() { if let Err(e) = writeln!(f, "{l}") { errors.push(format!("write {}: {e}", path.display())); file = None; } }
             lines.push(l);
         }
-        lines
+        if let Some(mut f) = file { if let Err(e) = f.flush() { errors.push(format!("flush {}: {e}", path.display())); } }
+        (lines, errors)
     });
     let t_out = tee(Box::new(out), evidence.join("runtime_integration.stdout.log"), false);
     let t_err = tee(Box::new(err), evidence.join("runtime_integration.stderr.log"), true);
     let status = child.wait().map_err(|e| Blocked(format!("waiting for the test executable: {e}")))?;
-    let stdout_lines = t_out.join().unwrap_or_default();
-    let stderr_lines = t_err.join().unwrap_or_default();
-    let stdout = stdout_lines.join("\n");
-    let pass_files: Vec<PathBuf> = fs::read_dir(&evidence).map(|rd| rd.filter_map(Result::ok).map(|e| e.path()).filter(|p| p.file_name().and_then(|n| n.to_str()).map(|n| n.starts_with("run-") && n.ends_with("-PASS.json")).unwrap_or(false)).collect()).unwrap_or_default();
-    let (outcome, why) = decide(status.success(), &stdout, pass_files.len());
-    let summary_lines: Vec<&str> = stdout_lines.iter().map(String::as_str).filter(|l| l.starts_with("OBSERVED ") || l.starts_with("OUTCOME:") || l.starts_with("test ") || l.starts_with("test result:") || l.contains("panicked")).collect();
-    report["test"] = json!({"executable": test_exe.display().to_string(), "exit": status.code(), "stdout_lines": stdout_lines.len(), "stderr_lines": stderr_lines.len(), "pass_evidence_files": pass_files.iter().map(|p| p.display().to_string()).collect::<Vec<_>>(), "key_lines": summary_lines});
-    if let Some(p) = pass_files.first() {
-        if let Ok(v) = fs::read(p).map_err(|e| e.to_string()).and_then(|b| serde_json::from_slice::<Value>(&b).map_err(|e| e.to_string())) {
-            report["observed"] = v["observed"].clone();
-            report["terminations"] = v["terminations"].clone();
-            report["verdict_after"] = v["verdict_after"].clone();
+    let (stdout_lines, mut capture_errors) = t_out.join().unwrap_or_else(|_| (vec![], vec!["stdout reader panicked".into()]));
+    let (stderr_lines, errors) = t_err.join().unwrap_or_else(|_| (vec![], vec!["stderr reader panicked".into()]));
+    capture_errors.extend(errors);
+    let (outcome, why) = collect_test_report(report, &evidence, status.success(), status.code(), &stdout_lines, &stderr_lines, capture_errors);
+    report["test"]["executable"] = json!(test_exe.display().to_string());
+    step(report, "test", format!("exit {:?}; {why}", status.code()));
+    Ok((outcome, why))
+}
+
+/// Collect every case, not just PASS files. Only the explicitly tagged integration flow can
+/// determine the main outcome; deliberate negative regressions remain separately inspectable.
+fn collect_test_report(report: &mut Value, dir: &Path, exit_ok: bool, exit: Option<i32>, stdout: &[String], stderr: &[String], mut errors: Vec<String>) -> (Outcome, String) {
+    let mut files = Vec::new();
+    match fs::read_dir(dir) {
+        Err(e) => errors.push(format!("list evidence {}: {e}", dir.display())),
+        Ok(entries) => for entry in entries {
+            match entry {
+                Err(e) => errors.push(format!("list evidence entry: {e}")),
+                Ok(entry) => {
+                    let p = entry.path();
+                    if p.file_name().and_then(|n| n.to_str()).is_some_and(|n| (n.starts_with("run-") || n.starts_with("bootstrap-")) && n.ends_with(".json")) { files.push(p); }
+                }
+            }
         }
     }
-    report["evidence"] = json!([evidence.join("runtime_integration.stdout.log"), evidence.join("runtime_integration.stderr.log"), evidence.join("verify-report.json")].iter().map(|p| p.display().to_string()).chain(pass_files.iter().map(|p| p.display().to_string())).collect::<Vec<_>>());
-    step(report, "test", format!("exit {:?}; {} PASS evidence file(s); {why}", status.code(), pass_files.len()));
-    Ok((outcome, why))
+    files.sort();
+    let mut records = Vec::new();
+    for path in &files {
+        match fs::read(path).map_err(|e| e.to_string()).and_then(|b| serde_json::from_slice::<Value>(&b).map_err(|e| e.to_string())) {
+            Ok(v) => {
+                if !matches!(v["kind"].as_str(), Some("integration" | "harness-regression")) || !matches!(v["outcome"].as_str(), Some("PASS" | "FAIL" | "BLOCKED")) {
+                    errors.push(format!("invalid evidence identity/outcome: {}", path.display()));
+                }
+                records.push(json!({"path": path.display().to_string(), "record": v}));
+            }
+            Err(e) => errors.push(format!("read evidence {}: {e}", path.display())),
+        }
+    }
+    let main: Vec<_> = records.iter().filter(|v| v["record"]["kind"] == "integration" && v["record"]["case"] == "flow").collect();
+    let pass_files: Vec<_> = main.iter().filter(|v| v["record"]["outcome"] == "PASS").map(|v| v["path"].clone()).collect();
+    let (mut outcome, mut why) = decide(exit_ok, &stdout.join("\n"), pass_files.len());
+    if main.len() != 1 { errors.push(format!("expected one integration flow record, found {}", main.len())); }
+    if let [one] = main.as_slice() {
+        let v = &one["record"];
+        for key in ["observed", "terminations", "verdict_after", "error"] { report[key] = v[key].clone(); }
+        report["main_evidence"] = one["path"].clone();
+        match v["outcome"].as_str() {
+            Some("BLOCKED") => { outcome = Outcome::Blocked; why = v["error"].as_str().unwrap_or("integration blocked").into(); }
+            Some("FAIL") => { outcome = Outcome::Fail; why = v["error"].as_str().unwrap_or("integration failed").into(); }
+            _ => {}
+        }
+    }
+    if !errors.is_empty() { outcome = Outcome::Fail; why = format!("evidence collection incomplete: {}", errors.join("; ")); }
+    // Keep stderr (including multi-line panics and prepare diagnostics) even when no record
+    // could be saved. Raw streams are separate: this does not imply cross-stream ordering.
+    report["test"] = json!({"exit":exit, "stdout_lines":stdout.len(), "stderr_lines":stderr.len(), "stdout":stdout, "stderr":stderr, "key_lines":stdout, "pass_evidence_files":pass_files, "evidence_records":records, "evidence_errors":errors});
+    report["evidence"] = json!([dir.join("runtime_integration.stdout.log"), dir.join("runtime_integration.stderr.log"), dir.join("verify-report.json")].into_iter().chain(files).map(|p| p.display().to_string()).collect::<Vec<_>>());
+    (outcome, why)
 }
 
 // Windows tools may use narrow argv for filesystem paths. Keep all path-bearing arguments
@@ -358,6 +402,7 @@ pub fn finish(root: &Path, outcome: Outcome, mut report: Value) -> u8 {
     if let Some(b) = report["bundle"].as_object() { println!("bundle: source {} arch {} ({} files verified against {})", b["source"], b["arch"], b["files"].as_array().map(|a| a.len()).unwrap_or(0), BUNDLE_MANIFEST); }
     if let Some(c) = report["cli"].as_object() { println!("cli: {} {} version '{}' matches_ci_pin={} sha256 {}", c["source"], c["path"], c["version_output"].as_str().unwrap_or(""), c["matches_ci_pin"], c["sha256"].as_str().unwrap_or("")); }
     if let Some(t) = report["test"].as_object() { println!("test: exit {} ; PASS evidence files {}", t["exit"], t["pass_evidence_files"].as_array().map(|a| a.len()).unwrap_or(0)); }
+    if let Some(error) = report["error"].as_str() { println!("integration error: {error}"); }
     for o in report["observed"].as_array().into_iter().flatten() { println!("observed: {}", o.as_str().unwrap_or("")); }
     for t in report["terminations"].as_array().into_iter().flatten() { println!("termination: {} pid {} {} — {}", t["kind"].as_str().unwrap_or(""), t["pid"], t["how"].as_str().unwrap_or(""), t["detail"].as_str().unwrap_or("")); }
     println!("limits:"); for l in LIMITS { println!("  - {l}"); }
@@ -370,6 +415,49 @@ pub fn finish(root: &Path, outcome: Outcome, mut report: Value) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn failed_flow_keeps_error_observations_stderr_and_separates_negative_regressions() {
+        let dir = std::env::temp_dir().join(format!("gil-evidence-report-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir(&dir).unwrap();
+        let main = json!({"kind":"integration", "case":"flow", "outcome":"FAIL", "error":"prepare v2: DACL still inherits", "observed":["v1 connected"], "terminations":[{"how":"Unconfirmed"}], "verdict_after":"Blocked"});
+        fs::write(dir.join("run-main-FAIL.json"), main.to_string()).unwrap();
+        fs::write(dir.join("run-negative-FAIL.json"), json!({"kind":"harness-regression", "case":"stranger", "outcome":"FAIL", "error":"deliberate negative test"}).to_string()).unwrap();
+        let mut report = json!({});
+        let stderr = vec!["thread panicked".into(), "prepare v2: DACL still inherits".into()];
+        let (outcome, why) = collect_test_report(&mut report, &dir, false, Some(101), &[], &stderr, vec![]);
+        assert_eq!(outcome, Outcome::Fail); assert_eq!(why, "prepare v2: DACL still inherits");
+        assert_eq!(report["observed"], main["observed"]);
+        assert_eq!(report["error"], main["error"]);
+        assert_eq!(report["terminations"], main["terminations"]);
+        assert_eq!(report["test"]["stderr"], json!(stderr));
+        assert_eq!(report["test"]["evidence_records"].as_array().unwrap().len(), 2);
+        assert_eq!(report["evidence"].as_array().unwrap().len(), 5);
+        // A successful flow plus the expected negative regression is a PASS, not a failure.
+        let pass = json!({"kind":"integration", "case":"flow", "outcome":"PASS", "observed":["v2 connected"]});
+        fs::write(dir.join("run-main-FAIL.json"), pass.to_string()).unwrap(); // outcome comes from JSON, not filename
+        assert_eq!(collect_test_report(&mut report, &dir, true, Some(0), &[], &[], vec![]).0, Outcome::Pass);
+        // Capture errors and malformed evidence must not silently become a PASS.
+        assert_eq!(collect_test_report(&mut report, &dir, true, Some(0), &[], &[], vec!["stderr write failed".into()]).0, Outcome::Fail);
+        fs::write(dir.join("run-corrupt-FAIL.json"), b"{broken").unwrap();
+        assert_eq!(collect_test_report(&mut report, &dir, true, Some(0), &[], &stderr, vec![]).0, Outcome::Fail);
+        assert!(!report["test"]["evidence_errors"].as_array().unwrap().is_empty());
+        fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn missing_duplicate_and_blocked_flow_records_are_explicit() {
+        let dir = std::env::temp_dir().join(format!("gil-evidence-missing-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir(&dir).unwrap();
+        let mut report = json!({});
+        let stderr = vec!["original failure before save".into()];
+        assert_eq!(collect_test_report(&mut report, &dir, true, Some(0), &[], &stderr, vec![]).0, Outcome::Fail);
+        assert_eq!(report["test"]["stderr"], json!(stderr));
+        let blocked = json!({"kind":"integration", "case":"flow", "outcome":"BLOCKED", "error":"CLI missing"});
+        fs::write(dir.join("bootstrap-a-BLOCKED.json"), blocked.to_string()).unwrap();
+        assert_eq!(collect_test_report(&mut report, &dir, false, Some(101), &[], &[], vec![]), (Outcome::Blocked, "CLI missing".into()));
+        fs::write(dir.join("run-b-BLOCKED.json"), blocked.to_string()).unwrap();
+        assert_eq!(collect_test_report(&mut report, &dir, false, Some(101), &[], &[], vec![]).0, Outcome::Fail);
+        fs::remove_dir_all(dir).unwrap();
+    }
     #[test]
     fn external_tools_receive_ascii_names_and_a_separate_unicode_working_directory() {
         let dest = std::env::temp_dir().join("한글 path").join("cli");

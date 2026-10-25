@@ -239,3 +239,33 @@ Core-only 교체는 다음이 **모두** 같을 때만 허용한다(descriptor v
 - `src/command.rs`(`launch mcp` 서브커맨드), `src/agent.rs`(descriptor v2 필드, `--gil-tool-catalog`), `src/mcp/runtime.rs`(도구 3개, 작성 표면·Windows/Mac), `src/mcp/surface.rs`·`src/mcp.rs`(dispatch), `src/windows_fs.rs`(기존 rename/flush 재사용; known folder API 추가)
 - `plugins/gil-companion-prototype/.codex-plugin/plugin.json`·`distribution/windows/candidate.mjs`·`plugins/gil-companion-prototype/package-native.mjs`(args `launch mcp`), `distribution/codex/tool-contract.mjs`(도구 수), Skill(업데이트 절 1개)
 - 시험: `src/runtime/*_tests.rs`, `tests/runtime_update.rs`(합성 두 버전 쌍), `tests/mcp.rs`(도구), `.github/workflows/windows-spike.yml`·`codex-preview.yml`(실행), `distribution/runtime-update/`(probe 유지)
+
+## 11. 검수 하네스 종료 판정·실패 증거 보정 (2026-10-25, 로컬)
+
+사용자 PC의 `runtime-verify-b28e2e3` 보고는 v1 준비·선택·MCP 응답까지 확인했고,
+v2 준비의 보호 검사 거절을 보고했다. 첨부된 요약에는 오류 전문이 없었다.
+보호 플래그 변경 주체 및 OneDrive 인과는 미확정이며, 이 보정은 DACL 검사나 저장소를 고치지 않는다.
+
+- Windows 종료 조회는 `tasklist`의 영어 문구/문자 인코딩 파싱을 제거했다.
+  `OpenProcess(SYNCHRONIZE)`와 `WaitForSingleObject(0)`의 숫자 결과만 사용한다.
+  같은 조회 핸들을 대기 동안 유지하고 닫는다. 접근 거부/조회 실패는 `Unknown`이고,
+  종료·권한 확대 권한은 요청하지 않는다. 핸들 획득 전 PID 재사용은 남은 한계다.
+- 증거는 PID·시각·원자 카운터의 고유 이름으로 배타 생성하고 flush한다.
+  같은 이름이 이미 있으면 덮어쓰지 않고 저장 실패와 JSON을 보고한다.
+  `case`·`kind`로 본 흐름과 의도적 실패 회귀시험을 구분한다.
+- 드라이버는 PASS뿐 아니라 FAIL/BLOCKED 증거 모두를 보존·집계한다.
+  본 흐름 1개의 `error`·`observed`·`terminations`를 결과와 무관하게 요약하고,
+  stdout/stderr 전문 및 증거별 원문을 JSON에 넣는다. 증거 누락·중복·파싱 실패,
+  출력 저장/reader 실패는 PASS가 될 수 없다. 스트림 간 시간 순서는 주장하지 않는다.
+- Mac 회귀: 보고서 시험 10개(두 프로필), 통합시험 7개, 전체 lib default 568 통과/1 ignored,
+  visual-authoring 579 통과/2 ignored. 최초 전체 실행은 샌드박스의 loopback 바인드 거부로
+  Monitor 50개가 실패했고, 필요한 실행 권한으로 같은 시험을 실행해 통과했다.
+  Windows x64 두 프로필 교차 check 통과. Windows 실행 및 CI는 아직 하지 않았다.
+- Mac 별도 App Server는 현재 동봉 CLI `0.164.0-alpha.11.1`을 사용했다.
+  Windows 고정판 `0.163.0-alpha.11.1`의 새 실행 증거로 대체하지 않는다.
+  제품 manifest/MCP/설치본/사용자 PC는 변경하지 않았고 게시·commit·push도 하지 않았다.
+- 로컬 debug 묶음으로 드라이버 종단 확인: 정상 실행 exit 0/PASS(관측 20줄), 중간 실패
+  주입 exit 1/FAIL(관측 8줄·오류 전문·stderr·Natural 종료 기록 유지), 각 증거 파일 2개
+  (본 흐름과 의도적 실패 회귀시험)가 분리됐다. 처음 만든 로컬 검수 스크립트는 드라이버가
+  주입 환경 변수를 제거한다는 기존 보호를 놓쳐 실패 주입 없이 PASS가 되어 기대값 단언이
+  실패했다. 제품 보호를 변경하지 않고 로컬 시험용 래퍼에서만 최종 시험 실행에 주입해 검증했다.

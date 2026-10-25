@@ -151,29 +151,46 @@ fn liveness_from_errno(errno: Option<i32>) -> Liveness {
 }
 #[cfg(windows)]
 fn liveness(pid: u32) -> Liveness {
-    let out = Command::new(PathBuf::from(std::env::var_os("SystemRoot").unwrap_or_default()).join("System32").join("tasklist.exe")).args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"]).output();
-    liveness_from_tasklist(out.map(|o| (o.status.success(), String::from_utf8_lossy(&o.stdout).into_owned())).map_err(|e| e.to_string()))
+    match process_watch(pid) { Ok(handle) => watch_state(&handle), Err(state) => state }
 }
-/// `tasklist` answers: a CSV row = alive; its "no tasks" notice = gone; anything else (command
-/// failure, access denied, unparsable text) = unknown.
+// Numeric Win32 results tested on every platform; no localized command output or termination
+// rights. Invalid PID zero is not proof that a known Core has exited.
+fn open_process_failure(pid: u32, error: u32) -> Liveness {
+    if pid != 0 && error == 87 { Liveness::Gone }
+    else { Liveness::Unknown(format!("OpenProcess(SYNCHRONIZE), pid {pid}, error {error}")) }
+}
+fn process_wait_result(result: u32, error: u32) -> Liveness {
+    match result { 0 => Liveness::Gone, 258 => Liveness::Alive,
+        other => Liveness::Unknown(format!("WaitForSingleObject returned {other}, error {error}")) }
+}
 #[cfg(windows)]
-fn liveness_from_tasklist(out: Result<(bool, String), String>) -> Liveness {
-    match out {
-        Err(e) => Liveness::Unknown(format!("tasklist could not run: {e}")),
-        Ok((false, text)) => Liveness::Unknown(format!("tasklist failed: {}", text.trim())),
-        Ok((true, text)) => {
-            let text = text.trim();
-            if text.starts_with('"') && text.matches(',').count() >= 4 { Liveness::Alive }
-            else if text.to_ascii_lowercase().contains("no tasks") { Liveness::Gone }
-            else { Liveness::Unknown(format!("tasklist output not understood: {text}")) }
-        }
-    }
+fn process_watch(pid: u32) -> Result<std::os::windows::io::OwnedHandle, Liveness> {
+    use std::os::windows::io::FromRawHandle;
+    use windows_sys::Win32::{Foundation::GetLastError, System::Threading::OpenProcess};
+    if pid == 0 { return Err(open_process_failure(pid, 87)); }
+    let handle = unsafe { OpenProcess(0x00100000 /* SYNCHRONIZE only */, 0, pid) };
+    if handle.is_null() { Err(open_process_failure(pid, unsafe { GetLastError() })) }
+    else { Ok(unsafe { std::os::windows::io::OwnedHandle::from_raw_handle(handle) }) }
+}
+#[cfg(windows)]
+fn watch_state(handle: &std::os::windows::io::OwnedHandle) -> Liveness {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::{Foundation::GetLastError, System::Threading::WaitForSingleObject};
+    let result = unsafe { WaitForSingleObject(handle.as_raw_handle(), 0) };
+    process_wait_result(result, if result == u32::MAX { unsafe { GetLastError() } } else { 0 })
 }
 /// Poll until gone or the limit; the last observation is returned (Unknown is not Gone).
 fn wait_until_gone(pid: u32, limit: Duration) -> Liveness {
+    // Hold the same object across polling. Reuse before opening can still conservatively
+    // report Alive/Unknown. A query handle never authorizes terminating a Core.
+    #[cfg(windows)]
+    let handle = match process_watch(pid) { Ok(handle) => handle, Err(state) => return state };
     let deadline = Instant::now() + limit;
     loop {
+        #[cfg(unix)]
         let now = liveness(pid);
+        #[cfg(windows)]
+        let now = watch_state(&handle);
         if now == Liveness::Gone || Instant::now() >= deadline { return now; }
         std::thread::sleep(Duration::from_millis(50));
     }
@@ -181,6 +198,7 @@ fn wait_until_gone(pid: u32, limit: Duration) -> Liveness {
 
 /// Everything the test created, with cleanup and evidence on drop (also on a panic).
 struct Harness {
+    case: String, evidence_id: String,
     cli: PathBuf, base: PathBuf, codex_home: PathBuf, root: PathBuf,
     log: Vec<String>, servers: Vec<AppServer>, cores: Vec<Identity>, terminations: Vec<Termination>,
     outcome: &'static str, error: Option<String>, evidence_dir: PathBuf, saved: Option<Result<PathBuf, String>>,
@@ -226,7 +244,7 @@ impl Harness {
     }
     fn evidence(&self) -> Value {
         let terminations: Vec<Value> = self.terminations.iter().map(|t| json!({"kind": t.kind, "pid": t.pid, "how": format!("{:?}", t.how), "detail": t.detail})).collect();
-        json!({"outcome": self.outcome, "error": self.error, "cli": self.cli.display().to_string(), "codex_home": self.codex_home.display().to_string(), "store": self.root.display().to_string(), "observed": self.log, "terminations": terminations, "verdict_after": if self.root.exists() { format!("{:?}", observe_and_judge(&self.root).1.state) } else { "no store".into() }})
+        json!({"case": self.case, "kind": if self.case == "flow" { "integration" } else { "harness-regression" }, "evidence_id": self.evidence_id, "outcome": self.outcome, "error": self.error, "cli": self.cli.display().to_string(), "codex_home": self.codex_home.display().to_string(), "store": self.root.display().to_string(), "observed": self.log, "terminations": terminations, "verdict_after": if self.root.exists() { format!("{:?}", observe_and_judge(&self.root).1.state) } else { "no store".into() }})
     }
     /// Save the evidence once. A failure is returned and printed (stderr: the error; stdout: the
     /// evidence itself) and never turned into "written" or PASS.
@@ -235,13 +253,17 @@ impl Harness {
         let evidence = self.evidence();
         let result = (|| -> Result<PathBuf, String> {
             fs::create_dir_all(&self.evidence_dir).map_err(|e| format!("create_dir_all {}: {e}", self.evidence_dir.display()))?;
-            let path = self.evidence_dir.join(format!("run-{}-{}.json", std::process::id(), self.outcome));
-            fs::write(&path, serde_json::to_string_pretty(&evidence).unwrap()).map_err(|e| format!("write {}: {e}", path.display()))?;
+            let path = self.evidence_dir.join(format!("run-{}-{}.json", self.evidence_id, self.outcome));
+            write_new_evidence(&path, &evidence)?;
             Ok(path)
         })();
         match &result {
-            Ok(path) => { println!("OUTCOME: {}", self.outcome); println!("OBSERVED evidence written to {}", path.display()); }
-            Err(e) => { eprintln!("EVIDENCE NOT WRITTEN: {e}"); println!("OUTCOME: {} (evidence not saved: {e})", if self.outcome == "PASS" { "FAIL" } else { self.outcome }); println!("EVIDENCE (not saved) {}", evidence); }
+            Ok(path) => {
+                println!("{}: {}", if self.case == "flow" { "OUTCOME" } else { "HARNESS-REGRESSION" }, self.outcome);
+                if let Some(error) = &self.error { eprintln!("CASE {} ERROR: {error}", self.case); }
+                println!("OBSERVED evidence written to {}", path.display());
+            }
+            Err(e) => { eprintln!("EVIDENCE NOT WRITTEN: {e}"); println!("{}: {} (evidence not saved: {e})", if self.case == "flow" { "OUTCOME" } else { "HARNESS-REGRESSION" }, if self.outcome == "PASS" { "FAIL" } else { self.outcome }); println!("EVIDENCE (not saved) {}", evidence); }
         }
         self.saved = Some(result.clone());
         result
@@ -256,10 +278,19 @@ impl Drop for Harness {
     }
 }
 fn evidence_dir() -> PathBuf { std::env::var_os("GIL_RUNTIME_INTEGRATION_EVIDENCE_DIR").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target").join("runtime-integration-evidence")) }
+fn evidence_id() -> String {
+    static SERIAL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    format!("{}-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos(), SERIAL.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+}
+fn write_new_evidence(path: &Path, value: &Value) -> Result<(), String> {
+    let bytes = serde_json::to_vec_pretty(value).map_err(|e| e.to_string())?;
+    let mut file = fs::OpenOptions::new().write(true).create_new(true).open(path).map_err(|e| format!("create evidence {}: {e}", path.display()))?;
+    file.write_all(&bytes).and_then(|()| file.sync_all()).map_err(|e| format!("write evidence {}: {e}", path.display()))
+}
 fn new_harness(cli: PathBuf, base: PathBuf) -> Result<Harness, String> {
     let codex_home = base.join("codex-home");
     fs::create_dir_all(&codex_home).map_err(|e| format!("create isolated home {}: {e}", codex_home.display()))?;
-    Ok(Harness { cli, root: base.join("runtime-v1"), codex_home, base, log: vec![], servers: vec![], cores: vec![], terminations: vec![], outcome: "RUNNING", error: None, evidence_dir: evidence_dir(), saved: None })
+    Ok(Harness { case: "harness-regression".into(), evidence_id: evidence_id(), cli, root: base.join("runtime-v1"), codex_home, base, log: vec![], servers: vec![], cores: vec![], terminations: vec![], outcome: "RUNNING", error: None, evidence_dir: evidence_dir(), saved: None })
 }
 fn fresh_base_in(parent: &Path, label: &str) -> Result<PathBuf, String> {
     let parent = fs::canonicalize(parent).map_err(|e| format!("resolve temporary directory {}: {e}", parent.display()))?;
@@ -272,11 +303,11 @@ fn fresh_base_in(parent: &Path, label: &str) -> Result<PathBuf, String> {
 }
 fn fresh_base(label: &str) -> Result<PathBuf, String> { fresh_base_in(&std::env::temp_dir(), label) }
 fn bootstrap(cli: PathBuf, label: &str) -> Result<Harness, String> {
-    let result = fresh_base(label).and_then(|base| new_harness(cli, base));
+    let result = fresh_base(label).and_then(|base| new_harness(cli, base)).map(|mut h| { h.case = label.into(); h });
     if let Err(reason) = &result {
-        let evidence = json!({"outcome":"BLOCKED", "stage":"bootstrap", "error":reason, "observed":[], "terminations":[]});
+        let evidence = json!({"case":label, "kind":if label == "flow" { "integration" } else { "harness-regression" }, "outcome":"BLOCKED", "stage":"bootstrap", "error":reason, "observed":[], "terminations":[]});
         let dir = evidence_dir();
-        let saved = fs::create_dir_all(&dir).and_then(|()| fs::write(dir.join(format!("bootstrap-{}-{label}-BLOCKED.json", std::process::id())), evidence.to_string()));
+        let saved = fs::create_dir_all(&dir).map_err(|e| e.to_string()).and_then(|()| write_new_evidence(&dir.join(format!("bootstrap-{}-BLOCKED.json", evidence_id())), &evidence));
         println!("OUTCOME: BLOCKED (bootstrap: {reason})\n{evidence}");
         if let Err(e) = saved { eprintln!("EVIDENCE NOT WRITTEN: {e}"); }
     }
@@ -428,11 +459,52 @@ fn liveness_distinguishes_alive_gone_and_unknown() {
 #[test]
 fn liveness_distinguishes_alive_gone_and_unknown() {
     assert_eq!(liveness(std::process::id()), Liveness::Alive);
-    assert_eq!(liveness_from_tasklist(Ok((true, "\"gil.exe\",\"1234\",\"Console\",\"1\",\"8,000 K\"".into()))), Liveness::Alive);
-    assert_eq!(liveness_from_tasklist(Ok((true, "INFO: No tasks are running which match the specified criteria.".into()))), Liveness::Gone);
-    assert!(matches!(liveness_from_tasklist(Ok((false, "ERROR: Access denied".into()))), Liveness::Unknown(_)), "a failed query is not Gone");
-    assert!(matches!(liveness_from_tasklist(Ok((true, "garbage".into()))), Liveness::Unknown(_)));
-    assert!(matches!(liveness_from_tasklist(Err("spawn failed".into())), Liveness::Unknown(_)));
+    let mut child = Command::new(testbed()).args(["core", "watch"]).stdin(Stdio::piped()).stdout(Stdio::null()).spawn().unwrap();
+    let handle = process_watch(child.id()).unwrap();
+    assert_eq!(watch_state(&handle), Liveness::Alive);
+    drop(child.stdin.take());
+    child.wait().unwrap();
+    assert_eq!(watch_state(&handle), Liveness::Gone, "same kernel object is signaled after exit");
+    assert_eq!(wait_until_gone(child.id(), Duration::from_secs(1)), Liveness::Gone);
+}
+#[test]
+fn native_process_results_are_language_independent_and_fail_closed() {
+    assert_eq!(open_process_failure(123, 87), Liveness::Gone);
+    for (pid, error) in [(0, 87), (123, 5), (123, 8), (123, 0)] {
+        assert!(matches!(open_process_failure(pid, error), Liveness::Unknown(_)));
+    }
+    assert_eq!(process_wait_result(0, 0), Liveness::Gone);
+    assert_eq!(process_wait_result(258, 0), Liveness::Alive);
+    for result in [u32::MAX, 128, 17] { assert!(matches!(process_wait_result(result, 5), Liveness::Unknown(_))); }
+}
+#[test]
+fn evidence_from_parallel_cases_is_unique_exclusive_and_keeps_failure_details() {
+    let base = fresh_base("evidence-unique").unwrap();
+    let dir = base.join("records");
+    let handles: Vec<_> = (0..8).map(|i| {
+        let base = base.clone(); let dir = dir.clone();
+        std::thread::spawn(move || {
+            let mut h = new_harness(PathBuf::new(), base.join(format!("case-{i}"))).unwrap();
+            h.case = "negative-case".into();
+            h.evidence_dir = dir; h.outcome = "FAIL";
+            h.error = Some(format!("prepare v2: injected failure {i}"));
+            h.log.push("v1 connected".into());
+            let path = h.save_evidence().unwrap();
+            assert_eq!(h.save_evidence().unwrap(), path);
+            path
+        })
+    }).collect();
+    let paths: std::collections::HashSet<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+    assert_eq!(paths.len(), 8);
+    for path in &paths {
+        let bytes = fs::read(path).unwrap();
+        let record: Value = serde_json::from_slice(&bytes).unwrap();
+        assert!(record["error"].as_str().unwrap().starts_with("prepare v2:"));
+        assert_eq!(record["observed"], json!(["v1 connected"]));
+        assert!(write_new_evidence(path, &json!({"overwritten":true})).is_err());
+        assert_eq!(fs::read(path).unwrap(), bytes);
+    }
+    fs::remove_dir_all(base).unwrap();
 }
 #[test]
 fn a_core_the_test_does_not_hold_a_handle_for_is_never_ended_even_with_the_same_image_name() {
