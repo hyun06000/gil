@@ -58,7 +58,7 @@ pub fn install(app: &AppHandle, autostart_on: bool) -> Result<(), tauri::Error> 
     let current = MenuItem::with_id(app, CURRENT, current_name(app), false, None::<&str>)?;
     let refresh = MenuItem::with_id(app, REFRESH, "새로고침", true, None::<&str>)?;
     let autostart =
-        CheckMenuItem::with_id(app, AUTOSTART, "로그인 시 시작", true, autostart_on, None::<&str>)?;
+        CheckMenuItem::with_id(app, AUTOSTART, "로그인 시 시작", !app.state::<crate::sessions::Sessions>().enabled(), autostart_on, None::<&str>)?;
     let quit = MenuItem::with_id(app, QUIT, "종료", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,

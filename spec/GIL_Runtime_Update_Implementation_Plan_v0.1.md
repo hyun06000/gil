@@ -1,5 +1,10 @@
 # GIL Runtime Update — 최소 구현 설계안 v0.1 (U2 CI 결과 기준)
 
+> 2026-10-25: [Companion 설치·업데이트 계약](GIL_Companion_Install_Update_v0.1.md)에 따라
+> 업데이트는 사용자가 native UI에서 시작한다. 아래 MCP 업데이트 도구·Agent 실행 경로는
+> 연결하지 않는다. 준비·선택·실행 원시 계층은 검증된 범위만 native updater에서 재사용한다.
+> 정책·session IPC·설치 cohort 발견은 구현했으며 실제 업데이트 UI/worker/installer 연결은 아직 없다.
+
 2026-10-23. [계약](GIL_Runtime_Update_Contract_v0.1.md)·[U1 설계 결정안](GIL_Runtime_Update_Design_v0.1.md)의 구현 전 최소 설계.
 **설계·코드 조사만. 제품 미구현, commit·게시·PC 실험 없음.** 정상 설치 경로에서 사용자에게 긴 코드·PowerShell·수동 권한 변경을 요구하지 않는다.
 

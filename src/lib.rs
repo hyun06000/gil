@@ -111,6 +111,12 @@ pub mod agent;
 mod artifact;
 pub mod capability;
 pub mod companion;
+/// Native Companion session/update policy; no IPC, installation, or automatic activation.
+pub mod companion_session;
+/// Local session transport; no updater commands. Installed-cohort discovery is separate below.
+pub mod companion_ipc;
+#[cfg(any(target_os = "macos", windows))]
+pub mod companion_discovery;
 mod context;
 mod contract;
 mod cycle;

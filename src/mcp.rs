@@ -23,11 +23,39 @@ use monitor::Monitor;
 pub struct GilServer {
     monitor: Arc<Monitor>,
     native_gate: Arc<Mutex<()>>,
+    companion_session: Arc<Mutex<crate::companion_ipc::McpSession>>,
 }
 impl Default for GilServer { fn default() -> Self { Self::new() } }
 impl GilServer {
     pub fn new() -> Self {
-        Self { monitor: Arc::new(Monitor::default()), native_gate: Arc::new(Mutex::new(())) }
+        Self::with_companion_endpoint(None)
+    }
+    /// Deployment/test adapter, not an MCP tool parameter. None discovers an installed cohort;
+    /// existing Plugin installs with no cohort receipt remain opted out.
+    pub fn with_companion_endpoint(endpoint: Option<std::path::PathBuf>) -> Self {
+        Self { monitor: Arc::new(Monitor::default()), native_gate: Arc::new(Mutex::new(())),
+            companion_session: Arc::new(Mutex::new(crate::companion_ipc::McpSession::new(endpoint))) }
+    }
+    async fn dispatch_with_session(&self, name: String, input: Value) -> CallToolResult {
+        // These operations actually open/create a Project on success. Help topics, listing,
+        // initialization, workspace planning and native-window requests do not qualify.
+        let project_use = input.get("project_root").and_then(Value::as_str).is_some()
+            && matches!(name.as_str(), "gil_start" | "gil_status" | "gil_context" | "gil_story"
+                | "gil_open" | "gil_close" | "gil_restore" | "gil_revisit" | "gil_cycle"
+                | "gil_monitor_prepare" | "gil_report_visuals");
+        let result = self.dispatch(name, input).await;
+        if project_use && result.is_error != Some(true) {
+            let session = self.companion_session.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                if let Ok(mut session) = session.lock() {
+                    if let Err(err) = session.used() {
+                        // Auxiliary icon failure must not replay or change a successful action.
+                        eprintln!("GIL Companion session unavailable ({:?}); Project result unchanged", err.kind());
+                    }
+                }
+            }).await;
+        }
+        result
     }
     pub fn status_said(root: &str) -> Result<String, String> {
         crate::command::action(&["status".into()], Some(std::path::Path::new(root)), "")
@@ -98,7 +126,7 @@ impl ServerHandler for GilServer {
         let tool = self.get_tool(&request.name).ok_or_else(|| ErrorData::invalid_params("Unknown GIL tool", None))?;
         let input = Value::Object(request.arguments.unwrap_or_default());
         if !surface::valid_input(&tool, &input) { return Err(ErrorData::invalid_params(surface::rejection(&tool, &input), None)); }
-        Ok(self.dispatch(request.name.into_owned(), input).await.into())
+        Ok(self.dispatch_with_session(request.name.into_owned(), input).await.into())
     }
     async fn list_resources(&self, _: Option<PaginatedRequestParams>, _: RequestContext<RoleServer>) -> Result<ListResourcesResult, ErrorData> {
         let mut result = ListResourcesResult::default();
@@ -125,7 +153,8 @@ pub fn serve_stdio() -> Result<(), String> {
         .map_err(|err| format!("MCP 실행기를 세우지 못했다: {err}"))?;
 
     runtime.block_on(async {
-        let server = GilServer::new();
+        let server = GilServer::with_companion_endpoint(std::env::var_os(crate::companion_ipc::ENV_ENDPOINT).map(Into::into));
+        let companion_session = server.companion_session.clone();
         server.monitor.reap();
         let service = match server.serve(rmcp::transport::stdio()).await {
             Ok(service) => service,
@@ -136,10 +165,13 @@ pub fn serve_stdio() -> Result<(), String> {
         };
         // stdin 이 닫히면 여기서 깨끗이 돌아온다. `Closed`·`Cancelled` 는 **끝난 것**이지
         // 실패가 아니다. 매달려 기다리지 않는다.
-        match service.waiting().await {
+        let result = match service.waiting().await {
             Ok(_) => Ok(()),
             Err(err) => Err(format!("MCP 연결이 끊겼다: {err}")),
-        }
+        };
+        // rmcp handler clones may outlive waiting(); the transport owns this disconnect.
+        if let Ok(mut session) = companion_session.lock() { session.close(); }
+        result
     })
 }
 

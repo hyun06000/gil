@@ -629,6 +629,57 @@ fn text_of(reply: &serde_json::Value) -> String {
 
 // ── 시험 ───────────────────────────────────────────────────────────────────
 
+#[cfg(target_os = "macos")]
+#[test]
+fn companion_session_tracks_actual_project_use_and_stdio_eof() {
+    use std::os::unix::fs::DirBuilderExt;
+    use std::time::{Duration, Instant};
+    use serde_json::json;
+    let unique = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    let base = PathBuf::from("/private/tmp").join(format!("gil-mcp-session-{}-{unique}", std::process::id()));
+    std::fs::DirBuilder::new().mode(0o700).create(&base).unwrap();
+    let socket = base.join("session.sock");
+    let server = gil::companion_ipc::Server::bind(&socket).unwrap();
+    let root = base.join("project"); std::fs::create_dir(&root).unwrap();
+    let mut a = Client::serve_with_env(&base.join("a"), &[(gil::companion_ipc::ENV_ENDPOINT, &socket)]);
+    a.initialize();
+    a.request("tools/list", json!({}));
+    assert_eq!(server.snapshot().unwrap().active_connections, 0);
+    assert_eq!(a.status(root.to_str().unwrap())["result"]["isError"], true);
+    assert_eq!(server.snapshot().unwrap().active_connections, 0);
+    let help = monitor_call(&mut a, "gil_help", json!({"topic":"overview", "project_root":root}));
+    let _ = help; // Whether the topic exists is unrelated; help cannot register a session.
+    assert_eq!(server.snapshot().unwrap().active_connections, 0);
+    let started = monitor_call(&mut a, "gil_start", json!({"project_root":root}));
+    assert_eq!(started["isError"], false, "{started}");
+    assert_eq!(server.snapshot().unwrap().active_connections, 1);
+    let before = std::fs::read(root.join(gil::STATE_PATH)).unwrap();
+    assert_eq!(a.status(root.to_str().unwrap())["result"]["isError"], false);
+    assert_eq!(server.snapshot().unwrap().active_connections, 1);
+    let mut b = Client::serve_with_env(&base.join("b"), &[(gil::companion_ipc::ENV_ENDPOINT, &socket)]);
+    b.initialize(); b.status(root.to_str().unwrap());
+    assert_eq!(server.snapshot().unwrap().active_connections, 2);
+    assert!(a.eof().0.success());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while server.snapshot().unwrap().active_connections != 1 {
+        assert!(Instant::now() < deadline); std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(!server.finished());
+    assert!(b.eof().0.success());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !server.finished() {
+        assert!(Instant::now() < deadline); std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(), before);
+    // Unavailable endpoint cannot undo/replay successful Project operations.
+    let mut c = Client::serve_with_env(&base.join("c"), &[(gil::companion_ipc::ENV_ENDPOINT, &socket)]);
+    c.initialize();
+    assert_eq!(c.status(root.to_str().unwrap())["result"]["isError"], false);
+    assert!(c.eof().0.success());
+    drop(server);
+    std::fs::remove_dir_all(base).unwrap();
+}
+
 #[test]
 fn initialize_succeeds_and_says_who_is_answering() {
     let mut mcp = Client::serve();

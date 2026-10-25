@@ -50,6 +50,7 @@ mod handshake;
 mod lifetime;
 mod live;
 mod settings;
+mod sessions;
 mod tray;
 mod window;
 
@@ -69,14 +70,21 @@ fn main() {
         return;
     }
 
+    let sessions = match sessions::Sessions::from_args(std::env::args_os()) {
+        Ok(sessions) => sessions,
+        Err(message) => { eprintln!("{message}"); std::process::exit(2); }
+    };
     tauri::Builder::default()
         // **가장 먼저 선다.** plugin 의 setup 은 등록 차례대로 돌고, 이미 창이 하나 떠
         // 있으면 이 plugin 이 그 자리에서 프로세스를 끝낸다. 그래서 둘째 실행은 `Desk` 도
         // 창도 만들지 못한다 — 설정을 적는 것은 **살아 있는 창 하나**뿐이다.
         .plugin(tauri_plugin_single_instance::init(Box::new(
-            |app: &tauri::AppHandle, _argv: Vec<String>, _cwd: String| {
+            |app: &tauri::AppHandle, argv: Vec<String>, _cwd: String| {
+                // A session-only launch never focuses the Monitor. If a legacy instance owns
+                // the app, the requested endpoint stays unavailable; don't silently switch it.
+                if argv.iter().any(|a| a == gil::companion_ipc::SESSION_ARG) { return; }
                 // 둘째 실행이 하는 일은 **있던 창을 앞으로 데려오는 것**뿐이다. 숨어 있든
-                // 최소화돼 있든 같은 문을 지난다. 인수도 cwd 도 보지 않는다 — 그것으로
+                // 최소화돼 있든 같은 문을 지난다. 위 고정 flag 외 인수 값과 cwd 는 보지 않는다 — 그것으로
                 // Project 를 짐작하면 사람이 고르지 않은 것을 열게 된다(§9.1.1-1).
                 let _ = lifetime::show_main_window(app);
             },
@@ -89,6 +97,7 @@ fn main() {
         .manage(adapter::Registry::default())
         .manage(window::LastSeen::default())
         .manage(live::Live::default())
+        .manage(sessions)
         .invoke_handler(tauri::generate_handler![
             adapter::pick_project,
             adapter::list_projects,
@@ -103,7 +112,10 @@ fn main() {
 
             // 실행 중인 process만 답할 수 있는 challenge 문. 포트도 URL도 없고, 사용자 전용
             // local IPC 하나만 앱 수명 동안 연다.
-            app.manage(handshake::RuntimeHandshake::start()?);
+            // The legacy probe socket is not needed in explicit session mode.
+            if !app.state::<sessions::Sessions>().enabled() {
+                app.manage(handshake::RuntimeHandshake::start()?);
+            }
 
             // ① 설정을 읽는다. 읽지 못하면 **원본을 그대로 두고** 임시 상태로 선다.
             let dir = app.path().app_config_dir()?;
@@ -118,14 +130,18 @@ fn main() {
             app.set_menu(appmenu::build(&handle)?)?;
 
             // ④ 창. 자리와 최대화는 `window::build` 가 설정에서 읽는다.
-            window::build(&handle)?;
+            if !app.state::<sessions::Sessions>().enabled() {
+                window::build(&handle)?;
+            }
 
             // ⑤ menu bar. 세우지 못해도 창과 Agent launcher 는 그대로 동작해야 하므로
             //    앱의 실패로 삼지 않는다.
             let on = autostart::enabled(&handle).unwrap_or(false);
             if let Err(err) = tray::install(&handle, on) {
+                if app.state::<sessions::Sessions>().enabled() { return Err(err.into()); }
                 eprintln!("menu bar 자리를 만들지 못했다 — 창은 그대로 씁니다: {err}");
             }
+            app.state::<sessions::Sessions>().start(&handle)?;
             Ok(())
         })
         .on_menu_event(appmenu::on_menu)
@@ -145,7 +161,8 @@ fn main() {
             }
             // 정말 끝나기 직전. 지켜보던 것을 멈추고 미뤄 둔 마지막 자리를 거둔다.
             tauri::RunEvent::Exit => {
-                app.state::<handshake::RuntimeHandshake>().stop();
+                if let Some(handshake) = app.try_state::<handshake::RuntimeHandshake>() { handshake.stop(); }
+                app.state::<sessions::Sessions>().stop();
                 app.state::<live::Live>().stop();
                 window::flush_now(app);
             }

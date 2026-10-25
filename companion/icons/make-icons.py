@@ -10,10 +10,12 @@
 
     python3 companion/icons/make-icons.py
 
-가 `icon.png` · `trayTemplate.png` · `trayTemplate@2x.png` 를 다시 만든다.
+가 `icon.png` · `icon.ico` · `trayTemplate.png` · `trayTemplate@2x.png` 를 다시 만든다.
+`--windows-only`는 ICO만 만들고 `--check-windows`는 기존 ICO를 쓰기 없이 검증한다.
 """
 
 import math
+import argparse
 import os
 import struct
 import zlib
@@ -91,7 +93,7 @@ def coverage(px, py, inside):
     return hit / (SAMPLES * SAMPLES)
 
 
-def write_png(path, w, h, pixel):
+def png_bytes(w, h, pixel):
     raw = b"".join(
         b"\x00" + bytes(v for x in range(w) for v in pixel(x, y)) for y in range(h)
     )
@@ -100,12 +102,32 @@ def write_png(path, w, h, pixel):
         body = tag + data
         return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
 
-    open(path, "wb").write(
+    return (
         b"\x89PNG\r\n\x1a\n"
         + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0))
         + chunk(b"IDAT", zlib.compress(raw, 9))
         + chunk(b"IEND", b"")
     )
+
+
+def write_png(path, w, h, pixel):
+    with open(path, "wb") as output:
+        output.write(png_bytes(w, h, pixel))
+
+
+def windows_icon():
+    """ICO with PNG frames, using the same procedural mark (no new artwork/tool dependency)."""
+    sizes = (16, 32, 48, 256)
+    images = []
+    for size in sizes:
+        scale = CANVAS / size
+        images.append(png_bytes(size, size, lambda x, y: app_pixel(x * scale, y * scale)))
+    offset = 6 + 16 * len(sizes)
+    entries = []
+    for size, image in zip(sizes, images):
+        entries.append(struct.pack("<BBBBHHII", size % 256, size % 256, 0, 0, 1, 32, len(image), offset))
+        offset += len(image)
+    return struct.pack("<HHH", 0, 1, len(sizes)) + b"".join(entries) + b"".join(images)
 
 
 def rounded(x, y, x0, y0, size, radius):
@@ -166,6 +188,22 @@ def tray_pixel_for(size):
 
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--windows-only", action="store_true", help="generate only icon.ico")
+    parser.add_argument("--check-windows", action="store_true", help="compare icon.ico with the procedural source; no writes")
+    args = parser.parse_args()
+    ico = windows_icon()
+    if args.check_windows:
+        with open(os.path.join(here, "icon.ico"), "rb") as source:
+            if source.read() != ico:
+                raise SystemExit("icon.ico differs from its procedural source")
+        print("icon.ico: 16/32/48/256 PNG frames match procedural source")
+        return
+    with open(os.path.join(here, "icon.ico"), "wb") as output:
+        output.write(ico)
+    if args.windows_only:
+        print("icon.ico: 16/32/48/256")
+        return
     write_png(os.path.join(here, "icon.png"), CANVAS, CANVAS, app_pixel)
     write_png(os.path.join(here, "trayTemplate.png"), 44, 44, tray_pixel_for(44))
     write_png(os.path.join(here, "trayTemplate@2x.png"), 88, 88, tray_pixel_for(88))

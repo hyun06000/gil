@@ -965,6 +965,11 @@ mod tests {
 
         // 그 자리에서 Project 를 짐작하거나 읽지 않는다.
         let hand = &code[guard..desk];
+        // Session-only requests may inspect exactly this fixed flag to suppress focusing.
+        // No argument value, endpoint or Project path is interpreted by the second instance.
+        let mode_check = "argv.iter().any(|a| a == gil::companion_ipc::SESSION_ARG)";
+        assert_eq!(hand.matches(mode_check).count(), 1);
+        let hand = hand.replace(mode_check, "SESSION_MODE_CHECK");
         for forbidden in ["argv[", "argv.", "cwd.", "remember(", "openable("] {
             assert!(!hand.contains(forbidden), "둘째 실행이 {forbidden} 를 만진다");
         }

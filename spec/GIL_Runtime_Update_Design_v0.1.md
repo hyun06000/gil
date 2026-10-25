@@ -1,5 +1,10 @@
 # GIL Runtime Update — U1 설계 결정안 v0.1
 
+> 2026-10-25: 업데이트 실행 주체/최초 설치/Companion 수명은
+> [새 계약](GIL_Companion_Install_Update_v0.1.md)이 우선한다.
+> Agent의 로컬 다운로드→MCP prepare/select 경로는 향후 제품 목표에서 제외한다.
+> 아래의 실험 근거와 Core 저장·선택 설계는 이력으로 보존한다.
+
 2026-10-23. [상위 계약](GIL_Runtime_Update_Contract_v0.1.md)의 U1 구체화.
 **문서 설계 / 제품 미구현.** 새 MCP 도구·명령·receipt schema를 현재 제공한다고 주장하지 않는다.
 기존 설치본·manifest·Skill·저장 형식과 unsigned 승인 정책은 변경하지 않는다.

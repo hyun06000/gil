@@ -9,6 +9,8 @@ use std::process::ExitCode;
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
     let code = match args.get(1).map(String::as_str) {
+        #[cfg(any(target_os = "macos", windows))]
+        Some(gil::companion_ipc::SESSION_ARG) if args.len() == 3 => gil::runtime_testbed::companion_fixture(&PathBuf::from(&args[2])),
         Some("launcher") if args.len() == 4 => gil::runtime_testbed::launcher_main(&PathBuf::from(&args[2]), &PathBuf::from(&args[3])),
         Some("launcher") if args.len() == 5 => gil::runtime_testbed::launcher_with_evidence(&PathBuf::from(&args[2]), &PathBuf::from(&args[3]), &PathBuf::from(&args[4])),
         Some("core") if args.len() >= 3 => gil::runtime_testbed::synthetic_core_main(&args[2], &args[3..]),

@@ -100,6 +100,15 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo +1.97.1 test --locked -p gil --test mcp --target $env:GIL_NATIVE_TARGET @features
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Companion sessions and Windows named pipes (isolated; both profiles)
+        shell: pwsh
+        run: |
+          $features = if ($env:GIL_RUNTIME_PROFILE -eq 'visual-authoring') { 'runtime-testbed,visual-authoring' } else { 'runtime-testbed' }
+          cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET --features $features --lib -- companion_session:: companion_ipc:: --nocapture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # Headless testbed copies, unique receipt + pipe namespace. Never installed Companion.
+          cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET --features $features --test companion_discovery -- --nocapture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Runtime update state judge (pure; both profiles)
         shell: pwsh
         run: |

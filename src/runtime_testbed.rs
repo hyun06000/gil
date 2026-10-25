@@ -24,6 +24,22 @@ pub use launcher_evidence::{launcher_with_evidence, read_launcher_evidence};
 pub const OVERLAY_PREFIX: &str = "--gil-synthetic-version:";
 pub const OVERLAY_SUFFIX: &str = "--";
 
+/// Isolated, headless Companion fixture. Never included in a product executable.
+#[cfg(any(target_os = "macos", windows))]
+pub fn companion_fixture(endpoint: &Path) -> i32 {
+    let run = || -> io::Result<()> {
+        let parent = std::env::current_exe()?.parent().unwrap().to_owned();
+        let pid = std::process::id();
+        let server = crate::companion_ipc::Server::bind(endpoint)?;
+        std::fs::write(parent.join(format!("started-{pid}")), b"fixture only")?;
+        while !server.finished() { std::thread::sleep(std::time::Duration::from_millis(20)); }
+        drop(server);
+        std::fs::write(parent.join(format!("exited-{pid}")), b"natural")?;
+        Ok(())
+    };
+    match run() { Ok(()) => 0, Err(e) => { eprintln!("Companion fixture: {e}"); 1 } }
+}
+
 /// Bytes to append to a copy of the testbed executable to make it a synthetic Core of `version`.
 pub fn overlay_marker(version: &str) -> Vec<u8> { format!("\n{OVERLAY_PREFIX}{version}{OVERLAY_SUFFIX}\n").into_bytes() }
 

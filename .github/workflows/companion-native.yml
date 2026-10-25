@@ -1,0 +1,59 @@
+name: Companion native build and tests (no installation)
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  companion:
+    name: Companion (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: windows-x64
+            runner: windows-2025
+            target: x86_64-pc-windows-msvc
+          - label: windows-arm64
+            runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+          - label: macos-arm64
+            runner: macos-15
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      RUSTUP_TOOLCHAIN: 1.97.1
+      GIL_COMPANION_TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Native toolchain and icon-source verification
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --target $env:GIL_COMPANION_TARGET
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $hostTriple = ((rustc -vV | Select-String '^host: ').ToString() -replace '^host: ', '').Trim()
+          if ($hostTriple -ne $env:GIL_COMPANION_TARGET) { throw "Native host required: $hostTriple" }
+          $python = if ($IsWindows) { 'python' } else { 'python3' }
+          & $python companion/icons/make-icons.py --check-windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build real Companion executable (never start or install the GUI)
+        shell: pwsh
+        run: |
+          cargo build --locked -p gil-companion --target $env:GIL_COMPANION_TARGET
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Companion unit tests (isolated fixtures; not Desktop UI acceptance)
+        shell: pwsh
+        run: |
+          cargo test --locked -p gil-companion --target $env:GIL_COMPANION_TARGET -- --nocapture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Session discovery integration on Mac
+        if: runner.os == 'macOS'
+        shell: pwsh
+        run: |
+          cargo test --locked -p gil --features runtime-testbed --target $env:GIL_COMPANION_TARGET --test companion_discovery -- --nocapture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
