@@ -18,6 +18,12 @@ test('receipt binds exact Companion bytes without adding product schema fields',
 test('review app identity is separate and installer bundling is disabled',async()=>{
   const c=JSON.parse(await readFile(new URL('./review-tauri.json',import.meta.url)));assert.equal(c.identifier,'dev.ariadne.gil.companion.review');assert.equal(c.bundle.active,false);
 });
+test('Windows build preserves tracked bytes and checks notice input hashes before compiling',async()=>{
+  const workflow=await readFile(new URL('../../.github/workflows/companion-review.yml',import.meta.url),'utf8');
+  assert.match(workflow,/GIT_CONFIG_KEY_0: core\.autocrlf\s+GIT_CONFIG_VALUE_0: 'false'/);
+  assert.ok(workflow.indexOf('Verify locked notice input bytes')<workflow.indexOf('cargo build'));
+  assert.match(workflow,/ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+});
 test('wrong build identity or tampered executable refuses before output creation',async()=>{
   const root=await mkdtemp(join(await realpath(tmpdir()),'gil-review-pack-'));
   try {

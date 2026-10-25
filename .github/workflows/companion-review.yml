@@ -32,9 +32,18 @@ jobs:
       REVIEW_SOURCE: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        env:
+          GIT_CONFIG_COUNT: 1
+          GIT_CONFIG_KEY_0: core.autocrlf
+          GIT_CONFIG_VALUE_0: 'false'
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify locked notice input bytes before compiling
+        shell: pwsh
+        run: |
+          node --input-type=module -e "import {loadBundle} from './distribution/compliance/notices.mjs'; for (const arch of ['x86_64','aarch64']) await loadBundle(process.cwd(), {directory:'distribution/windows/compliance', target:arch+'-pc-windows-msvc', policyName:arch==='aarch64'?'notice-policy-arm64.json':'notice-policy.json'});"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build isolated review identity and actual Core (never run GUI)
         shell: pwsh
         run: |

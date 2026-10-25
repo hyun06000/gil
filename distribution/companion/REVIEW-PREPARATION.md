@@ -68,3 +68,9 @@ The next approved step includes commit/push and Windows CI artifact verification
 The new workflow runs on relevant PR changes as well as manual dispatch; checkout, build receipt and
 artifact name all bind to the exact PR head rather than a synthetic merge SHA. Package fixture
 assembly uses the runner's CPU so ARM64 does not require unfetched x64 dependencies in offline mode.
+
+First bundle run (40209097606, head 38982d0) built the ARM64 binaries and passed driver tests, but
+packaging refused stale Cargo.toml bytes. The observed 730a24c0… digest exactly matches local CRLF
+conversion of the tracked LF file (5958c3b9…). Checkout now applies process-scoped core.autocrlf=false,
+as the existing Windows spike does, and checks both pinned notice inputs before compilation.
+No expected digest, dependency policy or refusal check was relaxed.
