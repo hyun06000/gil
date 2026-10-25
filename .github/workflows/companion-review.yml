@@ -1,0 +1,74 @@
+name: Core and Companion portable review bundle (not publication)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/companion-review.yml'
+      - 'distribution/companion/**'
+      - 'companion/**'
+      - 'src/companion*'
+      - 'src/companion*/**'
+      - 'src/bin/gil-runtime-testbed.rs'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bundle:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            arch: x86_64
+          - runner: windows-11-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      RUSTUP_TOOLCHAIN: 1.97.1
+      REVIEW_ARCH: ${{ matrix.arch }}
+      REVIEW_SOURCE: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Build isolated review identity and actual Core (never run GUI)
+        shell: pwsh
+        run: |
+          $target = "$env:REVIEW_ARCH-pc-windows-msvc"
+          rustup toolchain install 1.97.1 --profile minimal --target $target
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:TAURI_CONFIG = Get-Content -Raw distribution/companion/review-tauri.json
+          cargo build --locked --release --target $target -p gil --features runtime-testbed --bin gil --bin gil-runtime-testbed
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo build --locked --release --target $target -p gil-companion
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --locked -p gil --features runtime-testbed --bin gil-runtime-testbed
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test distribution/companion/package-review.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $bin = "target/$target/release"
+          $files = @{}
+          foreach ($name in @('gil.exe','gil-companion.exe','gil-runtime-testbed.exe')) {
+            $files[$name] = (Get-FileHash -Algorithm SHA256 -LiteralPath "$bin/$name").Hash.ToLowerInvariant()
+          }
+          @{identifier='dev.ariadne.gil.companion.review';source=$env:REVIEW_SOURCE;files=$files} |
+            ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8NoBOM "$bin/review-build.json"
+          node distribution/companion/package-review.mjs $bin "target/companion-review-$env:REVIEW_ARCH" $env:REVIEW_ARCH $env:REVIEW_SOURCE
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # tar arguments stay ASCII; archive and its full digest are review artifacts only.
+          tar.exe -czf "target/companion-review-$env:REVIEW_ARCH.tar.gz" -C target "companion-review-$env:REVIEW_ARCH"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $archive = "target/companion-review-$env:REVIEW_ARCH.tar.gz"
+          "$((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant())  companion-review-$env:REVIEW_ARCH.tar.gz" |
+            Set-Content -Encoding ascii "target/SHA256SUMS-$env:REVIEW_ARCH"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: companion-review-${{ matrix.arch }}-${{ env.REVIEW_SOURCE }}
+          if-no-files-found: error
+          path: |
+            target/companion-review-*.tar.gz
+            target/SHA256SUMS-*

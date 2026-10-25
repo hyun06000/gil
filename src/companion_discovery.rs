@@ -124,6 +124,12 @@ impl Installation {
     /// Existing running endpoint first; otherwise one spawn, with a bounded registration wait.
     /// Lock/rendezvous is private to GIL session IPC, never the runtime update store or Project.
     pub fn connect(&mut self, release: &Release) -> io::Result<Client> {
+        // Only the explicitly feature-gated review Core may select a private test namespace.
+        // Ordinary product builds never read this environment variable.
+        #[cfg(feature = "runtime-testbed")]
+        if let Some(namespace) = std::env::var_os("GIL_COMPANION_REVIEW_NAMESPACE") {
+            return self.connect_at(release, Path::new(&namespace));
+        }
         self.connect_at(release, &coord::default_root()?)
     }
     // Explicit isolated coordination namespace for tests; no environment override in production.

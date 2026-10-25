@@ -5,10 +5,13 @@
 //! are (that is how the launcher starts it on Windows: `gil.exe mcp --serve`).
 use std::path::PathBuf;
 use std::process::ExitCode;
+#[path = "../companion_review.rs"]
+mod companion_review;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
     let code = match args.get(1).map(String::as_str) {
+        Some("companion-review") if args.len() == 2 => companion_review::run(),
         #[cfg(any(target_os = "macos", windows))]
         Some(gil::companion_ipc::SESSION_ARG) if args.len() == 3 => gil::runtime_testbed::companion_fixture(&PathBuf::from(&args[2])),
         Some("launcher") if args.len() == 4 => gil::runtime_testbed::launcher_main(&PathBuf::from(&args[2]), &PathBuf::from(&args[3])),

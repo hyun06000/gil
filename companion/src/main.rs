@@ -109,6 +109,10 @@ fn main() {
         ])
         .setup(|app| {
             let handle = app.handle().clone();
+            if app.config().identifier == "dev.ariadne.gil.companion.review"
+                && !app.state::<sessions::Sessions>().enabled() {
+                return Err("review Companion requires the isolated session driver".into());
+            }
 
             // 실행 중인 process만 답할 수 있는 challenge 문. 포트도 URL도 없고, 사용자 전용
             // local IPC 하나만 앱 수명 동안 연다.
@@ -118,7 +122,13 @@ fn main() {
             }
 
             // ① 설정을 읽는다. 읽지 못하면 **원본을 그대로 두고** 임시 상태로 선다.
-            let dir = app.path().app_config_dir()?;
+            let dir = if app.config().identifier == "dev.ariadne.gil.companion.review" {
+                // Review builds never open the user's installed Companion settings.
+                let dir = std::env::var_os("GIL_COMPANION_REVIEW_DIR")
+                    .map(std::path::PathBuf::from).ok_or("review directory missing")?;
+                if !dir.is_absolute() || !dir.is_dir() { return Err("invalid review directory".into()); }
+                dir.join("companion-settings")
+            } else { app.path().app_config_dir()? };
             let desk = settings::Desk::open(dir);
 
             // ② 등록부를 되살린다 — 자리를 펴서 주소만 다시 센다. Graph 는 읽지 않는다.
@@ -142,6 +152,15 @@ fn main() {
                 eprintln!("menu bar 자리를 만들지 못했다 — 창은 그대로 씁니다: {err}");
             }
             app.state::<sessions::Sessions>().start(&handle)?;
+            if app.config().identifier == "dev.ariadne.gil.companion.review" {
+                use std::io::Write;
+                let dir = std::path::PathBuf::from(std::env::var_os("GIL_COMPANION_REVIEW_DIR").ok_or("review directory missing")?);
+                let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(dir.join("companion-ready.json"))?;
+                writeln!(file, "{}", serde_json::json!({"pid":std::process::id(),"tray_created":true}))?;
+                drop(file);
+                // Publish completion only after the JSON handle has closed; no rename needed.
+                std::fs::OpenOptions::new().write(true).create_new(true).open(dir.join("companion-ready.done"))?;
+            }
             Ok(())
         })
         .on_menu_event(appmenu::on_menu)

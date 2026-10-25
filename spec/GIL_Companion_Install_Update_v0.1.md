@@ -298,3 +298,24 @@ coordination 모듈이다. Windows API feature(Pipes/Cryptography)만 추가했�
   build하고 unit test를 실행한다. 앱 GUI를 열거나 설치·게시하지 않으며, testbed 성공을
   tray 표시나 Codex 제한 토큰 환경 인수로 세지 않는다.
 - 관련 없는 Distribution 모델·Roadmap·Windows 계약의 기존 미커밋 변경은 커밋에서 제외한다.
+
+## 11. 2026-10-26 portable 검수 묶음 준비 (미게시)
+
+정식 installer 이전에 실제 Core + 실제 Companion tray를 확인하는 별도 review cohort를 준비한다.
+`distribution/companion/package-review.mjs`는 같은 빌드의 Core·Companion·feature-gated 검수
+드라이버를 PE CPU/hash로 대조해 receipt와 manifest·고지·INSTALL·평문 시작 파일을 조립한다.
+Core/MCP 공개 도구나 제품 receipt schema는 바꾸지 않는다. runtime-testbed Core만 명시적인
+review namespace 환경 변수를 읽는다. 기본 빌드에는 이 분기가 없다.
+
+Companion은 별도 Tauri identifier/productName으로 빌드한다. 이 identifier일 때만 드라이버가
+만든 새 폴더의 설정·readiness 기록을 사용한다. 실제 설치 앱의 설정·single-instance guard·
+IPC namespace를 재사용하지 않는다. 일반 제품 app config와 기본 자동 발견 경로는 그대로다.
+드라이버는 실제 Core MCP initialize→gil_start 성공→tray 수동 확인→stdin EOF→Core 종료와
+보유 Companion 프로세스 핸들 종료→tray 소멸 수동 확인을 구분한다. 강제 종료·재시도는 없다.
+사용자가 시작을 승인한 새 시험 Project만 생성한다. 실패 시 Project와 증거를 보존한다.
+
+검수 묶음은 Node/Rust/npm/별도 CLI 다운로드 없이 동작하도록 설계한다. Codex Desktop 데몬·
+제한 토큰·공식 Plugin 등록·설치/업데이트·실제 GUI는 이 로컬 준비 시험으로 검증하지 않는다.
+기존 GIL/Windows PC는 접근하지 않는다. workflow는 관련 PR 변경 또는 수동 dispatch로 검수 artifact를 만들며
+contents:read이고 release/설치 단계는 없다. Windows 빌드·고지 검토·artifact hash 확정·게시 및
+실사용자 tray 검수는 별도 실행/승인 단계다. 임의 URL/hash를 안내에 넣지 않는다.

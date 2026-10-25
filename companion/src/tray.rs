@@ -85,7 +85,9 @@ pub fn install(app: &AppHandle, autostart_on: bool) -> Result<(), tauri::Error> 
     TrayIconBuilder::with_id("gil")
         .icon(mark)
         .icon_as_template(true)
-        .tooltip("GIL Companion")
+        .tooltip(if app.config().identifier == "dev.ariadne.gil.companion.review" {
+            "GIL Companion 검수"
+        } else { "GIL Companion" })
         .menu(&menu)
         // 아이콘을 왼쪽으로 누르면 메뉴가 아니라 **창이 열린다.**
         .show_menu_on_left_click(false)
