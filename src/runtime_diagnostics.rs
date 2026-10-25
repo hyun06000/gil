@@ -20,17 +20,36 @@ impl Session {
 impl Drop for Session {
     fn drop(&mut self) { ACTIVE.with(|a| { a.replace(self.previous.clone()); }); }
 }
+fn handle_snapshot(file: &File) -> Value {
+    let identity = crate::runtime_observe::platform::stamp_file(file)
+        .map(|s| { let id = s.object_id(); json!({"state":"observed", "volume_or_device":id.0.to_string(), "file_id_or_inode":id.1.to_string(), "stamp":format!("{s:?}")}) })
+        .unwrap_or_else(|e| json!({"state":"error", "error":e.to_string(), "os_error":e.raw_os_error()}));
+    let protection = read_security(file).unwrap_or_else(|e| json!({"state":"error", "error":e.to_string(), "os_error":e.raw_os_error()}));
+    json!({"identity":identity, "protection":protection})
+}
+/// Reopen only for this sample, using the observer's no-link walk. Do not retain a handle
+/// across Host operations: that would change Windows rename/sharing behaviour under test.
+pub fn root_snapshot(root: &std::path::Path) -> Value {
+    let opened = if !root.is_absolute() || root.components().any(|c| matches!(c, std::path::Component::ParentDir | std::path::Component::CurDir)) {
+        Err(std::io::Error::other("diagnostic root must be absolute without dot components"))
+    } else { crate::runtime_observe::platform::walk(root) };
+    let mut v = match opened {
+        Ok(Some(dir)) => { let mut v = handle_snapshot(dir.as_file()); v["state"] = json!("opened"); v },
+        Ok(None) => json!({"state":"absent"}),
+        Err(e) => json!({"state":"error", "error":e.to_string(), "os_error":e.raw_os_error()}),
+    };
+    v["basis"] = json!("path_reopened_no_link_walk; handle closed before next operation");
+    v["unix_ns"] = json!(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_nanos().to_string()));
+    v
+}
 pub(crate) fn sample(stage: &str, object: &str, file: &File) {
     ACTIVE.with(|a| {
         let Some(records) = a.borrow().upgrade() else { return };
-        let identity = crate::runtime_observe::platform::stamp_file(file)
-            .map(|s| { let id = s.object_id(); json!({"state":"observed", "volume_or_device":id.0.to_string(), "file_id_or_inode":id.1.to_string(), "stamp":format!("{s:?}")}) })
-            .unwrap_or_else(|e| json!({"state":"error", "error":e.to_string(), "os_error":e.raw_os_error()}));
-        let protection = read_security(file).unwrap_or_else(|e| json!({"state":"error", "error":e.to_string(), "os_error":e.raw_os_error()}));
+        let snapshot = handle_snapshot(file);
         let mut records = records.borrow_mut();
         let seq = records.len();
         records.push(json!({"sequence":seq, "unix_ns":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_nanos().to_string()),
-            "stage":stage, "object":object, "basis":"held_handle", "identity":identity, "protection":protection}));
+            "stage":stage, "object":object, "basis":"held_handle", "identity":snapshot["identity"], "protection":snapshot["protection"]}));
     });
 }
 fn read_security(file: &File) -> std::io::Result<Value> {
@@ -75,6 +94,30 @@ fn security(file: &File) -> std::io::Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn root_samples_distinguish_absence_errors_and_replaced_objects() {
+        let base = std::fs::canonicalize(std::env::temp_dir()).unwrap().join(format!("gil-root-sample-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir(&base).unwrap();
+        let root = base.join("root");
+        assert_eq!(root_snapshot(&root)["state"], "absent");
+        assert_eq!(root_snapshot(std::path::Path::new("relative"))["state"], "error");
+        std::fs::create_dir(&root).unwrap();
+        let before = root_snapshot(&root);
+        // No diagnostic handle survives this call, including on Windows.
+        std::fs::rename(&root, base.join("old")).unwrap();
+        std::fs::create_dir(&root).unwrap();
+        let after = root_snapshot(&root);
+        assert_eq!(before["state"], "opened"); assert_eq!(after["state"], "opened");
+        assert_ne!(before["identity"]["file_id_or_inode"], after["identity"]["file_id_or_inode"]);
+        #[cfg(unix)] {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o755)).unwrap();
+            let sample = root_snapshot(&root);
+            assert_eq!(sample["identity"]["file_id_or_inode"], after["identity"]["file_id_or_inode"]);
+            assert_eq!(sample["protection"]["mode"].as_u64().unwrap() & 0o777, 0o755);
+        }
+        std::fs::remove_dir_all(base).unwrap();
+    }
     #[test]
     fn read_errors_are_not_absence_and_nested_sessions_are_isolated() {
         let f = File::open(std::env::current_exe().unwrap()).unwrap();

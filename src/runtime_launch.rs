@@ -216,7 +216,11 @@ pub(crate) fn prepare_target(root: &Path, bundled: &Path) -> Result<Target, Laun
         Ok(None) => None,
         Err(e) => return Err(refuse(LaunchStage::Observe, format!("root walk: {e}"), None)),
     };
+    #[cfg(feature = "runtime-testbed")]
+    if let Some(d) = &root_dir { crate::runtime_diagnostics::sample("launcher_before_observe", "root", d.as_file()); }
     let (observed, verdict) = match &root_dir { Some(d) => observe_and_judge_held(root, d), None => observe_and_judge(root) };
+    #[cfg(feature = "runtime-testbed")]
+    if let Some(d) = &root_dir { crate::runtime_diagnostics::sample("launcher_after_observe", "root", d.as_file()); }
     #[cfg(test)]
     if let Some(f) = hooks::AFTER_OBSERVE.with(|c| c.get()) { f(root); }
     // 2. Judge → target kind; the selected identity comes from the same observation's record.

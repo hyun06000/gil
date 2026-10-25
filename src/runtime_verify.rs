@@ -334,7 +334,7 @@ fn collect_test_report(report: &mut Value, dir: &Path, exit_ok: bool, exit: Opti
     if main.len() != 1 { errors.push(format!("expected one integration flow record, found {}", main.len())); }
     if let [one] = main.as_slice() {
         let v = &one["record"];
-        for key in ["observed", "terminations", "verdict_after", "error", "protection_evidence", "protection_evidence_limits"] { report[key] = v[key].clone(); }
+        for key in ["observed", "terminations", "verdict_after", "error", "protection_evidence", "protection_evidence_limits", "connection_evidence", "root_at_report", "launcher_evidence"] { report[key] = v[key].clone(); }
         report["main_evidence"] = one["path"].clone();
         match v["outcome"].as_str() {
             Some("BLOCKED") => { outcome = Outcome::Blocked; why = v["error"].as_str().unwrap_or("integration blocked").into(); }
@@ -419,7 +419,7 @@ mod tests {
     fn failed_flow_keeps_error_observations_stderr_and_separates_negative_regressions() {
         let dir = std::env::temp_dir().join(format!("gil-evidence-report-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
         fs::create_dir(&dir).unwrap();
-        let main = json!({"kind":"integration", "case":"flow", "outcome":"FAIL", "error":"prepare v2: DACL still inherits", "observed":["v1 connected"], "terminations":[{"how":"Unconfirmed"}], "verdict_after":"Blocked", "protection_evidence":[{"stage":"core_created","protection":{"state":"error","error":"read denied"}}], "protection_evidence_limits":"sequential, no actor attribution"});
+        let main = json!({"kind":"integration", "case":"flow", "outcome":"FAIL", "error":"prepare v2: DACL still inherits", "observed":["v1 connected"], "terminations":[{"how":"Unconfirmed"}], "verdict_after":"Blocked", "protection_evidence":[{"stage":"core_created","protection":{"state":"error","error":"read denied"}}], "protection_evidence_limits":"sequential, no actor attribution", "connection_evidence":[{"stage":"after reload","root":{"state":"error","error":"denied"}}], "root_at_report":{"state":"opened","identity":{"id":42}}, "launcher_evidence":{"records":[{"events":[{"stage":"refused","data":{"reason":"protection failed"}}]}],"errors":[]}});
         fs::write(dir.join("run-main-FAIL.json"), main.to_string()).unwrap();
         fs::write(dir.join("run-negative-FAIL.json"), json!({"kind":"harness-regression", "case":"stranger", "outcome":"FAIL", "error":"deliberate negative test"}).to_string()).unwrap();
         let mut report = json!({});
@@ -431,6 +431,7 @@ mod tests {
         assert_eq!(report["terminations"], main["terminations"]);
         assert_eq!(report["protection_evidence"], main["protection_evidence"]);
         assert_eq!(report["protection_evidence_limits"], main["protection_evidence_limits"]);
+        for key in ["connection_evidence", "root_at_report", "launcher_evidence"] { assert_eq!(report[key], main[key]); }
         assert_eq!(report["test"]["stderr"], json!(stderr));
         assert_eq!(report["test"]["evidence_records"].as_array().unwrap().len(), 2);
         assert_eq!(report["evidence"].as_array().unwrap().len(), 5);

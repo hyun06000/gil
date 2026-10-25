@@ -291,3 +291,41 @@ v2 준비의 보호 검사 거절을 보고했다. 첨부된 요약에는 오류
   (본 흐름과 의도적 실패 회귀시험)가 분리됐다. 처음 만든 로컬 검수 스크립트는 드라이버가
   주입 환경 변수를 제거한다는 기존 보호를 놓쳐 실패 주입 없이 PASS가 되어 기대값 단언이
   실패했다. 제품 보호를 변경하지 않고 로컬 시험용 래퍼에서만 최종 시험 실행에 주입해 검증했다.
+
+### 연결 경계 및 실행기 거절 증거 (2026-10-25, 로컬 보정)
+
+- 기존 prepare 표본만으로는 T2 이후부터 reload/T3/B/T4 사이의 보호 상태 변화를
+  구분할 수 없다. 하네스는 App Server 시작/종료, initialize, thread/start,
+  MCP 상태 조회와 도구 호출, reload의 앞뒤(오류 응답 포함), 최종 판정 앞과 보고 시점에
+  루트 identity·보호 상태를 읽는다. 표본은 순서·시각·A/B·method·thread를 포함한다.
+- 경로 재탐색 표본은 링크를 따라가지 않는 walk로 핸들을 잠시 열어 읽고 닫는다.
+  상대/부모 경로는 오류이며 읽기 실패는 부재가 아니다. 표본 사이 핸들을 유지해
+  Windows의 공유/rename 조건을 바꾸지 않는다. 다만 조회 자체의 시간 영향은 있다.
+- testbed launcher의 선택적 evidence-dir 인자는 보호 저장소 밖, 같은 격리 시험 폴더의
+  기존 디렉터리만 받는다. 프로세스별 JSONL을 배타 생성하고 각 줄을 flush한다.
+  start, decision, spawned, exit 또는 refused(stage/reason/verdict/spawned/child)를
+  MCP stdout과 독립적으로 남긴다. 실제 실행기 관측 전후의 보유 루트 핸들 표본도
+  기록하므로 App Server가 stderr를 전달하지 않아도 거절 자체를 회수할 수 있다.
+- 기록 파일 생성/실행 전 쓰기 실패는 Core를 시작하지 않고 exit 6으로 거절한다.
+  시작 이후 기록 실패는 기존 자식 대기 수명을 유지한다. 파싱 오류·잘린 줄·크기 초과·
+  결정/시작/거절 증거 누락은 errors이며, 관측된 Core PID의 spawned 기록도 대조한다.
+- Host 아래 실행기에서 마지막 exit 줄이 없는 경우가 Mac에서 관측됐다.
+  exit_not_recorded로 보존하며 정상 종료로 추론하지 않는다. 실행 전 판정/시작 증거와
+  App Server/Core 종료 검사는 별개다. 이 기록만으로 실행기 종료 이유를 식별하지 않는다.
+- verify-report는 connection_evidence, root_at_report, launcher_evidence(원문 포함)를
+  FAIL에서도 보존한다. 본 오류를 진단 오류로 덮지 않는다. SID/경로는 개인 정보가
+  될 수 있으므로 원문은 로컬 증거이며 공개 릴리스에는 그대로 포함하지 않는다.
+- 제품 feature-off의 판정/보호 검사, manifest/MCP, 기존 설치는 변경하지 않는다.
+  Windows DACL/SDDL 실동작, 현장 재현은 후속 CI/사용자 검수 전까지 미검증이며
+  순차 표본은 원자적 스냅샷도 권한 변경 주체를 특정하는 증거도 아니다.
+- Mac: 전체 lib(testbed on) default 584 passed/1 ignored, visual-authoring 595/2;
+  통합시험은 두 프로필 각 8/8. 정상 흐름 연결 표본 37개·실행기 기록 4개·준비 표본 45개,
+  App Server/Core 종료 6개 Natural. 실행기 exit 줄은 4개 모두 미확보로 별도 표기했고
+  후속 PID 조회에서 네 실행기는 없었다(종료 이유는 미확정).
+  중간 실패 주입은 exit 101/FAIL과 원래 오류·연결 표본 13개·실행기 기록을 보존했다.
+  보호 실패 독립 시험은 MCP stdout 없이 refused 및 미실행을 기록했다.
+  Windows x64 두 프로필 교차 check와 제품 feature-off check 통과, Windows 실행 없음.
+- 시험 중 발견/정정: 상대 경로 표본이 walk에서 부재로 처리되어 진단 함수 입구에서
+  명시 거절하도록 수정. 최초 전체 시험은 sandbox loopback EPERM 50건, 권한 있는 실행은
+  기존 Monitor looking_does_not_make_more_hints 1건 실패(4 vs 3); 해당 코드 수정 없이
+  낮은 병렬도의 전체 재실행 통과. 원인 확정이나 실패 은폐 없이 원문 로그를 보존한다.

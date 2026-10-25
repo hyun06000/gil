@@ -17,6 +17,10 @@ use crate::runtime_launch::{self, FixedArgs, LaunchRefusal, TargetKind};
 use std::io::{self, BufRead, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
+#[path = "runtime_launcher_evidence.rs"]
+mod launcher_evidence;
+pub use launcher_evidence::{launcher_with_evidence, read_launcher_evidence};
+
 pub const OVERLAY_PREFIX: &str = "--gil-synthetic-version:";
 pub const OVERLAY_SUFFIX: &str = "--";
 

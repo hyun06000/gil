@@ -199,6 +199,7 @@ fn wait_until_gone(pid: u32, limit: Duration) -> Liveness {
 /// Everything the test created, with cleanup and evidence on drop (also on a panic).
 struct Harness {
     protection_evidence: gil::runtime_diagnostics::Session,
+    connection_evidence: Vec<Value>,
     case: String, evidence_id: String,
     cli: PathBuf, base: PathBuf, codex_home: PathBuf, root: PathBuf,
     log: Vec<String>, servers: Vec<AppServer>, cores: Vec<Identity>, terminations: Vec<Termination>,
@@ -206,14 +207,28 @@ struct Harness {
 }
 impl Harness {
     fn note(&mut self, s: String) { println!("OBSERVED {s}"); self.log.push(s); }
+    fn root_sample(&mut self, stage: &str, result: Value) {
+        self.connection_evidence.push(json!({"sequence":self.connection_evidence.len(), "stage":stage, "result":result,
+            "root":gil::runtime_diagnostics::root_snapshot(&self.root)}));
+    }
+    fn request_observed(&mut self, server: usize, method: &str, params: Value, timeout: Duration) -> Result<Value, String> {
+        let label = format!("{} {method} thread={}", self.servers[server].label, params.get("threadId").unwrap_or(&Value::Null));
+        self.root_sample(&format!("before {label}"), Value::Null);
+        let result = self.servers[server].request(method, params, timeout);
+        self.root_sample(&format!("after {label}"), match &result { Ok(_) => json!({"state":"ok"}), Err(e) => json!({"state":"error", "error":e}) });
+        result.map_err(|e| format!("{label}: {e}"))
+    }
     fn start_server(&mut self, label: &'static str) -> Result<usize, String> {
-        let s = AppServer::start(&self.cli, &self.codex_home, label)?;
+        self.root_sample(&format!("before app-server {label} start"), Value::Null);
+        let result = AppServer::start(&self.cli, &self.codex_home, label);
+        self.root_sample(&format!("after app-server {label} start"), match &result { Ok(_) => json!("ok"), Err(e) => json!({"error":e}) });
+        let s = result?;
         self.note(format!("app-server {label} started pid {}", s.pid()));
         self.servers.push(s);
         Ok(self.servers.len() - 1)
     }
     fn call(&mut self, server: usize, thread: &str) -> Result<Identity, String> {
-        let v = self.servers[server].request("mcpServer/tool/call", json!({"server": SERVER, "threadId": thread, "tool": TOOL, "arguments": {}}), Duration::from_secs(60))?;
+        let v = self.request_observed(server, "mcpServer/tool/call", json!({"server": SERVER, "threadId": thread, "tool": TOOL, "arguments": {}}), Duration::from_secs(60))?;
         let id = Identity::parse(&v);
         if id.pid > 0 && !self.cores.iter().any(|c| c.pid == id.pid) { self.cores.push(id.clone()); }
         Ok(id)
@@ -221,7 +236,10 @@ impl Harness {
     fn close_server(&mut self, server: usize) {
         if server < self.servers.len() {
             let s = self.servers.remove(server);
+            let label = s.label;
+            self.root_sample(&format!("before app-server {label} close"), Value::Null);
             let t = s.close();
+            self.root_sample(&format!("after app-server {label} close"), json!(format!("{:?}", t.how)));
             self.note(format!("{} pid {} -> {:?}: {}", t.kind, t.pid, t.how, t.detail));
             self.terminations.push(t);
         }
@@ -251,7 +269,27 @@ impl Harness {
     /// evidence itself) and never turned into "written" or PASS.
     fn save_evidence(&mut self) -> Result<PathBuf, String> {
         if let Some(done) = &self.saved { return done.clone(); }
-        let evidence = self.evidence();
+        self.root_sample("before final verdict", Value::Null);
+        let mut evidence = self.evidence();
+        evidence["connection_evidence"] = json!(self.connection_evidence);
+        evidence["root_at_report"] = gil::runtime_diagnostics::root_snapshot(&self.root);
+        let mut launcher = gil::runtime_testbed::read_launcher_evidence(&self.base.join("launcher-evidence"));
+        if self.case == "flow" {
+            let launched: Vec<u64> = launcher["records"].as_array().unwrap().iter()
+                .flat_map(|r| r["events"].as_array().unwrap().iter())
+                .filter(|e| e["stage"] == "spawned").filter_map(|e| e["data"]["child_pid"].as_u64()).collect();
+            for core in self.terminations.iter().filter(|t| t.kind == "synthetic-core") {
+                if !launched.contains(&(core.pid as u64)) {
+                    launcher["errors"].as_array_mut().unwrap().push(json!(format!("no launcher spawned record for observed Core {}", core.pid)));
+                }
+            }
+        }
+        if self.case == "flow" && self.outcome == "PASS" && (!launcher["errors"].as_array().unwrap().is_empty() || launcher["records"].as_array().unwrap().is_empty()) {
+            self.outcome = "FAIL";
+            self.error = Some(format!("launcher evidence incomplete: {}", launcher["errors"]));
+            evidence["outcome"] = json!(self.outcome); evidence["error"] = json!(self.error);
+        }
+        evidence["launcher_evidence"] = launcher;
         let result = (|| -> Result<PathBuf, String> {
             fs::create_dir_all(&self.evidence_dir).map_err(|e| format!("create_dir_all {}: {e}", self.evidence_dir.display()))?;
             let path = self.evidence_dir.join(format!("run-{}-{}.json", self.evidence_id, self.outcome));
@@ -291,7 +329,8 @@ fn write_new_evidence(path: &Path, value: &Value) -> Result<(), String> {
 fn new_harness(cli: PathBuf, base: PathBuf) -> Result<Harness, String> {
     let codex_home = base.join("codex-home");
     fs::create_dir_all(&codex_home).map_err(|e| format!("create isolated home {}: {e}", codex_home.display()))?;
-    Ok(Harness { protection_evidence: gil::runtime_diagnostics::Session::new(), case: "harness-regression".into(), evidence_id: evidence_id(), cli, root: base.join("runtime-v1"), codex_home, base, log: vec![], servers: vec![], cores: vec![], terminations: vec![], outcome: "RUNNING", error: None, evidence_dir: evidence_dir(), saved: None })
+    fs::create_dir(base.join("launcher-evidence")).map_err(|e| e.to_string())?;
+    Ok(Harness { connection_evidence: vec![], protection_evidence: gil::runtime_diagnostics::Session::new(), case: "harness-regression".into(), evidence_id: evidence_id(), cli, root: base.join("runtime-v1"), codex_home, base, log: vec![], servers: vec![], cores: vec![], terminations: vec![], outcome: "RUNNING", error: None, evidence_dir: evidence_dir(), saved: None })
 }
 fn fresh_base_in(parent: &Path, label: &str) -> Result<PathBuf, String> {
     let parent = fs::canonicalize(parent).map_err(|e| format!("resolve temporary directory {}: {e}", parent.display()))?;
@@ -317,7 +356,7 @@ fn bootstrap(cli: PathBuf, label: &str) -> Result<Harness, String> {
 
 fn thread_start(h: &mut Harness, server: usize) -> Result<String, String> {
     let cwd = h.base.to_str().unwrap().to_owned();
-    Ok(h.servers[server].request("thread/start", json!({"cwd": cwd, "ephemeral": true}), Duration::from_secs(30))?["thread"]["id"].as_str().ok_or("thread id")?.to_owned())
+    Ok(h.request_observed(server, "thread/start", json!({"cwd": cwd, "ephemeral": true}), Duration::from_secs(30))?["thread"]["id"].as_str().ok_or("thread id")?.to_owned())
 }
 
 /// The flow; every failure is an `Err` (or a panic) and the harness still cleans up.
@@ -325,7 +364,7 @@ fn flow(h: &mut Harness) -> Result<(), String> {
     let root = h.root.clone(); let base = h.base.clone();
     let bundled = base.join(if cfg!(windows) { "bundled-core.exe" } else { "bundled-core" });
     fs::write(&bundled, core_bytes("bundled")).unwrap(); make_executable(&bundled);
-    fs::write(h.codex_home.join("config.toml"), format!("# isolated runtime-integration home; the only MCP server is the test-only launcher driver\n[mcp_servers.{SERVER}]\ncommand = {}\nargs = [\"launcher\", {}, {}]\n", toml_literal(Path::new(&testbed())), toml_literal(&root), toml_literal(&bundled))).unwrap();
+    fs::write(h.codex_home.join("config.toml"), format!("# isolated runtime-integration home; the only MCP server is the test-only launcher driver\n[mcp_servers.{SERVER}]\ncommand = {}\nargs = [\"launcher\", {}, {}, {}]\n", toml_literal(Path::new(&testbed())), toml_literal(&root), toml_literal(&bundled), toml_literal(&base.join("launcher-evidence")))).unwrap();
     h.note(format!("isolated CODEX_HOME {} ; store {} ; testbed {}", h.codex_home.display(), root.display(), testbed()));
     // v1 through the crate's own layers
     let v1 = core_bytes(V1); let src1 = base.join("src-v1"); fs::write(&src1, &v1).unwrap();
@@ -334,7 +373,7 @@ fn flow(h: &mut Harness) -> Result<(), String> {
     h.note("store: v1 prepared and selected (generation 1)".into());
     // app-server A, thread T1
     let a = h.start_server("A")?;
-    let init = h.servers[a].request("initialize", json!({"clientInfo": {"name": "gil-runtime-integration", "version": "0"}}), Duration::from_secs(30))?;
+    let init = h.request_observed(a, "initialize", json!({"clientInfo": {"name": "gil-runtime-integration", "version": "0"}}), Duration::from_secs(30))?;
     h.note(format!("initialize: codexHome={} userAgent={}", init["codexHome"], init["userAgent"]));
     // The same directory, not the same spelling: Windows reports the home without the `\\?\`
     // verbatim prefix that our canonicalized temp path carries, so both sides are canonicalized.
@@ -343,7 +382,7 @@ fn flow(h: &mut Harness) -> Result<(), String> {
     let isolated_id = fs::canonicalize(&h.codex_home).map_err(|e| format!("canonicalize isolated codex_home {}: {e}", h.codex_home.display()))?;
     if reported_id != isolated_id { return Err(format!("the app-server must run on the isolated home {}, got {}", h.codex_home.display(), reported.display())); }
     let t1 = thread_start(h, a)?;
-    let status = h.servers[a].request("mcpServerStatus/list", json!({"threadId": t1, "serverName": SERVER}), Duration::from_secs(60))?;
+    let status = h.request_observed(a, "mcpServerStatus/list", json!({"threadId": t1, "serverName": SERVER}), Duration::from_secs(60))?;
     let entry = status["data"].as_array().and_then(|d| d.iter().find(|s| s["name"] == SERVER)).cloned().unwrap_or(Value::Null);
     h.note(format!("T1 {t1}: runtimeStatus={} serverInfo={} tools={:?} toolsError={}", entry["runtimeStatus"], entry["serverInfo"], entry["tools"].as_object().map(|t| t.keys().cloned().collect::<Vec<_>>()), entry["toolsError"]));
     if entry["serverInfo"]["name"] != "gil-synthetic-core" { return Err(format!("the launcher must have started the synthetic Core: {entry}")); }
@@ -364,7 +403,7 @@ fn flow(h: &mut Harness) -> Result<(), String> {
     let t2 = thread_start(h, a)?;
     let id3 = h.call(a, &t2)?;
     h.note(format!("T2 {t2} (new thread, same app-server): {} -> {}", id3.brief(), if id3.pid == id1.pid { "SAME process as T1" } else if id3.version == V2 { "NEW process running v2" } else { "new process, still v1" }));
-    let reload = h.servers[a].request("config/mcpServer/reload", Value::Null, Duration::from_secs(60));
+    let reload = h.request_observed(a, "config/mcpServer/reload", Value::Null, Duration::from_secs(60));
     h.note(format!("config/mcpServer/reload -> {reload:?}"));
     let id4 = h.call(a, &t1);
     h.note(format!("T1 call after reload: {}", match &id4 { Ok(i) => format!("{} -> {}", i.brief(), if i.pid == id1.pid { "SAME v1 process" } else { "DIFFERENT process" }), Err(e) => format!("error: {e}") }));
@@ -376,7 +415,7 @@ fn flow(h: &mut Harness) -> Result<(), String> {
     h.close_server(a);
     // restart → v2 with the fixed arguments
     let b = h.start_server("B")?;
-    h.servers[b].request("initialize", json!({"clientInfo": {"name": "gil-runtime-integration", "version": "0"}}), Duration::from_secs(30))?;
+    h.request_observed(b, "initialize", json!({"clientInfo": {"name": "gil-runtime-integration", "version": "0"}}), Duration::from_secs(30))?;
     let t4 = thread_start(h, b)?;
     let id6 = h.call(b, &t4)?;
     h.note(format!("B/T4 {t4} (app-server restart): {}", id6.brief()));
@@ -420,6 +459,44 @@ fn existing_connection_keeps_v1_while_v2_is_selected_and_the_origin_of_v2_proces
 }
 
 // ── regression tests for the harness itself (no app-server, no unrelated process is ended) ──
+#[test]
+fn launcher_refusal_is_saved_without_mcp_or_stderr_forwarding() {
+    let base = fresh_base("launcher-refusal").unwrap();
+    let root = base.join("runtime-v1"); fs::create_dir(&root).unwrap();
+    #[cfg(unix)] { use std::os::unix::fs::PermissionsExt; fs::set_permissions(&root, fs::Permissions::from_mode(0o755)).unwrap(); }
+    let journal = base.join("journals"); fs::create_dir(&journal).unwrap();
+    let before = fs::read_dir(&root).unwrap().count();
+    let out = Command::new(testbed()).arg("launcher").arg(&root).arg(base.join("must-not-run"))
+        .arg(&journal).stdin(Stdio::null()).output().unwrap();
+    assert_eq!(out.status.code(), Some(3), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(out.stdout.is_empty(), "evidence must never corrupt MCP stdout");
+    let evidence = gil::runtime_testbed::read_launcher_evidence(&journal);
+    assert!(evidence["errors"].as_array().unwrap().is_empty(), "{evidence}");
+    let events = evidence["records"][0]["events"].as_array().unwrap();
+    assert_eq!(events[0]["stage"], "start");
+    assert_eq!(events.last().unwrap()["stage"], "refused");
+    assert_eq!(events.last().unwrap()["data"]["spawned"], "No");
+    assert!(events.last().unwrap()["data"]["verdict"].as_str().unwrap().contains("Blocked"));
+    assert!(!events.last().unwrap()["data"]["reason"].as_str().unwrap().is_empty());
+    assert_eq!(events[0]["data"]["root"]["identity"]["file_id_or_inode"], events.last().unwrap()["data"]["root_after"]["identity"]["file_id_or_inode"]);
+    assert!(!events.last().unwrap()["data"]["held_root_samples"].as_array().unwrap().is_empty());
+    assert_eq!(fs::read_dir(&root).unwrap().count(), before);
+    let blocked = base.join("not-a-directory"); fs::write(&blocked, b"unchanged").unwrap();
+    let out = Command::new(testbed()).arg("launcher").arg(&root).arg(base.join("must-not-run"))
+        .arg(&blocked).stdin(Stdio::null()).output().unwrap();
+    assert_eq!(out.status.code(), Some(6)); assert!(out.stdout.is_empty());
+    assert_eq!(fs::read(&blocked).unwrap(), b"unchanged");
+    assert!(String::from_utf8_lossy(&out.stderr).contains("EVIDENCE NOT WRITTEN"));
+    let no_exit: String = ["start", "decision", "spawned"].iter().enumerate()
+        .map(|(n,s)| format!("{}\n", json!({"schema":1,"sequence":n,"stage":s}))).collect();
+    fs::write(journal.join("launcher-no-exit.jsonl"), no_exit).unwrap();
+    let collected = gil::runtime_testbed::read_launcher_evidence(&journal);
+    assert!(collected["errors"].as_array().unwrap().is_empty());
+    assert!(collected["records"].as_array().unwrap().iter().any(|r| r["completion"] == "exit_not_recorded"));
+    fs::write(journal.join("launcher-partial.jsonl"), b"{partial").unwrap();
+    assert!(!gil::runtime_testbed::read_launcher_evidence(&journal)["errors"].as_array().unwrap().is_empty());
+    fs::remove_dir_all(base).unwrap();
+}
 #[test]
 fn missing_temp_parent_is_a_contextual_error_without_fallback_creation() {
     let base = fresh_base("bootstrap-regression").expect("test fixture");

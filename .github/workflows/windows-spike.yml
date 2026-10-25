@@ -232,7 +232,7 @@ jobs:
           if (-not $env:GIL_CODEX_CLI -or -not (Test-Path -LiteralPath $env:GIL_CODEX_CLI -PathType Leaf)) { throw 'GIL_CODEX_CLI must name the verified codex.exe from the previous step' }
           # A real Codex App Server over stdio with an isolated CODEX_HOME whose only MCP server is
           # the test-only launcher driver; the synthetic Cores are overlay-marked copies of the
-          # testbed exe in a temp store (never a GIL Core, never the runner's own ~/.codex). 7 tests
+          # testbed exe in a temp store (never a GIL Core, never the runner's own ~/.codex). 8 tests
           # must run: the main flow prints OUTCOME: PASS with the evidence path, and --nocapture
           # keeps every version/pid/instance line and the app-server stderr in this log.
           cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET --features $features --lib runtime_verify -- --nocapture
@@ -254,6 +254,26 @@ jobs:
             if ($sample.object -eq 'root' -and -not $sample.protection.dacl_protected) { throw 'fixture root lost DACL protection' }
           }
           Write-Output "PROTECTION EVIDENCE: $($samples.Count) held-handle samples; owner/DACL collected; root protected; 2 ACEs each"
+          $connections = @($record.connection_evidence)
+          if ($connections.Count -ne 37) { throw "expected 37 connection boundary samples, found $($connections.Count)" }
+          $rootId = $record.root_at_report.identity
+          foreach ($root in (@($connections | ForEach-Object { $_.root }) + @($record.root_at_report))) {
+            if ($root.state -ne 'opened' -or $root.identity.state -ne 'observed' -or $root.protection.state -ne 'observed' -or -not $root.protection.sddl) { throw 'incomplete connection root sample' }
+            if ($root.identity.volume_or_device -ne $rootId.volume_or_device -or $root.identity.file_id_or_inode -ne $rootId.file_id_or_inode) { throw 'fixture root identity changed' }
+            if (-not $root.protection.dacl_protected -or $root.protection.ace_count -ne 2) { throw 'fixture root protection changed across connection boundaries' }
+          }
+          $journals = @($record.launcher_evidence.records)
+          if (@($record.launcher_evidence.errors).Count -ne 0 -or $journals.Count -lt 2) { throw 'missing or invalid launcher evidence' }
+          foreach ($journal in $journals) {
+            $decisions = @($journal.events | Where-Object { $_.stage -eq 'decision' })
+            if ($decisions.Count -ne 1) { throw 'expected one launcher decision' }
+            $held = @($decisions[0].data.held_root_samples)
+            if ($held.Count -ne 2) { throw 'missing before/after launcher held-root samples' }
+            foreach ($sample in $held) {
+              if ($sample.basis -ne 'held_handle' -or $sample.identity.state -ne 'observed' -or $sample.protection.state -ne 'observed' -or -not $sample.protection.sddl -or -not $sample.protection.dacl_protected -or $sample.protection.ace_count -ne 2) { throw 'incomplete launcher held-root protection evidence' }
+            }
+          }
+          Write-Output "CONNECTION EVIDENCE: $($connections.Count) boundary samples; $($journals.Count) launcher journals; exit records counted separately from process termination"
           Get-Content -LiteralPath $pass[0].FullName
       - name: Retain runtime integration evidence
         if: ${{ !cancelled() }}
