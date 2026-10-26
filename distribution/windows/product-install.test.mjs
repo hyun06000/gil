@@ -35,7 +35,9 @@ test('owner acceptance has a separate unsigned installer identity and cannot emi
   assert.match(script, /Remove-Item "Env:\$Name"/);
   assert.match(script, /tauri\.unsigned-test-windows\.conf\.json/);
   assert.match(script, /\$RuntimeVersion = "\$CoreVersion-owner\.\$\(\$Digest\.Substring\(0, 12\)\)"/);
-  assert.match(script, /\$env:TAURI_CONFIG = @\{ version = \$RuntimeVersion \}/);
+  assert.match(script, /Add-Member -NotePropertyName version -NotePropertyValue \$RuntimeVersion -Force/);
+  assert.match(script, /ConvertTo-Json -Depth 10 -Compress/);
+  assert.match(script, /cargo tauri build --bundles nsis --config \$UnsignedConfigJson/);
   assert.match(script, /version = \$RuntimeVersion; sha256 = \$Digest/);
   assert.doesNotMatch(script, /certificateThumbprint|timestampUrl/);
 });
@@ -129,6 +131,7 @@ test('signed product CI is manual, secret-gated, installed, and exercised before
   assert.match(workflow, /1\.3\.6\.1\.5\.5\.7\.3\.3/);
   assert.match(workflow, /product-e2e\.ps1/);
   assert.match(workflow, /DisplayName 'GIL Companion \(Unsigned Test\)' -SeedLegacyRuntime/);
+  assert.match(workflow, /Owner candidate is missing its content-specific version/);
   assert.ok(workflow.indexOf('product-e2e.ps1') < workflow.indexOf('actions\/upload-artifact'));
 
   const acceptance = await read('distribution/windows/product-e2e.ps1');

@@ -45,12 +45,14 @@ try {
     # preserved runtime directory a content-specific prerelease version so an older test install can
     # remain immutable while this candidate is installed beside it.
     $RuntimeVersion = "$CoreVersion-owner.$($Digest.Substring(0, 12))"
-    $env:TAURI_CONFIG = @{ version = $RuntimeVersion } | ConvertTo-Json -Compress
+    $UnsignedConfig = Get-Content -Raw (Join-Path $Here 'tauri.unsigned-test-windows.conf.json') | ConvertFrom-Json
+    $UnsignedConfig | Add-Member -NotePropertyName version -NotePropertyValue $RuntimeVersion -Force
+    $UnsignedConfigJson = $UnsignedConfig | ConvertTo-Json -Depth 10 -Compress
     @{ schema = 1; version = $RuntimeVersion; sha256 = $Digest; architecture = 'x86_64'; cohort = 'gil-mcp-v1' } |
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath (Join-Path $Bootstrap 'current.json') -Encoding utf8NoBOM
 
-    cargo tauri build --bundles nsis --config tauri.unsigned-test-windows.conf.json
+    cargo tauri build --bundles nsis --config $UnsignedConfigJson
     if ($LASTEXITCODE -ne 0) { throw 'Windows 무서명 내부 테스트 설치본 빌드가 실패했습니다.' }
 } finally {
     Pop-Location
