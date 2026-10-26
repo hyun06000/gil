@@ -1,0 +1,28 @@
+name: 질문 / Question
+description: 설치, 사용법 또는 프로젝트 방향을 질문합니다. 개발 도구를 알 필요가 없습니다.
+title: "[Question] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        한국어 또는 영어로 편하게 질문해 주세요. GIL은 공개 preview이므로 답변 시간이나 해결 일정을 약속하지 않습니다.
+        이 issue는 공개됩니다. 비밀번호·token·개인 경로·사적 대화·실제 .gil 기록은 넣지 마세요.
+  - type: textarea
+    id: question
+    attributes:
+      label: 궁금한 점 / Question
+      description: 무엇을 하려는 중인지 함께 적어 주면 답변에 도움이 됩니다.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 사용 환경 / Environment
+      description: 관련될 때만 OS, 앱 이름, GIL 버전 등 아는 내용을 적어 주세요. 모르면 비워도 됩니다.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 공개 정보 확인 / Public information check
+      options:
+        - label: 이 issue가 공개된다는 점을 이해했으며, 비밀·개인정보·실제 .gil 기록을 넣지 않았습니다.
+          required: true

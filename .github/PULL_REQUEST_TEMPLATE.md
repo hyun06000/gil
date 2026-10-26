@@ -3,11 +3,22 @@
 해결하는 문제, 변경한 범위, 변경하지 않은 범위를 적어 주세요. 관련 issue는 선택 사항입니다.
 비밀·개인 경로·실제 Project 기록·사적인 대화·취약점 악용 방법은 넣지 마세요.
 
+관련 issue / Related issue: <!-- 예: Closes #123, 없으면 None -->
+
+변경 종류 / Change type: <!-- bug fix / feature / docs / refactor / packaging -->
+
 ## 검증 / Verification
 
 실행한 명령 또는 화면 확인 절차와 통과·실패·미실행을 구분해 적어 주세요.
 OS/CPU/Host 모드는 관련될 때만 적습니다. Core 시험을 전체 workspace 성공으로,
 도구 응답을 실제 Monitor 표시 성공으로 쓰지 마세요. 문서만 바꿨다면 해당 검토만 적어도 됩니다.
+
+| 범위 / Scope | 결과 / Result | 증거 / Evidence |
+| --- | --- | --- |
+| Core | 미실행 / Not run | |
+| JS / MCP | 미실행 / Not run | |
+| Packaging | 미실행 / Not run | |
+| Companion / 화면 | 미실행 / Not run | |
 
 ## 확인 / Checklist
 
@@ -16,6 +27,7 @@ OS/CPU/Host 모드는 관련될 때만 적습니다. Core 시험을 전체 works
 - [ ] 계약·동작 변경에 필요한 시험과 문서를 반영했거나 미결을 설명했습니다.
 - [ ] 실제 사용자 기록, 자격 증명, 생성 바이너리와 cache를 포함하지 않았습니다.
 - [ ] 추가한 자료의 권한과 필요한 제3자 고지를 확인했습니다. 해당 없으면 본문에 적었습니다.
+- [ ] 사용자 파일·설치·업데이트·restore에 영향을 주면 실패 및 복구 경로를 설명했습니다. 해당 없으면 본문에 적었습니다.
 
 ## 남은 점 / Limitations
 
