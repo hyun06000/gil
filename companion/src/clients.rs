@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 pub struct CodexCapability {
     supported: bool,
     runtime_installed: bool,
+    cli_found: bool,
 }
 
 #[derive(Serialize)]
@@ -69,20 +70,88 @@ pub fn codex_capability() -> CodexCapability {
     CodexCapability {
         supported: cfg!(windows),
         runtime_installed: launcher.is_ok_and(|one| one.is_file()),
+        cli_found: cfg!(windows) && command().is_ok(),
     }
 }
 
-fn command() -> std::process::Command {
-    #[cfg(windows)]
-    let mut command = std::process::Command::new("codex.exe");
+fn codex_candidates_from(local: Option<&Path>, configured: Option<PathBuf>) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(path) = configured {
+        candidates.push(path);
+    }
+    if let Some(local) = local {
+        candidates.push(
+            local
+                .join("Programs")
+                .join("OpenAI")
+                .join("Codex")
+                .join("bin")
+                .join("codex.exe"),
+        );
+
+        let desktop_bin = local.join("OpenAI").join("Codex").join("bin");
+        candidates.push(desktop_bin.join("codex.exe"));
+        let mut relocated = std::fs::read_dir(&desktop_bin)
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+            .filter(|entry| !entry.file_name().to_string_lossy().starts_with(".staging-"))
+            .map(|entry| entry.path().join("codex.exe"))
+            .filter(|path| path.is_file())
+            .collect::<Vec<_>>();
+        relocated.sort_by_key(|path| {
+            std::fs::metadata(path)
+                .and_then(|metadata| metadata.modified())
+                .ok()
+        });
+        relocated.reverse();
+        candidates.extend(relocated);
+    }
+    // A separately installed CLI may be available even when Codex Desktop is not.
+    candidates.push(PathBuf::from("codex.exe"));
+    candidates
+}
+
+fn new_command(executable: &Path) -> std::process::Command {
+    let command = std::process::Command::new(executable);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
+        let mut command = command;
         command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        command
     }
     #[cfg(not(windows))]
-    let command = std::process::Command::new("codex.exe");
     command
+}
+
+fn command() -> Result<std::process::Command, String> {
+    #[cfg(windows)]
+    let candidates = codex_candidates_from(
+        std::env::var_os("LOCALAPPDATA").as_deref().map(Path::new),
+        std::env::var_os("CODEX_CLI_PATH").map(PathBuf::from),
+    );
+    #[cfg(not(windows))]
+    let candidates = codex_candidates_from(None, None);
+
+    for executable in candidates {
+        let Ok(output) = new_command(&executable).arg("--version").output() else {
+            continue;
+        };
+        let version = if output.stdout.is_empty() {
+            &output.stderr
+        } else {
+            &output.stdout
+        };
+        if output.status.success()
+            && String::from_utf8_lossy(version)
+                .trim()
+                .starts_with("codex-cli ")
+        {
+            return Ok(new_command(&executable));
+        }
+    }
+    Err("Codex 앱의 연결 도구를 찾지 못했다. Codex를 완전히 종료했다 다시 연 뒤 재시도한다.".into())
 }
 
 fn classify_registration(launcher: &Path, servers: Vec<ListedServer>) -> Registration {
@@ -101,14 +170,10 @@ fn classify_registration(launcher: &Path, servers: Vec<ListedServer>) -> Registr
 }
 
 fn registration(launcher: &Path) -> Result<Registration, String> {
-    let output = command()
+    let output = command()?
         .args(["mcp", "list", "--json"])
         .output()
-        .map_err(|err| {
-            format!(
-                "Codex CLI(codex.exe)를 실행하지 못했다: {err}. Codex를 설치하거나 PATH를 확인한다."
-            )
-        })?;
+        .map_err(|err| format!("Codex 연결 도구를 실행하지 못했다: {err}"))?;
     if !output.status.success() {
         return Err(format!(
             "Codex MCP 목록을 읽지 못했다: {}",
@@ -156,14 +221,10 @@ fn register(launcher: &Path) -> Result<String, String> {
         }
         Registration::Missing => {}
     }
-    let output = command()
+    let output = command()?
         .args(registration_args(launcher))
         .output()
-        .map_err(|err| {
-            format!(
-                "Codex CLI(codex.exe)를 실행하지 못했다: {err}. Codex를 설치하거나 PATH를 확인한다."
-            )
-        })?;
+        .map_err(|err| format!("Codex 연결 도구를 실행하지 못했다: {err}"))?;
     if !output.status.success() {
         return Err(format!(
             "Codex가 GIL 등록을 거절했다: {}. 기존 gil 등록은 자동으로 덮어쓰지 않는다.",
@@ -191,10 +252,10 @@ fn disconnect(launcher: &Path) -> Result<String, String> {
         }
         Registration::Ours => {}
     }
-    let output = command()
+    let output = command()?
         .args(["mcp", "remove", "gil"])
         .output()
-        .map_err(|err| format!("Codex CLI(codex.exe)를 실행하지 못했다: {err}"))?;
+        .map_err(|err| format!("Codex 연결 도구를 실행하지 못했다: {err}"))?;
     if !output.status.success() {
         return Err(format!(
             "Codex가 GIL 연결 해제를 거절했다: {}",
@@ -256,5 +317,32 @@ mod tests {
             classify_registration(launcher, Vec::new()),
             Registration::Missing
         );
+    }
+
+    #[test]
+    fn desktop_cli_candidates_ignore_incomplete_staging_directories() {
+        let root = std::env::temp_dir().join(format!(
+            "gil-codex-candidates-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let current = root.join("OpenAI/Codex/bin/0123456789abcdef");
+        let staging = root.join("OpenAI/Codex/bin/.staging-fedcba9876543210-test");
+        std::fs::create_dir_all(&current).unwrap();
+        std::fs::create_dir_all(&staging).unwrap();
+        std::fs::write(current.join("codex.exe"), b"current").unwrap();
+        std::fs::write(staging.join("codex.exe"), b"incomplete").unwrap();
+
+        let configured = PathBuf::from(r"C:\configured\codex.exe");
+        let candidates = codex_candidates_from(Some(&root), Some(configured.clone()));
+        assert_eq!(candidates.first(), Some(&configured));
+        assert!(candidates.contains(&current.join("codex.exe")));
+        assert!(!candidates.contains(&staging.join("codex.exe")));
+        assert_eq!(candidates.last(), Some(&PathBuf::from("codex.exe")));
+
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

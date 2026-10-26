@@ -990,6 +990,26 @@ async function refreshCodexConnection() {
   }
 }
 
+function showCodexUnavailable(message) {
+  codexConnection = "unavailable";
+  connectCodexButton.hidden = false;
+  connectCodexButton.disabled = false;
+  connectCodexButton.textContent = "Codex 연결 다시 시도";
+  connectCodexButton.title = message;
+  connectCodexButton.onclick = async () => {
+    busyOn("connecting", connectCodexButton);
+    try {
+      await refreshCodexConnection();
+      say("Codex 연결 상태를 다시 확인했다.");
+    } catch (error) {
+      showCodexUnavailable(why(error));
+      say(`Codex 연결 상태를 확인하지 못했다 — ${why(error)}`);
+    } finally {
+      busyOff(connectCodexButton);
+    }
+  };
+}
+
 async function start() {
   if (!window.GIL_HOST) {
     say("이 Host 가 GIL_HOST 를 제공하지 않는다.");
@@ -1009,10 +1029,24 @@ async function start() {
       typeof window.GIL_HOST.codexConnection === "function") {
     try {
       const capability = await window.GIL_HOST.codexCapability();
-      if (capability.supported && capability.runtime_installed) await refreshCodexConnection();
-      else connectCodexButton.hidden = true;
+      if (!capability.supported) {
+        connectCodexButton.hidden = true;
+      } else if (!capability.runtime_installed) {
+        codexConnection = "unavailable";
+        connectCodexButton.hidden = false;
+        connectCodexButton.disabled = true;
+        connectCodexButton.textContent = "GIL 설치 확인 필요";
+        connectCodexButton.title = "GIL 런타임을 찾지 못했다. Companion 설치를 다시 실행한다";
+      } else if (capability.cli_found === false) {
+        const message = "Codex 앱의 연결 도구를 찾지 못했다. Codex를 완전히 종료했다 다시 연 뒤 재시도한다.";
+        showCodexUnavailable(message);
+        say(message);
+      } else {
+        await refreshCodexConnection();
+      }
     } catch (error) {
-      connectCodexButton.hidden = true;
+      showCodexUnavailable(why(error));
+      say(`Codex 연결 상태를 확인하지 못했다 — ${why(error)}`);
     }
   }
 
