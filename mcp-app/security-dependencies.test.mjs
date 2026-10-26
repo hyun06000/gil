@@ -10,10 +10,14 @@ const bridge = JSON.parse(await readFile(new URL('../plugins/gil-companion-proto
 for (const [lock, name, floor] of [
   [app, '@modelcontextprotocol/client', '2.2.0'],
   [app, '@modelcontextprotocol/core', '2.2.0'],
+  [app, 'zod', '4.6.6'],
   [bridge, '@modelcontextprotocol/sdk', '1.31.0'],
-  [bridge, 'fast-uri', '3.1.8'],
-  [bridge, 'ip-address', '10.7.3'],
+  [bridge, 'body-parser', '2.4.0'],
+  [bridge, 'fast-uri', '3.1.9'],
+  [bridge, 'hono', '4.13.11'],
+  [bridge, 'ip-address', '10.7.4'],
   [bridge, 'proxy-addr', '2.0.8'],
+  [bridge, 'zod', '4.6.6'],
 ]) {
   test(`reviewed security floor: ${name} >= ${floor}`, () => {
     const entry = lock.packages[`node_modules/${name}`];
