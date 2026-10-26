@@ -20,6 +20,22 @@ test('Windows product bundle is a current-user NSIS installer with signed update
   await assert.rejects(read('companion/tauri.windows.conf.json'), /ENOENT/);
 });
 
+test('owner acceptance has a separate unsigned installer identity and cannot emit updater artifacts', async () => {
+  const config = JSON.parse(await read('companion/tauri.unsigned-test-windows.conf.json'));
+  assert.equal(config.productName, 'GIL Companion (Unsigned Test)');
+  assert.equal(config.identifier, 'dev.ariadne.gil.companion.unsigned-test');
+  assert.deepEqual(config.bundle.targets, ['nsis']);
+  assert.equal(config.bundle.windows.nsis.installMode, 'currentUser');
+  assert.equal(config.bundle.createUpdaterArtifacts, false);
+  assert.equal(config.bundle.windows.nsis.installerHooks, 'windows/runtime-hooks.nsh');
+
+  const script = await read('companion/build-windows-unsigned-test.ps1');
+  assert.match(script, /UNSIGNED INTERNAL TEST ONLY/);
+  assert.match(script, /Remove-Item "Env:\$Name"/);
+  assert.match(script, /tauri\.unsigned-test-windows\.conf\.json/);
+  assert.doesNotMatch(script, /certificateThumbprint|timestampUrl/);
+});
+
 test('installer stages immutable Core bytes and switches a recoverable receipt', async () => {
   const hook = await read('companion/windows/runtime-hooks.nsh');
   assert.match(hook, /runtime\\versions\\\$\{VERSION\}\\gil\.exe/);
@@ -118,6 +134,23 @@ test('signed product CI is manual, secret-gated, installed, and exercised before
   assert.match(acceptance, /Get-AuthenticodeSignature/);
   assert.match(acceptance, /Start-Process -FilePath \$Uninstaller -ArgumentList '\/S'/);
   assert.match(acceptance, /Uninstall removed the preserved runtime/);
+});
+
+test('unsigned owner acceptance CI is manual, isolated, install-tested and never published', async () => {
+  const workflow = await read('.github/workflows/windows-product.yml');
+  assert.match(workflow, /build_unsigned_test_candidate:/);
+  assert.match(workflow, /if: github\.event_name == 'workflow_dispatch' && inputs\.build_unsigned_test_candidate/);
+  assert.match(workflow, /UNSIGNED owner acceptance candidate/);
+  assert.match(workflow, /build-windows-unsigned-test\.ps1/);
+  assert.match(workflow, /-ExpectedSignature NotSigned/);
+  assert.match(workflow, /GIL Companion \(Unsigned Test\)/);
+  assert.match(workflow, /retention-days: 3/);
+  assert.doesNotMatch(workflow.slice(workflow.indexOf('unsigned-test-candidate:'), workflow.indexOf('signed-candidate:')), /environment: windows-product-signing|secrets\./);
+
+  const acceptance = await read('distribution/windows/product-e2e.ps1');
+  assert.match(acceptance, /ValidateSet\('Valid', 'NotSigned'\)/);
+  assert.match(acceptance, /Where-Object DisplayName -eq \$DisplayName/);
+  assert.match(acceptance, /if \(\$Signature\.SignerCertificate\)/);
 });
 
 test('local Windows acceptance separates contract checks from signed installation', async () => {
