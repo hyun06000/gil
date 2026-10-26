@@ -2,8 +2,8 @@
   "schema": 1,
   "target": "x86_64-pc-windows-msvc",
   "inputs": {
-    "Cargo.toml": "873253214e2872cceed5dfeffd8c4d6e7157d938513fe16d735110883fcb867a",
-    "Cargo.lock": "dbb9c7727820a3669e64658491225a0948dac9ecedd2eb7cb5def746c6faeb1f",
+    "Cargo.toml": "8476d5cf2e38d5c8e0951a28d15931247a0653c708fbad12a6ffa8c92ce5bd79",
+    "Cargo.lock": "cdb646cb23f0e03fe7e37d30c895d36c7a9a8aa4c6b56d7cb0a27579985627bf",
     "mcp-app/package-lock.json": "9c6170c797cb227eb236692c8087cfddfe09ceea0fa212df4417cf91712d83b6",
     "mcp-app/build.mjs": "00013682e3e300f5e5945f5fbadd2fb5d2e5c65797d1596511546da6261f5c3d",
     "plugins/gil-companion-prototype/assets/monitor.html": "0848c2c901ae0073da4d35995d55d1cea90156585fecaac5e8ab321a1fc18adf"
@@ -560,6 +560,25 @@
         {
           "path": "LICENSE",
           "sha256": "c09aae9d3c77b531f56351a9947bc7446511d6b025b3255312d3e3442a9a7583"
+        }
+      ]
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "getrandom",
+      "version": "0.3.4",
+      "role": "normal-candidate",
+      "declared_license": "MIT OR Apache-2.0",
+      "source": "https://crates.io/crates/getrandom/0.3.4",
+      "integrity": "899def5c37c4fd7b2664648c28120ecec138e4d395b459e5ca34f9cce2dd77fd",
+      "files": [
+        {
+          "path": "LICENSE-APACHE",
+          "sha256": "aaff376532ea30a0cd5330b9502ad4a4c8bf769c539c87ffe78819d188a18ebf"
+        },
+        {
+          "path": "LICENSE-MIT",
+          "sha256": "29e9fe5074bd27e0e5d5d110394fbbcd841baee2651a3c4b4560a632702cede4"
         }
       ]
     },

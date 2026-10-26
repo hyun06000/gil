@@ -92,12 +92,6 @@ object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'\r
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Capability(String);
 
-/// OS 가 주는 난수의 자리.
-///
-/// std 에는 CSPRNG 이 없다. 새 crate 를 들이는 대신 **운영체제가 직접 주는 통로**를 읽는다 —
-/// 이것이 `getrandom` 류 crate 가 Unix 에서 하는 일과 같은 일이다.
-const ENTROPY: &str = "/dev/urandom";
-
 /// capability 한 개의 바이트 수 — 256bit. 명세가 요구하는 최소의 두 배다.
 const TOKEN_BYTES: usize = 32;
 
@@ -108,21 +102,15 @@ impl Capability {
     /// 길을 두지 않는 까닭은 하나다 — 그 길은 실패한 날에만 쓰이고, 실패한 날에 가장
     /// 위험하다.
     pub(crate) fn new() -> Result<Capability, ServeError> {
-        Capability::from_source(ENTROPY)
+        Capability::from_fill(|bytes| getrandom::fill(bytes).map_err(|source| source.to_string()))
     }
 
-    /// 난수의 출처를 시험이 바꿔 낄 수 있는 자리.
-    fn from_source(source: &str) -> Result<Capability, ServeError> {
+    /// OS 난수 호출을 시험이 실패시킬 수 있는 좁은 seam.
+    fn from_fill(
+        fill: impl FnOnce(&mut [u8]) -> Result<(), String>,
+    ) -> Result<Capability, ServeError> {
         let mut bytes = [0u8; TOKEN_BYTES];
-        let mut file = std::fs::File::open(source).map_err(|source| ServeError::NoEntropy {
-            said: source.to_string(),
-        })?;
-        // **짧게 읽힌 것을 그대로 쓰지 않는다.** 채워지지 않은 뒤쪽은 0 이고, 그러면
-        // 자물쇠의 절반이 상수가 된다.
-        file.read_exact(&mut bytes)
-            .map_err(|source| ServeError::NoEntropy {
-                said: source.to_string(),
-            })?;
+        fill(&mut bytes).map_err(|said| ServeError::NoEntropy { said })?;
 
         // 소문자 hex — canonical 하고 URL 에서 그대로 쓸 수 있다. 창고 주소가 쓰는 것과
         // 같은 표기라 새 인코더를 짓지 않는다.
@@ -1134,12 +1122,7 @@ mod tests {
 
     #[test]
     fn the_token_comes_from_the_os_random_source() {
-        // 출처가 OS 의 통로다 — 시각도 PID 도 프로세스 안의 셈도 아니다.
-        assert_eq!(ENTROPY, "/dev/urandom");
-        assert!(
-            std::path::Path::new(ENTROPY).exists(),
-            "OS 난수 통로가 없다"
-        );
+        // getrandom 이 현재 OS 의 CSPRNG 를 고른다 — Unix path 에 고정하지 않는다.
         assert_eq!(TOKEN_BYTES * 8, 256, "128bit 아래로 내려갔다");
 
         let mut seen = std::collections::HashSet::new();
@@ -1158,7 +1141,7 @@ mod tests {
     #[test]
     fn without_os_entropy_the_window_does_not_open() {
         // 약한 값으로 물러서는 길이 없다 — 못 얻으면 열지 않는다.
-        let refused = Capability::from_source("/nonexistent/entropy/source");
+        let refused = Capability::from_fill(|_| Err("synthetic OS entropy failure".to_string()));
         assert!(
             matches!(refused, Err(ServeError::NoEntropy { .. })),
             "난수 없이도 자물쇠를 만들었다"

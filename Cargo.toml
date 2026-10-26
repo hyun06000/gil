@@ -30,6 +30,7 @@ required-features = ["runtime-testbed"]
 
 [dependencies]
 base64 = "=0.22.1"
+getrandom = "=0.3.4"
 libc = "0.2.189"
 notify = "8.2.0"
 png = { version = "=0.18.1", default-features = false }
