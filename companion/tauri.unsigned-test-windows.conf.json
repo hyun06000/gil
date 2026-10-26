@@ -2,6 +2,11 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "GIL Companion (Unsigned Test)",
   "identifier": "dev.ariadne.gil.companion.unsigned-test",
+  "plugins": {
+    "updater": {
+      "pubkey": ""
+    }
+  },
   "bundle": {
     "createUpdaterArtifacts": false,
     "targets": [
@@ -24,14 +29,6 @@
           "Korean",
           "English"
         ]
-      }
-    }
-  },
-  "plugins": {
-    "updater": {
-      "requireSignedVersion": true,
-      "windows": {
-        "installMode": "passive"
       }
     }
   }
