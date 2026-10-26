@@ -28,6 +28,7 @@ test('owner acceptance has a separate unsigned installer identity and cannot emi
   assert.equal(config.bundle.windows.nsis.installMode, 'currentUser');
   assert.equal(config.bundle.createUpdaterArtifacts, false);
   assert.equal(config.bundle.windows.nsis.installerHooks, 'windows/runtime-hooks.nsh');
+  assert.equal(config.plugins, undefined);
 
   const script = await read('companion/build-windows-unsigned-test.ps1');
   assert.match(script, /UNSIGNED INTERNAL TEST ONLY/);

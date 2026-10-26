@@ -26,13 +26,5 @@
         ]
       }
     }
-  },
-  "plugins": {
-    "updater": {
-      "requireSignedVersion": true,
-      "windows": {
-        "installMode": "passive"
-      }
-    }
   }
 }
