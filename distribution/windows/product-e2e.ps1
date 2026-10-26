@@ -29,6 +29,52 @@ if (-not (Test-Path -LiteralPath $Core -PathType Leaf)) { throw 'Selected Core w
 $CoreHash = (Get-FileHash -LiteralPath $Core -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($CoreHash -ne $Receipt.sha256) { throw 'Installed Core digest differs from the receipt' }
 
+$entries = @(Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' | Get-ItemProperty |
+    Where-Object DisplayName -eq $DisplayName)
+if ($entries.Count -ne 1) { throw "Expected one GIL Companion uninstall entry, found $($entries.Count)" }
+$uninstallText = $entries[0].UninstallString
+if ($uninstallText -match '^"([^\"]+\.exe)"(?:\s.*)?$') {
+    $Uninstaller = $Matches[1]
+} elseif ($uninstallText -match '^([^\r\n]+\.exe)$') {
+    $Uninstaller = $Matches[1]
+} else {
+    throw "Unexpected uninstall command: $uninstallText"
+}
+$Uninstaller = (Resolve-Path -LiteralPath $Uninstaller).Path
+
+# Installing bytes is not product acceptance: a person must get a visible window by launching the
+# installed application. Capture startup output so a release-subsystem crash is diagnosable instead
+# of looking like a double-click that did nothing.
+$InstallDir = Split-Path -Parent $Uninstaller
+$Companions = @(Get-ChildItem -LiteralPath $InstallDir -File -Filter '*.exe' |
+    Where-Object FullName -ne $Uninstaller)
+if ($Companions.Count -ne 1) { throw "Expected one installed Companion executable, found $($Companions.Count)" }
+$GuiStdout = Join-Path $env:RUNNER_TEMP 'gil-companion-gui.stdout.log'
+$GuiStderr = Join-Path $env:RUNNER_TEMP 'gil-companion-gui.stderr.log'
+$gui = Start-Process -FilePath $Companions[0].FullName -PassThru `
+    -RedirectStandardOutput $GuiStdout -RedirectStandardError $GuiStderr
+try {
+    $deadline = [DateTime]::UtcNow.AddSeconds(20)
+    do {
+        Start-Sleep -Milliseconds 200
+        $gui.Refresh()
+        if ($gui.HasExited) {
+            $stdout = if (Test-Path -LiteralPath $GuiStdout) { Get-Content -Raw -LiteralPath $GuiStdout } else { '' }
+            $stderr = if (Test-Path -LiteralPath $GuiStderr) { Get-Content -Raw -LiteralPath $GuiStderr } else { '' }
+            throw "Companion exited before showing a window (exit $($gui.ExitCode)). stdout: $stdout stderr: $stderr"
+        }
+    } while ($gui.MainWindowHandle -eq 0 -and [DateTime]::UtcNow -lt $deadline)
+    if ($gui.MainWindowHandle -eq 0) {
+        throw 'Companion stayed alive but did not show a top-level window within 20 seconds'
+    }
+} finally {
+    $gui.Refresh()
+    if (-not $gui.HasExited) {
+        Stop-Process -Id $gui.Id -Force
+        $gui.WaitForExit()
+    }
+}
+
 node distribution/windows/product-launcher-smoke.mjs $Launcher $Core
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -98,7 +144,7 @@ $SignerThumbprint = if ($Signature.SignerCertificate) { $Signature.SignerCertifi
         signature_status = $Signature.Status.ToString()
     }
     runtime = [ordered]@{ version = $Receipt.version; architecture = $Receipt.architecture; cohort = $Receipt.cohort; core_sha256 = $CoreHash }
-    acceptance = [ordered]@{ silent_current_user_install = $true; launcher_mcp = $true; running_core_write_refused = $true; codex_cli_registration = $true; codex_cli_disconnect = $true; companion_uninstall = $true; runtime_preserved = $true }
-    exclusions = @('visible Companion UI', 'Codex Desktop conversation', 'complete runtime cleanup', 'repair', 'SmartScreen reputation')
+    acceptance = [ordered]@{ silent_current_user_install = $true; visible_companion_window = $true; launcher_mcp = $true; running_core_write_refused = $true; codex_cli_registration = $true; codex_cli_disconnect = $true; companion_uninstall = $true; runtime_preserved = $true }
+    exclusions = @('Companion UI contents', 'Codex Desktop conversation', 'complete runtime cleanup', 'repair', 'SmartScreen reputation')
 } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $Evidence -Encoding utf8NoBOM
 Get-Content -Raw -LiteralPath $Evidence

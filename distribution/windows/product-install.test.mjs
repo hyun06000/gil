@@ -132,6 +132,9 @@ test('signed product CI is manual, secret-gated, installed, and exercised before
   assert.match(acceptance, /mcp add gil -- \$Launcher mcp --serve/);
   assert.match(acceptance, /mcp remove gil/);
   assert.match(acceptance, /Get-AuthenticodeSignature/);
+  assert.match(acceptance, /MainWindowHandle/);
+  assert.match(acceptance, /visible_companion_window = \$true/);
+  assert.match(acceptance, /RedirectStandardError \$GuiStderr/);
   assert.match(acceptance, /Start-Process -FilePath \$Uninstaller -ArgumentList '\/S'/);
   assert.match(acceptance, /Uninstall removed the preserved runtime/);
 });
