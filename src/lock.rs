@@ -56,7 +56,7 @@ pub(crate) struct ProjectLock {
     /// 잠금 권한은 이 handle이 진다. Unix에서는 부모 directory handle도 유지해
     /// 경로 교체를 검사하지만, 파일 이름만으로 잠금 권한을 추정하지 않는다.
     file: File,
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     directory: File,
 }
 
@@ -95,7 +95,12 @@ impl ProjectLock {
         let (directory, file) = crate::internal_fs::file(&path, true).map_err(|source| LockError::Unavailable {
             path: path.clone(), doing: "잠금 파일을 열지", source: source.to_string(),
         })?;
-        #[cfg(not(unix))]
+        // Windows: the entry itself under a pinned `.gil`; links, reparse points and directories refuse.
+        #[cfg(windows)]
+        let (directory, file) = crate::windows_fs::control_file(&path, true).map_err(|source| LockError::Unavailable {
+            path: path.clone(), doing: "잠금 파일을 열지", source: source.to_string(),
+        })?;
+        #[cfg(not(any(unix, windows)))]
         let file = File::options()
             .read(true)
             .write(true)
@@ -110,7 +115,7 @@ impl ProjectLock {
 
         match file.try_lock() {
             Ok(()) => {
-                let lock = ProjectLock { file, #[cfg(unix)] directory };
+                let lock = ProjectLock { file, #[cfg(any(unix, windows))] directory };
                 lock.validate(&path).map_err(|source| LockError::Unavailable {
                     path, doing: "잠근 프로젝트 identity를 확인하지", source: source.to_string(),
                 })?;
@@ -135,7 +140,13 @@ impl ProjectLock {
                 return Err(std::io::Error::other("locked Project identity changed"));
             }
         }
-        #[cfg(not(unix))] let _ = lock_path;
+        #[cfg(windows)] {
+            let (directory, file) = crate::windows_fs::control_file(lock_path, false)?;
+            if !crate::windows_fs::same(&self.directory, &directory)? || !crate::windows_fs::same(&self.file, &file)? {
+                return Err(std::io::Error::other("locked Project identity changed"));
+            }
+        }
+        #[cfg(not(any(unix, windows)))] let _ = lock_path;
         Ok(())
     }
 

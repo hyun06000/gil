@@ -1,0 +1,205 @@
+{
+  "alloc-stdlib@0.2.4": {
+    "repository": "https://github.com/dropbox/rust-alloc-no-stdlib",
+    "commit": "ae42d22078b98549e987d2f03d12df7b984fde47",
+    "crate_path": "alloc-stdlib",
+    "files": [
+      {
+        "path": "LICENSE",
+        "sha256": "c0c56f26d9c051cac4d200c34c84e7ae9aaa853e01a982a1df08b09931e518ae",
+        "url": "https://github.com/dropbox/rust-alloc-no-stdlib/blob/ae42d22078b98549e987d2f03d12df7b984fde47/LICENSE"
+      }
+    ],
+    "review": "Exact crate VCS revision; upstream root license/copyright originals retained. selectors also retains its source header and the official MPL 2.0 text. Source redistribution link is the pinned repository."
+  },
+  "selectors@0.36.1": {
+    "repository": "https://github.com/servo/stylo",
+    "commit": "635e1a19d02960588a00e189bd4bd5bdb150ec3d",
+    "crate_path": "selectors",
+    "files": [
+      {
+        "path": "selectors/lib.rs",
+        "sha256": "d54c6e13e9e952dac17d209171df8657e3cae93beaddace4906150cdec8d02e9",
+        "url": "https://github.com/servo/stylo/blob/635e1a19d02960588a00e189bd4bd5bdb150ec3d/selectors/lib.rs"
+      },
+      {
+        "path": "MPL-2.0.txt",
+        "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04",
+        "url": "https://www.mozilla.org/media/MPL/2.0/index.txt"
+      }
+    ],
+    "review": "Exact crate VCS revision; upstream root license/copyright originals retained. selectors also retains its source header and the official MPL 2.0 text. Source redistribution link is the pinned repository."
+  },
+  "tauri-plugin@2.6.3": {
+    "repository": "https://github.com/tauri-apps/tauri",
+    "commit": "6f6ab1207bb3923c2721fbc67d2fdb1c8deb0c7a",
+    "crate_path": "crates/tauri-plugin",
+    "files": [
+      {
+        "path": "LICENSE_APACHE-2.0",
+        "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+        "url": "https://github.com/tauri-apps/tauri/blob/6f6ab1207bb3923c2721fbc67d2fdb1c8deb0c7a/LICENSE_APACHE-2.0"
+      },
+      {
+        "path": "LICENSE_MIT",
+        "sha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
+        "url": "https://github.com/tauri-apps/tauri/blob/6f6ab1207bb3923c2721fbc67d2fdb1c8deb0c7a/LICENSE_MIT"
+      }
+    ],
+    "review": "Exact crate VCS revision; upstream root license/copyright originals retained. selectors also retains its source header and the official MPL 2.0 text. Source redistribution link is the pinned repository."
+  },
+  "unic-char-property@0.9.0": {
+    "repository": "https://github.com/open-i18n/rust-unic",
+    "commit": "5878605364af97a3358368a6eaef02104af2e016",
+    "crate_path": null,
+    "files": [
+      {
+        "path": "COPYRIGHT.md",
+        "sha256": "f5c342c49f3ac804f3e8e7bb62a8040a44c50d47bb36902b1abd13f66a1adf8b",
+        "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/COPYRIGHT.md"
+      },
+      {
+        "path": "LICENSE-APACHE",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+        "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/LICENSE-APACHE"
+      },
+      {
+        "path": "LICENSE-MIT",
+        "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+        "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/LICENSE-MIT"
+      }
+    ],
+    "review": "Exact crate VCS revision; upstream root license/copyright originals retained. selectors also retains its source header and the official MPL 2.0 text. Source redistribution link is the pinned repository."
+  },
+  "unic-char-range@0.9.0": {
+    "repository": "https://github.com/open-i18n/rust-unic",
+    "commit": "5878605364af97a3358368a6eaef02104af2e016",
+    "crate_path": null,
+    "files": [
+      {
+        "path": "COPYRIGHT.md",
+        "sha256": "f5c342c49f3ac804f3e8e7bb62a8040a44c50d47bb36902b1abd13f66a1adf8b",
+        "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/COPYRIGHT.md"
+      },
+      {
+        "path": "LICENSE-APACHE",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+        "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/LICENSE-APACHE"
+      },
+      {
+        "path": "LICENSE-MIT",
+        "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+        "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/LICENSE-MIT"
+      }
+    ],
+    "review": "Exact crate VCS revision; upstream root license/copyright originals retained. selectors also retains its source header and the official MPL 2.0 text. Source redistribution link is the pinned repository."
+  },
+  "unic-common@0.9.0": {
+    "repository": "https://github.com/open-i18n/rust-unic",
+    "commit": "5878605364af97a3358368a6eaef02104af2e016",
+    "crate_path": null,
+    "files": [
+      {
+        "path": "COPYRIGHT.md",
+        "sha256": "f5c342c49f3ac804f3e8e7bb62a8040a44c50d47bb36902b1abd13f66a1adf8b",
+        "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/COPYRIGHT.md"
+      },
+      {
+        "path": "LICENSE-APACHE",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+        "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/LICENSE-APACHE"
+      },
+      {
+        "path": "LICENSE-MIT",
+        "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+        "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/LICENSE-MIT"
+      }
+    ],
+    "review": "Exact crate VCS revision; upstream root license/copyright originals retained. selectors also retains its source header and the official MPL 2.0 text. Source redistribution link is the pinned repository."
+  },
+  "unic-ucd-version@0.9.0": {
+    "repository": "https://github.com/open-i18n/rust-unic",
+    "commit": "5878605364af97a3358368a6eaef02104af2e016",
+    "crate_path": null,
+    "files": [
+      {
+        "path": "COPYRIGHT.md",
+        "sha256": "f5c342c49f3ac804f3e8e7bb62a8040a44c50d47bb36902b1abd13f66a1adf8b",
+        "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/COPYRIGHT.md"
+      },
+      {
+        "path": "LICENSE-APACHE",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+        "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/LICENSE-APACHE"
+      },
+      {
+        "path": "LICENSE-MIT",
+        "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+        "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/LICENSE-MIT"
+      }
+    ],
+    "review": "Exact crate VCS revision; upstream root license/copyright originals retained. selectors also retains its source header and the official MPL 2.0 text. Source redistribution link is the pinned repository."
+  },
+  "unic-ucd-ident@0.9.0": {
+    "repository": "https://github.com/open-i18n/rust-unic",
+    "commit": "8a6ce83063d90b91ae2ce59eddb803edd393fca9",
+    "crate_path": null,
+    "files": [
+      {
+        "path": "COPYRIGHT.md",
+        "sha256": "f5c342c49f3ac804f3e8e7bb62a8040a44c50d47bb36902b1abd13f66a1adf8b",
+        "url": "https://github.com/open-i18n/rust-unic/blob/8a6ce83063d90b91ae2ce59eddb803edd393fca9/COPYRIGHT.md"
+      },
+      {
+        "path": "LICENSE-APACHE",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+        "url": "https://github.com/open-i18n/rust-unic/blob/8a6ce83063d90b91ae2ce59eddb803edd393fca9/LICENSE-APACHE"
+      },
+      {
+        "path": "LICENSE-MIT",
+        "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+        "url": "https://github.com/open-i18n/rust-unic/blob/8a6ce83063d90b91ae2ce59eddb803edd393fca9/LICENSE-MIT"
+      }
+    ],
+    "review": "Exact crate VCS revision; upstream root license/copyright originals retained. selectors also retains its source header and the official MPL 2.0 text. Source redistribution link is the pinned repository."
+  },
+  "webview2-com@0.38.2": {
+    "repository": "https://github.com/wravery/webview2-rs",
+    "commit": "b74dc5e2b394044bea5191052868ce7a106c202c",
+    "crate_path": "crates/webview2-com",
+    "files": [
+      {
+        "path": "LICENSE",
+        "sha256": "0dcf41516e608bbcb6cdc5229feb7b86fe4a643b85e7df251133c93408fdac73",
+        "url": "https://github.com/wravery/webview2-rs/blob/b74dc5e2b394044bea5191052868ce7a106c202c/LICENSE"
+      }
+    ],
+    "review": "Exact crate VCS revision; upstream root license/copyright originals retained. selectors also retains its source header and the official MPL 2.0 text. Source redistribution link is the pinned repository."
+  },
+  "webview2-com-sys@0.38.2": {
+    "repository": "https://github.com/wravery/webview2-rs",
+    "commit": "b74dc5e2b394044bea5191052868ce7a106c202c",
+    "crate_path": "crates/bindings",
+    "files": [
+      {
+        "path": "LICENSE",
+        "sha256": "0dcf41516e608bbcb6cdc5229feb7b86fe4a643b85e7df251133c93408fdac73",
+        "url": "https://github.com/wravery/webview2-rs/blob/b74dc5e2b394044bea5191052868ce7a106c202c/LICENSE"
+      }
+    ],
+    "review": "Exact crate VCS revision; upstream root license/copyright originals retained. selectors also retains its source header and the official MPL 2.0 text. Source redistribution link is the pinned repository."
+  },
+  "webview2-com-macros@0.8.1": {
+    "repository": "https://github.com/wravery/webview2-rs",
+    "commit": "dffa41a8a46d3f5565eefbff2de57d38d399f158",
+    "crate_path": "crates/callback-macros",
+    "files": [
+      {
+        "path": "LICENSE",
+        "sha256": "0dcf41516e608bbcb6cdc5229feb7b86fe4a643b85e7df251133c93408fdac73",
+        "url": "https://github.com/wravery/webview2-rs/blob/dffa41a8a46d3f5565eefbff2de57d38d399f158/LICENSE"
+      }
+    ],
+    "review": "Exact crate VCS revision; upstream root license/copyright originals retained. selectors also retains its source header and the official MPL 2.0 text. Source redistribution link is the pinned repository."
+  }
+}

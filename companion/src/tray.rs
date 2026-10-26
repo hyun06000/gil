@@ -58,7 +58,7 @@ pub fn install(app: &AppHandle, autostart_on: bool) -> Result<(), tauri::Error> 
     let current = MenuItem::with_id(app, CURRENT, current_name(app), false, None::<&str>)?;
     let refresh = MenuItem::with_id(app, REFRESH, "새로고침", true, None::<&str>)?;
     let autostart =
-        CheckMenuItem::with_id(app, AUTOSTART, "로그인 시 시작", true, autostart_on, None::<&str>)?;
+        CheckMenuItem::with_id(app, AUTOSTART, "로그인 시 시작", !app.state::<crate::sessions::Sessions>().enabled(), autostart_on, None::<&str>)?;
     let quit = MenuItem::with_id(app, QUIT, "종료", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
@@ -85,7 +85,9 @@ pub fn install(app: &AppHandle, autostart_on: bool) -> Result<(), tauri::Error> 
     TrayIconBuilder::with_id("gil")
         .icon(mark)
         .icon_as_template(true)
-        .tooltip("GIL Companion")
+        .tooltip(if app.config().identifier == "dev.ariadne.gil.companion.review" {
+            "GIL Companion 검수"
+        } else { "GIL Companion" })
         .menu(&menu)
         // 아이콘을 왼쪽으로 누르면 메뉴가 아니라 **창이 열린다.**
         .show_menu_on_left_click(false)

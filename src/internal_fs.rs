@@ -34,6 +34,43 @@ pub(crate) fn regular_at(dir: &File, name: &CStr) -> io::Result<File> {
     }
     Ok(file)
 }
+/// Exclusive directory creation relative to a held directory (`mkdirat`); the new directory is
+/// opened without following links and its mode set exactly (umask-independent).
+pub(crate) fn create_dir_at(dir: &File, name: &CStr, mode: u32) -> io::Result<File> {
+    if unsafe { libc::mkdirat(dir.as_raw_fd(), name.as_ptr(), mode as libc::mode_t) } < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let made = open(dir, name, libc::O_RDONLY | libc::O_DIRECTORY)?;
+    chmod(&made, mode)?;
+    Ok(made)
+}
+/// Exclusive regular-file creation relative to a held directory (`O_CREAT | O_EXCL`, read-write),
+/// mode set exactly afterwards.
+pub(crate) fn create_file_at(dir: &File, name: &CStr, mode: u32) -> io::Result<File> {
+    let file = open(dir, name, libc::O_RDWR | libc::O_CREAT | libc::O_EXCL)?;
+    chmod(&file, mode)?;
+    Ok(file)
+}
+pub(crate) fn chmod(file: &File, mode: u32) -> io::Result<()> {
+    if unsafe { libc::fchmod(file.as_raw_fd(), mode as libc::mode_t) } < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+/// `renameat` inside one held directory (replaces an existing `to`, never follows links).
+pub(crate) fn rename_at(dir: &File, from: &CStr, to: &CStr) -> io::Result<()> {
+    if unsafe { libc::renameat(dir.as_raw_fd(), from.as_ptr(), dir.as_raw_fd(), to.as_ptr()) } < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+/// `fsync` of a file or directory descriptor.
+pub(crate) fn fsync(file: &File) -> io::Result<()> {
+    if unsafe { libc::fsync(file.as_raw_fd()) } < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
 pub(crate) fn unlink_at(dir: &File, name: &CStr) -> io::Result<()> {
     if unsafe { libc::unlinkat(dir.as_raw_fd(), name.as_ptr(), 0) } < 0 {
         Err(io::Error::last_os_error())

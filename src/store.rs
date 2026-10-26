@@ -187,7 +187,7 @@ pub fn save(project: &Project, path: impl AsRef<Path>) -> Result<(), StoreError>
     let path = path.as_ref();
     let encoded = encode(project)?;
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     if project.visual_state().is_some() {
         return crate::visual_report::state_file::write(path, &encoded)
             .map_err(|source| StoreError::Write { path: said_path(path), source });
@@ -254,6 +254,26 @@ fn sync_dir(_at: Option<&Path>) -> Result<(), StoreError> {
     Ok(())
 }
 
+/// 저장 파일이 **선언한** 형식 — 로더와 같은 판별이다(YAML 전체를 `StoredFormat` 으로 읽으므로
+/// 첫 줄 주석·빈 줄이 있어도 같다). `FORMAT`/`VISUAL_FORMAT` 만 `Ok` 이고, 앞 형식·미지 형식·
+/// 선언 없음은 로더가 내는 것과 같은 오류다. Session 입구가 복구·정리 **전에** 이것으로 형식을
+/// 가른다: 판별하지 못하면 기록을 보존한 채 거절한다(Windows 지원 계약 §4 W4 5).
+pub(crate) fn declared_format(text: &str, path: &Path) -> Result<u32, StoreError> {
+    let head: StoredFormat = serde_norway::from_str(text).map_err(StoreError::Decode)?;
+    match head.format {
+        FORMAT | VISUAL_FORMAT => Ok(head.format),
+        found if found < FORMAT => Err(StoreError::PreviousFormat {
+            found,
+            current: FORMAT,
+            path: said_path(path),
+        }),
+        found => Err(StoreError::UnknownFormat {
+            found,
+            known: VISUAL_FORMAT,
+        }),
+    }
+}
+
 /// 파일에서 상태를 다시 세운다.
 ///
 /// 규칙은 파일에 없다 — [`RuleSet`] 은 언제나 `gil-spec.yaml` 에서 새로 읽어 넘긴다.
@@ -265,7 +285,9 @@ pub fn load(rules: RuleSet, path: impl AsRef<Path>) -> Result<Project, StoreErro
     let path = path.as_ref();
     #[cfg(unix)]
     let read = crate::internal_fs::read_state(path);
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    let read = crate::windows_fs::read_state(path);
+    #[cfg(not(any(unix, windows)))]
     let read = fs::read_to_string(path);
     let text = read.map_err(|source| match source.kind() {
         io::ErrorKind::NotFound => StoreError::NotFound {
@@ -279,23 +301,7 @@ pub fn load(rules: RuleSet, path: impl AsRef<Path>) -> Result<Project, StoreErro
 
     // **형식을 먼저 읽는다.** 구조를 통째로 해석한 뒤에 보면, 모양이 바뀐 앞 형식은
     // "앞 형식이다" 가 아니라 파서 오류로 도착한다 — 사람이 무엇을 해야 할지 모른다.
-    let head: StoredFormat = serde_norway::from_str(&text).map_err(StoreError::Decode)?;
-    match head.format {
-        FORMAT | VISUAL_FORMAT => {}
-        found if found < FORMAT => {
-            return Err(StoreError::PreviousFormat {
-                found: head.format,
-                current: FORMAT,
-                path: said_path(path),
-            });
-        }
-        _ => {
-            return Err(StoreError::UnknownFormat {
-                found: head.format,
-                known: VISUAL_FORMAT,
-            });
-        }
-    }
+    declared_format(&text, path)?;
 
     let stored: StoredState = serde_norway::from_str(&text).map_err(StoreError::Decode)?;
     let project = stored.into_project(rules)?;
@@ -303,7 +309,7 @@ pub fn load(rules: RuleSet, path: impl AsRef<Path>) -> Result<Project, StoreErro
     // **구조가 맞물린 뒤에 객체를 본다.** registry 가 깨진 채로 디스크를 뒤지면 잘못된
     // 자리를 열어 보게 된다.
     if let Some(gil) = path.parent() {
-        verify_manifests(&project, &ObjectStore::at(gil))?;
+        verify_manifests(&project, &ObjectStore::for_project(gil, &project))?;
     }
     Ok(project)
 }

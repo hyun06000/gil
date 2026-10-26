@@ -11,6 +11,22 @@ members = ["companion"]
 [features]
 # Development-only authoring surface; no default format change or migration.
 visual-authoring = []
+# Product builds keep recording and read surfaces, but refuse destructive Artifact rollback until
+# the tracked-file boundary, path validation and crash recovery have shipped together.
+product-safety = []
+# Test-only entry points for the runtime update layers (launcher driver + synthetic MCP Core).
+# Never enabled for product builds; the binary below exists only with this feature.
+runtime-testbed = []
+
+[[bin]]
+name = "gil-runtime-testbed"
+path = "src/bin/gil-runtime-testbed.rs"
+required-features = ["runtime-testbed"]
+
+[[bin]]
+name = "gil-runtime-verify"
+path = "src/bin/gil-runtime-verify.rs"
+required-features = ["runtime-testbed"]
 
 [dependencies]
 base64 = "=0.22.1"
@@ -26,4 +42,4 @@ sha2 = { version = "0.10", default-features = false, features = ["std"] }
 tokio = { version = "1", default-features = false, features = ["rt", "macros", "io-std", "time"] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_Threading"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_JobObjects", "Win32_System_Pipes", "Win32_System_Threading", "Win32_System_Registry", "Wdk_Foundation", "Wdk_Storage_FileSystem"] }

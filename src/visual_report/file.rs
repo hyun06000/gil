@@ -1,16 +1,42 @@
-//! Explicit relative attachment paths. Unix resolution is descriptor-relative and no-follow.
-//! Non-Unix ingestion fails closed until an equivalent handle-based implementation is tested.
+//! Explicit relative attachment paths. Unix resolution is descriptor-relative and no-follow;
+//! Windows opens every component as the entry itself under pinned ancestors (Windows contract §4).
+//! Other platforms fail closed until an equivalent handle-based implementation is tested.
 use super::image::VerifiedImage;
 use crate::artifact::EntryPath;
-use std::fs::{File, Metadata};
+use std::fs::File;
 use std::io::{Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+
+/// What must stay equal between the retained handle and its current name.
+#[cfg(unix)]
+type Stamp = std::fs::Metadata;
+#[cfg(windows)]
+type Stamp = crate::windows_fs::Stamp;
+#[cfg(not(any(unix, windows)))]
+type Stamp = ();
+
+fn stamp(file: &File) -> Result<Stamp, String> {
+    #[cfg(unix)]
+    {
+        file.metadata().map_err(|_| refused())
+    }
+    #[cfg(windows)]
+    {
+        crate::windows_fs::Stamp::of(file).map_err(|_| refused())
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = file;
+        Err(refused())
+    }
+}
 
 pub(crate) struct AttachmentFile {
     root: PathBuf,
     relative: String,
+    protected: bool,
     file: File,
-    before: Metadata,
+    before: Stamp,
     pub(crate) image: VerifiedImage,
 }
 
@@ -39,19 +65,23 @@ pub(crate) fn relative(text: &str) -> Result<EntryPath, String> {
 }
 
 impl AttachmentFile {
+    /// A user-supplied attachment source: never under `.gil`, no storage ACL contract.
     pub(crate) fn read(root: &Path, text: &str) -> Result<Self, String> {
         relative(text)?;
-        Self::read_at(root, text)
+        Self::read_at(root, text, false)
     }
 
-    fn read_at(root: &Path, text: &str) -> Result<Self, String> {
+    /// `protected`: the caller's storage contract (Windows contract §8 1a) — an owner-only
+    /// Project's stored object must carry only the inherited ACEs; a query error refuses.
+    fn read_at(root: &Path, text: &str, protected: bool) -> Result<Self, String> {
         let root = root.canonicalize().map_err(|_| refused())?;
-        let mut file = open(&root, text)?;
-        let before = file.metadata().map_err(|_| refused())?;
+        let mut file = open(&root, text, protected)?;
+        let before = stamp(&file)?;
         let image = VerifiedImage::read(&mut file).map_err(|e| e.to_string())?;
         let held = Self {
             root,
             relative: text.into(),
+            protected,
             file,
             before,
             image,
@@ -60,10 +90,8 @@ impl AttachmentFile {
         Ok(held)
     }
     fn check_metadata(&self) -> Result<(), String> {
-        let now = self.file.metadata().map_err(|_| refused())?;
-        let named = open(&self.root, &self.relative)?
-            .metadata()
-            .map_err(|_| refused())?;
+        let now = stamp(&self.file)?;
+        let named = stamp(&open(&self.root, &self.relative, self.protected)?)?;
         if same(&self.before, &now) && same(&self.before, &named) {
             Ok(())
         } else {
@@ -87,6 +115,7 @@ impl AttachmentFile {
 pub(crate) fn read_stored(
     root: &Path,
     metadata: &super::registry::NewVisualAsset,
+    protected: bool,
 ) -> Result<VerifiedImage, String> {
     use super::image::MAX_ENCODED_BYTES;
     use super::registry::ImageKind;
@@ -95,7 +124,7 @@ pub(crate) fn read_stored(
     }
     let hex: String = metadata.digest.iter().map(|b| format!("{b:02x}")).collect();
     let name = format!(".gil/artifacts/blobs/sha256/{}/{}", &hex[..2], &hex[2..]);
-    let mut held = AttachmentFile::read_at(root, &name)?;
+    let mut held = AttachmentFile::read_at(root, &name, protected)?;
     if held
         .image
         .metadata(metadata.source_kind, metadata.source_description.clone())
@@ -109,7 +138,7 @@ pub(crate) fn read_stored(
 }
 
 #[cfg(unix)]
-fn same(a: &Metadata, b: &Metadata) -> bool {
+fn same(a: &Stamp, b: &Stamp) -> bool {
     use std::os::unix::fs::MetadataExt;
     a.is_file()
         && b.is_file()
@@ -123,13 +152,17 @@ fn same(a: &Metadata, b: &Metadata) -> bool {
         && a.ctime() == b.ctime()
         && a.ctime_nsec() == b.ctime_nsec()
 }
-#[cfg(not(unix))]
-fn same(_: &Metadata, _: &Metadata) -> bool {
+#[cfg(windows)]
+fn same(a: &Stamp, b: &Stamp) -> bool {
+    a == b && a.is_single_regular()
+}
+#[cfg(not(any(unix, windows)))]
+fn same(_: &Stamp, _: &Stamp) -> bool {
     false
 }
 
 #[cfg(unix)]
-fn open(root: &Path, text: &str) -> Result<File, String> {
+fn open(root: &Path, text: &str, _protected: bool) -> Result<File, String> {
     use std::os::fd::{AsRawFd, FromRawFd};
     use std::os::unix::ffi::OsStrExt;
     use std::os::unix::fs::MetadataExt;
@@ -171,8 +204,47 @@ fn open(root: &Path, text: &str) -> Result<File, String> {
     }
     Ok(dir)
 }
-#[cfg(not(unix))]
-fn open(_: &Path, _: &str) -> Result<File, String> {
+/// Windows: pin each directory of the canonical root and of the relative path without following
+/// reparse points, then open the final entry itself. Sharing is not restricted (like Unix);
+/// changes are detected through `Stamp` and the byte re-read instead.
+#[cfg(windows)]
+fn open(root: &Path, text: &str, protected: bool) -> Result<File, String> {
+    use crate::windows_fs as win;
+    use std::path::Component;
+    let mut chain = win::Chain::open(root).map_err(|_| refused())?;
+    let parts: Vec<_> = Path::new(text)
+        .components()
+        .filter_map(|c| match c {
+            Component::Normal(p) => Some(p),
+            _ => None,
+        })
+        .collect();
+    let (last, dirs) = parts.split_last().ok_or_else(refused)?;
+    let mut gil_verified = false;
+    for (index, part) in dirs.iter().enumerate() {
+        chain.push(part, false).map_err(|_| refused())?;
+        if protected && index == 0 && part.eq_ignore_ascii_case(".gil") {
+            // Explicit contract: the owner-only check must pass; a query error refuses.
+            win::private_dir(chain.dir()).map_err(|_| refused())?;
+            gil_verified = true;
+        }
+    }
+    if protected && !gil_verified {
+        return Err(refused());
+    }
+    let at = chain.child(last).map_err(|_| refused())?;
+    let file = win::open_file(&at, win::READ, win::SHARE_ALL, windows_sys::Win32::Storage::FileSystem::OPEN_EXISTING)
+        .map_err(|_| refused())?;
+    if !win::Stamp::of(&file).map_err(|_| refused())?.is_single_regular() {
+        return Err(refused());
+    }
+    if protected {
+        win::inherited_only(&file, false).map_err(|_| refused())?;
+    }
+    Ok(file)
+}
+#[cfg(not(any(unix, windows)))]
+fn open(_: &Path, _: &str, _: bool) -> Result<File, String> {
     Err("이 플랫폼의 안전한 이미지 첨부 경로는 아직 검수되지 않았다".into())
 }
 
@@ -204,9 +276,9 @@ mod tests {
         }
         assert!(relative("화면 자료/결과.png").is_ok());
     }
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     #[test]
     fn unsupported_platform_never_opens_a_source_file() {
-        assert!(open(Path::new("C:/project"), "screen.png").is_err());
+        assert!(open(Path::new("C:/project"), "screen.png", false).is_err());
     }
 }

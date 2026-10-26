@@ -37,6 +37,8 @@ const mapSection = el(".map");
 const openButton = el(".scope .open");
 const refreshButton = el(".scope .refresh");
 const forgetButton = el(".scope .forget");
+const connectCodexButton = el(".scope .connect-codex");
+const updateButton = el(".scope .update");
 const settingsSay = el(".settings-say");
 const stage = el(".stage");
 const wires = el(".stage .wires");
@@ -61,6 +63,7 @@ let current = null; // { scopeId, view, seat, plan }
 let orientation = "vertical"; // presentation only; native defaults remain unchanged
 let detailRequest = 0;
 let noticeOwner = null;
+let codexConnection = "unknown";
 
 /** Host 가 준 거절의 **종류**를 사람의 말로.
  *
@@ -112,6 +115,9 @@ const WORKING = {
   picking: "폴더를 고르는 중",
   opening: "Project 를 읽는 중",
   refreshing: "다시 읽는 중",
+  updating: "업데이트를 확인하는 중",
+  connecting: "Codex에 연결하는 중",
+  disconnecting: "Codex 연결을 해제하는 중",
 };
 /** 중복 눌림만 그 손잡이로 막는다. 창 전체를 잠그지 않는다. */
 const busyOn = (what, button) => {
@@ -906,6 +912,84 @@ async function listScopes() {
   return scopes;
 }
 
+async function checkForUpdate() {
+  busyOn("updating", updateButton);
+  try {
+    const found = await window.GIL_HOST.checkUpdate();
+    if (!found) {
+      say("최신 버전을 사용하고 있다.");
+      return;
+    }
+    const notes = found.body ? `\n\n${found.body}` : "";
+    const approved = window.confirm(
+      `GIL Companion ${found.version} 업데이트를 설치할까요?` +
+      `\n현재 버전: ${found.current_version}${notes}`,
+    );
+    if (!approved) return;
+    working.textContent = "서명된 업데이트를 내려받아 설치하는 중";
+    await window.GIL_HOST.installUpdate(found.version);
+    say("업데이트 설치를 시작했다. Windows에서는 앱이 닫힌 뒤 설치된다.");
+  } catch (error) {
+    say(`업데이트하지 못했다 — ${why(error)}`);
+  } finally {
+    busyOff(updateButton);
+  }
+}
+
+async function connectCodex() {
+  busyOn("connecting", connectCodexButton);
+  try {
+    const approved = window.confirm(
+      "Codex 사용자 설정에 GIL MCP 연결을 추가할까요?\n기존 gil 등록은 덮어쓰지 않습니다.",
+    );
+    if (!approved) return;
+    say(await window.GIL_HOST.connectCodex());
+    await refreshCodexConnection();
+  } catch (error) {
+    say(`Codex에 연결하지 못했다 — ${why(error)}`);
+  } finally {
+    busyOff(connectCodexButton);
+    connectCodexButton.disabled = codexConnection === "conflict";
+  }
+}
+
+async function disconnectCodex() {
+  busyOn("disconnecting", connectCodexButton);
+  try {
+    const approved = window.confirm(
+      "Codex에서 GIL MCP 연결을 해제할까요?\n열려 있는 GIL 대화는 닫은 뒤 앱 제거를 계속하세요.",
+    );
+    if (!approved) return;
+    say(await window.GIL_HOST.disconnectCodex());
+    await refreshCodexConnection();
+  } catch (error) {
+    say(`Codex 연결을 해제하지 못했다 — ${why(error)}`);
+  } finally {
+    busyOff(connectCodexButton);
+    connectCodexButton.disabled = codexConnection === "conflict";
+  }
+}
+
+async function refreshCodexConnection() {
+  const connection = await window.GIL_HOST.codexConnection();
+  codexConnection = connection.state;
+  connectCodexButton.hidden = false;
+  connectCodexButton.disabled = codexConnection === "conflict";
+  if (codexConnection === "connected") {
+    connectCodexButton.textContent = "Codex 연결 해제";
+    connectCodexButton.title = "GIL이 만든 MCP 등록만 확인 후 해제한다";
+    connectCodexButton.onclick = disconnectCodex;
+  } else if (codexConnection === "not_connected") {
+    connectCodexButton.textContent = "Codex 연결";
+    connectCodexButton.title = "공식 Codex CLI로 GIL MCP를 등록한다";
+    connectCodexButton.onclick = connectCodex;
+  } else {
+    connectCodexButton.textContent = "Codex 설정 충돌";
+    connectCodexButton.title = "이름이 같은 다른 gil 등록이 있어 자동으로 변경하지 않는다";
+    connectCodexButton.onclick = null;
+  }
+}
+
 async function start() {
   if (!window.GIL_HOST) {
     say("이 Host 가 GIL_HOST 를 제공하지 않는다.");
@@ -920,6 +1004,27 @@ async function start() {
   scopeSelect.onchange = () => showScope(scopeSelect.value);
 
   forgetButton.onclick = forgetProject;
+
+  if (typeof window.GIL_HOST.codexCapability === "function" &&
+      typeof window.GIL_HOST.codexConnection === "function") {
+    try {
+      const capability = await window.GIL_HOST.codexCapability();
+      if (capability.supported && capability.runtime_installed) await refreshCodexConnection();
+      else connectCodexButton.hidden = true;
+    } catch (error) {
+      connectCodexButton.hidden = true;
+    }
+  }
+
+  if (typeof window.GIL_HOST.updateCapability === "function") {
+    try {
+      const capability = await window.GIL_HOST.updateCapability();
+      updateButton.hidden = !capability.configured;
+      updateButton.onclick = checkForUpdate;
+    } catch (error) {
+      updateButton.hidden = true;
+    }
+  }
 
   // 창 밖에서 오는 말 — 있는 Host 에서만. **사실은 이 길로 오지 않는다.**
   if (typeof window.GIL_HOST.listen === "function") {
@@ -1007,6 +1112,7 @@ window.GIL_COMPANION = {
   working: () => working.textContent,
   listScopes,
   forgetProject,
+  checkForUpdate,
   start,
   ready: start(),
 };

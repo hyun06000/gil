@@ -700,6 +700,7 @@ fn a_dirty_cycle_boundary_with_no_open_step_is_also_recovery() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn a_world_that_cannot_be_read_is_not_treated_as_dirty() {
     let dir = started("cannot-tell", &[("a.txt", "가")]);

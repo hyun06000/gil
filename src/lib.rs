@@ -111,18 +111,47 @@ pub mod agent;
 mod artifact;
 pub mod capability;
 pub mod companion;
+/// Native Companion session/update policy; no IPC, installation, or automatic activation.
+pub mod companion_session;
+/// Local session transport; no updater commands. Installed-cohort discovery is separate below.
+pub mod companion_ipc;
+#[cfg(any(target_os = "macos", windows))]
+pub mod companion_discovery;
 mod context;
 mod contract;
 mod cycle;
 mod cycles;
 mod existence;
 pub mod launcher;
+/// Runtime update: pure store-state judge (no I/O, no execution).
+pub mod runtime_state;
+/// Runtime update: read-only observation of an explicitly given store path.
+pub mod runtime_observe;
+/// Runtime update: initialization and candidate preparation of an explicitly given store (no selection, no execution).
+pub mod runtime_prepare;
+/// Runtime update: the OS exclusive lock that serializes selection and the prepared-record update.
+pub mod runtime_lock;
+/// Runtime update: selection transition (intent → selection → history) of a prepared candidate; no execution.
+pub mod runtime_select;
+/// Runtime update: isolated launch mechanism (target decision by the judge, pinned-handle verification, child stdio/exit); crate-private, no public entry point.
+pub mod runtime_launch;
+/// Runtime update: test-only driver and synthetic MCP Core behind the `runtime-testbed` feature (not in product builds).
+#[cfg(feature = "runtime-testbed")]
+pub mod runtime_testbed;
+#[cfg(feature = "runtime-testbed")]
+pub mod runtime_diagnostics;
+/// Runtime update: isolated verification driver for a prebuilt bundle behind the `runtime-testbed` feature (not in product builds).
+#[cfg(feature = "runtime-testbed")]
+pub mod runtime_verify;
 // **잠금 자체는 공개 계약이 아니다.** guard 타입을 내보내면 밖의 코드가 그것을 들고
 // 다니기 시작하고, 그러면 잠금을 언제 잡는지가 라이브러리의 몫이 아니게 된다. 밖에서
 // 볼 수 있는 것은 잠금을 이미 쥔 트랜잭션([`ProjectSession`]) 하나다.
 mod lock;
 #[cfg(unix)]
 mod internal_fs;
+/// Windows handle-based equivalents of the Unix internal boundaries (Windows contract v0.1).
+#[cfg(windows)]
+mod windows_fs;
 // Manual 은 **도구의 지식**이다 — 프로젝트 상태가 아니라 함께 실린 Topic 을 읽는다.
 // 밖으로 나가는 것은 조회 문 하나와 그 오류뿐이고, 주소 타입과 index 는 안에 남는다.
 mod manual;

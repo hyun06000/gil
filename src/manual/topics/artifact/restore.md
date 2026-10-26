@@ -14,6 +14,11 @@ related:
   gil status 가 `상태: dirty` 라고 말할 때.
 
 [지금 할 일]
+  현행 preview에서는 자동으로 실행하지 않는다.
+
+  이 Project가 폐기 가능한 격리 fixture이고, Snapshot 이후 파일이 사라질 수 있음을 사용자가
+  이해하고 명시적으로 요청한 경우에만 실행한다.
+
       gil restore
 
   인수는 없다. 되돌아갈 세계는 지금 서 있는 자리가 이미 정한다.
@@ -25,6 +30,12 @@ related:
   되돌리는 것은 행동 취소가 아니다. 열려 있던 자리는 열린 채 남고, 하려던 일을 마친 뒤 정상 Report 로 닫는다.
   이미 기준 세계와 같으면 오류가 아니라 성공적인 no-op 이다.
   도중에 프로세스가 죽어도 다음 GIL 명령이 먼저 복구한 뒤에야 진행한다.
+  현재 관리 범위는 루트 .gil/을 제외한 모든 일반 파일이다. .gitignore를 존중하지 않으며
+  .git/, secret, dependency, build output도 포함될 수 있다.
+  목표 Snapshot에 없는 현재 파일은 삭제된다. transaction rollback은 성공한 삭제를 되살리는
+  사용자 휴지통이 아니다.
+  안전한 scope plan과 current-only 파일 격리가 구현되기 전에는 가치 있는 기존 프로젝트에서
+  실행하지 않는다.
 
 [올바른 예]
       gil restore

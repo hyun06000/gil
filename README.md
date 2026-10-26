@@ -29,6 +29,11 @@ Interview Cycle을 연다. 설계상 사용자 Relation과 프로젝트 목표�
 format 4 Artifact Snapshot, dirty gate, 중단 복구 가능한 `gil restore`, 그리고 필요한 규칙
 하나만 조회하는 bundled Manual이 동작한다.
 
+> **중요한 preview 제한:** 현재 Artifact 관측은 루트 `.gil/`을 제외한 모든 일반 파일을
+> 관리한다. `.gitignore`를 읽지 않으며 `.git/`, `.env`, `node_modules/`, 빌드 산출물도 제외하지
+> 않는다. `gil restore`는 목표 Snapshot에 없는 현재 파일을 삭제한다. 따라서 가치 있는 기존
+> 저장소에서 안전한 추적 범위와 복구 가능한 격리가 구현되기 전에는 restore를 사용하지 않는다.
+
 GIL의 주 사용자는 비개발자다. 인간은 명령과 저장 형식을 외우는 대신 지속형 **GIL Monitor**에서
 현재 실험, 실패한 시도와 다음 방향을 본다. Monitor는 선택 부가기능이 아니다. 현재 기본 경로는
 **MCP App fullscreen에서 가로 Graph와 채팅을 함께 보는 것**이다. Codex의 실제 화면·자동 갱신·
@@ -46,7 +51,10 @@ Codex에게 검증된 marketplace Plugin 설치를 부탁한 뒤 작업 폴더�
 기존 Mac의 공식 설치·제거/재설치·preview.1↔preview.2 복구·프로젝트 보존·실제 fullscreen 화면을
 검수했다. 공개 HTTPS 설치와 원본 CI 파일의 증거는
 [preview.3 배포 장부](distribution/codex/PREVIEW-3-PUBLICATION-20260930.md)에 둔다.
-정식 신뢰 채널의 Apple 서명·공증, Windows·Intel 지원은 남아 있다.
+정식 신뢰 채널의 Apple 서명·공증, Windows·Intel 지원은 남아 있다. Windows native Core와
+검토용 archive가 존재하더라도 **Windows 설치판은 없다**. 현재 archive는 서명된 installer가
+아니며, Host cache의 실행 파일을 직접 쓰는 경로에는 실행 중 교체 문제가 남아 있다.
+[Windows 배포 상태](distribution/windows/README.md)를 현재 판정의 정본으로 삼는다.
 [시험판 조건](distribution/codex/RELEASE-macos.md)과 [보안 제보 안내](SECURITY.md)를 따른다.
 Claude Desktop은 폴더 없는 대화에서 Plugin 화면이 확인됐지만, 폴더 연결 뒤의 표시 차단과
 fullscreen의 도구 승인 창 가림이 남아 있다. [호출 경로별 진단](mcp-app/CLAUDE-DESKTOP-ROUTES.md)을
@@ -177,7 +185,8 @@ GIL은 모델의 비공개 chain-of-thought를 저장하려는 시스템이 아�
 - Cycle Entry/Exit Snapshot과 World Current 유도
 - 프로젝트 단위 잠금과 중단 뒤 임시 객체 회수
 - 현재 Snapshot과 clean/dirty를 보여 주는 `gil status`
-- 중단 뒤 rollback 가능한 `gil restore`
+- 중단 뒤 rollback 가능한 `gil restore`의 transaction 기반 동작. 현재 추적 범위가 지나치게
+  넓으므로 일반 프로젝트의 안전한 복구 기능으로는 아직 승인하지 않음
 - 바이너리에 함께 실리는 Manual과 `gil help <주제>` 조회
 - 현재 상태에 맞는 Topic만 보여 주는 `gil help`
 - 거절이 복구 Topic 하나를 가리키는 오류 Router
@@ -211,7 +220,8 @@ GIL은 모델의 비공개 chain-of-thought를 저장하려는 시스템이 아�
 - 심화 Interview와 실제 Chain: 승인된 로드맵·기능명세·사전 문서, 추가 인터뷰를 통한
   수정, 승인 문서에 없는 지침을 실험에서 실행하지 않는 경계.
   열린 Cycle을 둔 채 다른 Cycle은 열지 않으며, 재인터뷰도 현재 Cycle을 규칙에 따라 닫은 뒤 개설
-- Windows/Codex 설치와 macOS 기준 핵심 UX 동등성, 실제 사용자 경험 수집
+- Windows/Codex 사용자 단위 installer, 고정 실행 진입점, Companion의 사용자 버튼 업데이트와
+  macOS 기준 핵심 UX 동등성. 자동 다운로드·자동 설치는 기본 동작으로 만들지 않는다.
 - Windows 설치·경험 수집 뒤 홍보, 홍보 중 OpenAI와 로컬 MCP App 공식 디렉터리 노출 경로 협의
 - 독립 Claude 트랙: Anthropic 설치·화면·작업 경험 강화와 공용 변경의 회귀검증
 
@@ -363,8 +373,8 @@ layer를 목표로 한다.
 
 ## Project status
 
-**2026-09-30 — source와 marketplace 공개, unsigned preview.2의 공식 HTTPS 설치·rollback·
-Project 보존·main 보호/PVR를 확인했다. Codex/macOS Apple Silicon 한정이며 안정판·Windows 지원은 아니다.**
+**현재 사용자 채널은 Codex/macOS Apple Silicon unsigned preview뿐이다. Windows 코드는 CI와
+개발 후보 단계이며 installer·서명·Companion 업데이트·clean-PC 인수가 없어 지원으로 표시하지 않는다.**
 
 앞선 Go 구현과 과거 개발 이력은 기존 개발 저장소에 남겨 두었으며, 이 `gil` 저장소에는
 그 branch·tag·commit history를 가져오지 않았다. 현재 구현은 Rust로 작성하며, Git wrapper가

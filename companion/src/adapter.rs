@@ -669,11 +669,20 @@ mod tests {
     }
 
     #[test]
-    fn a_symlink_to_the_same_root_is_the_same_project() {
-        let real = scratch("scope-real");
-        let link = std::env::temp_dir().join("gil-adapter-scope-link");
-        let _ = std::fs::remove_file(&link);
+    fn an_alias_to_the_same_root_is_the_same_project() {
+        let base = std::env::temp_dir().join(format!("gil-adapter-alias-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir(&base).expect("새 시험 자리만 만든다");
+        let real = base.join("real");
+        std::fs::create_dir(&real).unwrap();
+        let link = base.join("alias");
+        #[cfg(unix)]
         std::os::unix::fs::symlink(&real, &link).expect("링크를 건다");
+        #[cfg(windows)] {
+            // Junction needs no Developer Mode or symlink privilege; no policy changes.
+            let output = std::process::Command::new("cmd.exe")
+                .args(["/d", "/c", "mklink", "/J"]).arg(&link).arg(&real).output().unwrap();
+            assert!(output.status.success(), "junction fixture failed: {:?} {:?}", output.stdout, output.stderr);
+        }
 
         // adapter 가 하는 것과 같은 걸음 — 먼저 편다.
         let through = |at: &Path| scope_of(&std::fs::canonicalize(at).expect("편다"));
@@ -682,7 +691,11 @@ mod tests {
             through(&link),
             "같은 자리를 가리키는 링크가 다른 Project 가 되었다"
         );
-        let _ = std::fs::remove_file(&link);
+        #[cfg(unix)]
+        std::fs::remove_file(&link).unwrap();
+        #[cfg(windows)]
+        std::fs::remove_dir(&link).unwrap();
+        std::fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]
@@ -965,6 +978,11 @@ mod tests {
 
         // 그 자리에서 Project 를 짐작하거나 읽지 않는다.
         let hand = &code[guard..desk];
+        // Session-only requests may inspect exactly this fixed flag to suppress focusing.
+        // No argument value, endpoint or Project path is interpreted by the second instance.
+        let mode_check = "argv.iter().any(|a| a == gil::companion_ipc::SESSION_ARG)";
+        assert_eq!(hand.matches(mode_check).count(), 1);
+        let hand = hand.replace(mode_check, "SESSION_MODE_CHECK");
         for forbidden in ["argv[", "argv.", "cwd.", "remember(", "openable("] {
             assert!(!hand.contains(forbidden), "둘째 실행이 {forbidden} 를 만진다");
         }

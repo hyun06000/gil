@@ -1,11 +1,57 @@
 //! Real locked Session close using synthetic Project files, never the source checkout.
-#![cfg(unix)]
+//! Unix and Windows (Windows contract §6, W2-*/W4-*); other platforms stay refused.
+#![cfg(any(unix, windows))]
 mod common;
 use gil::visual_report::image::VisualAttachment;
 use gil::visual_report::registry::{ReportOwner, ReportVisuals, SourceKind};
 use gil::visual_report::{VisualAssetId, VisualDeclaration, VisualUse};
 use gil::{CycleKind, CycleRef, NodeKind, ProjectSession, StepRef};
 use std::{fs, path::PathBuf};
+
+/// Link fixtures. Windows directory links are junctions (no privilege needed); file symlinks
+/// need the symlink privilege, which CI runners hold. Removal never touches link targets.
+mod links {
+    use std::path::Path;
+    #[cfg(unix)]
+    pub fn file(target: &Path, link: &Path) {
+        std::os::unix::fs::symlink(target, link).unwrap();
+    }
+    #[cfg(unix)]
+    pub fn dir(target: &Path, link: &Path) {
+        std::os::unix::fs::symlink(target, link).unwrap();
+    }
+    #[cfg(unix)]
+    pub fn remove(link: &Path) {
+        std::fs::remove_file(link).unwrap();
+    }
+    #[cfg(windows)]
+    pub fn file(target: &Path, link: &Path) {
+        std::os::windows::fs::symlink_file(target, link).expect("file symlink needs the symlink privilege");
+    }
+    #[cfg(windows)]
+    pub fn dir(target: &Path, link: &Path) {
+        let shell = std::path::PathBuf::from(std::env::var_os("SystemRoot").unwrap())
+            .join("System32/WindowsPowerShell/v1.0/powershell.exe");
+        let made = std::process::Command::new(shell)
+            .args(["-NoProfile", "-NonInteractive", "-Command",
+                "$ErrorActionPreference='Stop'; New-Item -ItemType Junction -Path $env:GIL_TEST_LINK -Target $env:GIL_TEST_TARGET | Out-Null"])
+            .env("GIL_TEST_LINK", link)
+            .env("GIL_TEST_TARGET", target)
+            .output()
+            .unwrap();
+        assert!(made.status.success(), "junction fixture creation failed");
+    }
+    #[cfg(windows)]
+    pub fn remove(link: &Path) {
+        use std::os::windows::fs::MetadataExt;
+        let meta = std::fs::symlink_metadata(link).unwrap();
+        assert!(meta.is_symlink());
+        // `is_dir()` is false for every symlink; a junction/directory link carries the
+        // directory attribute and must be removed as a directory entry (CI run 39125352678).
+        let directory = meta.file_attributes() & 0x10 != 0;
+        if directory { std::fs::remove_dir(link).unwrap() } else { std::fs::remove_file(link).unwrap() }
+    }
+}
 
 fn png() -> Vec<u8> {
     let mut bytes = Vec::new();
@@ -25,6 +71,7 @@ fn setup(label: &str) -> (PathBuf, ProjectSession) {
         root.join(gil::STATE_PATH),
     )
     .unwrap();
+    common::private_storage(&root);
     fs::write(root.join("screen.png"), png()).unwrap();
     let session = ProjectSession::open(common::spec(), root.join(gil::STATE_PATH)).unwrap();
     (root, session)
@@ -247,8 +294,25 @@ fn report_scoped_read_survives_source_deletion_and_does_not_mutate_state() {
 
 #[test]
 fn stored_read_refuses_links_at_every_internal_component() {
-    use std::os::unix::fs::symlink;
     let (root, session, id, blob) = committed("visual-read-links");
+    // Windows refuses renaming a directory that holds an open lock file: release the Session
+    // there and reopen read-only per check. Unix keeps the live Session like the real server.
+    #[cfg(windows)]
+    drop(session);
+    let read = || -> Result<(), String> {
+        #[cfg(unix)]
+        {
+            session.read_report_image(owner(), id).map(|_| ()).map_err(|e| e.to_string())
+        }
+        #[cfg(windows)]
+        {
+            ProjectSession::open_read_only(common::spec(), root.join(gil::STATE_PATH))
+                .map_err(|e| e.to_string())?
+                .read_report_image(owner(), id)
+                .map(|_| ())
+                .map_err(|e| e.to_string())
+        }
+    };
     let mut paths = vec![blob.clone()];
     let mut parent = blob.parent().unwrap();
     while parent != root {
@@ -258,16 +322,16 @@ fn stored_read_refuses_links_at_every_internal_component() {
     for path in paths {
         let moved = path.with_extension("held");
         fs::rename(&path, &moved).unwrap();
-        symlink(&moved, &path).unwrap();
-        assert!(session.read_report_image(owner(), id).is_err(), "{path:?}");
-        fs::remove_file(&path).unwrap();
+        if moved.is_dir() { links::dir(&moved, &path) } else { links::file(&moved, &path) }
+        assert!(read().is_err(), "{path:?}");
+        links::remove(&path);
         fs::rename(&moved, &path).unwrap();
     }
     let link = root.join("duplicate");
     fs::hard_link(&blob, &link).unwrap();
-    assert!(session.read_report_image(owner(), id).is_err());
+    assert!(read().is_err());
     fs::remove_file(link).unwrap();
-    assert!(session.read_report_image(owner(), id).is_ok());
+    assert!(read().is_ok());
 }
 
 #[test]
@@ -305,7 +369,6 @@ fn read_only_session_reads_preserved_image_without_recovery_or_state_write() {
 
 #[test]
 fn visual_state_temp_never_truncates_preexisting_files_or_links() {
-    use std::os::unix::fs::symlink;
     let (root, session) = setup("visual-state-temp-boundary");
     let state = root.join(gil::STATE_PATH);
     let before = fs::read(&state).unwrap();
@@ -315,7 +378,7 @@ fn visual_state_temp_never_truncates_preexisting_files_or_links() {
     for kind in 0..3 {
         match kind {
             0 => fs::write(&temp, b"unfinished").unwrap(),
-            1 => symlink(&victim, &temp).unwrap(),
+            1 => links::file(&victim, &temp),
             _ => fs::hard_link(&victim, &temp).unwrap(),
         }
         assert!(gil::save(session.project(), &state).is_err());
@@ -330,26 +393,27 @@ fn visual_state_temp_never_truncates_preexisting_files_or_links() {
 
 #[test]
 fn visual_state_refuses_linked_internal_parent_without_writing_target() {
-    use std::os::unix::fs::symlink;
     let (root, session) = setup("visual-state-parent-boundary");
+    // `save` is the lock-free low-level write; release the lock so `.gil` can be renamed on Windows.
+    let project = session.project().clone();
+    drop(session);
     let moved = root.join("held-gil");
     fs::rename(root.join(".gil"), &moved).unwrap();
-    symlink(&moved, root.join(".gil")).unwrap();
+    links::dir(&moved, &root.join(".gil"));
     let before = fs::read(moved.join("state.yaml")).unwrap();
-    assert!(gil::save(session.project(), root.join(gil::STATE_PATH)).is_err());
+    assert!(gil::save(&project, root.join(gil::STATE_PATH)).is_err());
     assert_eq!(fs::read(moved.join("state.yaml")).unwrap(), before);
     assert!(!moved.join("state.yaml.writing").exists());
 }
 
 #[test]
 fn visual_state_replaces_target_link_not_its_referent() {
-    use std::os::unix::fs::symlink;
     let (root, session) = setup("visual-state-target-boundary");
     let victim = root.join("keep.txt");
     fs::write(&victim, b"keep").unwrap();
     let state = root.join(gil::STATE_PATH);
     fs::remove_file(&state).unwrap();
-    symlink(&victim, &state).unwrap();
+    links::file(&victim, &state);
     gil::save(session.project(), &state).unwrap();
     assert_eq!(fs::read(victim).unwrap(), b"keep");
     assert!(
@@ -455,12 +519,11 @@ fn replacing_file_with_identical_bytes_still_changes_identity() {
 
 #[test]
 fn source_links_parent_links_hardlinks_and_unsafe_names_are_refused() {
-    use std::os::unix::fs::symlink;
     let (root, mut session) = setup("visual-attach-boundary");
     fs::create_dir(root.join("images")).unwrap();
     fs::write(root.join("images/normal.png"), png()).unwrap();
-    symlink(root.join("screen.png"), root.join("linked.png")).unwrap();
-    symlink(root.join("images"), root.join("linked-dir")).unwrap();
+    links::file(&root.join("screen.png"), &root.join("linked.png"));
+    links::dir(&root.join("images"), &root.join("linked-dir"));
     fs::hard_link(root.join("screen.png"), root.join("hard.png")).unwrap();
     let before = fs::read(root.join(gil::STATE_PATH)).unwrap();
     for path in [
@@ -489,9 +552,17 @@ fn source_links_parent_links_hardlinks_and_unsafe_names_are_refused() {
 fn directory_fifo_and_duplicate_input_do_not_become_attachments() {
     let (root, mut session) = setup("visual-attach-special");
     fs::create_dir(root.join("directory.png")).unwrap();
-    let path =
-        std::ffi::CString::new(root.join("pipe.png").as_os_str().as_encoded_bytes()).unwrap();
-    assert_eq!(unsafe { libc::mkfifo(path.as_ptr(), 0o600) }, 0);
+    #[cfg(unix)]
+    {
+        let path =
+            std::ffi::CString::new(root.join("pipe.png").as_os_str().as_encoded_bytes()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(path.as_ptr(), 0o600) }, 0);
+    }
+    #[cfg(windows)]
+    {
+        fs::create_dir(root.join("images-target")).unwrap();
+        links::dir(&root.join("images-target"), &root.join("pipe.png")); // a junction, not a FIFO
+    }
     for name in ["directory.png", "pipe.png"] {
         assert!(
             session
@@ -553,6 +624,7 @@ fn non_verify_and_legacy_projects_refuse_before_reading_files() {
         root.join(gil::STATE_PATH),
     )
     .unwrap();
+    common::private_storage(&root);
     let mut session = ProjectSession::open(common::spec(), root.join(gil::STATE_PATH)).unwrap();
     assert!(
         session

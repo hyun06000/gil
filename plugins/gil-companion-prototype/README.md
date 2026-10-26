@@ -1,5 +1,9 @@
 # gil-companion-prototype
 
+> 현재 배포 manifest는 Plugin 폴더 안의 Core를 직접 실행한다. Windows용 고정 실행 진입점,
+> installer와 Companion 업데이트 버튼은 연결되어 있지 않다. 이 Plugin의 runtime 시험 코드를
+> Windows 설치·업데이트 지원으로 해석하지 않는다.
+
 **Agent 가 쓸 GIL 과 사람이 볼 Monitor 의 문**을 함께 소유하는 공용 Plugin 정본.
 이 디렉터리가 **정본**이다.
 

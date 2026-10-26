@@ -707,3 +707,12 @@ N3 보고서의 근거 부족 문구는 그대로 보존하며, 후속 인수로
 `publishable: false`이며 archive SHA-256은
 `a7c4f1ccd50b3ff85ece6ffa298805f5e732097db77fd3db15f0d5001876daba`이다.
 도구 schema·저장 형식·설치본·기존 Report 수정·게시·커밋·push는 없다.
+
+## 23. Windows 작성 경계 단계 1 (2026-10-18)
+
+§6 항목 9("안전한 첨부 구현이 없는 플랫폼은 명시적으로 거절")의 Windows 구현을 시작했다.
+범위·위협·인수 기준은 `GIL_Windows_Visual_Support_Contract_v0.1.md`, 저장 경계 상세는 저장
+계약 §25다. 새 format-5 생성·Verify 첨부·저장 이미지 인용·재시작 보존만 대상이며 Windows
+이관은 계속 거절한다. 작성 profile의 Windows CI(`windows-spike.yml` matrix `visual-authoring`)가
+Rust 경계 시험과 24-도구 smoke를 실행한다. 빌드·runner 성공을 실제 PC·Host 화면 인수로
+세지 않으며, Skill·설치 문서의 Windows 안내는 runner 결과 뒤 별도 갱신한다.

@@ -70,7 +70,11 @@ impl ProjectSession {
         let state_path = state_path.as_ref().to_path_buf();
         let gil = gil_dir(&state_path)?;
 
+        // Windows image Projects: the storage ACL is verified **before** the lock file may be
+        // created and before any recovery or reaping (contract §4 W4 5).
+        let declared = private_storage_before_lock(&gil, &state_path)?;
         let lock = ProjectLock::acquire(&gil).map_err(SessionError::from)?;
+        private_storage_after_lock(&gil, &state_path, declared)?;
 
         preflight_state(&state_path)?;
 
@@ -83,6 +87,7 @@ impl ProjectSession {
         reap_tmp(&ObjectStore::at(&gil))?;
 
         let project = store::load_within(&lock, rules, &state_path).map_err(SessionError::Store)?;
+        private_visual_storage(&gil, &project)?;
 
         Ok(ProjectSession {
             project,
@@ -118,8 +123,10 @@ impl ProjectSession {
         let gil = gil_dir(&state_path)?;
 
         // 잠금은 여기서도 먼저다. 읽는 도중에 남이 상태를 갈아 끼우면, 읽어 낸 것은
-        // 아무 시점의 사실도 아니게 된다.
+        // 아무 시점의 사실도 아니게 된다. (Windows 이미지 Project: 그 전에 ACL 을 읽기만으로 검증.)
+        let declared = private_storage_before_lock(&gil, &state_path)?;
         let lock = ProjectLock::acquire(&gil).map_err(SessionError::from)?;
+        private_storage_after_lock(&gil, &state_path, declared)?;
 
         preflight_state(&state_path)?;
 
@@ -136,6 +143,7 @@ impl ProjectSession {
         // 지우는 것은 쓰기다.
 
         let project = store::load_within(&lock, rules, &state_path).map_err(SessionError::Store)?;
+        private_visual_storage(&gil, &project)?;
 
         Ok(ReadOnlySession(ProjectSession {
             project,
@@ -215,11 +223,11 @@ impl ProjectSession {
             .and_then(|state| state.registry().asset_for_report(owner, asset))
             .ok_or_else(|| error("이 Project의 해당 Report에 연결된 시각 자료가 아니다".into()))?
             .metadata();
-        crate::visual_report::file::read_stored(&self.root()?, metadata).map_err(error)
+        crate::visual_report::file::read_stored(&self.root()?, metadata, true).map_err(error)
     }
 
     fn store(&self) -> Result<ObjectStore, SessionError> {
-        Ok(ObjectStore::at(&gil_dir(&self.state_path)?))
+        Ok(ObjectStore::for_project(&gil_dir(&self.state_path)?, &self.project))
     }
 }
 
@@ -738,6 +746,99 @@ fn capture(root: &Path, store: &ObjectStore) -> Result<crate::ManifestAddress, S
 ///
 /// 모르는 것을 지우지 않는다. 그리고 **살아 있는 다른 GIL 프로세스의 임시 파일을 지울 수
 /// 없다** — 이 함수는 프로젝트 잠금을 쥔 채로만 불리고, 잠금을 쥔 명령은 한 번에 하나다.
+/// Test-only observation point between the pre-lock classification and the lock (Windows).
+#[cfg(all(test, windows))]
+pub(crate) mod open_hooks {
+    use std::cell::Cell;
+    use std::path::Path;
+    thread_local! {
+        pub static BETWEEN_CLASSIFY_AND_LOCK: Cell<Option<fn(&Path)>> = const { Cell::new(None) };
+    }
+}
+
+/// Windows: the state file's **declared** format, read through the no-follow control-file handle
+/// and classified exactly like the loader (`store::declared_format`). Absent, unreadable,
+/// undeclared, previous or unknown formats are errors, never "format 4": the caller refuses
+/// before any recovery or reaping and preserves everything (Windows contract §4 W4 5).
+#[cfg(windows)]
+fn declared_format_now(state_path: &Path) -> Result<u32, SessionError> {
+    let text = crate::windows_fs::read_state(state_path).map_err(|source| match source.kind() {
+        std::io::ErrorKind::NotFound => SessionError::Store(StoreError::NotFound { path: store::said_path(state_path) }),
+        _ => SessionError::Store(StoreError::Read { path: store::said_path(state_path), source }),
+    })?;
+    store::declared_format(&text, state_path).map_err(SessionError::Store)
+}
+
+/// Windows, before the lock: classify the declared format (read only; nothing is created) and,
+/// for format 5, verify the whole storage ACL tree read-only. Returns the classified format.
+/// "No modification" here means: no entry under `.gil` is created, deleted, renamed or written
+/// before this passes. The only entry the lock may then create is `project.lock` when absent;
+/// it inherits the verified `.gil` DACL and is checked again after the lock.
+fn private_storage_before_lock(gil: &Path, state_path: &Path) -> Result<u32, SessionError> {
+    #[cfg(windows)]
+    {
+        let format = declared_format_now(state_path)?;
+        if format == crate::VISUAL_FORMAT {
+            crate::windows_fs::verify_storage_tree(gil).map_err(|source| SessionError::Store(StoreError::Read {
+                path: store::said_path(gil), source,
+            }))?;
+        }
+        #[cfg(test)]
+        if let Some(act) = open_hooks::BETWEEN_CLASSIFY_AND_LOCK.with(|c| c.get()) {
+            act(state_path);
+        }
+        Ok(format)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (gil, state_path);
+        Ok(crate::FORMAT)
+    }
+}
+
+/// Windows, after the lock and still before recovery/reaping: classify the declared format
+/// again under the lock — it must equal the pre-lock classification — and for format 5 run the
+/// same read-only verification again (covers `project.lock`, which the lock may have just
+/// created, and any change in between). A failure releases the lock and touches nothing else.
+fn private_storage_after_lock(gil: &Path, state_path: &Path, before: u32) -> Result<(), SessionError> {
+    #[cfg(windows)]
+    {
+        let after = declared_format_now(state_path)?;
+        if after != before {
+            return Err(SessionError::Store(StoreError::Read {
+                path: store::said_path(state_path),
+                source: std::io::Error::other(format!(
+                    "저장 파일의 선언 형식이 잠금 전({before})과 잠금 후({after})로 다르다. 복구·정리 없이 기록을 보존하고 거절한다"
+                )),
+            }));
+        }
+        if after == crate::VISUAL_FORMAT {
+            crate::windows_fs::verify_storage_tree(gil).map_err(|source| SessionError::Store(StoreError::Read {
+                path: store::said_path(gil), source,
+            }))?;
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = (gil, state_path, before);
+    Ok(())
+}
+
+/// Windows: final gate after loading. The declared format was already classified before and
+/// after the lock and the ACL tree verified for format 5; this re-checks the tree against the
+/// Project the loader actually produced, so the contract never depends on the pre-load
+/// classification alone. Never repaired here; format-4 Projects and other platforms are not checked.
+fn private_visual_storage(gil: &Path, project: &Project) -> Result<(), SessionError> {
+    #[cfg(windows)]
+    if project.visual_state().is_some() {
+        crate::windows_fs::verify_storage_tree(gil).map_err(|source| SessionError::Store(StoreError::Read {
+            path: store::said_path(gil), source,
+        }))?;
+    }
+    #[cfg(not(windows))]
+    let _ = (gil, project);
+    Ok(())
+}
+
 /// Refuse linked/special control files before recovery or temporary-object cleanup.
 /// Absence remains the responsibility of the existing recovery/load protocol.
 fn preflight_state(path: &Path) -> Result<(), SessionError> {
@@ -749,7 +850,15 @@ fn preflight_state(path: &Path) -> Result<(), SessionError> {
             path: store::said_path(path), source,
         })),
     }
-    #[cfg(not(unix))] let _ = path;
+    #[cfg(windows)]
+    match crate::windows_fs::control_file(path, false) {
+        Ok(_) => (),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
+        Err(source) => return Err(SessionError::Store(StoreError::Read {
+            path: store::said_path(path), source,
+        })),
+    }
+    #[cfg(not(any(unix, windows)))] let _ = path;
     Ok(())
 }
 

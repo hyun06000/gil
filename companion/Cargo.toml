@@ -17,3 +17,4 @@ tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-autostart = "2.5.1"
 tauri-plugin-dialog = "2.7.3"
 tauri-plugin-single-instance = "2.4.4"
+tauri-plugin-updater = "2"

@@ -59,6 +59,36 @@
       return pass("show_window");
     },
 
+    /** 확인과 설치는 모두 사용자가 누른 뒤에만 시작한다. */
+    async updateCapability() {
+      return pass("update_capability");
+    },
+
+    async checkUpdate() {
+      return pass("check_update");
+    },
+
+    async installUpdate(expectedVersion) {
+      return pass("install_update", { expectedVersion });
+    },
+
+    /** Codex 설정은 이 버튼을 누른 때에만 공식 CLI를 통해 바꾼다. */
+    async codexCapability() {
+      return pass("codex_capability");
+    },
+
+    async codexConnection() {
+      return pass("codex_connection");
+    },
+
+    async connectCodex() {
+      return pass("connect_codex");
+    },
+
+    async disconnectCodex() {
+      return pass("disconnect_codex");
+    },
+
     /**
      * 창 밖에서 오는 말을 듣는다.
      *

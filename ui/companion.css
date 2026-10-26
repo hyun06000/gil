@@ -157,14 +157,15 @@ button, select { font: inherit; color: inherit; }
 
 /* ── 고른 것의 상세 ───────────────────────────────────────────────── */
 /* 고르개 옆의 손잡이 둘. 읽기만 하는 것들이라 강조하지 않는다. */
-.scope .open, .scope .refresh, .scope .forget {
+.scope .open, .scope .refresh, .scope .forget, .scope .connect-codex, .scope .update {
   flex: none; white-space: nowrap; margin-left: 6px; padding: 4px 8px; font-size: 10px; cursor: pointer;
   border: 1px solid light-dark(#d5d9d3, #424642); border-radius: 7px;
   background: light-dark(#fff, #252825); color: inherit;
 }
-.scope .open:hover, .scope .refresh:hover, .scope .forget:hover { border-color: #566fe8; }
-.scope .open:disabled, .scope .refresh:disabled, .scope .forget:disabled { opacity: .5; cursor: wait; }
-.scope .open:focus-visible, .scope .refresh:focus-visible, .scope .forget:focus-visible {
+.scope .open:hover, .scope .refresh:hover, .scope .forget:hover, .scope .connect-codex:hover, .scope .update:hover { border-color: #566fe8; }
+.scope .open:disabled, .scope .refresh:disabled, .scope .forget:disabled, .scope .connect-codex:disabled, .scope .update:disabled { opacity: .5; cursor: wait; }
+.scope .open:focus-visible, .scope .refresh:focus-visible, .scope .forget:focus-visible,
+.scope .connect-codex:focus-visible, .scope .update:focus-visible {
   outline: 2px solid #566fe8; outline-offset: 2px;
 }
 
