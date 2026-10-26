@@ -84,6 +84,9 @@ jobs:
         run: |
           $installers = @(Get-ChildItem target\release\bundle\nsis -File -Filter '*.exe')
           if ($installers.Count -ne 1) { throw "Expected one NSIS installer, found $($installers.Count)" }
+          if ($installers[0].Name -notmatch '_[0-9]+\.[0-9]+\.[0-9]+-owner\.[a-f0-9]{12}_x64-setup\.exe$') {
+            throw "Owner candidate is missing its content-specific version: $($installers[0].Name)"
+          }
           if ((Get-AuthenticodeSignature -LiteralPath $installers[0]).Status -ne 'NotSigned') {
             throw 'Owner-acceptance candidate must remain explicitly unsigned'
           }
@@ -92,7 +95,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $codex = @(Get-ChildItem "$prefix\node_modules\@openai\codex-win32-x64" -Recurse -File -Filter 'codex.exe')
           if ($codex.Count -ne 1) { throw "Expected one native codex.exe, found $($codex.Count)" }
-          ./distribution/windows/product-e2e.ps1 -Installer $installers[0].FullName -CodexExe $codex[0].FullName -Evidence 'target/windows-product-evidence/unsigned-acceptance.json' -ExpectedSignature NotSigned -DisplayName 'GIL Companion (Unsigned Test)'
+          ./distribution/windows/product-e2e.ps1 -Installer $installers[0].FullName -CodexExe $codex[0].FullName -Evidence 'target/windows-product-evidence/unsigned-acceptance.json' -ExpectedSignature NotSigned -DisplayName 'GIL Companion (Unsigned Test)' -SeedLegacyRuntime
       - name: Retain unsigned owner-acceptance candidate for three days
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:

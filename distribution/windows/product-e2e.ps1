@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory = $true)][string]$CodexExe,
     [Parameter(Mandatory = $true)][string]$Evidence,
     [ValidateSet('Valid', 'NotSigned')][string]$ExpectedSignature = 'Valid',
-    [string]$DisplayName = 'GIL Companion'
+    [string]$DisplayName = 'GIL Companion',
+    [switch]$SeedLegacyRuntime
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -12,6 +13,17 @@ $Installer = (Resolve-Path -LiteralPath $Installer).Path
 $CodexExe = (Resolve-Path -LiteralPath $CodexExe).Path
 $Runtime = Join-Path $env:LOCALAPPDATA 'GIL\runtime'
 if (Test-Path -LiteralPath $Runtime) { throw "Runner is not clean: $Runtime already exists" }
+$LegacyCore = $null
+$LegacyHash = $null
+if ($SeedLegacyRuntime) {
+    $LegacyCore = Join-Path $Runtime 'versions\0.1.0\gil.exe'
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $LegacyCore) | Out-Null
+    Set-Content -LiteralPath $LegacyCore -Value 'preserved legacy owner-test Core' -Encoding utf8NoBOM
+    $LegacyHash = (Get-FileHash -LiteralPath $LegacyCore -Algorithm SHA256).Hash.ToLowerInvariant()
+    [ordered]@{ schema = 1; version = '0.1.0'; sha256 = $LegacyHash; architecture = 'x86_64'; cohort = 'gil-mcp-v1' } |
+        ConvertTo-Json -Compress |
+        Set-Content -LiteralPath (Join-Path $Runtime 'current.json') -Encoding utf8NoBOM
+}
 
 $process = Start-Process -FilePath $Installer -ArgumentList '/S' -Wait -PassThru
 if ($process.ExitCode -ne 0) { throw "NSIS installer exited $($process.ExitCode)" }
@@ -28,6 +40,13 @@ $Core = Join-Path $Runtime "versions\$($Receipt.version)\gil.exe"
 if (-not (Test-Path -LiteralPath $Core -PathType Leaf)) { throw 'Selected Core was not installed' }
 $CoreHash = (Get-FileHash -LiteralPath $Core -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($CoreHash -ne $Receipt.sha256) { throw 'Installed Core digest differs from the receipt' }
+if ($SeedLegacyRuntime) {
+    if ($Receipt.version -eq '0.1.0') { throw 'Owner candidate reused the legacy runtime directory' }
+    if (-not (Test-Path -LiteralPath $LegacyCore -PathType Leaf) -or
+        (Get-FileHash -LiteralPath $LegacyCore -Algorithm SHA256).Hash.ToLowerInvariant() -ne $LegacyHash) {
+        throw 'Installation changed or removed the preserved legacy runtime'
+    }
+}
 
 $entries = @(Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' | Get-ItemProperty |
     Where-Object DisplayName -eq $DisplayName)
@@ -144,7 +163,7 @@ $SignerThumbprint = if ($Signature.SignerCertificate) { $Signature.SignerCertifi
         signature_status = $Signature.Status.ToString()
     }
     runtime = [ordered]@{ version = $Receipt.version; architecture = $Receipt.architecture; cohort = $Receipt.cohort; core_sha256 = $CoreHash }
-    acceptance = [ordered]@{ silent_current_user_install = $true; visible_companion_window = $true; launcher_mcp = $true; running_core_write_refused = $true; codex_cli_registration = $true; codex_cli_disconnect = $true; companion_uninstall = $true; runtime_preserved = $true }
+    acceptance = [ordered]@{ silent_current_user_install = $true; legacy_runtime_preserved = [bool]$SeedLegacyRuntime; visible_companion_window = $true; launcher_mcp = $true; running_core_write_refused = $true; codex_cli_registration = $true; codex_cli_disconnect = $true; companion_uninstall = $true; runtime_preserved = $true }
     exclusions = @('Companion UI contents', 'Codex Desktop conversation', 'complete runtime cleanup', 'repair', 'SmartScreen reputation')
 } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $Evidence -Encoding utf8NoBOM
 Get-Content -Raw -LiteralPath $Evidence
