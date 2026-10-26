@@ -2001,13 +2001,36 @@ mod tests {
         std::path::PathBuf,
         Arc<std::sync::atomic::AtomicUsize>,
     ) {
-        live_watching(label, pace, Path::to_path_buf)
+        live_maybe_watching(label, pace, |root| Some(root.to_path_buf()))
     }
 
     fn live_watching(
         label: &str,
         pace: Pace,
         watch_path: impl FnOnce(&Path) -> std::path::PathBuf,
+    ) -> (
+        Monitor,
+        std::path::PathBuf,
+        Arc<std::sync::atomic::AtomicUsize>,
+    ) {
+        live_maybe_watching(label, pace, |root| Some(watch_path(root)))
+    }
+
+    fn live_without_watcher(
+        label: &str,
+        pace: Pace,
+    ) -> (
+        Monitor,
+        std::path::PathBuf,
+        Arc<std::sync::atomic::AtomicUsize>,
+    ) {
+        live_maybe_watching(label, pace, |_| None)
+    }
+
+    fn live_maybe_watching(
+        label: &str,
+        pace: Pace,
+        watch_path: impl FnOnce(&Path) -> Option<std::path::PathBuf>,
     ) -> (
         Monitor,
         std::path::PathBuf,
@@ -2030,7 +2053,7 @@ mod tests {
             Arc::clone(&looks),
         ));
         let watch = watch_path(&root);
-        let window = serve(observer, pace, wall_clock(), Some(&watch)).expect("창을 연다");
+        let window = serve(observer, pace, wall_clock(), watch.as_deref()).expect("창을 연다");
         (window, root, looks)
     }
 
@@ -2185,7 +2208,10 @@ mod tests {
 
     #[test]
     fn a_hundred_hints_become_one_look() {
-        let (window, _root, looks) = live("hints-coalesce", only_the_watcher());
+        // 이 시험은 수동 hint 통로의 합침만 잰다. 실제 파일 watcher를 함께 세우면 fixture나
+        // 관측 자체의 OS 사건이 두 번째 독립 hint가 되어 이 계약과 무관한 횟수를 더한다.
+        let (window, _root, looks) =
+            live_without_watcher("hints-coalesce", only_the_watcher());
         let before = settle(&looks);
         for _ in 0..100 {
             window.hint();
