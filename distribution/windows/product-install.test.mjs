@@ -149,6 +149,7 @@ test('unsigned owner acceptance CI is manual, isolated, install-tested and never
 
   const acceptance = await read('distribution/windows/product-e2e.ps1');
   assert.match(acceptance, /ValidateSet\('Valid', 'NotSigned'\)/);
+  assert.match(acceptance, /expected \$\{ExpectedSignature\}:/);
   assert.match(acceptance, /Where-Object DisplayName -eq \$DisplayName/);
   assert.match(acceptance, /if \(\$Signature\.SignerCertificate\)/);
 });
