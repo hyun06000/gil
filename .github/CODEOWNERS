@@ -1,0 +1,12 @@
+# Route reviews to the current maintainer. This assigns review ownership; it does
+# not by itself require approval or authorize a release.
+* @hyun06000
+
+# Security, persistence, protocol and distribution changes deserve an explicit
+# maintainer review even if GitHub branch settings change later.
+/src/ @hyun06000
+/spec/ @hyun06000
+/mcp-app/ @hyun06000
+/distribution/ @hyun06000
+/.github/workflows/ @hyun06000
+/SECURITY.md @hyun06000
