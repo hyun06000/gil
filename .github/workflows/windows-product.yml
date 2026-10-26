@@ -12,6 +12,11 @@ on:
       - 'Cargo.lock'
   workflow_dispatch:
     inputs:
+      build_unsigned_test_candidate:
+        description: 'Build, install-test and retain an explicitly unsigned owner-acceptance candidate'
+        type: boolean
+        required: true
+        default: false
       build_signed_candidate:
         description: 'Build, install-test and retain a signed x64 candidate (never publish a release)'
         type: boolean
@@ -48,6 +53,55 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo check --locked --target x86_64-pc-windows-msvc -p gil --bin gil-launcher --features product-safety
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  unsigned-test-candidate:
+    name: UNSIGNED owner acceptance candidate
+    needs: contract
+    if: github.event_name == 'workflow_dispatch' && inputs.build_unsigned_test_candidate
+    runs-on: windows-2025
+    timeout-minutes: 60
+    env:
+      RUSTUP_TOOLCHAIN: 1.97.1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Install pinned native build tools
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo fetch --locked --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo install tauri-cli --version 2.10.1 --locked
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build explicitly unsigned current-user NSIS test candidate
+        shell: pwsh
+        run: ./companion/build-windows-unsigned-test.ps1
+      - name: Install and exercise the exact unsigned test candidate
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem target\release\bundle\nsis -File -Filter '*.exe')
+          if ($installers.Count -ne 1) { throw "Expected one NSIS installer, found $($installers.Count)" }
+          if ((Get-AuthenticodeSignature -LiteralPath $installers[0]).Status -ne 'NotSigned') {
+            throw 'Owner-acceptance candidate must remain explicitly unsigned'
+          }
+          $prefix = Join-Path $env:RUNNER_TEMP 'codex-cli'
+          npm install --prefix $prefix --no-audit --no-fund --ignore-scripts '@openai/codex@0.163.0-alpha.11.1'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $codex = @(Get-ChildItem "$prefix\node_modules\@openai\codex-win32-x64" -Recurse -File -Filter 'codex.exe')
+          if ($codex.Count -ne 1) { throw "Expected one native codex.exe, found $($codex.Count)" }
+          ./distribution/windows/product-e2e.ps1 -Installer $installers[0].FullName -CodexExe $codex[0].FullName -Evidence 'target/windows-product-evidence/unsigned-acceptance.json' -ExpectedSignature NotSigned -DisplayName 'GIL Companion (Unsigned Test)'
+      - name: Retain unsigned owner-acceptance candidate for three days
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: gil-windows-x64-UNSIGNED-OWNER-TEST-${{ github.sha }}
+          path: |
+            target/release/bundle/nsis/*.exe
+            target/windows-product-evidence/unsigned-acceptance.json
+          if-no-files-found: error
+          retention-days: 3
 
   signed-candidate:
     name: Signed NSIS install acceptance

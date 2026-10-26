@@ -1,7 +1,9 @@
 param(
     [Parameter(Mandatory = $true)][string]$Installer,
     [Parameter(Mandatory = $true)][string]$CodexExe,
-    [Parameter(Mandatory = $true)][string]$Evidence
+    [Parameter(Mandatory = $true)][string]$Evidence,
+    [ValidateSet('Valid', 'NotSigned')][string]$ExpectedSignature = 'Valid',
+    [string]$DisplayName = 'GIL Companion'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -54,12 +56,14 @@ try {
 }
 
 $Signature = Get-AuthenticodeSignature -LiteralPath $Installer
-if ($Signature.Status -ne 'Valid') { throw "Installer signature is $($Signature.Status): $($Signature.StatusMessage)" }
+if ($Signature.Status.ToString() -ne $ExpectedSignature) {
+    throw "Installer signature is $($Signature.Status), expected $ExpectedSignature: $($Signature.StatusMessage)"
+}
 
 # Tauri owns Companion removal. The external runtime is deliberately preserved because another
 # already-open Codex conversation may still be using it; Project directories are never in scope.
 $entries = @(Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' | Get-ItemProperty |
-    Where-Object DisplayName -eq 'GIL Companion')
+    Where-Object DisplayName -eq $DisplayName)
 if ($entries.Count -ne 1) { throw "Expected one GIL Companion uninstall entry, found $($entries.Count)" }
 $uninstallText = $entries[0].UninstallString
 if ($uninstallText -match '^"([^"]+\.exe)"(?:\s.*)?$') {
@@ -76,10 +80,12 @@ if (-not (Test-Path -LiteralPath $Launcher -PathType Leaf) -or -not (Test-Path -
     throw 'Uninstall removed the preserved runtime'
 }
 $left = @(Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' | Get-ItemProperty |
-    Where-Object DisplayName -eq 'GIL Companion')
+    Where-Object DisplayName -eq $DisplayName)
 if ($left.Count -ne 0) { throw 'Companion uninstall registration remains' }
 
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Evidence) | Out-Null
+$SignerSubject = if ($Signature.SignerCertificate) { $Signature.SignerCertificate.Subject } else { $null }
+$SignerThumbprint = if ($Signature.SignerCertificate) { $Signature.SignerCertificate.Thumbprint.ToLowerInvariant() } else { $null }
 [ordered]@{
     schema = 1
     source = $env:GITHUB_SHA
@@ -87,8 +93,8 @@ New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Evidence) | Out-N
         file = Split-Path -Leaf $Installer
         bytes = (Get-Item -LiteralPath $Installer).Length
         sha256 = (Get-FileHash -LiteralPath $Installer -Algorithm SHA256).Hash.ToLowerInvariant()
-        signer_subject = $Signature.SignerCertificate.Subject
-        signer_thumbprint = $Signature.SignerCertificate.Thumbprint.ToLowerInvariant()
+        signer_subject = $SignerSubject
+        signer_thumbprint = $SignerThumbprint
         signature_status = $Signature.Status.ToString()
     }
     runtime = [ordered]@{ version = $Receipt.version; architecture = $Receipt.architecture; cohort = $Receipt.cohort; core_sha256 = $CoreHash }
