@@ -5,7 +5,7 @@ GIL의 root MIT LICENSE를 변경하지 않는다. Companion과 legacy Node brid
 
 ## 포함 범위
 
-macOS arm64 native MCP: 잠근 Cargo graph 88개(일반 후보 66 + build/proc-macro 22),
+macOS arm64 native MCP: 잠근 Cargo graph 89개(일반 후보 67 + build/proc-macro 22),
 실제 MCP App JS bundle 5개, Rust 1.97.1 표준 라이브러리 고지.
 빌드 의존성을 보수적으로 포함하며 모든 package가 최종 실행 파일에 링크됐다고 주장하지 않는다.
 표준 라이브러리 고지도 각 플랫폼에서 실제 사용된 코드만 추려낸 것이 아니라 공식 배포본의 전체 고지다.
