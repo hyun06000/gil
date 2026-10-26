@@ -2,11 +2,11 @@
   "schema": 1,
   "target": "x86_64-pc-windows-msvc",
   "inputs": {
-    "Cargo.toml": "5958c3b97d20defba89b04fb7973d40b56eac79fc212c6bde8ce7256bf31c898",
-    "Cargo.lock": "197c097b1181d69d535cd5f5e7e545cf0ff764dd4854532513f357c47c7cac1d",
+    "Cargo.toml": "873253214e2872cceed5dfeffd8c4d6e7157d938513fe16d735110883fcb867a",
+    "Cargo.lock": "dbb9c7727820a3669e64658491225a0948dac9ecedd2eb7cb5def746c6faeb1f",
     "mcp-app/package-lock.json": "9c6170c797cb227eb236692c8087cfddfe09ceea0fa212df4417cf91712d83b6",
     "mcp-app/build.mjs": "00013682e3e300f5e5945f5fbadd2fb5d2e5c65797d1596511546da6261f5c3d",
-    "plugins/gil-companion-prototype/assets/monitor.html": "306e137986f918d61e0e5e39c73fbfd4aef6e77d334180e78af91a66bbd1381f"
+    "plugins/gil-companion-prototype/assets/monitor.html": "0848c2c901ae0073da4d35995d55d1cea90156585fecaac5e8ab321a1fc18adf"
   },
   "toolchain": {
     "release": "1.97.1",

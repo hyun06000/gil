@@ -32,7 +32,7 @@ export RUSTFLAGS
 # 평소 build 와 flag 가 다르므로 같은 `target/` 을 쓰면 개발자의 cache 가 매번 무효가 된다.
 CARGO_TARGET_DIR="$root/target/plugin-core-build"
 export CARGO_TARGET_DIR
-cargo build --release -p gil --target "$target" --manifest-path "$root/Cargo.toml" >/dev/null \
+cargo build --release -p gil --target "$target" --features product-safety --manifest-path "$root/Cargo.toml" >/dev/null \
   || die "cargo build 가 실패했다"
 built="$CARGO_TARGET_DIR/$target/release/gil"
 [ -x "$built" ] || die "지어진 실행 파일이 없다"

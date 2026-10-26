@@ -4,6 +4,10 @@
 > 범위: 비개발자가 플러그인 설치에서 GIL Monitor 사용 가능 상태까지 도달하는 배포·설치 계약
 > 비범위: 특정 Store 심사 양식, 서명 서비스 사업자, Host SDK의 구체 API
 
+> 2026-10-26 현재: Windows native Core와 검토 archive는 있지만 installer·서명·제품 업데이트
+> 배선은 없다. Windows 지원 또는 설치 완료로 표시하지 않는다. 업데이트는 자동 설치가 아니라
+> Companion 알림 뒤 사용자가 정확한 대상과 변경점을 보고 버튼을 누르는 방식으로 고정한다.
+
 ---
 
 ## 1. 목적
@@ -301,8 +305,9 @@ AI는 설치를 수행하는 주체가 아니라 설치 과정을 끝까지 조�
   첫 Codex/macOS arm64 시험판에 한해 §6.2a의 명시적 동의 기반 unsigned 채널을 허용한다.
 - Windows 정식 신뢰 채널은 Microsoft Store 또는 서명된 installer를 사용한다.
   Windows x64 테스터 시험판은 §6.2b의 별도 승인된 unsigned 예외를 따른다.
-- 설치 완료를 사용자가 채팅으로 다시 보고하게 하지 않는다. adapter가 재감지하고 원래 요청을
-  자동으로 재개한다.
+- 설치 완료를 사용자가 채팅으로 다시 보고하게 하지 않는 것을 목표로 한다. adapter가 실제
+  적용 버전을 재감지한 뒤 원래 요청을 재개한다. 새 연결이 필요한 경우에는 §9.1에 따라
+  현재 연결/선택/적용 상태를 구분하며, 같은 대화의 즉시 재개를 확인 없이 약속하지 않는다.
 - 설치·업데이트가 실패하면 Project와 `.gil`을 바꾸지 않고 text 사용과 재시도 경로를 제공한다.
 - 관리자 권한을 기본 전제로 두지 않는다. 꼭 필요하면 설치 전에 이유를 밝힌다.
 
@@ -520,11 +525,36 @@ remote server가 사용자의 로컬 Project 파일을 대신 보관하거나 �
 
 - Plugin, GIL Core, Companion과 wire schema의 호환 범위를 명시한다.
 - `outdated`를 `missing`으로 말하지 않는다.
-- 자동 업데이트는 서명된 동일 publisher의 배포물만 받는다.
-  §6.2a의 unsigned 시험판에는 자동 업데이트를 적용하지 않고 version별 사용자 승인을 받는다.
+- 자동 설치는 채택하지 않는다. 서명된 동일 publisher의 배포물이어도 업데이트 알림만 표시하고,
+  사용자가 정확한 version과 변경점을 확인한 뒤 버튼을 눌러야 다운로드·적용을 시작한다.
+  unsigned 시험판은 동일한 수동 승인에 더해 version별 고정 출처와 digest 검증을 요구한다.
 - update 실패 시 마지막 검증 View와 Project 기록을 보존한다.
 - 새 판이 저장 migration을 요구하면 rollback 가능 여부를 설치 전에 밝힌다.
 - 제거는 Companion 설정과 설치물만 지우며 사용자의 Project와 `.gil`을 지우지 않는다.
+
+### 9.1 고정 실행기와 다음 연결 적용 — 2026-10-23 설계 보완
+
+[Companion 설치·업데이트 계약](GIL_Companion_Install_Update_v0.1.md)을 제품 정본으로 두고,
+[Runtime Update 계약안](GIL_Runtime_Update_Contract_v0.1.md)은 하위 안전성 기준과 실험 장부로 둔다.
+installer가 Host cache 밖 GIL 소유 사용자 영역에 고정 실행 진입점을 설치하고, 그 진입점이
+불변 버전별 Core 중 검증된 선택을 신규 연결에 적용한다. 기존 연결은 옛 판을 유지한다.
+**제품 미구현이며 현재 manifest는 Plugin 안의 Core를 직접 실행한다.**
+
+Windows native fixture CI와 Mac/Windows의 별도 Codex App Server 합성 시험에서 새 연결의
+버전 전환을 관측했다. reload 직후 기존 연결은 옛 판을 유지했다. Windows 현장 결과는 사용자
+전달 보고이며 사후 실행기/config 해시와 개별 MCP 종료 확인이 부족하다. 별도 App Server
+재시작은 Desktop 앱 재시작 인수가 아니며, 디렉터리 rename EPERM과 배포 원자성은 열린 문제다.
+
+최초 설치, Host 관리 Plugin/Skill/실행기 자체 교체, Core-only 전환, Project 이관은 별개다.
+GIL이 Host cache를 수동 변경하거나 실행 중 파일 삭제를 성공의 선행 조건으로 삼지 않는다.
+서명/출처·호환성·안전한 선택 공개·제한 토큰·실제 GIL·Desktop 인수 전에는 업데이트 완료로
+표시하지 않는다. unsigned 버전별 승인과 사용자 기록 보존은 그대로 유지한다.
+
+기본 UX에 사용자 PowerShell·설정 편집·보안 해제·OneDrive 중지·ACL 수정을 요구하지 않는다.
+Node 합성 시험을 사용자 runtime 요구로 바꾸지 않는다. 실제 적용 전에는 "다음 연결부터 적용
+예정"이라고 말하며, 준비/선택/reload 반환만으로 "현재 대화에 적용 완료"라고 말하지 않는다.
+Companion의 사용자 버튼, 서명 검증 worker, installer와 production manifest가 이 경로에
+연결되기 전에는 “수동 업데이트 지원”이라고도 표시하지 않는다.
 
 ---
 
@@ -537,7 +567,8 @@ remote server가 사용자의 로컬 Project 파일을 대신 보관하거나 �
 4. MCP fullscreen과 Companion이 같은 fixture에서 같은 사실을 보여 준다.
 5. Companion 없음·꺼짐·낡음·호환됨을 서로 다르게 판정한다.
 6. 사용자 승인 없이 native binary를 설치하거나 실행하지 않는다.
-7. 설치 완료 뒤 같은 대화에서 원래 요청을 자동 재개한다.
+7. 설치·업데이트 적용을 실제로 재감지한 뒤 원래 요청을 재개한다. 새 연결이 필요한 Host에서는
+   적용 대기와 현재 연결의 버전을 표시하며 같은 대화의 즉시 교체를 검증 없이 주장하지 않는다.
 8. 설치·업데이트 거절과 실패 전후 Project bytes가 같다.
 9. Companion 없이도 Agent의 text loop와 GIL 기록은 동작한다.
 10. macOS와 Windows의 clean machine에서 설치·업데이트·제거를 재현한다.

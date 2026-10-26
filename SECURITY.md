@@ -11,11 +11,17 @@ entry if the direct form does not open. Do not post vulnerability details in a p
 
 ## Scope
 
-The current reviewed user channel is **0.2.1-preview.2, Codex on macOS Apple Silicon**.
+The current reviewed user channel is **0.2.1-preview.5, Codex on macOS Apple Silicon**.
 It is not Apple Developer ID signed or notarized; fresh-Mac installation is unverified.
-Old preview versions, other platforms, Claude work modes and Companion builds do not have a promised
+Windows archives are unsigned development/review candidates, not supported installers. Old preview
+versions, other platforms, Claude work modes and Companion builds do not have a promised
 maintenance window. Reports about current source or the distribution route are also welcome;
 accepting a report does not promise a fix or support for every version.
+
+The current Artifact scope excludes only the root `.gil/` directory. It does not honor
+`.gitignore`, and restore can replace or delete any other regular file, including `.git/`, secrets,
+dependencies and build output. Do not use restore on a valuable existing working tree. A path or
+restore operation that can affect data outside the selected project is in security scope.
 
 Include the version, affected component, expected and actual behavior, impact and the smallest safe
 reproduction you can provide. Prefer synthetic projects. Never include credentials, private keys,

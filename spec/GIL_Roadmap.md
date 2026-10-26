@@ -26,7 +26,7 @@ dogfood로 통과**해야 `[x]`가 된다.
 
 ## 2. 현재 위치
 
-마지막 갱신: **2026-09-30**
+마지막 갱신: **2026-10-26** (Windows 설치·업데이트 코드 대조와 사용자 주도 방식 확정)
 
 ```text
 전체 이정표 10개
@@ -42,10 +42,10 @@ Later    1  성공 가지 Merge
 
 현재 한 문장:
 
-> **Codex/macOS Apple Silicon 공개 unsigned preview를 배포했고, 사용자가 Plugin 제거 →
-> 재설치 → 프로젝트 실행까지 성공했음을 확인했다. 이제 외부 시험 사용자 경험을 모으며
-> 시작 UX·시각 보고서·현재 상태 표시를 개선하고, Chain과 심화 Interview, Windows/Codex,
-> 홍보 순으로 진행한다. Anthropic 경험은 별도 Claude 작업 트랙으로 관리한다.**
+> **Mac 공개 preview.5와 Windows 개발 후보를 분리한다. Windows에는 installer·서명·제품
+> 업데이트 UI가 없고 manifest는 Plugin cache의 Core를 직접 실행한다. runtime 선택 코드는
+> production 경로에 연결되지 않았다. 다음 목표는 사용자 단위 installer, Host cache 밖의 고정
+> 실행 진입점과 사용자가 버튼을 누르는 업데이트를 하나의 종단 경로로 만드는 것이다.**
 
 현재 초점:
 
@@ -53,12 +53,20 @@ Later    1  성공 가지 Merge
 - 외부 시험 사용자를 모집하고 설치·첫 작업·상태 판독의 불편을 수집한다. 모집과 실제 인수를 구분한다.
 - 아래 다섯 트랙을 실행 우선순위로 삼는다. 기존 M0–M8은 상세 구현·검증 장부로 유지한다.
 - Companion은 선택적 대안으로 보존한다. 새 Mac·서명/공증·Windows·공식 Directory 등재는 미완료다.
+- Windows의 Project 권한 문제, Host cache 제거 문제, Core 재연결 문제를 분리한다.
+  합성 재연결 성공을 설치·안전 배포 성공으로 확대하지 않고 T3.2의 게이트로 추적한다.
+- 날짜별 시험 장부는 증거로 보존하되 현재 사용자 안내로 사용하지 않는다. Windows의 정본 상태는
+  `distribution/windows/README.md`와 release-readiness 체크리스트다.
+- Artifact 추적 범위를 고친다. 현행 restore는 `.gitignore`를 무시하고 루트 `.gil/` 외 모든
+  일반 파일을 관리하므로 일반 프로젝트에서 사용 중지 상태다. `.git/` 고정 제외, ignore 정책,
+  current-only 파일 격리, read-only plan과 Windows 목적지 경계를 구현·인수한다.
 
 바로 다음 목표:
 
-> **T1.1: 사용자의 “GIL 프로젝트를 시작하자” 요청 하나로 프로젝트 시작과 MCP Monitor 표시를
-> 연결한다. 이미 있는 fullscreen 기본 요청을 재사용하되, 도구 응답이 아니라 실제 Graph와
-> 실시간 갱신을 확인한다. 이어서 T1의 시각 자료·현재/진행 상태 표시와 Git 병행 연구를 진행한다.**
+> **T3.2 제품 연결: Windows 사용자 단위 installer가 Companion·고정 실행 진입점·초기 Core를
+> 한 cohort로 설치하게 한다. Companion에 업데이트 알림과 native 버튼을 연결하고, 사용자가
+> 누르기 전에는 다운로드·설치를 시작하지 않는다. 불변 Core 준비→선택→새 연결 identity 확인을
+> production manifest로 종단 검증한다. cache 삭제·PowerShell·관리자 실행은 완료 경로가 아니다.**
 
 ### 2.1 공개 시험판 이후 실행 계획 — 2026-09-30
 
@@ -67,6 +75,8 @@ Later    1  성공 가지 Merge
 호환성/이전 방안과 시험을 먼저 확정한다. 이번 갱신 자체는 기능 구현·새 배포가 아니다.
 
 주 실행 순서: **T1 사용자 UX → T2 Interview/Chain → T3 Windows/Codex → T4 홍보**.
+이는 최초 우선순위 기록이다. 2026-10-23 현재 현장 차단점의 직접 후속은 T3.2이며 T1/T2를
+완료 처리하거나 T4 홍보 게이트를 앞당기는 뜻은 아니다.
 시험 사용자 모집·피드백 수집은 지금부터 시작할 수 있으며, T4의 본격 홍보와 구분한다.
 **T5 Anthropic은 독립 병렬 트랙**으로 Claude 세션에서 수행한다. 이 세션이 그 구현을 맡거나
 다른 세션을 자동 실행하지 않는다. 일정·지원 플랫폼·등재 승인을 미리 약속하지 않는다.
@@ -453,6 +463,10 @@ Later    1  성공 가지 Merge
       추출본 실행을 통과했다. Windows 전용 고지 89개 package, 시스템 DLL import 검사,
       다운로드 후 8개 파일 hash와 Plugin validator를 확인했다. 원격 설치 출처 게시·일반 계정
       설치·실제 fullscreen은 아직 미검증이며, MSVC runtime 재배포 조건 검토도 남아 있다.
+      **2026-10-23 현장 보완:** 이후 개발 후보 설치·교체 과정에서 공식 제거/갱신의 cache 삭제
+      access denied가 보고됐다. 실행 중 옛 Core도 관측됐지만 모든 원인을 잠금으로 확정하지
+      않는다. 사용자 PowerShell을 통한 개발 검수와 일반 비개발자 완료 경로를 구분한다.
+      초기 설치/교체 해결은 아래 T3.2 U1/U4에 남긴다.
 - [ ] 사용자에게 개발 도구·셸 명령·별도 Companion 설치를 요구하지 않고 macOS/Codex와 같은
       폴더 선택 → 프로젝트 시작 → fullscreen 가로 DAG·채팅 → 상세/시각 자료 → 실시간 갱신을 제공한다.
 - [~] **T3.1 Windows 이미지 Report 작성 경계(단계 1, 2026-10-18):** 새 format-5 생성·Verify 첨부·

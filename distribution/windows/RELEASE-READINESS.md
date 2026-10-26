@@ -1,112 +1,42 @@
-# Windows tester channels — release gates
+# Windows release readiness
 
-## Current checkpoint — 2026-10-07
+현재 판정: **NO-GO — x64 설치 경로는 구현됐고, 서명 산출물과 Windows 종단 인수가 남았다.**
 
-The limited Windows unsigned tester release is now published at
-https://github.com/hyun06000/gil/releases/tag/windows-preview-f0ecfbd . Both public archive hashes
-and INSTALL.md were rechecked through anonymous HTTPS downloads. Use [INSTALL.md](INSTALL.md),
-not the older CI-only procedure. See [publication evidence](PUBLICATION-f0ecfbd.md).
-The historical pending notes below describe earlier candidates, not an instruction to wait for
-GitHub support. Ordinary-user Windows installation/fullscreen are still acceptance work.
+## 출시 필수 게이트
 
-2026-09-30: maintainer approved a limited unsigned tester channel and publication after redistribution
-and installation-route checks. This is not stable support or successful ordinary-user acceptance.
-The existing Mac marketplace/default branch and installed plugin must remain unchanged.
+- [ ] x64 사용자 단위 installer와 동일한 방식의 uninstall/repair
+- [ ] Authenticode 서명 및 clean PC에서 publisher 표시 확인
+- [ ] Companion, 고정 진입점, Core, Skill/manifest의 한 release cohort
+- [ ] Host cache 밖 GIL 소유 설치 경로와 정확한 ACL/소유권 검증
+- [ ] 사용자의 버튼 클릭 전에는 다운로드·설치를 시작하지 않는 업데이트 UI
+- [ ] immutable version 준비, digest/서명/호환성 검증, 원자적 selection commit
+- [ ] 기존 연결 유지, 새 연결 identity 확인, 실패/중단 뒤 기존 선택 보존
+- [ ] Job Object 또는 동등한 자식 수명 관리와 고아 Core 부재 확인
+- [ ] 디스크 고갈·네트워크 중단·서명 불일치·동시 실행·재부팅 시험
+- [ ] standard-user clean Windows x64에서 설치→Codex 등록→Monitor→업데이트→제거 인수
+- [ ] ARM64 지원 여부를 별도 결정하고, 지원 시 x64와 독립적으로 같은 인수를 통과
+- [ ] Project와 `.gil`이 설치·업데이트·제거 전후 보존됨을 확인
+- [ ] support/rollback 정책과 서명된 고정 다운로드 URL 게시
 
-2026-10-07 update: the ARM64 VM is disk-space constrained; a Windows friend can perform ordinary-user
-acceptance. Detect the architecture automatically rather than requiring a hardware questionnaire.
-Both architectures retain the same functional/security gates; native CI is not GUI acceptance.
-The maintainer approved a proportionate unsigned open-source preview process: an individual
-GitHub/Microsoft support reply is not a required release permit. Applicable notices still matter.
+## 현재 확보한 하위 증거
 
-## Runtime review
+- native Core의 Windows x64/ARM64 CI 빌드 및 MCP smoke
+- 서명되지 않은 Plugin review archive 생성과 파일 무결성 검사
+- 합성 Core를 이용한 불변 버전 선택 및 새 연결 전환 시험
+- runtime 상태 판정과 capability probe의 단위/CI 시험
+- current-user NSIS 구성과 사용자가 누르는 서명 updater
+- 고정 런처의 receipt/digest 검사, 직전 Core 폴백 및 Job Object 구현
+- 버전별 Core 설치와 선택 기록 전환/복원 설치 훅
+- 사용자가 확인한 뒤 `codex mcp add gil -- <launcher> mcp --serve`를 호출하는 연결 버튼
+- 실제 서명 비밀이 있을 때만 실행되는 Windows 제품 후보 CI와 설치 후 런처/Codex CLI smoke
+- 정확히 소유한 등록만 해제하는 버튼과 Companion 제거 뒤 runtime/Project 보존 계약
 
-The previous candidate was built on GitHub's `windows-2025-vs2026` image,
-version `20260925.250.1` (run 36690752815). Its receipt did not identify the selected MSVC libraries.
-Do not infer the selected compiler from the image's inventory alone or apply VS 2022 terms by habit.
+이 증거는 Authenticode 서명 installer 실행, 실제 Companion UI, Codex Desktop 제한 토큰,
+일반 사용자 설치 또는 안전한 업데이트의 종단 증거가 아니다. 특히 testbed 전용 코드와
+`publishable: false` archive는 출시 자산으로 승격하지 않는다.
 
-`toolchain.ps1` now selects a complete non-prerelease MSVC installation, initializes its native architecture build
-environment and explicitly passes that link.exe to Cargo. The receipt records VS/MSVC/SDK versions
-and SHA-256 for link.exe, libcmt.lib, libvcruntime.lib and libucrt.lib, without machine paths.
-This identifies selected inputs; hashes are not a redistribution license or a link map.
+## 출시 결정 규칙
 
-First provenance run 36692696766 passed native tests but failed before release build: nested cmd
-quoting broke the spaced Visual Studio path. Use Microsoft's Launch-VsDevShell.ps1 directly;
-do not remove the explicit toolchain selection gate to get a green run.
-
-Official sources reviewed (2026-09-30):
-
-- [Deployment](https://learn.microsoft.com/en-us/cpp/windows/deployment-in-visual-cpp?view=msvc-170):
-  static CRT is a deployment method; runtime security fixes require rebuilding/redeploying the app.
-- [VS licensing guidance](https://www.microsoft.com/licensing/guidance/Visual-Studio): identified
-  distributable .lib code is linked into the application, not shipped as standalone libraries.
-- [VS 2026 distributable list](https://learn.microsoft.com/en-us/visualstudio/releases/2026/redistribution):
-  rights depend on the applicable licensed product; preview components are excluded.
-- [VS 2026 development license](https://visualstudio.microsoft.com/license-terms/vs2026-ga-pro-enterprise/):
-  distributable-code conditions and restrictions apply separately from GIL's MIT source license.
-  The runtime end-user license alone is not the developer's redistribution grant.
-
-Pending: review the actual selected toolchain's applicable terms (including Windows SDK/UCRT),
-required recipient terms/notices and hosted build entitlement. Preserve Microsoft rights; do not
-label every byte of the linked executable MIT. Cargo notice coverage does not settle these items.
-This is engineering release review, not a legal certification.
-
-The specific unanswered hosted-build entitlement questions are now in
-[the support inquiry record](RUNTIME-INQUIRY-DRAFT.md). GitHub closed the submitted request on
-support-eligibility grounds without answering it. Do not infer a paid subscription requirement,
-permission or prohibition from that closure. Do not wait indefinitely for individual support approval.
-
-## Automatic installation preflight
-
-`install-target.psm1` detects native Windows CPU architecture from up to three read-only
-sources that need no administrator rights: the
-[Win32_Processor Architecture property](https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-processor)
-(9 selects x64, 12 selects ARM64; CIM access can be refused by policy, which is then simply "no
-answer"), the machine `PROCESSOR_ARCHITECTURE` value under `HKLM\SYSTEM\...\Session Manager\Environment`
-(not WOW64-redirected) and the family prefix of `HKLM\HARDWARE\DESCRIPTION\System\CentralProcessor\0\Identifier`.
-Agreeing sources decide; it never uses the architecture of the PowerShell process (an x86 or x64
-shell may run emulated on ARM64) and reports that process view separately as `emulated`.
-Unsupported, inconsistent or absent results stop without installing and carry one minimal
-question for the person (whether Settings › System › About says "ARM-based processor"). It returns
-no user paths, serial numbers or CPU identifier strings and performs no download, configuration
-write or install. Field record 2026-10-22: a standard-user PC refused CIM access, and the
-single-source guidance had no fallback; this is the fix.
-This is the target-selection component, not a completed installer or release approval.
-
-## Publication and acceptance
-
-- Keep the candidate receipt `publishable: false` until the preceding review is resolved and a
-  separate publication record identifies the approved bytes, version, immutable ref and channel.
-- Use an isolated Windows catalog/ref, not the Mac default catalog. Verify anonymous HTTPS access
-  and the official Codex installation route; CI's seven-day artifact is not the tester channel.
-- No Node, Cargo, administrator rights, Companion or security-policy changes for testers.
-- Verify actual Windows/Codex installation on the available tester machine and record its native architecture. Use a new local fixed NTFS folder,
-  outside OneDrive/junction/network paths. Do not use valuable existing projects for first acceptance.
-- Tester checks: install, start + Monitor, fullscreen with chat, node details, live updates, restart,
-  disable/re-enable and uninstall/reinstall preserving Project records. Separate each observation.
-- If OS/Host blocks installation, stop and record the message. Do not suggest Defender/SmartScreen
-  exclusions or execution-policy changes. Do not claim success from tool responses alone.
-
-No external-tester installation prompt is issued until the fixed public source and hash are verified.
-The maintainer's own ARM64 VM can follow the separate pinned
-[internal acceptance procedure](MAINTAINER-VM-CHECK.md). It uses the existing CI artifact,
-does not publish or endorse redistribution, and leaves all external-release gates open.
-
-## Provenance checkpoint
-
-Source `0c2e8c31d32b59a18d6883a646beaf57a3663aa2` passed
-[Windows candidate CI 36693181563](https://github.com/hyun06000/gil/actions/runs/36693181563).
-The same-source Mac and Windows PR checks passed. Local packaging regression: 75 Mac/common
-checks plus 7 Windows checks, all passed. No Core source changed in this provenance follow-up.
-
-The downloaded archive passed SHA-256 verification:
-`4466ec503561be93fe4167492f9a8952f9de7652a1c9facce700dab9a505cefc`.
-Selected VS Enterprise `18.10.12210.168`, MSVC `14.51.36231`, SDK `10.0.26100.0`,
-runner `win25-vs2026` / `20260922.246.2`, non-prerelease. The immediately preceding passing
-run used a different VS/runner patch; this is why each artifact must carry its own provenance.
-The receipt includes the four input file hashes, archive inventory and native smoke evidence.
-
-Runtime terms/recipient notices remain unresolved; the receipt correctly remains `publishable: false`.
-No marketplace entry, release or user installation was changed. The unsigned policy approval is
-recorded, but it is not a substitute for this review. [Tester checks](TESTER-CHECK.md) are a draft,
-not an installation invitation. No further unsigned-policy approval is needed to continue the review.
+모든 필수 게이트에 재현 가능한 증거가 있을 때만 별도 release record에서 GO를 선언한다.
+부분 통과를 합쳐 종단 성공으로 만들지 않는다. OS 또는 Host가 차단하면 우회하지 않고 NO-GO를
+유지한다. 날짜가 붙은 기존 문서는 당시 실험 기록이며 이 체크리스트의 현재 상태를 바꾸지 않는다.

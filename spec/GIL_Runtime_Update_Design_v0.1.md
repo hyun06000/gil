@@ -1,9 +1,10 @@
 # GIL Runtime Update — U1 설계 결정안 v0.1
 
-> 2026-10-25: 업데이트 실행 주체/최초 설치/Companion 수명은
+> 2026-10-26: 업데이트 실행 주체/최초 설치/Companion 수명은
 > [새 계약](GIL_Companion_Install_Update_v0.1.md)이 우선한다.
 > Agent의 로컬 다운로드→MCP prepare/select 경로는 향후 제품 목표에서 제외한다.
-> 아래의 실험 근거와 Core 저장·선택 설계는 이력으로 보존한다.
+> 아래의 실험 근거는 보존한다. 2026-10-26에는 Windows x64 NSIS 제품 후보에 별도의 고정 런처와
+> 버전별 Core 선택이 연결됐지만, 서명·실기기 인수 전에는 지원 완료로 보지 않는다.
 
 2026-10-23. [상위 계약](GIL_Runtime_Update_Contract_v0.1.md)의 U1 구체화.
 **문서 설계 / 제품 미구현.** 새 MCP 도구·명령·receipt schema를 현재 제공한다고 주장하지 않는다.
@@ -13,7 +14,8 @@
 
 - `plugins/gil-companion-prototype/.codex-plugin/plugin.json`: 함께 실은 Core에
   `mcp --serve`를 직접 전달한다. Windows는 `distribution/windows/candidate.mjs`가
-  해당 CPU의 Core 경로로 manifest를 생성한다. 고정 실행기는 아직 없다.
+  해당 CPU의 Core 경로로 manifest를 생성한다. 이 개발 후보와 별개로 NSIS 제품 경로에는
+  `%LOCALAPPDATA%\GIL\runtime\gil-launcher.exe` 고정 실행기가 있다.
 - `src/agent.rs`: `--gil-agent-descriptor`가 protocol/action surface/storage 범위를 제공한다.
   설치 권한이나 특정 Core 쌍의 저장 호환성을 인증하는 API는 아니다.
 - `distribution/codex/compatibility.mjs`: macOS/aarch64 검사다. Windows 검증기로 재사용하지 않는다.
@@ -30,17 +32,17 @@ Skill 변경, 저장 migration, launcher 교체를 이 경로에 섞지 않는�
 
 | 구성 | 제안 역할 | 변경 주체/경계 |
 | --- | --- | --- |
-| Host Plugin | native 실행기, bootstrap Core, Skill, 신뢰·호환 기준 포함 | 공식 Host 설치/교체만. 자기 cache 편집 금지 |
-| native 실행기 | 선택 검증, Core 시작, stdio 전달, 자식 수명 관리 | Rust 구현 방향. Node 설치 불요. 네트워크 자동 다운로드 없음 |
-| native 업데이트 처리부 | 승인된 묶음 검증·준비·선택 확정·상태 조회 | 실행기와 같은 배포 단위의 기능으로 검토. 상주 서비스/관리자 broker는 도입하지 않음 |
+| Host adapter | GIL 소유 고정 진입점을 등록하고 Skill/표면 계약을 제공 | 공식 Host 절차만 사용. cache의 Core를 제품 실행 위치로 쓰지 않음 |
+| 고정 실행 진입점 | 선택 검증, Core 시작, stdio 전달, 자식 수명 관리 | installer가 사용자 local app data에 설치. Node·네트워크 기능 없음 |
+| Companion 업데이트 처리부 | 알림, native 버튼 승인, 서명된 묶음 검증·준비·선택, 상태 표시 | 자동 설치 없음. 관리자 broker를 기본으로 두지 않음 |
 | 버전 저장소 | immutable Core 묶음, 선택 기록, 최소 상태·증거 | 공식적으로 허용된 GIL 소유 영역. 실제 위치/접근 정책은 §3 검증 전 미확정 |
 | Agent | 지원 확인·변경 설명·승인 전달·실행 결과 확인 | 셸 스크립트를 즉석 작성해 runtime을 갱신하지 않음. 제공 표면/schema는 후속 설계 |
 
-실행기는 연결마다 한 Core만 시작한다. 자식에 MCP stdio를 전달하고 진단은 stderr로만 낸다.
+고정 진입점은 연결마다 한 Core만 시작한다. 자식에 MCP stdio를 전달하고 진단은 stderr로만 낸다.
 Host stdin EOF를 자식에 전달하며 정상 종료를 기다린다. 고아 프로세스 방지·종료 제한 시간은
-U2 시험으로 정한다. 기존 사용자 Core를 PID 이름으로 찾아 종료하지 않는다.
-실행기 자신도 Host가 실행하는 바이너리이므로 자기 교체 문제는 남는다. 별도 제거/갱신 인수 없이
-"설치 캐시 잠금 해결"이라고 말하지 않는다.
+Windows Job Object를 포함해 U2/종단 시험으로 정한다. 기존 사용자 Core를 PID 이름으로 찾아
+종료하지 않는다. 진입점 자신을 바꾸는 release는 Core-only 업데이트가 아니라 전체 installer
+업데이트다. installer 교체·복구 인수 없이 “잠금 문제 해결”이라고 말하지 않는다.
 
 ## 3. 저장 위치와 계정 — 먼저 닫아야 할 설계 조건
 
@@ -103,13 +105,15 @@ U2에서 디렉터리 rename 의존 방식과 최종 위치 배타 생성+완성
 
 ## 6. 초기 도입과 업데이트 표면
 
-새 설치는 bootstrap Core가 포함된 자족형 Plugin을 공식 경로로 받는 방향이다. 기존 direct-Core
-설치본의 최초 교체는 여전히 공식 Host가 수행해야 한다. 실행 중 cache 삭제 실패에 대한
-비개발자 완료 경로는 미확정이며, 새 marketplace 이름으로 우회해 두 GIL을 노출하지 않는다.
+새 설치는 bootstrap Core와 고정 진입점을 포함한 서명된 사용자 installer를 공식 경로로 받는다.
+Host adapter는 설치된 고정 진입점을 등록한다. 기존 direct-Core Plugin에서 옮기는 최초 전환은
+기존 Core가 종료된 것을 확인하고 공식 Host 제거/등록 절차를 사용해야 한다. cache를 손으로
+지우거나 새 marketplace 이름으로 두 GIL을 노출하지 않는다.
 
 초기 도입, Core 선택, Skill 변경, 실행기 자체 변경, 제거는 각각 승인/인수 범위가 다르다.
 현재 없는 updater 도구를 Skill에 쓰거나 내부 App Server API를 제품의 원격 제어 수단으로
-채택하지 않는다. Agent용 status/plan/prepare/select의 구체 schema와 사용자 승인 결합은 후속이다.
+채택하지 않는다. 업데이트 승인과 실행은 Companion native UI가 소유한다. Agent는 상태 설명과
+새 연결 identity 확인만 하며 `approved:true` 같은 모델 출력을 클릭 대신 사용하지 않는다.
 제품화 전 준비된 상태 조회 수단이 실제 실행 build와 다음 선택을 구별해야 한다.
 
 ## 7. U1 판정과 다음 실험

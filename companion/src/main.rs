@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 //! **GIL Companion** — 계속 떠 있는 읽기 전용 창 하나.
 //!
 //! # 이 crate 가 하는 일의 전부
@@ -45,6 +47,7 @@
 mod adapter;
 mod appmenu;
 mod autostart;
+mod clients;
 mod geometry;
 mod handshake;
 mod lifetime;
@@ -52,6 +55,7 @@ mod live;
 mod settings;
 mod sessions;
 mod tray;
+mod updates;
 mod window;
 
 use tauri::Manager;
@@ -94,6 +98,7 @@ fn main() {
             None,
         ))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(adapter::Registry::default())
         .manage(window::LastSeen::default())
         .manage(live::Live::default())
@@ -106,6 +111,13 @@ fn main() {
             adapter::opening,
             adapter::forget_project,
             adapter::show_window,
+            updates::update_capability,
+            updates::check_update,
+            updates::install_update,
+            clients::codex_capability,
+            clients::codex_connection,
+            clients::connect_codex,
+            clients::disconnect_codex,
         ])
         .setup(|app| {
             let handle = app.handle().clone();

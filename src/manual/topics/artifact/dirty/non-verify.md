@@ -16,6 +16,12 @@ related:
   gil status 가 `상태: dirty` 이고 열린 자리가 verify 가 아닐 때.
 
 [지금 할 일]
+  현행 preview에서는 restore를 자동으로 실행하지 않는다. Project가 폐기 가능한 격리 fixture가
+  아니면 멈추고 변경을 별도로 보존한다. 현재 restore는 .gitignore를 존중하지 않고 목표
+  Snapshot에 없는 일반 파일을 삭제할 수 있다.
+
+  사용자가 그 범위를 이해하고 격리 fixture의 복원을 명시적으로 요청한 경우에만 실행한다.
+
       gil restore
 
   그 다음 원래 하려던 대로 이 자리를 닫는다.

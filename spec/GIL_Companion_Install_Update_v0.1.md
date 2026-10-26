@@ -1,13 +1,19 @@
 # GIL Companion 설치·업데이트·연결 수명 v0.1
 
-2026-10-25. **합의된 제품 방향 / 정책 및 Mac opt-in 연결 구현 / 사용자 설치 경로 미완성.**
+2026-10-26. **제품 결정 / Windows x64 구현 중. 자동 업데이트는 채택하지 않는다.**
+
+현재 코드에는 current-user NSIS, 사용자가 누르는 서명 updater, 고정 Windows 런처, 버전별 Core,
+선택 기록과 Codex 연결 버튼이 하나의 x64 제품 후보 경로로 연결돼 있다. 기존 Plugin 후보 manifest는
+여전히 Plugin 안의 Core를 직접 실행하므로 제품 경로가 아니다. 서명된 산출물과 clean Windows
+종단 인수 전에는 이 문서의 흐름을 지원 완료 기능처럼 설명하지 않는다.
 
 ## 1. 목적과 결정
 
 이미 Codex를 사용하는 Windows·Mac 사용자가 명령어·MCP 설정·ACL을 몰라도 GIL을 설치하고
 업데이트할 수 있어야 한다. 에이전트의 자기 업데이트보다 사용자가 완료할 수 있는 경로를 먼저 만든다.
 
-- 기본 입구는 공식 다운로드 페이지다. OS/CPU에 맞는 Companion＋Core를 한 묶음으로 받는다.
+- 기본 입구는 공식 다운로드 페이지다. OS/CPU에 맞는 Companion＋고정 실행 진입점＋Core를
+  서명된 한 묶음으로 받는다.
 - 보조 입구는 Codex 프롬프트다. Agent는 같은 배포물과 버전별 `INSTALL.md`를 사용한다.
 - 업데이트의 실행 주체는 사용자용 Companion/설치 프로그램이다. Agent는 안내·상태 조회·결과
   확인만 맡는다. MCP에 설치·prepare·select·승인 대행 도구를 추가하지 않는다.
@@ -16,17 +22,19 @@
 - 진행 중인 사용자 요청 업데이트만 마지막 연결 종료 뒤 계속한다. 완료 또는 실패를 기록한 뒤
   종료한다. OS 종료·정전까지 막거나 미완료 작업을 성공으로 표시하지 않는다.
 - Project, `.gil`, Host plugin cache, 기존 프로세스를 업데이트 편의상 변경·삭제·종료하지 않는다.
+- 백그라운드 자동 다운로드·자동 설치·강제 재시작은 하지 않는다. 확인은 알림이고, 설치는
+  사용자가 대상 version과 변경 내용을 본 뒤 native 버튼을 누른 별도 행위다.
 
 이 문서는 Runtime Update Contract §3/§6, Design §2/§6, Implementation Plan의
 **Agent 실행 업데이트 역할**을 향후 제품에서 대체한다. 기존 상태 판정·불변 버전·무결성·
 호환성·실패 보존 계약은 유지한다. 아직 배포된 Plugin 동작을 바꾸었다는 뜻이 아니다.
-Distribution 모델의 기존 미커밋 내용은 수정하지 않는다. Host UI Model의 fullscreen 우선도
-유지한다. 자동으로 띄우는 것은 관리 아이콘이며 Monitor 창을 강제로 열지 않는다.
+Distribution 모델의 설치·업데이트 절은 이 결정에 맞춰 함께 갱신한다. Host UI Model의
+fullscreen 우선도는 유지한다. 자동으로 띄우는 것은 관리 아이콘이며 Monitor 창을 강제로 열지 않는다.
 
 ## 2. 최초 설치의 사용자 흐름
 
 1. 공식 다운로드 페이지에서 지원 OS/CPU, 버전, 시험판 여부, 출처·서명 상태를 확인한다.
-2. 설치 프로그램을 다운로드한다. Companion·Core·고정 연결 진입점·필요한 Skill/manifest를
+2. 설치 프로그램을 다운로드한다. Companion·Core·고정 실행 진입점·필요한 Skill/manifest를
    하나의 검증된 release cohort로 제공한다. 사용자는 Rust/Node/npm을 설치하지 않는다.
 3. 설치 프로그램이 새 설치/기존 설치를 구분하고 변경 내용을 표시한다. 기존 설치가 있으면
    조용히 덮어쓰지 않는다. 기존 cache를 실행 위치로 재사용하거나 수동 삭제하지 않는다.
@@ -35,7 +43,13 @@ Distribution 모델의 기존 미커밋 내용은 수정하지 않는다. Host U
 5. 실제 Core 응답으로 설치 버전·빌드를 확인한다. 파일 존재나 등록 성공만으로 완료하지 않는다.
 6. 사용자가 고른 GIL Project를 처음 성공적으로 열 때 관리 아이콘이 나타난다.
 
-공식 연결 절차와 OS별 설치 산출물은 아직 미구현/미검수다. 이 단계가 닫히기 전에는
+Windows의 설치 기준 위치는 사용자 단위의 비동기화 local app data 아래 GIL 전용 영역이다.
+Host 등록은 그 영역의 고정 진입점을 가리킨다. Host Plugin cache와 버전별 Core 경로는 등록
+대상이 아니다. 정확한 경로와 ACL은 installer 인수에서 확정하되, 구현이 임의 폴더를 검색하거나
+Project 아래에 runtime을 두지 않는다.
+
+Codex 연결은 사용자가 Companion에서 확인한 뒤 공식 `codex mcp add` CLI를 호출하도록 구현했다.
+`codex.exe` 발견, Codex Desktop 반영과 설치 산출물은 아직 Windows 실기기에서 미검수다. 이 단계가 닫히기 전에는
 페이지에 설치 가능 버튼·지원 완료 표시를 게시하지 않는다. 설치 프로그램을 직접 열었을 때의
 설치/도움말 창 수명은 작업 중에 한정하며 무기한 상주 서비스로 바꾸지 않는다.
 
@@ -83,6 +97,8 @@ Windows named-pipe와 macOS local IPC는 각각 검증한다. 현행 Unix handsh
   자동 rollback·ACL 복원·보안 설정 변경·자동 재시도는 하지 않는다.
 - 정상 완료 뒤 남은 구버전 정리는 별도 기능이다. 업데이트 성공의 선행 조건으로 삼지 않는다.
 - 모든 개발 build를 사용자에게 권하지 않는다. 명시적으로 게시·검수된 채널만 안내한다.
+- 정기 확인은 metadata 조회까지만 허용한다. 사용자가 버튼을 누르기 전에는 payload를 받거나
+  installer를 실행하지 않는다. 알림을 끄는 설정도 제공한다.
 
 ### Core-only와 전체 설치 업데이트
 
@@ -109,6 +125,20 @@ descriptor 확인 명목으로 실행하지 않는다. 고정 공식 출처 외 
 분리한 공유 정책으로 연결 등록/만료, 마지막 연결 종료, 업데이트 종료 유예, 정확한 대상 확인,
 작업 ID, 공개와 새 연결 응답 확인의 분리를 제공한다. 업데이트 worker는 아직 연결하지 않았다.
 공개 API의 호출자 역할은 문서 계약이지 인증 구현이 아니다. 이 모듈 성공은 업데이트 성공이 아니다.
+
+### 6.0 현재 제품 배선 판정
+
+| 구성요소 | 코드 존재 | 제품에서 사용 | 판정 |
+| --- | --- | --- | --- |
+| 연결·업데이트 정책 상태기계 | 예 | 업데이트 worker/UI에서 사용 안 함 | 정책 시험만 완료 |
+| 불변 Core 저장·선택·실행 | 예 | production manifest가 호출하지 않음 | testbed/기반 코드 |
+| Companion 업데이트 버튼·다운로드 worker | 예 | x64 제품 후보 | 서명 release·Windows E2E 미검수 |
+| Windows installer/uninstaller | 예 | x64 제품 후보 | current-user NSIS 구성, 제거/repair·서명 산출물 미검수 |
+| Windows Companion 상태·tray 종단 | 일부 | 설치 경로와 연결 안 됨 | 미검수 |
+| 고정 실행 진입점과 버전별 Core | 예 | NSIS 제품 후보 | digest·직전판 폴백·Job Object 구현, Windows E2E 미검수 |
+| Codex 공식 등록 | 예 | Companion 버튼 | 공식 CLI 사용, `codex.exe` 탐색·Desktop 반영 미검수 |
+
+위 표가 모두 제품 경로로 연결되기 전에는 “수동 업데이트 지원”이라고 표시하지 않는다.
 
 ### 6.1 Mac opt-in 연결 구현
 
@@ -202,9 +232,10 @@ Windows ACL 변화나 runtime 저장소 쓰기 문제를 해결했다는 증거�
 다음 구현 순서는 사용자 완료 경로에 맞춘다.
 
 1. 인증된 IPC + Project 열기/EOF adapter + Companion 단일 인스턴스 수명 연결.
-2. 사용자 업데이트 화면 + 다운로드/검증 worker + 내구성 결과 + native 승인 연결.
-3. Companion＋Core 묶음, 공식 Codex 연결 절차, 웹 다운로드 페이지와 버전별 INSTALL.md 확정.
-4. Mac 검수 → Windows CI → 별도 승인한 prerelease → 사용자 기기에서 짧은 안내로 설치·업데이트.
+2. 사용자 단위 installer + Host cache 밖 고정 실행 진입점 + 초기 Core cohort.
+3. 사용자 업데이트 화면 + 서명된 다운로드/검증 worker의 Windows 설치·취소·실패 E2E와 내구성 결과.
+4. 공식 Codex 연결 절차, 웹 다운로드 페이지와 버전별 INSTALL.md 확정.
+5. Mac 검수 → Windows CI → 별도 승인한 prerelease → clean 사용자 기기에서 설치·업데이트.
 
 게시 URL, publisher 키, OS별 실제 installer, 자동 Codex 연결, 전체 설치 업데이트 인계는
 미완이다. 현재 개발용 `companion/make-app.sh`는 격리 표식 제거/설치 동작이 있어 사용자 경로로
@@ -217,9 +248,9 @@ Windows ACL 변화나 runtime 저장소 쓰기 문제를 해결했다는 증거�
 | 정책 | 연결 0/1/다수, 종료·만료·지연 heartbeat, clock 역행, 유한 registry | 단위시험 구현 |
 | 업데이트 정책 | 알림만으로 실행 안 함, 대상 바뀌면 거절, 중복·오래된 결과 거절, 종료 유예 | 단위시험 구현 |
 | 적용 판정 | 기존 연결 v1 유지, 공개는 대기, 공개 후 새 연결의 일치하는 응답만 적용 확인 | 단위시험 구현 |
-| IPC/수명 | 양 OS 실제 Core Project 연결→아이콘 하나→마지막 연결 종료→프로세스 종료 | 두 OS IPC/자동 발견 구현, Mac 합성 앱 검증; Windows native·실제 tray 인수 미검수 |
-| 업데이트 | native 클릭→v2 준비·선택→새 Core 응답, 기존 연결·Project 보존 | 미구현/미검수 |
-| 최초 설치 | 새 Mac/Windows에서 다운로드·설치·공식 연결, 터미널 없이 사용 | 미구현/미검수 |
+| IPC/수명 | 양 OS 실제 Core Project 연결→아이콘 하나→마지막 연결 종료→프로세스 종료 | transport/정책 코드와 Mac 합성 검증은 있으나 production 설치·Windows tray 종단 미검수 |
+| 업데이트 | native 클릭→서명된 전체 설치→새 Core 응답, 기존 연결·Project 보존 | 코드 구현/Windows E2E 미검수 |
+| 최초 설치 | 새 Mac/Windows에서 다운로드·설치·공식 연결, 터미널 없이 사용 | NSIS 구성/고정 Core 연결 미구현 |
 | 전체 설치 | Companion/Skill 변경을 Core-only로 오판하지 않음, 종료·인계·재연결 | 미구현/미검수 |
 
 검증 결과는 정책 시험, Core 회귀, Tauri 빌드, 실제 창/트레이, Windows native 실행, 사용자
@@ -280,7 +311,7 @@ coordination 모듈이다. Windows API feature(Pipes/Cryptography)만 추가했�
 
 다음 검수는 Windows CI의 native pipe·자동 시작 시험과 GUI build다. 그 뒤 별도 승인한
 설치 묶음에서 실제 tray·Codex 제한 토큰·legacy 인스턴스 충돌을 확인해야 한다. 현재 installer,
-업데이트 버튼/worker와 Core-only cohort 배치 연결은 미완이며 이번 변경을 사용자 설치 완료로
+업데이트 버튼/서명 검증 worker는 구현됐지만 고정 Core 진입점과 cohort 배치 연결은 미완이며 이번 변경을 사용자 설치 완료로
 표시하지 않는다. commit·push·CI·게시·Windows PC 변경은 하지 않았다.
 
 ## 10. Windows 빌드 준비 및 native CI

@@ -33,13 +33,13 @@ export function labels(profile, arch, head) {
     marketplace: `gil-dev-windows-visual-${arch}`,
     displayName: `GIL Windows ${arch} — image-authoring development candidate (not a release)`,
     channel: 'windows_unsigned_development_candidate_visual_authoring',
-    cargoFeatures: ['--features', 'visual-authoring'], tools: 25, storage_format: 5};
+    cargoFeatures: ['--features', 'visual-authoring,product-safety'], tools: 25, storage_format: 5};
   return {
     version: `0.2.1-preview.3+windows.${arch}.${short}`,
     marketplace: `gil-preview-windows-${arch}`,
     displayName: `GIL Windows ${arch} — review candidate`,
     channel: 'windows_unsigned_review_candidate',
-    cargoFeatures: [], tools: 19, storage_format: 4};
+    cargoFeatures: ['--features', 'product-safety'], tools: 19, storage_format: 4};
 }
 export function packTar(run, tree) {
   return run('tar.exe', ['-czf', '-', '.'], {cwd: tree, encoding: 'buffer'});

@@ -1,12 +1,16 @@
-# GIL Runtime Update — 최소 구현 설계안 v0.1 (U2 CI 결과 기준)
+# GIL Runtime Update — 구현 실험 장부 v0.1 (제품 계획 아님)
 
-> 2026-10-25: [Companion 설치·업데이트 계약](GIL_Companion_Install_Update_v0.1.md)에 따라
+> 2026-10-26: [Companion 설치·업데이트 계약](GIL_Companion_Install_Update_v0.1.md)에 따라
 > 업데이트는 사용자가 native UI에서 시작한다. 아래 MCP 업데이트 도구·Agent 실행 경로는
 > 연결하지 않는다. 준비·선택·실행 원시 계층은 검증된 범위만 native updater에서 재사용한다.
 > 정책·session IPC·설치 cohort 발견은 구현했으며 실제 업데이트 UI/worker/installer 연결은 아직 없다.
+> 이 문서의 “구현됨”은 해당 하위 코드나 testbed를 뜻한다. production manifest에서 도달 가능하거나
+> Windows 사용자가 업데이트할 수 있다는 뜻이 아니다.
 
-2026-10-23. [계약](GIL_Runtime_Update_Contract_v0.1.md)·[U1 설계 결정안](GIL_Runtime_Update_Design_v0.1.md)의 구현 전 최소 설계.
-**설계·코드 조사만. 제품 미구현, commit·게시·PC 실험 없음.** 정상 설치 경로에서 사용자에게 긴 코드·PowerShell·수동 권한 변경을 요구하지 않는다.
+2026-10-23부터 누적된 [계약](GIL_Runtime_Update_Contract_v0.1.md)·[U1 설계 결정안](GIL_Runtime_Update_Design_v0.1.md)의
+실험 기록이다. 앞부분의 초기 설계 뒤에 구현·CI 결과가 날짜순으로 누적돼 있으므로 현재 제품
+상태의 요약으로 사용하지 않는다. 정상 설치 경로에서 사용자에게 긴 코드·PowerShell·수동 권한
+변경을 요구하지 않는다.
 
 목표: 기존 GIL cache를 삭제하거나 실행 중 바이너리를 덮어쓰지 않고, 고정 실행기가 **승인된 새 Core를 다음 연결부터** 실행한다.
 
@@ -31,7 +35,12 @@
 | A4 | Core 프로세스가 네트워크 다운로드를 할 수 있다 | 의존하지 않음: 다운로드는 Agent가 작업 폴더에 받고(현장에서 동작 확인), Core는 로컬 파일을 검증·복사 |
 | A5 | 사용자 PC에서 파일 rename 교체가 된다(F8의 디렉터리 EPERM 환경) | `gil_runtime_status`의 capability probe 결과를 prerelease로 확인; 안 되면 "이 환경에서 업데이트 차단" |
 
-## 1. 최초 설치에 포함할 구성 (고정 실행기 + 기본 Core)
+## 1. 당시 실험 구성 (Plugin 안의 실행기 + 기본 Core, 제품안에서 폐기)
+
+아래의 “같은 바이너리 두 역할”은 runtime 원시 계층을 시험하기 위한 구조다. 실행 중 교체되는
+Host cache에 실행기를 두는 문제를 해결하지 못하므로 최종 Windows 제품 구조로 채택하지 않는다.
+제품은 installer가 GIL 소유 사용자 영역에 별도 고정 진입점을 설치하고 Host가 그 경로를
+등록한다. 이 절의 상태표와 불변 버전 선택 규칙만 재사용 후보로 남긴다.
 
 - **같은 바이너리 두 역할**: 별도 launcher 실행 파일을 추가하지 않고 번들 `gil`(`gil.exe`)에 서브커맨드 `gil launch mcp` 를 둔다. manifest만 `args: ["launch","mcp"]`로 바뀐다(F1). 이유: 패키징·고지·수명 문제가 있는 실행 파일을 하나로 유지하고, bootstrap(선택 없음·저장소 없음)일 때는 **자기 자신을 in-process로 `mcp --serve`** 하여 현재 동작과 완전히 같다.
 - **실행기 동작**(연결 시작 1회): 저장소 결정(§3) → 저장소 상태 판정(아래) → `selection.json` 읽기·검증 → 선택된 버전의 `complete` 마커·파일 digest 재검증(핀 고정 핸들 아래) → 그 Core를 `mcp --serve`로 spawn, stdio 전달, stdin EOF 전달, 자식 종료 대기·종료 코드 전달 → 진단은 stderr만. 임의 구판 탐색·"가장 새 디렉터리" 선택은 하지 않는다.

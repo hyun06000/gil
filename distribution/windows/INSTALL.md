@@ -1,98 +1,35 @@
-# Windows unsigned tester preview — f0ecfbd
+# Windows 설치 안내
 
-This is an opt-in test build, not stable Windows support. Native x64 and ARM64 CI passed.
-Ordinary-user Codex installation and visible fullscreen are the acceptance test, not already proved.
-No Authenticode signature is supplied. Stop on OS security warnings; never bypass them.
+> **제품 설치 코드는 있으나, 서명·실기기 인수 전이라 공개 설치본은 없다.**
 
-Release: https://github.com/hyun06000/gil/releases/tag/windows-preview-f0ecfbd
+이 저장소가 만드는 Windows `tar.gz`는 개발·검토용 후보이며 installer가 아니다. 과거
+`windows-preview-*` archive를 수동으로 풀어 local marketplace로 등록하는 절차는 제품 설치
+경로에서 폐기한다. 그 절차는 Host cache 안의 실행 파일을 직접 사용하므로 실행 중 교체와 제거를
+안전하게 해결하지 못하고, 서명된 publisher·복구·제거·Companion 업데이트도 제공하지 않는다.
 
-## Request for the installing Codex agent
+사용자와 설치를 돕는 Agent는 다음을 하지 않는다.
 
-Use a local Windows task with PowerShell and the user's normal Codex installation. You have consent
-to install this preview, not to overwrite an existing installation or modify existing projects.
-Explain briefly that GIL reads/writes the project the user selects and stores its history in `.gil`.
-The native Plugin includes the Monitor; Companion, Node, npm, Cargo, Git and administrator rights
-are not needed. This source is a local marketplace downloaded from an official project release,
-not a listing in the universal plugin directory.
+- archive를 일반 사용자용 installer라고 부르기
+- Plugin cache, registry 또는 Codex 설정을 손으로 편집·삭제하기
+- Defender, SmartScreen, 실행 정책 또는 ACL을 완화하기
+- 관리자 권한으로 실패를 우회하기
+- CI 성공을 실제 Codex 설치나 화면 성공으로 보고하기
 
-1. Read-only preflight: check PowerShell, `codex plugin --help`, `codex plugin add --help`,
-   `codex plugin marketplace add --help`, and the Windows system `tar.exe`. Use the existing Codex
-   CLI; do not install development tools. If tools/network access are denied, request the normal
-   task permission or explain the blocker. Never alter security policy.
-2. Determine native CPU using `Get-CimInstance Win32_Processor` and its `Architecture` field.
-   Exactly one distinct value 9 means x64; 12 means ARM64. Do not use the shell process's bitness.
-   Missing, conflicting or other values: stop. Do not ask the person to research CPU details.
-3. Inspect existing Plugin and marketplace state through official commands. If any GIL install
-   exists, report its source/version and ask before replacing or registering a conflicting source.
-   Never edit registry/config/cache files manually or delete an old install directory.
-4. Choose the matching archive below. Download via HTTPS only into a fresh, user-owned directory
-   outside the project, OneDrive, network shares and reparse-point paths. Check available disk space
-   first (allow at least 150 MiB). Use a GUID/new name; never reuse or overwrite an existing directory.
-   Retain the prepared marketplace at a persistent user-local path, not a temporary cleanup location.
-5. Before extraction, verify `Get-FileHash -Algorithm SHA256` against the exact digest below.
-   Mismatch: stop, do not execute or register anything. Inspect tar entries: no absolute paths,
-   `..`, drive/ADS colon, backslashes, links or special files. Expected file list is below; only their
-   parent directories may occur. Stop on extras or duplicates. Hash validation is mandatory even
-   if a downloaded checksum file agrees. Do not accept a hash from an unrelated source.
-6. Extract only the validated archive into a newly created empty directory. To preserve non-ASCII
-   Windows user paths, set the working directory to the staging directory and pass ASCII relative
-   arguments to Windows tar, e.g. `tar.exe -xzf package.tar.gz -C marketplace`. Check its exit code.
-   Check the resulting file allowlist, no reparse points, manifest version, native executable path
-   and marketplace name before registering anything.
-7. Run official management commands, checking each exit code and JSON result:
+현재 구현된 제품 경로는 current-user NSIS가 `%LOCALAPPDATA%\GIL\runtime`에 고정 런처와
+버전별 Core를 설치하고, Companion의 **Codex 연결** 버튼이 사용자의 재확인 뒤 공식 CLI로
+등록하는 방식이다. 설정 파일을 직접 편집하거나 기존 등록을 자동으로 덮어쓰지 않는다.
+제거할 때는 Companion의 **Codex 연결 해제**를 먼저 누르고 열려 있는 GIL 대화를 닫은 뒤 Windows
+앱 제거를 사용한다. 첫 판 uninstaller는 안전을 위해 runtime과 Project의 `.gil`을 보존한다.
 
-   ```text
-   codex plugin marketplace add <absolute-prepared-marketplace-root> --json
-   codex plugin add gil-companion-prototype@gil-preview-windows-<architecture> --json
-   ```
+서명·실기기 인수가 끝나면 이 문서는 다음 항목을 포함한 짧은 안내로 교체한다.
 
-   Do not pass `--ref` for a local directory. Keep that directory for future marketplace access.
-   If this client's CLI does not support installation, use its official Plugin UI for that registered
-   source; do not invent commands or patch cache files. Report incomplete installation accurately.
-8. Verify installed source/version and GIL tool availability. New tools may require a new Codex
-   conversation; ask for that only when necessary. Never claim the tools attached from a CLI success
-   response alone. Restart the app only if a new conversation does not load the installed tools.
-9. After tools are available, ask the user to select a new empty local test folder in Codex. Never
-   guess a project root or initialize an existing project. Start GIL, request the Monitor, and begin
-   an interview for a simple calculator. Ask the user to confirm the graph and chat are actually
-   visible together; successful tool data is not proof of fullscreen rendering.
+1. 공식 HTTPS 다운로드와 서명된 x64 installer(ARM64는 별도 검수 뒤 추가)
+2. publisher, version, size와 digest 확인 방법
+3. 사용자 단위 설치/복구/제거 동작
+4. Codex의 공식 등록 절차
+5. Companion의 **업데이트 확인** 및 사용자가 누르는 **업데이트** 버튼
+6. 새 연결의 실제 Core identity로 적용을 확인하는 방법
 
-## Fixed packages (never substitute Mac or an emulated architecture)
-
-Base URL: `https://github.com/hyun06000/gil/releases/download/windows-preview-f0ecfbd/`
-
-| Native CPU | File | SHA-256 |
-| --- | --- | --- |
-| x64 | `gil-windows-x64-candidate.tar.gz` | `3d4e374cf4cf7ec735ca5305124b94cb5f2b1e85529d295da829a6ed1d1221ad` |
-| ARM64 | `gil-windows-arm64-candidate.tar.gz` | `5cc6f3db2015062e08397d5d1b839d74c188319fdb0456b782ec2d2680c1c465` |
-
-Version: `0.2.1-preview.3+windows.<architecture>.f0ecfbd1ddff`.
-Marketplace: `gil-preview-windows-<architecture>`.
-Build source: `f0ecfbd1ddffd883a78fb82aba05c9716db084f6`.
-Build evidence: https://github.com/hyun06000/gil/actions/runs/37552996947
-
-Exactly eight regular payload files (tar may prefix paths with `./`):
-
-```text
-.agents/plugins/marketplace.json
-plugins/gil-companion-prototype/.codex-plugin/plugin.json
-plugins/gil-companion-prototype/core/windows-<architecture>/gil.exe
-plugins/gil-companion-prototype/skills/gil-companion/SKILL.md
-plugins/gil-companion-prototype/LICENSE
-plugins/gil-companion-prototype/THIRD-PARTY-NOTICES.txt
-plugins/gil-companion-prototype/THIRD-PARTY-NOTICES.json
-plugins/gil-companion-prototype/RUST-STDLIB-NOTICES.html
-```
-
-## Security boundaries
-
-Do not disable Defender/SmartScreen, change execution policy, clear download protection with
-Unblock-File, elevate to administrator, or add exclusions. OS/Host refusal is a test result, not
-permission to bypass protection. No automatic Companion fallback. No telemetry or personal logs
-are required from the tester. Preserve all third-party notices and project history.
-
-## Report back
-
-Ask only whether installation worked, graph+chat appeared, clicking a node opened its details,
-and the graph updated during work. Error text or a redacted screenshot is sufficient.
-Restart and uninstall/reinstall preservation tests can follow after first-run success.
+구현 방향과 남은 게이트는 [Windows 배포 상태](README.md)와
+[Companion 설치·업데이트 계약](../../spec/GIL_Companion_Install_Update_v0.1.md)을 따른다.
+과거 공개 후보의 bytes와 검수 결과는 `PUBLICATION-*` 문서에 역사적 증거로만 남긴다.

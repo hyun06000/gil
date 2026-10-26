@@ -1,240 +1,109 @@
-# Windows native feasibility — not a release
+# Windows 배포 상태
 
-The limited Windows x64 unsigned tester policy is now approved; publication remains gated on
-runtime redistribution review and a verified install source. See [release readiness](RELEASE-READINESS.md).
+> 상태: **x64 제품 경로 구현 중. Windows 실기기 서명·설치 인수 전이므로 아직 배포하지 않음.**
 
-Native test targets: Windows ARM64 and x64 / MSVC, local fixed NTFS drives.
-ARM64 installation and supported end-user OS versions are not yet accepted.
-This maintainer CI builds the native Core/MCP executable and runs a dependency-free Node test driver.
-Node, npm and Rust are CI tools, not proposed end-user installation requirements.
-No release is published and no active marketplace entry or existing Mac installation is changed.
-An opt-in workflow dispatch can retain an unsigned review artifact for seven days.
+Windows x64와 ARM64용 native Core 후보는 CI에서 빌드·실행된다. 제품 경로는 우선 x64로 좁혔다.
+현재 사용자용 NSIS 구성, 사용자가 누르는 서명 검증 updater, 고정 런처, 버전별 Core 설치와
+Codex 연결 버튼까지 코드에 들어왔다. 아직 Authenticode 서명 산출물과 clean Windows 실기기
+설치·업데이트 E2E 검수가 없으므로 지원 완료로 표시하지 않는다.
+`candidate.mjs`가 만드는 `tar.gz`는 검토용
+Plugin 묶음이며 receipt도 `publishable: false`다.
 
-## VM-first validation — 2026-10-07
+따라서 다음 표현은 현재 사실이 아니다.
 
-Prioritize the user's Apple Silicon macOS VM and Windows ARM64 VM. Defer physical Intel/AMD x64
-acceptance, not x64 regression coverage. The Windows matrix builds the same source, runs the same
-binding/security and MCP integration tests, and uses the same native protocol/Monitor smoke on
-both CPUs. Native OS and Node architecture assertions reject accidental emulation. No feature,
-tool schema, storage format or security rule is forked by CPU.
+- “Windows를 지원한다.”
+- “archive를 풀고 Plugin을 등록하면 설치가 끝난다.”
+- “업데이트가 다음 연결부터 자동으로 적용된다.”
+- “CI에서 통과했으므로 일반 사용자 PC에서도 설치·화면·업데이트가 동작한다.”
 
-Keep evidence separate: macOS ARM64 native, Windows ARM64 native, Windows x64 native, and any
-x64-on-ARM emulation. Passing one is not evidence of another. The UTM GUI tests remain human
-acceptance; CI cannot establish fullscreen, node details or host restart behavior on that VM.
+## 현재 코드의 두 실행 경로
 
-The candidate assembler now selects native ARM64 or x64 profiles for PE inspection, toolchain,
-notice inventory, catalog and executable path. Both matrix entries may prepare review archives.
-ARM64 has an independently resolved 89-package inventory: the architecture-specific windows
-import-library crate differs; the original legal-text hashes are shared and verified.
-This does not authorize a release or establish runtime redistribution terms.
-Both architectures must meet the same installation, integrity,
-runtime-notice and visible Monitor criteria before claiming equivalent end-user support.
+기존 `candidate.mjs` 검토 묶음의 Host manifest는 여전히 Plugin cache 안의 `gil.exe`를 직접
+실행한다. 이 묶음은 제품 설치본이 아니며 Windows 파일 수명 충돌을 해결하지 않는다.
 
-Runner reference: [GitHub-hosted runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
-(`windows-11-arm` for ARM64, `windows-2025` for x64).
+새 NSIS 제품 경로는 `%LOCALAPPDATA%\GIL\runtime\gil-launcher.exe`를 고정 진입점으로 두고,
+`versions\<version>\gil.exe`의 SHA-256을 `current.json`과 대조해 실행한다. 설치 훅은 실행 중인
+Core를 덮어쓰지 않고 새 버전 디렉터리를 만든 뒤 작은 선택 기록만 바꾼다. 새 기록이나 Core가
+손상되면 `current.previous` 한 판까지만 검증해 사용한다. 런처는 Job Object로 자식 Core를
+묶는다. Companion의 **Codex 연결** 버튼은 사용자가 확인한 뒤 공식 `codex mcp add` 명령으로
+이 고정 진입점을 등록하며 기존 `gil` 등록을 강제로 교체하지 않는다.
 
-Source `c762634` passed [native packaging run 37542348090](https://github.com/hyun06000/gil/actions/runs/37542348090):
-both CPUs passed binding/security and MCP tests, 9 packaging tests, release build, PE checks,
-Unicode archive roundtrip and relocated native execution. Both exposed 17 tools, verified embedded
-UI bytes and returned a read-only Monitor View with an active watcher. Local regression: 24
-Windows/common-notice tests plus 60 Mac packaging tests, all passed without skips.
-Downloaded archives independently matched SHA256SUMS and their receipts:
+이 코드는 구현 증거이지 출시 증거가 아니다. NSIS 자체 실행, updater가 설치한 다음 연결의
+실제 Core identity, Codex Desktop의 제한 토큰, uninstall/repair는 Windows x64 실기기에서
+아직 확인하지 않았다. 런처 자체를 바꾸는 업데이트 경로도 첫 판에서는 동결한다.
 
-- ARM64: 2,519,040 bytes, `437f0a8db18ebe7efef660f806fbaf505bb17a540e953e8fe9bea1e8e55abf71`.
-- x64: 2,693,120 bytes, `1030de5e2b0f026571f8c519ed0405551039bf02f064211fe9dbee1a8c895106`.
+`.github/workflows/windows-product.yml`은 이 간극을 좁히는 수동 제품 후보 작업이다. PR에서는
+계약만 검사하고, 승인된 `workflow_dispatch`에서만 updater 개인키와 Authenticode PFX를 읽는다.
+서명된 NSIS를 실제 설치한 뒤 receipt/digest, MCP 초기화, 실행 중 Core 쓰기 거절과 격리된
+Codex CLI 등록을 확인한 경우에만 3일짜리 후보 artifact를 남긴다. 이 작업은 release를 만들거나
+실제 Codex Desktop 화면·SmartScreen 평판·제거를 성공으로 선언하지 않는다.
 
-Both selected stable VS Enterprise 18.10.12217.157 / MSVC 14.51.36231 / SDK 10.0.26100.0;
-architecture-specific input hashes are in each receipt. Both receipts remain `publishable: false`.
-Ordinary-user install, visible fullscreen and runtime redistribution review remain open.
+수동 후보 작업은 GitHub Environment `windows-product-signing`의 승인과 다음 secrets를 요구한다.
 
-Source `975eb9e` passed [native matrix run 37532673397](https://github.com/hyun06000/gil/actions/runs/37532673397):
-each CPU passed 11 binding/security tests and 17 MCP integration tests (zero failures/ignored),
-then the same 17-tool, embedded-UI hash and read-only Monitor smoke with an active OS watcher.
-No compiler warnings were found in the run log. x64 packaging regression also passed 7 tests.
-Installation and visible fullscreen remain untested on both Windows VMs and physical machines.
-Local shared UI/Plugin regression passed 79 tests with 4 existing missing-sidecar skips; packaging
-regression passed 7. Initial local missing-module failures were resolved by installing the locked
-development dependencies in the isolated checkout, without modifying source or lockfiles.
+- `GIL_UPDATER_PUBLIC_KEY`: 앱에 포함할 Tauri updater 공개키
+- `GIL_UPDATER_PRIVATE_KEY`: 공개 저장소에 넣지 않는 대응 개인키
+- `GIL_UPDATER_PRIVATE_KEY_PASSWORD`: 개인키 암호
+- `GIL_UPDATER_ENDPOINT`: credentials가 없는 공식 HTTPS update JSON 주소
+- `GIL_WINDOWS_CERTIFICATE_PFX_BASE64`: Authenticode code-signing PFX의 base64
+- `GIL_WINDOWS_CERTIFICATE_PASSWORD`: PFX 암호
+- `GIL_WINDOWS_TIMESTAMP_URL`: 인증기관이 안내한 RFC 3161 timestamp 주소
 
-Separate release follow-up: the existing locked UI dependencies report one high npm advisory;
-the legacy JS Plugin development tree reports four (one critical, one high, two moderate).
-Affected-code reachability has not been established. Those node_modules are not included in the
-native shipping payload, but green functional tests are not security clearance. Review dependency
-exposure before a new publication; this architecture change does not silently update dependencies.
+개인키/PFX를 파일로 commit하거나 workflow artifact에 넣지 않는다. Environment에는 필수 reviewer를
+두고, `build_signed_candidate=true`인 수동 실행만 후보를 만든다. 성공 artifact도 release가 아니며
+3일 뒤 만료된다.
 
-`windows-spike.yml` checks native handshake, MCP initialize/list/resource bytes, project start/status,
-duplicate-start refusal and record preservation in a temporary Unicode/space-containing path.
-The first spike deliberately refused Monitor preparation. The follow-up implements local NTFS
-identity and private binding storage; the smoke now requires a read-only View and live OS watcher.
-Protocol success still is not a passing Windows/Codex screen acceptance test.
-The legacy loopback Monitor's Unix signal wait remains unsupported on Windows; MCP stdio is separate.
+## 연결 해제와 제거
 
-## Remaining gates
+Companion의 **Codex 연결 해제**는 `codex mcp list --json`으로 등록을 먼저 읽고, command가 설치된
+고정 런처이며 args가 정확히 `mcp --serve`일 때만 공식 `codex mcp remove gil`을 실행한다. 이름이
+같은 다른 등록은 삭제하지 않는다. 제거 순서는 **Codex 연결 해제 → 열려 있는 GIL 대화 닫기 →
+Windows 앱 제거**다.
 
-- Validate on an ordinary tester account and Codex (hosted native runner passed; below).
-- Port Unix-specific test helpers and run the full relevant Windows regression suite.
-- Native plugin packaging, execution trust, remote marketplace installation/update/removal.
-- Real Windows/Codex fullscreen horizontal graph, details, watcher, locks and restart acceptance.
+첫 제품판의 NSIS uninstaller는 Companion과 그 바로가기/등록만 제거한다. `%LOCALAPPDATA%\GIL\runtime`
+과 모든 Project의 `.gil`은 보존한다. 이미 열린 대화가 Core를 사용 중일 수 있는데 재귀 삭제를
+시도하면 반쯤 제거된 runtime을 만들 수 있기 때문이다. 완전 runtime 정리는 별도의 소유권·실행 중
+프로세스·등록 부재 검증과 명시적 사용자 버튼이 구현되기 전까지 지원하지 않는다.
 
-Mac cross-target `cargo check` proves compilation only, not Windows linking or execution.
-Running `node distribution/windows/spike.mjs <native-binary>` on Mac validates the harness's shared
-  protocol path but does not exercise Windows ACLs. Windows CI results must be recorded
-separately. Do not disable OS security or relax binding privacy checks to make the spike pass.
+## 채택할 사용자 경로
 
-## Local checkpoint — 2026-09-30
+첫 Windows 배포는 다음 한 경로만 제공한다.
 
-- macOS → `x86_64-pc-windows-msvc` `cargo check --locked -p gil --bin gil`: passed, no warnings.
-- macOS native build and the shared smoke driver: passed (17 tools, embedded UI hash,
-  start/status and duplicate-start byte preservation).
-- Windows x64 native runner: **passed** on source commit `3fd7e57`;
-  [CI run 36679663944](https://github.com/hyun06000/gil/actions/runs/36679663944).
-  Build completed without warnings. The executable answered its native challenge, exposed 17 MCP
-  tools, served hash-matching embedded UI, started/read a temporary Project, refused duplicate start
-  without changing state bytes, and refused Monitor preparation with `resume_unavailable` as expected.
-- Existing macOS CI also passed:
-  [run 36679663787](https://github.com/hyun06000/gil/actions/runs/36679663787).
-- Windows installation and visible fullscreen: **not run**. The full Windows Rust suite is not part
-  of this smoke gate; the outstanding platform security work remains unchanged.
+1. 서명된 사용자 단위 installer가 Companion, 고정 실행 진입점과 초기 Core를
+   `%LOCALAPPDATA%\GIL` 아래의 GIL 소유 영역에 설치한다.
+2. Host 등록은 버전별 Core나 Host cache의 실행 파일이 아니라 고정 진입점만 가리킨다.
+3. 업데이트 확인은 알림만 표시한다. 다운로드·설치는 자동으로 시작하지 않는다.
+4. 사용자가 Companion에서 버전과 변경 사항을 보고 **업데이트** 버튼을 눌러야 시작한다.
+5. 새 Core는 새 버전 디렉터리에 준비하고 검증한다. 실행 중인 Core는 덮어쓰거나 종료하지 않는다.
+6. 검증된 선택 기록을 원자적으로 바꾼 뒤 새 MCP 연결부터 새 Core를 사용한다.
+7. 새 연결의 실제 Core identity가 일치할 때만 적용 완료로 표시한다.
+8. Companion·고정 진입점·Skill·Host 등록이 바뀌는 판은 Core-only 업데이트가 아니라 새 installer로
+   처리한다.
 
-## Monitor implementation candidate
+“가장 최신 이름의 폴더”를 고르는 방식은 사용하지 않는다. 선택 기록은 정확한 release identity,
+digest, architecture와 설치 cohort를 포함해야 한다. 실패 시 기존 선택과 Project를 보존하고,
+자동 rollback·보안 설정 변경·Host cache 삭제·구버전 강제 종료를 하지 않는다.
 
-- Local fixed drive paths on NTFS only. Mapped network/removable drives, UNC, ReFS/FAT and any
-  reparse-point component are refused. Unsupported root drives are checked before creating settings.
-- Stable `.gil` directory volume serial + 64-bit NTFS file index + creation time; existing binding
-  schema and Unix identity remain unchanged. `state.yaml` replacement does not change identity.
-- Directory handles pin ancestors against rename/delete during storage operations. Read records
-  through handles that deny concurrent writes/delete; validate owner and protected DACL on the handle.
-- New settings directories and records have exactly one effective full-access ACE for the current
-  process user SID, with inheritance disabled. Existing ACLs are never silently repaired.
-- Flush new file bytes, close the private temporary file, then same-directory `MoveFileExW` with
-  `MOVEFILE_WRITE_THROUGH` and without replacement/cross-volume copy. Corrupt/existing records survive.
-  Power-loss durability on every storage controller is not established by these tests.
-- Native tests cover persistence, Project replacement, concurrency, corrupt/future records, scope
-  traversal, Unicode paths, public ACL refusal and junction refusal. The normal MCP integration suite
-  additionally checks process restart and stale scopes against the real executable.
-- `windows-sys 0.61.2` was already locked, and is now a direct Windows-only dependency. Mac dependency
-  inventory is unchanged (only Cargo input digests in the Mac notice policy are refreshed). Windows
-  dependency notices and package trust checks remain a packaging gate before any distribution.
+## 출시를 막는 항목
 
-References: [NTFS file identity](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/ns-fileapi-by_handle_file_information),
-[file security](https://learn.microsoft.com/en-us/windows/win32/fileio/file-security-and-access-rights),
-[MoveFileExW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw).
+- Windows x64 installer의 uninstall/repair 경로와 후속 ARM64 범위 결정
+- Authenticode publisher와 설치·업데이트 서명 검증
+- `%LOCALAPPDATA%\GIL`의 권한, 원자적 선택, 중단 복구와 정리 정책
+- 고정 진입점·Job Object·이전 Core 폴백의 Windows 실기기 검증
+- Companion의 Windows tray/UI와 서명 updater 실기기 검증
+- `codex.exe`가 PATH에 없는 설치의 공식 연결 대안 및 clean standard-user PC 종단 시험
+- 설치 중단, 디스크 고갈, 실행 중 업데이트, 재부팅, 제거/재설치 인수
+- x64와 ARM64 각각의 실제 화면·재연결·Project 보존 인수
 
-## Native Monitor checkpoint — 2026-09-30
+이 항목이 닫히기 전에는 사용자에게 PowerShell 스크립트, cache 삭제, `config.toml` 편집,
+Defender/SmartScreen 우회, 관리자 실행을 설치 방법으로 안내하지 않는다.
 
-Source `55d5ebf` passed [Windows CI 36684755556](https://github.com/hyun06000/gil/actions/runs/36684755556):
-11 binding/security tests + 17 MCP integration tests, no failures or skips, native build without warnings.
-The smoke received a complete read-only Monitor View with `watching: true`. This includes process
-restart/restoration, stale-scope refusal, first Step hint, protected ACL, junction rejection and
-rename-guard tests; it does not include real Codex rendering. Mac CI
-[36684755606](https://github.com/hyun06000/gil/actions/runs/36684755606) also passed.
+## 개발자 검증 자료
 
-First failures and fixes are retained in PR #12, not erased by a green rerun:
-
-- A Unix-only slash expectation in a receipt test was changed to the native relative path.
-- An attribute-only directory handle did not enforce the intended sharing guard. It now requests
-  read access; the real rename refusal assertion passed unchanged.
-- The ACL mutation test needed READ_CONTROL as well as WRITE_DAC; junction fixture creation now uses
-  PowerShell with paths passed through environment values, never source interpolation. Neither test skips.
-- Mac's initial sandbox MCP run missed a watcher hint. The unrestricted MCP rerun and full
-  `cargo test --locked -p gil` / `cargo build --locked -p gil --all-targets` passed.
-
-Still open: Windows dependency-notice inventory, installable artifact/trust checks, ordinary-user
-installation, real Codex fullscreen and tester acceptance. No Windows package has been released.
-
-## Unsigned packaging candidate (not tester installation approval)
-
-Dispatch `windows-spike.yml` on the reviewed branch with `prepare_candidate=true`.
-`candidate.mjs` checks a separate pinned Windows notice policy (89 packages), builds with a static
-CRT and remapped build paths, inspects the matching native PE imports, assembles a native-only plugin
-and an isolated `gil-preview-windows-{x64,arm64}` catalog, and verifies every file after extraction. The extracted
-binary must pass the native smoke with no Node/Cargo on its child PATH. The workflow only retains
-the archive, SHA256SUMS and evidence; it never pushes a catalog, installs, or creates a release.
-
-The source-level runtime/build dependency graph and original legal texts are recorded separately
-under `compliance/`. Shared notice validation defaults remain macOS-only; selecting Windows is explicit.
-The stdlib notice is the complete compiler distribution notice already reviewed for Rust 1.97.1.
-Static MSVC runtime redistribution review is a separate pending gate, not certified by Cargo coverage.
-Authenticode, downloaded-file security prompts, ordinary-user Codex install and visible fullscreen
-also remain unverified. Never advise users to disable Defender/SmartScreen or change execution policy.
-
-Packaging failures retained: run 36689441583 lacked prefetched workspace metadata dependencies;
-the offline gate remained and CI now fetches the locked target first. Run 36689772910 then built
-the release but stopped at the DLL allowlist: `bcryptprimitives.dll` was missing from that list.
-It is the Windows [ProcessPrng system library](https://learn.microsoft.com/en-us/windows/win32/seccng/processprng),
-now explicitly tested. No arbitrary DLL directory was permitted.
-Run 36690272236 passed release/import checks but Windows tar converted the Unicode `-C` path
-to question marks. Archive transport now uses stdin/stdout bytes and a Unicode process cwd,
-retaining the same Korean/space-containing extraction and executable path acceptance gate.
-Microsoft documents [static CRT deployment and its update responsibility](https://learn.microsoft.com/en-us/cpp/windows/deployment-in-visual-cpp?view=msvc-170)
-and separate [redistribution terms](https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files?view=msvc-170).
-This candidate does not treat static linking as automatic license approval or an OS trust bypass.
-
-Do not send a nondeveloper tester these build commands or a CI login requirement. After release gates
-and a stable installation source are ready, give them one Codex prompt and a simple graph/detail/restart
-check. Native ARM64 and x64 candidates are separate archives; do not substitute one for the other.
-
-## Downloaded candidate checkpoint — 2026-09-30
-
-Source `7d7aec67b6f5feca03cebfe5d3e9de923bf5c7d3`,
-[Windows candidate run 36690752815](https://github.com/hyun06000/gil/actions/runs/36690752815): passed.
-Native binding/MCP tests 28, packaging tests 7; relocated release binary smoke passed with 17 tools,
-matching embedded UI bytes, read-only Monitor View and active watcher. Same-source Mac PR CI
-[36690756906](https://github.com/hyun06000/gil/actions/runs/36690756906) and Windows PR CI
-[36690756776](https://github.com/hyun06000/gil/actions/runs/36690756776) passed.
-Local Mac packaging/compliance regression: 82 passed, no skips.
-
-Archive: `gil-windows-x64-candidate.tar.gz`, 2,693,120 bytes.
-SHA-256: `1071266e719093cb1d6c23c9641e32972e9f0296db5851b78df0330d384b4d05`.
-Downloaded independently; archive checksum, all 8 extracted file hashes, PE imports and the
-official plugin-creator validator passed. No executable was run on the Mac during this validation.
-Imports: advapi32, api-ms-win-core-synch-l1-2-0, bcryptprimitives, kernel32, ntdll, ws2_32 (all DLLs).
-No external VCRUNTIME/Node dependency was present in the PE import table. This is not a blanket
-claim about every dynamically loaded dependency or every clean Windows installation.
-
-The receipt remains `publishable: false`: no Authenticode signature, actual Windows/Codex install
-and fullscreen not yet tested, no marketplace publication, MSVC runtime redistribution review pending.
-CI retention is seven days; a CI artifact is not the stable nondeveloper installation channel.
-
-## Image-report authoring profile — stage 1 (2026-10-18)
-
-The `visual-authoring` Cargo feature now has Windows implementations of the storage boundaries
-that were Unix-only (new format-5 creation, Verify attachment, stored-image reuse, reopen after
-restart). Scope, threat list and acceptance table: `spec/GIL_Windows_Visual_Support_Contract_v0.1.md`;
-storage details: storage contract §25. Migration of existing format-4 records stays refused on
-Windows (`unsupported_platform`).
-
-`windows-spike.yml` now runs a four-entry matrix: x64/ARM64 × default/visual-authoring. The
-authoring entries build with the feature, run the binding/MCP tests plus `visual_attachment`,
-`visual_start`, `visual_store` and the filtered library unit tests (creation fault/abort
-checkpoints, lock and object-store boundaries), then `spike.mjs` with
-`GIL_RUNTIME_PROFILE=visual-authoring` (25-tool contract on Windows: the 24 authoring tools plus `gil_prepare_workspace`, `storage_format: 5`, restart).
-The default entries are unchanged and remain the only ones that package a review candidate.
-A green authoring job is runner evidence for the contract table; it is not an installable
-Windows authoring candidate, a version-label decision or a Codex screen acceptance.
-
-Evidence: PR #25 run 39126103310 (head 09882352) passed all four jobs after three fix rounds
-(rename call form, a test fixture, and a real Core defect: a junction root was accepted after
-canonicalization). The follow-up (owner-only `.gil`, actual cross-account access test, UNC and
-mapped-drive refusal, rename security review) passed all four jobs in run 39129885115
-(head b84a6322) after six more rounds; contract §6.1 lists each failure and fix, including one
-further Core defect (a reservation handle retained DELETE access and collided with the pinned
-opens). The inherited ACL of the published text preview is reviewed in
-[ACL-IMPACT-20261018.md](ACL-IMPACT-20261018.md).
-
-2026-10-19 (design A, contract §4 W1 3 and §8 1a): the reservation is created and first held by
-one `NtCreateFile` call, child entries have an explicit inherited-ACL acceptance that applies
-only to owner-only storages (format-4 Projects are unchanged), and the library no longer exposes
-an ACL adoption function. Run 39162630706 (head 19508d50) passed all four jobs after three
-rounds; contract §6.1 lists them. The handle transition after creation is detection, not
-prevention.
-
-### Development candidate packaging (2026-10-19)
-
-`candidate.mjs` honors `GIL_RUNTIME_PROFILE`. With `visual-authoring` it builds the feature,
-labels the plugin `0.2.1-dev.visual-authoring+windows.<arch>.<head12>` under the marketplace
-`gil-dev-windows-visual-<arch>`, packages `gil-windows-<arch>-visual-authoring-candidate.tar.gz`
-and requires the native smoke to report 25 tools and storage format 5 (`checks.json` schema 2).
-A `prepare_candidate` dispatch now retains one profile-labeled artifact per matrix entry. The
-isolated PC check for such a candidate is [DEV-CANDIDATE-CHECK.md](DEV-CANDIDATE-CHECK.md); the
-public tester channel and its labels are unchanged.
+- [`candidate.mjs`](candidate.mjs): 서명되지 않은 native Plugin 검토 묶음 생성
+- [`spike.mjs`](spike.mjs): native MCP/Monitor smoke
+- [`RELEASE-READINESS.md`](RELEASE-READINESS.md): 현재 출시 게이트
+- [`../runtime-update/README.md`](../runtime-update/README.md): 제품과 분리된 update capability probe
+- [`../../spec/GIL_Companion_Install_Update_v0.1.md`](../../spec/GIL_Companion_Install_Update_v0.1.md):
+  사용자 주도 설치·업데이트 계약
+- 날짜와 commit이 붙은 `PUBLICATION-*`, `CHECKPOINT-*`, `*-CHECK.md`: 당시 증거 장부.
+  현재 사용자 설치 지침이 아니다.

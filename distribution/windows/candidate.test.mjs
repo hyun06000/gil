@@ -84,11 +84,11 @@ test('authoring development candidate is labeled apart from the public preview c
   assert.equal(dev.version, `0.2.1-dev.visual-authoring+windows.x64.${'f'.repeat(12)}`);
   assert.equal(dev.marketplace, 'gil-dev-windows-visual-x64');
   assert.match(dev.displayName, /development candidate/);
-  assert.deepEqual(dev.cargoFeatures, ['--features', 'visual-authoring']);
+  assert.deepEqual(dev.cargoFeatures, ['--features', 'visual-authoring,product-safety']);
   assert.equal(dev.tools, 25); assert.equal(dev.storage_format, 5);
   assert.equal(tester.marketplace, 'gil-preview-windows-x64');
   assert.equal(tester.tools, 19); assert.equal(tester.storage_format, 4);
-  assert.deepEqual(tester.cargoFeatures, []);
+  assert.deepEqual(tester.cargoFeatures, ['--features', 'product-safety']);
   assert.notEqual(dev.marketplace, tester.marketplace);
   assert.ok(!dev.version.includes('preview'), 'development candidate must not look like a preview');
   assert.equal(labels('visual-authoring', 'arm64', head).marketplace, 'gil-dev-windows-visual-arm64');

@@ -9,9 +9,11 @@ use std::path::{Path, PathBuf};
 
 use crate::{
     ActionContract, CloseContract, CycleKind, NodeKind, ProjectSession, Refusal, Report, RuleSet,
-    SessionError, StoreError, Usage, context, render_monitor_html,
+    SessionError, StoreError, context, render_monitor_html,
     render_monitor_text, story, with_help,
 };
+#[cfg(not(feature = "product-safety"))]
+use crate::Usage;
 
 // Shared command execution. CLI owns ambient cwd/stdin; MCP supplies both explicitly.
 // Never chdir or spawn this binary to execute a domain action.
@@ -702,6 +704,12 @@ fn close_cycle(ctx: &Invocation<'_>, session: &mut Session) -> Result<String, St
 /// 인수를 받지 않는다. 목표는 지금 위치가 이미 정했고(Artifact Model §8.1), 파일을 골라
 /// 되돌리는 것은 **부분 복원**이라 어느 Snapshot 에도 속하지 않는 세계를 만든다.
 /// 확인 절차도 두지 않는다 — 안전성은 물어보는 데서 오지 않고 원자성에서 온다(§8.8).
+#[cfg(feature = "product-safety")]
+fn restore(_ctx: &Invocation<'_>, _extra: Option<&String>) -> Result<String, String> {
+    Err(product_artifact_rollback_refusal("restore"))
+}
+
+#[cfg(not(feature = "product-safety"))]
 fn restore(ctx: &Invocation<'_>, extra: Option<&String>) -> Result<String, String> {
     if let Some(extra) = extra {
         // Domain 명령이 서기 전의 거절도 복구할 Topic 이 있다 — 사용법 하나면 풀린다.
@@ -738,6 +746,7 @@ fn restore(ctx: &Invocation<'_>, extra: Option<&String>) -> Result<String, Strin
 ///
 /// 개별 파일 목록을 기본 출력에 늘어놓지 않는다. 되돌린 파일이 수백 개일 때 그 목록은
 /// 다음 수를 가린다. raw manifest·blob 주소도 내보이지 않는다 — 공개 표면은 `snapshot:A*` 다.
+#[cfg(not(feature = "product-safety"))]
 fn restored(session: &Session, done: &crate::Restored) -> String {
     let mut out = match done.no_op {
         true => format!(
@@ -789,6 +798,12 @@ fn restored(session: &Session, done: &crate::Restored) -> String {
 ///
 /// **인수를 받지 않는다.** 어디로 갈지는 닫는 순간 Report 에 이미 확정됐고, 여기서 다시
 /// 고르게 하면 근거와 이동이 갈린다 — Snapshot 을 고를 수 없는 것과 같은 까닭이다.
+#[cfg(feature = "product-safety")]
+fn revisit(_ctx: &Invocation<'_>, _extra: Option<&String>) -> Result<String, String> {
+    Err(product_artifact_rollback_refusal("revisit"))
+}
+
+#[cfg(not(feature = "product-safety"))]
 fn revisit(ctx: &Invocation<'_>, extra: Option<&String>) -> Result<String, String> {
     if let Some(extra) = extra {
         return Err(with_help(
@@ -813,10 +828,21 @@ fn revisit(ctx: &Invocation<'_>, extra: Option<&String>) -> Result<String, Strin
     Ok(where_now(ctx, &session))
 }
 
+#[cfg(feature = "product-safety")]
+fn product_artifact_rollback_refusal(command: &str) -> String {
+    refusal(
+        &format!("이 제품판에서는 `gil {command}` 를 사용할 수 없다."),
+        "현재 Artifact 추적 범위가 안전하게 제한되지 않아, 복원하면 추적하지 않아야 할 파일까지 바뀔 수 있다.",
+        "파일은 한 글자도 바꾸지 않았다. 필요한 변경은 Git 또는 별도 백업에서 직접 복구한다.",
+        "gil status",
+    )
+}
+
 /// Cycle 계층의 되돌아감 — **논리 이동과 세계 복원이 한 명령이다.**
 ///
 /// 저장은 이 안에서 이미 끝난다(②→③ 순서). 그래서 여기서 `write` 를 다시 부르지 않는다 —
 /// 부르면 복원이 끝난 뒤 같은 상태를 한 번 더 쓰는 셈이고, 그 사이의 의미가 흐려진다.
+#[cfg(not(feature = "product-safety"))]
 fn revisit_cycle(session: &mut Session) -> Result<String, String> {
     let done = session.revisit_cycle().map_err(say)?;
     Ok(revisited(session, &done))
@@ -826,6 +852,7 @@ fn revisit_cycle(session: &mut Session) -> Result<String, String> {
 ///
 /// 파일 목록도 내부 주소도 전체 Context 도 내지 않는다. Existence 와 판은 **지금 값을 읽어**
 /// 보일 뿐이며, 되돌아감이 새 판을 만든 것처럼 말하지 않는다 — 만들지 않았다.
+#[cfg(not(feature = "product-safety"))]
 fn revisited(session: &Session, done: &crate::CycleRevisited) -> String {
     let cycles = session.project().cycles();
     let mut out = String::from("되돌아갔다
@@ -889,6 +916,7 @@ Artifact 세계
 }
 
 /// 되돌아온 자리에서 **지금 실제로 밟을 수 있는 수** — 갈래를 여는 것 하나뿐이다.
+#[cfg(not(feature = "product-safety"))]
 fn branch_block() -> String {
     let openable = CycleKind::ALL.to_vec();
     format!(

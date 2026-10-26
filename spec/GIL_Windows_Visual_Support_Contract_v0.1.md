@@ -30,6 +30,8 @@ Core 경로를 쓰고, 플랫폼 원시 연산만 Windows 동등 구현으로 �
   (`symlink_metadata`로 일반 파일만, GIL 이름만 삭제)을 유지한다.
 - Monitor binding 저장(이미 Windows 검수됨, `bindings_windows.rs`), Host 화면 인수, 설치,
   공개 게시, 버전 표기 정책, MSVC runtime 재배포 검토.
+  설치·Core 업데이트 수명은 [Runtime Update 계약안](GIL_Runtime_Update_Contract_v0.1.md)을 따른다.
+  합성 MCP의 새 버전 재연결 성공은 이 문서 W1–W4의 실제 Project/이미지 검수를 대신하지 않는다.
 - 같은 사용자 권한의 악의적 동시 writer가 모든 검사 직후에 쓰는 경합의 완전한 제거.
   Unix 경계와 같은 한계다(저장 계약 §18).
 

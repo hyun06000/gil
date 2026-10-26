@@ -29,7 +29,10 @@ const target = join(repository, 'target/plugin-core-build');
 const cargoHome = process.env.CARGO_HOME || join(homedir(), '.cargo');
 const rustflags = `--remap-path-prefix=${cargoHome}=/cargo --remap-path-prefix=${repository}=/gil`;
 assert.ok(!/\s/.test(repository + cargoHome), 'build roots containing whitespace need encoded rustflags support');
-await run('cargo', ['build', '--locked', '--release', '-p', 'gil', '--target', 'aarch64-apple-darwin', ...(profile === 'visual-authoring' ? ['--features', 'visual-authoring'] : [])], {
+const productFeatures = profile === 'visual-authoring'
+  ? 'visual-authoring,product-safety'
+  : 'product-safety';
+await run('cargo', ['build', '--locked', '--release', '-p', 'gil', '--target', 'aarch64-apple-darwin', '--features', productFeatures], {
   ...process.env, RUSTFLAGS: rustflags, CARGO_TARGET_DIR: target,
 });
 assert.deepEqual(await sourceSnapshot(repository), source, 'source changed during build');
