@@ -7,7 +7,7 @@ body:
       value: |
         한국어 또는 영어로 아는 만큼만 적어 주세요. 모르는 항목은 '모름 / Unknown'이어도 됩니다.
         비밀번호·token·개인 경로·사적 대화·실제 .gil 기록은 첨부하지 마세요.
-        보안 취약점과 악용 방법은 이 양식에 쓰지 마세요. [보안 제보 준비 상태](https://github.com/hyun06000/gil/blob/main/spec/GIL_Security_Reporting_Plan_v0.1.md)를 확인해 주세요.
+        보안 취약점과 악용 방법은 이 양식에 쓰지 말고 [비공개 보안 제보](https://github.com/hyun06000/gil/security/advisories/new)를 이용해 주세요.
   - type: textarea
     id: problem
     attributes:
@@ -41,3 +41,10 @@ body:
     attributes:
       label: 추가 설명 / Optional evidence
       description: 첨부는 필수가 아닙니다. 스크린샷은 사적 대화·개인 경로·다른 앱 정보를 가린 뒤 올려 주세요.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 공개 정보 확인 / Public information check
+      options:
+        - label: 이 issue가 공개된다는 점을 이해했으며, 비밀·개인정보·실제 .gil 기록을 넣지 않았습니다.
+          required: true
