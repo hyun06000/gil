@@ -57,7 +57,7 @@ try {
 
 $Signature = Get-AuthenticodeSignature -LiteralPath $Installer
 if ($Signature.Status.ToString() -ne $ExpectedSignature) {
-    throw "Installer signature is $($Signature.Status), expected $ExpectedSignature: $($Signature.StatusMessage)"
+    throw "Installer signature is $($Signature.Status), expected ${ExpectedSignature}: $($Signature.StatusMessage)"
 }
 
 # Tauri owns Companion removal. The external runtime is deliberately preserved because another
