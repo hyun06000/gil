@@ -74,7 +74,7 @@ try {
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath (Join-Path $Bootstrap 'current.json') -Encoding utf8NoBOM
 
-    cargo tauri build --bundles nsis --config tauri.windows.conf.json
+    cargo tauri build --bundles nsis --config tauri.product-windows.conf.json
     if ($LASTEXITCODE -ne 0) {
         throw 'Windows NSIS 설치본 빌드가 실패했습니다.'
     }

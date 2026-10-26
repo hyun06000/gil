@@ -6,7 +6,9 @@ const here = new URL('../../', import.meta.url);
 const read = path => readFile(new URL(path, here), 'utf8');
 
 test('Windows product bundle is a current-user NSIS installer with signed updater artifacts', async () => {
-  const config = JSON.parse(await read('companion/tauri.windows.conf.json'));
+  // Do not name this tauri.windows.conf.json: Tauri automatically merges that platform file into
+  // every Windows cargo build, where product-only bootstrap resources do not exist.
+  const config = JSON.parse(await read('companion/tauri.product-windows.conf.json'));
   assert.deepEqual(config.bundle.targets, ['nsis']);
   assert.equal(config.bundle.windows.nsis.installMode, 'currentUser');
   assert.equal(config.bundle.createUpdaterArtifacts, true);
@@ -15,6 +17,7 @@ test('Windows product bundle is a current-user NSIS installer with signed update
   assert.equal(config.bundle.resources['../target/release/gil-launcher.exe'], 'bootstrap/gil-launcher.exe');
   assert.equal(config.bundle.resources['../target/windows-bootstrap/current.json'], 'bootstrap/current.json');
   assert.equal(config.bundle.windows.nsis.installerHooks, 'windows/runtime-hooks.nsh');
+  await assert.rejects(read('companion/tauri.windows.conf.json'), /ENOENT/);
 });
 
 test('installer stages immutable Core bytes and switches a recoverable receipt', async () => {
@@ -50,6 +53,7 @@ test('release build refuses missing update trust material', async () => {
   assert.match(script, /digestAlgorithm = 'sha256'/);
   assert.match(script, /Tauri CLI 2\.10\.1/);
   assert.match(script, /UpdaterEndpoint\.Scheme -ne 'https'/);
+  assert.match(script, /--config tauri\.product-windows\.conf\.json/);
 });
 
 test('the updater has no automatic check and install requires a second user decision', async () => {
