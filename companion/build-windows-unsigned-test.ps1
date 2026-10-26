@@ -34,14 +34,19 @@ try {
     $Core = Join-Path $Root 'target\release\gil.exe'
     $VersionLine = (& $Core --version).Trim()
     if ($VersionLine -notmatch '^gil ([0-9A-Za-z.+-]+)$') { throw 'Core 버전을 읽지 못했습니다.' }
-    $Version = $Matches[1]
+    $CoreVersion = $Matches[1]
     $Configured = (Get-Content -Raw (Join-Path $Here 'tauri.conf.json') | ConvertFrom-Json).version
-    if ($Version -ne $Configured) { throw "Core 버전($Version)과 Companion 버전($Configured)이 다릅니다." }
+    if ($CoreVersion -ne $Configured) { throw "Core 버전($CoreVersion)과 Companion 버전($Configured)이 다릅니다." }
 
     $Bootstrap = Join-Path $Root 'target\windows-bootstrap'
     New-Item -ItemType Directory -Force -Path $Bootstrap | Out-Null
     $Digest = (Get-FileHash -LiteralPath $Core -Algorithm SHA256).Hash.ToLowerInvariant()
-    @{ schema = 1; version = $Version; sha256 = $Digest; architecture = 'x86_64'; cohort = 'gil-mcp-v1' } |
+    # Owner candidates can change bytes several times before a public version is chosen. Give the
+    # preserved runtime directory a content-specific prerelease version so an older test install can
+    # remain immutable while this candidate is installed beside it.
+    $RuntimeVersion = "$CoreVersion-owner.$($Digest.Substring(0, 12))"
+    $env:TAURI_CONFIG = @{ version = $RuntimeVersion } | ConvertTo-Json -Compress
+    @{ schema = 1; version = $RuntimeVersion; sha256 = $Digest; architecture = 'x86_64'; cohort = 'gil-mcp-v1' } |
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath (Join-Path $Bootstrap 'current.json') -Encoding utf8NoBOM
 

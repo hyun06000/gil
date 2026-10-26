@@ -34,6 +34,9 @@ test('owner acceptance has a separate unsigned installer identity and cannot emi
   assert.match(script, /UNSIGNED INTERNAL TEST ONLY/);
   assert.match(script, /Remove-Item "Env:\$Name"/);
   assert.match(script, /tauri\.unsigned-test-windows\.conf\.json/);
+  assert.match(script, /\$RuntimeVersion = "\$CoreVersion-owner\.\$\(\$Digest\.Substring\(0, 12\)\)"/);
+  assert.match(script, /\$env:TAURI_CONFIG = @\{ version = \$RuntimeVersion \}/);
+  assert.match(script, /version = \$RuntimeVersion; sha256 = \$Digest/);
   assert.doesNotMatch(script, /certificateThumbprint|timestampUrl/);
 });
 
@@ -125,9 +128,13 @@ test('signed product CI is manual, secret-gated, installed, and exercised before
   assert.match(workflow, /cargo install tauri-cli --version 2\.10\.1 --locked/);
   assert.match(workflow, /1\.3\.6\.1\.5\.5\.7\.3\.3/);
   assert.match(workflow, /product-e2e\.ps1/);
+  assert.match(workflow, /DisplayName 'GIL Companion \(Unsigned Test\)' -SeedLegacyRuntime/);
   assert.ok(workflow.indexOf('product-e2e.ps1') < workflow.indexOf('actions\/upload-artifact'));
 
   const acceptance = await read('distribution/windows/product-e2e.ps1');
+  assert.match(acceptance, /\[switch\]\$SeedLegacyRuntime/);
+  assert.match(acceptance, /Owner candidate reused the legacy runtime directory/);
+  assert.match(acceptance, /Installation changed or removed the preserved legacy runtime/);
   assert.match(acceptance, /Start-Process -FilePath \$Installer -ArgumentList '\/S'/);
   assert.match(acceptance, /product-launcher-smoke\.mjs/);
   assert.match(acceptance, /mcp add gil -- \$Launcher mcp --serve/);
