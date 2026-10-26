@@ -42,6 +42,23 @@ test('owner acceptance has a separate unsigned installer identity and cannot emi
   assert.doesNotMatch(script, /certificateThumbprint|timestampUrl/);
 });
 
+test('Companion keeps Codex connection visible and discovers the Desktop CLI without PATH', async () => {
+  const clients = await read('companion/src/clients.rs');
+  assert.match(clients, /cli_found: bool/);
+  assert.match(clients, /join\("OpenAI"\).*join\("Codex"\).*join\("bin"\)/s);
+  assert.match(clients, /starts_with\("\.staging-"\)/);
+  assert.match(clients, /CODEX_CLI_PATH/);
+  assert.match(clients, /starts_with\("codex-cli "\)/);
+
+  const ui = await read('ui/companion.js');
+  assert.match(ui, /function showCodexUnavailable/);
+  assert.match(ui, /connectCodexButton\.hidden = false/);
+  assert.match(ui, /Codex 연결 다시 시도/);
+  assert.match(ui, /capability\.cli_found === false/);
+  const startup = ui.slice(ui.indexOf('async function start()'));
+  assert.doesNotMatch(startup, /catch \(error\) \{\s*connectCodexButton\.hidden = true;/);
+});
+
 test('installer stages immutable Core bytes and switches a recoverable receipt', async () => {
   const hook = await read('companion/windows/runtime-hooks.nsh');
   assert.match(hook, /runtime\\versions\\\$\{VERSION\}\\gil\.exe/);
