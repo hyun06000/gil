@@ -4,9 +4,9 @@
   "inputs": {
     "Cargo.toml": "8476d5cf2e38d5c8e0951a28d15931247a0653c708fbad12a6ffa8c92ce5bd79",
     "Cargo.lock": "cdb646cb23f0e03fe7e37d30c895d36c7a9a8aa4c6b56d7cb0a27579985627bf",
-    "mcp-app/package-lock.json": "9c6170c797cb227eb236692c8087cfddfe09ceea0fa212df4417cf91712d83b6",
+    "mcp-app/package-lock.json": "e81c74f94d4882f4f9af795959f18bc0ccb598ae58d516c2e728df06db08d8d8",
     "mcp-app/build.mjs": "00013682e3e300f5e5945f5fbadd2fb5d2e5c65797d1596511546da6261f5c3d",
-    "plugins/gil-companion-prototype/assets/monitor.html": "0848c2c901ae0073da4d35995d55d1cea90156585fecaac5e8ab321a1fc18adf"
+    "plugins/gil-companion-prototype/assets/monitor.html": "bb7600eccb8558fb90a50c185eda9e69b7fda82bb3e0f33796ba23c8efd8a000"
   },
   "toolchain": {
     "release": "1.97.1",
@@ -1830,11 +1830,11 @@
     {
       "ecosystem": "npm",
       "name": "zod",
-      "version": "4.6.5",
+      "version": "4.6.7",
       "role": "bundled-ui",
       "declared_license": "MIT",
-      "source": "https://www.npmjs.com/package/zod/v/4.6.5",
-      "integrity": "sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==",
+      "source": "https://www.npmjs.com/package/zod/v/4.6.7",
+      "integrity": "sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==",
       "files": [
         {
           "path": "LICENSE",
