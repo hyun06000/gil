@@ -20,6 +20,9 @@ import {
   cardArrow, ROW_H, NODE_R, SELECTED_NODE_R, BOX_W,
 } from "./layout.js";
 import { cycleReportDetail } from './cycle-report.js';
+import { progressTracker, progressSummary } from './progress.mjs';
+
+const observeProgress = progressTracker();
 
 const SUPPORTED_SCHEMA = 1;
 
@@ -561,6 +564,16 @@ function renderIntro() {
   intro.querySelector(".world").textContent = word(WORLD, view.world.state);
   status.textContent =
     `${view.current.cycle_ref} · ${view.current.step_ref || "Cycle 경계"} · 읽기 전용`;
+  const summary = progressSummary(view);
+  for (const field of ['position', 'action', 'done', 'records']) {
+    intro.querySelector(`.progress-${field}`).textContent = summary[field];
+  }
+  const observed = observeProgress(current.scopeId, view);
+  const at = new Date(observed.observedAt).toLocaleTimeString();
+  intro.querySelector('.progress-observed').textContent = observed.changed
+    ? `이 화면에서 마지막 기록 변화 확인: ${at}`
+    : `이 화면에서 기록 확인: ${at} · 이후 기록 변화는 아직 확인되지 않았습니다.`;
+  intro.querySelector('.progress-connection').textContent = 'Monitor 조회 성공 · 기록된 작업을 표시합니다.';
 }
 
 let disposeVisuals = () => {};
@@ -680,6 +693,7 @@ function expandCycle(cycleRef) {
 function markStale(error) {
   stale.textContent = `마지막으로 확인된 화면이다. 다시 읽지 못했다: ${why(error)}`;
   stale.dataset.shown = "true";
+  intro.querySelector('.progress-connection').textContent = 'Monitor 조회 실패 · 아래는 마지막으로 확인한 기록입니다.';
 }
 function markFresh() {
   stale.textContent = "";
@@ -1093,6 +1107,12 @@ async function start() {
     // 다시 조회한다 — 부분 갱신을 합쳐 사실을 만들지 않는다(§8).
     window.GIL_HOST.listen("gil://refresh", () => {
       return refresh();
+    });
+    window.GIL_HOST.listen("gil://connection", (error) => {
+      if (!current) return;
+      intro.querySelector('.progress-connection').textContent = error
+        ? 'Monitor 연결 실패 · 아래는 마지막으로 확인한 기록입니다.'
+        : 'Monitor 연결 회복 · 아래는 마지막 조회에서 확인한 기록입니다.';
     });
     // 이 창의 사정. Graph 를 건드리지 않고 한 줄로 알린다.
     window.GIL_HOST.listen("gil://say", (said) => {

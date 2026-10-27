@@ -517,6 +517,8 @@ fn half_typed_close_is_rejected_with_the_missing_field_and_recovery_is_an_ordina
     let opened = monitor_call(&mut mcp, "gil_open", json!({"project_root": at, "kind": "question",
         "contract": "objective: 사용자의 목표를 확인한다\nnext_action: 무엇을 만들고 싶은지 묻는다\ndone_when: 사용자의 원문 응답을 얻는다\n"}));
     assert_eq!(opened["structuredContent"]["ok"], true, "{opened}");
+    assert!(opened["content"][0]["text"].as_str().unwrap().contains("gil_close"));
+    assert!(opened["structuredContent"]["said"].as_str().unwrap().contains("진행 경계"));
     let before = std::fs::read(at.join(gil::STATE_PATH)).unwrap();
     let wrong = json!({"project_root": at, "report": "question: 무엇을 만들까\n",
         "expected_owner": {"kind": "step", "ref": "step:C1/S1"}});
@@ -673,6 +675,64 @@ fn text_of(reply: &serde_json::Value) -> String {
 }
 
 // ── 시험 ───────────────────────────────────────────────────────────────────
+
+#[test]
+fn start_hands_off_a_prepared_monitor_without_a_second_prepare_or_extra_step() {
+    use serde_json::json;
+    let root = scratch("guided-start");
+    let settings = scratch("guided-start-settings");
+    let mut client = Client::serve_with(&settings);
+    let initialized = client.initialize();
+    assert!(initialized["result"]["instructions"].as_str().unwrap().contains("done_when"));
+    let started = monitor_call(&mut client, "gil_start", json!({"project_root":root}));
+    assert_eq!(started["structuredContent"]["ok"], true, "{started}");
+    let hint = started["content"][0]["text"].as_str().unwrap();
+    assert!(hint.contains("show_gil_monitor"), "{hint}");
+    let from = hint.find("{\"scope_id\":").unwrap();
+    let end = hint[from..].find('}').unwrap() + from + 1;
+    let args: serde_json::Value = serde_json::from_str(&hint[from..end]).unwrap();
+    let before = std::fs::read(product_state_path(&root)).unwrap();
+    let shown = monitor_call(&mut client, "show_gil_monitor", args);
+    assert_ne!(shown["isError"], true, "{shown}");
+    assert_eq!(shown["structuredContent"]["view"]["timeline"][0]["steps"], json!([]));
+    assert_eq!(std::fs::read(product_state_path(&root)).unwrap(), before);
+    let duplicate = monitor_call(&mut client, "gil_start", json!({"project_root":root}));
+    assert_eq!(duplicate["isError"], true);
+    assert!(!duplicate["content"][0]["text"].as_str().unwrap().contains("show_gil_monitor"));
+    let opened = monitor_call(&mut client, "gil_open", json!({"project_root":root,"kind":"question",
+        "contract":"objective: 합성 요구 확인\nnext_action: 연산을 질문한다\ndone_when: 답을 받았다\n"}));
+    assert_eq!(opened["structuredContent"]["ok"], true, "{opened}");
+    assert!(opened["content"][0]["text"].as_str().unwrap().contains("gil_close"));
+    let closed = monitor_call(&mut client, "gil_close", json!({"project_root":root,
+        "report":"question: 어떤 연산인가\nchoices: 덧셈 / 뺄셈\nresponse: 덧셈\n"}));
+    assert_eq!(closed["structuredContent"]["ok"], true, "{closed}");
+    assert!(closed["content"][0]["text"].as_str().unwrap().contains("다음 행동"));
+    let refused = monitor_call(&mut client, "gil_close", json!({"project_root":root,"report":""}));
+    assert_eq!(refused["isError"], true, "{refused}");
+    assert!(!refused["content"][0]["text"].as_str().unwrap().contains("이 닫기가 성공"));
+    assert!(client.eof().0.success());
+    std::fs::remove_dir_all(root).unwrap();
+    std::fs::remove_dir_all(settings).unwrap();
+}
+
+#[test]
+fn monitor_preparation_failure_does_not_erase_a_successful_start() {
+    use serde_json::json;
+    let root = scratch("guided-start-no-monitor");
+    let base = scratch("guided-invalid-settings");
+    let settings = base.join("file-not-directory");
+    std::fs::write(&settings, b"preserve this").unwrap();
+    let mut client = Client::serve_with(&settings); client.initialize();
+    let result = monitor_call(&mut client, "gil_start", json!({"project_root":root}));
+    assert_eq!(result["structuredContent"]["ok"], true, "{result}");
+    assert_eq!(result["isError"], false);
+    assert!(result["content"][0]["text"].as_str().unwrap().contains("Monitor 준비는 실패"));
+    assert!(product_state_path(&root).is_file());
+    assert_eq!(std::fs::read(&settings).unwrap(), b"preserve this");
+    assert!(client.eof().0.success());
+    std::fs::remove_dir_all(root).unwrap();
+    std::fs::remove_dir_all(base).unwrap();
+}
 
 #[cfg(target_os = "macos")]
 #[test]
@@ -1041,11 +1101,11 @@ fn starting_receipt_uses_the_requested_root_not_the_servers_directory() {
     {
         assert_eq!(reply["result"]["structuredContent"]["said"], String::from_utf8(cli.stdout).unwrap());
         let relative = Path::new(".gil").join("state.yaml");
-        assert!(text_of(&reply).ends_with(&format!("기록: {}\n", relative.display())));
+        assert!(reply["result"]["structuredContent"]["said"].as_str().unwrap().ends_with(&format!("기록: {}\n", relative.display())));
     }
     #[cfg(all(windows, feature = "visual-authoring"))]
     {
-        let said = text_of(&reply);
+        let said = reply["result"]["structuredContent"]["said"].as_str().unwrap();
         assert!(said.ends_with("기록: Windows 개인 앱 데이터의 보호된 기록\n"), "{said}");
         assert!(!said.contains("project-state-v1") && !said.contains("LOCALAPPDATA"), "{said}");
     }
@@ -1262,7 +1322,7 @@ fn starting_a_project_leads_to_one_monitor_scope_and_the_first_interview_updates
         assert_eq!(started["structuredContent"]["storage_format"],5);
         assert_eq!(started["structuredContent"]["display_confirmed"],false);
     }
-    assert_eq!(binding_files(&settings), 0, "시작만으로는 Monitor binding 을 만들지 않는다");
+    assert_eq!(binding_files(&settings), 1, "MCP 시작은 같은 root 의 Monitor 를 준비한다");
 
     // 2. 준비 → 표시 — 같은 연결, 별도 요청 없음. 첫 View 는 Step 이 없는 열린 Interview 다.
     let prepared = agent_call(&mut mcp, "gil_monitor_prepare", serde_json::json!({ "project_root": root }));
@@ -1271,7 +1331,7 @@ fn starting_a_project_leads_to_one_monitor_scope_and_the_first_interview_updates
     assert_eq!(prepared["structuredContent"]["label"], "project");
     let shown = agent_call(&mut mcp, "show_gil_monitor", serde_json::json!({ "scope_id": scope }));
     assert_ne!(shown["isError"], true, "{shown}");
-    assert!(shown["content"][0]["text"].as_str().unwrap().contains("fullscreen을 한 번 자동 요청"), "{shown}");
+    assert!(shown["content"].as_array().unwrap().iter().any(|v| v["text"].as_str().is_some_and(|s| s.contains("fullscreen을 한 번 자동 요청"))), "{shown}");
     let view = &shown["structuredContent"]["view"];
     assert_eq!(view["schema_version"], 1);
     assert_eq!(view["current"]["cycle_ref"], "cycle:C1");

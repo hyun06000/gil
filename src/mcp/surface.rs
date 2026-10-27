@@ -28,6 +28,16 @@ pub fn tools() -> &'static [Tool] {
             }
             tools
         };
+        let mut tools = tools;
+        for tool in &mut tools {
+            let hint = match tool.name.as_ref() {
+                "gil_start" => " Start also prepares the Monitor; follow the returned show_gil_monitor call immediately, before the first gil_open. Never repeat start after display failure.",
+                "gil_open" => " Choose one bounded objective and observable done_when. Perform it, then gil_close before another objective. Interview is conversation only; implementation and tests belong to Verify.",
+                "gil_close" => " Call when the open action's done_when is met; report observed results, then follow the next receipt before doing more work.",
+                _ => continue,
+            };
+            tool.description.get_or_insert_with(Default::default).to_mut().push_str(hint);
+        }
         tools
     })
 }

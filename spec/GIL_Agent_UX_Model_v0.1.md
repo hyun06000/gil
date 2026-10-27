@@ -18,6 +18,18 @@ UX는 작은 명령 표면, 명령 결과의 국소적 nudge, 필요할 때만 �
 
 ## 2. 공개 상호작용의 중심
 
+### 2026-10-27 MCP의 짧은 행동 안내
+
+Plugin Skill이 없는 직접 MCP 설치에도 서버 initialize instructions와 도구 응답의 짧은 안내를
+전달한다. MCP `gil_start` 성공 후 같은 명시적 root의 Monitor를 준비하고, 응답 첫 부분에서
+정확한 scope의 `show_gil_monitor`를 첫 Interview step보다 먼저 호출하도록 안내한다. 이는
+표시 요청을 위한 로컬 binding 준비이며 화면 표시 성공이 아니다. 준비 실패는 이미 확정된 시작의
+성공을 바꾸지 않고 별도로 보고한다. CLI receipt와 structuredContent의 기존 사실은 유지한다.
+
+open 응답은 실제 행동과 완료 조건 뒤에 조건 충족 시 닫고 다른 목적은 다음 행동으로 넘기도록
+안내한다. Verify 내부의 여러 구현·시험 호출은 허용한다. 외부 Host 도구 사용이나 에이전트의
+비공개 사고를 MCP가 강제·관찰했다고 주장하지 않는다. 노드를 시간으로 자동 종료하지 않는다.
+
 AI가 평상시에 반복하는 동작은 셋이다.
 
 ```text

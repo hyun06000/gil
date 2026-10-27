@@ -437,6 +437,12 @@ check("14. UI 에 쓰기 길이 없다 — .gil·Artifact·Journey·Will 을 건
   // 파일은 하나도 건드리지 않는다(§9.1.2). Rust 시험이 그 바이트를 지킨다.
   const allowed = [".node", ".fold", ".cycle-report-hit", ".scope .open", ".scope .refresh", ".scope .forget"];
   for (const button of all("button")) {
+    // Native application-management controls exist in shared markup but must stay
+    // hidden when this fixture Host has no corresponding capability.
+    if (button.matches('.connect-codex, .update')) {
+      if (!button.hidden) throw new Error(`지원하지 않는 관리 button 이 보인다: .${button.className}`);
+      continue;
+    }
     if (!allowed.some((one) => button.matches(one)))
       throw new Error(`쓰기로 보이는 button 이 있다: .${button.className}`);
   }

@@ -123,11 +123,13 @@ test("Skill 이 드는 Monitor 거절 code 는 전부 Rust adapter 가 실제로
   assert.match(flow, /`settings_\*`/);
 });
 
-test("시작 요청 하나가 start → prepare → show → 첫 Interview 순서로 이어진다", () => {
+test("시작 응답의 준비된 scope를 표시하고 옛 서버만 별도 prepare를 사용한다", () => {
   const flow = section(START);
-  const order = ["`gil_start(project_root)`", "`gil_monitor_prepare(project_root)`", "`show_gil_monitor(scope_id)`", "`gil_open`"]
+  const order = ["`gil_start(project_root)`", "`show_gil_monitor(scope_id)`", "`gil_open`"]
     .map((call) => { const at = flow.indexOf(call); assert.notEqual(at, -1, `흐름에 없다 — ${call}`); return at; });
   for (let i = 1; i < order.length; i++) assert.ok(order[i - 1] < order[i], "시작 흐름의 순서가 뒤집혔다");
+  assert.match(flow, /Older servers without that handoff need\s+`gil_monitor_prepare\(project_root\)`/);
+  assert.match(flow, /preparation failed[^;]*report that failure and do not start again/);
   assert.match(flow, /Do not wait for a separate "Monitor 열어 줘"/, "별도 Monitor 요청을 기다리지 않는다는 문장이 없다");
   assert.match(flow, /never guess one/, "폴더를 추측하지 않는다는 문장이 없다");
   assert.match(flow, /do not ask them to install anything/, "Companion 설치를 요구하지 않는다는 문장이 없다");
