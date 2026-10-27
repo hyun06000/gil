@@ -84,7 +84,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo fetch --locked --target x86_64-pc-windows-msvc
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cargo install tauri-cli --version 2.10.1 --locked
+          cargo install tauri-cli --version 2.11.5 --locked
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build explicitly unsigned current-user NSIS test candidate
         shell: pwsh
@@ -152,7 +152,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo fetch --locked --target x86_64-pc-windows-msvc
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cargo install tauri-cli --version 2.10.1 --locked
+          cargo install tauri-cli --version 2.11.5 --locked
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build updater-signed current-user NSIS test candidate
         shell: pwsh
@@ -231,7 +231,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo fetch --locked --target x86_64-pc-windows-msvc
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cargo install tauri-cli --version 2.10.1 --locked
+          cargo install tauri-cli --version 2.11.5 --locked
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Import Authenticode certificate for this job
         id: certificate
