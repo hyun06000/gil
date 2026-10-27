@@ -140,7 +140,7 @@ impl ServerHandler for GilServer {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().enable_resources().build())
             .with_server_info(Implementation::new("gil", env!("CARGO_PKG_VERSION")))
-            .with_instructions(format!("{} {}", guidance::INSTRUCTIONS, guidance::EVIDENCE_INSTRUCTIONS))
+            .with_instructions(guidance::INSTRUCTIONS)
     }
     fn get_tool(&self, name: &str) -> Option<Tool> {
         surface::tools().iter().find(|t| t.name == name).cloned()

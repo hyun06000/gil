@@ -81,7 +81,8 @@ if(process.argv[2]==='--proxy') {
       assert.equal(r.structuredContent?.ok,true,JSON.stringify(r));return r;
     };
     try {
-      await core.rpc('initialize',{protocolVersion:'2024-11-05',capabilities:{},clientInfo:{name:'workflow-fixture',version:'1'}});
+      const initialized=await core.rpc('initialize',{protocolVersion:'2024-11-05',capabilities:{},clientInfo:{name:'workflow-fixture',version:'1'}});
+      assert.equal(initialized.instructions, await readFile(join(repo,'src/mcp/workflow.md'),'utf8'), 'evaluation binary has stale workflow instructions');
       core.send({jsonrpc:'2.0',method:'notifications/initialized'});
       await call('gil_start');
       for(const [kind,report] of [
