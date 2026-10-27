@@ -112,6 +112,33 @@ pub(crate) fn externalize_inline_if_needed(root: &Path) -> Result<bool, String> 
                 entries.insert(relative.clone(), Entry::Directory);
                 walk(base, &source, copy_to, entries, total)?;
             } else if metadata.is_file() {
+                // `project.lock` is an empty, persistent coordination entry. On Windows the
+                // byte-range lock we deliberately hold may make even a same-process read fail
+                // with ERROR_LOCK_VIOLATION. Its contents carry no record data, so validate its
+                // shape and recreate the required empty entry instead of reading through the
+                // lock we just took. Every actual record file is still hashed byte-for-byte.
+                if relative == Path::new(crate::lock::LOCK_FILE) {
+                    if metadata.len() != 0 {
+                        return Err("기존 기록의 잠금 파일에 알 수 없는 내용이 있어 자동 이관하지 않았다".into());
+                    }
+                    if let Some(destination) = copy_to {
+                        let file = OpenOptions::new()
+                            .write(true)
+                            .create_new(true)
+                            .open(destination.join(&relative))
+                            .map_err(|e| format!("개인 저장소 잠금 파일을 만들지 못했다: {e}"))?;
+                        file.sync_all()
+                            .map_err(|e| format!("개인 저장소 잠금 파일을 확정하지 못했다: {e}"))?;
+                    }
+                    entries.insert(
+                        relative,
+                        Entry::File {
+                            bytes: 0,
+                            sha256: Sha256::digest([]).into(),
+                        },
+                    );
+                    continue;
+                }
                 *total = total
                     .checked_add(metadata.len())
                     .ok_or_else(|| "기존 기록 크기를 계산하지 못했다".to_string())?;
