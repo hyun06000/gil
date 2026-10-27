@@ -49,6 +49,10 @@ try {
 
     $Config = Get-Content -Raw (Join-Path $Here 'tauri.unsigned-updater-test-windows.conf.json') | ConvertFrom-Json
     $Config | Add-Member -NotePropertyName version -NotePropertyValue $Version -Force
+    # createUpdaterArtifacts is handled by Tauri's bundler, independently from the runtime updater
+    # builder in updates.rs. Supply the same public trust material to both layers explicitly.
+    $Config.plugins.updater | Add-Member -NotePropertyName pubkey -NotePropertyValue $env:GIL_UPDATER_PUBLIC_KEY -Force
+    $Config.plugins.updater | Add-Member -NotePropertyName endpoints -NotePropertyValue @($UpdaterEndpoint.AbsoluteUri) -Force
     $ConfigJson = $Config | ConvertTo-Json -Depth 10 -Compress
     cargo tauri build --bundles nsis --config $ConfigJson
     if ($LASTEXITCODE -ne 0) { throw 'Windows updater 시험 설치본 빌드가 실패했습니다.' }
