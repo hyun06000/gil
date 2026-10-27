@@ -10,7 +10,7 @@ const ENDPOINT: Option<&str> = option_env!("GIL_UPDATER_ENDPOINT");
 #[derive(Serialize)]
 pub struct UpdateCapability {
     configured: bool,
-    current_version: &'static str,
+    current_version: String,
 }
 
 #[derive(Serialize)]
@@ -45,10 +45,10 @@ fn updater(app: &AppHandle) -> Result<tauri_plugin_updater::Updater, String> {
 }
 
 #[tauri::command]
-pub fn update_capability() -> UpdateCapability {
+pub fn update_capability(app: AppHandle) -> UpdateCapability {
     UpdateCapability {
         configured: settings().is_ok(),
-        current_version: env!("CARGO_PKG_VERSION"),
+        current_version: app.package_info().version.to_string(),
     }
 }
 

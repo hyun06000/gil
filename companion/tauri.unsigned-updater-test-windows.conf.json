@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "GIL Companion (Unsigned Test)",
+  "identifier": "dev.ariadne.gil.companion.unsigned-test",
+  "plugins": {
+    "updater": {
+      "requireSignedVersion": true,
+      "windows": {
+        "installMode": "basicUi"
+      }
+    }
+  },
+  "bundle": {
+    "createUpdaterArtifacts": true,
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "../target/release/gil.exe": "bootstrap/gil.exe",
+      "../target/release/gil-launcher.exe": "bootstrap/gil-launcher.exe",
+      "../target/windows-bootstrap/current.json": "bootstrap/current.json"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "installerHooks": "windows/runtime-hooks.nsh",
+        "languages": [
+          "Korean",
+          "English"
+        ]
+      }
+    }
+  }
+}

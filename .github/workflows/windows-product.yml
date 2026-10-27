@@ -17,6 +17,16 @@ on:
         type: boolean
         required: true
         default: false
+      build_unsigned_updater_candidate:
+        description: 'Build an unsigned-publisher candidate whose user-clicked updates are cryptographically signed'
+        type: boolean
+        required: true
+        default: false
+      owner_update_version:
+        description: 'Monotonic SemVer for the owner updater channel, for example 0.1.1-owner.1'
+        type: string
+        required: false
+        default: ''
       build_signed_candidate:
         description: 'Build, install-test and retain a signed x64 candidate (never publish a release)'
         type: boolean
@@ -103,6 +113,77 @@ jobs:
           path: |
             target/release/bundle/nsis/*.exe
             target/windows-product-evidence/unsigned-acceptance.json
+          if-no-files-found: error
+          retention-days: 3
+
+  unsigned-updater-candidate:
+    name: UNSIGNED publisher / SIGNED updater acceptance
+    needs: contract
+    if: github.event_name == 'workflow_dispatch' && inputs.build_unsigned_updater_candidate
+    runs-on: windows-2025
+    timeout-minutes: 60
+    env:
+      RUSTUP_TOOLCHAIN: 1.97.1
+      GIL_UPDATER_PUBLIC_KEY: ${{ secrets.GIL_UPDATER_PUBLIC_KEY }}
+      GIL_UPDATER_ENDPOINT: ${{ secrets.GIL_UPDATER_ENDPOINT }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.GIL_UPDATER_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.GIL_UPDATER_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Require updater trust material without printing it
+        shell: pwsh
+        run: |
+          if ('${{ inputs.owner_update_version }}' -notmatch '^[0-9]+\.[0-9]+\.[0-9]+-owner\.[1-9][0-9]*$') {
+            throw 'owner_update_version must look like 0.1.1-owner.1'
+          }
+          foreach ($name in @(
+            'GIL_UPDATER_PUBLIC_KEY', 'GIL_UPDATER_ENDPOINT', 'TAURI_SIGNING_PRIVATE_KEY',
+            'TAURI_SIGNING_PRIVATE_KEY_PASSWORD'
+          )) {
+            if ([string]::IsNullOrWhiteSpace((Get-Item "Env:$name").Value)) { throw "Missing required secret: $name" }
+          }
+      - name: Install pinned native build tools
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo fetch --locked --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo install tauri-cli --version 2.10.1 --locked
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build updater-signed current-user NSIS test candidate
+        shell: pwsh
+        run: ./companion/build-windows-unsigned-updater-test.ps1 -Version '${{ inputs.owner_update_version }}'
+      - name: Install and exercise the exact candidate
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem target\release\bundle\nsis -File -Filter '*.exe')
+          if ($installers.Count -ne 1) { throw "Expected one NSIS installer, found $($installers.Count)" }
+          if ($installers[0].Name -notmatch '_${{ inputs.owner_update_version }}_x64-setup\.exe$') {
+            throw "Candidate version does not match the requested version: $($installers[0].Name)"
+          }
+          if ((Get-AuthenticodeSignature -LiteralPath $installers[0]).Status -ne 'NotSigned') {
+            throw 'Owner updater candidate must remain explicitly unsigned at the Windows publisher layer'
+          }
+          $signatures = @(Get-ChildItem target\release\bundle\nsis -File -Filter '*.sig')
+          if ($signatures.Count -ne 1 -or $signatures[0].Length -eq 0) { throw 'Expected one non-empty updater signature' }
+          $prefix = Join-Path $env:RUNNER_TEMP 'codex-cli'
+          npm install --prefix $prefix --no-audit --no-fund --ignore-scripts '@openai/codex@0.163.0-alpha.11.1'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $codex = @(Get-ChildItem "$prefix\node_modules\@openai\codex-win32-x64" -Recurse -File -Filter 'codex.exe')
+          if ($codex.Count -ne 1) { throw "Expected one native codex.exe, found $($codex.Count)" }
+          ./distribution/windows/product-e2e.ps1 -Installer $installers[0].FullName -CodexExe $codex[0].FullName -Evidence 'target/windows-product-evidence/unsigned-updater-acceptance.json' -ExpectedSignature NotSigned -DisplayName 'GIL Companion (Unsigned Test)' -SeedLegacyRuntime
+      - name: Retain updater-signed owner candidate for three days
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: gil-windows-x64-UNSIGNED-PUBLISHER-SIGNED-UPDATER-${{ inputs.owner_update_version }}-${{ github.sha }}
+          path: |
+            target/release/bundle/nsis/*.exe
+            target/release/bundle/nsis/*.sig
+            target/windows-product-evidence/unsigned-updater-acceptance.json
           if-no-files-found: error
           retention-days: 3
 
