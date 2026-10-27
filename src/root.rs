@@ -69,6 +69,12 @@ pub fn open_project_root(rules: RuleSet, root: &Path) -> Result<ProjectSession, 
     if !root.is_absolute() {
         return Err(RootError::NotAbsolute);
     }
+    match std::fs::metadata(root) {
+        Ok(meta) if meta.is_dir() => {}
+        Ok(_) => return Err(RootError::NoProjectHere),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Err(RootError::NoProjectHere),
+        Err(error) => return Err(RootError::Session(format!("Project 자리를 읽지 못했다: {error}"))),
+    }
     let state = crate::project_state::state_for_root(root).map_err(RootError::Session)?;
     if !state.exists() {
         // 앞 형식만 있는 자리도 **여기서 멈춘다.** 조용히 지나치면 사람은 제 기록이
@@ -109,6 +115,12 @@ pub fn open_project_root_read_only(
 ) -> Result<ReadOnlySession, RootError> {
     if !root.is_absolute() {
         return Err(RootError::NotAbsolute);
+    }
+    match std::fs::metadata(root) {
+        Ok(meta) if meta.is_dir() => {}
+        Ok(_) => return Err(RootError::NoProjectHere),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Err(RootError::NoProjectHere),
+        Err(error) => return Err(RootError::Session(format!("Project 자리를 읽지 못했다: {error}"))),
     }
     let state = crate::project_state::state_for_root(root).map_err(RootError::Session)?;
     if !state.exists() {

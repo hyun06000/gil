@@ -85,7 +85,11 @@ pub fn watch_project_hints(
     if state != root.join(crate::STATE_PATH) {
         let storage_root = state.parent().and_then(Path::parent)
             .ok_or_else(|| "GIL 기록 감시 위치를 확인하지 못했다".to_string())?;
-        roots.push(storage_root.to_path_buf());
+        // The generic watcher is also used while a caller is choosing or testing a plain folder.
+        // Add the product record watch only after that record root has actually been published.
+        if storage_root.is_dir() {
+            roots.push(storage_root.to_path_buf());
+        }
     }
     let hint: Arc<dyn Fn() + Send + Sync> = Arc::new(hint);
     let mut watchers = Vec::with_capacity(roots.len());
