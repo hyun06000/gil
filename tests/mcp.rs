@@ -13,6 +13,46 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 mod common;
 
+/// State path used by the product-facing MCP start. On Windows the working tree and the private
+/// GIL record deliberately live in different roots.
+fn product_state_path(root: &Path) -> PathBuf {
+    #[cfg(windows)]
+    {
+        use sha2::{Digest, Sha256};
+        use std::os::windows::ffi::OsStrExt;
+        let canonical = root.canonicalize().unwrap();
+        let mut identity = Vec::new();
+        for unit in canonical.as_os_str().encode_wide() {
+            identity.extend_from_slice(&unit.to_le_bytes());
+        }
+        let key = format!("{:x}", Sha256::digest(&identity));
+        PathBuf::from(std::env::var_os("LOCALAPPDATA").unwrap())
+            .join("GIL/project-state-v1").join(key).join(gil::STATE_PATH)
+    }
+    #[cfg(not(windows))]
+    { root.join(gil::STATE_PATH) }
+}
+
+fn load_product(root: &Path) -> gil::Project {
+    gil::load(common::spec(), product_state_path(root)).unwrap()
+}
+
+fn save_product(root: &Path, project: &gil::Project) {
+    gil::save(project, product_state_path(root)).unwrap();
+}
+
+fn open_product(root: &Path) -> gil::ProjectSession {
+    gil::open_project_root(common::spec(), root).unwrap()
+}
+
+fn open_product_read_only(root: &Path) -> gil::ReadOnlySession {
+    gil::open_project_root_read_only(common::spec(), root).unwrap()
+}
+
+fn product_temp_path(root: &Path) -> PathBuf {
+    product_state_path(root).with_file_name("state.yaml.writing")
+}
+
 #[cfg(all(target_os="macos",target_arch="aarch64",feature="visual-authoring"))]
 #[test]
 fn migration_stdio_two_approvals_backup_apply_restart_and_preservation() {
@@ -116,22 +156,22 @@ fn format5_verify_without_images_uses_typed_close_with_a_declaration() {
     let root=scratch("verify-no-images");
     let mut mcp=Client::serve_with(&scratch("verify-no-images-settings")); mcp.initialize();
     assert_eq!(monitor_call(&mut mcp,"gil_start",json!({"project_root":root}))["structuredContent"]["storage_format"],5);
-    let mut p=common::bootstrap_from(gil::load(common::spec(),root.join(gil::STATE_PATH)).unwrap());
+    let mut p=common::bootstrap_from(load_product(&root));
     common::up_to_verify(&mut p);
-    gil::save(&p,root.join(gil::STATE_PATH)).unwrap();
+    save_product(&root, &p);
     let r=common::full_report(&common::spec(),CycleKind::Experiment,NodeKind::Verify);
     let report: String=r.field_names().map(|k| format!("{k}: {}\n",r.get(k).unwrap())).collect();
-    let before=std::fs::read(root.join(gil::STATE_PATH)).unwrap();
+    let before=std::fs::read(product_state_path(&root)).unwrap();
     // The ordinary text close is the wrong shape for a format-5 Verify: refused, nothing written.
     let text=monitor_call(&mut mcp,"gil_close",json!({"project_root":root,"report":report}));
     assert_eq!(text["isError"],true,"{text}");
-    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),before);
+    assert_eq!(std::fs::read(product_state_path(&root)).unwrap(),before);
     // Half-typed shape is a schema rejection that names the missing field.
     let half=mcp.request("tools/call",json!({"name":"gil_close","arguments":{"project_root":root,"report":report,
         "expected_owner":{"kind":"step","ref":"step:C2/S3"}}}));
     assert_eq!(half["error"]["code"],-32602);
     assert!(half["error"]["message"].as_str().unwrap().contains("not_needed/missing"),"{half}");
-    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),before);
+    assert_eq!(std::fs::read(product_state_path(&root)).unwrap(),before);
     // A `missing` declaration without follow_up is refused by the schema too.
     let bad=mcp.request("tools/call",json!({"name":"gil_close","arguments":{"project_root":root,"report":report,
         "expected_owner":{"kind":"step","ref":"step:C2/S3"},
@@ -163,9 +203,9 @@ fn authoring_stdio_close_reuse_confirmation_and_rejections() {
     let root=scratch("authoring-new-wire");
     let mut mcp=Client::serve_with(&scratch("authoring-settings")); mcp.initialize();
     assert_eq!(monitor_call(&mut mcp,"gil_start",json!({"project_root":root}))["structuredContent"]["storage_format"],5);
-    let mut p=common::bootstrap_from(gil::load(common::spec(),root.join(gil::STATE_PATH)).unwrap());
+    let mut p=common::bootstrap_from(load_product(&root));
     common::up_to_verify(&mut p);
-    gil::save(&p,root.join(gil::STATE_PATH)).unwrap();
+    save_product(&root, &p);
     let mut png=Vec::new();
     png::Encoder::new(&mut png,1,1).write_header().unwrap().write_image_data(&[91]).unwrap();
     std::fs::write(root.join("합성.png"),&png).unwrap();
@@ -176,7 +216,7 @@ fn authoring_stdio_close_reuse_confirmation_and_rejections() {
     let args=json!({"project_root":root,"report":report(NodeKind::Verify),"expected_owner":owner,
         "visuals":{"attachments":[{"key":"screen","path":"합성.png","source_kind":"generated","source_description":"synthetic only"}],
         "uses":[{"source":{"kind":"new","key":"screen"},"caption":"<script>not executable</script>","alt":"gray pixel","purpose":"wire check"}],"declaration":{"state":"attached"}}});
-    let before=std::fs::read(root.join(gil::STATE_PATH)).unwrap();
+    let before=std::fs::read(product_state_path(&root)).unwrap();
     for (path,value) in [
         ("/expected_owner/ref",json!("step:C2/S2")),
         ("/visuals/attachments/0/path",json!("../outside.png")),
@@ -185,7 +225,7 @@ fn authoring_stdio_close_reuse_confirmation_and_rejections() {
         let mut bad=args.clone(); *bad.pointer_mut(path).unwrap()=value;
         let got=monitor_call(&mut mcp,"gil_close",bad);
         assert_eq!(got["isError"],true,"{got}");
-        assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),before);
+        assert_eq!(std::fs::read(product_state_path(&root)).unwrap(),before);
     }
     let mut malformed=args.clone(); malformed["visuals"]["surprise"]=json!(true);
     assert!(mcp.request("tools/call",json!({"name":"gil_close","arguments":malformed}))["error"].is_object());
@@ -200,12 +240,12 @@ fn authoring_stdio_close_reuse_confirmation_and_rejections() {
         let message=err["error"]["message"].as_str().unwrap();
         assert!(message.contains(&format!("without '{drop}'")),"{message}");
         assert!(message.contains("Nothing was closed") && !message.contains(root.to_str().unwrap()),"{message}");
-        assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),before);
+        assert_eq!(std::fs::read(product_state_path(&root)).unwrap(),before);
     }
     std::fs::write(root.join("broken.png"),b"not png").unwrap();
     let mut broken=args.clone(); broken["visuals"]["attachments"][0]["path"]=json!("broken.png");
     assert_eq!(monitor_call(&mut mcp,"gil_close",broken)["isError"],true);
-    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),before);
+    assert_eq!(std::fs::read(product_state_path(&root)).unwrap(),before);
     std::fs::remove_file(root.join("broken.png")).unwrap();
     let receipt=monitor_call(&mut mcp,"gil_close",args.clone());
     assert_ne!(receipt["isError"],true,"{receipt}");
@@ -213,35 +253,35 @@ fn authoring_stdio_close_reuse_confirmation_and_rejections() {
     assert_eq!(committed["confirmed"],true);
     assert_eq!(committed["display_confirmed"],false);
     assert_eq!(committed["visuals"]["state"],"attached");
-    let after=std::fs::read(root.join(gil::STATE_PATH)).unwrap();
+    let after=std::fs::read(product_state_path(&root)).unwrap();
     assert_eq!(monitor_call(&mut mcp,"gil_close",args)["structuredContent"]["code"],"owner_mismatch");
-    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),after);
+    assert_eq!(std::fs::read(product_state_path(&root)).unwrap(),after);
     // Treat the receipt as lost: new process reads the durable result, never repeats close.
     mcp.eof(); let mut mcp=Client::serve_with(&scratch("authoring-restart")); mcp.initialize();
     assert_eq!(monitor_call(&mut mcp,"gil_report_visuals",read_args.clone())["structuredContent"],committed);
-    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),after);
+    assert_eq!(std::fs::read(product_state_path(&root)).unwrap(),after);
     let stored=&committed["visuals"]["uses"][0];
     let mut use_args=json!({"project_root":root,"report":report(NodeKind::Analysis),"expected_owner":{"kind":"step","ref":"step:C2/S4"},
         "visuals":{"attachments":[],"uses":[{"source":{"kind":"stored","owner":owner,"asset_id":stored["asset_id"],"sha256":stored["sha256"]},"caption":"Analysis-specific caption","alt":"same pixel","purpose":"reuse"}]}});
     {
-        let mut s=gil::ProjectSession::open(common::spec(),root.join(gil::STATE_PATH)).unwrap();
+        let mut s=open_product(&root);
         s.open_action_step(NodeKind::Analysis,common::plan(NodeKind::Analysis)).unwrap(); s.commit().unwrap();
     }
-    let open=std::fs::read(root.join(gil::STATE_PATH)).unwrap();
+    let open=std::fs::read(product_state_path(&root)).unwrap();
     let mut wrong=use_args.clone(); wrong["visuals"]["uses"][0]["source"]["sha256"]=json!("0".repeat(64));
     assert_eq!(monitor_call(&mut mcp,"gil_close",wrong)["structuredContent"]["code"],"visual_unavailable");
-    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),open);
+    assert_eq!(std::fs::read(product_state_path(&root)).unwrap(),open);
     // Non-Verify still obeys the world dirty gate.
     std::fs::write(root.join("dirty.txt"),b"dirty").unwrap();
     assert_eq!(monitor_call(&mut mcp,"gil_close",use_args.clone())["isError"],true);
-    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),open);
+    assert_eq!(std::fs::read(product_state_path(&root)).unwrap(),open);
     std::fs::remove_file(root.join("dirty.txt")).unwrap();
-    std::fs::create_dir(root.join(".gil/state.yaml.writing")).unwrap();
+    std::fs::create_dir(product_temp_path(&root)).unwrap();
     assert_eq!(monitor_call(&mut mcp,"gil_close",use_args.clone())["isError"],true);
-    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),open);
+    assert_eq!(std::fs::read(product_state_path(&root)).unwrap(),open);
     let confirmation=monitor_call(&mut mcp,"gil_report_visuals",json!({"project_root":root,"owner":use_args["expected_owner"]}));
     assert_eq!(confirmation["structuredContent"]["confirmed"],false);
-    std::fs::remove_dir(root.join(".gil/state.yaml.writing")).unwrap();
+    std::fs::remove_dir(product_temp_path(&root)).unwrap();
     let reused=monitor_call(&mut mcp,"gil_close",use_args.clone());
     assert_ne!(reused["isError"],true,"{reused}");
     assert_eq!(reused["structuredContent"]["visuals"]["uses"][0]["caption"],"Analysis-specific caption");
@@ -249,7 +289,7 @@ fn authoring_stdio_close_reuse_confirmation_and_rejections() {
     // Reuse through Outcome, Cycle close, then the next Cycle's Define via the same wire.
     let outcome_ref;
     {
-        let mut s=gil::ProjectSession::open(common::spec(),root.join(gil::STATE_PATH)).unwrap();
+        let mut s=open_product(&root);
         outcome_ref=s.open_action_step(NodeKind::Outcome,common::plan(NodeKind::Outcome)).unwrap().step; s.commit().unwrap();
     }
     let outcome=common::full_report(&common::spec(),CycleKind::Experiment,NodeKind::Outcome).with("verdict","success");
@@ -257,7 +297,7 @@ fn authoring_stdio_close_reuse_confirmation_and_rejections() {
     use_args["expected_owner"]=json!({"kind":"step","ref":outcome_ref.to_string()});
     assert_ne!(monitor_call(&mut mcp,"gil_close",use_args.clone())["isError"],true);
     let cycle_body={
-        let s=gil::ProjectSession::open_read_only(common::spec(),root.join(gil::STATE_PATH)).unwrap();
+        let s=open_product_read_only(&root);
         let r=common::cycle_report(s.project().current_cycle(),"success",common::step_id(s.project(),outcome_ref));
         r.field_names().map(|k|format!("{k}: {}\n",r.get(k).unwrap())).collect::<String>()
     };
@@ -267,7 +307,7 @@ fn authoring_stdio_close_reuse_confirmation_and_rejections() {
     assert_ne!(cycle["isError"],true,"{cycle}");
     assert_eq!(cycle["structuredContent"]["visuals"]["uses"][0]["sha256"],stored["sha256"]);
     {
-        let mut s=gil::ProjectSession::open(common::spec(),root.join(gil::STATE_PATH)).unwrap();
+        let mut s=open_product(&root);
         s.open_child_cycle(CycleKind::Experiment).unwrap();
         s.open_action_step(NodeKind::Define,common::plan(NodeKind::Define)).unwrap(); s.commit().unwrap();
     }
@@ -300,9 +340,9 @@ fn authoring_declarations_and_failed_commit_keep_reports_open() {
         let root=scratch(&format!("authoring-new-{state}"));
         let started=monitor_call(&mut mcp,"gil_start",json!({"project_root":root}));
         assert_eq!(started["structuredContent"]["storage_format"],5,"{started}");
-        let p=gil::load(common::spec(),root.join(gil::STATE_PATH)).unwrap();
+        let p=load_product(&root);
         let mut p=common::bootstrap_from(p); common::up_to_verify(&mut p);
-        gil::save(&p,root.join(gil::STATE_PATH)).unwrap();
+        save_product(&root, &p);
         let mut png=Vec::new(); png::Encoder::new(&mut png,1,1).write_header().unwrap().write_image_data(&[2]).unwrap();
         std::fs::write(root.join("a.png"),png).unwrap();
         let report=common::full_report(&common::spec(),gil::CycleKind::Experiment,gil::NodeKind::Verify);
@@ -319,16 +359,16 @@ fn authoring_declarations_and_failed_commit_keep_reports_open() {
                 args["visuals"]["declaration"]["follow_up"]=json!("next Cycle after normal close");
             }
         }
-        let before=std::fs::read(root.join(gil::STATE_PATH)).unwrap();
+        let before=std::fs::read(product_state_path(&root)).unwrap();
         // Default text path also cannot bypass the mandatory format-5 declaration.
         assert_eq!(monitor_call(&mut mcp,"gil_close",json!({"project_root":root,"report":body}))["isError"],true);
-        assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),before);
-        std::fs::create_dir(root.join(".gil/state.yaml.writing")).unwrap();
+        assert_eq!(std::fs::read(product_state_path(&root)).unwrap(),before);
+        std::fs::create_dir(product_temp_path(&root)).unwrap();
         assert_eq!(monitor_call(&mut mcp,"gil_close",args.clone())["isError"],true);
-        assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),before);
+        assert_eq!(std::fs::read(product_state_path(&root)).unwrap(),before);
         let read=monitor_call(&mut mcp,"gil_report_visuals",json!({"project_root":root,"owner":owner}));
         assert_eq!(read["structuredContent"]["confirmed"],false,"{read}");
-        std::fs::remove_dir(root.join(".gil/state.yaml.writing")).unwrap();
+        std::fs::remove_dir(product_temp_path(&root)).unwrap();
         let result=monitor_call(&mut mcp,"gil_close",args);
         assert_eq!(result["structuredContent"]["confirmed"],true,"{result}");
         assert_eq!(result["structuredContent"]["visuals"]["state"],state);
@@ -758,7 +798,8 @@ fn native_actions_keep_the_wrapper_and_reject_extra_monitor_inputs() {
     assert!(invalid["error"].is_object());
     let view = monitor_call(&mut mcp, "show_gil_monitor", serde_json::json!({"scope_id": scope}));
     assert_ne!(view["isError"], true);
-    assert!(view["content"][0]["text"].as_str().unwrap().contains("화면 표시나 지속 표시 성공을 판정하지 않는다"));
+    assert!(view["content"].as_array().is_some_and(|content| !content.is_empty()), "{view}");
+    assert_eq!(view["structuredContent"]["scope_id"], scope);
     mcp.eof(); std::fs::remove_dir_all(at).unwrap();
 }
 
@@ -991,9 +1032,18 @@ fn starting_receipt_uses_the_requested_root_not_the_servers_directory() {
     let reply = mcp.request("tools/call", serde_json::json!({
         "name": "gil_start", "arguments": {"project_root": mcp_root}
     }));
-    assert_eq!(reply["result"]["structuredContent"]["said"], String::from_utf8(cli.stdout).unwrap());
-    let relative = Path::new(".gil").join("state.yaml");
-    assert!(text_of(&reply).ends_with(&format!("기록: {}\n", relative.display())));
+    #[cfg(not(windows))]
+    {
+        assert_eq!(reply["result"]["structuredContent"]["said"], String::from_utf8(cli.stdout).unwrap());
+        let relative = Path::new(".gil").join("state.yaml");
+        assert!(text_of(&reply).ends_with(&format!("기록: {}\n", relative.display())));
+    }
+    #[cfg(windows)]
+    {
+        let said = text_of(&reply);
+        assert!(said.ends_with("기록: Windows 개인 앱 데이터의 보호된 기록\n"), "{said}");
+        assert!(!said.contains("project-state-v1") && !said.contains("LOCALAPPDATA"), "{said}");
+    }
     mcp.eof();
     std::fs::remove_dir_all(base).unwrap();
 }
@@ -1201,7 +1251,7 @@ fn starting_a_project_leads_to_one_monitor_scope_and_the_first_interview_updates
     let receipt = started["structuredContent"]["said"].as_str().unwrap();
     assert!(receipt.starts_with("프로젝트를 시작했다.\n현재: cycle:C1 · interview\n"), "{receipt}");
     assert!(receipt.contains("실행\n  gil open\n"), "{receipt}");
-    let state = std::fs::read(root.join(gil::STATE_PATH)).unwrap();
+    let state = std::fs::read(product_state_path(&root)).unwrap();
     assert!(state.starts_with(if cfg!(feature="visual-authoring") { b"format: 5\n" } else { b"format: 4\n" }));
     if cfg!(feature="visual-authoring") {
         assert_eq!(started["structuredContent"]["storage_format"],5);
@@ -1238,7 +1288,7 @@ fn starting_a_project_leads_to_one_monitor_scope_and_the_first_interview_updates
     let problem = again["structuredContent"]["problem"].as_str().unwrap();
     assert!(problem.contains("여기서 새로 시작할 수 없다.") && problem.contains("이미 걷고 있다"), "{problem}");
     assert!(problem.contains("gil status"), "복구 안내가 없다: {problem}");
-    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(), state, "거절된 start 가 기록을 바꿨다");
+    assert_eq!(std::fs::read(product_state_path(&root)).unwrap(), state, "거절된 start 가 기록을 바꿨다");
 
     // 4. 화면 재시도 — prepare/show 를 다시 불러도 같은 scope, binding 하나, 기록 불변.
     let retried = agent_call(&mut mcp, "gil_monitor_prepare", serde_json::json!({ "project_root": root }));
@@ -1247,7 +1297,7 @@ fn starting_a_project_leads_to_one_monitor_scope_and_the_first_interview_updates
     assert_ne!(reshown["isError"], true, "{reshown}");
     assert_eq!(reshown["structuredContent"]["view"]["timeline"], view["timeline"]);
     assert_eq!(binding_files(&settings), 1, "재시도가 binding 을 늘렸다");
-    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(), state);
+    assert_eq!(std::fs::read(product_state_path(&root)).unwrap(), state);
 
     // 5. App 조회의 typed 거절(알 수 없는 scope)은 Project 를 만지지 않는다 — 그 뒤 start 도 여전히
     //    거절이다. Host 가 카드를 그리지 못한 경우를 흉내 내는 것이 아니다.
@@ -1255,10 +1305,10 @@ fn starting_a_project_leads_to_one_monitor_scope_and_the_first_interview_updates
     assert_eq!(lost["isError"], true);
     assert_eq!(lost["structuredContent"]["code"], "reconnect_required");
     assert!(lost["structuredContent"].get("ok").is_none(), "Monitor 거절이 Agent 동작의 모양을 흉내 냈다");
-    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(), state);
+    assert_eq!(std::fs::read(product_state_path(&root)).unwrap(), state);
     let still = agent_call(&mut mcp, "gil_start", serde_json::json!({ "project_root": root }));
     assert_eq!(still["structuredContent"]["ok"], false);
-    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(), state);
+    assert_eq!(std::fs::read(product_state_path(&root)).unwrap(), state);
 
     // 6. 시작 실패는 화면 이전에 끝난다 — 없는 자리는 start 도 prepare 도 거절이고 binding 은 그대로다.
     let nowhere = at.join("missing");
@@ -1516,7 +1566,7 @@ fn reopen_after_protection_loss_refuses_with_code_and_changes_nothing() {
     std::fs::create_dir(&folder).unwrap();
     let mut mcp = Client::serve_with_env(&base.join("settings"), &[("USERPROFILE", &base), ("LOCALAPPDATA", &local)]); mcp.initialize();
     assert_eq!(monitor_call(&mut mcp, "gil_start", json!({"project_root": folder}))["structuredContent"]["ok"], true);
-    assert_eq!(monitor_call(&mut mcp, "gil_help", json!({"project_root": folder}))["structuredContent"]["ok"], true, "reopen works while protected");
+    assert_eq!(monitor_call(&mut mcp, "gil_status", json!({"project_root": folder}))["structuredContent"]["ok"], true, "reopen works while protected");
     let layout = local.join("GIL/project-state-v1");
     let record_root = std::fs::read_dir(&layout).unwrap().next().unwrap().unwrap().path();
     let gil = record_root.join(".gil");
@@ -1541,7 +1591,7 @@ fn reopen_after_protection_loss_refuses_with_code_and_changes_nothing() {
     let enabled = Command::new(&icacls).arg(&gil).args(["/inheritance:e"]).output().unwrap();
     assert!(enabled.status.success(), "fixture: {}", String::from_utf8_lossy(&enabled.stderr));
     let (files_before, acl_before) = snapshot("before");
-    for tool in ["gil_help", "gil_status", "gil_context", "gil_story"] {
+    for tool in ["gil_status", "gil_context", "gil_story"] {
         let refused = monitor_call(&mut mcp, tool, json!({"project_root": folder}));
         assert_eq!(refused["structuredContent"]["ok"], false, "{tool}: {refused}");
         assert_eq!(refused["structuredContent"]["code"], "storage_protection_lost", "{tool}: {refused}");

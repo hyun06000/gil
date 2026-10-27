@@ -301,6 +301,16 @@ pub(crate) fn start_visual_action(root: &Path) -> Result<String, String> {
     #[cfg(windows)]
     let externalized = crate::project_state::externalize_inline_if_needed(root)?;
     #[cfg(windows)]
+    {
+        // An unfinished inline record is evidence, not an empty Project. Do not silently create a
+        // second record in LOCALAPPDATA merely because state.yaml was never published.
+        let external = crate::project_state::external_storage_root(root)?;
+        let inline = root.join(".gil");
+        if !external.exists() && inline.exists() && !root.join(crate::STATE_PATH).is_file() {
+            return Err("기존 .gil 흔적이 있다. 기록 여부를 확정할 수 없다. 모두 보존하고 시작을 반복하거나 삭제·이관하지 않는다.".into());
+        }
+    }
+    #[cfg(windows)]
     let state = crate::project_state::state_for_root(root)?;
     #[cfg(not(windows))]
     let state = root.join(crate::STATE_PATH);
@@ -375,6 +385,13 @@ pub(crate) fn visual_read_action(root: &Path, command: &str) -> Result<String, S
 
 fn start_receipt(ctx: &Invocation<'_>, session: &ProjectSession) -> String {
     let cycle = session.project().cycles().current();
+    #[cfg(windows)]
+    let record = match session.root() {
+        Ok(root) if session.state_path() == root.join(crate::STATE_PATH) => ctx.said_path(session.state_path()),
+        _ => "Windows 개인 앱 데이터의 보호된 기록".to_owned(),
+    };
+    #[cfg(not(windows))]
+    let record = ctx.said_path(session.state_path());
     format!(
         "프로젝트를 시작했다.\n\
          현재: {} · {}\n\n\
@@ -385,7 +402,7 @@ fn start_receipt(ctx: &Invocation<'_>, session: &ProjectSession) -> String {
          기록: {}\n",
         cycle.id().to_ref(),
         cycle.kind(),
-        ctx.said_path(session.state_path())
+        record
     )
 }
 
