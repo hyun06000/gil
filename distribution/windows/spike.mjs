@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import {spawn, spawnSync} from 'node:child_process';
 import {createHash, randomUUID} from 'node:crypto';
-import {mkdtemp, mkdir, readFile, rm} from 'node:fs/promises';
+import {mkdtemp, mkdir, readFile, readdir, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {checkAuthoringTools, checkDefaultTools} from '../codex/tool-contract.mjs';
@@ -22,6 +22,7 @@ if (process.platform === 'win32') {
   assert.ok(process.env.SystemRoot, 'Windows system directory is required');
   env.SystemRoot = process.env.SystemRoot;
   env.PATH = join(env.SystemRoot, 'System32');
+  env.LOCALAPPDATA = join(state, 'local-app-data');
 } else env.PATH = '/usr/bin:/bin';
 
 // One MCP server process over stdio. Stopping it must not change any Project bytes.
@@ -114,11 +115,18 @@ try {
     assert.equal(started.structuredContent.display_confirmed, false);
   }
   assert.equal((await server.call('gil_status', {project_root: root})).structuredContent.ok, true);
-  const before = await readFile(join(root, '.gil', 'state.yaml'));
+  let statePath = join(root, '.gil', 'state.yaml');
+  if (process.platform === 'win32' && profile === 'visual-authoring') {
+    const layout = join(env.LOCALAPPDATA, 'GIL', 'project-state-v1');
+    const records = (await readdir(layout, {withFileTypes: true})).filter(one => one.isDirectory());
+    assert.equal(records.length, 1, 'one isolated external Project record expected');
+    statePath = join(layout, records[0].name, '.gil', 'state.yaml');
+  }
+  const before = await readFile(statePath);
   assert.ok(before.toString('utf8').startsWith(profile === 'visual-authoring' ? 'format: 5\n' : 'format: 4\n'),
     'stored format must match the profile');
   assert.equal((await server.call('gil_start', {project_root: root})).structuredContent.ok, false);
-  assert.deepEqual(await readFile(join(root, '.gil', 'state.yaml')), before);
+  assert.deepEqual(await readFile(statePath), before);
   const monitor = await server.call('gil_monitor_prepare', {project_root: root});
   assert.notEqual(monitor.isError, true);
   const scope = monitor.structuredContent.scope_id;
@@ -127,7 +135,7 @@ try {
   assert.notEqual(view.isError, true);
   assert.ok(view.structuredContent.view);
   assert.equal(view.structuredContent.watching, true);
-  assert.deepEqual(await readFile(join(root, '.gil', 'state.yaml')), before);
+  assert.deepEqual(await readFile(statePath), before);
   if (server.faulted()) throw server.faulted();
 
   // Process restart: a fresh server reads the same records without recovery or a second start.
@@ -140,7 +148,7 @@ try {
   assert.notEqual(again.isError, true);
   assert.equal(again.structuredContent.view.timeline.length, 1);
   assert.equal(again.structuredContent.watching, true);
-  assert.deepEqual(await readFile(join(root, '.gil', 'state.yaml')), before);
+  assert.deepEqual(await readFile(statePath), before);
   if (server.faulted()) throw server.faulted();
   console.log(JSON.stringify({platform: process.platform, arch: process.arch, profile,
     native_core: 'passed', mcp_tools: tools.length, embedded_ui: 'hash verified',
