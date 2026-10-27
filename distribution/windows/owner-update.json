@@ -1,10 +1,10 @@
 {
-  "version": "0.1.1-owner.5",
-  "notes": "Interview를 닫고 작은 실험으로 진행하도록 개선했습니다. Verify는 실제 증거 파일을 요구하며, 해석·배움과 연결해 기록합니다. 업데이트 후 새 GIL 연결과 새 대화에서 시험하세요. Codex는 닫지 않아도 됩니다.",
+  "version": "0.1.1-owner.6",
+  "notes": "Mac과 Windows의 핵심 작업 지침을 통일했습니다. Interview를 닫고 작은 실험으로 진행하며, 조사 전에 Verify를 열고 실제 파일 증거·해석·배움을 남기도록 안내합니다. 업데이트 후 새 GIL 연결과 새 대화에서 시험하세요. Codex는 닫지 않아도 됩니다.",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/hyun06000/gil/releases/download/windows-owner-update-0.1.1-owner.5/GIL.Companion.Unsigned.Test._0.1.1-owner.5_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRMmJnSHJ2eEhDbk8zVzZ2alJWNGg2Y3FxU3l1Z2NiYzhrdDdPSkRRZllpTno4Y3ZhOFNtL1RTckZUb2tCNTVLaTlOTVFlZEhSMy9hTy93WldULzY2dHdOVFJBSk5JeEFvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzMTIzNTI4CWZpbGU6R0lMIENvbXBhbmlvbiAoVW5zaWduZWQgVGVzdClfMC4xLjEtb3duZXIuNV94NjQtc2V0dXAuZXhlCXZlcnNpb246MC4xLjEtb3duZXIuNQpFSSs3Rk04bWExdmMyTG15N1dJaXJ3KzNSUURVL0FweklPbW02Uml6eHBrNW1uRFNZMGM1T3BmQ2tHT2N5NTh6c0VnSEg4ZE1aVTVURldZYmQ5eUxEZz09Cg=="
+      "url": "https://github.com/hyun06000/gil/releases/download/windows-owner-update-0.1.1-owner.6/GIL.Companion.Unsigned.Test._0.1.1-owner.6_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRMmJnSHJ2eEhDbktFMWppLzBNV2MweWE4bVJNaDFVR1NkUFI2ZHhwR1RmcGllMTV1TG0zdVEvV05SUVZHREdVdWR0aWlsZHpqNGZMSWcyUVBVT3p3SjFNS2ZmWXR6RVFRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzMTMwMzMwCWZpbGU6R0lMIENvbXBhbmlvbiAoVW5zaWduZWQgVGVzdClfMC4xLjEtb3duZXIuNl94NjQtc2V0dXAuZXhlCXZlcnNpb246MC4xLjEtb3duZXIuNgpaRlRuQko3d3pwUWNzYVlWRW84ZzVoUlQ3RUFwOUhLUXdmVnN3QTBKMWNTaVlvRVUrRS9rRCtRWFhMTFN0R3VXazBLa2RSajYxdHlqeDJNOUtFVHZDZz09Cg=="
     }
   }
 }

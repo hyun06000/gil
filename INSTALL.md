@@ -9,7 +9,7 @@
 
 | 환경 | 버전 | 상태 |
 |---|---|---|
-| Windows 11 x64 | `0.1.1-owner.5` | 친구용 증거 필수 시험판·CI 설치 검수 완료, 실기기 Luna 검수 대기 |
+| Windows 11 x64 | `0.1.1-owner.6` | 친구용 공통 지침 시험판·CI 설치 검수 완료, 실기기 Luna 검수 대기 |
 | macOS Apple Silicon | `0.2.1-preview.7` | 친구용 공통 지침 시험판·격리 설치/교체 확인, 실사용 검수 대기 |
 
 둘 다 정식 서명판이 아니다. Windows Authenticode와 Apple Developer ID/공증을 제공하지 않는다.
@@ -23,11 +23,11 @@ registry를 손으로 편집하지 않는다.
 
 ## Windows 11 x64
 
-릴리스: [windows-owner-update-0.1.1-owner.5](https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.5)
+릴리스: [windows-owner-update-0.1.1-owner.6](https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.6)
 
-- 설치 파일: `GIL.Companion.Unsigned.Test._0.1.1-owner.5_x64-setup.exe`
-- 크기: `5,545,097` bytes
-- SHA-256: `ce4b91c56164e4705cd054e486b54def06d9e86f174fc08fe49632599ef9a866`
+- 설치 파일: `GIL.Companion.Unsigned.Test._0.1.1-owner.6_x64-setup.exe`
+- 크기: `5,546,074` bytes
+- SHA-256: `4835ebf82ea7d4d2e53f030170bcf5a777ae1ece259e42ff353b40ac5ff2e306`
 - 지원: x64만. ARM64 Windows에는 설치하지 않는다.
 
 사용자 절차:
