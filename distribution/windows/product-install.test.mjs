@@ -35,6 +35,8 @@ test('owner updater acceptance shows a native installer and still requires signe
   assert.match(script, /GIL_UPDATER_PUBLIC_KEY/);
   assert.match(script, /GIL_UPDATER_ENDPOINT/);
   assert.match(script, /tauri\.unsigned-updater-test-windows\.conf\.json/);
+  assert.match(script, /Add-Member -NotePropertyName pubkey -NotePropertyValue \$env:GIL_UPDATER_PUBLIC_KEY -Force/);
+  assert.match(script, /Add-Member -NotePropertyName endpoints -NotePropertyValue @\(\$UpdaterEndpoint\.AbsoluteUri\) -Force/);
   assert.match(script, /version = \$Version; sha256 = \$Digest/);
   assert.doesNotMatch(script, /certificateThumbprint|timestampUrl|GIL_WINDOWS_CERTIFICATE_PFX/);
 });
@@ -110,6 +112,8 @@ test('release build refuses missing update trust material', async () => {
   assert.match(script, /current\.json/);
   assert.match(script, /certificateThumbprint = \$Thumbprint/);
   assert.match(script, /digestAlgorithm = 'sha256'/);
+  assert.match(script, /pubkey = \$env:GIL_UPDATER_PUBLIC_KEY/);
+  assert.match(script, /endpoints = @\(\$UpdaterEndpoint\.AbsoluteUri\)/);
   assert.match(script, /Tauri CLI 2\.10\.1/);
   assert.match(script, /UpdaterEndpoint\.Scheme -ne 'https'/);
   assert.match(script, /--config tauri\.product-windows\.conf\.json/);

@@ -45,6 +45,10 @@ $env:TAURI_CONFIG = @{
         timestampUrl = $Timestamp.AbsoluteUri
         tsp = $true
     }}
+    plugins = @{ updater = @{
+        pubkey = $env:GIL_UPDATER_PUBLIC_KEY
+        endpoints = @($UpdaterEndpoint.AbsoluteUri)
+    }}
 } | ConvertTo-Json -Depth 4 -Compress
 $TauriVersion = (cargo tauri --version 2>$null | Out-String).Trim()
 if ($LASTEXITCODE -ne 0 -or $TauriVersion -ne 'tauri-cli 2.10.1') {
