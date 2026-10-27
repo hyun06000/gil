@@ -130,8 +130,24 @@ $null = Recv
 Send @{jsonrpc='2.0'; method='notifications/initialized'}
 Send @{jsonrpc='2.0'; id=2; method='tools/call'; params=@{name='gil_start'; arguments=@{project_root=$root}}}
 $start = Recv
-if ($Mode -eq 'reinherit') {
+$layout = Join-Path $env:LOCALAPPDATA 'GIL\project-state-v1'
+$recordRoot = Get-ChildItem -LiteralPath $layout -Directory | Select-Object -First 1 -ExpandProperty FullName
+$gil = Join-Path $recordRoot '.gil'
+$migration = ''
+$sourceHash = ''
+if ($Mode -eq 'migrate') {
+  Copy-Item -LiteralPath $gil -Destination (Join-Path $root '.gil') -Recurse
   & icacls (Join-Path $root '.gil') /inheritance:e | Out-Null
+  $sourceHash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $root '.gil\state.yaml')).Hash
+  Remove-Item -LiteralPath $recordRoot -Recurse -Force
+  Send @{jsonrpc='2.0'; id=22; method='tools/call'; params=@{name='gil_start'; arguments=@{project_root=$root}}}
+  $migration = Recv
+  $recordRoot = Get-ChildItem -LiteralPath $layout -Directory | Where-Object { $_.Name -notlike '.migrating-*' } | Select-Object -First 1 -ExpandProperty FullName
+  if (-not $recordRoot) { throw "migration created no external record; response=$migration" }
+  $gil = Join-Path $recordRoot '.gil'
+}
+if ($Mode -eq 'reinherit') {
+  & icacls $gil /inheritance:e | Out-Null
 }
 Send @{jsonrpc='2.0'; id=3; method='tools/call'; params=@{name='gil_status'; arguments=@{project_root=$root}}}
 $status = Recv
@@ -141,15 +157,20 @@ $p.StandardInput.Close()
 $null = $p.WaitForExit(15000)
 "WHOAMI=" + (whoami)
 "HIVE_LOADED=" + $hiveLoaded
+"LOCAL_APP_DATA=" + $env:LOCALAPPDATA
 "ROOT_ENTRIES=" + ((Get-ChildItem -LiteralPath $root -Force | ForEach-Object { $_.Name }) -join ';')
 "GROUPS=" + ((whoami /groups /fo csv /nh) -join ';')
 "START=" + $start
+"MIGRATION=" + $migration
 "STATUS=" + $status
 "CONTEXT=" + $context
 "ACL_ROOT=" + ((icacls $root) -join ' | ')
-"ACL_GIL=" + ((icacls (Join-Path $root '.gil')) -join ' | ')
-"ACL_STATE=" + ((icacls (Join-Path $root '.gil\state.yaml')) -join ' | ')
-"STATE_HEAD=" + ((Get-Content -LiteralPath (Join-Path $root '.gil\state.yaml') -TotalCount 1) -join '')
+"RECORD_ROOT=" + $recordRoot
+"ACL_GIL=" + ((icacls $gil) -join ' | ')
+"ACL_STATE=" + ((icacls (Join-Path $gil 'state.yaml')) -join ' | ')
+"STATE_HEAD=" + ((Get-Content -LiteralPath (Join-Path $gil 'state.yaml') -TotalCount 1) -join '')
+"SOURCE_HASH=" + $sourceHash
+"EXTERNAL_HASH=" + ((Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $gil 'state.yaml')).Hash)
 "#;
 
 fn setup() -> (SharedFolder, PathBuf, PathBuf, Account) {
@@ -172,15 +193,12 @@ fn standard_user_creates_reopens_and_keeps_an_owner_only_gil_in_a_normal_folder(
     assert_eq!(code, 0, "driver failed: {err}\n{out}");
     assert!(!field(&out, "GROUPS").to_lowercase().contains("s-1-5-32-544") || field(&out, "GROUPS").contains("Deny"), "the account must not be an effective administrator: {}", field(&out, "GROUPS"));
     let start = field(&out, "START");
-    // The driver was started with the user's profile loaded, so its hive is readable and the
-    // location check must answer `queried` for every source (this reproduces a standard-user
-    // token with a loaded hive, not the Codex app's own server environment).
     assert_eq!(field(&out, "HIVE_LOADED"), "True", "fixture: the profile hive must be loaded in this mode");
     eprintln!("OBSERVED mode=normal HIVE_LOADED={} BRANCH=started", field(&out, "HIVE_LOADED"));
     assert!(start.contains("\"ok\":true") && start.contains("\"storage_format\":5"), "{start}");
-    assert!(start.contains("\"location_check\"") && start.contains("\"registry_hive\""), "{start}");
-    assert!(!start.contains("\"status\":\"failed\"") && !start.contains("\"status\":\"absent\""), "{start}");
-    assert!(start.contains("\"status\":\"queried\""), "{start}");
+    assert!(start.contains("\"record_storage\":\"private_app_data\""), "{start}");
+    assert!(!field(&out, "ROOT_ENTRIES").contains(".gil"), "working tree must not contain private records: {}", field(&out, "ROOT_ENTRIES"));
+    assert!(field(&out, "RECORD_ROOT").starts_with(field(&out, "LOCAL_APP_DATA")), "records must be in local app data: {}", field(&out, "RECORD_ROOT"));
     assert!(field(&out, "STATUS").contains("\"ok\":true"), "{}", field(&out, "STATUS"));
     assert!(field(&out, "CONTEXT").contains("\"ok\":true"), "{}", field(&out, "CONTEXT"));
     assert!(field(&out, "STATE_HEAD").starts_with("format: 5"), "{}", field(&out, "STATE_HEAD"));
@@ -218,10 +236,21 @@ fn inheritance_re_enabled_after_creation_reproduces_the_reopen_refusal() {
     assert!(field(&out, "STATE_HEAD").starts_with("format: 5"), "{}", field(&out, "STATE_HEAD"));
 }
 
-/// Without the user's profile, the account's registry hive may not be loaded. The expected
-/// result depends on that observed state: hive absent → `gil_start` refuses as unverifiable and
-/// creates nothing (even in an ordinary local folder — a documented limit); hive loaded anyway →
-/// the normal start with `queried` sources. Either way the response must match the state.
+#[test]
+fn an_existing_inline_visual_record_is_copied_verified_and_left_in_place() {
+    let (shared, exe, script, account) = setup();
+    let (code, out, err) = account.run_script(&script, &shared.0, &[exe.to_str().unwrap(), "migrate"]);
+    assert_eq!(code, 0, "driver failed: {err}\n{out}");
+    let migrated = field(&out, "MIGRATION");
+    assert!(migrated.contains("\"ok\":true"), "{migrated}");
+    assert!(migrated.contains("Windows 개인 앱 데이터"), "{migrated}");
+    assert!(field(&out, "ROOT_ENTRIES").contains(".gil"), "the preserved inline source is missing: {}", field(&out, "ROOT_ENTRIES"));
+    assert_eq!(field(&out, "SOURCE_HASH"), field(&out, "EXTERNAL_HASH"));
+    assert!(field(&out, "STATUS").contains("\"ok\":true"), "{}", field(&out, "STATUS"));
+}
+
+/// Sync-root registry discovery is no longer a prerequisite: records live in private local app
+/// data, so a missing user hive does not force the working folder to move.
 #[test]
 fn without_a_loaded_profile_the_start_matches_the_observed_hive_state() {
     let (shared, exe, script, account) = setup();
@@ -229,23 +258,13 @@ fn without_a_loaded_profile_the_start_matches_the_observed_hive_state() {
     assert_eq!(code, 0, "driver failed: {err}\n{out}");
     let start = field(&out, "START");
     let entries = field(&out, "ROOT_ENTRIES");
-    // Printed with --nocapture in CI so the log records which state was actually observed; no
-    // environment is manipulated to force either branch.
-    let branch = match field(&out, "HIVE_LOADED") { "False" => "refused-unverifiable", "True" => "started", other => other };
+    let branch = if field(&out, "LOCAL_APP_DATA").is_empty() { "no-local-app-data" } else { "started" };
     eprintln!("OBSERVED mode=noprofile HIVE_LOADED={} BRANCH={branch}", field(&out, "HIVE_LOADED"));
-    match field(&out, "HIVE_LOADED") {
-        "False" => {
-            assert!(start.contains("\"ok\":false") && start.contains("\"code\":\"unsupported_location\""), "hive absent must refuse: {start}");
-            assert!(start.contains("\"location_kind\":\"unverifiable\"") && start.contains("\"evidence\":\"check_failed\""), "{start}");
-            assert!(start.contains("not loaded"), "the detail names the unloaded hive: {start}");
-            assert!(start.contains("확인을 대신하지 않습니다") && !start.contains("suggested_parent"), "no workspace substitute may be offered: {start}");
-            assert!(!entries.contains(".gil"), "nothing may be created: {entries}");
-            assert!(field(&out, "STATUS").contains("\"ok\":false"), "{}", field(&out, "STATUS"));
-        }
-        "True" => {
-            assert!(start.contains("\"ok\":true") && start.contains("\"status\":\"queried\"") && !start.contains("\"status\":\"absent\""), "{start}");
-            assert!(entries.contains(".gil"), "{entries}");
-        }
-        other => panic!("unexpected HIVE_LOADED={other}\n{out}"),
+    if field(&out, "LOCAL_APP_DATA").is_empty() {
+        assert!(start.contains("Windows 개인 앱 데이터 위치를 찾지 못했다"), "{start}");
+    } else {
+        assert!(start.contains("\"ok\":true") && start.contains("\"record_storage\":\"private_app_data\""), "{start}");
+        assert!(!entries.contains(".gil"), "working tree received internal records: {entries}");
+        assert!(field(&out, "STATUS").contains("\"ok\":true"), "{}", field(&out, "STATUS"));
     }
 }

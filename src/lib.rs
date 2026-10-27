@@ -158,6 +158,7 @@ mod manual;
 mod monitor;
 mod node;
 mod project;
+mod project_state;
 mod refs;
 mod report;
 // Let unit fault tests reuse the same synthetic fixtures as integration tests.
@@ -205,7 +206,7 @@ pub use monitor::view::SCHEMA_VERSION;
 /// 변화 hint 와 「언제 다시 볼까」의 규칙 — `gil monitor --serve` 와 Desktop Companion 이
 /// **같은 것**을 쓴다. 두 벌로 두면 한쪽의 debounce 만 고쳐지는 날이 온다.
 pub use monitor::refresh::{Backoff, Cached, Moment, Observe, Pace, Refresh, Wake};
-pub use monitor::watch::{Watching, watch_hints};
+pub use monitor::watch::{Watching, watch_hints, watch_project_hints};
 pub use monitor::{DetailError, NodeDetailV1, ReportFieldV1, ReportV1};
 pub use monitor::{
     WireError, decode_detail_v1, decode_view_v1, encode_detail_v1, encode_view_v1,
@@ -229,7 +230,7 @@ pub use restore::{RestoreFailure, Restored, Stage};
 pub use session::{
     CycleRevisited, Gate, ProjectSession, ReadOnlySession, SessionError, WorldState,
 };
-pub use root::{RootError, open_project_root};
+pub use root::{RootError, open_project_root, open_project_root_read_only};
 pub use status::where_now;
 pub use story::story;
 pub use store::{FORMAT, VISUAL_FORMAT, LEGACY_WALK_PATH, STATE_PATH, StoreError, load, said_path, save};

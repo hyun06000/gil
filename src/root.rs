@@ -15,7 +15,9 @@
 //! 열리고, 쓰는 명령이었다면 거기에 적힌다. 장수 MCP server 에서는 이것이 사고다 —
 //! 요청마다 범위가 조용히 넓어지고, 넓어진 사실은 어디에도 남지 않는다.
 //!
-//! 그래서 이 문은 `<project_root>/.gil/state.yaml` **하나만** 본다. 없으면 없다고 답한다.
+//! 그래서 이 문은 `project_root` 에 대응하는 기록 **하나만** 본다. Windows 제품 표면에서는
+//! 기록이 개인 앱 데이터에 있을 수 있고, 다른 플랫폼과 이전 기록은 root 의 `.gil` 을 쓴다.
+//! 어느 경우에도 조상 폴더로 올라가지 않는다.
 //! cwd 를 읽지 않고, `chdir` 하지 않으며, 상위로 물러서지 않는다.
 //!
 //! 나뉘는 것은 여기까지다. 검증된 [`ProjectSession`] 을 손에 넣은 뒤의 domain 판독과
@@ -23,7 +25,7 @@
 
 use std::path::Path;
 
-use crate::{ProjectSession, RuleSet, SessionError, StoreError};
+use crate::{ProjectSession, ReadOnlySession, RuleSet, SessionError, StoreError};
 
 /// 정확 경로로 열지 못한 이유. **경로를 싣지 않는다** — 부르는 쪽이 이미 아는 값이고,
 /// 답에 실으면 사용자에게 가는 문장에 절대경로가 새는 문이 하나 더 생긴다.
@@ -60,14 +62,20 @@ impl std::fmt::Display for RootError {
     }
 }
 
-/// `<root>/.gil/state.yaml` 하나만 열어 검증된 Session 을 준다.
+/// 정확한 `root` 에 대응하는 기록 하나만 열어 검증된 Session 을 준다.
 ///
 /// 이 함수는 위로 오르지 않고, cwd 를 읽지 않고, 작업 디렉터리를 바꾸지 않는다.
 pub fn open_project_root(rules: RuleSet, root: &Path) -> Result<ProjectSession, RootError> {
     if !root.is_absolute() {
         return Err(RootError::NotAbsolute);
     }
-    let state = root.join(crate::STATE_PATH);
+    match std::fs::metadata(root) {
+        Ok(meta) if meta.is_dir() => {}
+        Ok(_) => return Err(RootError::NoProjectHere),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Err(RootError::NoProjectHere),
+        Err(error) => return Err(RootError::Session(format!("Project 자리를 읽지 못했다: {error}"))),
+    }
+    let state = crate::project_state::state_for_root(root).map_err(RootError::Session)?;
     if !state.exists() {
         // 앞 형식만 있는 자리도 **여기서 멈춘다.** 조용히 지나치면 사람은 제 기록이
         // 사라진 줄 안다 — 그 판정은 CLI 와 같다.
@@ -83,8 +91,50 @@ pub fn open_project_root(rules: RuleSet, root: &Path) -> Result<ProjectSession, 
         return Err(RootError::NoProjectHere);
     }
 
-    ProjectSession::open(rules, &state).map_err(|err| match err {
+    #[cfg(windows)]
+    let opened = if state == root.join(crate::STATE_PATH) {
+        ProjectSession::open(rules, &state)
+    } else {
+        ProjectSession::open_at(rules, root, &state)
+    };
+    #[cfg(not(windows))]
+    let opened = ProjectSession::open(rules, &state);
+
+    opened.map_err(|err| match err {
         // 방금 있는 것을 보고 왔다. 그새 사라졌다면 그건 다른 이야기다.
+        SessionError::Store(StoreError::NotFound { .. }) => RootError::NoProjectHere,
+        other => RootError::Session(other.to_string()),
+    })
+}
+
+/// Read-only counterpart used by persistent monitor surfaces. It resolves the same product record
+/// as [`open_project_root`] but never runs recovery or temporary-object cleanup.
+pub fn open_project_root_read_only(
+    rules: RuleSet,
+    root: &Path,
+) -> Result<ReadOnlySession, RootError> {
+    if !root.is_absolute() {
+        return Err(RootError::NotAbsolute);
+    }
+    match std::fs::metadata(root) {
+        Ok(meta) if meta.is_dir() => {}
+        Ok(_) => return Err(RootError::NoProjectHere),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Err(RootError::NoProjectHere),
+        Err(error) => return Err(RootError::Session(format!("Project 자리를 읽지 못했다: {error}"))),
+    }
+    let state = crate::project_state::state_for_root(root).map_err(RootError::Session)?;
+    if !state.exists() {
+        return Err(RootError::NoProjectHere);
+    }
+    #[cfg(windows)]
+    let opened = if state == root.join(crate::STATE_PATH) {
+        ProjectSession::open_read_only(rules, &state)
+    } else {
+        ProjectSession::open_read_only_at(rules, root, &state)
+    };
+    #[cfg(not(windows))]
+    let opened = ProjectSession::open_read_only(rules, &state);
+    opened.map_err(|err| match err {
         SessionError::Store(StoreError::NotFound { .. }) => RootError::NoProjectHere,
         other => RootError::Session(other.to_string()),
     })

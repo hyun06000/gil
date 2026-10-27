@@ -7,12 +7,12 @@
 //! ```
 //!
 //! 그게 전부다. Graph 의미도, Cycle 관계도, 요약도, 현재 위치도 여기서 만들지 않는다.
-//! `.gil/state.yaml` 을 **열지도 해석하지도 않는다** — 그 파일을 아는 것은 `gil` crate 뿐이고,
-//! 여기서는 그 crate 의 `open_read_only` 에 자리만 건넨다(§9.1.1-2).
+//! `state.yaml` 을 **열지도 해석하지도 않는다** — 실제 기록 위치를 아는 것은 `gil` crate
+//! 뿐이고, 여기서는 그 crate 의 Project-root read-only 문에 자리만 건넨다(§9.1.1-2).
 //!
 //! # 전부 읽기다 — **타입이 그것을 보장한다**
 //!
-//! 여는 문은 [`ProjectSession::open_read_only`] 하나뿐이고, 그것이 주는
+//! 여는 문은 `gil::open_project_root_read_only` 하나뿐이고, 그것이 주는
 //! [`ReadOnlySession`] 에는 `commit` 도 `project_mut` 도 없다. 이 파일이 프로젝트를 바꾸는
 //! 코드를 쓰려 해도 **컴파일되지 않는다**. 규율로 지키면 언젠가 한 줄이 새어 나간다.
 //!
@@ -59,7 +59,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use gil::{
-    DetailError, ProjectSession, ReadOnlySession, RuleSet, SessionError, StepRef, StoreError,
+    DetailError, ReadOnlySession, RuleSet, SessionError, StepRef, StoreError,
     ViewError, encode_detail_v1, encode_view_v1, monitor_view_v1,
 };
 use serde::Serialize;
@@ -355,25 +355,18 @@ fn refuse_view(err: ViewError) -> Refusal {
     Refusal::new("unsupported_vocabulary", err.to_string())
 }
 
-/// 이 자리를 열어 본다 — **`state.yaml` 을 읽지는 않는다.**
-///
-/// `ProjectSession::open` 은 `.gil/` 을 **먼저 잠그므로**, `.gil` 이 아예 없는 폴더에서는
-/// 「잠글 수 없다」로 끝난다. 그 말은 사실이지만 사람에게는 틀린 말이다 — 자리의 문제가
-/// 아니라 **여기가 GIL Project 가 아니라는 것**이다. 명세가 그 둘을 다른 거절로 남기라
-/// 했으므로(§9.1.1-7) 여는 일보다 먼저 가른다.
-///
-/// 가르는 방법은 **그 자리에 파일이 있는가** 하나뿐이다. 열지도 해석하지도 않고, 경로는
-/// `gil` 이 지닌 상수를 그대로 쓴다 — Companion 이 `.gil` 의 구조를 따로 아는 일이 없게(§9.1.1-2).
+/// 이 자리를 읽기 전용으로 연다. 기록 위치 선택은 Core 하나만 담당한다. Windows에서는
+/// 작업 폴더와 개인 앱 데이터가 분리될 수 있으므로 Companion이 `.gil` 경로를 조립하지 않는다.
 fn opened_at(root: &Path) -> Result<ReadOnlySession, Refusal> {
-    let state_path = root.join(gil::STATE_PATH);
-    if !state_path.is_file() {
-        return Err(Refusal::new(
+    // **읽기만 하는 문.** 복구도 잔해 회수도 저장도 하지 않는다(§9.1.1).
+    gil::open_project_root_read_only(rules()?, root).map_err(|problem| match problem {
+        gil::RootError::NoProjectHere => Refusal::new(
             "not_a_project",
             "이 자리에 GIL 걷기가 없다 — Project root 를 고른다",
-        ));
-    }
-    // **읽기만 하는 문.** 복구도 잔해 회수도 저장도 하지 않는다(§9.1.1).
-    ProjectSession::open_read_only(rules()?, &state_path).map_err(refuse_open)
+        ),
+        gil::RootError::NotAbsolute => Refusal::new("unreadable", "Project root 가 절대경로가 아니다"),
+        gil::RootError::Session(said) => Refusal::new("damaged", said),
+    })
 }
 
 fn rules() -> Result<RuleSet, Refusal> {

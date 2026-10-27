@@ -127,7 +127,7 @@ fn first_publication_is_visual_and_existing_git_files_are_unchanged() {
         }
         let before = inventory(&root);
         let mut before_publish = false;
-        let session = create(rules(), &root, &mut |stage| {
+        let session = create(rules(), &root, &root, true, &mut |stage| {
             if stage == "before_publish" {
                 before_publish = true;
                 assert!(!root.join(crate::STATE_PATH).exists());
@@ -261,7 +261,7 @@ fn failures_before_and_after_publication_preserve_work_and_remaining_storage() {
     ] {
         let root = scratch();
         fs::write(root.join("report.txt"), "変化なし\n보고서\n").unwrap();
-        let result = create(rules(), &root, &mut |at| {
+        let result = create(rules(), &root, &root, true, &mut |at| {
             if at == stage {
                 Err(std::io::Error::from_raw_os_error(DISK_FULL))
             } else {
@@ -287,7 +287,7 @@ fn failures_before_and_after_publication_preserve_work_and_remaining_storage() {
 #[test]
 fn concurrent_state_entry_is_not_overwritten_at_publication() {
     let root = scratch();
-    let result = create(rules(), &root, &mut |stage| {
+    let result = create(rules(), &root, &root, true, &mut |stage| {
         if stage == "before_publish" {
             fs::write(root.join(crate::STATE_PATH), b"other writer")?;
         }
@@ -309,7 +309,7 @@ fn concurrent_state_entry_is_not_overwritten_at_publication() {
 fn changed_directory_lock_or_temporary_entry_is_preserved_and_refused() {
     for kind in ["directory", "lock", "temp"] {
         let root = scratch();
-        let result = create(rules(), &root, &mut |stage| {
+        let result = create(rules(), &root, &root, true, &mut |stage| {
             if stage == "encoded" {
                 match kind {
                     "directory" => {
@@ -361,7 +361,7 @@ fn capture_refusal_preserves_source_and_does_not_commit_or_hide_the_problem() {
 fn crash_child() {
     let root = PathBuf::from(std::env::var_os("GIL_VISUAL_START_TEST_ROOT").unwrap());
     let stage = std::env::var("GIL_VISUAL_START_TEST_STAGE").unwrap();
-    create(rules(), &root, &mut |at| {
+    create(rules(), &root, &root, true, &mut |at| {
         if at == stage {
             // No destructors, no further writes: the OS reclaims handles and the lock.
             std::process::abort();

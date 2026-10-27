@@ -8,6 +8,7 @@
 //! 나가지 않는다(Monitor Model §8.3).
 
 use std::path::Path;
+use std::sync::Arc;
 
 // ── 감시 ───────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,33 @@ pub fn watch_hints(
         .watch(root, RecursiveMode::Recursive)
         .map_err(|said| said.to_string())?;
     Ok(Watching(Box::new(watcher)))
+}
+
+/// Watch both the user's working tree and, when product records are external, the private record
+/// root. A logical GIL change must wake the Monitor even though no file inside the working folder
+/// changed.
+pub fn watch_project_hints(
+    root: &Path,
+    hint: impl Fn() + Send + Sync + 'static,
+) -> Result<Watching, String> {
+    let mut roots = vec![root.to_path_buf()];
+    let state = crate::project_state::state_for_root(root)?;
+    if state != root.join(crate::STATE_PATH) {
+        let storage_root = state.parent().and_then(Path::parent)
+            .ok_or_else(|| "GIL 기록 감시 위치를 확인하지 못했다".to_string())?;
+        // The generic watcher is also used while a caller is choosing or testing a plain folder.
+        // Add the product record watch only after that record root has actually been published.
+        if storage_root.is_dir() {
+            roots.push(storage_root.to_path_buf());
+        }
+    }
+    let hint: Arc<dyn Fn() + Send + Sync> = Arc::new(hint);
+    let mut watchers = Vec::with_capacity(roots.len());
+    for at in roots {
+        let hint = Arc::clone(&hint);
+        watchers.push(watch_hints(&at, move || hint())?);
+    }
+    Ok(Watching(Box::new(watchers)))
 }
 
 /// 이 경로의 변화가 **다시 볼 만한 것인가.**

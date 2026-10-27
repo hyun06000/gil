@@ -298,15 +298,39 @@ fn start(ctx: &Invocation<'_>) -> Result<String, String> {
 #[cfg(feature = "visual-authoring")]
 pub(crate) fn start_visual_action(root: &Path) -> Result<String, String> {
     let ctx = Invocation { root: Root::Exact(root), input: Input::Body("") };
-    let gil = root.join(".gil");
+    #[cfg(windows)]
+    let externalized = crate::project_state::externalize_inline_if_needed(root)?;
+    #[cfg(windows)]
+    {
+        // An unfinished inline record is evidence, not an empty Project. Do not silently create a
+        // second record in LOCALAPPDATA merely because state.yaml was never published.
+        let external = crate::project_state::external_storage_root(root)?;
+        let inline = root.join(".gil");
+        if !external.exists() && inline.exists() && !root.join(crate::STATE_PATH).is_file() {
+            return Err("기존 .gil 흔적이 있다. 기록 여부를 확정할 수 없다. 모두 보존하고 시작을 반복하거나 삭제·이관하지 않는다.".into());
+        }
+    }
+    #[cfg(windows)]
+    let state = crate::project_state::state_for_root(root)?;
+    #[cfg(not(windows))]
+    let state = root.join(crate::STATE_PATH);
+    let gil = state.parent().expect("state path has a parent").to_path_buf();
     match std::fs::symlink_metadata(&gil) {
         Ok(dir) => {
             // Do not create a lock just to inspect partial/unknown storage.
             let regular = |name| std::fs::symlink_metadata(gil.join(name))
                 .is_ok_and(|m| m.is_file());
             if dir.is_dir() && regular("state.yaml") && regular("project.lock") {
-                ProjectSession::open_read_only(rules()?, gil.join("state.yaml"))
+                #[cfg(windows)]
+                ProjectSession::open_read_only_at(rules()?, root, &state)
                     .map_err(|e| format!("기존 기록을 확인하지 못했다. 모두 보존하고 시작을 반복하지 않는다.\n{e}"))?;
+                #[cfg(not(windows))]
+                ProjectSession::open_read_only(rules()?, &state)
+                    .map_err(|e| format!("기존 기록을 확인하지 못했다. 모두 보존하고 시작을 반복하지 않는다.\n{e}"))?;
+                #[cfg(windows)]
+                if externalized {
+                    return Ok("기존 GIL 기록을 Windows 개인 앱 데이터의 보호된 저장소로 복사하고 검증했다. 원래 기록은 변경하거나 삭제하지 않았다. 작업 폴더는 그대로 사용한다.\n".into());
+                }
                 return Err("여기서 새로 시작할 수 없다. 이미 걷고 있다.\n기존 기록을 보존한다. gil status / gil context로 현재 자리에서 이어간다.\n".into());
             }
             return Err("기존 .gil 흔적이 있다. 기록 여부를 확정할 수 없다. 모두 보존하고 시작을 반복하거나 삭제·이관하지 않는다.".into());
@@ -314,7 +338,16 @@ pub(crate) fn start_visual_action(root: &Path) -> Result<String, String> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {},
         Err(e) => return Err(format!("기록 여부를 확인하지 못했다. 모두 보존하고 시작을 반복하지 않는다.\n{e}")),
     }
-    let session = ProjectSession::start_visual(rules()?, root)
+    #[cfg(windows)]
+    let session = {
+        let storage_root = crate::project_state::external_storage_root(root)?;
+        std::fs::create_dir_all(&storage_root)
+            .map_err(|e| format!("Windows 개인 저장소를 준비하지 못했다: {e}"))?;
+        ProjectSession::start_visual_at(rules()?, root, storage_root)
+    };
+    #[cfg(not(windows))]
+    let session = ProjectSession::start_visual(rules()?, root);
+    let session = session
         .map_err(|e| format!("시작 완료 여부를 확인해야 한다. 남은 기록을 보존하고 시작을 반복하지 않는다.\n{e}"))?;
     Ok(start_receipt(&ctx, &session))
 }
@@ -322,7 +355,11 @@ pub(crate) fn start_visual_action(root: &Path) -> Result<String, String> {
 /// Safe post-start inspection: no recovery, temporary-object reaping, or bootstrap lock.
 #[cfg(feature = "visual-authoring")]
 pub(crate) fn visual_read_action(root: &Path, command: &str) -> Result<String, String> {
-    let gil = root.join(".gil");
+    #[cfg(windows)]
+    let state = crate::project_state::state_for_root(root)?;
+    #[cfg(not(windows))]
+    let state = root.join(crate::STATE_PATH);
+    let gil = state.parent().expect("state path has a parent").to_path_buf();
     match std::fs::symlink_metadata(&gil) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(crate::RootError::NoProjectHere.to_string()),
         Ok(dir) if dir.is_dir() => {},
@@ -333,7 +370,11 @@ pub(crate) fn visual_read_action(root: &Path, command: &str) -> Result<String, S
             return Err("기록 여부를 확인할 수 없다. 기존 흔적을 보존하고 시작을 반복하지 않는다.".into());
         }
     }
-    let session = ProjectSession::open_read_only(rules()?, gil.join("state.yaml"))
+    #[cfg(windows)]
+    let session = ProjectSession::open_read_only_at(rules()?, root, &state)
+        .map_err(|e| e.to_string())?;
+    #[cfg(not(windows))]
+    let session = ProjectSession::open_read_only(rules()?, &state)
         .map_err(|e| e.to_string())?;
     match command {
         "status" => Ok(session.status_said()),
@@ -344,6 +385,13 @@ pub(crate) fn visual_read_action(root: &Path, command: &str) -> Result<String, S
 
 fn start_receipt(ctx: &Invocation<'_>, session: &ProjectSession) -> String {
     let cycle = session.project().cycles().current();
+    #[cfg(windows)]
+    let record = match session.root() {
+        Ok(root) if session.state_path() == root.join(crate::STATE_PATH) => ctx.said_path(session.state_path()),
+        _ => "Windows 개인 앱 데이터의 보호된 기록".to_owned(),
+    };
+    #[cfg(not(windows))]
+    let record = ctx.said_path(session.state_path());
     format!(
         "프로젝트를 시작했다.\n\
          현재: {} · {}\n\n\
@@ -354,7 +402,7 @@ fn start_receipt(ctx: &Invocation<'_>, session: &ProjectSession) -> String {
          기록: {}\n",
         cycle.id().to_ref(),
         cycle.kind(),
-        ctx.said_path(session.state_path())
+        record
     )
 }
 

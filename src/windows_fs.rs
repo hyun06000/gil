@@ -1247,7 +1247,7 @@ impl LocationReport {
 #[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
 mod registry {
     use super::*;
-    use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_MORE_DATA, ERROR_NO_MORE_ITEMS, ERROR_SUCCESS};
+    use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_KEY_DELETED, ERROR_MORE_DATA, ERROR_NO_MORE_ITEMS, ERROR_SUCCESS};
     use windows_sys::Win32::System::Registry::{HKEY, HKEY_USERS, KEY_READ, REG_EXPAND_SZ, REG_SZ, RegCloseKey, RegEnumKeyExW, RegOpenKeyExW, RegQueryValueExW};
 
     pub(super) struct Key(HKEY);
@@ -1271,7 +1271,7 @@ mod registry {
         let status = unsafe { RegOpenKeyExW(parent, wide(sub).as_ptr(), 0, KEY_READ, &mut out) };
         match status {
             ERROR_SUCCESS => Ok(Some(Key(out))),
-            ERROR_FILE_NOT_FOUND => Ok(None),
+            ERROR_FILE_NOT_FOUND | ERROR_KEY_DELETED => Ok(None),
             code => Err(format!("open {sub}: error {code}")),
         }
     }
@@ -1285,7 +1285,7 @@ mod registry {
             let status = unsafe { RegEnumKeyExW(key.0, index, name.as_mut_ptr(), &mut len, null_mut(), null_mut(), null_mut(), null_mut()) };
             match status {
                 ERROR_SUCCESS => names.push(String::from_utf16_lossy(&name[..len as usize])),
-                ERROR_NO_MORE_ITEMS => return Ok(names),
+                ERROR_NO_MORE_ITEMS | ERROR_KEY_DELETED => return Ok(names),
                 code => return Err(format!("enumerate subkeys: error {code} at index {index}")),
             }
             index += 1;
@@ -1301,7 +1301,7 @@ mod registry {
         let status = unsafe { RegQueryValueExW(key.0, name_w.as_ptr(), null_mut(), &mut kind, null_mut(), &mut bytes) };
         match status {
             ERROR_SUCCESS | ERROR_MORE_DATA => {}
-            ERROR_FILE_NOT_FOUND => return Ok(None),
+            ERROR_FILE_NOT_FOUND | ERROR_KEY_DELETED => return Ok(None),
             code => return Err(format!("read {name}: error {code}")),
         }
         if kind != REG_SZ && kind != REG_EXPAND_SZ {
@@ -1310,6 +1310,9 @@ mod registry {
         let mut data = vec![0u8; bytes as usize + 2];
         let mut got = bytes;
         let status = unsafe { RegQueryValueExW(key.0, name_w.as_ptr(), null_mut(), &mut kind, data.as_mut_ptr(), &mut got) };
+        if status == ERROR_KEY_DELETED || status == ERROR_FILE_NOT_FOUND {
+            return Ok(None);
+        }
         if status != ERROR_SUCCESS {
             return Err(format!("read {name}: error {status}"));
         }
@@ -1372,9 +1375,9 @@ mod registry {
         let Some(providers) = open(hive.0, &base("SyncEngines\\Providers"))? else { return Ok(Declared { values: Vec::new(), key_present: false }); };
         let mut out = Vec::new();
         for provider in subkeys(&providers)? {
-            let Some(entries) = open(providers.0, &provider)? else { return Err(format!("provider {provider} vanished during enumeration")); };
+            let Some(entries) = open(providers.0, &provider)? else { continue; };
             for id in subkeys(&entries)? {
-                let Some(entry) = open(entries.0, &id)? else { return Err(format!("registration {provider}\\{id} vanished during enumeration")); };
+                let Some(entry) = open(entries.0, &id)? else { continue; };
                 if let Some(mount) = string_value(&entry, "MountPoint").map_err(|e| format!("{provider}\\{id}: {e}"))? {
                     out.push(mount);
                 }
@@ -1388,7 +1391,7 @@ mod registry {
         let Some(accounts) = open(hive.0, &base("Microsoft\\OneDrive\\Accounts"))? else { return Ok(Declared { values: Vec::new(), key_present: false }); };
         let mut out = Vec::new();
         for account in subkeys(&accounts)? {
-            let Some(entry) = open(accounts.0, &account)? else { return Err(format!("account {account} vanished during enumeration")); };
+            let Some(entry) = open(accounts.0, &account)? else { continue; };
             if let Some(folder) = string_value(&entry, "UserFolder").map_err(|e| format!("{account}: {e}"))? {
                 out.push(folder);
             }

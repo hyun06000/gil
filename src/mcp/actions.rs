@@ -21,6 +21,7 @@ pub fn refusal(said: impl Into<String>) -> CallToolResult {
 /// A refusal whose text carries a stable bracketed code (for example the Windows reopen refusal
 /// `[storage_protection_lost]`) gets that code as a structured field, so the Skill can apply one
 /// rule to it instead of reading prose.
+#[allow(unused_mut)]
 fn annotate_code(mut out: CallToolResult, problem: &str) -> CallToolResult {
     #[cfg(windows)]
     if problem.contains(&format!("[{}]", crate::windows_fs::PROTECTION_LOST_CODE)) {
@@ -74,18 +75,6 @@ pub fn call(name: &str, input: &Value) -> CallToolResult {
             Err(problem) => annotate_code(result(false, Some(1), String::new(), format!("{problem}\n")), &problem),
         };
     }
-    #[cfg(all(feature = "visual-authoring", windows))]
-    let location_check = {
-        // Support-scope check before any record exists (Windows contract §4 W1 0). A pass is
-        // reported with its evidence and limits; it is never a "no synchronization" guarantee.
-        let selected = Path::new(root.expect("validated root"));
-        if name == "gil_start" {
-            match crate::windows_fs::unsupported_location(selected) {
-                Err(location) => return super::workspace::start_refusal(selected, &location),
-                Ok(report) => Some(super::workspace::location_check(&report)),
-            }
-        } else { None }
-    };
     #[cfg(feature = "visual-authoring")]
     if name == "gil_start" {
         return match crate::command::start_visual_action(Path::new(root.expect("validated root"))) {
@@ -95,7 +84,7 @@ pub fn call(name: &str, input: &Value) -> CallToolResult {
                     fields.insert("storage_format".into(), json!(5));
                     fields.insert("display_confirmed".into(), json!(false));
                     #[cfg(windows)]
-                    if let Some(check) = location_check { fields.insert("location_check".into(), check); }
+                    fields.insert("record_storage".into(), json!("private_app_data"));
                 }
                 out
             }

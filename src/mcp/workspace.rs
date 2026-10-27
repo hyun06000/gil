@@ -1,18 +1,18 @@
-//! Windows development surface: location support check before `gil_start` creates anything,
-//! and approval-based preparation of a new local workspace folder (Windows contract §4 W1 0).
-//! Creating a folder is not connecting it: the Host's working-folder selection stays the user's.
+//! Optional Windows workspace-folder preparation. GIL no longer requires this for OneDrive:
+//! private records live in local app data while the user's selected working folder stays put.
 use crate::windows_fs as win;
 use rmcp::model::{CallToolResult, Tool};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::ffi::OsStr;
+#[cfg(test)]
 use std::path::Path;
 
 pub const NAME: &str = "gil_prepare_workspace";
 
 pub fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
     tools.push(serde_json::from_value(json!({"name": NAME,
-        "description": "Windows development surface. Plan (confirm:false) or create (confirm:true) one new empty local workspace folder for a GIL Project: <parent>\\<name>, parent defaulting to %USERPROFILE%\\gil-projects. Allowed range: parent must lie under %USERPROFILE%; at most the missing parent and the folder itself are created; nothing else is ever touched. confirm:true must carry approved_path equal to the exact path the plan returned and may only be sent after the user approved that path in chat (the tool cannot verify human approval; it only binds the request to the shown path). Location (local fixed NTFS, no OneDrive/cloud-sync root, no reparse point), ancestors and conflicts are re-checked right before creation; an existing entry is never reused or replaced and no other name is chosen; on any refusal nothing is created, and if a refusal happens after creation the response lists exactly what this call created and whether it remains. Creating the folder does not connect it: the user must select it as the working folder in the app before gil_start.",
+        "description": "Optional Windows convenience, only when the user explicitly asks for a separate empty local workspace folder. It is not a repair step and must not be offered merely because the selected folder is in OneDrive: GIL keeps private records in local app data and leaves the working folder in place. Plan (confirm:false) or create (confirm:true) <parent>\\<name>, parent defaulting to %USERPROFILE%\\gil-projects. confirm:true requires the exact approved_path returned by the plan after human approval. Existing entries are never reused or replaced.",
         "inputSchema": {"type":"object","additionalProperties":false,"required":["name","confirm"],
             "properties":{"name":{"type":"string","minLength":1,"maxLength":120},
                           "parent":{"type":"string","minLength":3,"maxLength":1024},
@@ -52,47 +52,6 @@ fn fail(code: &str, said: impl Into<String>) -> CallToolResult {
     out
 }
 
-/// The `location_check` field of a successful `gil_start`: what was looked at, per source, and
-/// the documented limits. Statuses are facts about this process's queries, not about the machine.
-pub fn location_check(report: &win::LocationReport) -> Value {
-    let sources: Vec<Value> = report.sources.iter().map(|r| match &r.status {
-        win::SourceStatus::Queried { roots, stale, key_present } => json!({"source": r.source, "status": "queried", "roots": roots, "stale": stale, "key_present": key_present}),
-        win::SourceStatus::Absent(what) => json!({"source": r.source, "status": "absent", "detail": what}),
-        win::SourceStatus::Failed(why) => json!({"source": r.source, "status": "failed", "detail": why}),
-    }).collect();
-    json!({
-        "sync_root_sources": sources,
-        "registry_hive": "the hive of the account this server runs as (process token); not asserted to be the person in the chat",
-        "path_components_checked": report.components_checked,
-        "reparse_points": "none observed",
-        "cloud_attributes": "none observed",
-        "drive": report.drive,
-        "filesystem": report.filesystem,
-        "limits": win::LocationReport::LIMITS,
-    })
-}
-
-/// Structured refusal for `gil_start` on an unsupported location: nothing was created.
-pub fn start_refusal(selected: &Path, location: &win::UnsupportedLocation) -> CallToolResult {
-    let said = format!("{} (아직 아무것도 만들지 않았습니다.)", location.kind.notice());
-    let mut fields = json!({"ok": false, "code": "unsupported_location",
-        "location_kind": location.kind.code(), "evidence": location.evidence().code(), "detail": location.detail,
-        "selected": selected.display().to_string(), "said": said});
-    let object = fields.as_object_mut().expect("object");
-    if location.kind == win::LocationKind::Unverifiable {
-        // The check itself did not run: preparing a workspace would be refused for the same
-        // reason, so it must not be offered as a substitute for verification.
-        object.insert("next".into(), json!("The location check itself could not run. Report GIL's words and stop: do not offer gil_prepare_workspace (it is refused for the same reason), do not retry gil_start, do not change any setting. The user decides how to proceed."));
-    } else {
-        let suggested = win::default_workspace_parent().map(|p| p.display().to_string()).unwrap_or_default();
-        object.insert("suggested_parent".into(), json!(suggested));
-        object.insert("next".into(), json!("Explain the support-scope notice in `said` and, only with the user's approval, call gil_prepare_workspace(confirm:false) to show the exact path, then confirm:true. Then ask the user to select the new folder in the app and wait; never call gil_start on it until it is the selected working folder."));
-    }
-    let mut out = CallToolResult::structured(fields);
-    out.is_error = Some(true);
-    out
-}
-
 pub fn call(input: Value) -> CallToolResult {
     let Ok(request) = serde_json::from_value::<Request>(input) else {
         return fail("invalid_request", "name(폴더 이름)·confirm(승인 여부)·parent·approved_path 만 받는다.");
@@ -114,7 +73,7 @@ pub fn call(input: Value) -> CallToolResult {
     };
     // Checked, not guaranteed: outside the roots OneDrive declares and without cloud-files
     // attributes. Other synchronization products are not detected (contract §8 1b).
-    let note = "확인한 범위에서 이 폴더는 OneDrive가 선언한 백업 위치 밖이고 클라우드 동기화 속성이 없다(다른 동기화 제품의 유무는 확인하지 않는다). 폴더를 만드는 것과 Codex의 작업 폴더로 선택하는 것은 별개다: 사용자가 앱에서 이 폴더를 선택한 뒤에만 gil_start를 부른다.";
+    let note = "사용자가 별도 로컬 작업 폴더를 명시적으로 요청한 경우에만 쓰는 선택 기능이다. OneDrive 안의 기존 작업 폴더를 옮길 필요는 없다. 폴더를 만드는 것과 Codex의 작업 폴더로 선택하는 것은 별개다.";
     let shown = plan.path.display().to_string();
     if !request.confirm {
         return CallToolResult::structured(json!({"ok": true, "stage": "planned", "path": shown,

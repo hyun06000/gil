@@ -26,7 +26,13 @@ struct Identity { device: u64, inode: u64, created_ns: Option<u128> }
 
 impl Identity {
     fn at(root: &Path) -> Result<Self, Refusal> {
-        let meta = fs::metadata(root.join(".gil")).map_err(|e| match e.kind() {
+        #[cfg(windows)]
+        let gil = crate::project_state::state_for_root(root)
+            .map_err(|_| Refusal::new("unreadable", "Project 기록 위치를 확인할 수 없다"))?
+            .parent().expect("state path has a parent").to_path_buf();
+        #[cfg(not(windows))]
+        let gil = root.join(".gil");
+        let meta = fs::metadata(&gil).map_err(|e| match e.kind() {
             std::io::ErrorKind::NotFound => Refusal::new("project_missing", "선택했던 Project 폴더를 찾을 수 없다"),
             _ => Refusal::new("unreadable", "선택했던 Project 를 확인할 수 없다"),
         })?;
@@ -39,7 +45,7 @@ impl Identity {
                 created_ns: meta.created().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_nanos()) })
         }
         #[cfg(windows)] {
-            let (device, inode, created_ns) = windows::identity(&root.join(".gil")).map_err(|_| {
+            let (device, inode, created_ns) = windows::identity(&gil).map_err(|_| {
                 Refusal::new("resume_unavailable", "이 Project 의 안전한 Windows identity 를 확인할 수 없다 — 로컬 NTFS 폴더가 필요하다")
             })?;
             Ok(Self { device, inode, created_ns: Some(created_ns) })
