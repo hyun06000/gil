@@ -17,11 +17,15 @@ pub(crate) const EXTERNAL_LAYOUT: &str = "project-state-v1";
 pub(crate) fn state_for_root(root: &Path) -> Result<PathBuf, String> {
     #[cfg(windows)]
     {
-        let external = external_state(root)?;
+        let inline = root.join(crate::STATE_PATH);
+        let external = match external_state(root) {
+            Ok(path) => path,
+            Err(_) if inline.is_file() => return Ok(inline),
+            Err(error) => return Err(error),
+        };
         if external.is_file() || external.parent().is_some_and(Path::exists) {
             return Ok(external);
         }
-        let inline = root.join(crate::STATE_PATH);
         if inline.is_file() {
             return Ok(inline);
         }
