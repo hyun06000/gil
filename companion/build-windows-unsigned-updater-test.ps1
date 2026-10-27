@@ -31,8 +31,8 @@ foreach ($Name in @('GIL_WINDOWS_CERTIFICATE_THUMBPRINT', 'GIL_WINDOWS_TIMESTAMP
     Remove-Item "Env:$Name" -ErrorAction SilentlyContinue
 }
 $TauriVersion = (cargo tauri --version 2>$null | Out-String).Trim()
-if ($LASTEXITCODE -ne 0 -or $TauriVersion -ne 'tauri-cli 2.10.1') {
-    throw 'Tauri CLI 2.10.1이 필요합니다.'
+if ($LASTEXITCODE -ne 0 -or $TauriVersion -ne 'tauri-cli 2.11.5') {
+    throw 'Tauri CLI 2.11.5가 필요합니다.'
 }
 
 Push-Location $Here
@@ -56,6 +56,14 @@ try {
     $ConfigJson = $Config | ConvertTo-Json -Depth 10 -Compress
     cargo tauri build --bundles nsis --config $ConfigJson
     if ($LASTEXITCODE -ne 0) { throw 'Windows updater 시험 설치본 빌드가 실패했습니다.' }
+    $Signatures = @(Get-ChildItem (Join-Path $Root 'target\release\bundle\nsis') -File -Filter '*.sig')
+    if ($Signatures.Count -ne 1) { throw "updater 서명은 하나여야 합니다: $($Signatures.Count)" }
+    $SignedText = [Text.Encoding]::UTF8.GetString(
+        [Convert]::FromBase64String((Get-Content -Raw -LiteralPath $Signatures[0].FullName).Trim())
+    )
+    if ($SignedText -notmatch [regex]::Escape("version:$Version")) {
+        throw "updater 서명이 버전 $Version 을 결속하지 않았습니다."
+    }
 } finally {
     Pop-Location
 }

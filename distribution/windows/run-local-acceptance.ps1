@@ -81,7 +81,7 @@ try {
         throw "Install acceptance requires a clean test PC; runtime already exists: $runtime"
     }
     if (-not (Get-Command cargo-tauri -ErrorAction SilentlyContinue)) {
-        cargo install tauri-cli --version 2.10.1 --locked
+        cargo install tauri-cli --version 2.11.5 --locked
         if ($LASTEXITCODE -ne 0) { throw "tauri-cli installation exited $LASTEXITCODE" }
     }
 

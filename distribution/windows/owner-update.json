@@ -1,10 +1,10 @@
 {
-  "version": "0.1.1-owner.2",
+  "version": "0.1.1-owner.3",
   "notes": "사용자가 요청한 GIL Companion 및 Core 업데이트입니다. Codex는 닫지 않아도 됩니다.",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/hyun06000/gil/releases/download/windows-owner-update-0.1.1-owner.2/GIL.Companion.Unsigned.Test._0.1.1-owner.2_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRMmJnSHJ2eEhDbkJNR2w3TVp4T0plU21FQVlYVlFValFadUEwSmR1dWdwWGpJRU42ckVRaFViYzkvOFBZNTU4UHpLSmdzZHhCMlBmOGVOc1BnaGFWY0JBTi95VkpTMVFnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzMDgxMjMwCWZpbGU6R0lMIENvbXBhbmlvbiAoVW5zaWduZWQgVGVzdClfMC4xLjEtb3duZXIuMl94NjQtc2V0dXAuZXhlCkFzdEV2UldXZjhKc1pSSnJqdHdSZDJIaGxyUFJsSXo4Rmp2L3RiV1NDVjVGOGRHTUJ6NzhQRENMRE9GN0pidk1tWHhielQ2YVJBcDdUNHBnVlVCaUFnPT0K"
+      "url": "https://github.com/hyun06000/gil/releases/download/windows-owner-update-0.1.1-owner.3/GIL.Companion.Unsigned.Test._0.1.1-owner.3_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRMmJnSHJ2eEhDbkx1aE1leFhwcUNPbjRRbjJBd0kyRjAvSU5jNWdZT0VDS0Z3bURjaXFmRDN6RWhaYkh4eHI1VHN2YXRka3FCcTRmUW1OWm42K2psVStXb1RQd1BGUFFJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzMDg5NjI2CWZpbGU6R0lMIENvbXBhbmlvbiAoVW5zaWduZWQgVGVzdClfMC4xLjEtb3duZXIuM194NjQtc2V0dXAuZXhlCXZlcnNpb246MC4xLjEtb3duZXIuMwozeXZzTldUVFQvSkhVQXpTVThoOWgzVGJ2Mlo2dmY3SnlPVGFNOHF5YjYxOGREbzNiUCtZb3MyU0h2enhWd1IrNmJjTVF6UERYUHc2NDYyWm1Hb2dBZz09Cg=="
     }
   }
 }
