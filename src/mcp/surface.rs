@@ -32,11 +32,17 @@ pub fn tools() -> &'static [Tool] {
         for tool in &mut tools {
             let hint = match tool.name.as_ref() {
                 "gil_start" => " Start also prepares the Monitor; follow the returned show_gil_monitor call immediately, before the first gil_open. Never repeat start after display failure.",
-                "gil_open" => " Choose one bounded objective and observable done_when. Perform it, then gil_close before another objective. Interview is conversation only; implementation and tests belong to Verify.",
+                "gil_open" => " Choose one independently checkable objective and observable done_when. Perform it, then gil_close before another objective. Interview agrees scope only; research, calculations, chat-only reports, implementation and tests belong to Experiment Verify. An Interview Outcome judges the approved scope, not completion of the whole project.",
                 "gil_close" => " Call when the open action's done_when is met; report observed results, then follow the next receipt before doing more work.",
+                "gil_cycle" => " Legacy helper: do NOT use action=close; this tool cannot accept a Report. Close both Steps and Cycles with gil_close(project_root, report). Use gil_open for new Cycles.",
                 _ => continue,
             };
-            tool.description.get_or_insert_with(Default::default).to_mut().push_str(hint);
+            if tool.name == "gil_cycle" {
+                tool.title = Some("Legacy GIL cycle helper".into());
+                tool.description = Some(hint.trim().to_owned().into());
+            } else {
+                tool.description.get_or_insert_with(Default::default).to_mut().push_str(hint);
+            }
         }
         tools
     })

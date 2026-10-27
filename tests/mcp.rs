@@ -677,6 +677,79 @@ fn text_of(reply: &serde_json::Value) -> String {
 // ── 시험 ───────────────────────────────────────────────────────────────────
 
 #[test]
+fn interview_assent_requires_outcome_and_separate_cycle_close_before_research() {
+    use serde_json::{json, Value};
+    fn action(c: &mut Client, root: &Path, name: &str, mut args: Value) -> Value {
+        args["project_root"] = json!(root);
+        let result = monitor_call(c, name, args);
+        assert_eq!(result["structuredContent"]["ok"], true, "{result}");
+        result
+    }
+    for approved in ["yes", "no"] {
+        let root = scratch(&format!("interview-research-{approved}"));
+        let settings = scratch(&format!("interview-research-settings-{approved}"));
+        let mut c = Client::serve_with(&settings); c.initialize();
+        action(&mut c, &root, "gil_start", json!({}));
+        let contract = "objective: 보고서 목표를 합의한다\nnext_action: 제안을 확인한다\ndone_when: 사용자 답을 받았다\n";
+        for (kind, report) in [
+            ("question", "question: 어떤 보고서인가\nchoices: 주가 / 실적\nresponse: 둘 다 출처와 함께 비교해줘\n"),
+            ("interpretation", "interpretation: 주가와 실적을 각각 확인한다\nunresolved: 없음\n"),
+        ] {
+            action(&mut c, &root, "gil_open", json!({"kind":kind,"contract":contract}));
+            action(&mut c, &root, "gil_close", json!({"report":report}));
+        }
+        let opened = action(&mut c, &root, "gil_open", json!({"kind":"synthesis","contract":contract}));
+        assert!(opened["structuredContent"]["said"].as_str().unwrap().contains("이미 그 제안에 동의했다면"));
+        let report = format!("statement: 주가·실적 근거를 각각 확인한 뒤 보고서로 종합한다\nbasis_refs: step:C1/S2\napproved: {approved}\n");
+        let closed = action(&mut c, &root, "gil_close", json!({"report":report}));
+        let said = closed["structuredContent"]["said"].as_str().unwrap();
+        if approved == "no" {
+            assert!(!said.contains("승인된 Synthesis만"));
+            assert!(said.contains("question"));
+            let refused = monitor_call(&mut c, "gil_open", json!({"project_root":root,"kind":"outcome","contract":contract}));
+            assert_eq!(refused["isError"], true);
+        } else {
+            assert!(said.contains("승인된 Synthesis만 닫혔다"));
+            let opened = action(&mut c, &root, "gil_open", json!({"kind":"outcome", "contract":
+                "objective: 승인된 목표를 판정한다\nnext_action: 승인된 제안으로 다음 방향을 정한다\ndone_when: 판정과 다음 방향이 정해졌다\n"}));
+            assert!(opened["structuredContent"]["said"].as_str().unwrap().contains("프로젝트 전체 실행이 끝날 때까지 열어 두지 않는다"));
+            let before = std::fs::read(product_state_path(&root)).unwrap();
+            let legacy = monitor_call(&mut c, "gil_cycle", json!({"project_root":root,"action":"close"}));
+            assert_eq!(legacy["isError"], true);
+            assert!(legacy["structuredContent"]["problem"].as_str().unwrap().contains("gil_close(project_root, report)"));
+            assert_eq!(std::fs::read(product_state_path(&root)).unwrap(), before);
+            let premature = monitor_call(&mut c, "gil_open", json!({"project_root":root,"kind":"experiment"}));
+            assert_eq!(premature["isError"], true);
+            assert_eq!(std::fs::read(product_state_path(&root)).unwrap(), before);
+            let closed = action(&mut c, &root, "gil_close", json!({"report":
+                "verdict: success\nlesson: 사용자와 조사 범위를 합의했다\nsynthesis_ref: step:C1/S3\nnext_direction.action: close_cycle\nnext_direction.reason: 합의한 범위를 실험으로 확인한다\n"}));
+            assert!(closed["structuredContent"]["said"].as_str().unwrap().contains("Interview Cycle은 아직 열려 있다"));
+            assert!(closed["structuredContent"]["said"].as_str().unwrap().contains("outcome_ref: step:C1/S4"));
+            let before = std::fs::read(product_state_path(&root)).unwrap();
+            let legacy = monitor_call(&mut c, "gil_cycle", json!({"project_root":root,"action":"close"}));
+            assert_eq!(legacy["isError"], true);
+            assert!(legacy["structuredContent"]["problem"].as_str().unwrap().contains("gil_close(project_root, report)"));
+            assert_eq!(std::fs::read(product_state_path(&root)).unwrap(), before);
+            let premature = monitor_call(&mut c, "gil_open", json!({"project_root":root,"kind":"experiment"}));
+            assert_eq!(premature["isError"], true);
+            let missing = monitor_call(&mut c, "gil_close", json!({"project_root":root,"report":"verdict: success\n"}));
+            assert_eq!(missing["isError"], true);
+            assert_eq!(std::fs::read(product_state_path(&root)).unwrap(), before);
+            let closed = action(&mut c, &root, "gil_close", json!({"report":
+                "verdict: success\noutcome_ref: step:C1/S4\nhandoff_summary: 주가·실적 근거를 각각 검증하고 종합하기로 합의했다\nnext_direction.action: open_child\nnext_direction.reason: 먼저 주가 자료를 검증한다\n"}));
+            assert!(closed["structuredContent"]["said"].as_str().unwrap().contains("Interview Cycle까지 닫혔다"));
+            action(&mut c, &root, "gil_open", json!({"kind":"experiment"}));
+            let define = action(&mut c, &root, "gil_open", json!({"kind":"define", "contract":
+                "objective: 주가 자료의 비교 가능성 확인\nnext_action: 기간과 기준이 일치하는지 성공 조건을 정한다\ndone_when: 검증 가능한 기준을 정했다\n"}));
+            assert!(define["structuredContent"]["said"].as_str().unwrap().contains("독립적으로 확인할 질문 하나"));
+        }
+        assert!(c.eof().0.success());
+        std::fs::remove_dir_all(root).unwrap();
+        std::fs::remove_dir_all(settings).unwrap();
+    }
+}
+
+#[test]
 fn start_hands_off_a_prepared_monitor_without_a_second_prepare_or_extra_step() {
     use serde_json::json;
     let root = scratch("guided-start");
