@@ -1,10 +1,14 @@
 # GIL Companion + Core 설치 안내 — 제작 중
 
+> 이 파일은 플랫폼 공통 설계 초안이다. 현재 친구·테스터용 실행 절차와 정확한 배포 자산은
+> 저장소 루트의 [INSTALL](../../INSTALL.md)을 따른다. Windows x64용 Companion preview는 이미
+> 별도 인수했지만, 서명된 일반 공개판은 아직 아니다.
+
 실제 Windows의 자동 시작·트레이·종료만 검수하는 별도 portable 묶음 준비는
 [INSTALL-review.md](INSTALL-review.md)를 봅니다. 정식 installer나 기존 Plugin 교체 경로가 아니며,
 아직 게시·Windows 인수 완료 상태가 아닙니다.
 
-**아직 실행 가능한 사용자 설치 안내가 아닙니다.** 이 문서는 새 사용자 설치 경로의 정본 초안입니다.
+**이 파일 자체는 실행 가능한 사용자 설치 안내가 아닙니다.** 이 문서는 새 사용자 설치 경로의 설계 초안입니다.
 Companion＋Core 통합 installer와 공식 Codex 연결 인수가 완료되기 전에는 설치 완료를 주장하거나
 이 문서를 근거로 기존 Plugin을 제거하지 마세요. 현재 게시된 runtime-verify 묶음은 설치 프로그램이 아닙니다.
 

@@ -1,94 +1,133 @@
-# GIL preview 설치
+# GIL macOS preview 설치
 
-대상: **macOS Apple Silicon의 Codex** · `0.2.1-preview.6` (2026-10-27 게시, unsigned prerelease; 최신 Core·Skill·fullscreen Monitor).
-게시·검증 기록은 [preview.6 장부](PREVIEW-6-PUBLICATION-20261027.md)를 본다.
-Apple Developer ID 서명·공증은 없다. 개발 도구 없는 Mac VM의 설치·실사용은
-2026-10-07 **preview.3** 사용자 검수로 확인했으며, preview.4는 새 Mac·VM에서 아직 검수하지 않았고
-모든 Mac의 동작을 보장하는 것은 아니다. preview.4의 이미지 보고서 범위와 이관·복구 주의는
-[배포 장부](PREVIEW-4-PUBLICATION-20261014.md)를 따른다.
-2026-10-07 깨끗한 Mac VM에서 Git 경로가 Apple Command Line Tools 부재로 실패했다.
-개발 도구가 없는 환경은 [Git 없는 설치](GITLESS-INSTALL.md)를 따른다. 이 경로는 2026-10-16에
-preview.4 공개 archive(URL·크기·SHA-256 고정)로 갱신했고 개발 Mac의 격리 profile에서 다운로드·검증·
-해제·공식 설치·손상/중단/기존 설치 분기를 로컬 검수했다. 개발 도구 없는 Mac VM에서는 **추가 권한 요청
-뒤 설치·Monitor 표시 성공, 최초 프롬프트만으로는 설치 미완**이었다(권한 문구를 보강한 현재 판의 단독
-완료는 미확인). 아래 Git 사용 고정 tag 설치 검증과는 별개의 경로다.
-macOS가 실행을 막으면 중단한다. Gatekeeper 해제·quarantine 제거·설치 cache 수정으로 우회하지 않는다.
-Windows·Intel Mac·Claude 작업 모드는 이번 배포의 지원 대상이 아니다.
+전체 OS 안내의 시작점은 [저장소 설치 안내](../../INSTALL.md)다. 이 문서는 macOS 전용 상세 절차다.
 
-## Git을 이미 사용할 수 있는 환경에서 설치하기
+대상은 **macOS Apple Silicon(`arm64`)의 로컬 Codex 작업**이다. 현재 배포판은
+`0.2.1-preview.6`이며 2026-10-27 게시한 unsigned prerelease다. Core, MCP server, Skill과
+fullscreen Monitor UI가 Plugin 하나에 들어 있으므로 Node·npm·Cargo·Homebrew·별도 Companion을
+설치하지 않는다. Intel Mac, Windows, Claude 작업 모드에는 이 파일을 사용하지 않는다.
 
-아래 요청을 Codex에 전달한다. 사용자에게 Node·npm·Cargo·Homebrew 설치나 소스 빌드를 요구하지 않는다.
-먼저 Codex에서 빈 작업 폴더를 선택해 **로컬 명령을 실행할 수 있는 새 대화**를 연다.
-이 경로는 Git을 요구한다. Git이 없다면 개발 도구를 추가 설치하지 말고 위 Git 없는 경로를 사용한다.
+- marketplace: `https://github.com/hyun06000/gil-marketplace.git`
+- 고정 tag: `v0.2.1-preview.6`
+- 고정 commit: `2a1ec23576eb35e05210dda1d8b5400a577ec30f`
+- Plugin: `gil-companion-prototype@gil-preview-macos-arm64`
+- 공개 archive: `gil-codex-macos-arm64-0.2.1-preview.6.tar.gz`
+- archive 크기: `3,189,503` bytes
+- archive SHA-256: `477ad55fb6757fc58c4264bd265c7dd8e196c4a5ecf648ac6e1a181a8338d2b5`
+- 게시·검증 장부: [PREVIEW-6-PUBLICATION-20261027.md](PREVIEW-6-PUBLICATION-20261027.md)
 
-> GIL의 unsigned preview 0.2.1-preview.6을 설치해 줘.
-> 공식 Plugin 관리 기능으로 https://github.com/hyun06000/gil-marketplace.git 을
-> 고정 tag v0.2.1-preview.6 (commit 2a1ec23576eb35e05210dda1d8b5400a577ec30f) 에 등록하고,
-> gil-companion-prototype@gil-preview-macos-arm64 를 설치해 줘.
-> tag가 존재하고 설치된 버전이 preview.6인지 확인해 줘.
-> 기존 GIL 설치가 있다면 중복 등록하지 말고 출처와 버전을 먼저 확인하고 교체 전에 물어봐 줘.
-> 내 프로젝트를 초기화하거나 이관하거나 기록을 바꾸지는 마.
+Apple Developer ID 서명과 공증은 없다. macOS가 정상적인 사용자 확인 뒤에도 실행을 차단하면 멈춘다.
+Gatekeeper를 끄거나 quarantine·권한·Plugin cache를 변경해 우회하지 않는다.
 
-이는 검수된 Git marketplace 설치다. 범용 Plugins Directory 검색 목록에 등재됐다는 뜻은 아니다.
-소스 저장소 `hyun06000/gil`이 아니라 **`hyun06000/gil-marketplace`가 설치 출처**다.
-앱에서 설치 승인을 요청하면 대상과 버전을 확인한다. 설치 후에는 **새 대화**를 연다.
-기존 연결은 이전 프로세스를 유지할 수 있다.
+## 사용자에게 보장할 설치 경험
 
-## 시작하기
+사용자는 터미널 명령을 직접 입력하지 않는다. Codex에서 빈 폴더를 선택해 **로컬 명령을 실행할 수 있는
+새 대화**를 열고 아래 요청문을 붙여넣는다. Agent가 사용하는 앱 내장 `codex` CLI는 Plugin 관리 MCP
+도구와 별개다. 관리 도구에 검색·권한·제거만 있다는 이유로 설치 불가라고 결론내리지 않는다.
 
-1. Codex의 폴더 선택 UI에서 작업할 폴더를 선택한다.
-2. 새 프로젝트라면 **“지금 폴더에서 GIL 프로젝트를 시작해 줘”**라고 말한다.
-   이미 GIL 기록이 있다면 **“기록을 바꾸지 말고 GIL Monitor를 열어 줘”**라고 말한다.
-3. 원하는 일을 이야기한다. Monitor의 가로 그래프와 채팅을 함께 본다.
-   fullscreen이 자동으로 열리지 않으면 앱의 **모니터 펼치기**를 누른다.
-4. 노드를 눌러 상세가 보이는지 직접 확인한다. 도구의 성공 응답만으로 화면 성공을 판정하지 않는다.
+일반 ChatGPT/Work 대화처럼 로컬 셸이 없는 환경에서는 설치하지 않는다. Agent가 별도 Codex CLI,
+Git, Xcode Command Line Tools나 개발 도구 설치를 사용자에게 요구해서도 안 된다.
 
-Plugin 하나에 Rust Core·MCP server·Monitor UI가 들어 있다. **Companion을 따로 설치할 필요는 없다.**
-Monitor는 읽기 전용이며, 프로젝트 변경은 사용자가 요청한 Agent의 GIL 행동을 통해서만 한다.
-프로젝트 기록은 선택한 폴더의 `.gil`에, 재연결용 폴더 선택은 로컬 GIL 설정에 남는다.
-GIL은 별도 클라우드 서비스에 기록을 업로드하지 않지만, Agent가 호출한 도구 응답은 사용 중인
-Host/AI의 대화로 전달된다. 그 서비스의 데이터 정책과 폴더 권한을 함께 확인한다.
+## Agent가 먼저 판단할 분기
 
-## 업데이트·제거·복구
-
-unsigned preview는 자동으로 최신 main을 따라가지 않는다. 새 버전의 변경 내용·출처·검수 범위를
-확인하고 승인한 뒤 공식 Plugin 관리 기능으로 갱신한다. 같은 버전의 파일을 덮어쓰지 않는다.
-
-제거는 Codex의 Plugin 관리 화면에서 한다. **프로젝트 폴더나 `.gil`을 지우지 않는다.**
-화면이 사라져도 프로젝트의 Journey가 삭제됐다는 뜻은 아니다. 다시 설치한 뒤 같은 폴더를 고른다.
-
-이전 검증판은 `0.2.1-preview.5`, tag `v0.2.1-preview.5` / marketplace commit
-`0f841dae120e45d0ac7e2a90bd383685c8756627`다. 복구가 필요하면 Codex에게 현재 설치를 확인한 뒤
-같은 marketplace를 이 tag로 교체해 달라고 요청한다. 이는 **Plugin 버전 복구**이지
-프로젝트 Artifact를 되돌리는 `gil restore`가 아니다. 사용자 동의 없이 실행하지 않는다.
-**주의:** preview.4 이후로 새로 만든 이미지 Project는 저장 형식 5이며, preview.3는 형식 5를 읽지 못한다
-("저장 형식 5 … 모른다" 거절). 이는 기록 손실이 아니며 Plugin을 되돌려도 기록은 되돌아가지 않는다.
-설치만으로 기존 Project가 이관되지는 않는다. 이관은 Project마다 백업·복구 확인 승인과 적용 승인을 따로 받는다.
-격리 profile에서 preview.3 → preview.4 → preview.3 → preview.4 교체 쌍은 확인했다(합성 Project 기준).
-
-오류가 나면 OS/CPU, Codex 버전, Plugin 버전과 실제 화면을 아는 만큼만
-[GIL Issues](https://github.com/hyun06000/gil/issues)에 알려 준다. 개인 경로·대화·token·`.gil` 기록은
-첨부하지 않는다. 보안 취약점은 공개 issue 대신 [보안 안내](../../SECURITY.md)를 따른다.
-
-## Agent·유지관리자용 공식 명령
-
-앱에 제공된 Codex CLI를 사용한다. 사용자의 시스템에 별도 CLI 설치를 요구하지 않는다.
-새 설치의 명령 형태는 다음과 같고, 기존 marketplace가 있으면 먼저 등록 상태와 동의를 확인한다.
+다음 항목만 읽기 전용으로 확인한다.
 
 ```sh
-codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.6 --json
-codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
+uname -s
+uname -m
+command -v codex
+codex --version
+codex plugin list --json
+codex plugin marketplace list --json
+xcode-select -p
+git --version
 ```
 
-2026-10-27 확인: 새 격리 profile에서 위 tag가 고정 commit으로 설치됐고 Codex가 preview.6을
-보고했으며 설치된 Core·Skill bytes가 검수본과 같았다. 공개 archive도 익명 HTTPS 다운로드로 재검증했다.
+1. Darwin/arm64가 아니면 중단한다.
+2. 앱 번들 `codex`가 없거나 `plugin marketplace add`/`plugin add`를 지원하지 않으면 중단한다.
+3. 기존 GIL이 있으면 출처와 버전을 보고하고 교체 승인을 기다린다.
+4. Git과 활성 Command Line Tools가 실제로 동작하면 고정 Git tag 경로를 사용한다.
+5. `git clone`이 Command Line Tools 부재로 실패하면 개발 도구 설치를 제안하지 않고 Git 없는 경로로
+   전환한다. 실패한 등록이 남았는지 `codex plugin marketplace list --json`으로 다시 확인한다.
 
-공식 CLI가 실패하면 설치 cache나 Host 설정을 손으로 고쳐 성공처럼 만들지 않는다.
-[Codex 공식 Plugin 안내](https://developers.openai.com/plugins/build/plugins)를 따른다.
+## Codex에 붙여넣을 통합 요청
 
-게시된 preview.6 archive의 SHA-256:
-`477ad55fb6757fc58c4264bd265c7dd8e196c4a5ecf648ac6e1a181a8338d2b5`
-(3,189,503 bytes; source CI가 만든 검증 후보 그대로 게시).
-이 값은 GitHub가 생성하는 Source ZIP의 해시가 아니다. 해시는 파일 일관성이지 Apple 서명·
-공증이나 publisher 인증의 대체물이 아니다. 공개 게시 상태와 증거는
-[배포 장부](PREVIEW-6-PUBLICATION-20261027.md)를 확인한다. 이전 판은 [preview.5 장부](PREVIEW-5-PUBLICATION-20261018.md).
+```text
+GIL unsigned preview 0.2.1-preview.6을 설치해 줘. 내가 터미널을 직접 조작하게 하지 마.
+플러그인 관리 MCP 도구만 보고 설치 불가라고 결론내리지 말고, 이 로컬 Codex 작업의 셸에서
+앱에 포함된 codex CLI를 사용해. 프로젝트를 초기화·이관하거나 .gil 기록을 바꾸지 마.
+
+먼저 uname -s, uname -m, command -v codex, codex --version,
+codex plugin list --json, codex plugin marketplace list --json,
+xcode-select -p, git --version으로 OS·CPU·CLI·기존 설치·Git 상태를 확인해.
+Darwin/arm64가 아니면 중단해. 기존 GIL이 있으면 출처와 버전을 알려주고 교체 전에 물어봐.
+
+Git이 실제로 동작하면 다음 고정 tag를 사용해:
+codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.6 --json
+codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
+
+Git 또는 Xcode Command Line Tools가 없거나 clone이 그 이유로 실패하면 개발 도구를 설치하지 말고
+Git 없는 경로로 전환해. 다음 파일을 임시 위치에 다운로드해:
+https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.6/gil-codex-macos-arm64-0.2.1-preview.6.tar.gz
+
+압축 해제 전에 크기가 정확히 3189503 bytes이고 SHA-256이
+477ad55fb6757fc58c4264bd265c7dd8e196c4a5ecf648ac6e1a181a8338d2b5인지 확인해.
+다르면 아무것도 풀거나 등록하지 말고 중단해.
+
+일치하면 tar 목록에서 절대경로, .. 경로 이동, 심볼릭 링크, 하드 링크와 특수 파일이 없는지 확인해.
+문제가 없으면 기존 폴더를 덮어쓰지 말고
+$HOME/Library/Application Support/GIL/preview.6-local 이라는 새 사용자 전용 폴더에 풀어.
+.agents/plugins/marketplace.json, release.json, Plugin version 0.2.1-preview.6과
+core/darwin-arm64/gil 실행 권한을 확인한 뒤 다음 명령을 사용해:
+codex plugin marketplace add "$HOME/Library/Application Support/GIL/preview.6-local" --json
+codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
+
+네트워크나 Codex 설정 저장 권한이 필요하면 무엇이 필요한지 설명하고 정상 승인 창으로 요청해.
+승인 뒤에는 plugin list와 marketplace list로 상태를 다시 읽고 미완료 단계만 이어가.
+이미 검증·해제한 파일을 다시 받거나 같은 marketplace를 무조건 재등록하지 마.
+설정 파일이나 cache를 직접 편집하지 말고 Gatekeeper·quarantine·권한을 강제로 변경하지 마.
+
+마지막으로 codex plugin list --json에서 설치 버전이 정확히 0.2.1-preview.6인지 확인해 알려줘.
+화면이 실제로 보이기 전에는 Monitor가 열렸다고 말하지 마.
+```
+
+Git 없는 경로의 archive member·목적지·권한 검사와 유지관리자 스크립트는
+[GITLESS-INSTALL.md](GITLESS-INSTALL.md)에 더 자세히 기록한다.
+
+## 설치 후 실제 동작 확인
+
+1. 설치가 끝난 뒤 **새 Codex 대화**를 연다. 설치 전 대화는 이전 MCP 연결을 유지할 수 있다.
+2. 빈 테스트 폴더를 선택한다.
+3. **“지금 폴더에서 GIL 프로젝트를 시작해 줘”**라고 말한다.
+4. 실제 Monitor, 첫 Interview와 graph가 보이는지 확인한다. 도구 성공 문장만으로 UI 성공을 판정하지 않는다.
+5. 기존 Project라면 **“기록을 바꾸지 말고 GIL Monitor를 열어 줘”**라고 말한다.
+
+깨끗한 Mac VM에서 Git/Xcode Command Line Tools 부재 → Git 없는 archive 검증 → 로컬 marketplace 등록 →
+Plugin 설치 → GIL 동작을 사용자가 확인했다. 별도의 fullscreen 전환과 앱 완전 종료 후 복원을 그 VM에서
+확인하지 않았다면 그 항목까지 통과했다고 기록하지 않는다.
+
+## 기존 설치·업데이트·제거
+
+기존 GIL 또는 같은 marketplace가 있으면 Agent는 `codex plugin list --json`과
+`codex plugin marketplace list --json` 결과를 먼저 보여 주고 교체 승인을 기다린다. 승인 전에는
+`plugin remove`나 `marketplace remove`를 실행하지 않는다. 같은 버전 bytes를 덮어쓰지 않는다.
+
+이전 검증판은 `0.2.1-preview.5`, tag `v0.2.1-preview.5`, marketplace commit
+`0f841dae120e45d0ac7e2a90bd383685c8756627`다. 복구는 Plugin 버전 교체이며 Project Artifact를
+되돌리는 `gil restore`가 아니다. Plugin 제거·교체로 Project 폴더나 `.gil`을 삭제하지 않는다.
+preview.4 이후 새 이미지 Project는 저장 형식 5를 사용할 수 있고 preview.3는 이를 읽지 못한다.
+
+## 실패별 대응
+
+| 실패 | Agent의 대응 |
+|---|---|
+| 관리 도구에 설치 기능이 없음 | 로컬 셸의 앱 번들 `codex` CLI를 확인. 로컬 셸이 없으면 중단 |
+| Xcode Command Line Tools를 찾지 못함 | 개발 도구를 설치하지 않고 Git 없는 로컬 marketplace 경로로 전환 |
+| 네트워크·설정 저장 권한 거절 | 필요한 권한을 설명해 정상 승인 요청; 승인 뒤 현재 상태를 재조회 |
+| 기존 marketplace/Plugin 발견 | 출처·버전 보고 후 사용자 승인 대기 |
+| 다운로드 크기/hash/member 불일치 | 압축 해제·등록 금지, 오류 원문과 생성된 임시 항목만 보고 |
+| CLI 등록 성공, 화면 없음 | 새 대화·선택 폴더·실제 Monitor를 별도로 확인 |
+| OneDrive의 `.gil` 권한 거절 | ACL을 강제로 바꾸지 않고 동기화 밖 로컬 작업 폴더 사용을 안내 |
+
+오류 보고에는 OS/CPU, Codex 버전, Plugin 버전, 실패 단계와 오류 원문만 포함한다. 개인 경로·대화·
+token·`.gil` 내용은 첨부하지 않는다. 보안 취약점은 공개 issue 대신 [보안 안내](../../SECURITY.md)를 따른다.

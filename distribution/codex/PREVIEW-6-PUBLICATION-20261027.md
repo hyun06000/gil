@@ -52,7 +52,11 @@ Apple Developer ID signing and notarization are not provided. This is a friends-
 not a stable release or universal Plugins Directory listing. If macOS blocks execution, stop; do not
 disable Gatekeeper or remove quarantine.
 
-The exact public tag installation was verified on the maintainer's existing Mac. A clean Mac/VM,
-external tester, visible fullscreen interaction and full application restart were not repeated for
-preview.6. Preview.5 remains the rollback target at tag `v0.2.1-preview.5`. Plugin rollback never
-changes Project records; preview.3 cannot read format-5 Projects.
+The exact public tag installation was verified on the maintainer's existing Mac. On 2026-10-27 the
+user also reported a clean Apple Silicon Mac VM acceptance: the Git route failed as expected because
+Xcode Command Line Tools were absent, the fixed public archive was installed through the Gitless local
+marketplace route, and GIL operated after installation. This report did not separately capture the VM
+build fingerprint, visible fullscreen transition or full application restart, so those items are not
+claimed as passed. External-friend acceptance remains separate. Preview.5 remains the rollback target
+at tag `v0.2.1-preview.5`. Plugin rollback never changes Project records; preview.3 cannot read
+format-5 Projects.
