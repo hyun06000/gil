@@ -97,7 +97,7 @@ impl Monitor {
         } else if entries.len() >= MAX_PROJECTS {
             return Err(Refusal::new("limit", "이 연결의 Project 한도에 도달했다 — 새 연결에서 연다"));
         }
-        // Only explicit preparation writes LOCAL consent settings. The session's Project
+        // Preparation (including a successful MCP start) writes LOCAL consent settings. The session's Project
         // lock is released here; neither persistence nor restoration holds a long-lived lock.
         self.store.save(&binding)?;
         entries.entry(scope.clone()).or_insert_with(|| Entry::new(binding));

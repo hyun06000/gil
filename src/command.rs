@@ -1299,6 +1299,12 @@ fn opened_step(session: &Session, opened: crate::Opened) -> String {
     let mut out = format!("열었다: {} · {}\n", opened.step, opened.kind);
     out.push_str(&format!("\n지금 할 일\n{}\n", indent(will.next_action())));
     out.push_str(&format!("\n완료 조건\n{}\n", indent(will.done_when())));
+    out.push_str("\n진행 경계\n  이 완료 조건을 충족하면 실제 결과를 Report로 적어 닫고 다음 행동으로 간다.\n  다른 목적의 일을 이 노드에 계속 붙이거나, 나중에 기록을 몰아 채우지 않는다.\n");
+    if opened.kind == crate::NodeKind::Verify {
+        out.push_str("  이 Verify 계약 안의 구현과 테스트는 함께 수행할 수 있다. 관측을 마치기 전에 닫지 않는다.\n");
+    } else {
+        out.push_str("  이 단계에서는 산출물을 수정하지 않는다. 구현과 테스트는 Verify에서 수행한다.\n");
+    }
     // **닫기 전에 계약을 미리 알려 준다.** 허용값을 오류로 알아내게 두지 않는다
     // (실사용 M2C 보고). 말은 여기서 짓지 않고 문법에서 읽는다.
     if let Some(contract) = &contract

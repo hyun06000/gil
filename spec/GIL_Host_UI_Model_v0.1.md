@@ -641,6 +641,15 @@ Codex Host의 PiP 미지원이나 실제 적용 mode를 확정하는 증거가 �
 
 ## 10. 보안과 격리
 
+### 2026-10-27 기록 진행 표시
+
+공용 UI는 View의 현재 step, current_will.next_action/done_when, 닫힌 step 수를 항상 표시한다.
+화면 내 scope별로 current/timeline/current_will의 변화를 비교해 마지막 기록 변화 **확인 시각**을
+표시한다. 최초 조회는 기록 확인이며 과거 사건 시각을 추정하지 않는다. captured_at 변경, 파일
+dirty 변화나 poll 성공을 GIL 기록 활동으로 세지 않는다. 조회 실패는 마지막 확인 화면으로 표시한다.
+오래 열린 Verify와 사용자 답변 대기를 자동 위반으로 판단하지 않고, 외부 도구 사용과 사고 여부는
+이 화면으로 알 수 없음을 설명한다. 이 정보는 화면 수명 동안만 유지하며 Project에 쓰지 않는다.
+
 - View의 모든 문자열은 data다. HTML·Markdown·명령으로 실행하지 않는다.
 - UI는 Project 밖의 경로를 요청하거나 표시를 근거로 파일을 열지 않는다.
 - 한 Project의 View·detail·presentation state를 다른 Project와 섞지 않는다.

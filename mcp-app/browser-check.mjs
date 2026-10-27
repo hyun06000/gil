@@ -26,7 +26,7 @@ const server = createServer(async (req, res) => {
   const path = resolve(ui, '.' + new URL(req.url, 'http://test').pathname);
   if (!path.startsWith(ui + '/')) { res.writeHead(404).end(); return; }
   try {
-    const types = { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.json': 'application/json' };
+    const types = { '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.json': 'application/json' };
     res.setHeader('content-type', types[extname(path)] || 'text/plain'); res.end(await readFile(path));
   } catch { res.writeHead(404).end(); }
 });
@@ -85,6 +85,10 @@ try {
   }, { html, view, details, visualItem, pngBase64 });
   const frame = page.frameLocator('iframe');
   await frame.locator('[data-step="step:C3/S1"]').waitFor({ timeout: 20000 });
+  assert.match(await frame.locator('.gil-progress').innerText(), /구현·검증 · 열려 있음/);
+  assert.ok((await frame.locator('.gil-progress').innerText()).includes(view.current_will.next_action));
+  assert.ok((await frame.locator('.gil-progress').innerText()).includes(view.current_will.done_when));
+  assert.match(await frame.locator('.gil-progress').innerText(), /닫힌 단계 11개/);
   await page.frames()[1].evaluate(()=>{window.visualURLs=new Set();const create=URL.createObjectURL.bind(URL),revoke=URL.revokeObjectURL.bind(URL);URL.createObjectURL=b=>{const u=create(b);window.visualURLs.add(u);return u;};URL.revokeObjectURL=u=>{window.visualURLs.delete(u);revoke(u);};});
   await frame.locator('[data-step="step:C3/S1"]').click();
   await frame.locator('.detail').getByText('<script>window.evil=1</script>', { exact: true }).waitFor();
@@ -217,11 +221,14 @@ try {
   await frame.locator('#host-say').filter({ hasText: '프로젝트 폴더를 찾을 수 없습니다' }).waitFor();
   assert.equal(await frame.locator('[data-step="step:C3/S1"]').count(), 1, 'last graph survives');
   await frame.locator('.notice').filter({ hasText: '상세를 읽지 못했다' }).waitFor();
+  await page.frames()[1].evaluate(()=>window.GIL_COMPANION.refresh());
+  await frame.locator('.progress-connection').filter({hasText:'마지막'}).waitFor({timeout:12000});
   assert.equal(await page.frames()[1].evaluate(()=>window.visualURLs.size),0);
   assert.equal(await frame.locator('.detail dl').innerText(), lastReport, 'last verified report survives a failed reread of the same step');
   await page.evaluate(() => { window.failResume = false; window.revision = 'new-server:3'; window.view.world.state = 'dirty'; });
   await frame.locator('.world').filter({ hasText: 'dirty' }).waitFor({ timeout: 12000 });
   await frame.locator('.notice[data-shown="false"]').waitFor({ state: 'attached' });
+  assert.match(await frame.locator('.gil-progress').innerText(), /Monitor 조회 성공/);
   assert.equal(await frame.locator('.detail dl').innerText(), lastReport, 'same report is available after automatic recovery');
   const calls = await page.evaluate(() => window.requests.filter(p => p.method === 'tools/call'));
   assert.ok(calls.some(c => c.params.name === 'gil_monitor_read'));

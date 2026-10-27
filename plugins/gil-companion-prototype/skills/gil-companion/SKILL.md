@@ -5,6 +5,22 @@ description: Use GIL from this plugin — start a GIL project in the folder the 
 
 # GIL
 
+## Everyday loop — read this first
+
+- Start once. Follow the start response's `show_gil_monitor` call before opening the first step.
+  New servers prepare the Monitor during start; do not prepare it again when a scope was returned.
+  If start succeeds but Monitor preparation fails, report the display failure and continue with
+  the first Interview `gil_open`. This is not a failed Project action or a reason to restart.
+- Open one small action, perform its `next_action`, then close when `done_when` is met. Close before
+  switching objectives. Multiple edits and tests within one Verify are normal.
+  Once the condition is met, the next GIL call is `gil_close`. A new request does not extend an
+  already completed contract: close it first, then address the request at the next appropriate step.
+- Interview is conversation; implementation belongs to Verify. Ask for the user's reply to the
+  Synthesis statement before recording approval. Never fill in skipped steps after doing the work.
+- Tell the user the current step and immediate action briefly. The Monitor shows recorded progress,
+  not private reasoning or proof that every external tool call followed GIL.
+- On refusal, resolve it before further work. For a new session read `gil_context` once and resume.
+
 This plugin carries two doors. **GIL itself**, which the agent calls, and the **GIL Monitor**,
 which a human watches.
 
@@ -35,6 +51,9 @@ attachments are unsupported. Without a selected Project, do not invent a root to
 Ordinary text actions answer with `ok`, `exit_code`, `said` (what GIL printed) and `problem` (what GIL
 refused with). **`ok` is the only success signal.** Read `said`/`problem` as GIL's own words and
 pass them on; do not reword them into a verdict of your own.
+Also read the response's text content: it carries the immediate Monitor handoff and workflow
+guidance alongside the unchanged structured receipt. Monitor preparation failure after
+`gil_start` with `ok: true` does not undo creation or prevent the first Interview.
 
 **After `ok: false`, handle the refusal before anything else.** A refused action did not move the
 project: never treat it as success, and never go on to the next step, the next Cycle or
@@ -122,8 +141,11 @@ platform is not permission to fall back to a shell or silently create a text-onl
 
 1. `gil_start(project_root)` with the selected folder. If no folder was explicitly selected or
    named, ask which folder first; never guess one.
-2. On `ok: true`, immediately `gil_monitor_prepare(project_root)` on that same root, then
-   `show_gil_monitor(scope_id)` with the scope it returned. The App starts horizontal and requests
+2. On `ok: true`, follow the start response's `show_gil_monitor(scope_id)` handoff immediately when
+   it says preparation succeeded. Older servers without that handoff need
+   `gil_monitor_prepare(project_root)` on that same root, then `show_gil_monitor(scope_id)` with the
+   scope it returned. If start says preparation failed, report that failure and do not start again;
+   apply the bounded display retry rules below. The App starts horizontal and requests
    fullscreen once by itself; you do not request or re-render it.
 3. Follow the start receipt: `gil_open` the first Interview step and ask the user what they want.
    The Monitor reads the project on its own, so the graph updates from this first step on without

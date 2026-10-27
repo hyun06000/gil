@@ -11,6 +11,7 @@ mod actions;
 mod native;
 mod surface;
 mod visuals;
+mod guidance;
 #[cfg(feature = "visual-authoring")]
 mod authoring;
 #[cfg(feature = "visual-authoring")]
@@ -43,7 +44,33 @@ impl GilServer {
             && matches!(name.as_str(), "gil_start" | "gil_status" | "gil_context" | "gil_story"
                 | "gil_open" | "gil_close" | "gil_restore" | "gil_revisit" | "gil_cycle"
                 | "gil_monitor_prepare" | "gil_report_visuals");
-        let result = self.dispatch(name, input).await;
+        let mut result = self.dispatch(name.clone(), input.clone()).await;
+        if name == "gil_start" && result.is_error != Some(true)
+            && result.structured_content.as_ref().is_some_and(|v| v["ok"] == true) {
+            // Creation is already committed. A display preparation failure must never turn
+            // that success into a failed start or encourage a duplicate creation.
+            let monitor = self.monitor.clone();
+            let root = input["project_root"].as_str().unwrap_or_default().to_owned();
+            let prepared = monitor::run(move || monitor.prepare(&root)).await;
+            if let Some(scope) = prepared.structured_content.as_ref()
+                .filter(|_| prepared.is_error != Some(true))
+                .and_then(|v| v["scope_id"].as_str()) {
+                guidance::prepend(&mut result, format!(
+                    "GIL 시작은 성공했다. Monitor 준비도 완료했다. 지금 다음 도구를 먼저 호출한다: show_gil_monitor({}). 그 뒤 같은 project_root로 첫 Interview의 gil_open을 호출한다. gil_start나 gil_monitor_prepare를 반복하지 않는다. 화면이 보인다고 아직 단정하지 않는다.",
+                    serde_json::json!({"scope_id": scope})));
+            } else {
+                let detail = prepared.structured_content.as_ref()
+                    .and_then(|v| v["said"].as_str()).unwrap_or("Monitor 준비 결과를 확인하지 못했다");
+                guidance::prepend(&mut result, format!(
+                    "GIL 시작은 성공했으나 Monitor 준비는 실패했다: {detail}. gil_start를 반복하지 않는다. 표시 실패를 사용자에게 알리고 기록된 Interview를 이어간다. Monitor 재시도는 일시적 실패일 때만 gil_monitor_prepare로 한 번 한다."));
+            }
+        } else if name == "gil_monitor_prepare" && result.is_error != Some(true) {
+            if let Some(scope) = result.structured_content.as_ref().and_then(|v| v["scope_id"].as_str()) {
+                let hint = format!("다음 호출: show_gil_monitor({}). 준비만으로 화면이 표시되지는 않는다.", serde_json::json!({"scope_id": scope}));
+                guidance::prepend(&mut result, hint);
+            }
+        }
+        guidance::after(&name, &mut result);
         if project_use && result.is_error != Some(true) {
             let session = self.companion_session.clone();
             let _ = tokio::task::spawn_blocking(move || {
@@ -113,6 +140,7 @@ impl ServerHandler for GilServer {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().enable_resources().build())
             .with_server_info(Implementation::new("gil", env!("CARGO_PKG_VERSION")))
+            .with_instructions(guidance::INSTRUCTIONS)
     }
     fn get_tool(&self, name: &str) -> Option<Tool> {
         surface::tools().iter().find(|t| t.name == name).cloned()
