@@ -48,6 +48,16 @@ if ($SeedLegacyRuntime) {
     }
 }
 
+# Re-running the exact same installer is a normal repair action. It must preserve immutable Core
+# bytes, refresh the Companion files and receipt, and exit successfully.
+$repair = Start-Process -FilePath $Installer -ArgumentList '/S' -Wait -PassThru
+if ($repair.ExitCode -ne 0) { throw "NSIS repair install exited $($repair.ExitCode)" }
+$RepairReceipt = Get-Content -Raw -LiteralPath $ReceiptPath | ConvertFrom-Json
+if ($RepairReceipt.version -ne $Receipt.version -or
+    (Get-FileHash -LiteralPath $Core -Algorithm SHA256).Hash.ToLowerInvariant() -ne $CoreHash) {
+    throw 'Repair install changed the selected immutable Core'
+}
+
 $entries = @(Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' | Get-ItemProperty |
     Where-Object DisplayName -eq $DisplayName)
 if ($entries.Count -ne 1) { throw "Expected one GIL Companion uninstall entry, found $($entries.Count)" }
@@ -163,7 +173,7 @@ $SignerThumbprint = if ($Signature.SignerCertificate) { $Signature.SignerCertifi
         signature_status = $Signature.Status.ToString()
     }
     runtime = [ordered]@{ version = $Receipt.version; architecture = $Receipt.architecture; cohort = $Receipt.cohort; core_sha256 = $CoreHash }
-    acceptance = [ordered]@{ silent_current_user_install = $true; legacy_runtime_preserved = [bool]$SeedLegacyRuntime; visible_companion_window = $true; launcher_mcp = $true; running_core_write_refused = $true; codex_cli_registration = $true; codex_cli_disconnect = $true; companion_uninstall = $true; runtime_preserved = $true }
-    exclusions = @('Companion UI contents', 'Codex Desktop conversation', 'complete runtime cleanup', 'repair', 'SmartScreen reputation')
+    acceptance = [ordered]@{ silent_current_user_install = $true; idempotent_repair_install = $true; legacy_runtime_preserved = [bool]$SeedLegacyRuntime; visible_companion_window = $true; launcher_mcp = $true; running_core_write_refused = $true; codex_cli_registration = $true; codex_cli_disconnect = $true; companion_uninstall = $true; runtime_preserved = $true }
+    exclusions = @('Companion UI contents', 'Codex Desktop conversation', 'complete runtime cleanup', 'SmartScreen reputation')
 } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $Evidence -Encoding utf8NoBOM
 Get-Content -Raw -LiteralPath $Evidence

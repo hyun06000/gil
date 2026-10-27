@@ -39,6 +39,7 @@ const refreshButton = el(".scope .refresh");
 const forgetButton = el(".scope .forget");
 const connectCodexButton = el(".scope .connect-codex");
 const updateButton = el(".scope .update");
+const runtimeStatus = el(".title .runtime");
 const settingsSay = el(".settings-say");
 const stage = el(".stage");
 const wires = el(".stage .wires");
@@ -970,11 +971,27 @@ async function disconnectCodex() {
   }
 }
 
+async function repairCodexConnection() {
+  busyOn("connecting", connectCodexButton);
+  try {
+    const approved = window.confirm(
+      "예전 GIL 플러그인 또는 연결을 제거하고, 지금 설치된 GIL Core로 교체할까요?\n다른 플러그인과 Project 파일은 건드리지 않습니다.",
+    );
+    if (!approved) return;
+    say(await window.GIL_HOST.repairCodexConnection());
+    await refreshCodexConnection();
+  } catch (error) {
+    say(`Codex 연결을 교체하지 못했다 — ${why(error)}`);
+  } finally {
+    busyOff(connectCodexButton);
+  }
+}
+
 async function refreshCodexConnection() {
   const connection = await window.GIL_HOST.codexConnection();
   codexConnection = connection.state;
   connectCodexButton.hidden = false;
-  connectCodexButton.disabled = codexConnection === "conflict";
+  connectCodexButton.disabled = false;
   if (codexConnection === "connected") {
     connectCodexButton.textContent = "Codex 연결 해제";
     connectCodexButton.title = "GIL이 만든 MCP 등록만 확인 후 해제한다";
@@ -984,9 +1001,9 @@ async function refreshCodexConnection() {
     connectCodexButton.title = "공식 Codex CLI로 GIL MCP를 등록한다";
     connectCodexButton.onclick = connectCodex;
   } else {
-    connectCodexButton.textContent = "Codex 설정 충돌";
-    connectCodexButton.title = "이름이 같은 다른 gil 등록이 있어 자동으로 변경하지 않는다";
-    connectCodexButton.onclick = null;
+    connectCodexButton.textContent = "이전 GIL 연결 교체";
+    connectCodexButton.title = "사용자 확인 후 예전 GIL 플러그인·연결을 제거하고 설치된 Core에 연결한다";
+    connectCodexButton.onclick = repairCodexConnection;
   }
 }
 
@@ -1029,6 +1046,9 @@ async function start() {
       typeof window.GIL_HOST.codexConnection === "function") {
     try {
       const capability = await window.GIL_HOST.codexCapability();
+      if (capability.runtime_version) {
+        runtimeStatus.textContent = `Core ${capability.runtime_version}`;
+      }
       if (!capability.supported) {
         connectCodexButton.hidden = true;
       } else if (!capability.runtime_installed) {

@@ -26,11 +26,15 @@ Plugin 묶음이며 receipt도 `publishable: false`다.
 Core를 덮어쓰지 않고 새 버전 디렉터리를 만든 뒤 작은 선택 기록만 바꾼다. 새 기록이나 Core가
 손상되면 `current.previous` 한 판까지만 검증해 사용한다. 런처는 Job Object로 자식 Core를
 묶는다. Companion의 **Codex 연결** 버튼은 사용자가 확인한 뒤 공식 `codex mcp add` 명령으로
-이 고정 진입점을 등록하며 기존 `gil` 등록을 강제로 교체하지 않는다.
+이 고정 진입점을 등록한다. 같은 installer를 다시 실행하면 이미 설치된 불변 Core bytes는
+덮어쓰지 않고 Companion과 선택 기록을 복구 설치한다. 예전 `gil-companion-prototype` Plugin이나
+다른 `gil` 등록이 함께 있으면 연결 완료로 표시하지 않으며, 사용자가 Companion의
+**이전 GIL 연결 교체**를 확인한 경우에만 공식 Codex CLI로 그 GIL 항목을 제거하고 고정 런처를
+등록한다. 다른 Plugin과 Project 파일은 변경하지 않는다.
 
 이 코드는 구현 증거이지 출시 증거가 아니다. NSIS 자체 실행, updater가 설치한 다음 연결의
 실제 Core identity, Codex Desktop의 제한 토큰, uninstall/repair는 Windows x64 실기기에서
-아직 확인하지 않았다. 런처 자체를 바꾸는 업데이트 경로도 첫 판에서는 동결한다.
+새 후보로 다시 확인해야 한다. 런처 자체를 바꾸는 업데이트 경로도 첫 판에서는 동결한다.
 
 `.github/workflows/windows-product.yml`은 이 간극을 좁히는 수동 제품 후보 작업이다. PR에서는
 계약만 검사하고, 승인된 `workflow_dispatch`에서만 updater 개인키와 Authenticode PFX를 읽는다.
