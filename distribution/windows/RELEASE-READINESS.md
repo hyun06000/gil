@@ -1,6 +1,6 @@
 # Windows release readiness
 
-현재 판정: **NO-GO — x64 설치 경로는 구현됐고, 서명 산출물과 Windows 종단 인수가 남았다.**
+현재 판정: **서명된 일반 공개판은 NO-GO. 친구·테스터용 unsigned x64 preview는 제한 인수 완료.**
 
 ## 출시 필수 게이트
 
@@ -30,9 +30,11 @@
 - 사용자가 확인한 뒤 `codex mcp add gil -- <launcher> mcp --serve`를 호출하는 연결 버튼
 - 실제 서명 비밀이 있을 때만 실행되는 Windows 제품 후보 CI와 설치 후 런처/Codex CLI smoke
 - 정확히 소유한 등록만 해제하는 버튼과 Companion 제거 뒤 runtime/Project 보존 계약
+- Windows x64 실기기에서 unsigned `0.1.1-owner.3` 설치, Companion 실행, Codex 연결·이전 연결
+  교체, 파일 생성과 사용자 버튼 업데이트 완료(2026-10-27 사용자 보고)
 
-이 증거는 Authenticode 서명 installer 실행, 실제 Companion UI, Codex Desktop 제한 토큰,
-일반 사용자 설치 또는 안전한 업데이트의 종단 증거가 아니다. 특히 testbed 전용 코드와
+이 증거는 Authenticode 서명 installer, SmartScreen publisher, clean standard-user PC,
+제거 또는 모든 실패 복구의 종단 증거가 아니다. 특히 testbed 전용 코드와
 `publishable: false` archive는 출시 자산으로 승격하지 않는다.
 
 ## 출시 결정 규칙

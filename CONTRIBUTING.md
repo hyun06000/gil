@@ -1,6 +1,6 @@
 # Contributing to GIL
 
-GIL은 공개 preview 단계다. 사용자 설치는 [marketplace 안내](distribution/codex/INSTALL.md)를 따르며,
+GIL은 공개 preview 단계다. 사용자 설치는 [통합 설치 안내](INSTALL.md)를 따르며,
 아래는 **기여자용** 절차다. 현재 검수 범위는 [README](README.md)와 [Roadmap](spec/GIL_Roadmap.md)을 본다.
 
 ## 처음 참여하기
@@ -95,4 +95,4 @@ Tauri 포함 workspace 전체 성공이라고 부르지 않는다. 시험마다 
 marketplace 게시를 구분하며 [오픈소스 공개 준비 게이트](spec/GIL_Open_Source_Readiness_v0.1.md)를
 정식 출시 전에 닫는다. 비밀·서명 키는 source, 공개 로그 또는 artifact에 포함하지 않는다.
 첫 unsigned 시험판은 별도 승인된 제한 채널이며 [배포 계약](distribution/codex/RELEASE-macos.md)을
-따른다. 새 Mac 인수 유예나 미공증을 통과로 표시하지 않는다.
+따른다. 친구·테스터의 unsigned 인수를 서명·공증된 일반 공개판 통과로 표시하지 않는다.

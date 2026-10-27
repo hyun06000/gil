@@ -1,20 +1,22 @@
 # Windows 배포 상태
 
-> 상태: **x64 제품 경로 구현 중. Windows 실기기 서명·설치 인수 전이므로 아직 배포하지 않음.**
+> 상태: **친구·테스터용 unsigned x64 preview는 설치·연결·업데이트 인수 완료. 서명된 일반 공개판은 NO-GO.**
 
 Windows x64와 ARM64용 native Core 후보는 CI에서 빌드·실행된다. 제품 경로는 우선 x64로 좁혔다.
-현재 사용자용 NSIS 구성, 사용자가 누르는 서명 검증 updater, 고정 런처, 버전별 Core 설치와
-Codex 연결 버튼까지 코드에 들어왔다. 아직 Authenticode 서명 산출물과 clean Windows 실기기
-설치·업데이트 E2E 검수가 없으므로 지원 완료로 표시하지 않는다.
+사용자용 NSIS, 사용자가 누르는 서명 검증 updater, 고정 런처, 버전별 Core 설치와 Codex 연결 버튼이
+연결됐다. 2026-10-27 Windows x64 실기기에서 unsigned `0.1.1-owner.3` 설치, Companion 실행,
+Codex 연결·이전 GIL 연결 교체, 파일 생성과 사용자 버튼 업데이트를 확인했다. 친구용 설치 절차와
+정확한 자산은 [INSTALL](INSTALL.md)을 따른다. Authenticode publisher, SmartScreen 평판,
+clean standard-user PC 전체 인수와 ARM64는 완료하지 않았으므로 일반 지원 완료로 표시하지 않는다.
 `candidate.mjs`가 만드는 `tar.gz`는 검토용
 Plugin 묶음이며 receipt도 `publishable: false`다.
 
 따라서 다음 표현은 현재 사실이 아니다.
 
-- “Windows를 지원한다.”
+- “서명된 Windows 일반 공개판을 지원한다.”
 - “archive를 풀고 Plugin을 등록하면 설치가 끝난다.”
 - “업데이트가 다음 연결부터 자동으로 적용된다.”
-- “CI에서 통과했으므로 일반 사용자 PC에서도 설치·화면·업데이트가 동작한다.”
+- “CI에서 통과했으므로 모든 일반 사용자 PC에서도 설치·화면·업데이트가 동작한다.”
 
 ## 현재 코드의 두 실행 경로
 
@@ -32,9 +34,9 @@ Core를 덮어쓰지 않고 새 버전 디렉터리를 만든 뒤 작은 선택 
 **이전 GIL 연결 교체**를 확인한 경우에만 공식 Codex CLI로 그 GIL 항목을 제거하고 고정 런처를
 등록한다. 다른 Plugin과 Project 파일은 변경하지 않는다.
 
-이 코드는 구현 증거이지 출시 증거가 아니다. NSIS 자체 실행, updater가 설치한 다음 연결의
-실제 Core identity, Codex Desktop의 제한 토큰, uninstall/repair는 Windows x64 실기기에서
-새 후보로 다시 확인해야 한다. 런처 자체를 바꾸는 업데이트 경로도 첫 판에서는 동결한다.
+코드와 CI만으로 출시를 주장하지 않는다. 위 사용자 인수는 unsigned friends-only x64 후보의
+설치·연결·작업·업데이트 증거다. 서명된 NSIS, clean standard-user PC, SmartScreen publisher,
+uninstall과 런처 자체를 바꾸는 업데이트 경로는 별도 후보에서 확인해야 한다.
 
 `.github/workflows/windows-product.yml`은 이 간극을 좁히는 수동 제품 후보 작업이다. PR에서는
 계약만 검사하고, 승인된 `workflow_dispatch`에서만 updater 개인키와 Authenticode PFX를 읽는다.

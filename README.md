@@ -41,20 +41,21 @@ GIL의 주 사용자는 비개발자다. 인간은 명령과 저장 형식을 �
 유지하며, fullscreen 실패를 이유로 자동 실행하지 않는다. inline 카드는 미리보기이지 설치 완료
 상태가 아니다. PiP는 현재 지원을 주장하지 않는다.
 
-소스는 [MIT 라이선스](LICENSE)로 공개한다. 첫 사용자 채널은 **Apple 개발자 서명·공증 없는
-Codex/macOS Apple Silicon `0.2.1-preview.6`**(현재 Core·Skill·fullscreen Monitor, unsigned prerelease)다. [설치 안내](distribution/codex/INSTALL.md)에 따라
-Codex에게 검증된 marketplace Plugin 설치를 부탁한 뒤 작업 폴더를 선택하면 된다.
+소스는 [MIT 라이선스](LICENSE)로 공개한다. 현재 친구·테스터용 채널은 **서명되지 않은 preview**다.
+[통합 설치 안내](INSTALL.md)에서 OS와 CPU에 맞는 검수본을 확인한 뒤 설치한다. macOS Apple
+Silicon은 Codex Plugin `0.2.1-preview.6`, Windows x64는 Companion installer
+`0.1.1-owner.3`이다.
 **Node·Cargo·Homebrew·별도 Companion 설치는 필요하지 않다.** 설치 출처는
 [gil-marketplace](https://github.com/hyun06000/gil-marketplace)이며, 범용 Plugins Directory 등재와는 다르다.
 
-새 Mac 검수는 **유예·미통과**다. macOS가 실행을 막으면 보안 설정을 끄지 말고 중단한다.
-기존 Mac의 공식 설치·제거/재설치·preview.1↔preview.2 복구·프로젝트 보존·실제 fullscreen 화면을
-검수했다. 공개 HTTPS 설치와 원본 CI 파일의 증거는
-[preview.3 배포 장부](distribution/codex/PREVIEW-3-PUBLICATION-20260930.md)에 둔다.
-정식 신뢰 채널의 Apple 서명·공증, Windows·Intel 지원은 남아 있다. Windows native Core와
-검토용 archive가 존재하더라도 **Windows 설치판은 없다**. 현재 archive는 서명된 installer가
-아니며, Host cache의 실행 파일을 직접 쓰는 경로에는 실행 중 교체 문제가 남아 있다.
-[Windows 배포 상태](distribution/windows/README.md)를 현재 판정의 정본으로 삼는다.
+깨끗한 Apple Silicon Mac VM에서 Git/Xcode Command Line Tools가 없는 상태의 Git 없는 설치와
+GIL 동작을 확인했다. 그 VM의 fullscreen 전환과 앱 완전 종료 뒤 복원은 별도 확인 사항이다.
+Windows x64 실기기에서는 installer 설치, Companion의 Codex 연결·이전 연결 교체, 파일 생성과
+사용자 버튼 업데이트를 확인했다. 두 배포 모두 OS publisher 신뢰를 제공하는 Apple
+Developer ID/공증 또는 Authenticode 서명은 없다. Intel Mac, Windows ARM64와 서명된 일반 공개판은
+남아 있다. OS가 실행을 막으면 보안 설정을 끄거나 ACL을 강제로 바꾸지 말고 중단한다.
+[Mac 상세 안내](distribution/codex/INSTALL.md), [Windows 상세 안내](distribution/windows/INSTALL.md)와
+[Windows 배포 상태](distribution/windows/README.md)를 따른다.
 [시험판 조건](distribution/codex/RELEASE-macos.md)과 [보안 제보 안내](SECURITY.md)를 따른다.
 Claude Desktop은 폴더 없는 대화에서 Plugin 화면이 확인됐지만, 폴더 연결 뒤의 표시 차단과
 fullscreen의 도구 승인 창 가림이 남아 있다. [호출 경로별 진단](mcp-app/CLAUDE-DESKTOP-ROUTES.md)을
@@ -225,9 +226,9 @@ GIL은 모델의 비공개 chain-of-thought를 저장하려는 시스템이 아�
 - Windows 설치·경험 수집 뒤 홍보, 홍보 중 OpenAI와 로컬 MCP App 공식 디렉터리 노출 경로 협의
 - 독립 Claude 트랙: Anthropic 설치·화면·작업 경험 강화와 공용 변경의 회귀검증
 
-2026-09-30 사용자가 기존 Mac에서 Plugin 제거·재설치·프로젝트 실행 성공을 보고했다.
-외부 시험 사용자 모집을 시작하되 실제 외부 인수와 혼동하지 않는다. 새 Mac·서명/공증·
-Windows·공식 디렉터리 등재는 여전히 미완료다. 기존 판독 실험과 시나리오 검증도 유지한다.
+2026-10-27까지 기존 Mac, 깨끗한 Apple Silicon Mac VM과 Windows x64 실기기에서 위에 적은
+preview 범위를 확인했다. 친구·테스터 검수를 일반 사용자 지원, 서명·공증 또는 공식 디렉터리
+등재와 혼동하지 않는다. 기존 판독 실험과 시나리오 검증도 유지한다.
 
 상세 진행 상황과 합격 조건은 [GIL Living Roadmap](spec/GIL_Roadmap.md)에서 추적한다.
 
@@ -250,7 +251,7 @@ gil help     Agent가 지금 필요한 규칙 하나를 배운다.
 
 아직 정식 릴리스가 아니다. 다음은 기여자·개발 검수용이며, 비개발자에게 요구하는 설치 절차가
 아니다. Rust 개발 환경에서 저장소의 현재 작업 트리를 직접 설치한다. 일반 사용자는
-[공개 preview 설치 안내](distribution/codex/INSTALL.md)를 따른다. 일반 질문과 문제 제보는 [SUPPORT](SUPPORT.md), 기여·시험 방법은
+[공개 preview 설치 안내](INSTALL.md)를 따른다. 일반 질문과 문제 제보는 [SUPPORT](SUPPORT.md), 기여·시험 방법은
 [CONTRIBUTING](CONTRIBUTING.md)을 참고한다.
 
 ```bash
