@@ -42,6 +42,8 @@ use crate::rules::RuleSet;
 use crate::store::{self, LEGACY_WALK_PATH, StoreError};
 use crate::will::ActionContract;
 
+mod evidence;
+
 #[cfg(feature = "visual-authoring")]
 #[path = "visual_start.rs"]
 mod visual_start;
@@ -399,6 +401,7 @@ impl ProjectSession {
         // 「닫을 자리가 없다」로 거절되는데, 그 말은 사실이지만 무엇을 해야 하는지
         // 알려 주지 않는다. 판정은 `Project` 의 그 함수 하나가 한다.
         self.project.no_pending_revisit().map_err(SessionError::Action)?;
+        let report = self.link_learning(report)?;
         let cycle = self.project.cycles().current();
         let opened = cycle
             .step_now_open()
@@ -427,9 +430,12 @@ impl ProjectSession {
     /// (Artifact Model §3.5·§10).
     fn close_verify(&mut self, report: Report) -> Result<Closed, SessionError> {
         let world = capture(&self.root()?, &self.store()?)?;
-        self.project
-            .close_verify_step(report, world)
-            .map_err(SessionError::Action)
+        let mut next = self.project.clone();
+        let closed = next.close_verify_step(report.clone(), world.clone())
+            .map_err(SessionError::Action)?;
+        self.require_verify_evidence(&report, &world)?;
+        self.project = next;
+        Ok(closed)
     }
 
     /// Experimental format-5 entry point. The opt-in visual-authoring MCP uses it;
@@ -482,7 +488,8 @@ impl ProjectSession {
             }
         }
         let mut next = self.project.clone();
-        let receipt = next.close_verify_with_registry(report, world, registry).map_err(SessionError::Action)?;
+        let receipt = next.close_verify_with_registry(report.clone(), world.clone(), registry).map_err(SessionError::Action)?;
+        self.require_verify_evidence(&report, &world)?;
         for file in &files { objects.put_visual(&file.image).map_err(|e| error(e.to_string()))?; }
         for file in &mut files { file.revalidate().map_err(error)?; }
         store::save_within(&self._lock, &next, &self.state_path).map_err(SessionError::Store)?;
@@ -498,6 +505,7 @@ impl ProjectSession {
     ) -> Result<(), SessionError> {
         use crate::visual_report::registry::ReportVisuals;
         self.project.no_pending_revisit().map_err(SessionError::Action)?;
+        let report = self.link_learning(report)?;
         let cycle = self.project.current_cycle();
         let mut next = self.project.clone();
         if let Some(opened) = cycle.step_now_open() {
@@ -1089,6 +1097,8 @@ fn initializable(gil: &Path, state_path: &Path) -> Result<(), SessionError> {
 /// **상태를 읽기도 전에** 돌아온다. 어떤 파일도 만들거나 바꾸지 않았다.
 #[derive(Debug)]
 pub enum SessionError {
+    /// New-write evidence/learning policy; never used to invalidate historical records on load.
+    Evidence(String),
     /// 다른 GIL 명령이 이 프로젝트를 쥐고 있다.
     Busy { path: String },
     /// 잠금 자체를 걸 수 없었다 — 경쟁이 아니다.
@@ -1220,6 +1230,7 @@ impl From<LockError> for SessionError {
 impl fmt::Display for SessionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            SessionError::Evidence(reason) => write!(f, "[verify_evidence_required] {reason}\nVerify 증거 파일과 Snapshot → Analysis 해석 → Outcome 배움의 연결을 보존해야 한다. 현재 단계는 닫히지 않았다."),
             SessionError::Busy { .. } => write!(
                 f,
                 "다른 GIL 명령이 이 프로젝트를 사용하고 있다.\n\n\

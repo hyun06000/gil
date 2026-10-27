@@ -113,7 +113,12 @@ pub fn call(name: &str, input: &Value) -> CallToolResult {
     match crate::command::action(&args, root.map(Path::new), body) {
         Ok(said) => result(true, Some(0), said, String::new()),
         // The old CLI stderr boundary used eprintln!; preserve its final newline.
-        Err(problem) => annotate_code(result(false, Some(1), String::new(), format!("{problem}\n")), &problem),
+        Err(problem) => {
+            let problem = if name == "gil_cycle" && input.get("action").and_then(Value::as_str) == Some("close") {
+                format!("도구 선택 안내: gil_cycle은 Report를 받는 입력이 없어 닫기에 사용할 수 없다. 같은 gil_cycle 호출을 반복하지 않는다. 아래 Report를 작성해 gil_close(project_root, report)로 제출한다. Cycle도 gil_close로 닫는다. 이 실패로 닫힌 것은 없다.\n\n{problem}")
+            } else { problem };
+            annotate_code(result(false, Some(1), String::new(), format!("{problem}\n")), &problem)
+        },
     }
 }
 

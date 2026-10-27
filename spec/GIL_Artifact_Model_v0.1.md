@@ -307,8 +307,31 @@ Interview의 Question·Interpretation·Synthesis, Experiment의 Define·Hypothes
 「다시 가리킨다」는 **ID 재사용이 아니다.** 그 구분은 §13에 있다.
 
 `SnapshotRef`는 **사건의 이름이 아니라 하나의 불변 Artifact 세계의 정체성**이기 때문이다
-(§13). 아무것도 바꾸지 않은 Verify를 닫으면 새 이름이 나지 않고, 그 Verify가 기존 세계를
-가리킨다.
+(§13). 과거 기록과 저층 도메인에서는 같은 세계를 관측한 Verify가 기존 세계를 가리킬 수 있다.
+새 CLI/MCP 쓰기는 아래 증거 필수 조건을 먼저 통과해야 하므로, 변화 없는 세계만으로는 닫히지 않는다.
+
+### 새 Verify의 증거 필수 조건 (2026-10-27)
+
+CLI·MCP의 공통 파일시스템 트랜잭션에서 Verify Report의 `evidence_files`를 검사한다.
+프로젝트 상대 경로를 한 줄에 하나씩 1~32개 적으며, 중복·절대경로·탈출 경로·내부 저장소 경로는
+거절한다. 각 경로는 방금 캡처한 Snapshot 안의 비어 있지 않은 일반 파일이어야 하고, 최소 한
+파일은 현재 계보의 기준 Snapshot에 비해 새로 생성되었거나 내용이 달라야 한다. 다른 파일이
+변했다는 사실만으로 변하지 않은 증거를 새 관측처럼 제출할 수 없다. 읽기 전용 조사·실패한
+실험도 실제 관측을 문서·로그·데이터·코드·시각자료로 남긴다. 채팅이나 Report만으로 닫지 않는다.
+
+검증과 닫기는 같은 트랜잭션의 후보 상태에서 처리한다. 거절하면 Node·Will·Journey·Snapshot
+등록과 저장된 논리 상태를 전진시키지 않는다. 캡처 중 생긴 미참조 객체는 기존 규칙을 따른다.
+시각자료의 `not_needed`·`missing`은 이미지에 대한 선언이며 파일 증거를 면제하지 않는다.
+`evidence_files`는 닫힌 Verify의 `snapshot_ref`로 고정된 바이트를 가리킨다.
+
+새 Analysis의 `interpretation`, Experiment Outcome의 `lesson`은 공백일 수 없다. Core가
+현재 계보의 닫힌 Verify를 `evidence.verify_ref`로, 닫힌 Analysis를 `learning.analysis_ref`로
+연결한다. 사용자가 이 필드를 보내면 같은 참조여야 한다. Cycle Report는 기존 `outcome_ref`로
+이 배움을 이어받는다. 과거 기록은 수정·재검증하지 않으며, 저층 load/save·도메인 API는 여전히
+호환성/개발용이다. 이 정책은 모든 사용자 CLI/MCP 쓰기 경로에 적용되며 우회 설정은 없다.
+
+파일 존재·불변 바이트·계보 연결은 기계적으로 검사한다. 내용의 진실성·학습의 깊이까지 자동으로
+증명하지는 않는다. 에이전트는 출처·방법·관측·한계를 정직하게 문서화해야 한다.
 
 `gil start`에서는 아직 Snapshot 저장소가 없으므로 관측한 최초 기준 세계에 **언제나 새
 `SnapshotRef`를 발급한다.**

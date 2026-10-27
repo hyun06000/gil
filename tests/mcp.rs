@@ -164,12 +164,15 @@ fn format5_verify_without_images_uses_typed_close_with_a_declaration() {
     let mut p=common::bootstrap_from(load_product(&root));
     common::up_to_verify(&mut p);
     save_product(&root, &p);
-    let r=common::full_report(&common::spec(),CycleKind::Experiment,NodeKind::Verify);
+    let r=common::evidence_report(&root, common::full_report(&common::spec(),CycleKind::Experiment,NodeKind::Verify));
     let report: String=r.field_names().map(|k| format!("{k}: {}\n",r.get(k).unwrap())).collect();
     let before=std::fs::read(product_state_path(&root)).unwrap();
     // The ordinary text close is the wrong shape for a format-5 Verify: refused, nothing written.
     let text=monitor_call(&mut mcp,"gil_close",json!({"project_root":root,"report":report}));
     assert_eq!(text["isError"],true,"{text}");
+    for field in ["expected_owner", "visuals", "not_needed", "evidence_files", "step:C2/S3"] {
+        assert!(text["structuredContent"]["problem"].as_str().unwrap().contains(field), "{text}");
+    }
     assert_eq!(std::fs::read(product_state_path(&root)).unwrap(),before);
     // Half-typed shape is a schema rejection that names the missing field.
     let half=mcp.request("tools/call",json!({"name":"gil_close","arguments":{"project_root":root,"report":report,
@@ -218,7 +221,7 @@ fn authoring_stdio_close_reuse_confirmation_and_rejections() {
     let read_args=json!({"project_root":root,"owner":owner});
     let initial=monitor_call(&mut mcp,"gil_report_visuals",read_args.clone());
     assert_eq!(initial["structuredContent"]["confirmed"],false);
-    let args=json!({"project_root":root,"report":report(NodeKind::Verify),"expected_owner":owner,
+    let args=json!({"project_root":root,"report":format!("{}evidence_files: 합성.png\n",report(NodeKind::Verify)),"expected_owner":owner,
         "visuals":{"attachments":[{"key":"screen","path":"합성.png","source_kind":"generated","source_description":"synthetic only"}],
         "uses":[{"source":{"kind":"new","key":"screen"},"caption":"<script>not executable</script>","alt":"gray pixel","purpose":"wire check"}],"declaration":{"state":"attached"}}});
     let before=std::fs::read(product_state_path(&root)).unwrap();
@@ -232,6 +235,12 @@ fn authoring_stdio_close_reuse_confirmation_and_rejections() {
         assert_eq!(got["isError"],true,"{got}");
         assert_eq!(std::fs::read(product_state_path(&root)).unwrap(),before);
     }
+    let mut bad_report = args.clone();
+    bad_report["report"] = json!("execution: observed\nresult: documented\nevidence_files:\n합성.png");
+    let syntax = monitor_call(&mut mcp, "gil_close", bad_report);
+    assert_eq!(syntax["structuredContent"]["code"], "invalid_report");
+    assert!(syntax["structuredContent"]["said"].as_str().unwrap().contains("evidence_files: |"));
+    assert_eq!(std::fs::read(product_state_path(&root)).unwrap(),before);
     let mut malformed=args.clone(); malformed["visuals"]["surprise"]=json!(true);
     assert!(mcp.request("tools/call",json!({"name":"gil_close","arguments":malformed}))["error"].is_object());
     let mut orphan=args.clone(); orphan["visuals"]["uses"]=json!([]);
@@ -350,7 +359,7 @@ fn authoring_declarations_and_failed_commit_keep_reports_open() {
         save_product(&root, &p);
         let mut png=Vec::new(); png::Encoder::new(&mut png,1,1).write_header().unwrap().write_image_data(&[2]).unwrap();
         std::fs::write(root.join("a.png"),png).unwrap();
-        let report=common::full_report(&common::spec(),gil::CycleKind::Experiment,gil::NodeKind::Verify);
+        let report=common::evidence_report(&root, common::full_report(&common::spec(),gil::CycleKind::Experiment,gil::NodeKind::Verify));
         let body=report.field_names().map(|k|format!("{k}: {}\n",report.get(k).unwrap())).collect::<String>();
         let owner=json!({"kind":"step","ref":"step:C2/S3"});
         let mut args=json!({"project_root":root,"report":body,"expected_owner":owner,
@@ -390,7 +399,7 @@ fn authoring_competing_closes_publish_only_one_report() {
     let mut p=common::bootstrap(); common::up_to_verify(&mut p);
     gil::save(&p.prepare_visual_upgrade().unwrap(),root.join(gil::STATE_PATH)).unwrap();
     common::private_storage(&root);
-    let report=common::full_report(&common::spec(),gil::CycleKind::Experiment,gil::NodeKind::Verify);
+    let report=common::evidence_report(&root, common::full_report(&common::spec(),gil::CycleKind::Experiment,gil::NodeKind::Verify));
     let body=report.field_names().map(|k|format!("{k}: {}\n",report.get(k).unwrap())).collect::<String>();
     let args=json!({"project_root":root,"report":body,"expected_owner":{"kind":"step","ref":"step:C2/S3"},
         "visuals":{"attachments":[],"uses":[],"declaration":{"state":"not_needed","reason":"synthetic race"}}});
@@ -428,7 +437,7 @@ fn visual_report_tools_read_exact_bytes_and_refuse_unlinked_assets_over_stdio() 
     assert!(bytes.len() > 262144);
     std::fs::write(root.join("image.png"), &bytes).unwrap();
     let mut session = gil::ProjectSession::open(common::spec(), root.join(gil::STATE_PATH)).unwrap();
-    let report = common::full_report(session.project().current_cycle().rules(), gil::CycleKind::Experiment, gil::NodeKind::Verify);
+    let report = common::full_report(session.project().current_cycle().rules(), gil::CycleKind::Experiment, gil::NodeKind::Verify).with("evidence_files", "image.png");
     session.close_verify_with_images_and_commit(report, vec![VisualAttachment {path:"image.png".into(),source_kind:SourceKind::Generated,source_description:"synthetic".into()}], |ids| VisualDeclaration::Attached { uses:vec![VisualUse {asset:ids[0],caption:"wire test".into(),alt:"noise".into(),purpose:"transport".into()}] }).unwrap();
     drop(session);
     std::fs::remove_file(root.join("image.png")).unwrap();
@@ -675,6 +684,112 @@ fn text_of(reply: &serde_json::Value) -> String {
 }
 
 // ── 시험 ───────────────────────────────────────────────────────────────────
+
+#[test]
+fn verify_requires_world_evidence_even_when_visuals_are_not_needed() {
+    use serde_json::json;
+    let (root, settings) = (scratch("verify-evidence"), scratch("verify-evidence-settings"));
+    let mut client = Client::serve_with(&settings); client.initialize();
+    let started = monitor_call(&mut client, "gil_start", json!({"project_root":root}));
+    assert_eq!(started["structuredContent"]["ok"], true);
+    let state = product_state_path(&root);
+    let mut p = common::bootstrap_from(gil::load(common::spec(), &state).unwrap());
+    common::up_to_verify(&mut p); gil::save(&p, &state).unwrap();
+    let before = std::fs::read(&state).unwrap();
+    let mut args = json!({"project_root":root,"report":"execution: 합성 자료를 검사했다\nresult: 관측했다\n"});
+    #[cfg(feature = "visual-authoring")]
+    {
+        args["expected_owner"] = json!({"kind":"step","ref":"step:C2/S3"});
+        args["visuals"] = json!({"attachments":[],"uses":[],"declaration":{"state":"not_needed","reason":"문서 증거"}});
+    }
+    let refused = monitor_call(&mut client, "gil_close", args.clone());
+    assert_eq!(refused["isError"], true, "{refused}");
+    assert!(refused.to_string().contains("verify_evidence_required"), "{refused}");
+    assert_eq!(before, std::fs::read(&state).unwrap());
+    std::fs::write(root.join("observations.md"), "합성 관측: 입력 1+1, 결과 2.").unwrap();
+    args["report"] = json!("execution: 합성 자료를 검사했다\nresult: 관측 결과 2를 문서화했다\nevidence_files: observations.md\n");
+    let closed = monitor_call(&mut client, "gil_close", args);
+    assert_eq!(closed["isError"], false, "{closed}");
+    let p = gil::load(common::spec(), &state).unwrap();
+    let node = p.current_cycle().steps().nodes().iter().find(|n| n.kind == gil::NodeKind::Verify).unwrap();
+    assert!(node.is_closed()); assert!(node.snapshot.is_some());
+    assert_eq!(node.report.as_ref().unwrap().get("evidence_files"), Some("observations.md"));
+    assert!(client.eof().0.success());
+    std::fs::remove_dir_all(root).unwrap(); std::fs::remove_dir_all(settings).unwrap();
+}
+
+#[test]
+fn interview_assent_requires_outcome_and_separate_cycle_close_before_research() {
+    use serde_json::{json, Value};
+    fn action(c: &mut Client, root: &Path, name: &str, mut args: Value) -> Value {
+        args["project_root"] = json!(root);
+        let result = monitor_call(c, name, args);
+        assert_eq!(result["structuredContent"]["ok"], true, "{result}");
+        result
+    }
+    for approved in ["yes", "no"] {
+        let root = scratch(&format!("interview-research-{approved}"));
+        let settings = scratch(&format!("interview-research-settings-{approved}"));
+        let mut c = Client::serve_with(&settings); c.initialize();
+        action(&mut c, &root, "gil_start", json!({}));
+        let contract = "objective: 보고서 목표를 합의한다\nnext_action: 제안을 확인한다\ndone_when: 사용자 답을 받았다\n";
+        for (kind, report) in [
+            ("question", "question: 어떤 보고서인가\nchoices: 주가 / 실적\nresponse: 둘 다 출처와 함께 비교해줘\n"),
+            ("interpretation", "interpretation: 주가와 실적을 각각 확인한다\nunresolved: 없음\n"),
+        ] {
+            action(&mut c, &root, "gil_open", json!({"kind":kind,"contract":contract}));
+            action(&mut c, &root, "gil_close", json!({"report":report}));
+        }
+        let opened = action(&mut c, &root, "gil_open", json!({"kind":"synthesis","contract":contract}));
+        assert!(opened["structuredContent"]["said"].as_str().unwrap().contains("이미 그 제안에 동의했다면"));
+        let report = format!("statement: 주가·실적 근거를 각각 확인한 뒤 보고서로 종합한다\nbasis_refs: step:C1/S2\napproved: {approved}\n");
+        let closed = action(&mut c, &root, "gil_close", json!({"report":report}));
+        let said = closed["structuredContent"]["said"].as_str().unwrap();
+        if approved == "no" {
+            assert!(!said.contains("승인된 Synthesis만"));
+            assert!(said.contains("question"));
+            let refused = monitor_call(&mut c, "gil_open", json!({"project_root":root,"kind":"outcome","contract":contract}));
+            assert_eq!(refused["isError"], true);
+        } else {
+            assert!(said.contains("승인된 Synthesis만 닫혔다"));
+            let opened = action(&mut c, &root, "gil_open", json!({"kind":"outcome", "contract":
+                "objective: 승인된 목표를 판정한다\nnext_action: 승인된 제안으로 다음 방향을 정한다\ndone_when: 판정과 다음 방향이 정해졌다\n"}));
+            assert!(opened["structuredContent"]["said"].as_str().unwrap().contains("프로젝트 전체 실행이 끝날 때까지 열어 두지 않는다"));
+            let before = std::fs::read(product_state_path(&root)).unwrap();
+            let legacy = monitor_call(&mut c, "gil_cycle", json!({"project_root":root,"action":"close"}));
+            assert_eq!(legacy["isError"], true);
+            assert!(legacy["structuredContent"]["problem"].as_str().unwrap().contains("gil_close(project_root, report)"));
+            assert_eq!(std::fs::read(product_state_path(&root)).unwrap(), before);
+            let premature = monitor_call(&mut c, "gil_open", json!({"project_root":root,"kind":"experiment"}));
+            assert_eq!(premature["isError"], true);
+            assert_eq!(std::fs::read(product_state_path(&root)).unwrap(), before);
+            let closed = action(&mut c, &root, "gil_close", json!({"report":
+                "verdict: success\nlesson: 사용자와 조사 범위를 합의했다\nsynthesis_ref: step:C1/S3\nnext_direction.action: close_cycle\nnext_direction.reason: 합의한 범위를 실험으로 확인한다\n"}));
+            assert!(closed["structuredContent"]["said"].as_str().unwrap().contains("Interview Cycle은 아직 열려 있다"));
+            assert!(closed["structuredContent"]["said"].as_str().unwrap().contains("outcome_ref: step:C1/S4"));
+            let before = std::fs::read(product_state_path(&root)).unwrap();
+            let legacy = monitor_call(&mut c, "gil_cycle", json!({"project_root":root,"action":"close"}));
+            assert_eq!(legacy["isError"], true);
+            assert!(legacy["structuredContent"]["problem"].as_str().unwrap().contains("gil_close(project_root, report)"));
+            assert_eq!(std::fs::read(product_state_path(&root)).unwrap(), before);
+            let premature = monitor_call(&mut c, "gil_open", json!({"project_root":root,"kind":"experiment"}));
+            assert_eq!(premature["isError"], true);
+            let missing = monitor_call(&mut c, "gil_close", json!({"project_root":root,"report":"verdict: success\n"}));
+            assert_eq!(missing["isError"], true);
+            assert_eq!(std::fs::read(product_state_path(&root)).unwrap(), before);
+            let closed = action(&mut c, &root, "gil_close", json!({"report":
+                "verdict: success\noutcome_ref: step:C1/S4\nhandoff_summary: 주가·실적 근거를 각각 검증하고 종합하기로 합의했다\nnext_direction.action: open_child\nnext_direction.reason: 먼저 주가 자료를 검증한다\n"}));
+            assert!(closed["structuredContent"]["said"].as_str().unwrap().contains("Interview Cycle까지 닫혔다"));
+            action(&mut c, &root, "gil_open", json!({"kind":"experiment"}));
+            let define = action(&mut c, &root, "gil_open", json!({"kind":"define", "contract":
+                "objective: 주가 자료의 비교 가능성 확인\nnext_action: 기간과 기준이 일치하는지 성공 조건을 정한다\ndone_when: 검증 가능한 기준을 정했다\n"}));
+            assert!(define["structuredContent"]["said"].as_str().unwrap().contains("독립적으로 확인할 질문 하나"));
+        }
+        assert!(c.eof().0.success());
+        std::fs::remove_dir_all(root).unwrap();
+        std::fs::remove_dir_all(settings).unwrap();
+    }
+}
 
 #[test]
 fn start_hands_off_a_prepared_monitor_without_a_second_prepare_or_extra_step() {

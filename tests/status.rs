@@ -237,7 +237,7 @@ fn a_closed_cycle_boundary_reads_its_exit() {
     up_to_verify(session.project_mut());
     write(&dir, "work.txt", "확정할 세계");
     let verify = full_report(&rules(), CycleKind::Experiment, NodeKind::Verify);
-    session.close_step(verify).expect("Verify 를 닫는다");
+    session.close_step(verify.with("evidence_files", "work.txt")).expect("Verify 를 닫는다");
 
     walked(session.project_mut(), NodeKind::Analysis);
     let outcome = opened(session.project_mut(), NodeKind::Outcome);
@@ -280,7 +280,7 @@ fn a_closed_cycle_reports_the_exit_it_recorded_not_a_recomputation() {
 
     write(&dir, "work.txt", "확정할 세계");
     let verify = full_report(&rules(), CycleKind::Experiment, NodeKind::Verify);
-    session.close_step(verify).expect("Verify 를 닫는다");
+    session.close_step(verify.with("evidence_files", "work.txt")).expect("Verify 를 닫는다");
 
     walked(session.project_mut(), NodeKind::Analysis);
     let outcome = opened(session.project_mut(), NodeKind::Outcome);
@@ -329,7 +329,7 @@ fn an_abandoned_branch_and_the_largest_name_are_both_ignored() {
     // 첫 가지 → A2 (버려질 것)
     write(&dir, "work.txt", "버려질 가지");
     let verify = full_report(&rules(), CycleKind::Experiment, NodeKind::Verify);
-    session.close_step(verify).expect("Verify 를 닫는다");
+    session.close_step(verify.with("evidence_files", "work.txt")).expect("Verify 를 닫는다");
     assert_eq!(session.project().world_snapshot().to_string(), "snapshot:A2");
 
     walked(session.project_mut(), NodeKind::Analysis);
@@ -356,7 +356,7 @@ fn an_abandoned_branch_and_the_largest_name_are_both_ignored() {
     walked(session.project_mut(), NodeKind::Hypothesis);
     opened(session.project_mut(), NodeKind::Verify);
     let verify = full_report(&rules(), CycleKind::Experiment, NodeKind::Verify);
-    session.close_step(verify).expect("Verify 를 닫는다");
+    common::close_legacy_fixture(&mut session, verify).expect("historical unchanged Verify");
     session.commit().expect("눕힌다");
     drop(session);
 

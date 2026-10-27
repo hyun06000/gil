@@ -38,6 +38,15 @@ fn run(dir: &Path, args: &[&str], stdin: Option<&str>) -> Output {
 }
 
 fn ok(dir: &Path, args: &[&str], stdin: Option<&str>) -> String {
+    // Successful current-write fixtures leave the observation in the world as required.
+    let evidence = stdin.filter(|body| args == ["close"] && body.contains("execution:") && body.contains("result:"))
+        .map(|body| {
+            let root = dir.ancestors().find(|p| p.join(gil::STATE_PATH).is_file()).unwrap_or(dir);
+            let report = common::evidence_report(root, gil::Report::parse(body).unwrap());
+            let fields = report.field_names().map(|k| format!("{k}: |\n{}\n", report.get(k).unwrap().lines().map(|line| format!("  {line}")).collect::<Vec<_>>().join("\n"))).collect::<String>();
+            fields
+        });
+    let stdin = evidence.as_deref().or(stdin);
     let out = run(dir, args, stdin);
     assert!(
         out.status.success(),

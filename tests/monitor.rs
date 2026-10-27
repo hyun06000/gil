@@ -144,8 +144,7 @@ fn walk_exit(session: &mut ProjectSession, verdict: &str) {
         opened(session.project_mut(), kind);
         let cycle = session.project().cycles().current();
         let report = full_report(cycle.rules(), CycleKind::Experiment, kind);
-        session
-            .close_step(report)
+        common::close_legacy_fixture(session, report)
             .unwrap_or_else(|err| panic!("{kind} 를 닫지 못했다: {err}"));
     }
     opened(session.project_mut(), NodeKind::Outcome);
@@ -155,7 +154,7 @@ fn walk_exit(session: &mut ProjectSession, verdict: &str) {
         .with("lesson", "이 갈래가 남긴 것")
         .with(ACTION, "close_cycle")
         .with(REASON, "판정을 Cycle 경계로 넘긴다");
-    session.close_step(report).expect("판정을 닫는다");
+    common::close_legacy_fixture(session, report).expect("판정을 닫는다");
 }
 
 fn close_cycle_toward(session: &mut ProjectSession, verdict: &str, target: Option<&str>) {
@@ -698,6 +697,7 @@ fn close_with_report(dir: &Path, kind: NodeKind) {
     let session = ProjectSession::open(spec(), state_in(dir)).expect("되살린다");
     let cycle = session.project().cycles().current();
     let report = full_report(cycle.rules(), CycleKind::Experiment, kind);
+    let report = if kind == NodeKind::Verify { common::evidence_report(dir, report) } else { report };
     drop(session);
     stdin_ok(dir, &["close"], &written(&report));
 }
@@ -2343,8 +2343,7 @@ fn reading_one(label: &str) -> PathBuf {
     for kind in [NodeKind::Hypothesis, NodeKind::Verify, NodeKind::Analysis] {
         opened(session.project_mut(), kind);
         let rules = session.project().cycles().current().rules().clone();
-        session
-            .close_step(full_report(&rules, CycleKind::Experiment, kind))
+        common::close_legacy_fixture(&mut session, full_report(&rules, CycleKind::Experiment, kind))
             .expect("걷는다");
     }
     opened(session.project_mut(), NodeKind::Outcome);

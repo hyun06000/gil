@@ -287,7 +287,7 @@ fn the_target_is_the_nearest_verify_not_the_largest_name() {
     // 첫 가지: 파일을 바꾸고 Verify 로 확정한다 → A2
     write(&dir, "work.txt", "버려질 가지");
     let verify = full_report(&rules(), CycleKind::Experiment, NodeKind::Verify);
-    session.close_step(verify).expect("Verify 를 닫는다");
+    session.close_step(verify.with("evidence_files", "work.txt")).expect("Verify 를 닫는다");
     assert_eq!(session.project().world_snapshot().to_string(), "snapshot:A2");
 
     // 실패로 판정하고 define 으로 되돌아간다.
@@ -316,7 +316,7 @@ fn the_target_is_the_nearest_verify_not_the_largest_name() {
     walked(session.project_mut(), NodeKind::Hypothesis);
     opened(session.project_mut(), NodeKind::Verify);
     let verify = full_report(&rules(), CycleKind::Experiment, NodeKind::Verify);
-    session.close_step(verify).expect("Verify 를 닫는다");
+    common::close_legacy_fixture(&mut session, verify).expect("historical unchanged Verify");
     assert_eq!(session.project().world_snapshot().to_string(), "snapshot:A1");
     session.commit().expect("눕힌다");
 

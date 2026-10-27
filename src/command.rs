@@ -687,6 +687,10 @@ fn close(ctx: &Invocation<'_>) -> Result<String, String> {
     }
 }
 
+fn typed_verify_hint(here: crate::StepRef) -> String {
+    format!("\n이 프로젝트는 format 5다. Verify는 일반 텍스트 close로 닫을 수 없다. 연결된 gil_close의 typed 입력을 쓴다.\n  project_root와 report(실제 execution/result/evidence_files)에 다음 두 인자를 함께 보낸다:\n  expected_owner: {{\"kind\":\"step\",\"ref\":\"{here}\"}}\n  이미지가 필요 없는 문서 증거라면 visuals: {{\"attachments\":[],\"uses\":[],\"declaration\":{{\"state\":\"not_needed\",\"reason\":\"이미지가 필요 없는 실제 이유\"}}}}\n  이미지를 남긴 경우 연결된 스키마의 attachments/uses와 attached 선언을 쓴다. 별도 시각 보고 도구를 찾거나 일반 close를 반복하지 않는다.\n")
+}
+
 fn close_step(ctx: &Invocation<'_>, session: &mut Session) -> Result<String, String> {
     let cycle = session.project().cycles().current();
     let node = cycle
@@ -699,7 +703,10 @@ fn close_step(ctx: &Invocation<'_>, session: &mut Session) -> Result<String, Str
     let contract = cycle
         .step_contract(node.id, kind)
         .expect("열린 자리의 종류는 문법이 선언한 것이다");
-    let hint = skeleton_of(&contract, cycle);
+    let mut hint = skeleton_of(&contract, cycle);
+    if kind == crate::NodeKind::Verify && session.project().visual_state.is_some() {
+        hint.push_str(&typed_verify_hint(here));
+    }
 
     let report = read_report(ctx, &hint)?;
     // **한 번에 확정된다** — Report·Closed·Will Done·Journey 판이 함께 눕거나, 아무것도
@@ -1186,10 +1193,12 @@ fn close_help(ctx: &Invocation<'_>) -> Result<String, String> {
         return Ok(String::from("지금 자리의 Close 계약을 문법에서 찾지 못했다.\n"));
     };
     Ok(format!(
-        "닫을 대상\n  {}\n\n필요한 Report\n{}\n입력 골격\n{}\n",
+        "닫을 대상\n  {}\n\n필요한 Report\n{}\n입력 골격\n{}{}\n",
         contract.subject(),
         contract.constraints("  "),
-        skeleton_of(&contract, cycle)
+        skeleton_of(&contract, cycle), if session.can_confirm_artifact() {
+            "\n추가 종료 조건: 실제 증거 파일을 저장하고 evidence_files에 상대 경로를 한 줄에 하나씩 적는다. 모든 파일은 Snapshot에 있고 비어 있지 않아야 하며, 적어도 하나는 기준 세계보다 새롭거나 내용이 달라야 한다.\n"
+        } else { "" }
     ))
 }
 
@@ -1301,9 +1310,23 @@ fn opened_step(session: &Session, opened: crate::Opened) -> String {
     out.push_str(&format!("\n완료 조건\n{}\n", indent(will.done_when())));
     out.push_str("\n진행 경계\n  이 완료 조건을 충족하면 실제 결과를 Report로 적어 닫고 다음 행동으로 간다.\n  다른 목적의 일을 이 노드에 계속 붙이거나, 나중에 기록을 몰아 채우지 않는다.\n");
     if opened.kind == crate::NodeKind::Verify {
-        out.push_str("  이 Verify 계약 안의 구현과 테스트는 함께 수행할 수 있다. 관측을 마치기 전에 닫지 않는다.\n");
+        if session.project().visual_state.is_some() {
+            out.push_str(&typed_verify_hint(opened.step));
+        }
+        out.push_str("  증거 필수: 실제 관측·실행 결과를 프로젝트의 문서·로그·데이터·코드·시각자료 파일로 저장한다. 읽기만 한 작업도 관측 문서를 남긴다. Report의 evidence_files에 상대 경로를 한 줄에 하나씩 적는다. 파일 없음·빈 파일·이전 파일만 그대로 재사용하면 서버가 닫기를 거절한다. 채팅이나 visuals.not_needed/missing으로 대체할 수 없다.\n");
+        out.push_str("  이 Verify 계약 안의 조사·출처 확인·계산·보고서 작성·구현·테스트를 수행한다. 관측을 마치기 전에 닫지 않는다. 완료 뒤에는 닫고 Analysis로 결과를 해석한다.\n");
     } else {
-        out.push_str("  이 단계에서는 산출물을 수정하지 않는다. 구현과 테스트는 Verify에서 수행한다.\n");
+        out.push_str("  이 단계에서는 산출물을 수정하지 않는다. 새 근거를 얻는 외부 자료 조회·측정·계산·원고 작성·구현·테스트는 Verify에서 수행한다. 이미 관측한 자료의 해석은 Analysis에서 한다.\n");
+    }
+    if cycle.kind() == CycleKind::Interview {
+        out.push_str("  Interview는 목표·범위를 합의하는 자리다. 본격적인 웹 조사와 보고서 작성은 채팅으로만 전달하더라도 실행 작업이다. Interview를 닫은 뒤 Experiment의 Verify에서 수행한다.\n");
+        match opened.kind {
+            NodeKind::Synthesis => out.push_str("  제안에 대한 사용자의 답을 기다린다. 이미 그 제안에 동의했다면 다시 묻거나 작업을 시작하지 말고, 실제 승인을 Report에 기록해 이 Synthesis를 닫는다. 이후 영수증에 따라 Outcome을 열고 닫은 다음 Interview Cycle Report를 별도로 닫는다.\n"),
+            NodeKind::Outcome => out.push_str("  이 Outcome은 승인된 목표에 대한 판정이다. 프로젝트 전체 실행이 끝날 때까지 열어 두지 않는다. 판정과 다음 방향이 정해지면 이 Step을 닫고, 이어 Interview Cycle Report를 별도로 닫는다.\n"),
+            _ => {},
+        }
+    } else if opened.kind == NodeKind::Define {
+        out.push_str("  지금은 독립적으로 확인할 질문 하나와 성공 기준만 정한다. 성공 기준은 결과를 미리 알아야 정할 수 있는 값이 아니라 확인 방법·판정 조건이다. 자료를 조회하거나 답을 계산하지 말고 Define Report를 닫은 뒤 Hypothesis를 정한다. 주가 변화와 매출 변화처럼 각각 별도로 참·거짓을 판단할 수 있는 질문은 분리한다. 검색 한 번이나 문단 하나마다 나눌 필요는 없다.\n");
     }
     // **닫기 전에 계약을 미리 알려 준다.** 허용값을 오류로 알아내게 두지 않는다
     // (실사용 M2C 보고). 말은 여기서 짓지 않고 문법에서 읽는다.
@@ -1330,6 +1353,9 @@ fn opened_cycle(session: &Session) -> String {
     // 않는데, 이 Cycle 은 어느 실패에서 갈라진 것이다.
     if let Some(from) = cycle.revisit_from() {
         out.push_str(&format!("갈래 출처: {}\n", from.to_ref()));
+    }
+    if cycle.kind() == CycleKind::Experiment {
+        out.push_str("\n실험 범위\n  이번 Cycle은 독립적으로 확인할 질문 하나를 다룬다. Define에서 문제·판정 기준, Hypothesis에서 검증할 예상을 기록하고 닫는다. 그 뒤 Verify를 열고 자료 조회·계산 등 실제 검증을 시작한다. 별도 질문과 보고서 종합을 한 번에 실행하지 않는다.\n");
     }
     out.push_str(&format!("출발한 세계: {}\n", cycle.entry_snapshot()));
     out.push_str(&next_block(cycle));
@@ -1371,6 +1397,9 @@ fn closed_cycle(session: &Session, closed: &crate::ClosedCycle) -> String {
     }
     match cycles.why_not_open_child() {
         None => {
+            if kind == CycleKind::Interview {
+                out.push_str("  Interview Cycle까지 닫혔다. 합의한 작업을 수행할 때는 독립적으로 확인할 질문 하나를 골라 Experiment → Define → Hypothesis → Verify로 간다. 여러 독립된 문제라면 각 실험의 Analysis·Outcome·Cycle Report를 마친 뒤 다음 문제로 간다. 목표를 다시 확인해야 한다면 Interview를 선택할 수 있다.\n  다음 계약을 쓰기 전에 이번에 검증할 질문 하나와 나중에 다룰 질문을 구분해 사용자에게 짧게 알린다. 예를 들어 주가 변화와 매출 변화는 각각 따로 확인할 수 있으므로 별도 실험이다. 같은 계산식을 쓴다는 이유로 두 문제와 보고서 전체를 한 Define에 넣지 않는다. 남은 문제가 있다는 이유로 완료된 실험을 열어 두지도 않는다.\n");
+            }
             out.push_str(&format!(
                 "  열 수 있는 것\n  {}\n\n실행\n  gil open <종류>\n",
                 cycle_choices(session, &CycleKind::ALL)
@@ -1386,9 +1415,18 @@ fn closed_cycle(session: &Session, closed: &crate::ClosedCycle) -> String {
 /// 다음에 열 수 있는 것 — 하나면 `gil open`, 여럿이면 고르라고 한다.
 fn next_block(cycle: &crate::Cycle) -> String {
     let openable = cycle.openable_here();
-    match openable.as_slice() {
+    let mut out = String::new();
+    if cycle.kind() == CycleKind::Interview {
+        if cycle.can_close() {
+            out.push_str("\nInterview 마무리\n  Outcome Step만 닫혔고 Interview Cycle은 아직 열려 있다. 다음 행동은 Cycle Report를 별도로 닫는 것이다. 조사·보고서 작성이나 새 Experiment는 그 닫기가 성공한 뒤에 시작한다.\n");
+        } else if openable.as_slice() == [NodeKind::Outcome] {
+            out.push_str("\nInterview 마무리\n  승인된 Synthesis만 닫혔다. 다음은 Interview Outcome을 열어 판정하고 닫는 것이다. 그 뒤 Cycle Report도 별도로 닫아야 실행 작업으로 넘어갈 수 있다.\n");
+        }
+    }
+    out.push_str(&match openable.as_slice() {
         [] if cycle.can_close() => {
-            "\n다음\n  이 Cycle 의 Report 를 적어 닫는다\n\n실행\n  gil close\n".to_string()
+            let report = cycle.close_contract().map(|contract| skeleton_of(&contract, cycle)).unwrap_or_default();
+            format!("\n다음\n  이 Cycle 의 Report 를 적어 닫는다. MCP에서는 gil_close(project_root, report)를 사용한다. gil_cycle(action=close)는 Report를 받을 수 없으므로 사용하지 않는다.\n\n{report}\n\n실행\n  gil close\n")
         }
         [] => "\n다음\n  여기서 할 수 있는 것이 없다\n\n실행\n  gil status\n".to_string(),
         [_only] => format!(
@@ -1399,7 +1437,8 @@ fn next_block(cycle: &crate::Cycle) -> String {
             "\n다음\n  열 수 있는 것\n  {}\n\n실행\n  gil open <종류>\n",
             choices(cycle, many)
         ),
-    }
+    });
+    out
 }
 
 /// 여러 종류가 가능할 때 — 이름과 **그 자리가 무엇을 하는 자리인지.**
