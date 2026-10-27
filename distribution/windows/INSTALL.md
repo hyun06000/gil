@@ -5,10 +5,10 @@
 현재 설치본은 **Windows 11 x64 친구 테스트용 unsigned prerelease**다. 정식 공개판이나 서명된
 publisher 배포가 아니다. ARM64 Windows, 기업 배포와 일반 사용자 지원 완료를 주장하지 않는다.
 
-- release: [windows-owner-update-0.1.1-owner.3](https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.3)
-- installer: `GIL.Companion.Unsigned.Test._0.1.1-owner.3_x64-setup.exe`
-- 크기: `5,540,981` bytes
-- SHA-256: `e15632ea254301e81b1d97220da2b2179eaf6087fd255f4f674fc0c899a39789`
+- release: [windows-owner-update-0.1.1-owner.4](https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.4)
+- installer: `GIL.Companion.Unsigned.Test._0.1.1-owner.4_x64-setup.exe`
+- 크기: `5,541,311` bytes
+- SHA-256: `0744f2fc7cae1562044824a5460f18ecd263229826ba13915260c7e26b1e09c5`
 - 표시 이름: **GIL Companion (Unsigned Test)**
 
 이 파일은 Authenticode 서명이 없다. hash 일치는 바이트 무결성 확인이며 publisher 인증은 아니다.
@@ -47,10 +47,10 @@ ACL 상속을 강제로 바꾸거나 Project를 Agent가 자동 이동하지 않
 사용자가 Codex에 도움을 요청할 때는 다음처럼 말할 수 있다.
 
 ```text
-Windows 11 x64용 GIL Companion unsigned test 0.1.1-owner.3 설치를 도와줘.
-고정 release https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.3 의
-GIL.Companion.Unsigned.Test._0.1.1-owner.3_x64-setup.exe만 사용해.
-크기 5540981 bytes와 SHA-256 e15632ea254301e81b1d97220da2b2179eaf6087fd255f4f674fc0c899a39789를
+Windows 11 x64용 GIL Companion unsigned test 0.1.1-owner.4 설치를 도와줘.
+고정 release https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.4 의
+GIL.Companion.Unsigned.Test._0.1.1-owner.4_x64-setup.exe만 사용해.
+크기 5541311 bytes와 SHA-256 0744f2fc7cae1562044824a5460f18ecd263229826ba13915260c7e26b1e09c5를
 확인하고, 내가 해야 할 다운로드·실행·OS 승인과 네가 확인할 단계를 구분해 줘.
 기존 GIL이 있으면 출처와 버전을 먼저 보여 주고 교체 전에 물어봐.
 보안 설정, registry, Codex 설정 파일이나 Plugin cache를 직접 수정하지 마.
@@ -85,6 +85,13 @@ Core나 Host Plugin cache의 실행 파일을 직접 등록하지 않는다.
 `0.1.1-owner.3` updater는 사용자가 누른 설치와 version-bound updater signature 흐름을 실제 Windows
 x64 PC에서 확인한 친구용 build다. Authenticode publisher 신뢰나 SmartScreen 평판을 통과했다는 뜻은
 아니다.
+
+`0.1.1-owner.4`는 PR #49의 Monitor 시작 안내·단계 전환 안내·기록 진행 패널을 포함한다.
+[빌드 및 설치 CI](https://github.com/hyun06000/gil/actions/runs/40500038549)에서 설치·재설치·기존 MCP
+연결을 유지한 버전 전환·다음 연결의 새 Core 선택을 확인했다. 실제 Codex 대화에서 Luna가 작업을
+끝까지 수행하는 인수는 사용자 시험 전이므로 통과로 표시하지 않는다. 업데이트 후 Companion의
+Core 표시가 `0.1.1-owner.4`인지 확인하고, 새 Codex 대화에서 Luna로 시험한다. 기존 연결을 새 Core로
+강제 교체하지 않는다. macOS Plugin은 이 Windows 업데이트로 교체되지 않는다.
 
 ## 연결 해제와 제거
 
