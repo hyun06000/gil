@@ -5,7 +5,7 @@
 //! 내용도 화면으로 나가지 않고 설정에도 남지 않는다.
 //!
 //! ```text
-//!   notify event → gil::watch_hints 가 `.gil` 잡음을 거른다 → hint 한 마디
+//!   notify event → gil::watch_project_hints 가 내부 잡음을 거른다 → hint 한 마디
 //!                → Refresh 가 모은다(첫 hint 부터 debounce)
 //!                → `gil://refresh` 한 번
 //!                → 창이 기존 load_view(scope) 로 **완전한 View** 하나를 읽는다
@@ -13,7 +13,7 @@
 //!
 //! # 무엇을 빌려 쓰는가
 //!
-//! 감시(`watch_hints`)도 모으는 규칙(`Refresh`)도 `gil monitor --serve` 와 **같은 것**이다.
+//! 감시(`watch_project_hints`)도 모으는 규칙(`Refresh`)도 `gil monitor --serve` 와 **같은 것**이다.
 //! 상태기계를 베껴 두 자리에서 따로 키우면, 한쪽의 debounce 만 고쳐지는 날이 온다.
 //!
 //! `Refresh` 가 「관측」이라 부르는 자리에서 이 파일이 하는 일은 **창에 알리는 것**뿐이다.
@@ -30,7 +30,7 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, sync_channel};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use gil::{Backoff, Moment, Observe, Pace, Refresh, Wake, watch_hints};
+use gil::{Backoff, Moment, Observe, Pace, Refresh, Wake, watch_project_hints};
 use tauri::{AppHandle, Emitter};
 
 /// 창에 보내는 말. 이 한 줄이 전부다.
@@ -194,7 +194,7 @@ impl Live {
         let mut teller = teller();
 
         // **감시가 서지 못해도 worker 는 선다.** 그래야 느린 기한이 수렴을 맡는다.
-        let watching = watch_hints(root, {
+        let watching = watch_project_hints(root, {
             let wishes = wishes.clone();
             // 가득 차면 버린다 — hint 는 백 개나 한 개나 뜻이 같다.
             move || {
@@ -1011,7 +1011,7 @@ mod tests {
         let body = &code[at..];
         // 실패해도 worker 는 선다 — 느린 기한이 수렴을 맡는다.
         let spawn = body.find("thread::spawn").expect("갈래를 세우는 자리");
-        let watch = body.find("watch_hints").expect("감시를 세우는 자리");
+        let watch = body.find("watch_project_hints").expect("감시를 세우는 자리");
         assert!(watch < spawn, "감시가 실패하면 갈래도 세우지 않는다");
         assert!(body.contains("Err(said) => (None, Some(said))"), "실패를 사실로 남기지 않는다");
         // 그리고 그 실패가 `Err` 로 나가 창이 한 번 말할 수 있다.

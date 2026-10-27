@@ -267,7 +267,8 @@ impl ProjectSession {
             .and_then(|state| state.registry().asset_for_report(owner, asset))
             .ok_or_else(|| error("이 Project의 해당 Report에 연결된 시각 자료가 아니다".into()))?
             .metadata();
-        crate::visual_report::file::read_stored(&self.root()?, metadata, true).map_err(error)
+        let storage_root = project_root(&gil_dir(&self.state_path)?)?;
+        crate::visual_report::file::read_stored(&storage_root, metadata, true).map_err(error)
     }
 
     fn store(&self) -> Result<ObjectStore, SessionError> {

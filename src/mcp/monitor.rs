@@ -137,7 +137,9 @@ impl Monitor {
         if e.watching.is_none() && e.attempted.is_none_or(|at| at.elapsed() >= Duration::from_secs(60)) {
             e.attempted = Some(Instant::now());
             let revision = e.revision.clone();
-            e.watching = crate::watch_hints(&root, move || { revision.fetch_add(1, Ordering::Relaxed); }).ok();
+            e.watching = crate::watch_project_hints(&root, move || {
+                revision.fetch_add(1, Ordering::Relaxed);
+            }).ok();
             // A renewed watch may have missed events while its lease was absent.
             e.revision.fetch_add(1, Ordering::Relaxed);
         }

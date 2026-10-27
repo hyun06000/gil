@@ -42,7 +42,7 @@ use std::time::{Duration, Instant};
 
 use super::MonitorSnapshot;
 use super::refresh::{Moment, Observe, Pace, Refresh, Wake, render_cached_page};
-use super::watch::watch_hints;
+use super::watch::watch_project_hints;
 
 // ── 좁은 문 ────────────────────────────────────────────────────────────────
 
@@ -306,7 +306,7 @@ pub(crate) fn serve(
     let (wishes, incoming) = sync_channel(EVENTS_MAX);
 
     let (watcher, blind) = match watch {
-        Some(root) => match watch_hints(root, {
+        Some(root) => match watch_project_hints(root, {
             let wishes = wishes.clone();
             // **가득 차면 버린다.** hint 는 백 개나 한 개나 뜻이 같다.
             move || {

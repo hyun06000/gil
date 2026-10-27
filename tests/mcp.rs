@@ -16,7 +16,7 @@ mod common;
 /// State path used by the product-facing MCP start. On Windows the working tree and the private
 /// GIL record deliberately live in different roots.
 fn product_state_path(root: &Path) -> PathBuf {
-    #[cfg(windows)]
+    #[cfg(all(windows, feature = "visual-authoring"))]
     {
         use sha2::{Digest, Sha256};
         use std::os::windows::ffi::OsStrExt;
@@ -29,26 +29,31 @@ fn product_state_path(root: &Path) -> PathBuf {
         PathBuf::from(std::env::var_os("LOCALAPPDATA").unwrap())
             .join("GIL/project-state-v1").join(key).join(gil::STATE_PATH)
     }
-    #[cfg(not(windows))]
+    #[cfg(not(all(windows, feature = "visual-authoring")))]
     { root.join(gil::STATE_PATH) }
 }
 
+#[cfg(feature = "visual-authoring")]
 fn load_product(root: &Path) -> gil::Project {
     gil::load(common::spec(), product_state_path(root)).unwrap()
 }
 
+#[cfg(feature = "visual-authoring")]
 fn save_product(root: &Path, project: &gil::Project) {
     gil::save(project, product_state_path(root)).unwrap();
 }
 
+#[cfg(feature = "visual-authoring")]
 fn open_product(root: &Path) -> gil::ProjectSession {
     gil::open_project_root(common::spec(), root).unwrap()
 }
 
+#[cfg(feature = "visual-authoring")]
 fn open_product_read_only(root: &Path) -> gil::ReadOnlySession {
     gil::open_project_root_read_only(common::spec(), root).unwrap()
 }
 
+#[cfg(feature = "visual-authoring")]
 fn product_temp_path(root: &Path) -> PathBuf {
     product_state_path(root).with_file_name("state.yaml.writing")
 }
@@ -1032,13 +1037,13 @@ fn starting_receipt_uses_the_requested_root_not_the_servers_directory() {
     let reply = mcp.request("tools/call", serde_json::json!({
         "name": "gil_start", "arguments": {"project_root": mcp_root}
     }));
-    #[cfg(not(windows))]
+    #[cfg(not(all(windows, feature = "visual-authoring")))]
     {
         assert_eq!(reply["result"]["structuredContent"]["said"], String::from_utf8(cli.stdout).unwrap());
         let relative = Path::new(".gil").join("state.yaml");
         assert!(text_of(&reply).ends_with(&format!("기록: {}\n", relative.display())));
     }
-    #[cfg(windows)]
+    #[cfg(all(windows, feature = "visual-authoring"))]
     {
         let said = text_of(&reply);
         assert!(said.ends_with("기록: Windows 개인 앱 데이터의 보호된 기록\n"), "{said}");
