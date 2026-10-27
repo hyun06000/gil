@@ -11,7 +11,8 @@ impl ProjectSession {
     pub fn start_visual(rules: RuleSet, root: impl AsRef<Path>) -> Result<Self, SessionError> {
         #[cfg(any(all(target_os = "macos", target_arch = "aarch64"), windows))]
         {
-            create(rules, root.as_ref(), &mut |_| Ok(()))
+            let root = root.as_ref();
+            create(rules, root, root, true, &mut |_| Ok(()))
         }
         #[cfg(not(any(all(target_os = "macos", target_arch = "aarch64"), windows)))]
         {
@@ -21,12 +22,25 @@ impl ProjectSession {
             )))
         }
     }
+
+    /// Windows product entry: observe `root`, while keeping private records beneath
+    /// `storage_root/.gil`. The ordinary API remains unchanged for existing inline projects.
+    #[cfg(windows)]
+    pub(crate) fn start_visual_at(
+        rules: RuleSet,
+        root: impl AsRef<Path>,
+        storage_root: impl AsRef<Path>,
+    ) -> Result<Self, SessionError> {
+        create(rules, root.as_ref(), storage_root.as_ref(), false, &mut |_| Ok(()))
+    }
 }
 
 #[cfg(any(all(target_os = "macos", target_arch = "aarch64"), windows))]
 fn create(
     rules: RuleSet,
     root: &Path,
+    storage_root: &Path,
+    _check_working_location: bool,
     checkpoint: &mut impl FnMut(&str) -> std::io::Result<()>,
 ) -> Result<ProjectSession, SessionError> {
     let error = |source| {
@@ -43,9 +57,15 @@ fn create(
     }
     // Exclusive reservation, not exists()+create_dir_all(): only one creator may win.
     // In particular, never acquire a lock in, recover, or reap an already existing directory.
-    let reserved = reserve::Reserved::take(root).map_err(error)?;
-    let root = reserved.root.clone();
-    let gil = root.join(".gil");
+    let root = root.canonicalize().map_err(error)?;
+    if !std::fs::metadata(&root).map_err(error)?.is_dir() {
+        return Err(error(std::io::Error::other("프로젝트 폴더가 아니다")));
+    }
+    #[cfg(windows)]
+    let reserved = reserve::Reserved::take(storage_root, _check_working_location).map_err(error)?;
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    let reserved = reserve::Reserved::take(storage_root).map_err(error)?;
+    let gil = reserved.root.join(".gil");
     let identity = || reserved.identity();
     reserved.sync_parent().map_err(error)?;
     checkpoint("reserved").map_err(error)?;
@@ -74,6 +94,7 @@ fn create(
     guarded("completed").map_err(error)?;
     Ok(ProjectSession {
         project,
+        project_root: root,
         state_path,
         _lock: lock,
     })
@@ -185,7 +206,7 @@ mod reserve {
     }
 
     impl Reserved {
-        pub(super) fn take(root: &Path) -> std::io::Result<Self> {
+        pub(super) fn take(root: &Path, check_working_location: bool) -> std::io::Result<Self> {
             // The user-selected path itself must not pass through any reparse point
             // (Distribution §6.2b); only then is the canonical form used for the chain.
             let selected = win::Chain::open(root)?;
@@ -206,11 +227,13 @@ mod reserve {
             })?;
             // Support-scope check before anything is created (contract §4 W1 0): sync roots,
             // cloud-files attributes, network/removable drives, reparse points, or unverifiable.
-            if let Err(location) = win::unsupported_location(&root) {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Unsupported,
-                    format!("지원하지 않는 위치({})라 기록을 만들지 않았다: {}", location.kind.code(), location.detail),
-                ));
+            if check_working_location {
+                if let Err(location) = win::unsupported_location(&root) {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Unsupported,
+                        format!("지원하지 않는 위치({})라 기록을 만들지 않았다: {}", location.kind.code(), location.detail),
+                    ));
+                }
             }
             let name = OsStr::new(".gil");
             // 1. Exclusive creation with the owner-only descriptor; the handle is to the object

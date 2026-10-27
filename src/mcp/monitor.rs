@@ -58,10 +58,19 @@ fn refuse(err: SessionError) -> Refusal {
 }
 
 fn opened(root: &Path) -> Result<ReadOnlySession, Refusal> {
-    let state = root.join(crate::STATE_PATH);
+    let state = crate::project_state::state_for_root(root)
+        .map_err(|_| Refusal::new("unreadable", "Project 기록 위치를 확인하지 못했다"))?;
     if !state.is_file() { return Err(Refusal::new("not_a_project", "이 자리에 GIL Project 가 없다")); }
     let rules = RuleSet::builtin().map_err(|_| Refusal::new("damaged", "함께 실린 명세를 읽지 못했다"))?;
-    ProjectSession::open_read_only(rules, &state).map_err(refuse)
+    #[cfg(windows)]
+    let opened = if state == root.join(crate::STATE_PATH) {
+        ProjectSession::open_read_only(rules, &state)
+    } else {
+        ProjectSession::open_read_only_at(rules, root, &state)
+    };
+    #[cfg(not(windows))]
+    let opened = ProjectSession::open_read_only(rules, &state);
+    opened.map_err(refuse)
 }
 
 impl Monitor {

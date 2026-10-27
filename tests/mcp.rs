@@ -1305,11 +1305,11 @@ fn starting_a_project_leads_to_one_monitor_scope_and_the_first_interview_updates
     std::fs::remove_dir_all(at).unwrap();
 }
 
-/// Windows contract §4 W1 0 / §6 W12: the location is checked before `gil_start` creates
-/// anything, and a new local workspace is prepared only after approval, never connected.
+/// A OneDrive working folder stays selected while private records go to local app data. The
+/// separate-workspace helper remains an explicitly approved convenience, not a repair path.
 #[cfg(all(windows, feature = "visual-authoring"))]
 #[test]
-fn unsupported_location_is_refused_before_creation_and_workspace_prep_needs_approval() {
+fn onedrive_working_folder_stays_put_and_workspace_prep_still_needs_approval() {
     use serde_json::json;
     let base = scratch("ws-location");
     let settings = base.join("settings");
@@ -1321,14 +1321,10 @@ fn unsupported_location_is_refused_before_creation_and_workspace_prep_needs_appr
     let mut mcp = Client::serve_with_env(&settings, &[("OneDrive", &onedrive), ("USERPROFILE", &base)]); mcp.initialize();
     let selected = onedrive.join("문서 test");
     let before: Vec<_> = std::fs::read_dir(&selected).unwrap().map(|e| e.unwrap().file_name()).collect();
-    let refused = monitor_call(&mut mcp, "gil_start", json!({"project_root": selected}));
-    assert_eq!(refused["structuredContent"]["ok"], false, "{refused}");
-    assert_eq!(refused["structuredContent"]["code"], "unsupported_location");
-    assert_eq!(refused["structuredContent"]["location_kind"], "onedrive");
-    assert_eq!(refused["structuredContent"]["evidence"], "declared_by_environment", "an environment variable is a declaration, not an observed attribute");
-    assert!(refused["structuredContent"]["said"].as_str().unwrap().contains("OneDrive 설정이 백업 위치로 선언한"), "{refused}");
-    assert_eq!(refused["structuredContent"]["suggested_parent"], base.join("gil-projects").display().to_string());
-    assert!(!selected.join(".gil").exists(), "nothing may be created on refusal");
+    let started_here = monitor_call(&mut mcp, "gil_start", json!({"project_root": selected}));
+    assert_eq!(started_here["structuredContent"]["ok"], true, "{started_here}");
+    assert_eq!(started_here["structuredContent"]["record_storage"], "private_app_data");
+    assert!(!selected.join(".gil").exists(), "private records must not be placed in OneDrive");
     let after: Vec<_> = std::fs::read_dir(&selected).unwrap().map(|e| e.unwrap().file_name()).collect();
     assert_eq!(after, before);
     // A supported folder outside that root starts normally (same server, same environment).
@@ -1362,7 +1358,7 @@ fn unsupported_location_is_refused_before_creation_and_workspace_prep_needs_appr
     assert_eq!(made["structuredContent"]["created_by_this_call"], json!([parent.display().to_string(), shown]));
     assert!(planned.is_dir());
     assert_eq!(std::fs::read_dir(&planned).unwrap().count(), 0, "the workspace is empty: no .gil until gil_start");
-    assert!(made["structuredContent"]["said"].as_str().unwrap().contains("다른 동기화 제품의 유무는 확인하지 않는다"), "{made}");
+    assert!(made["structuredContent"]["said"].as_str().unwrap().contains("OneDrive 안의 기존 작업 폴더를 옮길 필요는 없다"), "{made}");
     // Same name again: refused, nothing changed, nothing substituted.
     std::fs::write(planned.join("note.txt"), b"user file").unwrap();
     let dup = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "새 작업 폴더", "parent": parent, "confirm": true, "approved_path": shown}));
@@ -1445,13 +1441,13 @@ fn tool_result(client: &mut Client, name: &str, arguments: serde_json::Value) ->
     got["result"].clone()
 }
 
-/// Windows contract §6 W12-8: a declared sync root in the user hive refuses `gil_start` before
-/// anything is created, with no OneDrive environment variable at all. The registration is made
+/// A registry-declared sync root is accepted as a working folder because records are external.
+/// The optional local-workspace helper still excludes it. The registration is made
 /// with the official `reg.exe` under a GilTest provider of the current user's hive and removed
 /// afterwards; it runs only where `GIL_TEST_REAL_REGISTRY=1` says the hive may be used (CI).
 #[cfg(all(windows, feature = "visual-authoring"))]
 #[test]
-fn registry_declared_sync_root_refuses_start_without_environment_variables() {
+fn registry_declared_sync_root_stays_selected_without_inline_records() {
     use serde_json::json;
     if std::env::var_os("GIL_TEST_REAL_REGISTRY").as_deref() != Some(std::ffi::OsStr::new("1")) {
         eprintln!("skipped: GIL_TEST_REAL_REGISTRY != 1"); return;
@@ -1473,12 +1469,10 @@ fn registry_declared_sync_root_refuses_start_without_environment_variables() {
     let mut mcp = Client::serve_with_env(&base.join("settings"), &[("USERPROFILE", &base)]); mcp.initialize();
     let selected = root.join("바탕 화면").join("test3");
     let before: Vec<_> = std::fs::read_dir(&selected).unwrap().map(|e| e.unwrap().file_name()).collect();
-    let refused = monitor_call(&mut mcp, "gil_start", json!({"project_root": selected}));
-    assert_eq!(refused["structuredContent"]["code"], "unsupported_location", "{refused}");
-    assert_eq!(refused["structuredContent"]["location_kind"], "sync_root");
-    assert_eq!(refused["structuredContent"]["evidence"], "declared_by_registry");
-    assert!(refused["structuredContent"]["said"].as_str().unwrap().contains("등록된 동기화 루트"), "{refused}");
-    assert!(!selected.join(".gil").exists(), "nothing may be created");
+    let started_here = monitor_call(&mut mcp, "gil_start", json!({"project_root": selected}));
+    assert_eq!(started_here["structuredContent"]["ok"], true, "{started_here}");
+    assert_eq!(started_here["structuredContent"]["record_storage"], "private_app_data");
+    assert!(!selected.join(".gil").exists(), "no private record belongs in the sync root");
     let after: Vec<_> = std::fs::read_dir(&selected).unwrap().map(|e| e.unwrap().file_name()).collect();
     assert_eq!(after, before);
     // Preparing a workspace under the registered root is refused the same way; outside it works.
@@ -1488,17 +1482,14 @@ fn registry_declared_sync_root_refuses_start_without_environment_variables() {
     std::fs::create_dir(&outside).unwrap();
     let started = monitor_call(&mut mcp, "gil_start", json!({"project_root": outside}));
     assert_eq!(started["structuredContent"]["ok"], true, "{started}");
-    let check = &started["structuredContent"]["location_check"];
-    let sources = check["sync_root_sources"].as_array().unwrap();
-    assert_eq!(sources.len(), 3, "{check}");
-    assert!(sources.iter().any(|s| s["source"].as_str().unwrap().contains("SyncEngines") && s["status"] == "queried" && s["roots"].as_u64().unwrap() >= 1), "{check}");
+    assert_eq!(started["structuredContent"]["record_storage"], "private_app_data");
     mcp.eof();
 }
 
-/// A passed location check reports its evidence and limits on every successful start.
+/// A successful Windows start declares that records are in private app data.
 #[cfg(all(windows, feature = "visual-authoring"))]
 #[test]
-fn successful_start_reports_what_the_location_check_looked_at_without_guaranteeing_anything() {
+fn successful_start_reports_private_app_data_storage() {
     use serde_json::json;
     let base = scratch("ws-check");
     let folder = base.join("정상");
@@ -1506,16 +1497,9 @@ fn successful_start_reports_what_the_location_check_looked_at_without_guaranteei
     let mut mcp = Client::serve_with_env(&base.join("settings"), &[("USERPROFILE", &base)]); mcp.initialize();
     let started = monitor_call(&mut mcp, "gil_start", json!({"project_root": folder}));
     assert_eq!(started["structuredContent"]["ok"], true, "{started}");
-    let check = &started["structuredContent"]["location_check"];
-    let sources = check["sync_root_sources"].as_array().unwrap();
-    assert_eq!(sources.len(), 3, "{check}");
-    for s in sources { assert!(matches!(s["status"].as_str(), Some("queried") | Some("absent") | Some("failed")), "{s}"); }
-    assert!(sources.iter().all(|s| s["status"] == "queried"), "registry sources must be queryable in the test process: {check}");
-    assert!(check["registry_hive"].as_str().unwrap().contains("account this server runs as"), "{check}");
-    assert_eq!(check["filesystem"], "NTFS");
-    assert!(check["path_components_checked"].as_u64().unwrap() >= 2);
-    let limits = check["limits"].as_str().unwrap();
-    assert!(limits.contains("보장하지 않는다") && !limits.contains("동기화 없음을 보장한다"), "{limits}");
+    assert_eq!(started["structuredContent"]["record_storage"], "private_app_data");
+    assert!(started["structuredContent"].get("location_check").is_none());
+    assert!(!folder.join(".gil").exists());
     mcp.eof();
 }
 
@@ -1528,11 +1512,14 @@ fn reopen_after_protection_loss_refuses_with_code_and_changes_nothing() {
     use serde_json::json;
     let base = scratch("ws-protection");
     let folder = base.join("프로젝트");
+    let local = base.join("local-app-data");
     std::fs::create_dir(&folder).unwrap();
-    let mut mcp = Client::serve_with_env(&base.join("settings"), &[("USERPROFILE", &base)]); mcp.initialize();
+    let mut mcp = Client::serve_with_env(&base.join("settings"), &[("USERPROFILE", &base), ("LOCALAPPDATA", &local)]); mcp.initialize();
     assert_eq!(monitor_call(&mut mcp, "gil_start", json!({"project_root": folder}))["structuredContent"]["ok"], true);
     assert_eq!(monitor_call(&mut mcp, "gil_help", json!({"project_root": folder}))["structuredContent"]["ok"], true, "reopen works while protected");
-    let gil = folder.join(".gil");
+    let layout = local.join("GIL/project-state-v1");
+    let record_root = std::fs::read_dir(&layout).unwrap().next().unwrap().unwrap().path();
+    let gil = record_root.join(".gil");
     let icacls = PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32/icacls.exe");
     let snapshot = |label: &str| -> (Vec<(PathBuf, u64)>, String) {
         let mut files: Vec<(PathBuf, u64)> = walkdir(&gil);
@@ -1610,25 +1597,24 @@ impl Drop for DenyCreate {
     }
 }
 
-/// Detection limits are explicit: an unset or invalid OneDrive variable is a miss (the folder is
-/// accepted), and a stale variable is a false positive (refused) — neither is a safety claim.
+/// OneDrive environment declarations no longer decide whether a working folder can be used.
 #[cfg(all(windows, feature = "visual-authoring"))]
 #[test]
-fn onedrive_variable_misses_and_false_positives_are_what_the_contract_says() {
+fn onedrive_environment_values_do_not_move_the_working_folder() {
     use serde_json::json;
     let base = scratch("ws-detection");
     let folder = base.join("synced-but-unnamed");
     std::fs::create_dir(&folder).unwrap();
-    // Variable points nowhere: a miss — the folder is accepted (no other signal exists here).
+    // A stale declaration and a matching declaration both leave the working folder in place.
     let mut mcp = Client::serve_with_env(&base.join("s1"), &[("OneDrive", Path::new("C:\\nonexistent-gil-onedrive-root"))]); mcp.initialize();
     assert_eq!(monitor_call(&mut mcp, "gil_start", json!({"project_root": folder}))["structuredContent"]["ok"], true);
     mcp.eof();
-    // Variable names an ordinary folder that is not synchronized: a false positive — refused.
     let stale = base.join("stale-root");
     std::fs::create_dir_all(stale.join("p")).unwrap();
     let mut mcp = Client::serve_with_env(&base.join("s2"), &[("OneDriveConsumer", &stale)]); mcp.initialize();
     let got = monitor_call(&mut mcp, "gil_start", json!({"project_root": stale.join("p")}));
-    assert_eq!(got["structuredContent"]["code"], "unsupported_location", "{got}");
+    assert_eq!(got["structuredContent"]["ok"], true, "{got}");
+    assert_eq!(got["structuredContent"]["record_storage"], "private_app_data");
     assert!(!stale.join("p").join(".gil").exists());
     mcp.eof();
 }

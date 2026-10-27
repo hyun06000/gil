@@ -240,10 +240,14 @@ fn execute(name: &str, input: Value) -> Result<Value, &'static str> {
     let rules = RuleSet::builtin().map_err(|_| "rules_unavailable")?;
     if name == "gil_report_visuals" {
         let r: Read = serde_json::from_value(input).map_err(|_| "invalid_request")?;
-        let session = ProjectSession::open_read_only(
-            rules,
-            Path::new(&r.project_root).join(crate::STATE_PATH),
-        )
+        let root = Path::new(&r.project_root);
+        let state = crate::project_state::state_for_root(root)
+            .map_err(|_| "confirmation_unavailable")?;
+        #[cfg(windows)]
+        let session = ProjectSession::open_read_only_at(rules, root, &state)
+            .map_err(|_| "confirmation_unavailable")?;
+        #[cfg(not(windows))]
+        let session = ProjectSession::open_read_only(rules, &state)
         .map_err(|_| "confirmation_unavailable")?;
         return projection(session.project(), r.owner.parsed()?);
     }

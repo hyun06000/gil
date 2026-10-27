@@ -55,6 +55,9 @@ const INTERNAL_ONLY: &[&str] = &[LOCK_FILE, "artifacts", "restore"];
 /// 한 GIL 명령이 이 프로젝트를 쥐고 있는 동안 사는 값.
 pub struct ProjectSession {
     project: Project,
+    /// The user's working tree. This is deliberately independent from `state_path`: product
+    /// surfaces may keep private GIL records outside a synchronized working folder.
+    project_root: PathBuf,
     state_path: PathBuf,
     /// **맨 뒤에 선언한다.** Rust 는 필드를 선언 차례로 떨어뜨리므로, 잠금이 마지막에
     /// 풀린다. 위의 것들이 떨어질 때까지 프로젝트는 여전히 잠겨 있다.
@@ -67,6 +70,19 @@ impl ProjectSession {
     /// `state_path` 는 `<루트>/.gil/state.yaml` 이다. 그 자리를 찾는 일은 부르는 쪽의
     /// 몫이다 — 어디서부터 거슬러 올라 찾을지는 표면마다 다르다.
     pub fn open(rules: RuleSet, state_path: impl AsRef<Path>) -> Result<Self, SessionError> {
+        let state_path = state_path.as_ref().to_path_buf();
+        let gil = gil_dir(&state_path)?;
+        let project_root = project_root(&gil)?;
+        Self::open_at(rules, project_root, state_path)
+    }
+
+    /// Open records stored separately from the user's working tree.
+    pub(crate) fn open_at(
+        rules: RuleSet,
+        project_root: impl AsRef<Path>,
+        state_path: impl AsRef<Path>,
+    ) -> Result<Self, SessionError> {
+        let project_root = project_root.as_ref().to_path_buf();
         let state_path = state_path.as_ref().to_path_buf();
         let gil = gil_dir(&state_path)?;
 
@@ -83,7 +99,7 @@ impl ProjectSession {
         // 미완의 복원이 남긴 파일 위에서 상태를 읽으면, 그 상태는 **아무도 확정한 적 없는
         // 세계**를 설명하게 된다. 그래서 파일을 먼저 제자리로 돌린 뒤에 읽는다.
         // 복구가 실패하면 원래 명령을 실행하지 않는다.
-        restore::recover(&project_root(&gil)?, &gil).map_err(SessionError::Restore)?;
+        restore::recover(&project_root, &gil).map_err(SessionError::Restore)?;
         reap_tmp(&ObjectStore::at(&gil))?;
 
         let project = store::load_within(&lock, rules, &state_path).map_err(SessionError::Store)?;
@@ -91,6 +107,7 @@ impl ProjectSession {
 
         Ok(ProjectSession {
             project,
+            project_root,
             state_path,
             _lock: lock,
         })
@@ -121,6 +138,19 @@ impl ProjectSession {
     ) -> Result<ReadOnlySession, SessionError> {
         let state_path = state_path.as_ref().to_path_buf();
         let gil = gil_dir(&state_path)?;
+        let project_root = project_root(&gil)?;
+        Self::open_read_only_at(rules, project_root, state_path)
+    }
+
+    /// Read records stored separately from the user's working tree.
+    pub(crate) fn open_read_only_at(
+        rules: RuleSet,
+        project_root: impl AsRef<Path>,
+        state_path: impl AsRef<Path>,
+    ) -> Result<ReadOnlySession, SessionError> {
+        let project_root = project_root.as_ref().to_path_buf();
+        let state_path = state_path.as_ref().to_path_buf();
+        let gil = gil_dir(&state_path)?;
 
         // 잠금은 여기서도 먼저다. 읽는 도중에 남이 상태를 갈아 끼우면, 읽어 낸 것은
         // 아무 시점의 사실도 아니게 된다. (Windows 이미지 Project: 그 전에 ACL 을 읽기만으로 검증.)
@@ -135,7 +165,7 @@ impl ProjectSession {
             restore::left_behind(&gil).map_err(SessionError::Restore)?
         {
             return Err(SessionError::NeedsRecovery {
-                path: project_root(&gil)?.display().to_string(),
+                path: project_root.display().to_string(),
                 found,
             });
         }
@@ -147,6 +177,7 @@ impl ProjectSession {
 
         Ok(ReadOnlySession(ProjectSession {
             project,
+            project_root,
             state_path,
             _lock: lock,
         }))
@@ -162,23 +193,36 @@ impl ProjectSession {
     pub fn start(rules: RuleSet, state_path: impl AsRef<Path>) -> Result<Self, SessionError> {
         let state_path = state_path.as_ref().to_path_buf();
         let gil = gil_dir(&state_path)?;
+        let project_root = project_root(&gil)?;
+        Self::start_at(rules, project_root, state_path)
+    }
+
+    /// Start with private records stored separately from the user's working tree.
+    pub(crate) fn start_at(
+        rules: RuleSet,
+        project_root: impl AsRef<Path>,
+        state_path: impl AsRef<Path>,
+    ) -> Result<Self, SessionError> {
+        let project_root = project_root.as_ref().to_path_buf();
+        let state_path = state_path.as_ref().to_path_buf();
+        let gil = gil_dir(&state_path)?;
 
         // `.gil/` 을 만들며 잠근다. 초기화가 실패해 잠금 파일 하나가 남는 것은 손상이
         // 아니다 — 파일의 존재는 초기화 완료도 잠금 보유도 뜻하지 않는다.
         let lock = ProjectLock::bootstrap(&gil).map_err(SessionError::from)?;
         let store = ObjectStore::at(&gil);
-        restore::recover(&project_root(&gil)?, &gil).map_err(SessionError::Restore)?;
+        restore::recover(&project_root, &gil).map_err(SessionError::Restore)?;
         reap_tmp(&store)?;
         initializable(&gil, &state_path)?;
         check_object_store(&store)?;
 
         // **최초 세계는 지금 여기 있는 파일들이다.** 빈 세계로 만들지 않는다 — 그러면
         // 첫 Verify 가 「전부 새로 생겼다」로 보이고, 그것은 일어난 일이 아니다(§4).
-        let root = project_root(&gil)?;
-        let world = capture(&root, &store)?;
+        let world = capture(&project_root, &store)?;
 
         Ok(ProjectSession {
             project: Project::start(rules, world),
+            project_root,
             state_path,
             _lock: lock,
         })
@@ -207,7 +251,7 @@ impl ProjectSession {
 
     /// 이 프로젝트의 루트 — Artifact 세계가 사는 자리.
     pub fn root(&self) -> Result<PathBuf, SessionError> {
-        project_root(&gil_dir(&self.state_path)?)
+        Ok(self.project_root.clone())
     }
 
     /// Experimental Report-scoped image read. The caller must separately establish Host scope
@@ -1379,6 +1423,32 @@ mod tests {
 
         assert!(state_in(&root).exists());
         assert!(root.join(".gil").join(LOCK_FILE).exists());
+    }
+
+    #[test]
+    fn records_can_live_outside_the_working_tree_without_changing_what_is_observed() {
+        let base = scratch("separate-records");
+        let root = base.join("working tree");
+        let storage = base.join("private records");
+        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(&storage).unwrap();
+        fs::write(root.join("note.txt"), b"first").unwrap();
+        let state = storage.join(crate::STATE_PATH);
+
+        let session = ProjectSession::start_at(rules(), &root, &state).expect("분리해서 시작한다");
+        assert_eq!(session.root().unwrap(), root);
+        session.commit().unwrap();
+        drop(session);
+
+        assert!(!root.join(".gil").exists());
+        assert!(state.exists());
+        let reopened = ProjectSession::open_read_only_at(rules(), &root, &state).expect("분리된 기록으로 연다");
+        assert_eq!(reopened.0.root().unwrap(), root);
+        drop(reopened);
+
+        fs::write(root.join("note.txt"), b"second").unwrap();
+        let reopened = ProjectSession::open_at(rules(), &root, &state).expect("작업 폴더를 다시 관찰한다");
+        assert!(matches!(reopened.world_state().unwrap(), WorldState::Dirty { .. }));
     }
 
     #[test]

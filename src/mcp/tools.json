@@ -599,6 +599,18 @@
         },
         "problem": {
           "type": "string"
+        },
+        "storage_format": {
+          "type": "integer"
+        },
+        "display_confirmed": {
+          "type": "boolean"
+        },
+        "record_storage": {
+          "type": "string",
+          "enum": [
+            "private_app_data"
+          ]
         }
       },
       "required": [

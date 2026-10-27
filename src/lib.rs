@@ -158,6 +158,7 @@ mod manual;
 mod monitor;
 mod node;
 mod project;
+mod project_state;
 mod refs;
 mod report;
 // Let unit fault tests reuse the same synthetic fixtures as integration tests.
@@ -229,7 +230,7 @@ pub use restore::{RestoreFailure, Restored, Stage};
 pub use session::{
     CycleRevisited, Gate, ProjectSession, ReadOnlySession, SessionError, WorldState,
 };
-pub use root::{RootError, open_project_root};
+pub use root::{RootError, open_project_root, open_project_root_read_only};
 pub use status::where_now;
 pub use story::story;
 pub use store::{FORMAT, VISUAL_FORMAT, LEGACY_WALK_PATH, STATE_PATH, StoreError, load, said_path, save};
