@@ -133,6 +133,17 @@ test('the updater has no automatic check and install requires a second user deci
   assert.match(rust, /\.pubkey\(key\)/);
   assert.match(rust, /expected_version/);
   assert.match(rust, /app\.package_info\(\)\.version\.to_string\(\)/);
+  assert.match(rust, /업데이트 설정을 열지 못했다/);
+  assert.match(rust, /업데이트 서버 응답을 처리하지 못했다/);
+  assert.match(rust, /업데이트 파일을 설치하지 못했다/);
+});
+
+test('plain Tauri updater errors remain visible instead of pretending project storage is damaged', async () => {
+  const host = await read('companion/src/host.js');
+  assert.match(host, /typeof refusal === "string"/);
+  assert.match(host, /const message = typeof refusal === "string"/);
+  assert.match(host, /if \(structured && refusal\.code\) error\.code = refusal\.code/);
+  assert.doesNotMatch(host, /error\.code = \(refusal && refusal\.code\) \|\| "damaged"/);
 });
 
 test('the update UI keeps Codex open and explains the connection boundary', async () => {
