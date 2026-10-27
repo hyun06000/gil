@@ -143,6 +143,7 @@ if ($Mode -eq 'migrate') {
   Send @{jsonrpc='2.0'; id=22; method='tools/call'; params=@{name='gil_start'; arguments=@{project_root=$root}}}
   $migration = Recv
   $recordRoot = Get-ChildItem -LiteralPath $layout -Directory | Where-Object { $_.Name -notlike '.migrating-*' } | Select-Object -First 1 -ExpandProperty FullName
+  if (-not $recordRoot) { throw "migration created no external record; response=$migration" }
   $gil = Join-Path $recordRoot '.gil'
 }
 if ($Mode -eq 'reinherit') {
