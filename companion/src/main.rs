@@ -118,6 +118,7 @@ fn main() {
             clients::codex_connection,
             clients::connect_codex,
             clients::disconnect_codex,
+            clients::repair_codex_connection,
         ])
         .setup(|app| {
             let handle = app.handle().clone();

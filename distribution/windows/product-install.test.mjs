@@ -62,7 +62,8 @@ test('Companion keeps Codex connection visible and discovers the Desktop CLI wit
 test('installer stages immutable Core bytes and switches a recoverable receipt', async () => {
   const hook = await read('companion/windows/runtime-hooks.nsh');
   assert.match(hook, /runtime\\versions\\\$\{VERSION\}\\gil\.exe/);
-  assert.match(hook, /already installed; refusing to replace immutable version bytes/);
+  assert.match(hook, /already installed; preserving immutable version bytes/);
+  assert.doesNotMatch(hook, /Abort "GIL Core .*already installed/);
   assert.match(hook, /IfFileExists .*gil-launcher\.exe.*launcher_ready/);
   assert.match(hook, /current\.next/);
   assert.match(hook, /current\.previous/);
@@ -122,6 +123,9 @@ test('Codex registration is explicit, uses the official CLI shape, and does not 
   assert.match(clients, /\["mcp", "list", "--json"\]/);
   assert.match(clients, /\["mcp", "remove", "gil"\]/);
   assert.match(clients, /Registration::Conflict/);
+  assert.match(clients, /\["plugin", "list", "--json"\]/);
+  assert.match(clients, /\["plugin", "remove", &plugin, "--json"\]/);
+  assert.match(clients, /gil-companion-prototype/);
 
   const ui = await read('ui/companion.js');
   const connect = ui.indexOf('async function connectCodex');
@@ -132,6 +136,10 @@ test('Codex registration is explicit, uses the official CLI shape, and does not 
   assert.ok(disconnect > connect);
   const disconnectBody = ui.slice(disconnect, ui.indexOf('async function refreshCodexConnection', disconnect));
   assert.ok(disconnectBody.indexOf('window.confirm(') < disconnectBody.indexOf('window.GIL_HOST.disconnectCodex()'));
+  const repair = ui.indexOf('async function repairCodexConnection');
+  assert.ok(repair > disconnect);
+  const repairBody = ui.slice(repair, ui.indexOf('async function refreshCodexConnection', repair));
+  assert.ok(repairBody.indexOf('window.confirm(') < repairBody.indexOf('window.GIL_HOST.repairCodexConnection()'));
 });
 
 test('signed product CI is manual, secret-gated, installed, and exercised before retention', async () => {

@@ -5,13 +5,16 @@
   CreateDirectory "$LOCALAPPDATA\GIL\runtime\versions"
   CreateDirectory "$LOCALAPPDATA\GIL\runtime\versions\${VERSION}"
 
-  IfFileExists "$LOCALAPPDATA\GIL\runtime\versions\${VERSION}\gil.exe" 0 copy_core
-  Abort "GIL Core ${VERSION} is already installed; refusing to replace immutable version bytes."
+  IfFileExists "$LOCALAPPDATA\GIL\runtime\versions\${VERSION}\gil.exe" core_already_present copy_core
 copy_core:
   ClearErrors
   CopyFiles /SILENT "$INSTDIR\bootstrap\gil.exe" "$LOCALAPPDATA\GIL\runtime\versions\${VERSION}"
   IfErrors 0 core_ready
   Abort "Could not install GIL Core ${VERSION}. The previous version remains selected."
+core_already_present:
+  ; A repeated installer run is a repair of the Companion and selection receipt, not an attempt
+  ; to replace the immutable Core. Keep the existing bytes and continue idempotently.
+  DetailPrint "GIL Core ${VERSION} is already installed; preserving immutable version bytes."
 core_ready:
   IfFileExists "$LOCALAPPDATA\GIL\runtime\gil-launcher.exe" launcher_ready
   ClearErrors

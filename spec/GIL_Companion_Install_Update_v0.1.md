@@ -133,10 +133,10 @@ descriptor 확인 명목으로 실행하지 않는다. 고정 공식 출처 외 
 | 연결·업데이트 정책 상태기계 | 예 | 업데이트 worker/UI에서 사용 안 함 | 정책 시험만 완료 |
 | 불변 Core 저장·선택·실행 | 예 | production manifest가 호출하지 않음 | testbed/기반 코드 |
 | Companion 업데이트 버튼·다운로드 worker | 예 | x64 제품 후보 | 서명 release·Windows E2E 미검수 |
-| Windows installer/uninstaller | 예 | x64 제품 후보 | current-user NSIS 구성, 제거/repair·서명 산출물 미검수 |
+| Windows installer/uninstaller | 예 | x64 제품 후보 | 같은 후보 재실행은 불변 Core를 보존하며 repair, 서명 산출물·실기기 재검수 전 |
 | Windows Companion 상태·tray 종단 | 일부 | 설치 경로와 연결 안 됨 | 미검수 |
 | 고정 실행 진입점과 버전별 Core | 예 | NSIS 제품 후보 | digest·직전판 폴백·Job Object 구현, Windows E2E 미검수 |
-| Codex 공식 등록 | 예 | Companion 버튼 | 공식 CLI 사용, `codex.exe` 탐색·Desktop 반영 미검수 |
+| Codex 공식 등록 | 예 | Companion 버튼 | 공식 CLI 사용, 예전 GIL Plugin/충돌 등록은 사용자 확인 뒤 교체, Desktop 재검수 전 |
 
 위 표가 모두 제품 경로로 연결되기 전에는 “수동 업데이트 지원”이라고 표시하지 않는다.
 

@@ -89,6 +89,10 @@
       return pass("disconnect_codex");
     },
 
+    async repairCodexConnection() {
+      return pass("repair_codex_connection");
+    },
+
     /**
      * 창 밖에서 오는 말을 듣는다.
      *

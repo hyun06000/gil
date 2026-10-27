@@ -8,11 +8,19 @@ pub struct CodexCapability {
     supported: bool,
     runtime_installed: bool,
     cli_found: bool,
+    runtime_version: Option<String>,
 }
 
 #[derive(Serialize)]
 pub struct CodexConnection {
     state: &'static str,
+}
+
+#[cfg(windows)]
+#[derive(Deserialize)]
+struct RuntimeReceipt {
+    schema: u32,
+    version: String,
 }
 
 #[derive(Deserialize)]
@@ -37,6 +45,20 @@ enum Registration {
     Missing,
     Ours,
     Conflict,
+}
+
+#[derive(Deserialize)]
+struct PluginList {
+    installed: Vec<ListedPlugin>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ListedPlugin {
+    plugin_id: String,
+    name: String,
+    installed: bool,
+    enabled: bool,
 }
 
 fn launcher_path() -> Result<PathBuf, String> {
@@ -67,11 +89,25 @@ fn registration_args(launcher: &Path) -> Vec<std::ffi::OsString> {
 #[tauri::command]
 pub fn codex_capability() -> CodexCapability {
     let launcher = launcher_path();
+    let runtime_version = runtime_version();
     CodexCapability {
         supported: cfg!(windows),
         runtime_installed: launcher.is_ok_and(|one| one.is_file()),
         cli_found: cfg!(windows) && command().is_ok(),
+        runtime_version,
     }
+}
+
+fn runtime_version() -> Option<String> {
+    #[cfg(windows)]
+    {
+        let local = std::env::var_os("LOCALAPPDATA")?;
+        let bytes = std::fs::read(PathBuf::from(local).join("GIL/runtime/current.json")).ok()?;
+        let receipt: RuntimeReceipt = serde_json::from_slice(&bytes).ok()?;
+        (receipt.schema == 1 && !receipt.version.is_empty()).then_some(receipt.version)
+    }
+    #[cfg(not(windows))]
+    None
 }
 
 fn codex_candidates_from(local: Option<&Path>, configured: Option<PathBuf>) -> Vec<PathBuf> {
@@ -185,19 +221,90 @@ fn registration(launcher: &Path) -> Result<Registration, String> {
     Ok(classify_registration(launcher, servers))
 }
 
+fn legacy_plugins() -> Result<Vec<String>, String> {
+    let output = command()?
+        .args(["plugin", "list", "--json"])
+        .output()
+        .map_err(|err| format!("Codex 플러그인 목록을 읽지 못했다: {err}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "Codex 플러그인 목록을 읽지 못했다: {}",
+            output_detail(&output)
+        ));
+    }
+    let listed: PluginList = serde_json::from_slice(&output.stdout)
+        .map_err(|err| format!("Codex 플러그인 목록 응답을 읽지 못했다: {err}"))?;
+    Ok(listed
+        .installed
+        .into_iter()
+        .filter(|plugin| {
+            plugin.installed && plugin.enabled && plugin.name == "gil-companion-prototype"
+        })
+        .map(|plugin| plugin.plugin_id)
+        .collect())
+}
+
 #[tauri::command]
 pub async fn codex_connection() -> Result<CodexConnection, String> {
     let launcher = launcher_path()?;
     tauri::async_runtime::spawn_blocking(move || {
-        let state = match registration(&launcher)? {
-            Registration::Missing => "not_connected",
-            Registration::Ours => "connected",
-            Registration::Conflict => "conflict",
+        let state = if !legacy_plugins()?.is_empty() {
+            "needs_repair"
+        } else {
+            match registration(&launcher)? {
+                Registration::Missing => "not_connected",
+                Registration::Ours => "connected",
+                Registration::Conflict => "needs_repair",
+            }
         };
         Ok(CodexConnection { state })
     })
     .await
     .map_err(|err| format!("Codex 연결 상태를 확인하지 못했다: {err}"))?
+}
+
+#[tauri::command]
+pub async fn repair_codex_connection() -> Result<String, String> {
+    let launcher = launcher_path()?;
+    if !launcher.is_file() {
+        return Err("GIL 런타임이 설치되지 않았다. Companion 설치를 다시 실행한다.".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || repair_registration(&launcher))
+        .await
+        .map_err(|err| format!("Codex 연결 교체 작업을 마치지 못했다: {err}"))?
+}
+
+fn repair_registration(launcher: &Path) -> Result<String, String> {
+    for plugin in legacy_plugins()? {
+        let output = command()?
+            .args(["plugin", "remove", &plugin, "--json"])
+            .output()
+            .map_err(|err| format!("이전 GIL 플러그인을 제거하지 못했다: {err}"))?;
+        if !output.status.success() {
+            return Err(format!(
+                "이전 GIL 플러그인을 제거하지 못했다: {}",
+                output_detail(&output)
+            ));
+        }
+    }
+
+    if registration(launcher)? == Registration::Conflict {
+        let output = command()?
+            .args(["mcp", "remove", "gil"])
+            .output()
+            .map_err(|err| format!("이전 gil 연결을 제거하지 못했다: {err}"))?;
+        if !output.status.success() {
+            return Err(format!(
+                "이전 gil 연결을 제거하지 못했다: {}",
+                output_detail(&output)
+            ));
+        }
+    }
+    register(launcher)?;
+    if !legacy_plugins()?.is_empty() || registration(launcher)? != Registration::Ours {
+        return Err("Codex 연결 교체가 끝까지 확인되지 않았다".into());
+    }
+    Ok("이전 GIL 플러그인과 연결을 정리하고 새 GIL Core에 연결했다. Codex를 완전히 종료한 뒤 다시 연다.".into())
 }
 
 #[tauri::command]
@@ -317,6 +424,23 @@ mod tests {
             classify_registration(launcher, Vec::new()),
             Registration::Missing
         );
+    }
+
+    #[test]
+    fn only_enabled_legacy_gil_plugins_need_repair() {
+        let plugins: PluginList = serde_json::from_str(
+            r#"{"installed":[{"pluginId":"gil-companion-prototype@old","name":"gil-companion-prototype","installed":true,"enabled":true},{"pluginId":"gil-companion-prototype@off","name":"gil-companion-prototype","installed":true,"enabled":false},{"pluginId":"other@old","name":"other","installed":true,"enabled":true}]}"#,
+        )
+        .unwrap();
+        let found = plugins
+            .installed
+            .into_iter()
+            .filter(|plugin| {
+                plugin.installed && plugin.enabled && plugin.name == "gil-companion-prototype"
+            })
+            .map(|plugin| plugin.plugin_id)
+            .collect::<Vec<_>>();
+        assert_eq!(found, ["gil-companion-prototype@old"]);
     }
 
     #[test]

@@ -17,7 +17,10 @@
 
 현재 구현된 제품 경로는 current-user NSIS가 `%LOCALAPPDATA%\GIL\runtime`에 고정 런처와
 버전별 Core를 설치하고, Companion의 **Codex 연결** 버튼이 사용자의 재확인 뒤 공식 CLI로
-등록하는 방식이다. 설정 파일을 직접 편집하거나 기존 등록을 자동으로 덮어쓰지 않는다.
+등록하는 방식이다. 같은 설치 파일을 다시 실행해도 불변 Core를 덮어쓰지 않고 복구 설치가
+완료되어야 한다. 예전 GIL Plugin이나 충돌하는 `gil` 등록이 발견되면 Companion이
+**이전 GIL 연결 교체**를 표시하며, 사용자가 확인한 때에만 해당 GIL 항목을 공식 Codex CLI로
+정리한다. 설정 파일을 직접 편집하거나 사용자 확인 없이 기존 등록을 덮어쓰지 않는다.
 제거할 때는 Companion의 **Codex 연결 해제**를 먼저 누르고 열려 있는 GIL 대화를 닫은 뒤 Windows
 앱 제거를 사용한다. 첫 판 uninstaller는 안전을 위해 runtime과 Project의 `.gil`을 보존한다.
 
