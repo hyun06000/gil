@@ -3,8 +3,9 @@
 이 디렉터리는 **제작자용 배포 도구**다. 받는 사람에게 Node·Cargo·clone·tar 명령을 요구하는
 설치 설명서가 아니다. 최종 UX는 Host의 Plugin 설치 한 번이다.
 
-2026-10-27: `0.2.1-preview.6`(현재 Core·Skill·fullscreen Monitor)를 unsigned prerelease로 게시했다.
-사용자는 [설치 안내](INSTALL.md), 제작자는 [현재 배포 장부](PREVIEW-6-PUBLICATION-20261027.md)를 따른다.
+2026-10-28: `0.2.1-preview.7`(공통 작업 지침·Verify 증거 필수)을 unsigned prerelease로 게시했다.
+사용자는 [설치 안내](INSTALL.md), 제작자는 [현재 배포 장부](PREVIEW-7-PUBLICATION-20261028.md)를 따른다.
+이전 preview.6의 게시·VM 검수는 [이전 장부](PREVIEW-6-PUBLICATION-20261027.md)를 본다.
 2026-10-18: `0.2.1-preview.5`(companion Skill 보정, 같은 이미지 보고서 계약) 게시.
 2026-10-14: `0.2.1-preview.4`(visual-authoring, 이미지 보고서) 게시 ([장부](PREVIEW-4-PUBLICATION-20261014.md)).
 2026-09-30: 공개 HTTPS 설치·preview.2↔preview.1 rollback·Project 보존과 main 보호/PVR를 확인했다

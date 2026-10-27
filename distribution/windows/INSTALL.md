@@ -5,10 +5,10 @@
 현재 설치본은 **Windows 11 x64 친구 테스트용 unsigned prerelease**다. 정식 공개판이나 서명된
 publisher 배포가 아니다. ARM64 Windows, 기업 배포와 일반 사용자 지원 완료를 주장하지 않는다.
 
-- release: [windows-owner-update-0.1.1-owner.5](https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.5)
-- installer: `GIL.Companion.Unsigned.Test._0.1.1-owner.5_x64-setup.exe`
-- 크기: `5,545,097` bytes
-- SHA-256: `ce4b91c56164e4705cd054e486b54def06d9e86f174fc08fe49632599ef9a866`
+- release: [windows-owner-update-0.1.1-owner.6](https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.6)
+- installer: `GIL.Companion.Unsigned.Test._0.1.1-owner.6_x64-setup.exe`
+- 크기: `5,546,074` bytes
+- SHA-256: `4835ebf82ea7d4d2e53f030170bcf5a777ae1ece259e42ff353b40ac5ff2e306`
 - 표시 이름: **GIL Companion (Unsigned Test)**
 
 이 파일은 Authenticode 서명이 없다. hash 일치는 바이트 무결성 확인이며 publisher 인증은 아니다.
@@ -47,10 +47,10 @@ ACL 상속을 강제로 바꾸거나 Project를 Agent가 자동 이동하지 않
 사용자가 Codex에 도움을 요청할 때는 다음처럼 말할 수 있다.
 
 ```text
-Windows 11 x64용 GIL Companion unsigned test 0.1.1-owner.5 설치를 도와줘.
-고정 release https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.5 의
-GIL.Companion.Unsigned.Test._0.1.1-owner.5_x64-setup.exe만 사용해.
-크기 5545097 bytes와 SHA-256 ce4b91c56164e4705cd054e486b54def06d9e86f174fc08fe49632599ef9a866를
+Windows 11 x64용 GIL Companion unsigned test 0.1.1-owner.6 설치를 도와줘.
+고정 release https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.6 의
+GIL.Companion.Unsigned.Test._0.1.1-owner.6_x64-setup.exe만 사용해.
+크기 5546074 bytes와 SHA-256 4835ebf82ea7d4d2e53f030170bcf5a777ae1ece259e42ff353b40ac5ff2e306를
 확인하고, 내가 해야 할 다운로드·실행·OS 승인과 네가 확인할 단계를 구분해 줘.
 기존 GIL이 있으면 출처와 버전을 먼저 보여 주고 교체 전에 물어봐.
 보안 설정, registry, Codex 설정 파일이나 Plugin cache를 직접 수정하지 마.
@@ -86,16 +86,20 @@ Core나 Host Plugin cache의 실행 파일을 직접 등록하지 않는다.
 x64 PC에서 확인한 친구용 build다. Authenticode publisher 신뢰나 SmartScreen 평판을 통과했다는 뜻은
 아니다.
 
-`0.1.1-owner.5`는 PR #51의 Interview 종료 안내와 Verify 증거 필수 조건을 포함한다.
-Verify마다 실제 파일을 저장하고 `evidence_files`로 지정해야 하며, 해당 Snapshot에서 해석과 배움으로
-이어지는 참조를 기록한다. 채팅만으로 종료하거나 변하지 않은 이전 증거만 제출하면 거절한다.
-기존 기록은 유지한다.
+`0.1.1-owner.6`는 [PR #53](https://github.com/hyun06000/gil/pull/53)의 공통 작업 지침을 포함한다.
+Mac Plugin preview.7과 같은 소스 `64de8e5c1207dda329600ef12a86f39cf7781ee3`에서 빌드했다.
+Monitor 열기, 승인 후 Interview 닫기, 작은 Experiment, 조사 전에 Verify 열기, 실제 증거 파일과
+해석·배움을 남기는 규칙을 MCP와 Plugin이 같은 원본에서 전달한다. 기존 기록은 변경·이관하지 않는다.
+Verify마다 실제 파일을 저장하고 `evidence_files`로 지정해야 한다. 지정한 파일 중 최소 하나가
+새로 생성되거나 바뀌어야 하며, 채팅만으로 종료하거나 변하지 않은 이전 증거만 제출하면 거절한다.
+증거 Snapshot에서 해석과 배움으로 이어지는 참조를 기록한다.
 
-[빌드 및 설치 CI](https://github.com/hyun06000/gil/actions/runs/40551619152)에서 설치·재설치·기존 MCP
-연결을 유지한 버전 전환·다음 연결의 새 Core 선택을 확인했다. 합성 자료의 Luna 시험에서는 직접
-MCP가 실험 두 개·문서 두 개, Plugin 지침 경로가 실험 세 개·문서 세 개를 남기고 종료했다.
-실제 Windows Codex 대화에서의 인수는 이번 업데이트 후 사용자 시험 대상이다.
-업데이트 후 Companion 표시가 `0.1.1-owner.5`인지 확인하고, 새 GIL 연결·새 대화에서 Luna로 시험한다.
+[빌드 및 설치 CI](https://github.com/hyun06000/gil/actions/runs/40568942122)에서 설치·재설치·기존 MCP
+연결을 유지한 버전 전환·다음 연결의 새 Core 선택을 확인했다. Luna 합성 실제 작업은 런타임/진입
+네 조합에서 모두 열 개 검증을 통과하며 각각 실험 두 개·파일 두 개를 남겼다. 별도 다음 행동 시험은
+61/64 통과이며, 채팅만 있는 Verify에서 세 번 잘못된 행동 라벨을 선택한 한계가 남는다.
+실제 Windows Codex 대화에서의 인수는 업데이트 후 사용자 시험 대상이다.
+업데이트 후 Companion 표시가 `0.1.1-owner.6`인지 확인하고 새 GIL 연결·새 대화에서 Luna로 시험한다.
 기존 연결을 새 Core로 강제 교체하지 않는다. macOS Plugin은 이 Windows 업데이트로 교체되지 않는다.
 
 ## 연결 해제와 제거

@@ -9,8 +9,8 @@
 
 | 환경 | 버전 | 상태 |
 |---|---|---|
-| Windows 11 x64 | `0.1.1-owner.5` | 친구용 증거 필수 시험판·CI 설치 검수 완료, 실기기 Luna 검수 대기 |
-| macOS Apple Silicon | `0.2.1-preview.6` | 친구용 unsigned Codex Plugin·Git 없는 VM 설치와 동작 확인 |
+| Windows 11 x64 | `0.1.1-owner.6` | 친구용 공통 지침 시험판·CI 설치 검수 완료, 실기기 Luna 검수 대기 |
+| macOS Apple Silicon | `0.2.1-preview.7` | 친구용 공통 지침 시험판·격리 설치/교체 확인, 실사용 검수 대기 |
 
 둘 다 정식 서명판이 아니다. Windows Authenticode와 Apple Developer ID/공증을 제공하지 않는다.
 파일 hash는 손상·바이트 일치를 확인하지만 제작자 서명을 대신하지 않는다. OS가 정상적인 사용자 확인
@@ -23,11 +23,11 @@ registry를 손으로 편집하지 않는다.
 
 ## Windows 11 x64
 
-릴리스: [windows-owner-update-0.1.1-owner.5](https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.5)
+릴리스: [windows-owner-update-0.1.1-owner.6](https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.6)
 
-- 설치 파일: `GIL.Companion.Unsigned.Test._0.1.1-owner.5_x64-setup.exe`
-- 크기: `5,545,097` bytes
-- SHA-256: `ce4b91c56164e4705cd054e486b54def06d9e86f174fc08fe49632599ef9a866`
+- 설치 파일: `GIL.Companion.Unsigned.Test._0.1.1-owner.6_x64-setup.exe`
+- 크기: `5,546,074` bytes
+- SHA-256: `4835ebf82ea7d4d2e53f030170bcf5a777ae1ece259e42ff353b40ac5ff2e306`
 - 지원: x64만. ARM64 Windows에는 설치하지 않는다.
 
 사용자 절차:
@@ -51,20 +51,20 @@ registry를 손으로 편집하지 않는다.
 
 ## macOS Apple Silicon
 
-릴리스: [v0.2.1-preview.6](https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.6)
+릴리스: [v0.2.1-preview.7](https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.7)
 
 - Plugin: `gil-companion-prototype@gil-preview-macos-arm64`
-- marketplace tag: `v0.2.1-preview.6`
-- marketplace commit: `2a1ec23576eb35e05210dda1d8b5400a577ec30f`
-- Git 없는 설치 archive: `gil-codex-macos-arm64-0.2.1-preview.6.tar.gz`
-- archive 크기: `3,189,503` bytes
-- archive SHA-256: `477ad55fb6757fc58c4264bd265c7dd8e196c4a5ecf648ac6e1a181a8338d2b5`
+- marketplace tag: `v0.2.1-preview.7`
+- marketplace commit: `b81151830a4d723be95705b8f9274b1ff3ed3adb`
+- Git 없는 설치 archive: `gil-codex-macos-arm64-0.2.1-preview.7.tar.gz`
+- archive 크기: `3,218,986` bytes
+- archive SHA-256: `ecd045e3a043e820bb5ff59a6d8b6d3ca57e68dfa3d8a8426a598f70682dd8ee`
 - 지원: Apple Silicon(`arm64`)만. Intel Mac에는 설치하지 않는다.
 
 ### Codex에 붙여넣을 요청
 
 ```text
-GIL unsigned preview 0.2.1-preview.6을 설치해 줘. 사용자가 터미널을 직접 조작하게 하지 마.
+GIL unsigned preview 0.2.1-preview.7을 설치해 줘. 사용자가 터미널을 직접 조작하게 하지 마.
 플러그인 관리 MCP 도구만 보고 설치 불가라고 결론내리지 말고, 이 로컬 Codex 작업의 셸에서
 앱에 포함된 codex CLI를 사용해. 프로젝트를 초기화·이관하거나 .gil 기록을 바꾸지 마.
 
@@ -79,35 +79,35 @@ GIL unsigned preview 0.2.1-preview.6을 설치해 줘. 사용자가 터미널을
 알려준 뒤 내 승인을 기다려. 설정 파일이나 Plugin cache를 직접 편집하지 마.
 
 Git이 실제로 동작하면 다음 고정 tag 경로를 사용해:
-codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.6 --json
+codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.7 --json
 codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 
 Git 또는 Xcode Command Line Tools를 찾지 못하면 개발 도구 설치를 제안하지 말고 Git 없는 경로로 전환해.
 다음 archive를 임시 파일로 받은 뒤 압축 해제 전에 크기와 SHA-256을 모두 확인해:
-https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.6/gil-codex-macos-arm64-0.2.1-preview.6.tar.gz
-크기: 3189503 bytes
-SHA-256: 477ad55fb6757fc58c4264bd265c7dd8e196c4a5ecf648ac6e1a181a8338d2b5
+https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.7/gil-codex-macos-arm64-0.2.1-preview.7.tar.gz
+크기: 3218986 bytes
+SHA-256: ecd045e3a043e820bb5ff59a6d8b6d3ca57e68dfa3d8a8426a598f70682dd8ee
 
 값이 다르면 아무것도 풀지 말고 중단해. 일치하면 tar 목록에서 절대경로, .. 경로 이동,
 심볼릭 링크, 하드 링크와 특수 파일이 없는지 확인해. 문제가 없으면 기존 폴더를 덮어쓰지 말고
-$HOME/Library/Application Support/GIL/preview.6-local 이라는 새 사용자 전용 폴더에 풀어.
-그 폴더의 .agents/plugins/marketplace.json, release.json, Plugin version 0.2.1-preview.6,
+$HOME/Library/Application Support/GIL/preview.7-local 이라는 새 사용자 전용 폴더에 풀어.
+그 폴더의 .agents/plugins/marketplace.json, release.json, Plugin version 0.2.1-preview.7,
 core/darwin-arm64/gil 실행 권한을 확인한 뒤 다음 공식 CLI 명령을 사용해:
-codex plugin marketplace add "$HOME/Library/Application Support/GIL/preview.6-local" --json
+codex plugin marketplace add "$HOME/Library/Application Support/GIL/preview.7-local" --json
 codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 
 네트워크나 Codex 설정 저장 권한이 필요하면 정상 승인 창으로 요청하고, 승인 뒤에는
 codex plugin list --json으로 상태를 다시 읽어 끝나지 않은 단계만 이어가. 다시 다운로드·압축 해제하거나
 무조건 재등록하지 마. Gatekeeper를 끄거나 quarantine·권한을 강제로 변경하지 마.
 
-마지막으로 codex plugin list --json에서 설치 버전이 0.2.1-preview.6인지 확인해 알려줘.
+마지막으로 codex plugin list --json에서 설치 버전이 0.2.1-preview.7인지 확인해 알려줘.
 화면이 실제로 보이기 전에는 Monitor가 열렸다고 말하지 마.
 ```
 
 설치 후 새 대화에서 빈 테스트 폴더를 선택하고 **“지금 폴더에서 GIL 프로젝트를 시작해 줘”**라고
 말한다. 이미 기록이 있는 폴더라면 **“기록을 바꾸지 말고 GIL Monitor를 열어 줘”**라고 말한다.
 
-깨끗한 Mac VM에서 Git/Xcode Command Line Tools 부재를 확인한 뒤 Git 없는 경로로 설치했고 GIL 동작까지
+이전 preview.6의 깨끗한 Mac VM에서 Git/Xcode Command Line Tools 부재를 확인한 뒤 Git 없는 경로로 설치했고 GIL 동작까지
 사용자가 확인했다. 이 확인은 Apple 서명·공증이나 모든 Mac 호환성을 의미하지 않는다. fullscreen 전환과
 앱 완전 종료 후 복원이 그 VM에서 별도로 확인되지 않았다면 성공 범위에 포함하지 않는다.
 
