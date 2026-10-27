@@ -1,10 +1,10 @@
 {
-  "version": "0.1.1-owner.3",
-  "notes": "사용자가 요청한 GIL Companion 및 Core 업데이트입니다. Codex는 닫지 않아도 됩니다.",
+  "version": "0.1.1-owner.4",
+  "notes": "GIL 시작 시 Monitor 안내, 완료 조건에 따른 단계 전환 안내, 현재 작업·완료 조건·기록 변화 표시를 개선했습니다. 업데이트 후 새 대화에서 확인하세요. Codex는 닫지 않아도 됩니다.",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/hyun06000/gil/releases/download/windows-owner-update-0.1.1-owner.3/GIL.Companion.Unsigned.Test._0.1.1-owner.3_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRMmJnSHJ2eEhDbkx1aE1leFhwcUNPbjRRbjJBd0kyRjAvSU5jNWdZT0VDS0Z3bURjaXFmRDN6RWhaYkh4eHI1VHN2YXRka3FCcTRmUW1OWm42K2psVStXb1RQd1BGUFFJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzMDg5NjI2CWZpbGU6R0lMIENvbXBhbmlvbiAoVW5zaWduZWQgVGVzdClfMC4xLjEtb3duZXIuM194NjQtc2V0dXAuZXhlCXZlcnNpb246MC4xLjEtb3duZXIuMwozeXZzTldUVFQvSkhVQXpTVThoOWgzVGJ2Mlo2dmY3SnlPVGFNOHF5YjYxOGREbzNiUCtZb3MyU0h2enhWd1IrNmJjTVF6UERYUHc2NDYyWm1Hb2dBZz09Cg=="
+      "url": "https://github.com/hyun06000/gil/releases/download/windows-owner-update-0.1.1-owner.4/GIL.Companion.Unsigned.Test._0.1.1-owner.4_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRMmJnSHJ2eEhDbkxTd3VIcEVqb3dTdmFFTnNHclhEVnYzMk5qVVdNamJ4aVk4UHNDZi9XdzNLalViQmE5akdnZ3FyWWRlSVcrZnZaTHQzdlJlVFZNNktqbVZGZjROSkFJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzMTAzNTc5CWZpbGU6R0lMIENvbXBhbmlvbiAoVW5zaWduZWQgVGVzdClfMC4xLjEtb3duZXIuNF94NjQtc2V0dXAuZXhlCXZlcnNpb246MC4xLjEtb3duZXIuNAphQ24zUDBSVGx1RmpuNGJNa1hjMTV6SGxRNkRYSHNzOUR0WCsrK05yZWNMWE1KYy9YUEVtSjhaZXpVa2kwY0JsaSsyUitOVkRQdmJNRi80OFRzQ3VCZz09Cg=="
     }
   }
 }
