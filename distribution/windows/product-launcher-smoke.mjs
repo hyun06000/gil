@@ -9,7 +9,11 @@ assert.equal(process.platform, 'win32', 'Windows is required');
 assert.equal(process.arch, 'x64', 'The first product cohort is x64 only');
 const launcher = resolve(process.argv[2] || '');
 const core = resolve(process.argv[3] || '');
-assert.ok(process.argv[2] && process.argv[3], 'Usage: node product-launcher-smoke.mjs <launcher> <core>');
+const installer = resolve(process.argv[4] || '');
+const receiptPath = resolve(process.argv[5] || '');
+const expectedVersion = process.argv[6] || '';
+assert.ok(process.argv[2] && process.argv[3] && process.argv[4] && process.argv[5] && expectedVersion,
+  'Usage: node product-launcher-smoke.mjs <launcher> <running-core> <installer> <receipt> <expected-version>');
 
 const version = spawnSync(launcher, ['--version'], {encoding: 'utf8', timeout: 30_000});
 assert.equal(version.status, 0, version.stderr);
@@ -53,6 +57,22 @@ try {
   // the child exits. An installer must therefore add a new version, never modify these bytes.
   await assert.rejects(open(core, 'r+'), error => ['EBUSY', 'EACCES', 'EPERM'].includes(error.code));
   assert.equal(createHash('sha256').update(await readFile(core)).digest('hex'), before);
+
+  // Codex does not need to close for an update. Keep this initialized MCP process alive while NSIS
+  // repairs the Companion and republishes the selection receipt. Installation must neither stop this
+  // connection nor replace the immutable Core bytes mapped by it.
+  const repair = spawnSync(installer, ['/S'], {
+    encoding: 'utf8',
+    timeout: 120_000,
+    windowsHide: true,
+  });
+  assert.equal(repair.status, 0,
+    `installer failed while MCP stayed connected: ${repair.error || repair.stderr || repair.stdout}`);
+  const afterUpdate = await request('tools/list', {});
+  assert.ok(afterUpdate.tools.some(one => one.name === 'gil_status'));
+  assert.equal(createHash('sha256').update(await readFile(core)).digest('hex'), before);
+  const selected = JSON.parse(await readFile(receiptPath, 'utf8'));
+  assert.equal(selected.version, expectedVersion);
 } finally {
   const exited = child.exitCode === null ? new Promise((resolveExit, reject) => {
     const timer = setTimeout(() => { child.kill(); reject(new Error(`launcher did not exit; ${stderr}`)); }, 10_000);
@@ -63,4 +83,5 @@ try {
 }
 
 console.log(JSON.stringify({installation: 'passed', launcher: 'verified', mcp: 'initialized',
-  immutable_running_core: 'write refused', architecture: process.arch}));
+  version_switch_while_mcp_connected: 'passed', immutable_running_core: 'write refused',
+  architecture: process.arch}));
