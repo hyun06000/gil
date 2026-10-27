@@ -208,7 +208,11 @@ pub(crate) fn externalize_inline_if_needed(root: &Path) -> Result<bool, String> 
     let staging = parent.join(format!(".migrating-{}-{nonce}", std::process::id()));
     std::fs::create_dir(&staging)
         .map_err(|e| format!("Windows 개인 저장소 준비 폴더를 만들지 못했다: {e}"))?;
-    let held_parent = File::open(&staging)
+    let held_parent = crate::windows_fs::open_dir(
+        &staging,
+        crate::windows_fs::SHARE_ALL,
+        false,
+    )
         .map_err(|e| format!("Windows 개인 저장소 준비 폴더를 열지 못했다: {e}"))?;
     let held_gil = crate::windows_fs::create_private_dir_at(&held_parent, OsStr::new(".gil"))
         .map_err(|e| format!("Windows 개인 기록 폴더를 만들지 못했다: {e}"))?;
