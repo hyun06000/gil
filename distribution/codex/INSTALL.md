@@ -1,7 +1,7 @@
 # GIL preview 설치
 
-대상: **macOS Apple Silicon의 Codex** · `0.2.1-preview.5` (2026-10-18 게시, unsigned prerelease; companion Skill 보정).
-게시·검증 기록은 [preview.5 장부](PREVIEW-5-PUBLICATION-20261018.md)를 본다.
+대상: **macOS Apple Silicon의 Codex** · `0.2.1-preview.6` (2026-10-27 게시, unsigned prerelease; 최신 Core·Skill·fullscreen Monitor).
+게시·검증 기록은 [preview.6 장부](PREVIEW-6-PUBLICATION-20261027.md)를 본다.
 Apple Developer ID 서명·공증은 없다. 개발 도구 없는 Mac VM의 설치·실사용은
 2026-10-07 **preview.3** 사용자 검수로 확인했으며, preview.4는 새 Mac·VM에서 아직 검수하지 않았고
 모든 Mac의 동작을 보장하는 것은 아니다. preview.4의 이미지 보고서 범위와 이관·복구 주의는
@@ -21,11 +21,11 @@ Windows·Intel Mac·Claude 작업 모드는 이번 배포의 지원 대상이 �
 먼저 Codex에서 빈 작업 폴더를 선택해 **로컬 명령을 실행할 수 있는 새 대화**를 연다.
 이 경로는 Git을 요구한다. Git이 없다면 개발 도구를 추가 설치하지 말고 위 Git 없는 경로를 사용한다.
 
-> GIL의 unsigned preview 0.2.1-preview.5를 설치해 줘.
+> GIL의 unsigned preview 0.2.1-preview.6을 설치해 줘.
 > 공식 Plugin 관리 기능으로 https://github.com/hyun06000/gil-marketplace.git 을
-> 고정 tag v0.2.1-preview.5 (commit 0f841dae120e45d0ac7e2a90bd383685c8756627) 에 등록하고,
+> 고정 tag v0.2.1-preview.6 (commit 2a1ec23576eb35e05210dda1d8b5400a577ec30f) 에 등록하고,
 > gil-companion-prototype@gil-preview-macos-arm64 를 설치해 줘.
-> tag가 존재하고 설치된 버전이 preview.5인지 확인해 줘.
+> tag가 존재하고 설치된 버전이 preview.6인지 확인해 줘.
 > 기존 GIL 설치가 있다면 중복 등록하지 말고 출처와 버전을 먼저 확인하고 교체 전에 물어봐 줘.
 > 내 프로젝트를 초기화하거나 이관하거나 기록을 바꾸지는 마.
 
@@ -57,8 +57,8 @@ unsigned preview는 자동으로 최신 main을 따라가지 않는다. 새 버�
 제거는 Codex의 Plugin 관리 화면에서 한다. **프로젝트 폴더나 `.gil`을 지우지 않는다.**
 화면이 사라져도 프로젝트의 Journey가 삭제됐다는 뜻은 아니다. 다시 설치한 뒤 같은 폴더를 고른다.
 
-이전 검증판은 `0.2.1-preview.4`, tag `v0.2.1-preview.4` / marketplace commit
-`e3ce1be57f1a2b6829b89258e703a6cabc1b77eb`다. 복구가 필요하면 Codex에게 현재 설치를 확인한 뒤
+이전 검증판은 `0.2.1-preview.5`, tag `v0.2.1-preview.5` / marketplace commit
+`0f841dae120e45d0ac7e2a90bd383685c8756627`다. 복구가 필요하면 Codex에게 현재 설치를 확인한 뒤
 같은 marketplace를 이 tag로 교체해 달라고 요청한다. 이는 **Plugin 버전 복구**이지
 프로젝트 Artifact를 되돌리는 `gil restore`가 아니다. 사용자 동의 없이 실행하지 않는다.
 **주의:** preview.4 이후로 새로 만든 이미지 Project는 저장 형식 5이며, preview.3는 형식 5를 읽지 못한다
@@ -76,19 +76,19 @@ unsigned preview는 자동으로 최신 main을 따라가지 않는다. 새 버�
 새 설치의 명령 형태는 다음과 같고, 기존 marketplace가 있으면 먼저 등록 상태와 동의를 확인한다.
 
 ```sh
-codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.5 --json
+codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.6 --json
 codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 ```
 
-2026-10-18 확인: 저장된 Git 인증정보·Codex 로그인 없이 새 격리 profile에서 위 tag로 설치됐고,
-설치된 7개 파일의 bytes·권한이 검수본과 같았다(preview.4도 2026-10-15에 같은 방식으로 확인).
+2026-10-27 확인: 새 격리 profile에서 위 tag가 고정 commit으로 설치됐고 Codex가 preview.6을
+보고했으며 설치된 Core·Skill bytes가 검수본과 같았다. 공개 archive도 익명 HTTPS 다운로드로 재검증했다.
 
 공식 CLI가 실패하면 설치 cache나 Host 설정을 손으로 고쳐 성공처럼 만들지 않는다.
 [Codex 공식 Plugin 안내](https://developers.openai.com/plugins/build/plugins)를 따른다.
 
-게시된 preview.5 archive의 SHA-256:
-`64ab183502161b81459d7a3e96fb73f62d624b75b39bb667da44212de46632e4`
-(원본 CI archive `3fa6713f3fd51576b95e5c9f60d748aa041b01c8f062b97b0a22b128f4275634`에서 version·PREVIEW.md만 staging).
+게시된 preview.6 archive의 SHA-256:
+`477ad55fb6757fc58c4264bd265c7dd8e196c4a5ecf648ac6e1a181a8338d2b5`
+(3,189,503 bytes; source CI가 만든 검증 후보 그대로 게시).
 이 값은 GitHub가 생성하는 Source ZIP의 해시가 아니다. 해시는 파일 일관성이지 Apple 서명·
 공증이나 publisher 인증의 대체물이 아니다. 공개 게시 상태와 증거는
-[배포 장부](PREVIEW-5-PUBLICATION-20261018.md)를 확인한다. 이전 판은 [preview.4 장부](PREVIEW-4-PUBLICATION-20261014.md).
+[배포 장부](PREVIEW-6-PUBLICATION-20261027.md)를 확인한다. 이전 판은 [preview.5 장부](PREVIEW-5-PUBLICATION-20261018.md).
