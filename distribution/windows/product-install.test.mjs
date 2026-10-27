@@ -111,6 +111,17 @@ test('the updater has no automatic check and install requires a second user deci
   assert.match(rust, /expected_version/);
 });
 
+test('the update UI keeps Codex open and explains the connection boundary', async () => {
+  const ui = await read('ui/companion.js');
+  const check = ui.indexOf('async function checkForUpdate');
+  const connect = ui.indexOf('async function connectCodex', check);
+  const body = ui.slice(check, connect);
+  assert.match(body, /Codex는 닫지 않아도 됩니다/);
+  assert.match(body, /기존 GIL 대화는 현재 Core로 계속/);
+  assert.match(body, /새 대화부터 새 Core/);
+  assert.match(body, /Companion만 닫힐 수/);
+});
+
 test('release GUI does not open a Windows console', async () => {
   assert.match(await read('companion/src/main.rs'), /windows_subsystem = "windows"/);
 });
@@ -165,6 +176,10 @@ test('signed product CI is manual, secret-gated, installed, and exercised before
   assert.match(acceptance, /Installation changed or removed the preserved legacy runtime/);
   assert.match(acceptance, /Start-Process -FilePath \$Installer -ArgumentList '\/S'/);
   assert.match(acceptance, /product-launcher-smoke\.mjs/);
+  assert.match(acceptance, /product-launcher-smoke\.mjs \$Launcher \$PreviousCore \$Installer \$ReceiptPath \$Receipt\.version/);
+  assert.match(acceptance, /version_switch_while_mcp_connected = \$true/);
+  assert.match(acceptance, /old_connection_survived_update = \$true/);
+  assert.match(acceptance, /new_core_selected_for_next_connection = \$true/);
   assert.match(acceptance, /mcp add gil -- \$Launcher mcp --serve/);
   assert.match(acceptance, /mcp remove gil/);
   assert.match(acceptance, /Get-AuthenticodeSignature/);
@@ -173,6 +188,12 @@ test('signed product CI is manual, secret-gated, installed, and exercised before
   assert.match(acceptance, /RedirectStandardError \$GuiStderr/);
   assert.match(acceptance, /Start-Process -FilePath \$Uninstaller -ArgumentList '\/S'/);
   assert.match(acceptance, /Uninstall removed the preserved runtime/);
+
+  const launcherSmoke = await read('distribution/windows/product-launcher-smoke.mjs');
+  assert.match(launcherSmoke, /spawnSync\(installer, \['\/S'\]/);
+  assert.match(launcherSmoke, /afterUpdate = await request\('tools\/list'/);
+  assert.match(launcherSmoke, /selected\.version, expectedVersion/);
+  assert.match(launcherSmoke, /version_switch_while_mcp_connected: 'passed'/);
 });
 
 test('unsigned owner acceptance CI is manual, isolated, install-tested and never published', async () => {

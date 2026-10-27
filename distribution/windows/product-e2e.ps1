@@ -104,8 +104,24 @@ try {
     }
 }
 
-node distribution/windows/product-launcher-smoke.mjs $Launcher $Core
+# Model a real side-by-side update without rebuilding an untrusted second installer. The selected
+# previous-version directory contains verified Core bytes and stays mapped by the live MCP process;
+# the installer must select its own immutable version beside it without stopping that connection.
+$PreviousVersion = "$($Receipt.version)-previous-test"
+$PreviousCore = Join-Path $Runtime "versions\$PreviousVersion\gil.exe"
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $PreviousCore) | Out-Null
+Copy-Item -LiteralPath $Core -Destination $PreviousCore
+[ordered]@{ schema = 1; version = $PreviousVersion; sha256 = $CoreHash; architecture = 'x86_64'; cohort = 'gil-mcp-v1' } |
+    ConvertTo-Json -Compress |
+    Set-Content -LiteralPath $ReceiptPath -Encoding utf8NoBOM
+
+node distribution/windows/product-launcher-smoke.mjs $Launcher $PreviousCore $Installer $ReceiptPath $Receipt.version
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$UpdatedReceipt = Get-Content -Raw -LiteralPath $ReceiptPath | ConvertFrom-Json
+if ($UpdatedReceipt.version -ne $Receipt.version) { throw 'Installer did not select the new Core for the next MCP connection' }
+if ((Get-FileHash -LiteralPath $PreviousCore -Algorithm SHA256).Hash.ToLowerInvariant() -ne $CoreHash) {
+    throw 'Update changed the Core used by the existing MCP connection'
+}
 
 # Exercise the same official CLI command shape used by the Companion button, but isolate all test
 # configuration under RUNNER_TEMP. The test never reads or changes the runner's normal Codex home.
@@ -173,7 +189,7 @@ $SignerThumbprint = if ($Signature.SignerCertificate) { $Signature.SignerCertifi
         signature_status = $Signature.Status.ToString()
     }
     runtime = [ordered]@{ version = $Receipt.version; architecture = $Receipt.architecture; cohort = $Receipt.cohort; core_sha256 = $CoreHash }
-    acceptance = [ordered]@{ silent_current_user_install = $true; idempotent_repair_install = $true; legacy_runtime_preserved = [bool]$SeedLegacyRuntime; visible_companion_window = $true; launcher_mcp = $true; running_core_write_refused = $true; codex_cli_registration = $true; codex_cli_disconnect = $true; companion_uninstall = $true; runtime_preserved = $true }
+    acceptance = [ordered]@{ silent_current_user_install = $true; idempotent_repair_install = $true; version_switch_while_mcp_connected = $true; old_connection_survived_update = $true; new_core_selected_for_next_connection = $true; legacy_runtime_preserved = [bool]$SeedLegacyRuntime; visible_companion_window = $true; launcher_mcp = $true; running_core_write_refused = $true; codex_cli_registration = $true; codex_cli_disconnect = $true; companion_uninstall = $true; runtime_preserved = $true }
     exclusions = @('Companion UI contents', 'Codex Desktop conversation', 'complete runtime cleanup', 'SmartScreen reputation')
 } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $Evidence -Encoding utf8NoBOM
 Get-Content -Raw -LiteralPath $Evidence
