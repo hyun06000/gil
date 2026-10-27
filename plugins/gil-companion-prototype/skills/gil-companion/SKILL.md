@@ -25,6 +25,18 @@ Use only the user's selected absolute `project_root`. Read the tool's text guida
    each success. Do not ask again for approval already given to that proposal. Outcome judges the
    approved scope; do not leave it open until the whole project is finished. Resume from the actual
    recorded position without repeating already closed steps.
+
+   Choose the next call from the **current recorded state**, not from the beginning of the sequence:
+
+   | Current state | Next call |
+   | --- | --- |
+   | Question is open and the user has answered its question | `gil_close` with that response |
+   | Synthesis is open and the user approved its statement | `gil_close` with the approval |
+   | Synthesis is closed and Outcome has not been opened | `gil_open` Outcome |
+   | Outcome is already open and its verdict/next direction are ready | `gil_close` Outcome; do not open it again |
+   | Outcome is closed but the Interview Cycle is still open | `gil_close` with the Cycle Report; there is no extra Report step to open |
+   | Interview Cycle is closed and the agreed execution work remains | `gil_open` Experiment; never `gil_start` an existing project |
+
 3. **One checkable question at a time.** Open a small action contract, perform its `next_action`,
    then `gil_close` when `done_when` is met, before further external work or final delivery.
    A new request does not extend an already completed contract. Substantive research, source
