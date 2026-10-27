@@ -57,6 +57,17 @@ main 보호를 적용·재조회했다. force push·main 삭제도 금지한다.
 
 ## 개발과 시험
 
+### 공통 Agent 작업 규칙
+
+OS·설치 방식과 무관한 핵심 작업 지침은 `src/mcp/workflow.md` 한 곳에서 수정한다.
+Rust MCP 서버는 이 원문을 컴파일 때 포함하고, Plugin Skill은 같은 원문을 생성 영역에 담는다.
+수정 후 `node plugins/gil-companion-prototype/sync-workflow.mjs --write`를 실행한다.
+Skill의 생성 영역은 직접 수정하지 않는다. 기본 실행은 파일을 바꾸지 않는 일치 검사다.
+macOS·Windows의 Core 시험과 Plugin 시험이 원문과 Skill의 차이를 거절한다.
+설치·권한·화면 표시 절차와 기능별 입력 형식은 달라도 Interview·Verify·배움·종료 규칙은 같다.
+연결된 도구 schema와 프로젝트 형식을 기준으로 동작하며 OS 이름으로 기능을 추측하지 않는다.
+설치본에 반영하려면 두 배포를 각각 갱신해야 한다. 소스 변경은 기존 설치본을 갱신하지 않는다.
+
 현재 검증한 제작 환경은 macOS arm64, Rust 1.97.1, Node 22 이상이다. Node는 UI 제작과 비교시험용이며
 native Plugin 설치본의 실행 의존성은 아니다. 새 환경의 필요 의존성·지원 범위는 별도 확인한다.
 

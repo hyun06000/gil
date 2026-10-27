@@ -28,6 +28,7 @@ const call=(name,args)=>rpc('tools/call',{name,arguments:args});
 let initialized, started, opened, failedMonitor;
 try {
   initialized=await rpc('initialize',{protocolVersion:'2024-11-05',capabilities:{},clientInfo:{name:'synthetic-eval',version:'1'}});
+  assert.equal(initialized.instructions, await readFile(join(repo,'src/mcp/workflow.md'),'utf8'), 'evaluation binary has stale workflow instructions');
   server.stdin.write(JSON.stringify({jsonrpc:'2.0',method:'notifications/initialized'})+'\n');
   started=await call('gil_start',{project_root:project});
   opened=await call('gil_open',{project_root:project,kind:'question',contract:'objective: 계산기 요구를 확인한다\nnext_action: 필요한 연산을 질문한다\ndone_when: 사용자의 답을 받았다\n'});

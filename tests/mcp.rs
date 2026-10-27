@@ -907,6 +907,15 @@ fn initialize_succeeds_and_says_who_is_answering() {
     assert_eq!(got["jsonrpc"], "2.0");
     assert!(got["result"]["serverInfo"]["name"].is_string(), "{got}");
     assert!(got["result"]["capabilities"]["tools"].is_object(), "{got}");
+    // This real initialize exchange runs on macOS and native Windows in both profiles.
+    let workflow = include_str!("../src/mcp/workflow.md");
+    assert_eq!(got["result"]["instructions"].as_str(), Some(workflow));
+    let skill = include_str!("../plugins/gil-companion-prototype/skills/gil-companion/SKILL.md");
+    let block = skill.split("<!-- BEGIN GENERATED SHARED WORKFLOW -->\n")
+        .nth(1).expect("shared workflow start")
+        .split("<!-- END GENERATED SHARED WORKFLOW -->")
+        .next().expect("shared workflow end");
+    assert_eq!(block, workflow, "regenerate the Plugin skill from workflow.md");
     let (done, _) = mcp.eof();
     assert!(done.success());
 }

@@ -1,7 +1,7 @@
 // **공용 Skill 의 시험** — `node --test`
 //
-// Skill 은 Agent 가 언제 무엇을 부를지 정하는 유일한 자리다. T1.1 은 도구·schema 를 바꾸지 않고
-// 이 문서 하나로 「프로젝트 시작 → Monitor 표시 → 첫 Interview」를 한 요청에 잇는다. 그러니
+// 핵심 작업 규칙은 src/mcp/workflow.md 에서 생성하고 MCP 와 함께 사용한다. 이 시험은
+// Skill 의 Host 절차가 「프로젝트 시작 → Monitor 표시 → 첫 Interview」를 잇는지 확인한다. 그러니
 // 여기서 지키는 것은 그 문서가 실제 도구 표·Core 의 거절 문구·Monitor 거절 code 에 어긋나지
 // 않고, 도구 응답을 화면 성공으로 단정하는 문장이 다시 들어오지 않는다는 사실이다.
 //
