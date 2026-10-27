@@ -53,6 +53,7 @@ const cases=[
   {id:'interview_cycle_closed',state:{cycle:'interview',cycleState:'closed',lastTool:'gil_close',ok:true,nextReceipt:'open_child: interview 또는 experiment',userReply:'합의한 보고서 조사를 시작해줘'},want:'gil_open'},
   {id:'research_verify_complete',state:{cycle:'experiment',kind:'verify',next_action:'주가 자료의 기간과 기준을 확인한다',done_when:'두 자료의 기간·통화·조정 기준 일치를 확인했다',observed:'모두 일치함을 확인하고 이번 관측을 sources.md에 저장했다 (evidence_files: sources.md). 실적 확인과 최종 보고서는 아직 하지 않았다.',userReply:'다음에는 실적도 조사해줘'},want:'gil_close'},
   {id:'verify_chat_only',state:{kind:'verify',observed:'자료를 읽어 결과를 확인했고 채팅 보고서만 작성했다. 파일은 전혀 저장하지 않았다.'},want:'perform_current_action'},
+  {id:'hypothesis_closed_before_research',state:{cycle:'experiment',lastTool:'gil_close',ok:true,closedKind:'hypothesis',nextReceipt:'Verify를 연다',observed:'주가 자료를 읽어 가설을 확인할 차례다. Verify 계약은 준비했지만 gil_open은 아직 호출하지 않았다.'},want:'gil_open'},
   {id:'refused_close',state:{lastTool:'gil_close',isError:true,problem:'Report에 outcome이 빠졌다',observed:'현재 Verify 완료, 실제 테스트 결과 있음'},want:'repair_refusal'},
   {id:'resume',state:{newConversation:true,projectExists:true,userReply:'이어서 해줘',contextRead:false},want:'gil_context'},
   {id:'monitor_failed',state:{lastTool:'gil_start',result:failedMonitor,userReply:null},want:'gil_open'},

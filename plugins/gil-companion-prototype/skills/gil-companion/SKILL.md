@@ -32,6 +32,11 @@ Use only the user's selected absolute `project_root`. Read the tool's text guida
    and tests belong in Experiment Verify, never an open Interview. Split independent uncertainties
    into successive Experiments with observable success conditions. Multiple related searches,
    edits and tests within the same unfinished Verify are valid.
+   **Open before acting:** after closing Hypothesis, the next action is `gil_open` for Verify.
+   Wait for its success before reading sources, searching, calculating or writing files. A closed
+   Hypothesis or a prepared Verify contract does not mean Verify is open. Do not gather evidence
+   first and then open Verify to record work already performed. This also applies between cycles:
+   finish the old cycle and reach a successfully opened Verify before the next investigation.
 4. **Leave evidence in the world.** Every Verify must save its actual observations/results as
    project files: documents, logs, datasets, code or visual artifacts. Chat alone cannot complete
    Verify. Even read-only investigation or a failed test needs a saved observation document.
