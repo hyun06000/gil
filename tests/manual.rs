@@ -261,7 +261,7 @@ fn help_takes_one_topic_and_not_a_sentence() {
 // ── ③ 본문이 지금 CLI·Grammar 와 어긋나지 않는다 ────────────────────────
 
 #[test]
-fn the_verify_topic_asks_for_exactly_what_the_grammar_asks_for() {
+fn the_verify_topic_includes_grammar_and_new_write_evidence_policy() {
     let dir = nowhere("the_verify_topic_asks_for_exactly_what_the_grammar_asks_for");
     let said = ok(&dir, &["help", "step/verify/close"]);
     let rules: RuleSet = spec();
@@ -275,15 +275,16 @@ fn the_verify_topic_asks_for_exactly_what_the_grammar_asks_for() {
         assert!(todo.contains(field.as_str()), "{field} 이 빠졌다:\n{todo}");
     }
 
-    // 예제가 적는 칸도 문법과 같은 집합이다 — 갈리면 여기서 빨개진다.
+    // Historical grammar stays readable; the current-write example also needs file evidence.
     let example = section(&said, "올바른 예");
     let written: Vec<String> = example
         .lines()
         .filter_map(|line| line.trim().split_once(':').map(|(key, _)| key.to_string()))
         .filter(|key| !key.is_empty() && !key.contains(' '))
         .collect();
-    let wanted: Vec<String> = declared.close_requires.clone();
-    assert_eq!(written, wanted, "예제의 칸이 문법과 다르다:\n{example}");
+    let mut wanted: Vec<String> = declared.close_requires.clone();
+    wanted.push("evidence_files".into());
+    assert_eq!(written, wanted, "예제의 칸이 현재 쓰기 조건과 다르다:\n{example}");
 }
 
 #[test]

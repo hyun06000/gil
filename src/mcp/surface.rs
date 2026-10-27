@@ -33,7 +33,7 @@ pub fn tools() -> &'static [Tool] {
             let hint = match tool.name.as_ref() {
                 "gil_start" => " Start also prepares the Monitor; follow the returned show_gil_monitor call immediately, before the first gil_open. Never repeat start after display failure.",
                 "gil_open" => " Choose one independently checkable objective and observable done_when. Perform it, then gil_close before another objective. Interview agrees scope only; research, calculations, chat-only reports, implementation and tests belong to Experiment Verify. An Interview Outcome judges the approved scope, not completion of the whole project.",
-                "gil_close" => " Call when the open action's done_when is met; report observed results, then follow the next receipt before doing more work.",
+                "gil_close" => " Call when done_when is met. Verify additionally requires actual saved evidence: Report.evidence_files lists project-relative paths, one per line. All must be nonempty Snapshot files; at least one must be new or changed. Chat-only results and visual not_needed/missing do not waive this. Analysis requires a nonblank interpretation; Outcome a nonblank lesson. Core links them to their actual evidence lineage. Follow the next receipt before more work.",
                 "gil_cycle" => " Legacy helper: do NOT use action=close; this tool cannot accept a Report. Close both Steps and Cycles with gil_close(project_root, report). Use gil_open for new Cycles.",
                 _ => continue,
             };

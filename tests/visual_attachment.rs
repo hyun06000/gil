@@ -88,7 +88,7 @@ fn report(session: &ProjectSession) -> gil::Report {
         session.project().current_cycle().rules(),
         CycleKind::Experiment,
         NodeKind::Verify,
-    )
+    ).with("evidence_files", "screen.png")
 }
 fn attached(ids: &[VisualAssetId]) -> VisualDeclaration {
     VisualDeclaration::Attached {
@@ -595,10 +595,17 @@ fn failed_state_write_does_not_publish_success_or_mutate_in_memory_project() {
 }
 
 #[test]
-fn not_needed_without_files_can_close_and_persist_explicitly() {
-    let (_, mut session) = setup("visual-attach-not-needed");
+fn not_needed_without_visual_attachments_still_requires_a_document() {
+    let (root, mut session) = setup("visual-attach-not-needed");
+    fs::remove_file(root.join("screen.png")).unwrap();
+    let before = fs::read(root.join(gil::STATE_PATH)).unwrap();
+    assert!(session.close_verify_with_images_and_commit(report(&session), vec![], |_| {
+        VisualDeclaration::NotNeeded { reason: "문자열만 검사했다".into() }
+    }).is_err());
+    assert_eq!(before, fs::read(root.join(gil::STATE_PATH)).unwrap());
+    fs::write(root.join("observations.md"), "합성 문자열 검사: 입력 ABC, 관측 ABC, 일치함.").unwrap();
     session
-        .close_verify_with_images_and_commit(report(&session), vec![], |_| {
+        .close_verify_with_images_and_commit(report(&session).with("evidence_files", "observations.md"), vec![], |_| {
             VisualDeclaration::NotNeeded {
                 reason: "문자열만 검사했다".into(),
             }

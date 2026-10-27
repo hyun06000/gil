@@ -223,7 +223,7 @@ const CANONICAL = [
   ["open", [], CONTRACT],
   ["close", [], "hypothesis: 이것이 원인이다\nrationale: 근거\nguardrail: 넘지 않을 선\n"],
   ["open", [], CONTRACT],
-  ["close", [], "execution: 이렇게 했다\nresult: 이렇게 나왔다\n"],
+  ["close", [], "execution: 이렇게 했다\nresult: 이렇게 나왔다\nevidence_files: observations.txt\n"],
   ["open", [], CONTRACT],
   ["close", [], "hypothesis_fit: yes\nproblem_solved: yes\nsuccess_condition_met: yes\n"
     + "guardrail_triggered: no\ninterpretation: 가설대로였다\n"],
@@ -248,6 +248,7 @@ async function walkThrough(exe) {
   const root = await mkdtemp(join(tmpdir(), "gil-equiv-"));
   const seen = [];
   for (const [sub, args, input] of CANONICAL) {
+    if (input?.includes("evidence_files:")) await writeFile(join(root, "observations.txt"), "Synthetic observation: expected 2, observed 2.\n");
     const got = await callCore(exe, [sub, ...args], { input, cwd: root });
     seen.push({ sub, args, ok: got.ok, exit_code: got.exit_code, said: got.said, problem: got.problem });
   }

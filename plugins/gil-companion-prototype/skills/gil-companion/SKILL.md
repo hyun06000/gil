@@ -7,6 +7,27 @@ description: Use GIL from this plugin — start a GIL project in the folder the 
 
 ## Everyday loop — read this first
 
+- Every Verify must leave durable evidence in the project: save the actual observations as a
+  document, log, dataset, code artifact or visualization. Chat alone never completes Verify.
+  Include `evidence_files` in its Report. One file: `evidence_files: evidence/result.md`.
+  For multiple paths use `evidence_files: |` followed by indented path lines (not bare lines).
+  Core checks
+  that every listed file is present and nonempty in the Snapshot and at least one is new or
+  changed from the baseline. Even reading/testing without changing the deliverable needs a saved
+  observation document. Record sources, inputs/method, observed results and limitations; never
+  create a meaningless marker or invent results just to satisfy the gate. Use visual evidence
+  when it helps assess the work. `visuals.not_needed`/`missing` only describe image attachment;
+  they do not exempt ordinary file evidence.
+- In a format-5 project, close Verify with the connected `gil_close` typed input. Include both
+  `expected_owner: {kind: "step", ref: "<actual open step ref>"}` and `visuals`. With no images,
+  use `visuals: {attachments: [], uses: [], declaration: {state: "not_needed", reason: "<actual reason>"}}`.
+  Keep the document paths in `report.evidence_files`. This is the same tool, not a separate visual
+  report tool; retrying a text-only close cannot fix a missing visual declaration.
+- After Verify, interpret its observations in Analysis and record the resulting lesson in Outcome.
+  Core links `evidence.verify_ref` and `learning.analysis_ref` to the actual current lineage; do not
+  supply different references. Deliver links to the saved evidence/deliverable, not only chat text.
+  If evidence is refused, the step stays open: save truthful evidence there, then submit the close.
+
 - Start once. Follow the start response's `show_gil_monitor` call before opening the first step.
   New servers prepare the Monitor during start; do not prepare it again when a scope was returned.
   If start succeeds but Monitor preparation fails, report the display failure and continue with
@@ -16,7 +37,8 @@ description: Use GIL from this plugin — start a GIL project in the folder the 
   Once the condition is met, the next GIL call is `gil_close`. A new request does not extend an
   already completed contract: close it first, then address the request at the next appropriate step.
 - Interview agrees scope. Research, calculations and report writing (even only in chat), like
-  implementation, belong to Experiment Verify; Analysis interprets those observations.
+  implementation, belong to Experiment Verify; Analysis interprets those observations. A report
+  requested in chat still needs a saved document alongside the chat summary.
   After the user's assent to the Synthesis statement: close Synthesis → open/close Interview
   Outcome → separately close Interview Cycle → open a bounded Experiment. Wait for each success.
   Outcome judges the agreed scope; do not keep it open until the whole project is finished.

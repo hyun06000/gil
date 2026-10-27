@@ -687,6 +687,10 @@ fn close(ctx: &Invocation<'_>) -> Result<String, String> {
     }
 }
 
+fn typed_verify_hint(here: crate::StepRef) -> String {
+    format!("\n이 프로젝트는 format 5다. Verify는 일반 텍스트 close로 닫을 수 없다. 연결된 gil_close의 typed 입력을 쓴다.\n  project_root와 report(실제 execution/result/evidence_files)에 다음 두 인자를 함께 보낸다:\n  expected_owner: {{\"kind\":\"step\",\"ref\":\"{here}\"}}\n  이미지가 필요 없는 문서 증거라면 visuals: {{\"attachments\":[],\"uses\":[],\"declaration\":{{\"state\":\"not_needed\",\"reason\":\"이미지가 필요 없는 실제 이유\"}}}}\n  이미지를 남긴 경우 연결된 스키마의 attachments/uses와 attached 선언을 쓴다. 별도 시각 보고 도구를 찾거나 일반 close를 반복하지 않는다.\n")
+}
+
 fn close_step(ctx: &Invocation<'_>, session: &mut Session) -> Result<String, String> {
     let cycle = session.project().cycles().current();
     let node = cycle
@@ -699,7 +703,10 @@ fn close_step(ctx: &Invocation<'_>, session: &mut Session) -> Result<String, Str
     let contract = cycle
         .step_contract(node.id, kind)
         .expect("열린 자리의 종류는 문법이 선언한 것이다");
-    let hint = skeleton_of(&contract, cycle);
+    let mut hint = skeleton_of(&contract, cycle);
+    if kind == crate::NodeKind::Verify && session.project().visual_state.is_some() {
+        hint.push_str(&typed_verify_hint(here));
+    }
 
     let report = read_report(ctx, &hint)?;
     // **한 번에 확정된다** — Report·Closed·Will Done·Journey 판이 함께 눕거나, 아무것도
@@ -1186,10 +1193,12 @@ fn close_help(ctx: &Invocation<'_>) -> Result<String, String> {
         return Ok(String::from("지금 자리의 Close 계약을 문법에서 찾지 못했다.\n"));
     };
     Ok(format!(
-        "닫을 대상\n  {}\n\n필요한 Report\n{}\n입력 골격\n{}\n",
+        "닫을 대상\n  {}\n\n필요한 Report\n{}\n입력 골격\n{}{}\n",
         contract.subject(),
         contract.constraints("  "),
-        skeleton_of(&contract, cycle)
+        skeleton_of(&contract, cycle), if session.can_confirm_artifact() {
+            "\n추가 종료 조건: 실제 증거 파일을 저장하고 evidence_files에 상대 경로를 한 줄에 하나씩 적는다. 모든 파일은 Snapshot에 있고 비어 있지 않아야 하며, 적어도 하나는 기준 세계보다 새롭거나 내용이 달라야 한다.\n"
+        } else { "" }
     ))
 }
 
@@ -1301,6 +1310,10 @@ fn opened_step(session: &Session, opened: crate::Opened) -> String {
     out.push_str(&format!("\n완료 조건\n{}\n", indent(will.done_when())));
     out.push_str("\n진행 경계\n  이 완료 조건을 충족하면 실제 결과를 Report로 적어 닫고 다음 행동으로 간다.\n  다른 목적의 일을 이 노드에 계속 붙이거나, 나중에 기록을 몰아 채우지 않는다.\n");
     if opened.kind == crate::NodeKind::Verify {
+        if session.project().visual_state.is_some() {
+            out.push_str(&typed_verify_hint(opened.step));
+        }
+        out.push_str("  증거 필수: 실제 관측·실행 결과를 프로젝트의 문서·로그·데이터·코드·시각자료 파일로 저장한다. 읽기만 한 작업도 관측 문서를 남긴다. Report의 evidence_files에 상대 경로를 한 줄에 하나씩 적는다. 파일 없음·빈 파일·이전 파일만 그대로 재사용하면 서버가 닫기를 거절한다. 채팅이나 visuals.not_needed/missing으로 대체할 수 없다.\n");
         out.push_str("  이 Verify 계약 안의 조사·출처 확인·계산·보고서 작성·구현·테스트를 수행한다. 관측을 마치기 전에 닫지 않는다. 완료 뒤에는 닫고 Analysis로 결과를 해석한다.\n");
     } else {
         out.push_str("  이 단계에서는 산출물을 수정하지 않는다. 새 근거를 얻는 외부 자료 조회·측정·계산·원고 작성·구현·테스트는 Verify에서 수행한다. 이미 관측한 자료의 해석은 Analysis에서 한다.\n");

@@ -204,8 +204,7 @@ fn a_dirty_cycle_boundary_points_at_the_same_topic() {
     // Experiment 를 판정까지 걸어 Cycle 을 닫을 자리에 세운다 — 세계는 그대로.
     *session.project_mut() = bootstrap_from(session.project().clone());
     up_to_verify(session.project_mut());
-    session
-        .close_step(full_report(&rules(), CycleKind::Experiment, NodeKind::Verify))
+    common::close_legacy_fixture(&mut session, full_report(&rules(), CycleKind::Experiment, NodeKind::Verify))
         .expect("Verify 를 닫는다");
     common::walked(session.project_mut(), NodeKind::Analysis);
 
@@ -537,8 +536,7 @@ fn after_verify(label: &str) -> PathBuf {
         ProjectSession::start(rules(), dir.join(gil::STATE_PATH)).expect("시작한다");
     *session.project_mut() = bootstrap_from(session.project().clone());
     up_to_verify(session.project_mut());
-    session
-        .close_step(full_report(&rules(), CycleKind::Experiment, NodeKind::Verify))
+    common::close_legacy_fixture(&mut session, full_report(&rules(), CycleKind::Experiment, NodeKind::Verify))
         .expect("Verify 를 닫는다");
     session.commit().expect("눕힌다");
     dir
@@ -659,8 +657,7 @@ fn closing_the_experiment_cycle_without_a_report_points_at_its_topic() {
         ProjectSession::start(rules(), dir.join(gil::STATE_PATH)).expect("시작한다");
     *session.project_mut() = bootstrap_from(session.project().clone());
     up_to_verify(session.project_mut());
-    session
-        .close_step(full_report(&rules(), CycleKind::Experiment, NodeKind::Verify))
+    common::close_legacy_fixture(&mut session, full_report(&rules(), CycleKind::Experiment, NodeKind::Verify))
         .expect("Verify 를 닫는다");
     common::walked(session.project_mut(), NodeKind::Analysis);
     let outcome = common::opened(session.project_mut(), NodeKind::Outcome);

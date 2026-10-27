@@ -781,7 +781,8 @@ impl Project {
     /// ```
     ///
     /// **Verify 에는 verdict 가 없다.** 파일이 바뀌었는지와 가설이 맞았는지는 다른 물음이고,
-    /// 아무것도 바꾸지 않은 Verify 도 정상적으로 닫힌다.
+    /// 이 저층 도메인 API는 과거의 변화 없는 Verify도 표현한다. 새 사용자 쓰기는
+    /// `ProjectSession`에서 실제 새/변경 증거 파일을 검사한 뒤 이 함수를 부른다.
     pub fn close_verify_step(
         &mut self,
         report: Report,

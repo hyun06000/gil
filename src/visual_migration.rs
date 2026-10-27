@@ -989,7 +989,8 @@ mod tests {
             crate::CycleKind::Experiment,
             crate::NodeKind::Verify,
         )
-        .with("execution", "이관 이후 새 보고서 — 절대로 버리지 않는다");
+        .with("execution", "이관 이후 새 보고서 — 절대로 버리지 않는다")
+        .with("evidence_files", "new-screen.png");
         s.close_verify_with_images_and_commit(
             report,
             vec![VisualAttachment {

@@ -176,7 +176,7 @@ fn failed_cycle(label: &str) -> (ProjectSession, PathBuf) {
     // Verify 가 세계를 바꾼다 → A2
     write(&dir, "work.txt", "실패한 시도가 남긴 세계");
     let verify = full_report(&spec(), CycleKind::Experiment, NodeKind::Verify);
-    session.close_step(verify).expect("Verify 를 닫는다");
+    session.close_step(verify.with("evidence_files", "work.txt")).expect("Verify 를 닫는다");
     assert_eq!(session.project().world_snapshot().to_string(), "snapshot:A2");
 
     walked(session.project_mut(), NodeKind::Analysis);
@@ -209,8 +209,7 @@ fn walk_exit(session: &mut ProjectSession, verdict: &str) {
         opened(session.project_mut(), kind);
         let cycle = session.project().cycles().current();
         let report = full_report(cycle.rules(), CycleKind::Experiment, kind);
-        session
-            .close_step(report)
+        common::close_legacy_fixture(session, report)
             .unwrap_or_else(|err| panic!("{kind} 를 닫지 못했다: {err}"));
     }
     opened(session.project_mut(), NodeKind::Outcome);
@@ -220,7 +219,7 @@ fn walk_exit(session: &mut ProjectSession, verdict: &str) {
         .with("lesson", "이 갈래가 남긴 것")
         .with(ACTION, "close_cycle")
         .with(REASON, "판정을 Cycle 경계로 넘긴다");
-    session.close_step(report).expect("판정을 닫는다");
+    common::close_legacy_fixture(session, report).expect("판정을 닫는다");
 }
 
 /// 지금 서 있는 끝 경계를 이 판정으로 닫는다.

@@ -90,21 +90,18 @@ fn reading_one(label: &str) -> PathBuf {
 
     // 실패한 첫 실험.
     opened(session.project_mut(), NodeKind::Define);
-    session
-        .close_step(define(
+    common::close_legacy_fixture(&mut session, define(
             "병렬로 모은 결과를 점수로 정렬할 때 순서가 실행마다 달라진다",
             "같은 입력에 대해 100회 실행이 모두 같은 순서를 낸다",
         ))
         .expect("문제를 고정한다");
     for kind in [NodeKind::Hypothesis, NodeKind::Verify, NodeKind::Analysis] {
         opened(session.project_mut(), kind);
-        session
-            .close_step(full_report(&rules, CycleKind::Experiment, kind))
+        common::close_legacy_fixture(&mut session, full_report(&rules, CycleKind::Experiment, kind))
             .expect("걷는다");
     }
     opened(session.project_mut(), NodeKind::Outcome);
-    session
-        .close_step(
+    common::close_legacy_fixture(&mut session,
             full_report(&rules, CycleKind::Experiment, NodeKind::Outcome)
                 .with("verdict", "failure")
                 .with(
@@ -136,15 +133,13 @@ fn reading_one(label: &str) -> PathBuf {
     session.commit().expect("눕힌다");
 
     opened(session.project_mut(), NodeKind::Define);
-    session
-        .close_step(define(
+    common::close_legacy_fixture(&mut session, define(
             "동점일 때 고유 ID를 보조 키로 사용하면 순서가 고정되는가",
             "100회 결과가 같고 ID의 고유성이 확인된다",
         ))
         .expect("새 문제를 고정한다");
     opened(session.project_mut(), NodeKind::Hypothesis);
-    session
-        .close_step(full_report(&rules, CycleKind::Experiment, NodeKind::Hypothesis))
+    common::close_legacy_fixture(&mut session, full_report(&rules, CycleKind::Experiment, NodeKind::Hypothesis))
         .expect("가설을 닫는다");
     session
         .open_action_step(
@@ -197,8 +192,7 @@ fn dense(label: &str) -> PathBuf {
     // 실험 하나를 끝까지 걷고 닫는다.
     let walk = |session: &mut ProjectSession, problem: &str, verdict: &str, target: Option<&str>| {
         opened(session.project_mut(), NodeKind::Define);
-        session
-            .close_step(
+        common::close_legacy_fixture(session,
                 full_report(&rules, CycleKind::Experiment, NodeKind::Define)
                     .with("problem", problem)
                     .with("success_condition", "재현되면 성공이다"),
@@ -206,13 +200,11 @@ fn dense(label: &str) -> PathBuf {
             .expect("문제를 고정한다");
         for kind in [NodeKind::Hypothesis, NodeKind::Verify, NodeKind::Analysis] {
             opened(session.project_mut(), kind);
-            session
-                .close_step(full_report(&rules, CycleKind::Experiment, kind))
+            common::close_legacy_fixture(session, full_report(&rules, CycleKind::Experiment, kind))
                 .expect("걷는다");
         }
         opened(session.project_mut(), NodeKind::Outcome);
-        session
-            .close_step(
+        common::close_legacy_fixture(session,
                 full_report(&rules, CycleKind::Experiment, NodeKind::Outcome)
                     .with("verdict", verdict)
                     .with("lesson", format!("{problem} — 여기까지 배웠다"))
@@ -250,26 +242,22 @@ fn dense(label: &str) -> PathBuf {
         .expect("새 갈래를 연다");
     session.commit().expect("눕힌다");
     opened(session.project_mut(), NodeKind::Define);
-    session
-        .close_step(
+    common::close_legacy_fixture(&mut session,
             full_report(&rules, CycleKind::Experiment, NodeKind::Define)
                 .with("problem", "되돌아와 다시 세운 문제")
                 .with("success_condition", "이번에는 재현된다"),
         )
         .expect("문제를 고정한다");
     opened(session.project_mut(), NodeKind::Hypothesis);
-    session
-        .close_step(full_report(&rules, CycleKind::Experiment, NodeKind::Hypothesis))
+    common::close_legacy_fixture(&mut session, full_report(&rules, CycleKind::Experiment, NodeKind::Hypothesis))
         .expect("가설을 닫는다");
     for kind in [NodeKind::Verify, NodeKind::Analysis] {
         opened(session.project_mut(), kind);
-        session
-            .close_step(full_report(&rules, CycleKind::Experiment, kind))
+        common::close_legacy_fixture(&mut session, full_report(&rules, CycleKind::Experiment, kind))
             .expect("걷는다");
     }
     opened(session.project_mut(), NodeKind::Outcome);
-    session
-        .close_step(
+    common::close_legacy_fixture(&mut session,
             full_report(&rules, CycleKind::Experiment, NodeKind::Outcome)
                 .with("verdict", "failure")
                 .with("lesson", "갈래를 바꿔도 같은 곳에서 막혔다")
@@ -300,16 +288,14 @@ fn dense(label: &str) -> PathBuf {
         .expect("새 갈래를 연다");
     session.commit().expect("눕힌다");
     opened(session.project_mut(), NodeKind::Define);
-    session
-        .close_step(
+    common::close_legacy_fixture(&mut session,
             full_report(&rules, CycleKind::Experiment, NodeKind::Define)
                 .with("problem", "세 번째로 다시 세운 문제")
                 .with("success_condition", "이번에는 막히지 않는다"),
         )
         .expect("문제를 고정한다");
     opened(session.project_mut(), NodeKind::Hypothesis);
-    session
-        .close_step(full_report(&rules, CycleKind::Experiment, NodeKind::Hypothesis))
+    common::close_legacy_fixture(&mut session, full_report(&rules, CycleKind::Experiment, NodeKind::Hypothesis))
         .expect("가설을 닫는다");
     session
         .open_action_step(
@@ -826,8 +812,9 @@ fn a_manual_refresh_reads_the_whole_view_again_and_never_merges() {
     // `reading_one` 은 열린 Verify 위에 서 있으므로, 그것을 닫는 것이 다음 한 걸음이다.
     {
         let mut session = ProjectSession::open(spec(), state_in(&dir)).expect("연다");
+        let report = common::evidence_report(&dir, full_report(&spec(), CycleKind::Experiment, NodeKind::Verify));
         session
-            .close_step(full_report(&spec(), CycleKind::Experiment, NodeKind::Verify))
+            .close_step(report)
             .expect("검증을 닫는다");
         opened(session.project_mut(), NodeKind::Analysis);
         session.commit().expect("눕힌다");

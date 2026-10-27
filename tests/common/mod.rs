@@ -76,6 +76,27 @@ pub fn full_report(rules: &RuleSet, cycle: CycleKind, kind: NodeKind) -> Report 
     fill(&step.close_requires, &step.field_constraints)
 }
 
+/// Frozen read-model fixtures intentionally describe records written before the evidence policy.
+/// They contain no new work; use the domain API to preserve their historical bytes/world identity.
+pub fn close_legacy_fixture(session: &mut gil::ProjectSession, report: Report) -> Result<gil::Closed, gil::ActionError> {
+    if session.can_confirm_artifact() {
+        let world = session.project().world_manifest(session.project().world_snapshot()).unwrap().clone();
+        session.project_mut().close_verify_step(report, world)
+    } else {
+        session.project_mut().close_action_step(report)
+    }
+}
+
+/// Current-write fixture helper: materialize the supplied observation, never disable the gate.
+pub fn evidence_report(root: &std::path::Path, mut report: Report) -> Report {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let revision = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let text = report.field_names().map(|k| format!("{k}: {}\n", report.get(k).unwrap())).collect::<String>();
+    std::fs::write(root.join("test-evidence.txt"), format!("Synthetic observation {revision}\n{text}")).unwrap();
+    report.insert("evidence_files", "test-evidence.txt");
+    report
+}
+
 /// Cycle 을 닫는 규칙을 전부 채운 Cycle Report. **Step 과 같은 방식으로 채운다.**
 pub fn full_cycle_report(rules: &RuleSet, kind: CycleKind) -> Report {
     let cycle = rules

@@ -1,5 +1,8 @@
 # Interview handoff and research workflow verification
 
+Follow-up: [durable Verify evidence](VERIFY-EVIDENCE-ACCEPTANCE-20261027.md) adds a server-enforced file-evidence gate.
+The chat-only behavior below describes the earlier revision, not the new-write rule.
+
 ## Failure and change
 
 An owner.4 field test reported that, despite explicit approval of the proposed scope, the agent

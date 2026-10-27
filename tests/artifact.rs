@@ -754,7 +754,7 @@ fn a_world_confirmed_by_a_verify_reads_back_from_disk() {
     fs::remove_file(dir.join("before.txt")).unwrap();
 
     let report = full_report(&rules(), CycleKind::Experiment, NodeKind::Verify);
-    session.close_step(report).expect("Verify 를 닫는다");
+    session.close_step(report.with("evidence_files", "after.txt")).expect("Verify 를 닫는다");
     session.commit().expect("눕힌다");
 
     let project = session.project();
@@ -887,7 +887,7 @@ fn every_non_verify_kind_is_gated_the_same_way() {
                 // **세션의 문으로 닫는다** — 지어낸 주소가 아니라 실제 세계를 관측해야
                 // 그 manifest 가 이 프로젝트의 창고에 눕는다.
                 let verify = full_report(&rules(), CycleKind::Experiment, NodeKind::Verify);
-                session.close_step(verify).expect("Verify 를 닫는다");
+                common::close_legacy_fixture(&mut session, verify).expect("historical unchanged Verify");
                 walked(session.project_mut(), NodeKind::Analysis);
             }
         } else if kind == NodeKind::Interpretation {
@@ -929,7 +929,7 @@ fn a_cycle_will_not_close_over_a_changed_world_either() {
 
     // Verify 는 세션의 문으로 닫는다 — 실제 세계를 관측해 이 창고에 눕히기 위해.
     let verify = full_report(&rules(), CycleKind::Experiment, NodeKind::Verify);
-    session.close_step(verify).expect("Verify 를 닫는다");
+    common::close_legacy_fixture(&mut session, verify).expect("historical unchanged Verify");
 
     let mut project = session.project().clone();
     walked(&mut project, NodeKind::Analysis);
