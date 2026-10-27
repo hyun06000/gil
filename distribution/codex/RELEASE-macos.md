@@ -1,7 +1,8 @@
 # Native MCP macOS release gates
 
-상태: **0.2.1-preview.6(현재 Core·Skill·fullscreen Monitor) unsigned prerelease 게시·고정 tag 설치 확인** (2026-10-27).
-현재 [설치 안내](INSTALL.md)와 [배포 장부](PREVIEW-6-PUBLICATION-20261027.md)가 정본이다.
+상태: **0.2.1-preview.7(공통 지침·증거 필수) unsigned prerelease 게시·격리 교체 검증** (2026-10-28).
+현재 [설치 안내](INSTALL.md)와 [배포 장부](PREVIEW-7-PUBLICATION-20261028.md)가 정본이다.
+이전 preview.6 게시·VM 검수는 [장부](PREVIEW-6-PUBLICATION-20261027.md)를 본다.
 이전: preview.5 게시·고정 tag 설치 확인(2026-10-18, [장부](PREVIEW-5-PUBLICATION-20261018.md)).
 이전: preview.4 게시·익명 설치 확인(2026-10-15, [장부](PREVIEW-4-PUBLICATION-20261014.md)).
 이전: preview.2 공식 설치·rollback·보호/PVR 검수(2026-09-30, [장부](PREVIEW-2-PUBLICATION-20260930.md)).

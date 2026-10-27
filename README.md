@@ -43,12 +43,13 @@ GIL의 주 사용자는 비개발자다. 인간은 명령과 저장 형식을 �
 
 소스는 [MIT 라이선스](LICENSE)로 공개한다. 현재 친구·테스터용 채널은 **서명되지 않은 preview**다.
 [통합 설치 안내](INSTALL.md)에서 OS와 CPU에 맞는 검수본을 확인한 뒤 설치한다. macOS Apple
-Silicon은 Codex Plugin `0.2.1-preview.6`, Windows x64는 Companion installer
+Silicon은 Codex Plugin `0.2.1-preview.7`, Windows x64는 Companion installer
 `0.1.1-owner.5`이다.
-**Node·Cargo·Homebrew·별도 Companion 설치는 필요하지 않다.** 설치 출처는
-[gil-marketplace](https://github.com/hyun06000/gil-marketplace)이며, 범용 Plugins Directory 등재와는 다르다.
+**사용자에게 Node·Cargo·Homebrew 설치를 요구하지 않는다.** Mac Plugin은 별도 Companion 없이
+[gil-marketplace](https://github.com/hyun06000/gil-marketplace)에서 설치하며, 범용 Plugins Directory
+등재와는 다르다. Windows는 위 Companion installer를 사용한다.
 
-깨끗한 Apple Silicon Mac VM에서 Git/Xcode Command Line Tools가 없는 상태의 Git 없는 설치와
+이전 preview.6의 깨끗한 Apple Silicon Mac VM에서 Git/Xcode Command Line Tools가 없는 상태의 Git 없는 설치와
 GIL 동작을 확인했다. 그 VM의 fullscreen 전환과 앱 완전 종료 뒤 복원은 별도 확인 사항이다.
 Windows x64 실기기에서는 installer 설치, Companion의 Codex 연결·이전 연결 교체, 파일 생성과
 사용자 버튼 업데이트를 확인했다. 두 배포 모두 OS publisher 신뢰를 제공하는 Apple
