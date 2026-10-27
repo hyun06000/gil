@@ -42,7 +42,7 @@ GIL의 주 사용자는 비개발자다. 인간은 명령과 저장 형식을 �
 상태가 아니다. PiP는 현재 지원을 주장하지 않는다.
 
 소스는 [MIT 라이선스](LICENSE)로 공개한다. 첫 사용자 채널은 **Apple 개발자 서명·공증 없는
-Codex/macOS Apple Silicon `0.2.1-preview.5`**(이미지 보고서 + companion Skill 보정, unsigned prerelease)다. [설치 안내](distribution/codex/INSTALL.md)에 따라
+Codex/macOS Apple Silicon `0.2.1-preview.6`**(현재 Core·Skill·fullscreen Monitor, unsigned prerelease)다. [설치 안내](distribution/codex/INSTALL.md)에 따라
 Codex에게 검증된 marketplace Plugin 설치를 부탁한 뒤 작업 폴더를 선택하면 된다.
 **Node·Cargo·Homebrew·별도 Companion 설치는 필요하지 않다.** 설치 출처는
 [gil-marketplace](https://github.com/hyun06000/gil-marketplace)이며, 범용 Plugins Directory 등재와는 다르다.
