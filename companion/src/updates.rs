@@ -115,7 +115,7 @@ mod tests {
         let release: RemoteRelease = serde_json::from_str(include_str!(
             "../../distribution/windows/owner-update.json"
         )).expect("Tauri updater manifest");
-        assert_eq!(release.version.to_string(), "0.1.1-owner.4");
+        assert_eq!(release.version.to_string(), "0.1.1-owner.5");
         assert!(release
             .download_url("windows-x86_64")
             .expect("Windows x64 URL")
