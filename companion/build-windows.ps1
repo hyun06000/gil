@@ -51,8 +51,8 @@ $env:TAURI_CONFIG = @{
     }}
 } | ConvertTo-Json -Depth 4 -Compress
 $TauriVersion = (cargo tauri --version 2>$null | Out-String).Trim()
-if ($LASTEXITCODE -ne 0 -or $TauriVersion -ne 'tauri-cli 2.10.1') {
-    throw "Tauri CLI 2.10.1이 필요합니다. 'cargo install tauri-cli --version 2.10.1 --locked'를 실행하세요."
+if ($LASTEXITCODE -ne 0 -or $TauriVersion -ne 'tauri-cli 2.11.5') {
+    throw "Tauri CLI 2.11.5가 필요합니다. 'cargo install tauri-cli --version 2.11.5 --locked'를 실행하세요."
 }
 
 Push-Location $Here
@@ -81,6 +81,14 @@ try {
     cargo tauri build --bundles nsis --config tauri.product-windows.conf.json
     if ($LASTEXITCODE -ne 0) {
         throw 'Windows NSIS 설치본 빌드가 실패했습니다.'
+    }
+    $Signatures = @(Get-ChildItem (Join-Path $Root 'target\release\bundle\nsis') -File -Filter '*.sig')
+    if ($Signatures.Count -ne 1) { throw "updater 서명은 하나여야 합니다: $($Signatures.Count)" }
+    $SignedText = [Text.Encoding]::UTF8.GetString(
+        [Convert]::FromBase64String((Get-Content -Raw -LiteralPath $Signatures[0].FullName).Trim())
+    )
+    if ($SignedText -notmatch [regex]::Escape("version:$Version")) {
+        throw "updater 서명이 버전 $Version 을 결속하지 않았습니다."
     }
 } finally {
     Pop-Location

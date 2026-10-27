@@ -114,8 +114,10 @@ test('release build refuses missing update trust material', async () => {
   assert.match(script, /digestAlgorithm = 'sha256'/);
   assert.match(script, /pubkey = \$env:GIL_UPDATER_PUBLIC_KEY/);
   assert.match(script, /endpoints = @\(\$UpdaterEndpoint\.AbsoluteUri\)/);
-  assert.match(script, /Tauri CLI 2\.10\.1/);
+  assert.match(script, /Tauri CLI 2\.11\.5/);
   assert.match(script, /UpdaterEndpoint\.Scheme -ne 'https'/);
+  assert.match(script, /FromBase64String/);
+  assert.match(script, /version:\$Version/);
   assert.match(script, /--config tauri\.product-windows\.conf\.json/);
 });
 
@@ -133,6 +135,17 @@ test('the updater has no automatic check and install requires a second user deci
   assert.match(rust, /\.pubkey\(key\)/);
   assert.match(rust, /expected_version/);
   assert.match(rust, /app\.package_info\(\)\.version\.to_string\(\)/);
+  assert.match(rust, /업데이트 설정을 열지 못했다/);
+  assert.match(rust, /업데이트 서버 응답을 처리하지 못했다/);
+  assert.match(rust, /업데이트 파일을 설치하지 못했다/);
+});
+
+test('plain Tauri updater errors remain visible instead of pretending project storage is damaged', async () => {
+  const host = await read('companion/src/host.js');
+  assert.match(host, /typeof refusal === "string"/);
+  assert.match(host, /const message = typeof refusal === "string"/);
+  assert.match(host, /if \(structured && refusal\.code\) error\.code = refusal\.code/);
+  assert.doesNotMatch(host, /error\.code = \(refusal && refusal\.code\) \|\| "damaged"/);
 });
 
 test('the update UI keeps Codex open and explains the connection boundary', async () => {
@@ -189,7 +202,7 @@ test('signed product CI is manual, secret-gated, installed, and exercised before
     'GIL_WINDOWS_CERTIFICATE_PFX_BASE64',
     'GIL_WINDOWS_CERTIFICATE_PASSWORD',
   ]) assert.match(workflow, new RegExp(`secrets\\.${secret}`));
-  assert.match(workflow, /cargo install tauri-cli --version 2\.10\.1 --locked/);
+  assert.match(workflow, /cargo install tauri-cli --version 2\.11\.5 --locked/);
   assert.match(workflow, /1\.3\.6\.1\.5\.5\.7\.3\.3/);
   assert.match(workflow, /product-e2e\.ps1/);
   assert.match(workflow, /DisplayName 'GIL Companion \(Unsigned Test\)' -SeedLegacyRuntime/);
@@ -255,6 +268,10 @@ test('owner updater CI needs a monotonic version and updater secrets but no paid
   assert.match(job, /Get-AuthenticodeSignature/);
   assert.match(job, /NotSigned/);
   assert.match(job, /Get-ChildItem target\\release\\bundle\\nsis -File -Filter '\*\.sig'/);
+  const buildScript = await read('companion/build-windows-unsigned-updater-test.ps1');
+  assert.match(buildScript, /Tauri CLI 2\.11\.5/);
+  assert.match(buildScript, /FromBase64String/);
+  assert.match(buildScript, /version:\$Version/);
   assert.doesNotMatch(job, /GIL_WINDOWS_CERTIFICATE|Import-PfxCertificate|timestampUrl/);
 });
 

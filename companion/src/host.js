@@ -16,8 +16,15 @@
     try {
       return await invoke(name, args);
     } catch (refusal) {
-      const error = new Error((refusal && refusal.said) || "GIL 이 거절했다");
-      error.code = (refusal && refusal.code) || "damaged";
+      // Domain commands reject with a structured Refusal, while Tauri commands such as the
+      // updater reject with a plain string. Do not mislabel infrastructure errors as damaged
+      // project storage; preserving the string is the only way a user can report the real cause.
+      const structured = refusal && typeof refusal === "object";
+      const message = typeof refusal === "string"
+        ? refusal
+        : (structured && refusal.said) || "GIL 이 거절했다";
+      const error = new Error(message);
+      if (structured && refusal.code) error.code = refusal.code;
       error.said = error.message;
       throw error;
     }

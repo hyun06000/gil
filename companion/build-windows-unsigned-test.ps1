@@ -10,8 +10,8 @@ if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne 'X64
 }
 if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) { throw 'Rust cargo가 없습니다.' }
 $TauriVersion = (cargo tauri --version 2>$null | Out-String).Trim()
-if ($LASTEXITCODE -ne 0 -or $TauriVersion -ne 'tauri-cli 2.10.1') {
-    throw "Tauri CLI 2.10.1이 필요합니다."
+if ($LASTEXITCODE -ne 0 -or $TauriVersion -ne 'tauri-cli 2.11.5') {
+    throw "Tauri CLI 2.11.5가 필요합니다."
 }
 
 # This path exists only for owner-operated acceptance on a disposable PC. It deliberately strips

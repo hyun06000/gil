@@ -54,7 +54,10 @@ pub fn update_capability(app: AppHandle) -> UpdateCapability {
 
 #[tauri::command]
 pub async fn check_update(app: AppHandle) -> Result<Option<AvailableUpdate>, String> {
-    let found = updater(&app)?.check().await.map_err(|err| err.to_string())?;
+    let updater = updater(&app)
+        .map_err(|err| format!("업데이트 설정을 열지 못했다: {err}"))?;
+    let found = updater.check().await
+        .map_err(|err| format!("업데이트 서버 응답을 처리하지 못했다: {err}"))?;
     Ok(found.map(|one| AvailableUpdate {
         current_version: one.current_version,
         version: one.version,
@@ -65,7 +68,10 @@ pub async fn check_update(app: AppHandle) -> Result<Option<AvailableUpdate>, Str
 
 #[tauri::command]
 pub async fn install_update(app: AppHandle, expected_version: String) -> Result<(), String> {
-    let Some(update) = updater(&app)?.check().await.map_err(|err| err.to_string())? else {
+    let updater = updater(&app)
+        .map_err(|err| format!("업데이트 설정을 열지 못했다: {err}"))?;
+    let Some(update) = updater.check().await
+        .map_err(|err| format!("업데이트 서버 응답을 처리하지 못했다: {err}"))? else {
         return Err("설치할 업데이트가 없다".into());
     };
     if update.version != expected_version {
@@ -88,11 +94,13 @@ pub async fn install_update(app: AppHandle, expected_version: String) -> Result<
                 let _ = app.emit("gil://update-downloaded", ());
             }
         },
-    ).await.map_err(|err| err.to_string())
+    ).await.map_err(|err| format!("업데이트 파일을 설치하지 못했다: {err}"))
 }
 
 #[cfg(test)]
 mod tests {
+    use tauri_plugin_updater::RemoteRelease;
+
     #[test]
     fn development_builds_do_not_pretend_updates_are_configured() {
         if option_env!("GIL_UPDATER_PUBLIC_KEY").is_none()
@@ -100,5 +108,22 @@ mod tests {
         {
             assert!(super::settings().is_err());
         }
+    }
+
+    #[test]
+    fn published_owner_manifest_is_valid_for_the_pinned_updater() {
+        let release: RemoteRelease = serde_json::from_str(include_str!(
+            "../../distribution/windows/owner-update.json"
+        )).expect("Tauri updater manifest");
+        assert_eq!(release.version.to_string(), "0.1.1-owner.3");
+        assert!(release
+            .download_url("windows-x86_64")
+            .expect("Windows x64 URL")
+            .as_str()
+            .starts_with("https://github.com/hyun06000/gil/releases/download/"));
+        assert!(!release
+            .signature("windows-x86_64")
+            .expect("Windows x64 signature")
+            .is_empty());
     }
 }
