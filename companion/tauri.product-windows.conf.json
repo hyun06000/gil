@@ -29,7 +29,7 @@
     "updater": {
       "requireSignedVersion": true,
       "windows": {
-        "installMode": "passive"
+        "installMode": "basicUi"
       }
     }
   }

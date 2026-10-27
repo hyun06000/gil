@@ -13,11 +13,30 @@ test('Windows product bundle is a current-user NSIS installer with signed update
   assert.equal(config.bundle.windows.nsis.installMode, 'currentUser');
   assert.equal(config.bundle.createUpdaterArtifacts, true);
   assert.equal(config.plugins.updater.requireSignedVersion, true);
-  assert.equal(config.plugins.updater.windows.installMode, 'passive');
+  assert.equal(config.plugins.updater.windows.installMode, 'basicUi');
   assert.equal(config.bundle.resources['../target/release/gil-launcher.exe'], 'bootstrap/gil-launcher.exe');
   assert.equal(config.bundle.resources['../target/windows-bootstrap/current.json'], 'bootstrap/current.json');
   assert.equal(config.bundle.windows.nsis.installerHooks, 'windows/runtime-hooks.nsh');
   await assert.rejects(read('companion/tauri.windows.conf.json'), /ENOENT/);
+});
+
+test('owner updater acceptance shows a native installer and still requires signed payloads', async () => {
+  const config = JSON.parse(await read('companion/tauri.unsigned-updater-test-windows.conf.json'));
+  assert.equal(config.productName, 'GIL Companion (Unsigned Test)');
+  assert.equal(config.identifier, 'dev.ariadne.gil.companion.unsigned-test');
+  assert.equal(config.bundle.createUpdaterArtifacts, true);
+  assert.equal(config.plugins.updater.requireSignedVersion, true);
+  assert.equal(config.plugins.updater.windows.installMode, 'basicUi');
+
+  const script = await read('companion/build-windows-unsigned-updater-test.ps1');
+  assert.match(script, /ValidatePattern\('\^\[0-9\]\+\\\.\[0-9\]\+\\\.\[0-9\]\+-owner/);
+  assert.match(script, /TAURI_SIGNING_PRIVATE_KEY/);
+  assert.match(script, /TAURI_SIGNING_PRIVATE_KEY_PASSWORD/);
+  assert.match(script, /GIL_UPDATER_PUBLIC_KEY/);
+  assert.match(script, /GIL_UPDATER_ENDPOINT/);
+  assert.match(script, /tauri\.unsigned-updater-test-windows\.conf\.json/);
+  assert.match(script, /version = \$Version; sha256 = \$Digest/);
+  assert.doesNotMatch(script, /certificateThumbprint|timestampUrl|GIL_WINDOWS_CERTIFICATE_PFX/);
 });
 
 test('owner acceptance has a separate unsigned installer identity and cannot emit updater artifacts', async () => {
@@ -109,6 +128,7 @@ test('the updater has no automatic check and install requires a second user deci
   assert.match(rust, /download_and_install/);
   assert.match(rust, /\.pubkey\(key\)/);
   assert.match(rust, /expected_version/);
+  assert.match(rust, /app\.package_info\(\)\.version\.to_string\(\)/);
 });
 
 test('the update UI keeps Codex open and explains the connection boundary', async () => {
@@ -117,6 +137,8 @@ test('the update UI keeps Codex open and explains the connection boundary', asyn
   const connect = ui.indexOf('async function connectCodex', check);
   const body = ui.slice(check, connect);
   assert.match(body, /Codex는 닫지 않아도 됩니다/);
+  assert.match(body, /다운로드가 끝나면 Windows 설치창이 열립니다/);
+  assert.match(body, /완료되면 설치창이 열립니다/);
   assert.match(body, /기존 GIL 대화는 현재 Core로 계속/);
   assert.match(body, /새 대화부터 새 Core/);
   assert.match(body, /Companion만 닫힐 수/);
@@ -205,13 +227,39 @@ test('unsigned owner acceptance CI is manual, isolated, install-tested and never
   assert.match(workflow, /-ExpectedSignature NotSigned/);
   assert.match(workflow, /GIL Companion \(Unsigned Test\)/);
   assert.match(workflow, /retention-days: 3/);
-  assert.doesNotMatch(workflow.slice(workflow.indexOf('unsigned-test-candidate:'), workflow.indexOf('signed-candidate:')), /environment: windows-product-signing|secrets\./);
+  assert.doesNotMatch(workflow.slice(workflow.indexOf('unsigned-test-candidate:'), workflow.indexOf('unsigned-updater-candidate:')), /environment: windows-product-signing|secrets\./);
 
   const acceptance = await read('distribution/windows/product-e2e.ps1');
   assert.match(acceptance, /ValidateSet\('Valid', 'NotSigned'\)/);
   assert.match(acceptance, /expected \$\{ExpectedSignature\}:/);
   assert.match(acceptance, /Where-Object DisplayName -eq \$DisplayName/);
   assert.match(acceptance, /if \(\$Signature\.SignerCertificate\)/);
+});
+
+test('owner updater CI needs a monotonic version and updater secrets but no paid certificate', async () => {
+  const workflow = await read('.github/workflows/windows-product.yml');
+  assert.match(workflow, /build_unsigned_updater_candidate:/);
+  assert.match(workflow, /owner_update_version:/);
+  const start = workflow.indexOf('  unsigned-updater-candidate:');
+  const end = workflow.indexOf('  signed-candidate:', start);
+  assert.ok(start >= 0 && end > start);
+  const job = workflow.slice(start, end);
+  assert.match(job, /inputs\.build_unsigned_updater_candidate/);
+  assert.match(job, /build-windows-unsigned-updater-test\.ps1 -Version/);
+  assert.match(job, /secrets\.GIL_UPDATER_PRIVATE_KEY/);
+  assert.match(job, /secrets\.GIL_UPDATER_PRIVATE_KEY_PASSWORD/);
+  assert.match(job, /Get-AuthenticodeSignature/);
+  assert.match(job, /NotSigned/);
+  assert.match(job, /Get-ChildItem target\\release\\bundle\\nsis -File -Filter '\*\.sig'/);
+  assert.doesNotMatch(job, /GIL_WINDOWS_CERTIFICATE|Import-PfxCertificate|timestampUrl/);
+});
+
+test('the owner update manifest is produced by a validated static-manifest writer', async () => {
+  const writer = await read('distribution/windows/write-owner-update-manifest.mjs');
+  assert.match(writer, /windows-x86_64/);
+  assert.match(writer, /signature/);
+  assert.match(writer, /url\.protocol !== 'https:'/);
+  assert.match(writer, /flag: 'wx'/);
 });
 
 test('local Windows acceptance separates contract checks from signed installation', async () => {

@@ -925,12 +925,13 @@ async function checkForUpdate() {
     const approved = window.confirm(
       `GIL Companion ${found.version} 업데이트를 설치할까요?` +
       `\n현재 버전: ${found.current_version}` +
+      "\n\n다운로드가 끝나면 Windows 설치창이 열립니다." +
       "\n\nCodex는 닫지 않아도 됩니다. 기존 GIL 대화는 현재 Core로 계속되고, " +
       "새 대화부터 새 Core를 사용합니다. 설치 중에는 GIL Companion만 닫힐 수 있습니다." +
       notes,
     );
     if (!approved) return;
-    working.textContent = "서명된 업데이트를 내려받아 설치하는 중";
+    working.textContent = "서명된 업데이트를 내려받는 중 — 완료되면 설치창이 열립니다";
     await window.GIL_HOST.installUpdate(found.version);
     say(
       "업데이트 설치를 시작했다. Codex와 기존 GIL 대화는 계속 사용할 수 있다. " +
