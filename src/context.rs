@@ -28,6 +28,7 @@
 //! 낡은 채로 남는다.
 
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 use crate::cycle::{Cycle, CycleKind};
@@ -46,7 +47,7 @@ pub fn context(project: &Project) -> String {
     let mut out = String::new();
     write_preamble(&mut out);
     write_previous_cycles(&mut out, cycles);
-    write_abandoned_cycle(&mut out, cycles);
+    write_failed_cycles(&mut out, cycles);
     write_current_cycle(&mut out, cycles);
     write_here(&mut out, project);
     out
@@ -120,32 +121,54 @@ fn write_previous_cycles(out: &mut String, cycles: &Cycles) {
 /// 그러나 그 Cycle 은 **계보의 조상이 아니다** — 여기 실린다고 해서 `parent` 사슬에 낀 것이
 /// 아니고, 그 사실을 절 이름과 한 줄로 함께 말한다.
 ///
-/// 두 자리에서 온다.
-///
-/// ```text
-/// pending 이 있다        방금 되돌아왔고 아직 새 Cycle 을 열지 않았다
-/// 지금 Cycle 이 갈래다   그 Cycle 의 revisit_from 이 가리키는 실패
-/// ```
+/// Current와 pending 출처에서 parent/revisit_from을 따라 필요한 실패를 모두 읽는다.
+/// parent는 구조적 계보이고 revisit_from은 경험의 출처다. 이 투영 때문에 둘을 같은
+/// 계보로 바꾸지 않는다. 성공한 자식으로 진행하거나 더 먼 조상으로 돌아가도 경험은 남는다.
 ///
 /// 조상과 **같은 해상도**로 싣는다 — 안의 Step Graph 는 펼치지 않는다.
-fn write_abandoned_cycle(out: &mut String, cycles: &Cycles) {
-    let Some(from) = cycles
-        .pending_revisit()
-        .or_else(|| cycles.current().revisit_from())
-    else {
-        return;
-    };
-    let Some(cycle) = cycles.node(from) else {
-        return; // 복원이 이미 막았을 자리다. 없는 것을 지어내지 않는다.
-    };
+fn write_failed_cycles(out: &mut String, cycles: &Cycles) {
+    let failures = failure_context(cycles);
+    if failures.is_empty() { return; }
 
     let _ = write!(
         out,
         "\n═══ 되돌아오며 버린 Cycle ═══\n\
-         (계보의 조상이 **아니다** — 여기서 갈라져 나왔을 뿐이다. 같은 실패를 되풀이하지\n\
-         않으려면 이 Report 를 읽어야 한다. 조상과 같은 해상도로 싣는다.)\n"
+         (누적 실패 {}개 · 계보의 조상이 **아니다** — parent와 revisit 출처를 따라 이어받은\n\
+         경험이다. 앞선 실패부터 한 번씩 읽는다. 같은 실패를 되풀이하지 않으려면 이 Report들을\n\
+         읽어야 한다. 조상과 같은 해상도로 싣고 내부 Step Graph는 펼치지 않는다.)\n",
+        failures.len()
     );
-    write_one_previous_cycle(out, cycle);
+    for cycle in failures {
+        write_one_previous_cycle(out, cycle);
+        let _ = writeln!(out, "  원본 Cycle: {}", cycle.id().to_ref());
+    }
+}
+
+/// Read-only causal closure, not a scan of every failure in storage. Dependencies precede
+/// their consumers; neither ID magnitude nor serialized array order defines experience.
+/// Iterative traversal avoids stack growth and repeated expansion of shared ancestors.
+fn failure_context(cycles: &Cycles) -> Vec<&Cycle> {
+    let nodes: BTreeMap<_, _> = cycles.nodes().iter().map(|c| (c.id(), c)).collect();
+    let mut seen = BTreeSet::new();
+    let mut stack = Vec::new();
+    if let Some(from) = cycles.pending_revisit() { stack.push((from, false)); }
+    stack.push((cycles.current_id(), false));
+    let mut failures = Vec::new();
+    while let Some((id, expanded)) = stack.pop() {
+        let cycle = nodes[&id]; // restored Project already validates all structural references
+        if expanded {
+            // Current's full Report is already in the current-Cycle section.
+            if id != cycles.current_id() && cycle.is_closed()
+                && cycle.report().and_then(|r| r.get(VERDICT)) == Some("failure") {
+                failures.push(cycle);
+            }
+        } else if seen.insert(id) {
+            stack.push((id, true));
+            if let Some(from) = cycle.revisit_from() { stack.push((from, false)); }
+            if let Some(parent) = cycle.parent() { stack.push((parent, false)); }
+        }
+    }
+    failures
 }
 
 /// 조상 하나의 투영 — **명세가 고른 자리만.**

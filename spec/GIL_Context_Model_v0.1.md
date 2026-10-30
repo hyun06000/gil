@@ -188,6 +188,27 @@ Existence의 Relation·목표·Synthesis 중 아직 형성되지 않은 것을 �
 정확한 relevance 선택 알고리즘은 이후에 결정한다. v0에서는 구조적 lineage와 명세가 항상
 전달하도록 요구한 실패 Report를 기준으로 한다.
 
+### 반복 실패의 누적 투영 — v0 구현 경계 (2026-10-31)
+
+Cycle Model §10의 실패 전달은 직전 `revisit_from` 하나로 끝나지 않는다. 현재 Cycle과
+`pending_cycle_revisit`의 출처를 시작점으로, 각 Cycle의 `parent`와 `revisit_from`을 따라
+확정된 실패 경험을 수집한다. 구조적 lineage 계산은 여전히 parent만 따른다. Context 수집에
+provenance를 사용한다고 해서 실패 Cycle이 성공한 현재 가지의 조상이 되는 것은 아니다.
+
+- 같은 조상으로 C3 실패→C4 실패→C5를 시작하면 C3·C4의 요약을 모두 전달한다.
+- 새 가지가 성공하고 일반 자식 Cycle을 열어도 parent의 provenance를 통해 앞선 실패를 유지한다.
+- 더 먼 조상으로 돌아갈 때는 실패 출처가 딛고 있던 경로도 따라가 그 경로의 경험을 보존한다.
+- 앞선 의존 경험부터 결정적으로 나열하고 Cycle별 한 번만 투영한다. ID 크기나 저장 배열 순서를
+  경험의 의미로 사용하지 않는다. 현재 Cycle의 실패는 현재 절에 이미 있으므로 과거 절에 중복하지 않는다.
+- 과거 실패도 §7.1의 선택적 투영(Define의 목적/성공 기준, 판정 Outcome의 교훈, Cycle Report의
+  판정/인수인계/다음 방향)과 원본 CycleRef만 싣는다. 내부 Step·임의 추가 필드를 전부 펼치지 않는다.
+- 단순히 저장소에 존재하는 모든 실패를 나열하지 않는다. 현재 경로와 pending의 검증된 참조로
+  연결된 경험이 대상이다. 다른 Existence의 Journey를 자동 병합하거나 relevance 점수를 만들지 않는다.
+
+수집은 read-only이며 원본 Report·Journey·Artifact를 수정하지 않는다. 별도 실패 목록을 저장하거나
+이름을 재발급하지 않으므로 기존 format 4/5도 같은 참조에서 재구성한다. 이 투영 개선은 제품의
+restore/revisit 안전 차단을 해제하지 않는다.
+
 ---
 
 ## 6. `gil history`
