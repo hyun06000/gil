@@ -75,7 +75,7 @@ impl Chain {
         };
         if id.number() != 1 || first.kind() != CycleKind::Interview || first.parent().is_some() {
             return Err(ChainError::Invalid(
-                "M6-A requires the root Chain and its opening Interview",
+                "the root Chain must contain its opening Interview",
             ));
         }
         if owner != current_owner
@@ -108,7 +108,7 @@ impl std::fmt::Display for ChainError {
         match self {
             Self::ParentOpen(id) => write!(
                 f,
-                "{id}이 열려 있어 자식 Chain을 만들 수 없다. Chain 종료는 M6-B에서 지원한다"
+                "{id}이 열려 있어 자식 Chain을 만들 수 없다. 이 버전은 Chain 종료를 아직 지원하지 않는다"
             ),
             Self::LegacyProject => write!(
                 f,

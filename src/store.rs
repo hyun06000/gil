@@ -381,7 +381,7 @@ impl StoredState {
             (CHAIN_FORMAT | CHAIN_VISUAL_FORMAT, None, Some(mut chains)) if chains.current == "chain:C1" && chains.next_id == 2 && chains.nodes.len() == 1 => {
                 let chain = chains.nodes.remove(0);
                 if chain.id != "C1" || chain.state != "open" || chain.parent_chain_ref.is_some() || chain.exit_snapshot_ref.is_some() {
-                    return Err(StoreError::ChainState("M6-A admits one open root Chain, with no Exit or parent".into()));
+                    return Err(StoreError::ChainState("only one open root Chain is supported, with no Exit or parent".into()));
                 }
                 let identity = (read_ref(&format!("chain:{}", chain.id), "chains.nodes.id")?,
                     read_ref(&chain.existence_ref, "chains.nodes.existence_ref")?,
