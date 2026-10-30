@@ -1355,6 +1355,95 @@ fn a_branch_keeps_the_failure_in_the_handoff() {
     assert!(told.contains("Cycle 2 에서 갈라짐"), "{told}");
 }
 
+fn fail_with_handoff(session: &mut ProjectSession, target: &str, marker: &str) {
+    walk_exit(session, "failure");
+    let cycle = session.project().cycles().current();
+    let report = cycle_report(cycle, "failure", cycle.steps().current().unwrap())
+        .with(CYCLE_TARGET, target).with("handoff_summary", marker)
+        .with("private_detail", "DO_NOT_EXPAND_FREE_REPORT_FIELDS");
+    session.close_cycle(report).unwrap();
+    session.commit().unwrap();
+}
+
+fn assert_failure_context(text: &str, markers: &[&str]) {
+    let mut end = 0;
+    for marker in markers {
+        assert_eq!(text.matches(marker).count(), 1, "missing or duplicated {marker}: {text}");
+        let at = text.find(marker).unwrap();
+        assert!(at >= end, "failure dependencies must precede later attempts: {text}");
+        end = at + marker.len();
+    }
+    let historical = text.split("═══ 현재 Cycle ═══").next().unwrap();
+    assert!(!historical.contains("DO_NOT_EXPAND_FREE_REPORT_FIELDS"));
+}
+
+#[test]
+fn cumulative_context_survives_pending_new_branch_success_and_process_restart() {
+    let (mut session, dir) = three_deep("context-cumulative");
+    fail_with_handoff(&mut session, "cycle:C2", "FAILURE_ALPHA_EVIDENCE"); // C3
+    revisit(&mut session).unwrap(); open_branch(&mut session, CycleKind::Experiment); // C4
+    fail_with_handoff(&mut session, "cycle:C2", "FAILURE_BETA_EVIDENCE");
+    // The current failure already has its full Report; it must not be duplicated.
+    let text = gil::context(session.project());
+    assert_failure_context(&text, &["FAILURE_ALPHA_EVIDENCE", "FAILURE_BETA_EVIDENCE"]);
+    revisit(&mut session).unwrap();
+    assert_failure_context(&gil::context(session.project()), &["FAILURE_ALPHA_EVIDENCE", "FAILURE_BETA_EVIDENCE"]);
+    open_branch(&mut session, CycleKind::Experiment); // C5
+    walk_exit(&mut session, "success"); close_cycle_here(&mut session, "success");
+    session.open_child_cycle(CycleKind::Experiment).unwrap(); // C6 has no revisit_from of its own
+    session.commit().unwrap();
+    let before = (state_bytes(&dir), world_of(&dir), objects_of(&dir));
+    let expected = gil::context(session.project());
+    assert_failure_context(&expected, &["FAILURE_ALPHA_EVIDENCE", "FAILURE_BETA_EVIDENCE"]);
+    drop(session);
+    // Real CLI process restart and read-only context must retain both failures without writes.
+    let text = ok(&dir, &["context"]);
+    assert_failure_context(&text, &["FAILURE_ALPHA_EVIDENCE", "FAILURE_BETA_EVIDENCE"]);
+    let session = ProjectSession::open(spec(), state_in(&dir)).unwrap();
+    assert_eq!(gil::context(session.project()), expected);
+    assert_eq!((state_bytes(&dir), world_of(&dir), objects_of(&dir)), before);
+    drop(session); fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn cumulative_context_keeps_farther_failures_independent_of_storage_order() {
+    let (mut session, dir) = three_deep("context-farther");
+    fail_with_handoff(&mut session, "cycle:C2", "OLDER_FAILURE"); // C3
+    revisit(&mut session).unwrap(); open_branch(&mut session, CycleKind::Experiment); // C4
+    walk_exit(&mut session, "success"); close_cycle_here(&mut session, "success");
+    session.open_child_cycle(CycleKind::Experiment).unwrap(); // C5
+    fail_with_handoff(&mut session, "cycle:C1", "LATER_FAILURE");
+    revisit(&mut session).unwrap(); // C4 and C2 no longer belong to Current's lineage
+    assert_failure_context(&gil::context(session.project()), &["OLDER_FAILURE", "LATER_FAILURE"]);
+    open_branch(&mut session, CycleKind::Interview); // C6
+    let expected = gil::context(session.project());
+    assert_failure_context(&expected, &["OLDER_FAILURE", "LATER_FAILURE"]);
+    drop(session);
+    let mut stored = yaml_of(&dir);
+    // C3 and C4 share a parent; keep parent-before-child storage validity while swapping them.
+    stored["cycles"]["nodes"].as_sequence_mut().unwrap().swap(2, 3);
+    fs::write(state_in(&dir), serde_norway::to_string(&stored).unwrap()).unwrap();
+    let restored = gil::load(spec(), state_in(&dir)).unwrap();
+    assert_eq!(gil::context(&restored), expected, "array order is not causal history");
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn cumulative_context_excludes_records_outside_the_selected_history() {
+    let (mut session, dir) = three_deep("context-unrelated");
+    fail_with_handoff(&mut session, "cycle:C2", "UNREACHED_FAILURE");
+    drop(session);
+    // A read-model fixture with C2 selected and no pending/provenance edge to C3.
+    // This does not claim a historical Journey rollback or add public checkout.
+    let mut stored = yaml_of(&dir);
+    stored["cycles"]["current"] = serde_norway::Value::from(2u32);
+    fs::write(state_in(&dir), serde_norway::to_string(&stored).unwrap()).unwrap();
+    let historical = gil::load(spec(), state_in(&dir)).unwrap();
+    assert!(!gil::context(&historical).contains("UNREACHED_FAILURE"));
+    assert_eq!(historical.cycles().nodes().len(), 3, "history was filtered, not deleted");
+    fs::remove_dir_all(dir).unwrap();
+}
+
 // ── ⑪ Help Topic 과 Router ───────────────────────────────────────────────
 
 #[test]

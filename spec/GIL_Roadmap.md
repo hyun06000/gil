@@ -39,7 +39,7 @@ Core 시험 통과, 제품 기능 활성화, 실제 Host 인수를 서로 대신
 
 완료     3  Step Core, 단일 Cycle 경계, AI Manual Foundation
 진행 중  2  Bootstrap·Context 잔여(M2), Human Monitor(M5)
-재검토   2  Artifact 제품 안전성(M3), Revisit 제품 연결·누적 실패 전달(M4)
+재검토   2  Artifact 제품 안전성(M3), Revisit 제품 연결(M4; 누적 Context 로컬 구현)
 대기     2  Advanced Interview·Chain Closing(M6), Scenario Suite(M7)
 Later    1  성공 가지 Merge
 ```
@@ -47,7 +47,8 @@ Later    1  성공 가지 Merge
 현재 한 문장:
 
 > **친구용 Mac preview.7·Windows owner.6 설치 채널과 공통 작업 지침은 배포됐다.
-> 핵심 기능의 잔여는 실제 Chain/Closing, 승인된 탐색 계획, 반복 실패의 누적 인수인계다.
+> 핵심 기능의 잔여는 실제 Chain/Closing, 승인된 탐색 계획과 revisit의 안전한 제품 연결이다.
+> 반복 실패의 누적 Context 전달은 후속 구현 브랜치에서 로컬 검증을 통과했으며 아직 배포하지 않았다.
 > Step·Cycle 반복 revisit은 Core에 있지만 제품 안전 설정에서는 실행이 차단된다.
 > 구현·제품 연결·실사용 검수의 빈칸을 각각 닫아야 한다.**
 
@@ -575,7 +576,7 @@ CI 8개 통과·미병합이며 Monitor 표시 감지만 다룬다. Chain이나 
 | 닫힌 Chain 뒤 새 Chain과 상위 인수인계 / M6-C | 기본 명세 §5·19, Node Model §7, Cycle Model §19·21, [Context Model](GIL_Context_Model_v0.1.md) | **미구현 + 일부 명세 미결.** 현재 context는 Cycle/Step 투영이며 Chain Report 투영이 없다. Chain Report 이후 Project `next_direction`의 정확한 문법은 Cycle Model §21에서 유보한다. | 직렬 Chain 연결·상위 Current·요약 전달 계약을 먼저 확정. 열린 Chain의 자식 생성 거절, 이전 Chain 보고서/세계 보존 |
 | Step에서 같은 지점으로 여러 번 revisit / M4-R | 기본 명세 §14·22, [Time Model](GIL_Time_Model_v0.2.md) §6–8, Cycle Model §9 | **Core 구현·제품 차단.** `src/walk.rs`의 pending→새 Hypothesis 전이와 `tests/walk.rs::each_branch_off_the_same_point_knows_its_own_origin`이 반복 분기와 출처를 검사한다. `product-safety` 빌드의 공개 revisit은 거절된다. | M3 안전 복원 후 제품 재연결, 실제 파일·Journey 보존 및 Host 재시작 인수. 미구현으로 다시 만들지 않음 |
 | Cycle에서 같은/더 먼 조상으로 반복 revisit / M4-R | Cycle Model §9, [Storage Model](GIL_Storage_Model_v0.1.md) §3.1 | **Core 구현·제품 차단.** `src/cycles.rs::{revisit,open_after_revisit}`, `tests/revisit.rs::{a_second_failure_may_target_the_same_ancestor_again,a_further_ancestor_branch_is_not_called_a_sibling}`. 새 실패마다 같은 조상을 다시 선택 가능. | 제품에서 실패 종료→복원→새 Cycle→재실패→복원까지 인수. 같은 실패의 중복 실행과 새 실패의 재시도를 구분 |
-| 반복 실패 전체를 다음 시도에 전달 / M2·M4-H | Cycle Model §10 “부모 이후 현재 Journey에서 닫힌 실패 Cycle Report들” | **부분 구현, 명세 대비 결손.** `src/context.rs::write_previous_cycles`는 parent 계보, `write_abandoned_cycle`은 pending 또는 현재 Cycle의 `revisit_from` 하나만 투영한다. 여러 실패 형제의 누적 전달 경로는 없다. | C3 실패→C4 실패→C5에서 C3·C4 두 실패 Report가 모두 Context에 남고 재시작해도 같음. 수집 범위·순서·중복 제거 근거 정의; 과거 Step 전체 복사 금지 |
+| 반복 실패 전체를 다음 시도에 전달 / M2·M4-H | Cycle Model §10 “부모 이후 현재 Journey에서 닫힌 실패 Cycle Report들” | **후속 구현 후보·미배포.** 대조 시점 main의 `write_abandoned_cycle`은 출처 하나만 투영했다. 후속 `write_failed_cycles`는 Current/pending에서 parent와 revisit provenance를 따라 누적 실패를 한 번씩 읽는다. | C3·C4→C5, 다음 성공 자식, 먼 조상, 새 CLI 프로세스 재개와 원본 불변 시험 통과. 실제 모델/설치본 인수는 미실시; M4-R 제품 차단은 유지 |
 | 성공 후 추가 Interview / M2·M6-D | Cycle Model §6·13·16–17 | **기본 전이는 구현됨.** `src/cycles.rs::open_child`, `src/cycle.rs`의 승인/참조 검사와 `tests/cycles.rs`; 실패 뒤 새 Interview도 `tests/revisit.rs::an_interview_branch_is_allowed_too`에서 확인. | “재인터뷰 전부 미구현”으로 세지 않음. 승인 계획 변경·문서 revision과의 연결 및 실제 인간 승인 수집은 별도 잔여 |
 | 승인된 탐색 체크리스트·남은 계획 변경 / M2B·M6-D | Cycle Model §16 (`executed_cycles`, `pending_exploration`)·§21 | **미구현 + 상세 schema 미결.** 닫힌 Cycle 기록은 보존되지만 승인된 후보 목록을 갱신/소비하는 실행 모델은 없다. 임의 Report 문자열은 계획 상태 머신이 아니다. | 항목 식별·승인 revision·추가/재정렬/소비 계약. 완료 A 보존 + 새 승인 D 반영 후 `[D,B,C]` 복원. 실행한 Cycle을 덮어쓰지 않음 |
 | 승인된 계획 문서와 실험 범위 연결 / T2.2–4·M6-D | 기본 명세 §5, Cycle Model §5·16·21, T2의 제품 요구 | **미구현·선행 설계 필요.** 근거 StepRef/`approved: yes` 검사는 있지만 승인 문서 revision↔실험 요구사항 연결은 없다. Interview 문서의 Artifact 확정 경계도 미정이다. | Report→문서 파일→승인 revision→실험 연결. 범위 밖 요청은 다음 Interview에서 확인. Verify 증거 규칙을 우회해 Interview에서 임의 파일 확정하지 않음 |
@@ -641,7 +642,7 @@ M3.5 AI Manual Foundation            완료   ← GIL Manual Model v0.1
   ├─ 중첩 GIL 프로젝트 지원          Later  §7.4 미결 기능
   ├─ Managed Dataset                 Later  §7.5 결정 로그만 남긴다
   ↓
-M4 Failure Revisit & Branching       Core 구현 / 제품 차단·누적 전달 미완
+M4 Failure Revisit & Branching       Core·누적 Context 로컬 구현 / 제품 차단
   ↓
 M5 Human Monitor                     진행 중 ← GIL Monitor Model v0.1
   ↓
@@ -742,7 +743,7 @@ M1이 끝나면:
 
 ## 6. M2 — Multi-Cycle Continuity
 
-상태: `[~] Core 다중 Cycle 구현됨; 누적 실패 Context·승인 계획·자아 객체 잔여`
+상태: `[~] Core 다중 Cycle·누적 Context 구현; 승인 계획·자아 객체·실사용 잔여`
 
 2026-10-31 대조: 아래 첫 묶음은 `src/cycles.rs`와 `tests/cycles.rs`의 실제 구현에 맞춰 보정했다.
 실행된 Graph 보존과 아직 시작하지 않은 승인 계획의 관리는 다른 기능이다(§2.2).
@@ -758,7 +759,7 @@ M1이 끝나면:
 - [x] 성공한 Closed Cycle만 새 자식 Cycle의 부모가 됨; 실패한 Cycle 아래 child open 거절
 - [x] 새 Experiment Cycle마다 별도의 immutable Define 요구
 - [x] 부모 Cycle Report 참조 전달
-- [~] 누적된 실패 Cycle Report 전달 — 직전 출처 하나는 구현, 여러 실패의 누적은 M4-H 결손
+- [x] 누적된 실패 Cycle Report의 Core Context 전달 — M4-H 후속 구현/시험. 제품 배포·실사용과 구분
 - [x] 이미 실행한 Cycle과 Report의 Graph 보존
 - [ ] `executed_cycles`와 `pending_exploration`을 연결하는 승인 계획의 식별·소비·재정렬 투영 (M6-D)
 - [x] 여러 Cycle을 구분하는 status / story / context
@@ -1504,7 +1505,7 @@ Verify Topic 이 verdict 를 요구하지 않는지, restore Topic 이 대상 �
 
 ## 9. M4 — Failure Revisit & Branching
 
-상태: `[!] Step/Cycle 반복 revisit Core 구현됨; 제품 실행 차단 및 누적 실패 Context 미완`
+상태: `[!] Step/Cycle 반복 revisit·누적 Context Core 구현됨; 제품 실행 차단 유지`
 
 2026-10-31 대조는 §2.2를 따른다. 아래 기존 `[x]`는 기본 Core의 구현/시험을 의미하며,
 `product-safety` 빌드의 공개 `restore`/`revisit` 성공을 뜻하지 않는다. Chain-level revisit은 범위 밖이다.
@@ -1558,7 +1559,7 @@ Experiment Cycle failure Report의 `revisit`은 **기본 Core에서 기록·실�
 합격 조건:
 
 - [x] 실패한 Artifact는 현재 세계에서 제거되지만 snapshot으로 남는다.
-- [~] 직전 실패의 Report는 새 가지에 전달되지만, 여러 번 실패한 전체 Report의 누적 전달은 M4-H에 남는다.
+- [x] 관련된 누적 실패의 Report를 새 가지·다음 성공 자식의 Context에 전달한다 (M4-H 로컬 후속 구현).
 - [x] 과거 Cycle이나 snapshot을 수정하지 않는다.
 
 권장 시나리오:
@@ -1567,11 +1568,23 @@ Experiment Cycle failure Report의 `revisit`은 **기본 Core에서 기록·실�
 
 ### M4-H — 반복 실패의 누적 인수인계
 
-- [ ] Cycle Model §10에 맞춰 부모 이후 현재 Journey의 실패 Cycle Report 수집 범위·순서·중복 제거를 정의한다.
-- [ ] `write_abandoned_cycle`의 단일 출처 투영을 보완한다. parent 계보와 실패 provenance를 혼합하지 않는다.
-- [ ] C3·C4가 같은 C2에서 시작해 실패한 뒤 C5의 Context에 두 실패 요약이 모두 등장하는 회귀시험.
-- [ ] 더 먼 조상 선택, 다음 성공 자식, 새 서버 재개에서도 필요한 실패 요약 보존을 검사한다.
-- [ ] 실패 내부 Step 전체를 매번 복사하지 않고 Report 참조로 원문 조회를 이어간다.
+상태: `[x] Core 투영·로컬 회귀 구현, 미배포` — 제품 revisit 차단을 해제한 뜻이 아니다.
+
+- [x] 수집 범위: Current와 pending에서 parent/revisit_from을 따라 연결된 닫힌 실패들.
+      의존 경험을 먼저 출력하고 Cycle별 한 번만 포함한다. ID/저장 순서로 경험을 추정하지 않는다.
+- [x] 단일 출처 투영을 `write_failed_cycles`로 보완했다. 구조적 lineage는 parent만 따른다.
+- [x] C3·C4가 같은 C2에서 시작해 실패한 뒤 C5의 Context에 두 실패 요약이 모두 등장한다.
+- [x] 먼 조상, 다음 성공 자식, pending/새 가지, 새 CLI 프로세스와 저장 배열 재배치에서도 보존된다.
+- [x] 과거 Step 전체와 임의 Report 필드를 펼치지 않고 기존 선택적 투영과 원본 CycleRef를 출력한다.
+- [x] 현재 실패 Report 중복과 연결되지 않은 저장 기록의 자동 노출을 방지한다.
+- [x] read-only 조회 전후 state/작업 파일/객체 저장소 바이트가 같다.
+
+명확한 범위는 [Context Model §5](GIL_Context_Model_v0.1.md)의 누적 투영 절을 따른다.
+새 회귀시험은 수정 전 첫 실패 근거가 누락되어 실패했고 수정 후 통과했다. 실제 모델이
+누적 근거를 활용해 같은 실패를 피하는지는 M7 실사용 평가로 남긴다. 저장 형식 변경은 없다.
+로컬 macOS arm64 검증: Core 1,431 통과/기존 2 ignored, all-targets 빌드 통과,
+제품 설정 MCP/Context 45 통과와 누적 회귀 3 통과, JS/패키징 205 통과/기존 5 skip.
+제품 회귀는 합성 기존 기록의 조회이며 공개 revisit 차단 해제나 실기기 Windows 인수를 뜻하지 않는다.
 
 ### M4-R — 제품에서 반복 revisit 재개
 
