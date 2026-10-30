@@ -17,6 +17,9 @@ pub fn where_now(session: &ProjectSession, state_is_elsewhere: bool) -> String {
     let cycle = cycles.current();
     let walk = cycle.steps();
     let mut out = String::new();
+    if let Some(chain) = session.project().current_chain() {
+        out.push_str(&format!("Chain: {} · 열림 · Entry {} · 현재 {}\n", chain.id(), chain.entry_snapshot(), chain.current_cycle()));
+    }
 
     if state_is_elsewhere {
         out.push_str(&format!("기록: {}\n", crate::said_path(session.state_path())));

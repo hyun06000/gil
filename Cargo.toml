@@ -9,6 +9,8 @@ edition = "2024"
 members = ["companion"]
 
 [features]
+# M6-A development profile: new projects have a real Chain (format 6). No legacy migration.
+chain-core = []
 # Development-only authoring surface; no default format change or migration.
 visual-authoring = []
 # Product builds keep recording and read surfaces, but refuse destructive Artifact rollback until

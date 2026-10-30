@@ -37,7 +37,8 @@
 //!    않았을 때만 지날 수 있다. 이름은 [`ProjectSession`] 이 잠금 안에서 발급한다.
 //!
 //! 아직 없는 것(다음 Step 의 몫): Existence 전환 · Participant 와 Relation ·
-//! Knowledge·Memory 의 내용 · `gil restore` · Cycle 수준의 되돌아감 · Chain.
+//! Knowledge·Memory 의 내용 · Chain 종료/다음 Chain.
+//! `chain-core` 개발 프로필은 실제 Chain 컨테이너를 생성한다(저장 format 6/7).
 //!
 //! ```
 //! use gil::{CycleKind, ManifestAddress, Node, NodeKind, Project, Report, RuleSet};
@@ -196,7 +197,7 @@ pub use manual::TopicId;
 pub use monitor::{
     ActionKind, CapturedAt, CurrentCycleFacts, CycleFacts, CycleRelation, CycleReportFacts,
     ExistenceFacts, ExperimentDefinition, InactiveCycle, InterviewQuestion, MonitorError,
-    MonitorSnapshot,
+    ChainFacts, MonitorSnapshot,
     MonitorServer, NextAction, NextDirection, PendingRevisit, StepFacts, WillFacts, WorldFacts,
     TimelineCycleFacts, TimelineRelation, WorldMark, render_monitor_html, render_monitor_text,
     serve_monitor,
@@ -212,7 +213,7 @@ pub use monitor::{
     WireError, decode_detail_v1, decode_view_v1, encode_detail_v1, encode_view_v1,
 };
 pub use monitor::{
-    CurrentV1, CycleKindV1, CycleReportV1, DefinitionV1, DirectionActionV1, MonitorViewV1,
+    ChainV1, CurrentV1, CycleKindV1, CycleReportV1, DefinitionV1, DirectionActionV1, MonitorViewV1,
     NextActionKindV1, NextActionV1, NextDirectionV1, NodeStateV1, StepKindV1, StepV1,
     TimelineCycleV1, TimelineRelationV1, VerdictV1, ViewError, WillV1, WorldStateV1, WorldV1,
     monitor_view_v1,
@@ -233,7 +234,10 @@ pub use session::{
 pub use root::{RootError, open_project_root, open_project_root_read_only};
 pub use status::where_now;
 pub use story::story;
-pub use store::{FORMAT, VISUAL_FORMAT, LEGACY_WALK_PATH, STATE_PATH, StoreError, load, said_path, save};
+pub use store::{FORMAT, VISUAL_FORMAT, CHAIN_FORMAT, CHAIN_VISUAL_FORMAT, LEGACY_WALK_PATH, STATE_PATH, StoreError, load, said_path, save};
 pub use validate::{GrammarError, Subject};
 pub use walk::{NextDirectionError, NodeId, RestoreError, StepNode, Walk, WalkError};
 pub use will::{ActionContract, ContractError, DONE_WHEN, NEXT_ACTION, OBJECTIVE, Will};
+
+mod chain;
+pub use chain::{Chain, ChainError};

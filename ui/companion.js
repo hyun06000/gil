@@ -563,7 +563,7 @@ function renderIntro() {
     asked.under ?? `${cycleName(view.current.cycle_ref, here ? here.kind : "")} 안에 서 있다`;
   intro.querySelector(".world").textContent = word(WORLD, view.world.state);
   status.textContent =
-    `${view.current.cycle_ref} · ${view.current.step_ref || "Cycle 경계"} · 읽기 전용`;
+    `${view.current.chain_ref ? `${view.current.chain_ref} · ` : ""}${view.current.cycle_ref} · ${view.current.step_ref || "Cycle 경계"} · 읽기 전용`;
   const summary = progressSummary(view);
   for (const field of ['position', 'action', 'done', 'records']) {
     intro.querySelector(`.progress-${field}`).textContent = summary[field];

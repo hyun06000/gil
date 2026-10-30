@@ -5,7 +5,7 @@
 //!
 //! ```text
 //! Project
-//! ├─ cycles                 World Graph        — 여기는 어떤 곳인가
+//! ├─ world                  Chain → Cycles (chain-core), or legacy Cycles
 //! ├─ existences             지속적 행동 주체들  — 나는 누구인가
 //! ├─ existence_states       그들의 State 객체
 //! └─ current_existence_ref  지금 행동하는 존재
@@ -23,7 +23,8 @@
 //! Existence State ES0        (빈 객체 · 실재해야 한다)
 //! Journey revision X1@J0     (ES0 을 가리키고 나머지 head 는 null)
 //! current_existence_ref      existence:X1
-//! Cycle C1                   interview · Open · X1 이 소유
+//! Chain C1                   chain-core에서만 생성 · Open · X1이 소유
+//! └─ Cycle C1                interview · Open · X1 이 소유
 //! ```
 //!
 //! 어느 하나만 저장된 중간 상태를 허용하지 않는다. 사용자 호칭·Relation·프로젝트 목표는
@@ -55,7 +56,7 @@ const FIRST_WILL: u32 = 1;
 #[derive(Debug, Clone)]
 pub struct Project {
     pub(crate) visual_state: Option<crate::visual_report::project::VisualState>,
-    cycles: Cycles,
+    world: WorldGraph,
     existences: BTreeMap<u32, Existence>,
     existence_states: BTreeMap<u32, ExistenceState>,
     current_existence: ExistenceRef,
@@ -69,6 +70,13 @@ pub struct Project {
     /// 여기 사는 것은 **이름과 manifest 주소**뿐이다. 파일 목록도 blob 도 들어오지 않는다 —
     /// 그것들은 `.gil/artifacts/` 의 content-addressed 창고가 진다(Artifact Model §10.5).
     artifacts: SnapshotRegistry,
+}
+
+/// Legacy worlds remain unwrapped when read; only new chain-profile projects create a Chain.
+#[derive(Debug, Clone)]
+enum WorldGraph {
+    Legacy(Cycles),
+    Chain(crate::Chain),
 }
 
 impl Project {
@@ -98,7 +106,12 @@ impl Project {
 
         Project {
             visual_state: None,
-            cycles: Cycles::start(rules, existence, first),
+            world: {
+                let cycles = Cycles::start(rules, existence, first);
+                if cfg!(feature = "chain-core") {
+                    WorldGraph::Chain(crate::Chain::start(cycles))
+                } else { WorldGraph::Legacy(cycles) }
+            },
             existences: BTreeMap::from([(
                 FIRST_EXISTENCE,
                 Existence::start(existence, state),
@@ -108,6 +121,30 @@ impl Project {
             next_will_id: FIRST_WILL,
             artifacts,
         }
+    }
+
+    /// Real current container, absent in format 4/5. Never synthesizes historical approval.
+    pub fn current_chain(&self) -> Option<&crate::Chain> {
+        match &self.world { WorldGraph::Chain(chain) => Some(chain), _ => None }
+    }
+
+    /// Same-level children require a closed parent; M6-A has no Chain closing transition.
+    pub fn open_child_chain(&mut self) -> Result<crate::ChainRef, crate::ChainError> {
+        match self.current_chain() {
+            Some(chain) => Err(crate::ChainError::ParentOpen(chain.id())),
+            None => Err(crate::ChainError::LegacyProject),
+        }
+    }
+
+    pub(crate) fn restore_chain(mut self, id: crate::ChainRef, owner: ExistenceRef,
+        entry: SnapshotRef) -> Result<Self, crate::ChainError> {
+        crate::Chain::validate(id, owner, entry, self.cycles(), self.current_existence_ref())?;
+        // Move the graph into its owner, never keep a second graph or duplicate ownership map.
+        let WorldGraph::Legacy(cycles) = self.world else {
+            return Err(crate::ChainError::Invalid("a Chain already owns this graph"));
+        };
+        self.world = WorldGraph::Chain(crate::Chain::restore(id, owner, entry, cycles));
+        Ok(self)
     }
 
     /// 이 프로젝트가 이름 붙인 세계들. 읽기만 한다.
@@ -121,7 +158,7 @@ impl Project {
     /// dirty 판정·Cycle Exit·훗날의 restore 가 **같은 함수**를 쓴다 — 두 자리에 적으면
     /// 한쪽이 낡고, 그러면 「닫을 수 있다」와 「되돌아갈 곳」이 서로 다른 세계를 가리킨다.
     pub fn world_snapshot(&self) -> SnapshotRef {
-        self.cycles.current().world_snapshot()
+        self.cycles().current().world_snapshot()
     }
 
     /// 그 이름이 가리키는 세계의 manifest 주소. 모르는 이름이면 `None`.
@@ -161,12 +198,12 @@ impl Project {
 
     /// World Graph. 읽기만 한다.
     pub fn cycles(&self) -> &Cycles {
-        &self.cycles
+        match &self.world { WorldGraph::Legacy(cycles) => cycles, WorldGraph::Chain(chain) => chain.cycles() }
     }
 
     /// World Graph — 고치기 위해.
     pub fn cycles_mut(&mut self) -> &mut Cycles {
-        &mut self.cycles
+        match &mut self.world { WorldGraph::Legacy(cycles) => cycles, WorldGraph::Chain(chain) => &mut chain.cycles }
     }
 
     /// 지금 행동하는 존재.
@@ -214,7 +251,7 @@ impl Project {
     /// 순간의 Current 를 그 Cycle 에 새긴다.
     pub fn open_child_cycle(&mut self, kind: CycleKind) -> Result<CycleId, CyclesError> {
         let existence = self.current_existence;
-        self.cycles.open_child(kind, existence)
+        self.cycles_mut().open_child(kind, existence)
     }
 
     /// **되돌아온 자리에서 새 갈래를 연다** — 지금 행동하는 존재의 이름으로.
@@ -227,7 +264,7 @@ impl Project {
         kind: CycleKind,
     ) -> Result<CycleId, OpenAfterRevisitError> {
         let existence = self.current_existence;
-        self.cycles.open_after_revisit(kind, existence)
+        self.cycles_mut().open_after_revisit(kind, existence)
     }
 
     /// **적어 둔 Cycle 계층의 되돌아감을 밟는다 — 논리적 이동 하나.**
@@ -242,7 +279,7 @@ impl Project {
     /// [`ProjectSession::revisit_cycle`](crate::ProjectSession::revisit_cycle) 만 공개한다 —
     /// 순수 계층만 부르면 논리는 옮겨졌는데 폴더는 옛 세계인 상태를 만들 수 있다.
     pub(crate) fn revisit_cycle(&mut self) -> Result<CycleRevisit, CycleRevisitError> {
-        self.cycles.revisit()
+        self.cycles_mut().revisit()
     }
 
     /// 되돌아온 뒤 아직 소비되지 않은 결정이 있는가 — **있으면 Graph 를 바꾸지 않는다.**
@@ -251,10 +288,10 @@ impl Project {
     /// 만지므로, 그 자리에서 다시 묻는다. 지금 서 있는 자리는 닫힌 대상 조상이라 어차피
     /// 막히지만, 「이미 닫혔다」는 말은 **무엇을 해야 하는지**를 알려 주지 않는다.
     pub(crate) fn no_pending_revisit(&self) -> Result<(), ActionError> {
-        match self.cycles.pending_revisit() {
+        match self.cycles().pending_revisit() {
             Some(from) => Err(ActionError::RevisitPending {
                 from: from.to_ref(),
-                target: self.cycles.current_id().to_ref(),
+                target: self.cycles().current_id().to_ref(),
             }),
             None => Ok(()),
         }
@@ -271,7 +308,7 @@ impl Project {
     ) -> Result<Project, ProjectError> {
         let project = Project {
             visual_state: None,
-            cycles,
+            world: WorldGraph::Legacy(cycles),
             existences,
             existence_states,
             current_existence,
@@ -322,7 +359,7 @@ impl Project {
         //
         // Node 를 연 Existence 와 닫는 Existence 는 같아야 하고, 열린 Node 가 있는 동안
         // 전환을 막는다. 그러므로 파일에서 이 둘이 갈렸다면 걸어서 만들 수 없는 상태다.
-        for cycle in self.cycles.nodes() {
+        for cycle in self.cycles().nodes() {
             if !cycle.is_closed() && cycle.existence() != current.id() {
                 return Err(ProjectError::OpenCycleOfAnotherExistence {
                     cycle: cycle.id(),
@@ -348,7 +385,7 @@ impl Project {
     fn check_restored_worlds(&self) -> Result<(), ProjectError> {
         let known = |world: SnapshotRef| self.artifacts.resolve(world).is_some();
 
-        for cycle in self.cycles.nodes() {
+        for cycle in self.cycles().nodes() {
             let id = cycle.id().to_ref();
 
             // ① 모든 Cycle 은 Entry 를 지니고, 그 이름은 registry 에 있다.
@@ -378,7 +415,7 @@ impl Project {
             //    만들 수 없다 — `open_child` 가 읽는 자리가 하나뿐이기 때문이다.
             if let Some(parent) = cycle.parent() {
                 let parent = self
-                    .cycles
+                    .cycles()
                     .node(parent)
                     .expect("Cycles::restore 가 부모의 실재를 이미 쟀다");
                 let inherited = parent.exit_snapshot();
@@ -583,7 +620,7 @@ impl Project {
 
     /// 닫힌 Node 의 provenance 가 실재하는 판을 가리키고, 그 판이 그 행동을 확정했는가.
     fn check_restored_provenance(&self) -> Result<(), ProjectError> {
-        for cycle in self.cycles.nodes() {
+        for cycle in self.cycles().nodes() {
             if let Some(journey) = cycle.journey() {
                 self.must_have_revision(journey, cycle.existence())?;
             }
@@ -651,7 +688,7 @@ impl Project {
     /// 한 번에 열린 Cycle 은 하나이고 그 안에 열린 Step 도 하나다. 컨테이너가 열려 있다는
     /// 이유만으로 가상의 자리를 만들지 않는다(Will Model §5).
     fn deepest_open_action_step(&self) -> Option<StepRef> {
-        let cycle = self.cycles.current();
+        let cycle = self.cycles().current();
         if cycle.is_closed() {
             return None;
         }
@@ -668,7 +705,7 @@ impl Project {
         ExistenceRef,
     ) {
         (
-            &self.cycles,
+            self.cycles(),
             &self.existences,
             &self.existence_states,
             self.current_existence,
@@ -679,7 +716,7 @@ impl Project {
 /// 지금 Cycle 안에서 다음에 할 수 있는 것들 — 편의를 위해 한 층 위로 올린다.
 impl Project {
     pub fn current_cycle(&self) -> &Cycle {
-        self.cycles.current()
+        self.cycles().current()
     }
 }
 
@@ -738,7 +775,7 @@ impl Project {
         }
 
         // ③④ 문법 판정이 먼저다 — 거절되면 이름도 Will 도 나지 않는다.
-        let cycle = next.cycles.current_mut();
+        let cycle = next.cycles_mut().current_mut();
         cycle.open_step(kind)?;
         let opened = cycle.steps().current().expect("방금 열었다");
         let target = cycle.step_ref(opened);
@@ -819,7 +856,7 @@ impl Project {
         let mut next = self.clone();
         let owner = next.current_existence;
 
-        let cycle = next.cycles.current();
+        let cycle = next.cycles().current();
         let Some(at) = cycle.step_now_open() else {
             return Err(ActionError::NothingOpen);
         };
@@ -875,7 +912,7 @@ impl Project {
         };
 
         // ⑤⑫ Report 를 재고 Node 를 닫는다. 거절되면 복제본째 버린다.
-        next.cycles
+        next.cycles_mut()
             .current_mut()
             .close_step_into(report, journey, confirmed)?;
 
@@ -922,7 +959,7 @@ impl Project {
     ) -> Result<ClosedCycle, ActionError> {
         let mut next = self.clone();
         let owner = next.current_existence;
-        let cycle = next.cycles.current();
+        let cycle = next.cycles().current();
         let (id, kind) = (cycle.id().to_ref(), cycle.kind());
 
         if cycle.existence() != owner {
@@ -959,7 +996,7 @@ impl Project {
         // **어느 종류의 Cycle 이 거절했는지 함께 말한다.** 성공하면 `ClosedCycle` 이 kind 를
         // 알려 주는데 거절할 때만 잃을 이유가 없다 — 그리고 Interview 와 Experiment 는
         // 사람이 할 일이 다르다.
-        next.cycles
+        next.cycles_mut()
             .close_current(report, journey)
             .map_err(|err| match err {
                 CycleCloseError::NextDirection(source) => {

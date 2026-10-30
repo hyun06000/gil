@@ -1,0 +1,36 @@
+name: Chain M6-A development acceptance (no publication)
+on:
+  pull_request:
+    paths: ['src/**', 'tests/**', 'Cargo.toml', 'Cargo.lock', '.github/workflows/chain-core.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  chain:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, windows-2025]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      RUSTUP_TOOLCHAIN: 1.97.1
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install 1.97.1 --profile minimal
+      - name: Actual Chain, legacy preservation and domain regressions
+        run: cargo test --locked -p gil --features chain-core --test chains --test cycles --test context --test will --test walk
+      - name: Repeated failure and branch context inside a Chain
+        run: cargo test --locked -p gil --features chain-core --test revisit cumulative_context_survives_pending_new_branch_success_and_process_restart -- --exact
+      - name: Private visual creation and native MCP roundtrip
+        run: |
+          cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --lib visual_start
+          cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --test visual_start
+          cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --test mcp chain_profile_stdio_start_monitor_and_restart_preserve_containment -- --exact
+      - name: Compile all Core targets in the development product profile
+        run: cargo build --locked -p gil --all-targets --features chain-core,visual-authoring,product-safety

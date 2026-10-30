@@ -599,7 +599,7 @@ fn a_closed_step_whose_journey_does_not_hold_its_will_is_refused() {
     walked(&mut project, NodeKind::Interpretation);
 
     let err = tampered(&project, "will-journey-mismatch", |file| {
-        file["cycles"]["nodes"][0]["steps"]["nodes"][0]["journey_ref"] =
+        common::stored_cycles(file)["nodes"][0]["steps"]["nodes"][0]["journey_ref"] =
             Value::from("journey:X1@J2");
     });
     assert!(
@@ -614,7 +614,7 @@ fn a_provenance_that_points_at_no_revision_is_refused() {
     walked(&mut project, NodeKind::Question);
 
     let err = tampered(&project, "will-journey-ghost", |file| {
-        file["cycles"]["nodes"][0]["steps"]["nodes"][0]["journey_ref"] =
+        common::stored_cycles(file)["nodes"][0]["steps"]["nodes"][0]["journey_ref"] =
             Value::from("journey:X1@J9");
     });
     assert!(
@@ -631,7 +631,7 @@ fn a_closed_cycle_without_its_journey_is_refused() {
     project.close_cycle(report).expect("Cycle 을 닫는다");
 
     let err = tampered(&project, "will-cycle-no-journey", |file| {
-        file["cycles"]["nodes"][0]["journey_ref"] = Value::Null;
+        common::stored_cycles(file)["nodes"][0]["journey_ref"] = Value::Null;
     });
     assert!(
         matches!(err, ProjectError::ClosedCycleWithoutJourney(_)),

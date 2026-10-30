@@ -48,7 +48,7 @@ pub use wire::{
     WireError, decode_detail_v1, decode_view_v1, encode_detail_v1, encode_view_v1,
 };
 pub use view::{
-    CurrentV1, CycleKindV1, CycleReportV1, DefinitionV1, DirectionActionV1, MonitorViewV1,
+    ChainV1, CurrentV1, CycleKindV1, CycleReportV1, DefinitionV1, DirectionActionV1, MonitorViewV1,
     NextActionKindV1, NextActionV1, NextDirectionV1, NodeStateV1, StepKindV1, StepV1,
     TimelineCycleV1, TimelineRelationV1, VerdictV1, ViewError, WillV1, WorldStateV1, WorldV1,
     monitor_view_v1,
@@ -95,6 +95,7 @@ impl CapturedAt {
 #[derive(Debug, Clone)]
 pub struct MonitorSnapshot {
     pub captured_at: CapturedAt,
+    pub current_chain: Option<ChainFacts>,
     pub current_existence: ExistenceFacts,
     pub current_cycle: CurrentCycleFacts,
     /// 지금 Cycle 에서 **`parent` 만 따라** 뿌리까지 간 구조적 경로. 뿌리가 먼저 온다.
@@ -131,6 +132,16 @@ pub struct MonitorSnapshot {
     ///
     /// 여기서 자르지 않는다. 접기와 축약은 그리는 쪽이 한다.
     pub timeline: Vec<TimelineCycleFacts>,
+}
+
+/// Container facts from the domain; typed references, no UI layout or invented approval.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChainFacts {
+    pub chain_ref: crate::ChainRef,
+    pub existence_ref: ExistenceRef,
+    pub entry_snapshot_ref: SnapshotRef,
+    pub current_cycle_ref: CycleRef,
+    pub cycle_refs: Vec<CycleRef>,
 }
 
 /// 지금 행동하는 존재와 그 판.
@@ -558,6 +569,12 @@ fn snapshot(
 
     Ok(MonitorSnapshot {
         captured_at: CapturedAt(SystemTime::now()),
+        current_chain: project.current_chain().map(|chain| ChainFacts {
+            chain_ref: chain.id(), existence_ref: chain.existence(),
+            entry_snapshot_ref: chain.entry_snapshot(),
+            current_cycle_ref: chain.current_cycle(),
+            cycle_refs: chain.cycles().nodes().iter().map(|cycle| cycle.id().to_ref()).collect(),
+        }),
         current_existence: ExistenceFacts {
             existence_ref: existence.id(),
             journey_ref: existence.current_journey(),

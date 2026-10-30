@@ -1857,3 +1857,41 @@ fn onedrive_environment_values_do_not_move_the_working_folder() {
     assert!(!stale.join("p").join(".gil").exists());
     mcp.eof();
 }
+
+/// Same typed containment on both CLI and native MCP, including the image/private-store profile.
+#[cfg(feature = "chain-core")]
+#[test]
+fn chain_profile_stdio_start_monitor_and_restart_preserve_containment() {
+    use serde_json::json;
+    let root = scratch("chain-profile-root");
+    let settings = scratch("chain-profile-settings");
+    let mut mcp = Client::serve_with(&settings);
+    mcp.initialize();
+    let started = monitor_call(&mut mcp, "gil_start", json!({"project_root": root}));
+    assert_eq!(started["structuredContent"]["ok"], true, "{started}");
+    assert!(started["structuredContent"]["said"].as_str().unwrap().contains("chain:C1"));
+    #[cfg(feature = "visual-authoring")]
+    assert_eq!(started["structuredContent"]["storage_format"], 7);
+    let state = product_state_path(&root);
+    let before = std::fs::read(&state).unwrap();
+    let project = gil::load(common::spec(), &state).unwrap();
+    assert_eq!(project.current_chain().unwrap().cycles().nodes().len(), 1);
+    assert!(project.current_chain().unwrap().exit_snapshot().is_none());
+    let prepared = monitor_call(&mut mcp, "gil_monitor_prepare", json!({"project_root": root}));
+    let scope = prepared["structuredContent"]["scope_id"].clone();
+    let shown = monitor_call(&mut mcp, "show_gil_monitor", json!({"scope_id": scope}));
+    let view = &shown["structuredContent"]["view"];
+    assert_eq!(view["current"]["chain_ref"], "chain:C1");
+    assert_eq!(view["chain"]["cycle_refs"], json!(["cycle:C1"]));
+    assert_eq!(view["chain"]["entry_snapshot_ref"], "snapshot:A1");
+    assert!(view["chain"]["exit_snapshot_ref"].is_null());
+    mcp.eof();
+    let mut mcp = Client::serve_with(&settings);
+    mcp.initialize();
+    let status = monitor_call(&mut mcp, "gil_status", json!({"project_root": root}));
+    assert!(status["structuredContent"]["said"].as_str().unwrap().contains("Chain: chain:C1"));
+    let context = monitor_call(&mut mcp, "gil_context", json!({"project_root": root}));
+    assert!(context["structuredContent"]["said"].as_str().unwrap().contains("현재 Chain: chain:C1"));
+    assert_eq!(std::fs::read(&state).unwrap(), before);
+    mcp.eof();
+}

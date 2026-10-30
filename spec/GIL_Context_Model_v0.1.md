@@ -385,3 +385,10 @@ model을 사용하되 사람이 필요할 때 상위 Report에서 내부 Graph�
 > 위한 것이며, history는 전체 경로를 감사하기 위한 것이다.**
 
 > **압축은 삭제가 아니다. 상위 Report 뒤에 있는 내부 Graph는 필요할 때 다시 읽을 수 있다.**
+
+## M6-A 현재 Chain 투영 (2026-10-31)
+
+[실제 Chain 저장](GIL_Chain_Storage_v0.1.md)을 쓰는 개발 프로젝트에서만 현재 Chain의
+참조·Open 상태·Existence·Entry·현재 Cycle을 먼저 표시한다. 아래 Cycle/누적 실패/Step 해상도는
+그대로 유지한다. 4/5 기록에는 Chain을 지어내지 않는다. M6-B/C 이전에는 Chain Report나
+이전 Chain 요약을 생성하지 않는다.

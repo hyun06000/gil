@@ -55,6 +55,10 @@ pub const FORMAT: u32 = 4;
 
 /// 명시적으로 전환한 Project의 시각 Report 저장 형식. 기본 생성은 여전히 format 4다.
 pub const VISUAL_FORMAT: u32 = 5;
+/// M6-A container format; read/write enabled only in the chain-core development profile.
+pub const CHAIN_FORMAT: u32 = 6;
+/// Chain plus visual registry; retains format-5 private-storage requirements.
+pub const CHAIN_VISUAL_FORMAT: u32 = 7;
 
 /// **사람에게 보일 때의 자리.** 절대 경로를 적지 않는다.
 ///
@@ -159,13 +163,17 @@ pub(crate) fn load_within(
 
 /// Encode without filesystem mutation, shared by save and explicit migration.
 pub(crate) fn encode(project: &Project) -> Result<Vec<u8>, StoreError> {
+    if let Some(chain) = project.current_chain() {
+        crate::Chain::validate(chain.id(), chain.existence(), chain.entry_snapshot(),
+            chain.cycles(), project.current_existence_ref()).map_err(|err| StoreError::ChainState(err.to_string()))?;
+    }
     let mut stored = StoredState::from(project);
     if let Some(state) = project.visual_state() {
         let graph = crate::visual_report::project::ProjectVisualGraph::new(project, &state.boundary)
             .map_err(|err| StoreError::VisualState(format!("{err:?}")))?;
         let registry = crate::visual_report::registry::codec::to_stored(&state.registry, &graph)
             .map_err(|err| StoreError::VisualState(format!("{err:?}")))?;
-        stored.format = VISUAL_FORMAT;
+        stored.format = if project.current_chain().is_some() { CHAIN_VISUAL_FORMAT } else { VISUAL_FORMAT };
         stored.visuals = Some(StoredVisualState {
             boundary: state.boundary.heads.iter()
                 .map(|(owner, revision)| StoredVisualBoundary {
@@ -262,6 +270,7 @@ pub(crate) fn declared_format(text: &str, path: &Path) -> Result<u32, StoreError
     let head: StoredFormat = serde_norway::from_str(text).map_err(StoreError::Decode)?;
     match head.format {
         FORMAT | VISUAL_FORMAT => Ok(head.format),
+        CHAIN_FORMAT | CHAIN_VISUAL_FORMAT if cfg!(feature = "chain-core") => Ok(head.format),
         found if found < FORMAT => Err(StoreError::PreviousFormat {
             found,
             current: FORMAT,
@@ -269,7 +278,7 @@ pub(crate) fn declared_format(text: &str, path: &Path) -> Result<u32, StoreError
         }),
         found => Err(StoreError::UnknownFormat {
             found,
-            known: VISUAL_FORMAT,
+            known: if cfg!(feature = "chain-core") { CHAIN_VISUAL_FORMAT } else { VISUAL_FORMAT },
         }),
     }
 }
@@ -365,9 +374,23 @@ impl StoredState {
     ///
     /// 두 축을 각자 세운 뒤 [`Project::restore`] 가 **서로 맞물리는지**를 잰다.
     fn into_project(self, rules: RuleSet) -> Result<Project, StoreError> {
-        if (self.format == VISUAL_FORMAT) != self.visuals.is_some() {
+        if matches!(self.format, VISUAL_FORMAT | CHAIN_VISUAL_FORMAT) != self.visuals.is_some() {
             return Err(StoreError::VisualState("저장 형식과 시각 registry가 일치하지 않는다".into()));
         }
+        let (stored_cycles, chain) = match (self.format, self.cycles, self.chains) {
+            (CHAIN_FORMAT | CHAIN_VISUAL_FORMAT, None, Some(mut chains)) if chains.current == "chain:C1" && chains.next_id == 2 && chains.nodes.len() == 1 => {
+                let chain = chains.nodes.remove(0);
+                if chain.id != "C1" || chain.state != "open" || chain.parent_chain_ref.is_some() || chain.exit_snapshot_ref.is_some() {
+                    return Err(StoreError::ChainState("M6-A admits one open root Chain, with no Exit or parent".into()));
+                }
+                let identity = (read_ref(&format!("chain:{}", chain.id), "chains.nodes.id")?,
+                    read_ref(&chain.existence_ref, "chains.nodes.existence_ref")?,
+                    read_ref(&chain.entry_snapshot_ref, "chains.nodes.entry_snapshot_ref")?);
+                (chain.cycles, Some(identity))
+            }
+            (FORMAT | VISUAL_FORMAT, Some(cycles), None) => (cycles, None),
+            _ => return Err(StoreError::ChainState("format, containment and Current disagree; no orphan or second Cycle graph is allowed".into())),
+        };
         let visuals = self.visuals;
         let artifacts = self.artifacts.into_registry()?;
 
@@ -385,7 +408,7 @@ impl StoredState {
             states.insert(id.number(), ExistenceState);
         }
 
-        let cycles = Cycles::restore(rules, self.cycles.into_state()?).map_err(StoreError::NotValid)?;
+        let cycles = Cycles::restore(rules, stored_cycles.into_state()?).map_err(StoreError::NotValid)?;
         let mut project = Project::restore(
             cycles,
             existences,
@@ -395,6 +418,9 @@ impl StoredState {
             artifacts,
         )
         .map_err(StoreError::NotWhole)?;
+        if let Some((id, owner, entry)) = chain {
+            project = project.restore_chain(id, owner, entry).map_err(|err| StoreError::ChainState(err.to_string()))?;
+        }
         if let Some(visuals) = visuals {
             use crate::visual_report::project::{MigrationBoundary, ProjectVisualGraph, VisualState};
             let mut heads = BTreeMap::new();
@@ -561,9 +587,31 @@ struct StoredState {
     /// 파일 목록도 blob 도 여기 없다 — `.gil/artifacts/` 의 content-addressed 창고가
     /// 그것을 지고, 여기 눕는 것은 **이름과 그 세계의 manifest 주소**뿐이다.
     artifacts: StoredArtifacts,
-    cycles: StoredCycles,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    cycles: Option<StoredCycles>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    chains: Option<StoredChains>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     visuals: Option<StoredVisualState>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StoredChains {
+    current: String,
+    next_id: u32,
+    nodes: Vec<StoredChain>,
+}
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StoredChain {
+    id: String,
+    existence_ref: String,
+    state: String,
+    parent_chain_ref: Option<String>,
+    entry_snapshot_ref: String,
+    exit_snapshot_ref: Option<String>,
+    cycles: StoredCycles,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -770,7 +818,16 @@ impl From<&Project> for StoredState {
     fn from(project: &Project) -> Self {
         let (cycles, existences, states, current) = project.parts();
         StoredState {
-            format: FORMAT,
+            format: if project.current_chain().is_some() { CHAIN_FORMAT } else { FORMAT },
+            chains: project.current_chain().map(|chain| StoredChains {
+                current: chain.id().to_string(), next_id: 2,
+                nodes: vec![StoredChain {
+                    id: chain.id().id(), existence_ref: chain.existence().to_string(),
+                    state: "open".into(), parent_chain_ref: None,
+                    entry_snapshot_ref: chain.entry_snapshot().to_string(), exit_snapshot_ref: None,
+                    cycles: StoredCycles::from(chain.cycles()),
+                }],
+            }),
             visuals: None,
             next_will_id: project.next_will_id(),
             current_existence_ref: current.to_string(),
@@ -800,13 +857,16 @@ impl From<&Project> for StoredState {
                     (id.id(), StoredExistenceState {})
                 })
                 .collect(),
-            cycles: StoredCycles {
-                next_id: cycles.next_name(),
-                current: cycles.current_id().raw(),
-                pending_cycle_revisit: cycles.pending_revisit().map(CycleId::raw),
-                nodes: cycles.nodes().iter().map(StoredCycle::from).collect(),
-            },
+            cycles: if project.current_chain().is_none() { Some(StoredCycles::from(cycles)) } else { None },
         }
+    }
+}
+
+impl From<&Cycles> for StoredCycles {
+    fn from(cycles: &Cycles) -> Self {
+        Self { next_id: cycles.next_name(), current: cycles.current_id().raw(),
+            pending_cycle_revisit: cycles.pending_revisit().map(CycleId::raw),
+            nodes: cycles.nodes().iter().map(StoredCycle::from).collect() }
     }
 }
 
@@ -964,6 +1024,7 @@ impl From<StoredStatus> for NodeStatus {
 #[derive(Debug)]
 pub enum StoreError {
     VisualState(String),
+    ChainState(String),
     /// 저장된 것이 아직 없다. 잘못이 아니라 **아직 시작하지 않았다**는 사실이다.
     NotFound { path: String },
     /// 앞 형식의 파일을 만났다. 읽지 않고, 있다는 사실을 말한다.
@@ -1009,6 +1070,7 @@ pub enum StoreError {
 impl fmt::Display for StoreError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            StoreError::ChainState(why) => write!(f, "Chain 저장 상태를 거절했다: {why}"),
             StoreError::VisualState(reason) => write!(f, "시각 Report 저장 상태가 맞지 않다: {reason}"),
             StoreError::NotFound { path } => {
                 write!(f, "저장된 것이 없다: {path}")
@@ -1098,7 +1160,7 @@ impl std::error::Error for StoreError {
             | StoreError::DigestNotCanonical { .. }
             | StoreError::Manifest { .. }
             | StoreError::JourneyWithoutState
-            | StoreError::VisualState(_) => None,
+            | StoreError::VisualState(_) | StoreError::ChainState(_) => None,
         }
     }
 }

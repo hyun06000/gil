@@ -184,6 +184,9 @@ pub struct MonitorViewV1 {
     /// UTC Unix epoch 이후 밀리초.
     pub captured_at_unix_ms: u64,
     pub current: CurrentV1,
+    /// Additive v1 extension; absent for historical worlds. It is never inferred from cycles.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chain: Option<ChainV1>,
     /// 이 Journey 가 발급한 **모든 Cycle**, 발급 순서 그대로.
     pub timeline: Vec<TimelineCycleV1>,
     pub current_will: Option<WillV1>,
@@ -192,9 +195,24 @@ pub struct MonitorViewV1 {
     pub next_actions: Vec<NextActionV1>,
 }
 
+/// Actual Chain containment and boundaries. No invented Report or approval.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChainV1 {
+    pub chain_ref: String,
+    pub existence_ref: String,
+    pub state: NodeStateV1,
+    pub parent_chain_ref: Option<String>,
+    pub entry_snapshot_ref: String,
+    pub exit_snapshot_ref: Option<String>,
+    pub current_cycle_ref: String,
+    pub cycle_refs: Vec<String>,
+}
+
 /// 지금 어디에 서 있는가.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CurrentV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chain_ref: Option<String>,
     pub existence_ref: String,
     pub journey_ref: String,
     pub cycle_ref: String,
@@ -406,7 +424,15 @@ pub fn monitor_view_v1(seen: &MonitorSnapshot) -> Result<MonitorViewV1, ViewErro
     Ok(MonitorViewV1 {
         schema_version: SCHEMA_VERSION,
         captured_at_unix_ms: unix_millis(seen.captured_at)?,
+        chain: seen.current_chain.as_ref().map(|chain| ChainV1 {
+            chain_ref: chain.chain_ref.to_string(), existence_ref: chain.existence_ref.to_string(),
+            state: NodeStateV1::Open, parent_chain_ref: None,
+            entry_snapshot_ref: chain.entry_snapshot_ref.to_string(), exit_snapshot_ref: None,
+            current_cycle_ref: chain.current_cycle_ref.to_string(),
+            cycle_refs: chain.cycle_refs.iter().map(ToString::to_string).collect(),
+        }),
         current: CurrentV1 {
+            chain_ref: seen.current_chain.as_ref().map(|chain| chain.chain_ref.to_string()),
             existence_ref: seen.current_existence.existence_ref.to_string(),
             journey_ref: seen.current_existence.journey_ref.to_string(),
             cycle_ref: seen.current_cycle.facts.cycle_ref.to_string(),
@@ -1270,7 +1296,7 @@ mod tests {
         seen.sort_unstable();
 
         let allowed = [
-            "action", "baseline_snapshot_ref", "captured_at_unix_ms", "command", "current",
+            "chain", "chain_ref", "action", "baseline_snapshot_ref", "captured_at_unix_ms", "command", "current",
             "current_will", "cycle_kind", "cycle_ref", "done_when", "existence_ref",
             "experiment_definition", "handoff_summary", "help_ref", "interview_question",
             "journey_ref", "kind",
