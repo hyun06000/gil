@@ -84,3 +84,26 @@ Rust 자식을 모두 종료·재실행한 뒤 재준비 없이 읽기·자동 �
 - 공식 cachebuster/reinstall 적용: `0.2.0+codex.20260925044007`.
   Core SHA-256 `0a5c30c4678ddbf362fc321b6b47a2ceb47f46b28b84e2de6c55396c36544da0`.
 - 실제 Codex 완전 종료·재실행 검수와 Cowork·Windows 검수는 남긴다. 커밋·푸시하지 않았다.
+
+## MCP App 표시 감지와 작업 재개 시 복구 (2026-10-30)
+
+`gil_monitor_status(project_root)`는 이 MCP 연결에 있는 해당 Project App의 최근 표시 보고를 읽는다.
+네이티브 Companion의 상태와 별개이며 Project 기록이나 설정을 쓰지 않는다. `gil_monitor_poll`의
+선택 필드 `instance_id`, `sequence`, `presentation`은 App만 보내는 일시적 관측이다. 일반 poll/read,
+View 준비나 파일 watcher 성공으로 표시를 추정하지 않는다. 표시 보고 자체는 인증된 OS 가시성 증거가 아니다.
+
+- `visible`: renderer 준비 뒤 document가 숨겨지지 않았고 Host가 inline/fullscreen 모드를 보고했다.
+- `hidden`/`closed`/`loading`/`error`: 해당 App의 마지막 상태. 종료 보고가 유실될 수 있다.
+- `unknown`: 아직 보고가 없거나 마지막 신호가 15초보다 오래됨. 서버 재시작도 unknown부터 시작한다.
+- `opening`: show 이후 최대 30초 동안의 표시 확인 대기. 화면 성공을 뜻하지 않는다.
+- `unconfirmed`: 표시 응답 없는 show 두 번 이후. 추가 자동 카드를 만들지 않고 문제를 알린다.
+
+성공한 Project 도구 호출(새 세션의 `gil_context` 포함)은 이 상태를 검사하고, 필요하면 정확한 scope의
+`show_gil_monitor` 다음 호출을 응답에 넣는다. Agent는 사용자에게 별도 창을 요구하지 않고 이 호출을
+따른다. 새 visible 보고는 재시도 예산을 회복하며, 정상 inline 화면을 fullscreen으로 강제하지 않는다.
+다른 Project/다른 MCP 연결의 화면은 대신 세지 않는다. 임시 상태는 `.gil`에 저장하지 않는다.
+Host가 한 MCP 연결을 여러 대화에서 공유한다면 현재 보고만으로 어느 대화의 App인지는 구분할 수 없다.
+
+이 경로는 Agent가 GIL을 사용하거나 재개할 때 복구한다. Agent가 도구를 호출하지 않는 동안,
+Codex가 종료된 동안의 강제 표시나 Host가 거절한 fullscreen을 보장하지 않는다. 숨김 이벤트가
+Host에서 전달되지 않는 경우와 OS의 창 가림도 별도 실제 Host 검수가 필요하다.

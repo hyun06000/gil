@@ -1127,13 +1127,22 @@
   },
   {
     "name": "gil_monitor_poll",
-    "description": "Read a change hint and renew the visible Monitor watch lease; no project scan.",
+    "description": "Read a change hint and renew the watch lease. App-only optional instance_id, presentation and sequence report ephemeral display observations; all three must travel together. Reads and watching alone never prove visibility.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "scope_id": {
           "type": "string",
           "pattern": "^project:[0-9a-f]{64}$"
+        },
+        "instance_id": {
+          "type": "string"
+        },
+        "presentation": {
+          "type": "string"
+        },
+        "sequence": {
+          "type": "string"
         }
       },
       "required": [
@@ -1154,6 +1163,37 @@
       "ui": {
         "visibility": [
           "app"
+        ]
+      }
+    }
+  },
+  {
+    "name": "gil_monitor_status",
+    "description": "Check this MCP connection’s recent App display report for the selected Project. No Project writes or native Companion lookup. If should_open is true, call gil_monitor_prepare then show_gil_monitor once. Opening is a bounded grace period, not display proof. Unknown includes expired signals and server restarts.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "project_root": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_root"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "ui": {
+        "visibility": [
+          "model"
         ]
       }
     }

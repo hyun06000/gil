@@ -526,7 +526,8 @@ fn half_typed_close_is_rejected_with_the_missing_field_and_recovery_is_an_ordina
     let opened = monitor_call(&mut mcp, "gil_open", json!({"project_root": at, "kind": "question",
         "contract": "objective: 사용자의 목표를 확인한다\nnext_action: 무엇을 만들고 싶은지 묻는다\ndone_when: 사용자의 원문 응답을 얻는다\n"}));
     assert_eq!(opened["structuredContent"]["ok"], true, "{opened}");
-    assert!(opened["content"][0]["text"].as_str().unwrap().contains("gil_close"));
+    assert!(opened["content"].as_array().unwrap().iter().any(|c|
+        c["text"].as_str().is_some_and(|s| s.contains("gil_close"))));
     assert!(opened["structuredContent"]["said"].as_str().unwrap().contains("진행 경계"));
     let before = std::fs::read(at.join(gil::STATE_PATH)).unwrap();
     let wrong = json!({"project_root": at, "report": "question: 무엇을 만들까\n",
@@ -677,6 +678,7 @@ impl Client {
 }
 
 fn text_of(reply: &serde_json::Value) -> String {
+    if let Some(said) = reply["result"]["structuredContent"]["said"].as_str().filter(|s| !s.is_empty()) { return said.to_owned(); }
     reply["result"]["content"][0]["text"]
         .as_str()
         .unwrap_or_else(|| panic!("text 가 없다: {reply}"))
@@ -921,14 +923,14 @@ fn initialize_succeeds_and_says_who_is_answering() {
 }
 
 #[test]
-fn tools_list_preserves_nineteen_tools_and_the_read_only_app_boundary() {
+fn tools_list_preserves_twenty_tools_and_the_read_only_app_boundary() {
     let mut mcp = Client::serve();
     mcp.initialize();
     let got = mcp.request("tools/list", serde_json::json!({}));
     let tools = got["result"]["tools"].as_array().expect("tools");
     let mut names: Vec<_> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     names.sort();
-    let mut expected=vec!["gil_close", "gil_companion_status", "gil_context", "gil_cycle", "gil_help", "gil_monitor_detail", "gil_monitor_poll", "gil_monitor_prepare", "gil_monitor_read", "gil_monitor_report_image", "gil_monitor_report_visuals", "gil_open", "gil_restore", "gil_revisit", "gil_start", "gil_status", "gil_story", "show_gil_companion", "show_gil_monitor"];
+    let mut expected=vec!["gil_close", "gil_companion_status", "gil_context", "gil_cycle", "gil_help", "gil_monitor_detail", "gil_monitor_poll", "gil_monitor_prepare", "gil_monitor_read", "gil_monitor_report_image", "gil_monitor_report_visuals", "gil_monitor_status", "gil_open", "gil_restore", "gil_revisit", "gil_start", "gil_status", "gil_story", "show_gil_companion", "show_gil_monitor"];
     if cfg!(feature="visual-authoring") {
         expected.extend(["gil_report_visuals", "gil_migration_check", "gil_migration_prepare", "gil_migration_apply", "gil_migration_status"]);
         if cfg!(windows) { expected.push("gil_prepare_workspace"); }
@@ -1254,12 +1256,14 @@ fn a_place_without_a_project_is_refused() {
 fn the_servers_own_working_directory_never_leaks_into_the_answer() {
     let asked = scratch("asked");
     let elsewhere = scratch("elsewhere");
+    let settings = scratch("cwd-monitor-settings");
     started(&asked);
     started(&elsewhere);
 
     let mut kid = Command::new(gil())
         .args(["mcp", "--serve"])
         .current_dir(&elsewhere) // ← 다른 Project 안에 서 있다
+        .env("GIL_MONITOR_STATE_DIR", &settings)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -1275,6 +1279,7 @@ fn the_servers_own_working_directory_never_leaks_into_the_answer() {
     assert_eq!(said.as_bytes(), cli_status(&asked).as_bytes(), "{said}");
     std::fs::remove_dir_all(&asked).ok();
     std::fs::remove_dir_all(&elsewhere).ok();
+    std::fs::remove_dir_all(&settings).ok();
 }
 
 /// stdin 이 닫히면 **깨끗이** 끝난다 — 매달리지 않고, 뒤에 쓰레기를 남기지 않는다.
@@ -1856,4 +1861,59 @@ fn onedrive_environment_values_do_not_move_the_working_folder() {
     assert_eq!(got["structuredContent"]["record_storage"], "private_app_data");
     assert!(!stale.join("p").join(".gil").exists());
     mcp.eof();
+}
+
+
+#[test]
+fn monitor_presence_reopens_on_resume_and_close_but_not_while_visible_and_does_not_survive_restart() {
+    use serde_json::{Value, json};
+    fn needs_show(result: &Value) -> bool {
+        result["content"].as_array().unwrap().iter().any(|c|
+            c["text"].as_str().is_some_and(|s| s.contains("show_gil_monitor({")))
+    }
+    let at = scratch("presence"); let root = at.join("project");
+    std::fs::create_dir(&root).unwrap(); started(&root);
+    let before = std::fs::read(root.join(gil::STATE_PATH)).unwrap();
+    let settings = at.join("settings");
+    let mut mcp = Client::serve_with(&settings); mcp.initialize();
+    let args = json!({"project_root":root});
+    let status = monitor_call(&mut mcp,"gil_monitor_status",args.clone());
+    assert_eq!(status["structuredContent"]["state"],"unknown");
+    assert_eq!(binding_files(&settings),0,"status must not register a binding");
+    let resumed = monitor_call(&mut mcp,"gil_context",args.clone());
+    assert!(needs_show(&resumed),"{resumed}");
+    assert!(resumed["content"][0]["text"].as_str().unwrap().contains("show_gil_monitor({"), "display recovery precedes workflow guidance");
+    let scope = status["structuredContent"]["scope_id"].clone();
+    let shown = monitor_call(&mut mcp,"show_gil_monitor",json!({"scope_id":scope}));
+    assert_ne!(shown["isError"],true);
+    assert_eq!(monitor_call(&mut mcp,"gil_monitor_status",args.clone())["structuredContent"]["state"],"opening");
+    assert!(!needs_show(&monitor_call(&mut mcp,"gil_context",args.clone())));
+    // A normal read/poll is not a visible App acknowledgement.
+    monitor_call(&mut mcp,"gil_monitor_poll",json!({"scope_id":scope}));
+    assert_ne!(monitor_call(&mut mcp,"gil_monitor_status",args.clone())["structuredContent"]["state"],"visible");
+    let observation = |sequence:&str, state:&str| json!({"scope_id":scope,"instance_id":"test-app","sequence":sequence,"presentation":state});
+    monitor_call(&mut mcp,"gil_monitor_poll",observation("1","fullscreen"));
+    let visible=monitor_call(&mut mcp,"gil_monitor_status",args.clone());
+    assert_eq!(visible["structuredContent"]["state"],"visible");
+    assert_eq!(visible["structuredContent"]["display_mode"],"fullscreen");
+    assert!(!needs_show(&monitor_call(&mut mcp,"gil_context",args.clone())));
+    monitor_call(&mut mcp,"gil_monitor_poll",observation("2","inline"));
+    assert!(!needs_show(&monitor_call(&mut mcp,"gil_context",args.clone())));
+    let other = at.join("other-project"); std::fs::create_dir(&other).unwrap(); started(&other);
+    assert_eq!(monitor_call(&mut mcp,"gil_monitor_status",json!({"project_root":other}))["structuredContent"]["state"],"unknown");
+    monitor_call(&mut mcp,"gil_monitor_poll",observation("3","hidden"));
+    assert!(needs_show(&monitor_call(&mut mcp,"gil_context",args.clone())));
+    monitor_call(&mut mcp,"gil_monitor_poll",observation("4","closed"));
+    // Delayed events cannot resurrect a closed instance.
+    monitor_call(&mut mcp,"gil_monitor_poll",observation("2","fullscreen"));
+    assert!(needs_show(&monitor_call(&mut mcp,"gil_context",args.clone())));
+    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),before);
+    mcp.eof();
+    let mut restarted=Client::serve_with(&settings);restarted.initialize();
+    assert_eq!(monitor_call(&mut restarted,"gil_monitor_status",args.clone())["structuredContent"]["state"],"unknown");
+    assert!(needs_show(&monitor_call(&mut restarted,"gil_context",args)));
+    let invalid=restarted.request("tools/call",json!({"name":"gil_monitor_poll","arguments":{"scope_id":scope,"instance_id":"partial"}}));
+    assert!(invalid.get("error").is_some());
+    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),before);
+    restarted.eof();std::fs::remove_dir_all(at).unwrap();
 }
