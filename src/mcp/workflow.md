@@ -10,6 +10,17 @@ Use only the user's selected absolute `project_root`. Read the tool's text guida
    preparation failed, report the display failure and continue the recorded Interview via `gil_open`.
    A display failure alone does not block Project work. A successful tool response does not prove
    that a screen is visible. In a new session, read `gil_context` once and resume instead of starting again.
+   **Keep the in-host MCP App present:** successful Project calls check recent App display reports.
+   When a receipt supplies `show_gil_monitor(scope_id)` because the Monitor is absent/hidden/unknown,
+   call it once before further work, without asking the user to open a Companion. For an explicit
+   display check use `gil_monitor_status(project_root)`; if `should_open` is true, prepare that root
+   and show the returned scope. `opening` is a 30-second grace, not proof of display: continue without
+   polling in a tight loop. Fresh `visible` reports (15-second lease) distinguish fullscreen/inline;
+   preserve an inline choice. Two unanswered show requests stop automatic attempts (`unconfirmed`):
+   report the display problem instead of adding cards indefinitely. A fresh visible report resets
+   that retry budget. Status covers this Project on this MCP connection. If a Host shares that
+   connection across chats, it cannot identify which chat contains the App. App reports do not prove
+   OS foreground visibility or that the human has looked.
 2. **Agree, then finish Interview.** Interview clarifies and agrees scope. Synthesis waits for the
    user's reply to its proposed statement; silence, earlier requests and the agent's own judgment
    are not approval. After explicit assent: close Synthesis → open/close Interview Outcome →

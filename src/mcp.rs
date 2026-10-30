@@ -6,6 +6,7 @@ use rmcp::service::RequestContext;
 use std::sync::{Arc, Mutex};
 use serde_json::Value;
 mod monitor;
+mod presence;
 mod bindings;
 mod actions;
 mod native;
@@ -45,7 +46,9 @@ impl GilServer {
                 | "gil_open" | "gil_close" | "gil_restore" | "gil_revisit" | "gil_cycle"
                 | "gil_monitor_prepare" | "gil_report_visuals");
         let mut result = self.dispatch(name.clone(), input.clone()).await;
-        if name == "gil_start" && result.is_error != Some(true)
+        let succeeded = result.is_error != Some(true)
+            && result.structured_content.as_ref().is_none_or(|v| v["ok"] != false);
+        if name == "gil_start" && succeeded
             && result.structured_content.as_ref().is_some_and(|v| v["ok"] == true) {
             // Creation is already committed. A display preparation failure must never turn
             // that success into a failed start or encourage a duplicate creation.
@@ -71,7 +74,29 @@ impl GilServer {
             }
         }
         guidance::after(&name, &mut result);
-        if project_use && result.is_error != Some(true) {
+        if project_use && succeeded && name != "gil_start" && name != "gil_monitor_prepare" {
+            let monitor = self.monitor.clone();
+            let root = input["project_root"].as_str().unwrap_or_default().to_owned();
+            let health = monitor::run(move || {
+                let status = monitor.presence_status(&root)?;
+                if status["should_open"] == true { monitor.prepare(&root)?; }
+                Ok(status)
+            }).await;
+            if health.is_error != Some(true) {
+                if let Some(status) = health.structured_content.as_ref() {
+                    if status["state"] == "unconfirmed" {
+                        guidance::prepend(&mut result, "MCP App Monitor가 두 번의 표시 요청에도 응답하지 않았다. 자동 재열기를 멈추고 표시 문제를 알린다. Companion을 자동으로 열지 않는다.");
+                    } else if status["should_open"] == true {
+                        guidance::prepend(&mut result, format!(
+                            "MCP App Monitor가 표시 중이라는 신호가 없다 ({}). 작업을 계속하기 전에 show_gil_monitor({})를 한 번 호출한다. Companion으로 대체하지 않는다. 호출 성공만으로 표시됐다고 말하지 않는다.",
+                            status["state"], serde_json::json!({"scope_id":status["scope_id"]})));
+                    }
+                }
+            } else {
+                guidance::prepend(&mut result, "MCP App Monitor 표시 상태를 확인하지 못했다. 표시 성공으로 보고하지 않는다. 기록된 작업 결과는 유지한다.");
+            }
+        }
+        if project_use && succeeded {
             let session = self.companion_session.clone();
             let _ = tokio::task::spawn_blocking(move || {
                 if let Ok(mut session) = session.lock() {
@@ -123,9 +148,11 @@ impl GilServer {
                 "gil_monitor_report_visuals" => visuals::call(&monitor, &input, false),
                 "gil_monitor_report_image" => visuals::call(&monitor, &input, true),
                 "gil_monitor_prepare" => monitor.prepare(input["project_root"].as_str().unwrap_or_default()),
-                "gil_monitor_read" | "show_gil_monitor" => monitor.view(scope),
+                "gil_monitor_read" => monitor.view(scope),
+                "show_gil_monitor" => monitor.show(scope),
+                "gil_monitor_status" => monitor.presence_status(input["project_root"].as_str().unwrap_or_default()),
                 "gil_monitor_detail" => monitor.detail(scope, input["step_ref"].as_str().unwrap_or_default()),
-                "gil_monitor_poll" => monitor.poll(scope),
+                "gil_monitor_poll" => monitor.app_poll(scope, &input),
                 _ => Err(monitor::Refusal::new("unavailable", "알 수 없는 Monitor 동작")),
             }
         }).await;
@@ -209,11 +236,11 @@ mod tests {
 
     /// 기존 status 와 명시적으로 추가한 read-only Monitor 문만 있다.
     #[test]
-    fn the_complete_nineteen_tool_surface_is_registered() {
+    fn the_complete_twenty_tool_surface_is_registered() {
         let tools = surface::tools();
         let mut names: Vec<&str> = tools.iter().map(|one| one.name.as_ref()).collect();
         names.sort();
-        let mut expected = vec!["gil_close", "gil_companion_status", "gil_context", "gil_cycle", "gil_help", "gil_monitor_detail", "gil_monitor_poll", "gil_monitor_prepare", "gil_monitor_read", "gil_monitor_report_image", "gil_monitor_report_visuals", "gil_open", "gil_restore", "gil_revisit", "gil_start", "gil_status", "gil_story", "show_gil_companion", "show_gil_monitor"];
+        let mut expected = vec!["gil_close", "gil_companion_status", "gil_context", "gil_cycle", "gil_help", "gil_monitor_detail", "gil_monitor_poll", "gil_monitor_prepare", "gil_monitor_read", "gil_monitor_report_image", "gil_monitor_report_visuals", "gil_monitor_status", "gil_open", "gil_restore", "gil_revisit", "gil_start", "gil_status", "gil_story", "show_gil_companion", "show_gil_monitor"];
         if cfg!(feature = "visual-authoring") {
             expected.extend(["gil_report_visuals", "gil_migration_check", "gil_migration_prepare", "gil_migration_apply", "gil_migration_status"]);
             expected.sort();

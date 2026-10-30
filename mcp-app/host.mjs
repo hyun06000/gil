@@ -25,7 +25,7 @@ export function unwrap(result) {
   return data;
 }
 
-export function makeHost(app, initial, { now = Date.now } = {}) {
+export function makeHost(app, initial, { now = Date.now, presence = () => ({}) } = {}) {
   const scope = initial.scope_id;
   const listeners = new Map();
   let seed = initial;
@@ -38,7 +38,7 @@ export function makeHost(app, initial, { now = Date.now } = {}) {
   const emit = async (event, payload) => { for (const fn of listeners.get(event) || []) await fn(payload); };
   const call = async (name, extra = {}) => {
     try {
-      const data = unwrap(await app.callServerTool({ name, arguments: { scope_id: scope, ...extra } }));
+      const data = unwrap(await app.callServerTool({ name, arguments: { scope_id: scope, ...extra } }, { timeout: 10000 }));
       if (data.scope_id !== scope) throw { code: 'unknown_scope', said: '다른 Project 의 응답을 거절했다' };
       if (disconnected) { disconnected = false; await emit('gil://connection', null); }
       return data;
@@ -89,8 +89,9 @@ export function makeHost(app, initial, { now = Date.now } = {}) {
       listeners.get(event).add(fn);
       return () => listeners.get(event).delete(fn);
     },
+    reportPresence: () => call('gil_monitor_poll', presence()),
     async tick() {
-      const hint = await call('gil_monitor_poll'); // counter only; no world scan
+      const hint = await call('gil_monitor_poll', presence()); // counter only; no world scan
       await watchNotice(hint.watching);
       if (now() >= nextRead && (failures > 0 || hint.revision !== cursor || now() - worked >= RECONCILE_MS)) {
         await emit('gil://refresh');
