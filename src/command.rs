@@ -393,13 +393,14 @@ fn start_receipt(ctx: &Invocation<'_>, session: &ProjectSession) -> String {
     #[cfg(not(windows))]
     let record = ctx.said_path(session.state_path());
     format!(
-        "프로젝트를 시작했다.\n\
+        "프로젝트를 시작했다.\n{}\
          현재: {} · {}\n\n\
          다음\n  \
          사용자가 무엇을 원하는지 확인한다.\n\n\
          실행\n  \
          gil open\n\n\
          기록: {}\n",
+        session.project().current_chain().map(|chain| format!("Chain: {} · open · Entry {}\n", chain.id(), chain.entry_snapshot())).unwrap_or_default(),
         cycle.id().to_ref(),
         cycle.kind(),
         record
@@ -472,6 +473,9 @@ fn open(ctx: &Invocation<'_>, name: Option<&String>) -> Result<String, String> {
 /// 쓰고 있다」로 스스로를 거절한다. 그래서 잠금은 명령 경계에서 한 번 잡고, 안쪽 함수에는
 /// 잡은 것을 **넘긴다**.
 fn open_with(ctx: &Invocation<'_>, mut session: Session, name: Option<&String>) -> Result<String, String> {
+    if name.is_some_and(|name| name == "chain") {
+        return Err(session.project_mut().open_child_chain().unwrap_err().to_string());
+    }
     match place(&session) {
         Place::CloseThisStep => {
             let cycle = session.project().cycles().current();

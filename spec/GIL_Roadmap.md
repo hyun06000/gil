@@ -571,7 +571,7 @@ CI 8개 통과·미병합이며 Monitor 표시 감지만 다룬다. Chain이나 
 
 | 기능 / 담당 | 명세 근거 | 실제 코드·시험 근거와 현재 판정 | 남은 완료 조건 |
 | --- | --- | --- | --- |
-| Chain 컨테이너·Current·Cycle 소유 / M6-A | [기본 명세](GIL%20Specification%20v0.1.md) §5, [Node Model](GIL_Node_Model_v0.1.md) §6–7 | **미구현.** `src/project.rs::Project`는 Cycles를 직접 보유하고 `src/store.rs::StoredState`에 Chain 집합/Current/소유 관계가 없다. `src/refs.rs::ChainRef`는 주소 타입뿐이다. `src/windows_fs.rs::Chain`은 파일 경로 핸들이며 도메인 Chain이 아니다. | 실제 Chain 생성·소유·저장·복원, 기존 CycleRef 유지, format 4/5 호환·이전, CLI/MCP/Context/Monitor 연결 |
+| Chain 컨테이너·Current·Cycle 소유 / M6-A | [기본 명세](GIL%20Specification%20v0.1.md) §5, [Node Model](GIL_Node_Model_v0.1.md) §6–7 | **개발 구현.** `chain-core`에서 실제 `Project → Chain → Cycles`, format 6/7과 Current/소유 검증. 4/5는 그대로 보존한다. `src/chain.rs`는 도메인 객체이며 Windows 파일 경로 핸들과 별개다. | [M6-A 저장 계약](GIL_Chain_Storage_v0.1.md). 기본/설치본 활성화, 명시적 legacy 이전 실행, Closing/다음 Chain은 별도 |
 | Closing Interview → Chain 판정·Report / M6-B | [Cycle Model](GIL_Cycle_Model_v0.1.md) §18–19 | **미구현.** `spec/gil-spec.yaml`은 `close_chain`을 `not_yet`로 거절한다. 승인된 일반 Synthesis/Interview Outcome 검사는 `src/cycle.rs`에 있지만 Chain close transaction은 없다. | `closing_synthesis_ref`의 소속·승인·판정 일치 검증. Interview success와 Chain failure 구분. 사람 승인 전 자동 종료 금지 |
 | 닫힌 Chain 뒤 새 Chain과 상위 인수인계 / M6-C | 기본 명세 §5·19, Node Model §7, Cycle Model §19·21, [Context Model](GIL_Context_Model_v0.1.md) | **미구현 + 일부 명세 미결.** 현재 context는 Cycle/Step 투영이며 Chain Report 투영이 없다. Chain Report 이후 Project `next_direction`의 정확한 문법은 Cycle Model §21에서 유보한다. | 직렬 Chain 연결·상위 Current·요약 전달 계약을 먼저 확정. 열린 Chain의 자식 생성 거절, 이전 Chain 보고서/세계 보존 |
 | Step에서 같은 지점으로 여러 번 revisit / M4-R | 기본 명세 §14·22, [Time Model](GIL_Time_Model_v0.2.md) §6–8, Cycle Model §9 | **Core 구현·제품 차단.** `src/walk.rs`의 pending→새 Hypothesis 전이와 `tests/walk.rs::each_branch_off_the_same_point_knows_its_own_origin`이 반복 분기와 출처를 검사한다. `product-safety` 빌드의 공개 revisit은 거절된다. | M3 안전 복원 후 제품 재연결, 실제 파일·Journey 보존 및 Host 재시작 인수. 미구현으로 다시 만들지 않음 |
@@ -646,7 +646,7 @@ M4 Failure Revisit & Branching       Core·누적 Context 로컬 구현 / 제품
   ↓
 M5 Human Monitor                     진행 중 ← GIL Monitor Model v0.1
   ↓
-M6 Advanced Interview & Chain Close  대기
+M6 Advanced Interview & Chain Close  M6-A 개발 구현 · M6-B 이후 대기
   ↓
 M7 Scenario Suite                    대기
   ↓
@@ -2215,7 +2215,7 @@ artifact·release pipeline → 새 기계 설치·업데이트 인수다. Claude
 
 ## 11. M6 — Advanced Interview & Chain Closing
 
-상태: `[ ] 실제 Chain·Closing·승인 계획 미구현 — 기존 Interview 전이는 재사용`
+상태: `[~] M6-A 개발 프로필 구현 · Closing·승인 계획은 미구현`
 
 목표:
 
@@ -2230,15 +2230,19 @@ artifact·release pipeline → 새 기계 설치·업데이트 인수다. Claude
 
 ### M6-A — 실제 Chain 계층과 저장
 
-- [ ] Chain identity·상태·Cycle containment·World Current·Entry/Exit의 저장 계약을 정한다.
+- [x] Chain identity·상태·Cycle containment·World Current·Entry/Exit의 저장 계약을 정한다.
       기존 Cycle parent와 Chain 소유 관계를 별개로 둔다. 기존 `cycle:Cn`/`step:Cn/Sn` 참조는 유지한다.
-- [ ] format 4/5의 Chain 없는 기록을 읽는 방식, 명시적 이전·백업·구형 writer 거절을 설계한다.
+- [x] format 4/5의 Chain 없는 기록을 읽는 방식, 명시적 이전·백업·구형 writer 거절을 설계한다.
       과거에 없던 승인이나 Chain Report를 만들어 넣지 않는다.
-- [ ] Chain 생성과 첫 Interview, 단일 활성 경로, Cycle 생성/종료와 소유 관계를 원자적으로 연결한다.
-- [ ] CLI/MCP·Context·Monitor에 실제 Chain을 투영하고 재시작 시 같은 현재 위치를 복원한다.
+- [x] Chain 생성과 첫 Interview, 단일 활성 경로, Cycle 생성/종료와 소유 관계를 원자적으로 연결한다.
+- [x] CLI/MCP·Context·Monitor에 실제 Chain을 투영하고 재시작 시 같은 현재 위치를 복원한다.
 
 **합격:** 새 프로젝트가 실제 Chain 아래 Interview→Experiment를 가지며, 기존 기록 보존/호환과
 소속 위조·고아 Cycle·열린 Chain의 자식 생성 거절을 검사한다. UI 그룹만 추가하면 불합격이다.
+
+개발 구현: `chain-core` opt-in. [저장·호환 계약](GIL_Chain_Storage_v0.1.md)을 따른다.
+6/7에서 실제 Chain이 Cycle graph를 소유하며 기본 생성·배포는 기존 4/5를 유지한다.
+명시적 legacy 이전은 **설계만 완료**, 적용 명령·설치본 배포·실기 UI 인수는 완료로 세지 않는다.
 
 ### M6-B — Closing Interview와 Chain Report
 

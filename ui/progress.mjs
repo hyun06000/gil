@@ -24,6 +24,6 @@ export function progressSummary(view) {
     position: step ? `${names[step.kind] || step.kind} · ${step.state === 'open' ? '열려 있음' : '닫힘'}` : '다음 단계 경계',
     action: will?.next_action || '열린 행동 계약이 없습니다. 다음 단계를 확인합니다.',
     done: will?.done_when || '새 행동을 열 때 완료 조건을 정합니다.',
-    records: `닫힌 단계 ${closed}개 · 현재 ${view.current.cycle_ref}${view.current.step_ref ? ` / ${view.current.step_ref}` : ''}`,
+    records: `${view.current.chain_ref ? `Chain ${view.current.chain_ref} · ` : ''}닫힌 단계 ${closed}개 · 현재 ${view.current.cycle_ref}${view.current.step_ref ? ` / ${view.current.step_ref}` : ''}`,
   };
 }

@@ -831,7 +831,7 @@ fn private_storage_before_lock(gil: &Path, state_path: &Path) -> Result<u32, Ses
     #[cfg(windows)]
     {
         let format = declared_format_now(state_path)?;
-        if format == crate::VISUAL_FORMAT {
+        if matches!(format, crate::VISUAL_FORMAT | crate::CHAIN_VISUAL_FORMAT) {
             crate::windows_fs::verify_storage_tree(gil).map_err(|source| SessionError::Store(StoreError::Read {
                 path: store::said_path(gil), source,
             }))?;
@@ -865,7 +865,7 @@ fn private_storage_after_lock(gil: &Path, state_path: &Path, before: u32) -> Res
                 )),
             }));
         }
-        if after == crate::VISUAL_FORMAT {
+        if matches!(after, crate::VISUAL_FORMAT | crate::CHAIN_VISUAL_FORMAT) {
             crate::windows_fs::verify_storage_tree(gil).map_err(|source| SessionError::Store(StoreError::Read {
                 path: store::said_path(gil), source,
             }))?;

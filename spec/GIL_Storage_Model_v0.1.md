@@ -349,3 +349,9 @@ a_restored_working_file_never_shares_an_inode_with_a_blob
 
 > **공개 `SnapshotRef`는 세계의 이름이고, 내부 내용 주소는 그 세계를 저장소에서 찾는
 > 방법이다. 둘을 분리한 채 객체를 먼저 내구성 있게 확정하고 Graph가 나중에 가리킨다.**
+
+## M6-A 개발 확장 (2026-10-31)
+
+`chain-core`의 실제 Chain 계층은 [Chain 저장 계약](GIL_Chain_Storage_v0.1.md)을 따른다.
+비시각/시각 형식을 6/7로 분리하여 Windows의 기존 4/5 권한 계약을 각각 유지한다.
+위 format 4/5의 일반 쓰기·명시적 visual migration을 자동 Chain 이전으로 바꾸지 않는다.

@@ -215,6 +215,13 @@ GIL은 모델의 비공개 chain-of-thought를 저장하려는 시스템이 아�
 
 아직 확인되지 않은 것: 전체 토큰 절약, 모든 모델·작업에서의 일반성.
 
+### Chain 개발 프로필 (M6-A)
+
+`chain-core` 빌드는 실제 Chain 아래 Interview→Experiment를 저장하고 CLI/MCP/Monitor에
+현재 Chain을 표시한다. [저장·호환 계약](spec/GIL_Chain_Storage_v0.1.md)을 따른다.
+기본 빌드와 설치본에는 아직 활성화하지 않았다. 기존 format 4/5 기록은 자동 이전하지 않으며,
+Chain 종료·인간 판정·다음 Chain은 M6-B/C에 남아 있다.
+
 ### 다음
 
 - 사용자 UX: 프로젝트 시작과 fullscreen Monitor 연결, 노드 상세의 시각 자료,

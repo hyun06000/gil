@@ -46,6 +46,10 @@ pub fn context(project: &Project) -> String {
     let cycles = project.cycles();
     let mut out = String::new();
     write_preamble(&mut out);
+    if let Some(chain) = project.current_chain() {
+        out.push_str(&format!("\n현재 Chain: {} · open · {}\nEntry: {} · 현재 Cycle: {}\nChain은 아직 닫히지 않았다. Cycle 성공은 Chain 종료가 아니다.\n",
+            chain.id(), chain.existence(), chain.entry_snapshot(), chain.current_cycle()));
+    }
     write_previous_cycles(&mut out, cycles);
     write_failed_cycles(&mut out, cycles);
     write_current_cycle(&mut out, cycles);

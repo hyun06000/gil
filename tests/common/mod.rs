@@ -551,3 +551,12 @@ pub fn private_storage(root: &Path) {
     #[cfg(not(windows))]
     let _ = root;
 }
+
+/// Address the actual containment shape when testing stored Cycle invariants in either profile.
+pub fn stored_cycles(file: &mut serde_norway::Value) -> &mut serde_norway::Value {
+    if file.get("chains").is_some() {
+        &mut file["chains"]["nodes"][0]["cycles"]
+    } else {
+        &mut file["cycles"]
+    }
+}

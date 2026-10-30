@@ -207,7 +207,7 @@ pub(crate) fn externalize_inline_if_needed(root: &Path) -> Result<bool, String> 
         .map_err(|e| format!("기존 기록 형식을 확인하지 못해 자동 이관하지 않았다: {e}"))?;
     let format = crate::store::declared_format(&declared, &inline)
         .map_err(|e| format!("기존 기록 형식을 확인하지 못해 자동 이관하지 않았다: {e}"))?;
-    if format != crate::VISUAL_FORMAT {
+    if !matches!(format, crate::VISUAL_FORMAT | crate::CHAIN_VISUAL_FORMAT) {
         return Ok(false);
     }
     let source = inline.parent().expect("inline state has a parent");
