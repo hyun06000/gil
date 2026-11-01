@@ -105,7 +105,11 @@ fn isolated_command(settings: &Path) -> Command {
 
 impl Client {
     pub fn serve(settings: &Path) -> Self {
+        Self::serve_with_env(settings, &[])
+    }
+    pub fn serve_with_env(settings: &Path, env: &[(&str, &str)]) -> Self {
         let mut kid = isolated_command(settings)
+            .envs(env.iter().copied())
             .current_dir(std::env::temp_dir())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

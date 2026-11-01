@@ -17,6 +17,9 @@ mod support;
 use serde_json::{Value, json};
 use std::path::Path;
 use support::*;
+#[cfg(all(feature = "product-safety", feature = "visual-authoring", target_os = "macos"))]
+#[path = "support_wave1/revisit_cases.rs"]
+mod revisit_cases;
 
 struct Rig { root: std::path::PathBuf, record: std::path::PathBuf, scope: String, c: Client }
 

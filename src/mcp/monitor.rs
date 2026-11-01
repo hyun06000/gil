@@ -188,6 +188,7 @@ impl Monitor {
         let mut value = json!({ "scope_id": scope, "label": label, "view": view,
             "revision": hint["revision"], "watching": hint["watching"] });
         if cfg!(feature = "approved-plan") && session.project().approved_plan().is_some() { value["plan_review_supported"] = json!(true); }
+        if cfg!(feature = "product-safety") { value["revisit_review_supported"] = json!(true); }
         Ok(value)
     }
 

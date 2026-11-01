@@ -283,6 +283,10 @@ test('pure state table covers every wire shape and never invents activity', () =
   assert.deepEqual(planItems({ ...bound, current_cycle: { ref: 'cycle:C2', state: 'open' } }).map(i => `${i.id}:${i.status}`), ['A:current', 'B:pending']);
   assert.deepEqual(planItems({ ...bound, current_cycle: { ref: 'cycle:C2', state: 'closed' } }).map(i => `${i.id}:${i.status}`), ['A:executed', 'B:pending']);
   assert.deepEqual(planItems(bound).map(i => `${i.id}:${i.status}`), ['A:bound', 'B:pending'], 'no field: never assume open');
+  const retried = {...bound, retry_pending:['A'], current_cycle:{ref:'cycle:C3',state:'closed'},
+    executed_cycles:[...bound.executed_cycles,{item_id:'A',cycle_ref:'cycle:C3',revision:1}]};
+  assert.deepEqual(planItems(retried).map(i => `${i.id}:${i.status}`), ['A:retry','B:pending']);
+  assert.equal(planItems(retried)[0].cycle_ref,'cycle:C3','latest attempt, not the original failed Cycle');
   assert.deepEqual(planItems({ ...bound, current_cycle: { ref: 'cycle:C2', state: 'running' } }).map(i => `${i.id}:${i.status}`), ['A:bound', 'B:pending'], 'unknown state: never assume open');
   assert.deepEqual(currentCycle({ current_cycle: { ref: 'cycle:C2', state: 'closed' } }), { ref: 'cycle:C2', state: 'closed' });
   assert.deepEqual(currentCycle({}), { ref: null, state: 'unknown' });

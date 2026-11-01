@@ -176,6 +176,41 @@ pub(crate) fn run(
     world: SnapshotRef,
     target: &Manifest,
 ) -> Result<Restored, RestoreFailure> {
+    run_with_expected(root, gil, store, world, target, None)
+}
+
+#[cfg(test)]
+mod approval_tests {
+    use super::*;
+
+    #[test]
+    fn a_file_arriving_after_consent_is_not_added_to_the_delete_plan() {
+        let root = std::env::temp_dir().join(format!(
+            "gil-approved-restore-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        fs::create_dir(&root).unwrap();
+        let target = observe(&root).unwrap();
+        fs::write(root.join("partial-report.txt"), "approved original").unwrap();
+        let approved = observe(&root).unwrap();
+        fs::write(root.join("new-user-notes.txt"), "written after consent").unwrap();
+        let actual = observe(&root).unwrap();
+        let gil = root.join(".gil");
+        let store = ObjectStore::at(&gil);
+        let result = run_with_expected(&root, &gil, &store, SnapshotRef::new(1).unwrap(), &target, Some(&approved));
+        assert!(matches!(result, Err(RestoreFailure::Observe { stage: Stage::Preflight, .. })));
+        assert_eq!(observe(&root).unwrap(), actual);
+        assert!(!gil.exists(), "refusal must not even create the restore area");
+        fs::remove_dir_all(&root).unwrap();
+    }
+}
+
+/// Approval-bound product recovery must never expand its write set to files appearing later.
+pub(crate) fn run_with_expected(
+    root: &Path, gil: &Path, store: &ObjectStore, world: SnapshotRef,
+    target: &Manifest, expected: Option<&Manifest>,
+) -> Result<Restored, RestoreFailure> {
     let area = Area::at(gil);
 
     // ── preflight ─────────────────────────────────────────────────────────
@@ -188,6 +223,10 @@ pub(crate) fn run(
         stage: Stage::Preflight,
         said: source.to_string(),
     })?;
+    if expected.is_some_and(|approved| approved != &before) {
+        return Err(RestoreFailure::Observe { stage: Stage::Preflight,
+            said: "승인한 파일 상태가 바뀌어 복원 계획을 실행하지 않았다".into() });
+    }
 
     let steps = plan::steps(root, &before, target);
     if steps.is_empty() {

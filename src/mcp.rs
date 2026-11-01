@@ -13,6 +13,8 @@ mod native;
 mod surface;
 mod visuals;
 mod guidance;
+#[cfg(feature = "product-safety")]
+mod recovery;
 #[cfg(feature = "approved-plan")]
 mod plans;
 #[cfg(feature = "visual-authoring")]
@@ -25,6 +27,8 @@ use monitor::Monitor;
 
 #[derive(Debug, Clone)]
 pub struct GilServer {
+    #[cfg(feature = "product-safety")]
+    recovery_grants: Arc<recovery::Grants>,
     monitor: Arc<Monitor>,
     #[cfg(feature = "approved-plan")]
     plan_grants: Arc<plans::Grants>,
@@ -39,7 +43,8 @@ impl GilServer {
     /// Deployment/test adapter, not an MCP tool parameter. None discovers an installed cohort;
     /// existing Plugin installs with no cohort receipt remain opted out.
     pub fn with_companion_endpoint(endpoint: Option<std::path::PathBuf>) -> Self {
-        Self { #[cfg(feature = "approved-plan")] plan_grants: Arc::new(plans::Grants::default()),
+        Self { #[cfg(feature = "product-safety")] recovery_grants: Arc::new(recovery::Grants::default()),
+            #[cfg(feature = "approved-plan")] plan_grants: Arc::new(plans::Grants::default()),
             monitor: Arc::new(Monitor::default()), native_gate: Arc::new(Mutex::new(())),
             companion_session: Arc::new(Mutex::new(crate::companion_ipc::McpSession::new(endpoint))) }
     }
@@ -118,6 +123,12 @@ impl GilServer {
         crate::command::action(&["status".into()], Some(std::path::Path::new(root)), "")
     }
     async fn dispatch(&self, name: String, input: Value) -> CallToolResult {
+        #[cfg(feature = "product-safety")]
+        if name.starts_with("gil_revisit_") {
+            let monitor = self.monitor.clone(); let grants = self.recovery_grants.clone();
+            return tokio::task::spawn_blocking(move || recovery::call(&monitor, &grants, &name, input)).await
+                .unwrap_or_else(|_| actions::refusal("복원 결과가 불확실하다. Monitor에서 다시 읽는다. 기존 보존본을 삭제하지 않는다."));
+        }
         #[cfg(feature = "approved-plan")]
         if name.starts_with("gil_plan_") {
             let monitor = self.monitor.clone();
@@ -280,6 +291,7 @@ mod tests {
         if cfg!(feature = "approved-plan") {
             expected.extend(PLAN_MODEL_SURFACE.iter().chain(PLAN_APP_SURFACE.iter()).map(|s| s.to_string()));
         }
+        if cfg!(feature = "product-safety") { expected.extend(["gil_revisit_apply".into(), "gil_revisit_review".into()]); }
         expected.sort();
         assert_eq!(registered_names(), expected);
     }

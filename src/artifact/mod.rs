@@ -239,7 +239,7 @@ impl ContentDigest {
     }
 
     /// 소문자 16진수 — 객체 경로의 글자.
-    fn hex(&self) -> String {
+    pub(crate) fn hex(&self) -> String {
         let mut out = String::with_capacity(64);
         for byte in &self.bytes {
             use fmt::Write as _;
