@@ -1,10 +1,10 @@
 {
-  "version": "0.1.1-owner.9",
-  "notes": "Monitor 복구 완료 뒤 채팅에 계속 요청을 전달하고, 에이전트가 현재 기록을 다시 읽도록 개선했습니다. 전달 실패 시 메시지만 재전송할 수 있습니다. 기존 기록은 보존합니다. 사용자가 누른 경우에만 설치하며 Codex는 닫지 않아도 됩니다.",
+  "version": "0.1.1-owner.10",
+  "notes": "Claude Desktop 연결 버튼과 공통 Monitor 확대·미니맵을 추가했습니다. 처음 Claude Desktop에 연결할 때는 Desktop을 완전히 종료하세요. 기존 고정 런처 연결은 유지되며 새 연결부터 새 Core를 사용합니다.",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/hyun06000/gil/releases/download/windows-owner-update-0.1.1-owner.9/GIL.Companion.Unsigned.Test._0.1.1-owner.9_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRMmJnSHJ2eEhDbkFoUk1qcDZGYVEvQXkvaXptQVM3WlkxdUxTblY4b3ZOL01yS2FZaTRXN0IyUlNseERKOXdKYjFFMmJVRHpQd05nU3R4bGIxRFYxaVY1a09QV3RFTXcwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNTY3NjgwCWZpbGU6R0lMIENvbXBhbmlvbiAoVW5zaWduZWQgVGVzdClfMC4xLjEtb3duZXIuOV94NjQtc2V0dXAuZXhlCXZlcnNpb246MC4xLjEtb3duZXIuOQpFMnNaTlJzWllrUVZnMm1GY2hUakJ3bWxSTG9sM2JqcDJ0VDc1ZjBqcU01M3JpVENlTUdpNFhEajJTeFZRdm5KeVdud2lBUE1iMnMrUFVhcU0vMnhBQT09Cg=="
+      "url": "https://github.com/hyun06000/gil/releases/download/windows-owner-update-0.1.1-owner.10/GIL.Companion.Unsigned.Test._0.1.1-owner.10_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRMmJnSHJ2eEhDbkRWV3ZDVTZCeUtobkM2MVArWmQrK1pzRXRDdXFYRFRpNGxyeGlFdW9TODd4ckJPckN1Wm1TMHNzNEtMdDZQbExyUzFnNjZiaWx5cHRyQmNXeXdUWndjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNTcxNTU4CWZpbGU6R0lMIENvbXBhbmlvbiAoVW5zaWduZWQgVGVzdClfMC4xLjEtb3duZXIuMTBfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMS4xLW93bmVyLjEwCisvWTErSm5CNjN2OFlpRU1oWG1DV2pkYzlKRjhBK2xjbi9ndk9tR0JwM2RKdkx2cEd6eFlkZVlGbXlTenBHZHQyeWkvVE5lYmVjaDNTYUx1eHIrbkNRPT0K"
     }
   }
 }
