@@ -173,7 +173,7 @@ app.ontoolresult = async (result) => {
     if (!/^project:[0-9a-f]{64}$/.test(data.scope_id) || !data.view) throw new Error('scope');
     booted = true;
     if (data.plan_review_supported) planReview = makePlanReview({ app, scope: data.scope_id,
-      panel: el('plan-review'), document, changed: () => { refreshOnReturn = true; } });
+      panel: el('plan-review'), banner: el('plan-banner'), document, changed: () => { refreshOnReturn = true; } });
     window.GIL_HOST = makeHost(app, data, { presence });
     if (planReview) window.GIL_HOST.listen('gil://refresh', () => { planNeedsRefresh = true; });
     void reportPresence();

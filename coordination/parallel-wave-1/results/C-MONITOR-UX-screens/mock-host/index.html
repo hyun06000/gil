@@ -1,0 +1,57 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Mock Host — fixture only</title>
+<style>html,body{margin:0;height:100%;background:#fff}iframe{position:fixed;inset:0;width:100%;height:100%;border:0}</style></head>
+<body><script>
+(async () => {
+  const q = new URLSearchParams(location.search);
+  const state = q.get('state') || 'requested', mode = q.get('mode') || 'fullscreen', jump = q.get('jump') === '1';
+  const [html, view, details] = await Promise.all([
+    fetch('/monitor.html').then(r => r.text()), fetch('/view.json').then(r => r.json()), fetch('/details.json').then(r => r.json())]);
+  const scope = 'project:' + 'a'.repeat(64);
+  const D = (c) => c.repeat(64);
+  const proposal = (extra = {}) => ({ revision: 1, base_revision: null, digest: D('a'), synthesis_ref: 'step:C3/S3', receipt: null,
+    draft: { scope: { goal: '정렬 결과의 동점 순서를 고정한다', in_scope: '정렬 함수와 ID 생성기', out_of_scope: 'UI 변경, 저장 형식 변경', constraints: '기존 API 유지', success_criteria: '100회 반복에서 결과가 같다' },
+      items: [{ id: 'A', question: '동점일 때 ID 순으로 정렬되는가', done_when: '100회 결과가 같다' }, { id: 'B', question: 'ID가 고유한가', done_when: '충돌 0건 로그' }, { id: 'C', question: '성능이 유지되는가', done_when: '벤치마크 ±5%' }],
+      synthesis: { statement: '동점 정렬을 ID 복합 정렬로 고정하고, 고유성·성능을 각각 확인한다.', basis_refs: 'step:C3/S1\nstep:C3/S2', exploration_checklist: 'A\nB\nC' } }, ...extra });
+  const base = { supported: true, active_revision: null, pending: [], executed_cycles: [], reinterview_requests: [], current_item: null, proposal: null, close_report: null, document: null };
+  const plans = {
+    idle: { ...base },
+    requested: { ...base, proposal: proposal() },
+    no_token: { ...base, proposal: proposal() },
+    reapproval: { ...base, active_revision: 1, executed_cycles: [{ cycle_ref: 'cycle:C2', revision: 1, item_id: 'A' }], pending: [{ id: 'B', question: 'ID가 고유한가', done_when: '충돌 0건 로그' }], proposal: proposal({ revision: 2, base_revision: 1, digest: D('b') }) },
+    closing: { ...base, active_revision: 2, executed_cycles: [{ cycle_ref: 'cycle:C2', revision: 1, item_id: 'A' }, { cycle_ref: 'cycle:C3', revision: 2, item_id: 'B' }], proposal: (() => { const p = proposal({ revision: 3, base_revision: 2, digest: D('c') }); p.draft.items = p.draft.items.slice(0, 2); p.draft.synthesis = { statement: '두 항목이 모두 확인되어 전체 결과를 성공으로 마친다.', basis_refs: 'step:C3/S1', exploration_checklist: 'A\nB', chain_verdict: 'success' }; return p; })() },
+    approved: { ...base, proposal: proposal({ receipt: { decision: 'approve', source: 'monitor_button' } }) },
+    changes: { ...base, proposal: proposal({ receipt: { decision: 'request_changes', source: 'monitor_button' } }) },
+    executing: { ...base, active_revision: 2, executed_cycles: [{ cycle_ref: 'cycle:C2', revision: 2, item_id: 'A' }, { cycle_ref: 'cycle:C3', revision: 2, item_id: 'B' }], current_item: { id: 'B', question: 'ID가 고유한가', done_when: '충돌 0건 로그' }, pending: [{ id: 'C', question: '성능이 유지되는가', done_when: '벤치마크 ±5%' }], reinterview_requests: [{ cycle_ref: 'cycle:C3', reason: '성능 항목은 별도 환경이 필요하다' }] },
+    unreadable: null,
+  };
+  const frame = document.createElement('iframe');
+  if (q.get('w')) frame.style.cssText = `position:fixed;top:0;left:0;width:${q.get('w')}px;height:100%;border:0;border-right:1px solid #999`;
+  const post = (m) => frame.contentWindow.postMessage({ jsonrpc: '2.0', ...m }, '*');
+  const envelope = () => ({ content: [], structuredContent: { scope_id: scope, label: 'UI 회귀 fixture', view, revision: '1', watching: true, plan_review_supported: true } });
+  window.addEventListener('message', (event) => {
+    if (event.source !== frame.contentWindow) return;
+    const p = event.data;
+    if (p.method === 'ui/initialize') post({ id: p.id, result: { protocolVersion: p.params.protocolVersion, hostInfo: { name: 'Mock Host', version: '1' }, hostCapabilities: { serverTools: {} }, hostContext: { displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen'] } } });
+    else if (p.method === 'ui/notifications/initialized') post({ method: 'ui/notifications/tool-result', params: envelope() });
+    else if (p.method === 'ui/request-display-mode') { const actual = mode === 'inline' ? 'inline' : p.params.mode; post({ id: p.id, result: { mode: actual } }); post({ method: 'ui/notifications/host-context-changed', params: { displayMode: actual } }); }
+    else if (p.method === 'tools/call') {
+      const name = p.params.name;
+      if (name === 'gil_plan_review') {
+        const value = plans[state];
+        if (!value) post({ id: p.id, result: { isError: true, content: [], structuredContent: { code: 'busy', said: '다른 GIL 명령이 이 Project 를 쥐고 있다' } } });
+        else post({ id: p.id, result: { content: [], structuredContent: value, _meta: state !== 'no_token' && value.proposal && !value.proposal.receipt ? { 'gil/planApprovalToken': 'x'.repeat(64) } : {} } });
+      }
+      else if (name === 'gil_monitor_detail') post({ id: p.id, result: { content: [], structuredContent: { scope_id: scope, detail: details[p.params.arguments.step_ref] } } });
+      else post({ id: p.id, result: envelope() });
+    } else if (p.id !== undefined) post({ id: p.id, result: {} });
+  });
+  frame.srcdoc = html; document.body.append(frame);
+  const tick = setInterval(() => {
+    const doc = frame.contentDocument; if (!doc) return;
+    const panel = doc.getElementById('plan-review');
+    if (!panel || panel.children.length === 0) return;
+    clearInterval(tick); document.title = 'rendered:' + panel.dataset.state;
+    if (jump) panel.scrollIntoView({ block: 'start' });
+  }, 100);
+})();
+</script></body></html>
