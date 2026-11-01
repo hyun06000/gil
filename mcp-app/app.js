@@ -1,6 +1,6 @@
 import { App } from '@modelcontextprotocol/ext-apps';
 import { makeHost, unwrap, retryAfter, connectionMessage } from './host.mjs';
-import { graphOrientation, initialFullscreen } from './presentation.mjs';
+import { graphOrientation, initialFullscreen, hostIdentity } from './presentation.mjs';
 
 const app = new App({ name: 'GIL Monitor', version: '0.1.0' },
   { availableDisplayModes: ['inline', 'fullscreen'] });
@@ -13,7 +13,8 @@ let suspended = false, polling = false, refreshOnReturn = false;
 let connectionIssue = null;
 let layoutChoice = null;
 let presenceSequence = 0, renderFailed = false;
-const evidence = { declared: ['inline', 'fullscreen'], instance: crypto.randomUUID() };
+// Host identity is recorded as reported, never inferred; policy does not branch on it.
+const evidence = { declared: ['inline', 'fullscreen'], instance: crypto.randomUUID(), host: null };
 const initialDisplay = initialFullscreen();
 
 // Report only this rendered App's observations. Host display mode is not OS occlusion proof.
@@ -51,16 +52,18 @@ el('layout').onclick = () => {
 
 app.onhostcontextchanged = (change) => {
   context = { ...context, ...change };
-  if ('displayMode' in change) eventMode = change.displayMode;
+  if ('displayMode' in change) { eventMode = change.displayMode; initialDisplay.observe(change.displayMode); }
   modes();
   maybeFullscreen();
   void reportPresence();
 };
-async function requestMode(mode) {
+let retryTimer;
+async function requestMode(mode, { automatic = false } = {}) {
   if (stopped || pending || !connected || !context.availableDisplayModes?.includes(mode)) return;
   pending = true; modes('Host 에 표시 전환을 요청하는 중…');
+  let got;
   try {
-    const got = await app.requestDisplayMode({ mode }, { timeout: 10000 });
+    got = await app.requestDisplayMode({ mode }, { timeout: 10000 });
     if (stopped) return;
     response = raw(got);
     // Response is the applied mode; events are recorded separately. No timer-based guess.
@@ -70,21 +73,46 @@ async function requestMode(mode) {
       : 'Host 가 적용 모드를 반환하지 않았습니다. 화면이 그대로라면 모니터 펼치기를 눌러 주세요.');
   } catch {
     if (!stopped) { response = '요청 오류'; modes('전환을 확인하지 못했습니다. 모니터 펼치기를 눌러 다시 요청할 수 있습니다.'); }
-  } finally { pending = false; if (!stopped) { modes(); void reportPresence(); } }
+  } finally {
+    pending = false;
+    if (!stopped) {
+      if (automatic) scheduleRetry(got?.mode ?? null);
+      modes(); void reportPresence();
+    }
+  }
+}
+// Automatic requests only. A manual choice cancels the intent, so this never fights the user.
+function scheduleRetry(appliedMode) {
+  clearTimeout(retryTimer);
+  const delay = initialDisplay.settle(appliedMode);
+  if (delay !== null) {
+    retryTimer = setTimeout(() => { retryTimer = undefined; maybeFullscreen(); }, delay);
+  } else if (initialDisplay.awaitingGesture) {
+    modes('대화 안의 미리보기입니다. Monitor 를 한 번 클릭하면 펼칩니다. 모니터 펼치기도 사용할 수 있습니다.');
+  }
 }
 function maybeFullscreen() {
   if (stopped || suspended || document.hidden || pending) return;
+  if (initialDisplay.retrying && context.displayMode !== 'fullscreen' && !retryTimer) {
+    void requestMode('fullscreen', { automatic: true });
+    return;
+  }
   const mode = initialDisplay.next({ connected, ready: rendererReady, context });
-  if (mode) void requestMode(mode);
+  if (mode) void requestMode(mode, { automatic: true });
 }
+document.addEventListener('pointerdown', (event) => {
+  // Explicit controls own their gesture; never preempt their click with fullscreen.
+  if (event.target?.closest?.('button, a, input, select, textarea, [role="button"], [contenteditable]')) return;
+  if (initialDisplay.gesture() === 'fullscreen') void requestMode('fullscreen');
+}, true);
 for (const [id, mode] of [['expand', 'fullscreen'], ['inline', 'inline']]) {
   el(id).onclick = async () => {
-    initialDisplay.cancel();
+    initialDisplay.cancel(); clearTimeout(retryTimer); retryTimer = undefined;
     await requestMode(mode);
   };
 }
 el('native').onclick = async () => {
-  initialDisplay.cancel();
+  initialDisplay.cancel(); clearTimeout(retryTimer); retryTimer = undefined;
   pending = true; modes('별도 Monitor 창을 요청하는 중…');
   try {
     const data = unwrap(await app.callServerTool({ name: 'show_gil_companion', arguments: {} }));
@@ -144,7 +172,7 @@ app.ontoolresult = async (result) => {
     maybeFullscreen();
   } catch (err) { renderFailed = true; void reportPresence(); modes(err?.said || 'Monitor 데이터를 받지 못했습니다. Project 를 지정해 다시 열어 주세요.'); }
 };
-function stop() { stopped = true; initialDisplay.cancel(); clearTimeout(timer); window.GIL_COMPANION?.clearVisuals?.(); return reportPresence(); }
+function stop() { stopped = true; initialDisplay.cancel(); clearTimeout(timer); clearTimeout(retryTimer); window.GIL_COMPANION?.clearVisuals?.(); return reportPresence(); }
 function resume() {
   if (stopped || suspended || document.hidden) return;
   refreshOnReturn = true;
@@ -155,19 +183,20 @@ app.onteardown = async () => { await stop(); return {}; };
 // A cached page is suspended, not destroyed. Only true unload/teardown is terminal.
 window.addEventListener('pagehide', (event) => {
   if (!event.persisted) { stop(); return; }
-  suspended = true; clearTimeout(timer); void reportPresence();
+  suspended = true; clearTimeout(timer); clearTimeout(retryTimer); retryTimer = undefined; void reportPresence();
 });
 window.addEventListener('pageshow', (event) => {
   if (!event.persisted || !suspended || stopped) return;
   suspended = false; resume();
 });
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { clearTimeout(timer); void reportPresence(); }
+  if (document.hidden) { clearTimeout(timer); clearTimeout(retryTimer); retryTimer = undefined; void reportPresence(); }
   else resume();
 });
 app.connect().then(() => {
   if (stopped) return;
   connected = true; context = { ...app.getHostContext(), ...context };
+  evidence.host = hostIdentity(app);
   modes(context.availableDisplayModes?.includes('fullscreen')
     ? 'Monitor 가 준비되면 전체 화면을 자동 요청합니다. 그대로라면 모니터 펼치기를 눌러 주세요.'
     : Array.isArray(context.availableDisplayModes)

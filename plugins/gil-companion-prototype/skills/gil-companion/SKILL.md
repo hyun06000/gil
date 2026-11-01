@@ -455,18 +455,27 @@ Two surfaces can carry it, in this order:
 1. **MCP App fullscreen** — the supported Host shows the shared Monitor UI alongside its chat composer
 2. **optional native Companion** — if the user chooses it, a compatible desktop app shows the same UI in its own window
 
-The first unsigned preview's accepted target is **Codex on macOS Apple Silicon**. Its default is
-Plugin-only fullscreen; a separate Companion installation is **not required**. Windows, Intel Macs
-and Claude work-Plugin rendering are not accepted targets of this preview. Historical Claude Desktop
-Cowork/direct-MCP fullscreen demonstrations do not prove that a folder-connected Plugin works there.
-Do not present moving to Cowork as a verified fix. Fresh-Mac installation is deferred, not passed;
-if macOS blocks execution, stop without bypassing its security checks.
+The unsigned preview targets **macOS Apple Silicon** in two Hosts that share one Core: **Codex**
+(Plugin) and **Claude Desktop's Claude Code tab**. The extracted archive root carries both catalogs
+(Codex reads `.agents/plugins`, Claude Code reads `.claude-plugin`). As of 2026-10-31 the Claude Code
+Host does not render the Monitor App of a Plugin-installed server, while the same Core registered
+directly in Desktop settings renders inline and goes fullscreen on the user's first click inside
+the Monitor (that Host applies display-mode requests only within a user action, so no automatic
+request succeeds there); in Claude, treat the direct registration as the display route, tell the
+user to click the Monitor once to expand it, and treat a Plugin install as not yet visible. The default is Plugin-only fullscreen in
+Codex; a separate Companion installation is **not required**. Windows and Intel Macs are not
+accepted targets. The App sends the same one-shot fullscreen request to every Host and records the
+Host's reported name in its 연결 정보 panel; it never changes behaviour by Host name. A fullscreen
+seen in one Host, conversation mode or Desktop version is not evidence for another: report the
+actual Host and what the user saw. Fresh-Mac installation is deferred, not passed; if macOS blocks
+execution, stop without bypassing its security checks.
 
 For the in-host Monitor, use `gil_monitor_prepare(project_root)` with the user's explicit project
 or a host-verified root, then `show_gil_monitor(scope_id)` with its returned scope. The first tool
 does not render a UI; the second receives no filesystem path. Ask for the project if it is unknown.
-The App defaults to horizontal layout and automatically requests fullscreen **once**, after its
-Monitor is ready and the Host advertises support. If it stays inline, the user can press
+The App defaults to horizontal layout and automatically requests fullscreen after its Monitor is
+ready and the Host advertises support. If the Host leaves it inline, the App retries briefly on its
+own and then uses the user's first click inside the Monitor to request it; the user can also press
 **모니터 펼치기**. A user returning inline or choosing vertical must not be overridden. Do not call
 rendering tools repeatedly to refresh it: the App reads complete Views and exact Step details
 through its own read-only tools. Native Companion is never launched automatically by this App.
