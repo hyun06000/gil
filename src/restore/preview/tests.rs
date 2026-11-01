@@ -659,3 +659,240 @@ fn a_preview_carries_no_backup_ordinal_no_delete_and_no_world_number() {
         assert!(!debug.contains(word), "미리보기 안에 {word:?} 가 있다");
     }
 }
+
+// ── Wave 2 A — 뿌리 판정과 디스크 별칭(검토 R1/R2 회귀) ──────────────────────
+
+/// 대본대로 답하는 adapter — 어느 자리를 물었는지도 적는다.
+struct Scripted {
+    kinds: BTreeMap<&'static str, Result<EntryKind, ProbeError>>,
+    names: BTreeMap<&'static str, Vec<&'static str>>,
+    asked: std::cell::RefCell<Vec<String>>,
+}
+
+impl Scripted {
+    fn new(root: Result<EntryKind, ProbeError>) -> Scripted {
+        let mut kinds = BTreeMap::new();
+        kinds.insert("", root);
+        Scripted {
+            kinds,
+            names: BTreeMap::new(),
+            asked: std::cell::RefCell::new(Vec::new()),
+        }
+    }
+
+    fn asked(&self) -> Vec<String> {
+        self.asked.borrow().clone()
+    }
+}
+
+impl Probe for Scripted {
+    fn describe(&self) -> &'static str {
+        "scripted"
+    }
+
+    fn kind(&self, relative: &str) -> Result<EntryKind, ProbeError> {
+        self.asked.borrow_mut().push(format!("kind {relative:?}"));
+        self.kinds.get(relative).cloned().unwrap_or(Ok(EntryKind::Missing))
+    }
+
+    fn names(&self, relative_dir: &str) -> Result<Vec<String>, ProbeError> {
+        self.asked.borrow_mut().push(format!("names {relative_dir:?}"));
+        Ok(self
+            .names
+            .get(relative_dir)
+            .map(|names| names.iter().map(|n| n.to_string()).collect())
+            .unwrap_or_default())
+    }
+}
+
+#[test]
+fn a_root_that_is_not_a_verified_directory_refuses_the_whole_preview_and_asks_nothing_below() {
+    // 뿌리가 링크·없음·파일·그 밖이면 — 그리고 조회 자체가 실패하면 — Candidate 가 될 수 없다.
+    // Manifest 가 비어 있어도, 경로가 있어도 같다. 자식 자리는 하나도 묻지 않는다.
+    let empty = manifest(&[]);
+    let some = manifest(&[("src/new.txt", 1)]);
+    for found in [EntryKind::Symlink, EntryKind::Missing, EntryKind::File, EntryKind::Other] {
+        for (before, target) in [(&empty, &empty), (&empty, &some), (&some, &some)] {
+            let probe = Scripted::new(Ok(found));
+            let result = preview(&request(before, target, TargetOs::Unix), include_all, &probe);
+            assert_eq!(result.probe(), &ProbeStatus::RootNotDirectory { adapter: "scripted", found });
+            assert_eq!(blocks(&result), vec![Block::RootNotDirectory { found }], "{found:?}");
+            assert_eq!(probe.asked(), vec!["kind \"\"".to_string()], "{found:?}: 자식을 조회했다");
+            assert!(result.to_string().contains("자식 자리는 조회하지 않았다"));
+            // 경로별 역할(정보성 diff)은 그대로 보인다.
+            if target.get(&path("src/new.txt")).is_some() && before.get(&path("src/new.txt")).is_none() {
+                assert_eq!(entry(&result, "src/new.txt").disposition, Disposition::WouldCreate);
+            }
+        }
+    }
+    let probe = Scripted::new(Err(ProbeError::Io("permission denied".to_string())));
+    let result = preview(&request(&empty, &some, TargetOs::Unix), include_all, &probe);
+    assert_eq!(
+        blocks(&result),
+        vec![Block::RootUnreadable { why: "permission denied".to_string() }]
+    );
+    assert_eq!(probe.asked(), vec!["kind \"\"".to_string()]);
+    // 뿌리가 디렉터리로 확인되면 — 빈 Manifest 는 막는 것이 없다. 그래도 복원 허용은 아니다.
+    let probe = Scripted::new(Ok(EntryKind::Directory));
+    let result = preview(&request(&empty, &empty, TargetOs::Unix), include_all, &probe);
+    assert_eq!(result.readiness(), Readiness::Candidate);
+    assert!(result.to_string().contains("복원 허용이 아니다"));
+}
+
+#[test]
+fn a_leaf_that_lstat_reaches_under_an_unlisted_name_is_an_unidentified_alias_not_missing() {
+    // 폴더 목록에 글자 그대로의 이름이 없는데 조회가 파일에 닿는다 — 이 모듈이 모르는 접기다.
+    // 이전에는 조회를 생략하고 Missing 으로 대체해 Candidate 가 됐다(R2 의 일반형).
+    let before = manifest(&[]);
+    let target = manifest(&[("docs/n\u{303}.txt", 1), ("plain.txt", 2)]);
+    let mut probe = Scripted::new(Ok(EntryKind::Directory));
+    probe.kinds.insert("docs", Ok(EntryKind::Directory));
+    probe.kinds.insert("docs/n\u{303}.txt", Ok(EntryKind::File));
+    probe.names.insert("docs", vec!["ñ.txt"]);
+    let result = preview(&request(&before, &target, TargetOs::Unix), include_all, &probe);
+    let aliased = entry(&result, "docs/n\u{303}.txt");
+    assert!(
+        aliased.risks.contains(&Risk::Probe(ProbeFinding::UnidentifiedAliasOnDisk { found: EntryKind::File })),
+        "{:?}",
+        aliased.risks
+    );
+    // Unix 규칙으로 재도 이 디스크에서 실제로 겹쳤으므로 막힌다. 결합 문자는 글자 단계에서도 미확인이다.
+    assert!(aliased.blocked(TargetOs::Unix));
+    assert!(aliased.risks.contains(&Risk::UnverifiedNormalization));
+    assert!(
+        probe.asked().contains(&format!("kind {:?}", "docs/n\u{303}.txt")),
+        "잎 조회를 생략했다: {:?}",
+        probe.asked()
+    );
+    assert!(entry(&result, "plain.txt").risks.is_empty());
+    assert!(matches!(result.readiness(), Readiness::Refused(_)));
+    assert!(result.to_string().contains("미확인 별칭"));
+}
+
+#[test]
+fn hangul_normalization_variants_in_a_listing_are_identified_and_weighed_per_os() {
+    let nfd = "\u{1100}\u{1161}.txt";
+    let nfc = "\u{ac00}.txt";
+    let before = manifest(&[]);
+    let target = manifest(&[(nfc, 1)]);
+    for (os, blocks_here) in [(TargetOs::MacOs, true), (TargetOs::Unix, false), (TargetOs::Windows, false)] {
+        let mut probe = Scripted::new(Ok(EntryKind::Directory));
+        probe.names.insert("", vec![nfd]);
+        // 접지 않는 파일 시스템이라면 lstat(NFC) 는 비어 있다 — 그래도 변형은 적힌다.
+        let result = preview(&request(&before, &target, os), include_all, &probe);
+        assert_eq!(
+            entry(&result, nfc).risks,
+            vec![Risk::Probe(ProbeFinding::NormalizationVariantOnDisk { name: nfd.to_string() })],
+            "{os}"
+        );
+        assert_eq!(entry(&result, nfc).blocked(os), blocks_here, "{os}");
+    }
+}
+
+#[test]
+fn paths_that_could_escape_the_root_are_refused_before_any_disk_lookup() {
+    for text in ["", "../x", "a/../b", "/abs", "a//b", "a\\b", "a\u{0}b", ".", "a/."] {
+        assert!(escapes_root(text), "{text:?}");
+        // 글자 검사가 이미 모든 OS 에서 막는다 — 조회 생략이 판정을 느슨하게 하지 않는다.
+        if !text.is_empty() {
+            let risks = inspect_text(text);
+            assert!(
+                risks.iter().any(|r| r.severity(TargetOs::Unix) == Severity::Blocks),
+                "{text:?} → {risks:?}"
+            );
+        }
+    }
+    for text in ["a/b.txt", "..a", "a..", ".hidden", "가/나.txt"] {
+        assert!(!escapes_root(text), "{text:?}");
+    }
+}
+
+/// 검토 R1 — 임시 폴더의 `project -> outside`. 뿌리가 링크면 자식을 조회하지 않고 거절한다.
+#[cfg(unix)]
+#[test]
+fn review_r1_a_symlink_root_is_refused_and_the_outside_folder_is_not_read() {
+    use std::os::unix::fs::symlink;
+    let temp = scratch("r1-root");
+    let outside = temp.join("outside");
+    fs::create_dir_all(&outside).unwrap();
+    write(&outside, "secret.txt", b"outside bytes");
+    symlink(&outside, temp.join("project")).unwrap();
+    let frozen = bytes_of(&temp);
+
+    let before = manifest(&[]);
+    let target = manifest(&[("new.txt", 1)]);
+    let result = preview(
+        &request(&before, &target, TargetOs::host()),
+        include_all,
+        &LstatProbe::at(&temp.join("project")),
+    );
+    assert_eq!(bytes_of(&temp), frozen, "미리보기가 디스크를 바꿨다");
+    assert_eq!(
+        result.probe(),
+        &ProbeStatus::RootNotDirectory { adapter: "unix-lstat", found: EntryKind::Symlink }
+    );
+    assert_eq!(blocks(&result), vec![Block::RootNotDirectory { found: EntryKind::Symlink }]);
+    assert!(matches!(result.readiness(), Readiness::Refused(_)), "symlink root was accepted: {result}");
+    // 자식을 묻지 않았으므로 「없다」로 보이는 new.txt 에 디스크 근거가 붙지 않는다.
+    assert!(entry(&result, "new.txt").risks.is_empty());
+
+    // 뿌리가 없는 자리여도 같다.
+    let gone = preview(
+        &request(&before, &target, TargetOs::host()),
+        include_all,
+        &LstatProbe::at(&temp.join("nowhere")),
+    );
+    assert_eq!(blocks(&gone), vec![Block::RootNotDirectory { found: EntryKind::Missing }]);
+    // 뿌리가 파일이어도 같다.
+    let file = preview(
+        &request(&before, &target, TargetOs::host()),
+        include_all,
+        &LstatProbe::at(&outside.join("secret.txt")),
+    );
+    assert_eq!(blocks(&file), vec![Block::RootNotDirectory { found: EntryKind::File }]);
+    assert_eq!(bytes_of(&temp), frozen);
+    let _ = fs::remove_dir_all(&temp);
+}
+
+/// 검토 R2 — 실제 Mac 볼륨에 NFD 「가.txt」를 만들면 NFC 「가.txt」로도 닿는다. 기존 미추적 파일이
+/// 있는데 「생성 예정 · 막힘 0 · Candidate」가 나오면 안 된다. 파일 내용·bytes 는 그대로다.
+#[cfg(target_os = "macos")]
+#[test]
+fn review_r2_an_existing_nfd_file_blocks_an_nfc_target_on_a_normalization_insensitive_volume() {
+    let root = scratch("r2-normalization");
+    let nfd = "\u{1100}\u{1161}.txt";
+    let nfc = "\u{ac00}.txt";
+    assert_ne!(nfd, nfc);
+    let untracked = b"untracked local file";
+    write(&root, nfd, untracked);
+    assert!(
+        root.join(nfc).exists(),
+        "이 시험은 정규화를 접는 볼륨(APFS/HFS+)을 전제한다 — TMPDIR 이 다른 볼륨이면 전제가 깨진다"
+    );
+    let frozen = bytes_of(&root);
+
+    let before = manifest(&[]);
+    let target = manifest(&[(nfc, 1)]);
+    let result = preview(&request(&before, &target, TargetOs::MacOs), include_all, &LstatProbe::at(&root));
+
+    assert_eq!(bytes_of(&root), frozen, "미리보기가 디스크를 바꿨다");
+    assert_eq!(fs::read(root.join(nfd)).unwrap(), untracked, "미추적 파일 내용이 바뀌었다");
+    let created = entry(&result, nfc);
+    assert_eq!(created.disposition, Disposition::WouldCreate, "정보성 역할은 그대로다");
+    assert_eq!(
+        created.risks,
+        vec![Risk::Probe(ProbeFinding::NormalizationVariantOnDisk { name: nfd.to_string() })],
+        "{result}"
+    );
+    assert!(created.blocked(TargetOs::MacOs));
+    assert_eq!(result.tally().blocked, 1);
+    assert!(matches!(result.readiness(), Readiness::Refused(_)), "existing normalization alias was accepted: {result}");
+    assert!(result.to_string().contains("정규화만 다른"));
+
+    // 같은 디스크를 Unix 규칙으로 재면 변형은 정보성으로 남는다 — 그러나 lstat(NFC) 가 실제로
+    // 닿았으므로 「없다」로 대체되지 않았음을 Stale 없이도 확인할 수 있다: 위험이 비어 있지 않다.
+    let as_unix = preview(&request(&before, &target, TargetOs::Unix), include_all, &LstatProbe::at(&root));
+    assert!(!entry(&as_unix, nfc).risks.is_empty());
+    assert_eq!(bytes_of(&root), frozen);
+    let _ = fs::remove_dir_all(&root);
+}

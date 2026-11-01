@@ -105,13 +105,37 @@ preview(&request, includes: impl Fn(&str) -> Result<bool, String>, probe: &dyn P
 | `SymlinkAncestor`·`SymlinkLeaf`·`AncestorNotDirectory`·`LeafNotFile` | 경로가 밖으로 향하거나 종류가 다르다 | Blocks |
 | `Stale { expected, found }` | before Manifest와 디스크가 다르다 — **미리보기가 낡았다** | Blocks |
 | `CaseVariantOnDisk { name }` | 같은 폴더에 대소문자 변형 | 접는 OS에서 Blocks |
+| `NormalizationVariantOnDisk { name }` | 같은 폴더에 한글 음절↔자모 정규화 변형 | 정규화를 접는 OS(macOS)에서 Blocks |
+| `UnidentifiedAliasOnDisk { found }` | 글자 그대로의 이름은 목록에 없는데 `lstat`이 닿았다 — 모듈이 모르는 접기 | Blocks(모든 OS) |
 | `Failed(error)` | 조회 실패 | Unverified |
+
+### 4.3 디스크 조회 차례(Wave 2 A 수정, 2026-11-02)
+
+Wave 1 검토 R1/R2를 고친 뒤의 조회 계약이다. 세 단계 모두 **경로 이름으로** 보는 조회 시점의 사실이다.
+
+1. **뿌리 `""`** — 실제 `Directory`로 확인되어야 자식 조회로 넘어간다. `Symlink`·`Missing`·`File`·
+   `Other`는 `ProbeStatus::RootNotDirectory`, `Io` 실패는 `RootUnreadable`로 **전체 거절**이며 자식 자리를
+   하나도 묻지 않는다(바깥을 가리키는 링크를 따라가지 않기 위해). `Unsupported`는 종전대로 `FileSystemNotProbed`.
+   이 판정은 Manifest가 비어 있어도 `Readiness`에 들어간다. 경로별 정보성 diff는 그대로 보인다.
+2. **조상** — 디렉터리가 아니면(`SymlinkAncestor`/`AncestorNotDirectory`) 그 경로를 막고 더 내려가지 않는다.
+3. **잎** — 폴더 목록에 글자 그대로 있는지를 본 뒤 **항상** `lstat`도 한다. 목록에 없는데 `lstat`이 닿으면,
+   찾아낸 변형(`CaseVariantOnDisk`/`NormalizationVariantOnDisk`)이 막거나, 변형을 찾지 못했으면
+   `UnidentifiedAliasOnDisk`로 막는다. 목록 부재를 `Missing`으로 **대체하지 않는다**(R2).
+
+`..`·빈 조각·`\`·NUL을 담은 경로는 글자 검사가 이미 모든 OS에서 막으므로 디스크를 묻지 않는다 —
+뿌리에 이어 붙여 조회하면 프로젝트 밖에 닿을 수 있기 때문이다.
+
+이 차례는 **Windows handle 안전성·TOCTOU 보장·apply 허용이 아니다.** 조회 뒤 변동은 `still_matches`
+재관측과 apply 직전 handle 검사(§7.3)가 잡는 자리이고, 제품 restore/revisit의 `product-safety` 차단은 그대로다.
+Unicode 정규화는 한글 음절↔자모 알고리즘만 판정하며, 그 밖의 결합 문자는 `UnverifiedNormalization`(미확인)으로
+거절한다. 일부 문자만 알고리즘으로 판정하는 것을 「정규화 지원」이라 부르지 않는다(§7.4).
 
 ## 5. 전체 판정 `Readiness`
 
 ```text
-Candidate            정책 일치 ∧ 조회함 ∧ 막는 위험 없음
-Refused(Vec<Block>)  그 밖 — PolicyUnknown / PolicyMismatch / FileSystemNotProbed / Path{path, risk}
+Candidate            정책 일치 ∧ 조회함 ∧ 뿌리가 실제 디렉터리 ∧ 막는 위험 없음
+Refused(Vec<Block>)  그 밖 — PolicyUnknown / PolicyMismatch / FileSystemNotProbed /
+                     RootNotDirectory{found} / RootUnreadable{why} / Path{path, risk}
 ```
 
 - 정책 식별자가 **없거나 다르면** 정보성 diff는 그대로 내되 `Candidate`가 되지 않는다. 출력에
@@ -151,7 +175,13 @@ Refused(Vec<Block>)  그 밖 — PolicyUnknown / PolicyMismatch / FileSystemNotP
 
 ## 8. 시험 범위(2026-11-02)
 
-`src/restore/preview/tests.rs`: 바이트 동일성(Unix, `.gil`·`.git` 포함 전체 폴더), 현재에만 있는
+`src/restore/preview/tests.rs`(Wave 2 A 추가, 2026-11-02): 뿌리 종류별(링크·없음·파일·그 밖·Io) 전체 거절과
+자식 미조회(대본 adapter + 실제 Unix 디스크, 빈 Manifest 포함), 모르는 별칭의 미확인 거절, 목록의 한글 정규화
+변형 OS별 무게, 뿌리 탈출 글자의 조회 생략, 검토 R1(심볼릭 링크 뿌리) 재현, 검토 R2(실제 macOS 볼륨의 NFD 파일 vs
+NFC target — 미추적 파일 내용과 폴더 bytes 보존 확인) 재현. R2 재현은 `cfg(target_os = "macos")`이며 정규화를 접는
+볼륨을 전제한다.
+
+기존: 바이트 동일성(Unix, `.gil`·`.git` 포함 전체 폴더), 현재에만 있는
 파일 보존, `.git` 제외와 callback 미호출, 정책 제외/불일치/미상/오류, 내부 저장소, unsafe 글자,
 Windows 전용 위험의 OS별 무게, 한글·ASCII 무위험, 대소문자/한글 정규화/라틴 결합 문자/topology
 겹침, 결정성·지문·무효화, 디스크 조회(stale·symlink·대소문자 변형), `Plan`과의 타입 분리.

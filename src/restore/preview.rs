@@ -41,6 +41,23 @@
 //! 재야 하는 것이고, 이 모듈은 적용하지 않는다. 디스크 조회가 없는 환경이면 **조용히 통과시키지
 //! 않고 「조회하지 않았다」로 거절한다.**
 //!
+//! # 디스크 조회는 뿌리 → 조상 → 잎 차례이며, 각각 조회 시점의 사실이다
+//!
+//! ```text
+//! 뿌리 ""      실제 디렉터리인가. 링크·없음·파일·그 밖·조회 실패면 전체 거절, 자식은 묻지 않는다.
+//!              (Manifest 가 비어 있어도 같다 — 뿌리 판정은 경로 수와 무관하다.)
+//! 조상 a, a/b  디렉터리인가. 링크면 바깥으로 향할 수 있으니 막고, 파일이면 topology 가 틀렸다.
+//! 잎 a/b/c     폴더 목록에 글자 그대로 있는가 → 없다면 대소문자·한글 정규화 변형이 있는가 →
+//!              그래도 lstat 이 무엇에 닿는가(모르는 접기 = 미확인 별칭, 거절). 「없다」로 대체하지 않는다.
+//! ```
+//!
+//! 이 세 단계는 **경로 이름으로** 보는 것이고, 조회 뒤에 누가 바꾸면 모른다. 적용 직전의 재관측
+//! ([`Preview::still_matches`]) 과 handle 기준 검사가 그 틈을 잡는 자리이며, 그 어느 것도 여기
+//! 없다. `Candidate` 는 apply 허용이 아니다.
+//!
+//! Unicode 정규화는 한글 음절↔자모만 알고리즘으로 판정한다. 그 밖의 결합 문자는 표 없이 동등성을
+//! 알 수 없어 **미확인**으로 거절한다 — 일부 문자를 지원한다고 「정규화 지원」이라 부르지 않는다.
+//!
 //! 이 모듈이 완성되어도 제품 `gil restore` / `gil revisit` 의 `product-safety` 차단은 그대로다.
 //! 안전 restore 전체는 저장 provenance·apply 연결·양 OS 실기까지 닫혀야 끝난다.
 
@@ -398,6 +415,11 @@ pub(crate) enum ProbeFinding {
     Stale { expected: EntryKind, found: EntryKind },
     /// 대소문자만 다른 이름이 같은 폴더에 있다.
     CaseVariantOnDisk { name: String },
+    /// Unicode 정규화(한글 음절↔자모)만 다른 이름이 같은 폴더에 있다.
+    NormalizationVariantOnDisk { name: String },
+    /// 글자 그대로의 이름은 폴더 목록에 없는데 `lstat` 은 무엇인가에 닿았다 — 이 모듈이 모르는
+    /// 접기(정규화 표·대소문자 표)로 파일 시스템이 다른 이름을 같은 자리로 봤다. **미확인 별칭.**
+    UnidentifiedAliasOnDisk { found: EntryKind },
     /// 조회가 답하지 못했다.
     Failed(ProbeError),
 }
@@ -529,6 +551,15 @@ impl Risk {
                     Severity::ElsewhereOnly(TargetOs::MacOs)
                 }
             }
+            Risk::Probe(ProbeFinding::NormalizationVariantOnDisk { .. }) => {
+                if os.folds_normalization() {
+                    Severity::Blocks
+                } else {
+                    Severity::ElsewhereOnly(TargetOs::MacOs)
+                }
+            }
+            // 파일 시스템이 실제로 같은 자리로 봤다 — 어느 OS 규칙으로 재든 이 디스크에서는 겹친다.
+            Risk::Probe(ProbeFinding::UnidentifiedAliasOnDisk { .. }) => Severity::Blocks,
             Risk::Probe(_) => Severity::Blocks,
         }
     }
@@ -581,6 +612,12 @@ impl Risk {
                 ProbeFinding::CaseVariantOnDisk { name } => {
                     format!("같은 폴더에 대소문자만 다른 {name:?} 이 있다")
                 }
+                ProbeFinding::NormalizationVariantOnDisk { name } => {
+                    format!("같은 폴더에 Unicode 정규화만 다른 {name:?} 이 있다")
+                }
+                ProbeFinding::UnidentifiedAliasOnDisk { found } => format!(
+                    "글자 그대로의 이름은 폴더에 없는데 조회가 {found:?} 에 닿았다 — 이 모듈이 모르는 접기, 미확인 별칭"
+                ),
                 ProbeFinding::Failed(error) => error.to_string(),
             },
         }
@@ -611,6 +648,11 @@ pub(crate) enum ProbeStatus {
     Checked { adapter: &'static str },
     /// 조회하지 못했다 — **apply 후보 판정을 거절하는 이유다.**
     Unsupported { adapter: &'static str, why: String },
+    /// 뿌리를 조회했는데 실제 디렉터리가 아니다(심볼릭 링크·없음·파일·그 밖) — **전체 거절이다.**
+    /// 자식 자리는 조회하지 않았다. 링크를 따라 프로젝트 밖을 들여다보지 않기 위해서다.
+    RootNotDirectory { adapter: &'static str, found: EntryKind },
+    /// 뿌리 조회 자체가 실패했다 — 자식 자리는 조회하지 않았다.
+    RootUnreadable { adapter: &'static str, why: String },
 }
 
 /// 전체 판정을 막는 이유.
@@ -619,6 +661,9 @@ pub(crate) enum Block {
     PolicyUnknown { before_known: bool, target_known: bool },
     PolicyMismatch { before: String, target: String },
     FileSystemNotProbed { why: String },
+    /// 프로젝트 뿌리가 실제 디렉터리로 확인되지 않았다. Manifest 가 비어 있어도 막는다.
+    RootNotDirectory { found: EntryKind },
+    RootUnreadable { why: String },
     Path { path: String, risk: Risk },
 }
 
@@ -635,6 +680,11 @@ impl fmt::Display for Block {
                 write!(f, "정책 식별자 불일치 (현재 {before:?}, 목표 {target:?})")
             }
             Block::FileSystemNotProbed { why } => write!(f, "파일 시스템을 조회하지 않았다 — {why}"),
+            Block::RootNotDirectory { found } => write!(
+                f,
+                "프로젝트 뿌리가 실제 디렉터리가 아니다({found:?}) — 자식 자리를 조회하지 않았다"
+            ),
+            Block::RootUnreadable { why } => write!(f, "프로젝트 뿌리를 조회하지 못했다 — {why}"),
             Block::Path { path, risk } => write!(f, "{path:?}: {}", risk.why()),
         }
     }
@@ -709,8 +759,17 @@ impl Preview {
                 target: target.clone(),
             }),
         }
-        if let ProbeStatus::Unsupported { why, .. } = &self.probe {
-            blocks.push(Block::FileSystemNotProbed { why: why.clone() });
+        match &self.probe {
+            ProbeStatus::Checked { .. } => {}
+            ProbeStatus::Unsupported { why, .. } => {
+                blocks.push(Block::FileSystemNotProbed { why: why.clone() })
+            }
+            ProbeStatus::RootNotDirectory { found, .. } => {
+                blocks.push(Block::RootNotDirectory { found: *found })
+            }
+            ProbeStatus::RootUnreadable { why, .. } => {
+                blocks.push(Block::RootUnreadable { why: why.clone() })
+            }
         }
         for entry in &self.entries {
             for risk in &entry.risks {
@@ -782,6 +841,14 @@ impl fmt::Display for Preview {
             ProbeStatus::Unsupported { adapter, why } => {
                 writeln!(f, "파일 시스템 조회\n  하지 않음 ({adapter}) — {why}\n")?
             }
+            ProbeStatus::RootNotDirectory { adapter, found } => writeln!(
+                f,
+                "파일 시스템 조회\n  {adapter} — 뿌리가 디렉터리가 아니다({found:?}). 자식 자리는 조회하지 않았다\n"
+            )?,
+            ProbeStatus::RootUnreadable { adapter, why } => writeln!(
+                f,
+                "파일 시스템 조회\n  {adapter} — 뿌리 조회 실패: {why}. 자식 자리는 조회하지 않았다\n"
+            )?,
         }
         let tally = self.tally();
         writeln!(
@@ -1155,6 +1222,19 @@ fn add_collisions(entries: &mut [Entry], os: TargetOs) {
     }
 }
 
+/// 뿌리에 이어 붙여 조회하면 프로젝트 밖에 닿을 수 있는 글자 — 디스크를 묻기 전에 거절한다.
+///
+/// 글자 검사([`inspect_text`])가 같은 조각을 모든 OS 에서 `Blocks` 로 이미 적었으므로 여기서
+/// 조회를 생략해도 판정은 바뀌지 않는다. 바뀌는 것은 「조회가 뿌리 안에서만 일어난다」는 사실이다.
+fn escapes_root(text: &str) -> bool {
+    text.is_empty()
+        || text.contains('\0')
+        || text.contains('\\')
+        || text
+            .split('/')
+            .any(|part| part.is_empty() || part == "." || part == "..")
+}
+
 /// `a/b/c.txt` 의 디렉터리 조상 `a`, `a/b`.
 fn prefixes(text: &str) -> impl Iterator<Item = &str> {
     text.match_indices('/').map(move |(at, _)| &text[..at])
@@ -1196,12 +1276,30 @@ fn hangul_decomposed(text: &str) -> String {
 
 /// 각 자리를 읽기 전용으로 들여다보고 본 것을 적는다. **아무것도 바꾸지 않는다.**
 fn add_probe_findings(entries: &mut [Entry], request: &Request<'_>, probe: &dyn Probe) -> ProbeStatus {
-    // adapter 가 뿌리부터 답하지 못하면 전체를 「조회하지 않았다」로 둔다.
-    if let Err(ProbeError::Unsupported(why)) = probe.kind("") {
-        return ProbeStatus::Unsupported {
-            adapter: probe.describe(),
-            why,
-        };
+    // 뿌리부터. 실제 디렉터리로 확인되지 않은 뿌리 아래는 **아무 자리도 조회하지 않는다** — 뿌리가
+    // 바깥을 가리키는 링크라면 자식 조회가 곧 프로젝트 밖을 들여다보는 일이다. Manifest 가 비어
+    // 있어도 이 판정은 전체 판정에 들어간다(`Readiness`).
+    match probe.kind("") {
+        Ok(EntryKind::Directory) => {}
+        Ok(found) => {
+            return ProbeStatus::RootNotDirectory {
+                adapter: probe.describe(),
+                found,
+            };
+        }
+        Err(ProbeError::Unsupported(why)) => {
+            // adapter 가 뿌리부터 답하지 못하면 전체를 「조회하지 않았다」로 둔다.
+            return ProbeStatus::Unsupported {
+                adapter: probe.describe(),
+                why,
+            };
+        }
+        Err(ProbeError::Io(why)) => {
+            return ProbeStatus::RootUnreadable {
+                adapter: probe.describe(),
+                why,
+            };
+        }
     }
 
     let mut names_cache: BTreeMap<String, Result<Vec<String>, ProbeError>> = BTreeMap::new();
@@ -1210,6 +1308,11 @@ fn add_probe_findings(entries: &mut [Entry], request: &Request<'_>, probe: &dyn 
         let text = entry.path.as_str();
         if matches!(entry.disposition, Disposition::Excluded { .. }) {
             // 제외 자리는 복원이 건드리지 않으므로 디스크를 묻지 않는다 — 다만 겹침은 위에서 이미 봤다.
+            continue;
+        }
+        if escapes_root(text) {
+            // `..`·빈 조각·`\`·NUL 은 글자 검사가 이미 모든 OS 에서 막았다. 그 글자를 뿌리에 이어
+            // 붙여 조회하면 프로젝트 밖에 닿을 수 있으므로 **디스크를 묻지 않고** 거절로 둔다.
             continue;
         }
 
@@ -1245,9 +1348,11 @@ fn add_probe_findings(entries: &mut [Entry], request: &Request<'_>, probe: &dyn 
             continue;
         }
 
-        // 같은 폴더의 이름들 — 잎을 보기 **전에** 본다. 대소문자를 접는 파일 시스템에서는
-        // `lstat("dup.txt")` 가 `Dup.txt` 에 닿으므로, 그 적중을 「낡았다」로 잘못 읽지 않으려면
-        // 글자 그대로의 이름이 목록에 있는지를 먼저 알아야 한다.
+        // 같은 폴더의 이름들 — 잎을 보기 **전에** 본다. 대소문자·정규화를 접는 파일 시스템에서는
+        // `lstat("dup.txt")` 가 `Dup.txt` 에, `lstat("가.txt")`(NFC) 가 NFD 로 적힌 파일에 닿는다.
+        // 그 적중을 「낡았다」로 잘못 읽지 않으려면 글자 그대로의 이름이 목록에 있는지를 먼저
+        // 알아야 하고, 반대로 목록에 없다고 해서 **조회를 생략하고 「없다」로 대체하면 안 된다** —
+        // 디스크의 별칭이 바로 그렇게 숨는다(Wave 1 R2).
         let (parent, leaf) = match text.rsplit_once('/') {
             Some((parent, leaf)) => (parent.to_string(), leaf),
             None => (String::new(), text),
@@ -1256,12 +1361,26 @@ fn add_probe_findings(entries: &mut [Entry], request: &Request<'_>, probe: &dyn 
             .entry(parent.clone())
             .or_insert_with(|| probe.names(&parent));
         let mut literal_present = None;
+        let mut alias_identified = false;
         match listing {
             Ok(names) => {
                 literal_present = Some(names.iter().any(|name| name == leaf));
-                let folded = leaf.to_lowercase();
+                let folded_case = leaf.to_lowercase();
+                let folded_norm = hangul_decomposed(leaf);
                 for name in names {
-                    if name != leaf && name.to_lowercase() == folded {
+                    if name == leaf {
+                        continue;
+                    }
+                    // 정규화만 다른가(대소문자 접기 전 비교), 아니면 대소문자(도) 다른가.
+                    if hangul_decomposed(name) == folded_norm {
+                        alias_identified = true;
+                        entry.risks.push(Risk::Probe(ProbeFinding::NormalizationVariantOnDisk {
+                            name: name.clone(),
+                        }));
+                    } else if name.to_lowercase() == folded_case
+                        || hangul_decomposed(&name.to_lowercase()) == hangul_decomposed(&folded_case)
+                    {
+                        alias_identified = true;
                         entry.risks.push(Risk::Probe(ProbeFinding::CaseVariantOnDisk {
                             name: name.clone(),
                         }));
@@ -1271,25 +1390,36 @@ fn add_probe_findings(entries: &mut [Entry], request: &Request<'_>, probe: &dyn 
             Err(error) => entry.risks.push(Risk::Probe(ProbeFinding::Failed(error.clone()))),
         }
 
-        // 잎 — `before` 가 본 것과 같은가.
+        // 잎 — `before` 가 본 것과 같은가. 글자 그대로의 이름이 목록에 있든 없든 **항상 조회한다.**
         let expected = if request.before.get(&entry.path).is_some() {
             EntryKind::File
         } else {
             EntryKind::Missing
         };
-        let found = match literal_present {
-            // 글자 그대로의 이름이 폴더에 없다 — `lstat` 이 무엇에 닿든 그것은 변형이다.
-            Some(false) => Ok(EntryKind::Missing),
-            _ => probe.kind(text),
-        };
-        match found {
-            Ok(found) if found == expected => {}
-            Ok(EntryKind::Symlink) => entry.risks.push(Risk::Probe(ProbeFinding::SymlinkLeaf)),
-            Ok(found @ (EntryKind::Directory | EntryKind::Other)) => {
+        let found = probe.kind(text);
+        match (literal_present, found) {
+            // 글자 그대로의 이름이 폴더에 없는데 조회가 무엇에 닿았다 — 파일 시스템이 다른 이름을
+            // 같은 자리로 봤다. 위에서 변형을 찾아냈으면 그 위험이 막고, 찾지 못했으면 이 모듈이
+            // 모르는 접기다 — 「없다」로 바꿔 적지 않고 미확인 별칭으로 막는다.
+            (Some(false), Ok(found)) if found != EntryKind::Missing => {
+                if !alias_identified {
+                    entry.risks.push(Risk::Probe(ProbeFinding::UnidentifiedAliasOnDisk { found }));
+                }
+                // 글자 그대로의 자리는 비어 있다. before 가 이 자리에 파일을 봤다면 그것도 낡았다.
+                if expected != EntryKind::Missing {
+                    entry.risks.push(Risk::Probe(ProbeFinding::Stale {
+                        expected,
+                        found: EntryKind::Missing,
+                    }));
+                }
+            }
+            (_, Ok(found)) if found == expected => {}
+            (_, Ok(EntryKind::Symlink)) => entry.risks.push(Risk::Probe(ProbeFinding::SymlinkLeaf)),
+            (_, Ok(found @ (EntryKind::Directory | EntryKind::Other))) => {
                 entry.risks.push(Risk::Probe(ProbeFinding::LeafNotFile { kind: found }))
             }
-            Ok(found) => entry.risks.push(Risk::Probe(ProbeFinding::Stale { expected, found })),
-            Err(error) => entry.risks.push(Risk::Probe(ProbeFinding::Failed(error))),
+            (_, Ok(found)) => entry.risks.push(Risk::Probe(ProbeFinding::Stale { expected, found })),
+            (_, Err(error)) => entry.risks.push(Risk::Probe(ProbeFinding::Failed(error))),
         }
     }
 
