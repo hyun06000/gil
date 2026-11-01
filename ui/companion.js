@@ -40,7 +40,7 @@ const mapSection = el(".map");
 const openButton = el(".scope .open");
 const refreshButton = el(".scope .refresh");
 const forgetButton = el(".scope .forget");
-const connectCodexButton = el(".scope .connect-codex");
+const connectHostButtons = Array.from(root.querySelectorAll(".scope .connect-host"));
 const updateButton = el(".scope .update");
 const runtimeStatus = el(".title .runtime");
 const settingsSay = el(".settings-say");
@@ -67,7 +67,6 @@ let current = null; // { scopeId, view, seat, plan }
 let orientation = "vertical"; // presentation only; native defaults remain unchanged
 let detailRequest = 0;
 let noticeOwner = null;
-let codexConnection = "unknown";
 
 /** Host 가 준 거절의 **종류**를 사람의 말로.
  *
@@ -120,8 +119,8 @@ const WORKING = {
   opening: "Project 를 읽는 중",
   refreshing: "다시 읽는 중",
   updating: "업데이트를 확인하는 중",
-  connecting: "Codex에 연결하는 중",
-  disconnecting: "Codex 연결을 해제하는 중",
+  connecting: "Host 에 연결하는 중",
+  disconnecting: "Host 연결을 해제하는 중",
 };
 /** 중복 눌림만 그 손잡이로 막는다. 창 전체를 잠그지 않는다. */
 const busyOn = (what, button) => {
@@ -940,15 +939,16 @@ async function checkForUpdate() {
       `GIL Companion ${found.version} 업데이트를 설치할까요?` +
       `\n현재 버전: ${found.current_version}` +
       "\n\n다운로드가 끝나면 Windows 설치창이 열립니다." +
-      "\n\nCodex는 닫지 않아도 됩니다. 기존 GIL 대화는 현재 Core로 계속되고, " +
-      "새 대화부터 새 Core를 사용합니다. 설치 중에는 GIL Companion만 닫힐 수 있습니다." +
+      "\n\nCodex는 닫지 않아도 됩니다. Claude Desktop도 닫지 않아도 됩니다. 기존 GIL 대화는 현재 Core로 계속되고, " +
+      "새 대화부터 새 Core를 사용합니다. 연결된 모든 Host 가 같은 고정 런처를 쓰므로 한쪽만 바뀌는 일은 없습니다. " +
+      "설치 중에는 GIL Companion만 닫힐 수 있습니다." +
       notes,
     );
     if (!approved) return;
     working.textContent = "서명된 업데이트를 내려받는 중 — 완료되면 설치창이 열립니다";
     await window.GIL_HOST.installUpdate(found.version);
     say(
-      "업데이트 설치를 시작했다. Codex와 기존 GIL 대화는 계속 사용할 수 있다. " +
+      "업데이트 설치를 시작했다. Codex·Claude Desktop 과 기존 GIL 대화는 계속 사용할 수 있다. " +
       "Windows에서는 Companion만 닫힐 수 있으며 새 대화부터 새 Core가 적용된다.",
     );
   } catch (error) {
@@ -958,94 +958,167 @@ async function checkForUpdate() {
   }
 }
 
-async function connectCodex() {
-  busyOn("connecting", connectCodexButton);
+// ── Host 연결 — Codex 와 Claude Desktop, 같은 손잡이 하나씩 ──────────────────
+//
+// 두 Host 는 **같은 고정 런처**를 등록한다. 다른 것은 등록을 적는 자리(공식 CLI / Desktop 설정
+// 파일)와 사람에게 보이는 이름뿐이다. 이 bundle 은 그 차이를 모른다 — Host 가 준 문의 이름과
+// 사람의 말만 다르다. 사용자가 고른 Host 하나만 바꾸고, 다른 Host 의 등록은 읽지도 않는다.
+const HOSTS = {
+  codex: {
+    label: "Codex",
+    capability: "codexCapability", connection: "codexConnection",
+    connect: "connectCodex", disconnect: "disconnectCodex", repair: "repairCodexConnection",
+    connectAsk: "Codex 사용자 설정에 GIL MCP 연결을 추가할까요?\n기존 gil 등록은 덮어쓰지 않습니다.",
+    disconnectAsk: "Codex에서 GIL MCP 연결을 해제할까요?\n열려 있는 GIL 대화는 닫은 뒤 앱 제거를 계속하세요.",
+    repairAsk: "예전 GIL 플러그인 또는 연결을 제거하고, 지금 설치된 GIL Core로 교체할까요?\n다른 플러그인과 Project 파일은 건드리지 않습니다.",
+    connectTitle: "공식 Codex CLI로 GIL MCP를 등록한다",
+    repairTitle: "사용자 확인 후 예전 GIL 플러그인·연결을 제거하고 설치된 Core에 연결한다",
+    toolMissing: "Codex 앱의 연결 도구를 찾지 못했다. Codex를 완전히 종료했다 다시 연 뒤 재시도한다.",
+  },
+  claude: {
+    label: "Claude Desktop",
+    capability: "claudeCapability", connection: "claudeConnection",
+    connect: "connectClaude", disconnect: "disconnectClaude", repair: "repairClaudeConnection",
+    connectAsk: "Claude Desktop 설정에 GIL MCP 연결을 추가할까요?\n기존 gil 등록은 덮어쓰지 않습니다. " +
+      "Claude Desktop 이 실행 중이면 먼저 완전히 종료해야 합니다(실행 중 바뀐 설정은 되돌아갈 수 있습니다).",
+    disconnectAsk: "Claude Desktop에서 GIL MCP 연결을 해제할까요?\n열려 있는 GIL 대화는 닫은 뒤 앱 제거를 계속하세요. " +
+      "Claude Desktop 이 실행 중이면 먼저 완전히 종료해야 합니다.",
+    repairAsk: "예전 GIL 연결을 지금 설치된 GIL 고정 런처로 교체할까요?\n다른 MCP 서버와 Project 파일은 건드리지 않습니다. " +
+      "Claude Desktop 이 실행 중이면 먼저 완전히 종료해야 합니다.",
+    connectTitle: "Claude Desktop 설정 파일(claude_desktop_config.json)에 GIL 고정 런처를 등록한다. Claude Code 탭도 같은 설정을 읽는다",
+    repairTitle: "사용자 확인 후 다른 GIL 실행 파일을 가리키는 gil 등록을 설치된 고정 런처로 교체한다",
+    toolMissing: "Claude Desktop 설정 폴더를 찾지 못했다. Claude Desktop을 설치하고 한 번 실행한 뒤 재시도한다.",
+  },
+};
+const hostState = { codex: "unknown", claude: "unknown" };
+const hostButton = (key) => connectHostButtons.find((one) => one.dataset.host === key);
+const hostApi = (key, name) => window.GIL_HOST[HOSTS[key][name]];
+
+async function connectHost(key) {
+  const host = HOSTS[key], button = hostButton(key);
+  busyOn("connecting", button);
   try {
-    const approved = window.confirm(
-      "Codex 사용자 설정에 GIL MCP 연결을 추가할까요?\n기존 gil 등록은 덮어쓰지 않습니다.",
-    );
-    if (!approved) return;
-    say(await window.GIL_HOST.connectCodex());
-    await refreshCodexConnection();
+    if (!window.confirm(host.connectAsk)) return;
+    say(await hostApi(key, "connect")());
+    await refreshHostConnection(key);
   } catch (error) {
-    say(`Codex에 연결하지 못했다 — ${why(error)}`);
+    say(`${host.label}에 연결하지 못했다 — ${why(error)}`);
   } finally {
-    busyOff(connectCodexButton);
-    connectCodexButton.disabled = codexConnection === "conflict";
+    busyOff(button);
+    button.disabled = hostState[key] === "conflict";
   }
 }
 
-async function disconnectCodex() {
-  busyOn("disconnecting", connectCodexButton);
+async function disconnectHost(key) {
+  const host = HOSTS[key], button = hostButton(key);
+  busyOn("disconnecting", button);
   try {
-    const approved = window.confirm(
-      "Codex에서 GIL MCP 연결을 해제할까요?\n열려 있는 GIL 대화는 닫은 뒤 앱 제거를 계속하세요.",
-    );
-    if (!approved) return;
-    say(await window.GIL_HOST.disconnectCodex());
-    await refreshCodexConnection();
+    if (!window.confirm(host.disconnectAsk)) return;
+    say(await hostApi(key, "disconnect")());
+    await refreshHostConnection(key);
   } catch (error) {
-    say(`Codex 연결을 해제하지 못했다 — ${why(error)}`);
+    say(`${host.label} 연결을 해제하지 못했다 — ${why(error)}`);
   } finally {
-    busyOff(connectCodexButton);
-    connectCodexButton.disabled = codexConnection === "conflict";
+    busyOff(button);
+    button.disabled = hostState[key] === "conflict";
   }
 }
 
-async function repairCodexConnection() {
-  busyOn("connecting", connectCodexButton);
+async function repairHostConnection(key) {
+  const host = HOSTS[key], button = hostButton(key);
+  busyOn("connecting", button);
   try {
-    const approved = window.confirm(
-      "예전 GIL 플러그인 또는 연결을 제거하고, 지금 설치된 GIL Core로 교체할까요?\n다른 플러그인과 Project 파일은 건드리지 않습니다.",
-    );
-    if (!approved) return;
-    say(await window.GIL_HOST.repairCodexConnection());
-    await refreshCodexConnection();
+    if (!window.confirm(host.repairAsk)) return;
+    say(await hostApi(key, "repair")());
+    await refreshHostConnection(key);
   } catch (error) {
-    say(`Codex 연결을 교체하지 못했다 — ${why(error)}`);
+    say(`${host.label} 연결을 교체하지 못했다 — ${why(error)}`);
   } finally {
-    busyOff(connectCodexButton);
+    busyOff(button);
   }
 }
 
-async function refreshCodexConnection() {
-  const connection = await window.GIL_HOST.codexConnection();
-  codexConnection = connection.state;
-  connectCodexButton.hidden = false;
-  connectCodexButton.disabled = false;
-  if (codexConnection === "connected") {
-    connectCodexButton.textContent = "Codex 연결 해제";
-    connectCodexButton.title = "GIL이 만든 MCP 등록만 확인 후 해제한다";
-    connectCodexButton.onclick = disconnectCodex;
-  } else if (codexConnection === "not_connected") {
-    connectCodexButton.textContent = "Codex 연결";
-    connectCodexButton.title = "공식 Codex CLI로 GIL MCP를 등록한다";
-    connectCodexButton.onclick = connectCodex;
+/** 연결 상태는 **그 Host 하나**를 다시 읽어 정한다. 다른 Host 의 상태를 섞지 않는다. */
+async function refreshHostConnection(key) {
+  const host = HOSTS[key], button = hostButton(key);
+  const connection = await hostApi(key, "connection")();
+  hostState[key] = connection.state;
+  button.hidden = false;
+  button.disabled = false;
+  // 등록이 가리키는 실행 파일을 그대로 보여 준다 — 사람이 옛 버전 폴더의 Core 와 고정 런처를 구분할 수 있게.
+  const registered = connection.command ? `\n등록된 실행 파일: ${connection.command}` : "";
+  const running = connection.desktop_running === true
+    ? `\n${host.label} 이 실행 중이다 — 설정을 바꾸기 전에 완전히 종료한다.` : "";
+  if (hostState[key] === "connected") {
+    button.textContent = `${host.label} 연결 해제`;
+    button.title = `GIL이 만든 MCP 등록만 확인 후 해제한다${registered}${running}`;
+    button.onclick = () => disconnectHost(key);
+  } else if (hostState[key] === "not_connected") {
+    button.textContent = `${host.label} 연결`;
+    button.title = `${host.connectTitle}${running}`;
+    button.onclick = () => connectHost(key);
+  } else if (hostState[key] === "conflict") {
+    // 사용자가 직접 만든 동명 등록. 읽기만 하고 바꾸지 않는다.
+    button.textContent = `${host.label} 에 다른 gil 등록 있음`;
+    button.title = `이름이 같은 다른 gil 등록이 있어 GIL 이 바꾸지 않는다${registered}`;
+    button.disabled = true;
+    button.onclick = null;
   } else {
-    connectCodexButton.textContent = "이전 GIL 연결 교체";
-    connectCodexButton.title = "사용자 확인 후 예전 GIL 플러그인·연결을 제거하고 설치된 Core에 연결한다";
-    connectCodexButton.onclick = repairCodexConnection;
+    button.textContent = `${host.label} 이전 GIL 연결 교체`;
+    button.title = `${host.repairTitle}${registered}${running}`;
+    button.onclick = () => repairHostConnection(key);
   }
 }
 
-function showCodexUnavailable(message) {
-  codexConnection = "unavailable";
-  connectCodexButton.hidden = false;
-  connectCodexButton.disabled = false;
-  connectCodexButton.textContent = "Codex 연결 다시 시도";
-  connectCodexButton.title = message;
-  connectCodexButton.onclick = async () => {
-    busyOn("connecting", connectCodexButton);
+function showHostUnavailable(key, message) {
+  const host = HOSTS[key], button = hostButton(key);
+  hostState[key] = "unavailable";
+  button.hidden = false;
+  button.disabled = false;
+  button.textContent = `${host.label} 연결 다시 시도`;
+  button.title = message;
+  button.onclick = async () => {
+    busyOn("connecting", button);
     try {
-      await refreshCodexConnection();
-      say("Codex 연결 상태를 다시 확인했다.");
+      await refreshHostConnection(key);
+      say(`${host.label} 연결 상태를 다시 확인했다.`);
     } catch (error) {
-      showCodexUnavailable(why(error));
-      say(`Codex 연결 상태를 확인하지 못했다 — ${why(error)}`);
+      showHostUnavailable(key, why(error));
+      say(`${host.label} 연결 상태를 확인하지 못했다 — ${why(error)}`);
     } finally {
-      busyOff(connectCodexButton);
+      busyOff(button);
     }
   };
+}
+
+/** 시작할 때 Host 하나의 손잡이를 세운다. 문이 그 Host 를 모르면 손잡이는 숨은 채로 남는다. */
+async function startHostConnection(key) {
+  const host = HOSTS[key], button = hostButton(key);
+  if (!button || typeof window.GIL_HOST[host.capability] !== "function" ||
+      typeof window.GIL_HOST[host.connection] !== "function") return;
+  try {
+    const capability = await hostApi(key, "capability")();
+    if (capability.runtime_version) {
+      runtimeStatus.textContent = `Core ${capability.runtime_version}`;
+    }
+    if (!capability.supported) {
+      button.hidden = true;
+    } else if (!capability.runtime_installed) {
+      hostState[key] = "unavailable";
+      button.hidden = false;
+      button.disabled = true;
+      button.textContent = "GIL 설치 확인 필요";
+      button.title = "GIL 런타임을 찾지 못했다. Companion 설치를 다시 실행한다";
+    } else if (capability.cli_found === false) {
+      showHostUnavailable(key, host.toolMissing);
+      say(host.toolMissing);
+    } else {
+      await refreshHostConnection(key);
+    }
+  } catch (error) {
+    showHostUnavailable(key, why(error));
+    say(`${host.label} 연결 상태를 확인하지 못했다 — ${why(error)}`);
+  }
 }
 
 async function start() {
@@ -1063,33 +1136,7 @@ async function start() {
 
   forgetButton.onclick = forgetProject;
 
-  if (typeof window.GIL_HOST.codexCapability === "function" &&
-      typeof window.GIL_HOST.codexConnection === "function") {
-    try {
-      const capability = await window.GIL_HOST.codexCapability();
-      if (capability.runtime_version) {
-        runtimeStatus.textContent = `Core ${capability.runtime_version}`;
-      }
-      if (!capability.supported) {
-        connectCodexButton.hidden = true;
-      } else if (!capability.runtime_installed) {
-        codexConnection = "unavailable";
-        connectCodexButton.hidden = false;
-        connectCodexButton.disabled = true;
-        connectCodexButton.textContent = "GIL 설치 확인 필요";
-        connectCodexButton.title = "GIL 런타임을 찾지 못했다. Companion 설치를 다시 실행한다";
-      } else if (capability.cli_found === false) {
-        const message = "Codex 앱의 연결 도구를 찾지 못했다. Codex를 완전히 종료했다 다시 연 뒤 재시도한다.";
-        showCodexUnavailable(message);
-        say(message);
-      } else {
-        await refreshCodexConnection();
-      }
-    } catch (error) {
-      showCodexUnavailable(why(error));
-      say(`Codex 연결 상태를 확인하지 못했다 — ${why(error)}`);
-    }
-  }
+  for (const key of Object.keys(HOSTS)) await startHostConnection(key);
 
   if (typeof window.GIL_HOST.updateCapability === "function") {
     try {

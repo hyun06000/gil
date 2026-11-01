@@ -11,11 +11,11 @@ entry if the direct form does not open. Do not post vulnerability details in a p
 
 ## Scope
 
-The current reviewed user channel is **0.2.1-preview.5, Codex on macOS Apple Silicon**.
-It is not Apple Developer ID signed or notarized; fresh-Mac installation is unverified.
-Windows archives are unsigned development/review candidates, not supported installers. Old preview
-versions, other platforms, Claude work modes and Companion builds do not have a promised
-maintenance window. Reports about current source or the distribution route are also welcome;
+The current user channels are the unsigned previews listed in [INSTALL.md](INSTALL.md): macOS Apple
+Silicon (Plugin/archive) and Windows x64 (Companion installer), each used from Codex or from the Claude
+Code tab of Claude Desktop. Neither is Apple Developer ID signed/notarized or Authenticode signed.
+Old preview versions, other platforms, other Claude surfaces (terminal Claude Code, Chat, Cowork) and
+review-only Companion builds do not have a promised maintenance window. Reports about current source or the distribution route are also welcome;
 accepting a report does not promise a fix or support for every version.
 
 The current Artifact scope excludes only the root `.gil/` directory. It does not honor

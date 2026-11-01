@@ -1,4 +1,6 @@
-//! Explicit host registration. This never runs during setup or update.
+//! Explicit Codex registration through the official `codex mcp` CLI. This never runs during
+//! setup or update. The Claude Desktop adapter lives in `claude.rs`; both register the same
+//! stable launcher so one update serves both Hosts.
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -41,7 +43,7 @@ enum ListedTransport {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Registration {
+pub(crate) enum Registration {
     Missing,
     Ours,
     Conflict,
@@ -61,7 +63,7 @@ struct ListedPlugin {
     enabled: bool,
 }
 
-fn launcher_path() -> Result<PathBuf, String> {
+pub(crate) fn launcher_path() -> Result<PathBuf, String> {
     #[cfg(windows)]
     {
         let local = std::env::var_os("LOCALAPPDATA").ok_or("LOCALAPPDATA가 없다")?;
@@ -71,7 +73,7 @@ fn launcher_path() -> Result<PathBuf, String> {
             .join("gil-launcher.exe"))
     }
     #[cfg(not(windows))]
-    Err("Codex 자동 연결은 Windows 제품 설치본에서만 제공한다".into())
+    Err("Host 자동 연결은 Windows 제품 설치본에서만 제공한다. macOS는 설치 안내의 직접 등록 절차를 따른다.".into())
 }
 
 fn registration_args(launcher: &Path) -> Vec<std::ffi::OsString> {
@@ -98,7 +100,7 @@ pub fn codex_capability() -> CodexCapability {
     }
 }
 
-fn runtime_version() -> Option<String> {
+pub(crate) fn runtime_version() -> Option<String> {
     #[cfg(windows)]
     {
         let local = std::env::var_os("LOCALAPPDATA")?;

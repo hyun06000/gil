@@ -38,7 +38,9 @@ fullscreen 우선도는 유지한다. 자동으로 띄우는 것은 관리 아�
    하나의 검증된 release cohort로 제공한다. 사용자는 Rust/Node/npm을 설치하지 않는다.
 3. 설치 프로그램이 새 설치/기존 설치를 구분하고 변경 내용을 표시한다. 기존 설치가 있으면
    조용히 덮어쓰지 않는다. 기존 cache를 실행 위치로 재사용하거나 수동 삭제하지 않는다.
-4. 지원이 검증된 공식 Codex 연결 절차를 안내한다. 자동 연결은 실제 지원이 확인된 경우에만
+4. 지원이 검증된 공식 Host 연결 절차를 안내한다. Codex와 Claude Desktop(Claude Code 탭)은 같은
+   고정 실행 진입점을 각자의 등록 자리에 적는 **Host adapter** 하나씩을 가지며, 사용자가 고른 Host만
+   바꾼다(2026-11-02, §12). 자동 연결은 실제 지원이 확인된 경우에만
    제공한다. 내부 App Server API나 사용자 `config.toml`의 무단 편집으로 대신하지 않는다.
 5. 실제 Core 응답으로 설치 버전·빌드를 확인한다. 파일 존재나 등록 성공만으로 완료하지 않는다.
 6. 사용자가 고른 GIL Project를 처음 성공적으로 열 때 관리 아이콘이 나타난다.
@@ -350,3 +352,35 @@ IPC namespace를 재사용하지 않는다. 일반 제품 app config와 기본 �
 기존 GIL/Windows PC는 접근하지 않는다. workflow는 관련 PR 변경 또는 수동 dispatch로 검수 artifact를 만들며
 contents:read이고 release/설치 단계는 없다. Windows 빌드·고지 검토·artifact hash 확정·게시 및
 실사용자 tray 검수는 별도 실행/승인 단계다. 임의 URL/hash를 안내에 넣지 않는다.
+
+## 12. 2026-11-02 Host adapter — Codex와 Claude Desktop 동등 지원
+
+결정: Companion의 Host 연결은 **Host별 adapter**로 나누되 모두 같은 고정 실행 진입점
+(`%LOCALAPPDATA%\GIL\runtime\gil-launcher.exe`)을 등록한다. 업데이트는 버전별 Core와 선택 기록만
+바꾸므로 등록된 Host가 몇이든 다음 새 연결부터 같은 Core를 받고, 한 Host만 바뀌거나 구버전 경로를
+가리키는 상태가 생기지 않는다. 공용 UI(`ui/companion.js`)는 Host 이름을 모르고 `window.GIL_HOST`의
+문 이름과 사람에게 보이는 표시만 다르게 가진다.
+
+| Host | 등록 자리 | 쓰는 방법 | 실행 중 Host |
+| --- | --- | --- | --- |
+| Codex | Codex 사용자 설정 | 공식 `codex mcp add/list/remove` CLI (`companion/src/clients.rs`) | 바꿔도 된다. 새 대화부터 적용 |
+| Claude Desktop (Claude Code 탭 포함) | `%APPDATA%\Claude\claude_desktop_config.json`의 `mcpServers.gil` | 설정 파일 편집 (`companion/src/claude.rs`): 읽기 → 백업 → 임시 파일 → 읽은 뒤 변경 없음 확인 → rename | **거절한다.** 실행 중 Desktop은 같은 파일을 다시 써서 바깥 편집을 되돌린다(10/31 실측) |
+
+Claude Desktop에는 설정 파일을 바꾸는 공식 CLI가 없다. 문서화된 경로는 Desktop의 *Developer → Edit
+Config*이며 같은 파일을 연다. Claude Code 탭이 이 파일의 `gil` 항목을 서비스로 띄우는 것은 2026-11-02에
+소유자 Mac에서 확인했다(사용자 범위 `~/.claude.json`에는 서버가 없었다). Claude Code CLI의
+`claude mcp add --scope user`가 Desktop의 Claude Code 탭에도 보이는지는 확인하지 않았으므로 adapter의
+경로로 쓰지 않는다.
+
+연결 상태 판정은 두 adapter가 같다: `gil` 항목이 없으면 `not_connected`, command가 고정 런처이고 args가
+정확히 `mcp --serve`이며 다른 키가 없으면 `connected`, 그 외는 교체 대상인지에 따라 `needs_repair`
+(GIL 실행 파일 `gil`/`gil.exe`/`gil-launcher.exe`를 가리키는 항목) 또는 `conflict`(사용자가 만든 동명
+등록, 읽기만 하고 바꾸지 않음)다. Claude adapter는 등록된 실행 파일 경로를 그대로 돌려주어 사람이 옛
+버전 폴더 Core와 고정 런처를 구분할 수 있게 한다. 다른 MCP 서버 항목과 Desktop 자체 설정 키는 파싱한
+그대로 다시 쓴다. 백업은 같은 폴더의 `claude_desktop_config.json.gil-backup-<unix초>`이며 최근 5개만 남긴다.
+
+검증 범위: Rust 단위 시험(등록 판정, 다른 항목 보존, 손상 파일 거절, 동시 변경 중단, 백업·정리, 교체 범위)과
+Windows 제품 계약 시험(`distribution/windows/product-install.test.mjs`)이 통과했다. **실제 Windows Claude
+Desktop에서 버튼 → 새 대화 → Monitor 표시는 아직 아무도 확인하지 않았다.** macOS Companion에는 고정 런처가
+없어 adapter가 `supported: false`를 답하고 버튼을 숨기며, macOS Claude 사용자는 INSTALL.md의 직접 등록
+절차와 업데이트 뒤 경로 재지정이 남는 제한이다.

@@ -41,6 +41,22 @@ export function labels(profile, arch, head) {
     channel: 'windows_unsigned_review_candidate',
     cargoFeatures: ['--features', 'product-safety'], tools: 19, storage_format: 4};
 }
+/// The Claude Code adapter of the same candidate: one identity, one Core, the Host's root variable
+/// instead of a relative cwd. Mirrors distribution/codex/artifact.mjs checkClaudeManifest.
+export const CLAUDE_ROOT = '${CLAUDE_PLUGIN_ROOT}';
+export function claudeManifestFor(codexManifest, arch) {
+  profileForArch(arch);
+  const {name, version, description, author} = codexManifest;
+  assert.equal(name, NAME);
+  return {name, version, description, author, license: 'MIT', keywords: ['gil', 'reasoning', 'journey', 'monitor'],
+    mcpServers: {'gil-companion': {command: `${CLAUDE_ROOT}/core/windows-${arch}/gil.exe`, args: ['mcp', '--serve'], cwd: CLAUDE_ROOT}}};
+}
+export function claudeCatalogFor(label) {
+  return {name: label.marketplace, owner: {name: 'Ariadne'},
+    metadata: {description: `${label.displayName}. Same Core, Skill and Monitor UI as the Codex catalog beside it; installed from this extracted archive root only.`},
+    plugins: [{name: NAME, source: `./${PREFIX}`, description: 'Record reasoning with GIL, and keep the journey visible in the GIL Monitor.',
+      category: 'productivity', keywords: ['gil', 'reasoning', 'journey', 'monitor']}]};
+}
 export function packTar(run, tree) {
   return run('tar.exe', ['-czf', '-', '.'], {cwd: tree, encoding: 'buffer'});
 }
@@ -154,6 +170,8 @@ export async function prepare(output) {
   const files = new Map([
     ['.agents/plugins/marketplace.json', json(catalog)],
     [`${PREFIX}/.codex-plugin/plugin.json`, json(manifest)],
+    ['.claude-plugin/marketplace.json', json(claudeCatalogFor(label))],
+    [`${PREFIX}/.claude-plugin/plugin.json`, json(claudeManifestFor(manifest, arch))],
     [`${PREFIX}/core/windows-${arch}/gil.exe`, binary],
     [`${PREFIX}/skills/gil-companion/SKILL.md`, await regular(join(ROOT, PREFIX, 'skills/gil-companion/SKILL.md'))],
     [`${PREFIX}/LICENSE`, await regular(join(ROOT, 'LICENSE'))],
@@ -190,6 +208,7 @@ export async function prepare(output) {
     gates: {archive_roundtrip: 'passed', native_relocated_execution: 'passed',
       authenticode: 'not signed', ordinary_user_codex_install: 'not tested',
       fullscreen: 'not tested', marketplace_publication: 'not performed',
+      claude_code_plugin_install: 'not tested',
       msvc_runtime_redistribution_review: 'pending',
       ...(runtime === 'visual-authoring' ? {image_authoring_pc_acceptance: 'not tested', format4_migration_on_windows: 'unsupported (refused)'} : {})}};
   await writeFile(join(out, 'checks.json'), json(checks), {flag: 'wx'});

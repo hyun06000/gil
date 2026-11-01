@@ -21,10 +21,19 @@ publisher 배포가 아니다. ARM64 Windows, 기업 배포와 일반 사용자 
    `release-assets.githubusercontent.com` URL을 공유하지 말고 고정 release 페이지를 공유한다.
 2. 파일명·크기·SHA-256을 확인한 뒤 더블클릭한다.
 3. 설치 창이 완료되면 시작 메뉴의 **GIL Companion (Unsigned Test)**를 연다.
-4. Companion에서 **Codex 연결**을 누른다.
+4. 쓰는 Host의 버튼을 누른다. 버튼은 그 Host 하나만 바꾼다.
+   - **Codex 연결** — 공식 `codex mcp add` 명령으로 고정 launcher를 등록한다.
+   - **Claude Desktop 연결** — Claude Desktop을 **완전히 종료한 뒤** 누른다. Companion이
+     `%APPDATA%\Claude\claude_desktop_config.json`의 `mcpServers.gil`에 같은 고정 launcher를 적는다.
+     Desktop이 실행 중이면 거절한다(실행 중 바깥에서 바꾼 설정은 Desktop이 되돌릴 수 있다). 바꾸기 전
+     같은 폴더에 `claude_desktop_config.json.gil-backup-<시각>` 백업을 남기고, 다른 MCP 서버 항목은 그대로
+     둔다. 이 버튼은 `0.1.1-owner.7`에는 없고 다음 Windows 후보부터 들어간다. owner.7에서는
+     [저장소 설치 안내](../../INSTALL.md)의 “직접 등록(임시)” 항목을 따른다.
 5. 이전 GIL Plugin 또는 `gil` MCP 등록이 있으면 Companion의 **이전 GIL 연결 교체** 내용을 확인하고
-   승인한다. 다른 Plugin과 Project는 대상이 아니다.
-6. 연결이 완료되면 Codex를 다시 열고 새 대화에서 테스트 폴더를 선택한다.
+   승인한다. 다른 Plugin·다른 MCP 서버·Project는 대상이 아니다. Claude Desktop에서는 **GIL 실행 파일을
+   가리키는** `gil` 항목만 교체 대상이고, 사용자가 직접 만든 다른 `gil` 등록은 “다른 gil 등록 있음”으로
+   표시한 채 바꾸지 않는다.
+6. 연결이 완료되면 Host(Codex 또는 Claude Desktop)를 다시 열고 새 대화에서 테스트 폴더를 선택한다.
 7. **“지금 폴더에서 GIL 프로젝트를 시작해 줘”**라고 말하고 실제 Monitor·첫 Interview·파일 작업을 확인한다.
 
 테스트 폴더는 우선 OneDrive 등 동기화 폴더 밖의 로컬 폴더를 사용한다. `.gil` 권한 거절이 나오면
@@ -41,6 +50,10 @@ ACL 상속을 강제로 바꾸거나 Project를 Agent가 자동 이동하지 않
   주장하지 않는다.
 - Codex 등록은 Companion의 버튼과 공식 `codex mcp` 명령만 사용한다. `config.toml`, registry,
   Plugin cache를 손으로 편집하지 않는다.
+- Claude Desktop 등록은 Companion의 **Claude Desktop 연결** 버튼을 사용한다. Agent가
+  `claude_desktop_config.json`을 직접 고치는 것은 owner.7처럼 버튼이 없는 설치본에서 사용자가 승인하고
+  Claude Desktop이 완전히 종료된 경우에만 한다. 그때도 다른 항목은 그대로 두고 `mcpServers.gil`만 고정
+  launcher로 적으며, 먼저 백업을 남긴다.
 - 기존 GIL을 발견하면 출처·command·args를 보여 주고 사용자 승인 전에는 제거하지 않는다.
 - 설치·연결 성공과 Project/Monitor 동작 성공을 별도로 확인한다.
 
@@ -109,17 +122,22 @@ Verify마다 실제 파일을 저장하고 `evidence_files`로 지정해야 한�
 이 수치는 이전 owner.6에 대한 기록이며 owner.7의 모델 시험 결과가 아니다.
 업데이트 후 Companion 표시가 `0.1.1-owner.7`인지 확인하고 새 GIL 연결·새 대화에서 Luna로 시험한다.
 기존 연결을 새 Core로 강제 교체하지 않는다. macOS Plugin은 이 Windows 업데이트로 교체되지 않는다.
+Codex와 Claude Desktop이 모두 같은 고정 launcher를 등록하므로 업데이트 뒤 어느 Host도 재등록할 필요가
+없고, 한쪽 Host만 새 Core를 받는 일이 없다. Companion 머리줄의 `Core <버전>`은 다음 새 연결이 받을
+Core다.
 
 ## 연결 해제와 제거
 
 제거 순서는 다음과 같다.
 
-1. Companion의 **Codex 연결 해제**를 누른다.
+1. Companion의 **Codex 연결 해제**와 **Claude Desktop 연결 해제**를 누른다(쓰던 Host만). Claude Desktop은
+   완전히 종료한 상태에서 누른다.
 2. 열린 GIL 대화를 닫는다.
 3. Windows의 앱 제거에서 **GIL Companion (Unsigned Test)**를 제거한다.
 
-연결 해제는 command가 설치된 고정 launcher이고 args가 정확히 `mcp --serve`인 소유 GIL 등록만
-제거한다. 이름이 같은 다른 등록은 지우지 않는다. 현재 uninstaller는 실행 중인 연결과 기록을 보호하기
+연결 해제는 두 Host 모두 command가 설치된 고정 launcher이고 args가 정확히 `mcp --serve`인 소유 GIL
+등록만 제거한다. 이름이 같은 다른 등록은 지우지 않는다. Claude Desktop 설정의 다른 MCP 서버 항목도
+그대로 둔다. 현재 uninstaller는 실행 중인 연결과 기록을 보호하기
 위해 `%LOCALAPPDATA%\GIL\runtime`과 모든 Project의 `.gil`을 보존한다. 완전 runtime 삭제는 아직
 일반 사용자 기능으로 제공하지 않는다.
 

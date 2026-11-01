@@ -28,7 +28,10 @@ Plugin 묶음이며 receipt도 `publishable: false`다.
 Core를 덮어쓰지 않고 새 버전 디렉터리를 만든 뒤 작은 선택 기록만 바꾼다. 새 기록이나 Core가
 손상되면 `current.previous` 한 판까지만 검증해 사용한다. 런처는 Job Object로 자식 Core를
 묶는다. Companion의 **Codex 연결** 버튼은 사용자가 확인한 뒤 공식 `codex mcp add` 명령으로
-이 고정 진입점을 등록한다. 같은 installer를 다시 실행하면 이미 설치된 불변 Core bytes는
+이 고정 진입점을 등록한다. **Claude Desktop 연결** 버튼(2026-11-02, owner.7 이후 후보)은 같은 고정 진입점을
+`%APPDATA%\Claude\claude_desktop_config.json`의 `mcpServers.gil`에 적는다 — Desktop이 꺼진 상태에서만, 백업과
+원자적 교체·동시 변경 검사를 거쳐, 다른 MCP 서버 항목은 그대로 둔 채. 두 Host가 한 진입점을 쓰므로 업데이트는
+어느 Host에도 재등록을 요구하지 않는다. 이 버튼의 실제 Windows Claude Desktop 화면 확인은 아직 없다. 같은 installer를 다시 실행하면 이미 설치된 불변 Core bytes는
 덮어쓰지 않고 Companion과 선택 기록을 복구 설치한다. 예전 `gil-companion-prototype` Plugin이나
 다른 `gil` 등록이 함께 있으면 연결 완료로 표시하지 않으며, 사용자가 Companion의
 **이전 GIL 연결 교체**를 확인한 경우에만 공식 Codex CLI로 그 GIL 항목을 제거하고 고정 런처를

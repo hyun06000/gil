@@ -100,6 +100,27 @@
       return pass("repair_codex_connection");
     },
 
+    /** Claude Desktop 설정도 이 버튼을 누른 때에만, Desktop 이 꺼진 상태에서만 바꾼다. */
+    async claudeCapability() {
+      return pass("claude_capability");
+    },
+
+    async claudeConnection() {
+      return pass("claude_connection");
+    },
+
+    async connectClaude() {
+      return pass("connect_claude");
+    },
+
+    async disconnectClaude() {
+      return pass("disconnect_claude");
+    },
+
+    async repairClaudeConnection() {
+      return pass("repair_claude_connection");
+    },
+
     /**
      * 창 밖에서 오는 말을 듣는다.
      *

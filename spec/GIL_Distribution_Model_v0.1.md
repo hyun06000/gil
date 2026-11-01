@@ -13,7 +13,8 @@
 ## 1. 목적
 
 GIL의 주 사용자는 터미널과 패키지 관리자를 다루는 개발자가 아니다. 기본 인간 표면은 Codex와
-Claude Desktop의 **Cowork** 모드다. 사용자는 이들
+Claude Desktop의 **Claude Code 탭**이다(2026-09-23 결정은 Cowork였으나 2026-10-30~11-01 실측으로 Claude Code 탭의
+MCP App fullscreen이 확인되어 §8.1에 따라 바뀌었다). 사용자는 이들
 같은 Agent Host에서 Agent와 협업하고, GIL의 복잡한 버전 Graph는 인간용 Monitor로
 이해한다.
 
@@ -468,9 +469,11 @@ Companion은 Host가 지속형 Monitor를 제공하지 못할 때만 이름을 �
 ### 8.1 Codex와 Claude Code
 
 현재 Agent 배포 adapter는 Codex Plugin과 Claude Code Plugin이다. 인간 Monitor의 권장 표면은
-Codex와 Claude Desktop Cowork로 정한다. **Code Plugin 도구 검수와 Cowork MCP Apps 검수는 별개**다.
-Cowork에서 같은 설치 단위가 실제 tool과 resource를 노출하는지는 따로 검수하며 Desktop 직접
-등록 probe의 성공을 Plugin 배포 성공으로 대체하지 않는다. 두 Plugin은 각 Host의 Plugin UI에서
+Codex와 Claude Desktop의 **Claude Code 탭**으로 정한다(2026-11-02; Cowork 권장은 2026-09-23 결정이었고
+실측 기록은 보존한다). **Plugin 도구 검수와 MCP Apps 화면 검수는 별개**다. 2026-10-31 기준 Claude Code 탭은
+Plugin이 제공한 서버의 App을 그리지 않았으므로 Claude의 현재 화면 경로는 Desktop 설정 직접 등록이며, Windows에서는
+Companion의 **Claude Desktop 연결** 버튼이 그 등록을 대신한다([Companion 계약 §12](GIL_Companion_Install_Update_v0.1.md)).
+Desktop 직접 등록의 성공을 Plugin 배포 성공으로 대체하지 않는다. 두 Plugin은 각 Host의 Plugin UI에서
 설치되며 Skill과 공통 MCP server를 한 설치 단위로 제공한다. 사용자는 runtime을 설치하거나 JSON을
 편집하거나 server command를 등록하지 않는다.
 

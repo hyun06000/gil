@@ -37,8 +37,10 @@ format 4 Artifact Snapshot, dirty gate, 중단 복구 가능한 `gil restore`, �
 GIL의 주 사용자는 비개발자다. 인간은 명령과 저장 형식을 외우는 대신 지속형 **GIL Monitor**에서
 현재 실험, 실패한 시도와 다음 방향을 본다. Monitor는 선택 부가기능이 아니다. 현재 기본 경로는
 **MCP App fullscreen에서 가로 Graph와 채팅을 함께 보는 것**이다. Codex의 실제 화면·자동 갱신·
-기본 재시작 복원을 확인했다. Native Companion은 같은 UI를 별도 창으로 제공하는 대안으로
-유지하며, fullscreen 실패를 이유로 자동 실행하지 않는다. inline 카드는 미리보기이지 설치 완료
+기본 재시작 복원을 확인했다. Claude Desktop의 Claude Code 탭은 같은 Monitor를 inline 카드로 띄운 뒤
+**첫 클릭에 fullscreen**으로 펼친다(사용자 확인 10/31·11/01). Native Companion은 같은 UI를 별도 창으로
+제공하는 대안이자 Windows의 Host 연결·업데이트 관리 창이며, fullscreen 실패를 이유로 자동 실행하지
+않는다. Companion 창이 열린 것을 MCP App 표시 성공으로 세지 않는다. inline 카드는 미리보기이지 설치 완료
 상태가 아니다. PiP는 현재 지원을 주장하지 않는다.
 
 소스는 [MIT 라이선스](LICENSE)로 공개한다. 현재 친구·테스터용 채널은 **서명되지 않은 preview**다.
@@ -63,8 +65,10 @@ Claude Desktop의 **Claude Code**는 2026-10-30 소유자 보고로 MCP App full
 반환했지만 사용자 화면에는 서지 않았고(10/31 이 브랜치 빌드의 marketplace 설치본도 같음), 같은 세션의
 직접 등록 Monitor는 사용자가 **모니터 펼치기**로 fullscreen을 확인했다(10/31 진단, 서버 로그 일치).
 따라서 Claude에서는 Desktop 설정 직접 등록이 현재의 표시 경로다. 그 경로에서도 Host는 사용자 동작 안의 표시
-모드 요청만 적용해, Monitor는 inline으로 뜬 뒤 **첫 클릭에 fullscreen**으로 펼쳐진다(자동 펼침은 Codex만). 이번 변경부터 preview archive 하나에 Codex(`.agents/plugins`)와 Claude Code
-(`.claude-plugin`) 두 catalog를 함께 싣는다. 사용자 화면 인수와 fullscreen 중 도구 승인 창 병행은
+모드 요청만 적용해, Monitor는 inline으로 뜬 뒤 **첫 클릭에 fullscreen**으로 펼쳐진다(자동 펼침은 Codex만).
+preview archive 하나에 Codex(`.agents/plugins`)와 Claude Code(`.claude-plugin`) 두 catalog를 함께 싣고,
+Windows Companion은 **Codex 연결**과 **Claude Desktop 연결** 버튼으로 같은 고정 런처를 각 Host에 등록한다
+(Claude 버튼은 다음 Windows 후보부터, 자동 테스트만 통과). 사용자 화면 인수와 fullscreen 중 도구 승인 창 병행은
 [호출 경로별 진단](mcp-app/CLAUDE-DESKTOP-ROUTES.md)에 Host·버전별로 따로 기록하며, 한 경로의
 성공을 다른 경로로 일반화하지 않는다. 자세한 범위는 아래 구현 상태와 Roadmap을 따른다.
 
@@ -388,8 +392,10 @@ layer를 목표로 한다.
 
 ## Project status
 
-**현재 사용자 채널은 Codex/macOS Apple Silicon unsigned preview뿐이다. Windows 코드는 CI와
-개발 후보 단계이며 installer·서명·Companion 업데이트·clean-PC 인수가 없어 지원으로 표시하지 않는다.**
+**현재 사용자 채널은 unsigned preview 둘이다.** macOS Apple Silicon은 Plugin/archive `0.2.1-preview.8`,
+Windows x64는 Companion installer `0.1.1-owner.7`이며, 두 채널 모두 Codex와 Claude Desktop(Claude Code 탭)을
+같은 Core·Monitor·작업 규칙으로 지원한다. 네 조합의 확인 상태(실기기 확인 / 사용자 확인 / 자동 테스트만 통과 /
+사용자 확인 대기)는 [설치 안내](INSTALL.md)의 표를 따른다. 서명된 일반 공개판·Intel Mac·Windows ARM64는 없다.
 
 앞선 Go 구현과 과거 개발 이력은 기존 개발 저장소에 남겨 두었으며, 이 `gil` 저장소에는
 그 branch·tag·commit history를 가져오지 않았다. 현재 구현은 Rust로 작성하며, Git wrapper가

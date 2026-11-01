@@ -223,7 +223,7 @@ app.connect().then(() => {
   modes(context.availableDisplayModes?.includes('fullscreen')
     ? 'Monitor 가 준비되면 전체 화면을 자동 요청합니다. 그대로라면 모니터 펼치기를 눌러 주세요.'
     : Array.isArray(context.availableDisplayModes)
-      ? '이 표면은 펼친 Monitor 를 지원하지 않습니다. Codex 또는 Claude Desktop Cowork 에서 다시 열거나 별도 창을 사용하세요.'
+      ? '이 표면은 펼친 Monitor 를 지원하지 않습니다. fullscreen 을 지원하는 Host(Codex, Claude Desktop 의 Claude Code 탭)에서 다시 열거나 별도 창을 사용하세요.'
       : 'Host 의 표시 모드 지원 정보를 기다리고 있습니다.');
   void poll();
   maybeFullscreen();

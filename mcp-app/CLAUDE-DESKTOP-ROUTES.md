@@ -225,3 +225,26 @@ Monitor의 **모니터 펼치기** 결과와 채팅 병행, (3) fullscreen 중 �
 - **사용자 확인 (11/01, Codex, dark):** 펼친 Monitor가 Codex 화면과 어울린다고 답했다.
 - **판정:** 두 Host 모두 표준 변수를 보내므로 Host 이름 분기는 필요 없다. Codex fallback은 넣지 않는다.
 - **남은 것:** 보지 않은 쪽 테마(두 Host), Claude Code 연결 정보 `styles` 수. 사용자 화면 확인으로만 닫는다.
+
+## 2026-11-02 등록 자리 확인과 Host 동등 지원 정리
+
+- **Claude Code 탭이 읽는 설정 (읽기 전용 확인, 소유자 Mac):** 이 세션은 Claude Desktop의 Claude Code 탭 안에서
+  돌았고 `gil` 서버(`dev-20261101-local` Core)를 쓸 수 있었다. 그 항목은
+  `~/Library/Application Support/Claude/claude_desktop_config.json`의 `mcpServers.gil`에만 있었고, Claude Code 사용자
+  범위 설정 `~/.claude.json`의 `mcpServers`는 비어 있었다. 따라서 Claude Code 탭의 MCP 서버 등록 자리는 Desktop
+  설정 파일이다. `claude mcp add --scope user`가 Desktop의 Claude Code 탭에도 보이는지는 확인하지 않았다.
+- **Companion Claude Desktop adapter (코드, 화면 미확인):** Windows Companion에 **Claude Desktop 연결** 버튼을
+  추가했다(`companion/src/claude.rs`). Codex와 같은 고정 런처를 `claude_desktop_config.json`에 적되, Desktop이 실행
+  중이면 거절하고(위 10/31 되돌아감 관측 때문), 백업·임시 파일·rename·읽은 뒤 변경 없음 확인을 거치며, 다른 서버
+  항목과 사용자가 만든 동명 `gil` 등록은 바꾸지 않는다. Rust 단위 시험과 Windows 제품 계약 시험만 통과했다.
+  **실제 Windows Claude Desktop에서 버튼 → 새 대화 → Monitor 표시는 사용자 확인 대기**다.
+- **Windows Plugin 후보:** `candidate.mjs`가 `.claude-plugin/marketplace.json`과 `.claude-plugin/plugin.json`
+  (`${CLAUDE_PLUGIN_ROOT}/core/windows-x64/gil.exe`)을 함께 싣는다. Mac archive와 같은 모양이며, 10/31 판정대로
+  Claude Code 탭이 Plugin 서버의 App을 그리기 전에는 화면 경로가 아니다.
+- **문구:** Monitor의 inline-only 안내에서 “Codex 또는 Claude Desktop Cowork”를 “fullscreen 을 지원하는
+  Host(Codex, Claude Desktop 의 Claude Code 탭)”로, Windows 작업 폴더 도구의 “Codex 앱에서 선택”을 “사용 중인 Host
+  앱(Codex 또는 Claude Desktop)에서 선택”으로 바꿨다. 표시 정책은 여전히 Host 이름으로 갈라지지 않는다.
+- **이 세션에서 확인하지 못한 것:** 이 세션은 Desktop을 재시작하거나 새 대화를 열 수 없어 (1) Windows Companion
+  버튼 경로의 실제 화면, (2) 업데이트 뒤 두 Host의 다음 연결이 같은 새 Core를 받는지, (3) fullscreen 중 승인 창
+  병행(#1081), (4) Desktop 완전 종료 뒤 Monitor 복원은 모두 사용자 확인으로만 닫는다. 최소 재현 절차는 저장소
+  `INSTALL.md`의 Windows 절과 PR 본문에 적었다.

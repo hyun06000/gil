@@ -439,7 +439,7 @@ check("14. UI 에 쓰기 길이 없다 — .gil·Artifact·Journey·Will 을 건
   for (const button of all("button")) {
     // Native application-management controls exist in shared markup but must stay
     // hidden when this fixture Host has no corresponding capability.
-    if (button.matches('.connect-codex, .update')) {
+    if (button.matches('.connect-host, .update')) {
       if (!button.hidden) throw new Error(`지원하지 않는 관리 button 이 보인다: .${button.className}`);
       continue;
     }
