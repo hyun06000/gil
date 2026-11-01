@@ -2,7 +2,7 @@
 // MCP stdio proxy for repeatable model evaluations of one scenario in one temporary project.
 //
 //   node tools/scenarios/proxy.mjs --core <gil binary> --root <abs temp project> --events <jsonl>
-//        [--settings <dir>] [--private-root <dir>] [--scenario <dir>] [--synthetic-app-decision approve|request_changes]
+//        [--core-args-json <JSON string array>] [--settings <dir>] [--private-root <dir>] [--scenario <dir>] [--synthetic-app-decision approve|request_changes]
 //   node tools/scenarios/proxy.mjs --control --root <abs temp project> --events <jsonl> [--scenario <dir>]
 //
 // App-only tools (gil_plan_review/decide) are removed from the model-facing tools/list and refused if called.
@@ -22,10 +22,11 @@ import { CoreClient, runCommand, isolatedEnv } from './lib/rpc.mjs';
 import { makeRedactor } from './lib/redact.mjs';
 
 function parseArgs(argv) {
-  const o = { core: null, root: null, events: null, settings: null, privateRoot: null, scenario: null, synthetic: null, timeoutMs: 20000, control: false };
+  const o = { core: null, coreArgs: undefined, root: null, events: null, settings: null, privateRoot: null, scenario: null, synthetic: null, timeoutMs: 20000, control: false };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '--core') o.core = resolve(argv[++i]);
+    else if (a === '--core-args-json') o.coreArgs = JSON.parse(argv[++i]);
     else if (a === '--root') o.root = resolve(argv[++i]);
     else if (a === '--events') o.events = resolve(argv[++i]);
     else if (a === '--settings') o.settings = resolve(argv[++i]);
@@ -36,7 +37,8 @@ function parseArgs(argv) {
     else if (a === '--control') o.control = true;
     else throw new Error(`unknown argument ${a}`);
   }
-  if (o.control && (o.core || o.synthetic)) throw new Error('--control takes no --core and no synthetic decision');
+  if (o.coreArgs !== undefined && (!Array.isArray(o.coreArgs) || o.coreArgs.length > 32 || o.coreArgs.some(a => typeof a !== 'string' || a.length > 4096 || a.includes('\0')))) throw new Error('--core-args-json takes a bounded string array');
+  if (o.control && (o.core || o.synthetic || o.coreArgs)) throw new Error('--control takes no --core and no synthetic decision');
   if ((!o.core && !o.control) || !o.root || !o.events) throw new Error('--core, --root and --events are required');
   if (o.synthetic && !['approve', 'request_changes'].includes(o.synthetic)) throw new Error('--synthetic-app-decision takes approve or request_changes');
   if (!isAbsolute(o.root) || !existsSync(o.root) || !statSync(o.root).isDirectory()) throw new Error('--root must be an existing absolute directory');
@@ -86,7 +88,7 @@ async function main() {
     mkdirSync(home, { recursive: true }); mkdirSync(localAppData, { recursive: true });
     isolated = isolatedEnv({ home, localAppData });
   }
-  const core = o.control ? null : new CoreClient({ binary: o.core, settingsDir: o.settings, isolated, requestTimeoutMs: o.timeoutMs, label: 'core' }).start();
+  const core = o.control ? null : new CoreClient({ binary: o.core, args: o.coreArgs, settingsDir: o.settings, isolated, requestTimeoutMs: o.timeoutMs, label: 'core' }).start();
   core?.child.on('exit', () => setTimeout(() => process.exit(0), 50));
   let scope = null;
   const out = (frame) => process.stdout.write(JSON.stringify(frame) + '\n');

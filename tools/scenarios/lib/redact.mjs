@@ -34,5 +34,5 @@ export function makeRedactor({ roots = {}, secrets = [], maxString = 4000 } = {}
 
 /** True when a serialized value still carries any of the given secrets or labelled roots. */
 export function leaks(serialized, { secrets = [], roots = [] } = {}) {
-  return [...secrets, ...roots].filter((s) => typeof s === 'string' && s.length > 1 && serialized.includes(s));
+  return [...secrets, ...roots].filter((s) => typeof s === 'string' && s.length > 1 && (serialized.includes(s) || serialized.includes(JSON.stringify(s).slice(1, -1))));
 }

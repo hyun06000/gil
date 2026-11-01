@@ -21,11 +21,9 @@ function rig(synthetic, control = false) {
   const args = [join(here, 'proxy.mjs'), '--core', process.execPath, '--root', root, '--events', events, '--scenario', scenario, '--settings', join(work, 'bindings')];
   if (synthetic) args.push('--synthetic-app-decision', synthetic);
   if (control) { args.splice(args.indexOf('--core'), 2); args.push('--control'); }
-  // The proxy spawns `<core> mcp --serve` exactly like a real run; this executable wrapper makes
-  // that command run the JS fake Core. The fake ignores its arguments.
-  const fakeGil = join(work, 'fake-gil');
-  writeFileSync(fakeGil, `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(fake)} "$@"\n`, { mode: 0o755 });
-  if (!control) args[args.indexOf('--core') + 1] = fakeGil;
+  // Spawn the Node fixture directly on both OSes, without a Unix shell wrapper.
+  // Production invocation keeps CoreClient's default `mcp --serve` arguments.
+  if (!control) args.push('--core-args-json', JSON.stringify([fake]));
   const proxy = new CoreClient({ binary: process.execPath, args, requestTimeoutMs: 5000, label: 'proxy' });
   return { work, root, events, proxy: proxy.start() };
 }

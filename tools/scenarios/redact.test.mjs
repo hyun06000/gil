@@ -30,3 +30,10 @@ test('secrets added later are redacted too and null token keys stay null', () =>
   assert.equal(r.text(`t=${late}`), 't=<redacted-token>');
   assert.deepEqual(r.redact({ token: null, 'gil/planApprovalToken': undefined }), { token: null, 'gil/planApprovalToken': undefined });
 });
+
+test('serialized Windows paths are detected after JSON backslash escaping on every host', () => {
+  const root = String.raw`C:\Users\synthetic\project`;
+  assert.deepEqual(leaks(JSON.stringify({ root }), { roots: [root] }), [root]);
+  const redacted = makeRedactor({ roots: { project_root: root } }).redact({ root });
+  assert.deepEqual(leaks(JSON.stringify(redacted), { roots: [root] }), []);
+});

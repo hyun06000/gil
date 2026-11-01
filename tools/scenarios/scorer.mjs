@@ -6,6 +6,7 @@
 // fields are read from --human only; they are never inferred from protocol success.
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseEvents, replay } from './lib/trace.mjs';
 import { scoreProcedure, scoreAnswer, summarize } from './lib/score.mjs';
 import { runCommand } from './lib/rpc.mjs';
@@ -62,7 +63,7 @@ export async function score(o) {
   return { result, md };
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === new URL(import.meta.url).pathname) {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   score(parseArgs(process.argv.slice(2))).then(({ result, md }) => {
     process.stdout.write(md + '\n');
     process.exitCode = result.procedure.summary.verdict === 'fail' || result.answer.summary.verdict === 'fail' ? 1 : 0;
