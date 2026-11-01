@@ -18,6 +18,17 @@ Use only the user's selected absolute `project_root`. Read the tool's text guida
    preparation failed, report the display failure and continue the recorded Interview via `gil_open`.
    A display failure alone does not block Project work. A successful tool response does not prove
    that a screen is visible. In a new session, read `gil_context` once and resume instead of starting again.
+   **Keep the in-host MCP App present:** successful Project calls check recent App display reports.
+   When a receipt supplies `show_gil_monitor(scope_id)` because the Monitor is absent/hidden/unknown,
+   call it once before further work, without asking the user to open a Companion. For an explicit
+   display check use `gil_monitor_status(project_root)`; if `should_open` is true, prepare that root
+   and show the returned scope. `opening` is a 30-second grace, not proof of display: continue without
+   polling in a tight loop. Fresh `visible` reports (15-second lease) distinguish fullscreen/inline;
+   preserve an inline choice. Two unanswered show requests stop automatic attempts (`unconfirmed`):
+   report the display problem instead of adding cards indefinitely. A fresh visible report resets
+   that retry budget. Status covers this Project on this MCP connection. If a Host shares that
+   connection across chats, it cannot identify which chat contains the App. App reports do not prove
+   OS foreground visibility or that the human has looked.
 2. **Agree, then finish Interview.** Interview clarifies and agrees scope. Synthesis waits for the
    user's reply to its proposed statement; silence, earlier requests and the agent's own judgment
    are not approval. After explicit assent: close Synthesis → open/close Interview Outcome →
@@ -276,11 +287,11 @@ Report three things separately and never fold them into one "done":
 - **Start** — `gil_start` answered `ok`. Its `said` is GIL's receipt; pass it on.
 - **Monitor data** — `show_gil_monitor` returned a View: the display was requested and its data is
   ready. That is not proof anything is visible.
-- **Display** — unconfirmed until the user says so. Say that the Monitor display was requested and
-  its data is ready, and that whether it is on screen is still unconfirmed; ask them to press
-  **모니터 펼치기** or tell you if it stays inline or hidden. Only after the user confirms the graph
-  and the chat are on screen together may you report that the Monitor is showing. Never phrase a
-  tool result as "the Monitor is open", "opened the Monitor" or "fullscreen succeeded".
+- **Display** — `gil_monitor_status` reports recent observations from this connection's App.
+  `visible` with `display_mode: fullscreen` means the rendered App reported fullscreen and not hidden;
+  it does not prove OS foreground visibility or human attention. `opening` is only a grace period.
+  An unknown or expired report must never be described as a visible screen.
+
 
 Keep these boundaries:
 
@@ -300,13 +311,16 @@ Keep these boundaries:
   to distinguish an existing record from an unreadable/partial state; preserve all remnants and
   do not convert them. If reading succeeds, resume that journey without claiming this call created
   it. Only propose a fresh start when absence of records and remnants is actually established.
-- **Display retries are limited and never touch the project.** Retry `gil_monitor_prepare` /
-  `show_gil_monitor` at most once, and only for a transient answer such as `busy` or a broken
-  connection. Do not repeat them for a lasting refusal (`not_a_project`, `unsupported_format`,
-  `project_moved`, `settings_*`) or when the Host does not advertise the display. If it is
-  unclear whether the screen appeared, ask the user instead of calling `show_gil_monitor` again:
-  every call can add another card. Preparing the same root again returns the same scope; it does not
-  create a second project, Cycle or binding. Never repeat `gil_start` to "refresh" the screen.
+- **Restore the in-host App when work resumes.** Follow a receipt's `show_gil_monitor` handoff
+  once before further work. The server checks display observations on successful Project calls,
+  including `gil_context` in a new/restarted session. A status-only check uses `gil_monitor_status`;
+  when `should_open` is true, prepare the selected root and show its scope. Never use Companion as
+  an automatic replacement. Do not loop while `opening`, reopen a fresh inline/fullscreen App,
+  or retry after `unconfirmed` (two unanswered requests). A transient `busy` allows one retry;
+  `not_a_project`, `unsupported_format`, `project_moved` and `settings_*` require resolving the
+  reported cause rather than more display calls. Report lasting refusal or unsupported
+  Host display. This restores on GIL use; it cannot open a Host panel while Codex is closed or
+  while no Agent/tool activity occurs. Never repeat `gil_start` to refresh a screen.
 - **Fullscreen can be refused.** If the Host keeps the App inline or answers with another mode, do
   not claim fullscreen. Tell the user the actual state, that **모니터 펼치기** requests it by hand,
   and that the optional native Companion exists — and open the Companion only if they choose it.
@@ -441,18 +455,27 @@ Two surfaces can carry it, in this order:
 1. **MCP App fullscreen** — the supported Host shows the shared Monitor UI alongside its chat composer
 2. **optional native Companion** — if the user chooses it, a compatible desktop app shows the same UI in its own window
 
-The first unsigned preview's accepted target is **Codex on macOS Apple Silicon**. Its default is
-Plugin-only fullscreen; a separate Companion installation is **not required**. Windows, Intel Macs
-and Claude work-Plugin rendering are not accepted targets of this preview. Historical Claude Desktop
-Cowork/direct-MCP fullscreen demonstrations do not prove that a folder-connected Plugin works there.
-Do not present moving to Cowork as a verified fix. Fresh-Mac installation is deferred, not passed;
-if macOS blocks execution, stop without bypassing its security checks.
+The unsigned preview targets **macOS Apple Silicon** in two Hosts that share one Core: **Codex**
+(Plugin) and **Claude Desktop's Claude Code tab**. The extracted archive root carries both catalogs
+(Codex reads `.agents/plugins`, Claude Code reads `.claude-plugin`). As of 2026-10-31 the Claude Code
+Host does not render the Monitor App of a Plugin-installed server, while the same Core registered
+directly in Desktop settings renders inline and goes fullscreen on the user's first click inside
+the Monitor (that Host applies display-mode requests only within a user action, so no automatic
+request succeeds there); in Claude, treat the direct registration as the display route, tell the
+user to click the Monitor once to expand it, and treat a Plugin install as not yet visible. The default is Plugin-only fullscreen in
+Codex; a separate Companion installation is **not required**. Windows and Intel Macs are not
+accepted targets. The App sends the same one-shot fullscreen request to every Host and records the
+Host's reported name in its 연결 정보 panel; it never changes behaviour by Host name. A fullscreen
+seen in one Host, conversation mode or Desktop version is not evidence for another: report the
+actual Host and what the user saw. Fresh-Mac installation is deferred, not passed; if macOS blocks
+execution, stop without bypassing its security checks.
 
 For the in-host Monitor, use `gil_monitor_prepare(project_root)` with the user's explicit project
 or a host-verified root, then `show_gil_monitor(scope_id)` with its returned scope. The first tool
 does not render a UI; the second receives no filesystem path. Ask for the project if it is unknown.
-The App defaults to horizontal layout and automatically requests fullscreen **once**, after its
-Monitor is ready and the Host advertises support. If it stays inline, the user can press
+The App defaults to horizontal layout and automatically requests fullscreen after its Monitor is
+ready and the Host advertises support. If the Host leaves it inline, the App retries briefly on its
+own and then uses the user's first click inside the Monitor to request it; the user can also press
 **모니터 펼치기**. A user returning inline or choosing vertical must not be overridden. Do not call
 rendering tools repeatedly to refresh it: the App reads complete Views and exact Step details
 through its own read-only tools. Native Companion is never launched automatically by this App.
@@ -469,7 +492,8 @@ explicit native-window choice and uses the same tool.
 `gil_companion_status` currently reports the native coordinator's availability, not the mode of
 an individual MCP App instance. A missing Companion is not a reason to block the in-host Monitor;
 do not require `companion_state: ready` before `gil_monitor_prepare` / `show_gil_monitor`.
-Never treat the native coordinator's status as proof that fullscreen succeeded.
+Never treat the native coordinator's status as proof that fullscreen succeeded. Use
+`gil_monitor_status(project_root)` for recent per-connection MCP App display observations.
 
 ## What the tools report
 

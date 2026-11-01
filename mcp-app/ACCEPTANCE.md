@@ -10,6 +10,7 @@
 | --- | --- | --- |
 | 계산기 → 공학용 계산기 작업 중 Graph 실시간 갱신 | 사용자 확인, 9/25 | macOS Codex |
 | 실제 GIL Graph fullscreen | 사용자 확인, 9/27 | Claude Desktop 직접 등록; Plugin 업로드와 별개 |
+| 폴더 연결 Claude Code 세션의 GIL Graph fullscreen | 사용자 확인 + 서버 진단 `mode_response {fullscreen}`, 10/31 | Desktop 4.4212.0 직접 등록(9/25 JS 진단 빌드); Plugin 설치 경로는 같은 세션에서 미표시 |
 | 가로 DAG와 기본 가로보기·자동 fullscreen | 사용자 확인, 9/27 | macOS Codex 설치본 `0.2.0+codex.20260927122346` |
 | Rust 단일 MCP 설치본의 가로 DAG·fullscreen·노드 상세 | 확인 요청 후 사용자 동작 성공 보고, 9/28 | macOS Codex `0.2.0+codex.20260927134559`; 이전 JS 승인에서 추정한 것이 아님 |
 | 다른 대화에 갔다 돌아와 선택·접힘·보고서 유지 | 사용자 “그대로 유지돼”, 9/28 | macOS Codex; Host 완전 종료나 새 App 복원은 포함하지 않음 |
@@ -23,8 +24,10 @@
 | 요약 카드 인디케이터의 몸통·화살촉 접합 | `ui/layout.test.mjs`, 공용 UI selftest 6·64 | 몸통은 밑변에서 종료, cap 돌출 없음, 가로·세로·대각선·접힌 원 및 선택 강조 반지름 검증 |
 | fullscreen 하단 Report 여백 | `browser-check.mjs`의 iframe 밖 모의 composer | 1280×900·900×650·600×480에서 160/220px overlay 위로 마지막 줄 스크롤·hit test 통과; 실제 Claude 검수 아님 |
 
-자동 fullscreen은 한 App에서 한 번만 요청한다. 사용자가 inline으로 돌아가거나 세로보기를 고르면
-덮어쓰지 않는다. Host의 응답과 실제 화면을 구분하며, `show_gil_monitor`의 성공을 화면 표시로
+자동 fullscreen은 한 App의 처음 한 의도다: 준비 뒤 1회 요청하고, Host가 inline으로 두면 1.5초·4초 뒤
+두 번만 더 요청한 뒤 사용자의 첫 클릭에 마지막으로 요청한다(2026-10-31, Claude Code 직접 등록 경로에서
+자동 요청만 적용되지 않은 관측에 대한 보정). 사용자가 inline으로 돌아가거나 세로보기를 고르면 어떤 재요청도
+하지 않는다. Host의 응답과 실제 화면을 구분하며, `show_gil_monitor`의 성공을 화면 표시로
 단정하지 않는다. Native Companion은 유지하되 자동 실행하지 않는다.
 
 ## 현재 진행 기준
@@ -51,6 +54,10 @@ Host 함수 분리 시험의 UI metadata 소실은 유력한 메커니즘이지 
 폴더를 연결한 같은 대화에서는 공식 map 예제도 표시되지 않았다. 폴더 없이 Monitor를 보며 파일을
 수정하는 흐름, fullscreen이 도구 권한 창을 가리는 새 차단점(#1081)과 열린 UX 문제는
 [CLAUDE-DESKTOP-ROUTES.md](./CLAUDE-DESKTOP-ROUTES.md)에 기록한다.
+
+2026-10-30 Desktop 4.4212.0의 Claude Code 탭에서는 소유자가 MCP App fullscreen 정상 지원을 보고했고,
+폴더가 연결된 세션의 Plugin 경로 `show_gil_monitor`가 View를 반환했다. 사용자 화면 확인은 같은 문서의
+10/30 항목에 따로 적으며, 9/28 차단점 기록을 소급해 수정하지 않는다.
 
 ## 다음 사용자 화면 확인
 

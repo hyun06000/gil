@@ -529,6 +529,11 @@ impl ProjectSession {
     ///
     /// Exit 은 안에서 이미 확정된 것 중에서 유도된다([`Cycle::exit_would_be`]). 그래서
     /// 여기서 하는 일은 「지금 폴더가 그 세계와 같은가」를 묻는 것뿐이다.
+    pub fn close_chain(&mut self, report: Report) -> Result<crate::ChainRef, SessionError> {
+        self.require_clean(Gate::Cycle(self.project.current_cycle().id().to_ref()))?;
+        self.project.close_chain(report).map_err(|err| SessionError::Action(ActionError::Chain(err)))
+    }
+
     pub fn close_cycle(&mut self, report: Report) -> Result<ClosedCycle, SessionError> {
         let cycle = self.project.cycles().current();
         self.require_clean(Gate::Cycle(cycle.id().to_ref()))?;
@@ -831,7 +836,7 @@ fn private_storage_before_lock(gil: &Path, state_path: &Path) -> Result<u32, Ses
     #[cfg(windows)]
     {
         let format = declared_format_now(state_path)?;
-        if format == crate::VISUAL_FORMAT {
+        if matches!(format, crate::VISUAL_FORMAT | crate::CHAIN_VISUAL_FORMAT) {
             crate::windows_fs::verify_storage_tree(gil).map_err(|source| SessionError::Store(StoreError::Read {
                 path: store::said_path(gil), source,
             }))?;
@@ -865,7 +870,7 @@ fn private_storage_after_lock(gil: &Path, state_path: &Path, before: u32) -> Res
                 )),
             }));
         }
-        if after == crate::VISUAL_FORMAT {
+        if matches!(after, crate::VISUAL_FORMAT | crate::CHAIN_VISUAL_FORMAT) {
             crate::windows_fs::verify_storage_tree(gil).map_err(|source| SessionError::Store(StoreError::Read {
                 path: store::said_path(gil), source,
             }))?;

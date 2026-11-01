@@ -4,7 +4,7 @@ import {execFileSync} from 'node:child_process';
 import {chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile} from 'node:fs/promises';
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {ARCHIVE_FLAGS, CORE, MANIFEST, hash, inventory, verifyPayload, verifyTree} from './artifact.mjs';
+import {ARCHIVE_FLAGS, CLAUDE_MANIFEST, CORE, MANIFEST, hash, inventory, verifyPayload, verifyTree} from './artifact.mjs';
 import {compareVersion, validateRecord} from './update-policy.mjs';
 import {smoke} from './smoke.mjs';
 import {compatibility} from './compatibility.mjs';
@@ -16,7 +16,7 @@ export const TRUST = Object.freeze({developer_id: 'not_provided', notarization: 
   os_security_override: 'prohibited', publication: 'requires_separate_approval'});
 const notice = (version, profile = 'default') => `# GIL ${version} — unsigned opt-in preview candidate
 
-macOS Apple Silicon / Codex only. Not a stable release; not yet published.
+macOS Apple Silicon only, for Codex and Claude Code (Claude Desktop). Not a stable release; not yet published.
 No Apple Developer ID signature or notarization is provided. Ad-hoc code signing may be present.
 Fresh-Mac installation is deferred, NOT passed. macOS may refuse to run this software.
 Do not disable Gatekeeper or remove quarantine to install it. Stop if the OS blocks execution.
@@ -24,7 +24,8 @@ SHA-256 checks integrity; it does not authenticate the publisher or replace Appl
 Install/update only after informed user approval through the verified Plugin channel.
 The installed runtime needs no Node, npm, Cargo, Homebrew or separate Companion app.
 Core, MCP tools and Monitor UI are bundled; a successful tool response is not proof of visible fullscreen.
-Windows, Intel Macs and Claude work-Plugin rendering are not accepted targets of this preview.
+Windows and Intel Macs are not accepted targets of this preview. Codex and Claude Code install from the same
+extracted root (.agents/plugins and .claude-plugin catalogs); each Host's on-screen Monitor is accepted separately.
 Removing the Plugin must not remove a Project or its .gil records.
 See release.json for exact bytes and source; publication remains a separate reviewed operation.
 ` + (profile === 'visual-authoring' ? `
@@ -94,7 +95,7 @@ export async function stageUnsigned({input, output, version, profile = 'default'
   for (const file of before.files) {
     let bytes = await readFile(join(input, file.path));
     assert.equal(hash(bytes), file.sha256, 'input changed during staging');
-    if (file.path === MANIFEST) {
+    if (file.path === MANIFEST || file.path === CLAUDE_MANIFEST) {
       const manifest = JSON.parse(bytes);
       manifest.version = version; // Only output metadata changes; Core and Skill identities stay put.
       bytes = Buffer.from(json(manifest));

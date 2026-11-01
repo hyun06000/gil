@@ -47,6 +47,12 @@ const DEEPER: &str = "    ";
 /// 물을 수 없게 된다(`captured_at` 은 표시용이며 판정에 쓰지 않는다).
 pub fn render_monitor_text(seen: &MonitorSnapshot) -> String {
     let mut out = String::from("GIL Monitor\n");
+    if let Some(chain) = &seen.current_chain {
+        out.push_str(&format!("Chain: {} · {} · Entry {} · 현재 {}\n", chain.chain_ref, if chain.exit_snapshot_ref.is_some() { "closed" } else { "open" }, chain.entry_snapshot_ref, chain.current_cycle_ref));
+        if let Some(report) = &chain.report {
+            out.push_str(&format!("Chain 판정: {} · Exit: {}\n승인 근거: {}\n인계 요약: {}\n", report.get("verdict").unwrap_or(""), chain.exit_snapshot_ref.unwrap(), report.get("closing_synthesis_ref").unwrap_or(""), report.get("handoff_summary").unwrap_or("")));
+        }
+    }
     write_here(&mut out, seen);
     write_active_lineage(&mut out, seen);
     write_left_behind(&mut out, seen);

@@ -389,13 +389,17 @@ fn no_will_is_invented_from_an_open_step() {
 
 #[test]
 fn nothing_that_does_not_exist_yet_appears_in_the_model() {
-    // Chain 도 승인 mode 도 시각 자료도 아직 없다. `chain: null` 같은 빈 자리조차 두지 않는다.
+    // Legacy wire에는 가상 Chain/빈 placeholder를 넣지 않는다. 개발 Chain은 실제 저장에서만 읽는다.
     let dir = branched("absent");
     let seen = monitor(&dir);
+    let wire = serde_json::to_value(gil::monitor_view_v1(&seen).unwrap()).unwrap();
+    assert_eq!(seen.current_chain.is_some(), cfg!(feature = "chain-core"));
+    assert_eq!(wire.get("chain").is_some(), cfg!(feature = "chain-core"));
+    assert_eq!(wire["current"].get("chain_ref").is_some(), cfg!(feature = "chain-core"));
     let shown = format!("{seen:?}");
 
     for absent in [
-        "chain", "Chain", "approval", "Approval", "checkpoint", "Checkpoint", "milestone",
+        "approval", "Approval", "checkpoint", "Checkpoint", "milestone",
         "stepwise", "autonomous", "media", "attachment",
     ] {
         assert!(

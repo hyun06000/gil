@@ -169,7 +169,7 @@ fn only_runnable_values_are_offered_and_not_yet_stands_apart() {
     assert_eq!(offered, ["open_child"], "실행할 수 없는 값이 섞였다");
     assert_eq!(
         action.not_yet,
-        vec![("close_chain".to_string(), "Chain 을 아직 짓지 않았다".to_string())]
+        vec![("close_chain".to_string(), "실제 Chain 안에서만 승인된 종료 Synthesis를 담은 Interview를 닫고 Chain Report를 제출한다. 기존 format 4/5에서는 사용할 수 없다".to_string())]
     );
 
     let shown = contract.constraints("  ");
@@ -180,7 +180,7 @@ fn only_runnable_values_are_offered_and_not_yet_stands_apart() {
         !offered_part.contains("close_chain"),
         "아직인 값이 허용값에 섞였다:\n{shown}"
     );
-    assert!(not_yet_part.contains("close_chain") && not_yet_part.contains("아직 짓지 않았다"));
+    assert!(not_yet_part.contains("close_chain") && not_yet_part.contains("기존 format 4/5에서는 사용할 수 없다"));
 }
 
 #[test]

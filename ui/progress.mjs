@@ -3,7 +3,7 @@ export function progressTracker() {
   const scopes = new Map();
   return (scope, view, now = Date.now()) => {
     // Exclude read timestamps and world dirtiness: neither means a GIL record changed.
-    const key = JSON.stringify([view.current, view.timeline, view.current_will]);
+    const key = JSON.stringify([view.current, view.chain, view.timeline, view.current_will]);
     const previous = scopes.get(scope);
     const changed = !!previous && previous.key !== key;
     const state = { key, observedAt: changed || !previous ? now : previous.observedAt,
@@ -21,9 +21,9 @@ export function progressSummary(view) {
     define: '문제 정의', hypothesis: '가설', verify: '구현·검증', analysis: '결과 분석', outcome: '판정' };
   const closed = view.timeline.reduce((n, one) => n + one.steps.filter(s => s.state === 'closed').length, 0);
   return {
-    position: step ? `${names[step.kind] || step.kind} · ${step.state === 'open' ? '열려 있음' : '닫힘'}` : '다음 단계 경계',
-    action: will?.next_action || '열린 행동 계약이 없습니다. 다음 단계를 확인합니다.',
-    done: will?.done_when || '새 행동을 열 때 완료 조건을 정합니다.',
-    records: `닫힌 단계 ${closed}개 · 현재 ${view.current.cycle_ref}${view.current.step_ref ? ` / ${view.current.step_ref}` : ''}`,
+    position: view.chain?.state === 'closed' ? 'Chain 종료' : step ? `${names[step.kind] || step.kind} · ${step.state === 'open' ? '열려 있음' : '닫힘'}` : '다음 단계 경계',
+    action: view.chain?.state === 'closed' ? `최종 판정: ${view.chain.report?.verdict || ''}` : will?.next_action || '열린 행동 계약이 없습니다. 다음 단계를 확인합니다.',
+    done: view.chain?.state === 'closed' ? (view.chain.report?.handoff_summary || 'Chain Report가 저장되었습니다.') : will?.done_when || '새 행동을 열 때 완료 조건을 정합니다.',
+    records: `${view.current.chain_ref ? `Chain ${view.current.chain_ref}${view.chain?.state === "closed" ? ` 닫힘 (${view.chain.report?.verdict || ""})` : " 열림"} · ` : ''}닫힌 단계 ${closed}개 · 현재 ${view.current.cycle_ref}${view.current.step_ref ? ` / ${view.current.step_ref}` : ''}`,
   };
 }

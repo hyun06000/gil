@@ -59,8 +59,8 @@ Companion   읽기 전용 Monitor · DAG·Report UI · Project watcher · 지속
 ```
 
 Companion과 MCP App에 Agent write 명령을 넣지 않는다. Plugin은 Host가 그리는 MCP App resource를
-제공하지만 별도 native 창 수명은 Companion이 맡는다. 기본 인간 표면은 Codex / Claude Desktop
-Cowork의 fullscreen이며 Companion은 Windows·독립 창·Host 미지원 fallback으로 유지한다.
+제공하지만 별도 native 창 수명은 Companion이 맡는다. 기본 인간 표면은 Codex와 Claude Desktop
+(Claude Code·Cowork)의 MCP App fullscreen이며 Companion은 Windows·독립 창·Host 미지원 fallback으로 유지한다.
 
 ## MCP fullscreen Monitor (개발 인수 단계)
 
@@ -251,14 +251,16 @@ Codex 쪽 절차다. `node package-native.mjs claude /새/경로/gil-plugin.zip`
 묶음을 만든다(기존 zip은 덮지 않는다). 설치 registry(`~/.claude/plugins/…`)는 손으로 고치지 않는다. 갱신된 skill 과 tool 은
 **새 session** 에서 붙는다.
 
-저장소 최상위의 `.claude-plugin/marketplace.json` 은 그 묶음의 정본 descriptor 다. **Desktop UI
-에서 로컬 디렉터리를 marketplace 로 더하는 자리는 확인되지 않았다** — 그 문을 전제로 절차를
-적지 않는다. 사용자 배포 경로는 local upload 가 아니라 **remote marketplace** 이며, 그것은 아직
-열려 있다(M5-E).
+저장소 최상위의 `.claude-plugin/marketplace.json` 은 source clone 용 개발 descriptor 다. 사용자
+배포 경로는 Codex 와 같은 **preview archive** 다: `distribution/codex/build-preview.mjs` 가 만드는
+tree 는 `.agents/plugins/marketplace.json`(Codex) 과 `.claude-plugin/marketplace.json`(Claude Code,
+`distribution/codex/claude-marketplace.json` 원본) 을 함께 싣고, `.claude-plugin/plugin.json` 은
+Codex manifest 와 같은 이름·설명·Core 를 `${CLAUDE_PLUGIN_ROOT}` 기준으로 가리킨다. 압축을 푼 폴더를
+Claude Code 에서 marketplace 로 더하면 같은 Plugin 이 설치된다(절차는 저장소 INSTALL.md).
 
 ```text
 local Plugin upload    개발 인수 경로 — 이 저장소에서 지어 올리고, 받는 쪽도 개발자다
-remote marketplace     사용자 배포 경로 — self-contained artifact 와 release pipeline 이 필요하다
+preview archive        사용자 배포 경로 — Codex 와 Claude Code 가 같은 압축본의 서로 다른 catalog 를 읽는다
 ```
 
 source clone은 **비개발자 설치의 완성본이 아니다.** 만드는 개발자에게는 `make-core.sh`와

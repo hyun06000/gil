@@ -13,6 +13,15 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 mod common;
 
+fn expected_start_format() -> u64 {
+    match (cfg!(feature = "chain-core"), cfg!(feature = "visual-authoring")) {
+        (false, false) => 4,
+        (false, true) => 5,
+        (true, false) => 6,
+        (true, true) => 7,
+    }
+}
+
 /// State path used by the product-facing MCP start. On Windows the working tree and the private
 /// GIL record deliberately live in different roots.
 fn product_state_path(root: &Path) -> PathBuf {
@@ -87,6 +96,18 @@ fn migration_stdio_two_approvals_backup_apply_restart_and_preservation() {
             let mut p=common::bootstrap_from(s.project().clone());common::up_to_verify(&mut p);p
         };
         *s.project_mut()=p;s.commit().unwrap();drop(s);
+        // This migration contract starts from a synthetic historical format-4 record,
+        // even when the test binary's default writer creates a Chain.
+        #[cfg(feature = "chain-core")]
+        {
+            let path = root.join(gil::STATE_PATH);
+            let mut value: serde_norway::Value = serde_norway::from_slice(&fs::read(&path).unwrap()).unwrap();
+            value["cycles"] = value["chains"]["nodes"][0]["cycles"].clone();
+            value.as_mapping_mut().unwrap().remove(serde_norway::Value::from("chains"));
+            value["format"] = serde_norway::Value::from(4);
+            fs::write(&path, serde_norway::to_string(&value).unwrap()).unwrap();
+            assert!(gil::load(common::spec(), &path).unwrap().current_chain().is_none());
+        }
         fs::write(root.join("미확정 변경.txt"),"공백과 한글\n다음 줄\n").unwrap();
         fs::write(root.join(".gil/unreferenced"),b"retain even unreferenced").unwrap();
         fs::create_dir(root.join(".git")).unwrap();
@@ -151,7 +172,7 @@ fn migration_stdio_two_approvals_backup_apply_restart_and_preservation() {
     }
 }
 
-/// A format-5 Verify without images must close with the typed shape carrying a `not_needed` (or
+/// A visual Verify (format 5 or 7) must close with the typed shape carrying a `not_needed` (or
 /// `missing`) declaration; the ordinary text close of that Verify is refused and converts nothing.
 #[cfg(all(any(unix, windows), feature = "visual-authoring"))]
 #[test]
@@ -160,7 +181,7 @@ fn format5_verify_without_images_uses_typed_close_with_a_declaration() {
     use gil::{CycleKind, NodeKind};
     let root=scratch("verify-no-images");
     let mut mcp=Client::serve_with(&scratch("verify-no-images-settings")); mcp.initialize();
-    assert_eq!(monitor_call(&mut mcp,"gil_start",json!({"project_root":root}))["structuredContent"]["storage_format"],5);
+    assert_eq!(monitor_call(&mut mcp,"gil_start",json!({"project_root":root}))["structuredContent"]["storage_format"],expected_start_format());
     let mut p=common::bootstrap_from(load_product(&root));
     common::up_to_verify(&mut p);
     save_product(&root, &p);
@@ -210,7 +231,7 @@ fn authoring_stdio_close_reuse_confirmation_and_rejections() {
     }
     let root=scratch("authoring-new-wire");
     let mut mcp=Client::serve_with(&scratch("authoring-settings")); mcp.initialize();
-    assert_eq!(monitor_call(&mut mcp,"gil_start",json!({"project_root":root}))["structuredContent"]["storage_format"],5);
+    assert_eq!(monitor_call(&mut mcp,"gil_start",json!({"project_root":root}))["structuredContent"]["storage_format"],expected_start_format());
     let mut p=common::bootstrap_from(load_product(&root));
     common::up_to_verify(&mut p);
     save_product(&root, &p);
@@ -353,7 +374,7 @@ fn authoring_declarations_and_failed_commit_keep_reports_open() {
     for state in ["not_needed","missing","attached"] {
         let root=scratch(&format!("authoring-new-{state}"));
         let started=monitor_call(&mut mcp,"gil_start",json!({"project_root":root}));
-        assert_eq!(started["structuredContent"]["storage_format"],5,"{started}");
+        assert_eq!(started["structuredContent"]["storage_format"],expected_start_format(),"{started}");
         let p=load_product(&root);
         let mut p=common::bootstrap_from(p); common::up_to_verify(&mut p);
         save_product(&root, &p);
@@ -526,7 +547,8 @@ fn half_typed_close_is_rejected_with_the_missing_field_and_recovery_is_an_ordina
     let opened = monitor_call(&mut mcp, "gil_open", json!({"project_root": at, "kind": "question",
         "contract": "objective: 사용자의 목표를 확인한다\nnext_action: 무엇을 만들고 싶은지 묻는다\ndone_when: 사용자의 원문 응답을 얻는다\n"}));
     assert_eq!(opened["structuredContent"]["ok"], true, "{opened}");
-    assert!(opened["content"][0]["text"].as_str().unwrap().contains("gil_close"));
+    assert!(opened["content"].as_array().unwrap().iter().any(|c|
+        c["text"].as_str().is_some_and(|s| s.contains("gil_close"))));
     assert!(opened["structuredContent"]["said"].as_str().unwrap().contains("진행 경계"));
     let before = std::fs::read(at.join(gil::STATE_PATH)).unwrap();
     let wrong = json!({"project_root": at, "report": "question: 무엇을 만들까\n",
@@ -677,6 +699,7 @@ impl Client {
 }
 
 fn text_of(reply: &serde_json::Value) -> String {
+    if let Some(said) = reply["result"]["structuredContent"]["said"].as_str().filter(|s| !s.is_empty()) { return said.to_owned(); }
     reply["result"]["content"][0]["text"]
         .as_str()
         .unwrap_or_else(|| panic!("text 가 없다: {reply}"))
@@ -921,14 +944,14 @@ fn initialize_succeeds_and_says_who_is_answering() {
 }
 
 #[test]
-fn tools_list_preserves_nineteen_tools_and_the_read_only_app_boundary() {
+fn tools_list_preserves_twenty_tools_and_the_read_only_app_boundary() {
     let mut mcp = Client::serve();
     mcp.initialize();
     let got = mcp.request("tools/list", serde_json::json!({}));
     let tools = got["result"]["tools"].as_array().expect("tools");
     let mut names: Vec<_> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     names.sort();
-    let mut expected=vec!["gil_close", "gil_companion_status", "gil_context", "gil_cycle", "gil_help", "gil_monitor_detail", "gil_monitor_poll", "gil_monitor_prepare", "gil_monitor_read", "gil_monitor_report_image", "gil_monitor_report_visuals", "gil_open", "gil_restore", "gil_revisit", "gil_start", "gil_status", "gil_story", "show_gil_companion", "show_gil_monitor"];
+    let mut expected=vec!["gil_close", "gil_companion_status", "gil_context", "gil_cycle", "gil_help", "gil_monitor_detail", "gil_monitor_poll", "gil_monitor_prepare", "gil_monitor_read", "gil_monitor_report_image", "gil_monitor_report_visuals", "gil_monitor_status", "gil_open", "gil_restore", "gil_revisit", "gil_start", "gil_status", "gil_story", "show_gil_companion", "show_gil_monitor"];
     if cfg!(feature="visual-authoring") {
         expected.extend(["gil_report_visuals", "gil_migration_check", "gil_migration_prepare", "gil_migration_apply", "gil_migration_status"]);
         if cfg!(windows) { expected.push("gil_prepare_workspace"); }
@@ -1254,12 +1277,14 @@ fn a_place_without_a_project_is_refused() {
 fn the_servers_own_working_directory_never_leaks_into_the_answer() {
     let asked = scratch("asked");
     let elsewhere = scratch("elsewhere");
+    let settings = scratch("cwd-monitor-settings");
     started(&asked);
     started(&elsewhere);
 
     let mut kid = Command::new(gil())
         .args(["mcp", "--serve"])
         .current_dir(&elsewhere) // ← 다른 Project 안에 서 있다
+        .env("GIL_MONITOR_STATE_DIR", &settings)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -1275,6 +1300,7 @@ fn the_servers_own_working_directory_never_leaks_into_the_answer() {
     assert_eq!(said.as_bytes(), cli_status(&asked).as_bytes(), "{said}");
     std::fs::remove_dir_all(&asked).ok();
     std::fs::remove_dir_all(&elsewhere).ok();
+    std::fs::remove_dir_all(&settings).ok();
 }
 
 /// stdin 이 닫히면 **깨끗이** 끝난다 — 매달리지 않고, 뒤에 쓰레기를 남기지 않는다.
@@ -1438,12 +1464,17 @@ fn starting_a_project_leads_to_one_monitor_scope_and_the_first_interview_updates
     assert_eq!(started["isError"], false, "{started}");
     assert_eq!(started["structuredContent"]["ok"], true);
     let receipt = started["structuredContent"]["said"].as_str().unwrap();
-    assert!(receipt.starts_with("프로젝트를 시작했다.\n현재: cycle:C1 · interview\n"), "{receipt}");
+    let prefix = if cfg!(feature = "chain-core") {
+        "프로젝트를 시작했다.\nChain: chain:C1 · open · Entry snapshot:A1\n현재: cycle:C1 · interview\n"
+    } else {
+        "프로젝트를 시작했다.\n현재: cycle:C1 · interview\n"
+    };
+    assert!(receipt.starts_with(prefix), "{receipt}");
     assert!(receipt.contains("실행\n  gil open\n"), "{receipt}");
     let state = std::fs::read(product_state_path(&root)).unwrap();
-    assert!(state.starts_with(if cfg!(feature="visual-authoring") { b"format: 5\n" } else { b"format: 4\n" }));
+    assert!(state.starts_with(format!("format: {}\n", expected_start_format()).as_bytes()));
     if cfg!(feature="visual-authoring") {
-        assert_eq!(started["structuredContent"]["storage_format"],5);
+        assert_eq!(started["structuredContent"]["storage_format"],expected_start_format());
         assert_eq!(started["structuredContent"]["display_confirmed"],false);
     }
     assert_eq!(binding_files(&settings), 1, "MCP 시작은 같은 root 의 Monitor 를 준비한다");
@@ -1667,7 +1698,7 @@ fn onedrive_working_folder_stays_put_and_workspace_prep_still_needs_approval() {
     // Starting in the prepared folder works once it is the explicitly given root.
     let started = monitor_call(&mut mcp, "gil_start", json!({"project_root": planned}));
     assert_eq!(started["structuredContent"]["ok"], true, "{started}");
-    assert_eq!(started["structuredContent"]["storage_format"], 5);
+    assert_eq!(started["structuredContent"]["storage_format"], expected_start_format());
     mcp.eof();
 }
 
@@ -1856,4 +1887,135 @@ fn onedrive_environment_values_do_not_move_the_working_folder() {
     assert_eq!(got["structuredContent"]["record_storage"], "private_app_data");
     assert!(!stale.join("p").join(".gil").exists());
     mcp.eof();
+}
+
+
+#[test]
+fn monitor_presence_reopens_on_resume_and_close_but_not_while_visible_and_does_not_survive_restart() {
+    use serde_json::{Value, json};
+    fn needs_show(result: &Value) -> bool {
+        result["content"].as_array().unwrap().iter().any(|c|
+            c["text"].as_str().is_some_and(|s| s.contains("show_gil_monitor({")))
+    }
+    let at = scratch("presence"); let root = at.join("project");
+    std::fs::create_dir(&root).unwrap(); started(&root);
+    let before = std::fs::read(root.join(gil::STATE_PATH)).unwrap();
+    let settings = at.join("settings");
+    let mut mcp = Client::serve_with(&settings); mcp.initialize();
+    let args = json!({"project_root":root});
+    let status = monitor_call(&mut mcp,"gil_monitor_status",args.clone());
+    assert_eq!(status["structuredContent"]["state"],"unknown");
+    assert_eq!(binding_files(&settings),0,"status must not register a binding");
+    let resumed = monitor_call(&mut mcp,"gil_context",args.clone());
+    assert!(needs_show(&resumed),"{resumed}");
+    assert!(resumed["content"][0]["text"].as_str().unwrap().contains("show_gil_monitor({"), "display recovery precedes workflow guidance");
+    let scope = status["structuredContent"]["scope_id"].clone();
+    let shown = monitor_call(&mut mcp,"show_gil_monitor",json!({"scope_id":scope}));
+    assert_ne!(shown["isError"],true);
+    assert_eq!(monitor_call(&mut mcp,"gil_monitor_status",args.clone())["structuredContent"]["state"],"opening");
+    assert!(!needs_show(&monitor_call(&mut mcp,"gil_context",args.clone())));
+    // A normal read/poll is not a visible App acknowledgement.
+    monitor_call(&mut mcp,"gil_monitor_poll",json!({"scope_id":scope}));
+    assert_ne!(monitor_call(&mut mcp,"gil_monitor_status",args.clone())["structuredContent"]["state"],"visible");
+    let observation = |sequence:&str, state:&str| json!({"scope_id":scope,"instance_id":"test-app","sequence":sequence,"presentation":state});
+    monitor_call(&mut mcp,"gil_monitor_poll",observation("1","fullscreen"));
+    let visible=monitor_call(&mut mcp,"gil_monitor_status",args.clone());
+    assert_eq!(visible["structuredContent"]["state"],"visible");
+    assert_eq!(visible["structuredContent"]["display_mode"],"fullscreen");
+    assert!(!needs_show(&monitor_call(&mut mcp,"gil_context",args.clone())));
+    monitor_call(&mut mcp,"gil_monitor_poll",observation("2","inline"));
+    assert!(!needs_show(&monitor_call(&mut mcp,"gil_context",args.clone())));
+    let other = at.join("other-project"); std::fs::create_dir(&other).unwrap(); started(&other);
+    assert_eq!(monitor_call(&mut mcp,"gil_monitor_status",json!({"project_root":other}))["structuredContent"]["state"],"unknown");
+    monitor_call(&mut mcp,"gil_monitor_poll",observation("3","hidden"));
+    assert!(needs_show(&monitor_call(&mut mcp,"gil_context",args.clone())));
+    monitor_call(&mut mcp,"gil_monitor_poll",observation("4","closed"));
+    // Delayed events cannot resurrect a closed instance.
+    monitor_call(&mut mcp,"gil_monitor_poll",observation("2","fullscreen"));
+    assert!(needs_show(&monitor_call(&mut mcp,"gil_context",args.clone())));
+    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),before);
+    mcp.eof();
+    let mut restarted=Client::serve_with(&settings);restarted.initialize();
+    assert_eq!(monitor_call(&mut restarted,"gil_monitor_status",args.clone())["structuredContent"]["state"],"unknown");
+    assert!(needs_show(&monitor_call(&mut restarted,"gil_context",args)));
+    let invalid=restarted.request("tools/call",json!({"name":"gil_monitor_poll","arguments":{"scope_id":scope,"instance_id":"partial"}}));
+    assert!(invalid.get("error").is_some());
+    assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(),before);
+    restarted.eof();std::fs::remove_dir_all(at).unwrap();
+}
+
+/// Same typed containment on both CLI and native MCP, including the image/private-store profile.
+#[cfg(feature = "chain-core")]
+#[test]
+fn chain_profile_stdio_start_monitor_and_restart_preserve_containment() {
+    use serde_json::json;
+    let root = scratch("chain-profile-root");
+    let settings = scratch("chain-profile-settings");
+    let mut mcp = Client::serve_with(&settings);
+    mcp.initialize();
+    let started = monitor_call(&mut mcp, "gil_start", json!({"project_root": root}));
+    assert_eq!(started["structuredContent"]["ok"], true, "{started}");
+    assert!(started["structuredContent"]["said"].as_str().unwrap().contains("chain:C1"));
+    #[cfg(feature = "visual-authoring")]
+    assert_eq!(started["structuredContent"]["storage_format"], 7);
+    let state = product_state_path(&root);
+    let before = std::fs::read(&state).unwrap();
+    let project = gil::load(common::spec(), &state).unwrap();
+    assert_eq!(project.current_chain().unwrap().cycles().nodes().len(), 1);
+    assert!(project.current_chain().unwrap().exit_snapshot().is_none());
+    let prepared = monitor_call(&mut mcp, "gil_monitor_prepare", json!({"project_root": root}));
+    let scope = prepared["structuredContent"]["scope_id"].clone();
+    let shown = monitor_call(&mut mcp, "show_gil_monitor", json!({"scope_id": scope}));
+    let view = &shown["structuredContent"]["view"];
+    assert_eq!(view["current"]["chain_ref"], "chain:C1");
+    assert_eq!(view["chain"]["cycle_refs"], json!(["cycle:C1"]));
+    assert_eq!(view["chain"]["entry_snapshot_ref"], "snapshot:A1");
+    assert!(view["chain"]["exit_snapshot_ref"].is_null());
+    mcp.eof();
+    let mut mcp = Client::serve_with(&settings);
+    mcp.initialize();
+    let status = monitor_call(&mut mcp, "gil_status", json!({"project_root": root}));
+    assert!(status["structuredContent"]["said"].as_str().unwrap().contains("Chain: chain:C1"));
+    let context = monitor_call(&mut mcp, "gil_context", json!({"project_root": root}));
+    assert!(context["structuredContent"]["said"].as_str().unwrap().contains("현재 Chain: chain:C1"));
+    assert_eq!(std::fs::read(&state).unwrap(), before);
+    mcp.eof();
+}
+
+#[cfg(feature = "chain-core")]
+#[test]
+fn chain_profile_stdio_closing_report_survives_lost_response_and_monitor_restart() {
+    use serde_json::json;
+    for visual in [false, true] {
+        let root = common::scratch(if visual { "closing-seven" } else { "closing-six" });
+        common::private_storage(&root);
+        let path = root.join(gil::STATE_PATH);
+        let project = common::closing_ready("failure");
+        let project = if visual { project.prepare_visual_upgrade().unwrap() } else { project };
+        gil::save(&project, &path).unwrap();
+        let settings = scratch("closing-settings");
+        let mut mcp = Client::serve_with(&settings);
+        mcp.initialize();
+        let report = "verdict: failure\nclosing_synthesis_ref: step:C3/S3\nhandoff_summary: Explored paths; unresolved question recorded.";
+        let args = json!({"project_root": root, "report": report});
+        let reply = monitor_call(&mut mcp, "gil_close", args.clone());
+        assert_eq!(reply["structuredContent"]["ok"], true, "{reply}");
+        mcp.eof();
+        let bytes = std::fs::read(&path).unwrap();
+        let mut mcp = Client::serve_with(&settings);
+        mcp.initialize();
+        let status = monitor_call(&mut mcp, "gil_status", json!({"project_root": root}));
+        assert!(status["structuredContent"]["said"].as_str().unwrap().contains("Chain 판정: failure"), "{status}");
+        let duplicate = monitor_call(&mut mcp, "gil_close", args);
+        assert_eq!(duplicate["structuredContent"]["ok"], false, "{duplicate}");
+        let prepared = monitor_call(&mut mcp, "gil_monitor_prepare", json!({"project_root": root}));
+        let shown = monitor_call(&mut mcp, "show_gil_monitor", json!({"scope_id": prepared["structuredContent"]["scope_id"]}));
+        let view = &shown["structuredContent"]["view"];
+        assert_eq!(view["chain"]["state"], "closed", "{shown}");
+        assert_eq!(view["chain"]["report"]["verdict"], "failure");
+        assert_eq!(view["chain"]["exit_snapshot_ref"], "snapshot:A1");
+        assert_eq!(view["next_actions"], json!([]));
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        mcp.eof();
+    }
 }

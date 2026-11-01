@@ -4,13 +4,16 @@ import {execFileSync, spawnSync} from 'node:child_process';
 import {mkdtemp, realpath, readFile, writeFile, mkdir, rm, chmod, symlink, unlink, cp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
-import {ARCHIVE_FLAGS, CATALOG, CORE, FILES, MANIFEST, PREFIX, checkCatalog, checkManifest, checkMachO, checkLibraries,
+import {ARCHIVE_FLAGS, CATALOG, CLAUDE_CATALOG, CLAUDE_MANIFEST, CORE, FILES, MANIFEST, PREFIX, checkCatalog,
+  checkClaudeCatalog, checkClaudeManifest, checkManifest, checkMachO, checkLibraries,
   checkNoLocalPaths, createTree, hash, inventory, repository, verifyTree} from './artifact.mjs';
 import {noticeFixture} from '../compliance/test-fixture.mjs';
 import {stageUnsigned} from './unsigned-preview.mjs';
 
 const manifest = JSON.parse(await readFile(join(repository, MANIFEST)));
 const catalog = JSON.parse(await readFile(join(import.meta.dirname, 'catalog.json')));
+const claudeManifest = JSON.parse(await readFile(join(repository, CLAUDE_MANIFEST)));
+const claudeCatalog = JSON.parse(await readFile(join(import.meta.dirname, 'claude-marketplace.json')));
 
 test('experimental authoring package is labelled and refused without explicit staging opt-in', async t => {
   const f = await fixture(t);
@@ -48,7 +51,9 @@ async function fixture(t) {
   git('init', '-q');
   git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'fixture', '--allow-empty');
   const files = new Map([[MANIFEST, JSON.stringify(manifest)],
+    [CLAUDE_MANIFEST, JSON.stringify(claudeManifest)],
     ['distribution/codex/catalog.json', JSON.stringify(catalog)],
+    ['distribution/codex/claude-marketplace.json', JSON.stringify(claudeCatalog)],
     [`${PREFIX}/skills/gil-companion/SKILL.md`, '---\nname: gil-companion\ndescription: fixture\n---\n'],
     ['LICENSE', 'fixture license'], ['binary', macho()]]);
   for (const [path, bytes] of files) {
@@ -64,6 +69,23 @@ async function fixture(t) {
 test('catalog resolves from the built marketplace root and preserves identity', () => {
   checkManifest(manifest); checkCatalog(catalog);
   assert.equal(catalog.plugins[0].source.path, `./${PREFIX}`);
+});
+test('the Claude Code adapter shares identity, version and Core with the Codex manifest', () => {
+  checkClaudeManifest(claudeManifest, manifest); checkClaudeCatalog(claudeCatalog);
+  assert.equal(claudeCatalog.name, catalog.name, 'one marketplace name for both Hosts');
+  assert.equal(claudeCatalog.plugins[0].source, `./${PREFIX}`);
+  assert.ok(FILES.includes(CLAUDE_CATALOG) && FILES.includes(CLAUDE_MANIFEST));
+  for (const change of [m => m.version = '9.9.9', m => m.name = 'other', m => m.hooks = './h',
+    m => m.mcpServers['gil-companion'].command = './core/darwin-arm64/gil',
+    m => m.mcpServers['gil-companion'].cwd = '.', m => m.mcpServers['gil-companion'].env = {A: 'B'}]) {
+    const altered = structuredClone(claudeManifest); change(altered);
+    assert.throws(() => checkClaudeManifest(altered, manifest));
+  }
+  for (const change of [c => c.name = 'other', c => c.plugins[0].source = '/abs', c => c.plugins.push({}),
+    c => c.plugins[0].source = {source: 'github', repo: 'x/y'}, c => c.extra = 1]) {
+    const altered = structuredClone(claudeCatalog); change(altered);
+    assert.throws(() => checkClaudeCatalog(altered));
+  }
 });
 test('absolute, Node, shell, alternate cwd and duplicate server entries are refused', () => {
   for (const change of [entry => entry.command = '/tmp/gil', entry => entry.command = 'node',

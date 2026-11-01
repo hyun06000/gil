@@ -4,7 +4,7 @@ import {execFileSync, spawnSync} from 'node:child_process';
 import {chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, unlink, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
-import {ARCHIVE_FLAGS, CORE, FILES, MANIFEST, PREFIX, createTree, hash, inventory, repository, verifyTree} from './artifact.mjs';
+import {ARCHIVE_FLAGS, CLAUDE_MANIFEST, CORE, FILES, MANIFEST, PREFIX, createTree, hash, inventory, repository, verifyTree} from './artifact.mjs';
 import {stageUnsigned, verifyUnsignedTree, TRUST} from './unsigned-preview.mjs';
 import {checkTransition} from './update-policy.mjs';
 import {noticeFixture} from '../compliance/test-fixture.mjs';
@@ -18,7 +18,9 @@ async function fixture(t, dirty = false, profile = 'default') {
   for (const [offset, value] of [[0, 0xfeedfacf], [4, 0x0100000c], [12, 2]]) binary.writeUInt32LE(value, offset);
   const files = new Map([
     [MANIFEST, await readFile(join(repository, MANIFEST))],
+    [CLAUDE_MANIFEST, await readFile(join(repository, CLAUDE_MANIFEST))],
     ['distribution/codex/catalog.json', await readFile(join(import.meta.dirname, 'catalog.json'))],
+    ['distribution/codex/claude-marketplace.json', await readFile(join(import.meta.dirname, 'claude-marketplace.json'))],
     [`${PREFIX}/skills/gil-companion/SKILL.md`, '---\nname: gil-companion\ndescription: fixture\n---\n'],
     ['LICENSE', 'fixture license'], ['binary', binary],
   ]);
@@ -45,12 +47,17 @@ test('explicit unsigned candidate preserves runtime/legal bytes and input, chang
   assert.equal(result.channel, 'preview_unsigned'); assert.equal(result.publishable, false);
   assert.deepEqual(result.trust, TRUST); assert.deepEqual(result.source, prior.source);
   assert.deepEqual(result.files.map(f => f.path).sort(), FILES);
-  for (const file of prior.files.filter(f => ![MANIFEST, 'PREVIEW.md'].includes(f.path))) {
+  for (const file of prior.files.filter(f => ![MANIFEST, CLAUDE_MANIFEST, 'PREVIEW.md'].includes(f.path))) {
     assert.deepEqual(result.files.find(f => f.path === file.path), file);
   }
   const oldManifest = JSON.parse(await readFile(join(f.input, MANIFEST)));
   const newManifest = JSON.parse(await readFile(join(f.output, MANIFEST)));
   assert.deepEqual(newManifest, {...oldManifest, version: '0.2.1-preview.1'});
+  // The Claude Code adapter is staged to the identical released version.
+  const oldClaude = JSON.parse(await readFile(join(f.input, CLAUDE_MANIFEST)));
+  const newClaude = JSON.parse(await readFile(join(f.output, CLAUDE_MANIFEST)));
+  assert.deepEqual(newClaude, {...oldClaude, version: '0.2.1-preview.1'});
+  assert.equal(newClaude.version, newManifest.version);
   assert.deepEqual(await inventory(f.input), before);
   await verifyTree(f.input); await verifyUnsignedTree(f.output);
   await assert.rejects(verifyTree(f.output)); await assert.rejects(verifyUnsignedTree(f.input));
@@ -96,7 +103,7 @@ test('a Skill-only change is receipted and requires a new version and pair accep
   assert.notEqual(next.source.snapshot_sha256, previous.source.snapshot_sha256);
   assert.deepEqual(next.files.find(file => file.path === CORE), previous.files.find(file => file.path === CORE));
   assert.equal(next.files.find(file => file.path === skill).sha256, hash(updated));
-  for (const file of previous.files.filter(file => ![skill, MANIFEST, 'PREVIEW.md'].includes(file.path))) {
+  for (const file of previous.files.filter(file => ![skill, MANIFEST, CLAUDE_MANIFEST, 'PREVIEW.md'].includes(file.path))) {
     assert.deepEqual(next.files.find(item => item.path === file.path), file);
   }
   const record = async (root, receipt, name) => {
@@ -199,7 +206,7 @@ test('image candidate requires explicit matching profile and keeps bytes and mig
   assert.deepEqual(result.compatibility.action_surface, {min:2,max:2});
   assert.deepEqual(result.compatibility.storage_format, {min:4,max:5});
   assert.equal(result.publishable, false);
-  for(const file of before.filter(f=>![MANIFEST,'PREVIEW.md','release.json'].includes(f.path)))
+  for(const file of before.filter(f=>![MANIFEST,CLAUDE_MANIFEST,'PREVIEW.md','release.json'].includes(f.path)))
     assert.deepEqual(result.files.find(f=>f.path===file.path),file);
   assert.deepEqual(await inventory(f.input),before);
   const warning=await readFile(join(f.output,'PREVIEW.md'),'utf8');

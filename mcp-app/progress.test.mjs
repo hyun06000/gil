@@ -28,3 +28,18 @@ test('open contract, completion criterion and closed count come from the View, n
   assert.match(progressSummary(view).records, /닫힌 단계 1개/);
   assert.match(progressSummary(view).action, /열린 행동 계약이 없습니다/);
 });
+
+test('Chain closure is visible progress even when Cycle, Step and Journey do not change', () => {
+  const view = fixture(), observe = progressTracker();
+  view.current.chain_ref = 'chain:C1';
+  view.chain = {state: 'open'};
+  view.current_will = null;
+  observe('chain', view, 10);
+  view.chain = {state: 'closed', report: {verdict: 'failure', handoff_summary: '남은 질문을 보존했다'}};
+  assert.equal(observe('chain', view, 20).observedAt, 20);
+  const summary = progressSummary(view);
+  assert.equal(summary.position, 'Chain 종료');
+  assert.equal(summary.done, '남은 질문을 보존했다');
+  assert.match(summary.records, /닫힘 \(failure\)/);
+  assert.match(summary.action, /최종 판정: failure/);
+});

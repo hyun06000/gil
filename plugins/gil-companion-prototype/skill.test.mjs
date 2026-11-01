@@ -52,7 +52,7 @@ test("Skill 의 identity 는 그대로이고 description 이 시작 요청을 �
 });
 
 test("Skill 이 부르는 도구 이름은 전부 실제 tool 표에 있다", () => {
-  assert.equal(TOOLS.length, 19);
+  assert.equal(TOOLS.length, 20);
   const named = new Set([...SKILL.matchAll(/`((?:gil|show_gil)_[a-z_]+)(?:\(|`)/g)].map((m) => m[1]));
   for (const name of named) {
     if (name.startsWith("gil_migration_")) {
@@ -137,14 +137,12 @@ test("시작 응답의 준비된 scope를 표시하고 옛 서버만 별도 prep
   assert.match(flow, /from this first step on/, "첫 Step 부터 갱신된다는 문장이 없다");
 });
 
-test("시작 성공·Monitor 데이터 준비·실제 화면을 가르고, 화면은 사용자 확인 전까지 미확인이다", () => {
+test("시작·데이터·App 표시 보고와 OS 가시성을 구분한다", () => {
   const flow = section(START);
-  for (const owed of ["**Start**", "**Monitor data**", "**Display**"]) assert.ok(flow.includes(owed), `구분이 없다 — ${owed}`);
-  assert.match(flow, /the display was requested and its data is\s+ready/, "「요청했고 데이터가 준비됐다」가 없다");
-  assert.match(flow, /not proof anything is visible/);
-  assert.match(flow, /unconfirmed until the user says so/, "화면이 미확인이라는 문장이 없다");
-  assert.match(flow, /still unconfirmed/);
-  assert.match(flow, /Only after the user confirms[^.]*may you report that the Monitor is showing/, "사용자 확인 뒤에만 표시 성공을 보고한다는 문장이 없다");
+  for (const owed of ["**Start**", "**Monitor data**", "**Display**", "gil_monitor_status",
+    "not proof anything is visible", "does not prove OS foreground", "unknown or expired"]) {
+    assert.ok(flow.includes(owed), owed);
+  }
 });
 
 test("회귀 방지: 도구 응답을 화면 성공으로 단정하는 문장이 없다", () => {
@@ -192,17 +190,12 @@ test("시작 실패는 기존 기록이 없다는 증거가 아니며 원본을 
   assert.doesNotMatch(unquoted(flow), /nothing was started, so there is nothing to show/, "「없다」로 읽히는 옛 문장이 남아 있다");
 });
 
-test("화면 재시도는 일시적 답에만 한 번이고 gil_start 를 반복하지 않는다", () => {
+test("MCP App 재개는 표시 신호로 판단하고 무한 재열기와 Companion 대체를 금지한다", () => {
   const flow = section(START);
-  assert.match(flow, /Display retries are limited/);
-  assert.match(flow, /at most once, and only for a transient answer such as `busy` or a broken\s+connection/);
-  assert.match(flow, /Do not repeat them for a lasting refusal/);
-  assert.match(flow, /or when the Host does not advertise the display/);
-  assert.match(flow, /ask the user instead of calling `show_gil_monitor` again/);
-  assert.match(flow, /every call can add another card/);
-  assert.match(flow, /returns the same scope; it does not\s+create a second project, Cycle or binding/);
-  assert.match(flow, /Never repeat `gil_start`/);
-  assert.doesNotMatch(unquoted(flow), /retry (only )?those two tools/, "무제한 재시도의 옛 문장이 남아 있다");
+  for (const text of ['gil_monitor_status', 'should_open', 'opening', 'unconfirmed',
+    'Never use Companion', 'Never repeat `gil_start`', 'new/restarted session']) {
+    assert.ok(flow.includes(text), text);
+  }
 });
 
 test("fullscreen 거절·inline 선택·단일 열린 Cycle·읽기 전용 경계가 남아 있다", () => {

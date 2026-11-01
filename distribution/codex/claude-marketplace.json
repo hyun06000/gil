@@ -1,0 +1,23 @@
+{
+  "name": "gil-preview-macos-arm64",
+  "owner": {
+    "name": "Ariadne"
+  },
+  "metadata": {
+    "description": "GIL unsigned preview for Claude Code on macOS Apple Silicon. Same Core, Skill and Monitor UI as the Codex catalog beside it; installed from this extracted archive root only."
+  },
+  "plugins": [
+    {
+      "name": "gil-companion-prototype",
+      "source": "./plugins/gil-companion-prototype",
+      "description": "Record reasoning with GIL, and keep the journey visible in the GIL Monitor.",
+      "category": "productivity",
+      "keywords": [
+        "gil",
+        "reasoning",
+        "journey",
+        "monitor"
+      ]
+    }
+  ]
+}

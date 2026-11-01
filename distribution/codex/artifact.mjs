@@ -13,7 +13,11 @@ export const PREFIX = `plugins/${NAME}`;
 export const CORE = `${PREFIX}/core/darwin-arm64/gil`;
 export const MANIFEST = `${PREFIX}/.codex-plugin/plugin.json`;
 export const CATALOG = '.agents/plugins/marketplace.json';
-export const FILES = [CATALOG, MANIFEST, CORE, `${PREFIX}/skills/gil-companion/SKILL.md`,
+// Claude Code reads the same extracted root as a marketplace: one archive, two Host adapters.
+export const CLAUDE_MANIFEST = `${PREFIX}/.claude-plugin/plugin.json`;
+export const CLAUDE_CATALOG = '.claude-plugin/marketplace.json';
+export const CLAUDE_ROOT = '${CLAUDE_PLUGIN_ROOT}';
+export const FILES = [CATALOG, MANIFEST, CLAUDE_CATALOG, CLAUDE_MANIFEST, CORE, `${PREFIX}/skills/gil-companion/SKILL.md`,
   `${PREFIX}/LICENSE`, ...NOTICE_FILES.map(name => `${PREFIX}/${name}`), 'PREVIEW.md'].sort();
 export const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 // macOS bsdtar: no developer username/group, ACL, xattr or resource-fork metadata.
@@ -27,6 +31,7 @@ macOS arm64 only. NOT a public release; NOT Developer ID signed/notarized by thi
 Do not publish this tree or register it as a user distribution channel.
 No Node/npm/Cargo/source checkout is required by the installed MCP runtime.
 The Rust executable contains Core, the default MCP tool surface and the Monitor UI.
+The same root carries a Codex catalog (.agents/plugins) and a Claude Code catalog (.claude-plugin).
 Visual report reads are included; experimental visual-authoring is not enabled.
 Companion is not bundled or automatically launched; it remains an optional separate fallback.
 Third-party licenses/notices are included beside LICENSE; standard library notices have their own HTML file.
@@ -45,6 +50,33 @@ export function checkManifest(value) {
   for (const key of Object.keys(value)) assert.ok([
     'name', 'version', 'description', 'author', 'skills', 'interface',
     'mcpServers'].includes(key), `unpackaged manifest component: ${key}`);
+}
+
+// Same identity and Core as the Codex manifest; only the Host's root variable differs.
+export function checkClaudeManifest(value, codex) {
+  assert.equal(value.name, NAME, 'stable plugin identity');
+  // Codex may carry a +codex build tag in development; the released version is one string for both.
+  assert.ok(value.version === codex.version || value.version === codex.version.split('+')[0],
+    'Claude and Codex manifests must carry one version');
+  assert.equal(value.description, codex.description);
+  assert.deepEqual(value.mcpServers, {'gil-companion': {
+    command: `${CLAUDE_ROOT}/core/darwin-arm64/gil`, args: ['mcp', '--serve'], cwd: CLAUDE_ROOT,
+  }}, 'one native entry point under the Host-provided plugin root; no environment, shell or download hook');
+  for (const key of Object.keys(value)) assert.ok([
+    'name', 'version', 'description', 'author', 'license', 'keywords', 'mcpServers'].includes(key),
+  `unpackaged Claude manifest component: ${key}`);
+}
+
+export function checkClaudeCatalog(value) {
+  assert.equal(value.name, 'gil-preview-macos-arm64', 'same marketplace name as the Codex catalog');
+  assert.equal(value.plugins?.length, 1);
+  const [entry] = value.plugins;
+  assert.equal(entry.name, NAME);
+  assert.equal(entry.source, `./${PREFIX}`, 'catalog must resolve entirely within the extracted root');
+  for (const key of Object.keys(value)) assert.ok(['name', 'owner', 'metadata', 'plugins'].includes(key),
+    `unexpected Claude catalog component: ${key}`);
+  for (const key of Object.keys(entry)) assert.ok(['name', 'source', 'description', 'category', 'keywords'].includes(key),
+    `unexpected Claude catalog plugin component: ${key}`);
 }
 
 export function checkCatalog(value) {
@@ -130,6 +162,8 @@ export async function createTree({root = repository, binary, output, profile = '
   const inputs = new Map([
     [CATALOG, join(root, 'distribution/codex/catalog.json')],
     [MANIFEST, join(root, PREFIX, '.codex-plugin/plugin.json')],
+    [CLAUDE_MANIFEST, join(root, PREFIX, '.claude-plugin/plugin.json')],
+    [CLAUDE_CATALOG, join(root, 'distribution/codex/claude-marketplace.json')],
     [CORE, resolve(binary)],
     [`${PREFIX}/skills/gil-companion/SKILL.md`, join(root, PREFIX, 'skills/gil-companion/SKILL.md')],
     [`${PREFIX}/LICENSE`, join(root, 'LICENSE')],
@@ -142,6 +176,8 @@ export async function createTree({root = repository, binary, output, profile = '
   }
   checkManifest(JSON.parse(content.get(MANIFEST)));
   checkCatalog(JSON.parse(content.get(CATALOG)));
+  checkClaudeManifest(JSON.parse(content.get(CLAUDE_MANIFEST)), JSON.parse(content.get(MANIFEST)));
+  checkClaudeCatalog(JSON.parse(content.get(CLAUDE_CATALOG)));
   checkMachO(content.get(CORE));
   content.set('PREVIEW.md', Buffer.from(profile === 'default' ? preview : preview.replace(
     'Visual report reads are included; experimental visual-authoring is not enabled.',
@@ -203,6 +239,8 @@ export async function verifyPayload(root, receipt) {
   checkManifest(manifest);
   assert.equal(receipt.version, manifest.version);
   checkCatalog(JSON.parse(await regular(join(root, CATALOG))));
+  checkClaudeManifest(JSON.parse(await regular(join(root, CLAUDE_MANIFEST))), manifest);
+  checkClaudeCatalog(JSON.parse(await regular(join(root, CLAUDE_CATALOG))));
   checkMachO(await regular(join(root, CORE)));
   const notices = JSON.parse(await regular(join(root, PREFIX, 'THIRD-PARTY-NOTICES.json')));
   validatePolicy(notices);

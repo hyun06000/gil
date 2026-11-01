@@ -419,6 +419,7 @@ impl Cycle {
     ) -> Result<(), CycleError> {
         self.must_be_open()?;
         if let Some(at) = self.step_now_open() {
+            self.check_closing_proposal(at, &report)?;
             self.check_synthesis_ref(at, &report)?;
             self.check_basis_refs(at, &report)?;
         }
@@ -603,6 +604,15 @@ impl Cycle {
         }
     }
 
+    fn check_closing_proposal(&self, at: NodeId, report: &Report) -> Result<(), CycleError> {
+        if self.rules().supports_chain_closing() && self.kind == CycleKind::Interview
+            && self.steps.node(at).is_some_and(|node| node.kind == NodeKind::Synthesis)
+            && report.get("chain_verdict").is_some_and(|value| !matches!(value, "success" | "failure")) {
+            return Err(CycleError::ClosingInterview);
+        }
+        Ok(())
+    }
+
     /// 안에 적혀 있는 되돌아감을 밟는다.
     pub fn revisit_step(&mut self) -> Result<(), CycleError> {
         self.must_be_open()?;
@@ -707,7 +717,40 @@ impl Cycle {
             }
             .into());
         }
+        if self.kind == CycleKind::Interview && self.rules().supports_chain_closing() {
+            let closing = node.report.as_ref().and_then(|report| report.get("synthesis_ref"))
+                .and_then(|raw| raw.parse::<StepRef>().ok())
+                .and_then(|target| self.steps.node(NodeId::from_raw(target.step())))
+                .and_then(|node| node.report.as_ref())
+                .is_some_and(|report| report.has("chain_verdict"));
+            if closing && report.get("next_direction.action") != Some("close_chain") {
+                return Err(CycleError::ClosingInterview);
+            }
+        }
+        if report.get("next_direction.action") == Some("close_chain") {
+            self.closing_synthesis(report)?;
+        }
         Ok(())
+    }
+
+    /// The final Outcome's approved Synthesis, not an arbitrary earlier proposal.
+    pub(crate) fn closing_synthesis(&self, report: &Report) -> Result<(StepRef, &Report), CycleError> {
+        let invalid = || CycleError::ClosingInterview;
+        if self.kind != CycleKind::Interview || report.get("verdict") != Some("success")
+            || report.get("next_direction.action") != Some("close_chain") {
+            return Err(invalid());
+        }
+        let last = self.steps.current().and_then(|id| self.steps.node(id)).ok_or_else(invalid)?;
+        if last.kind != NodeKind::Outcome || !last.is_closed() { return Err(invalid()); }
+        let outcome = last.report.as_ref().ok_or_else(invalid)?;
+        self.check_synthesis_ref(last.id, outcome)?;
+        let target: StepRef = outcome.get("synthesis_ref").ok_or_else(invalid)?.parse().map_err(|_| invalid())?;
+        let synthesis = self.steps.node(NodeId::from_raw(target.step()))
+            .and_then(|node| node.report.as_ref()).ok_or_else(invalid)?;
+        if !matches!(synthesis.get("chain_verdict"), Some("success" | "failure")) {
+            return Err(invalid());
+        }
+        Ok((target, synthesis))
     }
 
     /// 이 Cycle 안의 Step 을 가리키는 **typed reference** — `step:C1/S4`.
@@ -836,6 +879,7 @@ impl Cycle {
             };
             let checked = self
                 .check_basis_refs(node.id, report)
+                .and_then(|()| self.check_closing_proposal(node.id, report))
                 .and_then(|()| self.check_synthesis_ref(node.id, report));
             checked.map_err(|source| RestoreError::StepReport {
                 step: self.step_ref(node.id),
@@ -866,6 +910,7 @@ pub(crate) struct CycleState {
 /// Cycle 이 거절한 이유.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CycleError {
+    ClosingInterview,
     /// 안의 걷기가 거절했다.
     Step(WalkError),
     /// 이 Cycle 은 이미 닫혔다.
@@ -1080,6 +1125,7 @@ impl From<OutcomeRefError> for CycleError {
 impl fmt::Display for CycleError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            CycleError::ClosingInterview => write!(f, "Chain 종료에는 성공한 Interview의 마지막 Outcome이 가리키는 승인된 Synthesis와 chain_verdict: success 또는 failure가 필요하다. 이 종료 제안을 담은 Cycle Report의 방향은 close_chain이어야 한다"),
             CycleError::Step(err) => write!(f, "{err}"),
             CycleError::AlreadyClosed => write!(
                 f,
@@ -1155,7 +1201,7 @@ impl std::error::Error for CycleError {
             CycleError::OutcomeRef(err) => Some(err),
             CycleError::SynthesisRef(err) => Some(err),
             CycleError::BasisRefs(err) => Some(err),
-            CycleError::AlreadyClosed | CycleError::StepsNotDone => None,
+            CycleError::ClosingInterview | CycleError::AlreadyClosed | CycleError::StepsNotDone => None,
         }
     }
 }

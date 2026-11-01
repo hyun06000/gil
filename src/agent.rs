@@ -63,7 +63,7 @@ impl DescriptorV1 {
             core_version: env!("CARGO_PKG_VERSION").to_string(),
             protocol: RangeV1::exact(PROTOCOL_VERSION),
             storage_format: RangeV1 { min: crate::FORMAT,
-                max: if IMAGE_STORAGE_SUPPORTED { 5 } else { crate::FORMAT } },
+                max: if cfg!(feature = "chain-core") { crate::CHAIN_VISUAL_FORMAT } else if IMAGE_STORAGE_SUPPORTED { 5 } else { crate::FORMAT } },
             action_surface: RangeV1::exact(ACTION_SURFACE),
             // **지금 이 binary 가 지어진 대상**이다. 부르는 쪽이 자기 기계와 견준다.
             os: std::env::consts::OS.to_string(),
@@ -136,7 +136,7 @@ mod tests {
         assert_eq!(decoded, DescriptorV1::current());
         // 저장 format 은 지어낸 값이 아니라 **Core 가 실제로 쓰는 그것**이다.
         assert_eq!(decoded.storage_format.min, crate::FORMAT);
-        assert_eq!(decoded.storage_format.max, if IMAGE_STORAGE_SUPPORTED { 5 } else { crate::FORMAT });
+        assert_eq!(decoded.storage_format.max, if cfg!(feature = "chain-core") { crate::CHAIN_VISUAL_FORMAT } else if IMAGE_STORAGE_SUPPORTED { 5 } else { crate::FORMAT });
         assert_eq!(decoded.action_surface, RangeV1::exact(if cfg!(feature = "visual-authoring") { 2 } else { 1 }));
         assert_eq!(decoded.product, PRODUCT);
     }

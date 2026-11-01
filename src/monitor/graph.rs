@@ -684,6 +684,7 @@ pub(super) mod tests {
     ) -> MonitorSnapshot {
         let current = lineage.last().expect("계보의 끝이 지금이다").clone();
         MonitorSnapshot {
+            current_chain: None,
             captured_at: super::super::CapturedAt(std::time::SystemTime::UNIX_EPOCH),
             current_existence: ExistenceFacts {
                 existence_ref: "existence:X1".parse::<ExistenceRef>().expect("주소"),

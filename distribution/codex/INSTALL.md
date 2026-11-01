@@ -5,7 +5,8 @@
 대상은 **macOS Apple Silicon(`arm64`)의 로컬 Codex 작업**이다. 현재 배포판은
 `0.2.1-preview.7`이며 2026-10-28 게시한 unsigned prerelease다. Core, MCP server, Skill과
 fullscreen Monitor UI가 Plugin 하나에 들어 있으므로 Node·npm·Cargo·Homebrew·별도 Companion을
-설치하지 않는다. Intel Mac, Windows, Claude 작업 모드에는 이 파일을 사용하지 않는다.
+설치하지 않는다. Intel Mac, Windows에는 이 파일을 사용하지 않는다. Claude Code(Claude Desktop)는
+같은 archive의 `.claude-plugin` catalog로 설치하며 절차는 [저장소 설치 안내](../../INSTALL.md)를 따른다.
 
 - marketplace: `https://github.com/hyun06000/gil-marketplace.git`
 - 고정 tag: `v0.2.1-preview.7`

@@ -179,12 +179,13 @@ Host의 다운로드/캐시/실행 방식까지 통과해야 이 포맷을 정�
 그 실패를 먼저 보고하고 배포 컨테이너를 재설계한다. 별도 DMG 설치를 몰래 추가하거나
 Plugin 한 번 설치라는 사용자 계약을 조용히 바꾸지 않는다.
 
-Windows·Intel/universal·Claude 작업 Plugin의 화면 전달·Companion 재배포는 이번 인수와 별개다.
-macOS/Codex를 닫기 전에 이들까지 지원한다고 표시하지 않는다.
+Windows·Intel/universal·Companion 재배포는 이번 인수와 별개다. macOS/Codex를 닫기 전에 이들까지
+지원한다고 표시하지 않는다.
 
-Claude Desktop의 [9/28 경로별 진단](../../mcp-app/CLAUDE-DESKTOP-ROUTES.md)은 폴더 없는 대화의
-Plugin 표시를 확인했지만, 폴더 연결 뒤의 차단과 fullscreen의 승인 창 가림은 남겼다. 이 때문에
-이번 Codex 후보의 UI나 실행 계약을 변경하지 않으며 Claude 전체 지원으로 배포 범위를 넓히지 않는다.
+Claude Desktop의 [경로별 진단](../../mcp-app/CLAUDE-DESKTOP-ROUTES.md)은 9/28의 폴더 연결 차단과
+승인 창 가림, 그리고 2026-10-30의 Claude Code fullscreen 지원 보고를 날짜·Host 버전별로 구분한다.
+이번 변경부터 archive는 Codex와 Claude Code catalog를 함께 싣지만, Claude Code의 화면 인수는
+Codex 인수와 별도로 기록하며 한쪽 성공을 다른 쪽에 승계하지 않는다.
 
 ## 근거 (2026-09-28 확인)
 

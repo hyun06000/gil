@@ -81,7 +81,7 @@ pub fn call(name: &str, input: &Value) -> CallToolResult {
             Ok(said) => {
                 let mut out = result(true, Some(0), said, String::new());
                 if let Some(fields) = out.structured_content.as_mut().and_then(Value::as_object_mut) {
-                    fields.insert("storage_format".into(), json!(5));
+                    fields.insert("storage_format".into(), json!(if cfg!(feature = "chain-core") { crate::CHAIN_VISUAL_FORMAT } else { crate::VISUAL_FORMAT }));
                     fields.insert("display_confirmed".into(), json!(false));
                     #[cfg(windows)]
                     fields.insert("record_storage".into(), json!("private_app_data"));

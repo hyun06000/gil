@@ -551,3 +551,52 @@ pub fn private_storage(root: &Path) {
     #[cfg(not(windows))]
     let _ = root;
 }
+
+/// Address the actual containment shape when testing stored Cycle invariants in either profile.
+pub fn stored_cycles(file: &mut serde_norway::Value) -> &mut serde_norway::Value {
+    if file.get("chains").is_some() {
+        &mut file["chains"]["nodes"][0]["cycles"]
+    } else {
+        &mut file["cycles"]
+    }
+}
+
+/// Synthetic Closing Interview; the approved answer is test data, never inferred from execution.
+#[cfg(feature = "chain-core")]
+pub fn closing_interview(verdict: Option<&str>, approved: &str) -> Project {
+    let mut project = graph_with_one_closed_cycle("success");
+    project.open_child_cycle(CycleKind::Interview).unwrap();
+    for kind in [NodeKind::Question, NodeKind::Interpretation, NodeKind::Synthesis] {
+        project.open_action_step(kind, plan(kind)).unwrap();
+        let cycle = project.current_cycle();
+        let mut report = full_report(cycle.rules(), CycleKind::Interview, kind);
+        if kind == NodeKind::Synthesis {
+            report.insert("approved", approved);
+            report.insert("basis_refs", cycle.steps().nodes().iter()
+                .filter(|node| matches!(node.kind, NodeKind::Question | NodeKind::Interpretation))
+                .map(|node| cycle.step_ref(node.id).to_string()).collect::<Vec<_>>().join("\n"));
+            if let Some(verdict) = verdict { report.insert("chain_verdict", verdict); }
+        }
+        project.close_action_step(report).unwrap();
+    }
+    project
+}
+
+#[cfg(feature = "chain-core")]
+pub fn closing_ready(verdict: &str) -> Project {
+    let mut project = closing_interview(Some(verdict), "yes");
+    let synthesis = project.current_cycle().step_ref(project.current_cycle().steps().current().unwrap());
+    let outcome = opened(&mut project, NodeKind::Outcome);
+    let report = full_report(project.current_cycle().rules(), CycleKind::Interview, NodeKind::Outcome)
+        .with("synthesis_ref", synthesis.to_string());
+    project.close_action_step(report).unwrap();
+    let report = cycle_report(project.current_cycle(), "success", step_id(&project, outcome)).with("next_direction.action", "close_chain");
+    project.close_cycle(report).unwrap();
+    project
+}
+
+#[cfg(feature = "chain-core")]
+pub fn chain_report(verdict: &str) -> Report {
+    Report::new().with("verdict", verdict).with("closing_synthesis_ref", "step:C3/S3")
+        .with("handoff_summary", "Synthetic: investigated paths and failed attempts; remaining question recorded.")
+}

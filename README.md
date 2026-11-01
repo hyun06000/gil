@@ -58,9 +58,15 @@ Developer ID/공증 또는 Authenticode 서명은 없다. Intel Mac, Windows ARM
 [Mac 상세 안내](distribution/codex/INSTALL.md), [Windows 상세 안내](distribution/windows/INSTALL.md)와
 [Windows 배포 상태](distribution/windows/README.md)를 따른다.
 [시험판 조건](distribution/codex/RELEASE-macos.md)과 [보안 제보 안내](SECURITY.md)를 따른다.
-Claude Desktop은 폴더 없는 대화에서 Plugin 화면이 확인됐지만, 폴더 연결 뒤의 표시 차단과
-fullscreen의 도구 승인 창 가림이 남아 있다. [호출 경로별 진단](mcp-app/CLAUDE-DESKTOP-ROUTES.md)을
-따르며 Claude 작업 UX 전체의 배포 완료로 세지 않는다. 자세한 범위는 아래 구현 상태와 Roadmap을 따른다.
+Claude Desktop의 **Claude Code**는 2026-10-30 소유자 보고로 MCP App fullscreen을 정상 지원한다.
+같은 날 폴더가 연결된 Claude Code 세션에서 설치된 Plugin 경로의 `show_gil_monitor`가 View를
+반환했지만 사용자 화면에는 서지 않았고(10/31 이 브랜치 빌드의 marketplace 설치본도 같음), 같은 세션의
+직접 등록 Monitor는 사용자가 **모니터 펼치기**로 fullscreen을 확인했다(10/31 진단, 서버 로그 일치).
+따라서 Claude에서는 Desktop 설정 직접 등록이 현재의 표시 경로다. 그 경로에서도 Host는 사용자 동작 안의 표시
+모드 요청만 적용해, Monitor는 inline으로 뜬 뒤 **첫 클릭에 fullscreen**으로 펼쳐진다(자동 펼침은 Codex만). 이번 변경부터 preview archive 하나에 Codex(`.agents/plugins`)와 Claude Code
+(`.claude-plugin`) 두 catalog를 함께 싣는다. 사용자 화면 인수와 fullscreen 중 도구 승인 창 병행은
+[호출 경로별 진단](mcp-app/CLAUDE-DESKTOP-ROUTES.md)에 Host·버전별로 따로 기록하며, 한 경로의
+성공을 다른 경로로 일반화하지 않는다. 자세한 범위는 아래 구현 상태와 Roadmap을 따른다.
 
 전체 명세를 미리 읽지 않은 새 Agent 세션이 `gil context`와 주소 가능한 Help Topic만으로
 실제 작업과 GIL Cycle을 완주하는 것을 Claude와 Codex 계열에서 각각 확인했다. 실패한 Cycle에서
@@ -214,6 +220,13 @@ GIL은 모델의 비공개 chain-of-thought를 저장하려는 시스템이 아�
 - 다른 모델 계열의 새 세션이 `gil context`만으로 열린 Verify와 Active Will을 인수인계
 
 아직 확인되지 않은 것: 전체 토큰 절약, 모든 모델·작업에서의 일반성.
+
+### Chain 개발 프로필 (M6-A)
+
+`chain-core` 빌드는 실제 Chain 아래 Interview→Experiment를 저장하고 CLI/MCP/Monitor에
+현재 Chain을 표시한다. [저장·호환 계약](spec/GIL_Chain_Storage_v0.1.md)을 따른다.
+기본 빌드와 설치본에는 아직 활성화하지 않았다. 기존 format 4/5 기록은 자동 이전하지 않으며,
+Chain 종료·인간 판정·다음 Chain은 M6-B/C에 남아 있다.
 
 ### 다음
 
