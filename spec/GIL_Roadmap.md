@@ -553,6 +553,11 @@ Later    1  성공 가지 Merge
       Plugin 경로 `show_gil_monitor` View 반환 실측. App 연결 정보에 Host 이름·버전 기록, preview
       archive에 `.claude-plugin` catalog/manifest 동봉, 설치 절차 문서화. 사용자 화면 인수·#1081 병행·
       재시작 복원은 [10/30 진단](../mcp-app/CLAUDE-DESKTOP-ROUTES.md) 기준으로 남김.
+- [~] 2026-11-01: Monitor 겉모습을 Host 테마 토큰 계층으로 전환. MCP Apps 표준 변수·글꼴을 받아 쓰고 없으면
+      중립 기본값. Claude Code 탭이 변수 전체를 보내는 것은 번들 분석으로 확인, Codex는 미확인. 맨 위 표시 모드
+      줄을 맨 아래로, 보조 손잡이를 머리줄로. Claude Code 탭 inline 카드는 사용자 확인("어울린다", 11/01).
+      Codex는 연결 정보로 `chatgpt` 26.1027이 변수 76개·dark를 보내고 자동 fullscreen 유지 확인(11/01). Host
+      분기 불필요. Codex dark 화면도 사용자 확인("어울린다"). 보지 않은 쪽 테마와 Claude Code 연결 정보 값은 남김.
 - [ ] Desktop 일반 대화·Cowork·Code·터미널 CLI의 관측을 분리하고 한 경로의 성공을 다른
       경로의 성공으로 일반화하지 않는다. 직접 등록 probe와 Plugin 설치 경로도 구분한다.
 - [ ] 공용 Core·MCP·UI 계약 변경은 별도 branch/PR에서 영향과 Codex 회귀를 확인한 뒤 통합한다.

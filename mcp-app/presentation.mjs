@@ -60,3 +60,33 @@ export function hostIdentity(app) {
     return identity;
   } catch { return null; }
 }
+
+// Host theme adoption. The App copies what the Host reports through the MCP Apps
+// standard (theme, styles.variables, styles.css.fonts) and never infers a theme from the
+// Host's name. Variable names and values are shape-checked only; policy does not read them.
+const VARIABLE_NAME = /^--[a-z][a-z0-9-]{0,60}$/;
+const VARIABLE_VALUE_MAX = 400;
+const FONTS_CSS_MAX = 65536;
+export function hostStyles(context) {
+  const theme = context?.theme === 'light' || context?.theme === 'dark' ? context.theme : null;
+  const given = context?.styles?.variables;
+  let variables = null;
+  if (given && typeof given === 'object' && !Array.isArray(given)) {
+    variables = {};
+    for (const [name, value] of Object.entries(given)) {
+      if (VARIABLE_NAME.test(name) && typeof value === 'string' && value.length > 0 &&
+          value.length <= VARIABLE_VALUE_MAX && !/[;{}<>]/.test(value)) variables[name] = value;
+    }
+    if (Object.keys(variables).length === 0) variables = null;
+  }
+  const css = context?.styles?.css?.fonts;
+  const fonts = typeof css === 'string' && css.length > 0 && css.length <= FONTS_CSS_MAX &&
+    !/<\/style/i.test(css) ? css : null;
+  return { theme, variables, fonts };
+}
+/** What the evidence block records: presence and counts, never the values themselves. */
+export function styleEvidence(context) {
+  const got = hostStyles(context);
+  return { theme: got.theme, variables: got.variables ? Object.keys(got.variables).length : 0,
+    fonts: got.fonts !== null };
+}

@@ -109,3 +109,27 @@ Host가 한 MCP 연결을 여러 대화에서 공유한다면 현재 보고만�
 이 경로는 Agent가 GIL을 사용하거나 재개할 때 복구한다. Agent가 도구를 호출하지 않는 동안,
 Codex가 종료된 동안의 강제 표시나 Host가 거절한 fullscreen을 보장하지 않는다. 숨김 이벤트가
 Host에서 전달되지 않는 경우와 OS의 창 가림도 별도 실제 Host 검수가 필요하다.
+## Host 테마 토큰 (2026-11-01)
+
+App의 겉모습은 `ui/companion.css`의 토큰 계층(`--gil-*`)이 정한다. 각 토큰은 MCP Apps 표준 테마
+변수(`--color-*`, `--font-*`, `--border-radius-*`, `--border-width-regular`, `--shadow-*`)를 먼저 읽고,
+없으면 무채색 중립 기본값과 시스템 글꼴로 돈다. 연결 직후와 `onhostcontextchanged`의 `theme`/`styles`
+변화마다 SDK 헬퍼(`applyDocumentTheme`, `applyHostStyleVariables`, `applyHostFonts`)로 Host 값을 문서에
+적용한다(`mcp-app/presentation.mjs`의 `hostStyles`가 모양만 검사한다). 정책은 Host 이름으로 갈라지지 않는다.
+
+- **연결 정보**의 `styles`는 Host가 보낸 것의 유무만 적는다: `theme`(`light`/`dark`/`null`), `variables`
+  (받아들인 변수 수), `fonts`(글꼴 CSS 유무). 값 자체는 적지 않는다.
+- **Claude Desktop 4.4212.0 Claude Code 탭(실측, 설치본 번들 분석):** 표준 변수 전체(약 75개)와
+  `anthropic-sans` `@font-face`를 App에 보낸다. 라이트 바탕 255·245,244,237·250,249,245, 다크 바탕
+  48,48,46·38,38,36·20,20,19, 경계선은 알파 0.15~0.4, `--border-width-regular` 0.5px. 번들 분석이지
+  화면 확인은 아니다. 다음 설치본의 연결 정보 `styles`로 확인한다.
+- **Codex(사용자 화면의 연결 정보, 11/01):** Host 이름 `chatgpt` 26.1027.51404가 `theme: dark`, 변수 76개를
+  보내고 글꼴 CSS는 보내지 않는다. 자동 fullscreen도 그대로 적용됐다(`response`·`event` 모두 fullscreen).
+  따라서 Codex 전용 fallback은 넣지 않는다. 앱 번들에서 변수 문자열이 보이지 않았던 것은 렌더러가 번들 밖에
+  있기 때문이며, 번들 분석은 Host 판정의 근거가 못 된다 — 연결 정보가 근거다.
+- 구조: 맨 위 `host-bar`를 없애고 머리줄 한 줄(워드마크·제목·Project 선택·새로고침·`세로로 보기`·`별도 창 열기`)과
+  맨 아래 표시 모드 줄(`#host-say`·`모니터 펼치기`·`대화 안으로`·연결 정보)로 나눴다. 900px 이상 fullscreen에서는
+  Report(`.detail`)가 오른쪽 380px 패널로 선다. 요소 id와 wire, DAG 기하는 그대로다.
+- 검증: `node build.mjs`가 index.html의 앵커를 정확히 한 번씩 찾지 못하면 실패한다. `display.test.mjs`는 연결·변경
+  시 적용 호출과 증거 값을, `presentation.test.mjs`는 모양 검사를 고정한다. 고지 정책은 `monitor.html`과
+  `build.mjs`의 지문을 세 곳(macOS·Windows x64·ARM64)에 고정하므로 번들을 다시 만들면 함께 갱신한다.
