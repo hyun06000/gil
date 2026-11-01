@@ -107,6 +107,7 @@ impl Project {
         Project {
             visual_state: None,
             world: {
+                let rules = if cfg!(feature = "chain-core") { rules.for_chain() } else { rules };
                 let cycles = Cycles::start(rules, existence, first);
                 if cfg!(feature = "chain-core") {
                     WorldGraph::Chain(crate::Chain::start(cycles))
@@ -128,22 +129,42 @@ impl Project {
         match &self.world { WorldGraph::Chain(chain) => Some(chain), _ => None }
     }
 
-    /// Same-level children require a closed parent; M6-A has no Chain closing transition.
+    /// Same-level children require a closed parent; subsequent Chains remain unsupported.
     pub fn open_child_chain(&mut self) -> Result<crate::ChainRef, crate::ChainError> {
         match self.current_chain() {
+            Some(chain) if chain.is_closed() => Err(crate::ChainError::NextChainUnsupported),
             Some(chain) => Err(crate::ChainError::ParentOpen(chain.id())),
             None => Err(crate::ChainError::LegacyProject),
         }
     }
 
+    /// Container close changes neither Will nor Journey nor the artifact registry.
+    pub fn close_chain(&mut self, report: Report) -> Result<crate::ChainRef, crate::ChainError> {
+        let owner = self.current_existence_ref();
+        let journey = self.current_existence().current_journey();
+        let WorldGraph::Chain(chain) = &mut self.world else { return Err(crate::ChainError::LegacyProject); };
+        let mut next = chain.clone();
+        next.close(report)?;
+        next.validate_state(owner, journey)?;
+        let id = next.id();
+        *chain = next;
+        Ok(id)
+    }
+
     pub(crate) fn restore_chain(mut self, id: crate::ChainRef, owner: ExistenceRef,
-        entry: SnapshotRef) -> Result<Self, crate::ChainError> {
+        entry: SnapshotRef, report: Option<Report>, exit: Option<SnapshotRef>, journey: Option<crate::JourneyRef>) -> Result<Self, crate::ChainError> {
         crate::Chain::validate(id, owner, entry, self.cycles(), self.current_existence_ref())?;
         // Move the graph into its owner, never keep a second graph or duplicate ownership map.
+        let current_journey = self.current_existence().current_journey();
         let WorldGraph::Legacy(cycles) = self.world else {
             return Err(crate::ChainError::Invalid("a Chain already owns this graph"));
         };
-        self.world = WorldGraph::Chain(crate::Chain::restore(id, owner, entry, cycles));
+        let mut chain = crate::Chain::restore(id, owner, entry, cycles);
+        if let Some(report) = report { chain.close(report)?; }
+        chain.validate_state(self.current_existence, current_journey)?;
+        if chain.journey() != journey { return Err(crate::ChainError::Invalid("Chain Journey disagrees with Closing Interview")); }
+        if chain.exit_snapshot() != exit { return Err(crate::ChainError::Invalid("Chain Exit disagrees with Closing Interview")); }
+        self.world = WorldGraph::Chain(chain);
         Ok(self)
     }
 
@@ -1021,6 +1042,7 @@ impl Project {
 /// 통합 transaction 이 거절한 이유.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ActionError {
+    Chain(crate::ChainError),
     Visual(String),
     /// 닫을 실행형 자리가 없다.
     NothingOpen,
@@ -1086,6 +1108,7 @@ impl From<CycleError> for ActionError {
 impl std::fmt::Display for ActionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            ActionError::Chain(reason) => write!(f, "{reason}"),
             ActionError::Visual(reason) => write!(f, "시각 Report를 확정하지 못했다: {reason}"),
             ActionError::Registry(source) => write!(f, "{source}"),
             ActionError::NothingOpen => write!(f, "지금 열려 있는 실행형 자리가 없다"),

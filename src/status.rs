@@ -18,7 +18,7 @@ pub fn where_now(session: &ProjectSession, state_is_elsewhere: bool) -> String {
     let walk = cycle.steps();
     let mut out = String::new();
     if let Some(chain) = session.project().current_chain() {
-        out.push_str(&format!("Chain: {} · 열림 · Entry {} · 현재 {}\n", chain.id(), chain.entry_snapshot(), chain.current_cycle()));
+        out.push_str(&format!("Chain: {} · {} · Entry {} · 현재 {}\n", chain.id(), if chain.is_closed() { "닫힘" } else { "열림" }, chain.entry_snapshot(), chain.current_cycle()));
     }
 
     if state_is_elsewhere {
@@ -91,7 +91,11 @@ pub fn where_now(session: &ProjectSession, state_is_elsewhere: bool) -> String {
     out.push_str(&world_nudge(session));
 
     // ⑥ 다음에 무엇을 할 수 있는가. **안내는 실행과 같은 자리에서 나온다.**
-    out.push_str(&crate::next_moves(cycles));
+    match session.project().current_chain() {
+        Some(chain) if chain.is_closed() => out.push_str(&format!("Chain 판정: {} · Exit: {}\n다음 Chain 생성은 아직 지원하지 않는다.\n", chain.report().unwrap().get("verdict").unwrap(), chain.exit_snapshot().unwrap())),
+        Some(chain) if chain.awaiting_report() => out.push_str(&chain.close_hint()),
+        _ => out.push_str(&crate::next_moves(cycles)),
+    }
     out
 }
 

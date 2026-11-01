@@ -1,6 +1,6 @@
-# GIL Chain storage — M6-A
+# GIL Chain storage — M6-A/B
 
-2026-10-31. 범위: 실제 Chain 생성·소유·Current·저장·재시작. 규범은
+2026-11-01. 범위: 실제 Chain 생성·소유·Current·저장·재시작과 승인 근거에 연결된 종료. 규범은
 [기본 명세 §5](GIL%20Specification%20v0.1.md), [Node Model §6–7](GIL_Node_Model_v0.1.md),
 [Cycle Model §5–10, §18–21](GIL_Cycle_Model_v0.1.md)이다.
 
@@ -12,10 +12,10 @@ macOS와 Windows에 같은 도메인·MCP 규칙을 사용한다. 기존 설치�
 이번 변경으로 갱신하지 않는다. 기본 빌드의 신규 생성 형식은 기존 4/5다.
 
 `chain-core`의 새 Project는 `Project → Chain → Cycle → Step`을 실제로 소유한다.
-Chain은 이름만 붙인 UI 그룹이나 Cycle의 `parent`가 아니다. M6-A는 첫 Open Chain 하나만
-허용한다. Closing Interview, Chain Report, 종료 판정은 M6-B이며 다음 Chain 생성은 M6-C다.
-`gil open chain` / `gil_open(kind: "chain")`은 Open Chain의 자식 생성을 거절한다.
-이 버전에는 Chain 종료·취소·Chain revisit의 우회 API가 없다.
+Chain은 이름만 붙인 UI 그룹이나 Cycle의 `parent`가 아니다. 첫 Chain 하나를 열고,
+Closing Interview 승인 근거로 닫을 수 있다. 다음 Chain 생성은 M6-C다.
+`gil open chain` / `gil_open(kind: "chain")`은 Open 부모 및 미지원 후속 Chain 생성을 거절한다.
+Chain 취소·Chain revisit의 우회 API는 없다.
 
 ## 저장과 불변식
 
@@ -65,6 +65,50 @@ chains:
   M6-A에는 Chain이 하나이므로 내부 Cycle 발급기가 프로젝트 전체 high-water mark다.
   M6-C가 여러 Chain을 허용하기 전에 이 발급기를 프로젝트 전역으로 옮기는 저장 계약을 정해야 한다.
 
+## Closing Interview와 종료 — M6-B
+
+1. Agent는 기존 Cycle Report·실패·남은 질문을 토대로 추가 Interview를 연다. 성공 또는 실패로
+   끝내겠다는 제안을 사용자에게 제시하고 실제 답변을 기다린다. 종료 제안 Synthesis에는 기존
+   statement/basis_refs/approved와 함께 `chain_verdict: success|failure`를 남긴다.
+2. 승인된 Synthesis를 참조하는 Outcome을 success로 닫는다. Interview Cycle Report는
+   `verdict: success`, 마지막 `outcome_ref`, nonempty handoff_summary/reason,
+   `next_direction.action: close_chain`을 가진다. 승인된 종료 제안을 `open_child`로 바꿔
+   새 실험으로 이어가는 요청은 거절한다. 이 단계만으로 Chain은 닫히지 않는다.
+3. 다음 일반 `gil close` / `gil_close({project_root, report})`는 Chain Report를 받는다.
+   format 7에서도 이 텍스트 계약을 쓴다. Chain 자체의 typed visual attachments는 지원하지 않으며,
+   실제 증거는 내부 Verify의 기존 파일·시각 증거 계약을 그대로 따른다.
+
+```text
+verdict: failure
+closing_synthesis_ref: step:C3/S3
+handoff_summary: 탐색한 경로와 실패, 이번에 해결하지 못한 질문을 구체적으로 요약한다.
+```
+
+`closing_synthesis_ref`는 단순히 같은 Chain 안의 승인된 Step이면 되는 것이 아니다.
+현재 성공한 Closing Interview의 **마지막 Outcome이 참조한** 닫힌 Synthesis여야 한다.
+기존 Synthesis 계보·basis_refs·approved=yes 검증도 적용한다. 잘못된 chain_verdict 값은 Synthesis를 닫기 전에 거절한다. 그 Synthesis의 chain_verdict와
+Chain Report verdict가 정확히 같아야 한다. handoff_summary는 공백일 수 없다. 아직 정의되지
+않은 Project next_direction을 비롯한 추가 Chain Report 필드는 거절한다.
+
+Experiment 성공/실패는 Chain 종료를 자동 유발하지 않는다. 같은 Interview success에서
+Chain success 또는 failure가 모두 가능하다. 일반 Interview(open_child), 열린 Interview,
+승인되지 않은 제안, 다른 Cycle/Step 참조, 판정 불일치는 닫기와 저장 복원에서 거절한다.
+
+닫을 때 작업 세계는 clean이어야 한다. Report·state=closed·exit_snapshot_ref·journey_ref는
+하나의 state 저장으로 확정한다. Exit과 Journey는 마지막 Closing Interview의 값에서 유도하며
+새 Artifact/Will/Journey revision을 만들지 않는다. Open에는 Report/Exit/Journey가 없다.
+기존 Open 6/7 파일은 새 필드가 없는 그대로 읽고 쓴다. Closed 6/7을 읽는 이전 M6-A writer는
+알 수 없는 Report/Journey 또는 closed 상태를 거절한다. 형식 번호를 낮추는 호환 우회는 없다.
+
+응답을 놓쳤다면 `gil_status`/`gil_context`/Monitor에서 닫힌 Chain Report를 먼저 조회한다.
+닫힌 Chain을 다시 닫는 요청은 명시적으로 거절하며 기존 기록·Current·세계는 바뀌지 않는다.
+조회는 저장하지 않는다. 열린 Chain의 종료 대기와 닫힌 Chain의 최종 판정은 CLI와 공용 Monitor에
+같은 데이터로 표시한다. 다음 Chain이 구현되기 전에는 종료 후 새 실행을 제안하지 않는다.
+
+**승인 보장의 범위:** Core는 저장된 `approved: yes`와 참조 관계를 검증한다. 사용자 응답을
+독립적으로 인증하거나 제안 revision과 묶는 기능은 M6-D다. 이 구현을 인간 인증 완료로
+표현하지 않는다. Agent는 동의를 추측하거나 테스트 fixture를 실제 사용자 승인으로 쓸 수 없다.
+
 ## 기존 기록의 명시적 이전 설계 — 아직 적용 명령 없음
 
 4/5는 정상적인 legacy world로 계속 읽고 쓴다. 새 빌드를 쓰거나 `start`를 다시 부른다는 이유로
@@ -90,7 +134,8 @@ legacy 보존/구형 writer 거절 검증까지다.
 
 CLI start/status/context/monitor 및 MCP가 같은 Chain을 투영한다. Monitor v1에는 선택적
 `chain` 객체와 `current.chain_ref`를 추가한다. `chain`에는 owner, state, parent, Entry/Exit,
-current_cycle_ref, cycle_refs가 있다. legacy에는 두 필드를 생략한다. 기존 v1 소비자는 추가
+current_cycle_ref, cycle_refs가 있다. 닫힌 Chain에는 `journey_ref`와 `report`도 있으며
+`report`는 verdict/closing_synthesis_ref/handoff_summary를 보존한다. legacy에는 두 필드를 생략한다. 기존 v1 소비자는 추가
 필드를 무시할 수 있고, 갱신된 공용 UI는 현재 경로와 기록 요약에 실제 Chain을 표시한다.
 조회는 상태 저장·가상 Chain/Report 생성·인간 승인 추론을 하지 않는다.
 
@@ -115,3 +160,10 @@ current_cycle_ref, cycle_refs가 있다. legacy에는 두 필드를 생략한다
   저장 경로·고정 format 5·Chain 부재 가정은 새 containment/profile에도 맞게 조정하고 다시 검증했다.
 - `.github/workflows/chain-core.yml`은 macOS/Windows native CI에서 별도 실행한다.
   위 로컬 수치를 Windows 실기 또는 실제 Codex fullscreen 화면 인수로 해석하지 않는다.
+
+M6-B 추가 검증:
+- `tests/chain_closing.rs`: success/failure, 부정 참조·무승인·빈 요약·위조 저장, 재시작과 중복 종료,
+  dirty 세계 거절, 컨테이너 종료 시 Journey/세계 보존, CLI 계약·조회.
+- `tests/mcp.rs::chain_profile_stdio_closing_report_survives_lost_response_and_monitor_restart`:
+  format 6/7의 stdio close→새 프로세스 status→중복 거절→Monitor 및 바이트 보존.
+- `mcp-app/progress.test.mjs`: Cycle·Step·Journey가 그대로여도 Chain 종료가 진행으로 표시된다.

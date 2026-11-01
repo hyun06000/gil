@@ -418,6 +418,7 @@ enum Place {
     Step(Vec<NodeKind>),
     /// Step Graph 가 끝 경계에 닿았다 — 이제 Cycle 을 닫는다.
     CloseThisCycle,
+    CloseThisChain,
     /// 닫힌 Cycle 뒤에서 다음 Cycle 을 연다.
     Cycle(Vec<CycleKind>),
     /// 되돌아온 자리다 — 다음 Cycle 은 **갈래**로 열린다.
@@ -427,6 +428,10 @@ enum Place {
 }
 
 fn place(session: &Session) -> Place {
+    if let Some(chain) = session.project().current_chain() {
+        if chain.is_closed() { return Place::Nothing("Chain이 닫혔다. 다음 Chain 생성은 아직 지원하지 않는다".into()); }
+        if chain.awaiting_report() { return Place::CloseThisChain; }
+    }
     let cycles = session.project().cycles();
     let cycle = cycles.current();
 
@@ -487,6 +492,7 @@ fn open_with(ctx: &Invocation<'_>, mut session: Session, name: Option<&String>) 
                 "gil close",
             ))
         }
+        Place::CloseThisChain => Err(session.project().current_chain().unwrap().close_hint()),
         Place::CloseThisCycle => Err(refusal(
             "지금은 열 자리가 아니다.",
             "이 Cycle 안의 판정이 닫혀 이제 Cycle 을 닫을 자리다.",
@@ -664,6 +670,13 @@ fn close(ctx: &Invocation<'_>) -> Result<String, String> {
     match place(&session) {
         Place::CloseThisStep => close_step(ctx, &mut session),
         Place::CloseThisCycle => close_cycle(ctx, &mut session),
+        Place::CloseThisChain => {
+            let hint = session.project().current_chain().unwrap().close_hint();
+            let report = read_report(ctx, &hint)?;
+            let id = session.close_chain(report).map_err(|err| format!("{err}\n{hint}"))?;
+            write(&session)?;
+            Ok(format!("닫았다: {id} · {}\nChain Report와 Exit을 보존했다. Will·Journey 판은 늘지 않는다.\n", session.project().current_chain().unwrap().report().unwrap().get("verdict").unwrap()))
+        },
         Place::Step(openable) => Err(refusal(
             "닫을 것이 없다.",
             "열려 있는 자리가 없다.",
@@ -1166,6 +1179,7 @@ fn close_help(ctx: &Invocation<'_>) -> Result<String, String> {
     let contract = match place(&session) {
         Place::CloseThisStep => step_contract(cycle),
         Place::CloseThisCycle => cycle_contract(cycle),
+        Place::CloseThisChain => return Ok(session.project().current_chain().unwrap().close_hint()),
         // 닫을 자리가 아니면 **무엇을 먼저 해야 하는지**를 말한다.
         Place::Step(openable) => {
             return Ok(format!(
@@ -1228,6 +1242,7 @@ fn open_help(ctx: &Invocation<'_>) -> Result<String, String> {
             out.push_str("\n먼저 할 일\n  실제 작업을 마친 뒤 그 자리를 닫는다.\n\n실행\n  gil close --help\n");
             Ok(out)
         }
+        Place::CloseThisChain => Ok(session.project().current_chain().unwrap().close_hint()),
         Place::CloseThisCycle => Ok(String::from(
             "지금은 열 자리가 아니다.\n\n이유\n  이 Cycle 안의 판정이 닫혀 이제 Cycle 을 \
              닫을 자리다.\n\n실행\n  gil close --help\n",
@@ -1392,6 +1407,10 @@ fn closed_cycle(session: &Session, closed: &crate::ClosedCycle) -> String {
         "닫았다: {here} · {kind} · {verdict}\n기록됨: {} (판은 늘지 않는다)\n\n다음\n",
         closed.journey
     );
+    if let Some(chain) = session.project().current_chain().filter(|chain| chain.awaiting_report()) {
+        out.push_str(&chain.close_hint());
+        return out;
+    }
     // **적어 둔 방향이 곧 다음 수다.** 되돌아감도 자식을 여는 것과 같은 자격으로 밟는다.
     if cycles.can_revisit() {
         out.push_str(
@@ -1522,10 +1541,17 @@ fn skeleton_of(contract: &CloseContract, cycle: &crate::Cycle) -> String {
         .steps()
         .current()
         .map(|id| cycle.step_ref(id).to_string());
-    contract.skeleton(|field| match field {
+    let mut hint = contract.skeleton(|field| match field {
         "outcome_ref" => last.clone(),
+        "next_direction.action" if cycle.can_close() && cycle.rules().supports_chain_closing()
+            && cycle.closing_synthesis(&Report::new().with("verdict", "success").with("next_direction.action", "close_chain")).is_ok() => Some("close_chain".into()),
         _ => None,
-    })
+    });
+    if cycle.rules().supports_chain_closing() && cycle.step_now_open()
+        .and_then(|id| cycle.steps().node(id)).is_some_and(|node| node.kind == NodeKind::Synthesis) {
+        hint.push_str("\nChain 종료 제안이라면 chain_verdict: success 또는 failure를 함께 적는다. 탐색 경로·실패·남은 질문을 사용자에게 설명하고 실제 동의를 받은 경우에만 approved: yes를 적는다. 동의를 추측하지 않는다. 일반 계획 합의에는 chain_verdict를 넣지 않는다.\n");
+    }
+    hint
 }
 
 fn names(kinds: &[NodeKind]) -> String {

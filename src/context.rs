@@ -47,8 +47,11 @@ pub fn context(project: &Project) -> String {
     let mut out = String::new();
     write_preamble(&mut out);
     if let Some(chain) = project.current_chain() {
-        out.push_str(&format!("\n현재 Chain: {} · open · {}\nEntry: {} · 현재 Cycle: {}\nChain은 아직 닫히지 않았다. Cycle 성공은 Chain 종료가 아니다.\n",
-            chain.id(), chain.existence(), chain.entry_snapshot(), chain.current_cycle()));
+        out.push_str(&format!("\n현재 Chain: {} · {} · {}\nEntry: {} · 현재 Cycle: {}\n",
+            chain.id(), if chain.is_closed() { "closed" } else { "open" }, chain.existence(), chain.entry_snapshot(), chain.current_cycle()));
+        if let Some(report) = chain.report() {
+            out.push_str(&format!("Chain 판정: {} · Exit: {}\n승인 근거: {}\n인계 요약: {}\n", report.get("verdict").unwrap(), chain.exit_snapshot().unwrap(), report.get("closing_synthesis_ref").unwrap(), report.get("handoff_summary").unwrap()));
+        } else { out.push_str("Cycle 성공은 Chain 종료가 아니다. 최종 판정은 Closing Interview에서 사용자에게 제안하고 실제 답변을 받은 뒤 기록한다. 승인된 Synthesis에 chain_verdict를 남기고 Interview를 close_chain 방향으로 닫은 후 Chain Report를 제출한다.\n"); }
     }
     write_previous_cycles(&mut out, cycles);
     write_failed_cycles(&mut out, cycles);
@@ -340,7 +343,11 @@ fn write_here(out: &mut String, project: &Project) {
     write_current_will(out, project);
 
     let _ = writeln!(out, "\n[다음에 할 수 있는 것]");
-    out.push_str(&next_moves(cycles));
+    match project.current_chain() {
+        Some(chain) if chain.is_closed() => out.push_str("Chain이 닫혔다. 다음 Chain 생성은 아직 지원하지 않는다.\n"),
+        Some(chain) if chain.awaiting_report() => out.push_str(&chain.close_hint()),
+        _ => out.push_str(&next_moves(cycles)),
+    }
 
     write_rules_here(out, cycles);
     write_report_principles(out);

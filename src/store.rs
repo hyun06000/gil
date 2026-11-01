@@ -164,8 +164,7 @@ pub(crate) fn load_within(
 /// Encode without filesystem mutation, shared by save and explicit migration.
 pub(crate) fn encode(project: &Project) -> Result<Vec<u8>, StoreError> {
     if let Some(chain) = project.current_chain() {
-        crate::Chain::validate(chain.id(), chain.existence(), chain.entry_snapshot(),
-            chain.cycles(), project.current_existence_ref()).map_err(|err| StoreError::ChainState(err.to_string()))?;
+        chain.validate_state(project.current_existence_ref(), project.current_existence().current_journey()).map_err(|err| StoreError::ChainState(err.to_string()))?;
     }
     let mut stored = StoredState::from(project);
     if let Some(state) = project.visual_state() {
@@ -380,12 +379,18 @@ impl StoredState {
         let (stored_cycles, chain) = match (self.format, self.cycles, self.chains) {
             (CHAIN_FORMAT | CHAIN_VISUAL_FORMAT, None, Some(mut chains)) if chains.current == "chain:C1" && chains.next_id == 2 && chains.nodes.len() == 1 => {
                 let chain = chains.nodes.remove(0);
-                if chain.id != "C1" || chain.state != "open" || chain.parent_chain_ref.is_some() || chain.exit_snapshot_ref.is_some() {
-                    return Err(StoreError::ChainState("only one open root Chain is supported, with no Exit or parent".into()));
+                if chain.id != "C1" || !matches!(chain.state.as_str(), "open" | "closed") || chain.parent_chain_ref.is_some()
+                    || (chain.state == "closed") != chain.report.is_some()
+                    || (chain.state == "closed") != chain.exit_snapshot_ref.is_some()
+                    || (chain.state == "closed") != chain.journey_ref.is_some() {
+                    return Err(StoreError::ChainState("root Chain state, Report and Exit must agree; no parent is supported".into()));
                 }
                 let identity = (read_ref(&format!("chain:{}", chain.id), "chains.nodes.id")?,
                     read_ref(&chain.existence_ref, "chains.nodes.existence_ref")?,
-                    read_ref(&chain.entry_snapshot_ref, "chains.nodes.entry_snapshot_ref")?);
+                    read_ref(&chain.entry_snapshot_ref, "chains.nodes.entry_snapshot_ref")?,
+                    chain.report.map(|fields| fields.into_iter().collect()),
+                    chain.exit_snapshot_ref.map(|value| read_ref(&value, "chains.nodes.exit_snapshot_ref")).transpose()?,
+                    chain.journey_ref.map(|value| read_ref(&value, "chains.nodes.journey_ref")).transpose()?);
                 (chain.cycles, Some(identity))
             }
             (FORMAT | VISUAL_FORMAT, Some(cycles), None) => (cycles, None),
@@ -408,6 +413,7 @@ impl StoredState {
             states.insert(id.number(), ExistenceState);
         }
 
+        let rules = if chain.is_some() { rules.for_chain() } else { rules };
         let cycles = Cycles::restore(rules, stored_cycles.into_state()?).map_err(StoreError::NotValid)?;
         let mut project = Project::restore(
             cycles,
@@ -418,8 +424,8 @@ impl StoredState {
             artifacts,
         )
         .map_err(StoreError::NotWhole)?;
-        if let Some((id, owner, entry)) = chain {
-            project = project.restore_chain(id, owner, entry).map_err(|err| StoreError::ChainState(err.to_string()))?;
+        if let Some((id, owner, entry, report, exit, journey)) = chain {
+            project = project.restore_chain(id, owner, entry, report, exit, journey).map_err(|err| StoreError::ChainState(err.to_string()))?;
         }
         if let Some(visuals) = visuals {
             use crate::visual_report::project::{MigrationBoundary, ProjectVisualGraph, VisualState};
@@ -605,6 +611,10 @@ struct StoredChains {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct StoredChain {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    journey_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    report: Option<BTreeMap<String, String>>,
     id: String,
     existence_ref: String,
     state: String,
@@ -823,8 +833,9 @@ impl From<&Project> for StoredState {
                 current: chain.id().to_string(), next_id: 2,
                 nodes: vec![StoredChain {
                     id: chain.id().id(), existence_ref: chain.existence().to_string(),
-                    state: "open".into(), parent_chain_ref: None,
-                    entry_snapshot_ref: chain.entry_snapshot().to_string(), exit_snapshot_ref: None,
+                    state: if chain.is_closed() { "closed" } else { "open" }.into(), parent_chain_ref: None,
+                    report: chain.report().map(write_report), journey_ref: chain.journey().map(|id| id.to_string()),
+                    entry_snapshot_ref: chain.entry_snapshot().to_string(), exit_snapshot_ref: chain.exit_snapshot().map(|id| id.to_string()),
                     cycles: StoredCycles::from(chain.cycles()),
                 }],
             }),

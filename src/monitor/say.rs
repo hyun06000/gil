@@ -82,6 +82,7 @@ pub(super) fn direction_of(action: &str) -> &str {
     match action {
         "open_child" => "이 결과를 바탕으로 다음 실험을 시작한다",
         "revisit" => "이전 질문으로 돌아가 다른 방법을 시도한다",
+        "close_chain" => "승인된 종료 제안으로 Chain Report를 제출한다",
         "close_cycle" => "이 Cycle 을 판정으로 닫는다",
         other => other,
     }
@@ -136,6 +137,7 @@ pub(super) fn what_it_does(kind: ActionKind) -> String {
     match kind {
         ActionKind::CloseStep(step) => format!("열린 {step} 자리를 Report 로 닫는다"),
         ActionKind::OpenStep(step) => format!("{step} 자리를 연다"),
+        ActionKind::CloseChain => "승인된 종료 제안으로 Chain을 닫는다".into(),
         ActionKind::CloseCycle(cycle) => format!("이 {cycle} Cycle 을 Cycle Report 로 닫는다"),
         ActionKind::OpenCycle(cycle) => format!("다음 {cycle} Cycle 을 연다"),
         ActionKind::OpenBranch(cycle) => format!("되돌아온 자리에 새 {cycle} 갈래를 연다"),

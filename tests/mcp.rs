@@ -1895,3 +1895,41 @@ fn chain_profile_stdio_start_monitor_and_restart_preserve_containment() {
     assert_eq!(std::fs::read(&state).unwrap(), before);
     mcp.eof();
 }
+
+#[cfg(feature = "chain-core")]
+#[test]
+fn chain_profile_stdio_closing_report_survives_lost_response_and_monitor_restart() {
+    use serde_json::json;
+    for visual in [false, true] {
+        let root = common::scratch(if visual { "closing-seven" } else { "closing-six" });
+        common::private_storage(&root);
+        let path = root.join(gil::STATE_PATH);
+        let project = common::closing_ready("failure");
+        let project = if visual { project.prepare_visual_upgrade().unwrap() } else { project };
+        gil::save(&project, &path).unwrap();
+        let settings = scratch("closing-settings");
+        let mut mcp = Client::serve_with(&settings);
+        mcp.initialize();
+        let report = "verdict: failure\nclosing_synthesis_ref: step:C3/S3\nhandoff_summary: Explored paths; unresolved question recorded.";
+        let args = json!({"project_root": root, "report": report});
+        let reply = monitor_call(&mut mcp, "gil_close", args.clone());
+        assert_eq!(reply["structuredContent"]["ok"], true, "{reply}");
+        mcp.eof();
+        let bytes = std::fs::read(&path).unwrap();
+        let mut mcp = Client::serve_with(&settings);
+        mcp.initialize();
+        let status = monitor_call(&mut mcp, "gil_status", json!({"project_root": root}));
+        assert!(status["structuredContent"]["said"].as_str().unwrap().contains("Chain 판정: failure"), "{status}");
+        let duplicate = monitor_call(&mut mcp, "gil_close", args);
+        assert_eq!(duplicate["structuredContent"]["ok"], false, "{duplicate}");
+        let prepared = monitor_call(&mut mcp, "gil_monitor_prepare", json!({"project_root": root}));
+        let shown = monitor_call(&mut mcp, "show_gil_monitor", json!({"scope_id": prepared["structuredContent"]["scope_id"]}));
+        let view = &shown["structuredContent"]["view"];
+        assert_eq!(view["chain"]["state"], "closed", "{shown}");
+        assert_eq!(view["chain"]["report"]["verdict"], "failure");
+        assert_eq!(view["chain"]["exit_snapshot_ref"], "snapshot:A1");
+        assert_eq!(view["next_actions"], json!([]));
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        mcp.eof();
+    }
+}

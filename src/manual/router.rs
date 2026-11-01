@@ -203,7 +203,7 @@ fn cycle_report(source: &CycleError) -> bool {
         | CycleError::AlreadyClosed
         | CycleError::StepsNotDone
         | CycleError::SynthesisRef(_)
-        | CycleError::BasisRefs(_) => false,
+        | CycleError::ClosingInterview | CycleError::BasisRefs(_) => false,
     }
 }
 

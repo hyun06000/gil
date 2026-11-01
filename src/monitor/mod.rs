@@ -137,6 +137,9 @@ pub struct MonitorSnapshot {
 /// Container facts from the domain; typed references, no UI layout or invented approval.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChainFacts {
+    pub journey_ref: Option<JourneyRef>,
+    pub exit_snapshot_ref: Option<SnapshotRef>,
+    pub report: Option<crate::Report>,
     pub chain_ref: crate::ChainRef,
     pub existence_ref: ExistenceRef,
     pub entry_snapshot_ref: SnapshotRef,
@@ -410,7 +413,7 @@ pub struct NextAction {
     pub help_ref: Option<TopicId>,
 }
 
-/// **아직 없는 전이를 담지 않는다** — Chain close·임의 checkout·merge·승인은 여기 없다.
+/// **아직 없는 전이를 담지 않는다** — 임의 checkout·merge·인간 인증은 여기 없다.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActionKind {
     /// 열려 있는 Step 을 Report 로 닫는다.
@@ -419,6 +422,7 @@ pub enum ActionKind {
     OpenStep(NodeKind),
     /// Step Graph 가 끝 경계에 닿았다 — Cycle Report 로 닫는다.
     CloseCycle(CycleKind),
+    CloseChain,
     /// 닫힌 Cycle 이 적어 둔 대로 다음 Cycle 을 연다.
     OpenCycle(CycleKind),
     /// 되돌아온 자리에서 새 갈래를 연다.
@@ -572,6 +576,7 @@ fn snapshot(
         current_chain: project.current_chain().map(|chain| ChainFacts {
             chain_ref: chain.id(), existence_ref: chain.existence(),
             entry_snapshot_ref: chain.entry_snapshot(),
+            exit_snapshot_ref: chain.exit_snapshot(), report: chain.report().cloned(), journey_ref: chain.journey(),
             current_cycle_ref: chain.current_cycle(),
             cycle_refs: chain.cycles().nodes().iter().map(|cycle| cycle.id().to_ref()).collect(),
         }),
@@ -794,7 +799,7 @@ fn topic_for(kind: ActionKind) -> Option<TopicId> {
         // **Interview 에는 붙이지 않는다.** 두 Cycle 은 요구하는 칸도 허용값도 다르므로,
         // 한 Topic 으로 뭉뚱그리면 읽는 쪽이 남의 규칙을 배운다(Router 와 같은 규율).
         ActionKind::CloseCycle(CycleKind::Experiment) => Bundled::ExperimentClose,
-        ActionKind::CloseCycle(CycleKind::Interview) => return None,
+        ActionKind::CloseCycle(CycleKind::Interview) | ActionKind::CloseChain => return None,
         ActionKind::OpenCycle(_) => return None,
         ActionKind::Revisit | ActionKind::OpenBranch(_) => Bundled::CycleRevisit,
         ActionKind::Restore => Bundled::Restore,
@@ -830,7 +835,7 @@ fn world_allows(kind: ActionKind, world: WorldMark) -> bool {
     match kind {
         ActionKind::OpenStep(_) | ActionKind::OpenCycle(_) | ActionKind::OpenBranch(_) => true,
         ActionKind::CloseStep(NodeKind::Verify) => world != WorldMark::Unknown,
-        ActionKind::CloseStep(_) | ActionKind::CloseCycle(_) | ActionKind::Revisit => {
+        ActionKind::CloseStep(_) | ActionKind::CloseCycle(_) | ActionKind::CloseChain | ActionKind::Revisit => {
             world == WorldMark::Clean
         }
         ActionKind::Restore => world == WorldMark::Dirty,
@@ -858,6 +863,10 @@ fn next_actions(project: &Project, world: WorldMark) -> Vec<NextAction> {
 
 /// 이 자리에서 **구조적으로** 가능한 수들. 세계는 아직 보지 않는다.
 fn possible_here(project: &Project) -> Vec<NextAction> {
+    if let Some(chain) = project.current_chain() {
+        if chain.is_closed() { return vec![]; }
+        if chain.awaiting_report() { return vec![action(ActionKind::CloseChain, "gil close".into(), &chain.close_hint())]; }
+    }
     let cycles = project.cycles();
     let here = cycles.current();
     let mut out = Vec::new();

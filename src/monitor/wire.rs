@@ -256,12 +256,12 @@ mod tests {
             ),
             (
                 DirectionActionV1::ALL.iter().map(|v| format!("\"{}\"", v.as_wire())).collect(),
-                words(&["open_child", "revisit", "close_cycle"]),
+                words(&["open_child", "revisit", "close_cycle", "close_chain"]),
             ),
             (
                 NextActionKindV1::ALL.iter().map(|v| format!("\"{}\"", v.as_wire())).collect(),
                 words(&[
-                    "close_step", "open_step", "close_cycle", "open_cycle", "open_branch",
+                    "close_step", "open_step", "close_cycle", "close_chain", "open_cycle", "open_branch",
                     "revisit", "restore",
                 ]),
             ),

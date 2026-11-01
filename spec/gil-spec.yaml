@@ -27,15 +27,14 @@ cycle_kinds:
       handoff_summary:
         non_empty: true
       next_direction.action:
-        # 명세는 `close_chain` 도 정의하지만 Chain 을 아직 짓지 않았다. 설계에서 지우지 않고
-        # **지금 밟을 수 없다는 사실과 까닭**을 함께 둔다 — Chain 이 생기면 여기 한 줄을
-        # allowed_values 로 옮긴다.
+        # Legacy grammar: close_chain is unavailable without a real owner.
+        # RuleSet::for_chain promotes this declared direction only for format 6/7.
         allowed_values:
           - open_child
         value_descriptions:
           open_child: 방금 닫은 이 Cycle 을 부모로 다음 Cycle 을 연다 (Cycle 계층의 이동)
         not_yet:
-          close_chain: Chain 을 아직 짓지 않았다
+          close_chain: 실제 Chain 안에서만 승인된 종료 Synthesis를 담은 Interview를 닫고 Chain Report를 제출한다. 기존 format 4/5에서는 사용할 수 없다
       next_direction.reason:
         non_empty: true
 

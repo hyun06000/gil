@@ -2246,15 +2246,21 @@ artifact·release pipeline → 새 기계 설치·업데이트 인수다. Claude
 
 ### M6-B — Closing Interview와 Chain Report
 
-- [ ] Cycle Model §18–19의 종료 제안→인간 승인→Closing Interview success→Chain close를 구현한다.
-- [ ] `closing_synthesis_ref`가 현재 Chain의 성공한 Closing Interview 안에 있고 `approved: yes`인지 검사한다.
-- [ ] `chain_report.verdict == synthesis.chain_verdict`와 nonempty `handoff_summary`를 검사한다.
-- [ ] 같은 Closing Interview success에서 Chain success/failure가 각각 가능한지 검증한다.
+- [x] Cycle Model §18–19의 종료 제안→인간 승인→Closing Interview success→Chain close를 구현한다.
+- [x] `closing_synthesis_ref`가 현재 Chain의 성공한 Closing Interview 안에 있고 `approved: yes`인지 검사한다.
+- [x] `chain_report.verdict == synthesis.chain_verdict`와 nonempty `handoff_summary`를 검사한다.
+- [x] 같은 Closing Interview success에서 Chain success/failure가 각각 가능한지 검증한다.
       Experiment success/failure만으로 Chain을 닫지 않는다.
-- [ ] 잘못된 참조·승인 없음·판정 불일치·중복/유실 응답이 기록과 현재 위치를 손상시키지 않는지 검사한다.
+- [x] 잘못된 참조·승인 없음·판정 불일치·중복/유실 응답이 기록과 현재 위치를 손상시키지 않는지 검사한다.
 
 **합격:** 사람이 성공 또는 실패로 끝내기로 승인한 정확한 근거와 Chain Report가 보존되고,
 재시작 후 같은 종료 결과를 조회한다. 일반 Interview Outcome 종료를 Chain 종료로 세지 않는다.
+
+2026-11-01: `chain-core` 개발 프로필에서 구현·로컬 인수를 완료했다. `tests/chain_closing.rs`의
+7개 종료/보존 시험, stdio MCP format 6/7 재시작, 공용 Monitor 상태 투영을 검증한다.
+저장 계약·명령 순서는 [Chain storage](GIL_Chain_Storage_v0.1.md)의 M6-B 절을 따른다.
+승인 응답의 인간 출처 인증은 M6-D이며 `approved: yes` 검사를 인증으로 표현하지 않는다.
+기본 설치본·피드 활성화, Windows 실기·Luna 실사용 인수는 별개다. CI 결과는 PR에서 확인한다.
 
 ### M6-C — 다음 Chain과 상위 인수인계
 
