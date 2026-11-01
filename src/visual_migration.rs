@@ -767,7 +767,62 @@ pub fn preservation(root: &Path, backup: &Path, expected: &str) -> Result<bool> 
 #[cfg(test)]
 #[path = "../tests/common/mod.rs"]
 mod common;
-#[cfg(test)]
+
+/// Chain profiles (`chain-core`, and `approved-plan` on top of it) never write format 4: a new
+/// project is format 6/7 and this in-place migration accepts format 4 only. So the format-4
+/// fixture below cannot exist there, and the approved-plan profile additionally refuses the
+/// fixture's bare `approved: yes` Synthesis. The profile-specific contract that remains — the
+/// migration refuses a chain-format project before touching anything — is pinned in
+/// `chain_profile_tests`. The format-4 rehearsal itself stays covered by the default and
+/// `visual-authoring` builds (`cargo test --locked -p gil --lib visual_migration`).
+#[cfg(all(test, feature = "chain-core"))]
+mod chain_profile_tests {
+    use super::*;
+    use std::{fs, os::unix::fs::DirBuilderExt, path::PathBuf};
+    fn chain_project() -> (PathBuf, PathBuf) {
+        let base = std::env::temp_dir().join(format!(
+            "gil-inplace-chain-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        fs::DirBuilder::new().mode(0o700).create(&base).unwrap();
+        let base = base.canonicalize().unwrap();
+        let root = base.join("source");
+        fs::DirBuilder::new().mode(0o700).create(&root).unwrap();
+        fs::write(root.join("work.txt"), "chain world\n").unwrap();
+        let s = ProjectSession::start(rules().unwrap(), root.join(STATE_PATH)).unwrap();
+        s.commit().unwrap();
+        (root, base.join("backup"))
+    }
+    /// The declared format is the evidence: a fresh chain-profile project is not format 4.
+    #[test]
+    fn a_new_chain_profile_project_declares_a_chain_format_not_four() {
+        let (root, _) = chain_project();
+        let head: serde_norway::Value =
+            serde_norway::from_slice(&fs::read(root.join(STATE_PATH)).unwrap()).unwrap();
+        let format = head.get("format").and_then(|v| v.as_u64()).expect("declared format");
+        assert!(format == crate::CHAIN_FORMAT as u64 || format == crate::CHAIN_VISUAL_FORMAT as u64, "{format}");
+        assert_ne!(format, crate::FORMAT as u64);
+        assert!(audited(&root).unwrap().project().current_chain().is_some());
+    }
+    /// A chain-format project is refused by precheck and prepare before any backup exists and
+    /// without rewriting the source. No approval shortcut and no auto-migration appears here.
+    #[test]
+    fn chain_format_projects_are_refused_before_backup_and_source_stays_unchanged() {
+        let (root, backup) = chain_project();
+        let before = fs::read(root.join(STATE_PATH)).unwrap();
+        let said = precheck(&root).err().map(|e| e.to_string()).expect("precheck refuses");
+        assert!(said.contains("only format 4"), "{said}");
+        let said = prepare(&root, &backup).err().map(|e| e.to_string()).expect("prepare refuses");
+        assert!(said.contains("only format 4"), "{said}");
+        assert!(!backup.exists(), "a refused prepare must not leave a backup");
+        assert_eq!(fs::read(root.join(STATE_PATH)).unwrap(), before);
+        assert!(status(&root, &backup, "0000").is_err() || status(&root, &backup, "0000").unwrap() == "not_applied");
+    }
+}
+
+/// Format-4 (legacy) migration rehearsal. See `chain_profile_tests` for why chain profiles are out.
+#[cfg(all(test, not(feature = "chain-core")))]
 mod tests {
     use super::*;
     use std::{
@@ -802,6 +857,8 @@ mod tests {
         fs::create_dir(root.join("empty directory")).unwrap();
         fs::write(root.join("work.txt"), "원래 세계 🧭\n").unwrap();
         let mut s = ProjectSession::start(rules().unwrap(), root.join(STATE_PATH)).unwrap();
+        // Explicitly a legacy (format-4) project: bare `approved: yes` is that profile's contract.
+        assert!(s.project().current_chain().is_none(), "fixture must be a legacy project");
         let mut p = common::bootstrap_from(s.project().clone());
         common::up_to_verify(&mut p);
         if closed {
@@ -819,6 +876,9 @@ mod tests {
         s.commit().unwrap();
         drop(s);
         fs::write(root.join(".gil/unreferenced-data"), "미참조도 보존").unwrap();
+        let head: serde_norway::Value =
+            serde_norway::from_slice(&fs::read(root.join(STATE_PATH)).unwrap()).unwrap();
+        assert_eq!(head.get("format").and_then(|v| v.as_u64()), Some(crate::FORMAT as u64), "legacy fixture declares format 4");
         (root, base.join("backup"))
     }
     fn snap(p: &Path) -> Tree {

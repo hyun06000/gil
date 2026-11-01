@@ -246,18 +246,91 @@ pub fn serve_stdio() -> Result<(), String> {
 mod tests {
     use super::*;
 
-    /// 기존 status 와 명시적으로 추가한 read-only Monitor 문만 있다.
-    #[test]
-    fn the_complete_twenty_tool_surface_is_registered() {
-        let tools = surface::tools();
-        let mut names: Vec<&str> = tools.iter().map(|one| one.name.as_ref()).collect();
+    /// 기본 표(`tools.json`)는 20개다. feature 별 등록은 **그 feature 가 켜졌을 때만** 더해진다.
+    /// 기본 표와 feature 표를 섞지 않는다 — 각 집합을 따로 고정한다.
+    const DEFAULT_SURFACE: [&str; 20] = ["gil_close", "gil_companion_status", "gil_context", "gil_cycle", "gil_help", "gil_monitor_detail", "gil_monitor_poll", "gil_monitor_prepare", "gil_monitor_read", "gil_monitor_report_image", "gil_monitor_report_visuals", "gil_monitor_status", "gil_open", "gil_restore", "gil_revisit", "gil_start", "gil_status", "gil_story", "show_gil_companion", "show_gil_monitor"];
+    const VISUAL_SURFACE: [&str; 5] = ["gil_report_visuals", "gil_migration_check", "gil_migration_prepare", "gil_migration_apply", "gil_migration_status"];
+    /// M6-D 승인 계획 도구 — 모델이 부르는 셋과 App 전용 결정 둘(src/mcp/plans.rs).
+    const PLAN_MODEL_SURFACE: [&str; 3] = ["gil_plan_propose", "gil_plan_read", "gil_plan_request_interview"];
+    const PLAN_APP_SURFACE: [&str; 2] = ["gil_plan_review", "gil_plan_decide"];
+
+    fn registered_names() -> Vec<String> {
+        let mut names: Vec<String> = surface::tools().iter().map(|one| one.name.to_string()).collect();
         names.sort();
-        let mut expected = vec!["gil_close", "gil_companion_status", "gil_context", "gil_cycle", "gil_help", "gil_monitor_detail", "gil_monitor_poll", "gil_monitor_prepare", "gil_monitor_read", "gil_monitor_report_image", "gil_monitor_report_visuals", "gil_monitor_status", "gil_open", "gil_restore", "gil_revisit", "gil_start", "gil_status", "gil_story", "show_gil_companion", "show_gil_monitor"];
+        names
+    }
+
+    fn visibility(name: &str) -> Vec<String> {
+        let tool = surface::tools().iter().find(|t| t.name == name).unwrap_or_else(|| panic!("{name} 가 등록되지 않았다"));
+        let value = serde_json::to_value(tool).expect("tool json");
+        value["_meta"]["ui"]["visibility"].as_array().unwrap_or_else(|| panic!("{name} 에 visibility 가 없다"))
+            .iter().map(|v| v.as_str().expect("visibility 문자열").to_owned()).collect()
+    }
+
+    /// 등록된 도구 이름은 feature 별 기대 집합과 **정확히** 같다. 이름 하나가 빠지거나 남으면 실패한다.
+    #[test]
+    fn the_registered_tool_names_match_the_enabled_features_exactly() {
+        let mut expected: Vec<String> = DEFAULT_SURFACE.iter().map(|s| s.to_string()).collect();
         if cfg!(feature = "visual-authoring") {
-            expected.extend(["gil_report_visuals", "gil_migration_check", "gil_migration_prepare", "gil_migration_apply", "gil_migration_status"]);
-            expected.sort();
+            expected.extend(VISUAL_SURFACE.iter().map(|s| s.to_string()));
         }
-        assert_eq!(names, expected);
+        if cfg!(all(feature = "visual-authoring", windows)) {
+            expected.push("gil_prepare_workspace".to_string());
+        }
+        if cfg!(feature = "approved-plan") {
+            expected.extend(PLAN_MODEL_SURFACE.iter().chain(PLAN_APP_SURFACE.iter()).map(|s| s.to_string()));
+        }
+        expected.sort();
+        assert_eq!(registered_names(), expected);
+    }
+
+    /// 기본 표 파일 자체에는 승인 계획 도구가 없다 — 승인 계획은 feature 가 더하는 것이지 기본 계약이 아니다.
+    #[test]
+    fn the_checked_in_default_catalog_never_lists_plan_or_visual_tools() {
+        let catalog: Vec<serde_json::Value> = serde_json::from_str(include_str!("mcp/tools.json")).expect("tools.json");
+        let mut names: Vec<&str> = catalog.iter().map(|t| t["name"].as_str().expect("name")).collect();
+        names.sort();
+        assert_eq!(names, DEFAULT_SURFACE);
+        for name in PLAN_MODEL_SURFACE.iter().chain(PLAN_APP_SURFACE.iter()).chain(VISUAL_SURFACE.iter()) {
+            assert!(!names.contains(name), "{name} 이 기본 표에 들어왔다");
+        }
+    }
+
+    /// 승인 계획 도구는 approved-plan 이 켜질 때만 다섯 개가 등록되고, 그 가시성은 모델 셋 / App 둘이다.
+    /// 기본·visual-authoring 만의 빌드에서는 하나도 없다.
+    #[test]
+    fn plan_tools_are_registered_only_in_the_approved_plan_profile_with_their_visibility() {
+        let names = registered_names();
+        let present: Vec<&String> = names.iter().filter(|n| n.starts_with("gil_plan_")).collect();
+        if cfg!(feature = "approved-plan") {
+            assert_eq!(present.len(), 5, "{present:?}");
+            for name in PLAN_MODEL_SURFACE {
+                assert_eq!(visibility(name), ["model"], "{name} 는 모델만 부른다");
+            }
+            for name in PLAN_APP_SURFACE {
+                assert_eq!(visibility(name), ["app"], "{name} 는 App 전용 결정 도구다");
+            }
+        } else {
+            assert!(present.is_empty(), "approved-plan 없이 승인 계획 도구가 등록됐다: {present:?}");
+        }
+    }
+
+    /// 기본 표의 가시성은 체크인된 파일 그대로다 — 모델 전용·App 전용·둘 다를 뒤섞지 않는다.
+    #[test]
+    fn default_surface_visibility_matches_the_checked_in_catalog() {
+        let catalog: Vec<serde_json::Value> = serde_json::from_str(include_str!("mcp/tools.json")).expect("tools.json");
+        for tool in &catalog {
+            let name = tool["name"].as_str().expect("name");
+            let declared: Vec<String> = tool["_meta"]["ui"]["visibility"].as_array().expect("visibility")
+                .iter().map(|v| v.as_str().unwrap().to_owned()).collect();
+            assert_eq!(visibility(name), declared, "{name}");
+        }
+        for name in ["gil_monitor_read", "gil_monitor_detail", "gil_monitor_poll", "gil_monitor_report_visuals", "gil_monitor_report_image"] {
+            assert_eq!(visibility(name), ["app"], "{name}");
+        }
+        for name in ["gil_start", "gil_open", "gil_close", "gil_context", "gil_status"] {
+            assert_eq!(visibility(name), ["model"], "{name}");
+        }
     }
 
     #[test]

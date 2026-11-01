@@ -5,7 +5,8 @@
 // 여기서 지키는 것은 그 문서가 실제 도구 표·Core 의 거절 문구·Monitor 거절 code 에 어긋나지
 // 않고, 도구 응답을 화면 성공으로 단정하는 문장이 다시 들어오지 않는다는 사실이다.
 //
-//   1. Skill 이 부르는 도구 이름은 전부 실제 19개 tool 표에 있다.
+//   1. Skill 이 부르는 도구 이름은 전부 실제 20개 tool 표에 있다 — feature 전용 도구(이관·시각
+//      작성·승인 계획)는 각자의 실제 catalog 와 조건 절에서만, 정확한 이름으로 확인한다.
 //   2. 시작 요청 하나가 start → prepare → show → 첫 Interview 순서로 이어진다.
 //   3. 시작 성공·Monitor 데이터 준비·실제 화면을 가르고, 화면은 사용자 확인 전까지 미확인이다.
 //   4. 이미 시작된 Project 의 거절 문구가 Core 가 실제로 말하는 글자와 같다.
@@ -51,9 +52,26 @@ test("Skill 의 identity 는 그대로이고 description 이 시작 요청을 �
   assert.match(meta.description, /Monitor/, "Monitor 표시가 description 에서 빠졌다");
 });
 
+/**
+ * M6-D 승인 계획 catalog — `src/mcp/plans.rs::catalog` 의 실제 등록 항목을 읽는다.
+ * 각 항목은 (이름, 설명, 입력, app, read) 다섯 칸이다. `app: true` 는 `_meta.ui.visibility: ["app"]`
+ * (Monitor 전용 결정 도구), `false` 는 `["model"]` 이다. 이 표는 `approved-plan` feature 에서만
+ * 등록되며 기본 `tools.json` 에는 없다 — 그 부재도 아래에서 고정한다.
+ */
+const planCatalog = () => {
+  const rust = readFileSync(join(REPO, "src", "mcp", "plans.rs"), "utf8");
+  const body = rust.slice(rust.indexOf("fn catalog("), rust.indexOf("#[cfg(test)]"));
+  const rows = [...body.matchAll(/\(\s*\n\s*"(gil_plan_[a-z_]+)",\s*\n\s*"[^"]*",\s*\n\s*input\([\s\S]*?\),\s*\n\s*(true|false),\s*\n\s*(true|false),\s*\n\s*\),/g)]
+    .map((m) => ({ name: m[1], app: m[2] === "true", readOnly: m[3] === "true" }));
+  assert.ok(rows.length >= 2, "plans.rs catalog 를 읽지 못했다");
+  assert.ok(body.includes('"visibility":if app {vec!["app"]} else {vec!["model"]}'), "plan catalog 의 가시성 규칙이 바뀌었다 — 이 시험도 함께 고친다");
+  return rows;
+};
+
 test("Skill 이 부르는 도구 이름은 전부 실제 tool 표에 있다", () => {
   assert.equal(TOOLS.length, 20);
   const named = new Set([...SKILL.matchAll(/`((?:gil|show_gil)_[a-z_]+)(?:\(|`)/g)].map((m) => m[1]));
+  const plans = planCatalog();
   for (const name of named) {
     if (name.startsWith("gil_migration_")) {
       const catalog=JSON.parse(readFileSync(join(REPO,"src","mcp","migration-tools.json"),"utf8"));
@@ -64,6 +82,14 @@ test("Skill 이 부르는 도구 이름은 전부 실제 tool 표에 있다", ()
     if (name === "gil_report_visuals") {
       assert.ok(section("## Visual reports — capability-gated authoring").includes(name));
       continue; // Explicit opt-in authoring route, never a promise about the default catalog.
+    }
+    if (name.startsWith("gil_plan_")) {
+      // approved-plan feature only (src/mcp/plans.rs). Exact name, model visibility; never a prefix pass.
+      const row = plans.find((t) => t.name === name);
+      assert.ok(row, `Skill 이 plan catalog 에 없는 도구를 부른다 — ${name}`);
+      assert.equal(row.app, false, `App 전용 결정 도구를 모델에게 시켰다 — ${name}`);
+      assert.ok(!TOOLS.includes(name), `승인 계획 도구가 기본 tools.json 에 들어왔다 — ${name}`);
+      continue;
     }
     if (name === "gil_prepare_workspace") {
       // Windows development surface only (src/mcp/workspace.rs); mentioned solely in the
@@ -80,6 +106,31 @@ test("Skill 이 부르는 도구 이름은 전부 실제 tool 표에 있다", ()
   for (const owed of ["gil_start", "gil_monitor_prepare", "show_gil_monitor", "gil_open", "gil_context"]) {
     assert.ok(named.has(owed), `시작 흐름에 필요한 도구가 문서에 없다 — ${owed}`);
   }
+});
+
+test("승인 계획 도구는 기본 표에 없고, Skill 은 모델용 셋만 capability 조건 아래에서 부르며 App 전용 결정 도구를 시키지 않는다", () => {
+  const plans = planCatalog();
+  const model = plans.filter((t) => !t.app).map((t) => t.name).sort();
+  const app = plans.filter((t) => t.app).map((t) => t.name).sort();
+  // 기본 profile 표의 부재 — 제품 catalog 와 시험이 함께 틀릴 수 없는 독립 사실.
+  assert.ok(TOOLS.every((name) => !name.startsWith("gil_plan_")), "기본 tools.json 에 gil_plan_* 이 있다");
+  assert.ok(!SKILL.includes("gil_plan_*`") || /never require `gil_plan_\*`/.test(SKILL), "gil_plan_* 접두어를 통째로 허용하는 문장이 있다");
+  // App 전용 결정 도구(Monitor 버튼)는 모델 지침 어디에도 나오지 않는다 — 이름으로도, 접두어 예외로도.
+  assert.ok(app.length >= 2, `App 전용 결정 도구가 catalog 에서 사라졌다 — ${app}`);
+  for (const name of app) assert.ok(!SKILL.includes(name), `App 전용 결정 도구를 Skill 이 부른다 — ${name}`);
+  // 모델용 도구 세 개는 전부 Skill 에 있고, 사용 조건은 실제 기록/조회/tools\/list 다.
+  assert.deepEqual(model, ["gil_plan_propose", "gil_plan_read", "gil_plan_request_interview"]);
+  const gate = SKILL.match(/A project uses the approved-plan profile only when[\s\S]*?Otherwise \(legacy projects, default builds, tools absent\) never require `gil_plan_\*`/);
+  assert.ok(gate, "승인 계획 도구의 사용 조건(기록·supported·tools/list)이 Skill 에 없다");
+  for (const name of model) assert.ok(gate[0].includes(`\`${name}\``), `조건문이 ${name} 를 들지 않는다`);
+  assert.match(gate[0], /`gil_context` says `승인 계획 프로필`/);
+  assert.match(gate[0], /`gil_plan_read` answers `supported: true`/);
+  assert.match(gate[0], /connected `tools\/list` offers/);
+  assert.match(SKILL, /Do not infer this from the OS or the install kind/);
+  // 승인은 Monitor 버튼이다 — 채팅 동의·approved 직접 기입 금지, close_report 그대로.
+  assert.match(SKILL, /Chat agreement is not approval/);
+  assert.match(SKILL, /Never write `approved`, `plan_revision` or `plan_digest`: Core adds them/);
+  assert.match(SKILL, /`gil_close` Synthesis with `close_report` \*\*unchanged\*\*/);
 });
 
 test("시각 작성은 실제 확장 schema와 조회 도구를 모두 확인하고 이관을 금지한다", () => {
