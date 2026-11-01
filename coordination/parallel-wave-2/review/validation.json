@@ -1,0 +1,345 @@
+{
+  "review_date_local": "2026-11-02",
+  "platform": "darwin-arm64",
+  "source_commit": "628da7020f8cf317905393d32f26d3a054f39e51",
+  "branch": "review/claude-wave2-20261102",
+  "checks": [
+    {
+      "name": "original-regressions",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "gil",
+        "--features",
+        "approved-plan,visual-authoring,product-safety",
+        "--lib",
+        "wave2_original_review"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "passed": 4,
+        "failed": 0,
+        "ignored": 0
+      }
+    },
+    {
+      "name": "chain-domain",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "gil",
+        "--features",
+        "chain-core",
+        "--test",
+        "chains",
+        "--test",
+        "chain_closing",
+        "--test",
+        "chain_handoff",
+        "--test",
+        "cycles",
+        "--test",
+        "context",
+        "--test",
+        "will",
+        "--test",
+        "walk"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "passed": 154,
+        "failed": 0,
+        "ignored": 0
+      }
+    },
+    {
+      "name": "chain-revisit",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "gil",
+        "--features",
+        "chain-core",
+        "--test",
+        "revisit",
+        "cumulative_context_survives_pending_new_branch_success_and_process_restart",
+        "--",
+        "--exact"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      }
+    },
+    {
+      "name": "chain-product",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "gil",
+        "--features",
+        "chain-core,visual-authoring,product-safety",
+        "--test",
+        "mcp",
+        "--test",
+        "visual_start"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "passed": 35,
+        "failed": 0,
+        "ignored": 0
+      }
+    },
+    {
+      "name": "default-build",
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "-p",
+        "gil",
+        "--all-targets"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "approved-build",
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "-p",
+        "gil",
+        "--all-targets",
+        "--features",
+        "approved-plan,visual-authoring,product-safety"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "wire",
+      "command": [
+        "node",
+        "tools/scenarios/wire-runner.mjs",
+        "--build",
+        "--out",
+        "coordination/parallel-wave-2/review/wire"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "pass": 20,
+        "fail": 0,
+        "unknown": 0,
+        "expected_blocked": 1,
+        "unsupported": 0,
+        "not_run": 0
+      },
+      "source_commit": "628da7020f8cf317905393d32f26d3a054f39e51",
+      "claims": {
+        "core_contract": "pass",
+        "model_task": "not_run (no model was called; synthetic App input only)",
+        "native_windows": "not_run (host is not Windows)"
+      }
+    },
+    {
+      "name": "default-guidance-final",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "gil",
+        "--lib",
+        "mcp::guidance"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "passed": 9,
+        "failed": 0,
+        "ignored": 0
+      }
+    },
+    {
+      "name": "chain-product-lib",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "gil",
+        "--features",
+        "chain-core,visual-authoring,product-safety",
+        "--lib",
+        "visual_start"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "passed": 9,
+        "failed": 0,
+        "ignored": 1
+      }
+    },
+    {
+      "name": "chain-build",
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "-p",
+        "gil",
+        "--all-targets",
+        "--features",
+        "chain-core,visual-authoring,product-safety"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "approved-legacy-context",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "gil",
+        "--features",
+        "approved-plan,visual-authoring,product-safety",
+        "--test",
+        "context"
+      ],
+      "exit_code": 101,
+      "counts": {
+        "passed": 1,
+        "failed": 14,
+        "ignored": 0
+      },
+      "interpretation": "Expected remaining coverage gap: 14 legacy bootstrap fixtures cannot approve an approved-plan project; not 14 independently demonstrated product defects."
+    },
+    {
+      "name": "wire-plain",
+      "command": [
+        "node",
+        "tools/scenarios/wire-runner.mjs",
+        "--build",
+        "--features",
+        "approved-plan,product-safety",
+        "--out",
+        "coordination/parallel-wave-2/review/wire-plain"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "pass": 20,
+        "fail": 0,
+        "unknown": 0,
+        "expected_blocked": 1,
+        "unsupported": 0,
+        "not_run": 0
+      },
+      "source_commit": "628da7020f8cf317905393d32f26d3a054f39e51",
+      "claims": {
+        "core_contract": "pass",
+        "model_task": "not_run (no model was called; synthetic App input only)",
+        "native_windows": "not_run (host is not Windows)"
+      }
+    },
+    {
+      "name": "default",
+      "command": "cargo test --locked -p gil",
+      "exit_code": 0,
+      "counts": {
+        "passed": 1515,
+        "failed": 0,
+        "ignored": 2
+      },
+      "scope_note": "Default full suite preceded final guidance change; final default guidance unit suite and all-target build were rerun."
+    },
+    {
+      "name": "approved-final",
+      "command": "cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib --test guidance_wave1 --test guidance_wave2 --test approved_plan_wire_wave1",
+      "exit_code": 0,
+      "counts": {
+        "passed": 687,
+        "failed": 0,
+        "ignored": 1
+      },
+      "scope_note": "Final guidance fix included."
+    },
+    {
+      "name": "js",
+      "command": "node --test ui/layout.test.mjs mcp-app/*.test.mjs plugins/gil-companion-prototype/*.test.mjs tools/scenarios/*.test.mjs",
+      "exit_code": 0,
+      "counts": {
+        "pass": 184,
+        "fail": 0,
+        "skipped": 4
+      }
+    },
+    {
+      "name": "packaging",
+      "command": "node --test distribution/codex/*.test.mjs distribution/compliance/notices.test.mjs",
+      "exit_code": 0,
+      "counts": {
+        "pass": 96,
+        "fail": 0,
+        "skipped": 1
+      }
+    },
+    {
+      "name": "design",
+      "command": "node --test design-tests/m6e/m6e.test.mjs",
+      "exit_code": 0,
+      "counts": {
+        "pass": 25,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "scenarios-final",
+      "command": "node --test tools/scenarios/*.test.mjs",
+      "exit_code": 0,
+      "counts": {
+        "pass": 37,
+        "fail": 0,
+        "skipped": 0
+      }
+    }
+  ],
+  "known_not_green": [
+    "Full approved-plan integration suite still contains legacy fixtures. Independently reproduced context: 1 pass / 14 fail. E lane reported 509 total profile failures before C integration; that total was not rerun or claimed current."
+  ],
+  "not_run": [
+    "Windows native CI/PC",
+    "Actual Codex fullscreen display",
+    "Human Monitor button input",
+    "Luna model task",
+    "Tauri workspace",
+    "Remote CI",
+    "Merge/main/push/publication"
+  ],
+  "initial_attempts": [
+    {
+      "name": "JS before locked plugin dependencies installed",
+      "result": "monitor.test.mjs module load failure; rerun after npm ci --offline: 184 pass, 4 skip"
+    },
+    {
+      "name": "New closed-Cycle guidance regression before integration fix",
+      "result": "0 pass / 1 fail; final regression passes"
+    }
+  ],
+  "additional_checks": [
+    "git diff --check: pass",
+    "sync-workflow.mjs: pass",
+    "three notice policies: collect/assertCoverage verified package/license/toolchain inventory unchanged before updating input hashes"
+  ]
+}
