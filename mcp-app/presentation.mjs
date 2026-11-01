@@ -142,7 +142,7 @@ export function updateGuide(update) {
     ]) };
   }
   return { title: 'macOS — 설치 안내의 절차로 업데이트', companion: false, steps: common.concat([
-    'Codex: 새 대화에 "GIL 을 ' + version + ' 으로 업데이트해 줘. 설치 안내(INSTALL.md)의 Codex 절차를 따르고, 기존 등록과 .gil 은 바꾸지 마." 라고 요청합니다.',
+    'Codex: 새 대화에 "GIL 을 ' + version + ' 으로 업데이트해 줘. 설치 안내(INSTALL.md)의 공식 Plugin 절차로 GIL 등록만 교체하고, 다른 등록과 프로젝트·.gil 기록은 바꾸지 마." 라고 요청합니다.',
     'Claude Desktop(Claude Code 탭): 설치 안내대로 새 archive 를 새 폴더에 풀고, Claude Desktop 을 완전히 종료한 뒤 설정의 gil 항목을 새 Core 경로로 바꿉니다. 바꾸지 않으면 Claude 만 이전 버전에 남습니다.',
   ]) };
 }

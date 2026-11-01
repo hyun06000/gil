@@ -269,8 +269,11 @@ fn write_cache(dir: &Path, cache: &Cache) {
 
 /// `curl` from the OS, HTTPS only, bounded in time and size. Output is the feed bytes.
 fn fetch_feed(url: &str) -> Result<Value, String> {
-    let output = std::process::Command::new(if cfg!(windows) { "curl.exe" } else { "curl" })
-        .args(["-fsSL", "--proto", "=https", "--max-time", "8", "--max-redirs", "2",
+    let mut command = std::process::Command::new(if cfg!(windows) { "curl.exe" } else { "/usr/bin/curl" });
+    #[cfg(windows)]
+    { use std::os::windows::process::CommandExt; command.creation_flags(0x0800_0000); }
+    let output = command
+        .args(["-q", "-fsSL", "--proto", "=https", "--proto-redir", "=https", "--max-time", "8", "--max-redirs", "2",
             "--max-filesize", &MAX_FEED_BYTES.to_string(), url])
         .stdin(std::process::Stdio::null())
         .output()

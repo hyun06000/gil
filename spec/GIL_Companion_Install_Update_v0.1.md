@@ -377,7 +377,8 @@ Config*이며 같은 파일을 연다. Claude Code 탭이 이 파일의 `gil` �
 (GIL 실행 파일 `gil`/`gil.exe`/`gil-launcher.exe`를 가리키는 항목) 또는 `conflict`(사용자가 만든 동명
 등록, 읽기만 하고 바꾸지 않음)다. Claude adapter는 등록된 실행 파일 경로를 그대로 돌려주어 사람이 옛
 버전 폴더 Core와 고정 런처를 구분할 수 있게 한다. 다른 MCP 서버 항목과 Desktop 자체 설정 키는 파싱한
-그대로 다시 쓴다. 백업은 같은 폴더의 `claude_desktop_config.json.gil-backup-<unix초>`이며 최근 5개만 남긴다.
+그대로 다시 쓴다. GIL 저장 작업은 파일 잠금으로 직렬화하고 교체 직전에 원본 digest를 재확인한다.
+외부 편집기는 잠금을 따르지 않을 수 있으므로 설정 편집을 동시에 하지 않는다. Desktop 실행 여부를 확인하지 못해도 쓰기를 거절한다. 백업은 같은 폴더의 `claude_desktop_config.json.gil-backup-<나노초>-<pid>-<순번>`이며 최근 5개만 남긴다.
 
 검증 범위: Rust 단위 시험(등록 판정, 다른 항목 보존, 손상 파일 거절, 동시 변경 중단, 백업·정리, 교체 범위)과
 Windows 제품 계약 시험(`distribution/windows/product-install.test.mjs`)이 통과했다. **실제 Windows Claude

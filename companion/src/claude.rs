@@ -7,7 +7,7 @@
 //! *Developer → Edit Config* button, which opens the same file. So this adapter edits the file
 //! itself, under the same rules a careful person would follow:
 //!
-//! - only the `mcpServers.gil` entry changes; every other key is written back byte-for-byte as
+//! - only the `mcpServers.gil` entry changes; every other key is written back with its parsed value
 //!   parsed, and a `gil` entry that is not GIL's is never touched;
 //! - a backup is kept beside the file, the new content lands through a temporary file and a
 //!   rename, and the file is re-read before the rename so a concurrent change aborts the write;
@@ -222,8 +222,8 @@ pub(crate) fn without_registration(mut root: Map<String, Value>) -> Map<String, 
     root
 }
 
-fn backup_name(seconds: u64) -> String {
-    format!("{FILE_NAME}.gil-backup-{seconds}")
+fn backup_name(id: impl std::fmt::Display) -> String {
+    format!("{FILE_NAME}.gil-backup-{id}")
 }
 
 fn prune_backups(dir: &Path) {
@@ -233,10 +233,11 @@ fn prune_backups(dir: &Path) {
         .flatten()
         .filter_map(Result::ok)
         .map(|entry| entry.path())
-        .filter(|path| {
-            path.file_name()
-                .is_some_and(|name| name.to_string_lossy().starts_with(&prefix))
-        })
+        .filter(|path| path.file_name().is_some_and(|name| {
+            let name = name.to_string_lossy();
+            name.strip_prefix(&prefix).is_some_and(|id| !id.is_empty()
+                && id.bytes().all(|b| b.is_ascii_digit() || b == b'-'))
+        }))
         .collect();
     backups.sort();
     while backups.len() > KEEP_BACKUPS {
@@ -244,9 +245,16 @@ fn prune_backups(dir: &Path) {
     }
 }
 
-/// Replace the settings file with `root`, keeping a backup. Aborts without writing when the
-/// file changed since `loaded` was read, so a concurrent writer never loses its edit.
+/// Serialize GIL writers and check for external edits immediately before replacement.
+/// Other editors do not honor our lock: Desktop must be stopped and the user must not edit
+/// settings during this operation. Detected conflicts leave the current file untouched.
 pub(crate) fn store(path: &Path, loaded: &Loaded, root: &Map<String, Value>) -> Result<(), String> {
+    store_before_replace(path, loaded, root, || {})
+}
+
+fn store_before_replace(
+    path: &Path, loaded: &Loaded, root: &Map<String, Value>, before_replace: impl FnOnce(),
+) -> Result<(), String> {
     let dir = path
         .parent()
         .ok_or("Claude Desktop 설정 경로가 올바르지 않다")?;
@@ -254,55 +262,58 @@ pub(crate) fn store(path: &Path, loaded: &Loaded, root: &Map<String, Value>) -> 
         .map_err(|err| format!("Claude Desktop 설정을 만들지 못했다: {err}"))?
         + "\n";
 
-    // Conflict check: the exact bytes we parsed must still be on disk.
-    match std::fs::read(path) {
-        Ok(now) => {
-            if loaded.digest != Some(digest_of(&now)) {
-                return Err(
-                    "Claude Desktop 설정이 읽은 뒤에 바뀌어서 쓰지 않았다. Claude Desktop을 완전히 종료한 뒤 다시 시도한다."
-                        .into(),
-                );
-            }
-        }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            if loaded.existed {
-                return Err("Claude Desktop 설정이 읽은 뒤에 사라져서 쓰지 않았다".into());
-            }
-        }
-        Err(err) => return Err(format!("Claude Desktop 설정을 다시 읽지 못했다: {err}")),
+    // Keep this file in place: unlinking a held lock would let another writer lock a new inode.
+    let lock = std::fs::OpenOptions::new().read(true).write(true).create(true).truncate(false)
+        .open(dir.join(format!("{FILE_NAME}.gil-lock")))
+        .map_err(|err| format!("Claude Desktop 설정 잠금을 열지 못했다: {err}"))?;
+    lock.try_lock().map_err(|_| "다른 GIL 연결 작업이 진행 중이다. 완료 후 다시 시도한다".to_owned())?;
+    ensure_unchanged(path, loaded)?;
+    let original = if loaded.existed {
+        let bytes = std::fs::read(path).map_err(|err| format!("설정 백업 원본을 읽지 못했다: {err}"))?;
+        if Some(digest_of(&bytes)) != loaded.digest { return Err("설정이 읽은 뒤에 바뀌어서 쓰지 않았다".into()); }
+        Some(bytes)
+    } else { None };
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let id = format!("{}-{}-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos()).unwrap_or(0), std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
+    if let Some(bytes) = original {
+        write_new_synced(&dir.join(backup_name(&id)), &bytes)?;
     }
-
-    if loaded.existed {
-        let seconds = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        std::fs::copy(path, dir.join(backup_name(seconds)))
-            .map_err(|err| format!("Claude Desktop 설정 백업을 만들지 못해 쓰지 않았다: {err}"))?;
-        prune_backups(dir);
-    }
-
-    let temporary = dir.join(format!("{FILE_NAME}.gil-next"));
-    let _ = std::fs::remove_file(&temporary);
-    {
-        use std::io::Write;
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temporary)
-            .map_err(|err| format!("Claude Desktop 설정 임시 파일을 만들지 못했다: {err}"))?;
-        if let Err(err) = file
-            .write_all(text.as_bytes())
-            .and_then(|_| file.sync_all())
-        {
-            drop(file);
-            let _ = std::fs::remove_file(&temporary);
-            return Err(format!("Claude Desktop 설정을 쓰지 못했다: {err}"));
-        }
+    let temporary = dir.join(format!("{FILE_NAME}.gil-next-{id}"));
+    write_new_synced(&temporary, text.as_bytes())?;
+    before_replace();
+    if let Err(err) = ensure_unchanged(path, loaded) {
+        let _ = std::fs::remove_file(&temporary);
+        return Err(err);
     }
     if let Err(err) = std::fs::rename(&temporary, path) {
         let _ = std::fs::remove_file(&temporary);
         return Err(format!("Claude Desktop 설정을 교체하지 못했다: {err}"));
+    }
+    prune_backups(dir);
+    Ok(())
+}
+
+fn ensure_unchanged(path: &Path, loaded: &Loaded) -> Result<(), String> {
+    let now = load(path)?;
+    if now.existed != loaded.existed || now.digest != loaded.digest {
+        return Err("Claude Desktop 설정이 읽은 뒤에 바뀌어서 쓰지 않았다. 설정 편집을 마친 뒤 다시 시도한다.".into());
+    }
+    Ok(())
+}
+
+fn write_new_synced(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    use std::io::Write;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    { use std::os::unix::fs::OpenOptionsExt; options.mode(0o600); }
+    let mut file = options.open(path).map_err(|err| format!("설정 보존 파일을 만들지 못했다: {err}"))?;
+    if let Err(err) = file.write_all(bytes).and_then(|_| file.sync_all()) {
+        drop(file);
+        let _ = std::fs::remove_file(path);
+        return Err(format!("설정 보존 파일을 쓰지 못했다: {err}"));
     }
     Ok(())
 }
@@ -346,11 +357,18 @@ pub(crate) fn desktop_running() -> Option<bool> {
 }
 
 fn refuse_while_running() -> Result<(), String> {
-    if desktop_running() == Some(true) {
+    require_stopped(desktop_running())
+}
+
+fn require_stopped(running: Option<bool>) -> Result<(), String> {
+    if running == Some(true) {
         return Err(
             "Claude Desktop이 실행 중이다. 실행 중에 바꾼 설정은 Desktop이 되돌릴 수 있으므로 Claude Desktop을 완전히 종료한 뒤 다시 누른다."
                 .into(),
         );
+    }
+    if running.is_none() {
+        return Err("Claude Desktop 실행 상태를 확인하지 못해 설정을 바꾸지 않았다. 확인 후 다시 시도한다.".into());
     }
     Ok(())
 }
@@ -421,6 +439,10 @@ pub async fn connect_claude() -> Result<String, String> {
 }
 
 fn register(path: &Path, launcher: &Path) -> Result<String, String> {
+    register_with_check(path, launcher, refuse_while_running)
+}
+
+fn register_with_check(path: &Path, launcher: &Path, check: impl FnOnce() -> Result<(), String>) -> Result<String, String> {
     let loaded = load(path)?;
     match classify(&loaded.root, launcher) {
         Registration::Ours => return Ok("Claude Desktop에 GIL이 이미 연결되어 있다.".into()),
@@ -434,7 +456,7 @@ fn register(path: &Path, launcher: &Path) -> Result<String, String> {
         }
         Registration::Missing => {}
     }
-    refuse_while_running()?;
+    check()?;
     let next = with_registration(loaded.root.clone(), launcher);
     store(path, &loaded, &next)?;
     if classify(&load(path)?.root, launcher) != Registration::Ours {
@@ -453,6 +475,10 @@ pub async fn disconnect_claude() -> Result<String, String> {
 }
 
 fn disconnect(path: &Path, launcher: &Path) -> Result<String, String> {
+    disconnect_with_check(path, launcher, refuse_while_running)
+}
+
+fn disconnect_with_check(path: &Path, launcher: &Path, check: impl FnOnce() -> Result<(), String>) -> Result<String, String> {
     let loaded = load(path)?;
     match classify(&loaded.root, launcher) {
         Registration::Missing => {
@@ -465,7 +491,7 @@ fn disconnect(path: &Path, launcher: &Path) -> Result<String, String> {
         }
         Registration::Ours => {}
     }
-    refuse_while_running()?;
+    check()?;
     let next = without_registration(loaded.root.clone());
     store(path, &loaded, &next)?;
     if classify(&load(path)?.root, launcher) != Registration::Missing {
@@ -487,10 +513,14 @@ pub async fn repair_claude_connection() -> Result<String, String> {
 }
 
 fn repair(path: &Path, launcher: &Path) -> Result<String, String> {
+    repair_with_check(path, launcher, refuse_while_running)
+}
+
+fn repair_with_check(path: &Path, launcher: &Path, check: impl FnOnce() -> Result<(), String>) -> Result<String, String> {
     let loaded = load(path)?;
     match classify(&loaded.root, launcher) {
         Registration::Ours => return Ok("Claude Desktop에 GIL이 이미 연결되어 있다.".into()),
-        Registration::Missing => return register(path, launcher),
+        Registration::Missing => return register_with_check(path, launcher, check),
         Registration::Conflict => {}
     }
     if !entry(&loaded.root).is_some_and(is_gil_executable) {
@@ -498,7 +528,7 @@ fn repair(path: &Path, launcher: &Path) -> Result<String, String> {
             "Claude Desktop의 gil 등록이 GIL 실행 파일이 아니라서 교체하지 않는다. 사용자가 직접 만든 등록으로 본다.".into(),
         );
     }
-    refuse_while_running()?;
+    check()?;
     let next = with_registration(loaded.root.clone(), launcher);
     store(path, &loaded, &next)?;
     if classify(&load(path)?.root, launcher) != Registration::Ours {
@@ -605,12 +635,12 @@ mod tests {
         let path = scratch("fresh");
         let launcher = launcher();
         assert!(matches!(load(&path), Ok(Loaded { existed: false, .. })));
-        register(&path, &launcher).unwrap();
+        register_with_check(&path, &launcher, || Ok(())).unwrap();
         let loaded = load(&path).unwrap();
         assert!(loaded.existed);
         assert_eq!(classify(&loaded.root, &launcher), Registration::Ours);
         assert!(std::fs::read_dir(path.parent().unwrap()).unwrap().count() >= 1);
-        disconnect(&path, &launcher).unwrap();
+        disconnect_with_check(&path, &launcher, || Ok(())).unwrap();
         let after = load(&path).unwrap();
         assert_eq!(classify(&after.root, &launcher), Registration::Missing);
         assert_eq!(after.root["mcpServers"], json!({}));
@@ -666,12 +696,12 @@ mod tests {
         let launcher = launcher();
         std::fs::write(&path, br#"{"mcpServers":{"gil":{"command":"/old/plugins/gil-companion-prototype/core/darwin-arm64/gil","args":["mcp","--serve"]},"map":{"command":"npx","args":[]}}}"#).unwrap();
         assert!(
-            register(&path, &launcher)
+            register_with_check(&path, &launcher, || Ok(()))
                 .unwrap_err()
                 .contains("이전 GIL 연결 교체")
         );
-        if desktop_running() != Some(true) {
-            repair(&path, &launcher).unwrap();
+        { // Isolated fixture: do not inspect or stop the developer's actual Desktop.
+            repair_with_check(&path, &launcher, || Ok(())).unwrap();
             let now = load(&path).unwrap();
             assert_eq!(classify(&now.root, &launcher), Registration::Ours);
             assert!(now.root["mcpServers"]["map"].is_object());
@@ -683,12 +713,12 @@ mod tests {
         )
         .unwrap();
         assert!(
-            repair(&path, &launcher)
+            repair_with_check(&path, &launcher, || Ok(()))
                 .unwrap_err()
                 .contains("교체하지 않는다")
         );
         assert!(
-            disconnect(&path, &launcher)
+            disconnect_with_check(&path, &launcher, || Ok(()))
                 .unwrap_err()
                 .contains("삭제하지 않는다")
         );
@@ -697,6 +727,59 @@ mod tests {
             untouched.root["mcpServers"]["gil"]["command"],
             json!("node")
         );
+        std::fs::remove_dir_all(path.parent().unwrap().parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn late_external_edit_is_kept_and_our_temporary_is_removed() {
+        let path = scratch("late-conflict");
+        std::fs::write(&path, br#"{"preferences":{"theme":"dark"}}"#).unwrap();
+        let loaded = load(&path).unwrap();
+        let next = with_registration(loaded.root.clone(), &launcher());
+        let newer = br#"{"preferences":{"theme":"light"}}"#;
+        let err = store_before_replace(&path, &loaded, &next, || {
+            std::fs::write(&path, newer).unwrap();
+        }).unwrap_err();
+        assert!(err.contains("바뀌어서"));
+        assert_eq!(std::fs::read(&path).unwrap(), newer);
+        assert!(!std::fs::read_dir(path.parent().unwrap()).unwrap().filter_map(Result::ok)
+            .any(|e| e.file_name().to_string_lossy().contains(".gil-next-")));
+        std::fs::remove_dir_all(path.parent().unwrap().parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn simultaneous_gil_writer_is_refused_and_rapid_backups_are_distinct() {
+        let path = scratch("serialized");
+        let first = br#"{"preferences":{"theme":"dark"}}"#;
+        std::fs::write(&path, first).unwrap();
+        let loaded = load(&path).unwrap();
+        let next = with_registration(loaded.root.clone(), &launcher());
+        store_before_replace(&path, &loaded, &next, || {
+            assert!(store(&path, &loaded, &next).unwrap_err().contains("진행 중"));
+        }).unwrap();
+        let second = std::fs::read(&path).unwrap();
+        let now = load(&path).unwrap();
+        store(&path, &now, &without_registration(now.root.clone())).unwrap();
+        let backups: Vec<_> = std::fs::read_dir(path.parent().unwrap()).unwrap().filter_map(Result::ok)
+            .filter(|e| e.file_name().to_string_lossy().contains(".gil-backup-"))
+            .map(|e| std::fs::read(e.path()).unwrap()).collect();
+        assert_eq!(backups.len(), 2);
+        assert!(backups.iter().any(|b| b == first));
+        assert!(backups.contains(&second));
+        std::fs::remove_dir_all(path.parent().unwrap().parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn an_unknown_desktop_process_state_does_not_authorize_a_write() {
+        assert!(require_stopped(Some(false)).is_ok());
+        assert!(require_stopped(Some(true)).is_err());
+        assert!(require_stopped(None).is_err());
+        let path = scratch("unknown-process");
+        let before = br#"{"preferences":{"theme":"dark"}}"#;
+        std::fs::write(&path, before).unwrap();
+        assert!(register_with_check(&path, &launcher(), || require_stopped(None)).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(std::fs::read_dir(path.parent().unwrap()).unwrap().count(), 1);
         std::fs::remove_dir_all(path.parent().unwrap().parent().unwrap()).unwrap();
     }
 

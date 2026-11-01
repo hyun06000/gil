@@ -30,3 +30,10 @@ test('update feed versions match the published install guide', async () => {
   assert.ok(install.includes(feed.platforms['darwin-arm64'].release_url));
   assert.ok(install.includes(feed.platforms['windows-x64'].release_url));
 });
+
+test('update feed names the active installer and archive pins, not a historical guide entry', async () => {
+  const windows = JSON.parse(await readFile(new URL('../windows/owner-update.json', import.meta.url), 'utf8'));
+  const mac = await readFile(new URL('./prepare-gitless-macos.sh', import.meta.url), 'utf8');
+  assert.equal(feed.platforms['windows-x64'].version, windows.version);
+  assert.equal(feed.platforms['darwin-arm64'].version, mac.match(/^version=(\S+)$/m)?.[1]);
+});
