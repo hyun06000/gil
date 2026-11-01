@@ -21,6 +21,7 @@ struct Entry {
     watching: Option<crate::Watching>,
     touched: Instant,
     attempted: Option<Instant>,
+    presence: super::presence::Presence,
 }
 
 #[derive(Debug)]
@@ -33,7 +34,7 @@ impl Default for Monitor {
 impl Entry {
     fn new(binding: Binding) -> Self {
         Self { binding, revision: Arc::new(AtomicU64::new(0)), watching: None,
-            touched: Instant::now(), attempted: None }
+            touched: Instant::now(), attempted: None, presence: Default::default() }
     }
 }
 
@@ -103,6 +104,35 @@ impl Monitor {
         entries.entry(scope.clone()).or_insert_with(|| Entry::new(binding));
         drop(session);
         Ok(json!({ "scope_id": scope, "label": label }))
+    }
+
+    /// Read-only status: do not prepare/register a Project just to inspect display.
+    pub fn presence_status(&self, root: &str) -> Result<Value, Refusal> {
+        let path = Path::new(root);
+        if !path.is_absolute() { return Err(Refusal::new("invalid_root", "명시적인 Project 절대경로가 필요하다")); }
+        let root = path.canonicalize().map_err(|_| Refusal::new("unreadable", "Project 자리를 읽지 못했다"))?;
+        let _session = opened(&root)?;
+        let scope = Binding::capture(root)?.scope();
+        let entries = self.entries.lock().map_err(|_| Refusal::new("unavailable", "Monitor 등록부를 열지 못했다"))?;
+        Ok(entries.get(&scope).map(|e| e.presence.status(&scope, Instant::now()))
+            .unwrap_or_else(|| super::presence::Presence::default().status(&scope, Instant::now())))
+    }
+
+    pub fn show(&self, scope: &str) -> Result<Value, Refusal> {
+        let view = self.view(scope)?;
+        let mut entries = self.entries.lock().map_err(|_| Refusal::new("unavailable", "Monitor 등록부를 열지 못했다"))?;
+        let e = entries.get_mut(scope).ok_or_else(super::bindings::unknown)?;
+        e.presence.requested(Instant::now());
+        Ok(view)
+    }
+
+    pub fn app_poll(&self, scope: &str, input: &Value) -> Result<Value, Refusal> {
+        if !super::presence::valid(input) { return Err(Refusal::new("invalid_presence", "Monitor 표시 상태 형식이 맞지 않는다")); }
+        let hint = self.poll(scope)?;
+        let mut entries = self.entries.lock().map_err(|_| Refusal::new("unavailable", "Monitor 등록부를 열지 못했다"))?;
+        let e = entries.get_mut(scope).ok_or_else(super::bindings::unknown)?;
+        e.presence.observe(input, Instant::now());
+        Ok(hint)
     }
 
     fn root(&self, scope: &str) -> Result<PathBuf, Refusal> {

@@ -80,6 +80,7 @@ pub fn valid_input(tool: &Tool, input: &Value) -> bool {
     if matches!(tool.name.as_ref(), "gil_monitor_report_visuals" | "gil_monitor_report_image") {
         return super::visuals::valid(input, tool.name == "gil_monitor_report_image");
     }
+    if tool.name == "gil_monitor_poll" && !super::presence::valid(input) { return false; }
     let Some(object) = input.as_object() else { return false; };
     let schema = &tool.input_schema;
     let Some(properties) = schema.get("properties").and_then(Value::as_object) else { return false; };

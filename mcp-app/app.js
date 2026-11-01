@@ -12,8 +12,21 @@ let response = '요청 전', eventMode = '이벤트 전', timer, pollFailures = 
 let suspended = false, polling = false, refreshOnReturn = false;
 let connectionIssue = null;
 let layoutChoice = null;
+let presenceSequence = 0, renderFailed = false;
 const evidence = { declared: ['inline', 'fullscreen'], instance: crypto.randomUUID() };
 const initialDisplay = initialFullscreen();
+
+// Report only this rendered App's observations. Host display mode is not OS occlusion proof.
+function presence() {
+  const presentation = stopped ? 'closed' : suspended || document.hidden ? 'hidden'
+    : renderFailed ? 'error' : !rendererReady ? 'loading'
+    : ['inline', 'fullscreen'].includes(context.displayMode) ? context.displayMode : 'loading';
+  return { instance_id: evidence.instance, sequence: String(++presenceSequence), presentation };
+}
+function reportPresence() {
+  if (!connected || !window.GIL_HOST) return Promise.resolve();
+  return window.GIL_HOST.reportPresence().catch(() => {});
+}
 
 function modes(message) {
   document.body.dataset.displayMode = context.displayMode || 'unknown';
@@ -41,6 +54,7 @@ app.onhostcontextchanged = (change) => {
   if ('displayMode' in change) eventMode = change.displayMode;
   modes();
   maybeFullscreen();
+  void reportPresence();
 };
 async function requestMode(mode) {
   if (stopped || pending || !connected || !context.availableDisplayModes?.includes(mode)) return;
@@ -56,7 +70,7 @@ async function requestMode(mode) {
       : 'Host 가 적용 모드를 반환하지 않았습니다. 화면이 그대로라면 모니터 펼치기를 눌러 주세요.');
   } catch {
     if (!stopped) { response = '요청 오류'; modes('전환을 확인하지 못했습니다. 모니터 펼치기를 눌러 다시 요청할 수 있습니다.'); }
-  } finally { pending = false; if (!stopped) modes(); }
+  } finally { pending = false; if (!stopped) { modes(); void reportPresence(); } }
 }
 function maybeFullscreen() {
   if (stopped || suspended || document.hidden || pending) return;
@@ -111,7 +125,8 @@ app.ontoolresult = async (result) => {
     const data = unwrap(result);
     if (!/^project:[0-9a-f]{64}$/.test(data.scope_id) || !data.view) throw new Error('scope');
     booted = true;
-    window.GIL_HOST = makeHost(app, data);
+    window.GIL_HOST = makeHost(app, data, { presence });
+    void reportPresence();
     window.GIL_HOST.listen('gil://connection', (error) => {
       connectionIssue = error;
       modes(error ? undefined : '프로젝트 연결을 다시 확인했습니다.');
@@ -127,27 +142,27 @@ app.ontoolresult = async (result) => {
     if (!data.watching) modes('변화 감시를 시작하지 못했습니다. 수동 새로고침과 5분 재조회는 사용할 수 있습니다.');
     poll();
     maybeFullscreen();
-  } catch (err) { modes(err?.said || 'Monitor 데이터를 받지 못했습니다. Project 를 지정해 다시 열어 주세요.'); }
+  } catch (err) { renderFailed = true; void reportPresence(); modes(err?.said || 'Monitor 데이터를 받지 못했습니다. Project 를 지정해 다시 열어 주세요.'); }
 };
-function stop() { stopped = true; initialDisplay.cancel(); clearTimeout(timer); window.GIL_COMPANION?.clearVisuals?.(); }
+function stop() { stopped = true; initialDisplay.cancel(); clearTimeout(timer); window.GIL_COMPANION?.clearVisuals?.(); return reportPresence(); }
 function resume() {
   if (stopped || suspended || document.hidden) return;
   refreshOnReturn = true;
   void poll();
   maybeFullscreen();
 }
-app.onteardown = async () => { stop(); return {}; };
+app.onteardown = async () => { await stop(); return {}; };
 // A cached page is suspended, not destroyed. Only true unload/teardown is terminal.
 window.addEventListener('pagehide', (event) => {
   if (!event.persisted) { stop(); return; }
-  suspended = true; clearTimeout(timer);
+  suspended = true; clearTimeout(timer); void reportPresence();
 });
 window.addEventListener('pageshow', (event) => {
   if (!event.persisted || !suspended || stopped) return;
   suspended = false; resume();
 });
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) clearTimeout(timer);
+  if (document.hidden) { clearTimeout(timer); void reportPresence(); }
   else resume();
 });
 app.connect().then(() => {

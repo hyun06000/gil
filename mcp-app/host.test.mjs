@@ -24,6 +24,22 @@ test('initial View is reused; quiet polling never scans before five minutes', as
   assert.equal(r.calls.filter(c => c.name === 'gil_monitor_read').length, 1);
 });
 
+test('App observations travel only with polling, bound to this scope and a bounded timeout', async () => {
+  const calls = []; let sequence = 0;
+  const initial = { scope_id: 'project:test', revision: '1', view: { schema_version: 1 }, watching: true };
+  const host = makeHost({ async callServerTool(request, options) {
+    calls.push({ ...request, options });
+    return { structuredContent: initial };
+  } }, initial, { presence: () => ({ instance_id: 'app-test', sequence: String(++sequence), presentation: 'fullscreen' }) });
+  await host.reportPresence(); await host.tick();
+  await host.loadView('project:test'); await host.loadView('project:test');
+  assert.deepEqual(calls.map(c => c.name), ['gil_monitor_poll', 'gil_monitor_poll', 'gil_monitor_read']);
+  assert.deepEqual(calls[0].arguments, { scope_id: 'project:test', instance_id: 'app-test', sequence: '1', presentation: 'fullscreen' });
+  assert.equal(calls[1].arguments.sequence, '2');
+  assert.deepEqual(calls[2].arguments, { scope_id: 'project:test' });
+  assert.ok(calls.every(c => c.options.timeout === 10000));
+});
+
 test('hint re-reads the whole View, not a delta, without waiting five minutes', async () => {
   const r = rig(); await r.host.loadView('project:test');
   r.host.listen('gil://refresh', () => r.host.loadView('project:test'));
