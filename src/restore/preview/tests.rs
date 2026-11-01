@@ -627,7 +627,7 @@ fn symlinks_and_case_variants_on_disk_are_seen_not_followed() {
     let _ = fs::remove_dir_all(&outside);
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 #[test]
 fn on_this_os_the_lstat_probe_refuses_instead_of_pretending() {
     let root = scratch("unsupported");
@@ -636,6 +636,26 @@ fn on_this_os_the_lstat_probe_refuses_instead_of_pretending() {
     assert!(matches!(result.probe(), ProbeStatus::Unsupported { adapter: "unsupported-on-this-os", .. }));
     assert!(blocks(&result).iter().any(|b| matches!(b, Block::FileSystemNotProbed { .. })));
     let _ = fs::remove_dir_all(&root);
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_preview_reads_pinned_entries_without_writes_and_refuses_hardlinks() {
+    let root = scratch("windows-pinned-preview");
+    fs::write(root.join("report.txt"), b"untouched evidence").unwrap();
+    let same = crate::artifact::observe(&root).unwrap();
+    let result = preview(&request(&same, &same, TargetOs::Windows), include_all, &LstatProbe::at(&root));
+    assert_eq!(result.probe(), &ProbeStatus::Checked { adapter: "windows-pinned-no-reparse" });
+    assert_eq!(result.readiness(), Readiness::Candidate, "{result}");
+    assert_eq!(crate::artifact::observe(&root).unwrap(), same);
+    let outside = scratch("windows-preview-outside");
+    fs::hard_link(root.join("report.txt"), outside.join("shared.txt")).unwrap();
+    let refused = preview(&request(&same, &same, TargetOs::Windows), include_all, &LstatProbe::at(&root));
+    assert_ne!(refused.readiness(), Readiness::Candidate, "{refused}");
+    assert_eq!(fs::read(outside.join("shared.txt")).unwrap(), b"untouched evidence");
+    assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
+    fs::remove_dir_all(root).unwrap();
+    fs::remove_dir_all(outside).unwrap();
 }
 
 // ── Plan 과 섞이지 않는다 ──────────────────────────────────────────────────
