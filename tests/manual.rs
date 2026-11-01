@@ -407,10 +407,16 @@ fn the_dirty_topic_never_points_at_a_path_that_cannot_be_walked() {
     let said = ok(&dir, &["help", "artifact/dirty/non-verify"]);
 
     let todo = section(&said, "지금 할 일");
-    assert!(todo.contains("gil restore"), "{todo}");
-    // **「Experiment 로 가라」는 지금 밟을 수 없는 길이다.**
-    assert!(!todo.contains("Experiment"), "{todo}");
-    assert!(!todo.contains("experiment"), "{todo}");
+    if cfg!(feature = "product-safety") {
+        // restore 가 거부되는 빌드는 그 명령을 권하지 않고, 사람이 할 수 있는 정리를 말한다.
+        assert!(!todo.contains("gil restore"), "{todo}");
+        assert!(todo.contains("프로젝트 밖으로 옮기거나 지운다"), "{todo}");
+    } else {
+        assert!(todo.contains("gil restore"), "{todo}");
+        // **「Experiment 로 가라」는 지금 밟을 수 없는 길이다.**
+        assert!(!todo.contains("Experiment"), "{todo}");
+        assert!(!todo.contains("experiment"), "{todo}");
+    }
 
     let invariants = section(&said, "불변식");
     assert!(invariants.contains("열려 있다"), "{invariants}");
@@ -441,8 +447,12 @@ fn the_dirty_topic_never_points_at_a_path_that_cannot_be_walked() {
     fs::write(project.join("a.txt"), "바꿨다").unwrap();
 
     let status = ok(&project, &["status"]);
-    assert!(status.contains("gil restore"), "{status}");
-    assert!(!status.contains("Experiment"), "{status}");
+    if cfg!(feature = "product-safety") {
+        assert!(!status.contains("gil restore"), "{status}");
+    } else {
+        assert!(status.contains("gil restore"), "{status}");
+        assert!(!status.contains("Experiment"), "{status}");
+    }
 }
 
 #[test]

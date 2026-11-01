@@ -57,27 +57,42 @@ pub fn call(name: &str, input: &Value) -> CallToolResult {
         "gil_close" => "close", "gil_restore" => "restore", "gil_revisit" => "revisit",
         "gil_cycle" => "cycle", _ => return refusal("허용되지 않은 GIL 동작"),
     };
-    let root = input.get("project_root").and_then(Value::as_str);
-    if name != "gil_help" || root.is_some() {
-        let Some(root) = root.filter(|r| !r.is_empty()) else { return refusal("Project 자리가 비었다"); };
-        if !Path::new(root).is_absolute() { return refusal(crate::RootError::NotAbsolute.to_string()); }
-        match std::fs::metadata(root) {
-            Ok(one) if one.is_dir() => {},
-            Ok(_) => return refusal("Project 자리가 폴더가 아니다"),
-            Err(_) => return refusal("Project 자리를 열 수 없다"),
+    let given = input.get("project_root").and_then(Value::as_str);
+    let mut resolved: Option<String> = None;
+    let mut normalized_note: Option<String> = None;
+    if name != "gil_help" || given.is_some() {
+        let Some(given) = given.filter(|r| !r.is_empty()) else { return refusal("Project 자리가 비었다"); };
+        if !Path::new(given).is_absolute() { return refusal(crate::RootError::NotAbsolute.to_string()); }
+        match resolve_root(given) {
+            Ok((used, note)) => { resolved = Some(used); normalized_note = note; }
+            Err(said) => return refusal(said),
         }
     }
+    let root = resolved.as_deref();
+    let announce = |mut out: CallToolResult| -> CallToolResult {
+        if let Some(note) = &normalized_note {
+            if out.is_error != Some(true) {
+                if let Some(fields) = out.structured_content.as_mut().and_then(Value::as_object_mut) {
+                    let said = format!("{note}\n{}", fields.get("said").and_then(Value::as_str).unwrap_or(""));
+                    fields.insert("said".into(), json!(said));
+                    let problem = fields.get("problem").and_then(Value::as_str).unwrap_or("").to_owned();
+                    out.content = vec![ContentBlock::text(format!("{said}{problem}"))];
+                }
+            }
+        }
+        out
+    };
     let mut args = vec![command.to_owned()];
     #[cfg(feature = "visual-authoring")]
     if matches!(name, "gil_status" | "gil_context") {
-        return match crate::command::visual_read_action(Path::new(root.expect("validated root")), command) {
+        return announce(match crate::command::visual_read_action(Path::new(root.expect("validated root")), command) {
             Ok(said) => result(true, Some(0), said, String::new()),
             Err(problem) => annotate_code(result(false, Some(1), String::new(), format!("{problem}\n")), &problem),
-        };
+        });
     }
     #[cfg(feature = "visual-authoring")]
     if name == "gil_start" {
-        return match crate::command::start_visual_action(Path::new(root.expect("validated root"))) {
+        return announce(match crate::command::start_visual_action(Path::new(root.expect("validated root"))) {
             Ok(said) => {
                 let mut out = result(true, Some(0), said, String::new());
                 if let Some(fields) = out.structured_content.as_mut().and_then(Value::as_object_mut) {
@@ -89,7 +104,7 @@ pub fn call(name: &str, input: &Value) -> CallToolResult {
                 out
             }
             Err(problem) => annotate_code(result(false, Some(1), String::new(), format!("{problem}\n")), &problem),
-        };
+        });
     }
     let slots: &[(&str, &str, bool)] = match name {
         "gil_help" => &[("topic", "주제", false)],
@@ -110,7 +125,7 @@ pub fn call(name: &str, input: &Value) -> CallToolResult {
     }
     let body = match name { "gil_open" => input.get("contract"), "gil_close" => input.get("report"), _ => None }
         .and_then(Value::as_str).unwrap_or("");
-    match crate::command::action(&args, root.map(Path::new), body) {
+    announce(match crate::command::action(&args, root.map(Path::new), body) {
         Ok(said) => result(true, Some(0), said, String::new()),
         // The old CLI stderr boundary used eprintln!; preserve its final newline.
         Err(problem) => {
@@ -119,7 +134,46 @@ pub fn call(name: &str, input: &Value) -> CallToolResult {
             } else { problem };
             annotate_code(result(false, Some(1), String::new(), format!("{problem}\n")), &problem)
         },
+    })
+}
+
+pub const ROOT_UNREADABLE: &str = "Project 자리를 열 수 없다";
+const COPY_ROOT_VERBATIM: &str = "gil_context/gil_status/receipt가 돌려준 project_root를 글자 그대로 복사해 다시 보낸다. 다시 타이핑하지 않는다.";
+
+/// The folder the Host selected, found from the string the Agent sent.
+///
+/// The string is used as given when it names a directory. When it does not, the same path in the
+/// other Hangul form (NFC ↔ NFD) is tried, because macOS stores names decomposed while Agents
+/// retype them composed; the form that exists is used and the receipt says so once. Compatibility
+/// jamo cannot be matched to any folder and are refused with that reason. Nothing is created.
+fn resolve_root(given: &str) -> Result<(String, Option<String>), String> {
+    let is_dir = |path: &str| std::fs::metadata(path).map(|one| one.is_dir());
+    match is_dir(given) {
+        Ok(true) => return Ok((given.to_owned(), None)),
+        Ok(false) => return Err("Project 자리가 폴더가 아니다".to_owned()),
+        Err(_) => {}
     }
+    if super::hangul::has_compatibility_jamo(given) {
+        return Err(format!(
+            "{ROOT_UNREADABLE}: 경로에 호환 자모(ㄱ·ㅏ 같은 낱자)로 쪼개진 글자가 있어 어떤 폴더에도 맞출 수 없다. {COPY_ROOT_VERBATIM}"
+        ));
+    }
+    for candidate in [super::hangul::nfc(given), super::hangul::nfd(given)] {
+        if candidate == given { continue; }
+        match is_dir(&candidate) {
+            Ok(true) => {
+                let note = format!(
+                    "project_root 글자를 맞춰 {candidate} 를 사용했다 — 받은 경로의 한글 정규화(NFC/NFD)가 실제 폴더와 달랐다. 다음 호출부터 이 경로를 글자 그대로 복사한다."
+                );
+                return Ok((candidate, Some(note)));
+            }
+            Ok(false) => return Err("Project 자리가 폴더가 아니다".to_owned()),
+            Err(_) => {}
+        }
+    }
+    Err(format!(
+        "{ROOT_UNREADABLE}: 경로가 존재하지 않는다. 받은 경로의 글자가 사용자가 고른 폴더와 다를 수 있다(한글 정규화). {COPY_ROOT_VERBATIM}"
+    ))
 }
 
 #[cfg(test)]

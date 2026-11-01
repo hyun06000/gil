@@ -23,6 +23,8 @@ actual recorded position and the connected tool schema. Never repeat a call that
    that retry budget. Status covers this Project on this MCP connection. If a Host shares that
    connection across chats, it cannot identify which chat contains the App. App reports do not prove
    OS foreground visibility or that the human has looked.
+   `project_root` is always the exact string the Host, `gil_context`/`gil_status` or the last
+   receipt gave; copy it verbatim and never retype it (retyped Korean paths change their letters).
 2. **Agree, then finish Interview.** Interview clarifies and agrees scope; it never researches,
    calculates or writes deliverables. Synthesis waits for the user's reply to its proposed statement;
    silence, earlier requests and the agent's own judgment are not approval. Do not ask again for
@@ -110,6 +112,8 @@ actual recorded position and the connected tool schema. Never repeat a call that
    one-word or boilerplate reasons (`없음`, `불필요`, `not needed`), and `not_needed` while an
    image file is listed in `evidence_files`. Use `missing` with `reason` and `follow_up` when the
    picture could not be produced; never relabel missing as unnecessary.
+   After Verify is closed and before the Cycle Report, create no project files: integrated reports
+   and deliverables are saved inside Verify, or in the next Experiment's Verify.
 5. **Learn from that evidence and close.** After Verify, write a nonblank `interpretation` in
    Analysis and a nonblank `lesson` in Experiment Outcome. Core links `evidence.verify_ref` and
    `learning.analysis_ref` to the actual current lineage; do not supply different references.

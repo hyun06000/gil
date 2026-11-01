@@ -773,6 +773,13 @@ pub enum Gate {
     Cycle(crate::refs::CycleRef),
 }
 
+/// product-safety 빌드의 dirty 복구 — `gil restore` 가 거부되는 빌드에서 **실제로 할 수 있는 일**만 적는다.
+///
+/// 위 변경 목록(새로 생김 · 바뀜 · 사라짐)이 이 글의 대상이다. GIL 은 파일을 지우거나 되돌리지 않는다.
+pub const DIRTY_RECOVERY_WITHOUT_RESTORE: &str = "이 빌드는 Artifact 되돌리기(restore)를 거부한다. 위 변경 목록을 보고 사람이 정리한다:\n\
+  · 새로 생긴 파일은 프로젝트 밖으로 옮기거나 지운다. 그 내용을 남기려면 지금 자리를 닫은 뒤 다음 Experiment 의 Verify 에서 다시 만들고 evidence_files 에 적는다.\n\
+  · 바뀐 기존 파일은 기준 내용으로 되돌린다. 사라진 파일은 기준 내용대로 다시 둔다.";
+
 /// 두 세계가 어떻게 다른가 — **사람이 읽을 만큼만.**
 const SHOWN: usize = 12;
 
@@ -1339,10 +1346,14 @@ impl fmt::Display for SessionError {
                     // 이 Cycle 을 닫는 것도 같은 gate 에 막힌다. 그러니 먼저 되돌린다.
                     Gate::Step(step, kind) => (
                         format!("{step} · {kind} 에서는 Artifact 변경을 확정할 수 없다."),
-                        format!(
-                            "`gil restore` 로 현재 변경을 되돌린 뒤 이 Step 을 닫는다.\n\
-                             Artifact 를 변경해야 하는 작업은 Verify Step 에서 수행한다."
-                        ),
+                        if cfg!(feature = "product-safety") {
+                            format!("{DIRTY_RECOVERY_WITHOUT_RESTORE}\n그런 뒤 이 Step 을 닫는다.")
+                        } else {
+                            format!(
+                                "`gil restore` 로 현재 변경을 되돌린 뒤 이 Step 을 닫는다.\n\
+                                 Artifact 를 변경해야 하는 작업은 Verify Step 에서 수행한다."
+                            )
+                        },
                     ),
                     Gate::OpenChain => (
                         "다음 Chain을 열 수 없다.".to_owned(),
@@ -1350,10 +1361,14 @@ impl fmt::Display for SessionError {
                     ),
                     Gate::Cycle(cycle) => (
                         format!("{cycle} 을(를) 닫을 수 없다."),
-                        format!(
-                            "Cycle 을 닫는 것은 새 세계를 만들지 않는다.\n\
-                             `gil restore` 로 현재 변경을 되돌린 뒤 닫는다."
-                        ),
+                        if cfg!(feature = "product-safety") {
+                            format!("Cycle 을 닫는 것은 새 세계를 만들지 않는다.\n{DIRTY_RECOVERY_WITHOUT_RESTORE}\n그런 뒤 닫는다.")
+                        } else {
+                            format!(
+                                "Cycle 을 닫는 것은 새 세계를 만들지 않는다.\n\
+                                 `gil restore` 로 현재 변경을 되돌린 뒤 닫는다."
+                            )
+                        },
                     ),
                 };
                 write!(
@@ -1459,6 +1474,30 @@ mod tests {
 
     fn rules() -> RuleSet {
         RuleSet::builtin().expect("함께 실린 명세를 읽는다")
+    }
+
+    /// dirty 거절문은 **이 빌드가 실제로 할 수 있는 복구**만 말한다 — restore 가 거부되는
+    /// product-safety 빌드에서 `gil restore` 를 권하면 막다른 길이다.
+    #[test]
+    fn a_dirty_refusal_only_recommends_what_this_build_allows() {
+        let world: crate::refs::SnapshotRef = "snapshot:A1".parse().unwrap();
+        let changes = vec!["새로 생김  report.md".to_owned(), "바뀜      a.txt".to_owned()];
+        let cycle: crate::refs::CycleRef = "cycle:C2".parse().unwrap();
+        let step: crate::refs::StepRef = "step:C1/S1".parse().unwrap();
+        for gate in [Gate::Cycle(cycle), Gate::Step(step, NodeKind::Question)] {
+            let said = SessionError::Dirty { gate, world: world.clone(), changes: changes.clone() }.to_string();
+            assert!(said.contains("새로 생김  report.md") && said.contains("바뀜      a.txt"), "{said}");
+            assert!(said.contains("그대로 열려 있다"), "{said}");
+            if cfg!(feature = "product-safety") {
+                assert!(!said.contains("gil restore"), "거부되는 명령을 권한다:\n{said}");
+                for must in ["프로젝트 밖으로 옮기거나 지운다", "다음 Experiment 의 Verify", "evidence_files", "기준 내용으로 되돌린다"] {
+                    assert!(said.contains(must), "{must} 가 없다:\n{said}");
+                }
+            } else {
+                assert!(said.contains("`gil restore`"), "{said}");
+                assert!(!said.contains("프로젝트 밖으로 옮기거나"), "{said}");
+            }
+        }
     }
 
     fn scratch(label: &str) -> PathBuf {

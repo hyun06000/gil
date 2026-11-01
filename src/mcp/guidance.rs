@@ -18,6 +18,11 @@ pub fn prepend(result: &mut CallToolResult, text: impl Into<String>) {
 pub fn after(name: &str, result: &mut CallToolResult) {
     if result.is_error == Some(true) {
         if let Some(hint) = refused(name) {
+            let problem = problem(result);
+            // A dirty refusal of a close has one more real recovery than "fix the input".
+            let hint = if name == "gil_close" && (problem.contains("기준 세계") || problem.contains("dirty")) {
+                format!("{hint} {DIRTY_CLOSE_RECOVERY}")
+            } else { hint.to_string() };
             prepend(result, hint);
         }
         return;
@@ -50,6 +55,18 @@ fn refused(name: &str) -> Option<&'static str> {
         "gil_plan_request_interview" => "GIL 거절: 재인터뷰 요청이 기록되지 않았다. 열린 Experiment에서 1~4096 bytes 이유로 한 번 다시 보낸다. 현재 Step의 다음 호출은 바뀌지 않는다 — 마지막 receipt의 다음 행동을 그대로 이어간다.",
         _ => return None,
     })
+}
+
+/// One line for a close refused by the dirty gate — only what this build can actually do.
+const DIRTY_CLOSE_RECOVERY: &str = if cfg!(feature = "product-safety") {
+    "dirty 거절이면: 이 빌드는 Artifact 되돌리기(restore)를 거부한다. 거절문의 변경 목록을 보고 새 파일은 프로젝트 밖으로 옮기거나 지우고(내용을 남기려면 지금 자리를 닫은 뒤 다음 Experiment의 Verify에서 다시 만들어 evidence_files에 적는다), 바뀐 기존 파일은 기준 내용으로 되돌린 뒤 같은 gil_close를 보낸다."
+} else {
+    "dirty 거절이면: 거절문의 변경 목록을 사용자에게 알리고, 사용자가 되돌리기를 택하면 gil_restore 뒤 같은 gil_close를 보낸다. Verify 밖에서 만든 전달물은 다음 Experiment의 Verify에서 다시 만든다."
+};
+
+fn problem(result: &CallToolResult) -> &str {
+    result.structured_content.as_ref()
+        .and_then(|v| v.get("problem")).and_then(Value::as_str).unwrap_or("")
 }
 
 fn said(result: &CallToolResult) -> &str {
@@ -199,6 +216,32 @@ mod tests {
     }
     fn text(result: &CallToolResult) -> String {
         result.content.iter().filter_map(|c| c.as_text().map(|t| t.text.clone())).collect::<Vec<_>>().join("\n")
+    }
+
+    fn refusal_of(problem: &str) -> CallToolResult {
+        let mut out = CallToolResult::success(vec![ContentBlock::text(problem.to_string())]);
+        out.structured_content = Some(json!({"ok": false, "exit_code": 1, "said": "", "problem": problem}));
+        out.is_error = Some(true);
+        out
+    }
+
+    #[test]
+    fn a_dirty_close_refusal_adds_the_recovery_this_build_allows() {
+        let mut dirty = refusal_of("거절: cycle:C2 을(를) 닫을 수 없다.\n\n이유\n  기준 세계 snapshot:A1 이후 프로젝트 파일이 바뀌었다.\n    새로 생김  report.md\n");
+        after("gil_close", &mut dirty);
+        let hint = text(&dirty);
+        assert!(hint.starts_with("GIL 거절: 닫힌 것은 없다."), "{hint}");
+        assert!(hint.contains("dirty 거절이면:"), "{hint}");
+        if cfg!(feature = "product-safety") {
+            assert!(!hint.contains("gil restore") && !hint.contains("gil_restore"), "{hint}");
+            assert!(hint.contains("프로젝트 밖으로 옮기거나 지우고") && hint.contains("다음 Experiment의 Verify"), "{hint}");
+        } else {
+            assert!(hint.contains("gil_restore"), "{hint}");
+        }
+        // An ordinary input refusal gets no dirty line.
+        let mut plain = refusal_of("Report 에 verdict 가 없다\n");
+        after("gil_close", &mut plain);
+        assert!(!text(&plain).contains("dirty 거절이면"), "{}", text(&plain));
     }
 
     #[test]

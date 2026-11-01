@@ -262,16 +262,37 @@ server.registerTool(
 const PROJECT_ROOT_SAID =
   "Absolute path of the GIL project to act on. The host-verified workspace root, or a path the user named. It is never guessed.";
 
-async function usableDirectory(root) {
-  if (typeof root !== "string" || root.length === 0) return "Project 자리가 비었다";
-  try {
-    const { stat } = await import("node:fs/promises");
-    const seen = await stat(root);
-    if (!seen.isDirectory()) return "Project 자리가 폴더가 아니다";
-  } catch {
-    return "Project 자리를 열 수 없다";
+const COPY_ROOT_VERBATIM =
+  "gil_context/gil_status/receipt가 돌려준 project_root를 글자 그대로 복사해 다시 보낸다. 다시 타이핑하지 않는다.";
+
+/** The folder the Host selected, found from the string the Agent sent. Mirrors Core's
+ *  `resolve_root`: the string as given when it is a directory; otherwise the same path in the
+ *  other Hangul form (macOS stores NFD, Agents retype NFC); compatibility jamo match no folder.
+ *  Returns `{ root, note }` or `{ problem }`. Nothing is created. */
+export async function usableDirectory(root) {
+  if (typeof root !== "string" || root.length === 0) return { problem: "Project 자리가 비었다" };
+  const { stat } = await import("node:fs/promises");
+  const isDir = async (path) => {
+    try { return (await stat(path)).isDirectory() ? "dir" : "other"; } catch { return "missing"; }
+  };
+  const seen = await isDir(root);
+  if (seen === "dir") return { root, note: null };
+  if (seen === "other") return { problem: "Project 자리가 폴더가 아니다" };
+  if (/[\u3131-\u318E]/.test(root)) {
+    return { problem: `Project 자리를 열 수 없다: 경로에 호환 자모(ㄱ·ㅏ 같은 낱자)로 쪼개진 글자가 있어 어떤 폴더에도 맞출 수 없다. ${COPY_ROOT_VERBATIM}` };
   }
-  return null;
+  for (const candidate of [root.normalize("NFC"), root.normalize("NFD")]) {
+    if (candidate === root) continue;
+    const found = await isDir(candidate);
+    if (found === "other") return { problem: "Project 자리가 폴더가 아니다" };
+    if (found === "dir") {
+      return {
+        root: candidate,
+        note: `project_root 글자를 맞춰 ${candidate} 를 사용했다 — 받은 경로의 한글 정규화(NFC/NFD)가 실제 폴더와 달랐다. 다음 호출부터 이 경로를 글자 그대로 복사한다.`,
+      };
+    }
+  }
+  return { problem: `Project 자리를 열 수 없다: 경로가 존재하지 않는다. 받은 경로의 글자가 사용자가 고른 폴더와 다를 수 있다(한글 정규화). ${COPY_ROOT_VERBATIM}` };
 }
 
 function refusal(text) {
@@ -327,10 +348,13 @@ for (const action of ACTIONS) {
           `GIL core is not usable here (${seen.why}). GIL actions are unavailable until the plugin ships a core for this machine.`,
         );
       }
-      const root = input?.project_root;
+      let root = input?.project_root;
+      let normalizedNote = null;
       if (action.project || root !== undefined) {
-        const wrong = await usableDirectory(root);
-        if (wrong) return refusal(wrong);
+        const place = await usableDirectory(root);
+        if (place.problem) return refusal(place.problem);
+        root = place.root;
+        normalizedNote = place.note;
       }
       const built = argvFor(action, input);
       if (built.error) return refusal(built.error);
@@ -343,9 +367,11 @@ for (const action of ACTIONS) {
       if (!got.ran) return refusal("GIL core did not run.");
       // Core 가 한 말을 **그대로** 나른다. 요약하지도 다시 쓰지도 않는다.
       // 성공은 종료 코드 하나로만 가른다 — 문장을 읽고 판단하지 않는다.
+      // 단 하나의 예외: 경로의 한글 정규화를 맞춘 사실은 성공 receipt 첫 줄에 한 번 알린다.
+      const said = got.ok && normalizedNote ? `${normalizedNote}\n${got.said}` : got.said;
       return {
-        structuredContent: { ok: got.ok, exit_code: got.exit_code, said: got.said, problem: got.problem },
-        content: [{ type: "text", text: got.said + got.problem }],
+        structuredContent: { ok: got.ok, exit_code: got.exit_code, said, problem: got.problem },
+        content: [{ type: "text", text: said + got.problem }],
         isError: !got.ok,
       };
     },
