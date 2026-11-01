@@ -85,8 +85,12 @@ fn view(p: &Project) -> Value {
     };
     let chain = p.current_chain().unwrap();
     let proposal = state.current(p);
+    // Read-only projection of the real current Cycle. `current_item` is a binding that survives
+    // the Cycle's close, so only this field says whether that Cycle is still open.
+    let cycle = p.current_cycle();
+    let current_cycle = json!({"ref":cycle.id().to_ref().to_string(), "state":if cycle.is_closed() {"closed"} else {"open"}});
     json!({"supported":true, "proposal":proposal, "active_revision":state.active(chain).map(|p| p.revision),
-        "current_item":p.current_plan_item(), "pending":state.pending(chain), "reinterview_requests":state.awaiting_interview(chain), "executed_cycles":state.executed_cycles,
+        "current_item":p.current_plan_item(), "current_cycle":current_cycle, "pending":state.pending(chain), "reinterview_requests":state.awaiting_interview(chain), "executed_cycles":state.executed_cycles,
         "close_report":proposal.and_then(|p| p.report().ok()).map(|r| crate::approved_plan::report_text(&r)), "document":p.plan_document(),
         "next":"Monitor 응답 후 close_report로 Synthesis를 닫고 Outcome, Interview Cycle까지 닫는다. Experiment Verify는 document와 별도 실행 증거를 파일로 남긴다."})
 }
@@ -357,6 +361,59 @@ mod tests {
         let mut s = session(root.to_str().unwrap()).unwrap();
         s.close_step(report).unwrap();
         s.commit().unwrap();
+    }
+    /// R3 (Wave 1 review): `current_item` stays bound after its Cycle closes, so the view must
+    /// project the real Cycle state separately. Real Core, no mock: the Experiment is walked and
+    /// closed through the public Project API.
+    #[test]
+    fn approved_plan_view_projects_real_current_cycle_state_beside_the_binding() {
+        use crate::{CycleKind, NodeKind};
+        let mut p = Project::start(h::spec(), h::first_world());
+        assert!(view(&p)["current_cycle"].is_object(), "supported projects always carry current_cycle");
+        let draft = crate::approved_plan::tests::synthesis(&mut p, &["A", "B"]);
+        let proposal = p.propose_plan(draft).unwrap();
+        let receipt = p
+            .decide_plan(proposal.revision, &proposal.digest, Decision::Approve)
+            .unwrap();
+        let synthesis = receipt.synthesis_ref.clone();
+        p.close_action_step(receipt.report().unwrap()).unwrap();
+        let outcome = h::opened(&mut p, NodeKind::Outcome);
+        p.close_action_step(
+            h::full_report(p.current_cycle().rules(), CycleKind::Interview, NodeKind::Outcome)
+                .with("synthesis_ref", synthesis),
+        )
+        .unwrap();
+        p.close_cycle(
+            h::cycle_report(p.current_cycle(), "success", h::step_id(&p, outcome))
+                .with("next_direction.action", "open_child"),
+        )
+        .unwrap();
+        let interview = view(&p);
+        assert_eq!(interview["current_cycle"]["state"], "closed");
+        assert_eq!(interview["current_item"], Value::Null, "nothing is bound before the Experiment opens");
+        p.open_child_cycle(CycleKind::Experiment).unwrap();
+        let open = view(&p);
+        let experiment = p.current_cycle().id().to_ref().to_string();
+        assert_eq!(open["current_cycle"], json!({"ref":experiment, "state":"open"}));
+        assert_eq!(open["current_item"]["id"], "A");
+        assert_eq!(open["executed_cycles"][0]["cycle_ref"], json!(experiment));
+        for kind in [NodeKind::Define, NodeKind::Hypothesis, NodeKind::Verify, NodeKind::Analysis, NodeKind::Outcome] {
+            h::walked(&mut p, kind);
+        }
+        let outcome = p.current_cycle().steps().current().unwrap();
+        p.close_cycle(
+            h::cycle_report(p.current_cycle(), "success", outcome)
+                .with("next_direction.action", "open_child"),
+        )
+        .unwrap();
+        assert!(p.current_cycle().is_closed());
+        let closed = view(&p);
+        assert_eq!(closed["current_cycle"], json!({"ref":experiment, "state":"closed"}));
+        assert_eq!(closed["current_item"]["id"], "A", "the binding is kept; it is not an open-state witness");
+        assert_eq!(closed["active_revision"], open["active_revision"]);
+        assert_eq!(closed["pending"], open["pending"], "the projection changes no approval or queue meaning");
+        assert_eq!(closed["executed_cycles"], open["executed_cycles"]);
+        assert_eq!(view(&p).as_object().unwrap().keys().filter(|k| *k == "current_cycle").count(), 1);
     }
     #[test]
     fn approved_plan_wire_schema_is_strict_and_app_tools_are_not_model_tools() {

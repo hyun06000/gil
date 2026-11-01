@@ -94,6 +94,8 @@ body[data-display-mode="fullscreen"] .detail { scroll-margin-bottom: var(--gil-c
 .plan-review .plan-items li { margin: 6px 0; padding-left: 4px; }
 .plan-review .plan-items li[data-status="executed"] { color: var(--gil-fg-3); }
 .plan-review .plan-items li[data-status="current"] { font-weight: var(--gil-w-semibold); border-left: 3px solid var(--gil-kind-verify); padding-left: 8px; }
+.plan-review .plan-items li[data-status="bound"] { border-left: 3px dashed var(--gil-line); padding-left: 8px; }
+.plan-review .plan-current[data-cycle="closed"], .plan-review .plan-current[data-cycle="unknown"] { color: var(--gil-fg-2); }
 .plan-review .plan-counts, .plan-review .plan-last, .plan-review small { font-size: var(--gil-xs); color: var(--gil-fg-3); }
 .plan-review .plan-delivery, .plan-review .plan-uncertain, .plan-review .plan-replaced, .plan-review .plan-reinterview {
   padding:8px 10px; border-radius: var(--gil-r-sm); border: var(--gil-hair) solid var(--gil-warn-line);

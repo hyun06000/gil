@@ -16,7 +16,15 @@ export const PLAN_STATE = {
   unreadable: '읽기 실패',
   unsupported: '',
 };
-const ITEM_STATUS = { executed: '실행함', current: '지금 열린 Cycle', pending: '남음' };
+const ITEM_STATUS = { executed: '실행함', current: '지금 열린 Cycle', bound: '현재 Cycle에 연결됨 (열림 여부 미확인)', pending: '남음' };
+
+/** The real state of the current Cycle, or 'unknown' when the wire does not say. Never inferred from current_item. */
+export function currentCycle(value) {
+  const c = value?.current_cycle;
+  const ref = typeof c?.ref === 'string' && c.ref ? c.ref : null;
+  const state = c?.state === 'open' || c?.state === 'closed' ? c.state : 'unknown';
+  return { ref, state };
+}
 
 /** One state for the whole screen, derived from the wire value and this screen's own facts. */
 export function planSummary(value, { hasToken = false, uncertain = null } = {}) {
@@ -37,8 +45,13 @@ export function planSummary(value, { hasToken = false, uncertain = null } = {}) 
 export function planItems(value) {
   const executed = value?.executed_cycles || [];
   const current = value?.current_item?.id ?? null;
-  const status = (id) => id === current ? 'current' : executed.some(e => e.item_id === id) ? 'executed' : 'pending';
-  const cycle = (id) => executed.find(e => e.item_id === id)?.cycle_ref ?? null;
+  const cycleState = currentCycle(value);
+  // A bound item counts as "open now" only when the server says the current Cycle is open.
+  // A closed Cycle keeps its binding, so the item is simply executed; without the field, unknown.
+  const bound = cycleState.state === 'open' ? 'current' : cycleState.state === 'closed' ? 'executed' : 'bound';
+  const status = (id) => id === current ? bound : executed.some(e => e.item_id === id) ? 'executed' : 'pending';
+  const cycle = (id) => executed.find(e => e.item_id === id)?.cycle_ref
+    ?? (id === current && cycleState.state === 'closed' ? cycleState.ref : null);
   const p = value?.proposal;
   if (p) return p.draft.items.map(i => ({ ...i, status: status(i.id), cycle_ref: cycle(i.id) }));
   const seen = new Set();
@@ -49,6 +62,10 @@ export function planItems(value) {
     const item = e.item_id === current ? value.current_item : null;
     out.push({ id: e.item_id, question: item?.question ?? null, done_when: item?.done_when ?? null,
       status: status(e.item_id), cycle_ref: e.cycle_ref });
+  }
+  if (current && !seen.has(current)) {
+    seen.add(current);
+    out.push({ ...value.current_item, status: status(current), cycle_ref: cycle(current) });
   }
   for (const i of value?.pending || []) {
     if (seen.has(i.id)) continue;
@@ -164,7 +181,7 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
     const list = document.createElement('ol');
     list.className = 'plan-items';
     for (const item of planItems(value)) {
-      const where = item.status === 'executed' && item.cycle_ref ? ` (${item.cycle_ref})` : '';
+      const where = (item.status === 'executed' || item.status === 'current') && item.cycle_ref ? ` (${item.cycle_ref})` : '';
       const li = text('li', `${ITEM_STATUS[item.status]}${where} · ${item.id}${item.question ? `: ${item.question}` : ''}${item.done_when ? `\n확인: ${item.done_when}` : ''}`);
       li.dataset.status = item.status;
       list.append(li);
@@ -174,7 +191,8 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
   function counts(value) {
     const items = planItems(value);
     const n = (status) => items.filter(i => i.status === status).length;
-    return `실행함 ${n('executed')}개 · 지금 열린 Cycle ${n('current')}개 · 남음 ${n('pending')}개`;
+    const open = currentCycle(value).state === 'unknown' ? `연결됨(열림 미확인) ${n('bound')}개` : `지금 열린 Cycle ${n('current')}개`;
+    return `실행함 ${n('executed')}개 · ${open} · 남음 ${n('pending')}개`;
   }
   function reinterview(value) {
     for (const request of value.reinterview_requests || []) {
@@ -277,12 +295,23 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
   function executing(value, summary) {
     head(summary, ` · 계획 v${value.active_revision}`);
     const item = value.current_item;
-    panel.append(text('p', item
-      ? `지금 열린 Cycle에 묶인 항목: ${item.id} — ${item.question}\n확인 조건: ${item.done_when}`
-      : '지금 열린 Cycle에 묶인 항목이 없습니다.', 'plan-current'));
+    const cycle = currentCycle(value);
+    const where = cycle.ref ? ` ${cycle.ref}` : '';
+    const bound = item ? `${item.id} — ${item.question}\n확인 조건: ${item.done_when}` : null;
+    let line;
+    if (cycle.state === 'open') line = bound ? `지금 열린 Cycle${where}에 묶인 항목: ${bound}` : `지금 열린 Cycle${where}에 묶인 항목이 없습니다.`;
+    else if (cycle.state === 'closed') line = bound
+      ? `현재 Cycle${where}은 닫혔습니다. 지금 열린 Cycle은 없습니다. 마지막으로 연결된 항목: ${bound}\n결과는 그 Cycle Report가 진실원이며 여기서 성공으로 보지 않습니다.`
+      : `현재 Cycle${where}은 닫혔습니다. 지금 열린 Cycle은 없습니다.`;
+    else line = bound
+      ? `현재 Cycle에 연결된 항목: ${bound}\n이 서버 응답에는 Cycle 열림 여부가 없어 열려 있다고 보지 않습니다.`
+      : '현재 Cycle에 연결된 항목이 없습니다. 이 서버 응답에는 Cycle 열림 여부가 없습니다.';
+    const current = text('p', line, 'plan-current');
+    current.dataset.cycle = cycle.state;
+    panel.append(current);
     panel.append(text('p', counts(value), 'plan-counts'), itemList(value));
     reinterview(value);
-    panel.append(text('small', 'GIL에 기록된 사실입니다. 에이전트가 지금 작업 중인지는 여기서 알 수 없습니다.'));
+    panel.append(text('small', 'GIL에 기록된 사실입니다. “실행함”은 Cycle이 열렸다는 기록이며 성공 여부는 해당 Cycle Report가 진실원입니다. 에이전트가 지금 작업 중인지는 여기서 알 수 없습니다.'));
   }
   function render(value) {
     const stood = standing();
