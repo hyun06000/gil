@@ -44,6 +44,11 @@ jobs:
         with:
           persist-credentials: false
       - run: rustup toolchain install 1.97.1 --profile minimal
+      - name: Native Windows recovery boundaries (pinned directories, links, journal cleanup)
+        if: runner.os == 'Windows'
+        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib restore::windows -- --test-threads=1
+      - name: Approval profile, M6-D contract over the real stdio process (Wave 1 E wire)
+        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test approved_plan_wire_wave1
       - name: Actual Chain, legacy preservation and domain regressions
         run: cargo test --locked -p gil --features chain-core --test chains --test chain_closing --test chain_handoff --test cycles --test context --test context_profiles --test will --test walk
       - name: Repeated failure and branch context inside a Chain
@@ -62,8 +67,6 @@ jobs:
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test context --test context_profiles
       - name: Approval profile, next-call guidance over in-memory state and the real receipt (Wave 1 C)
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test guidance_wave1 --test guidance_wave2
-      - name: Approval profile, M6-D contract over the real stdio process (Wave 1 E wire)
-        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test approved_plan_wire_wave1
       - name: Compile the opt-in approval profile
         run: cargo build --locked -p gil --all-targets --features approved-plan,visual-authoring,product-safety
       - name: Shared workflow text, Skill catalog and scenario evaluator contracts (pure Node, no Core process)

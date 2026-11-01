@@ -38,7 +38,8 @@ Keep original backups; installing this Plugin does not authorize migration of an
 EXPERIMENTAL approved-plan + visual-authoring; action surface 2, readable storage formats 4..7.
 New projects use a Chain and Monitor-approved plan (format 7). Existing records are NOT automatically converted.
 Use a new empty test folder for the approval workflow. Closing Verify requires the bound plan document
-and separate file evidence. Destructive restore/revisit remain blocked. Older runtimes may refuse these
+and separate file evidence. Closed failure revisit requires the Monitor preservation-and-recovery button;
+general restore and Step revisit remain blocked. Older runtimes may refuse these
 records; installing an older Plugin never downgrades project records.
 ` : '');
 

@@ -218,7 +218,7 @@ impl ProjectSession {
         let mut view = json!({"supported":true,"state":if resumed && observed == target {"completed"} else if resumed {"resumable"} else {"awaiting_approval"},
             "from":from.to_ref().to_string(),"target":next.current_cycle().id().to_ref().to_string(),
             "before_world":before_world.to_string(),"target_world":world.to_string(),"changes":changes,
-            "archive":gil_dir(&self.state_path).map_err(error)?.join("revisit-preserved").join(&key).to_string_lossy(),"pending_state_sha256":key,
+            "archive":gil_dir(&self.state_path).map_err(error)?.canonicalize().map_err(error)?.join("revisit-preserved").join(&key).to_string_lossy(),"pending_state_sha256":key,
             "policy":"legacy-whole-tree-protected-difference-v1",
             "notice":"실패 기록·Snapshot·배움은 유지한다. 교체·제외되는 기존 파일은 보존본을 만든 뒤 대상 세계로 복원한다. 새 Cycle은 별도로 연다."});
         // Resumption is the same approved operation, not a new proposal.

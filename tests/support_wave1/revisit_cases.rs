@@ -259,6 +259,7 @@ fn approved_recovery_survives_state_save_then_process_death_during_restore() {
         .output()
         .unwrap();
     assert!(!out.status.success());
+    assert!(r.record.parent().unwrap().join("restore/active/PLAN").is_file(), "child must abort during a real transaction: {}", String::from_utf8_lossy(&out.stderr));
     r.c = Client::serve(&settings);
     ok(
         r.model("gil_revisit", json!({})),

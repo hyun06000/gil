@@ -957,6 +957,19 @@ fn tools_list_preserves_twenty_tools_and_the_read_only_app_boundary() {
         if cfg!(windows) { expected.push("gil_prepare_workspace"); }
         expected.sort();
     }
+    if cfg!(feature="approved-plan") {
+        expected.extend(["gil_plan_propose", "gil_plan_read", "gil_plan_request_interview", "gil_plan_review", "gil_plan_decide"]);
+    }
+    if cfg!(feature="product-safety") {
+        expected.extend(["gil_revisit_review", "gil_revisit_apply"]);
+        for name in ["gil_revisit_review", "gil_revisit_apply"] {
+            let tool = tools.iter().find(|t| t["name"] == name).unwrap();
+            assert_eq!(tool["_meta"]["ui"]["visibility"], serde_json::json!(["app"]));
+            assert_eq!(tool["inputSchema"]["additionalProperties"], false);
+            assert_eq!(tool["annotations"]["destructiveHint"], name == "gil_revisit_apply");
+        }
+    }
+    expected.sort();
     assert_eq!(names, expected);
     for tool in tools.iter().filter(|t| t["name"]=="gil_report_visuals") {
         assert_eq!(tool["annotations"]["readOnlyHint"],true);
