@@ -10,6 +10,7 @@ mod presence;
 mod update;
 mod bindings;
 mod actions;
+mod hangul;
 mod native;
 mod surface;
 mod visuals;

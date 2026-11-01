@@ -55,11 +55,19 @@ pub(crate) use when::{Condition, Confirmation, Inside, ManualContext, WhenError,
 ///
 /// **여기 있는 것은 파일을 가리키는 줄뿐이다.** 본문은 `.md` 에 산다 — Topic 하나가
 /// 늘 때 여기 한 줄과 파일 하나가 늘고, 이 파일의 다른 코드는 그대로다.
+/// `artifact/dirty/non-verify` 는 빌드마다 다른 복구를 말한다 — restore 가 거부되는 product-safety
+/// 빌드에서는 `gil restore` 를 권하지 않고 사람이 실제로 할 수 있는 정리만 적는다. 주소는 하나다.
+const DIRTY_NON_VERIFY: &str = if cfg!(feature = "product-safety") {
+    include_str!("topics/artifact/dirty/non-verify.product-safety.md")
+} else {
+    include_str!("topics/artifact/dirty/non-verify.md")
+};
+
 const SOURCES: &[&str] = &[
     include_str!("topics/current.md"),
     include_str!("topics/step/verify/close.md"),
     include_str!("topics/artifact/restore.md"),
-    include_str!("topics/artifact/dirty/non-verify.md"),
+    DIRTY_NON_VERIFY,
     include_str!("topics/action/open-contract.md"),
     include_str!("topics/cycle/experiment/close.md"),
     include_str!("topics/cycle/revisit.md"),
@@ -803,9 +811,16 @@ mod tests {
         collect(&root, &mut found);
         found.sort();
 
+        // 빌드별 변형(`<topic>.product-safety.md`)은 같은 주소의 다른 본문이다 — 한 Topic 으로 센다.
+        let variants = found.iter().filter(|path| path.ends_with(".product-safety.md")).count();
+        for variant in found.iter().filter(|path| path.ends_with(".product-safety.md")) {
+            let base = variant.replace(".product-safety.md", ".md");
+            assert!(found.contains(&base), "변형만 있고 기본 본문이 없다: {variant}");
+        }
+
         let manual = Manual::bundled().unwrap();
         assert_eq!(
-            found.len(),
+            found.len() - variants,
             manual.topics().len(),
             "topics 폴더의 파일 수와 실린 Topic 수가 다르다: {found:?}"
         );
@@ -1290,6 +1305,26 @@ mod tests {
             2,
             "Topic 을 고르며 프로젝트를 한 벌 넘게 훑었다"
         );
+    }
+
+    /// 함께 실린 dirty Topic 의 「지금 할 일」은 빌드가 실제로 허용하는 복구만 적는다.
+    #[test]
+    fn the_bundled_dirty_topic_matches_the_builds_restore_policy() {
+        let manual = Manual::bundled().unwrap();
+        let topic = manual.resolve(&id("artifact/dirty/non-verify")).unwrap();
+        let todo = topic.section("지금 할 일").expect("지금 할 일");
+        let example = topic.section("올바른 예").expect("올바른 예");
+        if cfg!(feature = "product-safety") {
+            for text in [todo, example, topic.summary()] {
+                assert!(!text.contains("gil restore"), "거부되는 명령을 권한다:\n{text}");
+            }
+            for must in ["프로젝트 밖으로 옮기거나 지운다", "다음 Experiment 의 Verify", "evidence_files", "기준 내용으로 되돌린다", "gil close"] {
+                assert!(todo.contains(must), "{must} 가 없다:\n{todo}");
+            }
+        } else {
+            assert!(todo.contains("gil restore") && example.contains("gil restore"), "{todo}");
+            assert!(!todo.contains("Experiment"), "{todo}");
+        }
     }
 
     #[test]
