@@ -63,6 +63,10 @@ Synthesis 승인 누락으로 실패한다. 해당 fixture의 지정 chain 프�
 승인 프로필은 전용 wire·전체 library로 검증한다. 모든 feature 조합의 legacy aggregate가
 통과한다고 주장하지 않는다. 문서 worktree의 최초 고지 검사 3개 실패는 빠진 esbuild 의존성
 때문이며 lockfile의 의존성을 설치한 뒤 최종 132개 검사를 통과했다.
+게시 안내 PR의 첫 CI는 Companion의 owner.7 고정 assertion과 병렬 Unix 런처 fixture의
+일시적 selection-lock 경합으로 실패했다. assertion을 owner.8로 갱신하고 Mac 배포 CI의
+Core 시험을 순차 실행으로 맞췄다. 기존 assertion이나 시험을 제거하지 않았고 배포 실행
+코드·후보 bytes는 바꾸지 않았다.
 
 ## Mac 배포물
 
