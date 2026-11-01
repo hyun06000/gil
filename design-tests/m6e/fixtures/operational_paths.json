@@ -1,0 +1,12 @@
+{
+  "name": "Operational paths that are allowed only when no node is open: Existence switch and a non-product restore of the derived world",
+  "preset": "approved_plan_ready",
+  "options": { "product_safety": false },
+  "steps": [
+    { "event": "switch_existence", "args": { "to": "X2" }, "assert": { "existence": "X2", "journey.revision": 4 } },
+    { "event": "switch_existence", "args": { "to": "X1" }, "assert": { "existence": "X1" } },
+    { "event": "edit_files", "args": { "files": { "README.md": "r1", "stray.txt": "s" } } },
+    { "event": "restore_world", "args": {}, "assert": { "$path": [["folder", "files", "stray.txt"], null], "current_cycle": 1, "journey.revision": 4 } },
+    { "event": "restore_world", "args": {}, "assert": { "$path": [["folder", "files", "README.md"], "r1"] } }
+  ]
+}

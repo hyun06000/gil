@@ -1,0 +1,142 @@
+{
+  "name": "Case 4b — a judged failure keeps the existing rule (revisit only); under product-safety the recorded direction cannot execute and the state stays honest",
+  "preset": "approved_plan_ready",
+  "options": {
+    "product_safety": true
+  },
+  "steps": [
+    {
+      "macro": "open_experiment"
+    },
+    {
+      "macro": "define_hypothesis_open_verify"
+    },
+    {
+      "event": "edit_files",
+      "args": {
+        "files": {
+          "README.md": "r1",
+          "src/attempt.py": "a1",
+          "evidence/result.md": "f1"
+        }
+      }
+    },
+    {
+      "event": "close_verify",
+      "args": {
+        "report": {
+          "execution": "implemented P and ran the tests",
+          "result": "3 tests fail; see evidence/result.md",
+          "evidence_files": "evidence/result.md"
+        }
+      }
+    },
+    {
+      "macro": "analysis_outcome_judged_failure",
+      "assert": {
+        "cycles.2.steps.5.report.verdict": "failure"
+      }
+    },
+    {
+      "event": "close_cycle",
+      "args": {
+        "report": {
+          "verdict": "failure",
+          "outcome_ref": "step:C2/S5",
+          "handoff_summary": "P refuted",
+          "next_direction.action": "open_child",
+          "next_direction.reason": "keep going"
+        }
+      },
+      "expect": {
+        "refused": "ActionNotAllowed"
+      }
+    },
+    {
+      "event": "close_cycle",
+      "args": {
+        "report": {
+          "verdict": "failure",
+          "conclusion": "not_reached",
+          "outcome_ref": "step:C2/S5",
+          "handoff_summary": "P refuted",
+          "next_direction.action": "open_child",
+          "next_direction.reason": "relabel as interrupted"
+        }
+      },
+      "expect": {
+        "refused": "ConclusionMismatch"
+      }
+    },
+    {
+      "event": "close_cycle",
+      "args": {
+        "report": {
+          "verdict": "failure",
+          "outcome_ref": "step:C2/S5",
+          "handoff_summary": "P refuted for A; do not retry P",
+          "next_direction.action": "revisit",
+          "next_direction.target_cycle_ref": "cycle:C1",
+          "next_direction.reason": "go back to the approved world and try another plan"
+        }
+      },
+      "assert": {
+        "cycles.2.status": "closed",
+        "cycles.2.exit": "A2"
+      }
+    },
+    {
+      "event": "revisit_cycle",
+      "args": {},
+      "expect": {
+        "refused": "ProductSafetyBlocked"
+      }
+    },
+    {
+      "event": "open_cycle",
+      "args": {
+        "kind": "experiment"
+      },
+      "expect": {
+        "refused": "TargetCannotBranch"
+      }
+    },
+    {
+      "event": "restore_world",
+      "args": {},
+      "expect": {
+        "refused": "ProductSafetyBlocked"
+      }
+    },
+    {
+      "event": "session_crash",
+      "args": {}
+    },
+    {
+      "event": "session_resume",
+      "args": {},
+      "assert": {
+        "current_cycle": 2,
+        "cycles.2.status": "closed",
+        "pending_cycle_revisit": null,
+        "$path": [
+          [
+            "folder",
+            "files",
+            "src/attempt.py"
+          ],
+          "a1"
+        ],
+        "$path2": [
+          [
+            "cycles",
+            "2",
+            "report",
+            "next_direction.action"
+          ],
+          "revisit"
+        ]
+      }
+    }
+  ]
+}

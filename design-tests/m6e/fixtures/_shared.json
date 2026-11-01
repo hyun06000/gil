@@ -1,0 +1,49 @@
+{
+  "$comment": "Reusable step sequences for the M6-E fixtures. Pure model input, not GIL Core data.",
+  "macros": {
+    "open_experiment": [
+      { "event": "open_cycle", "args": { "kind": "experiment" } }
+    ],
+    "define_hypothesis_open_verify": [
+      { "event": "open_step", "args": { "kind": "define", "contract": { "objective": "fix the problem for this item", "next_action": "write problem and success condition", "done_when": "Define report is written" } } },
+      { "event": "close_step", "args": { "report": { "problem": "item is not done", "success_condition": "tests for the item pass and the result file exists" } } },
+      { "event": "open_step", "args": { "kind": "hypothesis", "contract": { "objective": "choose an approach", "next_action": "state hypothesis, rationale and guardrail", "done_when": "Hypothesis report is written" } } },
+      { "event": "close_step", "args": { "report": { "hypothesis": "approach P solves it", "rationale": "P matches the failing case", "guardrail": "if tests still fail after P the hypothesis is wrong" } } },
+      { "event": "open_step", "args": { "kind": "verify", "contract": { "objective": "run approach P", "next_action": "implement P, run the tests, save results", "done_when": "test results are saved under evidence/" } } }
+    ],
+    "partial_edit": [
+      { "event": "edit_files", "args": { "files": { "README.md": "r1", "src/partial.py": "p1" } } }
+    ],
+    "narrow_and_close_verify": [
+      { "event": "revise_will", "args": { "next_action": "record what ran, what blocked and the state of the partial files", "done_when": "evidence/interruption.md is saved" } },
+      { "event": "edit_files", "args": { "files": { "README.md": "r1", "src/partial.py": "p1", "evidence/interruption.md": "i1" } } },
+      { "event": "close_verify", "args": { "report": { "execution": "implemented half of P in src/partial.py; the test run was interrupted", "result": "no test result; interruption recorded with the exact blocker and the list of partial files", "evidence_files": "evidence/interruption.md" } } }
+    ],
+    "analysis_outcome_not_reached": [
+      { "event": "open_step", "args": { "kind": "analysis", "contract": { "objective": "interpret the interrupted verify", "next_action": "state what can and cannot be concluded", "done_when": "Analysis report is written" } } },
+      { "event": "close_step", "args": { "report": { "interpretation": "no conclusion: the success condition could not be evaluated because the verify was interrupted" } } },
+      { "event": "open_step", "args": { "kind": "outcome", "contract": { "objective": "record the outcome honestly", "next_action": "declare not_reached with the blocker", "done_when": "Outcome report is written" } } },
+      { "event": "close_step", "args": { "report": { "verdict": "failure", "conclusion": "not_reached", "blocker": "verify interrupted before the success condition could be evaluated", "lesson": "P was not refuted; the attempt stopped for an operational reason", "next_direction.action": "close_cycle", "next_direction.reason": "nothing more can be judged in this cycle" } } }
+    ],
+    "analysis_outcome_success": [
+      { "event": "open_step", "args": { "kind": "analysis", "contract": { "objective": "interpret the results", "next_action": "compare results with the success condition", "done_when": "Analysis report is written" } } },
+      { "event": "close_step", "args": { "report": { "interpretation": "tests pass; the success condition is met" } } },
+      { "event": "open_step", "args": { "kind": "outcome", "contract": { "objective": "judge the cycle", "next_action": "record verdict and lesson", "done_when": "Outcome report is written" } } },
+      { "event": "close_step", "args": { "report": { "verdict": "success", "lesson": "P works for this item", "next_direction.action": "close_cycle", "next_direction.reason": "success condition met" } } }
+    ],
+    "analysis_outcome_judged_failure": [
+      { "event": "open_step", "args": { "kind": "analysis", "contract": { "objective": "interpret the results", "next_action": "compare results with the success condition", "done_when": "Analysis report is written" } } },
+      { "event": "close_step", "args": { "report": { "interpretation": "tests fail in the same way; P does not solve it" } } },
+      { "event": "open_step", "args": { "kind": "outcome", "contract": { "objective": "judge the cycle", "next_action": "record verdict and lesson", "done_when": "Outcome report is written" } } },
+      { "event": "close_step", "args": { "report": { "verdict": "failure", "lesson": "P is refuted for this item", "next_direction.action": "close_cycle", "next_direction.reason": "the Define itself needs a new plan" } } }
+    ],
+    "interview_question_interpretation": [
+      { "event": "open_step", "args": { "kind": "question", "contract": { "objective": "learn what the user wants now", "next_action": "ask about the remaining scope", "done_when": "the user's own answer is recorded" } } },
+      { "event": "human_answer", "args": {} },
+      { "event": "close_step", "args": { "report": { "question": "what should happen with the interrupted item and the remaining plan?", "response": "the user's own words" } } },
+      { "event": "open_step", "args": { "kind": "interpretation", "contract": { "objective": "interpret the answer", "next_action": "state the interpretation", "done_when": "Interpretation report is written" } } },
+      { "event": "close_step", "args": { "report": { "interpretation": "the user asks for a specific remaining order" } } },
+      { "event": "open_step", "args": { "kind": "synthesis", "contract": { "objective": "propose the remaining plan", "next_action": "present the statement and wait for the button", "done_when": "the human has decided on the exact proposal revision" } } }
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "Case 4a — partial files exist but the success condition cannot be evaluated: honest not_reached, human decides next",
+  "preset": "approved_plan_ready",
+  "options": { "product_safety": true },
+  "steps": [
+    { "macro": "open_experiment" },
+    { "macro": "define_hypothesis_open_verify" },
+    { "event": "edit_files", "args": { "files": { "README.md": "r1", "src/partial.py": "p1", "evidence/observation.md": "o1" } } },
+    { "event": "close_verify", "args": { "report": { "execution": "implemented P; the build produced no output because the toolchain is missing", "result": "partial files exist; the success condition (tests pass) could not be evaluated; observation saved", "evidence_files": "evidence/observation.md" } } },
+    { "event": "open_step", "args": { "kind": "analysis", "contract": { "objective": "interpret", "next_action": "say what the partial files show and what they do not", "done_when": "Analysis report is written" } } },
+    { "event": "close_step", "args": { "report": { "interpretation": "the partial implementation compiles in isolation but no test ran; inconclusive" } } },
+    { "event": "open_step", "args": { "kind": "outcome", "contract": { "objective": "judge", "next_action": "declare not_reached", "done_when": "Outcome report is written" } } },
+    { "event": "close_step", "args": { "report": { "verdict": "failure", "conclusion": "not_reached", "blocker": "toolchain missing; success condition not evaluated", "lesson": "P is neither confirmed nor refuted", "next_direction.action": "close_cycle", "next_direction.reason": "the environment, not the hypothesis, must change" } } },
+    { "event": "close_cycle", "args": { "report": { "verdict": "failure", "conclusion": "not_reached", "outcome_ref": "step:C2/S5", "handoff_summary": "A inconclusive; partial world A2 kept", "next_direction.action": "open_child", "next_direction.reason": "ask the user whether to install the toolchain or change the plan" } }, "assert": { "cycles.2.exit": "A2" } },
+    { "event": "open_cycle", "args": { "kind": "interview" }, "assert": { "cycles.3.parent": 2, "cycles.3.entry": "A2" } }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "name": "Case 3 — agent/session/process dies mid-Verify; a new session with the same Existence resumes without any domain transition",
+  "preset": "approved_plan_ready",
+  "options": { "product_safety": true },
+  "steps": [
+    { "macro": "open_experiment" },
+    { "macro": "define_hypothesis_open_verify" },
+    { "macro": "partial_edit" },
+    { "event": "session_crash", "args": {}, "assert": { "session": "dead", "active_will.id": "W7", "cycles.2.steps.3.status": "open", "journey.revision": 6 } },
+    { "event": "session_resume", "args": { "existence": "X2" }, "expect": { "refused": "ExistenceMismatch" } },
+    { "event": "switch_existence", "args": { "to": "X2" }, "expect": { "refused": "OpenNodeBlocksSwitch" } },
+    { "event": "session_resume", "args": {}, "assert": { "session": "alive", "active_will.id": "W7", "active_will.target.step": 3, "cycles.2.steps.3.status": "open", "journey.revision": 6, "$path": [["folder", "files", "src/partial.py"], "p1"] } },
+    { "event": "edit_files", "args": { "files": { "README.md": "r1", "src/partial.py": "p2", "evidence/result.md": "e1" } } },
+    { "event": "close_verify", "args": { "report": { "execution": "finished P after the restart and ran the tests", "result": "tests pass; see evidence/result.md", "evidence_files": "evidence/result.md" } }, "assert": { "journey.revision": 7, "cycles.2.steps.3.snapshot_ref": "A2" } },
+    { "macro": "analysis_outcome_success" },
+    { "event": "close_cycle", "args": { "report": { "verdict": "success", "outcome_ref": "step:C2/S5", "handoff_summary": "A done; the crash cost nothing but time", "next_direction.action": "open_child", "next_direction.reason": "continue with B" } }, "assert": { "cycles.2.exit": "A2" } }
+  ]
+}

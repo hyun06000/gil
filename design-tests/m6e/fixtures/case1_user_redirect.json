@@ -1,0 +1,24 @@
+{
+  "name": "Case 1 — user asks to stop/redirect in the middle of Verify",
+  "preset": "approved_plan_ready",
+  "options": { "product_safety": true },
+  "steps": [
+    { "macro": "open_experiment", "assert": { "current_cycle": 2, "plan.executions.0.item": "A", "plan.executions.0.attempt": 1, "cycles.2.entry": "A1" } },
+    { "macro": "define_hypothesis_open_verify" },
+    { "macro": "partial_edit" },
+    { "event": "request_interview", "args": { "reason": "the user asked to stop item A and change direction" }, "assert": { "plan.reinterview_requests.0.cycle": 2 } },
+    { "macro": "narrow_and_close_verify", "assert": { "cycles.2.steps.3.snapshot_ref": "A2", "journey.revision": 7, "active_will": null } },
+    { "macro": "analysis_outcome_not_reached", "assert": { "cycles.2.steps.5.report.conclusion": "not_reached" } },
+    { "event": "close_cycle", "args": { "report": { "verdict": "failure", "conclusion": "not_reached", "outcome_ref": "step:C2/S5", "handoff_summary": "A was interrupted by the user; src/partial.py is half done and kept in snapshot A2", "next_direction.action": "open_child", "next_direction.reason": "the user wants to re-plan with the partial work in view" } }, "assert": { "cycles.2.status": "closed", "cycles.2.exit": "A2" } },
+    { "event": "open_cycle", "args": { "kind": "experiment" }, "expect": { "refused": "ReinterviewRequested" } },
+    { "event": "open_cycle", "args": { "kind": "interview" }, "assert": { "cycles.3.parent": 2, "cycles.3.entry": "A2", "cycles.3.revisit_from": null, "$path": [["folder", "files", "src/partial.py"], "p1"] } },
+    { "macro": "interview_question_interpretation" },
+    { "event": "propose_plan", "args": { "digest": "d2", "items": ["D", "A", "B", "C"] } },
+    { "event": "human_decide", "args": { "digest": "d2", "decision": "approve" } },
+    { "event": "close_step", "args": { "report": { "statement": "do D first, keep A's partial files, then A, B, C", "approved": "yes", "digest": "d2" } } },
+    { "event": "open_step", "args": { "kind": "outcome", "contract": { "objective": "close the interview", "next_action": "record success with the approved synthesis", "done_when": "Outcome report is written" } } },
+    { "event": "close_step", "args": { "report": { "verdict": "success", "lesson": "scope re-agreed after the interruption", "next_direction.action": "close_cycle", "next_direction.reason": "approved", "synthesis_ref": "step:C3/S3" } } },
+    { "event": "close_cycle", "args": { "report": { "verdict": "success", "outcome_ref": "step:C3/S4", "handoff_summary": "new order D,A,B,C approved on revision 2", "next_direction.action": "open_child", "next_direction.reason": "start D" } }, "assert": { "plan.proposals.1.activated": true, "plan.reinterview_requests.0.resolved_by_revision": 2 } },
+    { "event": "open_cycle", "args": { "kind": "experiment" }, "assert": { "plan.executions.1.item": "D", "plan.executions.1.revision": 2, "plan.executions.1.attempt": 1, "plan.executions.1.retry_of": null, "cycles.4.parent": 3, "cycles.4.entry": "A2" } }
+  ]
+}
