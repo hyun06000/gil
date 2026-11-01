@@ -241,3 +241,9 @@ pub use will::{ActionContract, ContractError, DONE_WHEN, NEXT_ACTION, OBJECTIVE,
 
 mod chain;
 pub use chain::{Chain, ChainError};
+
+pub mod approved_plan;
+
+#[cfg(all(test, feature = "approved-plan"))]
+#[path = "../tests/common/mod.rs"]
+pub(crate) mod plan_test_helpers;

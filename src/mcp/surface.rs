@@ -28,6 +28,8 @@ pub fn tools() -> &'static [Tool] {
             }
             tools
         };
+        #[cfg(feature = "approved-plan")]
+        let tools = super::plans::catalog(tools);
         let mut tools = tools;
         for tool in &mut tools {
             let hint = match tool.name.as_ref() {
@@ -61,6 +63,8 @@ pub fn contents() -> ResourceContents {
 /// The frozen inputs contain only string properties. Domain grammar stays in Core.
 /// Monitor inputs are strict, as in the previous JS adapter. Other inputs ignore extras.
 pub fn valid_input(tool: &Tool, input: &Value) -> bool {
+    #[cfg(feature = "approved-plan")]
+    if tool.name.starts_with("gil_plan_") { return super::plans::valid(tool.name.as_ref(), input); }
     #[cfg(feature = "visual-authoring")]
     if tool.name.starts_with("gil_migration_") {
         return super::migration::valid(tool.name.as_ref(), input);

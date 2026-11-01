@@ -13,6 +13,8 @@ mod native;
 mod surface;
 mod visuals;
 mod guidance;
+#[cfg(feature = "approved-plan")]
+mod plans;
 #[cfg(feature = "visual-authoring")]
 mod authoring;
 #[cfg(feature = "visual-authoring")]
@@ -24,6 +26,8 @@ use monitor::Monitor;
 #[derive(Debug, Clone)]
 pub struct GilServer {
     monitor: Arc<Monitor>,
+    #[cfg(feature = "approved-plan")]
+    plan_grants: Arc<plans::Grants>,
     native_gate: Arc<Mutex<()>>,
     companion_session: Arc<Mutex<crate::companion_ipc::McpSession>>,
 }
@@ -35,7 +39,8 @@ impl GilServer {
     /// Deployment/test adapter, not an MCP tool parameter. None discovers an installed cohort;
     /// existing Plugin installs with no cohort receipt remain opted out.
     pub fn with_companion_endpoint(endpoint: Option<std::path::PathBuf>) -> Self {
-        Self { monitor: Arc::new(Monitor::default()), native_gate: Arc::new(Mutex::new(())),
+        Self { #[cfg(feature = "approved-plan")] plan_grants: Arc::new(plans::Grants::default()),
+            monitor: Arc::new(Monitor::default()), native_gate: Arc::new(Mutex::new(())),
             companion_session: Arc::new(Mutex::new(crate::companion_ipc::McpSession::new(endpoint))) }
     }
     async fn dispatch_with_session(&self, name: String, input: Value) -> CallToolResult {
@@ -113,6 +118,13 @@ impl GilServer {
         crate::command::action(&["status".into()], Some(std::path::Path::new(root)), "")
     }
     async fn dispatch(&self, name: String, input: Value) -> CallToolResult {
+        #[cfg(feature = "approved-plan")]
+        if name.starts_with("gil_plan_") {
+            let monitor = self.monitor.clone();
+            let grants = self.plan_grants.clone();
+            return tokio::task::spawn_blocking(move || plans::call(&monitor, &grants, &name, input)).await
+                .unwrap_or_else(|_| actions::refusal("승인 기록 결과가 불확실하다. gil_plan_read로 확인한다."));
+        }
         #[cfg(feature = "visual-authoring")]
         if name.starts_with("gil_migration_") {
             return tokio::task::spawn_blocking(move || migration::call(&name, input)).await

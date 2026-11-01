@@ -10,18 +10,21 @@ pub struct Chain {
     entry: SnapshotRef,
     report: Option<Report>,
     pub(crate) cycles: Cycles,
+    pub(crate) approved_plan: Option<crate::approved_plan::PlanState>,
 }
 
 impl Chain {
     pub(crate) fn start(cycles: Cycles) -> Self {
         let first = &cycles.nodes()[0];
-        Self::restore(
+        let mut chain = Self::restore(
             ChainRef::new(1).unwrap(),
             first.existence(),
             first.entry_snapshot(),
             None,
             cycles,
-        )
+        );
+        if cfg!(feature = "approved-plan") { chain.approved_plan = Some(Default::default()); }
+        chain
     }
     pub(crate) fn restore(
         id: ChainRef,
@@ -36,6 +39,7 @@ impl Chain {
             parent,
             entry,
             report: None,
+            approved_plan: None,
             cycles,
         }
     }
@@ -143,6 +147,10 @@ impl Chain {
         owner: ExistenceRef,
         journey: crate::JourneyRef,
     ) -> Result<(), ChainError> {
+        if let Some(plan) = &self.approved_plan { plan.validate(self).map_err(ChainError::Plan)?; }
+        else if self.cycles.nodes().iter().flat_map(|c| c.steps().nodes()).any(|n| n.report.as_ref().is_some_and(|r| r.has("plan_revision") || r.has("plan_digest"))) {
+            return Err(ChainError::Invalid("approval ledger is missing; do not downgrade planned records"));
+        }
         Self::validate(self.id, self.existence, self.entry, &self.cycles, owner)?;
         for cycle in self.cycles.nodes() {
             if cycle.declared_action() == Some("close_chain")
@@ -214,6 +222,7 @@ impl Chain {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChainError {
+    Plan(String),
     AlreadyClosed,
     IdExhausted,
     ParentOpen(ChainRef),
@@ -223,6 +232,7 @@ pub enum ChainError {
 impl std::fmt::Display for ChainError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Plan(reason) => write!(f, "{reason}"),
             Self::AlreadyClosed => {
                 write!(f, "이 Chain은 이미 닫혔다. 기존 Report와 기록을 보존한다")
             }

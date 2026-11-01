@@ -37,12 +37,19 @@ impl ProjectSession {
         let before = objects.read_manifest(address)
             .map_err(|e| SessionError::Manifest { world: baseline, said: e.to_string() })?;
         let empty = artifact::digest_of(std::io::empty()).expect("empty reader");
+        let plan_path = if let Some(document) = self.project.plan_document() {
+            let path = crate::visual_report::file::relative(report.get("plan_document").unwrap_or(""))
+                .map_err(|_| refused("승인 계획의 상대 파일 경로가 필요하다"))?;
+            let expected = artifact::digest_of(std::io::Cursor::new(document.as_bytes())).expect("document bytes");
+            if found.get(&path) != Some(&expected) { return Err(refused("plan_document가 이 Experiment에 바인딩된 승인 계획과 다르다. gil_plan_read의 document를 그대로 저장한다")); }
+            Some(path)
+        } else { None };
         let mut fresh = false;
         for path in paths {
             let digest = found.get(&path)
                 .ok_or_else(|| refused(format!("증거 파일이 확정할 Snapshot에 없다: {path}")))?;
             if digest == &empty { return Err(refused(format!("빈 파일은 증거가 아니다: {path}"))); }
-            fresh |= before.get(&path) != Some(digest);
+            fresh |= plan_path.as_ref() != Some(&path) && before.get(&path) != Some(digest);
         }
         if !fresh {
             return Err(refused("지정한 증거가 모두 이전 Snapshot과 같다. 읽기·검사만 했어도 이번 관측 결과를 새 문서나 갱신한 실행 기록으로 남긴다"));

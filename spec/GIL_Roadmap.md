@@ -26,53 +26,39 @@ dogfood로 통과**해야 `[x]`가 된다.
 
 ## 2. 현재 위치
 
-마지막 갱신: **2026-10-31** (명세↔main 코드 대조: Chain·반복 revisit·누적 실패 전달·제품 실행 경계)
+마지막 갱신: **2026-11-01** (main `3b5341f`: PR #55–63 통합; M6-D 작업 브랜치 구현·로컬 검증)
 
-현재 기능 판정은 **§2.2 명세 대조표**를 따른다. 날짜별 구현·인수 장부는 당시 범위의 증거이며,
-Core 시험 통과, 제품 기능 활성화, 실제 Host 인수를 서로 대신하지 않는다.
+현재 상태는 아래 요약과 §2.2 및 M6 세부 절을 따른다. 과거 날짜별 시험 장부의 체크박스는 당시
+범위의 기록이며 현재 구현 상태로 다시 해석하지 않는다. Core 구현, 제품 활성화, 실제 Host 인수는 별개다.
 
-```text
-전체 이정표 10개
+| 범위 | 현재 상태 | 다음 완료 조건 |
+| --- | --- | --- |
+| M0/M1 Step·단일 Cycle, M3.5 Manual 기반 | 구현됨 | 후속 회귀 유지; Manual 예제 체계·일부 Topic은 별도 잔여 |
+| M2 Existence/Will·Context | 기반 구현 | Human Participant, Knowledge/Memory/Relations 독립 객체 및 실제 모델 인수 |
+| M3 Artifact | Core 구현·제품 안전성 재검토 | 추적 범위, 현재에만 있는 파일 보존, 읽기 전용 복원 계획, Windows 경계 |
+| M4-H 누적 실패 전달 | 구현·main 병합 | 실제 모델이 과거 실패를 활용하는지 M7에서 검증 |
+| M4-R 반복 revisit | Core 구현·제품 차단 | M3 안전성 후 제품 재연결과 양 OS 인수 |
+| M5 Monitor | 표시 감지/복구·Host 테마 개선 병합 | 최신 설치본 반영, 경로별 실제 화면·초보 사용자 판독 검수 |
+| M6-A/B/C | `chain-core` 개발 구현·main 병합 | 설치본 활성화·실사용 인수; legacy 이전은 설계만 완료 |
+| M6-D | **개발 프로필 구현·로컬 검증; 미병합** | 승인 계획·revision·실험 연결·Monitor 버튼·Verify 문서·재인터뷰 요청 보존. 실제 Host/Luna 인수·배포는 남음 |
+| M6-E | 설계 미결 | 증거/Report를 완성할 수 없는 열린 단계의 보존·중단 계약 |
+| M7 | 대기 | 네 유형의 실제 작업 및 가벼운 모델 반복 평가 |
+| M8 / Chain revisit / 중첩 프로젝트 / Managed Dataset | 후속·미결 | 실제 필요와 별도 계약 확정 |
 
-진행도  [x][x][~][!][x][!][~][ ][ ][L]
-        M0 M1 M2 M3 M3.5 M4 M5 M6 M7 M8
+바로 다음 순서: **M6-D → M3 안전성 → M4-R 제품 재개 → M7 실사용 검증**.
+M3의 독립 읽기 전용 모델·시험은 M6-D와 병렬로 진행할 수 있다. 공유 transaction/저장/Monitor 파일은
+소유자를 나눠 동시에 수정하지 않는다. M6-E와 자아 객체·Merge는 명세 합의가 필요한 별도 과제다.
 
-완료     3  Step Core, 단일 Cycle 경계, AI Manual Foundation
-진행 중  2  Bootstrap·Context 잔여(M2), Human Monitor(M5)
-재검토   2  Artifact 제품 안전성(M3), Revisit 제품 연결(M4; 누적 Context 로컬 구현)
-대기     2  Advanced Interview·Chain Closing(M6), Scenario Suite(M7)
-Later    1  성공 가지 Merge
-```
+PR #62의 Host 테마와 #63의 Chain 인계는 병합되었지만 소스 병합을 설치본 업데이트로 세지 않는다.
+기존 친구용 Mac/Windows 설치 성공은 유지하며, 현재 사용자 설치 안내는 [INSTALL.md](../INSTALL.md)를 따른다.
+서명·공증·공식 Directory 등재와 비개발자 clean-machine 인수는 후속이다.
 
-현재 한 문장:
+M6-D에서는 사람이 **Monitor의 승인/수정 요청 버튼**으로 정확한 제안 버전에 응답한다.
+에이전트가 입력한 `approved: yes`만으로 인간 입력의 출처를 보장하지 않는다. 승인 채널의 실제 보장과
+한계, 제안 변경·재시작·중복 응답 처리를 신규 계약에 명시한다. 승인되지 않은 확장 계획을 실행하지 않는다.
 
-> **친구용 Mac preview.7·Windows owner.6 설치 채널과 공통 작업 지침은 배포됐다.
-> 핵심 기능의 잔여는 실제 Chain/Closing, 승인된 탐색 계획과 revisit의 안전한 제품 연결이다.
-> 반복 실패의 누적 Context 전달은 후속 구현 브랜치에서 로컬 검증을 통과했으며 아직 배포하지 않았다.
-> Step·Cycle 반복 revisit은 Core에 있지만 제품 안전 설정에서는 실행이 차단된다.
-> 구현·제품 연결·실사용 검수의 빈칸을 각각 닫아야 한다.**
-
-현재 초점:
-
-- 비개발자가 프로젝트 시작과 동시에 fullscreen Monitor로 실제 진행을 관찰하게 한다.
-- 외부 시험 사용자를 모집하고 설치·첫 작업·상태 판독의 불편을 수집한다. 모집과 실제 인수를 구분한다.
-- 아래 다섯 트랙을 실행 우선순위로 삼는다. 기존 M0–M8은 상세 구현·검증 장부로 유지한다.
-- Companion은 선택적 대안으로 보존한다. 기존 Windows 실기기·Mac VM 설치 확인은 유지하며,
-  최신 시험판의 전체 실사용 인수, 서명/공증·공식 Directory 등재는 별개 미완료다.
-- Windows의 Project 권한 문제, Host cache 제거 문제, Core 재연결 문제를 분리한다.
-  합성 재연결 성공을 설치·안전 배포 성공으로 확대하지 않고 T3.2의 게이트로 추적한다.
-- 날짜별 시험 장부는 증거로 보존하되 현재 사용자 설치 안내는 [INSTALL.md](../INSTALL.md)를 따른다.
-  일반 공개 준비는 `distribution/windows/RELEASE-READINESS.md`와 구분한다.
-- Artifact 추적 범위를 고친다. 현행 restore는 `.gitignore`를 무시하고 루트 `.gil/` 외 모든
-  일반 파일을 관리하므로 일반 프로젝트에서 사용 중지 상태다. `.git/` 고정 제외, ignore 정책,
-  current-only 파일 격리, read-only plan과 Windows 목적지 경계를 구현·인수한다.
-
-바로 다음 목표:
-
-> **Monitor 복구(PR #55)의 병합·배포·실제 화면 인수를 별도로 마무리하고,
-> §2.2의 기능 잔여를 M4 후속과 M6-A~D로 진행한다. Chain은 저장/전이 계약부터,
-> 반복 revisit은 기존 Core 재사용과 안전한 제품 연결부터 시작한다.
-> 구현이 없는 기능을 단순한 사용자 검수 항목으로 숨기지 않는다.**
+현재 Artifact restore의 `.gitignore` 미적용과 사용자 파일 삭제 위험 때문에 제품 복원/revisit 차단은
+유지한다. M6-D 구현이나 Monitor 버튼 도입은 이 차단을 해제하지 않는다.
 
 ### 2.1 공개 시험판 이후 실행 계획 — 2026-09-30
 
@@ -426,27 +412,28 @@ Later    1  성공 가지 Merge
 
 #### T2 — 심화 Interview와 Chain (M6)
 
-- [ ] **T2.1 Chain 계층 도입:** 명세에 있으나 현재 실행 모델에 없는 Chain을 실제 노드 계층으로
-      구현한다. identity·Cycle 소유·수명·현재 위치·Report·context·Monitor 묶음과 기존 format 4
-      프로젝트의 호환/이전 방안을 먼저 정한다. UI만 가짜 Chain을 만들어 보여 주지 않는다.
-- [ ] **T2.2 심층 인터뷰와 지속 문서:** 목표·범위/비범위·사용자·제약·가정·위험·대안·성공 기준을
+- [~] **T2.1 Chain 계층 도입:** M6-A/B/C의 실제 Chain identity·Cycle 소유·수명·현재 위치·Report·
+      Context·Monitor와 직렬 인수인계가 개발 프로필에 구현·병합됐다. 기존 format 4/5는 보존한다.
+      명시적 이전 적용, 기본 배포 활성화와 실제 Host/Luna 인수가 남는다.
+- [~] **T2.2 심층 인터뷰와 지속 문서:** 목표·범위/비범위·사용자·제약·가정·위험·대안·성공 기준을
       충분히 질문하고, 사람이 승인한 Chain 수준 로드맵·기능명세·필요한 사전 분석 문서를
       결과물로 남긴다. 문서는 근거 Interview와 승인 revision을 추적할 수 있어야 한다.
-      **선행 설계:** Interview는 현재 일반적으로 Artifact를 바꾸지 않고 변경 확정은 Verify의
-      권한이다. Report 원본과 문서 파일의 관계·생성/확정 절차를 명세에서 결정한 뒤 구현하며
-      dirty gate를 문서 생성 때문에 우회하지 않는다.
-- [ ] **T2.3 언제든 재인터뷰 요청:** 사용자가 결과문서를 수정하고 싶으면 추가 Interview로
+      **개발 구현:** M6-D 계약에서 Interview는 제안·승인 원장과 문서 export만 만들고,
+      Verify에서 바인딩된 문서 bytes와 별도 작업 증거를 확정한다. dirty gate를 우회하지 않는다.
+      실제 심층 질문의 충분성·모델 활용·설치본 인수는 남는다.
+- [~] **T2.3 언제든 재인터뷰 요청:** 사용자가 결과문서를 수정하고 싶으면 추가 Interview로
       이어갈 수 있게 한다. “언제든”은 요청 시점이지 새 Cycle 개설의 예외가 아니다.
       **열린 Cycle이 하나라도 있으면 다른 Cycle을 절대로 열지 않는다.** 현재 Cycle을 기존
       Grammar·Report·Artifact 규칙에 따라 닫은 뒤에만 허용되는 경로로 새 Interview를 연다.
       열린 Cycle을 일시 중단해 둔 채 다른 Cycle을 열거나, 요청만으로 자동 종료·성공 처리하지 않는다.
       실패한 Cycle의 자식 금지도 유지한다. 닫힌 Interview/문서는
-      덮어쓰지 않고 새 승인 revision과 변경 이유를 남긴다.
-- [ ] **T2.4 승인된 인터뷰 문서로 실험 범위 제한:** Experiment는 적용되는 승인 문서 revision과
+      덮어쓰지 않고 새 승인 revision과 변경 이유를 남긴다. M6-D 개발 프로필에서 요청 보존과
+      새 승인 후 재개를 구현·합성 검증했으며 실제 Host 인수는 남는다.
+- [~] **T2.4 승인된 인터뷰 문서로 실험 범위 제한:** Experiment는 적용되는 승인 문서 revision과
       요구사항을 근거로 삼는다. 문서에 없는 목표·지침·제약을 임의로 실행하지 않고 추가
       Interview에서 확인·승인한 뒤 진행한다. 이때도 T2.3의 단일 열린 Cycle 경계를 지킨다.
-      미승인·충돌·낡은 revision을 어떻게 차단하고
-      안내할지 설계하며, 허용된 범위 안의 구현 선택과 새로운 요구사항의 경계도 명시한다.
+      M6-D 개발 프로필은 미승인·충돌·낡은 revision과 잘못된 항목 연결을 거절한다.
+      일반 외부 도구에서 수행하는 작업의 의미까지 Core가 자동 판별하는 기능은 아니며 실제 모델 인수가 필요하다.
       이 계약은 상위 안전·권한 규칙을 무효화하지 않는다.
 
 **합격:** 깊이 있는 인터뷰 → 승인 문서 → 근거를 가진 실험 → 추가 인터뷰 → 새 승인 문서 →
@@ -569,10 +556,9 @@ Later    1  성공 가지 Merge
 
 ### 2.2 명세와 구현의 기능 대조 — 2026-10-31
 
-대조 기준: main `c99177f5e6957f4f5881d61cbba6600c82d04b2e`. 이 절은 기능 구현이 아니라
-미완료 범위의 재분류다. [PR #55](https://github.com/hyun06000/gil/pull/55)는 조회 당시
-CI 8개 통과·미병합이며 Monitor 표시 감지만 다룬다. Chain이나 revisit을 구현/해제하지 않는다.
-이전 §2.1의 날짜별 장부와 체크박스가 이 절과 다르면 현재 상태는 이 절을 우선한다.
+대조 기준: main `3b5341f` (2026-11-01). PR #55의 Monitor 표시 감지·복구와 M4-H,
+M6-A/B/C 및 Host 테마는 main에 반영되었다. 아래는 구현·제품 활성화·실사용 인수를 분리한 현재 판정이다.
+이전 날짜별 장부와 상태가 다르면 이 표와 최신 세부 절을 따른다.
 
 판정은 **미구현**, **부분 구현**, **Core 구현·제품 차단**, **검수 대기**, **명세 미결**로 나눈다.
 `ChainRef` 타입, Report에 자유 필드를 적을 수 있음, 화면에 그룹을 그릴 수 있음만으로
@@ -580,16 +566,16 @@ CI 8개 통과·미병합이며 Monitor 표시 감지만 다룬다. Chain이나 
 
 | 기능 / 담당 | 명세 근거 | 실제 코드·시험 근거와 현재 판정 | 남은 완료 조건 |
 | --- | --- | --- | --- |
-| Chain 컨테이너·Current·Cycle 소유 / M6-A | [기본 명세](GIL%20Specification%20v0.1.md) §5, [Node Model](GIL_Node_Model_v0.1.md) §6–7 | **개발 구현.** `chain-core`에서 실제 `Project → Chain → Cycles`, format 6/7과 Current/소유 검증. 4/5는 그대로 보존한다. `src/chain.rs`는 도메인 객체이며 Windows 파일 경로 핸들과 별개다. | [M6-A 저장 계약](GIL_Chain_Storage_v0.1.md). 기본/설치본 활성화, 명시적 legacy 이전 실행, Closing/다음 Chain은 별도 |
-| Closing Interview → Chain 판정·Report / M6-B | [Cycle Model](GIL_Cycle_Model_v0.1.md) §18–19 | **개발 구현·미배포.** `chain-core`의 `src/chain.rs`와 `tests/chain_closing.rs`가 승인된 Closing Interview→Chain close 및 재시작을 검증한다. 기본 프로필은 기존 차단을 유지한다. | `closing_synthesis_ref`의 소속·승인·판정 일치 검증. Interview success와 Chain failure 구분. 사람 승인 전 자동 종료 금지 |
+| Chain 컨테이너·Current·Cycle 소유 / M6-A | [기본 명세](GIL%20Specification%20v0.1.md) §5, [Node Model](GIL_Node_Model_v0.1.md) §6–7 | **개발 구현.** `chain-core`에서 실제 `Project → Chain → Cycles`, format 6/7과 Current/소유 검증. 4/5는 그대로 보존한다. `src/chain.rs`는 도메인 객체이며 Windows 파일 경로 핸들과 별개다. | [M6-A 저장 계약](GIL_Chain_Storage_v0.1.md). 기본/설치본 활성화, 명시적 legacy 이전 실행과 실제 Host 인수 |
+| Closing Interview → Chain 판정·Report / M6-B | [Cycle Model](GIL_Cycle_Model_v0.1.md) §18–19 | **개발 구현·미배포.** `chain-core`의 `src/chain.rs`와 `tests/chain_closing.rs`가 승인된 Closing Interview→Chain close 및 재시작을 검증한다. 기본 프로필은 기존 차단을 유지한다. | M6-D의 실제 승인 입력과 제안 버전 결속; 설치본 활성화·실사용 인수 |
 | 닫힌 Chain 뒤 새 Chain과 상위 인수인계 / M6-C | 기본 명세 §5·19, Node Model §7, Cycle Model §19·21, [Context Model](GIL_Context_Model_v0.1.md) | **개발 구현·미배포.** M6-C 계약의 명시적 `gil open chain`으로 다음 Interview를 열고 이전 Chain Report를 Context로 전달한다. `tests/chain_handoff.rs`와 stdio MCP 시험이 전역 ID·세계·Journey·증거·재시작을 검증한다. | 기본/설치본 활성화와 실제 Host·Luna 인수는 별개. Chain revisit·병렬·다중 부모 미지원 |
 | Step에서 같은 지점으로 여러 번 revisit / M4-R | 기본 명세 §14·22, [Time Model](GIL_Time_Model_v0.2.md) §6–8, Cycle Model §9 | **Core 구현·제품 차단.** `src/walk.rs`의 pending→새 Hypothesis 전이와 `tests/walk.rs::each_branch_off_the_same_point_knows_its_own_origin`이 반복 분기와 출처를 검사한다. `product-safety` 빌드의 공개 revisit은 거절된다. | M3 안전 복원 후 제품 재연결, 실제 파일·Journey 보존 및 Host 재시작 인수. 미구현으로 다시 만들지 않음 |
 | Cycle에서 같은/더 먼 조상으로 반복 revisit / M4-R | Cycle Model §9, [Storage Model](GIL_Storage_Model_v0.1.md) §3.1 | **Core 구현·제품 차단.** `src/cycles.rs::{revisit,open_after_revisit}`, `tests/revisit.rs::{a_second_failure_may_target_the_same_ancestor_again,a_further_ancestor_branch_is_not_called_a_sibling}`. 새 실패마다 같은 조상을 다시 선택 가능. | 제품에서 실패 종료→복원→새 Cycle→재실패→복원까지 인수. 같은 실패의 중복 실행과 새 실패의 재시도를 구분 |
-| 반복 실패 전체를 다음 시도에 전달 / M2·M4-H | Cycle Model §10 “부모 이후 현재 Journey에서 닫힌 실패 Cycle Report들” | **후속 구현 후보·미배포.** 대조 시점 main의 `write_abandoned_cycle`은 출처 하나만 투영했다. 후속 `write_failed_cycles`는 Current/pending에서 parent와 revisit provenance를 따라 누적 실패를 한 번씩 읽는다. | C3·C4→C5, 다음 성공 자식, 먼 조상, 새 CLI 프로세스 재개와 원본 불변 시험 통과. 실제 모델/설치본 인수는 미실시; M4-R 제품 차단은 유지 |
+| 반복 실패 전체를 다음 시도에 전달 / M2·M4-H | Cycle Model §10 “부모 이후 현재 Journey에서 닫힌 실패 Cycle Report들” | **Core 구현·main 병합.** `write_failed_cycles`가 Current/pending에서 parent와 revisit provenance를 따라 누적 실패를 한 번씩 읽는다. M4-H의 재시작·원본 보존 회귀가 있다. | 실제 모델의 실패 활용과 설치본 인수; M4-R 제품 차단은 유지 |
 | 성공 후 추가 Interview / M2·M6-D | Cycle Model §6·13·16–17 | **기본 전이는 구현됨.** `src/cycles.rs::open_child`, `src/cycle.rs`의 승인/참조 검사와 `tests/cycles.rs`; 실패 뒤 새 Interview도 `tests/revisit.rs::an_interview_branch_is_allowed_too`에서 확인. | “재인터뷰 전부 미구현”으로 세지 않음. 승인 계획 변경·문서 revision과의 연결 및 실제 인간 승인 수집은 별도 잔여 |
-| 승인된 탐색 체크리스트·남은 계획 변경 / M2B·M6-D | Cycle Model §16 (`executed_cycles`, `pending_exploration`)·§21 | **미구현 + 상세 schema 미결.** 닫힌 Cycle 기록은 보존되지만 승인된 후보 목록을 갱신/소비하는 실행 모델은 없다. 임의 Report 문자열은 계획 상태 머신이 아니다. | 항목 식별·승인 revision·추가/재정렬/소비 계약. 완료 A 보존 + 새 승인 D 반영 후 `[D,B,C]` 복원. 실행한 Cycle을 덮어쓰지 않음 |
-| 승인된 계획 문서와 실험 범위 연결 / T2.2–4·M6-D | 기본 명세 §5, Cycle Model §5·16·21, T2의 제품 요구 | **미구현·선행 설계 필요.** 근거 StepRef/`approved: yes` 검사는 있지만 승인 문서 revision↔실험 요구사항 연결은 없다. Interview 문서의 Artifact 확정 경계도 미정이다. | Report→문서 파일→승인 revision→실험 연결. 범위 밖 요청은 다음 Interview에서 확인. Verify 증거 규칙을 우회해 Interview에서 임의 파일 확정하지 않음 |
-| 사람 승인 증거와 Agent가 쓴 승인 값 구분 / M6-D | Cycle Model §14·16·18, M6 인간 응답 통로 | **부분 구현.** 문법은 yes/no와 참조 일관성을 검사하고 공통 지침은 실제 응답을 기다리게 한다. 이것만으로 입력자가 인간임을 인증하지 않는다. | 승인 응답 출처·제안 revision·적용 범위를 결속하는 Host/제품 계약과 인수. 모델 지침 준수를 독립 승인 통로 완료로 세지 않음 |
+| 승인된 탐색 체크리스트·남은 계획 변경 / M2B·M6-D | Cycle Model §16 (`executed_cycles`, `pending_exploration`)·§21 | **개발 구현·미병합.** 승인 항목 ID·revision과 실행 Cycle을 연결하고 미실행 순서를 계산한다. 기존 승인·실행 기록은 보존한다. | A 실행 뒤 D를 승인해 `[D,B,C]`로 재개하는 합성 시험 통과. PR/양 OS CI·실제 Host/Luna·배포 남음 |
+| 승인된 계획 문서와 실험 범위 연결 / T2.2–4·M6-D | 기본 명세 §5, Cycle Model §5·16·21, T2의 제품 요구 | **개발 구현·미병합.** Experiment의 승인 판·항목을 고정하고 Verify에서 해당 문서 bytes와 별도 실행 증거를 검증한다. | 실제 문서 작성·버튼 승인·재인터뷰 흐름의 Host 인수, CI 및 배포. M6-E 취소/재시도 계약과 기존 기록 이전은 별도 |
+| 사람 승인 증거와 Agent가 쓴 승인 값 구분 / M6-D | Cycle Model §14·16·18, M6 인간 응답 통로 | **개발 구현·미병합.** Monitor 버튼 입력을 정확한 scope·제안 판·digest·임시 토큰과 결속한다. 기본 제품은 기존 yes/no 계약이며 개인 신원 인증이 아니다. | 실제 Host 버튼/재연결·Luna 인수, PR/CI 및 배포. 합성 입력 시험을 실제 인간 승인으로 세지 않음 |
 | 자아의 Knowledge·Memory·Relations 객체 / M2 후속 | [Existence Model](GIL_Existence_Model_v0.1.md) §4·11, Time Model §18 | **부분 구현·객체 schema 미결.** `src/existence.rs`에 Journey revision, Active/Done Will, 선택적 head 참조는 있다. ExistenceState는 빈 타입이며 독립 Knowledge/Memory/Relations 객체를 발행·조회하는 저장소는 없다. | 실제 객체 schema·생성/갱신·provenance·Context 투영. 현재 Verify→Analysis→Outcome의 증거/배움 연결을 완전한 지식·기억 저장소로 표현하지 않음. Human Participant/최초 Relation도 M2B 잔여 |
 | 닫지 못한 Open Node에서 중단/방향 전환 / M6-E | 기본 명세 §8·24, Time Model §7·18② | **명세 미결·미구현.** abort/cancel/abandon이나 열린 Node에서 강제 revisit을 허용하는 계약이 없다. | 증거/Report를 완성할 수 없는 경우의 명시적 종료·복구 계약을 먼저 결정. 가짜 success·자동 close·기록 삭제로 해결하지 않음 |
 | Chain 수준 revisit, 병렬 Cycle, 성공 가지 merge / M8·후속 | Cycle Model §21, Node Model §13, M8 | **명세 미결·미구현.** Step/Cycle의 반복 revisit 구현을 Chain으로 일반화할 수 없다. 다중 부모·합류 후 세계와 Journey 선택도 미정이다. | Chain 기본 수명 이후 별도 설계. 단일 열린 Cycle 제약 유지; 과거로 돌아가 다른 가지를 만드는 것과 여러 세계를 합치는 것을 구분 |
@@ -604,7 +590,7 @@ CI 8개 통과·미병합이며 Monitor 표시 감지만 다룬다. Chain이나 
 
 이미 구현: C3/C4 보존, C5.parent=C2, C5.revisit_from=C4,
            세 시도의 Entry=C2.Exit, 과거 Node를 다시 열지 않음
-남은 기능: C5 Context에 C3와 C4의 실패 근거를 모두 전달
+구현 완료: C5 Context에 C3와 C4의 실패 근거를 모두 전달 (M4-H)
 남은 제품: 안전한 Artifact 복원 후 제품의 revisit 차단 해제와 양 OS 인수
 별도 미결: Chain 자체를 과거 Chain으로 되돌리는 전이
 ```
@@ -616,8 +602,8 @@ CI 8개 통과·미병합이며 Monitor 표시 감지만 다룬다. Chain이나 
 
 #### 구현 순서와 검증 범위
 
-1. **M4-H:** 누적 실패 Context 전달을 보완한다. Chain이 없어도 기존 Cycle Graph에서 해결 가능하다.
-2. **M6-A → B → C:** Chain 저장/호환 계약 → 실제 계층 → Closing → 다음 Chain 인수인계 순서로 구현한다.
+1. **M4-H (구현·병합 완료):** 누적 실패 Context 전달. Chain이 없어도 기존 Cycle Graph에서 해결 가능하다.
+2. **M6-A → B → C (개발 구현·병합 완료):** 실제 계층·Closing·직렬 다음 Chain. 제품 활성화는 별도다.
 3. **M6-D:** 기존 Interview 전이를 활용해 승인된 계획·문서 revision·재인터뷰·실험 범위를 연결한다.
 4. **M3 안전성 → M4-R:** 추적 범위·보존·복원 실패 경계를 먼저 닫고 제품 revisit을 재개한다.
    Chain 구현을 기다릴 필요는 없지만 차단 플래그만 끄는 것은 완료가 아니다.
@@ -651,11 +637,11 @@ M3.5 AI Manual Foundation            완료   ← GIL Manual Model v0.1
   ├─ 중첩 GIL 프로젝트 지원          Later  §7.4 미결 기능
   ├─ Managed Dataset                 Later  §7.5 결정 로그만 남긴다
   ↓
-M4 Failure Revisit & Branching       Core·누적 Context 로컬 구현 / 제품 차단
+M4 Failure Revisit & Branching       Core·누적 Context main 반영 / 제품 차단
   ↓
 M5 Human Monitor                     진행 중 ← GIL Monitor Model v0.1
   ↓
-M6 Advanced Interview & Chain Close  M6-A 개발 구현 · M6-B 이후 대기
+M6 Advanced Interview & Chain Close  A/B/C 개발 구현 · D 착수 · E 설계 미결
   ↓
 M7 Scenario Suite                    대기
   ↓
@@ -770,7 +756,7 @@ M1이 끝나면:
 - [x] 부모 Cycle Report 참조 전달
 - [x] 누적된 실패 Cycle Report의 Core Context 전달 — M4-H 후속 구현/시험. 제품 배포·실사용과 구분
 - [x] 이미 실행한 Cycle과 Report의 Graph 보존
-- [ ] `executed_cycles`와 `pending_exploration`을 연결하는 승인 계획의 식별·소비·재정렬 투영 (M6-D)
+- [~] `executed_cycles`와 pending 순서를 연결하는 승인 계획의 식별·소비·재정렬 투영 (M6-D 개발 구현·미병합, 제품 인수 남음)
 - [x] 여러 Cycle을 구분하는 status / story / context
 - [x] 한 번에 하나의 active Cycle
 
@@ -1577,7 +1563,7 @@ Experiment Cycle failure Report의 `revisit`은 **기본 Core에서 기록·실�
 
 ### M4-H — 반복 실패의 누적 인수인계
 
-상태: `[x] Core 투영·로컬 회귀 구현, 미배포` — 제품 revisit 차단을 해제한 뜻이 아니다.
+상태: `[x] Core 투영·회귀 구현·main 병합; 신규 설치본/실제 모델 인수는 별도` — 제품 revisit 차단을 해제한 뜻이 아니다.
 
 - [x] 수집 범위: Current와 pending에서 parent/revisit_from을 따라 연결된 닫힌 실패들.
       의존 경험을 먼저 출력하고 Cycle별 한 번만 포함한다. ID/저장 순서로 경험을 추정하지 않는다.
@@ -2235,7 +2221,7 @@ artifact·release pipeline → 새 기계 설치·업데이트 인수다. Claude
 
 ## 11. M6 — Advanced Interview & Chain Closing
 
-상태: `[~] M6-A 개발 프로필 구현 · Closing·승인 계획은 미구현`
+상태: `[~] M6-A/B/C 개발 프로필 구현·main 병합 · M6-D 개발 구현·미병합 · M6-E 설계 미결`
 
 목표:
 
@@ -2298,11 +2284,18 @@ Chain-level revisit·다중 부모 merge는 이 직렬 연결의 자동 확장�
 
 ### M6-D — 승인 계획·문서와 재인터뷰
 
-- [ ] 승인된 탐색 항목·revision·실행 Cycle 연결과 `pending_exploration` 갱신 계약을 정한다.
-- [ ] 목표/범위/비범위/제약/성공 기준 문서의 생성·확정 경계를 Artifact 규칙과 맞춘다.
-- [ ] 인간 응답 출처와 제안 revision을 묶는 승인 경로를 정의한다. `approved: yes` 문자열만으로 인간 인증을 주장하지 않는다.
-- [ ] 이미 가능한 추가 Interview 전이를 재사용해 계획 변경을 승인받고, 과거 승인·실행 기록은 보존한다.
-- [ ] 실험이 참조하는 승인 revision/요구사항을 검증하고 미승인·충돌·낡은 계획을 거절/재확인한다.
+2026-11-01 작업 브랜치 `feat/approved-plan-m6d-20261101`에서 `approved-plan` 개발 프로필로 구현했다.
+[승인 계획 계약](GIL_Approved_Plan_v0.1.md)이 명세 §21의 미정 저장 부분을 이 범위에서 정한다.
+기존 프로젝트·기본 설치본에 자동 적용하지 않는다. Core 계약과 제품 인수를 구분한다.
+
+- [x] 승인 항목·revision·실행 Cycle 연결과 pending 순서. Experiment는 최신 승인 판의 첫 미실행 항목에 바인딩한다.
+- [x] 목표/범위/비범위/제약/성공 기준 문서는 Interview에서 export만 제공하고, Verify Snapshot에서 승인 판 bytes를 검증한다. 별도 실행 증거도 필요하다.
+- [x] Monitor의 승인/수정 요청 버튼, scope·revision·digest·App 전용 임시 토큰 검증. 채팅의 yes로 우회하지 못하며 개인 신원 인증이라고 주장하지 않는다.
+- [x] 추가 Interview로 항목 추가·재정렬. 과거 승인·실행 기록 보존. 열린 Experiment에서 재인터뷰 요청을 저장하되 자동 종료·동시 Cycle을 만들지 않는다.
+- [x] 미승인·변조·낡은 판·중복/알 수 없는 실행 연결 검증, 기존 기록 자동 이전 금지.
+- [ ] PR 검토·macOS/Windows CI·병합.
+- [ ] 실제 Codex MCP App 버튼/재연결/채팅 계속 요청과 Luna 실사용 인수.
+- [ ] 테스트 설치본과 업데이트 피드 반영. 현재 설치된 제품에 반영됐다고 간주하지 않는다.
 
 **합격:** A 완료 뒤 D를 다음으로 승인하면 완료 A는 그대로, 남은 계획은 `[D,B,C]`로 재개된다.
 열린 Cycle 중 재인터뷰 요청은 보존하되 다른 Cycle을 동시에 열거나 현재 Cycle을 자동 종료하지 않는다.
@@ -2316,6 +2309,9 @@ Chain-level revisit·다중 부모 merge는 이 직렬 연결의 자동 확장�
 abort/cancel/abandon은 현재 명세에 없으며 이번 문서가 새 상태나 실행 명령을 도입하지 않는다.
 
 ### M6 전체 완료 체크리스트
+
+아래는 **전체 제품 인수** 체크리스트다. A/B/C의 Core 구현 완료는 위 세부 절을 따른다.
+명시적 이전·직접 승인 통로·설치본·Host 실사용을 검증하기 전에는 전체 완료로 표시하지 않는다.
 
 체크리스트:
 
@@ -2331,11 +2327,11 @@ abort/cancel/abandon은 현재 명세에 없으며 이번 문서가 새 상태�
 - [ ] 인간 응답을 AI 대필과 구분하는 통로
 - [ ] `pending_exploration` 변경 승인
 - [ ] Interview는 success로만 닫힘
-- [ ] Closing Interview
-- [ ] Chain success / failure 인간 승인
-- [ ] Chain Report
-- [ ] `closing_synthesis_ref`
-- [ ] Chain `handoff_summary`
+- [x] Closing Interview의 Core 전이 (M6-B)
+- [ ] Chain success / failure의 실제 인간 입력 출처와 제안 버전 결속 (M6-D)
+- [x] Chain Report Core 저장·복원 (M6-B)
+- [x] `closing_synthesis_ref` Core 검증 (M6-B)
+- [x] Chain `handoff_summary` 저장·다음 Chain Context 투영 (M6-B/C)
 
 합격 조건:
 

@@ -28,6 +28,7 @@ must('<button class="refresh" type="button" title="완전한 View 를 다시 읽
 // The display-mode row sits at the bottom. The Host card and the header already carry the title.
 must('<footer class="status"><i></i><span></span></footer>',
   (line) => `${line}
+  <section id="plan-review" class="plan-review" aria-label="사용자 계획 승인" aria-live="polite" hidden></section>
   <section class="host-bar" aria-label="Monitor 표시 모드">
     <span id="host-say" role="status">MCP Apps 연결 중…</span>
     <button id="expand" type="button" disabled>모니터 펼치기</button>

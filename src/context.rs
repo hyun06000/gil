@@ -46,6 +46,15 @@ pub fn context(project: &Project) -> String {
     let cycles = project.cycles();
     let mut out = String::new();
     write_preamble(&mut out);
+    if let Some(plan) = project.approved_plan() {
+        let chain = project.current_chain().unwrap();
+        out.push_str("\n승인 계획 프로필: Synthesis를 열고 gil_plan_propose → Monitor 버튼 응답 → gil_plan_read의 close_report로 닫기 → Outcome → Interview Cycle 닫기. 채팅 동의로 대체하지 않는다.\n");
+        out.push_str(&format!("승인 판: {:?} · 미실행 순서: {}\n실행 연결: {}\n", plan.active(chain).map(|p| p.revision), plan.pending(chain).iter().map(|i| i.id.as_str()).collect::<Vec<_>>().join(", "), serde_json::to_string(&plan.executed_cycles).unwrap()));
+        if !plan.awaiting_interview(chain).is_empty() { out.push_str(&format!("보존된 재인터뷰 요청: {}. 현재 Cycle을 사실대로 닫은 후 Interview를 연다. 자동 종료나 동시 Cycle은 허용하지 않는다.\n", serde_json::to_string(&plan.awaiting_interview(chain)).unwrap())); }
+        if let Some(p) = plan.current(project) { out.push_str(&format!("제안 판 {} · 응답 {:?}. gil_plan_read로 정확한 결과를 읽는다.\n", p.revision, p.receipt)); }
+        if let Some(item) = project.current_plan_item() { out.push_str(&format!("이번 Experiment: {} · 질문: {} · 확인 조건: {}\n", item.id, item.question, item.done_when)); }
+        if project.plan_document().is_some() { out.push_str("Verify 전 gil_plan_read.document를 파일로 저장하고 plan_document에 경로를 적는다. 별도의 실제 작업 증거도 evidence_files로 남긴다.\n"); }
+    }
     if let Some(chain) = project.current_chain() {
         out.push_str(&format!("\n현재 Chain: {} · {} · {}\nEntry: {} · 현재 Cycle: {}\n",
             chain.id(), if chain.is_closed() { "closed" } else { "open" }, chain.existence(), chain.entry_snapshot(), chain.current_cycle()));

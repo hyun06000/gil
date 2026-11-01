@@ -1246,3 +1246,11 @@ v0의 형제 Cycle은 실패 후 revisit으로 생기는 대안 가지다. 동�
 > **Interpretation은 사용자의 응답보다 더 큰 의도를 확정하지 않는다.**
 
 > **failure는 끝이 아니라, 재귀적 Graph에서 다른 가지를 만들기 위한 논리적 발판이다.**
+
+## M6-D 개발 계약 연결 (2026-11-01)
+
+§16·§21의 승인 후보 목록, revision 및 실행 연결은 선택적 `approved-plan` 프로필에서
+[승인 계획 계약](GIL_Approved_Plan_v0.1.md)으로 구체화한다. 기존 기본 전이를 자동 변경하지 않는다.
+Monitor 버튼은 정확한 제안 판에 대한 응답을 기록하며 Synthesis/Outcome/Interview를 대신 닫지 않는다.
+열린 Experiment의 재인터뷰 요청은 보존하되 현재 Cycle을 사실대로 닫기 전 새 Cycle을 만들지 않는다.
+이 개발 프로필의 Cycle 재시도 바인딩과 취소는 후속 계약이며, 기존 Core의 반복 revisit 구현과 구분한다.

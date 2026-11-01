@@ -28,7 +28,7 @@ body[data-display-mode="fullscreen"] .detail { scroll-margin-bottom: var(--gil-c
   body[data-display-mode="fullscreen"] #gil-companion {
     display: grid; grid-template-columns: minmax(0, 1fr) 380px; align-content: start;
     grid-template-areas: "top top" "notice notice" "stale stale" "working working" "settings settings"
-      "empty empty" "intro detail" "map detail" "status status" "bar bar";
+      "empty empty" "intro detail" "map detail" "status status" "plan plan" "bar bar";
   }
   body[data-display-mode="fullscreen"] .top { grid-area: top; }
   body[data-display-mode="fullscreen"] .notice { grid-area: notice; }
@@ -56,3 +56,14 @@ body[data-display-mode="fullscreen"] .detail { scroll-margin-bottom: var(--gil-c
 .report-visuals .is-original .visual-image-trigger { max-width:none; width:max-content; cursor:zoom-out; }
 .report-visuals .is-original img { max-width:none; max-height:none; width:auto; height:auto; }
 .report-visuals .visual-image-trigger:focus-visible, .report-visuals .visual-viewport:focus-visible { outline:2px solid currentColor; outline-offset:-2px; }
+
+/* The approval panel is an MCP-only action surface, separate from the shared read model. */
+.plan-review { grid-area:plan; padding:16px; border-top:var(--gil-hair) solid var(--gil-line); overflow-wrap:anywhere; }
+.plan-review[hidden] { display:none; }
+.plan-review h2 { font-size:var(--gil-md); }
+.plan-review dt { font-weight:600; margin-top:10px; }
+.plan-review dd { margin:4px 0; white-space:pre-wrap; }
+.plan-review li, .plan-review pre { white-space:pre-wrap; overflow-wrap:anywhere; }
+.plan-review button { margin:8px 12px 0 0; padding:9px 14px; border:1px solid var(--gil-line); border-radius:6px; color:var(--gil-fg); background:var(--gil-bg); cursor:pointer; }
+.plan-review button:focus-visible { outline:2px solid var(--gil-ring); outline-offset:3px; }
+.plan-review button:disabled { opacity:.5; cursor:default; }
