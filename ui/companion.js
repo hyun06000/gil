@@ -315,10 +315,12 @@ function drawNodes() {
       button.dataset.step = node.ref;
       button.dataset.kind = node.stepKind;
       button.dataset.here = String(node.here);
+      const visuals = visualBadge(node.visuals);
+      if (visuals) { button.dataset.visuals = node.visuals.state; button.dataset.visualCount = visuals.count; }
       button.setAttribute(
         "aria-label",
         `${word(STEP_KIND, node.stepKind)} · ${node.ref}` +
-          `${node.here ? " · 현재 자리" : ""}${node.summary ? ` · ${node.summary}` : ""}`,
+          `${node.here ? " · 현재 자리" : ""}${node.summary ? ` · ${node.summary}` : ""}${visuals ? ` · ${visuals.label}` : ""}`,
       );
       button.onclick = () => selectStep(node.ref);
     }
@@ -328,6 +330,18 @@ function drawNodes() {
     button.setAttribute("aria-selected", String(Boolean(chosen)));
     layer.appendChild(button);
   }
+}
+
+/** 기록된 선언만 말한다. 선언이 없는 Report 는 배지도 없다 — 「없음」을 지어내지 않는다. */
+export function visualBadge(visuals) {
+  if (!visuals || typeof visuals !== 'object') return null;
+  if (visuals.state === 'attached' || visuals.state === 'references') {
+    const count = Number.isInteger(visuals.count) ? visuals.count : 0;
+    return count > 0 ? { count: String(count), label: `시각 자료 ${count}개` } : null;
+  }
+  if (visuals.state === 'not_needed') return { count: '0', label: '시각 자료 없음 (사유 기록됨)' };
+  if (visuals.state === 'missing') return { count: String(visuals.count || 0), label: `시각 자료 미완${visuals.count ? ` (${visuals.count}개 첨부)` : ''}` };
+  return null;
 }
 
 /** Fade the whole arrow once: overlapping paint must not darken its joint. */
@@ -377,12 +391,20 @@ function drawCard() {
     : folded
       ? "접힌 Cycle 안의 자리다. 펼치면 그 Step 으로 돌아간다."
       : "아직 닫히지 않아 요약이 없다.";
+  let badge = step ? visualBadge(step.visuals) : null;
   if (seat.selectedCycle) {
     head.textContent = `${cycleName(stepCycle, one.kind)} · ${one.state === 'open' ? '진행 중' : '닫힘'}`;
     name.textContent = `사이클 보고서 · ${stepCycle}`;
     said.textContent = one.report?.handoff_summary || '아직 닫히지 않아 최종 보고서가 없다.';
+    badge = one.report ? visualBadge(one.report.visuals) : null;
   }
   card.append(head, name, said);
+  if (badge) {
+    const visuals = document.createElement("p");
+    visuals.className = "card-visuals";
+    visuals.textContent = badge.label;
+    card.append(visuals);
+  }
   cardLayer.appendChild(card);
 
   if (current.plan.orientation === "horizontal") {
@@ -673,9 +695,10 @@ function renderIntro() {
   status.textContent =
     `${view.current.chain_ref ? `${view.current.chain_ref} · ${view.chain?.state === "closed" ? "Chain 닫힘" : "Chain 열림"} · ` : ""}${view.current.cycle_ref} · ${view.current.step_ref || "Cycle 경계"} · 읽기 전용`;
   const summary = progressSummary(view);
-  for (const field of ['position', 'action', 'done', 'records']) {
+  for (const field of ['position', 'action', 'done']) {
     intro.querySelector(`.progress-${field}`).textContent = summary[field];
   }
+  intro.querySelector('.progress-records').textContent = `${summary.records} · ${summary.visuals}`;
   const observed = observeProgress(current.scopeId, view);
   const at = new Date(observed.observedAt).toLocaleTimeString();
   intro.querySelector('.progress-observed').textContent = observed.changed
@@ -709,6 +732,8 @@ function renderDetail(node) {
     note.textContent = '보고서 요약 — 판정·인계·당시 다음 방향. 세부 관측은 각 Step 보고서에서 확인합니다.';
     detail.append(note);
   }
+  // **시각 자료가 먼저다.** 사람은 그림으로 결과를 먼저 보고, 그 다음 글을 읽는다. Host 가
+  // 시각 조회를 제공하면 Report 본문보다 위에 선다. 조회가 없으면(fixture Host) 본문만 남는다.
   const attachVisuals = () => {
     if (current && typeof window.GIL_HOST.mountVisuals === 'function') {
       disposeVisuals = window.GIL_HOST.mountVisuals(detail, current.scopeId, reportOwner);
@@ -722,6 +747,7 @@ function renderDetail(node) {
     attachVisuals();
     return;
   }
+  attachVisuals();
   const list = document.createElement("dl");
   for (const field of node.report.fields) {
     const label = document.createElement("dt");
@@ -731,7 +757,6 @@ function renderDetail(node) {
     list.append(label, value);
   }
   detail.appendChild(list);
-  attachVisuals();
 }
 
 // ── 사람이 누르는 것 ────────────────────────────────────────────────

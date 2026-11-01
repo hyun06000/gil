@@ -53,6 +53,20 @@ export function visualFailure(stage, error) {
   return `이미지를 읽지 못했습니다. 보고서 본문은 보존되어 있습니다. [${stages.includes(stage) ? stage : 'unknown'}/${codes.includes(error?.code) ? error.code : 'failed'}]`;
 }
 
+// One sentence per recorded state. Only the recorded declaration speaks; nothing is inferred.
+export function visualSummary(data) {
+  const n = Array.isArray(data?.uses) ? data.uses.length : 0;
+  switch (data?.state) {
+    case 'attached': return { title: `시각 자료 ${n}개`, status: '이 보고서가 첨부한 확정 자료입니다. 누르면 원본 크기로 봅니다.', tone: 'attached' };
+    case 'references': return { title: `인용한 시각 자료 ${n}개`, status: '다른 보고서(원래 Verify)가 확정한 자료를 이 보고서가 인용했습니다.', tone: 'attached' };
+    case 'not_needed': return { title: '시각 자료 없음', status: `사유: ${data.reason}`, tone: 'none' };
+    case 'missing': return { title: n ? `시각 자료 미완 · ${n}개 첨부` : '시각 자료 미완', status: `사유: ${data.reason} · 후속 계획: ${data.follow_up}`, tone: 'missing' };
+    case 'open_report': return { title: '시각 자료', status: '아직 확정되지 않은 보고서입니다.', tone: 'pending' };
+    case 'legacy_unspecified': return { title: '시각 자료', status: '당시 시각 자료 선언이 기록되지 않았습니다.', tone: 'pending' };
+    default: return { title: '시각 자료', status: '', tone: 'pending' };
+  }
+}
+
 export function mountVisuals(container, scope, initialOwner, call) {
   let disposed = false, epoch = 0;
   const releases = new Set();
@@ -60,6 +74,7 @@ export function mountVisuals(container, scope, initialOwner, call) {
   const section = node('section'); section.className = 'report-visuals';
   section.setAttribute('aria-label', '보고서 시각 자료');
   const title = node('h3','시각 자료'), status = node('p'), gallery = node('div');
+  gallery.className = 'visual-gallery';
   status.setAttribute('role','status');
   section.append(title, status, gallery); container.append(section);
   const release = () => { for (const cleanup of releases) cleanup(); releases.clear(); gallery.replaceChildren(); };
@@ -78,14 +93,17 @@ export function mountVisuals(container, scope, initialOwner, call) {
       const data = await invoke('gil_monitor_report_visuals',{owner});
       if (!alive()) return;
       check(data,scope,owner);
-      const labels = {open_report:'아직 확정되지 않은 보고서입니다.',legacy_unspecified:'당시 시각 자료 선언이 기록되지 않았습니다.',not_needed:'시각 자료 없음',missing:'시각 자료 미완',attached:'확정된 시각 자료',references:'이 보고서에서 인용한 시각 자료'};
+      const labels = {open_report:1,legacy_unspecified:1,not_needed:1,missing:1,attached:1,references:1};
       if (!Object.hasOwn(labels,data.state) || !Array.isArray(data.uses) || data.uses.length > 8) throw invalid();
       if (['open_report','legacy_unspecified','not_needed'].includes(data.state) && data.uses.length) throw invalid();
       if (data.state === 'attached' && !data.uses.length) throw invalid();
       if (['not_needed','missing'].includes(data.state) && typeof data.reason !== 'string') throw invalid();
       if (data.state === 'missing' && typeof data.follow_up !== 'string') throw invalid();
-      const summary = labels[data.state] + (typeof data.reason==='string' ? ` — ${data.reason}`:'') + (typeof data.follow_up==='string' ? ` · 후속 계획: ${data.follow_up}`:'');
-      status.textContent = summary;
+      const summary = visualSummary(data);
+      title.textContent = summary.title;
+      status.textContent = summary.status;
+      section.dataset.state = data.state;
+      section.dataset.tone = summary.tone;
       async function choose(item) {
         if (!alive()) return;
         const frame = node('figure'), transport = node('p'), loading = node('p','이미지 읽는 중…');

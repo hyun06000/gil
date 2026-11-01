@@ -483,8 +483,24 @@ impl ProjectSession {
         let owner = ReportOwner::Step(cycle.step_ref(cycle.step_now_open().expect("Verify is open")));
         let graph = ProjectVisualGraph::new(&self.project, &state.boundary).map_err(|e| error(format!("{e:?}")))?;
         let registry = graph.prepare_close(&state.registry, owner, metadata.clone(), |ids| ReportVisuals::Verify(declaration(ids)))
-            .map_err(|e| error(format!("{e:?}")))?;
+            .map_err(|e| error(e.to_string()))?;
         for file in &mut files { file.revalidate().map_err(error)?; }
+        // New writes only: a one-word or boilerplate reason says nothing about what replaces the image.
+        if let Some(ReportVisuals::Verify(declaration)) = registry.report(owner) {
+            declaration.check_reason_substance().map_err(|e| error(
+                crate::visual_report::registry::RegistryError::InvalidReport(e).to_string(),
+            ))?;
+        }
+        // A Verify that saved an image as evidence cannot declare images unnecessary.
+        if let Some(ReportVisuals::Verify(crate::visual_report::VisualDeclaration::NotNeeded { .. })) = registry.report(owner) {
+            if let Some(path) = crate::visual_report::image_evidence_path(report.get("evidence_files").unwrap_or("")) {
+                return Err(error(format!(
+                    "[visual_declaration_conflict] evidence_files에 이미지 파일 {path}이(가) 있는데 시각 자료가 \
+                     필요 없다고 선언했다. PNG면 attachments/uses로 첨부해 attached로 닫고, 첨부할 수 없으면 \
+                     missing에 이유와 follow_up을 적는다. 닫힌 것은 없다"
+                )));
+            }
+        }
         let objects = self.store()?;
         let world = capture(&root, &objects)?;
         let manifest = objects.read_manifest(&world).map_err(|_| error("확정할 세계를 읽지 못했다".into()))?;

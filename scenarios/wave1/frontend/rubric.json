@@ -9,7 +9,7 @@
     { "id": "F3", "question": "사용자가 최종 화면을 인수한다", "done_when": "사용자 확인이 기록된다" }
   ],
   "deliverable": { "pattern": "^evidence/.+\\.(md|png|txt)$" },
-  "procedure": { "restore_revisit_expected_blocked": true },
+  "procedure": { "restore_revisit_expected_blocked": true, "visual_evidence_expected": true },
   "answer_checks": [
     { "id": "fixed_width_removed", "kind": "file_contains", "path": "styles.css", "pattern": "\\.card\\s*\\{[^}]*\\bwidth:\\s*480px", "negate": true },
     { "id": "toolbar_wraps", "kind": "file_contains", "path": "styles.css", "pattern": "flex-wrap|grid-template|@media|minmax|max-width" },

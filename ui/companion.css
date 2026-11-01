@@ -166,6 +166,19 @@ button, select { font: inherit; color: inherit; }
 .node.step[data-kind="define"], .node.step[data-kind="analysis"] { --kind: var(--gil-kind-analysis); }
 .node.step[data-kind="synthesis"], .node.step[data-kind="outcome"] { --kind: var(--gil-kind-synthesis); }
 
+/* 시각 자료 배지 — 기록된 선언만 그린다. 숫자는 첨부 개수, 0 은 「없음」을 사유와 함께 선언한 자리다. */
+.node.step[data-visuals] { overflow: visible; }
+.node.step[data-visuals]::after {
+  content: attr(data-visual-count); position: absolute; left: 100%; top: -9px; margin-left: 2px;
+  min-width: 14px; height: 14px; padding: 0 3px; box-sizing: border-box; border-radius: 7px;
+  font-size: 9px; font-weight: 700; line-height: 14px; text-align: center; letter-spacing: 0;
+  color: var(--gil-bg); background: var(--gil-fg-2); border: 1px solid var(--gil-bg);
+}
+.node.step[data-visuals="attached"]::after, .node.step[data-visuals="references"]::after { background: var(--gil-kind-verify); }
+.node.step[data-visuals="missing"]::after { background: var(--gil-kind-synthesis); }
+.node.step[data-visuals="not_needed"]::after { content: "–"; background: var(--gil-fg-3); }
+.card-visuals { margin: 4px 0 0; font-size: var(--gil-xs); font-weight: var(--gil-w-semibold); color: var(--gil-fg); }
+
 /* 접힌 Cycle — 조금 더 큰 원 하나에 식별자(§6.1-8). */
 .node.cycle {
   width: 26px; height: 26px; border: 2px dashed var(--gil-line); color: var(--gil-fg-2);

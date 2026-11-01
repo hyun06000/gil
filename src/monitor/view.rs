@@ -273,6 +273,8 @@ pub struct CycleReportV1 {
     pub handoff_summary: String,
     pub outcome_lesson: Option<String>,
     pub next_direction: Option<NextDirectionV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visuals: Option<ReportVisualsSummaryV1>,
 }
 
 /// 그때 적어 둔 다음 방향. **지금의 행동이 아니다.**
@@ -294,6 +296,18 @@ pub struct StepV1 {
     /// Report 원문의 대표 칸. **자르거나 다시 요약하지 않는다** — 줄임표와 줄바꿈은 UI 의
     /// 표현 책임이다.
     pub summary: Option<String>,
+    /// Additive v1 extension: the recorded visual declaration of this Report, as state and count.
+    /// Absent when no declaration was recorded (open Report, legacy record, non-visual format).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visuals: Option<ReportVisualsSummaryV1>,
+}
+
+/// Count and state only; image metadata and bytes stay in the App-only visual reads.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportVisualsSummaryV1 {
+    /// `attached` · `not_needed` · `missing` · `references`
+    pub state: String,
+    pub count: u32,
 }
 
 /// 지금 걸린 행동 단위.
@@ -510,10 +524,15 @@ fn step(facts: &StepFacts) -> Result<StepV1, ViewError> {
         state: state(facts.state),
         // **원문 그대로.** 자르는 것은 그리는 쪽의 일이다.
         summary: facts.summary.clone(),
+        visuals: facts.visuals.as_ref().map(visuals_summary),
     })
 }
 
 /// 이 사실이 정말 Step 인가 — 아니면 어느 자리의 어떤 경계인지와 함께 거절한다.
+fn visuals_summary(facts: &super::VisualSummary) -> ReportVisualsSummaryV1 {
+    ReportVisualsSummaryV1 { state: facts.state.to_string(), count: facts.count }
+}
+
 fn check_is_a_step(facts: &StepFacts) -> Result<StepKindV1, ViewError> {
     step_kind(facts.kind).ok_or_else(|| ViewError::BoundaryIsNotAStep {
         step_ref: facts.step_ref.to_string(),
@@ -544,6 +563,7 @@ fn report(address: &str, facts: &CycleReportFacts) -> Result<CycleReportV1, View
                 })
             })
             .transpose()?,
+        visuals: facts.visuals.as_ref().map(visuals_summary),
     })
 }
 
@@ -1332,6 +1352,7 @@ mod tests {
             "revisit_from_cycle_ref", "schema_version", "state", "step_kind", "step_ref",
             "steps", "success_condition", "summary", "target_cycle_ref", "target_step_ref",
             "timeline", "verdict", "verify_can_confirm", "will_ref", "world",
+            "visuals", "count",
         ];
         for name in &seen {
             assert!(allowed.contains(name), "View 에 모르는 칸 {name:?} 이 생겼다");

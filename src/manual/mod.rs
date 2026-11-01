@@ -65,6 +65,7 @@ const SOURCES: &[&str] = &[
     include_str!("topics/cycle/revisit.md"),
     include_str!("topics/cycle/revisit/target.md"),
     include_str!("topics/monitor/serve.md"),
+    include_str!("topics/report/visuals.md"),
 ];
 
 /// 본문이 Grammar 를 가리키는 표시 — **여는 괄호와 닫는 괄호.**
@@ -1169,7 +1170,7 @@ mod tests {
                 Some((NodeKind::Verify, NodeStatus::Open)),
                 WorldMark::Dirty
             )),
-            vec!["step/verify/close", "artifact/restore", "current"]
+            vec!["step/verify/close", "report/visuals", "artifact/restore", "current"]
         );
         // dirty 비-Verify — 되돌리는 것이 먼저다.
         assert_eq!(
@@ -1195,7 +1196,7 @@ mod tests {
                 Some((NodeKind::Verify, NodeStatus::Open)),
                 WorldMark::Clean
             )),
-            vec!["step/verify/close", "current"]
+            vec!["step/verify/close", "report/visuals", "current"]
         );
         // clean 일반 — **채우지 않는다.**
         assert_eq!(

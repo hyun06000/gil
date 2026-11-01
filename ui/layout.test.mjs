@@ -189,3 +189,14 @@ test('minimap fits the stage, shows the visible window and maps a click back to 
     assert.equal(minimapNeeded(stage, 1.2, { clientWidth: stage.width, clientHeight: stage.height }), true);
   }
 });
+
+test('plan nodes carry the recorded visual summary and never invent one', () => {
+  const view = structuredClone(fixtures[0]);
+  const cycle = view.timeline.find(c => c.steps.length);
+  cycle.steps[0].visuals = { state: 'attached', count: 2 };
+  const plan = place(view, new Set(), 'vertical');
+  const first = plan.nodes.find(n => n.ref === cycle.steps[0].step_ref);
+  assert.deepEqual(first.visuals, { state: 'attached', count: 2 });
+  const second = plan.nodes.find(n => n.ref === cycle.steps[1]?.step_ref) || plan.nodes.find(n => n.kind === 'step' && n.ref !== first.ref);
+  assert.equal(second.visuals, null);
+});

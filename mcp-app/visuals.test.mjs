@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {readImage,visualFailure} from './visuals.mjs';
+import {readImage,visualFailure,visualSummary} from './visuals.mjs';
 const scope='project:test', owner={kind:'step',ref:'step:C2/S3'};
 function fixture(size=600000) {
   const bytes=Buffer.alloc(size,37);
@@ -33,4 +33,14 @@ test('Host failure diagnostics expose only fixed stage/code, never raw errors',(
   assert.match(visualFailure('digest',{code:'digest_unavailable'}),/\[digest\/digest_unavailable\]/);
   const message=visualFailure('secret path',{code:'private data',message:'secret path'});
   assert.match(message,/\[unknown\/failed\]/);assert.doesNotMatch(message,/secret|private/);
+});
+test('the panel headline states count or the recorded reason, never an inferred absence',()=>{
+  assert.deepEqual(visualSummary({state:'attached',uses:[{},{}]}).title,'시각 자료 2개');
+  assert.equal(visualSummary({state:'references',uses:[{}]}).title,'인용한 시각 자료 1개');
+  const none=visualSummary({state:'not_needed',reason:'두 파일의 sha256 일치만 비교했다',uses:[]});
+  assert.equal(none.title,'시각 자료 없음');assert.match(none.status,/사유: 두 파일의 sha256/);assert.equal(none.tone,'none');
+  const missing=visualSummary({state:'missing',reason:'렌더러 없음',follow_up:'다음 Cycle에서 캡처',uses:[{}]});
+  assert.equal(missing.title,'시각 자료 미완 · 1개 첨부');assert.match(missing.status,/후속 계획: 다음 Cycle/);
+  assert.equal(visualSummary({state:'legacy_unspecified',uses:[]}).status,'당시 시각 자료 선언이 기록되지 않았습니다.');
+  assert.equal(visualSummary({state:'open_report',uses:[]}).tone,'pending');
 });
