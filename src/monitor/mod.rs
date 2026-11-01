@@ -96,6 +96,7 @@ impl CapturedAt {
 pub struct MonitorSnapshot {
     pub captured_at: CapturedAt,
     pub current_chain: Option<ChainFacts>,
+    pub chains: Vec<ChainFacts>,
     pub current_existence: ExistenceFacts,
     pub current_cycle: CurrentCycleFacts,
     /// 지금 Cycle 에서 **`parent` 만 따라** 뿌리까지 간 구조적 경로. 뿌리가 먼저 온다.
@@ -137,6 +138,7 @@ pub struct MonitorSnapshot {
 /// Container facts from the domain; typed references, no UI layout or invented approval.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChainFacts {
+    pub parent_chain_ref: Option<crate::ChainRef>,
     pub journey_ref: Option<JourneyRef>,
     pub exit_snapshot_ref: Option<SnapshotRef>,
     pub report: Option<crate::Report>,
@@ -423,6 +425,7 @@ pub enum ActionKind {
     /// Step Graph 가 끝 경계에 닿았다 — Cycle Report 로 닫는다.
     CloseCycle(CycleKind),
     CloseChain,
+    OpenChain,
     /// 닫힌 Cycle 이 적어 둔 대로 다음 Cycle 을 연다.
     OpenCycle(CycleKind),
     /// 되돌아온 자리에서 새 갈래를 연다.
@@ -548,20 +551,14 @@ fn snapshot(
     // **발급 순서 그대로.** `Cycles::nodes()` 도 `Walk::nodes()` 도 「만든 순서대로」를
     // 계약으로 적어 둔 접근자다. 여기서 다시 정렬하지 않는다 — 정렬하는 순간 그 기준이
     // 새 진실 판정이 된다.
-    let timeline: Vec<TimelineCycleFacts> = cycles
-        .nodes()
-        .iter()
-        .map(|cycle| TimelineCycleFacts {
-            facts: cycle_facts(cycles, cycle),
-            relation_to_current: timeline_relation(cycles, cycle.id(), &on_lineage),
-            steps: cycle
-                .steps()
-                .nodes()
-                .iter()
-                .map(|node| step_facts(cycle, node))
-                .collect(),
-        })
-        .collect();
+    let timeline: Vec<TimelineCycleFacts> = project.cycle_graphs()
+        .flat_map(|graph| graph.nodes().iter().map(|cycle| TimelineCycleFacts {
+            facts: cycle_facts(graph, cycle),
+            relation_to_current: if graph.current_id() == cycles.current_id() {
+                timeline_relation(graph, cycle.id(), &on_lineage)
+            } else { TimelineRelation::Other },
+            steps: cycle.steps().nodes().iter().map(|node| step_facts(cycle, node)).collect(),
+        })).collect();
     // 서 있는 자리 — 닫혀 있어도 그 자리에 서 있다. 아직 아무것도 열지 않았으면 없다.
     let current_step = here
         .steps()
@@ -573,13 +570,8 @@ fn snapshot(
 
     Ok(MonitorSnapshot {
         captured_at: CapturedAt(SystemTime::now()),
-        current_chain: project.current_chain().map(|chain| ChainFacts {
-            chain_ref: chain.id(), existence_ref: chain.existence(),
-            entry_snapshot_ref: chain.entry_snapshot(),
-            exit_snapshot_ref: chain.exit_snapshot(), report: chain.report().cloned(), journey_ref: chain.journey(),
-            current_cycle_ref: chain.current_cycle(),
-            cycle_refs: chain.cycles().nodes().iter().map(|cycle| cycle.id().to_ref()).collect(),
-        }),
+        current_chain: project.current_chain().map(chain_facts),
+        chains: project.chains().iter().map(chain_facts).collect(),
         current_existence: ExistenceFacts {
             existence_ref: existence.id(),
             journey_ref: existence.current_journey(),
@@ -638,6 +630,16 @@ fn declared_target(cycles: &Cycles, from: CycleId) -> Option<CycleRef> {
         .and_then(|report| cycles.check_next_direction(from, report).ok())
         .flatten()
         .map(CycleId::to_ref)
+}
+
+/// Stored Chain identity, containment and Report for the shared Monitor.
+fn chain_facts(chain: &crate::Chain) -> ChainFacts {
+    ChainFacts {
+        chain_ref: chain.id(), parent_chain_ref: chain.parent(), existence_ref: chain.existence(),
+        entry_snapshot_ref: chain.entry_snapshot(), exit_snapshot_ref: chain.exit_snapshot(),
+        report: chain.report().cloned(), journey_ref: chain.journey(), current_cycle_ref: chain.current_cycle(),
+        cycle_refs: chain.cycles().nodes().iter().map(|cycle| cycle.id().to_ref()).collect(),
+    }
 }
 
 /// 계보 밖 Cycle 이 지금 자리와 맺는 관계 — **구조로만 가른다.**
@@ -799,7 +801,7 @@ fn topic_for(kind: ActionKind) -> Option<TopicId> {
         // **Interview 에는 붙이지 않는다.** 두 Cycle 은 요구하는 칸도 허용값도 다르므로,
         // 한 Topic 으로 뭉뚱그리면 읽는 쪽이 남의 규칙을 배운다(Router 와 같은 규율).
         ActionKind::CloseCycle(CycleKind::Experiment) => Bundled::ExperimentClose,
-        ActionKind::CloseCycle(CycleKind::Interview) | ActionKind::CloseChain => return None,
+        ActionKind::CloseCycle(CycleKind::Interview) | ActionKind::CloseChain | ActionKind::OpenChain => return None,
         ActionKind::OpenCycle(_) => return None,
         ActionKind::Revisit | ActionKind::OpenBranch(_) => Bundled::CycleRevisit,
         ActionKind::Restore => Bundled::Restore,
@@ -835,7 +837,7 @@ fn world_allows(kind: ActionKind, world: WorldMark) -> bool {
     match kind {
         ActionKind::OpenStep(_) | ActionKind::OpenCycle(_) | ActionKind::OpenBranch(_) => true,
         ActionKind::CloseStep(NodeKind::Verify) => world != WorldMark::Unknown,
-        ActionKind::CloseStep(_) | ActionKind::CloseCycle(_) | ActionKind::CloseChain | ActionKind::Revisit => {
+        ActionKind::CloseStep(_) | ActionKind::CloseCycle(_) | ActionKind::CloseChain | ActionKind::OpenChain | ActionKind::Revisit => {
             world == WorldMark::Clean
         }
         ActionKind::Restore => world == WorldMark::Dirty,
@@ -864,7 +866,7 @@ fn next_actions(project: &Project, world: WorldMark) -> Vec<NextAction> {
 /// 이 자리에서 **구조적으로** 가능한 수들. 세계는 아직 보지 않는다.
 fn possible_here(project: &Project) -> Vec<NextAction> {
     if let Some(chain) = project.current_chain() {
-        if chain.is_closed() { return vec![]; }
+        if chain.is_closed() { return vec![action(ActionKind::OpenChain, "gil open chain".into(), "이전 Chain 보고서를 보존하고 새 주제를 Opening Interview로 시작한다")]; }
         if chain.awaiting_report() { return vec![action(ActionKind::CloseChain, "gil close".into(), &chain.close_hint())]; }
     }
     let cycles = project.cycles();

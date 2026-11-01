@@ -1017,3 +1017,17 @@ focus panel은 아래 순서를 둔다.
 > Companion이며, browser는 개발·진단용 fallback이다.**
 
 > **Monitor는 선택 기능이 아니다. inline text와 카드만 보이는 상태는 인간용 설치 완료가 아니다.**
+
+
+## M6-C 직렬 Chain 투영 (2026-11-01)
+
+`chain-core` 개발 프로필의 Monitor v1은 실제 저장된 Current Chain을 `chain`과
+`current.chain_ref`로, 모든 Chain의 요약을 발급 순서의 `chains` 배열로 제공한다. 각 항목은
+`parent_chain_ref`, 소유 `cycle_refs`, Entry/Exit, Journey와 실제 Chain Report를 가진다.
+legacy 4/5에는 이 필드를 만들지 않는다. 이는 초기 M5의 Chain 부재 설명을 대체하는 opt-in 확장이다.
+
+`timeline`은 과거 Chain의 Cycle/Step도 보존한다. 현재 Chain 밖의 Cycle은 `other` 관계로 표시하며
+Chain 부모를 Cycle 부모로 합성하지 않는다. 예전 Step의 Node detail과 Report 이미지 조회도
+같은 전역 ID로 동작한다. 닫힌 Current Chain에서 다음 동작 종류 `open_chain`을 제공하고,
+작업 세계가 clean일 때만 실행 가능하다. 상세 불변식은 [Chain 저장 계약](GIL_Chain_Storage_v0.1.md)을 따른다.
+이는 데이터 투영 계약이며 새 Chain 전용 그래프 레이아웃 또는 실제 Host 화면 인수를 뜻하지 않는다.

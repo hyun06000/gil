@@ -525,15 +525,18 @@ impl ProjectSession {
         Ok(())
     }
 
-    /// Cycle 을 닫는다 — **새 세계를 만들지 않는다.**
-    ///
-    /// Exit 은 안에서 이미 확정된 것 중에서 유도된다([`Cycle::exit_would_be`]). 그래서
-    /// 여기서 하는 일은 「지금 폴더가 그 세계와 같은가」를 묻는 것뿐이다.
+    /// 다음 Chain의 Entry는 이전 Exit이다. 관측되지 않은 변경을 묵시적으로 인수하지 않는다.
+    pub fn open_child_chain(&mut self) -> Result<crate::ChainRef, SessionError> {
+        self.require_clean(Gate::OpenChain)?;
+        self.project.open_child_chain().map_err(|err| SessionError::Action(ActionError::Chain(err)))
+    }
+
     pub fn close_chain(&mut self, report: Report) -> Result<crate::ChainRef, SessionError> {
         self.require_clean(Gate::Cycle(self.project.current_cycle().id().to_ref()))?;
         self.project.close_chain(report).map_err(|err| SessionError::Action(ActionError::Chain(err)))
     }
 
+    /// Cycle 을 닫는다. 새 세계를 만들지 않고 이미 확정된 Exit과 현재 폴더를 비교한다.
     pub fn close_cycle(&mut self, report: Report) -> Result<ClosedCycle, SessionError> {
         let cycle = self.project.cycles().current();
         self.require_clean(Gate::Cycle(cycle.id().to_ref()))?;
@@ -737,6 +740,7 @@ impl WorldState {
 /// dirty 판정이 걸린 자리 — 사람이 할 일이 다르므로 구분해 말한다.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Gate {
+    OpenChain,
     Step(crate::refs::StepRef, NodeKind),
     Cycle(crate::refs::CycleRef),
 }
@@ -1312,6 +1316,10 @@ impl fmt::Display for SessionError {
                              Artifact 를 변경해야 하는 작업은 Verify Step 에서 수행한다."
                         ),
                     ),
+                    Gate::OpenChain => (
+                        "다음 Chain을 열 수 없다.".to_owned(),
+                        "새 Chain은 이전 Chain의 확정된 Exit에서 시작한다. 변경 파일을 별도 위치에 보존하고 기준 세계와 차이를 확인한 뒤 다시 시도한다. GIL은 파일을 자동으로 지우거나 복원하지 않았다.".to_owned(),
+                    ),
                     Gate::Cycle(cycle) => (
                         format!("{cycle} 을(를) 닫을 수 없다."),
                         format!(
@@ -1324,8 +1332,7 @@ impl fmt::Display for SessionError {
                     f,
                     "거절: {what}\n\n이유\n  기준 세계 {world} 이후 프로젝트 파일이 바뀌었다.\n{}\n\n\
                      지금 해야 할 일\n{}\n\n\
-                     현재 Step 과 Active Will 은 그대로 열려 있다 — \
-                     Node 도 Will 도 Journey 도 움직이지 않았다.",
+                     {}",
                     changes
                         .iter()
                         .map(|line| format!("    {line}"))
@@ -1334,7 +1341,12 @@ impl fmt::Display for SessionError {
                     todo.lines()
                         .map(|line| format!("  {line}"))
                         .collect::<Vec<_>>()
-                        .join("\n")
+                        .join("\n"),
+                    if matches!(gate, Gate::OpenChain) {
+                        "이전 Chain·Current·Will·Journey와 프로젝트 파일은 바뀌지 않았다."
+                    } else {
+                        "현재 Step 과 Active Will 은 그대로 열려 있다 — Node 도 Will 도 Journey 도 움직이지 않았다."
+                    }
                 )
             }
             SessionError::StrangeTemp { path } => write!(

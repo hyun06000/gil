@@ -1179,7 +1179,7 @@ stepwise
 - 사용자의 자연어 응답을 구조화하는 구현 방식
 - 실험 후보 계획의 저장 schema
 - 탐색 체크리스트 항목의 식별자·상태·의존 관계 schema
-- Chain Report 이후 Project 수준의 `next_direction`
+- Chain Report 안의 Project 수준 `next_direction` 필드 (추가하지 않음; 직렬 다음 Chain은 아래 명시적 명령으로 처리)
 - Chain-level revisit의 구체적인 명령과 상태 머신
 - 다중 부모 Cycle과 Artifact Merge
 - 독립 체크리스트 항목의 형제 실행과 합류 규칙
@@ -1193,6 +1193,13 @@ stepwise
 다중 부모 Merge는 서로 다른 성공 Artifact 가지를 실제로 결합해야 하는 사례가 나타날 때
 별도로 설계한다. 성공한 Experiment의 Artifact를 유지한 채 Interview를 여는 문제는 단일
 부모-자식 연결로 해결하며 Merge를 요구하지 않는다.
+
+2026-11-01 M6-C 보완: 직렬 다음 Chain은 Closed Chain에서 명시적 `gil open chain` /
+`gil_open(kind: "chain")`으로 연결한다. Chain Report를 바꾸거나 자동 실행하지 않는다. 새 Chain의
+Opening Interview는 부모 Exit에서 시작하고, 이전 Chain Report를 Context로 받는다. Cycle ID는
+Project 전체에서 유일하며 기존 Step 주소·세계·Journey는 보존한다. 세부 불변식과 호환 조건은
+[Chain storage의 M6-C 계약](GIL_Chain_Storage_v0.1.md#직렬-다음-chain과-인수인계--m6-c)을 따른다.
+Chain revisit·병렬·다중 부모는 이 보완에 포함하지 않는다.
 
 ### 단계별 구현 범위
 

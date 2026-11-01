@@ -213,9 +213,7 @@ fn projection(p: &Project, owner: ReportOwner) -> Result<Value, &'static str> {
         ReportOwner::Cycle(r) => r,
     };
     let c = p
-        .cycles()
-        .nodes()
-        .iter()
+        .all_cycles()
         .find(|c| c.id().to_ref() == cycle_ref)
         .ok_or("report_not_found")?;
     let report = match owner {

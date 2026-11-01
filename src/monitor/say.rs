@@ -137,6 +137,7 @@ pub(super) fn what_it_does(kind: ActionKind) -> String {
     match kind {
         ActionKind::CloseStep(step) => format!("열린 {step} 자리를 Report 로 닫는다"),
         ActionKind::OpenStep(step) => format!("{step} 자리를 연다"),
+        ActionKind::OpenChain => "새 Chain의 Opening Interview를 연다".into(),
         ActionKind::CloseChain => "승인된 종료 제안으로 Chain을 닫는다".into(),
         ActionKind::CloseCycle(cycle) => format!("이 {cycle} Cycle 을 Cycle Report 로 닫는다"),
         ActionKind::OpenCycle(cycle) => format!("다음 {cycle} Cycle 을 연다"),

@@ -42,7 +42,6 @@ fn approved_interview_success_can_close_chain_with_either_verdict_without_growin
             Some(&chain_report(verdict))
         );
         assert!(p.close_chain(chain_report(verdict)).is_err());
-        assert!(p.open_child_chain().is_err());
         assert!(p.open_child_cycle(CycleKind::Experiment).is_err());
         assert!(
             p.open_action_step(NodeKind::Question, common::plan(NodeKind::Question))
@@ -52,7 +51,8 @@ fn approved_interview_success_can_close_chain_with_either_verdict_without_growin
         assert_eq!(std::fs::read(&path).unwrap(), bytes);
         let s = ProjectSession::open_read_only(spec(), &path).unwrap();
         let view = gil::monitor_view_v1(&s.monitor().unwrap()).unwrap();
-        assert!(view.next_actions.is_empty());
+        assert_eq!(view.next_actions.len(), 1);
+        assert_eq!(view.next_actions[0].kind.as_wire(), "open_chain");
         let chain = view.chain.unwrap();
         assert_eq!(chain.state.as_wire(), "closed");
         assert_eq!(chain.exit_snapshot_ref.as_deref(), Some("snapshot:A1"));

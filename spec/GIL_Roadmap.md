@@ -576,8 +576,8 @@ CI 8개 통과·미병합이며 Monitor 표시 감지만 다룬다. Chain이나 
 | 기능 / 담당 | 명세 근거 | 실제 코드·시험 근거와 현재 판정 | 남은 완료 조건 |
 | --- | --- | --- | --- |
 | Chain 컨테이너·Current·Cycle 소유 / M6-A | [기본 명세](GIL%20Specification%20v0.1.md) §5, [Node Model](GIL_Node_Model_v0.1.md) §6–7 | **개발 구현.** `chain-core`에서 실제 `Project → Chain → Cycles`, format 6/7과 Current/소유 검증. 4/5는 그대로 보존한다. `src/chain.rs`는 도메인 객체이며 Windows 파일 경로 핸들과 별개다. | [M6-A 저장 계약](GIL_Chain_Storage_v0.1.md). 기본/설치본 활성화, 명시적 legacy 이전 실행, Closing/다음 Chain은 별도 |
-| Closing Interview → Chain 판정·Report / M6-B | [Cycle Model](GIL_Cycle_Model_v0.1.md) §18–19 | **미구현.** `spec/gil-spec.yaml`은 `close_chain`을 `not_yet`로 거절한다. 승인된 일반 Synthesis/Interview Outcome 검사는 `src/cycle.rs`에 있지만 Chain close transaction은 없다. | `closing_synthesis_ref`의 소속·승인·판정 일치 검증. Interview success와 Chain failure 구분. 사람 승인 전 자동 종료 금지 |
-| 닫힌 Chain 뒤 새 Chain과 상위 인수인계 / M6-C | 기본 명세 §5·19, Node Model §7, Cycle Model §19·21, [Context Model](GIL_Context_Model_v0.1.md) | **미구현 + 일부 명세 미결.** 현재 context는 Cycle/Step 투영이며 Chain Report 투영이 없다. Chain Report 이후 Project `next_direction`의 정확한 문법은 Cycle Model §21에서 유보한다. | 직렬 Chain 연결·상위 Current·요약 전달 계약을 먼저 확정. 열린 Chain의 자식 생성 거절, 이전 Chain 보고서/세계 보존 |
+| Closing Interview → Chain 판정·Report / M6-B | [Cycle Model](GIL_Cycle_Model_v0.1.md) §18–19 | **개발 구현·미배포.** `chain-core`의 `src/chain.rs`와 `tests/chain_closing.rs`가 승인된 Closing Interview→Chain close 및 재시작을 검증한다. 기본 프로필은 기존 차단을 유지한다. | `closing_synthesis_ref`의 소속·승인·판정 일치 검증. Interview success와 Chain failure 구분. 사람 승인 전 자동 종료 금지 |
+| 닫힌 Chain 뒤 새 Chain과 상위 인수인계 / M6-C | 기본 명세 §5·19, Node Model §7, Cycle Model §19·21, [Context Model](GIL_Context_Model_v0.1.md) | **개발 구현·미배포.** M6-C 계약의 명시적 `gil open chain`으로 다음 Interview를 열고 이전 Chain Report를 Context로 전달한다. `tests/chain_handoff.rs`와 stdio MCP 시험이 전역 ID·세계·Journey·증거·재시작을 검증한다. | 기본/설치본 활성화와 실제 Host·Luna 인수는 별개. Chain revisit·병렬·다중 부모 미지원 |
 | Step에서 같은 지점으로 여러 번 revisit / M4-R | 기본 명세 §14·22, [Time Model](GIL_Time_Model_v0.2.md) §6–8, Cycle Model §9 | **Core 구현·제품 차단.** `src/walk.rs`의 pending→새 Hypothesis 전이와 `tests/walk.rs::each_branch_off_the_same_point_knows_its_own_origin`이 반복 분기와 출처를 검사한다. `product-safety` 빌드의 공개 revisit은 거절된다. | M3 안전 복원 후 제품 재연결, 실제 파일·Journey 보존 및 Host 재시작 인수. 미구현으로 다시 만들지 않음 |
 | Cycle에서 같은/더 먼 조상으로 반복 revisit / M4-R | Cycle Model §9, [Storage Model](GIL_Storage_Model_v0.1.md) §3.1 | **Core 구현·제품 차단.** `src/cycles.rs::{revisit,open_after_revisit}`, `tests/revisit.rs::{a_second_failure_may_target_the_same_ancestor_again,a_further_ancestor_branch_is_not_called_a_sibling}`. 새 실패마다 같은 조상을 다시 선택 가능. | 제품에서 실패 종료→복원→새 Cycle→재실패→복원까지 인수. 같은 실패의 중복 실행과 새 실패의 재시도를 구분 |
 | 반복 실패 전체를 다음 시도에 전달 / M2·M4-H | Cycle Model §10 “부모 이후 현재 Journey에서 닫힌 실패 Cycle Report들” | **후속 구현 후보·미배포.** 대조 시점 main의 `write_abandoned_cycle`은 출처 하나만 투영했다. 후속 `write_failed_cycles`는 Current/pending에서 parent와 revisit provenance를 따라 누적 실패를 한 번씩 읽는다. | C3·C4→C5, 다음 성공 자식, 먼 조상, 새 CLI 프로세스 재개와 원본 불변 시험 통과. 실제 모델/설치본 인수는 미실시; M4-R 제품 차단은 유지 |
@@ -2279,12 +2279,17 @@ artifact·release pipeline → 새 기계 설치·업데이트 인수다. Claude
 
 ### M6-C — 다음 Chain과 상위 인수인계
 
-- [ ] Cycle Model §21에서 미정인 Project 수준 다음 방향·Chain 연결 명령을 먼저 명세화한다.
-- [ ] Closed Chain 뒤 새 Chain의 Opening Interview를 연결하며 이전 Chain 전체 Step 대신 Chain Report를 전달한다.
-- [ ] Chain-level parent/containment, Current, 보고서 조회와 그래프 탐색을 별도로 검증한다.
-- [ ] 새 세션이 이전 Chain의 핵심 결과·실패·남은 의문을 받아 다음 Chain을 진행하는 시나리오를 인수한다.
+- [x] Cycle Model §21에서 미정인 Project 수준 다음 방향·Chain 연결 명령을 먼저 명세화한다.
+- [x] Closed Chain 뒤 새 Chain의 Opening Interview를 연결하며 이전 Chain 전체 Step 대신 Chain Report를 전달한다.
+- [x] Chain-level parent/containment, Current, 보고서 조회와 그래프 탐색을 별도로 검증한다.
+- [x] 새 세션이 이전 Chain의 핵심 결과·실패·남은 의문을 받아 다음 Chain을 진행하는 시나리오를 인수한다.
 
 Chain-level revisit·다중 부모 merge는 이 직렬 연결의 자동 확장이 아니며 별도 미결이다.
+
+2026-11-01: `chain-core` 개발 프로필에서 구현했다. [M6-C 저장·인계 계약](GIL_Chain_Storage_v0.1.md)을
+따르며 형식 4/5는 변환하지 않는다. 새 Chain은 이전 승인 값을 재사용하지 않고 Opening Interview를
+새로 연다. CLI/MCP 재시작, Monitor 과거 자료와 실제 저장 이미지 조회를 합성 fixture로 검증한다.
+실제 Luna·Windows PC·Codex fullscreen 인수, 설치본 및 업데이트 피드 반영은 아직 하지 않았다.
 
 ### M6-D — 승인 계획·문서와 재인터뷰
 

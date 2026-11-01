@@ -129,7 +129,11 @@ impl Cycles {
     /// 뿌리 Cycle 의 Entry 는 **`gil start` 가 관측한 최초 세계**다(Artifact Model §4).
     /// 그것 말고 뿌리가 출발할 세계는 없다.
     pub fn start(rules: RuleSet, existence: ExistenceRef, entry: SnapshotRef) -> Cycles {
-        let id = CycleId(1);
+        Self::start_at(rules, existence, entry, 1)
+    }
+
+    pub(crate) fn start_at(rules: RuleSet, existence: ExistenceRef, entry: SnapshotRef, first: u32) -> Cycles {
+        let id = CycleId(first);
         Cycles {
             nodes: vec![Cycle::start(
                 rules.clone(),
@@ -140,7 +144,7 @@ impl Cycles {
                 entry,
             )],
             current: id,
-            next_id: 2,
+            next_id: first.checked_add(1).expect("validated Cycle allocator"),
             pending_revisit: None,
             rules,
         }

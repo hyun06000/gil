@@ -163,9 +163,7 @@ pub(crate) fn load_within(
 
 /// Encode without filesystem mutation, shared by save and explicit migration.
 pub(crate) fn encode(project: &Project) -> Result<Vec<u8>, StoreError> {
-    if let Some(chain) = project.current_chain() {
-        chain.validate_state(project.current_existence_ref(), project.current_existence().current_journey()).map_err(|err| StoreError::ChainState(err.to_string()))?;
-    }
+    project.check_chains().map_err(|err| StoreError::ChainState(err.to_string()))?;
     let mut stored = StoredState::from(project);
     if let Some(state) = project.visual_state() {
         let graph = crate::visual_report::project::ProjectVisualGraph::new(project, &state.boundary)
@@ -376,25 +374,40 @@ impl StoredState {
         if matches!(self.format, VISUAL_FORMAT | CHAIN_VISUAL_FORMAT) != self.visuals.is_some() {
             return Err(StoreError::VisualState("저장 형식과 시각 registry가 일치하지 않는다".into()));
         }
-        let (stored_cycles, chain) = match (self.format, self.cycles, self.chains) {
-            (CHAIN_FORMAT | CHAIN_VISUAL_FORMAT, None, Some(mut chains)) if chains.current == "chain:C1" && chains.next_id == 2 && chains.nodes.len() == 1 => {
-                let chain = chains.nodes.remove(0);
-                if chain.id != "C1" || !matches!(chain.state.as_str(), "open" | "closed") || chain.parent_chain_ref.is_some()
-                    || (chain.state == "closed") != chain.report.is_some()
-                    || (chain.state == "closed") != chain.exit_snapshot_ref.is_some()
-                    || (chain.state == "closed") != chain.journey_ref.is_some() {
-                    return Err(StoreError::ChainState("root Chain state, Report and Exit must agree; no parent is supported".into()));
+        let world = match (self.format, self.cycles, self.chains) {
+            (CHAIN_FORMAT | CHAIN_VISUAL_FORMAT, None, Some(stored)) => {
+                if stored.nodes.is_empty() || stored.next_id as usize != stored.nodes.len() + 1
+                    || stored.current != format!("chain:C{}", stored.nodes.len()) {
+                    return Err(StoreError::ChainState("serial Chain Current and allocator disagree".into()));
                 }
-                let identity = (read_ref(&format!("chain:{}", chain.id), "chains.nodes.id")?,
-                    read_ref(&chain.existence_ref, "chains.nodes.existence_ref")?,
-                    read_ref(&chain.entry_snapshot_ref, "chains.nodes.entry_snapshot_ref")?,
-                    chain.report.map(|fields| fields.into_iter().collect()),
-                    chain.exit_snapshot_ref.map(|value| read_ref(&value, "chains.nodes.exit_snapshot_ref")).transpose()?,
-                    chain.journey_ref.map(|value| read_ref(&value, "chains.nodes.journey_ref")).transpose()?);
-                (chain.cycles, Some(identity))
+                let mut chains = Vec::new();
+                for node in stored.nodes {
+                    if !matches!(node.state.as_str(), "open" | "closed")
+                        || (node.state == "closed") != node.report.is_some()
+                        || (node.state == "closed") != node.exit_snapshot_ref.is_some()
+                        || (node.state == "closed") != node.journey_ref.is_some() {
+                        return Err(StoreError::ChainState("Chain state, Report, Journey and Exit must agree".into()));
+                    }
+                    let cycles = Cycles::restore(rules.clone().for_chain(), node.cycles.into_state()?).map_err(StoreError::NotValid)?;
+                    let mut chain = crate::Chain::restore(
+                        read_ref(&format!("chain:{}", node.id), "chains.nodes.id")?,
+                        read_ref(&node.existence_ref, "chains.nodes.existence_ref")?,
+                        read_ref(&node.entry_snapshot_ref, "chains.nodes.entry_snapshot_ref")?,
+                        read_opt_ref(&node.parent_chain_ref, "chains.nodes.parent_chain_ref")?, cycles);
+                    if let Some(report) = node.report {
+                        chain.close(report.into_iter().collect()).map_err(|e| StoreError::ChainState(e.to_string()))?;
+                    }
+                    if chain.exit_snapshot() != read_opt_ref(&node.exit_snapshot_ref, "chains.nodes.exit_snapshot_ref")?
+                        || chain.journey() != read_opt_ref(&node.journey_ref, "chains.nodes.journey_ref")? {
+                        return Err(StoreError::ChainState("Chain Exit or Journey disagrees with its Closing Interview".into()));
+                    }
+                    chains.push(chain);
+                }
+                crate::project::WorldGraph::Chains(chains)
             }
-            (FORMAT | VISUAL_FORMAT, Some(cycles), None) => (cycles, None),
-            _ => return Err(StoreError::ChainState("format, containment and Current disagree; no orphan or second Cycle graph is allowed".into())),
+            (FORMAT | VISUAL_FORMAT, Some(stored), None) =>
+                crate::project::WorldGraph::Legacy(Cycles::restore(rules, stored.into_state()?).map_err(StoreError::NotValid)?),
+            _ => return Err(StoreError::ChainState("format and containment disagree; orphan graphs are refused".into())),
         };
         let visuals = self.visuals;
         let artifacts = self.artifacts.into_registry()?;
@@ -413,10 +426,8 @@ impl StoredState {
             states.insert(id.number(), ExistenceState);
         }
 
-        let rules = if chain.is_some() { rules.for_chain() } else { rules };
-        let cycles = Cycles::restore(rules, stored_cycles.into_state()?).map_err(StoreError::NotValid)?;
         let mut project = Project::restore(
-            cycles,
+            world,
             existences,
             states,
             current,
@@ -424,9 +435,6 @@ impl StoredState {
             artifacts,
         )
         .map_err(StoreError::NotWhole)?;
-        if let Some((id, owner, entry, report, exit, journey)) = chain {
-            project = project.restore_chain(id, owner, entry, report, exit, journey).map_err(|err| StoreError::ChainState(err.to_string()))?;
-        }
         if let Some(visuals) = visuals {
             use crate::visual_report::project::{MigrationBoundary, ProjectVisualGraph, VisualState};
             let mut heads = BTreeMap::new();
@@ -830,14 +838,14 @@ impl From<&Project> for StoredState {
         StoredState {
             format: if project.current_chain().is_some() { CHAIN_FORMAT } else { FORMAT },
             chains: project.current_chain().map(|chain| StoredChains {
-                current: chain.id().to_string(), next_id: 2,
-                nodes: vec![StoredChain {
+                current: chain.id().to_string(), next_id: chain.id().number() + 1,
+                nodes: project.chains().iter().map(|chain| StoredChain {
                     id: chain.id().id(), existence_ref: chain.existence().to_string(),
-                    state: if chain.is_closed() { "closed" } else { "open" }.into(), parent_chain_ref: None,
+                    state: if chain.is_closed() { "closed" } else { "open" }.into(), parent_chain_ref: chain.parent().map(|id| id.to_string()),
                     report: chain.report().map(write_report), journey_ref: chain.journey().map(|id| id.to_string()),
                     entry_snapshot_ref: chain.entry_snapshot().to_string(), exit_snapshot_ref: chain.exit_snapshot().map(|id| id.to_string()),
                     cycles: StoredCycles::from(chain.cycles()),
-                }],
+                }).collect(),
             }),
             visuals: None,
             next_will_id: project.next_will_id(),

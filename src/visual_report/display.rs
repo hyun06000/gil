@@ -65,9 +65,7 @@ impl Project {
             ReportOwner::Cycle(cycle) => cycle,
         };
         let cycle = self
-            .cycles()
-            .nodes()
-            .iter()
+            .all_cycles()
             .find(|c| c.id().to_ref() == cycle_ref)
             .ok_or(VisualDetailError::NotFound)?;
         let (owner_dto, has_report) = match owner {

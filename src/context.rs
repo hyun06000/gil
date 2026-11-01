@@ -7,13 +7,13 @@
 //! # 해상도는 거리가 정한다
 //!
 //! ```text
+//! 이전 Chain 들   → Chain Report 까지 (chain-core)
 //! 이전 Cycle 들   → Cycle Report 까지
 //! 현재 Cycle      → Step Report 까지
 //! 서 있는 자리    → 상태 · 다음 행동 · 지금 지켜야 하는 규칙
 //! ```
 //!
-//! Context Model §2 의 Context Resolution Rule 이고, §7 이 M2 에 남긴 몫이 그 셋뿐이다
-//! (Chain 도 Artifact snapshot 도 아직 없으므로 없는 절을 있는 척 적지 않는다).
+//! Context Model §2 의 Context Resolution Rule 을 따른다. legacy 기록에는 Chain 절을 만들지 않는다.
 //!
 //! **지나온 Cycle 의 Step 은 여기 펼치지 않는다.** 그것이 이 투영의 존재 이유다 — 같은 Step
 //! 기록을 Cycle 마다 다시 실어 나르면 프로젝트가 길어질수록 문맥이 그것만으로 찬다.
@@ -41,7 +41,7 @@ use crate::rules::RuleSet;
 
 /// 지금 자리에서 이어 걷기 위해 알아야 하는 것 전부.
 ///
-/// 세 절이다 — 이전 Cycle · 현재 Cycle · 지금 자리. 첫 Cycle 이면 첫 절이 없다(§7).
+/// 이전 Chain Report · 현재 Chain의 이전 Cycle · 현재 Cycle · 지금 자리. 없는 계층은 만들지 않는다.
 pub fn context(project: &Project) -> String {
     let cycles = project.cycles();
     let mut out = String::new();
@@ -52,6 +52,11 @@ pub fn context(project: &Project) -> String {
         if let Some(report) = chain.report() {
             out.push_str(&format!("Chain 판정: {} · Exit: {}\n승인 근거: {}\n인계 요약: {}\n", report.get("verdict").unwrap(), chain.exit_snapshot().unwrap(), report.get("closing_synthesis_ref").unwrap(), report.get("handoff_summary").unwrap()));
         } else { out.push_str("Cycle 성공은 Chain 종료가 아니다. 최종 판정은 Closing Interview에서 사용자에게 제안하고 실제 답변을 받은 뒤 기록한다. 승인된 Synthesis에 chain_verdict를 남기고 Interview를 close_chain 방향으로 닫은 후 Chain Report를 제출한다.\n"); }
+    }
+    for previous in project.chains().iter().filter(|chain| Some(chain.id()) != project.current_chain().map(|current| current.id())) {
+        let report = previous.report().expect("historical Chains are closed");
+        out.push_str(&format!("\n이전 Chain: {} · {}\n승인 근거: {}\n인계 요약: {}\n", previous.id(),
+            report.get("verdict").unwrap(), report.get("closing_synthesis_ref").unwrap(), report.get("handoff_summary").unwrap()));
     }
     write_previous_cycles(&mut out, cycles);
     write_failed_cycles(&mut out, cycles);
@@ -344,7 +349,7 @@ fn write_here(out: &mut String, project: &Project) {
 
     let _ = writeln!(out, "\n[다음에 할 수 있는 것]");
     match project.current_chain() {
-        Some(chain) if chain.is_closed() => out.push_str("Chain이 닫혔다. 다음 Chain 생성은 아직 지원하지 않는다.\n"),
+        Some(chain) if chain.is_closed() => out.push_str("Chain이 닫혔다. 새 주제를 시작하려면 gil open chain을 명시적으로 호출한다.\n"),
         Some(chain) if chain.awaiting_report() => out.push_str(&chain.close_hint()),
         _ => out.push_str(&next_moves(cycles)),
     }

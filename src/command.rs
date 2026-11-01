@@ -103,7 +103,14 @@ fn run(ctx: &Invocation<'_>, args: &[String]) -> Result<String, String> {
         // 식(式)의 모양에 달리게 된다.
         "story" => {
             let session = open_session(ctx)?;
-            Ok(story(session.project().cycles()))
+            let project = session.project();
+            if project.chains().is_empty() {
+                Ok(story(project.cycles()))
+            } else {
+                Ok(project.chains().iter().map(|chain|
+                    format!("{} · {}\n{}", chain.id(), if chain.is_closed() { "closed" } else { "open" }, story(chain.cycles()))
+                ).collect::<Vec<_>>().join("\n"))
+            }
         }
         "context" => {
             let session = open_session(ctx)?;
@@ -429,7 +436,7 @@ enum Place {
 
 fn place(session: &Session) -> Place {
     if let Some(chain) = session.project().current_chain() {
-        if chain.is_closed() { return Place::Nothing("Chain이 닫혔다. 다음 Chain 생성은 아직 지원하지 않는다".into()); }
+        if chain.is_closed() { return Place::Nothing("Chain이 닫혔다. 새 주제를 시작하려면 gil open chain을 명시적으로 호출한다".into()); }
         if chain.awaiting_report() { return Place::CloseThisChain; }
     }
     let cycles = session.project().cycles();
@@ -479,7 +486,9 @@ fn open(ctx: &Invocation<'_>, name: Option<&String>) -> Result<String, String> {
 /// 잡은 것을 **넘긴다**.
 fn open_with(ctx: &Invocation<'_>, mut session: Session, name: Option<&String>) -> Result<String, String> {
     if name.is_some_and(|name| name == "chain") {
-        return Err(session.project_mut().open_child_chain().unwrap_err().to_string());
+        let id = session.open_child_chain().map_err(|err| err.to_string())?;
+        session.commit().map_err(|err| err.to_string())?;
+        return Ok(format!("열었다: {id} · Opening Interview {}\n이전 Chain Report를 gil context로 읽고 새 주제를 사용자와 확인한다.\n", session.project().current_cycle().id().to_ref()));
     }
     match place(&session) {
         Place::CloseThisStep => {
