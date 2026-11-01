@@ -399,7 +399,8 @@ mod tests {
     use super::*;
     #[test]
     fn strict_typed_inputs_refuse_ambiguous_or_unbounded_authoring() {
-        let good = json!({"project_root":"/synthetic","report":"execution: test","expected_owner":{"kind":"step","ref":"step:C2/S3"},
+        let root = if cfg!(windows) { "C:/synthetic" } else { "/synthetic" };
+        let good = json!({"project_root":root,"report":"execution: test","expected_owner":{"kind":"step","ref":"step:C2/S3"},
             "visuals":{"attachments":[],"uses":[],"declaration":{"state":"not_needed","reason":"numbers only"}}});
         assert!(valid("gil_close", &good));
         for (path, value) in [

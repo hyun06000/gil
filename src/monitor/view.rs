@@ -468,7 +468,10 @@ fn unix_millis(at: CapturedAt) -> Result<u64, ViewError> {
         .instant()
         .duration_since(SystemTime::UNIX_EPOCH)
         .map_err(|_| ViewError::BeforeEpoch)?;
-    let millis = since.as_millis();
+    wire_millis(since.as_millis())
+}
+
+fn wire_millis(millis: u128) -> Result<u64, ViewError> {
     match u64::try_from(millis) {
         Ok(ms) if ms <= MAX_SAFE_INTEGER => Ok(ms),
         _ => Err(ViewError::BeyondSafeInteger { millis }),
@@ -944,23 +947,17 @@ mod tests {
         seen.captured_at = CapturedAt(SystemTime::UNIX_EPOCH - Duration::from_secs(1));
         assert_eq!(monitor_view_v1(&seen), Err(ViewError::BeforeEpoch));
 
-        // 안전 범위 밖.
-        seen.captured_at =
-            CapturedAt(SystemTime::UNIX_EPOCH + Duration::from_millis(MAX_SAFE_INTEGER + 1));
-        assert!(
-            matches!(
-                monitor_view_v1(&seen),
-                Err(ViewError::BeyondSafeInteger { .. })
-            ),
-            "안전 범위를 넘었는데 통과했다"
-        );
-
-        // 경계값은 지난다.
-        seen.captured_at = CapturedAt(SystemTime::UNIX_EPOCH + Duration::from_millis(MAX_SAFE_INTEGER));
-        assert_eq!(
-            monitor_view_v1(&seen).expect("경계는 지난다").captured_at_unix_ms,
-            MAX_SAFE_INTEGER
-        );
+        // Windows SystemTime cannot represent this far-future instant. Exercise the exact
+        // numeric wire gate on every OS, plus the complete projection wherever representable.
+        let beyond = u128::from(MAX_SAFE_INTEGER) + 1;
+        assert_eq!(wire_millis(beyond), Err(ViewError::BeyondSafeInteger { millis: beyond }));
+        assert_eq!(wire_millis(u128::from(MAX_SAFE_INTEGER)), Ok(MAX_SAFE_INTEGER));
+        for millis in [MAX_SAFE_INTEGER, MAX_SAFE_INTEGER + 1] {
+            if let Some(at) = SystemTime::UNIX_EPOCH.checked_add(Duration::from_millis(millis)) {
+                seen.captured_at = CapturedAt(at);
+                assert_eq!(monitor_view_v1(&seen).map(|v| v.captured_at_unix_ms), wire_millis(u128::from(millis)));
+            }
+        }
         // epoch 자신도.
         seen.captured_at = CapturedAt(SystemTime::UNIX_EPOCH);
         assert_eq!(monitor_view_v1(&seen).expect("epoch").captured_at_unix_ms, 0);

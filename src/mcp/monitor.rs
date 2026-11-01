@@ -300,6 +300,7 @@ mod tests {
         assert_eq!(std::fs::read(root.join(crate::STATE_PATH)).unwrap(), before);
         std::fs::rename(root.join(".gil"), at.join("original-gil")).unwrap();
         std::fs::create_dir(root.join(".gil")).unwrap();
+        std::fs::write(root.join(crate::STATE_PATH), "replacement identity fixture").unwrap();
         assert_eq!(m.report_image(scope, owner, asset).unwrap_err().code, "project_moved");
         // Synthetic test tree only.
         std::fs::remove_dir_all(at).unwrap();
@@ -310,6 +311,7 @@ mod tests {
         let now = Instant::now();
         let at = std::env::temp_dir().join(format!("gil-monitor-lease-{}", std::process::id()));
         std::fs::create_dir_all(at.join(".gil")).unwrap();
+        std::fs::write(at.join(crate::STATE_PATH), "lease identity fixture").unwrap();
         let mut e = Entry::new(Binding::capture(at.clone()).unwrap());
         e.touched = now; e.attempted = Some(now);
         m.entries.lock().unwrap().insert("s".into(), e);

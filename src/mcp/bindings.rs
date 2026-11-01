@@ -241,6 +241,9 @@ mod tests {
         }
         fn project(&self, name: &str) -> Binding {
             let root = self.0.join(name); fs::create_dir_all(root.join(".gil")).unwrap();
+            // The real Windows locator recognizes an inline project by its state file, not
+            // an empty directory. Identity tests do not parse this synthetic marker.
+            fs::write(root.join(".gil/state.yaml"), "synthetic identity fixture").unwrap();
             Binding::capture(root.canonicalize().unwrap()).unwrap()
         }
         fn store(&self) -> Store { Store::at(self.0.join("settings")) }
