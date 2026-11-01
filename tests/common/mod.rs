@@ -4,6 +4,8 @@
 //! 안 쓰임 경고를 끈다 — 없는 연장으로 오해하지 않도록.
 #![allow(dead_code)]
 
+pub mod legacy;
+
 use std::path::{Path, PathBuf};
 #[cfg(windows)]
 mod windows_acl;

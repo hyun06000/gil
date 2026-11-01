@@ -1,4 +1,4 @@
-//! Wave 2 / C — guidance-test-only helpers. Not part of tests/common (E owns that file).
+//! Guidance stdio helpers; historical fixtures delegate to tests/common/legacy.rs.
 //!
 //! Two things live here.
 //! - A **proven legacy fixture**: a format-4 record (no Chain, no approved-plan ledger) written to a
@@ -32,33 +32,15 @@ pub fn spec() -> gil::RuleSet { common::spec() }
 /// the legacy container the way `tests/chain_closing.rs` does, then loaded back through the real
 /// store. The loaded Project has no Chain and no approved-plan ledger, which is asserted here.
 pub fn legacy_record(dir: &Path) -> PathBuf {
-    let path = dir.join(gil::STATE_PATH);
-    gil::save(&Project::start(common::spec(), common::first_world()), &path).expect("save the fresh record");
-    let mut file: serde_norway::Value = serde_norway::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-    if file.get("chains").is_some() {
-        file["cycles"] = file["chains"]["nodes"][0]["cycles"].clone();
-        file.as_mapping_mut().unwrap().remove(serde_norway::Value::from("chains"));
-    }
-    file["format"] = gil::FORMAT.into();
-    std::fs::write(&path, serde_norway::to_string(&file).unwrap()).unwrap();
-    let loaded = gil::load(common::spec(), &path).expect("the rewritten record loads as format 4");
-    assert_legacy(&loaded);
-    path
+    common::legacy::record(dir, common::legacy::Layout::Cycles)
 }
 
-/// The legacy fixture in memory. `label` keeps parallel tests out of each other's folder.
 pub fn legacy(label: &str) -> Project {
-    let dir = common::scratch(&format!("guidance-legacy-{label}-{}", std::process::id()));
-    let path = legacy_record(&dir);
-    let project = gil::load(common::spec(), &path).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
-    project
+    common::legacy::project(label, common::legacy::Layout::Cycles)
 }
 
-/// What "legacy" means for these tests — stated once, checked wherever the fixture is used.
 pub fn assert_legacy(project: &Project) {
-    assert!(project.chains().is_empty(), "legacy fixture must have no Chain");
-    assert!(project.approved_plan().is_none(), "legacy fixture must have no approved-plan ledger");
+    common::legacy::assert_unplanned(project, common::legacy::Layout::Cycles);
 }
 
 /// Interview walked and an Experiment opened — on the **legacy** record only.

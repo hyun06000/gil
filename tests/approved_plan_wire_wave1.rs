@@ -27,6 +27,16 @@ impl Rig {
     }
     fn app(&mut self, name: &str, mut args: Value) -> Value { args["scope_id"] = json!(self.scope); self.c.call(name, args) }
     fn read(&mut self) -> Value { structured(&ok(self.model("gil_plan_read", json!({})), "gil_plan_read")).clone() }
+    /// Reading twice must not mint approval, advance state, or expose an App capability.
+    fn context_readonly(&mut self) -> String {
+        let before = record_bytes(&self.record);
+        let first = said(&ok(self.model("gil_context", json!({})), "context"));
+        let second = said(&ok(self.model("gil_context", json!({})), "context again"));
+        assert_eq!(first, second, "context must be a deterministic projection");
+        assert_eq!(record_bytes(&self.record), before, "context changed the record");
+        assert!(!first.contains("gil/planApprovalToken"));
+        first
+    }
     /// Question + Interpretation + open Synthesis; returns (basis refs, synthesis ref).
     fn ask_and_interpret(&mut self) -> (Vec<String>, String) {
         let mut basis = Vec::new();
@@ -139,6 +149,7 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     let again = ok(r.model("gil_plan_propose", json!({"draft":d})), "propose again");
     assert_eq!(structured(&again)["proposal"]["digest"], structured(&first)["proposal"]["digest"]);
     let rev1 = r.read()["proposal"].clone();
+    assert!(r.context_readonly().contains("Monitor 버튼 응답을 기다린다"));
 
     // capability only in _meta; state untouched; stable within a process
     let before = state(&root);
@@ -189,6 +200,8 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     let accepted = ok(r.app("gil_plan_decide", json!({"revision":2,"digest":rev2["digest"],"token":t2,"decision":"approve"})), "approve revision 2");
     assert_eq!(structured(&accepted)["proposal"]["receipt"]["decision"], "approve");
 
+    assert!(r.context_readonly().contains("close_report를 그대로 gil_close"));
+
     // duplicate approve idempotent; flip refused; no capability after receipt; no token in record
     let saved = state(&root);
     ok(r.app("gil_plan_decide", json!({"revision":2,"digest":rev2["digest"],"token":t2,"decision":"approve"})), "duplicate approve");
@@ -218,9 +231,13 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     assert_eq!(read["pending"].as_array().unwrap().iter().map(|i| i["id"].as_str().unwrap()).collect::<Vec<_>>(), ["A", "B"]);
     let (c2, document) = r.open_experiment("A");
     assert!(document.contains("Revision: 2"));
+    let context = r.context_readonly();
+    assert!(context.contains("gil_open(kind: define)") && context.contains("이번 Experiment: A"), "{context}");
 
     // Verify: document bytes + separate fresh evidence; four refusals first
     let verify = r.walk_to_verify("A");
+    let context = r.context_readonly();
+    assert!(context.contains("열린 Verify") && context.contains("plan_document") && context.contains("evidence_files"), "{context}");
     std::fs::create_dir_all(root.join("plan")).unwrap();
     std::fs::create_dir_all(root.join("evidence")).unwrap();
     std::fs::write(root.join(format!("evidence/C{c2}-A.md")), "# 합성 관측\n\n항목 A 결과\n").unwrap();
@@ -233,6 +250,15 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     refused(r.c.call("gil_close", verify_args(&root, &verify, "execution: 확인했다\nresult: 채팅으로 보고했다\n")), "no evidence_files");
     assert_eq!(state(&root), before);
     r.finish_experiment(c2, "A", &verify, &document);
+    let context = r.context_readonly();
+    assert!(context.contains("gil_open(kind: experiment)"), "{context}");
+    assert!(!context.contains("gil_plan_read.document") && context.contains("닫힌 Experiment의 실행 연결: A"), "closed Cycle still directs writing: {context}");
+    // A new server must reconstruct the same projection from the persisted approval/binding.
+    let old = std::mem::replace(&mut r.c, Client::serve(&settings));
+    let (status, noise) = old.eof();
+    assert!(status.success() && noise.is_empty());
+    assert_eq!(r.context_readonly(), context);
+
     let read = r.read();
     assert_eq!(read["executed_cycles"][0]["item_id"], "A");
     assert_eq!(read["executed_cycles"][0]["revision"], 2);
@@ -260,6 +286,9 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     let read = r.read();
     assert_eq!(read["reinterview_requests"].as_array().unwrap().len(), 1, "{read}");
     assert!(read["pending"].as_array().unwrap().is_empty());
+    let context = r.context_readonly();
+    assert!(context.contains("gil_open(kind: interview)"), "{context}");
+    assert!(!context.contains("현재 Cycle의 남은 Step을 실제 순서대로 마치고"), "closed Cycle still directs old steps: {context}");
     refused(r.model("gil_open", json!({"kind":"experiment"})), "experiment while reinterview pending");
     let opened = ok(r.model("gil_open", json!({"kind":"interview"})), "open interview");
     let c4 = cycle_number(&opened);

@@ -28,9 +28,18 @@ Core/저장 roundtrip, bare approval 거절, revision 교체, 중복 입력, 수
 ## 개발 검증 실행
 
 ```sh
-cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib approved_plan
+cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib
+cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test context --test context_profiles --test guidance_wave1 --test guidance_wave2 --test approved_plan_wire_wave1
 cargo build --locked -p gil --all-targets --features approved-plan,visual-authoring,product-safety
 node --test mcp-app/plans.test.mjs
 ```
 
 일반 `chain-core` 회귀와 기본 format 4/5 시험도 따로 실행한다. 이 프로필은 승인 없는 기존 합성 bootstrap을 의도적으로 거절하므로, 기존 전체 suite에 무조건 `--all-features`를 붙이는 것은 인수 기준이 아니다. 전용 suite의 사용자 응답은 명시적인 합성 fixture이며 실제 사람이 승인했다는 증거로 취급하지 않는다.
+
+2026-11-02 문맥 인수 보완: 기존 context 투영 시나리오는 format 4 또는 승인 계획 확장 없는
+format 6의 합성 기록을 실제 loader로 읽는다. 기본/Chain/승인 프로필 모두에서 옛 기록의
+format·Chain 포함 관계·승인 ledger 부재를 보존하며, 새 승인 프로젝트의 맨 `approved: yes`
+거절도 별도로 검사한다. 기존 시나리오를 새 승인 프로젝트로 오인해 부트스트랩하거나
+프로필 시험을 건너뛰지 않는다. 실제 stdio 시험은 제안 대기·승인·Verify·Cycle 종료 후
+Context의 read-only 성질, 종료 상태 안내, 서버 재시작 뒤 같은 문맥 복원을 검증한다.
+합성 App 입력은 물리적 사용자 승인이나 Luna 실사용의 증거가 아니다.

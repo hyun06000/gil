@@ -33,8 +33,20 @@ use gil::{
 
 mod common;
 use common::{
-    ACTION, REASON, TARGET, allowed_here, bootstrap, cycle_report, full_report, spec,
+    ACTION, REASON, TARGET, allowed_here, cycle_report, full_report, spec,
 };
+
+// These projection scenarios deliberately revisit historical branches. They measure the
+// pre-plan format 4/6 contract, not a new approved-plan project's restricted transitions.
+// Keep Chain containment in chain builds; never silently strip approval from a working project.
+fn bootstrap() -> Project {
+    let layout = if cfg!(feature = "chain-core") {
+        common::legacy::Layout::Chain
+    } else {
+        common::legacy::Layout::Cycles
+    };
+    common::bootstrap_from(common::legacy::project("context-projection", layout))
+}
 
 // ── 잴 수 있게 걷는다 ──────────────────────────────────────────────────────
 

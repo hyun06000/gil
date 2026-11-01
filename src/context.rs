@@ -51,10 +51,25 @@ pub fn context(project: &Project) -> String {
         let chain = project.current_chain().unwrap();
         out.push_str("\n승인 계획 프로필: Synthesis를 열고 gil_plan_propose → Monitor 버튼 응답 → gil_plan_read의 close_report로 닫기 → Outcome → Interview Cycle 닫기. 채팅 동의로 대체하지 않는다.\n");
         out.push_str(&format!("승인 판: {:?} · 미실행 순서: {}\n실행 연결: {}\n", plan.active(chain).map(|p| p.revision), plan.pending(chain).iter().map(|i| i.id.as_str()).collect::<Vec<_>>().join(", "), serde_json::to_string(&plan.executed_cycles).unwrap()));
-        if !plan.awaiting_interview(chain).is_empty() { out.push_str(&format!("보존된 재인터뷰 요청: {}. 요청은 이 Cycle이 끝날 때까지 보존된다. 현재 Cycle의 남은 Step을 실제 순서대로 마치고 Cycle Report까지 닫은 뒤에 Interview를 연다. 요청을 자동 취소하거나 Step을 건너뛰거나 동시에 다른 Cycle을 열지 않는다.\n", serde_json::to_string(&plan.awaiting_interview(chain)).unwrap())); }
+        let cycle = project.current_cycle();
+        if !plan.awaiting_interview(chain).is_empty() {
+            out.push_str(&format!("보존된 재인터뷰 요청: {}. ", serde_json::to_string(&plan.awaiting_interview(chain)).unwrap()));
+            if cycle.is_closed() {
+                out.push_str("현재 Cycle은 닫혔다. gil_open(kind: interview)으로 새 승인을 받는다. 요청을 자동 취소하거나 새 Experiment로 건너뛰지 않는다.\n");
+            } else {
+                out.push_str("요청은 이 Cycle이 끝날 때까지 보존된다. 현재 Cycle의 남은 Step을 실제 순서대로 마치고 Cycle Report까지 닫은 뒤에 Interview를 연다. 요청을 자동 취소하거나 Step을 건너뛰거나 동시에 다른 Cycle을 열지 않는다.\n");
+            }
+        }
         if let Some(p) = plan.current(project) { out.push_str(&format!("제안 판 {} · 응답 {:?}. gil_plan_read로 정확한 결과를 읽는다.\n", p.revision, p.receipt)); }
-        if let Some(item) = project.current_plan_item() { out.push_str(&format!("이번 Experiment: {} · 질문: {} · 확인 조건: {}\n", item.id, item.question, item.done_when)); }
-        if project.plan_document().is_some() { out.push_str("Verify 전 gil_plan_read.document를 파일로 저장하고 plan_document에 경로를 적는다. 별도의 실제 작업 증거도 evidence_files로 남긴다.\n"); }
+        if let Some(item) = project.current_plan_item() {
+            let label = if cycle.is_closed() { "닫힌 Experiment의 실행 연결" } else { "이번 Experiment" };
+            out.push_str(&format!("{label}: {} · 질문: {} · 확인 조건: {}\n", item.id, item.question, item.done_when));
+        }
+        let verify_open = cycle.step_now_open().and_then(|id| cycle.steps().node(id))
+            .is_some_and(|node| node.kind == NodeKind::Verify);
+        if verify_open && project.plan_document().is_some() {
+            out.push_str("열린 Verify에서 gil_plan_read.document를 파일로 저장하고 plan_document에 경로를 적는다. 별도의 실제 작업 증거도 evidence_files로 남긴다.\n");
+        }
     }
     if let Some(chain) = project.current_chain() {
         out.push_str(&format!("\n현재 Chain: {} · {} · {}\nEntry: {} · 현재 Cycle: {}\n",
