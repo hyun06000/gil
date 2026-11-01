@@ -197,9 +197,15 @@ fn next_call_here(project: &Project) -> String {
 
     // 닫힌 Cycle — 밟을 수 있는 수만 말한다(`next_moves`와 같은 판정).
     if let Some(from) = cycles.pending_revisit() {
+        if cfg!(feature = "product-safety") {
+            return format!("{}에서 되돌아왔다. Monitor에서 파일 복원 완료를 확인한 뒤 gil_open(kind: interview|experiment)으로 새 Cycle을 연다. gil_revisit을 반복하지 않는다. 저장된 승인 복원이 중단된 경우에만 gil_revisit으로 재개한다.", from.to_ref());
+        }
         return format!("{}에서 되돌아왔다. gil_open(kind: interview|experiment)으로 이 자리 아래에 새 Cycle을 연다. gil_revisit을 반복하지 않는다.", from.to_ref());
     }
     if cycles.can_revisit() {
+        if cfg!(feature = "product-safety") {
+            return format!("{}이(가) failure·revisit으로 닫혔다. Monitor에서 파일 변경 목록을 확인하고 ‘보존 후 되돌아가기’ 버튼 승인을 기다린다. gil_revisit을 반복하지 않는다. 복원 완료 후 gil_open으로 새 Cycle을 연다.", cycle.id());
+        }
         return format!("{}이(가) failure·revisit으로 닫혔다. gil_revisit(인수 없음)을 한 번 호출한 뒤 gil_open으로 새 Cycle을 연다. 되돌아가기는 Artifact를 복원하므로 사용자에게 먼저 알린다.", cycle.id());
     }
     if let Some(said) = plan_next_call_after_cycle(project) {
@@ -648,6 +654,9 @@ pub fn next_moves(cycles: &Cycles) -> String {
 
     // 닫힌 Cycle 이 되돌아가겠다고 적었는가 — **밟아 보고 답한다.**
     if cycles.can_revisit() {
+        if cfg!(feature = "product-safety") {
+            return "다음: Monitor에서 변경 목록을 확인하고 ‘보존 후 되돌아가기’ 버튼을 승인한다. 복원 완료 후 새 Cycle을 연다.\n".into();
+        }
         return format!(
             "다음: {} 이(가) 적어 둔 대로 조상으로 되돌아간다 — `gil revisit` (인수 없음)\n\
              \x20     그 뒤 그 자리 아래에 새 Cycle 을 연다 — `gil open <종류>`\n",

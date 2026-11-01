@@ -46,10 +46,12 @@ jobs:
         env:
           GIL_RUNTIME_PROFILE: ${{ inputs.runtime_profile || 'default' }}
         run: |
+          # Fork-based launcher fixtures can inherit another parallel fixture's lock.
+          # Keep assertions intact and run the native Core fixtures sequentially.
           case "$GIL_RUNTIME_PROFILE" in
-            default) cargo test --locked -p gil ;;
-            visual-authoring) cargo test --locked -p gil --features visual-authoring ;;
-            approved-plan) cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib --test context --test context_profiles --test guidance_wave1 --test guidance_wave2 --test approved_plan_wire_wave1 ;;
+            default) cargo test --locked -p gil -- --test-threads=1 ;;
+            visual-authoring) cargo test --locked -p gil --features visual-authoring -- --test-threads=1 ;;
+            approved-plan) cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib --test context --test context_profiles --test guidance_wave1 --test guidance_wave2 --test approved_plan_wire_wave1 -- --test-threads=1 ;;
             *) exit 2 ;;
           esac
           node --test ui/layout.test.mjs mcp-app/*.test.mjs plugins/gil-companion-prototype/*.test.mjs
@@ -63,6 +65,8 @@ jobs:
         env:
           GIL_RUNTIME_PROFILE: ${{ inputs.runtime_profile || 'default' }}
         run: |
+          # Fork-based launcher fixtures can inherit another parallel fixture's lock.
+          # Keep assertions intact and run the native Core fixtures sequentially.
           case "$GIL_RUNTIME_PROFILE" in
             default) node distribution/codex/build-preview.mjs target/codex-preview ;;
             visual-authoring) node distribution/codex/build-preview.mjs target/codex-preview --visual-authoring ;;
@@ -75,6 +79,8 @@ jobs:
           GIL_PREVIEW_VERSION: ${{ inputs.unsigned_preview_version }}
           GIL_RUNTIME_PROFILE: ${{ inputs.runtime_profile || 'default' }}
         run: |
+          # Fork-based launcher fixtures can inherit another parallel fixture's lock.
+          # Keep assertions intact and run the native Core fixtures sequentially.
           case "$GIL_RUNTIME_PROFILE" in
             default) node distribution/codex/unsigned-preview.mjs prepare target/codex-preview/marketplace "$GIL_PREVIEW_VERSION" target/codex-unsigned-candidate ;;
             visual-authoring) node distribution/codex/unsigned-preview.mjs prepare target/codex-preview/marketplace "$GIL_PREVIEW_VERSION" target/codex-unsigned-candidate --visual-authoring ;;

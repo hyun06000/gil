@@ -7,7 +7,7 @@ import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {CORE, MANIFEST, PREFIX, checkLibraries, hash, verifyTree} from './artifact.mjs';
-import {checkDefaultTools, checkAuthoringTools, checkApprovedPlanTools} from './tool-contract.mjs';
+import {checkDefaultTools, checkAuthoringTools, checkApprovedPlanTools, withoutRecoveryTools} from './tool-contract.mjs';
 import {checkCore, compatibility, developmentFeatures} from './compatibility.mjs';
 
 export async function smoke(root, expectedHtml, verify = verifyTree, profile = 'default') {
@@ -93,7 +93,7 @@ export async function smoke(root, expectedHtml, verify = verifyTree, profile = '
     child.stdin.write(JSON.stringify({jsonrpc: '2.0', method: 'notifications/initialized'}) + '\n');
     const initMs = Math.round(performance.now() - at);
     const {tools} = await request('tools/list', {});
-    (profile === 'default' ? checkDefaultTools : profile === 'approved-plan' ? checkApprovedPlanTools : checkAuthoringTools)(tools);
+    (profile === 'default' ? checkDefaultTools : profile === 'approved-plan' ? checkApprovedPlanTools : checkAuthoringTools)(withoutRecoveryTools(tools));
     const show = tools.find(t => t.name === 'show_gil_monitor');
     const uri = show?._meta?.ui?.resourceUri;
     assert.match(uri, /^ui:\/\/gil-monitor\/[a-f0-9]{20}\.html$/);

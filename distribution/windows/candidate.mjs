@@ -33,13 +33,13 @@ export function labels(profile, arch, head) {
     marketplace: `gil-dev-windows-visual-${arch}`,
     displayName: `GIL Windows ${arch} — image-authoring development candidate (not a release)`,
     channel: 'windows_unsigned_development_candidate_visual_authoring',
-    cargoFeatures: ['--features', 'visual-authoring,product-safety'], tools: 25, storage_format: 5};
+    cargoFeatures: ['--features', 'visual-authoring,product-safety'], tools: 28, storage_format: 5};
   return {
     version: `0.2.1-preview.3+windows.${arch}.${short}`,
     marketplace: `gil-preview-windows-${arch}`,
     displayName: `GIL Windows ${arch} — review candidate`,
     channel: 'windows_unsigned_review_candidate',
-    cargoFeatures: ['--features', 'product-safety'], tools: 19, storage_format: 4};
+    cargoFeatures: ['--features', 'product-safety'], tools: 22, storage_format: 4};
 }
 /// The Claude Code adapter of the same candidate: one identity, one Core, the Host's root variable
 /// instead of a relative cwd. Mirrors distribution/codex/artifact.mjs checkClaudeManifest.
@@ -195,7 +195,7 @@ export async function prepare(output) {
   assert.deepEqual(await inventory(extracted), before, 'archive bytes changed');
   // The driver launches only the extracted executable, with a system-only child PATH.
   const smoke = JSON.parse(run(process.execPath, [join(ROOT, 'distribution/windows/spike.mjs'),
-    join(extracted, PREFIX, `core/windows-${arch}/gil.exe`)], {env: {...process.env, GIL_RUNTIME_PROFILE: runtime}}));
+    join(extracted, PREFIX, `core/windows-${arch}/gil.exe`)], {env: {...process.env, GIL_RUNTIME_PROFILE: runtime, GIL_PRODUCT_SAFETY: '1'}}));
   assert.equal(smoke.profile, runtime);
   assert.equal(smoke.mcp_tools, label.tools);
   assert.equal(smoke.stored_format, label.storage_format);

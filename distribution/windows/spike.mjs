@@ -6,7 +6,7 @@ import {createHash, randomUUID} from 'node:crypto';
 import {mkdtemp, mkdir, readFile, readdir, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
-import {checkAuthoringTools, checkDefaultTools} from '../codex/tool-contract.mjs';
+import {checkAuthoringTools, checkDefaultTools, withoutRecoveryTools} from '../codex/tool-contract.mjs';
 
 const binary = resolve(process.argv[2] || '');
 assert.ok(process.argv[2], 'Usage: node spike.mjs <native-gil-binary>');
@@ -102,7 +102,8 @@ try {
   server = serve();
   await server.initialize();
   const {tools} = await server.request('tools/list', {});
-  if (profile === 'visual-authoring') checkAuthoringTools(tools); else checkDefaultTools(tools);
+  const checked = process.env.GIL_PRODUCT_SAFETY === '1' ? withoutRecoveryTools(tools) : tools;
+  if (profile === 'visual-authoring') checkAuthoringTools(checked); else checkDefaultTools(checked);
   const uri = tools.find(t => t.name === 'show_gil_monitor')._meta.ui.resourceUri;
   const {contents} = await server.request('resources/read', {uri});
   assert.equal(contents[0].mimeType, 'text/html;profile=mcp-app');

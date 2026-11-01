@@ -45,6 +45,16 @@ mod guard;
 mod destination;
 #[cfg(unix)]
 mod cleanup;
+#[cfg(all(windows, feature = "product-safety"))]
+mod windows;
+#[cfg(all(windows, feature = "product-safety"))]
+pub(crate) fn check_windows_recovery(root: &Path, gil: &Path) -> io::Result<()> {
+    use crate::recovery_fs_windows::Dir;
+    if Dir::open(root)?.volume()? != Dir::open(gil)?.volume()? {
+        return Err(io::Error::other("기록 저장소와 작업 폴더의 볼륨이 달라 원자적 복원을 거절했다"));
+    }
+    Ok(())
+}
 
 use std::fmt;
 use std::fs::{self, File};
@@ -176,6 +186,47 @@ pub(crate) fn run(
     world: SnapshotRef,
     target: &Manifest,
 ) -> Result<Restored, RestoreFailure> {
+    run_with_expected(root, gil, store, world, target, None)
+}
+
+#[cfg(test)]
+mod approval_tests {
+    use super::*;
+
+    #[test]
+    fn a_file_arriving_after_consent_is_not_added_to_the_delete_plan() {
+        let root = std::env::temp_dir().join(format!(
+            "gil-approved-restore-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        fs::create_dir(&root).unwrap();
+        let target = observe(&root).unwrap();
+        fs::write(root.join("partial-report.txt"), "approved original").unwrap();
+        let approved = observe(&root).unwrap();
+        fs::write(root.join("new-user-notes.txt"), "written after consent").unwrap();
+        let actual = observe(&root).unwrap();
+        let gil = root.join(".gil");
+        let store = ObjectStore::at(&gil);
+        let result = run_with_expected(&root, &gil, &store, SnapshotRef::new(1).unwrap(), &target, Some(&approved));
+        assert!(matches!(result, Err(RestoreFailure::Observe { stage: Stage::Preflight, .. })));
+        assert_eq!(observe(&root).unwrap(), actual);
+        assert!(!gil.exists(), "refusal must not even create the restore area");
+        fs::remove_dir_all(&root).unwrap();
+    }
+}
+
+/// Approval-bound product recovery must never expand its write set to files appearing later.
+#[cfg(all(windows, feature = "product-safety"))]
+pub(crate) fn run_with_expected(root: &Path, gil: &Path, store: &ObjectStore, world: SnapshotRef,
+    target: &Manifest, expected: Option<&Manifest>) -> Result<Restored, RestoreFailure> {
+    windows::run(root, gil, store, world, target, expected)
+}
+#[cfg(not(all(windows, feature = "product-safety")))]
+pub(crate) fn run_with_expected(
+    root: &Path, gil: &Path, store: &ObjectStore, world: SnapshotRef,
+    target: &Manifest, expected: Option<&Manifest>,
+) -> Result<Restored, RestoreFailure> {
     let area = Area::at(gil);
 
     // ── preflight ─────────────────────────────────────────────────────────
@@ -188,6 +239,10 @@ pub(crate) fn run(
         stage: Stage::Preflight,
         said: source.to_string(),
     })?;
+    if expected.is_some_and(|approved| approved != &before) {
+        return Err(RestoreFailure::Observe { stage: Stage::Preflight,
+            said: "승인한 파일 상태가 바뀌어 복원 계획을 실행하지 않았다".into() });
+    }
 
     let steps = plan::steps(root, &before, target);
     if steps.is_empty() {
@@ -769,6 +824,9 @@ fn area_entries(area: &Area) -> Result<Vec<(String, PathBuf)>, RestoreFailure> {
 /// 읽기만 하는 열기가 쓰는 문이다. 여기서 `Some` 이 나오면 그 Project 는 **아무도 확정한 적
 /// 없는 세계** 위에 서 있으므로, 읽는 쪽은 복구하지 않고 그 사실을 그대로 거절해야 한다
 /// (Host UI Model §9.1.1). 무엇이 남았는지 사람이 읽을 수 있게 이름으로 돌려준다.
+#[cfg(all(windows, feature = "product-safety"))]
+pub(crate) fn left_behind(gil: &Path) -> Result<Option<String>, RestoreFailure> { windows::left_behind(gil) }
+#[cfg(not(all(windows, feature = "product-safety")))]
 pub(crate) fn left_behind(gil: &Path) -> Result<Option<String>, RestoreFailure> {
     let area = Area::at(gil);
     let found = area_entries(&area)?;
@@ -780,6 +838,9 @@ pub(crate) fn left_behind(gil: &Path) -> Result<Option<String>, RestoreFailure> 
     Ok(Some(names.join(", ")))
 }
 
+#[cfg(all(windows, feature = "product-safety"))]
+pub(crate) fn recover(root: &Path, gil: &Path) -> Result<(), RestoreFailure> { windows::recover(root, gil) }
+#[cfg(not(all(windows, feature = "product-safety")))]
 pub(crate) fn recover(root: &Path, gil: &Path) -> Result<(), RestoreFailure> {
     let area = Area::at(gil);
     let mut found = area_entries(&area)?;

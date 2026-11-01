@@ -105,7 +105,11 @@ fn isolated_command(settings: &Path) -> Command {
 
 impl Client {
     pub fn serve(settings: &Path) -> Self {
+        Self::serve_with_env(settings, &[])
+    }
+    pub fn serve_with_env(settings: &Path, env: &[(&str, &str)]) -> Self {
         let mut kid = isolated_command(settings)
+            .envs(env.iter().copied())
             .current_dir(std::env::temp_dir())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -158,6 +162,19 @@ impl Client {
     /// tools/call → whole frame (result or error).
     pub fn call(&mut self, name: &str, arguments: Value) -> Value {
         self.request("tools/call", json!({"name":name,"arguments":arguments}))
+    }
+    pub fn call_expecting_crash(&mut self, name: &str, arguments: Value) {
+        let id = self.next; self.next += 1;
+        self.send(&json!({"jsonrpc":"2.0","id":id,"method":"tools/call","params":{"name":name,"arguments":arguments}}));
+        let deadline = std::time::Instant::now() + FRAME_TIMEOUT;
+        loop {
+            if let Some(status) = self.kid.try_wait().expect("try_wait") {
+                assert!(!status.success(), "expected abort, not normal exit");
+                break;
+            }
+            if std::time::Instant::now() > deadline { let _ = self.kid.kill(); panic!("Core did not abort during the injected restore failure"); }
+            std::thread::sleep(Duration::from_millis(20));
+        }
     }
     /// Close stdin and wait for exit (bounded); everything still on stdout is checked for noise.
     pub fn eof(mut self) -> (std::process::ExitStatus, Vec<String>) {

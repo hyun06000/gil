@@ -43,6 +43,8 @@ use crate::store::{self, LEGACY_WALK_PATH, StoreError};
 use crate::will::ActionContract;
 
 mod evidence;
+#[cfg(feature = "product-safety")]
+mod revisit_recovery;
 
 #[cfg(feature = "visual-authoring")]
 #[path = "visual_start.rs"]
@@ -611,6 +613,9 @@ impl ProjectSession {
     fn require_clean(&self, gate: Gate) -> Result<(), SessionError> {
         match self.world_state()? {
             WorldState::Clean { .. } => Ok(()),
+            WorldState::Dirty { .. } if cfg!(feature = "product-safety") && self.project.cycles().pending_revisit().is_some() => {
+                Err(SessionError::Evidence("승인한 되돌아감의 파일 복원이 아직 완료되지 않았다. gil_revisit으로 저장된 승인의 복구를 재개한다. 새 사용자 변경이 있으면 보존하고 중단한다".into()))
+            }
             WorldState::Dirty { world, changes } => Err(SessionError::Dirty {
                 gate,
                 world,
@@ -1594,6 +1599,8 @@ mod tests {
 pub struct ReadOnlySession(ProjectSession);
 
 impl ReadOnlySession {
+    #[cfg(feature = "product-safety")]
+    pub(crate) fn revisit_review(&self) -> Result<serde_json::Value, String> { self.0.revisit_review() }
     #[cfg(feature = "visual-authoring")]
     pub(crate) fn status_said(&self) -> String {
         crate::where_now(&self.0, false)

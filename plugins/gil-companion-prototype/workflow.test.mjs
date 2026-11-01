@@ -43,7 +43,7 @@ test('each Experiment state names the next call and Verify is opened before any 
   assert.match(next['Verify is closed'], /Analysis.*interpretation/);
   assert.match(next['Analysis is closed'], /Outcome.*lesson/);
   assert.match(next['Outcome is closed but the Experiment Cycle is still open'], /Cycle Report/);
-  assert.match(next['Cycle closed `failure` · `revisit`'], /Tell the user.*gil_revisit. once, then .gil_open/);
+  assert.match(next['Cycle closed `failure` · `revisit`'], /open Monitor and wait.*button.*do not call App-only tools or invent consent.*confirmed recovery.*gil_open/);
   assert.match(workflow, /Chat alone cannot complete\s+Verify/);
   assert.match(workflow, /Refused: an empty file, a file unchanged since the baseline, or the chat summary alone/);
 });
@@ -80,7 +80,7 @@ test('recovery rows connect each failure to the current fact and forbid loops an
   // Wave 2 / C (R4): a preserved request never replaces the legal next call or invites an early Cycle close.
   assert.match(next['Asked to re-interview during an Experiment'], /preserved and closes nothing.*each receipt's next call.*only when its receipt offers the Cycle Report.*then `gil_open` Interview/);
   assert.doesNotMatch(next['Asked to re-interview during an Experiment'], /cancel|interrupt|abort/i);
-  assert.match(next['`gil_revisit` refused (dirty files, plan binding, no recorded direction)'], /do not restore automatically or retry in a loop/);
+  assert.match(next['`gil_revisit` refused'], /show Monitor and wait.*Never edit records, fake success or loop restore/);
   assert.match(workflow, /Do not loop a tool to confirm a fact that a receipt already states/);
   assert.match(workflow, /never promise that a\s+screen, button or save "always works"/);
 });
