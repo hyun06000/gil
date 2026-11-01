@@ -104,3 +104,19 @@ M5-F 화면 성공과 M5-E 배포 완료는 별개다. 17개 tool과 내장 UI�
 새 기계 설치·서명/공증·원격 배포·
 Windows 검수는 각각 남아 있다. Tauri 검증 유예가 MCP 실행 파일의 배포 신뢰 검증을 면제하지 않는다.
 새 저장소 생성, 공개 게시, commit/push는 별도 승인 없이 수행하지 않는다.
+
+## Host 테마 토큰 (2026-11-01)
+
+App이 Host의 표준 테마 변수·글꼴을 받아 쓰고, 없으면 중립 기본값으로 도는 토큰 계층을 넣었다
+([README](README.md) "Host 테마 토큰"). 회귀시험과 fixture 화면(중립 기본값 라이트·다크, Claude Code 변수를
+주입한 라이트·다크)은 통과했다.
+
+- **사용자 확인 (11/01, Claude Desktop 4.4212.0 Claude Code 탭, 직접 등록 설치본 `dev-20261101-local`):**
+  inline 카드가 주변 대화와 어울린다("어울린다"). 이 확인은 당시 사용자의 Desktop 테마 한 가지에 대한 것이며,
+  연결 정보 `styles` 값은 받지 못했다.
+- **사용자 제공 연결 정보 (11/01, Codex, Plugin 교체 설치 `dev-20261101-local`):** `host` `chatgpt`
+  26.1027.51404, `styles` {theme: dark, variables: 76, fonts: false}, `current`·`response`·`event` 모두
+  fullscreen. Codex가 표준 변수를 보내므로 Codex 전용 fallback은 두지 않는다.
+- **사용자 확인 (11/01, Codex):** 펼친 Monitor가 Codex 화면과 어울린다("어울린다"). 당시 테마는 dark.
+- 남은 인수: 보지 않은 쪽 테마(Claude Code·Codex 각각), Claude Code 연결 정보 `styles` 수. 사용자 화면
+  확인으로만 닫는다.

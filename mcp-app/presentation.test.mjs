@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { graphOrientation, initialFullscreen, hostIdentity, RETRY_DELAYS_MS } from './presentation.mjs';
+import { graphOrientation, initialFullscreen, hostIdentity, hostStyles, styleEvidence, RETRY_DELAYS_MS } from './presentation.mjs';
 
 test('all MCP display modes default to horizontal without claiming fullscreen', () => {
   for (const mode of ['fullscreen', 'inline', 'pip', undefined, null])
@@ -78,4 +78,26 @@ test('a gesture before any automatic attempt or on an inline-only Host requests 
   policy = initialFullscreen();
   assert.equal(policy.next({ ...ready, context: { displayMode: 'inline', availableDisplayModes: ['inline'] } }), null);
   assert.equal(policy.settle('inline'), null); assert.equal(policy.gesture(), null);
+});
+
+test('Host styles are adopted as reported and shape-checked, never inferred', () => {
+  const fonts = '@font-face{font-family:host-sans;src:url(/assets/a.woff2)format("woff2")}';
+  const context = { theme: 'dark', styles: { variables: {
+    '--color-background-primary': 'light-dark(rgba(255, 255, 255, 1), rgba(48, 48, 46, 1))',
+    '--font-sans': 'host-sans, sans-serif',
+    'color-text-primary': '#000', '--Bad Name': '#000', '--color-text-primary': 42,
+    '--color-border-primary': 'red; } body { display: none', '--shadow-sm': '',
+  }, css: { fonts } } };
+  assert.deepEqual(hostStyles(context), { theme: 'dark', variables: {
+    '--color-background-primary': 'light-dark(rgba(255, 255, 255, 1), rgba(48, 48, 46, 1))',
+    '--font-sans': 'host-sans, sans-serif' }, fonts });
+  assert.deepEqual(styleEvidence(context), { theme: 'dark', variables: 2, fonts: true });
+  // Nothing reported, or junk: neutral defaults and an evidence block that says so.
+  for (const empty of [undefined, null, {}, { theme: 'blue', styles: 'x' },
+    { styles: { variables: [], css: { fonts: '' } } }, { styles: { variables: { '--a': 'b;' } } }]) {
+    assert.deepEqual(hostStyles(empty), { theme: null, variables: null, fonts: null });
+    assert.deepEqual(styleEvidence(empty), { theme: null, variables: 0, fonts: false });
+  }
+  assert.equal(hostStyles({ styles: { css: { fonts: 'x</STYLE><script>' } } }).fonts, null);
+  assert.equal(hostStyles({ styles: { css: { fonts: 'a'.repeat(65537) } } }).fonts, null);
 });
