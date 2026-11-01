@@ -159,15 +159,17 @@ wire_words! {
         OpenChild => "open_child",
         Revisit => "revisit",
         CloseCycle => "close_cycle",
+        CloseChain => "close_chain",
     }
 
     /// 지금 실제로 밟을 수 있는 동작의 종류.
     ///
-    /// **아직 없는 전이는 여기 없다** — Chain close·임의 checkout·merge·승인은 담지 않는다.
+    /// **아직 없는 전이는 여기 없다** — 임의 checkout·merge·인간 인증은 담지 않는다.
     NextActionKindV1 {
         CloseStep => "close_step",
         OpenStep => "open_step",
         CloseCycle => "close_cycle",
+        CloseChain => "close_chain",
         OpenCycle => "open_cycle",
         OpenBranch => "open_branch",
         Revisit => "revisit",
@@ -184,6 +186,9 @@ pub struct MonitorViewV1 {
     /// UTC Unix epoch 이후 밀리초.
     pub captured_at_unix_ms: u64,
     pub current: CurrentV1,
+    /// Additive v1 extension; absent for historical worlds. It is never inferred from cycles.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chain: Option<ChainV1>,
     /// 이 Journey 가 발급한 **모든 Cycle**, 발급 순서 그대로.
     pub timeline: Vec<TimelineCycleV1>,
     pub current_will: Option<WillV1>,
@@ -192,9 +197,28 @@ pub struct MonitorViewV1 {
     pub next_actions: Vec<NextActionV1>,
 }
 
+/// Actual Chain containment and boundaries. No invented Report or approval.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChainV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub journey_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub report: Option<std::collections::BTreeMap<String, String>>,
+    pub chain_ref: String,
+    pub existence_ref: String,
+    pub state: NodeStateV1,
+    pub parent_chain_ref: Option<String>,
+    pub entry_snapshot_ref: String,
+    pub exit_snapshot_ref: Option<String>,
+    pub current_cycle_ref: String,
+    pub cycle_refs: Vec<String>,
+}
+
 /// 지금 어디에 서 있는가.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CurrentV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chain_ref: Option<String>,
     pub existence_ref: String,
     pub journey_ref: String,
     pub cycle_ref: String,
@@ -406,7 +430,17 @@ pub fn monitor_view_v1(seen: &MonitorSnapshot) -> Result<MonitorViewV1, ViewErro
     Ok(MonitorViewV1 {
         schema_version: SCHEMA_VERSION,
         captured_at_unix_ms: unix_millis(seen.captured_at)?,
+        chain: seen.current_chain.as_ref().map(|chain| ChainV1 {
+            chain_ref: chain.chain_ref.to_string(), existence_ref: chain.existence_ref.to_string(),
+            journey_ref: chain.journey_ref.map(|id| id.to_string()),
+            state: if chain.exit_snapshot_ref.is_some() { NodeStateV1::Closed } else { NodeStateV1::Open }, parent_chain_ref: None,
+            report: chain.report.as_ref().map(|report| report.field_names().map(|key| (key.to_string(), report.get(key).unwrap().to_string())).collect()),
+            entry_snapshot_ref: chain.entry_snapshot_ref.to_string(), exit_snapshot_ref: chain.exit_snapshot_ref.map(|id| id.to_string()),
+            current_cycle_ref: chain.current_cycle_ref.to_string(),
+            cycle_refs: chain.cycle_refs.iter().map(ToString::to_string).collect(),
+        }),
         current: CurrentV1 {
+            chain_ref: seen.current_chain.as_ref().map(|chain| chain.chain_ref.to_string()),
             existence_ref: seen.current_existence.existence_ref.to_string(),
             journey_ref: seen.current_existence.journey_ref.to_string(),
             cycle_ref: seen.current_cycle.facts.cycle_ref.to_string(),
@@ -522,6 +556,7 @@ fn action(facts: &NextAction) -> Result<NextActionV1, ViewError> {
         ActionKind::CloseStep(kind) => (NextActionKindV1::CloseStep, Some(kind), None),
         ActionKind::OpenStep(kind) => (NextActionKindV1::OpenStep, Some(kind), None),
         ActionKind::CloseCycle(kind) => (NextActionKindV1::CloseCycle, None, Some(kind)),
+        ActionKind::CloseChain => (NextActionKindV1::CloseChain, None, None),
         ActionKind::OpenCycle(kind) => (NextActionKindV1::OpenCycle, None, Some(kind)),
         ActionKind::OpenBranch(kind) => (NextActionKindV1::OpenBranch, None, Some(kind)),
         ActionKind::Revisit => (NextActionKindV1::Revisit, None, None),
@@ -994,7 +1029,7 @@ mod tests {
         for (word, value) in VerdictV1::ALL_WORDS {
             assert_eq!(verdict("cycle:C1", word).expect("아는 낱말"), *value);
         }
-        assert_eq!(DirectionActionV1::ALL.len(), 3);
+        assert_eq!(DirectionActionV1::ALL.len(), 4);
         for (word, value) in DirectionActionV1::ALL_WORDS {
             assert_eq!(direction("cycle:C1", word).expect("아는 낱말"), *value);
         }
@@ -1004,7 +1039,7 @@ mod tests {
             Err(ViewError::UnknownVerdict { .. })
         ));
         assert!(matches!(
-            direction("cycle:C9", "close_chain"),
+            direction("cycle:C9", "merge"),
             Err(ViewError::UnknownDirection { .. })
         ));
     }
@@ -1139,6 +1174,7 @@ mod tests {
             make(ActionKind::CloseStep(NodeKind::Verify), Some("gil close")),
             make(ActionKind::OpenStep(NodeKind::Analysis), Some("gil open analysis")),
             make(ActionKind::CloseCycle(CycleKind::Experiment), Some("gil close")),
+            make(ActionKind::CloseChain, Some("gil close")),
             make(ActionKind::OpenCycle(CycleKind::Experiment), Some("gil open experiment")),
             make(ActionKind::OpenBranch(CycleKind::Interview), Some("gil open interview")),
             make(ActionKind::Revisit, Some("gil revisit")),
@@ -1167,6 +1203,7 @@ mod tests {
                 ("close_step", Some("verify"), None),
                 ("open_step", Some("analysis"), None),
                 ("close_cycle", None, Some("experiment")),
+                ("close_chain", None, None),
                 ("open_cycle", None, Some("experiment")),
                 ("open_branch", None, Some("interview")),
                 ("revisit", None, None),
@@ -1194,7 +1231,7 @@ mod tests {
                 NextActionKindV1::CloseCycle
                 | NextActionKindV1::OpenCycle
                 | NextActionKindV1::OpenBranch => (false, true),
-                NextActionKindV1::Revisit | NextActionKindV1::Restore => (false, false),
+                NextActionKindV1::CloseChain | NextActionKindV1::Revisit | NextActionKindV1::Restore => (false, false),
             };
             assert_eq!(one.step_kind.is_some(), step, "{} 의 Step 대상", one.kind);
             assert_eq!(one.cycle_kind.is_some(), cycle, "{} 의 Cycle 대상", one.kind);
@@ -1248,6 +1285,7 @@ mod tests {
                 ActionKind::CloseStep(_) => "close_step",
                 ActionKind::OpenStep(_) => "open_step",
                 ActionKind::CloseCycle(_) => "close_cycle",
+                ActionKind::CloseChain => "close_chain",
                 ActionKind::OpenCycle(_) => "open_cycle",
                 ActionKind::OpenBranch(_) => "open_branch",
                 ActionKind::Revisit => "revisit",
@@ -1270,7 +1308,7 @@ mod tests {
         seen.sort_unstable();
 
         let allowed = [
-            "action", "baseline_snapshot_ref", "captured_at_unix_ms", "command", "current",
+            "chain", "chain_ref", "action", "baseline_snapshot_ref", "captured_at_unix_ms", "command", "current",
             "current_will", "cycle_kind", "cycle_ref", "done_when", "existence_ref",
             "experiment_definition", "handoff_summary", "help_ref", "interview_question",
             "journey_ref", "kind",

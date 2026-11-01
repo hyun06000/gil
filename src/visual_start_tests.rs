@@ -1,3 +1,6 @@
+// New visual creation is format 5 normally and format 7 with real Chain containment.
+const VISUAL_HEAD: &[u8] = if cfg!(feature = "chain-core") { b"format: 7\n" } else { b"format: 5\n" };
+
 use super::*;
 use std::collections::BTreeMap;
 use std::os::unix::fs::{MetadataExt, PermissionsExt, symlink};
@@ -52,11 +55,12 @@ fn inventory(root: &Path) -> BTreeMap<PathBuf, (u32, Vec<u8>)> {
 }
 fn assert_initial(root: &Path) {
     let bytes = fs::read(root.join(crate::STATE_PATH)).unwrap();
-    assert!(bytes.starts_with(b"format: 5\n"));
+    assert!(bytes.starts_with(VISUAL_HEAD));
     let read = ProjectSession::open_read_only(rules(), root.join(crate::STATE_PATH)).unwrap();
     assert_eq!(read.project().current_cycle().kind(), CycleKind::Interview);
     let value: serde_norway::Value = serde_norway::from_slice(&bytes).unwrap();
     assert!(read.project().visual_state().is_some());
+    assert_eq!(read.project().current_chain().is_some(), cfg!(feature = "chain-core"));
     assert_eq!(
         read.project().visual_state().unwrap().registry(),
         &crate::visual_report::registry::VisualRegistry::default()
@@ -88,7 +92,7 @@ fn first_publication_is_visual_and_existing_git_files_are_unchanged() {
                 before_publish = true;
                 assert!(!root.join(crate::STATE_PATH).exists());
                 assert!(
-                    fs::read(root.join(".gil/state.yaml.writing"))?.starts_with(b"format: 5\n")
+                    fs::read(root.join(".gil/state.yaml.writing"))?.starts_with(VISUAL_HEAD)
                 );
             }
             Ok(())
@@ -242,7 +246,7 @@ fn concurrent_state_entry_is_not_overwritten_at_publication() {
     assert!(
         fs::read(root.join(".gil/state.yaml.writing"))
             .unwrap()
-            .starts_with(b"format: 5\n")
+            .starts_with(VISUAL_HEAD)
     );
 }
 

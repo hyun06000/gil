@@ -2,11 +2,11 @@
   "schema": 1,
   "target": "aarch64-apple-darwin",
   "inputs": {
-    "Cargo.toml": "8476d5cf2e38d5c8e0951a28d15931247a0653c708fbad12a6ffa8c92ce5bd79",
+    "Cargo.toml": "9bd1e2e206be8aa93f12760095dcac336faba64426dfc18d9b4b70c63749d83c",
     "Cargo.lock": "cdb646cb23f0e03fe7e37d30c895d36c7a9a8aa4c6b56d7cb0a27579985627bf",
     "mcp-app/package-lock.json": "e81c74f94d4882f4f9af795959f18bc0ccb598ae58d516c2e728df06db08d8d8",
     "mcp-app/build.mjs": "00013682e3e300f5e5945f5fbadd2fb5d2e5c65797d1596511546da6261f5c3d",
-    "plugins/gil-companion-prototype/assets/monitor.html": "29162d67cc06d4625290d16adc7f7b4c813508b222c0427fe9ecfa1a91e9e69f"
+    "plugins/gil-companion-prototype/assets/monitor.html": "8b9171e61748cf919287dcc512e2652eda75f4d7bcec1523125792c2aa11c88a"
   },
   "toolchain": {
     "release": "1.97.1",

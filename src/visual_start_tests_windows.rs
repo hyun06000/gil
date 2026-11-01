@@ -1,5 +1,7 @@
 //! Windows mirror of `visual_start_tests.rs` (Windows contract §6, W1-*). Runs only on a
 //! Windows host; a Mac cross-compile of this file is not evidence.
+const VISUAL_HEAD: &[u8] = if cfg!(feature = "chain-core") { b"format: 7\n" } else { b"format: 5\n" };
+
 use super::*;
 use std::collections::BTreeMap;
 use std::os::windows::fs::MetadataExt;
@@ -57,11 +59,12 @@ fn inventory(root: &Path) -> BTreeMap<PathBuf, (u32, Vec<u8>)> {
 }
 fn assert_initial(root: &Path) {
     let bytes = fs::read(root.join(crate::STATE_PATH)).unwrap();
-    assert!(bytes.starts_with(b"format: 5\n"));
+    assert!(bytes.starts_with(VISUAL_HEAD));
     let read = ProjectSession::open_read_only(rules(), root.join(crate::STATE_PATH)).unwrap();
     assert_eq!(read.project().current_cycle().kind(), CycleKind::Interview);
     let value: serde_norway::Value = serde_norway::from_slice(&bytes).unwrap();
     assert!(read.project().visual_state().is_some());
+    assert_eq!(read.project().current_chain().is_some(), cfg!(feature = "chain-core"));
     assert_eq!(
         read.project().visual_state().unwrap().registry(),
         &crate::visual_report::registry::VisualRegistry::default()
@@ -132,7 +135,7 @@ fn first_publication_is_visual_and_existing_git_files_are_unchanged() {
                 before_publish = true;
                 assert!(!root.join(crate::STATE_PATH).exists());
                 assert!(
-                    fs::read(root.join(".gil/state.yaml.writing"))?.starts_with(b"format: 5\n")
+                    fs::read(root.join(".gil/state.yaml.writing"))?.starts_with(VISUAL_HEAD)
                 );
             }
             Ok(())
@@ -301,7 +304,7 @@ fn concurrent_state_entry_is_not_overwritten_at_publication() {
     assert!(
         fs::read(root.join(".gil/state.yaml.writing"))
             .unwrap()
-            .starts_with(b"format: 5\n")
+            .starts_with(VISUAL_HEAD)
     );
 }
 
@@ -1038,7 +1041,7 @@ fn unclear_format_is_refused_before_recovery_and_reaping_with_everything_preserv
 fn format_change_between_classification_and_lock_is_refused_untouched() {
     // 5 → 4 (textual): the declared format differs under the lock.
     fn downgrade(state: &Path) {
-        let text = fs::read_to_string(state).unwrap().replacen("format: 5", "format: 4", 1);
+        let text = fs::read_to_string(state).unwrap().replacen(if cfg!(feature = "chain-core") { "format: 7" } else { "format: 5" }, if cfg!(feature = "chain-core") { "format: 6" } else { "format: 4" }, 1);
         fs::write(state, text).unwrap();
     }
     let root = scratch();
@@ -1055,7 +1058,7 @@ fn format_change_between_classification_and_lock_is_refused_untouched() {
     // 4 → 5: a text Project rewritten as format 5 between classification and lock must get
     // the ACL verification under the lock (its .gil inherits, so it is refused) and no reaping.
     fn upgrade(state: &Path) {
-        let text = fs::read_to_string(state).unwrap().replacen("format: 4", "format: 5", 1);
+        let text = fs::read_to_string(state).unwrap().replacen(if cfg!(feature = "chain-core") { "format: 6" } else { "format: 4" }, if cfg!(feature = "chain-core") { "format: 7" } else { "format: 5" }, 1);
         fs::write(state, text).unwrap();
     }
     let root4 = scratch();

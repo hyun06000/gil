@@ -167,6 +167,23 @@ pub struct RuleSet {
 }
 
 impl RuleSet {
+    pub(crate) fn supports_chain_closing(&self) -> bool {
+        self.cycle_rules(CycleKind::Interview)
+            .and_then(|rule| rule.field_constraints.get("next_direction.action"))
+            .is_some_and(|rule| rule.allowed_values.iter().any(|value| value == "close_chain"))
+    }
+    /// Closing Interview direction is available only inside a real Chain.
+    /// Legacy graphs retain their original grammar, even in a chain-capable binary.
+    pub(crate) fn for_chain(mut self) -> Self {
+        if let Some(rule) = self.cycle_kinds.get_mut(&CycleKind::Interview)
+            .and_then(|rule| rule.field_constraints.get_mut("next_direction.action")) {
+            if let Some(description) = rule.not_yet.remove("close_chain") {
+                rule.allowed_values.push("close_chain".into());
+                rule.value_descriptions.insert("close_chain".into(), description);
+            }
+        }
+        self
+    }
     /// 함께 실린 명세로 한 벌 만든다.
     ///
     /// 설치된 `gil` 은 저장소 곁에 서 있지 않다 — 규칙을 찾아 헤매는 대신 지니고 다닌다.
