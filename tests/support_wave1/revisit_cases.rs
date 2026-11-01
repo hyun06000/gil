@@ -132,6 +132,11 @@ fn old_failure_requires_exact_app_consent_preserves_evidence_and_retries_twice()
     fs::remove_file(r.root.join("unrecorded.txt")).unwrap();
     let done = ok(apply(&mut r, &v, &t), "approved recovery");
     assert_eq!(structured(&done)["state"], "completed");
+    // The chat continuation must re-read Core, not repeat the pre-click approval wait.
+    let resumed_context = r.context_readonly();
+    let next = resumed_context.split("[지금 바로 할 호출]\n").nth(1).unwrap().lines().next().unwrap();
+    assert!(next.contains("되돌아왔다") && next.contains("gil_open"), "{next}");
+    assert!(!next.contains("버튼 승인을 기다린다"), "{next}");
     assert_eq!(
         fs::read_to_string(r.root.join("report.txt")).unwrap(),
         "baseline report"
