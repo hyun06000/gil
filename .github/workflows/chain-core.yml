@@ -59,10 +59,10 @@ jobs:
       - name: Approval profile, complete library contracts (plan domain, tool catalog, guidance, profile fixtures)
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib
       - name: Approval profile, next-call guidance over in-memory state and the real receipt (Wave 1 C)
-        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test guidance_wave1
+        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test guidance_wave1 --test guidance_wave2
       - name: Approval profile, M6-D contract over the real stdio process (Wave 1 E wire)
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test approved_plan_wire_wave1
       - name: Compile the opt-in approval profile
         run: cargo build --locked -p gil --all-targets --features approved-plan,visual-authoring,product-safety
       - name: Shared workflow text, Skill catalog and scenario evaluator contracts (pure Node, no Core process)
-        run: node --test plugins/gil-companion-prototype/skill.test.mjs plugins/gil-companion-prototype/workflow.test.mjs tools/scenarios/proxy.test.mjs tools/scenarios/redact.test.mjs tools/scenarios/report.test.mjs tools/scenarios/rpc.test.mjs tools/scenarios/scorer-cli.test.mjs tools/scenarios/trace-score.test.mjs
+        run: node --test plugins/gil-companion-prototype/skill.test.mjs plugins/gil-companion-prototype/workflow.test.mjs tools/scenarios/proxy.test.mjs tools/scenarios/redact.test.mjs tools/scenarios/report.test.mjs tools/scenarios/rpc.test.mjs tools/scenarios/scorer-cli.test.mjs tools/scenarios/trace-score.test.mjs tools/scenarios/approval-link.test.mjs tools/scenarios/state-path.test.mjs

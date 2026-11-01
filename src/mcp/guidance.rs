@@ -158,6 +158,18 @@ fn plan(name: &str, result: &CallToolResult) -> Option<String> {
     let pending: Vec<String> = view.get("pending").and_then(Value::as_array).map(|items|
         items.iter().filter_map(|i| i.get("id").and_then(Value::as_str)).map(str::to_string).collect()).unwrap_or_default();
     let current = view.get("current_item").filter(|i| !i.is_null()).and_then(|i| i.get("id")).and_then(Value::as_str);
+    // A binding survives Cycle closure. B's read-only state is the witness; without it
+    // an older server's binding cannot justify telling the model to resume Verify.
+    let cycle_state = view.pointer("/current_cycle/state").and_then(Value::as_str);
+    if name == "gil_plan_read"
+        && (cycle_state == Some("closed") || (current.is_some() && cycle_state != Some("open")))
+    {
+        return Some(if cycle_state == Some("closed") {
+            "승인 계획: 현재 Cycle은 이미 닫혔다. 항목 연결은 기록으로 남아 있다. 다음 호출은 gil_context다. 그 응답의 다음 행동에 따라 새 Cycle 또는 Chain Report를 이어간다. 닫힌 Step에서 조사·파일 작성을 계속하지 않는다.".into()
+        } else {
+            "승인 계획: 항목 연결만으로 현재 Cycle이 열려 있는지 확인할 수 없다. 다음 호출은 gil_context다. 실제 열린 Step과 다음 행동을 확인한 뒤 이어간다.".into()
+        });
+    }
     Some(match name {
         "gil_plan_request_interview" => "승인 계획: 재인터뷰 요청을 보존했다. 아무것도 닫히거나 열리지 않았다. 지금 열린 Step은 마지막 receipt의 다음 행동대로 이어가고, 남은 Step과 Cycle Report가 실제 순서대로 닫힌 뒤에 gil_open(kind: interview)으로 다시 승인받는다. 요청은 그동안 보존되며, 그 전에는 새 Experiment를 열 수 없다. 요청을 취소하거나 Cycle을 중단하는 호출은 없다.".into(),
         _ => match (proposal, decision) {
@@ -294,7 +306,7 @@ mod tests {
         after("gil_plan_read", &mut c);
         assert!(text(&c).contains("approved: no") && text(&c).contains("이전 승인은 재사용되지 않는다"), "{}", text(&c));
 
-        let bound = json!({"supported": true, "proposal": null, "pending": [{"id": "B", "question": "q", "done_when": "d"}], "reinterview_requests": [], "current_item": {"id": "A", "question": "q", "done_when": "d"}, "document": "# GIL approved plan"});
+        let bound = json!({"supported": true, "proposal": null, "pending": [{"id": "B", "question": "q", "done_when": "d"}], "reinterview_requests": [], "current_item": {"id": "A", "question": "q", "done_when": "d"}, "current_cycle": {"ref": "cycle:C2", "state": "open"}, "document": "# GIL approved plan"});
         let mut b = CallToolResult::structured(bound);
         after("gil_plan_read", &mut b);
         assert!(text(&b).contains("항목 A") && text(&b).contains("plan_document") && text(&b).contains("evidence_files"), "{}", text(&b));
@@ -307,4 +319,22 @@ mod tests {
         after("gil_plan_read", &mut r2);
         assert!(text(&r2).contains("재인터뷰 요청이 보존") && !text(&r2).contains("gil_open(kind: experiment)"), "{}", text(&r2));
     }
+
+    #[test]
+    fn wave2_closed_or_unknown_cycle_never_directs_work_into_its_old_verify() {
+        for state in [Some("closed"), None] {
+            for requested in [false, true] {
+                let mut view = json!({"supported": true, "proposal": null,
+                    "current_item": {"id": "A"}, "pending": [{"id": "B"}],
+                    "reinterview_requests": if requested {json!([{"reason":"scope"}])} else {json!([])}});
+                if let Some(state) = state { view["current_cycle"] = json!({"ref":"cycle:C2", "state":state}); }
+                let mut result = CallToolResult::structured(view);
+                after("gil_plan_read", &mut result);
+                let hint = text(&result);
+                assert!(hint.contains("gil_context"), "{state:?}, request={requested}: {hint}");
+                assert!(!hint.contains("Verify에서") && !hint.contains("남은 Step"), "{hint}");
+            }
+        }
+    }
+
 }

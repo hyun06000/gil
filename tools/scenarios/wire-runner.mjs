@@ -86,7 +86,7 @@ async function main() {
   await mkdir(root); await mkdir(settings); await mkdir(home); await mkdir(localAppData);
   const childEnv = isolatedEnv({ home, localAppData });
   // Record location per the product contract; on Windows this is below the isolated LOCALAPPDATA.
-  const recordAt = projectStatePath(root, { env: childEnv });
+  let recordAt = projectStatePath(root, { env: childEnv });
   const out = opts.out ?? join(work, 'out');
   await mkdir(out, { recursive: true });
   const typedVerify = opts.features.split(',').includes('visual-authoring');
@@ -266,6 +266,9 @@ async function main() {
 
   await run('W02', 'gil_start once, then the returned show_gil_monitor; display stays unconfirmed', ['W01'], async () => {
     const started = ok(await model('gil_start', { project_root: root }), 'gil_start');
+    // Plain builds create an inline record; resolve again after creation so Windows
+    // state_for_root's existing-inline fallback is exercised instead of guessing before start.
+    recordAt = projectStatePath(root, { env: childEnv });
     const text = started.result.content.map((c) => c.text || '').join('\n');
     const m = text.match(/show_gil_monitor\((\{.*?\})\)/);
     expect(m, 'start receipt did not name show_gil_monitor(scope)');
@@ -275,8 +278,8 @@ async function main() {
     expect(/표시.*판정하지 않는다|확인되지 않았다/.test(said(shown) + shown.result.content.map((c) => c.text).join('')), 'show receipt must not claim display');
     const ms = ok(await model('gil_monitor_status', { project_root: root }), 'gil_monitor_status');
     expect(existsSync(recordAt.path), `record not found where the product layout says (${recordAt.layout}); start reported record_storage=${serial(started.structured.record_storage ?? null)}`);
-    if (process.platform === 'win32') expect(started.structured.record_storage === 'private_app_data' && recordAt.layout === 'private_app_data', `Windows start must declare private_app_data, got ${serial(started.structured.record_storage ?? null)} / resolved ${recordAt.layout}`);
-    else expect(!existsSync(join(localAppData, 'GIL')), 'LOCALAPPDATA store appeared on a non-Windows platform');
+    if (process.platform === 'win32' && typedVerify) expect(started.structured.record_storage === 'private_app_data' && recordAt.layout === 'private_app_data', `Windows start must declare private_app_data, got ${serial(started.structured.record_storage ?? null)} / resolved ${recordAt.layout}`);
+    else expect(!existsSync(join(localAppData, 'GIL')), 'unexpected LOCALAPPDATA store for this platform/profile');
     return { storage_format: started.structured.storage_format ?? null, record_layout: recordAt.layout, record_storage: started.structured.record_storage ?? null, display_confirmed: started.structured.display_confirmed ?? null, monitor_state: ms.structured.state ?? null, note: 'protocol success only; visibility is unknown without a human' };
   });
 
