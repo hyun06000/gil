@@ -25,7 +25,7 @@ Luna 작업은 사용자 검수 대상이다. 과거 버전의 격리 설치나 
 | archive SHA-256 | `6d0a7e3b9755b67daabad63642453d6abf2904a673bd3b8b6f60a8a5edb2b64c` |
 | archive 크기 | 3,536,700 bytes |
 | Git 경로 기준 | tag `v0.2.1-preview.9` / commit `fb7abe10b206a8c0da687e05c8ab21c02ef12348` (Git이 있는 Mac은 [INSTALL.md](INSTALL.md)) |
-| rollback | preview.7 archive `ecd045e3a043e820bb5ff59a6d8b6d3ca57e68dfa3d8a8426a598f70682dd8ee` (tag `v0.2.1-preview.7`). 형식 7 기록에는 사용하지 않는다 |
+| previous | preview.8 archive `5fcfbb2a328ae65c71d6b5aa4432a556d89429d0fe4c98cacb855e9c2a88d266` (tag `v0.2.1-preview.8`). 이번 실패 Cycle 승인 복구 기능은 없다 |
 
 ## 사용자가 할 일
 
