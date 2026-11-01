@@ -1,0 +1,49 @@
+{
+  "date": "2026-11-02",
+  "source_commit": "90cf763364652f06aec1f3f920deb2425233fdee",
+  "baseline": "e89a32bfd8235286621ce2c00de6737aa5038a94",
+  "default_core": {
+    "passed": 1505,
+    "failed": 0,
+    "ignored": 2
+  },
+  "approved_plan_lib": {
+    "passed": 663,
+    "failed": 12,
+    "ignored": 2,
+    "stopped_before_integration_suites": true
+  },
+  "approved_plan_new_tests": {
+    "wire_passed": 1,
+    "guidance_passed": 1,
+    "guidance_failed": 6
+  },
+  "js": {
+    "passed": 186,
+    "failed": 1,
+    "skipped": 4
+  },
+  "packaging": {
+    "passed": 94,
+    "failed": 2,
+    "skipped": 1
+  },
+  "wire_scenarios": {
+    "passed": 20,
+    "expected_blocked": 1,
+    "failed": 0,
+    "human_approval": false
+  },
+  "review_rust_probes": {
+    "passed": 1,
+    "failed_as_expected": 3
+  },
+  "build_all_targets": {
+    "default": "pass",
+    "approved_plan_visual_authoring_product_safety": "pass"
+  },
+  "native_windows": "not_run",
+  "luna": "not_run",
+  "real_host_ui": "not_run",
+  "release_ready": false
+}
