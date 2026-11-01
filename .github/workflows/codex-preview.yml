@@ -18,6 +18,7 @@ on:
         options:
           - default
           - visual-authoring
+          - approved-plan
 
 permissions:
   contents: read
@@ -48,6 +49,7 @@ jobs:
           case "$GIL_RUNTIME_PROFILE" in
             default) cargo test --locked -p gil ;;
             visual-authoring) cargo test --locked -p gil --features visual-authoring ;;
+            approved-plan) cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib --test context --test context_profiles --test guidance_wave1 --test guidance_wave2 --test approved_plan_wire_wave1 ;;
             *) exit 2 ;;
           esac
           node --test ui/layout.test.mjs mcp-app/*.test.mjs plugins/gil-companion-prototype/*.test.mjs
@@ -64,6 +66,7 @@ jobs:
           case "$GIL_RUNTIME_PROFILE" in
             default) node distribution/codex/build-preview.mjs target/codex-preview ;;
             visual-authoring) node distribution/codex/build-preview.mjs target/codex-preview --visual-authoring ;;
+            approved-plan) node distribution/codex/build-preview.mjs target/codex-preview --approved-plan ;;
             *) exit 2 ;;
           esac
       - name: Prepare opt-in unsigned candidate (never publishes)
@@ -75,6 +78,7 @@ jobs:
           case "$GIL_RUNTIME_PROFILE" in
             default) node distribution/codex/unsigned-preview.mjs prepare target/codex-preview/marketplace "$GIL_PREVIEW_VERSION" target/codex-unsigned-candidate ;;
             visual-authoring) node distribution/codex/unsigned-preview.mjs prepare target/codex-preview/marketplace "$GIL_PREVIEW_VERSION" target/codex-unsigned-candidate --visual-authoring ;;
+            approved-plan) node distribution/codex/unsigned-preview.mjs prepare target/codex-preview/marketplace "$GIL_PREVIEW_VERSION" target/codex-unsigned-candidate --approved-plan ;;
             *) exit 2 ;;
           esac
       - name: Retain unsigned candidate for review only

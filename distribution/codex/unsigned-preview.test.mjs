@@ -229,3 +229,19 @@ test('image opt-in cannot bypass dirty source or upgrade a default binary by dec
   await assert.rejects(stageUnsigned({...plain,version:'0.3.0-preview.1',profile:'visual-authoring'}),/explicitly match/);
   for(const f of [dirty,plain]) await assert.rejects(readFile(join(f.output,'release.json')),{code:'ENOENT'});
 });
+
+test('approved-plan candidate requires explicit matching profile and preserves the Core', async t => {
+  const f = await fixture(t, false, 'approved-plan');
+  const before = await verifyTree(f.input);
+  assert.deepEqual(before.development_features, ['approved-plan','visual-authoring']);
+  await assert.rejects(stageUnsigned({...f,version:'0.2.1-preview.8'}), /explicitly match/);
+  const result = await stageUnsigned({...f,version:'0.2.1-preview.8',profile:'approved-plan'});
+  assert.equal(result.runtime_profile,'approved-plan');
+  assert.deepEqual(result.compatibility.storage_format,{min:4,max:7});
+  assert.equal(result.migration,'requires_review');
+  assert.deepEqual(result.files.find(f=>f.path===CORE),before.files.find(f=>f.path===CORE));
+  assert.match(await readFile(join(f.output,'PREVIEW.md'),'utf8'),/NOT automatically converted/);
+  await verifyUnsignedTree(f.output);
+  await rewriteReceipt(f.output,r=>r.runtime_profile='visual-authoring');
+  await assert.rejects(verifyUnsignedTree(f.output));
+});

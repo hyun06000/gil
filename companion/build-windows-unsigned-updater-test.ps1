@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+-owner\.[1-9][0-9]*$')]
-    [string]$Version
+    [string]$Version,
+    [ValidateSet('default', 'approved-plan')][string]$RuntimeProfile = 'default'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -37,7 +38,14 @@ if ($LASTEXITCODE -ne 0 -or $TauriVersion -ne 'tauri-cli 2.11.5') {
 
 Push-Location $Here
 try {
-    cargo build --locked --release -p gil --bin gil --bin gil-launcher --features product-safety
+    $CoreFeatures = 'product-safety'
+    $TauriFeatures = @()
+    if ($RuntimeProfile -eq 'approved-plan') {
+        $CoreFeatures = 'approved-plan,visual-authoring,product-safety'
+        # Companion's embedded gil library must understand the same record/action contract.
+        $TauriFeatures = @('--features', 'gil/approved-plan,gil/visual-authoring,gil/product-safety')
+    }
+    cargo build --locked --release -p gil --bin gil --bin gil-launcher --features $CoreFeatures
     if ($LASTEXITCODE -ne 0) { throw '시험 Core와 고정 런처 빌드가 실패했습니다.' }
     $Core = Join-Path $Root 'target\release\gil.exe'
     $Digest = (Get-FileHash -LiteralPath $Core -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -54,7 +62,7 @@ try {
     $Config.plugins.updater | Add-Member -NotePropertyName pubkey -NotePropertyValue $env:GIL_UPDATER_PUBLIC_KEY -Force
     $Config.plugins.updater | Add-Member -NotePropertyName endpoints -NotePropertyValue @($UpdaterEndpoint.AbsoluteUri) -Force
     $ConfigJson = $Config | ConvertTo-Json -Depth 10 -Compress
-    cargo tauri build --bundles nsis --config $ConfigJson
+    cargo tauri build --bundles nsis --config $ConfigJson @TauriFeatures
     if ($LASTEXITCODE -ne 0) { throw 'Windows updater 시험 설치본 빌드가 실패했습니다.' }
     $Signatures = @(Get-ChildItem (Join-Path $Root 'target\release\bundle\nsis') -File -Filter '*.sig')
     if ($Signatures.Count -ne 1) { throw "updater 서명은 하나여야 합니다: $($Signatures.Count)" }

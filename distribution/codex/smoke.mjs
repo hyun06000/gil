@@ -7,16 +7,16 @@ import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {CORE, MANIFEST, PREFIX, checkLibraries, hash, verifyTree} from './artifact.mjs';
-import {checkDefaultTools, checkAuthoringTools} from './tool-contract.mjs';
-import {checkCore, compatibility} from './compatibility.mjs';
+import {checkDefaultTools, checkAuthoringTools, checkApprovedPlanTools} from './tool-contract.mjs';
+import {checkCore, compatibility, developmentFeatures} from './compatibility.mjs';
 
 export async function smoke(root, expectedHtml, verify = verifyTree, profile = 'default') {
-  assert.ok(['default', 'visual-authoring'].includes(profile));
+  assert.ok(['default', 'visual-authoring', 'approved-plan'].includes(profile));
   assert.equal(process.platform, 'darwin');
   assert.equal(process.arch, 'arm64');
   const receipt = await verify(root); // Integrity before executing any artifact.
   if (receipt.channel === 'development_unsigned') {
-    assert.deepEqual(receipt.development_features ?? [], profile === 'default' ? [] : ['visual-authoring']);
+    assert.deepEqual(receipt.development_features ?? [], developmentFeatures(profile));
     assert.deepEqual(receipt.compatibility, compatibility(profile));
   } else if (receipt.channel === 'preview_unsigned') {
     assert.equal(receipt.runtime_profile ?? 'default', profile);
@@ -93,7 +93,7 @@ export async function smoke(root, expectedHtml, verify = verifyTree, profile = '
     child.stdin.write(JSON.stringify({jsonrpc: '2.0', method: 'notifications/initialized'}) + '\n');
     const initMs = Math.round(performance.now() - at);
     const {tools} = await request('tools/list', {});
-    (profile === 'default' ? checkDefaultTools : checkAuthoringTools)(tools);
+    (profile === 'default' ? checkDefaultTools : profile === 'approved-plan' ? checkApprovedPlanTools : checkAuthoringTools)(tools);
     const show = tools.find(t => t.name === 'show_gil_monitor');
     const uri = show?._meta?.ui?.resourceUri;
     assert.match(uri, /^ui:\/\/gil-monitor\/[a-f0-9]{20}\.html$/);

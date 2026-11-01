@@ -291,3 +291,14 @@ test('local Windows acceptance separates contract checks from signed installatio
   assert.match(runner, /companion\\build-windows\.ps1/);
   assert.match(runner, /distribution\\windows\\product-e2e\.ps1/);
 });
+
+test('approval owner candidate opts in for both Core and Companion and exercises the packaged Core', async () => {
+  const script = await read('companion/build-windows-unsigned-updater-test.ps1');
+  assert.match(script, /ValidateSet\('default', 'approved-plan'\)/);
+  assert.match(script, /\$RuntimeProfile = 'default'/);
+  assert.match(script, /\$CoreFeatures = 'approved-plan,visual-authoring,product-safety'/);
+  assert.match(script, /gil\/approved-plan,gil\/visual-authoring,gil\/product-safety/);
+  assert.match(script, /cargo tauri build.*@TauriFeatures/);
+  const workflow = await read('.github/workflows/windows-product.yml');
+  assert.match(workflow, /--gil target\/release\/gil.exe --features approved-plan,visual-authoring,product-safety/);
+});

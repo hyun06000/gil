@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {ARCHIVE_FLAGS, CLAUDE_MANIFEST, CORE, MANIFEST, hash, inventory, verifyPayload, verifyTree} from './artifact.mjs';
 import {compareVersion, validateRecord} from './update-policy.mjs';
 import {smoke} from './smoke.mjs';
-import {compatibility} from './compatibility.mjs';
+import {compatibility, developmentFeatures} from './compatibility.mjs';
 
 const json = value => JSON.stringify(value, null, 2) + '\n';
 const sourceKeys = ['dirty', 'files', 'head', 'snapshot_sha256'];
@@ -34,11 +34,17 @@ New image projects use format 5. Existing projects are NOT automatically convert
 Back up and verify recovery with separate consent before requesting consent to apply migration.
 Older Plugins cannot write format 5. Downgrading the Plugin does not downgrade project records.
 Keep original backups; installing this Plugin does not authorize migration of any project.
+` : profile === 'approved-plan' ? `
+EXPERIMENTAL approved-plan + visual-authoring; action surface 2, readable storage formats 4..7.
+New projects use a Chain and Monitor-approved plan (format 7). Existing records are NOT automatically converted.
+Use a new empty test folder for the approval workflow. Closing Verify requires the bound plan document
+and separate file evidence. Destructive restore/revisit remain blocked. Older runtimes may refuse these
+records; installing an older Plugin never downgrades project records.
 ` : '');
 
 function checkProfile(receipt, profile) {
   compatibility(profile); // Reject unknown profiles, never infer permission from a feature flag.
-  assert.deepEqual(receipt.development_features ?? [], profile === 'default' ? [] : ['visual-authoring'],
+  assert.deepEqual(receipt.development_features ?? [], developmentFeatures(profile),
     'candidate profile must explicitly match the reviewed development tree');
   assert.deepEqual(receipt.compatibility, compatibility(profile));
   assert.equal(receipt.migration, profile === 'default' ? 'none' : 'requires_review');
@@ -67,8 +73,8 @@ export async function verifyUnsignedTree(root) {
     'publishable', 'schema', 'source', 'trust', 'version',
     ...(receipt.schema === 3 ? ['runtime_profile', 'compatibility', 'migration'] : [])].sort());
   if (receipt.schema === 3) {
-    assert.equal(receipt.runtime_profile, 'visual-authoring');
-    assert.deepEqual(receipt.compatibility, compatibility('visual-authoring'));
+    assert.ok(['visual-authoring', 'approved-plan'].includes(receipt.runtime_profile));
+    assert.deepEqual(receipt.compatibility, compatibility(receipt.runtime_profile));
     assert.equal(receipt.migration, 'requires_review');
   }
   assert.equal(receipt.channel, 'preview_unsigned');
@@ -170,13 +176,13 @@ export async function main(args = process.argv.slice(2)) {
     if (args.length === 2 && args[0] === 'verify') {
       const receipt = await verifyUnsignedTree(resolve(args[1]));
       console.log(json({integrity: 'passed', channel: receipt.channel, version: receipt.version, publishable: false}));
-    } else if ((args.length === 4 || (args.length === 5 && args[4] === '--visual-authoring')) && args[0] === 'prepare') {
+    } else if ((args.length === 4 || (args.length === 5 && ['--visual-authoring', '--approved-plan'].includes(args[4]))) && args[0] === 'prepare') {
       const result = await prepare({input: resolve(args[1]), version: args[2], output: resolve(args[3]),
-        profile: args.length === 5 ? 'visual-authoring' : 'default'});
+        profile: args.length === 5 ? args[4].slice(2) : 'default'});
       console.log(json({channel: result.channel, version: result.version, publishable: false,
         archive_sha256: result.archive_sha256, tools: result.smoke.tools}));
     } else {
-      console.error('Usage: unsigned-preview.mjs prepare <reviewed-tree> <X.Y.Z-preview.N> <new-output> [--visual-authoring] | verify <tree>');
+      console.error('Usage: unsigned-preview.mjs prepare <reviewed-tree> <X.Y.Z-preview.N> <new-output> [--visual-authoring|--approved-plan] | verify <tree>');
       return 2;
     }
     return 0;
