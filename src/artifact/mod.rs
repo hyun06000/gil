@@ -36,6 +36,17 @@ use sha2::{Digest, Sha256};
 mod codec;
 mod registry;
 mod store;
+mod tracking_policy;
+
+// M3 추적 정책 — **정책이 선택된 새 읽기 경로.** 기본 `observe`/`capture` 의 의미와
+// `EntryPath` 규칙은 그대로다. 아직 crate 안의 아무도 이 경로를 부르지 않는다: 제품 기본
+// capture 와 저장 정책 provenance 연결은 통합 단계의 명시적 작업이다.
+#[allow(unused_imports)]
+pub(crate) use tracking_policy::{
+    Builtin, Decision, ExcludedDirectories, ExcludedEntry, ExcludedKind, ExclusionReason,
+    IgnoreSource, PolicyError, PolicyObservation, PolicyObserveError, PolicyVersion, RuleRef,
+    TrackingPolicy, discover_gitignore_sources,
+};
 
 // format 4 가 Cycle 의 entry/exit 와 함께 서면서 **쓰는 자리가 생겼다.** 도메인이
 // registry 를 들고, 저장이 그것을 적는다.
@@ -365,6 +376,24 @@ pub(crate) fn digest_from_raw(bytes: [u8; 32]) -> ContentDigest {
 
 pub(crate) fn observe(root: &Path) -> Result<Manifest, ObserveError> {
     observe_twice(root, || {})
+}
+
+/// **정책이 선택된** 관측 — manifest 와 그것을 만든 정책 ID 를 함께 돌려준다.
+///
+/// [`observe`] 와 같은 규칙으로 두 번 훑고 견주되, 명시적 [`TrackingPolicy`] 가 제외한
+/// 항목은 manifest 에 담지 않고 결과의 `excluded` 에 이유와 함께 남긴다. `.git` 은 어느
+/// 깊이든, 루트 `.gil/` 은 언제나 제외다. 심볼릭 링크·특수 항목·비UTF-8 이름·중첩 `.gil`
+/// 은 정책과 무관하게 **열거되는 즉시** 기존 계약대로 거절한다; 제외된 디렉터리 안으로
+/// 들어갈지는 `excluded_directories` 가 정한다.
+///
+/// 아무것도 쓰지 않는다 — blob 저장(`capture`)·Snapshot 확정·Session 연결은 하지 않는다.
+/// 기존 Snapshot 에 이 정책을 소급 적용하지도 않는다.
+pub(crate) fn observe_with_policy(
+    root: &Path,
+    policy: &TrackingPolicy,
+    excluded_directories: ExcludedDirectories,
+) -> Result<PolicyObservation, PolicyObserveError> {
+    tracking_policy::observe_twice(root, policy, excluded_directories, || {})
 }
 
 /// 훑기가 몇 번 일어났는지 세는 자리 — **시험에서만 컴파일된다.**
