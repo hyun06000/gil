@@ -1,5 +1,9 @@
 # Claude 동시 개발 Wave 1
 
+> Wave 1은 제출·검토 완료. 후속 수정은 `../parallel-wave-2/README.md`와 새 작업 폴더에서 진행한다.
+> 아래 공유 target 설명은 당시 계획이며 검토에서 안전하지 않음이 확인됐다.
+> 현재 cargo-queue.py는 Wave 2의 **worktree별 target** 구현으로 위임한다. 같은 저장소의 잠금만 공유한다.
+
 목표: 서로 독립적인 구현/자동시험을 병렬로 끝낸 뒤 하나의 통합본에서 실제 Mac·Windows·Codex·Luna 검증과 디버깅을 수행한다.
 실제 개발 세션은 사용자가 Claude Code에서 직접 연다. 이 문서 생성은 작업 착수나 기능 완료를 의미하지 않는다.
 
