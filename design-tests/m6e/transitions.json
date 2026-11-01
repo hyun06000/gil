@@ -1,0 +1,516 @@
+{
+  "$comment": "M6-E 설계 전이표. 순수 설계 모델이며 GIL Core 구현이 아니다. model.mjs 가 이 표의 행렬을 읽어 판정하므로 표와 fixture 가 어긋나면 검사가 실패한다.",
+  "version": "0.1-proposal",
+  "grammar": {
+    "interview": {
+      "cycle_entry": [
+        "question"
+      ],
+      "question": [
+        "interpretation"
+      ],
+      "interpretation": [
+        "question",
+        "synthesis"
+      ],
+      "synthesis": [
+        "outcome",
+        "question"
+      ],
+      "outcome": []
+    },
+    "experiment": {
+      "cycle_entry": [
+        "define"
+      ],
+      "define": [
+        "hypothesis"
+      ],
+      "hypothesis": [
+        "verify"
+      ],
+      "verify": [
+        "analysis"
+      ],
+      "analysis": [
+        "hypothesis",
+        "outcome"
+      ],
+      "outcome": []
+    }
+  },
+  "step_close_requires": {
+    "question": [
+      "question",
+      "response"
+    ],
+    "interpretation": [
+      "interpretation"
+    ],
+    "synthesis": [
+      "statement",
+      "approved"
+    ],
+    "define": [
+      "problem",
+      "success_condition"
+    ],
+    "hypothesis": [
+      "hypothesis",
+      "rationale",
+      "guardrail"
+    ],
+    "verify": [
+      "execution",
+      "result",
+      "evidence_files"
+    ],
+    "analysis": [
+      "interpretation"
+    ],
+    "outcome": [
+      "verdict",
+      "lesson",
+      "next_direction.action",
+      "next_direction.reason"
+    ]
+  },
+  "outcome": {
+    "$comment": "conclusion 은 선택 필드. 없으면 judged 로 읽는다(기존 기록 호환). not_reached 는 verdict=failure 에서만 허용하고 blocker 가 비어 있을 수 없다.",
+    "conclusion_values": [
+      "judged",
+      "not_reached"
+    ],
+    "default_conclusion": "judged",
+    "not_reached_requires": [
+      "blocker"
+    ],
+    "allowed_actions": {
+      "experiment": {
+        "success": [
+          "close_cycle"
+        ],
+        "failure": [
+          "revisit",
+          "close_cycle"
+        ]
+      },
+      "interview": {
+        "success": [
+          "close_cycle"
+        ]
+      }
+    }
+  },
+  "cycle_report": {
+    "$comment": "M6-E 확장은 failure+not_reached 행 하나다. 기존 failure(judged) → revisit 만 허용은 그대로다.",
+    "allowed_actions": {
+      "experiment": {
+        "success/judged": [
+          "open_child"
+        ],
+        "failure/judged": [
+          "revisit"
+        ],
+        "failure/not_reached": [
+          "revisit",
+          "open_child"
+        ]
+      },
+      "interview": {
+        "success/judged": [
+          "open_child",
+          "close_chain"
+        ]
+      }
+    }
+  },
+  "approved_plan": {
+    "$comment": "같은 승인 판·같은 항목에 대한 연속 not_reached 재시도 상한. 넘으면 새 Interview 승인이 필요하다. 숫자는 결정 쟁점 D2.",
+    "max_not_reached_attempts_per_revision": 2,
+    "pending_item_rule": "활성 승인 판의 항목 중 '판정된(judged) 시도' 또는 '열린 시도'가 없는 항목이 pending 이다. not_reached 로 끝난 시도만 있는 항목은 pending 으로 남는다(기존 M6-D 의 'executed = 열렸다' 와 다르다 — 결정 쟁점 D2).",
+    "retry_binding_rule": "다음 Experiment 는 첫 pending 항목을 묶는다. 같은 판에서 그 항목의 이전 시도 수 +1 이 attempt 이고, 상한을 넘으면 거절한다. retry_of 는 그 항목의 마지막 시도 Cycle 이다. 사람 동의(판+항목)는 not_reached 재시도에 재사용되고, judged 뒤에는 재사용되지 않는다.",
+    "unreachable_in_model": {
+      "WillAlreadyActive": "모델은 Step 과 Will 을 한 객체 전이로 묶어 분리 상태를 만들 수 없다. Core 는 저장 손상 대비로 따로 검사한다.",
+      "WillStillActive": "같은 이유. 열린 Step 없는 Active Will 은 모델에서 생길 수 없다.",
+      "TargetHasNoExitWorld": "모델의 닫힌 Cycle 은 언제나 Exit 을 가진다. Core 는 파일에서 읽은 값을 다시 검사한다.",
+      "NotWhereItSaid": "모델의 revisit 은 current 를 선언 대상으로 옮기므로 어긋난 pending 을 만들 수 없다. Core 는 파일이 두 번째 통로이므로 검사한다."
+    }
+  },
+  "transitions": [
+    {
+      "id": "T01",
+      "event": "open_step",
+      "layer": "domain",
+      "before": "현재 Cycle 이 Open 이고 열린 Step 이 없고 Active Will 이 없다. pending_cycle_revisit 이 없다.",
+      "preconditions": [
+        "NoOpenCycle",
+        "StepStillOpen",
+        "WillAlreadyActive",
+        "RevisitPending",
+        "GrammarRefused",
+        "ContractIncomplete"
+      ],
+      "after": "Step Open + 같은 transaction 에 Active Will(target=그 Step). Journey revision 불변.",
+      "failure_restart": "저장 실패면 Step·Will·next_will_id 모두 이전 그대로. 재시작 후 같은 호출을 다시 한다.",
+      "evidence": "없음",
+      "human_input": "없음",
+      "forbidden": [
+        "Kind 만 보고 Will 내용을 지어내기"
+      ]
+    },
+    {
+      "id": "T02",
+      "event": "revise_will",
+      "layer": "domain (M6-E 신규 공개 동작, Will Model §6 의 덮어쓰기)",
+      "before": "Active Will 이 있다.",
+      "preconditions": [
+        "NoActiveWill",
+        "WillTargetLocked",
+        "ContractIncomplete"
+      ],
+      "after": "같은 Will id·같은 target 의 objective/next_action/done_when 덮어쓰기. Journey revision·Done 목록 불변. Node 상태 불변.",
+      "failure_restart": "저장 실패면 이전 Will 그대로. 중단된 행동의 좁히기는 재시작 뒤 다시 적는다.",
+      "evidence": "없음 (Will 은 증거가 아니다)",
+      "human_input": "없음. 사용자 중단 요구는 revise 의 이유가 될 수 있지만 승인 자체는 아니다.",
+      "forbidden": [
+        "target Step 변경",
+        "done_when 을 이미 충족된 것으로 사후 조작해 가짜 완료 만들기",
+        "Done Will 수정"
+      ]
+    },
+    {
+      "id": "T03",
+      "event": "edit_files",
+      "layer": "environment",
+      "before": "임의",
+      "preconditions": [],
+      "after": "작업 폴더 manifest 가 바뀐다. GIL 논리 상태 불변. 세계는 Verify close 전까지 어떤 Snapshot 에도 속하지 않는다(dirty).",
+      "failure_restart": "GIL 밖의 사건. 재시작 뒤 폴더가 실제 상태다.",
+      "evidence": "없음",
+      "human_input": "없음",
+      "forbidden": []
+    },
+    {
+      "id": "T04",
+      "event": "close_verify",
+      "layer": "domain",
+      "before": "열린 Step 이 Verify 이고 Active Will 이 그 Step 을 가리킨다.",
+      "preconditions": [
+        "NothingOpen",
+        "NotVerify",
+        "ReportIncomplete",
+        "EvidenceMissing",
+        "EvidenceNotInWorld",
+        "EvidenceEmptyFile",
+        "EvidenceStale",
+        "ObservationRefused"
+      ],
+      "after": "세계 관측·Snapshot intern(같은 세계면 기존 ref)·Verify.snapshot_ref·Will Done·Journey revision+1·Verify Closed 가 한 transaction. 중단 사례에서는 evidence 가 '중단 관측 문서'이며 부분 파일은 그대로 Snapshot 에 보존된다.",
+      "failure_restart": "하나라도 실패하면 Verify·Will Open 그대로, 미참조 객체만 남을 수 있다. 재시작 후 다시 닫는다.",
+      "evidence": "evidence_files 1~32개, 비어 있지 않고 최소 1개는 기준 Snapshot 대비 새/변경",
+      "human_input": "없음",
+      "forbidden": [
+        "빈 evidence",
+        "변하지 않은 증거만 제출",
+        "채팅만으로 닫기",
+        "실행/결과를 지어내기"
+      ]
+    },
+    {
+      "id": "T05",
+      "event": "close_step",
+      "layer": "domain",
+      "before": "열린 비-Verify Step 과 그 Step 을 가리키는 Active Will. 폴더 == 기준 세계(clean).",
+      "preconditions": [
+        "NothingOpen",
+        "IsVerify",
+        "DirtyWorld",
+        "ReportIncomplete",
+        "VerdictValueRefused",
+        "ConclusionRefused",
+        "BlockerMissing",
+        "ActionNotAllowed",
+        "ResponseNotFromHuman",
+        "ApprovalNotFromHuman",
+        "ApprovalForOtherProposal",
+        "SynthesisRefRefused"
+      ],
+      "after": "Report·Closed·Will Done·Journey revision+1. Outcome 의 conclusion 은 Report 에 남는다. 세계는 바뀌지 않는다.",
+      "failure_restart": "거절·실패 시 Step·Will Open 그대로.",
+      "evidence": "Analysis/Outcome 은 현재 계보의 닫힌 Verify/Analysis 를 가리킨다",
+      "human_input": "Question.response 와 Synthesis.approved 는 사람의 실제 입력에서만 온다. Outcome 의 verdict/conclusion 은 Agent 판정이지만 not_reached 는 '판정하지 않았다'는 선언이다.",
+      "forbidden": [
+        "success + not_reached",
+        "사람 응답 없는 Question close",
+        "receipt 없는 approved:yes",
+        "이전 제안 판의 승인 재사용"
+      ]
+    },
+    {
+      "id": "T06",
+      "event": "close_cycle",
+      "layer": "domain",
+      "before": "현재 Cycle Open, 내부 열린 Step 없음, Active Will 없음, 마지막 Outcome Closed, clean.",
+      "preconditions": [
+        "CycleNotOpen",
+        "InnerStepStillOpen",
+        "WillStillActive",
+        "DirtyWorld",
+        "ReportIncomplete",
+        "VerdictMismatch",
+        "ConclusionMismatch",
+        "ActionNotAllowed",
+        "RevisitTargetRefused",
+        "TargetRequiredOrForbidden"
+      ],
+      "after": "Cycle Report·Closed·exit_snapshot_ref(마지막 Outcome 계보의 최근 Verify Snapshot, 없으면 Entry). Will·Journey 불변. not_reached Cycle 이 open_child 를 선언하면 그 Cycle 은 분기점이 된다.",
+      "failure_restart": "거절 시 Cycle Open 그대로.",
+      "evidence": "outcome_ref 가 닫힌 Outcome 을 가리킨다",
+      "human_input": "없음",
+      "forbidden": [
+        "verdict/conclusion 이 Outcome 과 다름",
+        "judged failure 에 open_child",
+        "Interview 를 failure 로 닫기",
+        "새 Snapshot 생성"
+      ]
+    },
+    {
+      "id": "T07",
+      "event": "revisit_cycle",
+      "layer": "domain + artifact",
+      "before": "현재 Cycle Closed 이고 Report 가 revisit 대상(Closed ancestor 분기점)을 선언. 폴더 clean. pending 없음.",
+      "preconditions": [
+        "CycleStillOpen",
+        "NoRevisitDeclared",
+        "DirtyWorld",
+        "RevisitPending",
+        "ProductSafetyBlocked",
+        "TargetHasNoExitWorld"
+      ],
+      "after": "current=대상, pending_cycle_revisit=실패 Cycle, 폴더=대상 Exit 세계. Graph·Will·Journey·Snapshot registry 불변. 실패 Cycle 의 Snapshot 은 창고에 남는다.",
+      "failure_restart": "저장 뒤 복원 중 중단되면 '이동은 확정, 세계 미완'을 보고하고 재시작 시 미확정 restore 를 먼저 되돌린다. 저장 전 실패면 아무것도 바뀌지 않는다.",
+      "evidence": "없음",
+      "human_input": "없음 (방향은 Outcome/Cycle Report 에서 이미 확정)",
+      "forbidden": [
+        "Open Node 에서 revisit",
+        "dirty 덮어쓰기 강제 revisit",
+        "product-safety 빌드에서 실행",
+        "Journey 되감기"
+      ]
+    },
+    {
+      "id": "T08",
+      "event": "open_cycle",
+      "layer": "domain (+ approved-plan 바인딩)",
+      "before": "(a) pending 이 있으면 현재 자리가 선언된 대상이고 분기점. (b) pending 이 없으면 현재 Cycle Closed 이고 open_child 선언.",
+      "preconditions": [
+        "AnotherCycleOpen",
+        "NotWhereItSaid",
+        "TargetCannotBranch",
+        "NoPendingItem",
+        "RetryBudgetExhausted",
+        "ReinterviewRequested"
+      ],
+      "after": "새 Cycle(새 ID, parent=서 있는 자리, revisit_from=pending 또는 없음, entry=부모 Exit). pending 소비. approved-plan: origin 이 not_reached Experiment 이고 같은 승인 판이면 같은 항목에 attempt+1·retry_of 로 재바인딩, 아니면 첫 미실행 항목. Will·Journey 불변.",
+      "failure_restart": "거절 시 ID 발급기도 움직이지 않는다.",
+      "evidence": "없음",
+      "human_input": "같은 항목 재시도는 기존 승인(판+항목)을 재사용한다. 상한을 넘거나 judged failure 뒤 같은 항목은 새 Interview 승인이 필요하다.",
+      "forbidden": [
+        "두 번째 열린 Cycle",
+        "실패 Cycle 자체를 parent 로",
+        "승인 없는 항목 실행",
+        "상한 초과 자동 재시도"
+      ]
+    },
+    {
+      "id": "T09",
+      "event": "session_crash",
+      "layer": "operational",
+      "before": "임의",
+      "preconditions": [],
+      "after": "저장된 상태 불변(원자적 save 만 존재). lock 은 OS 가 해제. 미확정 tmp 객체·active restore 는 다음 load 전에 회수/되돌림. 열린 Step·Active Will 은 그대로 '열린 채' 남는다 — 종료가 아니다.",
+      "failure_restart": "이 사건 자체가 재시작 사례다.",
+      "evidence": "없음",
+      "human_input": "없음",
+      "forbidden": [
+        "자동 close",
+        "Will 을 Done 으로 만들기",
+        "기록 삭제"
+      ]
+    },
+    {
+      "id": "T10",
+      "event": "session_resume",
+      "layer": "operational",
+      "before": "저장된 상태가 있다.",
+      "preconditions": [
+        "ExistenceMismatch"
+      ],
+      "after": "같은 Existence 가 World Current·Active Will·열린 Step 을 읽고 이어간다. 어떤 전이도 일어나지 않는다. 폴더의 실제 파일이 진실이다.",
+      "failure_restart": "load 검증 실패는 손상으로 거절.",
+      "evidence": "없음",
+      "human_input": "없음",
+      "forbidden": [
+        "새 Existence 로 열린 Node 이어받기",
+        "gil start 재실행"
+      ]
+    },
+    {
+      "id": "T11",
+      "event": "switch_existence",
+      "layer": "domain",
+      "before": "열린 Node 가 하나도 없다.",
+      "preconditions": [
+        "OpenNodeBlocksSwitch"
+      ],
+      "after": "current_existence 변경. 다른 축 불변.",
+      "failure_restart": "거절 시 불변.",
+      "evidence": "없음",
+      "human_input": "없음",
+      "forbidden": [
+        "열린 Node 가 있을 때 전환"
+      ]
+    },
+    {
+      "id": "T12",
+      "event": "propose_plan",
+      "layer": "approved-plan ledger",
+      "before": "열린 Synthesis.",
+      "preconditions": [
+        "NoOpenSynthesis"
+      ],
+      "after": "제안 판 추가(digest). 같은 내용이면 같은 판. receipt 없음. Graph·Will·Journey·Snapshot 불변.",
+      "failure_restart": "거절 시 불변. 끊긴 앱은 다음 연결에서 같은 판을 다시 본다.",
+      "evidence": "없음",
+      "human_input": "아직 없음",
+      "forbidden": [
+        "제안 저장을 승인으로 세기"
+      ]
+    },
+    {
+      "id": "T13",
+      "event": "human_decide",
+      "layer": "approved-plan ledger (Monitor 버튼)",
+      "before": "receipt 없는 현재 제안 판.",
+      "preconditions": [
+        "NoProposal",
+        "DigestMismatch",
+        "AlreadyDecided"
+      ],
+      "after": "그 판에 receipt(approve|request_changes). Synthesis 는 아직 Open.",
+      "failure_restart": "응답 유실 시 저장된 receipt 를 재조회한다. 중복 클릭은 AlreadyDecided.",
+      "evidence": "없음",
+      "human_input": "이 사건이 사람 입력 그 자체다.",
+      "forbidden": [
+        "Agent 가 approved:yes 입력으로 대체",
+        "다른 digest 의 승인 적용"
+      ]
+    },
+    {
+      "id": "T14",
+      "event": "human_answer",
+      "layer": "human",
+      "before": "열린 Question.",
+      "preconditions": [
+        "NoOpenQuestion"
+      ],
+      "after": "사람의 원문 응답이 그 Question 에 대한 입력으로 기록 가능해진다. close 는 별도.",
+      "failure_restart": "없음",
+      "evidence": "없음",
+      "human_input": "이 사건이 사람 입력이다. 침묵은 응답이 아니다.",
+      "forbidden": [
+        "침묵·이전 요청·Agent 추정으로 response 채우기"
+      ]
+    },
+    {
+      "id": "T15",
+      "event": "request_interview",
+      "layer": "approved-plan ledger",
+      "before": "열린 Experiment.",
+      "preconditions": [
+        "NotInExperiment",
+        "ReasonEmpty"
+      ],
+      "after": "재인터뷰 요청(cycle_ref, reason) 보존. 열린 Step/Cycle 그대로. 추가 Experiment 는 현재 Cycle 을 사실대로 닫고 Interview 승인을 받기 전까지 막힌다.",
+      "failure_restart": "중복 요청은 한 번만 기록.",
+      "evidence": "없음",
+      "human_input": "사용자 방향 전환 요구가 이유가 된다",
+      "forbidden": [
+        "열린 Cycle 자동 종료",
+        "동시에 다른 Cycle 열기"
+      ]
+    },
+    {
+      "id": "T16",
+      "event": "restore_world",
+      "layer": "artifact",
+      "before": "임의 (논리 상태 불변)",
+      "preconditions": [
+        "ProductSafetyBlocked"
+      ],
+      "after": "폴더=유도된 현재 세계. Graph·Will·Journey·registry 불변.",
+      "failure_restart": "원자적, 실패 시 롤백. 중단된 restore 는 다음 load 전에 되돌린다.",
+      "evidence": "없음",
+      "human_input": "명령 실행 자체가 의사 표시",
+      "forbidden": [
+        "product-safety 에서 실행",
+        "Snapshot 인수 지정"
+      ]
+    }
+  ],
+  "refusals": {
+    "StepStillOpen": "이미 열린 Step 이 있다",
+    "WillAlreadyActive": "이미 Active Will 이 있다",
+    "RevisitPending": "되돌아온 자리에서 새 Cycle 을 열기 전에는 Graph 를 바꿀 수 없다",
+    "GrammarRefused": "현재 자리에서 그 Kind 를 열 수 없다",
+    "ContractIncomplete": "objective/next_action/done_when 중 빈 칸이 있다",
+    "NoActiveWill": "Active Will 이 없다",
+    "WillTargetLocked": "Active Will 의 target 은 바꿀 수 없다",
+    "NothingOpen": "닫을 열린 Step 이 없다",
+    "NotVerify": "열린 Step 이 Verify 가 아니다",
+    "IsVerify": "Verify 는 close_verify 로만 닫는다",
+    "ReportIncomplete": "필수 Report 항목이 비어 있다",
+    "EvidenceMissing": "evidence_files 가 없다",
+    "EvidenceNotInWorld": "증거 파일이 관측한 세계에 없다",
+    "EvidenceEmptyFile": "빈 파일은 증거가 아니다",
+    "EvidenceStale": "지정한 증거가 모두 기준 Snapshot 과 같다",
+    "ObservationRefused": "세계를 관측할 수 없다(symlink/권한 등)",
+    "DirtyWorld": "폴더가 기준 세계와 다르다 — 비-Verify close 거절",
+    "VerdictValueRefused": "verdict 는 success|failure 만",
+    "ConclusionRefused": "conclusion 은 judged|not_reached 이며 not_reached 는 failure 에서만",
+    "BlockerMissing": "not_reached 에는 blocker 가 필요하다",
+    "ActionNotAllowed": "verdict/conclusion 에서 허용되지 않는 next_direction.action",
+    "ResponseNotFromHuman": "Question.response 는 사람의 응답 사건 뒤에만 쓸 수 있다",
+    "ApprovalNotFromHuman": "approved 는 사람의 결정(receipt) 과 같아야 한다",
+    "ApprovalForOtherProposal": "receipt 가 현재 제안 판의 digest 가 아니다",
+    "SynthesisRefRefused": "Interview Outcome 은 승인된 닫힌 Synthesis 를 가리켜야 한다",
+    "CycleNotOpen": "현재 Cycle 이 열려 있지 않다",
+    "InnerStepStillOpen": "Cycle 안에 열린 Step 이 있다",
+    "WillStillActive": "Active Will 이 남아 있다",
+    "VerdictMismatch": "Cycle Report verdict 가 Outcome verdict 와 다르다",
+    "ConclusionMismatch": "Cycle Report conclusion 이 Outcome conclusion 과 다르다",
+    "RevisitTargetRefused": "revisit 대상이 Closed ancestor 분기점이 아니다",
+    "TargetRequiredOrForbidden": "revisit 이면 target 필수, 아니면 금지",
+    "CycleStillOpen": "현재 Cycle 이 아직 열려 있다 (Closed→Closed)",
+    "NoRevisitDeclared": "Cycle Report 가 revisit 을 선언하지 않았다",
+    "ProductSafetyBlocked": "product-safety 빌드는 작업 폴더를 바꾸는 restore/revisit 을 거절한다",
+    "TargetHasNoExitWorld": "대상 Cycle 에 Exit Snapshot 이 없다",
+    "AnotherCycleOpen": "열린 Cycle 이 이미 있다",
+    "NotWhereItSaid": "서 있는 자리가 선언된 revisit 대상이 아니다",
+    "TargetCannotBranch": "서 있는 Cycle 이 open_child 를 선언한 분기점이 아니다",
+    "NoPendingItem": "승인된 미실행 항목이 없다 — Interview 가 필요하다",
+    "RetryBudgetExhausted": "같은 승인 판에서 같은 항목의 not_reached 재시도 상한을 넘었다 — Interview 가 필요하다",
+    "ReinterviewRequested": "재인터뷰 요청이 보존되어 있어 새 Experiment 를 열 수 없다 — Interview 먼저",
+    "ExistenceMismatch": "열린 Node 의 existence_ref 가 현재 Existence 와 다르다",
+    "OpenNodeBlocksSwitch": "열린 Node 가 있으면 Existence 를 바꿀 수 없다",
+    "NoOpenSynthesis": "열린 Synthesis 가 없다",
+    "NoProposal": "결정할 제안이 없다",
+    "DigestMismatch": "결정이 현재 제안 판의 digest 와 다르다",
+    "AlreadyDecided": "이미 결정된 제안 판이다",
+    "NoOpenQuestion": "열린 Question 이 없다",
+    "NotInExperiment": "열린 Experiment 가 아니다",
+    "ReasonEmpty": "이유가 비어 있다",
+    "NoOpenCycle": "열린 Cycle 이 없다"
+  }
+}

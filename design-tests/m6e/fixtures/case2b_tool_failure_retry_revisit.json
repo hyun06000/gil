@@ -1,0 +1,15 @@
+{
+  "name": "Case 2b — tool failure; retry of the same item via revisit (discards the partial world from the folder, keeps it in the snapshot)",
+  "preset": "approved_plan_ready",
+  "options": { "product_safety": false },
+  "steps": [
+    { "macro": "open_experiment" },
+    { "macro": "define_hypothesis_open_verify" },
+    { "macro": "partial_edit" },
+    { "macro": "narrow_and_close_verify", "assert": { "cycles.2.steps.3.snapshot_ref": "A2" } },
+    { "macro": "analysis_outcome_not_reached" },
+    { "event": "close_cycle", "args": { "report": { "verdict": "failure", "conclusion": "not_reached", "outcome_ref": "step:C2/S5", "handoff_summary": "A interrupted; partial files are not wanted as the next starting world", "next_direction.action": "revisit", "next_direction.target_cycle_ref": "cycle:C1", "next_direction.reason": "restart A from the approved world" } } },
+    { "event": "revisit_cycle", "args": {}, "assert": { "current_cycle": 1, "pending_cycle_revisit": 2, "$path": [["folder", "files", "src/partial.py"], null], "$path2": [["snapshots", "A2", "files", "src/partial.py"], "p1"] } },
+    { "event": "open_cycle", "args": { "kind": "experiment" }, "assert": { "cycles.3.parent": 1, "cycles.3.revisit_from": 2, "cycles.3.entry": "A1", "pending_cycle_revisit": null, "plan.executions.1.item": "A", "plan.executions.1.attempt": 2, "plan.executions.1.retry_of": 2 } }
+  ]
+}

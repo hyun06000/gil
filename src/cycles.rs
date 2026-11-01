@@ -734,6 +734,7 @@ pub(crate) struct CyclesState {
 /// Cycle Graph 가 거절한 이유.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CyclesError {
+    Plan(String),
     /// 이 Graph 에 그런 이름의 Cycle 이 없다.
     UnknownCycle(CycleId),
     /// 자식을 열 수 없다.
@@ -791,6 +792,7 @@ fn pending_says(from: CycleRef, target: CycleRef) -> String {
 /// 적어 둔 Cycle 계층의 되돌아감을 밟을 수 없는 이유.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CycleRevisitError {
+    PlanBinding,
     /// 지금 서 있는 Cycle 이 아직 열려 있다 — 되돌아감은 닫힌 자리에서만 시작한다.
     StillOpen(CycleRef),
     /// 닫혔는데 Report 가 없다 — 밟을 결정이 적혀 있지 않다.
@@ -817,6 +819,7 @@ impl From<CycleTargetError> for CycleRevisitError {
 impl fmt::Display for CycleRevisitError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            CycleRevisitError::PlanBinding => write!(f, "Cycle retry bindings are not supported in the approved-plan profile; current state is preserved"),
             CycleRevisitError::StillOpen(id) => write!(
                 f,
                 "{id} 이(가) 아직 열려 있다 — 되돌아감은 닫힌 판정에서만 시작한다.\n\
@@ -871,6 +874,7 @@ pub struct CycleRevisit {
 /// 되돌아온 자리에서 새 갈래를 열 수 없는 이유.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OpenAfterRevisitError {
+    PlanBinding,
     /// 되돌아온 적이 없다 — 소비할 결정이 없다.
     NothingPending,
     /// 적어 둔 갈 곳이 이 Graph 에서 성립하지 않는다.
@@ -893,6 +897,7 @@ pub enum OpenAfterRevisitError {
 impl fmt::Display for OpenAfterRevisitError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            OpenAfterRevisitError::PlanBinding => write!(f, "승인 계획의 재시도 바인딩 계약이 아직 없다. 기존 기록을 보존한다"),
             OpenAfterRevisitError::NothingPending => {
                 write!(f, "되돌아온 적이 없다 — 소비할 결정이 없다")
             }
@@ -966,6 +971,7 @@ impl From<OpenChildError> for CyclesError {
 impl fmt::Display for CyclesError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            CyclesError::Plan(reason) => write!(f, "{reason}"),
             CyclesError::UnknownCycle(id) => {
                 write!(f, "{id} 은(는) 이 Cycle Graph 에 없다")
             }
@@ -1011,7 +1017,7 @@ impl std::error::Error for CyclesError {
         match self {
             CyclesError::OpenChild(err) => Some(err),
             CyclesError::Cycle(err) => Some(err),
-            CyclesError::UnknownCycle(_) => None,
+            CyclesError::UnknownCycle(_) | CyclesError::Plan(_) => None,
         }
     }
 }

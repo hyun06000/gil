@@ -11,8 +11,8 @@ import {check as checkNotices} from '../compliance/notices.mjs';
 assert.equal(process.platform, 'darwin');
 assert.equal(process.arch, 'arm64', 'only tested architecture may be packaged');
 const [destination, ...extra] = process.argv.slice(2);
-assert.ok(destination && (extra.length === 0 || (extra.length === 1 && extra[0] === '--visual-authoring')), 'Usage: build-preview.mjs <new-output-directory> [--visual-authoring]');
-const profile = extra.length ? 'visual-authoring' : 'default';
+assert.ok(destination && (extra.length === 0 || (extra.length === 1 && ['--visual-authoring', '--approved-plan'].includes(extra[0]))), 'Usage: build-preview.mjs <new-output-directory> [--visual-authoring|--approved-plan]');
+const profile = extra.length ? extra[0].slice(2) : 'default';
 const output = resolve(destination);
 await mkdir(output, {recursive: false}); // Existing output is never overwritten.
 const run = (command, args, env = process.env) => new Promise((resolve, reject) => {
@@ -29,7 +29,7 @@ const target = join(repository, 'target/plugin-core-build');
 const cargoHome = process.env.CARGO_HOME || join(homedir(), '.cargo');
 const rustflags = `--remap-path-prefix=${cargoHome}=/cargo --remap-path-prefix=${repository}=/gil`;
 assert.ok(!/\s/.test(repository + cargoHome), 'build roots containing whitespace need encoded rustflags support');
-const productFeatures = profile === 'visual-authoring'
+const productFeatures = profile === 'approved-plan' ? 'approved-plan,visual-authoring,product-safety' : profile === 'visual-authoring'
   ? 'visual-authoring,product-safety'
   : 'product-safety';
 await run('cargo', ['build', '--locked', '--release', '-p', 'gil', '--target', 'aarch64-apple-darwin', '--features', productFeatures], {

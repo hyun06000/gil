@@ -355,3 +355,10 @@ a_restored_working_file_never_shares_an_inode_with_a_blob
 `chain-core`의 실제 Chain 계층은 [Chain 저장 계약](GIL_Chain_Storage_v0.1.md)을 따른다.
 비시각/시각 형식을 6/7로 분리하여 Windows의 기존 4/5 권한 계약을 각각 유지한다.
 위 format 4/5의 일반 쓰기·명시적 visual migration을 자동 Chain 이전으로 바꾸지 않는다.
+
+## M6-D 개발 확장 (2026-11-01)
+
+`approved-plan`은 새 Chain의 선택적 `approved_plan` 원장에 제안 판·Monitor 응답·실행 연결·재인터뷰 요청을 저장한다.
+상세 계약은 [승인 계획 개발 계약](GIL_Approved_Plan_v0.1.md)을 따른다. 기존 기록에 이 필드를 자동 추가하지 않는다.
+format 6/7의 이 확장 필드를 모르는 writer와 기능을 끈 writer는 수정 대신 거절한다.
+제안/응답 저장은 Artifact 확정이나 Journey 증가가 아니며, 계획 문서의 파일 확정은 Verify에서만 수행한다.

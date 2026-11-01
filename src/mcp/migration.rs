@@ -145,11 +145,13 @@ mod tests {
     use super::*;
     #[test]
     fn catalog_and_runtime_have_strict_stage_specific_inputs() {
+        let root = if cfg!(windows) { "C:/synthetic" } else { "/synthetic" };
+        let backup = if cfg!(windows) { "C:/new-private-backup" } else { "/new-private-backup" };
         for t in catalog(Vec::new()) {
             let name = t.name.as_ref();
-            let mut v = json!({"project_root":"/synthetic"});
+            let mut v = json!({"project_root":root});
             if name != "gil_migration_check" {
-                v["backup_root"] = json!("/new-private-backup");
+                v["backup_root"] = json!(backup);
             }
             if name == "gil_migration_prepare" {
                 v["backup_approved"] = json!(false);
@@ -175,7 +177,7 @@ mod tests {
             let wire = serde_json::to_value(t).unwrap();
             assert_eq!(wire["_meta"]["ui"]["visibility"], json!(["model"]));
         }
-        let v = json!({"project_root":"/does-not-exist","backup_root":"/must-not-create","backup_approved":false});
+        let v = json!({"project_root":root,"backup_root":backup,"backup_approved":false});
         assert_eq!(
             call("gil_migration_prepare", v).structured_content.unwrap()["code"],
             "approval_required"

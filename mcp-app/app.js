@@ -1,4 +1,5 @@
 import { App, applyDocumentTheme, applyHostStyleVariables, applyHostFonts } from '@modelcontextprotocol/ext-apps';
+import { makePlanReview } from './plans.mjs';
 import { makeHost, unwrap, retryAfter, connectionMessage } from './host.mjs';
 import { graphOrientation, initialFullscreen, hostIdentity, hostStyles, styleEvidence } from './presentation.mjs';
 
@@ -7,7 +8,7 @@ const app = new App({ name: 'GIL Monitor', version: '0.1.0' },
 const el = (id) => document.getElementById(id);
 const raw = (v) => v === undefined ? 'undefined' : JSON.stringify(v, null, 2);
 let context = {}, connected = false, pending = false, booted = false, stopped = false;
-let rendererReady = false;
+let rendererReady = false, planReview = null, planNeedsRefresh = true, planReadAt = 0;
 let response = '요청 전', eventMode = '이벤트 전', timer, pollFailures = 0;
 let suspended = false, polling = false, refreshOnReturn = false;
 let connectionIssue = null;
@@ -145,6 +146,10 @@ async function poll() {
     // Resume uses the same scope-bound Host, not a new prepare/render call.
     if (refresh) await window.GIL_HOST.refresh();
     else await window.GIL_HOST.tick();
+    // State-file hints drive approval refreshes too. Quiet polling never loads a Project every 2s.
+    if (planReview && (planNeedsRefresh || Date.now() - planReadAt >= 30000)) {
+      await planReview.refresh(); planNeedsRefresh = false; planReadAt = Date.now();
+    }
     pollFailures = 0;
   } catch (err) {
     // A restarted server restores the saved binding itself. All transport failures
@@ -167,7 +172,10 @@ app.ontoolresult = async (result) => {
     const data = unwrap(result);
     if (!/^project:[0-9a-f]{64}$/.test(data.scope_id) || !data.view) throw new Error('scope');
     booted = true;
+    if (data.plan_review_supported) planReview = makePlanReview({ app, scope: data.scope_id,
+      panel: el('plan-review'), banner: el('plan-banner'), document, changed: () => { refreshOnReturn = true; } });
     window.GIL_HOST = makeHost(app, data, { presence });
+    if (planReview) window.GIL_HOST.listen('gil://refresh', () => { planNeedsRefresh = true; });
     void reportPresence();
     window.GIL_HOST.listen('gil://connection', (error) => {
       connectionIssue = error;
@@ -186,7 +194,7 @@ app.ontoolresult = async (result) => {
     maybeFullscreen();
   } catch (err) { renderFailed = true; void reportPresence(); modes(err?.said || 'Monitor 데이터를 받지 못했습니다. Project 를 지정해 다시 열어 주세요.'); }
 };
-function stop() { stopped = true; initialDisplay.cancel(); clearTimeout(timer); clearTimeout(retryTimer); window.GIL_COMPANION?.clearVisuals?.(); return reportPresence(); }
+function stop() { stopped = true; planReview?.stop(); initialDisplay.cancel(); clearTimeout(timer); clearTimeout(retryTimer); window.GIL_COMPANION?.clearVisuals?.(); return reportPresence(); }
 function resume() {
   if (stopped || suspended || document.hidden) return;
   refreshOnReturn = true;

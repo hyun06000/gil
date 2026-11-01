@@ -394,6 +394,7 @@ impl StoredState {
                         read_ref(&node.existence_ref, "chains.nodes.existence_ref")?,
                         read_ref(&node.entry_snapshot_ref, "chains.nodes.entry_snapshot_ref")?,
                         read_opt_ref(&node.parent_chain_ref, "chains.nodes.parent_chain_ref")?, cycles);
+                    chain.approved_plan = node.approved_plan;
                     if let Some(report) = node.report {
                         chain.close(report.into_iter().collect()).map_err(|e| StoreError::ChainState(e.to_string()))?;
                     }
@@ -620,6 +621,8 @@ struct StoredChains {
 #[serde(deny_unknown_fields)]
 struct StoredChain {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    approved_plan: Option<crate::approved_plan::PlanState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     journey_ref: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     report: Option<BTreeMap<String, String>>,
@@ -840,6 +843,7 @@ impl From<&Project> for StoredState {
             chains: project.current_chain().map(|chain| StoredChains {
                 current: chain.id().to_string(), next_id: chain.id().number() + 1,
                 nodes: project.chains().iter().map(|chain| StoredChain {
+                    approved_plan: chain.approved_plan.clone(),
                     id: chain.id().id(), existence_ref: chain.existence().to_string(),
                     state: if chain.is_closed() { "closed" } else { "open" }.into(), parent_chain_ref: chain.parent().map(|id| id.to_string()),
                     report: chain.report().map(write_report), journey_ref: chain.journey().map(|id| id.to_string()),

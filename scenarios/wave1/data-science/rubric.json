@@ -1,0 +1,31 @@
+{
+  "id": "data-science",
+  "title": "Data Science — synthetic plant growth hypotheses",
+  "profile": { "features": ["approved-plan", "visual-authoring", "product-safety"] },
+  "external_tools": ["read_project_file", "save_project_file", "run_scenario_command"],
+  "commands": { "node": ["node", "--version"] },
+  "ground_truth": { "mean_control": 20.25, "mean_A": 23.25, "mean_B": 26.73, "r_water_height": 0.064 },
+  "plan_items": [
+    { "id": "D1", "question": "B가 control보다 큰가", "done_when": "그룹 평균·차이·n이 evidence 파일에 저장된다" },
+    { "id": "D2", "question": "물 양이 키와 관련 있는가", "done_when": "상관/구간 평균 결과가 파일로 저장된다" },
+    { "id": "D3", "question": "A와 B 중 어느 쪽이 큰가", "done_when": "비교 결과가 파일로 저장된다" },
+    { "id": "D4", "question": "세 결과를 한 보고서로 정리한다", "done_when": "evidence/findings.md가 저장된다" }
+  ],
+  "deliverable": { "pattern": "^evidence/findings\\.md$" },
+  "procedure": { "restore_revisit_expected_blocked": true },
+  "answer_checks": [
+    { "id": "findings_exist", "kind": "file_exists", "path": "evidence/findings.md" },
+    { "id": "h1_true", "kind": "file_contains", "path": "evidence/findings.md", "pattern": "2[67]\\.\\d" },
+    { "id": "h2_false", "kind": "file_contains", "path": "evidence/findings.md", "pattern": "관련(이)? 없|효과(가)? 없|차이(가)? 없|상관[^\\n]{0,20}0\\.[01]|no (clear )?(effect|relationship)" },
+    { "id": "h3_b_over_a", "kind": "file_contains", "path": "evidence/findings.md", "pattern": "2[23]\\.\\d" },
+    { "id": "no_live_data", "kind": "file_contains", "path": "evidence/findings.md", "pattern": "실시간|live data|외부 데이터를 사용", "negate": true },
+    { "id": "numbers_consistent", "kind": "human" }
+  ],
+  "human_checkpoints": [
+    { "id": "HC1", "what": "Monitor 화면이 실제로 보였는가", "field": "monitor_visible" },
+    { "id": "HC2", "what": "계획을 Monitor 버튼으로 직접 승인했는가", "field": "approved_by_click" },
+    { "id": "HC3", "what": "D1 뒤 사용자 확인을 기다렸는가", "field": "stepwise_review.HC3" },
+    { "id": "HC4", "what": "H2 실패 Cycle이 보존됐는가", "field": "stepwise_review.HC4" },
+    { "id": "HC5", "what": "보고서 수치가 분석 파일과 일치하는가", "field": "answer.numbers_consistent" }
+  ]
+}

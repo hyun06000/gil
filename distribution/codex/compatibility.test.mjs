@@ -36,3 +36,13 @@ test('image release record cannot claim no migration or omit legacy format suppo
  assert.throws(()=>validateRecord({...r,migration:'none'}));
  assert.throws(()=>validateRecord({...r,compatibility:{...r.compatibility,storage_format:{min:5,max:5}}}));
 });
+
+test('approved-plan test profile requires action 2 and formats 4..7 without implicit migration', () => {
+ const profile = 'approved-plan', r = record(profile, '0.2.1-preview.8');
+ assert.deepEqual(compatibility(profile).storage_format, {min:4,max:7});
+ checkCore(core(profile), profile); validateRecord(r);
+ assert.throws(() => checkCore(core('visual-authoring'), profile));
+ assert.throws(() => checkCore(core(profile), 'visual-authoring'));
+ assert.throws(() => validateRecord({...r,migration:'none'}));
+ assert.equal(checkTransition(record('default','0.2.1-preview.7'),r).status,'blocked');
+});

@@ -22,6 +22,14 @@ on:
         type: boolean
         required: true
         default: false
+      runtime_profile:
+        description: 'Explicit owner-test Core profile; existing projects are never automatically migrated'
+        type: choice
+        required: true
+        default: default
+        options:
+          - default
+          - approved-plan
       owner_update_version:
         description: 'Monotonic SemVer for the owner updater channel, for example 0.1.1-owner.1'
         type: string
@@ -156,7 +164,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build updater-signed current-user NSIS test candidate
         shell: pwsh
-        run: ./companion/build-windows-unsigned-updater-test.ps1 -Version '${{ inputs.owner_update_version }}'
+        run: ./companion/build-windows-unsigned-updater-test.ps1 -Version '${{ inputs.owner_update_version }}' -RuntimeProfile '${{ inputs.runtime_profile }}'
+      - name: Exercise the exact approval Core packaged into this installer
+        if: inputs.runtime_profile == 'approved-plan'
+        shell: pwsh
+        run: |
+          node tools/scenarios/wire-runner.mjs --gil target/release/gil.exe --features approved-plan,visual-authoring,product-safety --out target/windows-product-evidence/approval-wire
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Install and exercise the exact candidate
         shell: pwsh
         run: |
@@ -184,6 +198,7 @@ jobs:
             target/release/bundle/nsis/*.exe
             target/release/bundle/nsis/*.sig
             target/windows-product-evidence/unsigned-updater-acceptance.json
+            target/windows-product-evidence/approval-wire/*.json
           if-no-files-found: error
           retention-days: 3
 

@@ -1,0 +1,30 @@
+{
+  "name": "Case 5 — approved item A interrupted twice: the third attempt needs a new Interview; re-approval restarts the attempt count",
+  "preset": "approved_plan_ready",
+  "options": { "product_safety": true },
+  "steps": [
+    { "macro": "open_experiment", "assert": { "plan.executions.0.attempt": 1 } },
+    { "macro": "define_hypothesis_open_verify" },
+    { "macro": "partial_edit" },
+    { "macro": "narrow_and_close_verify" },
+    { "macro": "analysis_outcome_not_reached" },
+    { "event": "close_cycle", "args": { "report": { "verdict": "failure", "conclusion": "not_reached", "outcome_ref": "step:C2/S5", "handoff_summary": "A interrupted (1)", "next_direction.action": "open_child", "next_direction.reason": "retry" } } },
+    { "event": "open_cycle", "args": { "kind": "experiment" }, "assert": { "plan.executions.1.item": "A", "plan.executions.1.attempt": 2, "plan.executions.1.retry_of": 2 } },
+    { "macro": "define_hypothesis_open_verify" },
+    { "event": "revise_will", "args": { "next_action": "record the second interruption", "done_when": "evidence/interruption-2.md is saved" } },
+    { "event": "edit_files", "args": { "files": { "README.md": "r1", "src/partial.py": "p1", "evidence/interruption.md": "i1", "evidence/interruption-2.md": "i2" } } },
+    { "event": "close_verify", "args": { "report": { "execution": "resumed P; the sandbox denied file writes", "result": "no result; second interruption recorded", "evidence_files": "evidence/interruption-2.md" } } },
+    { "macro": "analysis_outcome_not_reached" },
+    { "event": "close_cycle", "args": { "report": { "verdict": "failure", "conclusion": "not_reached", "outcome_ref": "step:C3/S5", "handoff_summary": "A interrupted (2)", "next_direction.action": "open_child", "next_direction.reason": "retry or re-plan" } } },
+    { "event": "open_cycle", "args": { "kind": "experiment" }, "expect": { "refused": "RetryBudgetExhausted" } },
+    { "event": "open_cycle", "args": { "kind": "interview" }, "assert": { "cycles.4.parent": 3 } },
+    { "macro": "interview_question_interpretation" },
+    { "event": "propose_plan", "args": { "digest": "d2", "items": ["A", "B", "C"] } },
+    { "event": "human_decide", "args": { "digest": "d2", "decision": "approve" } },
+    { "event": "close_step", "args": { "report": { "statement": "A was interrupted twice; try A once more with the sandbox fixed, then B, C", "approved": "yes", "digest": "d2" } } },
+    { "event": "open_step", "args": { "kind": "outcome", "contract": { "objective": "close the interview", "next_action": "record success", "done_when": "Outcome report is written" } } },
+    { "event": "close_step", "args": { "report": { "verdict": "success", "lesson": "the user explicitly re-approved A", "next_direction.action": "close_cycle", "next_direction.reason": "approved", "synthesis_ref": "step:C4/S3" } } },
+    { "event": "close_cycle", "args": { "report": { "verdict": "success", "outcome_ref": "step:C4/S4", "handoff_summary": "revision 2 approved: A, B, C", "next_direction.action": "open_child", "next_direction.reason": "retry A" } } },
+    { "event": "open_cycle", "args": { "kind": "experiment" }, "assert": { "plan.executions.2.item": "A", "plan.executions.2.revision": 2, "plan.executions.2.attempt": 1, "plan.executions.2.retry_of": 3, "cycles.5.parent": 4 } }
+  ]
+}

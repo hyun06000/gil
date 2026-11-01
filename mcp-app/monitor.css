@@ -27,11 +27,12 @@ body[data-display-mode="fullscreen"] .detail { scroll-margin-bottom: var(--gil-c
 @media (min-width: 900px) {
   body[data-display-mode="fullscreen"] #gil-companion {
     display: grid; grid-template-columns: minmax(0, 1fr) 380px; align-content: start;
-    grid-template-areas: "top top" "notice notice" "stale stale" "working working" "settings settings"
-      "empty empty" "intro detail" "map detail" "status status" "bar bar";
+    grid-template-areas: "top top" "notice notice" "plan-top plan-top" "stale stale" "working working" "settings settings"
+      "empty empty" "intro detail" "map detail" "status status" "plan plan" "bar bar";
   }
   body[data-display-mode="fullscreen"] .top { grid-area: top; }
   body[data-display-mode="fullscreen"] .notice { grid-area: notice; }
+  body[data-display-mode="fullscreen"] .plan-banner { grid-area: plan-top; }
   body[data-display-mode="fullscreen"] .stale { grid-area: stale; }
   body[data-display-mode="fullscreen"] .working { grid-area: working; }
   body[data-display-mode="fullscreen"] .settings-say { grid-area: settings; }
@@ -56,3 +57,61 @@ body[data-display-mode="fullscreen"] .detail { scroll-margin-bottom: var(--gil-c
 .report-visuals .is-original .visual-image-trigger { max-width:none; width:max-content; cursor:zoom-out; }
 .report-visuals .is-original img { max-width:none; max-height:none; width:auto; height:auto; }
 .report-visuals .visual-image-trigger:focus-visible, .report-visuals .visual-viewport:focus-visible { outline:2px solid currentColor; outline-offset:-2px; }
+
+/* The approval banner: one line at the top that says what waits for the person and jumps to the
+   panel on their click. Polling re-renders it only when the state changes; it never scrolls by itself. */
+.plan-banner { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; margin:12px 16px 0; padding:9px 12px;
+  border-radius: var(--gil-r-md); border: var(--gil-hair) solid var(--gil-kind-synthesis); background: var(--gil-bg-2);
+  font-size: var(--gil-sm); line-height:1.45; color: var(--gil-fg); overflow-wrap:anywhere; }
+.plan-banner[hidden] { display:none; }
+.plan-banner .plan-banner-text { flex: 1 1 240px; min-width:0; }
+.plan-banner .plan-jump { font: inherit; font-size: var(--gil-xs); padding:5px 10px; border: var(--gil-hair) solid var(--gil-line);
+  border-radius: var(--gil-r-md); background: var(--gil-bg); color: var(--gil-fg); cursor:pointer; white-space:nowrap; }
+.plan-banner .plan-jump:hover { border-color: var(--gil-fg-3); }
+.plan-banner .plan-jump:focus-visible { outline:2px solid var(--gil-ring); outline-offset:2px; }
+.plan-banner[data-state="unreadable"], .plan-banner[data-state="uncertain"], .plan-banner[data-state="no_token"] {
+  border-color: var(--gil-warn-line); background: var(--gil-warn-bg); color: var(--gil-warn-fg); }
+.plan-banner[data-state="approved"], .plan-banner[data-state="changes_requested"] { border-color: var(--gil-line-soft); }
+
+/* The approval panel is an MCP-only action surface, separate from the shared read model. */
+.plan-review { grid-area:plan; padding:16px; border-top:var(--gil-hair) solid var(--gil-line); overflow-wrap:anywhere; font-size: var(--gil-sm); line-height: 1.5; }
+.plan-review[hidden] { display:none; }
+.plan-review h2 { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; font-size:var(--gil-md); margin:0 0 8px; }
+.plan-review h2:focus-visible { outline:2px solid var(--gil-ring); outline-offset:3px; border-radius: var(--gil-r-sm); }
+.plan-review h3 { font-size: var(--gil-sm); margin: 14px 0 4px; }
+.plan-state { display:inline-block; padding:2px 8px; border-radius:999px; font-size: var(--gil-xs); font-weight: var(--gil-w-semibold);
+  border: var(--gil-hair) solid var(--gil-line); color: var(--gil-fg-2); background: var(--gil-bg-2); }
+.plan-state[data-state="requested"], .plan-state[data-state="reapproval"] { border-color: var(--gil-kind-synthesis); color: var(--gil-kind-synthesis); }
+.plan-state[data-state="approved"], .plan-state[data-state="executing"] { border-color: var(--gil-ok); color: var(--gil-ok); }
+.plan-state[data-state="uncertain"], .plan-state[data-state="unreadable"], .plan-state[data-state="no_token"] {
+  border-color: var(--gil-warn-line); color: var(--gil-warn-fg); background: var(--gil-warn-bg); }
+.plan-review .plan-verdict { margin: 8px 0; padding:8px 10px; border-left: 3px solid var(--gil-kind-synthesis);
+  background: var(--gil-bg-2); border-radius: var(--gil-r-sm); font-weight: var(--gil-w-medium); }
+.plan-review dt { font-weight:600; margin-top:10px; }
+.plan-review dd { margin:4px 0; white-space:pre-wrap; }
+.plan-review li, .plan-review pre, .plan-review .plan-statement, .plan-review .plan-current { white-space:pre-wrap; overflow-wrap:anywhere; }
+.plan-review .plan-items { padding-left: 22px; margin: 6px 0; }
+.plan-review .plan-items li { margin: 6px 0; padding-left: 4px; }
+.plan-review .plan-items li[data-status="executed"] { color: var(--gil-fg-3); }
+.plan-review .plan-items li[data-status="current"] { font-weight: var(--gil-w-semibold); border-left: 3px solid var(--gil-kind-verify); padding-left: 8px; }
+.plan-review .plan-items li[data-status="bound"] { border-left: 3px dashed var(--gil-line); padding-left: 8px; }
+.plan-review .plan-current[data-cycle="closed"], .plan-review .plan-current[data-cycle="unknown"] { color: var(--gil-fg-2); }
+.plan-review .plan-counts, .plan-review .plan-last, .plan-review small { font-size: var(--gil-xs); color: var(--gil-fg-3); }
+.plan-review .plan-delivery, .plan-review .plan-uncertain, .plan-review .plan-replaced, .plan-review .plan-reinterview {
+  padding:8px 10px; border-radius: var(--gil-r-sm); border: var(--gil-hair) solid var(--gil-warn-line);
+  background: var(--gil-warn-bg); color: var(--gil-warn-fg); }
+.plan-review .plan-delivered { color: var(--gil-ok); }
+.plan-review .plan-receipt { font-weight: var(--gil-w-medium); }
+.plan-review details { margin: 8px 0; }
+.plan-review summary { cursor:pointer; font-size: var(--gil-xs); color: var(--gil-fg-2); }
+.plan-review summary:focus-visible { outline:2px solid var(--gil-ring); outline-offset:2px; }
+.plan-review pre { font: var(--gil-xs)/1.45 var(--gil-mono); }
+.plan-review button { margin:8px 12px 0 0; padding:9px 14px; border:1px solid var(--gil-line); border-radius:6px; color:var(--gil-fg); background:var(--gil-bg); cursor:pointer; font: inherit; }
+.plan-review button[data-decision="approve"] { border-color: var(--gil-kind-synthesis); font-weight: var(--gil-w-semibold); }
+.plan-review button:focus-visible { outline:2px solid var(--gil-ring); outline-offset:3px; }
+.plan-review button:disabled { opacity:.5; cursor:default; }
+/* Narrow surfaces: full-width controls, so a thumb or a keyboard finds them without horizontal scroll. */
+@media (max-width: 480px) {
+  .plan-review button { display:block; width:100%; margin:8px 0 0; }
+  .plan-banner .plan-jump { flex: 1 1 100%; }
+}

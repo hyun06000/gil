@@ -4,6 +4,8 @@
 //! 안 쓰임 경고를 끈다 — 없는 연장으로 오해하지 않도록.
 #![allow(dead_code)]
 
+pub mod legacy;
+
 use std::path::{Path, PathBuf};
 #[cfg(windows)]
 mod windows_acl;
@@ -355,12 +357,34 @@ pub fn cycle_report(cycle: &Cycle, verdict: &str, outcome: NodeId) -> Report {
     report
 }
 
+/// 이 빌드가 **승인 계획 프로필**(`approved-plan`)인가.
+///
+/// 그 프로필에서는 `Project::start` 가 만드는 새 프로젝트마다 승인 계획 상태가 붙고, Synthesis 는
+/// 맨 `approved: yes` 로 닫히지 않는다 — Core 가 `gil_plan_propose` → Monitor 결정 → 그
+/// `close_report` 만 받는다(M6-D). 이 값은 시험이 **어느 fixture 를 쓸지 명시적으로 고르는**
+/// 데 쓴다. 조건 없이 시험을 건너뛰거나 모든 approve 를 허용하는 데 쓰지 않는다.
+pub fn approved_plan_profile() -> bool {
+    cfg!(feature = "approved-plan")
+}
+
+/// 맨 `approved: yes` 승인 fixture 가 **계약 그대로**인 프로필인가 — 기본(format 4/5)과
+/// `chain-core` 만의 빌드. [`bootstrap`]·[`bootstrap_from`]·[`closing_interview`] 는 이 범위에서만 뜻이 있다.
+pub fn bare_approval_is_the_contract() -> bool {
+    !approved_plan_profile()
+}
+
 /// **Bootstrap Interview 를 마치고 Experiment 자식까지 연 프로젝트.**
 ///
 /// 프로젝트의 첫 Cycle 은 언제나 Interview 다(Cycle Model §5). 그래서 Experiment 를 걷는
 /// 모든 시험은 먼저 이 길을 지난다 — 물어보고, 해석하고, 제안하고, 사람이 승인해야 비로소
 /// 실험할 수 있다. **이 prelude 를 건너뛰는 지름길을 두지 않는다** — 그러면 저장할 수 없는
 /// 상태를 시험만 만들 수 있게 되고, 시험이 지키는 것이 실제와 갈린다.
+///
+/// **적용 범위:** 맨 `approved: yes` 는 legacy/기본 프로필의 승인 기록이다. `approved-plan`
+/// 프로필의 새 프로젝트는 이 길로 닫히지 않으며, 그 사실은 [`bootstrap_from`] 이 Core 의 거절
+/// 전에 명시적으로 알린다. 그 프로필의 승인 흐름은 crate 안 `approved_plan::tests`(도메인)와
+/// 실제 stdio App 경로 `tests/support_wave1`(wire)에 있다 — 이 helper 를 조용히 그쪽으로
+/// 바꾸지 않는다.
 pub fn bootstrap() -> Project {
     bootstrap_from(Project::start(spec(), first_world()))
 }
@@ -369,7 +393,18 @@ pub fn bootstrap() -> Project {
 ///
 /// **세계를 바꾸지 않는다** — Interview 의 어느 자리도 Artifact 를 확정할 권한이 없으므로,
 /// 이 길을 지나는 동안 registry 는 `A1` 하나 그대로다.
+///
+/// 승인 계획 상태가 붙은 프로젝트(새 `approved-plan` 프로젝트)에는 **쓸 수 없다** — Core 가
+/// 맨 `approved: yes` 를 거절하는 것이 계약이다. 여기서는 그 거절을 숨기지도, 승인을 지어내지도
+/// 않고, 시험 작성자에게 어느 fixture 를 써야 하는지 먼저 말한다.
 pub fn bootstrap_from(mut project: Project) -> Project {
+    assert!(
+        project.approved_plan().is_none(),
+        "bootstrap_from: 이 프로젝트는 승인 계획 프로필이다. 맨 `approved: yes` 는 legacy/기본 \
+         승인 fixture 라 Core 가 거절한다. crate 안 시험은 approved_plan::tests 의 propose→decide→\
+         close_report 흐름을, 통합 시험은 tests/support_wave1 의 실제 App 경로를 명시적으로 쓴다. \
+         (approved_plan_profile() 로 범위를 고른다.)"
+    );
     for kind in [
         NodeKind::Question,
         NodeKind::Interpretation,

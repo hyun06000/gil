@@ -1,0 +1,22 @@
+{
+  "name": "Case 2a — tool/network failure; retry of the same approved item as open_child (works under product-safety)",
+  "preset": "approved_plan_ready",
+  "options": { "product_safety": true },
+  "steps": [
+    { "macro": "open_experiment", "assert": { "plan.executions.0.item": "A", "plan.executions.0.attempt": 1 } },
+    { "macro": "define_hypothesis_open_verify" },
+    { "macro": "partial_edit" },
+    { "event": "revise_will", "args": { "next_action": "save the tool failure log and the partial state", "done_when": "evidence/tool-failure.log is saved" } },
+    { "event": "edit_files", "args": { "files": { "README.md": "r1", "src/partial.py": "p1", "evidence/tool-failure.log": "t1" } } },
+    { "event": "close_verify", "args": { "report": { "execution": "ran the test command; the package registry was unreachable", "result": "no test result; the exact error is in evidence/tool-failure.log", "evidence_files": "evidence/tool-failure.log" } }, "assert": { "cycles.2.steps.3.snapshot_ref": "A2" } },
+    { "macro": "analysis_outcome_not_reached" },
+    { "event": "close_cycle", "args": { "report": { "verdict": "failure", "conclusion": "not_reached", "outcome_ref": "step:C2/S5", "handoff_summary": "network failure stopped A; nothing was refuted", "next_direction.action": "open_child", "next_direction.reason": "retry A from the partial world once the network is back" } }, "assert": { "cycles.2.exit": "A2" } },
+    { "event": "open_cycle", "args": { "kind": "experiment" }, "assert": { "plan.executions.1.item": "A", "plan.executions.1.attempt": 2, "plan.executions.1.retry_of": 2, "plan.executions.1.revision": 1, "cycles.3.parent": 2, "cycles.3.entry": "A2", "cycles.3.revisit_from": null } },
+    { "macro": "define_hypothesis_open_verify" },
+    { "event": "edit_files", "args": { "files": { "README.md": "r1", "src/partial.py": "p2", "evidence/tool-failure.log": "t1", "evidence/result.md": "e1" } } },
+    { "event": "close_verify", "args": { "report": { "execution": "completed P and ran the tests", "result": "all tests pass; see evidence/result.md", "evidence_files": "evidence/result.md" } }, "assert": { "cycles.3.steps.3.snapshot_ref": "A3" } },
+    { "macro": "analysis_outcome_success" },
+    { "event": "close_cycle", "args": { "report": { "verdict": "success", "outcome_ref": "step:C3/S5", "handoff_summary": "A done on the second attempt", "next_direction.action": "open_child", "next_direction.reason": "continue with B" } }, "assert": { "cycles.3.exit": "A3" } },
+    { "event": "open_cycle", "args": { "kind": "experiment" }, "assert": { "plan.executions.2.item": "B", "plan.executions.2.attempt": 1, "plan.executions.2.retry_of": null, "cycles.4.entry": "A3" } }
+  ]
+}

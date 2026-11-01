@@ -67,6 +67,13 @@ pub struct ProjectSession {
 }
 
 impl ProjectSession {
+    /// Narrow metadata adapter: acquire and validate as read-only (no recovery/reaping),
+    /// then retain that same lock for the explicitly requested plan mutation.
+    #[cfg(feature = "approved-plan")]
+    pub(crate) fn open_plan_editor(root: &Path, state: &Path) -> Result<Self, SessionError> {
+        Ok(Self::open_read_only_at(RuleSet::builtin().expect("embedded grammar"), root, state)?.0)
+    }
+
     /// 이미 있는 프로젝트를 연다 — **잠근 다음에 읽는다.**
     ///
     /// `state_path` 는 `<루트>/.gil/state.yaml` 이다. 그 자리를 찾는 일은 부르는 쪽의

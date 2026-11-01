@@ -75,7 +75,7 @@ fn opened(root: &Path) -> Result<ReadOnlySession, Refusal> {
 }
 
 impl Monitor {
-    fn with_store(store: Store) -> Self {
+    pub(super) fn with_store(store: Store) -> Self {
         static SERIAL: AtomicU64 = AtomicU64::new(0);
         let time = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos();
         let unique = format!("{}-{time}-{}", std::process::id(), SERIAL.fetch_add(1, Ordering::Relaxed));
@@ -135,7 +135,7 @@ impl Monitor {
         Ok(hint)
     }
 
-    fn root(&self, scope: &str) -> Result<PathBuf, Refusal> {
+    pub(super) fn root(&self, scope: &str) -> Result<PathBuf, Refusal> {
         let mut entries = self.entries.lock().map_err(|_| Refusal::new("unavailable", "Monitor 등록부를 열지 못했다"))?;
         if !entries.contains_key(scope) {
             // Load ONLY this App's saved consent, never enumerate projects or infer cwd.
@@ -185,8 +185,10 @@ impl Monitor {
         let snapshot = session.monitor().map_err(refuse)?;
         let view = crate::monitor_view_v1(&snapshot).map_err(|_| Refusal::new("unsupported_vocabulary", "이 Monitor 가 모르는 판정·종류·시각이 있다"))?;
         let label = self.entries.lock().map_err(|_| Refusal::new("unavailable", "Monitor 등록부를 열지 못했다"))?[scope].binding.label();
-        Ok(json!({ "scope_id": scope, "label": label, "view": view,
-            "revision": hint["revision"], "watching": hint["watching"] }))
+        let mut value = json!({ "scope_id": scope, "label": label, "view": view,
+            "revision": hint["revision"], "watching": hint["watching"] });
+        if cfg!(feature = "approved-plan") && session.project().approved_plan().is_some() { value["plan_review_supported"] = json!(true); }
+        Ok(value)
     }
 
     pub fn detail(&self, scope: &str, step: &str) -> Result<Value, Refusal> {
@@ -298,6 +300,7 @@ mod tests {
         assert_eq!(std::fs::read(root.join(crate::STATE_PATH)).unwrap(), before);
         std::fs::rename(root.join(".gil"), at.join("original-gil")).unwrap();
         std::fs::create_dir(root.join(".gil")).unwrap();
+        std::fs::write(root.join(crate::STATE_PATH), "replacement identity fixture").unwrap();
         assert_eq!(m.report_image(scope, owner, asset).unwrap_err().code, "project_moved");
         // Synthetic test tree only.
         std::fs::remove_dir_all(at).unwrap();
@@ -308,6 +311,7 @@ mod tests {
         let now = Instant::now();
         let at = std::env::temp_dir().join(format!("gil-monitor-lease-{}", std::process::id()));
         std::fs::create_dir_all(at.join(".gil")).unwrap();
+        std::fs::write(at.join(crate::STATE_PATH), "lease identity fixture").unwrap();
         let mut e = Entry::new(Binding::capture(at.clone()).unwrap());
         e.touched = now; e.attempted = Some(now);
         m.entries.lock().unwrap().insert("s".into(), e);

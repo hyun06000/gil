@@ -6,7 +6,7 @@ import {chmod, lstat, mkdir, readFile, readdir, writeFile} from 'node:fs/promise
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {OUTPUTS as NOTICE_FILES, loadBundle, validatePolicy} from '../compliance/notices.mjs';
-import {compatibility} from './compatibility.mjs';
+import {compatibility, developmentFeatures, profileFromFeatures} from './compatibility.mjs';
 
 export const NAME = 'gil-companion-prototype';
 export const PREFIX = `plugins/${NAME}`;
@@ -154,7 +154,7 @@ export async function sourceSnapshot(root) {
 }
 
 export async function createTree({root = repository, binary, output, profile = 'default'}) {
-  assert.ok(['default', 'visual-authoring'].includes(profile));
+  assert.ok(['default', 'visual-authoring', 'approved-plan'].includes(profile));
   const destination = resolve(output);
   // Existing paths, including dangling symlinks, are never replaced. Failure leaves no receipt.
   await mkdir(destination, {recursive: false, mode: 0o755});
@@ -181,7 +181,7 @@ export async function createTree({root = repository, binary, output, profile = '
   checkMachO(content.get(CORE));
   content.set('PREVIEW.md', Buffer.from(profile === 'default' ? preview : preview.replace(
     'Visual report reads are included; experimental visual-authoring is not enabled.',
-    'EXPERIMENTAL visual-authoring enabled. Synthetic projects only; no automatic migration. Public candidate staging requires explicit profile, clean source and separate review.')));
+    `EXPERIMENTAL ${profile} enabled. Synthetic projects only; no automatic migration. Public candidate staging requires explicit profile, clean source and separate review.`)));
   // Locked inputs and original legal-text hashes are checked before any notice can be packaged.
   for (const [name, bytes] of await loadBundle(root)) {
     checkNoLocalPaths(bytes);
@@ -198,7 +198,7 @@ export async function createTree({root = repository, binary, output, profile = '
     platform: 'darwin-arm64', plugin: NAME, version: JSON.parse(content.get(MANIFEST)).version,
     source, binary_origin: 'supplied_binary; source correspondence requires build pipeline evidence',
     compatibility: compatibility(profile), migration: profile === 'default' ? 'none' : 'requires_review',
-    ...(profile === 'visual-authoring' ? {development_features:['visual-authoring']} : {}),
+    ...(profile !== 'default' ? {development_features:developmentFeatures(profile)} : {}),
     gates: {developer_id: 'not_verified', notarization: 'not_verified',
       clean_machine_install: 'not_verified', marketplace_install: 'not_verified',
       first_launch_timeout: 'unresolved'}, files: await inventory(destination)};
@@ -215,8 +215,7 @@ export async function verifyTree(root) {
   assert.equal(receipt.publishable, false, 'preview cannot promote itself to release');
   assert.equal(receipt.platform, 'darwin-arm64');
   assert.equal(receipt.plugin, NAME);
-  const profile = receipt.development_features === undefined ? 'default' : 'visual-authoring';
-  if (profile !== 'default') assert.deepEqual(receipt.development_features, ['visual-authoring']);
+  const profile = profileFromFeatures(receipt.development_features);
   assert.deepEqual(receipt.compatibility, compatibility(profile));
   assert.equal(receipt.migration, profile === 'default' ? 'none' : 'requires_review');
   assert.deepEqual(receipt.gates, {developer_id: 'not_verified', notarization: 'not_verified',

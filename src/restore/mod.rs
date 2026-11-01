@@ -37,6 +37,8 @@
 //! 다르면 앞으로 가지 않고 되돌린다.
 
 pub mod plan;
+/// 파일을 바꾸지 않는 복원 미리보기 — `Plan` 과 다른 타입이며 서로 변환하지 않는다.
+pub(crate) mod preview;
 #[cfg(unix)]
 mod guard;
 #[cfg(unix)]

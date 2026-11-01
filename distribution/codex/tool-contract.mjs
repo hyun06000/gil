@@ -62,3 +62,22 @@ export function checkDefaultTools(tools) {
   assert.deepEqual(Object.keys(close.inputSchema.properties).sort(), ['project_root', 'report']);
   assert.ok(!tools.some(t => t.name === 'gil_report_visuals'));
 }
+
+// Approved-plan is an explicit test profile, never inferred from an arbitrary extra tool.
+export function checkApprovedPlanTools(tools, platform = process.platform) {
+  const names = ['gil_plan_propose', 'gil_plan_request_interview', 'gil_plan_read', 'gil_plan_review', 'gil_plan_decide'];
+  assert.equal(tools.length, (platform === 'win32' ? 26 : 25) + names.length);
+  checkAuthoringTools(tools.filter(t => !names.includes(t.name)), platform);
+  for (const name of names) {
+    const matches = tools.filter(t => t.name === name);
+    assert.equal(matches.length, 1, `missing/duplicate ${name}`);
+    const t = matches[0], app = ['gil_plan_review', 'gil_plan_decide'].includes(name);
+    assert.deepEqual(t._meta?.ui?.visibility, [app ? 'app' : 'model']);
+    assert.equal(t.inputSchema.additionalProperties, false);
+    assert.ok(t.inputSchema.required.includes(app ? 'scope_id' : 'project_root'));
+    assert.equal(t.annotations.readOnlyHint, ['gil_plan_read', 'gil_plan_review'].includes(name));
+    assert.equal(t.annotations.destructiveHint, false);
+  }
+  const decide = tools.find(t => t.name === 'gil_plan_decide');
+  assert.deepEqual([...decide.inputSchema.required].sort(), ['scope_id', 'revision', 'digest', 'token', 'decision'].sort());
+}

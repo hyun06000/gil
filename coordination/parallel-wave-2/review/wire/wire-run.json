@@ -1,0 +1,273 @@
+{
+  "suite": "wave1-approved-plan-wire",
+  "generated_at": "2026-11-01T17:33:26.716Z",
+  "finished_at": "2026-11-01T17:33:31.178Z",
+  "repo_head": "628da7020f8cf317905393d32f26d3a054f39e51",
+  "features": "approved-plan,visual-authoring,product-safety",
+  "binary_sha256": "777b1b80d69b61368e0f3ac300df2f14e2884e531a1bd77fc4e8b477abe162e8",
+  "built_here": true,
+  "platform": "darwin-arm64",
+  "node": "v26.5.0",
+  "queue": "cargo-queue.py",
+  "record": {
+    "layout": "inline",
+    "isolated_private_roots": [
+      "HOME"
+    ]
+  },
+  "claims": {
+    "core_contract": "pass",
+    "model_task": "not_run (no model was called; synthetic App input only)",
+    "native_windows": "not_run (host is not Windows)"
+  },
+  "observations": {
+    "monitor_display_confirmed": "unknown",
+    "human_button_click": "none (all App inputs were synthetic harness calls)",
+    "restore_revisit": "expected_blocked"
+  },
+  "summary": {
+    "counts": {
+      "pass": 20,
+      "fail": 0,
+      "unknown": 0,
+      "expected_blocked": 1,
+      "unsupported": 0,
+      "not_run": 0
+    },
+    "verdict": "pass"
+  },
+  "cases": [
+    {
+      "id": "W01",
+      "title": "tools/list exposes the approval contract with App/model visibility",
+      "depends_on": [],
+      "status": "pass",
+      "detail": "30 tools; plan tools present with correct visibility",
+      "started": "2026-11-01T17:33:27.036Z",
+      "finished": "2026-11-01T17:33:27.527Z"
+    },
+    {
+      "id": "W02",
+      "title": "gil_start once, then the returned show_gil_monitor; display stays unconfirmed",
+      "depends_on": [
+        "W01"
+      ],
+      "status": "pass",
+      "detail": "{\"storage_format\":7,\"record_layout\":\"inline\",\"record_storage\":null,\"display_confirmed\":false,\"monitor_state\":\"opening\",\"note\":\"protocol success only; visibility is unknown without a human\"}",
+      "started": "2026-11-01T17:33:27.527Z",
+      "finished": "2026-11-01T17:33:27.588Z"
+    },
+    {
+      "id": "W03",
+      "title": "Interview Question → Interpretation → open Synthesis",
+      "depends_on": [
+        "W02"
+      ],
+      "status": "pass",
+      "detail": "{\"basis\":[\"step:C1/S1\",\"step:C1/S2\"],\"synthesis\":\"step:C1/S3\"}",
+      "started": "2026-11-01T17:33:27.588Z",
+      "finished": "2026-11-01T17:33:27.672Z"
+    },
+    {
+      "id": "W04",
+      "title": "bare approved:yes close is refused; App review without a proposal carries no capability",
+      "depends_on": [
+        "W03"
+      ],
+      "status": "pass",
+      "detail": "refused; state unchanged; no capability without a proposal",
+      "started": "2026-11-01T17:33:27.672Z",
+      "finished": "2026-11-01T17:33:27.681Z"
+    },
+    {
+      "id": "W05",
+      "title": "propose; read shows revision 1 without receipt; identical re-propose is idempotent",
+      "depends_on": [
+        "W04"
+      ],
+      "status": "pass",
+      "detail": "{\"revision\":1,\"digest\":\"e88d32bb5037…\"}",
+      "started": "2026-11-01T17:33:27.681Z",
+      "finished": "2026-11-01T17:33:27.710Z"
+    },
+    {
+      "id": "W06",
+      "title": "App review returns the private capability only in _meta and writes nothing",
+      "depends_on": [
+        "W05"
+      ],
+      "status": "pass",
+      "detail": "capability only in _meta; state bytes unchanged; stable within process",
+      "started": "2026-11-01T17:33:27.710Z",
+      "finished": "2026-11-01T17:33:27.717Z"
+    },
+    {
+      "id": "W07",
+      "title": "decide with another scope, a wrong token, or an extra field is refused/rejected",
+      "depends_on": [
+        "W06"
+      ],
+      "status": "pass",
+      "detail": "all refused; no receipt; state unchanged",
+      "started": "2026-11-01T17:33:27.717Z",
+      "finished": "2026-11-01T17:33:27.721Z"
+    },
+    {
+      "id": "W08",
+      "title": "editing the open proposal creates revision 2 and voids the earlier capability and close_report",
+      "depends_on": [
+        "W07"
+      ],
+      "status": "pass",
+      "detail": "revision 2 proposed; revision-1 decision and close refused",
+      "started": "2026-11-01T17:33:27.721Z",
+      "finished": "2026-11-01T17:33:27.746Z"
+    },
+    {
+      "id": "W09",
+      "title": "process restart keeps the scope, reissues the capability, refuses the old one",
+      "depends_on": [
+        "W08"
+      ],
+      "status": "pass",
+      "detail": "scope restored without prepare; new capability accepted; old refused",
+      "started": "2026-11-01T17:33:27.746Z",
+      "finished": "2026-11-01T17:33:27.790Z"
+    },
+    {
+      "id": "W10",
+      "title": "duplicate approve is idempotent; flipping to request_changes is refused",
+      "depends_on": [
+        "W09"
+      ],
+      "status": "pass",
+      "detail": "idempotent; flip refused; no capability after receipt; no token in record",
+      "started": "2026-11-01T17:33:27.790Z",
+      "finished": "2026-11-01T17:33:27.807Z"
+    },
+    {
+      "id": "W11",
+      "title": "Synthesis closes only with the exact close_report; a tampered statement is refused",
+      "depends_on": [
+        "W10"
+      ],
+      "status": "pass",
+      "detail": "closed with the recorded report only",
+      "started": "2026-11-01T17:33:27.807Z",
+      "finished": "2026-11-01T17:33:27.837Z"
+    },
+    {
+      "id": "W12",
+      "title": "Experiment is refused until Outcome and the Interview Cycle are closed, then binds item A",
+      "depends_on": [
+        "W11"
+      ],
+      "status": "pass",
+      "detail": "{\"experiment\":\"C2\",\"bound\":\"A\",\"pending\":[\"B\"]}",
+      "started": "2026-11-01T17:33:27.837Z",
+      "finished": "2026-11-01T17:33:27.942Z"
+    },
+    {
+      "id": "W13",
+      "title": "Verify needs the bound plan document bytes plus separate fresh evidence",
+      "depends_on": [
+        "W12"
+      ],
+      "status": "pass",
+      "detail": "C2 closed success; four refusals before the valid close",
+      "started": "2026-11-01T17:33:27.943Z",
+      "finished": "2026-11-01T17:33:28.373Z"
+    },
+    {
+      "id": "W14",
+      "title": "gil_restore / gil_revisit are blocked in this profile (expected_blocked)",
+      "depends_on": [
+        "W13"
+      ],
+      "status": "expected_blocked",
+      "detail": "restore: 거절: 이 제품판에서는 `gil restore` 를 사용할 수 없다. | revisit: GIL 거절: 되돌아가지 않았다. 이유가 dirty 세계·승인 계획 바인딩·적어 둔 방향 없음이면 그 조건을 사용자에게 알린다. gil_revisit을 반복하거나 restore를 자동 실행하지 않는다.",
+      "started": "2026-11-01T17:33:28.373Z",
+      "finished": "2026-11-01T17:33:28.374Z"
+    },
+    {
+      "id": "W15",
+      "title": "reinterview request is preserved through the current Experiment and forces an Interview next",
+      "depends_on": [
+        "W13"
+      ],
+      "status": "pass",
+      "detail": "{\"experiment\":\"C3\",\"interview\":\"C4\",\"preserved\":[\"항목 D가 B 다음에 필요하다\"]}",
+      "started": "2026-11-01T17:33:28.374Z",
+      "finished": "2026-11-01T17:33:28.801Z"
+    },
+    {
+      "id": "W16",
+      "title": "request_changes closes with approved:no, re-proposal must keep approved items, then re-approval",
+      "depends_on": [
+        "W15"
+      ],
+      "status": "pass",
+      "detail": "{\"interview\":\"C4\",\"revisions\":[3,4],\"pending\":[\"D\"]}",
+      "started": "2026-11-01T17:33:28.801Z",
+      "finished": "2026-11-01T17:33:29.432Z"
+    },
+    {
+      "id": "W17",
+      "title": "the inserted item D executes under revision 4 with the revision-4 document",
+      "depends_on": [
+        "W16"
+      ],
+      "status": "pass",
+      "detail": "{\"experiment\":\"C5\",\"executed\":\"A@2,B@2,D@4\"}",
+      "started": "2026-11-01T17:33:29.432Z",
+      "finished": "2026-11-01T17:33:29.977Z"
+    },
+    {
+      "id": "W18",
+      "title": "closing Interview needs its own approval; Chain closes; the next Chain cannot reuse it",
+      "depends_on": [
+        "W17"
+      ],
+      "status": "pass",
+      "detail": "{\"closingInterview\":\"C6\",\"nextChainInterview\":\"C7\"}",
+      "started": "2026-11-01T17:33:29.977Z",
+      "finished": "2026-11-01T17:33:30.894Z"
+    },
+    {
+      "id": "W19",
+      "title": "clean shutdown: EOF exits 0 and stdout carried only JSON-RPC frames",
+      "depends_on": [
+        "W01"
+      ],
+      "status": "pass",
+      "detail": "{\"frames\":138,\"generations\":2}",
+      "started": "2026-11-01T17:33:30.894Z",
+      "finished": "2026-11-01T17:33:30.895Z"
+    },
+    {
+      "id": "W20",
+      "title": "proxy with explicit synthetic App decision: recorded as harness input, never as a person",
+      "depends_on": [
+        "W19"
+      ],
+      "status": "pass",
+      "detail": "{\"harnessEvents\":2,\"human_approval_real\":\"unknown\",\"no_action_while_synthesis_open\":\"fail\"}",
+      "started": "2026-11-01T17:33:30.895Z",
+      "finished": "2026-11-01T17:33:31.175Z"
+    },
+    {
+      "id": "W21",
+      "title": "scorer replays this run: synthetic approval never scores as human consent or display",
+      "depends_on": [
+        "W18"
+      ],
+      "status": "pass",
+      "detail": "{\"monitor_show_called\":\"pass\",\"monitor_display_confirmed\":\"unknown\",\"approval_before_execution\":\"pass\",\"human_approval_real\":\"unknown\",\"no_action_while_synthesis_open\":\"unknown\",\"one_purpose_per_node\":\"unknown\",\"verify_file_evidence\":\"pass\",\"no_reused_approval\":\"pass\",\"reinterview_preserved\":\"pass\",\"restore_revisit_blocked\":\"expected_blocked\",\"file_deliverable_not_chat_only\":\"not_run\",\"closing_interview_before_chain_close\":\"pass\",\"approval_link\":\"3 Experiment open(s) each linked to an approved, closed Synthesis revision of its own Chain and a read confirming the active revision and bound item (receipts came from synthetic harness App input, not a person)\"}",
+      "started": "2026-11-01T17:33:31.175Z",
+      "finished": "2026-11-01T17:33:31.178Z"
+    }
+  ],
+  "notes": [],
+  "frames": 166,
+  "events": 163
+}

@@ -56,7 +56,7 @@ const FIRST_WILL: u32 = 1;
 #[derive(Debug, Clone)]
 pub struct Project {
     pub(crate) visual_state: Option<crate::visual_report::project::VisualState>,
-    world: WorldGraph,
+    pub(crate) world: WorldGraph,
     existences: BTreeMap<u32, Existence>,
     existence_states: BTreeMap<u32, ExistenceState>,
     current_existence: ExistenceRef,
@@ -154,8 +154,9 @@ impl Project {
         first.checked_add(1).ok_or(ChainError::IdExhausted)?;
         let cycles = Cycles::start_at(parent.cycles().rules().clone(), self.current_existence_ref(),
             parent.exit_snapshot().unwrap(), first);
-        let chain = crate::Chain::restore(id, self.current_existence_ref(), parent.exit_snapshot().unwrap(),
+        let mut chain = crate::Chain::restore(id, self.current_existence_ref(), parent.exit_snapshot().unwrap(),
             Some(parent.id()), cycles);
+        if parent.approved_plan.is_some() { chain.approved_plan = Some(Default::default()); }
         let mut next = self.clone();
         let WorldGraph::Chains(chains) = &mut next.world else { unreachable!() };
         chains.push(chain);
@@ -192,6 +193,7 @@ impl Project {
                 return Err(Invalid("open Chain must belong to Current Existence"));
             }
             if let Some(parent) = previous {
+                if parent.approved_plan.is_some() != chain.approved_plan.is_some() { return Err(Invalid("Chain plan profile cannot change")); }
                 if !parent.is_closed() || parent.exit_snapshot() != Some(chain.entry_snapshot())
                     || chain.cycles().nodes()[0].id().raw() != parent.cycles().next_name() {
                     return Err(Invalid("successor must inherit a closed parent's Exit and global Cycle allocator"));
@@ -318,7 +320,10 @@ impl Project {
     /// 순간의 Current 를 그 Cycle 에 새긴다.
     pub fn open_child_cycle(&mut self, kind: CycleKind) -> Result<CycleId, CyclesError> {
         let existence = self.current_existence;
-        self.cycles_mut().open_child(kind, existence)
+        let binding = if kind == CycleKind::Experiment { self.next_plan_execution().map_err(CyclesError::Plan)? } else { None };
+        let id = self.cycles_mut().open_child(kind, existence)?;
+        if let Some((revision, item)) = binding { self.bind_plan_execution(revision, item, id.to_ref().to_string()); }
+        Ok(id)
     }
 
     /// **되돌아온 자리에서 새 갈래를 연다** — 지금 행동하는 존재의 이름으로.
@@ -331,6 +336,7 @@ impl Project {
         kind: CycleKind,
     ) -> Result<CycleId, OpenAfterRevisitError> {
         let existence = self.current_existence;
+        if self.approved_plan().is_some() { return Err(OpenAfterRevisitError::PlanBinding); }
         self.cycles_mut().open_after_revisit(kind, existence)
     }
 
@@ -346,6 +352,7 @@ impl Project {
     /// [`ProjectSession::revisit_cycle`](crate::ProjectSession::revisit_cycle) 만 공개한다 —
     /// 순수 계층만 부르면 논리는 옮겨졌는데 폴더는 옛 세계인 상태를 만들 수 있다.
     pub(crate) fn revisit_cycle(&mut self) -> Result<CycleRevisit, CycleRevisitError> {
+        if self.approved_plan().is_some() { return Err(CycleRevisitError::PlanBinding); }
         self.cycles_mut().revisit()
     }
 
@@ -930,6 +937,7 @@ impl Project {
         };
         let node = cycle.steps().node(at).expect("방금 자리를 받아 왔다");
         let (kind, target) = (node.kind, cycle.step_ref(at));
+        self.check_plan_close(kind, &report).map_err(ActionError::Plan)?;
 
         // ① 연 존재와 닫는 존재는 같아야 한다(Node Model §2).
         if node.existence != owner {
@@ -1089,6 +1097,7 @@ impl Project {
 /// 통합 transaction 이 거절한 이유.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ActionError {
+    Plan(String),
     Chain(crate::ChainError),
     Visual(String),
     /// 닫을 실행형 자리가 없다.
@@ -1155,6 +1164,7 @@ impl From<CycleError> for ActionError {
 impl std::fmt::Display for ActionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            ActionError::Plan(reason) => write!(f, "{reason}"),
             ActionError::Chain(reason) => write!(f, "{reason}"),
             ActionError::Visual(reason) => write!(f, "시각 Report를 확정하지 못했다: {reason}"),
             ActionError::Registry(source) => write!(f, "{source}"),
