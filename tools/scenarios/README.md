@@ -8,6 +8,8 @@ Node 표준 라이브러리만 쓴다(의존성 설치 없음). 네 부분으로
 | `proxy.mjs` | Host ↔ Core 사이에서 모든 tools/call을 기록하고 시나리오 도구를 더한다. `--control`은 Core 없이 시나리오 도구만 | GIL arm은 예 |
 | `scorer.mjs` | `events.jsonl` + rubric(+ 프로젝트 폴더, 사람 기록) → 절차/정답 분리 채점 | 아니오 |
 | `lib/*.mjs`, `*.test.mjs`, `fixtures/` | 클라이언트·가림·재생·채점 라이브러리와 JS 전용 자체시험 | 아니오 |
+| `lib/state-path.mjs` | 제품 배치 계약으로 기록 경로를 찾는다 (Windows: 격리된 LOCALAPPDATA 아래 private app data) | 아니오 |
+| `fixtures/approval/` | 승인 연결 채점기의 음성·양성 fixture (`NN-<기대 판정>-<사례>.jsonl`, `generate.mjs`로 재생성) | 아니오 |
 
 ## 실행
 
@@ -16,7 +18,7 @@ Node 표준 라이브러리만 쓴다(의존성 설치 없음). 네 부분으로
 node --test tools/scenarios/*.test.mjs
 
 # 실제 stdio 회귀: 공유 큐가 target과 TMPDIR을 준비하고 전체 명령 동안 잠근다. runner는 큐를 다시 잡지 않는다.
-python3 coordination/parallel-wave-1/cargo-queue.py -- node tools/scenarios/wire-runner.mjs --build --out <dir>
+python3 coordination/parallel-wave-2/cargo-queue.py -- node tools/scenarios/wire-runner.mjs --build --out <dir>
 
 # 이미 빌드된 특정 실행 파일로 (통합 후 CI 등): 큐 밖에서는 --gil 경로를 명시한다. PATH/GIL_BINARY는 읽지 않는다.
 node tools/scenarios/wire-runner.mjs --gil target/debug/gil --out <dir>
@@ -30,6 +32,10 @@ node tools/scenarios/scorer.mjs --scenario scenarios/wave1/backend --events <run
 - 결과: `wire-run.json`, `wire-run.md`, `wire-frames.jsonl`(가림된 요청/응답, 프로세스 세대별), `wire-events.jsonl`(채점기 입력 형식).
   가림 검사에 실패하면 frames/events 파일을 쓰지 않고 `redaction_gap`을 기록한다.
 - 실패 시 임시 작업 폴더를 남기고 경로를 stderr에 적는다. 각 case의 `repro`가 재현 명령을 가리킨다.
+- Core 자식 환경은 `lib/rpc.mjs::isolatedEnv`가 만든다: PATH는 시스템 폴더만, HOME(Unix)/LOCALAPPDATA(Windows)는 작업 폴더 아래 격리 폴더,
+  Windows는 실행에 필요한 변수(SystemRoot 등)만 복사한다. 필수 변수가 없으면 추측하지 않고 실패한다. proxy는 `--private-root`로 같은 격리를 받는다.
+- 기록 파일은 `.gil/state.yaml`을 하드코딩하지 않고 `lib/state-path.mjs`가 제품 계약으로 찾는다. 기록이 없으면 "변경 없음" 비교가 성립하지 않고 실패한다.
+- `wire-run.json`의 `claims`는 Core 계약(core_contract)·모델 평가(model_task, 항상 not_run)·native Windows(Mac에서는 not_run)를 따로 적는다.
 
 ## 상태 어휘
 

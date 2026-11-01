@@ -9,6 +9,8 @@
 //! closes with approved:no; a Closing Interview needs its own approval and the next Chain
 //! cannot reuse it. Only a synthetic temporary project is touched. Every App decision here is a
 //! synthetic harness input — it proves the protocol, never a person's consent or a visible screen.
+//! Wave 2 D: the record path follows the product layout (Windows private app data below an
+//! isolated LOCALAPPDATA), the child environment is isolated, and a missing record is a failure.
 #![cfg(feature = "approved-plan")]
 #[path = "support_wave1/mod.rs"]
 mod support;
@@ -16,10 +18,7 @@ use serde_json::{Value, json};
 use std::path::Path;
 use support::*;
 
-const STATE: &str = ".gil/state.yaml";
-fn state(root: &Path) -> Vec<u8> { std::fs::read(root.join(STATE)).expect("state at root (macOS/Linux layout)") }
-
-struct Rig { root: std::path::PathBuf, scope: String, c: Client }
+struct Rig { root: std::path::PathBuf, record: std::path::PathBuf, scope: String, c: Client }
 
 impl Rig {
     fn model(&mut self, name: &str, mut args: Value) -> Value {
@@ -97,7 +96,9 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     let root = scratch("plan-wire-project");
     let settings = scratch("plan-wire-settings");
     let c = Client::serve(&settings);
-    let mut r = Rig { root: root.clone(), scope: String::new(), c };
+    let record = product_state_path(&root, &private_local_app_data(&settings));
+    let state = |_: &Path| record_bytes(&record);
+    let mut r = Rig { root: root.clone(), record: record.clone(), scope: String::new(), c };
 
     // tools/list: App tools are not model tools.
     let listed = r.c.request("tools/list", json!({}));
@@ -114,6 +115,9 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     let end = text[at..].find(')').unwrap();
     r.scope = serde_json::from_str::<Value>(&text[at..at + end]).unwrap()["scope_id"].as_str().unwrap().to_owned();
     assert_eq!(started["result"]["structuredContent"]["display_confirmed"], json!(false));
+    assert!(r.record.is_file(), "record missing at the product layout path {} (record_storage={})", r.record.display(), started["result"]["structuredContent"]["record_storage"]);
+    if cfg!(windows) { assert_eq!(started["result"]["structuredContent"]["record_storage"], json!("private_app_data")); }
+    else { assert!(!private_local_app_data(&settings).join("GIL").exists(), "LOCALAPPDATA store must not appear on a non-Windows host"); }
     ok(r.c.call("show_gil_monitor", json!({"scope_id":r.scope})), "show_gil_monitor");
 
     let (basis, synthesis) = r.ask_and_interpret();

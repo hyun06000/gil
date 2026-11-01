@@ -114,7 +114,8 @@ test('violations are each caught: research in Synthesis, chat-only delivery, una
   assert.equal(judged.monitor_show_called.status, 'fail');
   assert.equal(judged.no_action_while_synthesis_open.status, 'fail');
   assert.match(judged.no_action_while_synthesis_open.detail, /1 while Synthesis was open/);
-  assert.equal(judged.approval_before_execution.status, 'pass', 'a receipt existed before the experiment, even though it was stale (caught separately)');
+  assert.equal(judged.approval_before_execution.status, 'fail', 'a stale receipt (revision 1 superseded by 2 before execution) is not an approval of this execution');
+  assert.match(judged.approval_before_execution.detail, /superseded by revision 2/);
   assert.equal(judged.no_reused_approval.status, 'fail');
   assert.match(judged.no_reused_approval.detail, /plan_revision 1 while latest proposal was 2/);
   assert.equal(judged.one_purpose_per_node.status, 'fail');
@@ -156,10 +157,19 @@ test('synthetic harness decisions count as a recorded receipt but never as human
   b.openCycle('cycle:C2', 'experiment');
   const facts = replay(parseEvents(b.events.map((e) => JSON.stringify(e)).join('\n')));
   const judged = Object.fromEntries(scoreProcedure(facts, {}).map((x) => [x.id, x]));
-  assert.equal(judged.approval_before_execution.status, 'pass');
-  assert.match(judged.approval_before_execution.detail, /synthetic harness/);
+  // The receipt/close chain is observed, but nothing read the plan inside the Experiment: unknown, not pass.
+  assert.equal(judged.approval_before_execution.status, 'unknown');
+  assert.match(judged.approval_before_execution.detail, /no gil_plan_read inside the Experiment/);
   assert.equal(judged.human_approval_real.status, 'unknown');
   assert.match(judged.human_approval_real.detail, /synthetic/);
+  b.read({ ...p, receipt: { decision: 'approve', source: 'monitor_button' } }, { current_item: { id: 'A' }, active_revision: 1 });
+  const withRead = Object.fromEntries(scoreProcedure(replay(parseEvents(b.events.map((e) => JSON.stringify(e)).join('\n'))), {}).map((x) => [x.id, x]));
+  assert.equal(withRead.approval_before_execution.status, 'pass');
+  assert.match(withRead.approval_before_execution.detail, /synthetic harness/);
+  // A human record cannot promote synthetic input into consent.
+  const claimed = Object.fromEntries(scoreProcedure(replay(parseEvents(b.events.map((e) => JSON.stringify(e)).join('\n'))), { human: { approved_by_click: true } }).map((x) => [x.id, x]));
+  assert.equal(claimed.human_approval_real.status, 'fail');
+  assert.match(claimed.human_approval_real.detail, /synthetic harness input/);
 });
 
 test('answer checks: file, regex, final text, human and un-run commands stay separate from procedure', async () => {

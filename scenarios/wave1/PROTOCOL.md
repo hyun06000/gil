@@ -6,8 +6,10 @@
 ## 0. 준비 (비용 없음)
 
 1. 통합 commit에서 Core를 빌드한다. 개발 프로필: `--features approved-plan,visual-authoring,product-safety`.
-   Wave 1 작업 중에는 반드시 공유 큐 안에서 빌드·실행한다:
-   `python3 coordination/parallel-wave-1/cargo-queue.py -- node tools/scenarios/wire-runner.mjs --build`
+   병렬 작업 중에는 반드시 공유 큐 안에서 빌드·실행한다 (Wave 2 큐는 worktree별 target을 쓴다):
+   `python3 coordination/parallel-wave-2/cargo-queue.py -- node tools/scenarios/wire-runner.mjs --build`
+   runner는 Core 자식에 격리된 HOME/LOCALAPPDATA를 주고 기록 위치를 제품 배치 계약(`tools/scenarios/lib/state-path.mjs`)으로 찾는다.
+   Windows 실제 실행은 Windows 호스트/CI에서만 유효하다; Mac에서 경로 문자열만 맞춘 것은 Windows 성공이 아니다.
 2. 프로토콜 회귀(`wire-runner.mjs`)가 `fail` 없이 끝난 Core만 모델 평가에 쓴다. `expected_blocked`·`unknown`은 허용.
 3. 시나리오마다 임시 프로젝트 폴더를 만들고 `initial-artifacts/`를 복사한다. 실제 사용자 프로젝트·소스 저장소에서 `gil start`를 하지 않는다.
 

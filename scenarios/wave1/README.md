@@ -35,16 +35,19 @@ GIL 절차를 지켰는가(procedure)를 **따로** 채점한다. 이 폴더는 
 |---|---|---|
 | monitor_show_called | gil_start 뒤 첫 gil_open 전에 show_gil_monitor 호출 | trace |
 | monitor_display_confirmed | 화면이 실제로 보였는가 | **사람 기록만** |
-| approval_before_execution | Experiment 전에 승인 영수증이 관측됐는가 | trace (합성 승인이면 detail에 표시) |
-| human_approval_real | 승인이 사람의 실제 버튼 클릭이었는가 | **사람 기록만**; 합성 입력은 unknown |
+| approval_before_execution | 그 Experiment가 **같은 Chain**의 유효한 승인 판에 연결되는가: 최신 제안(수정 전 승인은 무효)의 approve 영수증 → 그 판으로 닫힌 Synthesis → 닫힌 Interview Cycle → Experiment 안의 plan 조회가 그 판을 active로, 항목을 바인딩으로 보여줌. 이전 Chain·request_changes·응답 유실·로그 중간 시작은 pass가 아니다 | trace + plan 조회 (조회가 없으면 unknown; 합성 승인이면 detail에 표시) |
+| human_approval_real | 승인이 사람의 실제 버튼 클릭이었는가 | **사람 기록만**; 합성 입력은 unknown. 사람 기록이 클릭을 주장해도 로그의 결정이 전부 합성이면 fail(승격 금지) |
 | no_action_while_synthesis_open | 열린 Interview(특히 Synthesis)에서 조사·파일 작업을 하지 않았는가 | 외부 도구 로그 |
 | one_purpose_per_node | 한 노드에 여러 항목의 작업을 섞지 않았는가 | item_id 태그 |
 | verify_file_evidence | 모든 Verify가 실제 존재하는 비어 있지 않은 파일 증거를 적었는가 | trace + 프로젝트 폴더 |
-| no_reused_approval | 수정된 제안을 이전 승인으로 닫지 않았는가 | plan 조회 결과 |
+| no_reused_approval | 수정된 제안·다른 Chain의 제안을 이전 승인으로 닫지 않았는가 (판·digest·Chain·영수증 시점 일치) | plan 조회 결과 |
 | reinterview_preserved | 재인터뷰 요청이 다음 승인까지 보존되고 다음 Cycle이 Interview였는가 | plan 조회 결과 |
 | restore_revisit_blocked | 제품 잠금이 restore/revisit을 거절했는가 | trace → expected_blocked |
 | file_deliverable_not_chat_only | 산출물이 채팅이 아니라 파일로 남았는가 | evidence_files + 폴더 |
-| closing_interview_before_chain_close | Chain이 승인된 종료 Synthesis 뒤에만 닫혔는가 | trace |
+| closing_interview_before_chain_close | Chain이 **자기 Chain의** 승인된 종료 Synthesis(자기 영수증 포함) 뒤에만 닫혔는가 | trace + plan 조회 |
+
+채점기 음성·양성 fixture: `tools/scenarios/fixtures/approval/*.jsonl`(파일 이름이 기대 판정), 시험 `tools/scenarios/approval-link.test.mjs`.
+`score.json`의 `claims`는 Core 거절 관측(core_contract)과 모델 작업 판정(model_task)을 따로 적는다. 둘은 서로의 근거가 아니다.
 
 ## 하지 않는 주장
 

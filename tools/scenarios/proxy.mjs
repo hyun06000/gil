@@ -2,7 +2,7 @@
 // MCP stdio proxy for repeatable model evaluations of one scenario in one temporary project.
 //
 //   node tools/scenarios/proxy.mjs --core <gil binary> --root <abs temp project> --events <jsonl>
-//        [--settings <dir>] [--scenario <dir>] [--synthetic-app-decision approve|request_changes]
+//        [--settings <dir>] [--private-root <dir>] [--scenario <dir>] [--synthetic-app-decision approve|request_changes]
 //   node tools/scenarios/proxy.mjs --control --root <abs temp project> --events <jsonl> [--scenario <dir>]
 //
 // App-only tools (gil_plan_review/decide) are removed from the model-facing tools/list and refused if called.
@@ -13,20 +13,23 @@
 // model side. With --synthetic-app-decision the HARNESS (not the model) performs review+decide
 // through the Core's real App path after each successful proposal; events mark it synthetic and
 // the scorer never counts it as user consent. Nothing in the Core is bypassed or disabled.
+// --private-root <dir> gives the Core child an isolated HOME (Unix) / LOCALAPPDATA (Windows) below
+// that folder, so a Windows record never lands in the real %LOCALAPPDATA%.
 import { createInterface } from 'node:readline';
 import { appendFileSync, existsSync, readFileSync, mkdirSync, writeFileSync, statSync } from 'node:fs';
 import { join, resolve, isAbsolute, normalize, dirname } from 'node:path';
-import { CoreClient, runCommand } from './lib/rpc.mjs';
+import { CoreClient, runCommand, isolatedEnv } from './lib/rpc.mjs';
 import { makeRedactor } from './lib/redact.mjs';
 
 function parseArgs(argv) {
-  const o = { core: null, root: null, events: null, settings: null, scenario: null, synthetic: null, timeoutMs: 20000, control: false };
+  const o = { core: null, root: null, events: null, settings: null, privateRoot: null, scenario: null, synthetic: null, timeoutMs: 20000, control: false };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '--core') o.core = resolve(argv[++i]);
     else if (a === '--root') o.root = resolve(argv[++i]);
     else if (a === '--events') o.events = resolve(argv[++i]);
     else if (a === '--settings') o.settings = resolve(argv[++i]);
+    else if (a === '--private-root') o.privateRoot = resolve(argv[++i]);
     else if (a === '--scenario') o.scenario = resolve(argv[++i]);
     else if (a === '--synthetic-app-decision') o.synthetic = argv[++i];
     else if (a === '--timeout-ms') o.timeoutMs = Number(argv[++i]);
@@ -77,7 +80,13 @@ async function main() {
     appendFileSync(o.events, JSON.stringify({ seq, at: new Date().toISOString(), actor, synthetic, request: { name, arguments: redactor.redact(args ?? {}) }, result: result ? redactor.redact(result) : null, error: error ? redactor.redact(error) : null, ms }) + '\n');
   };
   if (!existsSync(o.events)) { mkdirSync(dirname(o.events), { recursive: true }); writeFileSync(o.events, ''); }
-  const core = o.control ? null : new CoreClient({ binary: o.core, settingsDir: o.settings, requestTimeoutMs: o.timeoutMs, label: 'core' }).start();
+  let isolated = null;
+  if (o.privateRoot) {
+    const home = join(o.privateRoot, 'home'); const localAppData = join(o.privateRoot, 'localappdata');
+    mkdirSync(home, { recursive: true }); mkdirSync(localAppData, { recursive: true });
+    isolated = isolatedEnv({ home, localAppData });
+  }
+  const core = o.control ? null : new CoreClient({ binary: o.core, settingsDir: o.settings, isolated, requestTimeoutMs: o.timeoutMs, label: 'core' }).start();
   core?.child.on('exit', () => setTimeout(() => process.exit(0), 50));
   let scope = null;
   const out = (frame) => process.stdout.write(JSON.stringify(frame) + '\n');

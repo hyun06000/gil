@@ -41,12 +41,20 @@ export async function score(o) {
     human_record: human ? 'provided' : 'absent', project_root_checked: !!o.root, commands_executed: o.runCommands,
     procedure: { judgements: procedure, summary: summarize(procedure) },
     answer: { judgements: answer, summary: summarize(answer) },
+    // Two different claims, never merged: Core refusals observed on the wire (the product blocked
+    // something) and the procedure/answer judgements about the model's work. A green Core gate
+    // says nothing about the model; a model verdict says nothing about Core enforcement.
+    claims: {
+      core_contract: { refusals_observed: facts.rejected.length, restore_revisit: facts.restoreRevisit.map((r) => ({ seq: r.seq, name: r.name, ok: r.ok })), note: 'Core-side refusals seen in this log; not a model-work judgement' },
+      model_task: { procedure_verdict: summarize(procedure).verdict, answer_verdict: summarize(answer).verdict, note: 'judgements about the model\'s actions and deliverable; synthetic App input and protocol success never count as human consent or display' },
+    },
     trace: { experiments: facts.experimentOpens.length, verify_closes: facts.verifyCloses.length, external_calls: facts.externalCalls.length, decides: facts.decides.map((d) => ({ seq: d.seq, actor: d.actor, synthetic: d.synthetic, decision: d.decision, ok: d.ok })), rejected: facts.rejected.length, unknown_tools: facts.unknownTools },
   };
   const md = [`# ${rubric.title || rubric.id} — score`, '',
     `- events: ${events.length} · human record: ${result.human_record} · project root checked: ${result.project_root_checked} · commands executed: ${o.runCommands}`,
     `- GIL procedure: **${result.procedure.summary.verdict}** ${JSON.stringify(result.procedure.summary.counts)}`,
     `- answer quality: **${result.answer.summary.verdict}** ${JSON.stringify(result.answer.summary.counts)}`,
+    `- Core contract (separate claim): ${facts.rejected.length} refusal(s) observed on the wire; restore/revisit: ${facts.restoreRevisit.length ? facts.restoreRevisit.map((r) => `${r.name}=${r.ok ? 'succeeded' : 'refused'}`).join(', ') : 'not called'}`,
     '', '## GIL procedure', '', table(['check', 'status', 'detail'], procedure.map((x) => [x.id, x.status, x.detail])),
     '', '## Answer quality', '', answer.length ? table(['check', 'status', 'detail'], answer.map((x) => [x.id, x.status, x.detail])) : '_rubric has no answer checks_',
     '', '## Human checkpoints', '', table(['id', 'what', 'field', 'value'], (rubric.human_checkpoints || []).map((h) => [h.id, h.what, h.field, human && h.field in human ? String(human[h.field]) : 'unfilled'])), ''].join('\n');

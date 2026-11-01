@@ -51,9 +51,10 @@ export function replay(events, { externalTools = [] } = {}) {
     const p = value.proposal;
     if (p && typeof p.revision === 'number') {
       const key = `${p.synthesis_ref}#${p.revision}`;
-      if (!facts.proposals.has(key)) { facts.proposals.set(key, { revision: p.revision, digest: p.digest, synthesis_ref: p.synthesis_ref, receipt: null, firstSeen: seq }); facts.proposalOrder.push(key); }
+      // A proposal belongs to the Chain it was first observed in; a later Chain never inherits it.
+      if (!facts.proposals.has(key)) { facts.proposals.set(key, { revision: p.revision, digest: p.digest, synthesis_ref: p.synthesis_ref, receipt: null, firstSeen: seq, chainIndex: st.chainIndex, base_revision: p.base_revision ?? null }); facts.proposalOrder.push(key); }
       // Keep the FIRST observation of a receipt; later reads must not move it forward in time.
-      if (p.receipt && !facts.proposals.get(key).receipt) facts.proposals.get(key).receipt = { ...p.receipt, seenAt: seq };
+      if (p.receipt && !facts.proposals.get(key).receipt) facts.proposals.get(key).receipt = { ...p.receipt, seenAt: seq, chainIndex: st.chainIndex };
     }
   };
   for (const e of events) {
@@ -75,7 +76,8 @@ export function replay(events, { externalTools = [] } = {}) {
       case 'gil_plan_review': notePlan(e.seq, e.actor, e.result?.structuredContent, name); break;
       case 'gil_plan_decide': {
         // Revisions restart at 1 in every Chain, so a decision is identified by the Synthesis it answers.
-        facts.decides.push({ seq: e.seq, ok, actor: e.actor, synthetic: e.synthetic || e.actor !== 'app', decision: args.decision, revision: args.revision, synthesis_ref: ok ? e.result?.structuredContent?.proposal?.synthesis_ref ?? null : null, scope_given: typeof args.scope_id === 'string', phase: snapshot() });
+        // A decide without any response (lost reply, timeout) is neither ok nor a refusal; it leaves no receipt.
+        facts.decides.push({ seq: e.seq, ok, answered: !!(e.result || e.error), actor: e.actor, synthetic: e.synthetic || e.actor !== 'app', decision: args.decision, revision: args.revision, synthesis_ref: ok ? e.result?.structuredContent?.proposal?.synthesis_ref ?? null : null, scope_given: typeof args.scope_id === 'string', chainIndex: st.chainIndex, phase: snapshot() });
         if (ok) notePlan(e.seq, e.actor, e.result?.structuredContent, name);
         break;
       }
@@ -91,11 +93,11 @@ export function replay(events, { externalTools = [] } = {}) {
         facts.steps.push({ seq: e.seq, action: 'open', ref: m[1], kind: m[4], cycleKind: st.cycleKind, contract: args.contract ?? null });
       } else if ((m = said.match(OPEN_CHAIN))) {
         st.chainIndex += 1; st.cycleRef = m[2]; st.cycleKind = 'interview'; st.stepKind = null; st.stepRef = null; st.interviewClosedInChain = false; st.awaitingChainReport = false;
-        facts.chains.push({ seq: e.seq, action: 'open', ref: m[1], firstCycle: m[2] });
+        facts.chains.push({ seq: e.seq, action: 'open', ref: m[1], firstCycle: m[2], chainIndex: st.chainIndex });
       } else if ((m = said.match(OPEN_CYCLE))) {
         st.cycleRef = m[1]; st.cycleKind = m[3]; st.stepKind = null; st.stepRef = null;
         if (m[3] === 'experiment') { st.experiments += 1; facts.experimentOpens.push({ seq: e.seq, ref: m[1], interviewClosedInChain: st.interviewClosedInChain, phase: snapshot() }); }
-        facts.cycles.push({ seq: e.seq, action: 'open', ref: m[1], kind: m[3] });
+        facts.cycles.push({ seq: e.seq, action: 'open', ref: m[1], kind: m[3], chainIndex: st.chainIndex });
       }
     } else if (name === 'gil_close') {
       const fields = parseReport(args.report);
@@ -108,16 +110,16 @@ export function replay(events, { externalTools = [] } = {}) {
       if (m || (m = said.match(CLOSE_STEP))) {
         const kind = m[4];
         facts.steps.push({ seq: e.seq, action: 'close', ref: m[1], kind, cycleKind: st.cycleKind, fields });
-        if (kind === 'synthesis') facts.synthesisCloses.push({ seq: e.seq, ref: m[1], approved: fields.approved ?? null, plan_revision: fields.plan_revision ? Number(fields.plan_revision) : null, plan_digest: fields.plan_digest ?? null, chain_verdict: fields.chain_verdict ?? null });
+        if (kind === 'synthesis') facts.synthesisCloses.push({ seq: e.seq, ref: m[1], cycleRef: st.cycleRef, chainIndex: st.chainIndex, approved: fields.approved ?? null, plan_revision: fields.plan_revision ? Number(fields.plan_revision) : null, plan_digest: fields.plan_digest ?? null, chain_verdict: fields.chain_verdict ?? null });
         if (kind === 'verify') facts.verifyCloses.push({ seq: e.seq, ref: m[1], evidence: evidenceFiles(fields), plan_document: fields.plan_document ?? null, cycleRef: st.cycleRef });
         st.stepKind = null; st.stepRef = null;
       } else if ((m = said.match(CLOSE_CYCLE))) {
-        facts.cycles.push({ seq: e.seq, action: 'close', ref: m[1], kind: m[3], verdict: m[4], next: fields['next_direction.action'] ?? null });
+        facts.cycles.push({ seq: e.seq, action: 'close', ref: m[1], kind: m[3], verdict: m[4], next: fields['next_direction.action'] ?? null, chainIndex: st.chainIndex });
         if (m[3] === 'interview') st.interviewClosedInChain = true;
         if (fields['next_direction.action'] === 'close_chain') st.awaitingChainReport = true;
         st.stepKind = null; st.stepRef = null;
       } else if ((m = said.match(CLOSE_CHAIN))) {
-        facts.chains.push({ seq: e.seq, action: 'close', ref: m[1], verdict: m[2] });
+        facts.chains.push({ seq: e.seq, action: 'close', ref: m[1], verdict: m[2], chainIndex: st.chainIndex });
         st.awaitingChainReport = false;
       }
     }

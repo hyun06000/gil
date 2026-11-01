@@ -15,6 +15,10 @@ function hookCleanup() {
   for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
     process.on(sig, () => { sweep(); process.exit(130); });
   }
+  // A crash or an unhandled rejection must not leave Core children behind either.
+  for (const kind of ['uncaughtException', 'unhandledRejection']) {
+    process.on(kind, (err) => { process.stderr.write(`[rpc] ${kind}: ${err?.stack || err}\n`); sweep(); process.exit(2); });
+  }
 }
 
 /** Kill a detached child's whole process group; falls back to the pid. */
@@ -25,6 +29,33 @@ export function killGroup(child, signal = 'SIGTERM') {
 }
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Environment keys a Windows process needs to run at all; everything else stays out. */
+export const WINDOWS_ESSENTIALS = ['SystemRoot', 'SystemDrive', 'COMSPEC', 'USERPROFILE', 'APPDATA', 'ProgramData', 'USERNAME', 'TEMP', 'TMP', 'PATHEXT'];
+
+/**
+ * The complete environment for a Core child. Nothing from the parent leaks except the listed
+ * essentials; PATH holds only system directories; the private data roots (HOME on Unix,
+ * LOCALAPPDATA on Windows) are the isolated folders the caller passes, never the real ones.
+ * Throws when a required variable is missing, instead of letting the Core guess.
+ */
+export function isolatedEnv({ localAppData = null, home = null, extra = {} } = {}) {
+  const env = {};
+  if (process.platform === 'win32') {
+    for (const key of WINDOWS_ESSENTIALS) if (process.env[key] !== undefined) env[key] = process.env[key];
+    for (const key of ['SystemRoot', 'USERPROFILE']) if (!env[key]) throw new Error(`required Windows environment variable ${key} is missing`);
+    env.PATH = [`${env.SystemRoot}\\System32`, env.SystemRoot, `${env.SystemRoot}\\System32\\WindowsPowerShell\\v1.0`].join(';');
+    if (!localAppData) throw new Error('isolatedEnv on Windows needs an isolated LOCALAPPDATA folder under the test root');
+    env.LOCALAPPDATA = localAppData;
+    if (home) env.USERPROFILE = home;
+  } else {
+    env.PATH = '/usr/bin:/bin';
+    if (!home && !process.env.HOME) throw new Error('HOME is not set and no isolated home was given');
+    env.HOME = home ?? process.env.HOME;
+    if (process.env.TMPDIR) env.TMPDIR = process.env.TMPDIR;
+  }
+  return { ...env, ...extra };
+}
 
 /** Wait for exit; escalate SIGTERM → SIGKILL. Resolves with {code, signal}. */
 export async function reap(child, graceMs = 5000) {
@@ -42,12 +73,13 @@ export async function reap(child, graceMs = 5000) {
  * environment; PATH is reduced to system directories so no repository or global gil is found.
  */
 export class CoreClient {
-  constructor({ binary, args = ['mcp', '--serve'], settingsDir, env = {}, cwd = tmpdir(), requestTimeoutMs = 20000, onFrame = null, label = 'core' }) {
+  constructor({ binary, args = ['mcp', '--serve'], settingsDir, env = {}, isolated = null, cwd = tmpdir(), requestTimeoutMs = 20000, onFrame = null, label = 'core' }) {
     if (!binary) throw new Error('CoreClient requires an explicit binary path');
     this.binary = binary;
     this.args = args;
     this.settingsDir = settingsDir;
     this.env = env;
+    this.isolated = isolated;
     this.cwd = cwd;
     this.requestTimeoutMs = requestTimeoutMs;
     this.onFrame = onFrame;
@@ -62,10 +94,13 @@ export class CoreClient {
   }
   start() {
     hookCleanup();
-    const env = { PATH: process.platform === 'win32' ? process.env.PATH : '/usr/bin:/bin', ...this.env };
+    // `isolated` (see isolatedEnv) is the whole environment; otherwise the legacy minimal env.
+    const env = this.isolated ? { ...this.isolated, ...this.env } : { PATH: process.platform === 'win32' ? process.env.PATH : '/usr/bin:/bin', ...this.env };
     if (this.settingsDir) env.GIL_MONITOR_STATE_DIR = this.settingsDir;
-    if (process.env.TMPDIR) env.TMPDIR = process.env.TMPDIR;
-    if (process.env.HOME) env.HOME = process.env.HOME;
+    if (!this.isolated) {
+      if (process.env.TMPDIR) env.TMPDIR = process.env.TMPDIR;
+      if (process.env.HOME) env.HOME = process.env.HOME;
+    }
     const child = spawn(this.binary, this.args, { cwd: this.cwd, env, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
     this.child = child;
     children.add(child);

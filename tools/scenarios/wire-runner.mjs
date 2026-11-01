@@ -1,19 +1,24 @@
 #!/usr/bin/env node
-// Wave 1 E: real native `gil mcp --serve` approval-boundary regression over stdio JSON-RPC.
+// Wave 1 E / Wave 2 D: real native `gil mcp --serve` approval-boundary regression over stdio JSON-RPC.
 //
 // Run inside the shared build queue so the Core built here is the one that runs here:
-//   python3 coordination/parallel-wave-1/cargo-queue.py -- node tools/scenarios/wire-runner.mjs --build
+//   python3 coordination/parallel-wave-2/cargo-queue.py -- node tools/scenarios/wire-runner.mjs --build
 // The runner never guesses an installed Core from PATH/GIL_BINARY. It builds the current branch
 // (CARGO_TARGET_DIR comes from the queue) and runs that exact executable, or takes --gil <path>.
 // It creates and touches only its own temporary folder, redacts tokens/paths in saved frames,
 // enforces per-request timeouts, and kills its child process groups on exit.
+// The Core child gets an isolated environment (HOME / LOCALAPPDATA below the work folder) and the
+// record path is resolved from the product layout contract (lib/state-path.mjs), never hard-coded.
+// Every App decision is synthetic harness input: this suite proves Core-side refusals, not a
+// person's consent, a visible screen, or any model's work.
 import { mkdtemp, mkdir, writeFile, readFile, rm, cp } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CoreClient, runCommand } from './lib/rpc.mjs';
+import { CoreClient, runCommand, isolatedEnv } from './lib/rpc.mjs';
+import { projectStatePath } from './lib/state-path.mjs';
 import { makeRedactor, leaks } from './lib/redact.mjs';
 import { formatReport } from './lib/report.mjs';
 import { parseEvents, replay } from './lib/trace.mjs';
@@ -23,7 +28,6 @@ import { table } from './lib/markdown.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, '..', '..');
 const DEFAULT_FEATURES = 'approved-plan,visual-authoring,product-safety';
-const STATE_PATH = '.gil/state.yaml';
 
 function parseArgs(argv) {
   const o = { build: false, gil: null, out: null, features: DEFAULT_FEATURES, keep: false, unqueued: false, timeoutMs: 20000 };
@@ -49,7 +53,7 @@ const expect = (cond, msg) => { if (!cond) throw new Error(msg); };
 
 async function buildCore(features, unqueued) {
   if (!process.env.GIL_PARALLEL_TARGET_DIR && !unqueued) {
-    throw new Error('refusing to build outside cargo-queue.py (GIL_PARALLEL_TARGET_DIR is unset). Run: python3 coordination/parallel-wave-1/cargo-queue.py -- node tools/scenarios/wire-runner.mjs --build  (or --unqueued where no shared queue exists)');
+    throw new Error('refusing to build outside cargo-queue.py (GIL_PARALLEL_TARGET_DIR is unset). Run: python3 coordination/parallel-wave-2/cargo-queue.py -- node tools/scenarios/wire-runner.mjs --build  (or --unqueued where no shared queue exists)');
   }
   const args = ['build', '--locked', '-p', 'gil', '--features', features, '--message-format=json-render-diagnostics'];
   process.stderr.write(`[wire] cargo ${args.join(' ')} (CARGO_TARGET_DIR=${process.env.CARGO_TARGET_DIR || 'default'})\n`);
@@ -77,12 +81,17 @@ async function main() {
   const work = await mkdtemp(join(tmpdir(), 'gil-wave1-wire-'));
   const root = join(work, 'project');
   const settings = join(work, 'settings');
-  await mkdir(root); await mkdir(settings);
+  const home = join(work, 'home');
+  const localAppData = join(work, 'localappdata');
+  await mkdir(root); await mkdir(settings); await mkdir(home); await mkdir(localAppData);
+  const childEnv = isolatedEnv({ home, localAppData });
+  // Record location per the product contract; on Windows this is below the isolated LOCALAPPDATA.
+  const recordAt = projectStatePath(root, { env: childEnv });
   const out = opts.out ?? join(work, 'out');
   await mkdir(out, { recursive: true });
   const typedVerify = opts.features.split(',').includes('visual-authoring');
 
-  const redactor = makeRedactor({ roots: { project_root: root, settings_dir: settings, work_dir: work, binary_path: dirname(binary), repo }, secrets: [] });
+  const redactor = makeRedactor({ roots: { project_root: root, settings_dir: settings, home_dir: home, localappdata_dir: localAppData, work_dir: work, binary_path: dirname(binary), repo }, secrets: [] });
   const secrets = [];
   const frames = [];
   const events = [];
@@ -100,7 +109,7 @@ async function main() {
   };
   const connect = async () => {
     generation += 1;
-    core = new CoreClient({ binary, settingsDir: join(settings, 'bindings'), requestTimeoutMs: opts.timeoutMs, onFrame, label: `core#${generation}` }).start();
+    core = new CoreClient({ binary, settingsDir: join(settings, 'bindings'), isolated: childEnv, requestTimeoutMs: opts.timeoutMs, onFrame, label: `core#${generation}` }).start();
     const init = await core.initialize();
     return init;
   };
@@ -114,8 +123,10 @@ async function main() {
   const refused = (r, what) => { expect(!r.error, `${what}: expected a Core refusal, got JSON-RPC error ${JSON.stringify(redactor.redact(r.error))}`); expect(!r.ok, `${what}: expected a refusal but the call succeeded`); return r; };
   const rpcError = (r, what) => { expect(r.error, `${what}: expected a JSON-RPC schema error, got ${r.ok ? 'success' : 'a Core refusal'}`); return r; };
   const said = (r) => r.structured?.said || r.result?.content?.map((c) => c.text || '').join('\n') || '';
-  const state = () => { try { return readFileSync(join(root, STATE_PATH)); } catch { return null; } };
-  const sameState = (a, b) => a && b ? a.equals(b) : null;
+  // The record must exist once the project started; a missing file is a failure, never a silent null
+  // that would make "state unchanged" vacuously true.
+  const state = () => { try { return readFileSync(recordAt.path); } catch (err) { throw new Error(`project record missing at <record> (${recordAt.layout}): ${err.code}`); } };
+  const sameState = (a, b) => { expect(Buffer.isBuffer(a) && Buffer.isBuffer(b), 'state comparison needs two record snapshots'); return a.equals(b); };
   const serial = (v) => JSON.stringify(v ?? null);
 
   async function run(id, title, deps, fn) {
@@ -263,7 +274,10 @@ async function main() {
     const shown = ok(await model('show_gil_monitor', { scope_id: scope }), 'show_gil_monitor');
     expect(/표시.*판정하지 않는다|확인되지 않았다/.test(said(shown) + shown.result.content.map((c) => c.text).join('')), 'show receipt must not claim display');
     const ms = ok(await model('gil_monitor_status', { project_root: root }), 'gil_monitor_status');
-    return { storage_format: started.structured.storage_format ?? null, display_confirmed: started.structured.display_confirmed ?? null, monitor_state: ms.structured.state ?? null, note: 'protocol success only; visibility is unknown without a human' };
+    expect(existsSync(recordAt.path), `record not found where the product layout says (${recordAt.layout}); start reported record_storage=${serial(started.structured.record_storage ?? null)}`);
+    if (process.platform === 'win32') expect(started.structured.record_storage === 'private_app_data' && recordAt.layout === 'private_app_data', `Windows start must declare private_app_data, got ${serial(started.structured.record_storage ?? null)} / resolved ${recordAt.layout}`);
+    else expect(!existsSync(join(localAppData, 'GIL')), 'LOCALAPPDATA store appeared on a non-Windows platform');
+    return { storage_format: started.structured.storage_format ?? null, record_layout: recordAt.layout, record_storage: started.structured.record_storage ?? null, display_confirmed: started.structured.display_confirmed ?? null, monitor_state: ms.structured.state ?? null, note: 'protocol success only; visibility is unknown without a human' };
   });
 
   await run('W03', 'Interview Question → Interpretation → open Synthesis', ['W02'], async () => {
@@ -275,7 +289,7 @@ async function main() {
   await run('W04', 'bare approved:yes close is refused; App review without a proposal carries no capability', ['W03'], async () => {
     const before = state();
     refused(await model('gil_close', { project_root: root, report: `statement: 합성 범위\nbasis_refs: ${cycle.basis.join('\n')}\napproved: yes\n` }), 'bare approved:yes');
-    expect(sameState(before, state()) !== false, 'state changed after a refused bare close');
+    expect(sameState(before, state()), 'state changed after a refused bare close');
     const review = ok(await app('gil_plan_review', { scope_id: scope }), 'review before proposal');
     expect(review.structured.proposal === null && !review.meta?.['gil/planApprovalToken'], 'review without proposal must have no proposal and no token');
     return 'refused; state unchanged; no capability without a proposal';
@@ -301,7 +315,7 @@ async function main() {
     expect(typeof token === 'string' && /^[0-9a-f]{64}$/.test(token), 'token must be 64 hex in _meta');
     secrets.push(token); redactor.addSecret(token); tokens.current = token;
     expect(!serial(review.structured).includes(token) && !serial(review.result.content).includes(token), 'token leaked into content');
-    expect(sameState(before, state()) !== false, 'review changed the state file');
+    expect(sameState(before, state()), 'review changed the state file');
     const again = ok(await app('gil_plan_review', { scope_id: scope }), 'review again');
     expect(again.meta['gil/planApprovalToken'] === token, 'same proposal must keep the same capability within one process');
     return 'capability only in _meta; state bytes unchanged; stable within process';
@@ -316,7 +330,7 @@ async function main() {
     rpcError(await app('gil_plan_decide', { ...base, approved: true }), 'extra field');
     rpcError(await app('gil_plan_decide', { ...base, decision: 'yes' }), 'invalid decision enum');
     rpcError(await model('gil_plan_propose', { project_root: root, draft: { approved: true } }), 'malformed draft');
-    expect(sameState(before, state()) !== false, 'state changed after refused decisions');
+    expect(sameState(before, state()), 'state changed after refused decisions');
     const read = ok(await model('gil_plan_read', { project_root: root }), 'read');
     expect(read.structured.proposal.receipt === null, 'a refused decision must not record a receipt');
     return 'all refused; no receipt; state unchanged';
@@ -334,7 +348,7 @@ async function main() {
     refused(await app('gil_plan_decide', { scope_id: scope, revision: 1, digest: proposal.rev1.digest, token: tokens.current, decision: 'approve' }), 'decide on superseded revision 1');
     const before = state();
     refused(await model('gil_close', { project_root: root, report: closeReportRev1 }), 'close with a forged revision-1 report');
-    expect(sameState(before, state()) !== false, 'state changed after refused close');
+    expect(sameState(before, state()), 'state changed after refused close');
     return 'revision 2 proposed; revision-1 decision and close refused';
   });
 
@@ -358,11 +372,11 @@ async function main() {
   await run('W10', 'duplicate approve is idempotent; flipping to request_changes is refused', ['W09'], async () => {
     const before = state();
     ok(await app('gil_plan_decide', { scope_id: scope, revision: 2, digest: proposal.rev2.digest, token: tokens.current, decision: 'approve' }), 'duplicate approve');
-    expect(sameState(before, state()) !== false, 'duplicate approve rewrote the state');
+    expect(sameState(before, state()), 'duplicate approve rewrote the state');
     refused(await app('gil_plan_decide', { scope_id: scope, revision: 2, digest: proposal.rev2.digest, token: tokens.current, decision: 'request_changes' }), 'flip decision');
     const review = ok(await app('gil_plan_review', { scope_id: scope }), 'review after receipt');
     expect(!review.meta?.['gil/planApprovalToken'], 'no new capability once a receipt exists');
-    const stateText = state()?.toString('utf8') ?? '';
+    const stateText = state().toString('utf8');
     expect(!secrets.some((s) => stateText.includes(s)), 'a capability token was written into the project record');
     return 'idempotent; flip refused; no capability after receipt; no token in record';
   });
@@ -405,7 +419,7 @@ async function main() {
     await writeFile(join(root, 'plan', 'approved-plan.md'), cycle.documentRev2.replace('Revision: 2', 'Revision: 1'));
     refused(await model('gil_close', verifyArgs(verifyRef, `execution: 확인했다\nresult: 저장했다\nplan_document: plan/approved-plan.md\nevidence_files: evidence/C${n}-A.md\n`)), 'wrong document bytes');
     refused(await model('gil_close', verifyArgs(verifyRef, 'execution: 확인했다\nresult: 채팅으로 보고했다\n')), 'no evidence_files at all');
-    expect(sameState(before, state()) !== false, 'state changed after refused Verify closes');
+    expect(sameState(before, state()), 'state changed after refused Verify closes');
     await finishExperiment(n, 'A', verifyRef, cycle.documentRev2);
     const read = ok(await model('gil_plan_read', { project_root: root }), 'read after C2');
     expect(read.structured.executed_cycles.length === 1 && read.structured.executed_cycles[0].item_id === 'A' && read.structured.executed_cycles[0].revision === 2, 'executed binding for A');
@@ -417,7 +431,7 @@ async function main() {
     const restore = await model('gil_restore', { project_root: root });
     const revisit = await model('gil_revisit', { project_root: root });
     if (restore.ok || revisit.ok) throw new Error(`destructive rollback succeeded: restore=${restore.ok} revisit=${revisit.ok}`);
-    expect(sameState(before, state()) !== false, 'blocked restore/revisit changed the state');
+    expect(sameState(before, state()), 'blocked restore/revisit changed the state');
     throw new Blocked(`restore: ${redactor.text(said(restore)).split('\n')[0].slice(0, 120)} | revisit: ${redactor.text(said(revisit)).split('\n')[0].slice(0, 120)}`);
   });
 
@@ -532,7 +546,7 @@ async function main() {
     const proot = join(work, 'proxy-project'); await mkdir(proot);
     const pevents = join(work, 'proxy-events.jsonl');
     const psettings = join(work, 'proxy-settings'); await mkdir(psettings);
-    const proxy = new CoreClient({ binary: process.execPath, args: [join(here, 'proxy.mjs'), '--core', binary, '--root', proot, '--events', pevents, '--settings', join(psettings, 'bindings'), '--synthetic-app-decision', 'approve'], requestTimeoutMs: opts.timeoutMs, label: 'proxy' }).start();
+    const proxy = new CoreClient({ binary: process.execPath, args: [join(here, 'proxy.mjs'), '--core', binary, '--root', proot, '--events', pevents, '--settings', join(psettings, 'bindings'), '--private-root', join(work, 'proxy-private'), '--synthetic-app-decision', 'approve'], requestTimeoutMs: opts.timeoutMs, label: 'proxy' }).start();
     try {
       await proxy.initialize();
       const listed = await proxy.request('tools/list', {});
@@ -573,7 +587,13 @@ async function main() {
     const want = { monitor_show_called: 'pass', monitor_display_confirmed: 'unknown', approval_before_execution: 'pass', human_approval_real: 'unknown', no_action_while_synthesis_open: 'unknown', verify_file_evidence: 'pass', no_reused_approval: 'pass', reinterview_preserved: 'pass', restore_revisit_blocked: 'expected_blocked', closing_interview_before_chain_close: 'pass' };
     const diff = Object.entries(want).filter(([k, v]) => judged[k] !== v).map(([k, v]) => `${k}: got ${judged[k]}, want ${v}`);
     expect(!diff.length, diff.join('; '));
-    return judged;
+    // The approval link must say the receipts were synthetic, and a human record claiming a click
+    // cannot promote them.
+    const link = scoreProcedure(facts, { root }).find((x) => x.id === 'approval_before_execution');
+    expect(/synthetic harness/.test(link.detail), `approval detail must say the receipts were synthetic: ${link.detail}`);
+    const claimed = Object.fromEntries(scoreProcedure(facts, { root, human: { approved_by_click: true, monitor_visible: true } }).map((x) => [x.id, x.status]));
+    expect(claimed.human_approval_real === 'fail', `a claimed click over synthetic-only decisions must fail, got ${claimed.human_approval_real}`);
+    return { ...judged, approval_link: link.detail.slice(0, 300) };
   });
 
   if (core && !core.exit) await core.kill();
@@ -584,6 +604,10 @@ async function main() {
     suite: 'wave1-approved-plan-wire', generated_at: startedAt.toISOString(), finished_at: new Date().toISOString(),
     repo_head: head, features: opts.features, binary_sha256: binarySha, built_here: opts.build, platform: `${process.platform}-${process.arch}`, node: process.version,
     queue: process.env.GIL_PARALLEL_TARGET_DIR ? 'cargo-queue.py' : 'none',
+    record: { layout: recordAt.layout, isolated_private_roots: process.platform === 'win32' ? ['LOCALAPPDATA'] : ['HOME'] },
+    // Two claims kept apart: this suite checks that the Core refuses what it must (core_contract);
+    // no model was driven, so there is no model-task evaluation to report (model_task).
+    claims: { core_contract: counts.verdict === 'fail' ? 'fail' : 'pass', model_task: 'not_run (no model was called; synthetic App input only)', native_windows: process.platform === 'win32' ? 'this run' : 'not_run (host is not Windows)' },
     observations: { monitor_display_confirmed: 'unknown', human_button_click: 'none (all App inputs were synthetic harness calls)', restore_revisit: 'expected_blocked' },
     summary: counts, cases, notes, frames: frames.length, events: events.length,
   };
@@ -600,9 +624,10 @@ async function main() {
     `- platform: ${result.platform} · node ${process.version} · queue: ${result.queue}`,
     `- verdict: **${counts.verdict}** · ${Object.entries(counts.counts).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join(', ')}`,
     `- Monitor display: unknown (protocol only). Human button click: none; every App decision was a synthetic harness call and earns no user-consent score.`,
+    `- claims: Core contract **${result.claims.core_contract}** · model task: ${result.claims.model_task} · native Windows: ${result.claims.native_windows} · record layout: ${recordAt.layout}`,
     '', table(['case', 'status', 'title', 'detail'], cases.map((c) => [c.id, c.status, c.title, c.detail.slice(0, 220)])), '',
     notes.length ? `## Notes\n\n${notes.map((n) => `- ${n}`).join('\n')}\n` : '',
-    `## Reproduce\n\n\`\`\`sh\npython3 coordination/parallel-wave-1/cargo-queue.py -- node tools/scenarios/wire-runner.mjs --build --out <dir>\n\`\`\`\n\nFailures keep the temporary work dir; inspect wire-frames.jsonl (redacted frames, per generation) and wire-events.jsonl.`].join('\n');
+    `## Reproduce\n\n\`\`\`sh\npython3 coordination/parallel-wave-2/cargo-queue.py -- node tools/scenarios/wire-runner.mjs --build --out <dir>\n\`\`\`\n\nFailures keep the temporary work dir; inspect wire-frames.jsonl (redacted frames, per generation) and wire-events.jsonl.`].join('\n');
   await writeFile(join(out, 'wire-run.md'), md);
   process.stderr.write(`[wire] ${counts.verdict}: ${JSON.stringify(counts.counts)}\n[wire] results: ${out}\n`);
   const failed = cases.some((c) => c.status === 'fail');

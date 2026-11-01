@@ -24,6 +24,50 @@ function nonEmptyFile(root, rel) {
 }
 
 /**
+ * Link one Experiment open to the approval that authorizes it, inside its own Chain.
+ * Returns {status: pass|fail|unknown, detail}. Nothing outside the log is assumed.
+ */
+export function approvalLink(facts, open) {
+  const chain = open.phase.chainIndex;
+  const all = [...facts.proposals.values()];
+  const here = all.filter((p) => p.chainIndex === chain && p.firstSeen < open.seq);
+  const approvedHere = here.filter((p) => p.receipt?.decision === 'approve' && p.receipt.seenAt < open.seq && p.receipt.chainIndex === chain);
+  const reasons = [];
+  if (!approvedHere.length) {
+    const earlier = all.filter((p) => p.chainIndex < chain && p.receipt?.decision === 'approve');
+    const readsBefore = facts.planReads.filter((r) => r.seq < open.seq && r.phase.chainIndex === chain);
+    if (earlier.length && !here.length) return { status: 'fail', detail: `${open.ref}: no proposal in Chain #${chain}; only an earlier Chain's approval (revision ${earlier.map((p) => p.revision).join(',')}) exists, which does not carry over` };
+    if (!here.length && readsBefore.some((r) => r.active_revision !== null || r.proposal?.receipt)) return { status: 'unknown', detail: `${open.ref}: the log begins after the approval (reads show an active revision but no proposal or receipt was observed)` };
+    const rc = here.filter((p) => p.receipt && p.receipt.decision !== 'approve');
+    if (rc.length) return { status: 'fail', detail: `${open.ref}: the only decision in Chain #${chain} was ${rc.map((p) => `${p.receipt.decision} on revision ${p.revision}`).join(',')}` };
+    const unanswered = facts.decides.filter((d) => d.chainIndex === chain && d.seq < open.seq && !d.answered);
+    if (unanswered.length) return { status: 'fail', detail: `${open.ref}: decide at seq ${unanswered.map((d) => d.seq).join(',')} got no response and no later read shows a receipt` };
+    return { status: 'fail', detail: `${open.ref}: no approve receipt observed in Chain #${chain} before the open` };
+  }
+  const valid = [];
+  for (const p of approvedHere) {
+    const newer = all.filter((q) => q.synthesis_ref === p.synthesis_ref && q.firstSeen < open.seq && q.revision > p.revision);
+    if (newer.length) { reasons.push(`revision ${p.revision} was superseded by revision ${Math.max(...newer.map((q) => q.revision))} before execution`); continue; }
+    const closes = facts.synthesisCloses.filter((s) => s.ref === p.synthesis_ref && s.seq < open.seq);
+    if (!closes.length) { reasons.push(`unknown: ${p.synthesis_ref} close not in the log for revision ${p.revision}`); continue; }
+    if (!closes.some((s) => s.approved === 'yes' && s.plan_revision === p.revision)) { reasons.push(`${p.synthesis_ref} did not close approved with revision ${p.revision}`); continue; }
+    valid.push(p);
+  }
+  if (!valid.length) {
+    const unknown = reasons.every((r) => r.startsWith('unknown:'));
+    return { status: unknown ? 'unknown' : 'fail', detail: `${open.ref}: ${reasons.join('; ')}` };
+  }
+  if (!open.interviewClosedInChain) return { status: 'fail', detail: `${open.ref}: opened before the Interview Cycle of Chain #${chain} was closed` };
+  // Binding read: the first plan read inside this Experiment cycle.
+  const read = facts.planReads.find((r) => r.seq > open.seq && r.phase.cycleRef === open.ref);
+  if (!read) return { status: 'unknown', detail: `${open.ref}: approval chain observed (revision ${valid.map((p) => p.revision).join(',')}) but no gil_plan_read inside the Experiment confirms the active revision and bound item` };
+  const active = valid.find((p) => p.revision === read.active_revision);
+  if (!active) return { status: 'fail', detail: `${open.ref}: read at seq ${read.seq} shows active_revision ${read.active_revision}, not an approved revision of this Chain (${valid.map((p) => p.revision).join(',')})` };
+  if (!read.current_item) return { status: 'fail', detail: `${open.ref}: read at seq ${read.seq} shows no bound current_item under revision ${active.revision}` };
+  return { status: 'pass', detail: `${open.ref}: revision ${active.revision} (receipt seq ${active.receipt.seenAt}, Synthesis ${active.synthesis_ref}) active with item ${read.current_item} at seq ${read.seq}` };
+}
+
+/**
  * @param facts replay() output
  * @param options { human: parsed human-checkpoints json or null, root: project root or null, rubric }
  */
@@ -44,18 +88,35 @@ export function scoreProcedure(facts, { human = null, root = null, rubric = {} }
   if (human && typeof human.monitor_visible === 'boolean') out.push(j('monitor_display_confirmed', human.monitor_visible ? 'pass' : 'fail', `human checkpoint: monitor_visible=${human.monitor_visible}`));
   else out.push(j('monitor_display_confirmed', 'unknown', 'no human checkpoint record; protocol success is not display evidence'));
 
-  // 3. Approval before execution: an experiment opens only after an approve receipt was observed.
+  // 3. Approval before execution. "Some approve receipt earlier in the log" is not evidence: the
+  //    receipt must belong to a proposal of the SAME Chain, that proposal must be the latest one
+  //    for its Synthesis (an edit voids earlier consent), its Synthesis must have closed with that
+  //    revision, the Interview Cycle must be closed in this Chain, and a gil_plan_read after the
+  //    Experiment open must show that revision active with a bound item. Missing reads → unknown.
   if (!facts.experimentOpens.length) out.push(j('approval_before_execution', 'not_run', 'no Experiment was opened'));
   else if (planUnsupported) out.push(j('approval_before_execution', 'unsupported', 'Core reported supported:false (legacy project or build without approved-plan)'));
   else {
-    const bad = facts.experimentOpens.filter((x) => ![...facts.proposals.values()].some((p) => p.receipt?.decision === 'approve' && p.receipt.seenAt < x.seq));
     const synthetic = facts.decides.some((d) => d.ok && d.synthetic);
-    out.push(j('approval_before_execution', bad.length ? 'fail' : 'pass', bad.length ? `Experiment opened at seq ${bad.map((b) => b.seq).join(',')} without an observed approve receipt` : `every Experiment open follows an observed approve receipt${synthetic ? ' (receipt came from synthetic harness App input, not a person)' : ''}`));
+    const verdicts = facts.experimentOpens.map((x) => approvalLink(facts, x));
+    const failed = verdicts.filter((v) => v.status === 'fail');
+    const unknown = verdicts.filter((v) => v.status === 'unknown');
+    if (failed.length) out.push(j('approval_before_execution', 'fail', failed.map((v) => v.detail).join(' | ')));
+    else if (unknown.length) out.push(j('approval_before_execution', 'unknown', unknown.map((v) => v.detail).join(' | ')));
+    else out.push(j('approval_before_execution', 'pass', `${verdicts.length} Experiment open(s) each linked to an approved, closed Synthesis revision of its own Chain and a read confirming the active revision and bound item${synthetic ? ' (receipts came from synthetic harness App input, not a person)' : ''}`));
   }
-  // 4. Was the approval a real person's click? Only the human record can say so.
-  if (human && typeof human.approved_by_click === 'boolean') out.push(j('human_approval_real', human.approved_by_click ? 'pass' : 'fail', `human checkpoint: approved_by_click=${human.approved_by_click}`));
-  else if (facts.decides.some((d) => d.ok && d.synthetic)) out.push(j('human_approval_real', 'unknown', 'decision was synthetic harness App input; it earns no user-consent score'));
-  else if (facts.decides.some((d) => d.ok)) out.push(j('human_approval_real', 'unknown', 'an App decision was recorded but no human checkpoint confirms a physical click'));
+  // 4. Was the approval a real person's click? Only the human record can say so, and the record
+  //    cannot promote synthetic harness input: a claimed click with only synthetic decisions in the
+  //    log is a contradiction, not consent.
+  const okDecides = facts.decides.filter((d) => d.ok);
+  const realDecides = okDecides.filter((d) => !d.synthetic);
+  if (human && typeof human.approved_by_click === 'boolean') {
+    if (!human.approved_by_click) out.push(j('human_approval_real', 'fail', 'human checkpoint: approved_by_click=false'));
+    else if (realDecides.length) out.push(j('human_approval_real', 'pass', `human checkpoint: approved_by_click=true; App decision(s) at seq ${realDecides.map((d) => d.seq).join(',')} were not synthetic`));
+    else if (okDecides.length) out.push(j('human_approval_real', 'fail', 'human checkpoint claims a click but every recorded decision was synthetic harness input; synthetic App input is never promoted to user consent'));
+    else out.push(j('human_approval_real', 'unknown', 'human checkpoint claims a click but the log holds no decision to corroborate it'));
+  }
+  else if (okDecides.some((d) => d.synthetic)) out.push(j('human_approval_real', 'unknown', 'decision was synthetic harness App input; it earns no user-consent score'));
+  else if (okDecides.length) out.push(j('human_approval_real', 'unknown', 'an App decision was recorded but no human checkpoint confirms a physical click'));
   else out.push(j('human_approval_real', 'not_run', 'no decision recorded'));
 
   // 5. No external work while an Interview node (especially Synthesis) is open.
@@ -87,7 +148,8 @@ export function scoreProcedure(facts, { human = null, root = null, rubric = {} }
       out.push(j('verify_file_evidence', absent.length ? 'fail' : 'pass', absent.length ? `evidence files missing or empty: ${absent.join(', ')}` : `${facts.verifyCloses.length} Verify close(s) with existing nonempty evidence files`));
     }
   }
-  // 8. No reuse of an older proposal's approval.
+  // 8. No reuse of an older proposal's approval: a Synthesis closes with the latest proposal of
+  //    its own Chain, that proposal's own receipt (same digest, same Chain), observed before the close.
   if (!facts.synthesisCloses.length) out.push(j('no_reused_approval', planSupported ? 'not_run' : 'unknown', 'no Synthesis close observed'));
   else if (!planSupported) out.push(j('no_reused_approval', 'unsupported', 'no approved-plan data in the log'));
   else {
@@ -95,12 +157,16 @@ export function scoreProcedure(facts, { human = null, root = null, rubric = {} }
     for (const c of facts.synthesisCloses) {
       const latest = [...facts.proposals.values()].filter((p) => p.synthesis_ref === c.ref && p.firstSeen < c.seq).sort((a, b) => b.revision - a.revision)[0];
       if (!latest) { bad.push(`${c.ref}: closed without an observed proposal`); continue; }
+      if (c.approved !== 'yes') continue; // approved:no / request_changes closes carry no consent to reuse
+      if (latest.chainIndex !== c.chainIndex) bad.push(`${c.ref}: proposal belongs to Chain #${latest.chainIndex}, close happened in Chain #${c.chainIndex}`);
       if (c.plan_revision !== latest.revision) bad.push(`${c.ref}: closed with plan_revision ${c.plan_revision} while latest proposal was ${latest.revision}`);
-      else if (!latest.receipt || latest.receipt.seenAt > c.seq) bad.push(`${c.ref}: closed before a receipt for revision ${latest.revision} was observed`);
+      else if (c.plan_digest && latest.digest && c.plan_digest !== latest.digest) bad.push(`${c.ref}: closed with a digest that is not revision ${latest.revision}'s`);
+      else if (!latest.receipt || latest.receipt.decision !== 'approve' || latest.receipt.seenAt > c.seq) bad.push(`${c.ref}: closed before an approve receipt for revision ${latest.revision} was observed`);
+      else if (latest.receipt.chainIndex !== c.chainIndex) bad.push(`${c.ref}: receipt was observed in Chain #${latest.receipt.chainIndex}, not in the closing Chain #${c.chainIndex}`);
     }
     const staleDecides = facts.decides.filter((d) => d.ok && d.synthesis_ref && [...facts.proposals.values()].some((p) => p.synthesis_ref === d.synthesis_ref && p.firstSeen < d.seq && p.revision > d.revision));
     if (staleDecides.length) bad.push(`accepted decision for a superseded revision at seq ${staleDecides.map((d) => d.seq).join(',')}`);
-    out.push(j('no_reused_approval', bad.length ? 'fail' : 'pass', bad.join('; ') || `${facts.synthesisCloses.length} Synthesis close(s) each matched the latest proposal and its own receipt`));
+    out.push(j('no_reused_approval', bad.length ? 'fail' : 'pass', bad.join('; ') || `${facts.synthesisCloses.length} Synthesis close(s) each matched the latest proposal of its Chain and its own receipt`));
   }
   // 9. Reinterview requests survive until the next Interview approval.
   const requests = facts.reinterviewRequests.filter((r) => r.ok);
@@ -136,12 +202,23 @@ export function scoreProcedure(facts, { human = null, root = null, rubric = {} }
     else if (!root) out.push(j('file_deliverable_not_chat_only', 'unknown', `evidence names ${named.join(', ')}, but no project root was given to check it`));
     else out.push(j('file_deliverable_not_chat_only', named.every((f) => nonEmptyFile(root, f)) ? 'pass' : 'fail', `deliverable file(s): ${named.join(', ')}`));
   }
-  // 12. A Chain closes only through an approved closing Interview.
+  // 12. A Chain closes only through an approved closing Interview OF THAT CHAIN: a closing Synthesis
+  //     (chain_verdict) closed with approved:yes in the same Chain, backed by its own observed receipt.
   const chainCloses = facts.chains.filter((c) => c.action === 'close');
   if (!chainCloses.length) out.push(j('closing_interview_before_chain_close', 'not_run', 'no Chain was closed'));
   else {
-    const bad = chainCloses.filter((c) => !facts.synthesisCloses.some((s) => s.seq < c.seq && s.chain_verdict && s.approved === 'yes'));
-    out.push(j('closing_interview_before_chain_close', bad.length ? 'fail' : 'pass', bad.length ? 'Chain closed without an observed approved closing Synthesis (chain_verdict)' : 'each Chain close followed an approved closing Synthesis'));
+    const problems = [];
+    let unknown = false;
+    for (const c of chainCloses) {
+      const closing = facts.synthesisCloses.filter((s) => s.seq < c.seq && s.chainIndex === c.chainIndex && s.chain_verdict && s.approved === 'yes');
+      if (!closing.length) { problems.push(`${c.ref}: closed without an approved closing Synthesis (chain_verdict) in its own Chain`); continue; }
+      const backed = closing.some((s) => [...facts.proposals.values()].some((p) => p.synthesis_ref === s.ref && p.revision === s.plan_revision && p.chainIndex === c.chainIndex && p.receipt?.decision === 'approve' && p.receipt.seenAt < s.seq));
+      if (!backed) {
+        if (closing.some((s) => ![...facts.proposals.values()].some((p) => p.synthesis_ref === s.ref))) { unknown = true; problems.push(`${c.ref}: closing Synthesis observed but its proposal/receipt was not in the log`); }
+        else problems.push(`${c.ref}: closing Synthesis has no approve receipt of its own revision`);
+      }
+    }
+    out.push(j('closing_interview_before_chain_close', !problems.length ? 'pass' : unknown && problems.every((p) => p.includes('not in the log')) ? 'unknown' : 'fail', problems.join('; ') || 'each Chain close followed an approved closing Synthesis of the same Chain with its own receipt'));
   }
   return out;
 }

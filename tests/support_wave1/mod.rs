@@ -1,15 +1,59 @@
-//! Wave 1 E support: a minimal stdio JSON-RPC client around the freshly built `gil` binary.
-//! Dedicated to tests/approved_plan_wire_wave1.rs; the shared tests/common is read-only for E.
+//! Wave 1 E / Wave 2 D support: a minimal stdio JSON-RPC client around the freshly built `gil`
+//! binary. Dedicated to tests/approved_plan_wire_wave1.rs; the shared tests/common is read-only here.
+//!
+//! The child gets an isolated environment: PATH holds system directories only, HOME/USERPROFILE and
+//! LOCALAPPDATA point below the test's own settings folder, and on Windows only the variables a
+//! process needs to run at all are copied. The Project record is located through the product
+//! layout contract (`product_state_path`), mirroring src/project_state.rs::state_for_root and the
+//! Windows fixture helper tests/mcp.rs::product_state_path; nothing hard-codes `.gil/state.yaml`
+//! at the project root.
 #![allow(dead_code)]
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::time::{Duration, Instant};
+use std::sync::mpsc::{Receiver, channel};
+use std::time::Duration;
+
+/// Per-request wait for one JSON-RPC frame; a hung Core fails the test instead of blocking forever.
+pub const FRAME_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// The binary Cargo built for this very test run; never PATH or an installed Core.
 pub fn gil() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_gil"))
+}
+
+/// Isolated private roots below a settings folder: HOME/USERPROFILE and LOCALAPPDATA for the child.
+pub fn private_home(settings: &Path) -> PathBuf { settings.join("home") }
+pub fn private_local_app_data(settings: &Path) -> PathBuf { settings.join("localappdata") }
+
+/// Where the product keeps this Project's record, given the child's LOCALAPPDATA.
+/// Windows visual-authoring builds: `LOCALAPPDATA\GIL\project-state-v1\<sha256(UTF-16LE canonical root)>\.gil\state.yaml`.
+/// Everything else: `<root>/.gil/state.yaml`. The key derivation is the one in
+/// src/project_state.rs::external_storage_root_in (canonicalize spelling, UTF-16 code units).
+pub fn product_state_path(root: &Path, local_app_data: &Path) -> PathBuf {
+    #[cfg(all(windows, feature = "visual-authoring"))]
+    {
+        use sha2::{Digest, Sha256};
+        use std::os::windows::ffi::OsStrExt;
+        let canonical = root.canonicalize().expect("project root canonicalizes");
+        let mut identity = Vec::new();
+        for unit in canonical.as_os_str().encode_wide() {
+            identity.extend_from_slice(&unit.to_le_bytes());
+        }
+        let key = format!("{:x}", Sha256::digest(&identity));
+        local_app_data.join("GIL").join("project-state-v1").join(key).join(".gil").join("state.yaml")
+    }
+    #[cfg(not(all(windows, feature = "visual-authoring")))]
+    {
+        let _ = local_app_data;
+        root.join(".gil").join("state.yaml")
+    }
+}
+
+/// The record bytes; a missing record is a failure, never a vacuous "unchanged".
+pub fn record_bytes(path: &Path) -> Vec<u8> {
+    std::fs::read(path).unwrap_or_else(|e| panic!("project record missing at the product layout path {}: {e}", path.display()))
 }
 
 pub fn scratch(name: &str) -> PathBuf {
@@ -25,20 +69,43 @@ pub fn scratch(name: &str) -> PathBuf {
 
 pub struct Client {
     kid: Child,
-    out: BufReader<std::process::ChildStdout>,
+    lines: Receiver<std::io::Result<String>>,
     next: i64,
     pub noise: Vec<String>,
 }
 
+/// Build the isolated child environment. Only system essentials come from the parent.
+fn isolated_command(settings: &Path) -> Command {
+    let home = private_home(settings);
+    let local = private_local_app_data(settings);
+    std::fs::create_dir_all(&home).expect("isolated home");
+    std::fs::create_dir_all(&local).expect("isolated localappdata");
+    let mut cmd = Command::new(gil());
+    cmd.args(["mcp", "--serve"]).env_clear();
+    #[cfg(windows)]
+    {
+        for key in ["SystemRoot", "SystemDrive", "COMSPEC", "APPDATA", "ProgramData", "USERNAME", "TEMP", "TMP", "PATHEXT"] {
+            if let Some(v) = std::env::var_os(key) { cmd.env(key, v); }
+        }
+        let system_root = std::env::var_os("SystemRoot").expect("SystemRoot is required on Windows");
+        let sr = PathBuf::from(&system_root);
+        cmd.env("PATH", std::env::join_paths([sr.join("System32"), sr.clone(), sr.join("System32/WindowsPowerShell/v1.0")]).unwrap());
+        cmd.env("USERPROFILE", &home);
+        cmd.env("LOCALAPPDATA", &local);
+    }
+    #[cfg(not(windows))]
+    {
+        cmd.env("PATH", "/usr/bin:/bin");
+        cmd.env("HOME", &home);
+        cmd.env("TMPDIR", std::env::temp_dir());
+    }
+    cmd.env("GIL_MONITOR_STATE_DIR", settings.join("bindings"));
+    cmd
+}
+
 impl Client {
     pub fn serve(settings: &Path) -> Self {
-        let mut kid = Command::new(gil())
-            .args(["mcp", "--serve"])
-            .env_clear()
-            .env("PATH", "/usr/bin:/bin")
-            .env("HOME", std::env::var_os("HOME").unwrap_or_default())
-            .env("TMPDIR", std::env::temp_dir())
-            .env("GIL_MONITOR_STATE_DIR", settings.join("bindings"))
+        let mut kid = isolated_command(settings)
             .current_dir(std::env::temp_dir())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -46,7 +113,13 @@ impl Client {
             .spawn()
             .expect("gil mcp --serve");
         let out = BufReader::new(kid.stdout.take().expect("stdout"));
-        let mut c = Self { kid, out, next: 1, noise: Vec::new() };
+        let (tx, lines) = channel();
+        std::thread::spawn(move || {
+            for line in out.lines() {
+                if tx.send(line).is_err() { break; }
+            }
+        });
+        let mut c = Self { kid, lines, next: 1, noise: Vec::new() };
         let init = c.request("initialize", json!({"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"wave1-wire","version":"0"}}));
         assert!(init.get("error").is_none(), "initialize failed: {init}");
         c.send(&json!({"jsonrpc":"2.0","method":"notifications/initialized"}));
@@ -57,14 +130,16 @@ impl Client {
         writeln!(stdin, "{}", serde_json::to_string(frame).unwrap()).expect("write");
         stdin.flush().expect("flush");
     }
-    /// One response frame. Non-JSON stdout lines are collected as noise (a defect) instead of panicking.
+    /// One response frame within FRAME_TIMEOUT. Non-JSON stdout lines are collected as noise (a
+    /// defect) instead of panicking; a timeout or a closed stdout kills the child and fails.
     fn read(&mut self) -> Value {
-        let deadline = Instant::now() + Duration::from_secs(30);
         loop {
-            assert!(Instant::now() < deadline, "timeout waiting for a JSON-RPC frame");
-            let mut line = String::new();
-            let n = self.out.read_line(&mut line).expect("read");
-            assert!(n > 0, "Core closed stdout before answering");
+            let line = match self.lines.recv_timeout(FRAME_TIMEOUT) {
+                Ok(Ok(line)) => line,
+                Ok(Err(e)) => { let _ = self.kid.kill(); panic!("stdout read failed: {e}") }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => { let _ = self.kid.kill(); panic!("timeout ({FRAME_TIMEOUT:?}) waiting for a JSON-RPC frame; Core killed") }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => { let _ = self.kid.kill(); panic!("Core closed stdout before answering") }
+            };
             if line.trim().is_empty() { continue; }
             match serde_json::from_str::<Value>(&line) {
                 Ok(v) => return v,
@@ -84,15 +159,19 @@ impl Client {
     pub fn call(&mut self, name: &str, arguments: Value) -> Value {
         self.request("tools/call", json!({"name":name,"arguments":arguments}))
     }
+    /// Close stdin and wait for exit (bounded); everything still on stdout is checked for noise.
     pub fn eof(mut self) -> (std::process::ExitStatus, Vec<String>) {
         drop(self.kid.stdin.take());
-        let mut rest = String::new();
-        use std::io::Read as _;
-        self.out.read_to_string(&mut rest).ok();
-        for line in rest.lines().filter(|l| !l.trim().is_empty()) {
-            if serde_json::from_str::<Value>(line).is_err() { self.noise.push(line.chars().take(200).collect()); }
+        let deadline = std::time::Instant::now() + FRAME_TIMEOUT;
+        let status = loop {
+            if let Some(status) = self.kid.try_wait().expect("try_wait") { break status; }
+            if std::time::Instant::now() > deadline { let _ = self.kid.kill(); panic!("Core did not exit after EOF within {FRAME_TIMEOUT:?}; killed"); }
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        while let Ok(Ok(line)) = self.lines.recv_timeout(Duration::from_millis(200)) {
+            if line.trim().is_empty() { continue; }
+            if serde_json::from_str::<Value>(&line).is_err() { self.noise.push(line.chars().take(200).collect()); }
         }
-        let status = self.kid.wait().expect("exit");
         (status, std::mem::take(&mut self.noise))
     }
 }
