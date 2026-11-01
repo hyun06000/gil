@@ -1,0 +1,140 @@
+{
+  "date_local": "2026-11-02",
+  "source_commit": "309007c518949e3910bd4910368c986ecd463848",
+  "platform": "darwin-arm64",
+  "checks": [
+    {
+      "name": "default",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "gil"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "passed": 1518,
+        "failed": 0,
+        "ignored": 2
+      }
+    },
+    {
+      "name": "chain",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "gil",
+        "--features",
+        "chain-core",
+        "--test",
+        "context",
+        "--test",
+        "context_profiles",
+        "--test",
+        "guidance_wave1",
+        "--test",
+        "guidance_wave2"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "passed": 25,
+        "failed": 0,
+        "ignored": 0
+      }
+    },
+    {
+      "name": "default-build",
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "-p",
+        "gil",
+        "--all-targets"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "approved-build",
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "-p",
+        "gil",
+        "--all-targets",
+        "--features",
+        "approved-plan,visual-authoring,product-safety"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "approved-final",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "gil",
+        "--features",
+        "approved-plan,visual-authoring,product-safety",
+        "--lib",
+        "--test",
+        "context",
+        "--test",
+        "context_profiles",
+        "--test",
+        "guidance_wave1",
+        "--test",
+        "guidance_wave2",
+        "--test",
+        "approved_plan_wire_wave1"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "passed": 704,
+        "failed": 0,
+        "ignored": 1
+      }
+    },
+    {
+      "name": "js",
+      "command": "node --test ui/layout.test.mjs mcp-app/*.test.mjs plugins/gil-companion-prototype/*.test.mjs",
+      "exit_code": 0,
+      "counts": {
+        "pass": 147,
+        "fail": 0,
+        "skipped": 4
+      }
+    },
+    {
+      "name": "packaging",
+      "command": "node --test distribution/codex/*.test.mjs distribution/compliance/notices.test.mjs",
+      "exit_code": 0,
+      "counts": {
+        "pass": 96,
+        "fail": 0,
+        "skipped": 1
+      }
+    }
+  ],
+  "initial_attempts": [
+    "New context_profiles test initially passed StepRef where NodeId was expected; corrected before test execution.",
+    "After fixture correction context 15/15 and context_profiles 2/2 passed, but newly expanded stdio test reproduced stale Verify instructions after Cycle close. Fixed src/context.rs and reran the approved acceptance set successfully."
+  ],
+  "scope": [
+    "No approval gate, storage format, automatic migration, or restore permission changed.",
+    "Context scenarios retain all original assertions and explicitly load historical format 4/6 fixtures; no added ignore/skip.",
+    "Synthetic App approval is not physical user consent or a model run."
+  ],
+  "not_run": [
+    "All approved-profile integration targets as one aggregate",
+    "Native Windows CI/PC",
+    "Actual Codex fullscreen and human approval button",
+    "Luna task",
+    "Remote push/PR/merge/release"
+  ]
+}
