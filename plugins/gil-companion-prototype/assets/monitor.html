@@ -124,8 +124,11 @@ button, select { font: inherit; color: inherit; }
 .map .viewport { overflow: auto; max-height: 52vh; }
 /* 확대 상자: stage 의 (plan 크기 × 배율) 만큼 자리를 지니고, stage 는 transform 으로만 커진다. */
 .map .zoom { position: relative; transform-origin: 0 0; }
+/* 미니맵·확대 손잡이는 오른쪽 **아래**에 뜬다. 가로 Graph 의 최신 노드는 오른쪽 위에 서므로 거기에 두면 가린다.
+   아래에 둬도 마지막 줄을 덮을 수 있으니, 스크롤 상자 끝에 손잡이 높이만큼 빈 자리를 더해 언제나 굴려 빼낼 수 있게 한다. */
+.map .zoom::after { content: ""; display: block; height: 170px; }
 .stage { position: relative; transform-origin: 0 0; }
-.map-tools { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+.map-tools { position: absolute; bottom: 8px; right: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
   pointer-events: none; }
 .map-tools > * { pointer-events: auto; }
 .minimap { display: block; border: var(--gil-hair) solid var(--gil-line); border-radius: var(--gil-r-sm);
