@@ -57,7 +57,7 @@ jobs:
       - name: Compile all Core targets in the development product profile
         run: cargo build --locked -p gil --all-targets --features chain-core,visual-authoring,product-safety
       - name: Approval profile, complete library contracts (plan domain, tool catalog, guidance, profile fixtures)
-        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib
+        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib -- --test-threads=1
       - name: Historical context projection stays readable without automatic approval migration
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test context --test context_profiles
       - name: Approval profile, next-call guidance over in-memory state and the real receipt (Wave 1 C)

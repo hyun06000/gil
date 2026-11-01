@@ -279,21 +279,62 @@ impl Probe for LstatProbe {
     }
 }
 
-/// Unix 가 아닌 곳의 기본 adapter — **handle 기반 조회가 서기 전까지 명시적으로 거절한다.**
+#[cfg(windows)]
+pub(crate) struct LstatProbe { root: std::path::PathBuf }
+#[cfg(windows)]
+impl LstatProbe {
+    pub(crate) fn at(root: &std::path::Path) -> Self { Self { root: root.to_owned() } }
+    fn dir(&self, relative: &str) -> std::io::Result<crate::windows_fs::Chain> {
+        let mut chain = crate::windows_fs::Chain::open(&self.root)?;
+        if !relative.is_empty() {
+            EntryPath::parse(relative).ok_or_else(crate::windows_fs::refused)?;
+            for part in relative.split('/') { chain.push(std::ffi::OsStr::new(part), false)?; }
+        }
+        Ok(chain)
+    }
+}
+#[cfg(windows)]
+impl Probe for LstatProbe {
+    fn describe(&self) -> &'static str { "windows-pinned-no-reparse" }
+    fn kind(&self, relative: &str) -> Result<EntryKind, ProbeError> {
+        use crate::windows_fs as win;
+        let run = || -> std::io::Result<EntryKind> {
+            if relative.is_empty() { self.dir("")?; return Ok(EntryKind::Directory); }
+            EntryPath::parse(relative).ok_or_else(win::refused)?;
+            let (parent, name) = relative.rsplit_once('/').unwrap_or(("", relative));
+            let chain = self.dir(parent)?;
+            let f = win::open_entry_at(chain.dir(), std::ffi::OsStr::new(name), win::READ, win::SHARE_ALL, None)?;
+            let info = win::info(&f)?;
+            if info.dwFileAttributes & windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_DIRECTORY != 0 { Ok(EntryKind::Directory) }
+            else if win::Stamp::of(&f)?.is_single_regular() { Ok(EntryKind::File) }
+            else { Ok(EntryKind::Other) }
+        };
+        match run() { Ok(k) => Ok(k), Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(EntryKind::Missing), Err(e) => Err(ProbeError::Io(e.to_string())) }
+    }
+    fn names(&self, relative: &str) -> Result<Vec<String>, ProbeError> {
+        let run = || -> std::io::Result<Vec<String>> {
+            let dir = self.dir(relative)?;
+            std::fs::read_dir(dir.path())?.map(|e| e?.file_name().into_string().map_err(|_| crate::windows_fs::refused())).collect()
+        };
+        match run() { Ok(n) => Ok(n), Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()), Err(e) => Err(ProbeError::Io(e.to_string())) }
+    }
+}
+
+/// Other platforms fail closed until a read-only adapter is verified.
 ///
 /// `std::fs::symlink_metadata` 는 Windows 에서 reparse point 를 가르고 handle 을 고정하지
 /// 못한다. 그것으로 본 것을 「확인했다」고 적으면 Windows 계약(§2–§4)을 글자로 흉내 내는 셈이다.
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 pub(crate) struct LstatProbe;
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 impl LstatProbe {
     pub(crate) fn at(_root: &std::path::Path) -> LstatProbe {
         LstatProbe
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 impl Probe for LstatProbe {
     fn describe(&self) -> &'static str {
         "unsupported-on-this-os"

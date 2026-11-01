@@ -107,7 +107,7 @@ fn tree(at: &Path) -> std::collections::BTreeMap<std::path::PathBuf, Vec<u8>> {
 fn old_failure_requires_exact_app_consent_preserves_evidence_and_retries_twice() {
     let (mut r, settings) = failed("recovery-two-retries", None);
     let original = record_bytes(&r.record);
-    let objects = tree(&r.root.join(".gil/artifacts"));
+    let objects = tree(&r.record.parent().unwrap().join("artifacts"));
     refused(r.model("gil_revisit", json!({})), "no approval");
     refused(
         r.model("gil_open", json!({"kind":"experiment"})),
@@ -115,7 +115,13 @@ fn old_failure_requires_exact_app_consent_preserves_evidence_and_retries_twice()
     );
     let (v, t) = review(&mut r);
     assert_eq!(original, record_bytes(&r.record));
-    assert!(!r.root.join(".gil/revisit-preserved").exists());
+    assert!(
+        !r.record
+            .parent()
+            .unwrap()
+            .join("revisit-preserved")
+            .exists()
+    );
     refused(apply(&mut r, &v, "invented"), "forged capability");
     let mut stale = v.clone();
     stale["digest"] = json!("old");
@@ -131,7 +137,7 @@ fn old_failure_requires_exact_app_consent_preserves_evidence_and_retries_twice()
         "baseline report"
     );
     assert!(!r.root.join("evidence.md").exists());
-    assert_eq!(objects, tree(&r.root.join(".gil/artifacts")));
+    assert_eq!(objects, tree(&r.record.parent().unwrap().join("artifacts")));
     let old: Value = serde_norway::from_slice(&original).unwrap();
     let new: Value = serde_norway::from_slice(&record_bytes(&r.record)).unwrap();
     for field in [
@@ -190,12 +196,12 @@ fn old_failure_requires_exact_app_consent_preserves_evidence_and_retries_twice()
     assert_eq!(
         objects
             .iter()
-            .filter(
-                |(path, bytes)| fs::read(r.root.join(".gil/artifacts").join(path))
-                    .ok()
-                    .as_ref()
-                    == Some(bytes)
+            .filter(|(path, bytes)| fs::read(
+                r.record.parent().unwrap().join("artifacts").join(path)
             )
+            .ok()
+            .as_ref()
+                == Some(bytes))
             .count(),
         objects.len()
     );
@@ -218,7 +224,13 @@ fn protected_changes_refuse_without_touching_state_or_files() {
         refused(r.app("gil_revisit_review", json!({})), "protected changes");
         assert_eq!(state, record_bytes(&r.record));
         assert_eq!(world, fs::read(r.root.join(path)).unwrap());
-        assert!(!r.root.join(".gil/revisit-preserved").exists());
+        assert!(
+            !r.record
+                .parent()
+                .unwrap()
+                .join("revisit-preserved")
+                .exists()
+        );
     }
 }
 
@@ -243,6 +255,7 @@ fn approved_recovery_survives_state_save_then_process_death_during_restore() {
         .arg("revisit")
         .current_dir(&r.root)
         .env("GIL_RESTORE_CRASH", "after-first-apply")
+        .env("LOCALAPPDATA", private_local_app_data(&settings))
         .output()
         .unwrap();
     assert!(!out.status.success());
@@ -275,7 +288,7 @@ fn server_restart_invalidates_private_consent_and_corrupt_evidence_refuses() {
     let (_, fresh) = review(&mut r);
     assert_ne!(fresh, t);
     // The immutable failed evidence must be readable, not merely a valid graph reference.
-    let blob = fs::read_dir(r.root.join(".gil/artifacts/blobs/sha256"))
+    let blob = fs::read_dir(r.record.parent().unwrap().join("artifacts/blobs/sha256"))
         .unwrap()
         .next()
         .unwrap()
@@ -286,7 +299,13 @@ fn server_restart_invalidates_private_consent_and_corrupt_evidence_refuses() {
     fs::write(&file, b"corrupt").unwrap();
     refused(apply(&mut r, &v, &fresh), "corrupt immutable evidence");
     assert_eq!(state, record_bytes(&r.record));
-    assert!(!r.root.join(".gil/revisit-preserved").exists());
+    assert!(
+        !r.record
+            .parent()
+            .unwrap()
+            .join("revisit-preserved")
+            .exists()
+    );
     fs::write(file, bytes).unwrap();
 }
 
@@ -297,7 +316,18 @@ fn preservation_area_symlink_cannot_redirect_recovery_writes() {
     let state = record_bytes(&r.record);
     let outside = scratch("recovery-outside");
     fs::write(outside.join("sentinel"), "untouched").unwrap();
-    std::os::unix::fs::symlink(&outside, r.root.join(".gil/revisit-preserved")).unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(
+        &outside,
+        r.record.parent().unwrap().join("revisit-preserved"),
+    )
+    .unwrap();
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_dir(
+        &outside,
+        r.record.parent().unwrap().join("revisit-preserved"),
+    )
+    .unwrap();
     refused(apply(&mut r, &v, &t), "no follow archive boundary");
     assert_eq!(state, record_bytes(&r.record));
     assert_eq!(fs::read_dir(&outside).unwrap().count(), 1);

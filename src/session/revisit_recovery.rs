@@ -3,14 +3,14 @@
 //! all other changes are previewed and the original bytes are durably retained before movement.
 use super::*;
 use serde_json::{Value, json};
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 use sha2::{Digest, Sha256};
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 fn error(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 fn hash(bytes: impl AsRef<[u8]>) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
@@ -21,11 +21,11 @@ impl ProjectSession {
         {
             return Ok(json!({"supported":true,"state":"not_needed"}));
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", windows)))]
         return Ok(
             json!({"supported":false,"reason":"이 플랫폼의 승인 복원은 아직 제공하지 않는다. 기존 파일과 기록을 보존한다."}),
         );
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", windows))]
         {
             let plan = self.recovery_plan()?;
             Ok(plan.view)
@@ -33,12 +33,12 @@ impl ProjectSession {
     }
 
     pub(crate) fn approve_revisit(&mut self, digest: &str) -> Result<Value, String> {
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", windows)))]
         {
             let _ = digest;
             Err("이 플랫폼의 승인 복원은 아직 제공하지 않는다".into())
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", windows))]
         {
             let plan = self.recovery_plan()?;
             if plan.view["digest"].as_str() != Some(digest) {
@@ -50,11 +50,11 @@ impl ProjectSession {
 
     /// A model/CLI call may only resume a durable approval, never create one.
     pub(crate) fn resume_revisit(&mut self) -> Result<Value, String> {
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", windows)))]
         return Err(
             "이 플랫폼의 승인 복원은 아직 제공하지 않는다. 기존 파일과 기록을 보존한다".into(),
         );
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", windows))]
         {
             if self.project.cycles().pending_revisit().is_none() {
                 return Err("Monitor의 되돌아가기 변경 목록을 확인하고 ‘보존 후 되돌아가기’를 눌러야 한다. 파일과 기록은 바꾸지 않았다".into());
@@ -67,20 +67,19 @@ impl ProjectSession {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 use crate::{
     artifact::{IgnoreSource, PolicyVersion, TrackingPolicy},
-    internal_fs as guarded,
     restore::preview,
 };
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 use std::{
     ffi::CString,
     fs::File,
     io::{Read, Write},
 };
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 struct Recovery {
     next: Project,
     before: Manifest,
@@ -90,7 +89,7 @@ struct Recovery {
     view: Value,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 fn policy(store: &ObjectStore, manifest: &Manifest) -> Result<TrackingPolicy, String> {
     let mut sources = Vec::new();
     for entry in manifest.entries() {
@@ -110,7 +109,7 @@ fn policy(store: &ObjectStore, manifest: &Manifest) -> Result<TrackingPolicy, St
     TrackingPolicy::from_sources(PolicyVersion::V1, sources).map_err(error)
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 impl ProjectSession {
     fn recovery_plan(&self) -> Result<Recovery, String> {
         let mut next = self.project.clone();
@@ -136,6 +135,9 @@ impl ProjectSession {
         let before = read(before_world)?;
         let target = read(world)?;
         let root = self.root().map_err(error)?;
+        #[cfg(windows)]
+        restore::check_windows_recovery(&root, &gil_dir(&self.state_path).map_err(error)?)
+            .map_err(error)?;
         let observed = artifact::observe(&root).map_err(error)?;
         let resumed = self.project.cycles().pending_revisit().is_some();
         if observed != before && !(resumed && observed == target) {
@@ -161,7 +163,7 @@ impl ProjectSession {
                 target: &target,
                 before_policy: None,
                 target_policy: None,
-                os: preview::TargetOs::MacOs,
+                os: recovery_os(),
             },
             |_| Ok(true),
             &preview::LstatProbe::at(&root),
@@ -170,7 +172,7 @@ impl ProjectSession {
             || inspection
                 .entries()
                 .iter()
-                .any(|e| e.blocked(preview::TargetOs::MacOs))
+                .any(|e| e.blocked(recovery_os()))
         {
             return Err("복원 경로에 충돌·링크·미확인 경계가 있어 거절했다".into());
         }
@@ -216,7 +218,7 @@ impl ProjectSession {
         let mut view = json!({"supported":true,"state":if resumed && observed == target {"completed"} else if resumed {"resumable"} else {"awaiting_approval"},
             "from":from.to_ref().to_string(),"target":next.current_cycle().id().to_ref().to_string(),
             "before_world":before_world.to_string(),"target_world":world.to_string(),"changes":changes,
-            "archive":format!(".gil/revisit-preserved/{key}"),"pending_state_sha256":key,
+            "archive":gil_dir(&self.state_path).map_err(error)?.join("revisit-preserved").join(&key).to_string_lossy(),"pending_state_sha256":key,
             "policy":"legacy-whole-tree-protected-difference-v1",
             "notice":"실패 기록·Snapshot·배움은 유지한다. 교체·제외되는 기존 파일은 보존본을 만든 뒤 대상 세계로 복원한다. 새 Cycle은 별도로 연다."});
         // Resumption is the same approved operation, not a new proposal.
@@ -301,10 +303,14 @@ impl ProjectSession {
     }
 }
 
-#[cfg(target_os = "macos")]
-fn archive(s: &ProjectSession, key: &str, create: bool) -> std::io::Result<File> {
+#[cfg(any(target_os = "macos", windows))]
+fn archive(s: &ProjectSession, key: &str, create: bool) -> std::io::Result<ArchiveDir> {
     let gil = guarded::directory(s.state_path.parent().unwrap(), false)?;
-    fn child(parent: &File, name: &std::ffi::CStr, create: bool) -> std::io::Result<File> {
+    fn child(
+        parent: &ArchiveDir,
+        name: &std::ffi::CStr,
+        create: bool,
+    ) -> std::io::Result<ArchiveDir> {
         if create {
             match guarded::create_dir_at(parent, name, 0o700) {
                 Ok(dir) => {
@@ -320,8 +326,8 @@ fn archive(s: &ProjectSession, key: &str, create: bool) -> std::io::Result<File>
     let base = child(&gil, c"revisit-preserved", create)?;
     child(&base, &CString::new(key).unwrap(), create)
 }
-#[cfg(target_os = "macos")]
-fn write_once(dir: &File, name: &std::ffi::CStr, bytes: &[u8]) -> Result<(), String> {
+#[cfg(any(target_os = "macos", windows))]
+fn write_once(dir: &ArchiveDir, name: &std::ffi::CStr, bytes: &[u8]) -> Result<(), String> {
     match guarded::regular_at(dir, name) {
         Ok(mut f) => {
             let mut old = Vec::new();
@@ -338,8 +344,8 @@ fn write_once(dir: &File, name: &std::ffi::CStr, bytes: &[u8]) -> Result<(), Str
         Err(e) => Err(error(e)),
     }
 }
-#[cfg(target_os = "macos")]
-fn verify_approval(dir: &File, plan: &Recovery) -> Result<(), String> {
+#[cfg(any(target_os = "macos", windows))]
+fn verify_approval(dir: &ArchiveDir, plan: &Recovery) -> Result<(), String> {
     let f = guarded::regular_at(dir, c"approval.json").map_err(error)?;
     let got: Value = serde_json::from_reader(f.take(4 * 1024 * 1024)).map_err(error)?;
     let mut expected = plan.view.clone();
@@ -350,9 +356,9 @@ fn verify_approval(dir: &File, plan: &Recovery) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 fn publish(
-    dir: &File,
+    dir: &ArchiveDir,
     name: &std::ffi::CStr,
     write: impl FnOnce(&mut File) -> Result<(), String>,
 ) -> Result<(), String> {
@@ -364,4 +370,48 @@ fn publish(
     f.sync_all().map_err(error)?;
     guarded::rename_at(dir, &tmp, name).map_err(error)?;
     guarded::fsync(dir).map_err(error)
+}
+
+#[cfg(target_os = "macos")]
+use crate::internal_fs as guarded;
+#[cfg(target_os = "macos")]
+type ArchiveDir = File;
+#[cfg(windows)]
+type ArchiveDir = crate::recovery_fs_windows::Dir;
+#[cfg(any(target_os = "macos", windows))]
+fn recovery_os() -> preview::TargetOs {
+    if cfg!(windows) {
+        preview::TargetOs::Windows
+    } else {
+        preview::TargetOs::MacOs
+    }
+}
+#[cfg(windows)]
+mod guarded {
+    use super::ArchiveDir;
+    use std::{ffi::CStr, fs::File, io, path::Path};
+    fn text(n: &CStr) -> io::Result<&str> {
+        n.to_str().map_err(io::Error::other)
+    }
+    pub(super) fn directory(p: &Path, _: bool) -> io::Result<ArchiveDir> {
+        ArchiveDir::open(p)
+    }
+    pub(super) fn child_dir(d: &ArchiveDir, n: &CStr) -> io::Result<ArchiveDir> {
+        d.child(text(n)?, false)
+    }
+    pub(super) fn create_dir_at(d: &ArchiveDir, n: &CStr, _: u32) -> io::Result<ArchiveDir> {
+        d.private_child(text(n)?)
+    }
+    pub(super) fn regular_at(d: &ArchiveDir, n: &CStr) -> io::Result<File> {
+        d.read(text(n)?)
+    }
+    pub(super) fn create_file_at(d: &ArchiveDir, n: &CStr, _: u32) -> io::Result<File> {
+        d.create(text(n)?)
+    }
+    pub(super) fn rename_at(d: &ArchiveDir, from: &CStr, to: &CStr) -> io::Result<()> {
+        d.rename_file(text(from)?, text(to)?)
+    }
+    pub(super) fn fsync(d: &ArchiveDir) -> io::Result<()> {
+        d.sync()
+    }
 }

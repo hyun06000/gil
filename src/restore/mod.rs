@@ -45,6 +45,16 @@ mod guard;
 mod destination;
 #[cfg(unix)]
 mod cleanup;
+#[cfg(all(windows, feature = "product-safety"))]
+mod windows;
+#[cfg(all(windows, feature = "product-safety"))]
+pub(crate) fn check_windows_recovery(root: &Path, gil: &Path) -> io::Result<()> {
+    use crate::recovery_fs_windows::Dir;
+    if Dir::open(root)?.volume()? != Dir::open(gil)?.volume()? {
+        return Err(io::Error::other("기록 저장소와 작업 폴더의 볼륨이 달라 원자적 복원을 거절했다"));
+    }
+    Ok(())
+}
 
 use std::fmt;
 use std::fs::{self, File};
@@ -207,6 +217,12 @@ mod approval_tests {
 }
 
 /// Approval-bound product recovery must never expand its write set to files appearing later.
+#[cfg(all(windows, feature = "product-safety"))]
+pub(crate) fn run_with_expected(root: &Path, gil: &Path, store: &ObjectStore, world: SnapshotRef,
+    target: &Manifest, expected: Option<&Manifest>) -> Result<Restored, RestoreFailure> {
+    windows::run(root, gil, store, world, target, expected)
+}
+#[cfg(not(all(windows, feature = "product-safety")))]
 pub(crate) fn run_with_expected(
     root: &Path, gil: &Path, store: &ObjectStore, world: SnapshotRef,
     target: &Manifest, expected: Option<&Manifest>,
@@ -808,6 +824,9 @@ fn area_entries(area: &Area) -> Result<Vec<(String, PathBuf)>, RestoreFailure> {
 /// 읽기만 하는 열기가 쓰는 문이다. 여기서 `Some` 이 나오면 그 Project 는 **아무도 확정한 적
 /// 없는 세계** 위에 서 있으므로, 읽는 쪽은 복구하지 않고 그 사실을 그대로 거절해야 한다
 /// (Host UI Model §9.1.1). 무엇이 남았는지 사람이 읽을 수 있게 이름으로 돌려준다.
+#[cfg(all(windows, feature = "product-safety"))]
+pub(crate) fn left_behind(gil: &Path) -> Result<Option<String>, RestoreFailure> { windows::left_behind(gil) }
+#[cfg(not(all(windows, feature = "product-safety")))]
 pub(crate) fn left_behind(gil: &Path) -> Result<Option<String>, RestoreFailure> {
     let area = Area::at(gil);
     let found = area_entries(&area)?;
@@ -819,6 +838,9 @@ pub(crate) fn left_behind(gil: &Path) -> Result<Option<String>, RestoreFailure> 
     Ok(Some(names.join(", ")))
 }
 
+#[cfg(all(windows, feature = "product-safety"))]
+pub(crate) fn recover(root: &Path, gil: &Path) -> Result<(), RestoreFailure> { windows::recover(root, gil) }
+#[cfg(not(all(windows, feature = "product-safety")))]
 pub(crate) fn recover(root: &Path, gil: &Path) -> Result<(), RestoreFailure> {
     let area = Area::at(gil);
     let mut found = area_entries(&area)?;

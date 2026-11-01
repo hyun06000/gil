@@ -8,10 +8,10 @@
 preview.8은 `failure → revisit`을 정상 저장하고 다음 행동으로 안내하지만 `product-safety`가
 그 실행을 일괄 차단했다. 승인 계획의 branch 금지도 있어 실패 뒤 더 이상 진행하지 못했다.
 
-이 계약은 **macOS의 닫힌 실패 Cycle**에 한정된 기존 기록 복구다. 일반 `restore`, Step-level
-revisit, Windows 복원, 전체 추적 정책 활성화 또는 저장 형식 migration을 허용하지 않는다.
-Artifact Model §3.6a의 일반 제품 복원 게이트를 완료했다고 주장하지 않는다. Windows의 실제
-목적지 쓰기는 아직 핸들 기준으로 검증되지 않았으므로 안전 거절을 유지한다.
+이 계약은 **macOS와 Windows의 닫힌 실패 Cycle**에 한정된 기존 기록 복구다. 일반 `restore`, Step-level
+revisit, 전체 추적 정책 활성화 또는 저장 형식 migration을 허용하지 않는다.
+Artifact Model §3.6a의 일반 제품 복원 게이트를 완료했다고 주장하지 않는다. Windows는 별도
+핸들 기반 transaction을 사용하며 기존 경로 문자열 기반 writer로 돌아가지 않는다.
 
 ## 기존 Snapshot의 정체성
 
@@ -36,7 +36,7 @@ Artifact Model §3.6a의 일반 제품 복원 게이트를 완료했다고 주�
 묶는 digest 및 scope별 256-bit 임시 토큰을 검증한다. 토큰은 `_meta`에만 보내며 기록이나
 모델 content에 넣지 않는다. 읽기·자동 갱신·채팅 동의는 승인이 아니다.
 
-승인 후 `.gil/revisit-preserved/<pending-state-sha256>/`에 before 세계의 원본 파일을
+승인 후 실제 기록 저장소의 `.gil/revisit-preserved/<pending-state-sha256>/`에 before 세계의 원본 파일을
 `file-N`으로 저장하고 `files.json`에 경로·보관 이름·SHA-256을 적는다. `approval.json`은 승인한
 계획을 남기며 토큰은 담지 않는다. 파일은 private mode, no-follow 디렉터리 핸들로 원자적으로
 게시하고 fsync한다. 보존본은 transient rollback backup과 달리 자동 삭제하지 않는다.
@@ -50,7 +50,7 @@ success로 바꾸지 않는다. 보존 파일을 작업 폴더에 다시 넣는 
 
 1. 변경 목록 재검증 → 원본·승인 receipt의 영속 보존.
 2. 기존 Cycle 전이로 대상 ancestor와 pending source를 저장.
-3. 승인된 before에 한정한 기존 macOS 핸들 기반 transaction으로 대상 세계를 복원.
+3. 승인된 before에 한정한 각 OS의 핸들 기반 transaction으로 대상 세계를 복원.
 4. 완료 후 별도 `gil_open`으로 새 Cycle을 연다.
 
 ② 뒤 중단되면 기존 transaction recovery가 중간 파일 변경을 rollback한다. `gil_revisit`은
@@ -85,3 +85,18 @@ failure로 닫힌 항목은 다시 pending에 나타나며, 성공 또는 열려
 호스트 지원 작업의 clients/설치기/배포 설정/호스트 판별은 수정하지 않는다. 공용 MCP 등록과
 Monitor bootstrap에는 recovery 모듈을 연결하는 최소 변경이 있다. 호스트 PR과 합칠 때 이
 등록·공용 workflow 생성 영역·생성 HTML만 함께 재검증한다. 생성 HTML은 소스를 통합한 뒤 재생성한다.
+
+## Windows 구현 경계
+
+- 사용자의 단계·버튼·증거 보존·재시도 규칙은 Mac과 같다. 작업 폴더 밖에 기록을 두는 설치도
+  실제 보존 위치를 Monitor에 표시한다. 일반 restore/Step revisit은 양쪽 모두 계속 차단한다.
+- 디렉터리의 모든 조상을 pin하고 한 구성요소씩 no-reparse 핸들로 연다. junction/reparse,
+  hard link, drive/prefix/ADS/reserved name, 대소문자 충돌은 거절한다.
+- PLAN과 원본을 durable하게 기록한 뒤 active transaction으로 전환한다. 신규 파일은
+  transaction의 work 디렉터리에서 완성·검증한 뒤 핸들 기반 rename으로 게시한다. 중단 시
+  미완성 bytes가 사용자 폴더에 남지 않으며 backup 검증 후 rollback한다.
+- working tree와 기록 저장소가 같은 볼륨이어야 원자적 게시가 가능하다. 서로 다른 볼륨이면
+  미리보기 단계에서 거절하며 승인·논리 전이·파일 쓰기를 시작하지 않는다.
+- cleanup은 알려진 전체 모양을 검사한 뒤에만 핸들로 삭제한다. 모르는 항목·링크·손상된
+  backup·복원 중 외부 편집이 있으면 보존하고 거절한다. 전원 장애에 대한 모든 장치의
+  내구성이나 실제 Host 화면 인수까지 보장하는 것은 아니다.
