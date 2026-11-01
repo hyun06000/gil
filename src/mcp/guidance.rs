@@ -47,7 +47,7 @@ fn refused(name: &str) -> Option<&'static str> {
         "gil_start" => "GIL 거절: 새 프로젝트를 만들지 않았다. 이미 프로젝트가 있다면 gil_context를 한 번 읽고 기록된 위치에서 이어간다. gil_start를 반복하지 않는다.",
         "gil_plan_propose" => "GIL 거절: 제안이 기록되지 않았다. 열린 Interview Synthesis인지, scope 5칸·items(id · question · done_when)·synthesis 칸이 모두 있는지, exploration_checklist가 items의 id를 같은 순서로 한 줄씩 적었는지, approved · plan_revision · plan_digest를 넣지 않았는지 확인해 한 번 다시 보낸다. 이 프로젝트가 승인 계획 프로필이 아니라면 일반 Synthesis로 사용자의 답을 기다린다.",
         "gil_plan_read" => "GIL 거절: 승인 상태를 읽지 못했다. 응답이 불확실하면 gil_plan_read를 한 번 다시 읽는다. 승인을 지어내거나 Synthesis를 닫지 않는다.",
-        "gil_plan_request_interview" => "GIL 거절: 재인터뷰 요청이 기록되지 않았다. 열린 Experiment에서 1~4096 bytes 이유로 한 번 다시 보낸다. 현재 Step과 Cycle은 그대로 사실대로 닫는다.",
+        "gil_plan_request_interview" => "GIL 거절: 재인터뷰 요청이 기록되지 않았다. 열린 Experiment에서 1~4096 bytes 이유로 한 번 다시 보낸다. 현재 Step의 다음 호출은 바뀌지 않는다 — 마지막 receipt의 다음 행동을 그대로 이어간다.",
         _ => return None,
     })
 }
@@ -99,7 +99,7 @@ fn closed(result: &CallToolResult) -> String {
         ("interview", Some(Next::OpenCycle)) => "다음 행동: Interview Cycle까지 닫혔다. gil_open(kind: experiment)으로 합의한 첫 질문의 Experiment를 연다. 승인 계획 프로필이면 첫 미실행 항목이 자동으로 묶인다. gil_start를 다시 부르지 않는다.".to_string(),
         ("interview", Some(Next::ChainReport)) | ("experiment", Some(Next::ChainReport)) => "다음 행동: Chain Report를 gil_close로 제출한다. 새 Cycle을 열지 않는다.".to_string(),
         ("experiment", Some(Next::Revisit)) => "다음 행동: 이 Cycle은 failure·revisit으로 닫혔다. Artifact 복원이 따르므로 사용자에게 알린 뒤 gil_revisit(인수 없음)을 한 번 호출하고, 그 다음 gil_open으로 새 Cycle을 연다.".to_string(),
-        ("experiment", Some(Next::OpenCycle)) => "다음 행동: Experiment Cycle이 닫혔다. 남은 독립 질문이 있으면 gil_open(kind: experiment), 목표를 다시 합의해야 하면 gil_open(kind: interview)을 연다.".to_string(),
+        ("experiment", Some(Next::OpenCycle)) => "다음 행동: Experiment Cycle이 닫혔다. 남은 독립 질문이 있으면 gil_open(kind: experiment), 목표를 다시 합의해야 하면 gil_open(kind: interview)을 연다. 일이 모두 끝났어도 채팅 보고만으로 끝내지 않는다: Chain이 있으면 gil_open(kind: interview)으로 Closing Interview를 열어 최종 판정을 승인받고 Chain Report를 닫는다.".to_string(),
         (_, Some(Next::Open(k))) => format!("다음 행동: gil_open(kind: {k})에 행동 계약을 적어 연다. 그 전에 조사·파일 작성을 하지 않는다."),
         (_, Some(Next::OpenMany(kinds))) => format!("다음 행동: gil_open으로 다음 중 하나를 연다: {kinds}. 고르는 기준은 아래 영수증에 있다."),
         (_, Some(Next::CloseCycle)) => "다음 행동: gil_close로 이 Cycle의 Report를 제출한다. gil_cycle(action=close)는 사용하지 않는다.".to_string(),
@@ -159,16 +159,16 @@ fn plan(name: &str, result: &CallToolResult) -> Option<String> {
         items.iter().filter_map(|i| i.get("id").and_then(Value::as_str)).map(str::to_string).collect()).unwrap_or_default();
     let current = view.get("current_item").filter(|i| !i.is_null()).and_then(|i| i.get("id")).and_then(Value::as_str);
     Some(match name {
-        "gil_plan_request_interview" => "승인 계획: 재인터뷰 요청을 보존했다. 아무것도 닫히거나 열리지 않았다. 현재 Step과 Cycle을 사실대로 닫은 뒤 gil_open(kind: interview)으로 다시 승인받는다. 그 전에는 새 Experiment를 열 수 없다.".into(),
+        "gil_plan_request_interview" => "승인 계획: 재인터뷰 요청을 보존했다. 아무것도 닫히거나 열리지 않았다. 지금 열린 Step은 마지막 receipt의 다음 행동대로 이어가고, 남은 Step과 Cycle Report가 실제 순서대로 닫힌 뒤에 gil_open(kind: interview)으로 다시 승인받는다. 요청은 그동안 보존되며, 그 전에는 새 Experiment를 열 수 없다. 요청을 취소하거나 Cycle을 중단하는 호출은 없다.".into(),
         _ => match (proposal, decision) {
             (Some(_), None) => format!("승인 계획: 제안 판 {}이(가) 기록됐고 Monitor 버튼 응답을 기다린다. 턴을 끝내고 기다린다. 채팅 동의로 대체하거나 approved를 직접 적지 않는다. 그동안 조사·보고서 작성·재제안을 하지 않는다. 응답 여부는 gil_plan_read로만 확인한다.", revision.unwrap_or(0)),
             (Some(_), Some("approve")) => format!("승인 계획: 판 {}이(가) 승인됐다. 다음 호출은 close_report를 글자 그대로 넣은 gil_close(Synthesis)다. 그 뒤 gil_open(kind: outcome) → gil_close → Interview Cycle Report gil_close 순서로 닫은 다음에야 gil_open(kind: experiment)을 연다.", revision.unwrap_or(0)),
             (Some(_), Some(_)) => format!("승인 계획: 판 {}에 수정 요청이 왔다. close_report(approved: no)로 Synthesis를 gil_close하고 다음 Question에서 무엇을 바꿀지 묻는다. 수정한 제안은 새 판이며 이전 승인은 재사용되지 않는다.", revision.unwrap_or(0)),
-            (None, _) if reinterview => "승인 계획: 재인터뷰 요청이 보존돼 있다. 현재 Cycle을 사실대로 닫고 gil_open(kind: interview)으로 다시 승인받는다. 그 전에는 Experiment를 열 수 없다.".into(),
+            (None, _) if reinterview => "승인 계획: 재인터뷰 요청이 보존돼 있다. 현재 Cycle의 남은 Step을 receipt 순서대로 마치고 Cycle Report를 닫은 뒤 gil_open(kind: interview)으로 다시 승인받는다. 그 전에는 Experiment를 열 수 없다. 열린 Step이 있으면 그 Step의 close가 다음 호출이다.".into(),
             (None, _) => match current {
                 Some(item) => format!("승인 계획: 이번 Experiment는 항목 {item}에 묶여 있다. Verify에서 document를 bytes 그대로 파일로 저장해 plan_document에 적고, 실제 작업 증거는 별도 파일로 evidence_files에 적는다."),
                 None if !pending.is_empty() => format!("승인 계획: 열린 제안이 없다. 미실행 항목 {}. Interview가 닫혀 있으면 gil_open(kind: experiment)으로 첫 미실행 항목을 연다. 열린 Synthesis가 있으면 먼저 gil_plan_propose로 제안한다.", pending.join(", ")),
-                None => "승인 계획: 열린 제안도 미실행 항목도 없다. 열린 Synthesis에서는 gil_plan_propose로 제안하고, 그 밖에서는 gil_open(kind: interview)으로 새 계획을 승인받는다. 승인을 지어내지 않는다.".into(),
+                None => "승인 계획: 열린 제안도 미실행 항목도 없다. 열린 Synthesis에서는 gil_plan_propose로 제안한다. 항목을 모두 실행했으면 gil_open(kind: interview)으로 Closing Interview를 열어 최종 판정(chain_verdict)을 승인받고 Chain Report를 닫는다. 채팅 보고만으로 끝내지 않고, 승인을 지어내지 않는다.".into(),
             },
         },
     })

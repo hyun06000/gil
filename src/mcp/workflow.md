@@ -59,7 +59,7 @@ actual recorded position and the connected tool schema. Never repeat a call that
    | Verify is closed | `gil_open` Analysis, `gil_close` with a nonblank `interpretation` of the saved evidence |
    | Analysis is closed | `gil_open` Outcome, `gil_close` with `verdict`, `lesson`, `next_direction` |
    | Outcome is closed but the Experiment Cycle is still open | `gil_close` with the Cycle Report |
-   | Cycle closed `success` | `gil_open` the next Experiment (next independent question) or Interview |
+   | Cycle closed `success` | `gil_open` the next Experiment (next independent question) or Interview. When no work remains and the project has a Chain, the Closing Interview and Chain Report follow; a chat summary alone never completes the project |
    | Cycle closed `failure` · `revisit` | Tell the user that files will be restored, then `gil_revisit` once, then `gil_open` a new Cycle |
 
    A closed Hypothesis or a prepared Verify contract does not mean Verify is open. Do not gather
@@ -123,9 +123,15 @@ actual recorded position and the connected tool schema. Never repeat a call that
      `plan_document: plan/A.md` + `evidence_files: evidence/A-result.md`. Refused: the plan file
      alone, or a plan file whose bytes differ from the export.
    - A scope change during an Experiment: `gil_plan_request_interview(reason)` preserves the
-     request and closes nothing. Finish the current Step and Cycle truthfully, then `gil_open`
-     Interview and approve a new revision before any further Experiment. Never fabricate evidence
-     to leave an unfinished Step.
+     request and closes nothing. Finish the current Step and Cycle truthfully: the next call is
+     still the one the latest receipt names (the open Step's `gil_close`, then Hypothesis, Verify,
+     Analysis, Outcome, and the Cycle Report only when that receipt offers it), never an early Cycle
+     close. The request stays preserved meanwhile; there is no cancel or interrupt call. Then
+     `gil_open` Interview and approve a new revision before any further Experiment. Never fabricate
+     evidence to leave an unfinished Step.
+   - When every approved item has executed, the project is not finished by a chat summary:
+     `gil_open` Interview as the Closing Interview, propose the final `chain_verdict` for approval,
+     then `gil_close` the Chain Report.
 8. **Recover and keep the user informed.** A rejected Project action must be resolved before
    further Project work. Never treat a refused close as closed, backfill skipped steps or fabricate
    history. A confirmed input rejection means the call was not executed: check current state and
@@ -138,7 +144,7 @@ actual recorded position and the connected tool schema. Never repeat a call that
    | Close response lost or uncertain | Read `gil_status`/`gil_context`; close again only if the step is still open |
    | Plan decision or save result uncertain | `gil_plan_read`; never assume approval or re-propose blindly |
    | Approved earlier, proposal edited since | The old approval is gone; wait for the new revision's button |
-   | Asked to re-interview during an Experiment | Preserve the request, finish this Cycle truthfully, then Interview |
+   | Asked to re-interview during an Experiment | The request is preserved and closes nothing; keep following each receipt's next call and close the Cycle only when its receipt offers the Cycle Report, then `gil_open` Interview |
    | `gil_revisit` refused (dirty files, plan binding, no recorded direction) | Report the condition; do not restore automatically or retry in a loop |
    | Refused `evidence_files` | Save truthful evidence while Verify is open, then resubmit the close |
    | Monitor cannot be shown | Report it and continue the recorded step; the record is unaffected |

@@ -41,5 +41,10 @@ related:
   프로젝트가 이미 있는 자리에서 gil start 를 다시 부르는 것.
   거절되며 아무것도 만들지 않는다. context 의 첫 블록 [지금 바로 할 호출] 이 이어갈 한 수를 말한다.
 
+  재인터뷰 요청이 보존됐다는 알림을 보고 현재 Step 을 건너뛰거나 Cycle 을 바로 닫으려는 것.
+  거절된다. 요청은 알림일 뿐이며 다음 수는 그 줄이 말하는 합법적인 호출 하나다 — Define 이
+  닫혔으면 Hypothesis, Hypothesis 가 닫혔으면 Verify. Cycle 은 Outcome 까지 닫힌 뒤에만 닫힌다.
+  요청은 그동안 보존되고, 그것을 취소하거나 Cycle 을 중단하는 명령은 없다.
+
 [관련 주제]
   artifact/restore

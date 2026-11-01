@@ -65,6 +65,11 @@ test('approved plans are detected from the record and schema, never required on 
   assert.match(section, /The plan file is not execution evidence/);
   assert.match(section, /an earlier approval is never reused/);
   assert.match(section, /closes nothing\. Finish the current Step and Cycle truthfully/);
+  assert.match(section, /the next call is\s+still the one the latest receipt names/);
+  assert.match(section, /never an early Cycle\s+close/);
+  assert.match(section, /there is no cancel or interrupt call/);
+  assert.match(section, /not finished by a chat summary:\s+`gil_open` Interview as the Closing Interview.*`chain_verdict`.*Chain Report/s);
+  assert.match(next['Cycle closed `success`'], /Closing Interview and Chain Report follow; a chat summary alone never completes the project/);
 });
 
 test('recovery rows connect each failure to the current fact and forbid loops and guarantees', () => {
@@ -72,7 +77,9 @@ test('recovery rows connect each failure to the current fact and forbid loops an
   assert.match(next['Close response lost or uncertain'], /gil_status.*close again only if the step is still open/);
   assert.match(next['Plan decision or save result uncertain'], /gil_plan_read.*never assume approval/);
   assert.match(next['Approved earlier, proposal edited since'], /old approval is gone/);
-  assert.match(next['Asked to re-interview during an Experiment'], /finish this Cycle truthfully/);
+  // Wave 2 / C (R4): a preserved request never replaces the legal next call or invites an early Cycle close.
+  assert.match(next['Asked to re-interview during an Experiment'], /preserved and closes nothing.*each receipt's next call.*only when its receipt offers the Cycle Report.*then `gil_open` Interview/);
+  assert.doesNotMatch(next['Asked to re-interview during an Experiment'], /cancel|interrupt|abort/i);
   assert.match(next['`gil_revisit` refused (dirty files, plan binding, no recorded direction)'], /do not restore automatically or retry in a loop/);
   assert.match(workflow, /Do not loop a tool to confirm a fact that a receipt already states/);
   assert.match(workflow, /never promise that a\s+screen, button or save "always works"/);
