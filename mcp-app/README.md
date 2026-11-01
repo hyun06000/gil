@@ -46,7 +46,9 @@ Project 전체 파일 지문 보존을 잰다. native 창을 열거나 사용자
 4. Host 입력창에서 대화를 계속하고 scroll해도 화면·선택·접힘이 남는지 확인.
 5. Agent가 그 Project를 진행하거나 작업 파일을 변경하면 완전 View와 선택 Report가 갱신되는지 확인.
 6. **별도 창 열기**로 기존 Companion이 열리는지 확인. Project 선택은 각각 독립이다.
-7. Codex와 Claude Desktop **Cowork**를 따로 기록. Code는 inline-only일 수 있다.
+7. Codex, Claude Desktop **Cowork**, Claude Desktop **Claude Code**를 따로 기록한다. 2026-10-30 이전
+   관측에서 Code는 inline-only였고, 같은 날 소유자 보고로 fullscreen 지원이 확인됐다. **연결 정보**의
+   Host 이름·버전과 함께 기록한다.
 
 Cowork의 직접 등록 probe 성공은 Plugin 설치 경로 성공이 아니다. Windows, 수동 표시 선택의 대화 왕복,
 Host 완전 재시작 및 `persistent_host` availability 통합은 별도 검수다. 이 조건들이 남아 있으므로

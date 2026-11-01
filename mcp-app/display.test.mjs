@@ -36,6 +36,7 @@ function fixture({ modes = ['inline', 'fullscreen'], mode = 'inline', answer } =
     return elements.get(id);
   };
   const app = { connect: () => connected.promise,
+    getHostVersion: () => ({ name: 'harness-host', version: '0.0.0' }),
     getHostContext: () => ({ availableDisplayModes: modes, displayMode: mode }),
     requestDisplayMode: async request => { calls.push(request.mode); return answer ? answer(request) : request; },
     callServerTool: async request => { native.push(request.name); return { said: 'opened' }; } };
@@ -51,6 +52,12 @@ function fixture({ modes = ['inline', 'fullscreen'], mode = 'inline', answer } =
     setTimeout: (fn, ms) => { const id = ++serial; timers.set(id, { fn, ms }); return id; },
     clearTimeout: id => timers.delete(id) });
   return { app, calls, directions, native, element, document, connected, rendered, timers,
+    async fireTimerOf(ms) {
+      const found = [...timers.entries()].find(([, t]) => t.ms === ms);
+      assert.ok(found, `a ${ms}ms timer is scheduled`);
+      timers.delete(found[0]); await found[1].fn(); await settle();
+    },
+    async pointerdown() { await documentEvents.get('pointerdown')?.({}); await settle(); },
     ticks: () => ticks, refreshes: () => refreshes, tickWork: fn => { tickWork = fn; },
     async visibility(hidden) { document.hidden = hidden; await documentEvents.get('visibilitychange')?.(); await settle(); },
     async page(name, persisted) { await windowEvents.get(name)?.({ persisted }); await settle(); },
@@ -81,6 +88,8 @@ test('real App waits for rendering in either callback order and keeps horizontal
     await settle();
     assert.deepEqual(f.calls, ['fullscreen']);
     assert.equal(f.document.body.dataset.displayMode, 'fullscreen');
+    assert.match(f.element('host-evidence').textContent, /"host": \{\s*"name": "harness-host"/);
+    assert.doesNotMatch(f.element('host-say').textContent, /Codex|Cowork/);
     await f.element('inline').onclick();
     f.app.onhostcontextchanged({ displayMode: 'inline' });
     await f.app.ontoolresult(data);
@@ -231,4 +240,42 @@ test('late capabilities trigger once, but manual inline or teardown cancels that
     await settle();
     assert.deepEqual(f.calls, cancel === 'none' ? ['fullscreen'] : []);
   }
+});
+
+test('a Host that keeps the App inline gets bounded automatic retries, then the first gesture requests fullscreen', async () => {
+  const f = fixture({ answer: () => ({ mode: 'inline' }) }); await f.start();
+  assert.deepEqual(f.calls, ['fullscreen']);
+  assert.equal(f.document.body.dataset.displayMode, 'inline');
+  await f.fireTimerOf(1500);
+  assert.deepEqual(f.calls, ['fullscreen', 'fullscreen']);
+  await f.fireTimerOf(4000);
+  assert.deepEqual(f.calls, ['fullscreen', 'fullscreen', 'fullscreen']);
+  assert.equal([...f.timers.values()].filter(t => t.ms === 1500 || t.ms === 4000).length, 0, 'no further automatic timer');
+  assert.match(f.element('host-say').textContent, /클릭하면 펼칩니다/);
+  await f.pointerdown();
+  assert.deepEqual(f.calls, ['fullscreen', 'fullscreen', 'fullscreen', 'fullscreen']);
+  await f.pointerdown();
+  assert.equal(f.calls.length, 4, 'one gesture-carried request only');
+  assert.equal(f.element('expand').disabled, false, 'manual expand stays available');
+});
+
+test('a manual inline choice or a Host fullscreen event cancels pending automatic retries', async () => {
+  let f = fixture({ answer: () => ({ mode: 'inline' }) }); await f.start();
+  await f.element('inline').onclick();
+  assert.equal([...f.timers.values()].some(t => t.ms === 1500), false);
+  await f.pointerdown();
+  assert.deepEqual(f.calls, ['fullscreen', 'inline']);
+  f = fixture({ answer: () => ({ mode: 'inline' }) }); await f.start();
+  f.app.onhostcontextchanged({ displayMode: 'fullscreen' });
+  await f.fireTimerOf(1500);
+  assert.deepEqual(f.calls, ['fullscreen'], 'a Host-confirmed fullscreen ends the intent');
+  await f.pointerdown();
+  assert.deepEqual(f.calls, ['fullscreen']);
+});
+
+test('a Host that applies the automatic request schedules no retry and ignores later gestures', async () => {
+  const f = fixture(); await f.start();
+  assert.equal([...f.timers.values()].some(t => t.ms === 1500), false);
+  await f.pointerdown();
+  assert.deepEqual(f.calls, ['fullscreen']);
 });

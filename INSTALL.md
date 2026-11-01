@@ -114,6 +114,59 @@ codex plugin list --json으로 상태를 다시 읽어 끝나지 않은 단계�
 상세한 실패·복구 분기는 [macOS 설치 안내](distribution/codex/INSTALL.md)와
 [Git 없는 설치](distribution/codex/GITLESS-INSTALL.md)를 따른다.
 
+### Claude Desktop(Claude Code 탭)에서 쓰기
+
+Claude Desktop의 **Claude Code** 탭에서도 같은 Core와 Monitor UI를 쓴다. Codex와 별도 제품이 아니다.
+2026-10-31 Desktop 4.4212.0 실측에서 **Desktop 설정에 직접 등록한 MCP 서버**의 Monitor는 inline 카드와
+**모니터 펼치기** fullscreen까지 사용자가 확인했다. 반면 **Plugin으로 설치한 서버**는 설치와 도구 호출이
+성공해도 Host가 App을 화면에 그리지 않았다(세 빌드·두 설치 방식 모두). 따라서 지금 Claude에서 Monitor를
+보는 경로는 직접 등록이다. 자세한 근거는 [호출 경로별 진단](mcp-app/CLAUDE-DESKTOP-ROUTES.md)을 본다.
+
+**1단계 — archive 준비(공통).** 위 Git 없는 경로 그대로 archive를 받아 크기·SHA-256·멤버 목록을 검증하고
+사용자 전용 새 폴더(`$HOME/Library/Application Support/GIL/<버전>-local`, 0700)에 푼다. 이번 변경 이후에
+게시되는 archive는 최상위에 Codex용 `.agents/plugins/marketplace.json`과 Claude Code용
+`.claude-plugin/marketplace.json`을 함께 담는다. `0.2.1-preview.7` archive에는 `.claude-plugin`이 없다.
+
+**2단계 — 직접 등록(현재 화면이 성립하는 경로).** 먼저 Claude Desktop을 **완전히 종료**한다. Desktop은
+실행 중에 자체 설정을 같은 파일에 다시 쓰므로, 켜진 상태에서 고친 내용은 되돌아갈 수 있다(10/31 실측).
+종료한 뒤 `~/Library/Application Support/Claude/claude_desktop_config.json`의 `mcpServers`에 아래 항목을
+더하고 Desktop을 다시 연다.
+`<폴더>`는 1단계의 실제 절대경로다. 공용 작업 규칙은 Rust MCP 서버에 포함되어 Plugin Skill 없이도
+도구 설명과 `gil_help`로 전달된다.
+
+```json
+"gil": {
+  "command": "<폴더>/plugins/gil-companion-prototype/core/darwin-arm64/gil",
+  "args": ["mcp", "--serve"]
+}
+```
+
+**2단계(대안) — Plugin 설치.** 아래 절차로 설치는 되지만, 2026-10-31 현재 Claude Code 탭은 Plugin 서버의
+Monitor App을 화면에 그리지 않는다. Host가 고쳐졌는지 확인하는 용도로만 쓰고, 설치 성공을 화면 성공으로
+보고하지 않는다. Plugin과 직접 등록을 같은 Desktop에 동시에 두면 같은 이름의 도구가 둘이 되므로 한 경로만 둔다.
+
+```text
+위 Git 없는 경로 그대로 archive를 검증해서 $HOME/Library/Application Support/GIL/<버전>-local 에 풀어 줘.
+그다음 Claude Code 플러그인 명령으로 그 폴더를 marketplace로 더하고
+gil-companion-prototype@gil-preview-macos-arm64 를 설치해 줘. 설정 파일이나 플러그인 cache를
+직접 편집하지 말고, 설치 뒤 플러그인 목록에서 버전을 확인해 알려 줘.
+```
+
+```bash
+claude plugin marketplace add "$HOME/Library/Application Support/GIL/<버전>-local"
+```
+
+```bash
+claude plugin install gil-companion-prototype@gil-preview-macos-arm64
+```
+
+설치 뒤 **새 세션**을 열고 빈 테스트 폴더에서 **“지금 폴더에서 GIL 프로젝트를 시작해 줘”**라고 말한다.
+Agent의 도구 성공 문장과 실제 화면을 구분한다. Claude Code 탭은 사용자 동작 없이 보낸 표시 모드 요청을 적용하지
+않으므로(10/31 실측) Monitor는 inline 카드로 먼저 뜨고, **카드를 한 번 클릭하면** fullscreen으로 펼쳐진다.
+Codex처럼 자동으로 펼쳐지지는 않는다. Monitor의 **연결 정보**에는 Host가 보고한 이름·버전과
+광고한 표시 모드가 그대로 적히므로, 문제를 제보할 때 그 값을 함께 적는다. fullscreen 중 다른 도구의
+승인 창이 보이지 않으면 **대화 안으로**를 눌러 inline으로 돌아간 뒤 승인한다.
+
 ## 설치가 멈췄을 때
 
 | 상황 | 대응 |

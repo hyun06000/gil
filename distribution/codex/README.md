@@ -38,9 +38,11 @@ Skill 보정은 새 `0.2.1-preview.2` 후보로 검수하며 설치된 preview.1
 ```text
 새 output/
   marketplace/                          장차 built-dist 저장소 root가 될 구조
-    .agents/plugins/marketplace.json     root 기준 상대 source.path
+    .agents/plugins/marketplace.json     Codex catalog · root 기준 상대 source.path
+    .claude-plugin/marketplace.json      Claude Code catalog · 같은 marketplace 이름, 같은 상대 source
     plugins/gil-companion-prototype/
       .codex-plugin/plugin.json          기존 정본 byte 그대로
+      .claude-plugin/plugin.json         Claude Code adapter · 같은 이름·설명·Core, ${CLAUDE_PLUGIN_ROOT} 기준
       core/darwin-arm64/gil              Core + profile별 19/24 tools + 내장 MCP App
       skills/gil-companion/SKILL.md       공용 Skill 그대로
       LICENSE
@@ -59,12 +61,14 @@ unsigned 후보 제작에서만 출력 version을 명시적 `X.Y.Z-preview.N`으
 `catalog.json`은 plugin-creator의 `create_basic_plugin.py`로 생성한
 template다. `personal`과 구별하는 이름은 `gil-preview-macos-arm64`다. template 자체는 원격 주소나
 Host 등록을 생성하지 않는다. 현재의 승인된 비공개 Host 등록은 위 장부에 별도로 기록한다.
-template를 산출물의 `.agents/plugins/marketplace.json`에 복사한다. 소스 저장소의
-`.claude-plugin/marketplace.json`은 별도 개발용 목록으로 그대로 남는다.
+template를 산출물의 `.agents/plugins/marketplace.json`에 복사한다. `claude-marketplace.json`은
+같은 이름의 Claude Code catalog로 산출물의 `.claude-plugin/marketplace.json`이 된다. 소스 저장소
+최상위의 `.claude-plugin/marketplace.json`은 source clone용 개발 목록이며 산출물에 싣지 않는다.
+unsigned 후보 제작은 두 manifest의 version을 같은 `X.Y.Z-preview.N`으로 바꾼다.
 
 UI는 Rust 실행 파일에 내장된다. `server.mjs`, `node_modules`, Cargo source, 독립 `assets`, 설치
 hook은 싣지 않는다. Companion을 싣거나 자동 실행하지 않는다. **도구·Skill 성공은 fullscreen
-성공이 아니며**, Claude 작업 Plugin의 UI 전달 문제를 이 패키징으로 해결했다고 주장하지 않는다.
+성공이 아니며**, Codex와 Claude Code의 실제 화면 인수는 Host별로 따로 기록한다.
 
 ## 제작자 실행
 

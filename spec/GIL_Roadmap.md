@@ -543,6 +543,10 @@ Later    1  성공 가지 Merge
 
 - [ ] Claude 담당 세션에서 Plugin marketplace 설치부터 폴더 접근·MCP 화면·fullscreen/승인
       병행·실시간 갱신·재연결까지 개선하고 실제 사용자 경험을 검수한다.
+- [~] 2026-10-30: Desktop 4.4212.0 Claude Code의 fullscreen 지원 소유자 보고. 폴더 연결 세션의
+      Plugin 경로 `show_gil_monitor` View 반환 실측. App 연결 정보에 Host 이름·버전 기록, preview
+      archive에 `.claude-plugin` catalog/manifest 동봉, 설치 절차 문서화. 사용자 화면 인수·#1081 병행·
+      재시작 복원은 [10/30 진단](../mcp-app/CLAUDE-DESKTOP-ROUTES.md) 기준으로 남김.
 - [ ] Desktop 일반 대화·Cowork·Code·터미널 CLI의 관측을 분리하고 한 경로의 성공을 다른
       경로의 성공으로 일반화하지 않는다. 직접 등록 probe와 Plugin 설치 경로도 구분한다.
 - [ ] 공용 Core·MCP·UI 계약 변경은 별도 branch/PR에서 영향과 Codex 회귀를 확인한 뒤 통합한다.
@@ -1987,6 +1991,17 @@ PiP는 확인하지 못했다. Windows·작업 전환·재시작 수명 검수 �
       사용자 동작 성공 보고 (2026-09-28). 프로토콜 응답이 아닌 실제 화면 인수
 - [x] Codex 사용자 실측: 폴더 선택·의도 확인 → 계산기 제작 → 공학용 확장 중 Graph 실시간 갱신 (2026-09-25)
 - [ ] Claude Desktop Cowork의 **Plugin 설치 경로**로 같은 인수 (직접 등록 진단판과 구분)
+- [~] Claude Desktop **Claude Code**의 Plugin 설치 경로 — 2026-10-30 fullscreen 지원 소유자 보고,
+      폴더 연결 세션의 View 반환 실측; 같은 archive의 `.claude-plugin` catalog로 설치 경로 추가.
+      10/31: Plugin 경로는 10/07 upload와 이 브랜치의 marketplace 설치본 모두 사용자 화면에 서지 않음(Host가
+      Plugin 서버의 App을 그리지 않음, #274 범위); 같은 세션의 직접 등록 Monitor는 사용자가 **모니터
+      펼치기**로 fullscreen 확인(서버 진단 일치). Claude 설치 안내는 직접 등록을 표시 경로로 둠. 직접
+      등록 App은 inline 카드는 뜨지만 자동 요청은 미적용, 버튼 클릭은 fullscreen 성공(실행 중 설정 편집이
+      되돌아가 10/07 Core로 관측됐을 가능성) →
+      App에 한정 재요청(1.5s·4s)과 첫 클릭 요청 보정 추가 → 보정 Core 직접 등록에서 사용자 확인 "클릭해야
+      펼쳐져": Host는 사용자 동작 안의 요청만 적용(타이밍 가설 기각). Claude Code 기본 UX = inline 뒤 첫 클릭
+      fullscreen. 승인 창 노출은
+      [10/30–31 진단](../mcp-app/CLAUDE-DESKTOP-ROUTES.md) 기준으로 남김
 - [x] Claude Desktop 호출 경로 대조 기록 — 폴더 없는 대화의 Plugin 표시와 폴더 연결 뒤 공식
       예제까지 표시되지 않는 결과를 구분. [9/28 진단](../mcp-app/CLAUDE-DESKTOP-ROUTES.md)
 - [ ] Claude 작업 UX 재설계·인수 — 경로 입력 없는 Project 선택, 폴더 접근 권한 경계,

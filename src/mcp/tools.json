@@ -1021,7 +1021,7 @@
   {
     "name": "show_gil_monitor",
     "title": "GIL Monitor",
-    "description": "Show the GIL MCP App for a prepared scope. It defaults to horizontal layout and requests fullscreen once when ready and supported; if it stays inline, the user can click 모니터 펼치기. A returned View is not proof of display or persistent success. Keep the native Companion fallback available.",
+    "description": "Show the GIL MCP App for a prepared scope. It defaults to horizontal layout and requests fullscreen when ready and supported, with a few bounded retries and then the user's first click inside the App; if it stays inline, the user can click 모니터 펼치기. A returned View is not proof of display or persistent success. Keep the native Companion fallback available.",
     "inputSchema": {
       "type": "object",
       "properties": {
