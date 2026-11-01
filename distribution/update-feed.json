@@ -4,16 +4,16 @@
   "note": "Metadata only. The installed GIL Core reads this file at most once a day to show update guidance in the Monitor; it never downloads or installs from it. Update this file in the same pull request that records a publication ledger.",
   "platforms": {
     "darwin-arm64": {
-      "version": "0.2.1-preview.11",
-      "release_url": "https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.11",
+      "version": "0.2.1-preview.12",
+      "release_url": "https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.12",
       "install_doc": "https://github.com/hyun06000/gil/blob/main/INSTALL.md",
-      "notes": "공통 Monitor 확대·미니맵·업데이트 안내 시험판. Claude Desktop은 새 archive의 Core 경로로 직접 등록을 갱신한다. 기존 프로젝트와 기록은 유지한다."
+      "notes": "Monitor에서 승인 성공과 일시적인 조회 실패를 구분합니다. 확인된 승인 판을 유지한 채 짧은 간격으로 다시 조회하며, 저장 결과가 불확실하면 승인을 자동 재전송하지 않습니다. Mac Claude Desktop 직접 등록은 새 Core 경로로 갱신합니다."
     },
     "windows-x64": {
-      "version": "0.1.1-owner.10",
-      "release_url": "https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.10",
+      "version": "0.1.1-owner.11",
+      "release_url": "https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.11",
       "install_doc": "https://github.com/hyun06000/gil/blob/main/INSTALL.md",
-      "notes": "Claude Desktop 연결 버튼과 공통 Monitor 확대·미니맵 시험판. Companion에서 업데이트 확인 → 업데이트로 설치한다. 첫 Claude Desktop 연결 때는 Desktop을 완전히 종료한다."
+      "notes": "Monitor에서 승인 성공과 일시적인 조회 실패를 구분합니다. 확인된 승인 판을 유지한 채 짧은 간격으로 다시 조회하며, 저장 결과가 불확실하면 승인을 자동 재전송하지 않습니다. Companion에서 업데이트 확인 → 업데이트로 설치합니다."
     }
   }
 }

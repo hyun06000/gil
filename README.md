@@ -45,8 +45,8 @@ GIL의 주 사용자는 비개발자다. 인간은 명령과 저장 형식을 �
 
 소스는 [MIT 라이선스](LICENSE)로 공개한다. 현재 친구·테스터용 채널은 **서명되지 않은 preview**다.
 [통합 설치 안내](INSTALL.md)에서 OS와 CPU에 맞는 검수본을 확인한 뒤 설치한다. macOS Apple
-Silicon은 Codex Plugin `0.2.1-preview.11`, Windows x64는 Companion installer
-`0.1.1-owner.10`이다.
+Silicon은 Codex Plugin `0.2.1-preview.12`, Windows x64는 Companion installer
+`0.1.1-owner.11`이다.
 **사용자에게 Node·Cargo·Homebrew 설치를 요구하지 않는다.** Mac Plugin은 별도 Companion 없이
 [gil-marketplace](https://github.com/hyun06000/gil-marketplace)에서 설치하며, 범용 Plugins Directory
 등재와는 다르다. Windows는 위 Companion installer를 사용한다.
@@ -392,8 +392,8 @@ layer를 목표로 한다.
 
 ## Project status
 
-**현재 사용자 채널은 unsigned preview 둘이다.** macOS Apple Silicon은 Plugin/archive `0.2.1-preview.11`,
-Windows x64는 Companion installer `0.1.1-owner.10`이며, 두 채널 모두 Codex와 Claude Desktop(Claude Code 탭)을
+**현재 사용자 채널은 unsigned preview 둘이다.** macOS Apple Silicon은 Plugin/archive `0.2.1-preview.12`,
+Windows x64는 Companion installer `0.1.1-owner.11`이며, 두 채널 모두 Codex와 Claude Desktop(Claude Code 탭)을
 같은 Core·Monitor·작업 규칙으로 지원한다. 네 조합의 확인 상태(실기기 확인 / 사용자 확인 / 자동 테스트만 통과 /
 사용자 확인 대기)는 [설치 안내](INSTALL.md)의 표를 따른다. 서명된 일반 공개판·Intel Mac·Windows ARM64는 없다.
 
