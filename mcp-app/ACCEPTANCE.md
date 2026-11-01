@@ -114,5 +114,9 @@ App이 Host의 표준 테마 변수·글꼴을 받아 쓰고, 없으면 중립 �
 - **사용자 확인 (11/01, Claude Desktop 4.4212.0 Claude Code 탭, 직접 등록 설치본 `dev-20261101-local`):**
   inline 카드가 주변 대화와 어울린다("어울린다"). 이 확인은 당시 사용자의 Desktop 테마 한 가지에 대한 것이며,
   연결 정보 `styles` 값은 받지 못했다.
-- 남은 인수: 다른 테마(라이트/다크 중 보지 않은 쪽), 연결 정보 `styles`의 `variables` 수, Codex 화면과 그
-  연결 정보 `styles` 값. 각각 사용자 화면 확인으로만 닫는다.
+- **사용자 제공 연결 정보 (11/01, Codex, Plugin 교체 설치 `dev-20261101-local`):** `host` `chatgpt`
+  26.1027.51404, `styles` {theme: dark, variables: 76, fonts: false}, `current`·`response`·`event` 모두
+  fullscreen. Codex가 표준 변수를 보내므로 Codex 전용 fallback은 두지 않는다.
+- **사용자 확인 (11/01, Codex):** 펼친 Monitor가 Codex 화면과 어울린다("어울린다"). 당시 테마는 dark.
+- 남은 인수: 보지 않은 쪽 테마(Claude Code·Codex 각각), Claude Code 연결 정보 `styles` 수. 사용자 화면
+  확인으로만 닫는다.

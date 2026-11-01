@@ -211,7 +211,8 @@ Monitor의 **모니터 펼치기** 결과와 채팅 병행, (3) fullscreen 중 �
 - **Claude Code 탭(Desktop 4.4212.0) 번들 분석:** 렌더러가 표준 변수 전체와 `anthropic-sans` `@font-face`를
   App에 보낸다. 테마는 `prefers-color-scheme`에서 정한다. 값 요약은 [README](README.md)에 있다. 설치본
   번들을 읽은 것이며 화면에서 확인한 값은 아니다.
-- **Codex:** ChatGPT.app 26.1027 번들에서 변수 문자열을 찾지 못했다. 보내지 않는다고 단정하지 않는다.
+- **Codex(사용자 제공 연결 정보, 11/01):** `host` `chatgpt` 26.1027.51404, `theme: dark`, 변수 76개, 글꼴 CSS
+  없음, 자동 fullscreen 적용. 번들 검색으로는 보이지 않았으므로 Host 판정은 연결 정보로만 한다.
 - **조치:** `ui/companion.css`를 Host 변수 우선·중립 fallback 토큰 계층으로 바꾸고, App이 연결·변경 시 Host 값을
   적용하며, 연결 정보에 `styles`(유무·개수)를 적는다. 맨 위 표시 모드 줄은 맨 아래로 내리고 보조 손잡이는
   머리줄로 옮겼다. 정책은 여전히 Host 이름으로 갈라지지 않는다.
@@ -219,5 +220,8 @@ Monitor의 **모니터 펼치기** 결과와 채팅 병행, (3) fullscreen 중 �
   inline 카드가 주변 대화와 어울린다고 답했다. 설정 적용은 Desktop 완전 종료 뒤 스크립트로 했고, 이번에는
   설정이 되돌아가지 않았다. 적용 스크립트의 실행 중 검사는 주 프로세스 `Claude`만 봐야 한다 — Chrome 확장이
   띄우는 `chrome-native-host` 등 보조 프로세스는 Desktop 종료 뒤에도 남는다.
-- **남은 것:** 보지 않은 쪽 테마, 연결 정보 `styles`의 `variables` 수, Codex 화면의 연결 정보 `styles` 값과
-  그에 따른 Codex fallback 결정. 각각 사용자 화면 확인으로만 닫는다.
+- **Codex Plugin 교체 (11/01):** 기존 GitHub marketplace 등록·Plugin을 제거하고 `dev-20261101-local`을 같은
+  이름의 로컬 marketplace로 등록해 재설치했다. 버전 문자열이 공개판과 같아 Core 지문(755fc55e…)으로만 구분된다.
+- **사용자 확인 (11/01, Codex, dark):** 펼친 Monitor가 Codex 화면과 어울린다고 답했다.
+- **판정:** 두 Host 모두 표준 변수를 보내므로 Host 이름 분기는 필요 없다. Codex fallback은 넣지 않는다.
+- **남은 것:** 보지 않은 쪽 테마(두 Host), Claude Code 연결 정보 `styles` 수. 사용자 화면 확인으로만 닫는다.
