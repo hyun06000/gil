@@ -1,11 +1,18 @@
-.host-bar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:12px 16px;
-  border-bottom:1px solid var(--line, #8885); font:14px system-ui; }
-.host-bar button { font:inherit; padding:7px 11px; border:1px solid #8885; border-radius:8px;
-  color:inherit; background:transparent; cursor:pointer; }
-.host-bar #expand { background:#5268ef; color:white; border-color:transparent; }
+/* Host 가 그리는 카드 안에서 한 겹만 더한다: 머리줄 오른쪽의 보조 손잡이(#layout·#native 는
+   companion.css 의 `.scope button` 을 그대로 입는다)와, 맨 아래의 표시 모드 줄. 제목은 Host 카드와
+   머리줄이 이미 말하므로 여기서 되풀이하지 않는다. 색·글꼴은 모두 companion.css 의 토큰이다. */
+.host-bar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:8px 16px 10px;
+  border-top: var(--gil-hair) solid var(--gil-line-soft); font-size: var(--gil-xs); color: var(--gil-fg-3); }
+.host-bar #host-say { flex: 1 1 240px; min-width: 0; line-height: 1.45; }
+.host-bar button { font: inherit; padding:4px 9px; border: var(--gil-hair) solid var(--gil-line);
+  border-radius: var(--gil-r-md); color: var(--gil-fg-2); background: transparent; cursor:pointer; white-space: nowrap; }
+.host-bar button:hover { border-color: var(--gil-fg-3); color: var(--gil-fg); }
 .host-bar button:disabled { opacity:.45; cursor:default; }
-.host-bar #host-say { flex-basis:100%; }
-.host-bar pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; }
+.host-bar button:focus-visible, .host-bar summary:focus-visible { outline: 2px solid var(--gil-ring); outline-offset: 2px; }
+.host-bar details { flex-basis: 100%; }
+.host-bar summary { cursor: pointer; width: max-content; }
+.host-bar pre { white-space:pre-wrap; overflow-wrap:anywhere; margin: 6px 0 0;
+  font: var(--gil-xs)/1.45 var(--gil-mono); color: var(--gil-fg-2); }
 body[data-display-mode="fullscreen"] .map { max-height:55vh; min-height:220px; }
 /* Host owns the chat composer. The Monitor never draws or intercepts another chat UI. */
 body[data-display-mode="fullscreen"] {
@@ -16,11 +23,32 @@ body[data-display-mode="fullscreen"] {
   padding-bottom: var(--gil-composer-space);
 }
 body[data-display-mode="fullscreen"] .detail { scroll-margin-bottom: var(--gil-composer-space); }
-.report-visuals { border-top:1px solid #8885; margin-top:24px; padding-top:12px; overflow-wrap:anywhere; }
-.report-visuals button { margin:4px; padding:8px 12px; font:inherit; cursor:pointer; }
+/* 펼친 화면이 넓으면 Report 를 오른쪽 패널로 세운다. DOM 순서와 wire 는 그대로다 — 자리만 바뀐다. */
+@media (min-width: 900px) {
+  body[data-display-mode="fullscreen"] #gil-companion {
+    display: grid; grid-template-columns: minmax(0, 1fr) 380px; align-content: start;
+    grid-template-areas: "top top" "notice notice" "stale stale" "working working" "settings settings"
+      "empty empty" "intro detail" "map detail" "status status" "bar bar";
+  }
+  body[data-display-mode="fullscreen"] .top { grid-area: top; }
+  body[data-display-mode="fullscreen"] .notice { grid-area: notice; }
+  body[data-display-mode="fullscreen"] .stale { grid-area: stale; }
+  body[data-display-mode="fullscreen"] .working { grid-area: working; }
+  body[data-display-mode="fullscreen"] .settings-say { grid-area: settings; }
+  body[data-display-mode="fullscreen"] .empty { grid-area: empty; }
+  body[data-display-mode="fullscreen"] .intro { grid-area: intro; }
+  body[data-display-mode="fullscreen"] .map { grid-area: map; align-self: start; }
+  body[data-display-mode="fullscreen"] .detail { grid-area: detail; align-self: start; margin: 14px 16px 0 0;
+    padding: 0 0 0 20px; border-top: 0; border-left: var(--gil-hair) solid var(--gil-line-soft); }
+  body[data-display-mode="fullscreen"] .status { grid-area: status; }
+  body[data-display-mode="fullscreen"] .host-bar { grid-area: bar; }
+}
+.report-visuals { border-top: var(--gil-hair) solid var(--gil-line-soft); margin-top:24px; padding-top:12px; overflow-wrap:anywhere; }
+.report-visuals button { margin:4px; padding:6px 10px; font:inherit; font-size: var(--gil-xs); cursor:pointer;
+  border: var(--gil-hair) solid var(--gil-line); border-radius: var(--gil-r-md); background: transparent; color: var(--gil-fg-2); }
 .report-visuals figure { margin:16px 0; }
-.report-visuals img { display:block; max-width:100%; max-height:65vh; object-fit:contain; }
-.report-visuals figcaption { font-weight:600; margin-top:10px; white-space:pre-wrap; }
+.report-visuals img { display:block; max-width:100%; max-height:65vh; object-fit:contain; border-radius: var(--gil-r-sm); }
+.report-visuals figcaption { font-weight: var(--gil-w-semibold); margin-top:10px; white-space:pre-wrap; }
 .report-visuals p { white-space:pre-wrap; }
 .report-visuals .visual-viewport { max-width:100%; overflow:auto; }
 .report-visuals .visual-image-trigger { display:block; margin:0; padding:0; border:0; background:transparent; max-width:100%; cursor:zoom-in; }

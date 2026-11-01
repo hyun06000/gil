@@ -11,7 +11,10 @@ const bundled = await build({ entryPoints: [new URL('./app.js', import.meta.url)
     b.onResolve({ filter: /^@modelcontextprotocol\/ext-apps$|^\.\/host\.mjs$|^\.\.\/ui\/companion\.js$/ },
       ({ path }) => ({ path, namespace: 'display-harness' }));
     b.onLoad({ filter: /.*/, namespace: 'display-harness' }, ({ path }) => ({ contents:
-      path.startsWith('@') ? 'export class App { constructor() { return harness.app; } }' :
+      path.startsWith('@') ? `export class App { constructor() { return harness.app; } }
+        export const applyDocumentTheme = theme => harness.applied.push(['theme', theme]);
+        export const applyHostStyleVariables = variables => harness.applied.push(['variables', variables]);
+        export const applyHostFonts = css => harness.applied.push(['fonts', css]);` :
       path.includes('host.mjs') ? `export const makeHost = (_app, _data, options) => { harness.presence = options.presence; return harness.host; };
         export const unwrap = value => value;
         export const retryAfter = harness.retryAfter;
@@ -26,7 +29,7 @@ const deferred = () => {
 };
 const settle = () => new Promise(done => setImmediate(done));
 const data = { scope_id: `project:${'a'.repeat(64)}`, view: {}, watching: true };
-function fixture({ modes = ['inline', 'fullscreen'], mode = 'inline', answer } = {}) {
+function fixture({ modes = ['inline', 'fullscreen'], mode = 'inline', answer, hostContext = {} } = {}) {
   const connected = deferred(), rendered = deferred(), calls = [], directions = [], native = [], observations = [];
   const timers = new Map(), documentEvents = new Map(), windowEvents = new Map();
   let serial = 0, ticks = 0, refreshes = 0, tickWork = async () => {};
@@ -37,10 +40,11 @@ function fixture({ modes = ['inline', 'fullscreen'], mode = 'inline', answer } =
   };
   const app = { connect: () => connected.promise,
     getHostVersion: () => ({ name: 'harness-host', version: '0.0.0' }),
-    getHostContext: () => ({ availableDisplayModes: modes, displayMode: mode }),
+    getHostContext: () => ({ availableDisplayModes: modes, displayMode: mode, ...hostContext }),
     requestDisplayMode: async request => { calls.push(request.mode); return answer ? answer(request) : request; },
     callServerTool: async request => { native.push(request.name); return { said: 'opened' }; } };
-  const harness = { app, retryAfter,
+  const applied = [];
+  const harness = { app, retryAfter, applied,
     host: { listen() {}, reportPresence: async () => { observations.push(harness.presence()); },
       tick: async () => { observations.push(harness.presence()); ticks++; await tickWork(); },
       refresh: async () => { refreshes++; } },
@@ -52,7 +56,7 @@ function fixture({ modes = ['inline', 'fullscreen'], mode = 'inline', answer } =
     crypto: { randomUUID: () => 'test' },
     setTimeout: (fn, ms) => { const id = ++serial; timers.set(id, { fn, ms }); return id; },
     clearTimeout: id => timers.delete(id) });
-  return { app, calls, directions, native, observations, element, document, connected, rendered, timers,
+  return { app, calls, directions, native, observations, element, document, connected, rendered, timers, applied,
     async fireTimerOf(ms) {
       const found = [...timers.entries()].find(([, t]) => t.ms === ms);
       assert.ok(found, `a ${ms}ms timer is scheduled`);
@@ -319,4 +323,30 @@ test('gesture fallback never captures explicit inline or native controls', async
     await f.pointerdown();
     assert.equal(f.calls.filter(mode => mode === 'fullscreen').length, 3);
   }
+});
+
+test('Host theme, style variables and fonts are adopted on connect and on change; junk is dropped', async () => {
+  const fonts = '@font-face{font-family:host-sans;src:url(/assets/a.woff2)}';
+  const f = fixture({ hostContext: { theme: 'dark', styles: { variables: {
+    '--color-background-primary': 'light-dark(#fff, #222)', 'bad key': '#000', '--color-text-primary': 42,
+  }, css: { fonts } } } });
+  await f.start();
+  assert.deepEqual(JSON.parse(JSON.stringify(f.applied)), [['theme', 'dark'],
+    ['variables', { '--color-background-primary': 'light-dark(#fff, #222)' }], ['fonts', fonts]]);
+  assert.deepEqual(JSON.parse(f.element('host-evidence').textContent).styles,
+    { theme: 'dark', variables: 1, fonts: true });
+  f.app.onhostcontextchanged({ theme: 'light' });
+  assert.deepEqual(JSON.parse(JSON.stringify(f.applied.slice(3))), [['theme', 'light'],
+    ['variables', { '--color-background-primary': 'light-dark(#fff, #222)' }], ['fonts', fonts]]);
+  assert.equal(JSON.parse(f.element('host-evidence').textContent).styles.theme, 'light');
+  // Display-mode changes alone never re-apply styles.
+  f.app.onhostcontextchanged({ displayMode: 'inline' });
+  assert.equal(f.applied.length, 6);
+});
+
+test('without Host styles nothing is applied and the evidence says so', async () => {
+  const f = fixture(); await f.start();
+  assert.deepEqual(JSON.parse(JSON.stringify(f.applied)), []);
+  assert.deepEqual(JSON.parse(f.element('host-evidence').textContent).styles,
+    { theme: null, variables: 0, fonts: false });
 });

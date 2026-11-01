@@ -1,6 +1,6 @@
-import { App } from '@modelcontextprotocol/ext-apps';
+import { App, applyDocumentTheme, applyHostStyleVariables, applyHostFonts } from '@modelcontextprotocol/ext-apps';
 import { makeHost, unwrap, retryAfter, connectionMessage } from './host.mjs';
-import { graphOrientation, initialFullscreen, hostIdentity } from './presentation.mjs';
+import { graphOrientation, initialFullscreen, hostIdentity, hostStyles, styleEvidence } from './presentation.mjs';
 
 const app = new App({ name: 'GIL Monitor', version: '0.1.0' },
   { availableDisplayModes: ['inline', 'fullscreen'] });
@@ -14,8 +14,21 @@ let connectionIssue = null;
 let layoutChoice = null;
 let presenceSequence = 0, renderFailed = false;
 // Host identity is recorded as reported, never inferred; policy does not branch on it.
-const evidence = { declared: ['inline', 'fullscreen'], instance: crypto.randomUUID(), host: null };
+const evidence = { declared: ['inline', 'fullscreen'], instance: crypto.randomUUID(), host: null, styles: null };
 const initialDisplay = initialFullscreen();
+
+// The Host's theme, standard style variables and font CSS are adopted as given. The
+// stylesheet reads them through var(--color-*, fallback); without them the neutral
+// defaults apply. This never branches on the Host's identity.
+function adoptHostStyles() {
+  const got = hostStyles(context);
+  try {
+    if (got.theme) applyDocumentTheme(got.theme);
+    if (got.variables) applyHostStyleVariables(got.variables);
+    if (got.fonts) applyHostFonts(got.fonts);
+  } catch { /* a Host that rejects style application still gets the neutral defaults */ }
+  evidence.styles = styleEvidence(context);
+}
 
 // Report only this rendered App's observations. Host display mode is not OS occlusion proof.
 function presence() {
@@ -53,6 +66,7 @@ el('layout').onclick = () => {
 app.onhostcontextchanged = (change) => {
   context = { ...context, ...change };
   if ('displayMode' in change) { eventMode = change.displayMode; initialDisplay.observe(change.displayMode); }
+  if ('theme' in change || 'styles' in change) adoptHostStyles();
   modes();
   maybeFullscreen();
   void reportPresence();
@@ -197,6 +211,7 @@ app.connect().then(() => {
   if (stopped) return;
   connected = true; context = { ...app.getHostContext(), ...context };
   evidence.host = hostIdentity(app);
+  adoptHostStyles();
   modes(context.availableDisplayModes?.includes('fullscreen')
     ? 'Monitor 가 준비되면 전체 화면을 자동 요청합니다. 그대로라면 모니터 펼치기를 눌러 주세요.'
     : Array.isArray(context.availableDisplayModes)
