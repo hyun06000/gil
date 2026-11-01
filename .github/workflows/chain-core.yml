@@ -31,6 +31,6 @@ jobs:
         run: |
           cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --lib visual_start
           cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --test visual_start
-          cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --test mcp chain_profile_stdio
+          cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --test mcp
       - name: Compile all Core targets in the development product profile
         run: cargo build --locked -p gil --all-targets --features chain-core,visual-authoring,product-safety

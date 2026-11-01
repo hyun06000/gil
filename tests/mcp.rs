@@ -13,6 +13,15 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 mod common;
 
+fn expected_start_format() -> u64 {
+    match (cfg!(feature = "chain-core"), cfg!(feature = "visual-authoring")) {
+        (false, false) => 4,
+        (false, true) => 5,
+        (true, false) => 6,
+        (true, true) => 7,
+    }
+}
+
 /// State path used by the product-facing MCP start. On Windows the working tree and the private
 /// GIL record deliberately live in different roots.
 fn product_state_path(root: &Path) -> PathBuf {
@@ -87,6 +96,18 @@ fn migration_stdio_two_approvals_backup_apply_restart_and_preservation() {
             let mut p=common::bootstrap_from(s.project().clone());common::up_to_verify(&mut p);p
         };
         *s.project_mut()=p;s.commit().unwrap();drop(s);
+        // This migration contract starts from a synthetic historical format-4 record,
+        // even when the test binary's default writer creates a Chain.
+        #[cfg(feature = "chain-core")]
+        {
+            let path = root.join(gil::STATE_PATH);
+            let mut value: serde_norway::Value = serde_norway::from_slice(&fs::read(&path).unwrap()).unwrap();
+            value["cycles"] = value["chains"]["nodes"][0]["cycles"].clone();
+            value.as_mapping_mut().unwrap().remove(serde_norway::Value::from("chains"));
+            value["format"] = serde_norway::Value::from(4);
+            fs::write(&path, serde_norway::to_string(&value).unwrap()).unwrap();
+            assert!(gil::load(common::spec(), &path).unwrap().current_chain().is_none());
+        }
         fs::write(root.join("미확정 변경.txt"),"공백과 한글\n다음 줄\n").unwrap();
         fs::write(root.join(".gil/unreferenced"),b"retain even unreferenced").unwrap();
         fs::create_dir(root.join(".git")).unwrap();
@@ -151,7 +172,7 @@ fn migration_stdio_two_approvals_backup_apply_restart_and_preservation() {
     }
 }
 
-/// A format-5 Verify without images must close with the typed shape carrying a `not_needed` (or
+/// A visual Verify (format 5 or 7) must close with the typed shape carrying a `not_needed` (or
 /// `missing`) declaration; the ordinary text close of that Verify is refused and converts nothing.
 #[cfg(all(any(unix, windows), feature = "visual-authoring"))]
 #[test]
@@ -160,7 +181,7 @@ fn format5_verify_without_images_uses_typed_close_with_a_declaration() {
     use gil::{CycleKind, NodeKind};
     let root=scratch("verify-no-images");
     let mut mcp=Client::serve_with(&scratch("verify-no-images-settings")); mcp.initialize();
-    assert_eq!(monitor_call(&mut mcp,"gil_start",json!({"project_root":root}))["structuredContent"]["storage_format"],5);
+    assert_eq!(monitor_call(&mut mcp,"gil_start",json!({"project_root":root}))["structuredContent"]["storage_format"],expected_start_format());
     let mut p=common::bootstrap_from(load_product(&root));
     common::up_to_verify(&mut p);
     save_product(&root, &p);
@@ -210,7 +231,7 @@ fn authoring_stdio_close_reuse_confirmation_and_rejections() {
     }
     let root=scratch("authoring-new-wire");
     let mut mcp=Client::serve_with(&scratch("authoring-settings")); mcp.initialize();
-    assert_eq!(monitor_call(&mut mcp,"gil_start",json!({"project_root":root}))["structuredContent"]["storage_format"],5);
+    assert_eq!(monitor_call(&mut mcp,"gil_start",json!({"project_root":root}))["structuredContent"]["storage_format"],expected_start_format());
     let mut p=common::bootstrap_from(load_product(&root));
     common::up_to_verify(&mut p);
     save_product(&root, &p);
@@ -353,7 +374,7 @@ fn authoring_declarations_and_failed_commit_keep_reports_open() {
     for state in ["not_needed","missing","attached"] {
         let root=scratch(&format!("authoring-new-{state}"));
         let started=monitor_call(&mut mcp,"gil_start",json!({"project_root":root}));
-        assert_eq!(started["structuredContent"]["storage_format"],5,"{started}");
+        assert_eq!(started["structuredContent"]["storage_format"],expected_start_format(),"{started}");
         let p=load_product(&root);
         let mut p=common::bootstrap_from(p); common::up_to_verify(&mut p);
         save_product(&root, &p);
@@ -1443,12 +1464,17 @@ fn starting_a_project_leads_to_one_monitor_scope_and_the_first_interview_updates
     assert_eq!(started["isError"], false, "{started}");
     assert_eq!(started["structuredContent"]["ok"], true);
     let receipt = started["structuredContent"]["said"].as_str().unwrap();
-    assert!(receipt.starts_with("프로젝트를 시작했다.\n현재: cycle:C1 · interview\n"), "{receipt}");
+    let prefix = if cfg!(feature = "chain-core") {
+        "프로젝트를 시작했다.\nChain: chain:C1 · open · Entry snapshot:A1\n현재: cycle:C1 · interview\n"
+    } else {
+        "프로젝트를 시작했다.\n현재: cycle:C1 · interview\n"
+    };
+    assert!(receipt.starts_with(prefix), "{receipt}");
     assert!(receipt.contains("실행\n  gil open\n"), "{receipt}");
     let state = std::fs::read(product_state_path(&root)).unwrap();
-    assert!(state.starts_with(if cfg!(feature="visual-authoring") { b"format: 5\n" } else { b"format: 4\n" }));
+    assert!(state.starts_with(format!("format: {}\n", expected_start_format()).as_bytes()));
     if cfg!(feature="visual-authoring") {
-        assert_eq!(started["structuredContent"]["storage_format"],5);
+        assert_eq!(started["structuredContent"]["storage_format"],expected_start_format());
         assert_eq!(started["structuredContent"]["display_confirmed"],false);
     }
     assert_eq!(binding_files(&settings), 1, "MCP 시작은 같은 root 의 Monitor 를 준비한다");
@@ -1672,7 +1698,7 @@ fn onedrive_working_folder_stays_put_and_workspace_prep_still_needs_approval() {
     // Starting in the prepared folder works once it is the explicitly given root.
     let started = monitor_call(&mut mcp, "gil_start", json!({"project_root": planned}));
     assert_eq!(started["structuredContent"]["ok"], true, "{started}");
-    assert_eq!(started["structuredContent"]["storage_format"], 5);
+    assert_eq!(started["structuredContent"]["storage_format"], expected_start_format());
     mcp.eof();
 }
 
