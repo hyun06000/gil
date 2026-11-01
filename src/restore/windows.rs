@@ -236,7 +236,7 @@ pub(super) fn recover(root: &Path, gil: &Path) -> Result<(), RestoreFailure> {
             Ok(mut f) => {
                 let mut b = String::new();
                 f.read_to_string(&mut b).map_err(err)?;
-                if b != "committed\n" {
+                if !b.is_empty() && b != "committed\n" {
                     return Err(err("unknown commit marker"));
                 }
             }

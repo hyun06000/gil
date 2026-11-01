@@ -154,6 +154,7 @@ impl ProjectSession {
         let target_policy = policy(&store, &target)?;
         let includes = |path: &str| -> Result<bool, String> {
             Ok(defaults.includes_file(path)?
+                && defaults.includes_file(&path.to_ascii_lowercase())?
                 && old_policy.includes_file(path)?
                 && target_policy.includes_file(path)?)
         };

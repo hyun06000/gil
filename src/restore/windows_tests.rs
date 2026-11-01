@@ -140,3 +140,31 @@ fn cleanup_validates_every_entry_before_deleting_even_one_known_file() {
         b"keep"
     );
 }
+
+#[test]
+fn private_preservation_paths_longer_than_max_path_can_publish_and_reopen() {
+    let root = scratch("long-private-archive");
+    let root = Dir::open(&root).unwrap();
+    let external = root
+        .child(&"x".repeat(100), true)
+        .unwrap()
+        .child(".gil", true)
+        .unwrap();
+    let base = external.private_child("revisit-preserved").unwrap();
+    let archive = base.private_child(&"a".repeat(64)).unwrap();
+    let from = format!("part-{}", "b".repeat(64));
+    assert!(archive.path().join(&from).as_os_str().len() > 260);
+    let mut f = archive.create(&from).unwrap();
+    f.write_all(b"preserved evidence").unwrap();
+    f.sync_all().unwrap();
+    archive.rename_file(&from, "file-0").unwrap();
+    drop(f);
+    let reopened = base.private_child(&"a".repeat(64)).unwrap();
+    let mut bytes = String::new();
+    reopened
+        .read("file-0")
+        .unwrap()
+        .read_to_string(&mut bytes)
+        .unwrap();
+    assert_eq!(bytes, "preserved evidence");
+}

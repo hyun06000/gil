@@ -4,14 +4,32 @@ use std::{
     ffi::OsStr,
     fs::{self, File},
     io,
-    path::Path,
+    path::{Component, Path, PathBuf, Prefix},
 };
 use windows_sys::Win32::Storage::FileSystem::{DELETE, FILE_SHARE_READ};
 
 pub(crate) struct Dir(win::Chain);
 impl Dir {
     pub(crate) fn open(path: &Path) -> io::Result<Self> {
-        Ok(Self(win::Chain::open(path)?))
+        win::absolute(path)?;
+        // Add the long-path spelling lexically, never canonicalize through a junction.
+        // External project-state paths plus archive digests commonly exceed MAX_PATH.
+        let extended = match path.components().next() {
+            Some(Component::Prefix(p)) => match p.kind() {
+                Prefix::Disk(letter) => {
+                    let mut full = PathBuf::from(format!("\\\\?\\{}:\\", char::from(letter)));
+                    for part in path.components().skip(2) {
+                        if let Component::Normal(name) = part {
+                            full.push(name);
+                        }
+                    }
+                    full
+                }
+                _ => path.to_owned(),
+            },
+            _ => return Err(win::refused()),
+        };
+        Ok(Self(win::Chain::open(&extended)?))
     }
     pub(crate) fn path(&self) -> &Path {
         self.0.path()

@@ -211,7 +211,9 @@ fn old_failure_requires_exact_app_consent_preserves_evidence_and_retries_twice()
 fn protected_changes_refuse_without_touching_state_or_files() {
     for (i, path) in [
         ".env",
+        ".ENV",
         ".git/HEAD",
+        ".GIT/HEAD",
         "node_modules/cache.js",
         "private/report.txt",
     ]
@@ -250,16 +252,17 @@ fn approved_recovery_survives_state_save_then_process_death_during_restore() {
         fs::read_to_string(r.root.join("report.txt")).unwrap(),
         "partial attempt 2"
     );
-    // The CLI may resume only the already approved operation. Abort after a real file change.
-    let out = std::process::Command::new(gil())
-        .arg("revisit")
-        .current_dir(&r.root)
-        .env("GIL_RESTORE_CRASH", "after-first-apply")
-        .env("LOCALAPPDATA", private_local_app_data(&settings))
-        .output()
-        .unwrap();
-    assert!(!out.status.success());
-    assert!(r.record.parent().unwrap().join("restore/active/PLAN").is_file(), "child must abort during a real transaction: {}", String::from_utf8_lossy(&out.stderr));
+    // The exact MCP transport resumes only a durable approval, then dies after a real write.
+    r.c = Client::serve_with_env(&settings, &[("GIL_RESTORE_CRASH", "after-first-apply")]);
+    r.c.call_expecting_crash("gil_revisit", json!({"project_root":r.root}));
+    assert!(
+        r.record
+            .parent()
+            .unwrap()
+            .join("restore/active/PLAN")
+            .is_file(),
+        "a real transaction must remain after abort"
+    );
     r.c = Client::serve(&settings);
     ok(
         r.model("gil_revisit", json!({})),
