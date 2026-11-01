@@ -390,5 +390,10 @@ model을 사용하되 사람이 필요할 때 상위 Report에서 내부 Graph�
 
 [실제 Chain 저장](GIL_Chain_Storage_v0.1.md)을 쓰는 개발 프로젝트에서만 현재 Chain의
 참조·Open 상태·Existence·Entry·현재 Cycle을 먼저 표시한다. 아래 Cycle/누적 실패/Step 해상도는
-그대로 유지한다. 4/5 기록에는 Chain을 지어내지 않는다. M6-B/C 이전에는 Chain Report나
-이전 Chain 요약을 생성하지 않는다.
+그대로 유지한다. 4/5 기록에는 Chain을 지어내지 않는다.
+
+M6-C (2026-11-01): 다음 Chain을 명시적으로 열면 이전 Chain들의 ID·판정·closing_synthesis_ref·
+handoff_summary를 생성 순서로 읽는다. 이전 Chain의 전체 Cycle/Step 본문을 기본 Context에
+펼치거나 Report를 새로 요약해 저장하지 않는다. 세부 이력은 `gil story`, Monitor 타임라인,
+Node detail과 증거 이미지 조회로 읽는다. 새 Opening Interview의 사용자 승인은 별도로 필요하다.
+과거 승인 문자열을 새 주제에 대한 승인으로 간주하지 않는다.

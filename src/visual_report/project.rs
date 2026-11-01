@@ -163,9 +163,7 @@ impl<'a> ProjectVisualGraph<'a> {
         };
         let Some(cycle) = self
             .project
-            .cycles()
-            .nodes()
-            .iter()
+            .all_cycles()
             .find(|cycle| cycle.id().to_ref() == cycle_ref)
         else {
             return TargetState::Unknown;
@@ -203,9 +201,7 @@ impl<'a> ProjectVisualGraph<'a> {
         };
         let cycle = self
             .project
-            .cycles()
-            .nodes()
-            .iter()
+            .all_cycles()
             .find(|cycle| cycle.id().to_ref() == cycle_ref)?;
         match owner {
             ReportOwner::Cycle(_) => {
@@ -239,9 +235,7 @@ impl VisualGraph for ProjectVisualGraph<'_> {
 
     fn required_verify_reports(&self) -> Vec<StepRef> {
         self.project
-            .cycles()
-            .nodes()
-            .iter()
+            .all_cycles()
             .flat_map(|cycle| {
                 cycle.steps().nodes().iter().filter_map(|node| {
                     if node.kind != NodeKind::Verify || !node.is_closed() {

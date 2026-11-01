@@ -2014,7 +2014,51 @@ fn chain_profile_stdio_closing_report_survives_lost_response_and_monitor_restart
         assert_eq!(view["chain"]["state"], "closed", "{shown}");
         assert_eq!(view["chain"]["report"]["verdict"], "failure");
         assert_eq!(view["chain"]["exit_snapshot_ref"], "snapshot:A1");
-        assert_eq!(view["next_actions"], json!([]));
+        assert_eq!(view["next_actions"][0]["kind"], "open_chain");
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        mcp.eof();
+    }
+}
+
+#[cfg(feature = "chain-core")]
+#[test]
+fn chain_profile_stdio_handoff_survives_restart_without_duplicate_or_lost_history() {
+    use serde_json::json;
+    for visual in [false, true] {
+        let root = common::scratch(if visual { "handoff-seven" } else { "handoff-six" });
+        common::private_storage(&root);
+        let path = root.join(gil::STATE_PATH);
+        let mut p = common::closing_ready("failure");
+        p.close_chain(common::chain_report("failure")).unwrap();
+        let p = if visual { p.prepare_visual_upgrade().unwrap() } else { p };
+        let journey = p.current_existence().current_journey();
+        gil::save(&p, &path).unwrap();
+        let settings = scratch("handoff-settings");
+        let mut mcp = Client::serve_with(&settings);
+        mcp.initialize();
+        let args = json!({"project_root": root, "kind": "chain"});
+        let opened = monitor_call(&mut mcp, "gil_open", args.clone());
+        assert_eq!(opened["structuredContent"]["ok"], true, "{opened}");
+        mcp.eof();
+        let bytes = std::fs::read(&path).unwrap();
+        let p = gil::load(common::spec(), &path).unwrap();
+        assert_eq!(p.current_existence().current_journey(), journey);
+        assert_eq!(p.current_chain().unwrap().id().to_string(), "chain:C2");
+        let mut mcp = Client::serve_with(&settings);
+        mcp.initialize();
+        let context = monitor_call(&mut mcp, "gil_context", json!({"project_root": root}));
+        let said = context["structuredContent"]["said"].as_str().unwrap();
+        assert!(said.contains("이전 Chain: chain:C1 · failure"), "{said}");
+        assert!(said.contains(common::chain_report("failure").get("handoff_summary").unwrap()));
+        let duplicate = monitor_call(&mut mcp, "gil_open", args);
+        assert_eq!(duplicate["structuredContent"]["ok"], false, "{duplicate}");
+        let prepared = monitor_call(&mut mcp, "gil_monitor_prepare", json!({"project_root": root}));
+        let shown = monitor_call(&mut mcp, "show_gil_monitor", json!({"scope_id": prepared["structuredContent"]["scope_id"]}));
+        let view = &shown["structuredContent"]["view"];
+        assert_eq!(view["current"]["chain_ref"], "chain:C2", "{shown}");
+        assert_eq!(view["chain"]["parent_chain_ref"], "chain:C1");
+        assert_eq!(view["chains"][0]["report"]["verdict"], "failure");
+        assert_eq!(view["timeline"].as_array().unwrap().len(), 4);
         assert_eq!(std::fs::read(&path).unwrap(), bytes);
         mcp.eof();
     }

@@ -1,4 +1,4 @@
-# GIL Chain storage — M6-A/B
+# GIL Chain storage — M6-A/B/C
 
 2026-11-01. 범위: 실제 Chain 생성·소유·Current·저장·재시작과 승인 근거에 연결된 종료. 규범은
 [기본 명세 §5](GIL%20Specification%20v0.1.md), [Node Model §6–7](GIL_Node_Model_v0.1.md),
@@ -12,9 +12,9 @@ macOS와 Windows에 같은 도메인·MCP 규칙을 사용한다. 기존 설치�
 이번 변경으로 갱신하지 않는다. 기본 빌드의 신규 생성 형식은 기존 4/5다.
 
 `chain-core`의 새 Project는 `Project → Chain → Cycle → Step`을 실제로 소유한다.
-Chain은 이름만 붙인 UI 그룹이나 Cycle의 `parent`가 아니다. 첫 Chain 하나를 열고,
-Closing Interview 승인 근거로 닫을 수 있다. 다음 Chain 생성은 M6-C다.
-`gil open chain` / `gil_open(kind: "chain")`은 Open 부모 및 미지원 후속 Chain 생성을 거절한다.
+Chain은 이름만 붙인 UI 그룹이나 Cycle의 `parent`가 아니다. 첫 Chain을 열고,
+Closing Interview 승인 근거로 닫은 뒤 명시적으로 다음 Chain을 열 수 있다.
+`gil open chain` / `gil_open(kind: "chain")`은 Open 부모와 legacy Project에서 거절한다.
 Chain 취소·Chain revisit의 우회 API는 없다.
 
 ## 저장과 불변식
@@ -51,10 +51,11 @@ chains:
 ```
 
 - 루트의 별도 `cycles`는 없다. 모든 Cycle은 정확히 한 Chain 안에 저장된다. 중복 graph,
-  Chain 없는 Cycle, 거짓 Current, 추가 Chain/부모, 알 수 없는 소속 필드는 거절한다.
+  Chain 없는 Cycle, 거짓 Current, 직렬 계보 밖 Chain/부모, 알 수 없는 소속 필드는 거절한다.
 - 첫 Chain C1과 첫 Interview Cycle C1, X1/ES0/J0/A1은 한 번의 시작 저장으로 생성한다.
   Step·Will·Chain Open Report·인간 승인은 생성하지 않는다.
-- Entry는 최초 관측 세계이자 첫 Interview Entry와 같아야 하며 Artifact registry에 실재한다.
+- 첫 Chain의 Entry는 최초 관측 세계이고, 후속 Chain은 부모 Exit이다. 각 Chain Entry는
+  자신의 첫 Interview Entry와 같아야 하며 Artifact registry에 실재한다.
   Open Chain의 Exit은 없다. Cycle이 닫혀도 Chain은 열린 상태다.
 - Chain을 연 Existence는 내부 모든 Cycle의 실행 주체와 같고, Open Chain 중에 바뀌지 않는다.
 - World Current 경로는 `chains.current → cycles.current → 현재 Step`이다. 세계 Snapshot은
@@ -62,8 +63,8 @@ chains:
 - Cycle 생성·종료·revisit은 소유 Chain의 graph를 바꾼다. 기존 원자적 저장과 단일 활성 Cycle/
   Step 제약을 그대로 적용한다. 컨테이너 전이 자체로 Will이나 Journey revision을 만들지 않는다.
 - `chain:C1`, `cycle:C1`, `step:C1/S1`은 서로 다른 주소다. CycleRef/StepRef를 다시 쓰지 않는다.
-  M6-A에는 Chain이 하나이므로 내부 Cycle 발급기가 프로젝트 전체 high-water mark다.
-  M6-C가 여러 Chain을 허용하기 전에 이 발급기를 프로젝트 전역으로 옮기는 저장 계약을 정해야 한다.
+  현재 Chain의 내부 Cycle 발급기가 프로젝트 전체 high-water mark다.
+  다음 Chain으로의 발급기 인계와 검증은 아래 M6-C 계약을 따른다.
 
 ## Closing Interview와 종료 — M6-B
 
@@ -103,11 +104,36 @@ Chain success 또는 failure가 모두 가능하다. 일반 Interview(open_child
 응답을 놓쳤다면 `gil_status`/`gil_context`/Monitor에서 닫힌 Chain Report를 먼저 조회한다.
 닫힌 Chain을 다시 닫는 요청은 명시적으로 거절하며 기존 기록·Current·세계는 바뀌지 않는다.
 조회는 저장하지 않는다. 열린 Chain의 종료 대기와 닫힌 Chain의 최종 판정은 CLI와 공용 Monitor에
-같은 데이터로 표시한다. 다음 Chain이 구현되기 전에는 종료 후 새 실행을 제안하지 않는다.
+같은 데이터로 표시한다. 닫힌 Chain에서는 명시적 다음 Chain 열기를 안내한다.
 
 **승인 보장의 범위:** Core는 저장된 `approved: yes`와 참조 관계를 검증한다. 사용자 응답을
 독립적으로 인증하거나 제안 revision과 묶는 기능은 M6-D다. 이 구현을 인간 인증 완료로
 표현하지 않는다. Agent는 동의를 추측하거나 테스트 fixture를 실제 사용자 승인으로 쓸 수 없다.
+
+## 직렬 다음 Chain과 인수인계 — M6-C
+
+Project 수준의 다음 동작은 **명시적인 `gil open chain` / `gil_open(kind: "chain")`**이다.
+Chain Report의 세 필드는 그대로 유지하며 `next_direction`을 추가하거나 종료와 동시에 다음
+Chain을 자동 생성하지 않는다. 성공/실패 어느 판정으로 닫았든 그 결과를 보존한 채 다음 주제를
+Interview로 시작할 수 있다. 이는 실패한 Cycle의 자식 실험 허용이나 Chain revisit이 아니다.
+
+- Current는 직렬 목록의 마지막 Chain이다. 새 Chain의 parent는 바로 이전 Closed Chain이며,
+  Entry와 새 Opening Interview Entry는 부모 Exit이다. 열린 Chain·legacy 4/5에서는 거절한다.
+- Chain 생성은 clean 세계에서 단일 state commit으로 확정한다. Artifact 관측을 새 Snapshot으로
+  확정하거나 작업 파일을 복원하지 않는다. Will·Journey·기존 Report·시각 자료를 보존한다.
+- Chain ID는 C1부터 순서대로 발급한다. Cycle ID는 Project 전체에서 유일하다. 직렬 실행에서는
+  현재 Chain의 Cycle `next_id`가 전역 high-water mark이고 새 Chain의 첫 Cycle이 이 값을 소비한다.
+  이전 Chain의 발급기는 당시 값 그대로 동결한다. 새 Chain의 첫 Cycle ID는 부모 발급기 값,
+  새 발급기는 그 값+1이다. 모든 Chain의 Cycle ID 중복과 발급 경계는 load/save에서 검증한다.
+- format 6/7의 `chains.nodes`에만 append한다. current/next_id와 각 parent_chain_ref가 직렬
+  연결과 정확히 일치해야 한다. 기존 단일 Chain 6/7은 동일하게 재저장하며 4/5는 변환하지 않는다.
+  M6-A/B writer는 다중 Chain의 개수/Current gate에서 거절한다. 과거 기록은 다시 쓰지 않는다.
+- 응답 유실 뒤 status/context로 Current와 Opening Interview를 확인한다. 같은 요청을 재전송하면
+  열린 Chain 때문에 거절되며 세 번째 Chain은 생기지 않는다. 이전 Chain을 Current로 임의 선택하거나
+  여러 부모·병렬·Chain revisit을 만들 수 없다.
+- Context는 이전 Chain들의 ID/판정/승인 근거/인계 요약을 생성 순서로 전달한다. 이전 Chain의
+  전체 Step 본문은 펼치지 않는다. 명시적 보고서 조회와 Monitor 타임라인에서는 과거 자료를 읽는다.
+  새 Chain의 범위·계획·사용자 동의는 새 Opening Interview에서 형성하며 이전 승인을 재사용하지 않는다.
 
 ## 기존 기록의 명시적 이전 설계 — 아직 적용 명령 없음
 
@@ -133,9 +159,11 @@ legacy 보존/구형 writer 거절 검증까지다.
 ## 읽기와 UI
 
 CLI start/status/context/monitor 및 MCP가 같은 Chain을 투영한다. Monitor v1에는 선택적
-`chain` 객체와 `current.chain_ref`를 추가한다. `chain`에는 owner, state, parent, Entry/Exit,
+`chain` 객체, `current.chain_ref`, 발급 순서의 `chains` 목록을 추가한다. `chain`에는 owner, state, parent, Entry/Exit,
 current_cycle_ref, cycle_refs가 있다. 닫힌 Chain에는 `journey_ref`와 `report`도 있으며
-`report`는 verdict/closing_synthesis_ref/handoff_summary를 보존한다. legacy에는 두 필드를 생략한다. 기존 v1 소비자는 추가
+`report`는 verdict/closing_synthesis_ref/handoff_summary를 보존한다. legacy에는 세 필드를 생략한다. `chains`는 각 Chain의 실제 부모/소유 Cycle/Report를 포함하며,
+`timeline`과 Node detail/증거 이미지 조회는 과거 Chain의 Cycle도 포함한다. Chain을 넘는 연결은
+Cycle parent로 꾸미지 않는다. 닫힌 Current Chain은 clean 세계에서 `open_chain` 다음 동작을 안내한다. 기존 v1 소비자는 추가
 필드를 무시할 수 있고, 갱신된 공용 UI는 현재 경로와 기록 요약에 실제 Chain을 표시한다.
 조회는 상태 저장·가상 Chain/Report 생성·인간 승인 추론을 하지 않는다.
 
@@ -167,3 +195,12 @@ M6-B 추가 검증:
 - `tests/mcp.rs::chain_profile_stdio_closing_report_survives_lost_response_and_monitor_restart`:
   format 6/7의 stdio close→새 프로세스 status→중복 거절→Monitor 및 바이트 보존.
 - `mcp-app/progress.test.mjs`: Cycle·Step·Journey가 그대로여도 Chain 종료가 진행으로 표시된다.
+
+M6-C 추가 검증:
+- `tests/chain_handoff.rs`: success/failure 후 직렬 C2/C3 생성, 전역 Cycle ID, 과거 상태 바이트/세계/
+  Will/Journey 보존, 위조 계보·발급기·provenance 거절, CLI dirty/중복/재시작, Monitor 과거 조회.
+- 같은 파일의 실제 PNG 시험은 Verify에 저장한 증거를 새 Chain 생성·프로세스 재개·원본 삭제 뒤에도
+  읽고, 조회가 state를 바꾸지 않음을 검사한다.
+- `tests/mcp.rs::chain_profile_stdio_handoff_survives_restart_without_duplicate_or_lost_history`:
+  format 6/7 stdio open→새 프로세스 Context→중복 거절→Monitor 기록 조회.
+- 위 합성 승인 fixture와 프로토콜 검증은 실제 인간 승인 인증이나 Luna 실사용 검증이 아니다.

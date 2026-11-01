@@ -1,4 +1,4 @@
-name: Chain M6-A/B development acceptance (no publication)
+name: Chain M6-A/B/C development acceptance (no publication)
 on:
   pull_request:
     paths: ['src/**', 'tests/**', 'Cargo.toml', 'Cargo.lock', 'spec/gil-spec.yaml', '.github/workflows/chain-core.yml']
@@ -32,7 +32,7 @@ jobs:
           persist-credentials: false
       - run: rustup toolchain install 1.97.1 --profile minimal
       - name: Actual Chain, legacy preservation and domain regressions
-        run: cargo test --locked -p gil --features chain-core --test chains --test chain_closing --test cycles --test context --test will --test walk
+        run: cargo test --locked -p gil --features chain-core --test chains --test chain_closing --test chain_handoff --test cycles --test context --test will --test walk
       - name: Repeated failure and branch context inside a Chain
         run: cargo test --locked -p gil --features chain-core --test revisit cumulative_context_survives_pending_new_branch_success_and_process_restart -- --exact
       - name: Private visual creation unit contracts

@@ -1,4 +1,4 @@
-//! Real Chain containment and approval-linked closure. Subsequent Chains remain unsupported.
+//! Real Chain containment and approval-linked closure. Serial successors retain their parent and immutable handoff.
 //! Cycle lineage lives inside the container; it is not Chain ownership.
 use crate::{ChainRef, CycleKind, CycleRef, Cycles, ExistenceRef, Report, SnapshotRef, StepRef};
 
@@ -6,6 +6,7 @@ use crate::{ChainRef, CycleKind, CycleRef, Cycles, ExistenceRef, Report, Snapsho
 pub struct Chain {
     id: ChainRef,
     existence: ExistenceRef,
+    parent: Option<ChainRef>,
     entry: SnapshotRef,
     report: Option<Report>,
     pub(crate) cycles: Cycles,
@@ -18,6 +19,7 @@ impl Chain {
             ChainRef::new(1).unwrap(),
             first.existence(),
             first.entry_snapshot(),
+            None,
             cycles,
         )
     }
@@ -25,11 +27,13 @@ impl Chain {
         id: ChainRef,
         existence: ExistenceRef,
         entry: SnapshotRef,
+        parent: Option<ChainRef>,
         cycles: Cycles,
     ) -> Self {
         Self {
             id,
             existence,
+            parent,
             entry,
             report: None,
             cycles,
@@ -151,16 +155,16 @@ impl Chain {
         }
         if let Some(report) = &self.report {
             self.check_report(report)?;
-            if self.journey() != Some(journey) {
+            if self.journey().is_none_or(|at| at.existence() != journey.existence() || at.revision() > journey.revision()) {
                 return Err(ChainError::Invalid(
-                    "closed Chain Journey must match Current",
+                    "closed Chain Journey must belong to its owner and not be in the future",
                 ));
             }
         }
         Ok(())
     }
     pub fn parent(&self) -> Option<ChainRef> {
-        None
+        self.parent
     }
     pub fn cycles(&self) -> &Cycles {
         &self.cycles
@@ -184,7 +188,7 @@ impl Chain {
         let Some(first) = cycles.nodes().first() else {
             return Err(ChainError::Invalid("Chain has no opening Interview"));
         };
-        if id.number() != 1 || first.kind() != CycleKind::Interview || first.parent().is_some() {
+        if id.number() == 0 || first.kind() != CycleKind::Interview || first.parent().is_some() {
             return Err(ChainError::Invalid(
                 "the root Chain must contain its opening Interview",
             ));
@@ -211,7 +215,7 @@ impl Chain {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChainError {
     AlreadyClosed,
-    NextChainUnsupported,
+    IdExhausted,
     ParentOpen(ChainRef),
     LegacyProject,
     Invalid(&'static str),
@@ -222,8 +226,8 @@ impl std::fmt::Display for ChainError {
             Self::AlreadyClosed => {
                 write!(f, "이 Chain은 이미 닫혔다. 기존 Report와 기록을 보존한다")
             }
-            Self::NextChainUnsupported => {
-                write!(f, "이 버전은 다음 Chain 생성을 아직 지원하지 않는다")
+            Self::IdExhausted => {
+                write!(f, "Chain 또는 Cycle 식별자 공간이 소진되었다. 기록을 보존한다")
             }
             Self::ParentOpen(id) => write!(
                 f,

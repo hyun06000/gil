@@ -74,9 +74,9 @@ pub struct Project {
 
 /// Legacy worlds remain unwrapped when read; only new chain-profile projects create a Chain.
 #[derive(Debug, Clone)]
-enum WorldGraph {
+pub(crate) enum WorldGraph {
     Legacy(Cycles),
-    Chain(crate::Chain),
+    Chains(Vec<crate::Chain>),
 }
 
 impl Project {
@@ -110,7 +110,7 @@ impl Project {
                 let rules = if cfg!(feature = "chain-core") { rules.for_chain() } else { rules };
                 let cycles = Cycles::start(rules, existence, first);
                 if cfg!(feature = "chain-core") {
-                    WorldGraph::Chain(crate::Chain::start(cycles))
+                    WorldGraph::Chains(vec![crate::Chain::start(cycles)])
                 } else { WorldGraph::Legacy(cycles) }
             },
             existences: BTreeMap::from([(
@@ -124,25 +124,52 @@ impl Project {
         }
     }
 
-    /// Real current container, absent in format 4/5. Never synthesizes historical approval.
-    pub fn current_chain(&self) -> Option<&crate::Chain> {
-        match &self.world { WorldGraph::Chain(chain) => Some(chain), _ => None }
+    /// Real current container, absent in format 4/5. Serial Current is the last Chain.
+    pub fn current_chain(&self) -> Option<&crate::Chain> { self.chains().last() }
+
+    pub fn chains(&self) -> &[crate::Chain] {
+        match &self.world { WorldGraph::Chains(chains) => chains, _ => &[] }
     }
 
-    /// Same-level children require a closed parent; subsequent Chains remain unsupported.
-    pub fn open_child_chain(&mut self) -> Result<crate::ChainRef, crate::ChainError> {
-        match self.current_chain() {
-            Some(chain) if chain.is_closed() => Err(crate::ChainError::NextChainUnsupported),
-            Some(chain) => Err(crate::ChainError::ParentOpen(chain.id())),
-            None => Err(crate::ChainError::LegacyProject),
+    pub fn cycle_graphs(&self) -> Box<dyn Iterator<Item = &Cycles> + '_> {
+        match &self.world {
+            WorldGraph::Legacy(cycles) => Box::new(std::iter::once(cycles)),
+            WorldGraph::Chains(chains) => Box::new(chains.iter().map(|chain| chain.cycles())),
         }
+    }
+    pub fn all_cycles(&self) -> impl Iterator<Item = &Cycle> {
+        self.cycle_graphs().flat_map(|cycles| cycles.nodes().iter())
+    }
+
+    /// Explicit serial successor. Creation does not advance Journey or confirm a new world.
+    pub fn open_child_chain(&mut self) -> Result<crate::ChainRef, crate::ChainError> {
+        use crate::ChainError;
+        let parent = self.current_chain().ok_or(ChainError::LegacyProject)?;
+        if !parent.is_closed() { return Err(ChainError::ParentOpen(parent.id())); }
+        let id = crate::ChainRef::new(parent.id().number().checked_add(1).ok_or(ChainError::IdExhausted)?)
+            .ok_or(ChainError::IdExhausted)?;
+        // A stored allocator always has room for its next value.
+        id.number().checked_add(1).ok_or(ChainError::IdExhausted)?;
+        let first = parent.cycles().next_name();
+        first.checked_add(1).ok_or(ChainError::IdExhausted)?;
+        let cycles = Cycles::start_at(parent.cycles().rules().clone(), self.current_existence_ref(),
+            parent.exit_snapshot().unwrap(), first);
+        let chain = crate::Chain::restore(id, self.current_existence_ref(), parent.exit_snapshot().unwrap(),
+            Some(parent.id()), cycles);
+        let mut next = self.clone();
+        let WorldGraph::Chains(chains) = &mut next.world else { unreachable!() };
+        chains.push(chain);
+        next.check_restored().map_err(|_| ChainError::Invalid("successor violates Project invariants"))?;
+        *self = next;
+        Ok(id)
     }
 
     /// Container close changes neither Will nor Journey nor the artifact registry.
     pub fn close_chain(&mut self, report: Report) -> Result<crate::ChainRef, crate::ChainError> {
         let owner = self.current_existence_ref();
         let journey = self.current_existence().current_journey();
-        let WorldGraph::Chain(chain) = &mut self.world else { return Err(crate::ChainError::LegacyProject); };
+        let WorldGraph::Chains(chains) = &mut self.world else { return Err(crate::ChainError::LegacyProject); };
+        let chain = chains.last_mut().unwrap();
         let mut next = chain.clone();
         next.close(report)?;
         next.validate_state(owner, journey)?;
@@ -151,21 +178,40 @@ impl Project {
         Ok(id)
     }
 
-    pub(crate) fn restore_chain(mut self, id: crate::ChainRef, owner: ExistenceRef,
-        entry: SnapshotRef, report: Option<Report>, exit: Option<SnapshotRef>, journey: Option<crate::JourneyRef>) -> Result<Self, crate::ChainError> {
-        crate::Chain::validate(id, owner, entry, self.cycles(), self.current_existence_ref())?;
-        // Move the graph into its owner, never keep a second graph or duplicate ownership map.
-        let current_journey = self.current_existence().current_journey();
-        let WorldGraph::Legacy(cycles) = self.world else {
-            return Err(crate::ChainError::Invalid("a Chain already owns this graph"));
-        };
-        let mut chain = crate::Chain::restore(id, owner, entry, cycles);
-        if let Some(report) = report { chain.close(report)?; }
-        chain.validate_state(self.current_existence, current_journey)?;
-        if chain.journey() != journey { return Err(crate::ChainError::Invalid("Chain Journey disagrees with Closing Interview")); }
-        if chain.exit_snapshot() != exit { return Err(crate::ChainError::Invalid("Chain Exit disagrees with Closing Interview")); }
-        self.world = WorldGraph::Chain(chain);
-        Ok(self)
+    pub(crate) fn check_chains(&self) -> Result<(), crate::ChainError> {
+        use crate::ChainError::Invalid;
+        let mut previous: Option<&crate::Chain> = None;
+        let mut ids = std::collections::BTreeSet::new();
+        for (index, chain) in self.chains().iter().enumerate() {
+            if chain.id().number() as usize != index + 1 || chain.parent() != previous.map(|p| p.id()) {
+                return Err(Invalid("Chains must form one serial parent lineage"));
+            }
+            let owner = self.existence(chain.existence()).ok_or(Invalid("unknown Chain owner"))?;
+            chain.validate_state(chain.existence(), owner.current_journey())?;
+            if !chain.is_closed() && chain.existence() != self.current_existence_ref() {
+                return Err(Invalid("open Chain must belong to Current Existence"));
+            }
+            if let Some(parent) = previous {
+                if !parent.is_closed() || parent.exit_snapshot() != Some(chain.entry_snapshot())
+                    || chain.cycles().nodes()[0].id().raw() != parent.cycles().next_name() {
+                    return Err(Invalid("successor must inherit a closed parent's Exit and global Cycle allocator"));
+                }
+            } else if chain.cycles().nodes()[0].id().raw() != 1 {
+                return Err(Invalid("first Chain must start at Cycle C1"));
+            }
+            for cycle in chain.cycles().nodes() {
+                if !ids.insert(cycle.id()) { return Err(Invalid("duplicate Project-wide Cycle ID")); }
+                if cycle.id().raw() < chain.cycles().nodes()[0].id().raw() {
+                    return Err(Invalid("Cycle ID precedes its Chain's allocation boundary"));
+                }
+            }
+            if index + 1 == self.chains().len() && chain.is_closed()
+                && chain.journey() != Some(owner.current_journey()) {
+                return Err(Invalid("closed Current Chain Journey must match its owner's Current"));
+            }
+            previous = Some(chain);
+        }
+        Ok(())
     }
 
     /// 이 프로젝트가 이름 붙인 세계들. 읽기만 한다.
@@ -219,12 +265,12 @@ impl Project {
 
     /// World Graph. 읽기만 한다.
     pub fn cycles(&self) -> &Cycles {
-        match &self.world { WorldGraph::Legacy(cycles) => cycles, WorldGraph::Chain(chain) => chain.cycles() }
+        match &self.world { WorldGraph::Legacy(cycles) => cycles, WorldGraph::Chains(chains) => chains.last().unwrap().cycles() }
     }
 
     /// World Graph — 고치기 위해.
     pub fn cycles_mut(&mut self) -> &mut Cycles {
-        match &mut self.world { WorldGraph::Legacy(cycles) => cycles, WorldGraph::Chain(chain) => &mut chain.cycles }
+        match &mut self.world { WorldGraph::Legacy(cycles) => cycles, WorldGraph::Chains(chains) => &mut chains.last_mut().unwrap().cycles }
     }
 
     /// 지금 행동하는 존재.
@@ -320,7 +366,7 @@ impl Project {
 
     /// 저장이 읽어 온 값으로 다시 세운다.
     pub(crate) fn restore(
-        cycles: Cycles,
+        world: WorldGraph,
         existences: BTreeMap<u32, Existence>,
         existence_states: BTreeMap<u32, ExistenceState>,
         current_existence: ExistenceRef,
@@ -329,7 +375,7 @@ impl Project {
     ) -> Result<Project, ProjectError> {
         let project = Project {
             visual_state: None,
-            world: WorldGraph::Legacy(cycles),
+            world,
             existences,
             existence_states,
             current_existence,
@@ -345,6 +391,7 @@ impl Project {
     /// Cycle Graph 안쪽의 불변식은 [`Cycles`] 가 이미 쟀다. 여기서 재는 것은 **두 축이
     /// 서로 맞물리는가**뿐이다 — 존재와 그 판, 그리고 열린 Cycle 의 주인.
     fn check_restored(&self) -> Result<(), ProjectError> {
+        self.check_chains().map_err(ProjectError::Chain)?;
         // ① 지금 행동한다는 그 존재가 실재하는가.
         let current = self
             .existence(self.current_existence)
@@ -380,7 +427,7 @@ impl Project {
         //
         // Node 를 연 Existence 와 닫는 Existence 는 같아야 하고, 열린 Node 가 있는 동안
         // 전환을 막는다. 그러므로 파일에서 이 둘이 갈렸다면 걸어서 만들 수 없는 상태다.
-        for cycle in self.cycles().nodes() {
+        for cycle in self.all_cycles() {
             if !cycle.is_closed() && cycle.existence() != current.id() {
                 return Err(ProjectError::OpenCycleOfAnotherExistence {
                     cycle: cycle.id(),
@@ -406,7 +453,7 @@ impl Project {
     fn check_restored_worlds(&self) -> Result<(), ProjectError> {
         let known = |world: SnapshotRef| self.artifacts.resolve(world).is_some();
 
-        for cycle in self.cycles().nodes() {
+        for cycle in self.all_cycles() {
             let id = cycle.id().to_ref();
 
             // ① 모든 Cycle 은 Entry 를 지니고, 그 이름은 registry 에 있다.
@@ -436,8 +483,8 @@ impl Project {
             //    만들 수 없다 — `open_child` 가 읽는 자리가 하나뿐이기 때문이다.
             if let Some(parent) = cycle.parent() {
                 let parent = self
-                    .cycles()
-                    .node(parent)
+                    .all_cycles()
+                    .find(|candidate| candidate.id() == parent)
                     .expect("Cycles::restore 가 부모의 실재를 이미 쟀다");
                 let inherited = parent.exit_snapshot();
                 if inherited != Some(cycle.entry_snapshot()) {
@@ -641,7 +688,7 @@ impl Project {
 
     /// 닫힌 Node 의 provenance 가 실재하는 판을 가리키고, 그 판이 그 행동을 확정했는가.
     fn check_restored_provenance(&self) -> Result<(), ProjectError> {
-        for cycle in self.cycles().nodes() {
+        for cycle in self.all_cycles() {
             if let Some(journey) = cycle.journey() {
                 self.must_have_revision(journey, cycle.existence())?;
             }
@@ -1185,6 +1232,7 @@ impl std::error::Error for ActionError {
 /// 두 축이 서로 맞물리지 않는 이유.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProjectError {
+    Chain(crate::ChainError),
     /// 지금 행동한다는 존재가 이 프로젝트에 없다.
     UnknownCurrentExistence(ExistenceRef),
     /// 서 있다는 판이 그 Journey 에 없다.
@@ -1337,6 +1385,7 @@ fn or_none(will: Option<WillRef>) -> String {
 impl std::fmt::Display for ProjectError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            ProjectError::Chain(error) => write!(f, "{error}"),
             ProjectError::UnknownCurrentExistence(id) => {
                 write!(f, "{id} 은(는) 이 프로젝트에 없다 — 지금 누가 행동하는지 알 수 없다")
             }

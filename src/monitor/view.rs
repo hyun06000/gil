@@ -170,6 +170,7 @@ wire_words! {
         OpenStep => "open_step",
         CloseCycle => "close_cycle",
         CloseChain => "close_chain",
+        OpenChain => "open_chain",
         OpenCycle => "open_cycle",
         OpenBranch => "open_branch",
         Revisit => "revisit",
@@ -189,6 +190,8 @@ pub struct MonitorViewV1 {
     /// Additive v1 extension; absent for historical worlds. It is never inferred from cycles.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chain: Option<ChainV1>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chains: Vec<ChainV1>,
     /// 이 Journey 가 발급한 **모든 Cycle**, 발급 순서 그대로.
     pub timeline: Vec<TimelineCycleV1>,
     pub current_will: Option<WillV1>,
@@ -430,15 +433,8 @@ pub fn monitor_view_v1(seen: &MonitorSnapshot) -> Result<MonitorViewV1, ViewErro
     Ok(MonitorViewV1 {
         schema_version: SCHEMA_VERSION,
         captured_at_unix_ms: unix_millis(seen.captured_at)?,
-        chain: seen.current_chain.as_ref().map(|chain| ChainV1 {
-            chain_ref: chain.chain_ref.to_string(), existence_ref: chain.existence_ref.to_string(),
-            journey_ref: chain.journey_ref.map(|id| id.to_string()),
-            state: if chain.exit_snapshot_ref.is_some() { NodeStateV1::Closed } else { NodeStateV1::Open }, parent_chain_ref: None,
-            report: chain.report.as_ref().map(|report| report.field_names().map(|key| (key.to_string(), report.get(key).unwrap().to_string())).collect()),
-            entry_snapshot_ref: chain.entry_snapshot_ref.to_string(), exit_snapshot_ref: chain.exit_snapshot_ref.map(|id| id.to_string()),
-            current_cycle_ref: chain.current_cycle_ref.to_string(),
-            cycle_refs: chain.cycle_refs.iter().map(ToString::to_string).collect(),
-        }),
+        chain: seen.current_chain.as_ref().map(chain_view),
+        chains: seen.chains.iter().map(chain_view).collect(),
         current: CurrentV1 {
             chain_ref: seen.current_chain.as_ref().map(|chain| chain.chain_ref.to_string()),
             existence_ref: seen.current_existence.existence_ref.to_string(),
@@ -548,6 +544,23 @@ fn report(address: &str, facts: &CycleReportFacts) -> Result<CycleReportV1, View
     })
 }
 
+/// A real container and its retained Report; never infer a Chain from Cycle ancestry.
+fn chain_view(chain: &super::ChainFacts) -> ChainV1 {
+    ChainV1 {
+        chain_ref: chain.chain_ref.to_string(),
+        existence_ref: chain.existence_ref.to_string(),
+        journey_ref: chain.journey_ref.map(|id| id.to_string()),
+        state: if chain.exit_snapshot_ref.is_some() { NodeStateV1::Closed } else { NodeStateV1::Open },
+        parent_chain_ref: chain.parent_chain_ref.map(|id| id.to_string()),
+        report: chain.report.as_ref().map(|report| report.field_names()
+            .map(|key| (key.to_string(), report.get(key).unwrap().to_string())).collect()),
+        entry_snapshot_ref: chain.entry_snapshot_ref.to_string(),
+        exit_snapshot_ref: chain.exit_snapshot_ref.map(|id| id.to_string()),
+        current_cycle_ref: chain.current_cycle_ref.to_string(),
+        cycle_refs: chain.cycle_refs.iter().map(ToString::to_string).collect(),
+    }
+}
+
 /// 지금 밟을 수 있는 동작 하나를 wire 로.
 ///
 /// **`command` 를 읽지 않는다.** 종류와 대상은 오직 내부 [`ActionKind`] 의 모양에서 온다.
@@ -557,6 +570,7 @@ fn action(facts: &NextAction) -> Result<NextActionV1, ViewError> {
         ActionKind::OpenStep(kind) => (NextActionKindV1::OpenStep, Some(kind), None),
         ActionKind::CloseCycle(kind) => (NextActionKindV1::CloseCycle, None, Some(kind)),
         ActionKind::CloseChain => (NextActionKindV1::CloseChain, None, None),
+        ActionKind::OpenChain => (NextActionKindV1::OpenChain, None, None),
         ActionKind::OpenCycle(kind) => (NextActionKindV1::OpenCycle, None, Some(kind)),
         ActionKind::OpenBranch(kind) => (NextActionKindV1::OpenBranch, None, Some(kind)),
         ActionKind::Revisit => (NextActionKindV1::Revisit, None, None),
@@ -1175,6 +1189,7 @@ mod tests {
             make(ActionKind::OpenStep(NodeKind::Analysis), Some("gil open analysis")),
             make(ActionKind::CloseCycle(CycleKind::Experiment), Some("gil close")),
             make(ActionKind::CloseChain, Some("gil close")),
+            make(ActionKind::OpenChain, Some("gil open chain")),
             make(ActionKind::OpenCycle(CycleKind::Experiment), Some("gil open experiment")),
             make(ActionKind::OpenBranch(CycleKind::Interview), Some("gil open interview")),
             make(ActionKind::Revisit, Some("gil revisit")),
@@ -1204,6 +1219,7 @@ mod tests {
                 ("open_step", Some("analysis"), None),
                 ("close_cycle", None, Some("experiment")),
                 ("close_chain", None, None),
+                ("open_chain", None, None),
                 ("open_cycle", None, Some("experiment")),
                 ("open_branch", None, Some("interview")),
                 ("revisit", None, None),
@@ -1231,7 +1247,7 @@ mod tests {
                 NextActionKindV1::CloseCycle
                 | NextActionKindV1::OpenCycle
                 | NextActionKindV1::OpenBranch => (false, true),
-                NextActionKindV1::CloseChain | NextActionKindV1::Revisit | NextActionKindV1::Restore => (false, false),
+                NextActionKindV1::CloseChain | NextActionKindV1::OpenChain | NextActionKindV1::Revisit | NextActionKindV1::Restore => (false, false),
             };
             assert_eq!(one.step_kind.is_some(), step, "{} 의 Step 대상", one.kind);
             assert_eq!(one.cycle_kind.is_some(), cycle, "{} 의 Cycle 대상", one.kind);
@@ -1286,6 +1302,7 @@ mod tests {
                 ActionKind::OpenStep(_) => "open_step",
                 ActionKind::CloseCycle(_) => "close_cycle",
                 ActionKind::CloseChain => "close_chain",
+                ActionKind::OpenChain => "open_chain",
                 ActionKind::OpenCycle(_) => "open_cycle",
                 ActionKind::OpenBranch(_) => "open_branch",
                 ActionKind::Revisit => "revisit",
@@ -1308,7 +1325,7 @@ mod tests {
         seen.sort_unstable();
 
         let allowed = [
-            "chain", "chain_ref", "action", "baseline_snapshot_ref", "captured_at_unix_ms", "command", "current",
+            "chain", "chains", "chain_ref", "action", "baseline_snapshot_ref", "captured_at_unix_ms", "command", "current",
             "current_will", "cycle_kind", "cycle_ref", "done_when", "existence_ref",
             "experiment_definition", "handoff_summary", "help_ref", "interview_question",
             "journey_ref", "kind",

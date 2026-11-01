@@ -100,9 +100,7 @@ impl ProjectSession {
         };
         let cycle = self
             .project()
-            .cycles()
-            .nodes()
-            .iter()
+            .all_cycles()
             .find(|cycle| cycle.id().to_ref() == step.cycle())
             .ok_or_else(missing)?;
         let node = cycle

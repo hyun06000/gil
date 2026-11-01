@@ -107,7 +107,7 @@ pub(crate) fn help_for(refusal: &Refusal<'_>) -> Option<TopicId> {
         // 열린 Verify 는 제외한다 — 거기서는 확정이 정상 경로다. (지금 구조에서는 그
         // gate 가 서지 않지만, 규칙을 코드에도 적어 둔다.)
         Refusal::Session(SessionError::Dirty { gate, .. }) => match gate {
-            Gate::Step(_, NodeKind::Verify) => return None,
+            Gate::Step(_, NodeKind::Verify) | Gate::OpenChain => return None,
             Gate::Step(..) | Gate::Cycle(_) => DIRTY_NON_VERIFY,
         },
 
