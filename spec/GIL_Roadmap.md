@@ -550,7 +550,9 @@ M6-D에서는 사람이 **Monitor의 승인/수정 요청 버튼**으로 정확�
       교체·동시 변경 검사로 `claude_desktop_config.json` 편집), Windows Plugin 후보에 `.claude-plugin` 동봉, Monitor·
       작업 폴더 문구의 Codex 전제 제거, INSTALL.md에 OS×Host 네 조합 상태표. Claude Code 탭의 등록 자리가 Desktop
       설정 파일임을 소유자 Mac에서 확인. Windows Claude 버튼 경로의 실제 화면·업데이트 뒤 두 Host 버전 일치는
-      사용자 확인 대기([11/02 진단](../mcp-app/CLAUDE-DESKTOP-ROUTES.md)).
+      사용자 확인 대기([11/02 진단](../mcp-app/CLAUDE-DESKTOP-ROUTES.md)). 같은 날 Monitor에 **업데이트 안내**
+      버튼 추가: Core가 저장소 `update-feed.json`을 하루 1회 metadata만 읽고(끄기 가능) 두 OS·두 Host의 절차를 글로
+      보여 준다. 실제 Host 화면 확인 대기([Companion 계약 §13](GIL_Companion_Install_Update_v0.1.md)).
 - [ ] Desktop 일반 대화·Cowork·Code·터미널 CLI의 관측을 분리하고 한 경로의 성공을 다른
       경로의 성공으로 일반화하지 않는다. 직접 등록 probe와 Plugin 설치 경로도 구분한다.
 - [ ] 공용 Core·MCP·UI 계약 변경은 별도 branch/PR에서 영향과 Codex 회귀를 확인한 뒤 통합한다.

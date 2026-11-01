@@ -5,8 +5,8 @@
     "Cargo.toml": "d8a6ba810053a7a3f8ecfc2ec9fe37883e3e3ad998245505e97f6a743af634cf",
     "Cargo.lock": "cdb646cb23f0e03fe7e37d30c895d36c7a9a8aa4c6b56d7cb0a27579985627bf",
     "mcp-app/package-lock.json": "e81c74f94d4882f4f9af795959f18bc0ccb598ae58d516c2e728df06db08d8d8",
-    "mcp-app/build.mjs": "7c388dc3c9c0ef5130b16ca21118f142785f55d471bd778d2997458659dc33b2",
-    "plugins/gil-companion-prototype/assets/monitor.html": "e6ac683ec5b304f925ddc90fc3d4fe7b7b3be3fa91e25b0c751102b315ac4e68"
+    "mcp-app/build.mjs": "c7d13cb042d8b91f172594dce23031ccfac0cd425e8192b3fa82156de4708032",
+    "plugins/gil-companion-prototype/assets/monitor.html": "6d6f227d659c76a43929c968eb29c2ec81a90acf734471c6e2bbcec6fc753cf5"
   },
   "toolchain": {
     "release": "1.97.1",

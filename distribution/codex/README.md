@@ -61,7 +61,9 @@ unsigned 후보 제작에서만 출력 version을 명시적 `X.Y.Z-preview.N`으
 `catalog.json`은 plugin-creator의 `create_basic_plugin.py`로 생성한
 template다. `personal`과 구별하는 이름은 `gil-preview-macos-arm64`다. template 자체는 원격 주소나
 Host 등록을 생성하지 않는다. 현재의 승인된 비공개 Host 등록은 위 장부에 별도로 기록한다.
-template를 산출물의 `.agents/plugins/marketplace.json`에 복사한다. `claude-marketplace.json`은
+template를 산출물의 `.agents/plugins/marketplace.json`에 복사한다. 게시 뒤에는 저장소 `main`의
+`distribution/update-feed.json`에 플랫폼별 버전·release URL을 적어야 설치된 Core의 Monitor가 **업데이트 안내**
+버튼을 띄운다(metadata만 읽음; `distribution/codex/update-feed.test.mjs`가 INSTALL.md와의 일치를 검사한다). `claude-marketplace.json`은
 같은 이름의 Claude Code catalog로 산출물의 `.claude-plugin/marketplace.json`이 된다. 소스 저장소
 최상위의 `.claude-plugin/marketplace.json`은 source clone용 개발 목록이며 산출물에 싣지 않는다.
 unsigned 후보 제작은 두 manifest의 version을 같은 `X.Y.Z-preview.N`으로 바꾼다.

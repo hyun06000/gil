@@ -90,3 +90,59 @@ export function styleEvidence(context) {
   return { theme: got.theme, variables: got.variables ? Object.keys(got.variables).length : 0,
     fonts: got.fonts !== null };
 }
+
+// Update guidance is metadata beside the Graph. The Core reports what it knows (installed
+// version, the feed's latest entry, a state); the App turns that into one line, one button
+// and OS-specific steps. Nothing here downloads, installs or changes a Host registration.
+export function updateNotice(update) {
+  if (!update || typeof update !== 'object') return { show: false, line: null };
+  const latest = update.latest && typeof update.latest === 'object' ? update.latest : null;
+  const version = typeof latest?.version === 'string' ? latest.version : null;
+  switch (update.state) {
+    case 'available':
+      return { show: true, state: 'available', version, latest,
+        label: `새 버전 ${version} 있음 · 업데이트 안내`,
+        line: `설치된 GIL ${update.installed ?? '?'} → 새 버전 ${version} 이 있습니다. 업데이트는 사용자가 직접 진행합니다.` };
+    case 'unknown_installed':
+      return { show: true, state: 'unknown_installed', version, latest,
+        label: `최신 ${version} · 업데이트 안내`,
+        line: `최신 버전은 ${version} 입니다. 설치된 버전은 이 Core 가 확인하지 못했습니다.` };
+    case 'up_to_date':
+      return { show: false, state: 'up_to_date', version, latest, line: `GIL ${update.installed} 은 최신 버전입니다.` };
+    case 'disabled':
+      return { show: false, state: 'disabled', line: '업데이트 확인이 꺼져 있습니다.' };
+    case 'checking':
+      return { show: false, state: 'checking', line: '업데이트 정보를 확인하는 중입니다.' };
+    case 'not_installed':
+      return { show: false, state: 'not_installed', line: null };
+    default:
+      return { show: false, state: update.state ?? 'unavailable',
+        line: update.error ? `업데이트 정보를 읽지 못했습니다 (${update.error}).` : null };
+  }
+}
+
+// Steps per OS. Both Hosts are listed, because the Core does not know which one is showing it
+// and the App never branches on the Host's name. Text only; no commands are executed.
+export function updateGuide(update) {
+  const latest = update?.latest ?? {};
+  const version = latest.version ?? '?';
+  const common = [
+    `새 버전: ${version}${update?.installed ? ` (설치됨: ${update.installed})` : ''}`,
+    `릴리스: ${latest.release_url ?? ''}`,
+    `설치 안내: ${latest.install_doc ?? ''}`,
+    latest.notes ? `변경: ${latest.notes}` : null,
+    '열린 대화는 지금 Core 를 끝까지 쓰고, 새 대화부터 새 버전이 적용됩니다. Project 와 .gil 기록은 그대로 둡니다.',
+  ].filter(Boolean);
+  if (update?.platform?.startsWith('windows')) {
+    return { title: 'Windows — GIL Companion 에서 업데이트', companion: true, steps: common.concat([
+      '1. GIL Companion 을 엽니다(아래 "Companion 열기" 또는 시작 메뉴).',
+      '2. 업데이트 확인 → 내용을 읽고 업데이트 를 누릅니다. 설치 창이 열립니다.',
+      '3. Codex·Claude Desktop 은 미리 닫지 않아도 됩니다. 두 Host 모두 같은 고정 런처를 쓰므로 다시 연결할 필요가 없습니다.',
+      '4. 새 대화에서 Monitor 연결 정보의 GIL 버전이 바뀌었는지 확인합니다.',
+    ]) };
+  }
+  return { title: 'macOS — 설치 안내의 절차로 업데이트', companion: false, steps: common.concat([
+    'Codex: 새 대화에 "GIL 을 ' + version + ' 으로 업데이트해 줘. 설치 안내(INSTALL.md)의 Codex 절차를 따르고, 기존 등록과 .gil 은 바꾸지 마." 라고 요청합니다.',
+    'Claude Desktop(Claude Code 탭): 설치 안내대로 새 archive 를 새 폴더에 풀고, Claude Desktop 을 완전히 종료한 뒤 설정의 gil 항목을 새 Core 경로로 바꿉니다. 바꾸지 않으면 Claude 만 이전 버전에 남습니다.',
+  ]) };
+}

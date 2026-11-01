@@ -119,10 +119,13 @@ impl Monitor {
     }
 
     pub fn show(&self, scope: &str) -> Result<Value, Refusal> {
-        let view = self.view(scope)?;
+        let mut view = self.view(scope)?;
         let mut entries = self.entries.lock().map_err(|_| Refusal::new("unavailable", "Monitor 등록부를 열지 못했다"))?;
         let e = entries.get_mut(scope).ok_or_else(super::bindings::unknown)?;
         e.presence.requested(Instant::now());
+        drop(entries);
+        // Update guidance is metadata the App shows beside the Graph; it changes no Graph fact.
+        view["update"] = super::update::status();
         Ok(view)
     }
 
@@ -132,6 +135,9 @@ impl Monitor {
         let mut entries = self.entries.lock().map_err(|_| Refusal::new("unavailable", "Monitor 등록부를 열지 못했다"))?;
         let e = entries.get_mut(scope).ok_or_else(super::bindings::unknown)?;
         e.presence.observe(input, Instant::now());
+        drop(entries);
+        let mut hint = hint;
+        hint["update"] = super::update::status();
         Ok(hint)
     }
 

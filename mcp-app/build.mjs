@@ -36,8 +36,10 @@ must('<footer class="status"><i></i><span></span></footer>',
     <span id="host-say" role="status">MCP Apps 연결 중…</span>
     <button id="expand" type="button" disabled>모니터 펼치기</button>
     <button id="inline" type="button" disabled>대화 안으로</button>
+    <button id="update" type="button" hidden>업데이트 안내</button>
     <details><summary>연결 정보</summary><pre id="host-evidence"></pre></details>
-  </section>`);
+  </section>
+  <section id="update-guide" class="update-guide" role="region" aria-label="업데이트 안내" hidden></section>`);
 must('<script src="host.js"></script>\n<script type="module" src="companion.js"></script>',
   `<script>${result.outputFiles[0].text.replace(/<\/script/gi, '<\\/script')}</script>`);
 const digest = createHash('sha256').update(html).digest('hex');

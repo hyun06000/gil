@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "updated": "2026-11-02",
+  "note": "Metadata only. The installed GIL Core reads this file at most once a day to show update guidance in the Monitor; it never downloads or installs from it. Update this file in the same pull request that records a publication ledger.",
+  "platforms": {
+    "darwin-arm64": {
+      "version": "0.2.1-preview.8",
+      "release_url": "https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.8",
+      "install_doc": "https://github.com/hyun06000/gil/blob/main/INSTALL.md",
+      "notes": "Monitor 승인 계획·Chain 시험판. 새 대화·새 빈 폴더에서 시험한다. 새 기록은 형식 7이며 기존 기록 형식은 자동 변환하지 않는다."
+    },
+    "windows-x64": {
+      "version": "0.1.1-owner.7",
+      "release_url": "https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.7",
+      "install_doc": "https://github.com/hyun06000/gil/blob/main/INSTALL.md",
+      "notes": "Monitor 승인 계획·Chain 시험판. Companion의 업데이트 확인 → 업데이트로 설치한다. Codex·Claude Desktop은 미리 닫지 않아도 된다."
+    }
+  }
+}

@@ -384,3 +384,27 @@ Windows 제품 계약 시험(`distribution/windows/product-install.test.mjs`)이
 Desktop에서 버튼 → 새 대화 → Monitor 표시는 아직 아무도 확인하지 않았다.** macOS Companion에는 고정 런처가
 없어 adapter가 `supported: false`를 답하고 버튼을 숨기며, macOS Claude 사용자는 INSTALL.md의 직접 등록
 절차와 업데이트 뒤 경로 재지정이 남는 제한이다.
+
+## 13. 2026-11-02 Monitor 업데이트 안내 (metadata 확인)
+
+§4의 “정기 확인은 metadata 조회까지만 허용, 알림을 끄는 설정 제공”을 Monitor에서 구현했다
+(`src/mcp/update.rs`, `distribution/update-feed.json`).
+
+- **출처:** 저장소 `main`의 `distribution/update-feed.json` 하나. 플랫폼별 version·release_url·install_doc·notes.
+  새 버전 게시 PR이 이 파일을 함께 갱신한다. 피드는 원격 내용이므로 모양만 검사하고(SemVer, https, 길이) 해석하지 않는다.
+- **주기와 수단:** 설치본의 Core가 Monitor 표시·poll 때 캐시(`<Monitor 상태 폴더>/update-check.json`)를 읽고, 24시간
+  (실패 시 6시간)이 지났으면 배경 스레드에서 OS 내장 `curl`(HTTPS만, 8초, 64KB, redirect 2)로 한 번 받는다. 도구 응답은
+  네트워크를 기다리지 않는다. payload·installer는 받지 않는다.
+- **설치 버전:** Core 실행 파일 자리에서만 읽는다 — Windows `runtime\versions\<v>\gil.exe`, Plugin
+  `plugins/<name>/core/<platform>/gil` 옆의 `.codex-plugin|.claude-plugin/plugin.json`. 개발 빌드(`target/`)는
+  설치본이 아니므로 `not_installed`로 답하고 확인하지 않는다 — 시험이 네트워크에 닿지 않는 이유이기도 하다.
+- **상태:** `available` / `up_to_date` / `unknown_installed`(피드는 읽었지만 설치 버전 불명) / `checking` /
+  `unavailable`(오류 원문 포함) / `disabled` / `not_installed`. `show_gil_monitor`와 `gil_monitor_poll` 응답의 `update`
+  필드로 전달한다(추가 필드, 도구 schema·개수 불변).
+- **끄기:** `GIL_UPDATE_CHECK=off` 환경변수 또는 상태 폴더의 `update-check.off` 파일.
+- **App:** `available`/`unknown_installed`일 때만 **업데이트 안내** 버튼을 보이고, 누르면 OS별 절차를 글로 보여 준다.
+  Windows 패널의 **Companion 열기**는 기존 `show_gil_companion` 도구다. Host 이름으로 갈라지지 않으며 두 Host의 절차를
+  함께 적는다. 연결 정보에 `update` 요약(state·installed·latest·checked_at·error)을 남긴다.
+- **검증 범위:** Rust 단위 시험(SemVer, 판정, 피드 모양, 설치 자리, 캐시·끄기), MCP 통합 시험(poll 필드), App 하네스 시험
+  (버튼·패널·도구 호출 없음), 피드 schema 시험. **실제 Host 화면에서 버튼이 보이는지, 설치본에서 하루 1회 조회가 일어나는지는
+  사용자 확인 대기**다.

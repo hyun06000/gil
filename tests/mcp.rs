@@ -1113,9 +1113,13 @@ fn monitor_uses_exact_scope_and_canonical_view_without_touching_project_bytes() 
     assert_eq!(actual, expected);
     drop(session);
     let hint = monitor_call(&mut mcp, "gil_monitor_poll", serde_json::json!({ "scope_id": scope }));
-    assert_eq!(hint["structuredContent"].as_object().unwrap().len(), 3);
+    // scope_id, revision, watching, plus update guidance metadata (never a View or a world scan).
+    assert_eq!(hint["structuredContent"].as_object().unwrap().len(), 4);
     assert!(hint["structuredContent"]["revision"].is_string());
     assert!(hint["structuredContent"].get("view").is_none());
+    // A development binary is not an installation: no feed fetch, explicit state.
+    assert_eq!(hint["structuredContent"]["update"]["state"], "not_installed");
+    assert!(hint["structuredContent"]["update"]["latest"].is_null());
     assert_eq!(std::fs::read(at.join(gil::STATE_PATH)).unwrap(), state);
     assert_eq!(std::fs::read_to_string(at.join("work.txt")).unwrap(), "원문 세계");
     // Unknown identity is well-formed. A malformed scope is a schema rejection,

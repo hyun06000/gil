@@ -260,6 +260,23 @@ Codex처럼 자동으로 펼쳐지지는 않는다. fullscreen 지원과 “항�
 함께 적는다. fullscreen 중 다른 도구의 승인 창이 보이지 않으면 **대화 안으로**를 눌러 inline으로 돌아간 뒤
 승인한다.
 
+## Monitor의 업데이트 안내
+
+설치된 Core는 저장소의 [업데이트 피드](distribution/update-feed.json)를 **하루 한 번, metadata만** 읽어
+(OS 내장 `curl`, HTTPS만, 64KB 한도) 새 버전이 있으면 Monitor 맨 아래 표시 모드 줄에 **“새 버전 X 있음 · 업데이트
+안내”** 버튼을 띄운다. 버튼은 OS별 절차를 글로 보여 줄 뿐 다운로드·설치·등록 변경을 하지 않는다.
+
+- Windows: Companion → **업데이트 확인** → **업데이트** 절차와 **Companion 열기** 버튼. 두 Host가 같은 고정 런처를
+  쓰므로 재연결은 필요 없다.
+- macOS: Codex에 붙여넣을 업데이트 요청문과, Claude Desktop 직접 등록의 경로 재지정 절차(위 “업데이트(macOS Claude)”).
+
+설치 버전은 Core가 놓인 자리(Windows `runtime\versions\<버전>\`, Mac Plugin의 `.codex-plugin/plugin.json`)에서
+읽는다. 개발용 빌드는 설치본이 아니므로 확인하지 않는다. 설치 버전을 못 읽으면 “최신 X · 업데이트 안내”로만 표시한다.
+확인을 끄려면 Host의 MCP 서버 환경에 `GIL_UPDATE_CHECK=off`를 두거나 Monitor 상태 폴더
+(macOS `~/Library/Application Support/GIL/monitor-bindings-v1`, Windows `%LOCALAPPDATA%\GIL\monitor-bindings-v1`)에
+`update-check.off` 파일을 둔다. 결과와 마지막 확인 시각은 Monitor **연결 정보**의 `update`에 적힌다.
+새 버전을 게시할 때는 게시 장부와 같은 PR에서 피드 파일을 갱신한다.
+
 ## 설치가 멈췄을 때
 
 | 상황 | 대응 |
