@@ -5,6 +5,8 @@
 // item, a reply this screen did or did not get. It never claims that the agent is working.
 
 export const PLAN_STATE = {
+  checking: '승인 상태 확인 중',
+  retrying: '최신 상태 다시 확인 중',
   idle: '승인 계획 없음',
   requested: '승인 요청',
   reapproval: '새 판 재승인 필요',
@@ -29,6 +31,7 @@ export function currentCycle(value) {
 /** One state for the whole screen, derived from the wire value and this screen's own facts. */
 export function planSummary(value, { hasToken = false, uncertain = null } = {}) {
   if (uncertain) return { state: 'uncertain', revision: uncertain.revision, decision: uncertain.decision };
+  if (['checking', 'retrying', 'unreadable'].includes(value?.code)) return { state: value.code, said: value.said, confirmed: value.confirmed };
   if (!value || value.code === 'unreadable') return { state: 'unreadable', said: value?.said ?? null };
   if (!value.supported) return { state: 'unsupported' };
   const p = value.proposal;
@@ -90,7 +93,10 @@ export function verdictSentence(synthesis, itemCount) {
 /** The one line at the top of the Monitor. Empty when nothing waits for the person. */
 export function bannerLine(summary, delivery = null) {
   const v = summary.revision != null ? `계획 v${summary.revision}` : '계획';
+  const known = summary.confirmed ? `계획 v${summary.confirmed.revision} ${summary.confirmed.decision === 'approve' ? '승인' : '수정 요청'} 기록을 확인했습니다. ` : '';
   switch (summary.state) {
+    case 'checking': return '승인 상태를 확인하고 있습니다.';
+    case 'retrying': return `${known}최신 상태를 잠시 읽지 못해 다시 확인 중입니다. 승인 저장 실패를 뜻하지 않습니다.`;
     case 'requested': return `승인 대기 · ${v} — 내용을 확인하고 승인 또는 수정 요청을 눌러 주세요.`;
     case 'reapproval': return `새 판 재승인 필요 · ${v} — ${summary.base_revision != null ? `이전 승인(v${summary.base_revision})은 ` : '이전 승인은 '}이 판에 적용되지 않습니다. 다시 확인해 주세요.`;
     case 'no_token': return `승인 대기 · ${v} — 승인 버튼 연결을 아직 받지 못했습니다. 자동으로 다시 읽습니다.`;
@@ -99,7 +105,7 @@ export function bannerLine(summary, delivery = null) {
       : `승인 기록됨 · ${v} — 제안 단계가 아직 열려 있습니다. 에이전트가 이어가지 않으면 채팅에서 확인을 요청하세요.`;
     case 'changes_requested': return `수정 요청 기록됨 · ${v} — 바꿀 내용을 채팅으로 알려 주세요.`;
     case 'uncertain': return `저장 결과 불확실 · ${v} — 응답을 받지 못했습니다. 다시 읽어 기록 여부를 확인합니다. 응답을 다시 보내지 않습니다.`;
-    case 'unreadable': return '승인 상태를 읽지 못했습니다 — 연결되면 자동으로 다시 확인합니다.';
+    case 'unreadable': return `${known}최신 승인 상태 조회가 계속 실패하고 있습니다. 아래 원인을 확인하거나 다시 읽어 주세요.`;
     default: return '';
   }
 }
@@ -115,6 +121,10 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
   let delivery = null;    // { digest, state: 'delivered' | 'undelivered' } for a decision made on this screen
   let shown = null;       // digest of the proposal last shown without a receipt
   let replaced = false;   // that proposal was replaced before anyone answered it
+  let readFailures = 0;
+  const confirmedRecord = () => last?.proposal?.receipt
+    ? { revision: last.proposal.revision, decision: last.proposal.receipt.decision }
+    : last?.active_revision != null ? { revision: last.active_revision, decision: 'approve' } : null;
   const text = (tag, content, className) => {
     const n = document.createElement(tag);
     n.textContent = content;
@@ -164,7 +174,7 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
     banner.dataset.state = summary.state;
     if (!line) return;
     banner.append(text('span', line, 'plan-banner-text'));
-    if (summary.state !== 'unreadable') {
+    if (summary.state !== 'checking') {
       const go = button('승인 화면으로', { action: 'jump', className: 'plan-jump' });
       go.addEventListener('click', jump);
       banner.append(go);
@@ -239,7 +249,12 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
           const result = await app.callServerTool({ name: 'gil_plan_decide', arguments: request }, { timeout: 10000 });
           if (dead) return;
           if (result.isError) throw new Error(result.structuredContent?.said || '승인 결과를 확인하지 못했습니다.');
+          const saved = result.structuredContent?.proposal;
+          if (saved?.revision !== p.revision || saved?.digest !== p.digest || saved?.receipt?.decision !== decision) {
+            throw new Error('저장된 승인 기록이 응답에 없어 다시 확인해야 합니다.');
+          }
           token = null; current = result.structuredContent?.proposal; last = result.structuredContent;
+          lastState = planSummary(last); readFailures = 0;
           busy = false;
           render(last); rendered = key(last); changed();
           busy = true;
@@ -331,16 +346,25 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
         panel.append(text('p', `${uncertain.decision === 'approve' ? '승인' : '수정 요청'} 응답을 보냈지만 결과를 받지 못했습니다: ${uncertain.said}`, 'plan-uncertain'));
         panel.append(text('p', '응답은 다시 보내지 않습니다. 다시 읽어 실제 기록을 확인합니다. 기록이 없으면 새 버튼이 나타납니다.', 'plan-hint'));
         const again = button('다시 읽기', { action: 'reread' });
-        again.addEventListener('click', () => { void api.refresh(); });
+        again.addEventListener('click', () => api.refresh());
         panel.append(again);
         break;
       }
+      case 'checking':
+        head(summary, '');
+        panel.append(text('p', '저장된 승인 상태를 확인한 뒤 버튼을 표시합니다.', 'plan-hint'));
+        break;
+      case 'retrying':
       case 'unreadable': {
         head(summary, summary.said ? ` · ${summary.said}` : '');
-        panel.append(text('p', '계획 승인 상태를 읽지 못했습니다. 연결되면 자동으로 다시 확인합니다. 버튼은 읽기에 성공한 뒤에 나타납니다.', 'plan-hint'));
+        panel.append(text('p', bannerLine(summary), 'plan-hint'));
+        panel.append(text('p', '마지막 확인 기록과 최신 상태는 다를 수 있습니다. 짧은 간격으로 다시 조회하며, 읽기에 성공하기 전에는 승인 버튼을 표시하지 않습니다.', 'plan-hint'));
         if (lastState) {
           panel.append(text('p', `마지막으로 읽은 상태: ${PLAN_STATE[lastState.state] || lastState.state}${lastState.revision != null ? ` · 계획 v${lastState.revision}` : ''}`, 'plan-last'));
         }
+        const again = button('다시 읽기', { action: 'reread' });
+        again.addEventListener('click', () => api.refresh());
+        panel.append(again);
         break;
       }
       case 'idle':
@@ -358,22 +382,30 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
   }
   const api = {
     async refresh() {
-      if (dead || busy) return;
+      if (dead) return { status: 'stopped' };
+      if (busy) return { status: 'busy' };
       busy = true;
+      if (!last && !uncertain && readFailures === 0) render({ code: 'checking' });
       try {
         const result = await app.callServerTool({ name: 'gil_plan_review', arguments: { scope_id: scope } }, { timeout: 10000 });
-        if (dead) return;
-        if (result.isError || !result.structuredContent) throw new Error(result.structuredContent?.said || '계획 승인 상태를 읽지 못했습니다.');
+        if (dead) return { status: 'stopped' };
+        if (result.isError || typeof result.structuredContent?.supported !== 'boolean') throw new Error(result.structuredContent?.said || '계획 승인 상태를 읽지 못했습니다.');
         const value = result.structuredContent;
         current = value.proposal; last = value; uncertain = null;
         token = result._meta?.['gil/planApprovalToken'] ?? null;
         lastState = planSummary(value, { hasToken: !!token });
+        readFailures = 0;
         const k = key(value);
         busy = false;
         // Preserve focus while polling. A renewed token does not change the visible proposal.
         if (k !== rendered) { render(value); rendered = k; }
+        return { status: 'ok' };
       } catch (err) {
-        if (!dead) { token = null; current = null; rendered = null; render({ code: 'unreadable', said: err?.message }); }
+        if (dead) return { status: 'stopped' };
+        readFailures += 1;
+        token = null; current = null; rendered = null;
+        render({ code: readFailures < 3 ? 'retrying' : 'unreadable', said: err?.message, confirmed: confirmedRecord() });
+        return { status: 'failed', retryAfterMs: Math.min(15000, 2000 * 2 ** Math.min(readFailures - 1, 3)) };
       } finally { busy = false; }
     },
     stop() {

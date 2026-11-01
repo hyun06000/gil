@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makePlanReview, planSummary, planItems, currentCycle, verdictSentence, bannerLine, PLAN_STATE } from './plans.mjs';
+import { makePlanPolling } from './plan-poll.mjs';
 
 // Deterministic controller fixture. Synthetic trusted flags test event routing, not physical user identity.
 class Element {
@@ -45,6 +46,7 @@ function rig({ withBanner = true, value: initial } = {}) {
         state.value = structuredClone(state.value);
         state.value.proposal.receipt = { decision: request.arguments.decision, source: 'monitor_button' };
         if (state.loseReply) throw new Error('reply lost');
+        if (state.badAck) return { structuredContent: { supported: true } };
       }
       const token = state.value.proposal && !state.value.proposal.receipt && !state.tokenMissing ? state.token : undefined;
       return { structuredContent: structuredClone(state.value), _meta: { 'gil/planApprovalToken': token } };
@@ -131,15 +133,112 @@ test('a reply dropped before saving shows the proposal again with fresh buttons,
 test('disconnect and teardown remove actionable buttons; legacy projects have no approval panel', async () => {
   const r = rig(); await r.review.refresh(); r.state.error = true;
   await r.review.refresh();
-  assert.equal(r.panel.querySelectorAll('button').length, 0);
-  assert.equal(r.panel.dataset.state, 'unreadable');
+  assert.equal(r.decisions().length, 0);
+  assert.equal(r.panel.dataset.state, 'retrying');
   assert.match(r.panel.allText(), /마지막으로 읽은 상태: 승인 요청 · 계획 v1/);
-  assert.match(r.banner.allText(), /읽지 못했습니다/);
-  assert.equal(r.banner.querySelectorAll('button').length, 0);
+  assert.match(r.banner.allText(), /다시 확인 중/);
+  assert.equal(r.actions('reread').length, 1);
   r.state.error = false; r.state.value = { supported: false };
   await r.review.refresh(); assert.equal(r.panel.hidden, true); assert.equal(r.banner.hidden, true);
   r.review.stop(); const n = r.calls.length; await r.review.refresh(); assert.equal(r.calls.length, n);
   assert.equal(r.banner.hidden, true); assert.equal(r.banner.children.length, 0);
+});
+
+test('a saved approval remains a confirmed historical fact through transient and persistent read failure', async () => {
+  const r = rig(); await r.review.refresh();
+  await r.decisions()[0].click(true);
+  assert.equal(r.decides(), 1); assert.equal(r.messages.length, 1);
+  r.state.error = true;
+  for (let n = 1; n <= 5; n++) {
+    const result = await r.review.refresh();
+    assert.equal(result.status, 'failed');
+    assert.equal(result.retryAfterMs, [2000, 4000, 8000, 15000, 15000][n - 1]);
+    assert.match(r.banner.allText(), /계획 v1 승인 기록을 확인했습니다/);
+    assert.equal(r.panel.dataset.state, n < 3 ? 'retrying' : 'unreadable');
+    assert.equal(r.decisions().length, 0);
+    assert.equal(r.actions('reread').length, 1);
+  }
+  assert.equal(r.decides(), 1); assert.equal(r.messages.length, 1);
+  r.state.error = false;
+  r.state.value = { ...r.state.value, proposal: proposal({ revision: 2, digest: 'b'.repeat(64), base_revision: 1 }), active_revision: 1 };
+  await r.review.refresh();
+  assert.equal(r.panel.dataset.state, 'reapproval', 'old confirmed approval must not approve a replacement proposal');
+  assert.match(r.banner.allText(), /계획 v2/);
+  r.state.error = true; const next = await r.review.refresh();
+  assert.equal(next.retryAfterMs, 2000, 'a successful read resets the failure ladder');
+  assert.match(r.banner.allText(), /계획 v1 승인 기록/);
+  assert.doesNotMatch(r.banner.allText(), /계획 v2 승인 기록/);
+});
+
+test('unknown save results stay uncertain during read failures; polling never repeats a decision', async () => {
+  const r = rig(); await r.review.refresh(); r.state.loseReply = true;
+  await r.decisions()[0].click(true);
+  r.state.error = true;
+  for (let i = 0; i < 3; i++) await r.review.refresh();
+  assert.equal(r.panel.dataset.state, 'uncertain');
+  assert.doesNotMatch(r.banner.allText(), /승인 기록을 확인했습니다/);
+  assert.equal(r.decides(), 1); assert.equal(r.messages.length, 0);
+  r.state.error = false; await r.review.refresh();
+  assert.equal(r.panel.dataset.state, 'approved');
+  assert.equal(r.decides(), 1); assert.equal(r.messages.length, 0);
+});
+
+test('first-read failures are neutral retries first, never a saved-approval claim', async () => {
+  const r = rig(); r.state.error = true;
+  await r.review.refresh();
+  assert.equal(r.panel.dataset.state, 'retrying');
+  assert.doesNotMatch(r.banner.allText(), /승인 기록을 확인했습니다/);
+  assert.equal(r.decisions().length, 0);
+  await r.review.refresh(); await r.review.refresh();
+  assert.equal(r.panel.dataset.state, 'unreadable');
+  assert.match(r.panel.allText(), /offline/);
+  r.state.error = false; await r.actions('reread')[0].click(true);
+  assert.equal(r.panel.dataset.state, 'requested');
+});
+
+test('a successful transport reply without the matching saved receipt cannot claim approval or send chat', async () => {
+  const r = rig(); await r.review.refresh(); r.state.badAck = true;
+  await r.decisions()[0].click(true);
+  assert.equal(r.panel.dataset.state, 'uncertain');
+  assert.equal(r.messages.length, 0); assert.equal(r.decides(), 1);
+  await r.review.refresh();
+  assert.equal(r.panel.dataset.state, 'approved');
+  assert.equal(r.messages.length, 0); assert.equal(r.decides(), 1);
+});
+
+test('pending first read says checking; stale detached approval buttons cannot write after a read failure', async () => {
+  const r = rig(); let finish;
+  const review = makePlanReview({ app: { callServerTool: () => new Promise(resolve => { finish = resolve; }) },
+    scope: 'project:checking', panel: r.panel, banner: r.banner, document: r.doc });
+  const pending = review.refresh();
+  assert.equal(r.banner.dataset.state, 'checking');
+  assert.equal(r.decisions().length, 0);
+  finish({ structuredContent: { supported: false } }); await pending;
+  assert.equal(r.banner.hidden, true);
+  await r.review.refresh(); const old = r.decisions()[0];
+  r.state.error = true; await r.review.refresh(); await old.click(true);
+  assert.equal(r.decides(), 0);
+});
+
+test('polling retries a handled read error after two seconds rather than waiting thirty seconds', async () => {
+  const r = rig(); let time = 0;
+  const poll = makePlanPolling(r.review, { now: () => time });
+  r.state.error = true; await poll.tick();
+  assert.equal(r.calls.length, 1);
+  time = 1999; await poll.tick(); assert.equal(r.calls.length, 1);
+  r.state.error = false; time = 2000; await poll.tick();
+  assert.equal(r.calls.length, 2); assert.equal(r.panel.dataset.state, 'requested');
+  time = 31999; await poll.tick(); assert.equal(r.calls.length, 2);
+  time = 32000; await poll.tick(); assert.equal(r.calls.length, 3);
+});
+
+test('polling preserves hints arriving during a read and does not mark a busy read as successful', async () => {
+  let time = 0, calls = 0, finish;
+  const poll = makePlanPolling({ refresh() { calls++; return new Promise(resolve => { finish = resolve; }); } }, { now: () => time });
+  const first = poll.tick(); poll.request(); finish({ status: 'ok' }); await first;
+  const second = poll.tick(); assert.equal(calls, 2); finish({ status: 'busy' }); await second;
+  time = 1999; await poll.tick(); assert.equal(calls, 2);
+  time = 2000; const third = poll.tick(); assert.equal(calls, 3); finish({ status: 'ok' }); await third;
 });
 
 test('a late decide reply after stop paints nothing and sends nothing', async () => {
