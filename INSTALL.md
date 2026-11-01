@@ -14,8 +14,8 @@ Agent가 앱에 포함된 CLI와 OS 기본 도구를 사용한다. 일반 ChatGP
 
 | OS | Codex | Claude Desktop (Claude Code 탭) |
 |---|---|---|
-| Windows 11 x64 | **이전 판 실기기 확인 / 이번 판 사용자 확인 대기** — Companion installer `0.1.1-owner.10`, **Codex 연결** 버튼 | **사용자 확인 대기** — `0.1.1-owner.10`의 **Claude Desktop 연결** 버튼(자동 테스트 통과) |
-| macOS Apple Silicon | **이전 판 실기기 확인 / 이번 판 사용자 확인 대기** — Plugin `0.2.1-preview.11` 또는 Git 없는 archive | **이전 판 사용자 확인(11/01) / 이번 판 확인 대기** — 같은 archive의 Core를 Desktop 설정에 직접 등록. Plugin 경로는 화면 미표시 |
+| Windows 11 x64 | **이전 판 실기기 확인 / 이번 판 사용자 확인 대기** — Companion installer `0.1.1-owner.11`, **Codex 연결** 버튼 | **사용자 확인 대기** — `0.1.1-owner.11`의 **Claude Desktop 연결** 버튼(자동 테스트 통과) |
+| macOS Apple Silicon | **이전 판 실기기 확인 / 이번 판 사용자 확인 대기** — Plugin `0.2.1-preview.12` 또는 Git 없는 archive | **이전 판 사용자 확인(11/01) / 이번 판 확인 대기** — 같은 archive의 Core를 Desktop 설정에 직접 등록. Plugin 경로는 화면 미표시 |
 
 상태의 뜻:
 
@@ -31,16 +31,21 @@ Agent가 앱에 포함된 CLI와 OS 기본 도구를 사용한다. 일반 ChatGP
 
 | 환경 | 버전 | 상태 |
 |---|---|---|
-| Windows 11 x64 | `0.1.1-owner.10` | Claude Desktop 연결·Monitor 확대/미니맵 시험판, 실사용 검수 대기 |
-| macOS Apple Silicon | `0.2.1-preview.11` | 공통 Monitor 확대/미니맵·업데이트 안내 시험판, 실사용 검수 대기 |
+| Windows 11 x64 | `0.1.1-owner.11` | 승인 성공·조회 재시도 구분 시험판, 실사용 검수 대기 |
+| macOS Apple Silicon | `0.2.1-preview.12` | 승인 성공·조회 재시도 구분 시험판, 실사용 검수 대기 |
+
+이번 판은 승인 저장과 최신 상태 조회를 구분한다. 승인 뒤 읽기가 잠시 실패하면 확인된 승인 판을 유지하고
+회색 **최신 상태 다시 확인 중** 안내를 보인다. 연속 실패 때는 조회 실패로 알리며 **다시 읽기**를 제공한다.
+저장 응답을 확인하지 못한 경우에는 **저장 결과 불확실**로 표시하고 승인을 자동 재전송하지 않는다.
+이전 판의 승인을 새 제안에 적용하지 않는다. 조회는 2/4/8/15초 간격으로 재시도한다.
 
 이번 두 배포본은 같은 `approved-plan` + `visual-authoring` 시험 프로필이다. **새 대화·새 빈 폴더**에서
 Monitor 승인 버튼 → Interview 닫기 → 계획 항목별 Experiment → Verify 파일 증거를 시험한다.
 새 프로젝트는 저장 형식 7을 사용한다. 기존 기록의 형식은 자동 변환하지 않으며, 이전 설치본으로
 되돌려도 형식 7 기록은 이전 형식으로 바뀌지 않는다. 닫힌 실패 Cycle의 revisit만 Monitor에서 변경 목록 확인·보존 승인을 거쳐 진행한다. 일반 restore와 Step revisit는 계속 차단한다.
-검증 범위와 정확한 배포물은 [게시 장부](distribution/codex/PREVIEW-11-PUBLICATION-20261102.md)에 남긴다.
+검증 범위와 정확한 배포물은 [게시 장부](distribution/codex/PREVIEW-12-PUBLICATION-20261102.md)에 남긴다.
 
-> Windows **Claude Desktop 연결** 버튼은 `0.1.1-owner.10`부터, 공통 Monitor의 **업데이트 안내·확대·미니맵**은 이 두 배포본부터 포함된다.
+> Windows **Claude Desktop 연결** 버튼은 `0.1.1-owner.10`부터, 공통 Monitor의 **업데이트 안내·확대·미니맵**은 owner.10/preview.11부터 포함된다.
 > 이전 owner.8/owner.9에는 Claude Desktop 연결 버튼이 없다. 업데이트 뒤 새 연결에서 확인한다.
 
 둘 다 정식 서명판이 아니다. Windows Authenticode와 Apple Developer ID/공증을 제공하지 않는다.
@@ -55,11 +60,11 @@ Companion의 버튼(Windows) 또는 아래 절차의 사용자 승인 뒤 **Desk
 
 ## Windows 11 x64
 
-릴리스: [windows-owner-update-0.1.1-owner.10](https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.10)
+릴리스: [windows-owner-update-0.1.1-owner.11](https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.11)
 
-- 설치 파일: `GIL.Companion.Unsigned.Test._0.1.1-owner.10_x64-setup.exe`
-- 크기: `6,048,931` bytes
-- SHA-256: `d24356e3329e827f51e1fe2f63c7916ebdc11bcb3a2b8486b6ab137d0d5a7247`
+- 설치 파일: `GIL.Companion.Unsigned.Test._0.1.1-owner.11_x64-setup.exe`
+- 크기: `6,051,801` bytes
+- SHA-256: `140be96ad41107da9f227b7ebe4a3af54121052511ec79f7ca86ce82d8827e78`
 - 지원: x64만. ARM64 Windows에는 설치하지 않는다.
 
 Windows에서는 Host가 어느 쪽이든 Core는 한 곳에 있다. installer가 `%LOCALAPPDATA%\GIL\runtime\`에
@@ -112,14 +117,14 @@ Core이고, 이미 열린 대화는 열 때의 Core를 끝까지 쓴다.
 
 ## macOS Apple Silicon
 
-릴리스: [v0.2.1-preview.11](https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.11)
+릴리스: [v0.2.1-preview.12](https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.12)
 
 - Plugin: `gil-companion-prototype@gil-preview-macos-arm64`
-- marketplace tag: `v0.2.1-preview.11`
-- marketplace commit: `52e7699b8dfa444698afcdaf489a6805521d520e`
-- Git 없는 설치 archive: `gil-codex-macos-arm64-0.2.1-preview.11.tar.gz`
-- archive 크기: `3,565,880` bytes
-- archive SHA-256: `955cf16c566939543d02f96077f71a8eb186333187f9ccd3bcb708ad27537fdb`
+- marketplace tag: `v0.2.1-preview.12`
+- marketplace commit: `1132114d299c896e9879c3b9f108a8349c5ff691`
+- Git 없는 설치 archive: `gil-codex-macos-arm64-0.2.1-preview.12.tar.gz`
+- archive 크기: `3,566,625` bytes
+- archive SHA-256: `41f1bb5bfafac4912efc8251d5dc31ec462221e8e3805dc3fdfb890bc18943f1`
 - 지원: Apple Silicon(`arm64`)만. Intel Mac에는 설치하지 않는다.
 
 archive 하나가 Codex용 `.agents/plugins/marketplace.json`과 Claude Code용 `.claude-plugin/marketplace.json`,
@@ -132,7 +137,7 @@ macOS에는 아직 고정 런처와 Companion 버튼이 없다. Codex는 Plugin 
 ### Codex에 붙여넣을 요청
 
 ```text
-GIL unsigned preview 0.2.1-preview.11을 설치해 줘. 사용자가 터미널을 직접 조작하게 하지 마.
+GIL unsigned preview 0.2.1-preview.12를 설치해 줘. 사용자가 터미널을 직접 조작하게 하지 마.
 플러그인 관리 MCP 도구만 보고 설치 불가라고 결론내리지 말고, 이 로컬 Codex 작업의 셸에서
 앱에 포함된 codex CLI를 사용해. 프로젝트를 초기화·이관하거나 .gil 기록을 바꾸지 마.
 
@@ -147,28 +152,28 @@ GIL unsigned preview 0.2.1-preview.11을 설치해 줘. 사용자가 터미널�
 알려준 뒤 내 승인을 기다려. 설정 파일이나 Plugin cache를 직접 편집하지 마.
 
 Git이 실제로 동작하면 다음 고정 tag 경로를 사용해:
-codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.11 --json
+codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.12 --json
 codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 
 Git 또는 Xcode Command Line Tools를 찾지 못하면 개발 도구 설치를 제안하지 말고 Git 없는 경로로 전환해.
 다음 archive를 임시 파일로 받은 뒤 압축 해제 전에 크기와 SHA-256을 모두 확인해:
-https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.11/gil-codex-macos-arm64-0.2.1-preview.11.tar.gz
-크기: 3565880 bytes
-SHA-256: 955cf16c566939543d02f96077f71a8eb186333187f9ccd3bcb708ad27537fdb
+https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.12/gil-codex-macos-arm64-0.2.1-preview.12.tar.gz
+크기: 3566625 bytes
+SHA-256: 41f1bb5bfafac4912efc8251d5dc31ec462221e8e3805dc3fdfb890bc18943f1
 
 값이 다르면 아무것도 풀지 말고 중단해. 일치하면 tar 목록에서 절대경로, .. 경로 이동,
 심볼릭 링크, 하드 링크와 특수 파일이 없는지 확인해. 문제가 없으면 기존 폴더를 덮어쓰지 말고
-$HOME/Library/Application Support/GIL/preview.11-local 이라는 새 사용자 전용 폴더에 풀어.
-그 폴더의 .agents/plugins/marketplace.json, release.json, Plugin version 0.2.1-preview.11,
+$HOME/Library/Application Support/GIL/preview.12-local 이라는 새 사용자 전용 폴더에 풀어.
+그 폴더의 .agents/plugins/marketplace.json, release.json, Plugin version 0.2.1-preview.12,
 core/darwin-arm64/gil 실행 권한을 확인한 뒤 다음 공식 CLI 명령을 사용해:
-codex plugin marketplace add "$HOME/Library/Application Support/GIL/preview.11-local" --json
+codex plugin marketplace add "$HOME/Library/Application Support/GIL/preview.12-local" --json
 codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 
 네트워크나 Codex 설정 저장 권한이 필요하면 정상 승인 창으로 요청하고, 승인 뒤에는
 codex plugin list --json으로 상태를 다시 읽어 끝나지 않은 단계만 이어가. 다시 다운로드·압축 해제하거나
 무조건 재등록하지 마. Gatekeeper를 끄거나 quarantine·권한을 강제로 변경하지 마.
 
-마지막으로 codex plugin list --json에서 설치 버전이 0.2.1-preview.11인지 확인해 알려줘.
+마지막으로 codex plugin list --json에서 설치 버전이 0.2.1-preview.12인지 확인해 알려줘.
 화면이 실제로 보이기 전에는 Monitor가 열렸다고 말하지 마.
 ```
 
@@ -195,7 +200,7 @@ inline 카드가 주변 대화와 어울린다고 확인했다. 반면 **Plugin�
 보는 경로는 직접 등록이다. 자세한 근거는 [호출 경로별 진단](mcp-app/CLAUDE-DESKTOP-ROUTES.md)을 본다.
 
 **1단계 — archive 준비(공통).** 위 Git 없는 경로 그대로 archive를 받아 크기·SHA-256·멤버 목록을 검증하고
-사용자 전용 새 폴더(`$HOME/Library/Application Support/GIL/<버전>-local`, 0700)에 푼다. preview.11 archive는 최상위에 Codex용 `.agents/plugins/marketplace.json`과 Claude Code용
+사용자 전용 새 폴더(`$HOME/Library/Application Support/GIL/<버전>-local`, 0700)에 푼다. preview.12 archive는 최상위에 Codex용 `.agents/plugins/marketplace.json`과 Claude Code용
 `.claude-plugin/marketplace.json`을 함께 담는다. 이전 `0.2.1-preview.7` archive에는 `.claude-plugin`이 없다.
 
 **2단계 — 직접 등록(현재 화면이 성립하는 경로).** 먼저 Claude Desktop을 **완전히 종료**한다(Dock에서
@@ -215,9 +220,9 @@ Skill 없이도 도구 설명과 `gil_help`로 전달된다.
 Claude Code 탭에 붙여넣어 Agent에게 맡길 수 있는 요청문:
 
 ```text
-GIL unsigned preview 0.2.1-preview.11을 Claude Desktop에 직접 등록해 줘. 내가 터미널을 직접 조작하게 하지 마.
+GIL unsigned preview 0.2.1-preview.12를 Claude Desktop에 직접 등록해 줘. 내가 터미널을 직접 조작하게 하지 마.
 위 Git 없는 경로 그대로 archive를 받아 크기·SHA-256·tar 멤버를 검증하고
-$HOME/Library/Application Support/GIL/preview.11-local 에 풀어. 기존 폴더는 덮어쓰지 마.
+$HOME/Library/Application Support/GIL/preview.12-local 에 풀어. 기존 폴더는 덮어쓰지 마.
 그다음 ~/Library/Application Support/Claude/claude_desktop_config.json 을 읽어 지금 mcpServers 에 무엇이
 있는지 보여 주고, gil 항목이 이미 있으면 어떤 실행 파일을 가리키는지 알려 준 뒤 내 승인을 기다려.
 내가 승인하면: Claude Desktop 이 완전히 종료됐는지(주 프로세스 Claude 가 없는지) 확인하고, 설정 파일을
