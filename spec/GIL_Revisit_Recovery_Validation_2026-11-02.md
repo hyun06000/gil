@@ -1,5 +1,9 @@
 # M4-R local recovery validation — 2026-11-02
 
+> Historical first-stage macOS report. The later Windows parity and publication results are in
+> [the final release record](../distribution/codex/PREVIEW-9-PUBLICATION-20261102.md).
+> Statements below about Windows refusal and no deployment describe this earlier stage only.
+
 Contract: [GIL_Revisit_Recovery_v0.1.md](GIL_Revisit_Recovery_v0.1.md).
 Base: `514adb8bb94930c6672bff3bebd3664600484434`.
 Branch: `fix/product-revisit-recovery-20261102`.

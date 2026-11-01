@@ -1,6 +1,7 @@
 # M4-R — 승인된 실패 Cycle 복구
 
-상태: 2026-11-02 개발 구현. 설치본 배포와 실제 Monitor 클릭 인수 전이다.
+상태: 2026-11-02 양 OS CI 통과, Mac preview.9 / Windows owner.8 시험판 게시.
+실제 Monitor 클릭·Luna 인수는 별도다. [게시 장부](../distribution/codex/PREVIEW-9-PUBLICATION-20261102.md)를 따른다.
 사용자 결정: Monitor에서 변경 목록을 확인하고 **보존 후 되돌아가기** 버튼으로 승인한다.
 
 ## 문제와 제한된 범위
