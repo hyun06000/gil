@@ -35,10 +35,11 @@ jobs:
         run: cargo test --locked -p gil --features chain-core --test chains --test chain_closing --test cycles --test context --test will --test walk
       - name: Repeated failure and branch context inside a Chain
         run: cargo test --locked -p gil --features chain-core --test revisit cumulative_context_survives_pending_new_branch_success_and_process_restart -- --exact
-      - name: Private visual creation and native MCP roundtrip
-        run: |
-          cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --lib visual_start
-          cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --test visual_start
-          cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --test mcp
+      - name: Private visual creation unit contracts
+        run: cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --lib visual_start
+      - name: Private visual creation integration
+        run: cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --test visual_start
+      - name: Complete native MCP roundtrip
+        run: cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --test mcp
       - name: Compile all Core targets in the development product profile
         run: cargo build --locked -p gil --all-targets --features chain-core,visual-authoring,product-safety
