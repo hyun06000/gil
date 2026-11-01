@@ -96,6 +96,8 @@ body[data-display-mode="fullscreen"] .detail { scroll-margin-bottom: var(--gil-c
 .plan-banner[data-state="unreadable"], .plan-banner[data-state="uncertain"], .plan-banner[data-state="no_token"] {
   border-color: var(--gil-warn-line); background: var(--gil-warn-bg); color: var(--gil-warn-fg); }
 .plan-banner[data-state="approved"], .plan-banner[data-state="changes_requested"] { border-color: var(--gil-line-soft); }
+.plan-banner[data-state="checking"], .plan-banner[data-state="retrying"] {
+  border-color: var(--gil-line); color: var(--gil-fg-2); background: var(--gil-bg-2); }
 
 /* The approval panel is an MCP-only action surface, separate from the shared read model. */
 .plan-panels { grid-area:plan; }

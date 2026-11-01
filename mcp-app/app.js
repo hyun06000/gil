@@ -1,5 +1,6 @@
 import { App, applyDocumentTheme, applyHostStyleVariables, applyHostFonts } from '@modelcontextprotocol/ext-apps';
 import { makePlanReview } from './plans.mjs';
+import { makePlanPolling } from './plan-poll.mjs';
 import { makeRecoveryReview } from './recovery.mjs';
 import { makeHost, unwrap, retryAfter, connectionMessage } from './host.mjs';
 import { graphOrientation, initialFullscreen, hostIdentity, hostStyles, styleEvidence, updateNotice, updateGuide } from './presentation.mjs';
@@ -9,7 +10,7 @@ const app = new App({ name: 'GIL Monitor', version: '0.1.0' },
 const el = (id) => document.getElementById(id);
 const raw = (v) => v === undefined ? 'undefined' : JSON.stringify(v, null, 2);
 let context = {}, connected = false, pending = false, booted = false, stopped = false;
-let rendererReady = false, planReview = null, planNeedsRefresh = true, planReadAt = 0;
+let rendererReady = false, planReview = null, planPolling = null;
 let recoveryReview = null, recoveryReadAt = 0;
 let response = '요청 전', eventMode = '이벤트 전', timer, pollFailures = 0;
 let suspended = false, polling = false, refreshOnReturn = false;
@@ -187,9 +188,7 @@ async function poll() {
     if (refresh) await window.GIL_HOST.refresh();
     else await window.GIL_HOST.tick();
     // State-file hints drive approval refreshes too. Quiet polling never loads a Project every 2s.
-    if (planReview && (planNeedsRefresh || Date.now() - planReadAt >= 30000)) {
-      await planReview.refresh(); planNeedsRefresh = false; planReadAt = Date.now();
-    }
+    if (planPolling) await planPolling.tick();
     if (recoveryReview && Date.now() - recoveryReadAt >= 30000) { await recoveryReview.refresh(); recoveryReadAt = Date.now(); }
     pollFailures = 0;
   } catch (err) {
@@ -215,13 +214,14 @@ app.ontoolresult = async (result) => {
     booted = true;
     if (data.plan_review_supported) planReview = makePlanReview({ app, scope: data.scope_id,
       panel: el('plan-review'), banner: el('plan-banner'), document, changed: () => { refreshOnReturn = true; } });
+    if (planReview) planPolling = makePlanPolling(planReview);
     window.GIL_HOST = makeHost(app, data, { presence });
     window.GIL_HOST.listen('gil://update', renderUpdate);
     if (data.revisit_review_supported) {
-      recoveryReview = makeRecoveryReview({app, scope:data.scope_id, panel:el('revisit-review'), document, changed:() => { refreshOnReturn = true; planNeedsRefresh = true; }});
+      recoveryReview = makeRecoveryReview({app, scope:data.scope_id, panel:el('revisit-review'), document, changed:() => { refreshOnReturn = true; planPolling?.request(); }});
       window.GIL_HOST.listen('gil://refresh', () => { recoveryReadAt = 0; });
     }
-    if (planReview) window.GIL_HOST.listen('gil://refresh', () => { planNeedsRefresh = true; });
+    if (planReview) window.GIL_HOST.listen('gil://refresh', () => { planPolling?.request(); });
     void reportPresence();
     window.GIL_HOST.listen('gil://connection', (error) => {
       connectionIssue = error;

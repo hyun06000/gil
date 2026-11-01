@@ -45,8 +45,8 @@ GIL의 주 사용자는 비개발자다. 인간은 명령과 저장 형식을 �
 
 소스는 [MIT 라이선스](LICENSE)로 공개한다. 현재 친구·테스터용 채널은 **서명되지 않은 preview**다.
 [통합 설치 안내](INSTALL.md)에서 OS와 CPU에 맞는 검수본을 확인한 뒤 설치한다. macOS Apple
-Silicon은 Codex Plugin `0.2.1-preview.10`, Windows x64는 Companion installer
-`0.1.1-owner.9`이다.
+Silicon은 Codex Plugin `0.2.1-preview.11`, Windows x64는 Companion installer
+`0.1.1-owner.10`이다.
 **사용자에게 Node·Cargo·Homebrew 설치를 요구하지 않는다.** Mac Plugin은 별도 Companion 없이
 [gil-marketplace](https://github.com/hyun06000/gil-marketplace)에서 설치하며, 범용 Plugins Directory
 등재와는 다르다. Windows는 위 Companion installer를 사용한다.
@@ -68,7 +68,7 @@ Claude Desktop의 **Claude Code**는 2026-10-30 소유자 보고로 MCP App full
 모드 요청만 적용해, Monitor는 inline으로 뜬 뒤 **첫 클릭에 fullscreen**으로 펼쳐진다(자동 펼침은 Codex만).
 preview archive 하나에 Codex(`.agents/plugins`)와 Claude Code(`.claude-plugin`) 두 catalog를 함께 싣고,
 Windows Companion은 **Codex 연결**과 **Claude Desktop 연결** 버튼으로 같은 고정 런처를 각 Host에 등록한다
-(Claude 버튼은 다음 Windows 후보부터, 자동 테스트만 통과). 사용자 화면 인수와 fullscreen 중 도구 승인 창 병행은
+(Claude 버튼은 owner.10부터, 실제 Windows Claude 화면은 사용자 확인 대기). 사용자 화면 인수와 fullscreen 중 도구 승인 창 병행은
 [호출 경로별 진단](mcp-app/CLAUDE-DESKTOP-ROUTES.md)에 Host·버전별로 따로 기록하며, 한 경로의
 성공을 다른 경로로 일반화하지 않는다. 자세한 범위는 아래 구현 상태와 Roadmap을 따른다.
 
@@ -415,8 +415,8 @@ layer를 목표로 한다.
 
 ## Project status
 
-**현재 사용자 채널은 unsigned preview 둘이다.** macOS Apple Silicon은 Plugin/archive `0.2.1-preview.8`,
-Windows x64는 Companion installer `0.1.1-owner.7`이며, 두 채널 모두 Codex와 Claude Desktop(Claude Code 탭)을
+**현재 사용자 채널은 unsigned preview 둘이다.** macOS Apple Silicon은 Plugin/archive `0.2.1-preview.11`,
+Windows x64는 Companion installer `0.1.1-owner.10`이며, 두 채널 모두 Codex와 Claude Desktop(Claude Code 탭)을
 같은 Core·Monitor·작업 규칙으로 지원한다. 네 조합의 확인 상태(실기기 확인 / 사용자 확인 / 자동 테스트만 통과 /
 사용자 확인 대기)는 [설치 안내](INSTALL.md)의 표를 따른다. 서명된 일반 공개판·Intel Mac·Windows ARM64는 없다.
 
