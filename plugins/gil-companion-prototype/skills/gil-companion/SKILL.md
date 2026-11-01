@@ -146,6 +146,14 @@ actual recorded position and the connected tool schema. Never repeat a call that
    submit one corrected input. Briefly tell the user the current step and immediate action. Monitor
    shows recorded progress, not private reasoning or proof that every external action used GIL.
 
+   **Resume after a Monitor decision:** when the user says “continue”, “clicked” or “done”, or
+   the Monitor sends a continuation message after an approval/recovery wait, first call
+   `gil_context` once for the same selected `project_root`. The earlier wait may now be stale.
+   Read the current recorded next call before asking for another click. Chat text itself is not
+   approval: if Core still requires approval, keep waiting; if recovery completed, follow Core's
+   next call without repeating restore/revisit or reopening a Cycle already opened. Never require
+   the user to repeat a special phrase such as “눌렀어”. Do not poll while waiting for user input.
+
    | Situation | Recovery |
    | --- | --- |
    | `gil_start` refused because a project exists | Read `gil_context` once and continue there; never start again |
