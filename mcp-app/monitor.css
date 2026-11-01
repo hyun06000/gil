@@ -74,6 +74,7 @@ body[data-display-mode="fullscreen"] .detail { scroll-margin-bottom: var(--gil-c
 .plan-banner[data-state="approved"], .plan-banner[data-state="changes_requested"] { border-color: var(--gil-line-soft); }
 
 /* The approval panel is an MCP-only action surface, separate from the shared read model. */
+.plan-panels { grid-area:plan; }
 .plan-review { grid-area:plan; padding:16px; border-top:var(--gil-hair) solid var(--gil-line); overflow-wrap:anywhere; font-size: var(--gil-sm); line-height: 1.5; }
 .plan-review[hidden] { display:none; }
 .plan-review h2 { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; font-size:var(--gil-md); margin:0 0 8px; }

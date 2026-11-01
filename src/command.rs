@@ -880,8 +880,11 @@ fn restored(session: &Session, done: &crate::Restored) -> String {
 /// **인수를 받지 않는다.** 어디로 갈지는 닫는 순간 Report 에 이미 확정됐고, 여기서 다시
 /// 고르게 하면 근거와 이동이 갈린다 — Snapshot 을 고를 수 없는 것과 같은 까닭이다.
 #[cfg(feature = "product-safety")]
-fn revisit(_ctx: &Invocation<'_>, _extra: Option<&String>) -> Result<String, String> {
-    Err(product_artifact_rollback_refusal("revisit"))
+fn revisit(ctx: &Invocation<'_>, extra: Option<&String>) -> Result<String, String> {
+    if extra.is_some() { return Err("gil revisit은 인수를 받지 않는다".into()); }
+    let mut session = open_session(ctx)?;
+    let result = session.resume_revisit()?;
+    Ok(format!("보존 후 되돌아갔다. 실패 기록과 증거는 유지했다.\n{}\n", result))
 }
 
 #[cfg(not(feature = "product-safety"))]
@@ -1422,6 +1425,10 @@ fn closed_cycle(session: &Session, closed: &crate::ClosedCycle) -> String {
     }
     // **적어 둔 방향이 곧 다음 수다.** 되돌아감도 자식을 여는 것과 같은 자격으로 밟는다.
     if cycles.can_revisit() {
+        if cfg!(feature = "product-safety") {
+            out.push_str("  적어 둔 조상으로 되돌아간다 — 먼저 Monitor에서 변경 목록을 확인하고 ‘보존 후 되돌아가기’를 승인한다.\n  승인 전 gil revisit을 반복하지 않는다. 복원 후 gil open으로 새 Cycle을 연다.\n");
+            return out;
+        }
         out.push_str(
             "  적어 둔 조상으로 되돌아간다 — 그 자리의 Artifact 세계가 함께 복원된다\n\n             실행\n  gil revisit\n",
         );

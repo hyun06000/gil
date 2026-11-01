@@ -90,6 +90,7 @@ fn view(p: &Project) -> Value {
     let cycle = p.current_cycle();
     let current_cycle = json!({"ref":cycle.id().to_ref().to_string(), "state":if cycle.is_closed() {"closed"} else {"open"}});
     json!({"supported":true, "proposal":proposal, "active_revision":state.active(chain).map(|p| p.revision),
+        "retry_pending":state.pending(chain).iter().filter(|i| state.executed_cycles.iter().any(|e| e.item_id == i.id)).map(|i| &i.id).collect::<Vec<_>>(),
         "current_item":p.current_plan_item(), "current_cycle":current_cycle, "pending":state.pending(chain), "reinterview_requests":state.awaiting_interview(chain), "executed_cycles":state.executed_cycles,
         "close_report":proposal.and_then(|p| p.report().ok()).map(|r| crate::approved_plan::report_text(&r)), "document":p.plan_document(),
         "next":"Monitor 응답 후 close_report로 Synthesis를 닫고 Outcome, Interview Cycle까지 닫는다. Experiment Verify는 document와 별도 실행 증거를 파일로 남긴다."})

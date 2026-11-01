@@ -16,7 +16,7 @@ export const PLAN_STATE = {
   unreadable: '읽기 실패',
   unsupported: '',
 };
-const ITEM_STATUS = { executed: '실행함', current: '지금 열린 Cycle', bound: '현재 Cycle에 연결됨 (열림 여부 미확인)', pending: '남음' };
+const ITEM_STATUS = { executed: '실행함', current: '지금 열린 Cycle', bound: '현재 Cycle에 연결됨 (열림 여부 미확인)', pending: '남음', retry: '재시도 대기 (실패 기록 유지)' };
 
 /** The real state of the current Cycle, or 'unknown' when the wire does not say. Never inferred from current_item. */
 export function currentCycle(value) {
@@ -49,8 +49,9 @@ export function planItems(value) {
   // A bound item counts as "open now" only when the server says the current Cycle is open.
   // A closed Cycle keeps its binding, so the item is simply executed; without the field, unknown.
   const bound = cycleState.state === 'open' ? 'current' : cycleState.state === 'closed' ? 'executed' : 'bound';
-  const status = (id) => id === current ? bound : executed.some(e => e.item_id === id) ? 'executed' : 'pending';
-  const cycle = (id) => executed.find(e => e.item_id === id)?.cycle_ref
+  const retry = new Set(value?.retry_pending || []);
+  const status = (id) => id === current && cycleState.state === 'open' ? 'current' : retry.has(id) ? 'retry' : id === current ? bound : executed.some(e => e.item_id === id) ? 'executed' : 'pending';
+  const cycle = (id) => executed.findLast(e => e.item_id === id)?.cycle_ref
     ?? (id === current && cycleState.state === 'closed' ? cycleState.ref : null);
   const p = value?.proposal;
   if (p) return p.draft.items.map(i => ({ ...i, status: status(i.id), cycle_ref: cycle(i.id) }));
@@ -61,7 +62,7 @@ export function planItems(value) {
     seen.add(e.item_id);
     const item = e.item_id === current ? value.current_item : null;
     out.push({ id: e.item_id, question: item?.question ?? null, done_when: item?.done_when ?? null,
-      status: status(e.item_id), cycle_ref: e.cycle_ref });
+      status: status(e.item_id), cycle_ref: cycle(e.item_id) });
   }
   if (current && !seen.has(current)) {
     seen.add(current);
@@ -192,7 +193,7 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
     const items = planItems(value);
     const n = (status) => items.filter(i => i.status === status).length;
     const open = currentCycle(value).state === 'unknown' ? `연결됨(열림 미확인) ${n('bound')}개` : `지금 열린 Cycle ${n('current')}개`;
-    return `실행함 ${n('executed')}개 · ${open} · 남음 ${n('pending')}개`;
+    return `실행함 ${n('executed')}개 · ${open} · 남음 ${n('pending')}개${n('retry') ? ` · 재시도 대기 ${n('retry')}개` : ''}`;
   }
   function reinterview(value) {
     for (const request of value.reinterview_requests || []) {

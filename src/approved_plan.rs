@@ -81,6 +81,10 @@ pub struct PlanState {
 fn bad(message: &str) -> String {
     format!("승인 계획: {message}")
 }
+fn failed_execution(chain: &Chain, e: &Execution) -> bool {
+    chain.cycles().nodes().iter().find(|c| c.id().to_ref().to_string() == e.cycle_ref)
+        .is_some_and(|c| c.is_closed() && c.report().is_some_and(|r| r.get("verdict") == Some("failure")))
+}
 impl Proposal {
     fn hash(&self) -> String {
         let bytes = serde_json::to_vec(&(
@@ -160,7 +164,8 @@ impl PlanState {
                 p.draft
                     .items
                     .iter()
-                    .filter(|i| !self.executed_cycles.iter().any(|e| e.item_id == i.id))
+                    .filter(|i| self.executed_cycles.iter().rev().find(|e| e.item_id == i.id)
+                        .is_none_or(|e| failed_execution(chain, e)))
                     .collect()
             })
             .unwrap_or_default()
@@ -304,7 +309,7 @@ impl PlanState {
                 }
             }
         }
-        let mut seen = BTreeSet::new();
+        let mut seen: BTreeMap<&str, &Execution> = BTreeMap::new();
         let mut prior_cycle = 0;
         for e in &self.executed_cycles {
             let p = self
@@ -312,10 +317,9 @@ impl PlanState {
                 .iter()
                 .find(|p| p.revision == e.revision && self.activated(chain, p))
                 .ok_or_else(|| bad("실행의 승인 판이 없다"))?;
-            let expected = p.draft.items.iter().find(|i| !seen.contains(&i.id));
-            if expected.map(|i| i.id.as_str()) != Some(e.item_id.as_str())
-                || !seen.insert(&e.item_id)
-            {
+            let expected = p.draft.items.iter().find(|i| seen.get(i.id.as_str())
+                .is_none_or(|prior| failed_execution(chain, prior)));
+            if expected.map(|i| i.id.as_str()) != Some(e.item_id.as_str()) {
                 return Err(bad("중복 또는 승인 순서와 다른 실행 항목"));
             }
             let c = chain
@@ -326,6 +330,26 @@ impl PlanState {
                     c.id().to_ref().to_string() == e.cycle_ref && c.kind() == CycleKind::Experiment
                 })
                 .ok_or_else(|| bad("실행 Cycle이 없다"))?;
+            if let Some(prior) = seen.get(e.item_id.as_str()) {
+                // A retry must descend from the declared revisit of the last failed attempt.
+                // A fresh Interview may intervene, but cannot erase the origin of the retry.
+                let mut todo = vec![c.id()];
+                let mut visited = BTreeSet::new();
+                let mut inherited = false;
+                while let Some(id) = todo.pop() {
+                    if !visited.insert(id) { continue; }
+                    let node = chain.cycles().node(id).ok_or_else(|| bad("재시도 계보가 없다"))?;
+                    if let Some(from) = node.revisit_from() {
+                        if from.to_ref().to_string() == prior.cycle_ref { inherited = true; break; }
+                        todo.push(from);
+                    }
+                    if let Some(parent) = node.parent() { todo.push(parent); }
+                }
+                if !inherited {
+                    return Err(bad("재시도는 직전 실패의 revisit 계보를 이어야 한다"));
+                }
+            }
+            seen.insert(&e.item_id, e);
             if c.id().to_ref().number() <= prior_cycle {
                 return Err(bad("실행 바인딩의 순서가 다르다"));
             }

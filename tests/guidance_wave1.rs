@@ -146,7 +146,11 @@ fn a_failed_experiment_is_told_revisit_once_then_open_and_never_restore_silently
     session.close_cycle(report).expect("실패로 닫는다");
     session.commit().expect("눕힌다");
     assert!(session.project().cycles().can_revisit(), "이 시험은 되돌아갈 수 있는 자리를 전제한다");
-    says(session.project(), &["gil_revisit(인수 없음)", "한 번", "사용자에게 먼저 알린다"], &["gil_restore", "gil_open(kind: experiment)을 바로"]);
+    if cfg!(feature = "product-safety") {
+        says(session.project(), &["Monitor", "버튼 승인을 기다린다"], &["gil_revisit(인수 없음)", "gil_restore"]);
+    } else {
+        says(session.project(), &["gil_revisit(인수 없음)", "한 번", "사용자에게 먼저 알린다"], &["gil_restore", "gil_open(kind: experiment)을 바로"]);
+    }
     session.revisit_cycle().expect("적어 둔 대로 되돌아간다");
     says(session.project(), &["되돌아왔다", "gil_open(kind: interview|experiment)", "gil_revisit을 반복하지 않는다"], &["gil_close"]);
     drop(session);

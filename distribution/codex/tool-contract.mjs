@@ -7,6 +7,24 @@ const expected = JSON.parse(readFileSync(new URL('../../src/mcp/tools.json', imp
 const authoring = JSON.parse(readFileSync(new URL('../../src/mcp/authoring-schema.json', import.meta.url)));
 const migration = JSON.parse(readFileSync(new URL('../../src/mcp/migration-tools.json', import.meta.url)));
 
+// Explicit product-safety surface: verify the private consent boundary before normalizing.
+export function withoutRecoveryTools(tools) {
+  const names = ['gil_revisit_review', 'gil_revisit_apply'];
+  for (const name of names) {
+    const found = tools.filter(t => t.name === name);
+    assert.equal(found.length, 1, `missing/duplicate ${name}`);
+    const tool = found[0], apply = name.endsWith('_apply');
+    assert.deepEqual(tool._meta?.ui?.visibility, ['app']);
+    assert.deepEqual(tool.annotations, {readOnlyHint: !apply, destructiveHint: apply, openWorldHint: false});
+    assert.equal(tool.inputSchema.additionalProperties, false);
+    const keys = apply ? ['scope_id', 'digest', 'token'] : ['scope_id'];
+    assert.deepEqual([...tool.inputSchema.required].sort(), [...keys].sort());
+    assert.deepEqual(Object.keys(tool.inputSchema.properties).sort(), [...keys].sort());
+    for (const key of keys) assert.deepEqual(tool.inputSchema.properties[key], {type:'string'});
+  }
+  return tools.filter(t => !names.includes(t.name));
+}
+
 export function checkAuthoringTools(tools, platform = process.platform) {
   // Windows adds gil_prepare_workspace (approved local workspace preparation); macOS has 25.
   assert.equal(tools.length, platform === 'win32' ? 26 : 25);

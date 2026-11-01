@@ -98,6 +98,7 @@ fn closed(result: &CallToolResult) -> String {
         ("outcome", Some(Next::CloseCycle)) => "다음 행동: gil_close로 이 Cycle의 Report를 제출한다. 다음 문제는 그 뒤에 연다.".to_string(),
         ("interview", Some(Next::OpenCycle)) => "다음 행동: Interview Cycle까지 닫혔다. gil_open(kind: experiment)으로 합의한 첫 질문의 Experiment를 연다. 승인 계획 프로필이면 첫 미실행 항목이 자동으로 묶인다. gil_start를 다시 부르지 않는다.".to_string(),
         ("interview", Some(Next::ChainReport)) | ("experiment", Some(Next::ChainReport)) => "다음 행동: Chain Report를 gil_close로 제출한다. 새 Cycle을 열지 않는다.".to_string(),
+        ("experiment", Some(Next::Revisit)) if cfg!(feature = "product-safety") => "다음 행동: 이 Cycle은 failure·revisit으로 닫혔다. Monitor를 열고 변경 목록과 보존 위치를 사용자가 확인하도록 안내한 뒤 ‘보존 후 되돌아가기’ 버튼을 기다린다. 채팅 동의를 승인으로 옮겨 적거나 gil_revisit을 반복하지 않는다. 복원 완료 후 gil_open으로 새 Cycle을 연다. 실패 기록·증거·학습은 남는다.".to_string(),
         ("experiment", Some(Next::Revisit)) => "다음 행동: 이 Cycle은 failure·revisit으로 닫혔다. Artifact 복원이 따르므로 사용자에게 알린 뒤 gil_revisit(인수 없음)을 한 번 호출하고, 그 다음 gil_open으로 새 Cycle을 연다.".to_string(),
         ("experiment", Some(Next::OpenCycle)) => "다음 행동: Experiment Cycle이 닫혔다. 남은 독립 질문이 있으면 gil_open(kind: experiment), 목표를 다시 합의해야 하면 gil_open(kind: interview)을 연다. 일이 모두 끝났어도 채팅 보고만으로 끝내지 않는다: Chain이 있으면 gil_open(kind: interview)으로 Closing Interview를 열어 최종 판정을 승인받고 Chain Report를 닫는다.".to_string(),
         (_, Some(Next::Open(k))) => format!("다음 행동: gil_open(kind: {k})에 행동 계약을 적어 연다. 그 전에 조사·파일 작성을 하지 않는다."),
@@ -236,7 +237,8 @@ mod tests {
         let mut r = receipt("닫았다: cycle:C3 · experiment · failure\n기록됨: journey:J9 (판은 늘지 않는다)\n\n다음\n  적어 둔 조상으로 되돌아간다 — 그 자리의 Artifact 세계가 함께 복원된다\n\n실행\n  gil revisit\n");
         after("gil_close", &mut r);
         let hint = text(&r);
-        assert!(hint.contains("gil_revisit(인수 없음)") && hint.contains("사용자에게 알린"), "{hint}");
+        if cfg!(feature = "product-safety") { assert!(hint.contains("버튼을 기다린다"), "{hint}"); }
+        else { assert!(hint.contains("gil_revisit(인수 없음)") && hint.contains("사용자에게 알린"), "{hint}"); }
     }
 
     #[test]

@@ -68,7 +68,7 @@ actual recorded position and the connected tool schema. Never repeat a call that
    | Analysis is closed | `gil_open` Outcome, `gil_close` with `verdict`, `lesson`, `next_direction` |
    | Outcome is closed but the Experiment Cycle is still open | `gil_close` with the Cycle Report |
    | Cycle closed `success` | `gil_open` the next Experiment (next independent question) or Interview. When no work remains and the project has a Chain, the Closing Interview and Chain Report follow; a chat summary alone never completes the project |
-   | Cycle closed `failure` · `revisit` | Tell the user that files will be restored, then `gil_revisit` once, then `gil_open` a new Cycle |
+   | Cycle closed `failure` · `revisit` | When the Core receipt requires Monitor approval, open Monitor and wait for the user's “보존 후 되돌아가기” button after reviewing file changes; do not call App-only tools or invent consent. After confirmed recovery, `gil_open` a new Cycle. Otherwise follow the connected Core receipt; never bypass a product refusal |
 
    A closed Hypothesis or a prepared Verify contract does not mean Verify is open. Do not gather
    evidence first and then open Verify to record work already performed. This also applies between
@@ -153,7 +153,7 @@ actual recorded position and the connected tool schema. Never repeat a call that
    | Plan decision or save result uncertain | `gil_plan_read`; never assume approval or re-propose blindly |
    | Approved earlier, proposal edited since | The old approval is gone; wait for the new revision's button |
    | Asked to re-interview during an Experiment | The request is preserved and closes nothing; keep following each receipt's next call and close the Cycle only when its receipt offers the Cycle Report, then `gil_open` Interview |
-   | `gil_revisit` refused (dirty files, plan binding, no recorded direction) | Report the condition; do not restore automatically or retry in a loop |
+   | `gil_revisit` refused | If Monitor approval is required, show Monitor and wait for its button. If protected files differ or the platform is unsupported, preserve files and report the limitation. Never edit records, fake success or loop restore. A durably approved interrupted recovery can be resumed by `gil_revisit` when the receipt explicitly says so |
    | Refused `evidence_files` | Save truthful evidence while Verify is open, then resubmit the close |
    | Monitor cannot be shown | Report it and continue the recorded step; the record is unaffected |
 

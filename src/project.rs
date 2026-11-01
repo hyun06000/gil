@@ -336,8 +336,12 @@ impl Project {
         kind: CycleKind,
     ) -> Result<CycleId, OpenAfterRevisitError> {
         let existence = self.current_existence;
-        if self.approved_plan().is_some() { return Err(OpenAfterRevisitError::PlanBinding); }
-        self.cycles_mut().open_after_revisit(kind, existence)
+        let binding = if kind == CycleKind::Experiment {
+            self.next_plan_execution().map_err(|_| OpenAfterRevisitError::PlanBinding)?
+        } else { None };
+        let id = self.cycles_mut().open_after_revisit(kind, existence)?;
+        if let Some((revision, item)) = binding { self.bind_plan_execution(revision, item, id.to_ref().to_string()); }
+        Ok(id)
     }
 
     /// **적어 둔 Cycle 계층의 되돌아감을 밟는다 — 논리적 이동 하나.**
@@ -352,7 +356,6 @@ impl Project {
     /// [`ProjectSession::revisit_cycle`](crate::ProjectSession::revisit_cycle) 만 공개한다 —
     /// 순수 계층만 부르면 논리는 옮겨졌는데 폴더는 옛 세계인 상태를 만들 수 있다.
     pub(crate) fn revisit_cycle(&mut self) -> Result<CycleRevisit, CycleRevisitError> {
-        if self.approved_plan().is_some() { return Err(CycleRevisitError::PlanBinding); }
         self.cycles_mut().revisit()
     }
 
