@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
 import {sync, render, begin, end} from './sync-workflow.mjs';
+
+const workflow = await readFile(new URL('../../src/mcp/workflow.md', import.meta.url), 'utf8');
 
 test('packaged Plugin skill contains the exact Core workflow', async () => {
   await sync();
@@ -13,4 +16,72 @@ test('workflow synchronization preserves host-specific instructions and is idemp
   assert.ok(render(skill, 'new workflow\n\n').includes(`new workflow\n\n${end}`));
   for (const malformed of ['no markers', `${end}${begin}`, `${begin}${begin}${end}`, `${begin}${end}${end}`])
     assert.throws(() => render(malformed, 'text'), /exactly one/);
+});
+
+// Wave 1 / D: the shared text must give every recorded state exactly one next call and must
+// not offer the shortcuts that light models took in the field. This is a guidance regression,
+// not a record of any real model run.
+const rows = workflow.split('\n').filter(line => line.trim().startsWith('|')).map(line =>
+  line.split('|').slice(1, -1).map(cell => cell.trim()));
+const next = Object.fromEntries(rows.filter(([state, call]) => state && call && !state.startsWith('---') && state !== 'Current state' && state !== 'Situation').map(([state, call]) => [state, call]));
+
+test('each Interview state maps to one next call and approval is never derived', () => {
+  assert.match(next['Question is open'], /end the turn.*gil_close/);
+  assert.match(next['Synthesis is open and the user has not answered'], /end the turn and wait; no research, no deliverable/);
+  assert.match(next['Synthesis is open and the user approved its statement'], /gil_close.*approved: yes/);
+  assert.match(next['Synthesis is open and the user declined'], /approved: no.*gil_open. Question/);
+  assert.match(next['Synthesis is closed and Outcome has not been opened'], /^`gil_open` Outcome$/);
+  assert.match(next['Outcome is closed but the Interview Cycle is still open'], /Cycle Report; there is no extra Report step/);
+  assert.match(next['Interview Cycle is closed and the agreed execution work remains'], /gil_open. Experiment; never .gil_start/);
+  assert.match(workflow, /silence, earlier requests and the agent's own judgment are not approval/);
+});
+
+test('each Experiment state names the next call and Verify is opened before any investigation', () => {
+  assert.match(next['Experiment Cycle just opened'], /Define.*no lookup yet/);
+  assert.match(next['Hypothesis is closed'], /`gil_open` Verify\. \*\*Wait for its success\*\* before reading sources/);
+  assert.match(next['Verify is open'], /save the observation as project files.*evidence_files/);
+  assert.match(next['Verify is closed'], /Analysis.*interpretation/);
+  assert.match(next['Analysis is closed'], /Outcome.*lesson/);
+  assert.match(next['Outcome is closed but the Experiment Cycle is still open'], /Cycle Report/);
+  assert.match(next['Cycle closed `failure` · `revisit`'], /Tell the user.*gil_revisit. once, then .gil_open/);
+  assert.match(workflow, /Chat alone cannot complete\s+Verify/);
+  assert.match(workflow, /Refused: an empty file, a file unchanged since the baseline, or the chat summary alone/);
+});
+
+test('approved plans are detected from the record and schema, never required on legacy projects', () => {
+  const section = workflow.slice(workflow.indexOf('**Approved plans'), workflow.indexOf('**Recover and keep'));
+  assert.match(section, /`supported: true`/);
+  assert.match(section, /`tools\/list` offers `gil_plan_propose`/);
+  assert.match(section, /never require `gil_plan_\*`/);
+  assert.match(section, /Do not infer this from the OS or the install kind/);
+  for (const field of ['goal', 'in_scope', 'out_of_scope', 'constraints', 'success_criteria', '`id`, `question`, `done_when`'])
+    assert.ok(section.includes(field), field);
+  assert.match(section, /`exploration_checklist` lists the item IDs in the same\s+order, one per line/);
+  assert.match(section, /Never write `approved`, `plan_revision` or `plan_digest`/);
+  assert.match(section, /end the turn and wait for the Monitor button\.\*\* Chat agreement is not approval/);
+  assert.match(section, /`close_report` \*\*unchanged\*\*/);
+  assert.match(section, /then `gil_close` the Interview Cycle Report, then `gil_open`\s+Experiment/);
+  assert.match(section, /\*\*byte for byte\*\* \(UTF-8\)/);
+  assert.match(section, /The plan file is not execution evidence/);
+  assert.match(section, /an earlier approval is never reused/);
+  assert.match(section, /closes nothing\. Finish the current Step and Cycle truthfully/);
+});
+
+test('recovery rows connect each failure to the current fact and forbid loops and guarantees', () => {
+  assert.match(next['`gil_start` refused because a project exists'], /gil_context. once.*never start again/);
+  assert.match(next['Close response lost or uncertain'], /gil_status.*close again only if the step is still open/);
+  assert.match(next['Plan decision or save result uncertain'], /gil_plan_read.*never assume approval/);
+  assert.match(next['Approved earlier, proposal edited since'], /old approval is gone/);
+  assert.match(next['Asked to re-interview during an Experiment'], /finish this Cycle truthfully/);
+  assert.match(next['`gil_revisit` refused (dirty files, plan binding, no recorded direction)'], /do not restore automatically or retry in a loop/);
+  assert.match(workflow, /Do not loop a tool to confirm a fact that a receipt already states/);
+  assert.match(workflow, /never promise that a\s+screen, button or save "always works"/);
+});
+
+test('forbidden shortcuts never appear as instructions', () => {
+  assert.doesNotMatch(workflow, /gil_cycle[^.]*action: close/);
+  assert.doesNotMatch(workflow, /approved: yes` (when|if) (the )?(scope|answer) (is|seems) obvious/i);
+  assert.match(workflow, /`gil_cycle` cannot accept a Report/);
+  assert.match(workflow, /Never repeat a call that already succeeded/);
+  assert.match(workflow, /^## GIL shared workflow\n/);
 });

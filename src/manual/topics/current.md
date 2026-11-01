@@ -38,5 +38,8 @@ related:
   같은 세션에서 명령마다 gil context 를 다시 부르는 것.
   context 는 이어받을 때 한 번 읽는 것이고, 그 뒤에는 각 명령의 receipt 가 다음 수를 말한다.
 
+  프로젝트가 이미 있는 자리에서 gil start 를 다시 부르는 것.
+  거절되며 아무것도 만들지 않는다. context 의 첫 블록 [지금 바로 할 호출] 이 이어갈 한 수를 말한다.
+
 [관련 주제]
   artifact/restore

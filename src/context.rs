@@ -46,6 +46,7 @@ pub fn context(project: &Project) -> String {
     let cycles = project.cycles();
     let mut out = String::new();
     write_preamble(&mut out);
+    out.push_str(&format!("\n[지금 바로 할 호출]\n{}\n", next_call(project)));
     if let Some(plan) = project.approved_plan() {
         let chain = project.current_chain().unwrap();
         out.push_str("\n승인 계획 프로필: Synthesis를 열고 gil_plan_propose → Monitor 버튼 응답 → gil_plan_read의 close_report로 닫기 → Outcome → Interview Cycle 닫기. 채팅 동의로 대체하지 않는다.\n");
@@ -72,6 +73,167 @@ pub fn context(project: &Project) -> String {
     write_current_cycle(&mut out, cycles);
     write_here(&mut out, project);
     out
+}
+
+/// **지금 바로 할 호출 하나** — 가벼운 모델이 긴 규칙을 추론하지 않아도 되도록.
+///
+/// 실제 기록된 위치에서 다음 호출(또는 기다림)을 한 줄로 말한다. 판정을 새로 만들지 않고
+/// [`Cycles::openable_here`]·[`Cycles::can_close`]·Chain·승인 계획 기록을 그대로 읽는다.
+/// 이미 성공한 동작(`gil_start`, 닫힌 Synthesis, 열린 Monitor)을 반복하라고 하지 않는다.
+///
+/// 승인 계획 프로필은 기록(`approved_plan`)으로만 판단한다 — OS 이름이나 설치 방식으로
+/// 기능을 추측하지 않고, 옛 프로젝트에 `gil_plan_*`를 요구하지 않는다.
+pub fn next_call(project: &Project) -> String {
+    if let Some(chain) = project.current_chain() {
+        if chain.is_closed() {
+            return "Chain이 닫혔다. 새 주제가 있을 때만 gil_open(kind: chain)을 명시적으로 호출한다. gil_start는 부르지 않는다.".into();
+        }
+        if chain.awaiting_report() {
+            return "Chain Report를 gil_close로 제출한다 (verdict · closing_synthesis_ref · handoff_summary). 새 Cycle을 열지 않는다.".into();
+        }
+    }
+    let cycles = project.cycles();
+    let cycle = cycles.current();
+    let walk = cycle.steps();
+    let here = walk.current().and_then(|id| walk.node(id)).filter(|node| !node.is_closed());
+
+    if let Some(node) = here {
+        if let Some(said) = plan_next_call(project, node.kind) {
+            return said;
+        }
+        return match (cycle.kind(), node.kind) {
+            (CycleKind::Interview, NodeKind::Question) =>
+                "열린 Question: 사용자에게 질문하고 턴을 끝내 답을 기다린다. 답을 받으면 그 원문으로 gil_close한다. 조사·보고서 작성은 하지 않는다.".into(),
+            (CycleKind::Interview, NodeKind::Interpretation) =>
+                "열린 Interpretation: 받은 답에서 확정된 것과 모르는 것을 갈라 gil_close한다. 외부 조사는 하지 않는다.".into(),
+            (CycleKind::Interview, NodeKind::Synthesis) =>
+                "열린 Synthesis: 제안 statement를 사용자에게 보여 주고 턴을 끝내 답을 기다린다. 사용자가 명시적으로 동의했을 때만 approved: yes로 gil_close한다. 침묵·이전 요청·자체 판단은 승인이 아니다. 기다리는 동안 조사·보고서 작성을 하지 않는다.".into(),
+            (CycleKind::Interview, NodeKind::Outcome) =>
+                "열린 Interview Outcome: 승인된 범위를 판정해 gil_close한다 (verdict · lesson · synthesis_ref · next_direction). 프로젝트가 끝날 때까지 열어 두지 않는다. 닫은 뒤 Interview Cycle Report를 별도로 닫는다.".into(),
+            (CycleKind::Experiment, NodeKind::Define) =>
+                "열린 Define: 확인할 질문 하나와 판정 기준만 적어 gil_close한다. 자료 조회·계산은 아직 하지 않는다.".into(),
+            (CycleKind::Experiment, NodeKind::Hypothesis) =>
+                "열린 Hypothesis: 예상·근거·guardrail을 적어 gil_close한다. 닫힌 뒤 다음 호출은 Verify의 gil_open이며, 그 성공 전에는 자료 읽기·검색·파일 작성을 하지 않는다.".into(),
+            (CycleKind::Experiment, NodeKind::Verify) =>
+                "열린 Verify: 계약의 next_action을 실제로 수행하고 관측 결과를 프로젝트 파일로 저장한 뒤 evidence_files를 포함해 gil_close한다. 채팅만으로는 닫히지 않는다.".into(),
+            (CycleKind::Experiment, NodeKind::Analysis) =>
+                "열린 Analysis: 저장된 Verify 증거를 해석해 nonblank interpretation으로 gil_close한다. 새 조사는 하지 않는다.".into(),
+            (CycleKind::Experiment, NodeKind::Outcome) =>
+                "열린 Experiment Outcome: verdict·lesson·next_direction을 적어 gil_close한다. 닫은 뒤 Cycle Report를 별도로 닫는다.".into(),
+            (_, kind) => format!("열린 {kind}: 완료 조건을 충족하면 관측한 결과로 gil_close한다."),
+        };
+    }
+
+    if !cycle.is_closed() {
+        if let Some(said) = plan_next_call_between_steps(project) {
+            return said;
+        }
+        let openable = cycle.openable_here();
+        if cycle.can_close() {
+            return match cycle.kind() {
+                CycleKind::Interview => "Outcome까지 닫혔고 Interview Cycle은 아직 열려 있다. gil_close로 Cycle Report를 제출한다 (verdict · outcome_ref · handoff_summary · next_direction). 조사·Experiment는 그 뒤다.".into(),
+                CycleKind::Experiment => "Outcome까지 닫혔고 Experiment Cycle은 아직 열려 있다. gil_close로 Cycle Report를 제출한다. 다음 문제는 그 뒤에 연다.".into(),
+            };
+        }
+        if openable.is_empty() {
+            return "여기서 열거나 닫을 수 있는 것이 없다. gil_status를 한 번 읽는다.".into();
+        }
+        let names: Vec<&str> = openable.iter().map(|kind| kind.as_str()).collect();
+        return match (cycle.kind(), openable.as_slice()) {
+            (CycleKind::Interview, [NodeKind::Outcome]) =>
+                "승인된 Synthesis만 닫혔다. gil_open(kind: outcome)으로 Interview Outcome을 연다. Synthesis를 다시 열거나 승인을 다시 묻지 않는다.".into(),
+            (CycleKind::Interview, [NodeKind::Question]) if walk.nodes().is_empty() =>
+                "새 Interview: gil_open(kind: question)에 행동 계약(objective · next_action · done_when)을 적어 첫 질문을 연다. gil_start나 Monitor 준비를 반복하지 않는다.".into(),
+            (CycleKind::Experiment, [NodeKind::Define]) =>
+                "새 Experiment: gil_open(kind: define)에 행동 계약을 적어 연다. 확인할 질문 하나만 다룬다.".into(),
+            (CycleKind::Experiment, [NodeKind::Verify]) =>
+                "Hypothesis가 닫혔다. gil_open(kind: verify)에 행동 계약을 적어 연다. 열기 성공 전에는 조사·계산·파일 작성을 하지 않는다.".into(),
+            (CycleKind::Experiment, [NodeKind::Analysis]) =>
+                "Verify가 닫혔다. gil_open(kind: analysis)으로 저장된 증거를 해석하는 자리를 연다.".into(),
+            (_, [only]) => format!("gil_open(kind: {})에 행동 계약을 적어 연다.", only.as_str()),
+            _ => format!("gil_open으로 다음 중 하나를 연다: {}. 행동 계약(objective · next_action · done_when)을 함께 적는다.", names.join(", ")),
+        };
+    }
+
+    // 닫힌 Cycle — 밟을 수 있는 수만 말한다(`next_moves`와 같은 판정).
+    if let Some(from) = cycles.pending_revisit() {
+        return format!("{}에서 되돌아왔다. gil_open(kind: interview|experiment)으로 이 자리 아래에 새 Cycle을 연다. gil_revisit을 반복하지 않는다.", from.to_ref());
+    }
+    if cycles.can_revisit() {
+        return format!("{}이(가) failure·revisit으로 닫혔다. gil_revisit(인수 없음)을 한 번 호출한 뒤 gil_open으로 새 Cycle을 연다. 되돌아가기는 Artifact를 복원하므로 사용자에게 먼저 알린다.", cycle.id());
+    }
+    if let Some(said) = plan_next_call_after_cycle(project) {
+        return said;
+    }
+    match cycles.why_not_open_child() {
+        None => match cycle.kind() {
+            CycleKind::Interview => "Interview Cycle까지 닫혔다. gil_open(kind: experiment)으로 합의한 첫 질문의 Experiment를 연다. gil_start를 다시 부르지 않는다.".into(),
+            CycleKind::Experiment => "Experiment Cycle이 닫혔다. 남은 독립 질문이 있으면 gil_open(kind: experiment), 목표를 다시 합의해야 하면 gil_open(kind: interview)을 연다.".into(),
+        },
+        Some(why) => format!("{why}. 적어 둔 방향은 gil_story에서 읽는다. 막힌 이유를 사용자에게 알린다."),
+    }
+}
+
+/// 승인 계획 프로필에서 **열린 Step**의 다음 호출. 프로필이 아니면 `None`.
+fn plan_next_call(project: &Project, kind: NodeKind) -> Option<String> {
+    let plan = project.approved_plan()?;
+    match kind {
+        NodeKind::Synthesis => {
+            let Some(proposal) = plan.current(project) else {
+                return Some("열린 Synthesis (승인 계획 프로필): gil_plan_propose로 제안한다 — scope 5칸(goal · in_scope · out_of_scope · constraints · success_criteria), items(id · question · done_when), synthesis Report 칸. exploration_checklist에는 items의 id를 같은 순서로 한 줄씩 적고, approved · plan_revision · plan_digest는 적지 않는다. 채팅 동의로 대체하지 않는다.".into());
+            };
+            Some(match proposal.receipt.as_ref().map(|r| &r.decision) {
+                None => format!("제안 판 {}이(가) Monitor 버튼 응답을 기다린다. 턴을 끝내고 기다린다. 그동안 조사·보고서 작성·재제안을 하지 않는다. 응답이 왔는지는 gil_plan_read로만 확인한다.", proposal.revision),
+                Some(crate::approved_plan::Decision::Approve) => format!("제안 판 {}이(가) 승인됐다. gil_plan_read의 close_report를 그대로 gil_close에 넣어 Synthesis를 닫는다. 내용을 고치거나 다시 묻지 않는다.", proposal.revision),
+                Some(crate::approved_plan::Decision::RequestChanges) => format!("제안 판 {}에 수정 요청이 왔다. gil_plan_read의 close_report(approved: no)로 Synthesis를 닫고 다음 Question에서 무엇을 바꿀지 묻는다. 이전 승인은 재사용하지 않는다.", proposal.revision),
+            })
+        }
+        NodeKind::Verify if project.plan_document().is_some() => Some(
+            "열린 Verify (승인 계획 프로필): gil_plan_read.document를 bytes 그대로 파일로 저장하고 Report의 plan_document에 그 상대 경로를 적는다. 실제 작업의 관측 결과는 별도 파일로 저장해 evidence_files에 적는다. 계획 문서만으로는 닫히지 않는다.".into(),
+        ),
+        _ => {
+            let chain = project.current_chain()?;
+            if project.current_cycle().kind() == CycleKind::Experiment && !plan.awaiting_interview(chain).is_empty() {
+                return Some("재인터뷰 요청이 보존돼 있다. 현재 Step과 Cycle을 사실대로 닫는다. 추가 Experiment를 열거나 증거를 지어내 탈출하지 않는다.".into());
+            }
+            None
+        }
+    }
+}
+
+/// 승인 계획 프로필에서 **Step 사이**(열린 Step 없음, Cycle 열림)의 다음 호출.
+fn plan_next_call_between_steps(project: &Project) -> Option<String> {
+    let plan = project.approved_plan()?;
+    let chain = project.current_chain()?;
+    let cycle = project.current_cycle();
+    if cycle.kind() == CycleKind::Interview && cycle.openable_here().as_slice() == [NodeKind::Outcome] {
+        // Grammar only reaches this position through a closed `approved: yes` Synthesis, and in
+        // this profile that close required the recorded Monitor receipt.
+        return Some("승인된 Synthesis가 닫혔다. gil_open(kind: outcome)으로 Interview Outcome을 연다. 승인을 다시 묻거나 gil_plan_propose를 반복하지 않는다.".into());
+    }
+    if cycle.kind() == CycleKind::Experiment && !plan.awaiting_interview(chain).is_empty() {
+        return Some("재인터뷰 요청이 보존돼 있다. 현재 Cycle을 사실대로 닫는다. 그 전에는 새 Experiment를 열 수 없다.".into());
+    }
+    None
+}
+
+/// 승인 계획 프로필에서 **닫힌 Cycle** 뒤의 다음 호출.
+fn plan_next_call_after_cycle(project: &Project) -> Option<String> {
+    let plan = project.approved_plan()?;
+    let chain = project.current_chain()?;
+    if !plan.awaiting_interview(chain).is_empty() {
+        return Some("재인터뷰 요청이 보존돼 있다. gil_open(kind: interview)으로 새 Interview를 열어 변경된 범위를 다시 승인받는다. Experiment는 그 전에 열 수 없다.".into());
+    }
+    match plan.active(chain) {
+        None => Some("승인된 실행 계획이 없다. gil_open(kind: interview)으로 Interview를 열고 Synthesis에서 gil_plan_propose로 승인받는다. 이전 판의 승인은 재사용되지 않는다.".into()),
+        Some(active) => {
+            let pending = plan.pending(chain);
+            match pending.first() {
+                Some(item) => Some(format!("승인 판 {} · 다음 항목 {}: gil_open(kind: experiment)을 열면 이 항목이 자동으로 묶인다. 질문: {} · 확인 조건: {}", active.revision, item.id, item.question, item.done_when)),
+                None => Some("승인된 항목을 모두 실행했다. 남은 작업이 있으면 gil_open(kind: interview)으로 새 계획을 승인받는다. 완료 보고는 사용자에게 한다.".into()),
+            }
+        }
+    }
 }
 
 fn write_preamble(out: &mut String) {
@@ -580,5 +742,103 @@ fn write_report_fields(out: &mut String, declared: &[String], report: &Report, i
                 let _ = writeln!(out, "{indent}{field}: {value}");
             }
         }
+    }
+}
+
+// ── 승인 계획 프로필의 다음 호출 — Core 의 합성 fixture 로 잰다 ──────────────
+//
+// Monitor 버튼 응답은 `decide_plan` 의 합성 입력이며 실제 사람의 승인 증거가 아니다.
+#[cfg(all(test, feature = "approved-plan"))]
+mod plan_guidance_tests {
+    use super::*;
+    use crate::approved_plan::{Decision, tests::synthesis};
+    use crate::plan_test_helpers as h;
+
+    fn first_line(project: &Project) -> String {
+        let told = context(project);
+        let (_, rest) = told.split_once("[지금 바로 할 호출]\n").expect("첫 블록이 없다");
+        rest.lines().next().unwrap().to_string()
+    }
+    fn says(project: &Project, must: &[&str], must_not: &[&str]) {
+        let line = first_line(project);
+        for m in must { assert!(line.contains(m), "{m:?} 가 없다: {line}"); }
+        for n in must_not { assert!(!line.contains(n), "{n:?} 를 제안했다: {line}"); }
+    }
+    fn close_interview_after_approval(p: &mut Project, approved: crate::approved_plan::Proposal) {
+        let target = approved.synthesis_ref.clone();
+        p.close_action_step(approved.report().unwrap()).unwrap();
+        says(p, &["gil_open(kind: outcome)", "gil_plan_propose를 반복하지 않는다"], &["gil_plan_propose로", "gil_close"]);
+        let outcome = h::opened(p, NodeKind::Outcome);
+        p.close_action_step(h::full_report(p.current_cycle().rules(), CycleKind::Interview, NodeKind::Outcome).with("synthesis_ref", target)).unwrap();
+        says(p, &["Interview Cycle은 아직 열려 있다", "gil_close"], &["gil_open(kind: experiment)"]);
+        p.close_cycle(h::cycle_report(p.current_cycle(), "success", h::step_id(p, outcome)).with("next_direction.action", "open_child")).unwrap();
+    }
+
+    #[test]
+    fn synthesis_waits_for_the_monitor_button_and_follows_the_recorded_decision() {
+        let mut p = Project::start(h::spec(), h::first_world());
+        let draft = synthesis(&mut p, &["A", "B"]);
+        says(&p, &["gil_plan_propose", "scope 5칸", "exploration_checklist", "approved · plan_revision · plan_digest는 적지 않는다"], &["approved: yes", "gil_close"]);
+        let first = p.propose_plan(draft.clone()).unwrap();
+        says(&p, &["제안 판 1", "Monitor 버튼 응답을 기다린다", "턴을 끝내고"], &["gil_close", "gil_plan_propose", "조사를 시작"]);
+        // 승인 후 제안을 고치면 새 판이다 — 이전 승인은 재사용되지 않는다.
+        p.decide_plan(first.revision, &first.digest, Decision::Approve).unwrap();
+        says(&p, &["제안 판 1이(가) 승인됐다", "close_report를 그대로 gil_close", "다시 묻지 않는다"], &["gil_plan_propose"]);
+        let mut edited = draft.clone();
+        edited.scope.goal = "Edited".into();
+        let second = p.propose_plan(edited).unwrap();
+        says(&p, &["제안 판 2", "Monitor 버튼 응답을 기다린다"], &["승인됐다", "close_report"]);
+        p.decide_plan(second.revision, &second.digest, Decision::RequestChanges).unwrap();
+        says(&p, &["수정 요청", "approved: no", "다음 Question", "이전 승인은 재사용하지 않는다"], &["gil_open(kind: outcome)"]);
+    }
+
+    #[test]
+    fn approved_interview_binds_the_first_pending_item_and_verify_separates_plan_from_evidence() {
+        let mut p = Project::start(h::spec(), h::first_world());
+        let draft = synthesis(&mut p, &["A", "B"]);
+        let proposal = p.propose_plan(draft).unwrap();
+        let approved = p.decide_plan(proposal.revision, &proposal.digest, Decision::Approve).unwrap();
+        close_interview_after_approval(&mut p, approved);
+        says(&p, &["승인 판 1", "다음 항목 A", "gil_open(kind: experiment)", "Question A"], &["gil_start", "gil_plan_propose"]);
+        p.open_child_cycle(CycleKind::Experiment).unwrap();
+        says(&p, &["gil_open(kind: define)"], &["plan_document"]);
+        h::up_to_verify(&mut p);
+        says(&p, &["bytes 그대로", "plan_document", "evidence_files", "계획 문서만으로는 닫히지 않는다"], &["gil_open"]);
+        let told = context(&p);
+        assert!(told.contains("승인 계획 프로필") && told.contains("이번 Experiment: A"), "{told}");
+    }
+
+    #[test]
+    fn a_reinterview_request_keeps_the_cycle_honest_and_routes_back_to_interview() {
+        let mut p = Project::start(h::spec(), h::first_world());
+        let draft = synthesis(&mut p, &["A", "B"]);
+        let proposal = p.propose_plan(draft).unwrap();
+        let approved = p.decide_plan(proposal.revision, &proposal.digest, Decision::Approve).unwrap();
+        close_interview_after_approval(&mut p, approved);
+        p.open_child_cycle(CycleKind::Experiment).unwrap();
+        h::opened(&mut p, NodeKind::Define);
+        p.request_plan_interview("scope changed".into()).unwrap();
+        says(&p, &["재인터뷰 요청이 보존", "사실대로 닫는다"], &["gil_open(kind: interview)", "gil_open(kind: experiment)"]);
+        p.close_action_step(h::full_report(p.current_cycle().rules(), CycleKind::Experiment, NodeKind::Define)).unwrap();
+        says(&p, &["재인터뷰 요청이 보존", "사실대로 닫는다"], &["gil_open(kind: interview)"]);
+        for kind in [NodeKind::Hypothesis, NodeKind::Verify, NodeKind::Analysis, NodeKind::Outcome] { h::walked(&mut p, kind); }
+        let last = p.current_cycle().steps().current().unwrap();
+        p.close_cycle(h::cycle_report(p.current_cycle(), "success", last).with("next_direction.action", "open_child")).unwrap();
+        says(&p, &["gil_open(kind: interview)", "다시 승인받는다"], &["gil_open(kind: experiment)"]);
+        let told = context(&p);
+        assert!(told.contains("보존된 재인터뷰 요청"), "{told}");
+    }
+
+    #[test]
+    fn a_plan_project_without_an_active_plan_is_sent_to_interview_not_experiment() {
+        let mut p = Project::start(h::spec(), h::first_world());
+        // Synthesis 를 승인 없이 닫을 수 없으므로 Interview 는 열린 채 Question 으로 돌아간다.
+        let draft = synthesis(&mut p, &["A"]);
+        let proposal = p.propose_plan(draft).unwrap();
+        p.decide_plan(proposal.revision, &proposal.digest, Decision::RequestChanges).unwrap();
+        p.close_action_step(proposal.report().unwrap_or_else(|_| p.approved_plan().unwrap().current(&p).unwrap().report().unwrap())).unwrap();
+        let line = first_line(&p);
+        assert!(line.contains("gil_open") && line.contains("question"), "{line}");
+        assert!(!line.contains("experiment"), "{line}");
     }
 }
