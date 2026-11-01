@@ -3,19 +3,19 @@
 전체 OS 안내의 시작점은 [저장소 설치 안내](../../INSTALL.md)다. 이 문서는 macOS 전용 상세 절차다.
 
 대상은 **macOS Apple Silicon(`arm64`)의 로컬 Codex 작업**이다. 현재 배포판은
-`0.2.1-preview.7`이며 2026-10-28 게시한 unsigned prerelease다. Core, MCP server, Skill과
+`0.2.1-preview.8`이며 2026-11-02 게시한 unsigned prerelease다. Core, MCP server, Skill과
 fullscreen Monitor UI가 Plugin 하나에 들어 있으므로 Node·npm·Cargo·Homebrew·별도 Companion을
 설치하지 않는다. Intel Mac, Windows에는 이 파일을 사용하지 않는다. Claude Code(Claude Desktop)는
 같은 archive의 `.claude-plugin` catalog로 설치하며 절차는 [저장소 설치 안내](../../INSTALL.md)를 따른다.
 
 - marketplace: `https://github.com/hyun06000/gil-marketplace.git`
-- 고정 tag: `v0.2.1-preview.7`
-- 고정 commit: `b81151830a4d723be95705b8f9274b1ff3ed3adb`
+- 고정 tag: `v0.2.1-preview.8`
+- 고정 commit: `116bc49f4a464f75c81400fb2ff3d18091b50706`
 - Plugin: `gil-companion-prototype@gil-preview-macos-arm64`
-- 공개 archive: `gil-codex-macos-arm64-0.2.1-preview.7.tar.gz`
-- archive 크기: `3,218,986` bytes
-- archive SHA-256: `ecd045e3a043e820bb5ff59a6d8b6d3ca57e68dfa3d8a8426a598f70682dd8ee`
-- 게시·검증 장부: [PREVIEW-7-PUBLICATION-20261028.md](PREVIEW-7-PUBLICATION-20261028.md)
+- 공개 archive: `gil-codex-macos-arm64-0.2.1-preview.8.tar.gz`
+- archive 크기: `3,435,833` bytes
+- archive SHA-256: `5fcfbb2a328ae65c71d6b5aa4432a556d89429d0fe4c98cacb855e9c2a88d266`
+- 게시·검증 장부: [PREVIEW-8-PUBLICATION-20261102.md](PREVIEW-8-PUBLICATION-20261102.md)
 
 Apple Developer ID 서명과 공증은 없다. macOS가 정상적인 사용자 확인 뒤에도 실행을 차단하면 멈춘다.
 Gatekeeper를 끄거나 quarantine·권한·Plugin cache를 변경해 우회하지 않는다.
@@ -54,7 +54,7 @@ git --version
 ## Codex에 붙여넣을 통합 요청
 
 ```text
-GIL unsigned preview 0.2.1-preview.7을 설치해 줘. 내가 터미널을 직접 조작하게 하지 마.
+GIL unsigned preview 0.2.1-preview.8을 설치해 줘. 내가 터미널을 직접 조작하게 하지 마.
 플러그인 관리 MCP 도구만 보고 설치 불가라고 결론내리지 말고, 이 로컬 Codex 작업의 셸에서
 앱에 포함된 codex CLI를 사용해. 프로젝트를 초기화·이관하거나 .gil 기록을 바꾸지 마.
 
@@ -64,23 +64,23 @@ xcode-select -p, git --version으로 OS·CPU·CLI·기존 설치·Git 상태를 
 Darwin/arm64가 아니면 중단해. 기존 GIL이 있으면 출처와 버전을 알려주고 교체 전에 물어봐.
 
 Git이 실제로 동작하면 다음 고정 tag를 사용해:
-codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.7 --json
+codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.8 --json
 codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 
 Git 또는 Xcode Command Line Tools가 없거나 clone이 그 이유로 실패하면 개발 도구를 설치하지 말고
 Git 없는 경로로 전환해. 다음 파일을 임시 위치에 다운로드해:
-https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.7/gil-codex-macos-arm64-0.2.1-preview.7.tar.gz
+https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.8/gil-codex-macos-arm64-0.2.1-preview.8.tar.gz
 
-압축 해제 전에 크기가 정확히 3218986 bytes이고 SHA-256이
-ecd045e3a043e820bb5ff59a6d8b6d3ca57e68dfa3d8a8426a598f70682dd8ee인지 확인해.
+압축 해제 전에 크기가 정확히 3435833 bytes이고 SHA-256이
+5fcfbb2a328ae65c71d6b5aa4432a556d89429d0fe4c98cacb855e9c2a88d266인지 확인해.
 다르면 아무것도 풀거나 등록하지 말고 중단해.
 
 일치하면 tar 목록에서 절대경로, .. 경로 이동, 심볼릭 링크, 하드 링크와 특수 파일이 없는지 확인해.
 문제가 없으면 기존 폴더를 덮어쓰지 말고
-$HOME/Library/Application Support/GIL/preview.7-local 이라는 새 사용자 전용 폴더에 풀어.
-.agents/plugins/marketplace.json, release.json, Plugin version 0.2.1-preview.7과
+$HOME/Library/Application Support/GIL/preview.8-local 이라는 새 사용자 전용 폴더에 풀어.
+.agents/plugins/marketplace.json, release.json, Plugin version 0.2.1-preview.8과
 core/darwin-arm64/gil 실행 권한을 확인한 뒤 다음 명령을 사용해:
-codex plugin marketplace add "$HOME/Library/Application Support/GIL/preview.7-local" --json
+codex plugin marketplace add "$HOME/Library/Application Support/GIL/preview.8-local" --json
 codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 
 네트워크나 Codex 설정 저장 권한이 필요하면 무엇이 필요한지 설명하고 정상 승인 창으로 요청해.
@@ -88,12 +88,19 @@ codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 이미 검증·해제한 파일을 다시 받거나 같은 marketplace를 무조건 재등록하지 마.
 설정 파일이나 cache를 직접 편집하지 말고 Gatekeeper·quarantine·권한을 강제로 변경하지 마.
 
-마지막으로 codex plugin list --json에서 설치 버전이 정확히 0.2.1-preview.7인지 확인해 알려줘.
+마지막으로 codex plugin list --json에서 설치 버전이 정확히 0.2.1-preview.8인지 확인해 알려줘.
 화면이 실제로 보이기 전에는 Monitor가 열렸다고 말하지 마.
 ```
 
 Git 없는 경로의 archive member·목적지·권한 검사와 유지관리자 스크립트는
 [GITLESS-INSTALL.md](GITLESS-INSTALL.md)에 더 자세히 기록한다.
+
+## 이번 시험판의 범위
+
+`approved-plan` + `visual-authoring` 프로필에서 새 프로젝트는 Chain과 Monitor 승인 계획을 쓴다.
+새 빈 폴더에서 승인 버튼, Interview 닫기, 항목별 Experiment와 실제 증거 파일을 확인한다.
+저장 형식은 새 프로젝트에서 7이며 기존 기록의 형식은 자동 변환하지 않는다. 이전 Plugin으로
+되돌려도 기록 형식은 내려가지 않는다. 제품 restore/revisit는 차단되며 Luna 실사용은 사용자 검수다.
 
 ## 설치 후 실제 동작 확인
 
@@ -105,7 +112,7 @@ Git 없는 경로의 archive member·목적지·권한 검사와 유지관리자
 
 이전 preview.6의 깨끗한 Mac VM에서 Git/Xcode Command Line Tools 부재 → Git 없는 archive 검증 → 로컬 marketplace 등록 →
 Plugin 설치 → GIL 동작을 사용자가 확인했다. 별도의 fullscreen 전환과 앱 완전 종료 후 복원을 그 VM에서
-확인하지 않았다면 그 항목까지 통과했다고 기록하지 않는다. 이번 preview.7은 별도 실사용 검수 대상이다.
+확인하지 않았다면 그 항목까지 통과했다고 기록하지 않는다. 이번 preview.8은 별도 실사용 검수 대상이다.
 
 ## 기존 설치·업데이트·제거
 
@@ -122,11 +129,11 @@ codex plugin remove gil-companion-prototype@gil-preview-macos-arm64 --json
 codex plugin marketplace remove gil-preview-macos-arm64 --json
 ```
 
-각 명령 뒤 조회하여 완료한 단계는 반복하지 않는다. 새 설치가 끝나면 `plugin list`에서 preview.7을
+각 명령 뒤 조회하여 완료한 단계는 반복하지 않는다. 새 설치가 끝나면 `plugin list`에서 preview.8을
 확인하고 새 대화를 연다. Plugin 제거는 프로젝트 폴더나 `.gil` 기록 삭제를 포함하지 않는다.
 
-이전 검증판은 `0.2.1-preview.6`, tag `v0.2.1-preview.6`, marketplace commit
-`2a1ec23576eb35e05210dda1d8b5400a577ec30f`다. 복구는 Plugin 버전 교체이며 Project Artifact를
+이전 배포판은 `0.2.1-preview.7`, tag `v0.2.1-preview.7`, marketplace commit
+`b81151830a4d723be95705b8f9274b1ff3ed3adb`다. preview.7은 새 형식 7 기록을 읽는 복구판이 아니다. 복구는 Plugin 버전 교체이며 Project Artifact를
 되돌리는 `gil restore`가 아니다. Plugin 제거·교체로 Project 폴더나 `.gil`을 삭제하지 않는다.
 preview.4 이후 새 이미지 Project는 저장 형식 5를 사용할 수 있고 preview.3는 이를 읽지 못한다.
 

@@ -9,8 +9,14 @@
 
 | 환경 | 버전 | 상태 |
 |---|---|---|
-| Windows 11 x64 | `0.1.1-owner.6` | 친구용 공통 지침 시험판·CI 설치 검수 완료, 실기기 Luna 검수 대기 |
-| macOS Apple Silicon | `0.2.1-preview.7` | 친구용 공통 지침 시험판·격리 설치/교체 확인, 실사용 검수 대기 |
+| Windows 11 x64 | `0.1.1-owner.7` | Monitor 승인·Chain 시험판, 실기기 Luna 검수 대기 |
+| macOS Apple Silicon | `0.2.1-preview.8` | Monitor 승인·Chain 시험판, 실사용 검수 대기 |
+
+이번 두 배포본은 같은 `approved-plan` + `visual-authoring` 시험 프로필이다. **새 대화·새 빈 폴더**에서
+Monitor 승인 버튼 → Interview 닫기 → 계획 항목별 Experiment → Verify 파일 증거를 시험한다.
+새 프로젝트는 저장 형식 7을 사용한다. 기존 기록의 형식은 자동 변환하지 않으며, 이전 설치본으로
+되돌려도 형식 7 기록은 이전 형식으로 바뀌지 않는다. 제품의 restore/revisit는 여전히 차단된다.
+검증 범위와 정확한 배포물은 [게시 장부](distribution/codex/PREVIEW-8-PUBLICATION-20261102.md)에 남긴다.
 
 둘 다 정식 서명판이 아니다. Windows Authenticode와 Apple Developer ID/공증을 제공하지 않는다.
 파일 hash는 손상·바이트 일치를 확인하지만 제작자 서명을 대신하지 않는다. OS가 정상적인 사용자 확인
@@ -23,11 +29,11 @@ registry를 손으로 편집하지 않는다.
 
 ## Windows 11 x64
 
-릴리스: [windows-owner-update-0.1.1-owner.6](https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.6)
+릴리스: [windows-owner-update-0.1.1-owner.7](https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.7)
 
-- 설치 파일: `GIL.Companion.Unsigned.Test._0.1.1-owner.6_x64-setup.exe`
-- 크기: `5,546,074` bytes
-- SHA-256: `4835ebf82ea7d4d2e53f030170bcf5a777ae1ece259e42ff353b40ac5ff2e306`
+- 설치 파일: `GIL.Companion.Unsigned.Test._0.1.1-owner.7_x64-setup.exe`
+- 크기: `5,919,030` bytes
+- SHA-256: `0b690218e67370495544174a45b2658c2a99e3baa2a8040e70c61268be0cee96`
 - 지원: x64만. ARM64 Windows에는 설치하지 않는다.
 
 사용자 절차:
@@ -51,20 +57,20 @@ registry를 손으로 편집하지 않는다.
 
 ## macOS Apple Silicon
 
-릴리스: [v0.2.1-preview.7](https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.7)
+릴리스: [v0.2.1-preview.8](https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.8)
 
 - Plugin: `gil-companion-prototype@gil-preview-macos-arm64`
-- marketplace tag: `v0.2.1-preview.7`
-- marketplace commit: `b81151830a4d723be95705b8f9274b1ff3ed3adb`
-- Git 없는 설치 archive: `gil-codex-macos-arm64-0.2.1-preview.7.tar.gz`
-- archive 크기: `3,218,986` bytes
-- archive SHA-256: `ecd045e3a043e820bb5ff59a6d8b6d3ca57e68dfa3d8a8426a598f70682dd8ee`
+- marketplace tag: `v0.2.1-preview.8`
+- marketplace commit: `116bc49f4a464f75c81400fb2ff3d18091b50706`
+- Git 없는 설치 archive: `gil-codex-macos-arm64-0.2.1-preview.8.tar.gz`
+- archive 크기: `3,435,833` bytes
+- archive SHA-256: `5fcfbb2a328ae65c71d6b5aa4432a556d89429d0fe4c98cacb855e9c2a88d266`
 - 지원: Apple Silicon(`arm64`)만. Intel Mac에는 설치하지 않는다.
 
 ### Codex에 붙여넣을 요청
 
 ```text
-GIL unsigned preview 0.2.1-preview.7을 설치해 줘. 사용자가 터미널을 직접 조작하게 하지 마.
+GIL unsigned preview 0.2.1-preview.8을 설치해 줘. 사용자가 터미널을 직접 조작하게 하지 마.
 플러그인 관리 MCP 도구만 보고 설치 불가라고 결론내리지 말고, 이 로컬 Codex 작업의 셸에서
 앱에 포함된 codex CLI를 사용해. 프로젝트를 초기화·이관하거나 .gil 기록을 바꾸지 마.
 
@@ -79,28 +85,28 @@ GIL unsigned preview 0.2.1-preview.7을 설치해 줘. 사용자가 터미널을
 알려준 뒤 내 승인을 기다려. 설정 파일이나 Plugin cache를 직접 편집하지 마.
 
 Git이 실제로 동작하면 다음 고정 tag 경로를 사용해:
-codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.7 --json
+codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.8 --json
 codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 
 Git 또는 Xcode Command Line Tools를 찾지 못하면 개발 도구 설치를 제안하지 말고 Git 없는 경로로 전환해.
 다음 archive를 임시 파일로 받은 뒤 압축 해제 전에 크기와 SHA-256을 모두 확인해:
-https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.7/gil-codex-macos-arm64-0.2.1-preview.7.tar.gz
-크기: 3218986 bytes
-SHA-256: ecd045e3a043e820bb5ff59a6d8b6d3ca57e68dfa3d8a8426a598f70682dd8ee
+https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.8/gil-codex-macos-arm64-0.2.1-preview.8.tar.gz
+크기: 3435833 bytes
+SHA-256: 5fcfbb2a328ae65c71d6b5aa4432a556d89429d0fe4c98cacb855e9c2a88d266
 
 값이 다르면 아무것도 풀지 말고 중단해. 일치하면 tar 목록에서 절대경로, .. 경로 이동,
 심볼릭 링크, 하드 링크와 특수 파일이 없는지 확인해. 문제가 없으면 기존 폴더를 덮어쓰지 말고
-$HOME/Library/Application Support/GIL/preview.7-local 이라는 새 사용자 전용 폴더에 풀어.
-그 폴더의 .agents/plugins/marketplace.json, release.json, Plugin version 0.2.1-preview.7,
+$HOME/Library/Application Support/GIL/preview.8-local 이라는 새 사용자 전용 폴더에 풀어.
+그 폴더의 .agents/plugins/marketplace.json, release.json, Plugin version 0.2.1-preview.8,
 core/darwin-arm64/gil 실행 권한을 확인한 뒤 다음 공식 CLI 명령을 사용해:
-codex plugin marketplace add "$HOME/Library/Application Support/GIL/preview.7-local" --json
+codex plugin marketplace add "$HOME/Library/Application Support/GIL/preview.8-local" --json
 codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 
 네트워크나 Codex 설정 저장 권한이 필요하면 정상 승인 창으로 요청하고, 승인 뒤에는
 codex plugin list --json으로 상태를 다시 읽어 끝나지 않은 단계만 이어가. 다시 다운로드·압축 해제하거나
 무조건 재등록하지 마. Gatekeeper를 끄거나 quarantine·권한을 강제로 변경하지 마.
 
-마지막으로 codex plugin list --json에서 설치 버전이 0.2.1-preview.7인지 확인해 알려줘.
+마지막으로 codex plugin list --json에서 설치 버전이 0.2.1-preview.8인지 확인해 알려줘.
 화면이 실제로 보이기 전에는 Monitor가 열렸다고 말하지 마.
 ```
 
@@ -123,9 +129,8 @@ Claude Desktop의 **Claude Code** 탭에서도 같은 Core와 Monitor UI를 쓴�
 보는 경로는 직접 등록이다. 자세한 근거는 [호출 경로별 진단](mcp-app/CLAUDE-DESKTOP-ROUTES.md)을 본다.
 
 **1단계 — archive 준비(공통).** 위 Git 없는 경로 그대로 archive를 받아 크기·SHA-256·멤버 목록을 검증하고
-사용자 전용 새 폴더(`$HOME/Library/Application Support/GIL/<버전>-local`, 0700)에 푼다. 이번 변경 이후에
-게시되는 archive는 최상위에 Codex용 `.agents/plugins/marketplace.json`과 Claude Code용
-`.claude-plugin/marketplace.json`을 함께 담는다. `0.2.1-preview.7` archive에는 `.claude-plugin`이 없다.
+사용자 전용 새 폴더(`$HOME/Library/Application Support/GIL/<버전>-local`, 0700)에 푼다. preview.8 archive는 최상위에 Codex용 `.agents/plugins/marketplace.json`과 Claude Code용
+`.claude-plugin/marketplace.json`을 함께 담는다. 이전 `0.2.1-preview.7` archive에는 `.claude-plugin`이 없다.
 
 **2단계 — 직접 등록(현재 화면이 성립하는 경로).** 먼저 Claude Desktop을 **완전히 종료**한다. Desktop은
 실행 중에 자체 설정을 같은 파일에 다시 쓰므로, 켜진 상태에서 고친 내용은 되돌아갈 수 있다(10/31 실측).
