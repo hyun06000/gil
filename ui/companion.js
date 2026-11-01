@@ -20,6 +20,8 @@ import {
   cardArrow, ROW_H, NODE_R, SELECTED_NODE_R, BOX_W,
 } from "./layout.js";
 import { cycleReportDetail } from './cycle-report.js';
+import { clampZoom, stepZoom, zoomAround, minimapFrame, minimapViewport, scrollToMinimapPoint, minimapNeeded }
+  from './viewport.mjs';
 import { progressTracker, progressSummary } from './progress.mjs';
 
 const observeProgress = progressTracker();
@@ -45,6 +47,12 @@ const updateButton = el(".scope .update");
 const runtimeStatus = el(".title .runtime");
 const settingsSay = el(".settings-say");
 const stage = el(".stage");
+const viewport = el(".map .viewport");
+const zoomBox = el(".map .zoom");
+const minimap = el(".map .minimap");
+const zoomInButton = el(".zoom-tools .zoom-in");
+const zoomOutButton = el(".zoom-tools .zoom-out");
+const zoomResetButton = el(".zoom-tools .zoom-reset");
 const wires = el(".stage .wires");
 const layer = el(".stage .layer");
 const cardLayer = el(".stage .cards");
@@ -336,8 +344,7 @@ function drawCardArrow(arrow, from, tip) {
 /** 고른 node 옆의 짧은 요약 카드와, 그 둘을 잇는 굵고 반투명한 화살표. */
 function drawCard() {
   cardLayer.innerHTML = "";
-  stage.style.minWidth = `${current.plan.width}px`;
-  stage.style.height = `${current.plan.height}px`;
+  fitStage(current.plan.width, current.plan.height);
   const seat = current.seat;
   if (!seat.selectedStep && !seat.selectedCycle) return;
   let anchor = seat.selectedCycle
@@ -385,8 +392,7 @@ function drawCard() {
     card.style.top = `${y}px`;
     const width = Math.max(current.plan.width, x + cardW + 8);
     const height = Math.max(current.plan.height, y + cardH + 8);
-    stage.style.minWidth = `${width}px`;
-    stage.style.height = `${height}px`;
+    fitStage(width, height);
     const tipX = Math.max(x + 10, Math.min(anchor.x, x + cardW - 10));
     const tipY = y - 5;
     const arrow = svg("svg", { class: "arrow", viewBox: `0 0 ${width} ${height}`, width, height });
@@ -406,7 +412,7 @@ function drawCard() {
   card.style.left = `${x}px`;
   card.style.top = `${y}px`;
   // 카드가 설 자리까지 무대가 지닌다 — 그래야 잘리지 않고 스크롤로 닿는다.
-  stage.style.minWidth = `${Math.max(current.plan.width, x + cardW + 8)}px`;
+  fitStage(Math.max(current.plan.width, x + cardW + 8), current.plan.height);
 
   // 화살표는 node 중심에서 카드의 가까운 모서리로. **화살촉은 언제나 카드 쪽이다.**
   const arrow = svg("svg", { class: "arrow" });
@@ -500,7 +506,7 @@ function revealSelection() {
     : a;
   // 가장자리에 딱 붙지 않게 조금 물린다.
   const edge = 8;
-  const room = map;
+  const room = viewport;
   room.scrollLeft = leastScroll(both.l - edge, both.r + edge, room.scrollLeft, room.clientWidth);
   room.scrollTop = leastScroll(both.t - edge, both.b + edge, room.scrollTop, room.clientHeight);
 }
@@ -510,15 +516,118 @@ function renderGraph() {
   current.plan = place(current.view, current.seat.collapsed, orientation);
   map.dataset.orientation = orientation;
   layer.innerHTML = "";
-  stage.style.height = `${current.plan.height}px`;
-  stage.style.minWidth = `${current.plan.width}px`;
+  fitStage(current.plan.width, current.plan.height);
   drawEdges();
   drawCycles();
   drawNodes();
   drawCard();
   giveBackTheirPlace(stood);
   revealSelection();
+  drawMinimap();
 }
+
+// ── 확대와 미니맵 ────────────────────────────────────────────────────
+//
+// plan 의 좌표는 그대로 두고 stage 하나에 `scale()` 을 건다. 스크롤 자리는 zoom 상자가 (plan 크기 × 배율)
+// 만큼 지니므로 Host 의 스크롤바가 실제 크기를 안다. 배율은 이 창이 사는 동안의 화면 상태다 —
+// `.gil`·View·detail 로 나가지 않고, Project 를 바꿔도 그대로다(사람의 눈높이이지 Project 의 사실이 아니다).
+let zoom = 1;
+let stageSize = { width: 0, height: 0 };
+function fitStage(width, height) {
+  stageSize = { width, height };
+  stage.style.width = `${width}px`;
+  stage.style.minWidth = `${width}px`;
+  stage.style.height = `${height}px`;
+  applyZoom();
+}
+function applyZoom() {
+  stage.style.transform = zoom === 1 ? "" : `scale(${zoom})`;
+  zoomBox.style.width = `${Math.ceil(stageSize.width * zoom)}px`;
+  zoomBox.style.height = `${Math.ceil(stageSize.height * zoom)}px`;
+  zoomResetButton.textContent = `${Math.round(zoom * 100)}%`;
+  zoomInButton.disabled = zoom >= 2.5;
+  zoomOutButton.disabled = zoom <= 0.4;
+  map.dataset.zoom = String(zoom);
+}
+/** 배율을 바꾸되 `pointer`(viewport 기준) 아래의 자리는 그대로 둔다. 없으면 가운데를 기준으로 삼는다. */
+function setZoom(next, pointer = null) {
+  const to = clampZoom(next);
+  if (to === zoom) return;
+  const from = zoom;
+  const anchor = pointer || { x: viewport.clientWidth / 2, y: viewport.clientHeight / 2 };
+  const scroll = zoomAround({ scrollLeft: viewport.scrollLeft, scrollTop: viewport.scrollTop }, anchor, from, to);
+  zoom = to;
+  applyZoom();
+  viewport.scrollLeft = scroll.scrollLeft;
+  viewport.scrollTop = scroll.scrollTop;
+  drawMinimap();
+}
+zoomInButton.onclick = () => setZoom(stepZoom(zoom, +1));
+zoomOutButton.onclick = () => setZoom(stepZoom(zoom, -1));
+zoomResetButton.onclick = () => { setZoom(1); revealSelection(); };
+// Ctrl/⌘ + 휠은 브라우저 확대 대신 Graph 확대다. 일반 휠은 그대로 스크롤이다.
+viewport.addEventListener("wheel", (event) => {
+  if (!(event.ctrlKey || event.metaKey)) return;
+  event.preventDefault();
+  const box = viewport.getBoundingClientRect();
+  setZoom(stepZoom(zoom, event.deltaY < 0 ? +1 : -1), { x: event.clientX - box.left, y: event.clientY - box.top });
+}, { passive: false });
+
+/** 미니맵: 전체 Graph 를 작은 상자에, 지금 보이는 범위를 네모로. 끌면 그 자리로 굴러간다. */
+let minimapFrameNow = null;
+// SVG 요소에는 `hidden` property 가 없다 — attribute 로만 다룬다.
+const hideMinimap = () => minimap.setAttribute("hidden", "");
+function drawMinimap() {
+  if (!current || !current.plan || !current.plan.nodes.length) { hideMinimap(); return; }
+  const view = { scrollLeft: viewport.scrollLeft, scrollTop: viewport.scrollTop,
+    clientWidth: viewport.clientWidth, clientHeight: viewport.clientHeight };
+  if (!minimapNeeded(stageSize, zoom, view)) { hideMinimap(); return; }
+  const frame = minimapFrame(stageSize);
+  minimapFrameNow = frame;
+  minimap.removeAttribute("hidden");
+  minimap.setAttribute("width", frame.width);
+  minimap.setAttribute("height", frame.height);
+  minimap.setAttribute("viewBox", `0 0 ${frame.width} ${frame.height}`);
+  minimap.innerHTML = "";
+  for (const cycle of current.plan.cycles || []) {
+    const bounds = cycleBounds(current.plan, cycle);
+    if (!bounds) continue;
+    minimap.appendChild(svg("rect", { class: "mini-cycle", x: bounds.x * frame.scale, y: bounds.y * frame.scale,
+      width: Math.max(1, bounds.width * frame.scale), height: Math.max(1, bounds.height * frame.scale), rx: 2 }));
+  }
+  for (const node of current.plan.nodes) {
+    const r = Math.max(1.5, radiusOf(node) * frame.scale);
+    const attrs = { cx: node.x * frame.scale, cy: node.y * frame.scale, r };
+    minimap.appendChild(node.kind === "cycle"
+      ? svg("circle", { class: "mini-cycle-node", ...attrs })
+      : svg("circle", { class: "mini-step", "data-kind": node.stepKind, "data-here": String(node.here), ...attrs }));
+  }
+  const seen = minimapViewport(frame, stageSize, zoom, view);
+  minimap.appendChild(svg("rect", { class: "mini-view", x: seen.x, y: seen.y, width: seen.width, height: seen.height, rx: 1.5 }));
+}
+function minimapPointOf(event) {
+  const box = minimap.getBoundingClientRect();
+  return { x: Math.min(box.width, Math.max(0, event.clientX - box.left)),
+    y: Math.min(box.height, Math.max(0, event.clientY - box.top)) };
+}
+function scrollToMinimap(event) {
+  if (!minimapFrameNow) return;
+  const view = { clientWidth: viewport.clientWidth, clientHeight: viewport.clientHeight };
+  const target = scrollToMinimapPoint(minimapFrameNow, zoom, view, minimapPointOf(event));
+  viewport.scrollLeft = target.scrollLeft;
+  viewport.scrollTop = target.scrollTop;
+}
+let draggingMinimap = false;
+minimap.addEventListener("pointerdown", (event) => {
+  draggingMinimap = true;
+  minimap.setPointerCapture?.(event.pointerId);
+  scrollToMinimap(event);
+  event.preventDefault();
+});
+minimap.addEventListener("pointermove", (event) => { if (draggingMinimap) scrollToMinimap(event); });
+for (const end of ["pointerup", "pointercancel"]) minimap.addEventListener(end, () => { draggingMinimap = false; });
+// 스크롤과 창 크기 변화는 보이는 범위의 네모만 옮긴다. Graph 를 다시 그리지 않는다.
+viewport.addEventListener("scroll", () => { if (current) drawMinimap(); }, { passive: true });
 
 function setOrientation(next) {
   if (!["vertical", "horizontal"].includes(next)) throw new Error("unknown DAG orientation");
@@ -847,8 +956,9 @@ async function showScope(scopeId) {
   layer.innerHTML = "";
   wires.innerHTML = "";
   cardLayer.innerHTML = "";
-  map.scrollLeft = 0;
-  map.scrollTop = 0;
+  viewport.scrollLeft = 0;
+  viewport.scrollTop = 0;
+  hideMinimap();
   renderDetail(null);
 
   markFresh();
@@ -1220,6 +1330,7 @@ window.addEventListener("resize", () => {
   if (!current) return;
   drawCard();
   revealSelection();
+  drawMinimap();
 });
 
 // 시험이 들여다보는 자리 — 화면이 말하는 것을 프로그램으로도 물을 수 있게.
@@ -1228,6 +1339,8 @@ window.GIL_COMPANION = {
   scopeId: () => current && current.scopeId,
   plan: () => current && current.plan,
   setOrientation,
+  zoom: () => zoom,
+  setZoom,
   seats,
   showScope,
   selectStep,

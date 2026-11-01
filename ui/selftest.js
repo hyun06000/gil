@@ -435,7 +435,8 @@ check("14. UI 에 쓰기 길이 없다 — .gil·Artifact·Journey·Will 을 건
   // ② 사람이 누를 수 있는 것은 **읽는 손잡이**뿐이다.
   // `목록에서 빼기` 도 읽는 손잡이다 — 이 창의 설정에서 한 칸을 지울 뿐, Project 의
   // 파일은 하나도 건드리지 않는다(§9.1.2). Rust 시험이 그 바이트를 지킨다.
-  const allowed = [".node", ".fold", ".cycle-report-hit", ".scope .open", ".scope .refresh", ".scope .forget"];
+  const allowed = [".node", ".fold", ".cycle-report-hit", ".scope .open", ".scope .refresh", ".scope .forget",
+    ".zoom-tools .zoom-in", ".zoom-tools .zoom-out", ".zoom-tools .zoom-reset"];
   for (const button of all("button")) {
     // Native application-management controls exist in shared markup but must stay
     // hidden when this fixture Host has no corresponding capability.

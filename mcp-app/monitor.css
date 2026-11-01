@@ -25,7 +25,7 @@
 .update-guide button { margin-top: 8px; font: inherit; font-size: var(--gil-xs); padding: 5px 10px;
   border: var(--gil-hair) solid var(--gil-line); border-radius: var(--gil-r-md); background: transparent; color: var(--gil-fg-2); cursor: pointer; }
 .update-guide small { display: block; margin-top: 8px; font-size: var(--gil-xs); color: var(--gil-fg-3); }
-body[data-display-mode="fullscreen"] .map { max-height:55vh; min-height:220px; }
+body[data-display-mode="fullscreen"] .map .viewport { max-height:55vh; min-height:220px; }
 /* Host owns the chat composer. The Monitor never draws or intercepts another chat UI. */
 body[data-display-mode="fullscreen"] {
   /* The Host's overlaid composer is outside this iframe; we cannot measure its

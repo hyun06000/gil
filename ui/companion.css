@@ -113,8 +113,34 @@ button, select { font: inherit; color: inherit; }
 .intro .gil-progress p { margin-top: 5px; font-size: var(--gil-xs); color: var(--gil-fg-3); }
 .intro .gil-progress small { display: block; margin-top: 8px; }
 .map { margin: 12px 16px 0; padding: 0; border: var(--gil-hair) solid var(--gil-line-soft); border-radius: var(--gil-r-lg);
-       background: var(--gil-bg); overflow: auto; max-height: 52vh; }
-.stage { position: relative; }
+       background: var(--gil-bg); position: relative; overflow: hidden; }
+/* 스크롤 상자. 높이 제한은 여기 있다 — 미니맵·확대 손잡이는 이 상자 밖에 떠서 함께 굴러가지 않는다. */
+.map .viewport { overflow: auto; max-height: 52vh; }
+/* 확대 상자: stage 의 (plan 크기 × 배율) 만큼 자리를 지니고, stage 는 transform 으로만 커진다. */
+.map .zoom { position: relative; transform-origin: 0 0; }
+.stage { position: relative; transform-origin: 0 0; }
+.map-tools { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+  pointer-events: none; }
+.map-tools > * { pointer-events: auto; }
+.minimap { display: block; border: var(--gil-hair) solid var(--gil-line); border-radius: var(--gil-r-sm);
+  background: color-mix(in srgb, var(--gil-bg) 88%, transparent); cursor: crosshair; touch-action: none; }
+.minimap[hidden] { display: none; }
+.minimap .mini-cycle { fill: var(--gil-bg-2); stroke: var(--gil-line-soft); stroke-width: 1; }
+.minimap .mini-step { fill: var(--kind, var(--gil-fg-3)); }
+.minimap .mini-step[data-kind="question"], .minimap .mini-step[data-kind="hypothesis"] { --kind: var(--gil-kind-question); }
+.minimap .mini-step[data-kind="interpretation"], .minimap .mini-step[data-kind="verify"] { --kind: var(--gil-kind-verify); }
+.minimap .mini-step[data-kind="define"], .minimap .mini-step[data-kind="analysis"] { --kind: var(--gil-kind-analysis); }
+.minimap .mini-step[data-kind="synthesis"], .minimap .mini-step[data-kind="outcome"] { --kind: var(--gil-kind-synthesis); }
+.minimap .mini-step[data-here="true"] { stroke: var(--gil-fg); stroke-width: 1.5; }
+.minimap .mini-cycle-node { fill: var(--gil-bg); stroke: var(--gil-fg-3); stroke-width: 1; }
+.minimap .mini-view { fill: color-mix(in srgb, var(--gil-ring) 14%, transparent); stroke: var(--gil-ring); stroke-width: 1.2; }
+.zoom-tools { display: flex; gap: 2px; padding: 2px; border: var(--gil-hair) solid var(--gil-line); border-radius: var(--gil-r-md);
+  background: color-mix(in srgb, var(--gil-bg) 88%, transparent); }
+.zoom-tools button { min-width: 26px; height: 24px; padding: 0 6px; font: inherit; font-size: var(--gil-xs); line-height: 1;
+  border: 0; border-radius: var(--gil-r-sm); background: transparent; color: var(--gil-fg-2); cursor: pointer; }
+.zoom-tools button:hover { background: var(--gil-bg-2); color: var(--gil-fg); }
+.zoom-tools button:disabled { opacity: .4; cursor: default; }
+.zoom-tools button:focus-visible { outline: 2px solid var(--gil-ring); outline-offset: 1px; }
 .stage .wires, .stage .arrow { position: absolute; left: 0; top: 0; pointer-events: none; }
 .stage .layer { position: absolute; inset: 0; }
 .stage .cards { position: absolute; inset: 0; pointer-events: none; }

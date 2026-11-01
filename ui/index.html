@@ -49,10 +49,24 @@
     </section>
   </section>
   <section class="map" aria-label="Step DAG" hidden>
-    <div class="stage">
-      <svg class="wires" aria-hidden="true"></svg>
-      <div class="layer"></div>
-      <div class="cards" aria-hidden="true"></div>
+    <!-- 스크롤은 viewport 가, 확대는 zoom 상자의 transform 하나가 맡는다. stage 좌표는 plan 그대로다. -->
+    <div class="viewport">
+      <div class="zoom">
+        <div class="stage">
+          <svg class="wires" aria-hidden="true"></svg>
+          <div class="layer"></div>
+          <div class="cards" aria-hidden="true"></div>
+        </div>
+      </div>
+    </div>
+    <!-- 오른쪽 위: 미니맵과 확대 손잡이. 읽는 손잡이뿐이다 — Project 의 무엇도 바꾸지 않는다. -->
+    <div class="map-tools">
+      <svg class="minimap" role="img" aria-label="Graph 미니맵 — 보이는 범위를 끌어 이동한다" hidden></svg>
+      <div class="zoom-tools" role="group" aria-label="Graph 확대">
+        <button class="zoom-out" type="button" title="축소 (Ctrl/⌘ + 휠)" aria-label="축소">−</button>
+        <button class="zoom-reset" type="button" title="원래 크기로" aria-label="원래 크기로">100%</button>
+        <button class="zoom-in" type="button" title="확대 (Ctrl/⌘ + 휠)" aria-label="확대">+</button>
+      </div>
     </div>
   </section>
   <section class="detail" aria-live="polite" hidden></section>
