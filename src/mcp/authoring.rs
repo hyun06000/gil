@@ -187,19 +187,36 @@ pub fn valid(name: &str, input: &Value) -> bool {
         serde_json::from_value::<Close>(input.clone()).is_ok_and(|r| r.valid())
     }
 }
-fn close_error(error: crate::SessionError) -> &'static str {
+/// A visual-contract refusal keeps Core's own words: the model must see which asset to cite or
+/// which declaration to change. The code is the bracketed tag Core put at the front of its reason.
+fn close_error(error: crate::SessionError) -> (String, Option<String>) {
     match error {
-        crate::SessionError::Evidence(_) => "verify_evidence_required",
-        _ => "close_not_confirmed",
+        crate::SessionError::Evidence(reason) => ("verify_evidence_required".into(), Some(reason)),
+        crate::SessionError::Action(crate::ActionError::Visual(reason)) => {
+            let code = reason.strip_prefix('[').and_then(|rest| rest.split_once(']')).map(|(code, _)| code.to_string())
+                .filter(|code| !code.is_empty() && code.bytes().all(|b| b.is_ascii_lowercase() || b == b'_'))
+                .unwrap_or_else(|| "visual_rejected".into());
+            (code, Some(reason))
+        }
+        other => ("close_not_confirmed".into(), Some(other.to_string())),
     }
 }
 fn fail(code: &str) -> CallToolResult {
+    fail_with(code, None)
+}
+fn fail_with(code: &str, reason: Option<String>) -> CallToolResult {
     let said = if code == "verify_evidence_required" {
         "단계는 닫히지 않았다. Verify는 실제 저장한 비어 있지 않은 파일을 evidence_files에 상대 경로로 명시해야 하며, 적어도 하나는 이전 Snapshot보다 새롭거나 달라야 한다. 읽기만 한 작업도 관측 결과를 파일로 남긴다. Analysis의 interpretation과 Outcome의 lesson은 비어 있을 수 없고 실제 계보의 근거를 참조한다. gil_context로 현재 단계를 확인하고 누락된 증거·해석·배움을 보완한다."
     } else if code == "invalid_report" {
         "Report 문법 오류로 실행하지 않았고 아무 단계도 닫히지 않았다. report는 '이름: 값' 텍스트다. 한 파일은 'evidence_files: evidence/result.md'처럼 같은 줄에 적는다. 여러 파일은 'evidence_files: |\n  evidence/one.md\n  evidence/two.md'처럼 |와 들여쓰기를 쓴다. 실제 저장한 경로만 적는다. 현재 대상이 여전히 열려 있으면 Report 문법을 고쳐 같은 gil_close를 한 번 제출한다. typed 입력의 expected_owner와 visuals도 함께 유지한다."
+    } else if code.starts_with("visual_") {
+        "시각 자료 계약이 거절했다. 닫힌 것은 없다. 아래 이유대로 visuals(선언·첨부·인용)를 고쳐 같은 gil_close를 한 번 다시 보낸다. 규칙은 gil_help topic report/visuals 에 있다."
     } else {
         "시각 보고서 요청을 완료하지 못했다. gil_report_visuals로 예상 보고서의 확정 여부를 확인한다. close를 자동 반복하지 않는다."
+    };
+    let said = match reason {
+        Some(reason) => format!("{said}\n{reason}"),
+        None => said.to_string(),
     };
     let mut result = CallToolResult::structured(json!({"ok":false,"code":code,
         "said":said}));
@@ -244,38 +261,44 @@ pub fn call(name: &str, input: Value) -> CallToolResult {
     }
     match execute(name, input) {
         Ok(value) => super::visuals::bounded(CallToolResult::structured(value)),
-        Err(code) => fail(code),
+        Err((code, reason)) => fail_with(&code, reason),
     }
 }
-fn execute(name: &str, input: Value) -> Result<Value, &'static str> {
-    let rules = RuleSet::builtin().map_err(|_| "rules_unavailable")?;
+fn execute(name: &str, input: Value) -> Result<Value, (String, Option<String>)> {
+    execute_inner(name, input).map_err(|(code, reason)| (code, reason))
+}
+fn plain(code: &'static str) -> (String, Option<String>) {
+    (code.to_string(), None)
+}
+fn execute_inner(name: &str, input: Value) -> Result<Value, (String, Option<String>)> {
+    let rules = RuleSet::builtin().map_err(|_| plain("rules_unavailable"))?;
     if name == "gil_report_visuals" {
-        let r: Read = serde_json::from_value(input).map_err(|_| "invalid_request")?;
+        let r: Read = serde_json::from_value(input).map_err(|_| plain("invalid_request"))?;
         let root = Path::new(&r.project_root);
         let state = crate::project_state::state_for_root(root)
-            .map_err(|_| "confirmation_unavailable")?;
+            .map_err(|_| plain("confirmation_unavailable"))?;
         #[cfg(windows)]
         let session = ProjectSession::open_read_only_at(rules, root, &state)
-            .map_err(|_| "confirmation_unavailable")?;
+            .map_err(|_| plain("confirmation_unavailable"))?;
         #[cfg(not(windows))]
         let session = ProjectSession::open_read_only(rules, &state)
-        .map_err(|_| "confirmation_unavailable")?;
-        return projection(session.project(), r.owner.parsed()?);
+        .map_err(|_| plain("confirmation_unavailable"))?;
+        return projection(session.project(), r.owner.parsed().map_err(plain)?).map_err(plain);
     }
-    let r: Close = serde_json::from_value(input).map_err(|_| "invalid_request")?;
-    let owner = r.expected_owner.parsed()?;
+    let r: Close = serde_json::from_value(input).map_err(|_| plain("invalid_request"))?;
+    let owner = r.expected_owner.parsed().map_err(plain)?;
     let mut session = crate::open_project_root(rules, Path::new(&r.project_root))
-        .map_err(|_| "project_unavailable")?;
+        .map_err(|_| plain("project_unavailable"))?;
     if session.project().visual_state().is_none() {
-        return Err("visual_upgrade_required");
+        return Err(plain("visual_upgrade_required"));
     }
     let c = session.project().current_cycle();
     let actual = match c.step_now_open() {
         Some(n) => ReportOwner::Step(c.step_ref(n)),
         None => ReportOwner::Cycle(c.id().to_ref()),
     };
-    if owner != actual || projection(session.project(), owner)?["confirmed"] == true {
-        return Err("owner_mismatch");
+    if owner != actual || projection(session.project(), owner).map_err(plain)?["confirmed"] == true {
+        return Err(plain("owner_mismatch"));
     }
     let is_verify = c
         .step_now_open()
@@ -284,7 +307,7 @@ fn execute(name: &str, input: Value) -> Result<Value, &'static str> {
     if is_verify != r.visuals.declaration.is_some()
         || (!is_verify && !r.visuals.attachments.is_empty())
     {
-        return Err("visual_stage_mismatch");
+        return Err(plain("visual_stage_mismatch"));
     }
     // Resolve only references already linked to a Report in this exact Project.
     let mut resolved = Vec::new();
@@ -296,12 +319,12 @@ fn execute(name: &str, input: Value) -> Result<Value, &'static str> {
                 asset_id,
                 sha256,
             } => {
-                let asset = id(asset_id).ok_or("invalid_asset")?;
+                let asset = id(asset_id).ok_or(plain("invalid_asset"))?;
                 let stored = session
-                    .read_report_image(owner.parsed()?, asset)
-                    .map_err(|_| "visual_unavailable")?;
+                    .read_report_image(owner.parsed().map_err(plain)?, asset)
+                    .map_err(|_| plain("visual_unavailable"))?;
                 if format!("{:x}", Sha256::digest(stored.bytes())) != *sha256 {
-                    return Err("visual_unavailable");
+                    return Err(plain("visual_unavailable"));
                 }
                 Some(asset)
             }
@@ -333,7 +356,7 @@ fn execute(name: &str, input: Value) -> Result<Value, &'static str> {
             })
             .collect::<Vec<_>>()
     };
-    let report = Report::parse(&r.report).map_err(|_| "invalid_report")?;
+    let report = Report::parse(&r.report).map_err(|_| plain("invalid_report"))?;
     if let Some(declaration) = &r.visuals.declaration {
         let attachments = r
             .visuals
@@ -369,7 +392,7 @@ fn execute(name: &str, input: Value) -> Result<Value, &'static str> {
             .close_references_and_commit(report, make_uses(&[]))
             .map_err(close_error)?;
     }
-    projection(session.project(), owner)
+    projection(session.project(), owner).map_err(plain)
 }
 
 pub fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
@@ -384,7 +407,7 @@ pub fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
     // Legacy receipts remain unchanged; typed close returns its durable Report projection.
     raw.as_object_mut().unwrap().remove("outputSchema");
     raw["description"] = json!(
-        "Close the current Report. Two input shapes only. Ordinary close {project_root, report}: every step of a format-4 project (including its Verify), and format-5 non-Verify steps that cite no stored images. Typed close {project_root, report, expected_owner:{kind,ref}, visuals:{attachments,uses,declaration}} with expected_owner and visuals ALWAYS together: every format-5 Verify (with attachments/uses and declaration attached, or empty arrays and declaration not_needed (reason) / missing (reason, follow_up) when there are no images), and any format-5 non-Verify step or Cycle report that cites stored images (uses with source kind stored, empty attachments, no declaration). Sending expected_owner without visuals, or visuals without expected_owner, is rejected with -32602 naming the missing field; that call is not executed and nothing is closed — read gil_status/gil_context for the actual open step, then send one corrected call. After an uncertain or lost response use gil_report_visuals; never automatically repeat close. Every Verify also requires evidence_files in report: 1–32 unique project-relative paths, all nonempty files in its Snapshot, at least one new or changed. No-image declarations do not waive file evidence. Analysis interpretation and Outcome lesson must be nonblank; Core links their actual evidence lineage. No migration."
+        "Close the current Report. Two input shapes only. Ordinary close {project_root, report}: every step of a format-4 project (including its Verify), and format-5 non-Verify steps that cite no stored images. Typed close {project_root, report, expected_owner:{kind,ref}, visuals:{attachments,uses,declaration}} with expected_owner and visuals ALWAYS together: every format-5 Verify (with attachments/uses and declaration attached, or empty arrays and declaration not_needed (reason) / missing (reason, follow_up) when there are no images), and any format-5 non-Verify step or Cycle report that cites stored images (uses with source kind stored, empty attachments, no declaration). Sending expected_owner without visuals, or visuals without expected_owner, is rejected with -32602 naming the missing field; that call is not executed and nothing is closed — read gil_status/gil_context for the actual open step, then send one corrected call. After an uncertain or lost response use gil_report_visuals; never automatically repeat close. Every Verify also requires evidence_files in report: 1–32 unique project-relative paths, all nonempty files in its Snapshot, at least one new or changed. No-image declarations do not waive file evidence. Visual evidence means a PNG that shows the real result: a plot or diagram drawn by code from the data, a headless or ordinary browser screenshot of the actual page/UI, a before/after comparison table. AI-generated or decorative pictures are never visual evidence. Contract checks: not_needed/missing reason must say what replaces the image (one-word or boilerplate reasons such as 없음/not needed are refused, code visual_reason_weak); a Verify whose evidence_files include an image file cannot close not_needed (visual_declaration_conflict); when the Verify attached assets, the Analysis and the Experiment Cycle Report must cite at least one of them with a stored source (visual_citation_required; the refusal lists asset_id and sha256). Analysis interpretation and Outcome lesson must be nonblank; Core links their actual evidence lineage. No migration."
     );
     *close = serde_json::from_value(raw).unwrap();
     tools.push(serde_json::from_value(json!({"name":"gil_report_visuals",

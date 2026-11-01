@@ -716,3 +716,11 @@ N3 보고서의 근거 부족 문구는 그대로 보존하며, 후속 인수로
 이관은 계속 거절한다. 작성 profile의 Windows CI(`windows-spike.yml` matrix `visual-authoring`)가
 Rust 경계 시험과 24-도구 smoke를 실행한다. 빌드·runner 성공을 실제 PC·Host 화면 인수로
 세지 않으며, Skill·설치 문서의 Windows 안내는 runner 결과 뒤 별도 갱신한다.
+
+## 24. 시각 증거 정책 — 선언 실질·충돌·인용 강제 (2026-11-02)
+
+typed close 와 일반 close 가 같은 검사를 지나는 세 규칙(`visual_reason_weak`, `visual_declaration_conflict`,
+`visual_citation_required`)과 시각 증거의 정의(실제 결과의 PNG, AI 생성 이미지 제외)는
+[시각 증거 정책](GIL_Visual_Evidence_Policy_v0.1.md)이 정본이다. typed close 의 거절 receipt 는 이제 Core 의
+이유 원문과 bracket 코드를 `code`·`said` 에 그대로 싣는다(이전에는 `close_not_confirmed` 로 뭉뚱그렸다).
+저장 형식과 schema 필드는 바뀌지 않았다.

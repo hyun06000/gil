@@ -723,7 +723,7 @@ fn verify_requires_world_evidence_even_when_visuals_are_not_needed() {
     #[cfg(feature = "visual-authoring")]
     {
         args["expected_owner"] = json!({"kind":"step","ref":"step:C2/S3"});
-        args["visuals"] = json!({"attachments":[],"uses":[],"declaration":{"state":"not_needed","reason":"문서 증거"}});
+        args["visuals"] = json!({"attachments":[],"uses":[],"declaration":{"state":"not_needed","reason":"관측 숫자를 문서로만 남겼고 보여 줄 화면이 없다"}});
     }
     let refused = monitor_call(&mut client, "gil_close", args.clone());
     assert_eq!(refused["isError"], true, "{refused}");

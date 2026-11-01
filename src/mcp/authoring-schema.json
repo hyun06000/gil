@@ -18,7 +18,7 @@
         "properties": {
           "attachments":{"type":"array","maxItems":8,"items":{
             "type":"object","additionalProperties":false,
-            "properties":{"key":{"$ref":"#/$defs/text"},"path":{"$ref":"#/$defs/text"},"source_kind":{"enum":["captured","generated","provided"]},"source_description":{"$ref":"#/$defs/text"}},
+            "properties":{"key":{"$ref":"#/$defs/text"},"path":{"$ref":"#/$defs/text"},"source_kind":{"enum":["captured","generated","provided"],"description":"captured: screenshot of the actual screen, page or terminal (headless browsers count); generated: drawn by code from data or structure (plot, diagram, comparison table); provided: supplied by the user. Never an AI-synthesized or decorative image."},"source_description":{"$ref":"#/$defs/text"}},
             "required":["key","path","source_kind","source_description"]
           }},
           "uses":{"type":"array","maxItems":8,"items":{
@@ -33,7 +33,7 @@
           }},
           "declaration":{"oneOf":[
             {"type":"object","additionalProperties":false,"properties":{"state":{"const":"attached"}},"required":["state"]},
-            {"type":"object","additionalProperties":false,"properties":{"state":{"const":"not_needed"},"reason":{"$ref":"#/$defs/text"}},"required":["state","reason"]},
+            {"type":"object","additionalProperties":false,"properties":{"state":{"const":"not_needed"},"reason":{"$ref":"#/$defs/text","description":"What replaces an image for this verification (e.g. byte equality of two files, exit code only). At least two words; 없음/불필요/not needed/n-a are refused."}},"required":["state","reason"]},
             {"type":"object","additionalProperties":false,"properties":{"state":{"const":"missing"},"reason":{"$ref":"#/$defs/text"},"follow_up":{"$ref":"#/$defs/text"}},"required":["state","reason","follow_up"]}
           ]}
         },"required":["attachments","uses"]

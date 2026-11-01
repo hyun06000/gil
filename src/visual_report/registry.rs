@@ -95,6 +95,21 @@ pub enum RegistryError {
     InvalidReport(VisualValidationError),
 }
 
+impl std::fmt::Display for RegistryError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidReport(VisualValidationError::WeakReason) => f.write_str(
+                "[visual_reason_weak] 선언의 reason이 한 단어이거나 상투어다(없음·불필요·not needed…). \
+                 무엇이 이미지를 대신하는 증거인지 두 단어 이상으로 구체적으로 적는다. 닫힌 것은 없다",
+            ),
+            Self::InvalidReport(VisualValidationError::BlankReason) => f.write_str("[visual_reason_blank] 선언의 reason이 비어 있다"),
+            Self::InvalidReport(VisualValidationError::EmptyAttachments) => f.write_str("[visual_attachments_empty] attached 선언에는 uses가 하나 이상 필요하다"),
+            Self::VerifyDeclarationRequired => f.write_str("[visual_declaration_required] Verify의 시각 자료 선언이 필요하다"),
+            other => write!(f, "{other:?}"),
+        }
+    }
+}
+
 /// 하나의 Project가 소유해야 한다. 이 타입 자체는 Host scope 인증 경계가 아니다.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VisualRegistry {

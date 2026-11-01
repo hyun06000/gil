@@ -55,6 +55,8 @@ pub enum VisualValidationError {
     DeclarationRequired,
     EmptyAttachments,
     BlankReason,
+    /// 이유가 상투어이거나 한 단어다. 무엇이 이미지를 대신하는 증거인지 말해야 한다.
+    WeakReason,
     BlankFollowUp,
     BlankDescription {
         index: usize,
@@ -80,6 +82,15 @@ impl VisualDeclaration {
         match self {
             Self::Attached { uses } | Self::Missing { uses, .. } => uses,
             Self::NotNeeded { .. } => &[],
+        }
+    }
+
+    /// **새 쓰기에만** 적용하는 이유의 실질 검사. 저장된 기록을 읽을 때는 부르지 않는다 —
+    /// 이전 판이 받아들인 "필요 없음" 은 그대로 읽혀야 한다(호환성).
+    pub fn check_reason_substance(&self) -> Result<(), VisualValidationError> {
+        match self {
+            Self::Attached { .. } => Ok(()),
+            Self::NotNeeded { reason } | Self::Missing { reason, .. } => require_reason(reason),
         }
     }
 
@@ -157,6 +168,62 @@ fn require_text(text: &str, error: VisualValidationError) -> Result<(), VisualVa
     }
 }
 
+/// 상투어 목록. 정규화(소문자·공백 하나·끝 구두점 제거) 후 전체 일치만 거절한다.
+const BOILERPLATE_REASONS: &[&str] = &[
+    "not needed", "not required", "not applicable", "no image", "no images", "no visual",
+    "no visuals", "none", "n/a", "na", "text only", "no", "없음", "불필요", "필요 없음",
+    "필요없음", "해당 없음", "해당없음", "이미지 없음", "시각 자료 없음", "시각자료 없음",
+    "텍스트만", "필요하지 않음",
+];
+
+/// `not_needed`/`missing` 의 이유가 **무엇이 이미지를 대신하는지** 말하는가.
+///
+/// 기계적으로 잴 수 있는 것만 잰다: 비어 있지 않고, 두 단어 이상이며, 여섯 글자 이상이고,
+/// 상투어 하나로 끝나지 않는다. 내용의 진실성은 여기서 판정하지 않는다.
+pub fn reason_is_substantive(reason: &str) -> bool {
+    let trimmed = reason.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    let words = trimmed.split_whitespace().count();
+    let letters = trimmed.chars().filter(|c| !c.is_whitespace()).count();
+    if words < 2 || letters < 6 {
+        return false;
+    }
+    let normalized = trimmed
+        .to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let normalized = normalized.trim_end_matches(['.', '!', '。', '…']);
+    !BOILERPLATE_REASONS.contains(&normalized)
+}
+
+/// `evidence_files` 본문에서 첫 이미지 파일 경로. 확장자만 본다 — 내용은 첨부 경계가 검사한다.
+pub fn image_evidence_path(evidence_files: &str) -> Option<String> {
+    const IMAGE: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "tif", "tiff"];
+    evidence_files
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .find(|line| {
+            std::path::Path::new(line)
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(|ext| IMAGE.contains(&ext.to_ascii_lowercase().as_str()))
+        })
+        .map(str::to_string)
+}
+
+fn require_reason(reason: &str) -> Result<(), VisualValidationError> {
+    require_text(reason, VisualValidationError::BlankReason)?;
+    if reason_is_substantive(reason) {
+        Ok(())
+    } else {
+        Err(VisualValidationError::WeakReason)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -225,6 +292,32 @@ mod tests {
     }
 
     #[test]
+    fn not_needed_refuses_boilerplate_and_one_word_reasons() {
+        for reason in [
+            "없음", "불필요", "필요 없음", "Not needed.", "N/A", "none", "no images",
+            "텍스트만", "numbers", "짧음 ok",
+        ] {
+            let declared = VisualDeclaration::NotNeeded { reason: reason.into() };
+            // Stored records stay readable; only the write boundary refuses.
+            assert_eq!(declared.validate(|_| panic!()), Ok(()), "{reason:?}");
+            assert_eq!(declared.check_reason_substance(), Err(VisualValidationError::WeakReason), "{reason:?}");
+        }
+        for reason in [
+            "numeric assertions only",
+            "두 문자열의 바이트 일치만 비교했고 화면이 없다",
+            "로그 파일의 종료 코드 0을 확인한 검증이다",
+        ] {
+            assert!(reason_is_substantive(reason), "{reason:?}");
+        }
+        // missing 의 이유도 같은 기준이다.
+        assert_eq!(
+            VisualDeclaration::Missing { reason: "없음".into(), follow_up: "다음 실험".into(), uses: vec![] }
+                .check_reason_substance(),
+            Err(VisualValidationError::WeakReason)
+        );
+    }
+
+    #[test]
     fn missing_all_or_some_is_explicit_and_not_a_verdict() {
         for uses in [vec![], vec![usage(1)]] {
             let declaration = VisualDeclaration::Missing {
@@ -250,6 +343,13 @@ mod tests {
             };
             assert_eq!(declaration.validate(|_| true), Err(error));
         }
+    }
+
+    #[test]
+    fn image_evidence_is_recognised_by_extension_only() {
+        assert_eq!(image_evidence_path("evidence/result.md\n  evidence/plot.PNG \n"), Some("evidence/plot.PNG".into()));
+        assert_eq!(image_evidence_path("evidence/result.md\nnotes/png-format.md"), None);
+        assert_eq!(image_evidence_path(""), None);
     }
 
     #[test]

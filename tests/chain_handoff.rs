@@ -301,7 +301,20 @@ fn attached_evidence_stays_readable_after_handoff_and_source_removal() {
     let image = uses[0].asset;
     let before = s.project().report_visuals_v1(owner).unwrap();
     let p = s.project_mut();
-    common::walked(p, NodeKind::Analysis);
+    // The Verify attached an asset, so Analysis and the Cycle Report must cite it (visual evidence policy).
+    let cite = || VisualUse {
+        asset: image,
+        caption: "Cited evidence".into(),
+        alt: "Gray pixel".into(),
+        purpose: "Interpretation basis".into(),
+    };
+    common::opened(p, NodeKind::Analysis);
+    p.close_step_with_visuals(
+        common::full_report(p.current_cycle().rules(), CycleKind::Experiment, NodeKind::Analysis),
+        None,
+        ReportVisuals::References(vec![cite()]),
+    )
+    .unwrap();
     let outcome = common::opened(p, NodeKind::Outcome);
     p.close_action_step(
         common::full_report(
@@ -313,11 +326,10 @@ fn attached_evidence_stays_readable_after_handoff_and_source_removal() {
         .with("next_direction.action", "close_cycle"),
     )
     .unwrap();
-    p.close_cycle(common::cycle_report(
-        p.current_cycle(),
-        "success",
-        common::step_id(p, outcome),
-    ))
+    p.close_cycle_with_visuals(
+        common::cycle_report(p.current_cycle(), "success", common::step_id(p, outcome)),
+        vec![cite()],
+    )
     .unwrap();
     p.open_child_cycle(CycleKind::Interview).unwrap();
     close_opening_as_final(p, "success");

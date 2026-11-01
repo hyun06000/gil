@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { progressTracker, progressSummary } from '../ui/progress.mjs';
+import { progressTracker, progressSummary, visualCounts } from '../ui/progress.mjs';
 const fixture = () => JSON.parse(readFileSync(new URL('../ui/fixtures/first-interview/view.json', import.meta.url)));
 
 test('polls and Artifact changes do not impersonate GIL record progress; scopes stay isolated', () => {
@@ -42,4 +42,18 @@ test('Chain closure is visible progress even when Cycle, Step and Journey do not
   assert.equal(summary.done, '남은 질문을 보존했다');
   assert.match(summary.records, /닫힘 \(failure\)/);
   assert.match(summary.action, /최종 판정: failure/);
+});
+
+test('visual counts come only from recorded declarations; none-declared and missing are listed apart', () => {
+  const view = fixture();
+  const cycle = view.timeline.find(c => c.cycle_ref === view.current.cycle_ref);
+  assert.match(progressSummary(view).visuals, /시각 자료 기록 없음/);
+  cycle.steps[0].visuals = { state: 'attached', count: 2 };
+  view.timeline.push({ cycle_ref: 'cycle:C9', kind: 'experiment', state: 'closed', relation_to_current: 'ancestor',
+    parent_cycle_ref: null, revisit_from_cycle_ref: null, experiment_definition: null, interview_question: null, report: null,
+    steps: [{ step_ref: 'step:C9/S3', kind: 'verify', state: 'closed', summary: null, visuals: { state: 'not_needed', count: 0 } },
+      { step_ref: 'step:C9/S4', kind: 'verify', state: 'closed', summary: null, visuals: { state: 'missing', count: 1 } },
+      { step_ref: 'step:C9/S5', kind: 'analysis', state: 'closed', summary: null }] });
+  assert.deepEqual(visualCounts(view), { total: 3, here: 2, declaredNone: 1, missing: 1 });
+  assert.match(progressSummary(view).visuals, /시각 자료 3개 \(이 Cycle 2개\) · 없음 선언 1건 · 미완 1건/);
 });

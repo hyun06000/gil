@@ -153,6 +153,7 @@ export function place(view, collapsed, orientation = "vertical") {
         stepKind: step.kind,
         state: step.state,
         summary: step.summary,
+        visuals: step.visuals || null, // {state, count} as recorded; never inferred
         here: step.step_ref === view.current.step_ref,
         row,
         col,

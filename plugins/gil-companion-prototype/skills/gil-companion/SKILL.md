@@ -88,26 +88,58 @@ actual recorded position and the connected tool schema. Never repeat a call that
    ```
 
    Record sources, inputs/method, observed results and limitations; never invent results or save
-   meaningless markers to satisfy the gate. Use visual evidence when it helps assess the work.
-   Image declarations `not_needed`/`missing` do not waive ordinary file evidence. If evidence is
-   refused, save truthful evidence while Verify remains open, then submit the corrected close.
+   meaningless markers to satisfy the gate. Image declarations `not_needed`/`missing` do not
+   waive ordinary file evidence. If evidence is refused, save truthful evidence while Verify
+   remains open, then submit the corrected close.
    Accepted: `evidence_files: evidence/load-test.md` where that file holds the measured numbers.
    Refused: an empty file, a file unchanged since the baseline, or the chat summary alone.
+
+   **Make the result visible — without being asked.** A Verify Report is read later by people
+   who were not there; a picture of the real result is the fastest handoff. Before closing a
+   Verify, decide which visual evidence fits the work and produce it as a static PNG inside the
+   project, using whatever the Host offers (Python matplotlib/pandas, Node canvas, Graphviz,
+   Mermaid CLI, a headless Chromium/Playwright or the ordinary browser's screenshot):
+
+   | What the Verify observed | Visual evidence to attach |
+   | --- | --- |
+   | Numbers, measurements, datasets | A plot drawn by code from the actual data (bars, trend, distribution) |
+   | Structure, flow, dependencies | A diagram generated from the real structure (graph, sequence, module map) |
+   | A web page, UI, rendered document | A screenshot of the real page in a headless or ordinary browser |
+   | Files or settings before/after | A rendered comparison table or diff image, with the raw files in `evidence_files` |
+   | Build/test runs | A results table image; keep the log file as ordinary evidence |
+
+   Visual evidence shows something that exists in the world. An AI-generated or decorative
+   picture is never visual evidence; `source_kind` is `captured` (real screen/page),
+   `generated` (drawn by code from data) or `provided` (supplied by the user), truthfully.
+   Save the PNG in the project, list it in `evidence_files` too, and attach it with
+   `visuals.attachments`/`uses` and `declaration: {state: "attached"}`. Choose `not_needed`
+   only when nothing visual exists to show (byte equality, an exit code, one number) and say
+   what replaces the image: `reason: "두 파일의 sha256 일치만 비교했고 화면이 없다"`. Refused:
+   one-word or boilerplate reasons (`없음`, `불필요`, `not needed`), and `not_needed` while an
+   image file is listed in `evidence_files`. Use `missing` with `reason` and `follow_up` when the
+   picture could not be produced; never relabel missing as unnecessary.
 5. **Learn from that evidence and close.** After Verify, write a nonblank `interpretation` in
    Analysis and a nonblank `lesson` in Experiment Outcome. Core links `evidence.verify_ref` and
    `learning.analysis_ref` to the actual current lineage; do not supply different references.
-   Finish Analysis, Outcome and the Cycle Report before the next independent problem or final
-   delivery. Deliver links to the saved evidence/deliverable alongside the chat summary.
+   **Cite the pictures.** When the Verify attached visuals, the Analysis and the Experiment Cycle
+   Report must cite at least one of them (Core refuses otherwise, listing the citable assets):
+   send `expected_owner` and `visuals` together, `attachments: []`, no `declaration`, and
+   `uses: [{source: {kind: "stored", owner: {kind: "step", ref: "<verify ref>"}, asset_id, sha256},
+   caption, alt, purpose}]` with the values from the Verify receipt or `gil_report_visuals`.
+   Outcome may cite them too. Finish Analysis, Outcome and the Cycle Report before the next
+   independent problem or final delivery. Deliver links to the saved evidence/deliverable
+   alongside the chat summary, and name the attached visuals.
 6. **Use the actual close contract.** Close both Steps and Cycles with `gil_close`; the legacy
    `gil_cycle` cannot accept a Report. Format-4 steps (including Verify) and format-5 non-Verify
    reports without stored images use `{project_root, report}`. Every format-5 Verify uses
    `{project_root, report, expected_owner, visuals}`, even without images. Supply both
    `expected_owner: {kind: "step", ref: "<actual open step ref>"}` and `visuals`; with no images,
-   use `visuals: {attachments: [], uses: [], declaration: {state: "not_needed", reason: "<actual reason>"}}`.
+   use `visuals: {attachments: [], uses: [], declaration: {state: "not_needed", reason: "<what replaces the image>"}}`.
    Format-5 non-Verify reports citing stored images also use both fields, per the connected schema.
    Keep `evidence_files` in the Report in every Verify. Available capabilities and project format,
    not the OS name, determine the input shape. Never migrate an existing project merely to follow
-   these instructions.
+   these instructions. The rules behind every visual refusal are one topic: `gil_help` with
+   `topic: report/visuals`.
 7. **Approved plans (only where recorded).** A project uses the approved-plan profile only when
    its `gil_context` says `승인 계획 프로필` or `gil_plan_read` answers `supported: true`, and the
    connected `tools/list` offers `gil_plan_propose`/`gil_plan_read`/`gil_plan_request_interview`.
@@ -452,10 +484,18 @@ file change, not silent alteration of evidence.
    Store a static PNG inside the selected Project (no symlinks, absolute attachment paths or
    external URLs). Current limits: 8 files, 16 MiB each, 32 MiB total, 8192 per dimension and
    16,777,216 pixels. Describe `captured`, `generated`, or `provided` truthfully; a generated
-   mockup is not a captured test result.
+   mockup is not a captured test result, and an AI-generated or decorative picture is never
+   visual evidence. Decide the picture from the work, not from the user's wording: data → a
+   code-drawn plot, structure → a generated diagram, a page or UI → a real (headless or ordinary)
+   browser screenshot, file changes → a before/after comparison image.
 2. Before Verify close, choose exactly one declaration: `attached` with actual uses;
    `not_needed` with a reason and no uses; or `missing` with a reason and `follow_up` (partial
    uses are allowed). Never label missing evidence as unnecessary. Report only observed tests.
+   Core refuses a one-word or boilerplate reason (`visual_reason_weak`), `not_needed` while an
+   image file is listed in `evidence_files` (`visual_declaration_conflict`), and — once the
+   Verify attached assets — an Analysis or Experiment Cycle Report that cites none of them
+   (`visual_citation_required`; the refusal lists the citable asset_id/sha256). Every such
+   refusal closes nothing: resend the same close with corrected `visuals`.
 3. Send one `gil_close` with the ordinary `report`, the exact `expected_owner` (kind/ref), and
    `visuals`: `attachments` and `uses` arrays plus the Verify `declaration`. Each attachment has
    a unique request-local key, relative path, source_kind and source_description. Each new use

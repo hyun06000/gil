@@ -57,11 +57,22 @@ body[data-display-mode="fullscreen"] .detail { scroll-margin-bottom: var(--gil-c
   body[data-display-mode="fullscreen"] .host-bar { grid-area: bar; }
   body[data-display-mode="fullscreen"] .update-guide { grid-area: update; }
 }
-.report-visuals { border-top: var(--gil-hair) solid var(--gil-line-soft); margin-top:24px; padding-top:12px; overflow-wrap:anywhere; }
+.report-visuals { margin:10px 0 16px; padding:10px 12px; border-radius: var(--gil-r-md); overflow-wrap:anywhere;
+  border: var(--gil-hair) solid var(--gil-line-soft); background: var(--gil-bg-2); }
+.report-visuals h3 { margin:0 0 4px; font-size: var(--gil-sm); font-weight: var(--gil-w-semibold); }
+.report-visuals > p[role="status"] { margin:0; font-size: var(--gil-xs); color: var(--gil-fg-2); }
+.report-visuals[data-tone="none"] { border-style: dashed; }
+.report-visuals[data-tone="none"] > p[role="status"], .report-visuals[data-tone="missing"] > p[role="status"] { color: var(--gil-fg); }
+.report-visuals[data-tone="missing"] { border-color: var(--gil-kind-synthesis); }
+.report-visuals[data-tone="attached"] { border-color: var(--gil-kind-verify); }
+.report-visuals .visual-gallery { display:flex; flex-wrap:wrap; gap:12px 16px; align-items:flex-start; }
+.report-visuals .visual-gallery:empty { display:none; }
 .report-visuals button { margin:4px; padding:6px 10px; font:inherit; font-size: var(--gil-xs); cursor:pointer;
   border: var(--gil-hair) solid var(--gil-line); border-radius: var(--gil-r-md); background: transparent; color: var(--gil-fg-2); }
-.report-visuals figure { margin:16px 0; }
-.report-visuals img { display:block; max-width:100%; max-height:65vh; object-fit:contain; border-radius: var(--gil-r-sm); }
+.report-visuals figure { margin:10px 0 0; max-width:100%; flex: 0 1 360px; }
+.report-visuals figure + p { flex-basis:100%; margin:0; font-size: var(--gil-xs); color: var(--gil-fg-3); }
+.report-visuals img { display:block; max-width:100%; max-height:260px; object-fit:contain; border-radius: var(--gil-r-sm); background: var(--gil-bg); }
+.report-visuals .is-original { flex-basis:100%; }
 .report-visuals figcaption { font-weight: var(--gil-w-semibold); margin-top:10px; white-space:pre-wrap; }
 .report-visuals p { white-space:pre-wrap; }
 .report-visuals .visual-viewport { max-width:100%; overflow:auto; }

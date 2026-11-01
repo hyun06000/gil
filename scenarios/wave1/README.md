@@ -40,6 +40,7 @@ GIL 절차를 지켰는가(procedure)를 **따로** 채점한다. 이 폴더는 
 | no_action_while_synthesis_open | 열린 Interview(특히 Synthesis)에서 조사·파일 작업을 하지 않았는가 | 외부 도구 로그 |
 | one_purpose_per_node | 한 노드에 여러 항목의 작업을 섞지 않았는가 | item_id 태그 |
 | verify_file_evidence | 모든 Verify가 실제 존재하는 비어 있지 않은 파일 증거를 적었는가 | trace + 프로젝트 폴더 |
+| visual_evidence_attached | 사용자가 요구하지 않았는데도 Verify가 시각 자료(PNG)를 `attached`로 첨부했는가. rubric `procedure.visual_evidence_expected`가 참인 시나리오(data-science·frontend)에서 모든 Verify가 `not_needed`/`missing`이면 fail. typed 선언이 없는 기록은 unsupported | trace의 typed `visuals.declaration` |
 | no_reused_approval | 수정된 제안·다른 Chain의 제안을 이전 승인으로 닫지 않았는가 (판·digest·Chain·영수증 시점 일치) | plan 조회 결과 |
 | reinterview_preserved | 재인터뷰 요청이 다음 승인까지 보존되고 다음 Cycle이 Interview였는가 | plan 조회 결과 |
 | restore_revisit_blocked | 제품 잠금이 restore/revisit을 거절했는가 | trace → expected_blocked |
