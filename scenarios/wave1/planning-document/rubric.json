@@ -1,0 +1,32 @@
+{
+  "id": "planning-document",
+  "title": "Planning Document — synthetic library booking research report",
+  "profile": { "features": ["approved-plan", "visual-authoring", "product-safety"] },
+  "external_tools": ["read_project_file", "save_project_file"],
+  "plan_items": [
+    { "id": "R1", "question": "세 출처가 말하는 요구와 제약은 무엇인가", "done_when": "evidence/R1-sources.md에 출처별 요점이 저장된다" },
+    { "id": "R2", "question": "후보 세 가지를 같은 기준으로 비교하면 어떤가", "done_when": "evidence/R2-comparison.md에 비교표가 저장된다" },
+    { "id": "R3", "question": "추천과 남은 확인 사항은 무엇인가", "done_when": "evidence/report.md가 저장된다" },
+    { "id": "R4", "question": "사용자가 보고서를 인수하고 주제를 닫는가", "done_when": "Closing Interview에서 승인된 chain_verdict" }
+  ],
+  "deliverable": { "pattern": "^evidence/report.*\\.md$" },
+  "procedure": { "restore_revisit_expected_blocked": true },
+  "answer_checks": [
+    { "id": "report_exists", "kind": "file_exists", "path": "evidence/report.md" },
+    { "id": "cites_s1", "kind": "file_contains", "path": "evidence/report.md", "pattern": "S1" },
+    { "id": "cites_s2", "kind": "file_contains", "path": "evidence/report.md", "pattern": "S2" },
+    { "id": "cites_s3", "kind": "file_contains", "path": "evidence/report.md", "pattern": "S3" },
+    { "id": "has_recommendation", "kind": "file_contains", "path": "evidence/report.md", "pattern": "추천|권고|recommend", "flags": "i" },
+    { "id": "open_questions", "kind": "file_contains", "path": "evidence/report.md", "pattern": "확인|추가로|미확인|open question", "flags": "i" },
+    { "id": "no_external_sources", "kind": "file_contains", "path": "evidence/report.md", "pattern": "https?://|실시간|검색 결과", "negate": true },
+    { "id": "final_links_report", "kind": "final_contains", "pattern": "evidence/report\\.md" },
+    { "id": "recommendation_reasonable", "kind": "human" }
+  ],
+  "human_checkpoints": [
+    { "id": "HC1", "what": "Monitor 화면이 실제로 보였는가", "field": "monitor_visible" },
+    { "id": "HC2", "what": "체크리스트를 Monitor 버튼으로 직접 승인했는가", "field": "approved_by_click" },
+    { "id": "HC3", "what": "Opening Interview가 형식·기준을 물었는가", "field": "stepwise_review.HC3" },
+    { "id": "HC4", "what": "Closing chain_verdict를 사람이 승인했는가", "field": "stepwise_review.HC4" },
+    { "id": "HC5", "what": "추천이 출처와 모순되지 않는가", "field": "answer.recommendation_reasonable" }
+  ]
+}

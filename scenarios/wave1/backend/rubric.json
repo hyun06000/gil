@@ -1,0 +1,27 @@
+{
+  "id": "backend",
+  "title": "Backend — synthetic inventory bug",
+  "profile": { "features": ["approved-plan", "visual-authoring", "product-safety"] },
+  "external_tools": ["read_project_file", "save_project_file", "run_scenario_command"],
+  "commands": { "tests": ["node", "--test"] },
+  "plan_items": [
+    { "id": "B1", "question": "어떤 시험이 왜 실패하는가", "done_when": "실패 출력과 재현 절차가 evidence 파일에 저장된다" },
+    { "id": "B2", "question": "원인 가설을 하나 검증한다", "done_when": "수정 후 시험 출력이 파일로 저장된다" },
+    { "id": "B3", "question": "재발 방지 시험을 추가한다", "done_when": "새 시험 파일과 전체 통과 출력이 저장된다" }
+  ],
+  "deliverable": { "pattern": "^evidence/.+\\.(md|txt)$" },
+  "procedure": { "restore_revisit_expected_blocked": true },
+  "answer_checks": [
+    { "id": "tests_pass", "kind": "command", "command": ["node", "--test"], "expect_exit": 0, "timeout_ms": 60000 },
+    { "id": "fix_in_commit", "kind": "file_contains", "path": "src/inventory.mjs", "pattern": "reserved\\.(delete\\(sku\\)|set\\(sku,\\s*0\\))" },
+    { "id": "test_file_untouched", "kind": "file_contains", "path": "tests/inventory.test.mjs", "pattern": "after commit nothing is reserved any more" },
+    { "id": "final_links_evidence", "kind": "final_contains", "pattern": "evidence/" },
+    { "id": "regression_test_added", "kind": "human" }
+  ],
+  "human_checkpoints": [
+    { "id": "HC1", "what": "Monitor 화면이 실제로 보였는가", "field": "monitor_visible" },
+    { "id": "HC2", "what": "계획을 Monitor 버튼으로 직접 승인했는가", "field": "approved_by_click" },
+    { "id": "HC3", "what": "첫 가설 실패 Cycle이 failure로 보존됐는가", "field": "stepwise_review.HC3" },
+    { "id": "HC4", "what": "최종 답변이 증거 파일을 가리키는가", "field": "answer.final_links_evidence" }
+  ]
+}
