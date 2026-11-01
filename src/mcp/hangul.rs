@@ -1,10 +1,10 @@
 //! Hangul-only NFC/NFD for the `project_root` boundary.
 //!
-//! macOS stores folder names decomposed (NFD); a Host or Agent that retypes a Korean path usually
+//! File systems may expose decomposed folder names (NFD); a Host or Agent retyping a Korean path often
 //! sends it composed (NFC). The bytes differ, the folder is the same. This module maps one form to
 //! the other with the Unicode Hangul algorithm alone — no general normalization tables, no crate.
 //! Compatibility jamo (U+3131 block, the lone `ㄱ`·`ㅏ` letters) belong to neither form and cannot be
-//! matched to any folder; [`has_compatibility_jamo`] names them so the refusal can say so.
+//! repaired by canonical normalization; [`has_compatibility_jamo`] names them so the refusal can say so.
 
 const S_BASE: u32 = 0xAC00;
 const L_BASE: u32 = 0x1100;
@@ -41,7 +41,8 @@ pub fn nfd(text: &str) -> String {
 /// L·V(·T) jamo sequences become syllables; everything else is copied.
 pub fn nfc(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
-    let mut chars = text.chars().peekable();
+    let decomposed = nfd(text); // Also compose an LV syllable followed by a trailing jamo.
+    let mut chars = decomposed.chars().peekable();
     while let Some(c) = chars.next() {
         let l = (c as u32).wrapping_sub(L_BASE);
         if l < L_COUNT {
@@ -64,7 +65,7 @@ pub fn nfc(text: &str) -> String {
     out
 }
 
-/// Hangul Compatibility Jamo (U+3131–U+318E): letters typed apart, matching no folder name.
+/// Hangul Compatibility Jamo (U+3131–U+318E): letters which canonical normalization cannot repair.
 pub fn has_compatibility_jamo(text: &str) -> bool {
     text.chars().any(|c| ('\u{3131}'..='\u{318E}').contains(&c))
 }
@@ -82,6 +83,7 @@ mod tests {
         assert_eq!(decomposed.chars().count(), 5 + 6 + 1 + 9 + 1 + 3);
         assert_eq!(nfc(&decomposed), composed);
         assert_eq!(nfd(&decomposed), decomposed, "decomposing twice changes nothing");
+        assert_eq!(nfc("가\u{11A8}"), "각");
         assert_eq!(nfc(composed), composed, "composing composed text changes nothing");
     }
 

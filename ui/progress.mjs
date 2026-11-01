@@ -37,7 +37,7 @@ export function progressSummary(view) {
   const closed = view.timeline.reduce((n, one) => n + one.steps.filter(s => s.state === 'closed').length, 0);
   const visuals = visualCounts(view);
   return {
-    visuals: visuals.total === 0 && visuals.declaredNone === 0
+    visuals: visuals.total === 0 && visuals.declaredNone === 0 && visuals.missing === 0
       ? '시각 자료 기록 없음'
       : `시각 자료 ${visuals.total}개 (이 Cycle ${visuals.here}개)${visuals.declaredNone ? ` · 없음 선언 ${visuals.declaredNone}건` : ''}${visuals.missing ? ` · 미완 ${visuals.missing}건` : ''}`,
     position: view.chain?.state === 'closed' ? 'Chain 종료' : step ? `${names[step.kind] || step.kind} · ${step.state === 'open' ? '열려 있음' : '닫힘'}` : '다음 단계 경계',

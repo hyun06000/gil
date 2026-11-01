@@ -269,30 +269,35 @@ const COPY_ROOT_VERBATIM =
  *  `resolve_root`: the string as given when it is a directory; otherwise the same path in the
  *  other Hangul form (macOS stores NFD, Agents retype NFC); compatibility jamo match no folder.
  *  Returns `{ root, note }` or `{ problem }`. Nothing is created. */
-export async function usableDirectory(root) {
+export async function usableDirectory(root, { stat: inspect } = {}) {
   if (typeof root !== "string" || root.length === 0) return { problem: "Project 자리가 비었다" };
-  const { stat } = await import("node:fs/promises");
+  const stat = inspect || (await import("node:fs/promises")).stat;
   const isDir = async (path) => {
-    try { return (await stat(path)).isDirectory() ? "dir" : "other"; } catch { return "missing"; }
+    try { return (await stat(path)).isDirectory() ? "dir" : "other"; }
+    catch (error) { if (error.code === 'ENOENT') return 'missing'; throw error; }
   };
-  const seen = await isDir(root);
-  if (seen === "dir") return { root, note: null };
-  if (seen === "other") return { problem: "Project 자리가 폴더가 아니다" };
-  if (/[\u3131-\u318E]/.test(root)) {
-    return { problem: `Project 자리를 열 수 없다: 경로에 호환 자모(ㄱ·ㅏ 같은 낱자)로 쪼개진 글자가 있어 어떤 폴더에도 맞출 수 없다. ${COPY_ROOT_VERBATIM}` };
-  }
-  for (const candidate of [root.normalize("NFC"), root.normalize("NFD")]) {
-    if (candidate === root) continue;
-    const found = await isDir(candidate);
-    if (found === "other") return { problem: "Project 자리가 폴더가 아니다" };
-    if (found === "dir") {
-      return {
-        root: candidate,
-        note: `project_root 글자를 맞춰 ${candidate} 를 사용했다 — 받은 경로의 한글 정규화(NFC/NFD)가 실제 폴더와 달랐다. 다음 호출부터 이 경로를 글자 그대로 복사한다.`,
-      };
+  try {
+    const seen = await isDir(root);
+    if (seen === "dir") return { root, note: null };
+    if (seen === "other") return { problem: "Project 자리가 폴더가 아니다" };
+    if (/[\u3131-\u318E]/.test(root)) {
+      return { problem: `Project 자리를 열 수 없다: 경로에 호환 자모(ㄱ·ㅏ 같은 낱자)가 있어 정규화로 폴더를 추측하지 않는다. ${COPY_ROOT_VERBATIM}` };
     }
+    // Only Hangul, matching native Core; do not rewrite unrelated Unicode names.
+    const normalized = form => root.replace(/[\u1100-\u11FF\uAC00-\uD7A3]+/g, part => part.normalize(form));
+    const found = [];
+    for (const candidate of new Set([normalized("NFC"), normalized("NFD")])) {
+      if (candidate === root) continue;
+      const state = await isDir(candidate);
+      if (state === 'other') return { problem: "Project 자리가 폴더가 아니다" };
+      if (state === 'dir') found.push(candidate);
+    }
+    if (found.length > 1) return { problem: `Project 자리를 열 수 없다: 정규화 후보 폴더가 여러 개라 Project를 선택하지 않았다. ${COPY_ROOT_VERBATIM}` };
+    if (found.length === 1) return { root: found[0], note: `project_root 글자를 맞춰 ${found[0]} 를 사용했다 — 받은 경로의 한글 정규화(NFC/NFD)가 실제 폴더와 달랐다. 다음 호출부터 이 경로를 글자 그대로 복사한다.` };
+    return { problem: `Project 자리를 열 수 없다: 경로가 존재하지 않는다. 받은 경로의 글자가 사용자가 고른 폴더와 다를 수 있다(한글 정규화). ${COPY_ROOT_VERBATIM}` };
+  } catch {
+    return { problem: `Project 자리를 열 수 없다: 경로 접근을 확인하지 못했다. 권한·디스크 오류를 경로 없음으로 판단하거나 다른 폴더로 바꾸지 않는다. ${COPY_ROOT_VERBATIM}` };
   }
-  return { problem: `Project 자리를 열 수 없다: 경로가 존재하지 않는다. 받은 경로의 글자가 사용자가 고른 폴더와 다를 수 있다(한글 정규화). ${COPY_ROOT_VERBATIM}` };
 }
 
 function refusal(text) {

@@ -777,8 +777,8 @@ pub enum Gate {
 ///
 /// 위 변경 목록(새로 생김 · 바뀜 · 사라짐)이 이 글의 대상이다. GIL 은 파일을 지우거나 되돌리지 않는다.
 pub const DIRTY_RECOVERY_WITHOUT_RESTORE: &str = "이 빌드는 Artifact 되돌리기(restore)를 거부한다. 위 변경 목록을 보고 사람이 정리한다:\n\
-  · 새로 생긴 파일은 프로젝트 밖으로 옮기거나 지운다. 그 내용을 남기려면 지금 자리를 닫은 뒤 다음 Experiment 의 Verify 에서 다시 만들고 evidence_files 에 적는다.\n\
-  · 바뀐 기존 파일은 기준 내용으로 되돌린다. 사라진 파일은 기준 내용대로 다시 둔다.";
+  · 새로 생긴 파일은 프로젝트 밖의 새 보존 위치로 옮긴다. 그 내용을 남기려면 지금 자리를 닫은 뒤 다음 Experiment 의 Verify 에서 다시 만들고 evidence_files 에 적는다.\n\
+  · 바뀐 기존 파일은 현재 내용을 별도로 보존한 뒤 기준 내용으로 되돌린다. 사라진 파일은 기준 내용대로 다시 둔다.";
 
 /// 두 세계가 어떻게 다른가 — **사람이 읽을 만큼만.**
 const SHOWN: usize = 12;
@@ -1490,12 +1490,12 @@ mod tests {
             assert!(said.contains("그대로 열려 있다"), "{said}");
             if cfg!(feature = "product-safety") {
                 assert!(!said.contains("gil restore"), "거부되는 명령을 권한다:\n{said}");
-                for must in ["프로젝트 밖으로 옮기거나 지운다", "다음 Experiment 의 Verify", "evidence_files", "기준 내용으로 되돌린다"] {
+                for must in ["프로젝트 밖의 새 보존 위치로 옮긴다", "다음 Experiment 의 Verify", "evidence_files", "기준 내용으로 되돌린다"] {
                     assert!(said.contains(must), "{must} 가 없다:\n{said}");
                 }
             } else {
                 assert!(said.contains("`gil restore`"), "{said}");
-                assert!(!said.contains("프로젝트 밖으로 옮기거나"), "{said}");
+                assert!(!said.contains("프로젝트 밖의 새 보존 위치로"), "{said}");
             }
         }
     }

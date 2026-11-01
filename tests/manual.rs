@@ -410,7 +410,7 @@ fn the_dirty_topic_never_points_at_a_path_that_cannot_be_walked() {
     if cfg!(feature = "product-safety") {
         // restore 가 거부되는 빌드는 그 명령을 권하지 않고, 사람이 할 수 있는 정리를 말한다.
         assert!(!todo.contains("gil restore"), "{todo}");
-        assert!(todo.contains("프로젝트 밖으로 옮기거나 지운다"), "{todo}");
+        assert!(todo.contains("프로젝트 밖의 새 보존 위치로 옮긴다"), "{todo}");
     } else {
         assert!(todo.contains("gil restore"), "{todo}");
         // **「Experiment 로 가라」는 지금 밟을 수 없는 길이다.**

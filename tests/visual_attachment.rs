@@ -232,6 +232,13 @@ fn display_projection_reuse_preserves_asset_and_report_specific_caption() {
     let p = session.project_mut();
     let analysis = common::opened(p, NodeKind::Analysis);
     let report = common::full_report(p.current_cycle().rules(), CycleKind::Experiment, NodeKind::Analysis);
+    let before = format!("{:?}", p);
+    let refused = p.close_action_step(report.clone()).unwrap_err().to_string();
+    assert!(refused.contains("visual_citation_required") && refused.contains("asset_id"), "{refused}");
+    assert_eq!(format!("{:?}", p), before);
+    let refused = p.close_step_with_visuals(report.clone(), None, ReportVisuals::References(vec![])).unwrap_err().to_string();
+    assert!(refused.contains("visual_citation_required"), "{refused}");
+    assert_eq!(format!("{:?}", p), before);
     p.close_step_with_visuals(report, None, ReportVisuals::References(vec![VisualUse {
         asset: id, caption: "<script>자료 해석</script>".into(), alt: "다시 쓰는 그림".into(), purpose: "해석".into(),
     }])).unwrap();
@@ -248,6 +255,10 @@ fn display_projection_reuse_preserves_asset_and_report_specific_caption() {
     p.close_step_with_visuals(report, None, ReportVisuals::References(vec![usage("최종 판정")])).unwrap();
     let report = common::cycle_report(p.current_cycle(), "success", common::step_id(p, outcome));
     let cycle_owner = ReportOwner::Cycle(p.current_cycle().id().to_ref());
+    let before = format!("{:?}", p);
+    let refused = p.close_cycle(report.clone()).unwrap_err().to_string();
+    assert!(refused.contains("visual_citation_required"), "{refused}");
+    assert_eq!(format!("{:?}", p), before);
     p.close_cycle_with_visuals(report, vec![usage("Cycle 요약")]).unwrap();
     assert_eq!(p.report_visuals_v1(cycle_owner).unwrap().uses[0].caption, "Cycle 요약");
     p.open_child_cycle(CycleKind::Experiment).unwrap();
@@ -674,4 +685,28 @@ fn too_many_inputs_are_refused_before_opening_any_file() {
             .to_string()
             .contains("8개")
     );
+}
+
+
+#[test]
+fn visual_evidence_refusals_preserve_open_verify_and_accept_a_corrected_attachment() {
+    let (root, mut session) = setup("visual-policy-refusals");
+    let disk = fs::read(root.join(gil::STATE_PATH)).unwrap();
+    let memory = format!("{:?}", session.project());
+    for (reason, code) in [("없음", "visual_reason_weak"),
+        ("실행 결과는 텍스트 로그로만 남겼다", "visual_declaration_conflict")] {
+        let refused = session.close_verify_with_images_and_commit(report(&session), vec![], |_| {
+            VisualDeclaration::NotNeeded { reason: reason.into() }
+        }).unwrap_err().to_string();
+        assert!(refused.contains(code), "{refused}");
+        assert_eq!(fs::read(root.join(gil::STATE_PATH)).unwrap(), disk);
+        assert_eq!(format!("{:?}", session.project()), memory);
+        assert!(session.project().current_cycle().step_now_open().is_some());
+    }
+    session.close_verify_with_images_and_commit(report(&session), input("screen.png"), attached).unwrap();
+    let view = session.project().report_visuals_v1(owner()).unwrap();
+    assert_eq!(view.uses.len(), 1);
+    drop(session);
+    let reopened = ProjectSession::open_read_only(common::spec(), root.join(gil::STATE_PATH)).unwrap();
+    assert_eq!(reopened.project().report_visuals_v1(owner()).unwrap(), view);
 }

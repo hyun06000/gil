@@ -1319,7 +1319,7 @@ mod tests {
             for text in [todo, example, topic.summary()] {
                 assert!(!text.contains("gil restore"), "거부되는 명령을 권한다:\n{text}");
             }
-            for must in ["프로젝트 밖으로 옮기거나 지운다", "다음 Experiment 의 Verify", "evidence_files", "기준 내용으로 되돌린다", "gil close"] {
+            for must in ["프로젝트 밖의 새 보존 위치로 옮긴다", "다음 Experiment 의 Verify", "evidence_files", "기준 내용으로 되돌린다", "gil close"] {
                 assert!(todo.contains(must), "{must} 가 없다:\n{todo}");
             }
         } else {

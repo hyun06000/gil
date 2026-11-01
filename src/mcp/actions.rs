@@ -143,41 +143,69 @@ const COPY_ROOT_VERBATIM: &str = "gil_context/gil_status/receipt가 돌려준 pr
 /// The folder the Host selected, found from the string the Agent sent.
 ///
 /// The string is used as given when it names a directory. When it does not, the same path in the
-/// other Hangul form (NFC ↔ NFD) is tried, because macOS stores names decomposed while Agents
-/// retype them composed; the form that exists is used and the receipt says so once. Compatibility
-/// jamo cannot be matched to any folder and are refused with that reason. Nothing is created.
-fn resolve_root(given: &str) -> Result<(String, Option<String>), String> {
-    let is_dir = |path: &str| std::fs::metadata(path).map(|one| one.is_dir());
+/// other Hangul form (NFC ↔ NFD) is tried, because some file systems retain decomposed names while Agents
+/// retype them composed; the form that exists is used and the receipt says so once. Missing paths with compatibility
+/// jamo cannot be repaired by normalization; existing literal names remain usable. Nothing is created.
+pub(super) fn resolve_root(given: &str) -> Result<(String, Option<String>), String> {
+    resolve_root_with(given, |path| std::fs::metadata(path).map(|one| one.is_dir()))
+}
+
+fn resolve_root_with(given: &str, mut is_dir: impl FnMut(&str) -> std::io::Result<bool>) -> Result<(String, Option<String>), String> {
+    let inaccessible = |error: std::io::Error| format!("{ROOT_UNREADABLE}: 경로 접근을 확인하지 못했다 ({error}). 권한·디스크 오류를 경로 없음으로 판단하거나 다른 폴더로 바꾸지 않는다. {COPY_ROOT_VERBATIM}");
     match is_dir(given) {
         Ok(true) => return Ok((given.to_owned(), None)),
         Ok(false) => return Err("Project 자리가 폴더가 아니다".to_owned()),
-        Err(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
+        Err(error) => return Err(inaccessible(error)),
     }
     if super::hangul::has_compatibility_jamo(given) {
         return Err(format!(
-            "{ROOT_UNREADABLE}: 경로에 호환 자모(ㄱ·ㅏ 같은 낱자)로 쪼개진 글자가 있어 어떤 폴더에도 맞출 수 없다. {COPY_ROOT_VERBATIM}"
+            "{ROOT_UNREADABLE}: 경로에 호환 자모(ㄱ·ㅏ 같은 낱자)가 있어 정규화로 폴더를 추측하지 않는다. {COPY_ROOT_VERBATIM}"
         ));
     }
+    let mut found = Vec::new();
     for candidate in [super::hangul::nfc(given), super::hangul::nfd(given)] {
-        if candidate == given { continue; }
+        if candidate == given || found.contains(&candidate) { continue; }
         match is_dir(&candidate) {
-            Ok(true) => {
-                let note = format!(
-                    "project_root 글자를 맞춰 {candidate} 를 사용했다 — 받은 경로의 한글 정규화(NFC/NFD)가 실제 폴더와 달랐다. 다음 호출부터 이 경로를 글자 그대로 복사한다."
-                );
-                return Ok((candidate, Some(note)));
-            }
+            Ok(true) => found.push(candidate),
             Ok(false) => return Err("Project 자리가 폴더가 아니다".to_owned()),
-            Err(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
+            Err(error) => return Err(inaccessible(error)),
         }
     }
-    Err(format!(
-        "{ROOT_UNREADABLE}: 경로가 존재하지 않는다. 받은 경로의 글자가 사용자가 고른 폴더와 다를 수 있다(한글 정규화). {COPY_ROOT_VERBATIM}"
-    ))
+    if found.len() > 1 {
+        return Err(format!("{ROOT_UNREADABLE}: 정규화 후보 폴더가 여러 개라 Project를 선택하지 않았다. {COPY_ROOT_VERBATIM}"));
+    }
+    if let Some(candidate) = found.pop() {
+        let note = format!("project_root 글자를 맞춰 {candidate} 를 사용했다 — 받은 경로의 한글 정규화(NFC/NFD)가 실제 폴더와 달랐다. 다음 호출부터 이 경로를 글자 그대로 복사한다.");
+        return Ok((candidate, Some(note)));
+    }
+    Err(format!("{ROOT_UNREADABLE}: 경로가 존재하지 않는다. 받은 경로의 글자가 사용자가 고른 폴더와 다를 수 있다(한글 정규화). {COPY_ROOT_VERBATIM}"))
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn root_lookup_never_converts_access_errors_or_ambiguity_into_a_different_project() {
+        use std::io::{Error, ErrorKind};
+        let mut probes = 0;
+        let denied = super::resolve_root_with("/tmp/한글", |_| {
+            probes += 1; Err(Error::from(ErrorKind::PermissionDenied))
+        }).unwrap_err();
+        assert_eq!(probes, 1);
+        assert!(denied.contains("경로 접근"));
+        let mixed = "/tmp/한글";
+        let ambiguous = super::resolve_root_with(mixed, |p| {
+            if p == mixed { Err(Error::from(ErrorKind::NotFound)) } else { Ok(true) }
+        }).unwrap_err();
+        assert!(ambiguous.contains("후보 폴더가 여러 개"));
+        let unique = super::resolve_root_with(mixed, |p| {
+            if p == super::super::hangul::nfc(mixed) { Ok(true) } else { Err(Error::from(ErrorKind::NotFound)) }
+        }).unwrap();
+        assert_eq!(unique.0, "/tmp/한글");
+        assert!(unique.1.is_some());
+    }
+
     use super::*;
     #[test]
     fn positional_rules_match_the_js_boundary_including_utf16_length() {

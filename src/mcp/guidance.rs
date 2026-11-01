@@ -59,7 +59,7 @@ fn refused(name: &str) -> Option<&'static str> {
 
 /// One line for a close refused by the dirty gate — only what this build can actually do.
 const DIRTY_CLOSE_RECOVERY: &str = if cfg!(feature = "product-safety") {
-    "dirty 거절이면: 이 빌드는 Artifact 되돌리기(restore)를 거부한다. 거절문의 변경 목록을 보고 새 파일은 프로젝트 밖으로 옮기거나 지우고(내용을 남기려면 지금 자리를 닫은 뒤 다음 Experiment의 Verify에서 다시 만들어 evidence_files에 적는다), 바뀐 기존 파일은 기준 내용으로 되돌린 뒤 같은 gil_close를 보낸다."
+    "dirty 거절이면: 이 빌드는 Artifact 되돌리기(restore)를 거부한다. 거절문의 변경 목록을 보고 새 파일은 프로젝트 밖의 새 보존 위치로 옮기고(내용을 남기려면 지금 자리를 닫은 뒤 다음 Experiment의 Verify에서 다시 만들어 evidence_files에 적는다), 바뀐 기존 파일은 현재 내용을 별도로 보존한 뒤 기준 내용으로 되돌린 뒤 같은 gil_close를 보낸다."
 } else {
     "dirty 거절이면: 거절문의 변경 목록을 사용자에게 알리고, 사용자가 되돌리기를 택하면 gil_restore 뒤 같은 gil_close를 보낸다. Verify 밖에서 만든 전달물은 다음 Experiment의 Verify에서 다시 만든다."
 };
@@ -234,7 +234,7 @@ mod tests {
         assert!(hint.contains("dirty 거절이면:"), "{hint}");
         if cfg!(feature = "product-safety") {
             assert!(!hint.contains("gil restore") && !hint.contains("gil_restore"), "{hint}");
-            assert!(hint.contains("프로젝트 밖으로 옮기거나 지우고") && hint.contains("다음 Experiment의 Verify"), "{hint}");
+            assert!(hint.contains("프로젝트 밖의 새 보존 위치로 옮기고") && hint.contains("다음 Experiment의 Verify"), "{hint}");
         } else {
             assert!(hint.contains("gil_restore"), "{hint}");
         }

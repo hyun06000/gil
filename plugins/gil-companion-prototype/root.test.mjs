@@ -54,3 +54,18 @@ test("a missing folder and compatibility jamo are refused with what to copy", as
     assert.equal((await usableDirectory(undefined)).problem, "Project 자리가 비었다");
   } finally { await rm(base, { recursive: true, force: true }); }
 });
+
+
+test('access failure stops lookup and ambiguous normalized folders are not selected', async () => {
+  let calls = 0;
+  const denied = await usableDirectory('/tmp/한글', { stat: async () => {
+    calls++; throw Object.assign(new Error('denied'), {code: 'EACCES'});
+  }});
+  assert.equal(calls, 1); assert.match(denied.problem, /경로 접근/);
+  const mixed = '/tmp/한글';
+  const ambiguous = await usableDirectory(mixed, {stat: async p => {
+    if (p === mixed) throw Object.assign(new Error('missing'), {code: 'ENOENT'});
+    return {isDirectory: () => true};
+  }});
+  assert.match(ambiguous.problem, /후보 폴더가 여러 개/);
+});

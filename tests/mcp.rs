@@ -1290,23 +1290,31 @@ fn a_korean_root_in_the_other_normal_form_reaches_the_same_project() {
     for (made, asked) in [(HANGUL_NFD, HANGUL_NFC), (HANGUL_NFC, HANGUL_NFD)] {
         let root = base.join(format!("{made}-{}", made.chars().count()));
         std::fs::create_dir_all(&root).unwrap();
-        started(&root);
         let other = base.join(format!("{asked}-{}", made.chars().count()));
         let other = other.to_str().unwrap();
         let direct = std::fs::metadata(other).is_ok();
 
         let mut mcp = Client::serve();
         mcp.initialize();
+        let begun = monitor_call(&mut mcp, "gil_start", serde_json::json!({"project_root": other}));
+        assert_eq!(begun["isError"], false, "{begun}");
+        assert!(begun["content"].as_array().unwrap().iter().any(|c| c["text"].as_str().is_some_and(|t| t.contains("Monitor 준비도 완료"))), "{begun}");
+        #[cfg(feature = "visual-authoring")]
+        {
+            let read = monitor_call(&mut mcp, "gil_report_visuals", serde_json::json!({"project_root": other, "owner": {"kind":"cycle","ref":"cycle:C1"}}));
+            assert_ne!(read["isError"], true, "{read}");
+        }
         let got = mcp.status(other);
         assert_eq!(got["result"]["isError"], serde_json::json!(false), "{got}");
-        let said = text_of(&got);
+        let said = got["result"]["content"].as_array().unwrap().iter()
+            .filter_map(|c| c["text"].as_str()).collect::<Vec<_>>().join("\n");
         if direct {
             assert!(!said.contains("project_root 글자를 맞춰"), "{said}");
         } else {
             let first = said.lines().next().unwrap();
             assert!(first.starts_with("project_root 글자를 맞춰"), "{said}");
             assert!(first.contains(root.to_str().unwrap()), "{said}");
-            assert_eq!(said.lines().count(), cli_status(&root).lines().count() + 1, "{said}");
+            assert_eq!(said.matches("project_root 글자를 맞춰").count(), 1, "{said}");
         }
         // The note is for the receipt only; a refusal from Core keeps its own first line.
         mcp.eof();

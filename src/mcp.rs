@@ -50,13 +50,21 @@ impl GilServer {
             monitor: Arc::new(Monitor::default()), native_gate: Arc::new(Mutex::new(())),
             companion_session: Arc::new(Mutex::new(crate::companion_ipc::McpSession::new(endpoint))) }
     }
-    async fn dispatch_with_session(&self, name: String, input: Value) -> CallToolResult {
+    async fn dispatch_with_session(&self, name: String, mut input: Value) -> CallToolResult {
         // These operations actually open/create a Project on success. Help topics, listing,
         // initialization, workspace planning and native-window requests do not qualify.
         let project_use = input.get("project_root").and_then(Value::as_str).is_some()
             && matches!(name.as_str(), "gil_start" | "gil_status" | "gil_context" | "gil_story"
                 | "gil_open" | "gil_close" | "gil_restore" | "gil_revisit" | "gil_cycle"
                 | "gil_monitor_prepare" | "gil_report_visuals");
+        // Use the same resolved root for the action, typed authoring and Monitor preparation.
+        // Workspace creation/migration targets are intentionally outside this fallback.
+        let normalized_note = if project_use || actions::NAMES.contains(&name.as_str()) || name == "gil_monitor_status" {
+            input.get("project_root").and_then(Value::as_str)
+                .filter(|root| std::path::Path::new(root).is_absolute())
+                .and_then(|root| actions::resolve_root(root).ok())
+        } else { None };
+        if let Some((root, _)) = &normalized_note { input["project_root"] = serde_json::json!(root); }
         let mut result = self.dispatch(name.clone(), input.clone()).await;
         let succeeded = result.is_error != Some(true)
             && result.structured_content.as_ref().is_none_or(|v| v["ok"] != false);
@@ -118,6 +126,9 @@ impl GilServer {
                     }
                 }
             }).await;
+        }
+        if succeeded {
+            if let Some((_, Some(note))) = normalized_note { guidance::prepend(&mut result, note); }
         }
         result
     }

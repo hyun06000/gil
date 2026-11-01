@@ -57,3 +57,11 @@ test('visual counts come only from recorded declarations; none-declared and miss
   assert.deepEqual(visualCounts(view), { total: 3, here: 2, declaredNone: 1, missing: 1 });
   assert.match(progressSummary(view).visuals, /시각 자료 3개 \(이 Cycle 2개\) · 없음 선언 1건 · 미완 1건/);
 });
+
+
+test('zero-image missing declaration remains visible instead of claiming no records', () => {
+  const view = fixture();
+  view.timeline[0].steps[0].visuals = { state: 'missing', count: 0 };
+  assert.match(progressSummary(view).visuals, /미완 1건/);
+  assert.doesNotMatch(progressSummary(view).visuals, /기록 없음/);
+});

@@ -131,8 +131,8 @@ fn world_nudge(session: &ProjectSession) -> String {
                 // 닫는 것도 같은 gate 에 막힌다 — 그러니 먼저 되돌리는 수뿐이다.
                 false if cfg!(feature = "product-safety") => String::from(
                     "이 자리에서는 Artifact 변경을 확정할 수 없다.\n\
-                     이 빌드는 Artifact 되돌리기(restore)를 거부한다. 새로 생긴 파일은 프로젝트 밖으로 옮기거나 지우고, \
-                     바뀐 기존 파일은 기준 내용으로 되돌려 기준 세계와 맞춘다. 남길 내용은 다음 Experiment 의 Verify 에서 다시 만든다.\n\
+                     이 빌드는 Artifact 되돌리기(restore)를 거부한다. 새로 생긴 파일은 프로젝트 밖의 새 보존 위치로 옮기고, \
+                     바뀐 기존 파일은 현재 내용을 별도로 보존한 뒤 기준 내용으로 되돌려 기준 세계와 맞춘다. 남길 내용은 다음 Experiment 의 Verify 에서 다시 만든다.\n\
                      현재 Step 과 Active Will 은 그대로 열린 채 남는다.\n\n",
                 ),
                 false => String::from(
