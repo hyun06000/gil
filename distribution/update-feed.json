@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "updated": "2026-11-02",
+  "note": "Metadata only. The installed GIL Core reads this file at most once a day to show update guidance in the Monitor; it never downloads or installs from it. Update this file in the same pull request that records a publication ledger.",
+  "platforms": {
+    "darwin-arm64": {
+      "version": "0.2.1-preview.10",
+      "release_url": "https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.10",
+      "install_doc": "https://github.com/hyun06000/gil/blob/main/INSTALL.md",
+      "notes": "복구 완료 후 채팅 전달 시험판. 기존 실패 기록과 증거는 보존한다. 업데이트 후 새 대화에서 현재 기록을 읽고 이어간다."
+    },
+    "windows-x64": {
+      "version": "0.1.1-owner.9",
+      "release_url": "https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.9",
+      "install_doc": "https://github.com/hyun06000/gil/blob/main/INSTALL.md",
+      "notes": "복구 완료 후 채팅 전달 시험판. Companion에서 업데이트 확인 → 업데이트로 설치한다. 고정 런처를 쓰는 기존 MCP 연결은 유지한다."
+    }
+  }
+}

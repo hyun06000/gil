@@ -25,7 +25,7 @@ body:
     attributes:
       label: 사용 환경 / Environment
       description: 아는 정보만 적어 주세요. OS, 앱 이름과 모드, 앱 및 GIL 버전 등. 파일 경로는 필요 없습니다.
-      placeholder: "예: macOS / Codex / fullscreen / 버전 모름"
+      placeholder: "예: macOS / Codex / fullscreen / 버전 모름  ·  Windows / Claude Desktop의 Claude Code 탭 / inline"
   - type: dropdown
     id: connection
     attributes:
@@ -34,6 +34,7 @@ body:
         - 모름 / Unknown
         - Marketplace Plugin
         - 직접 MCP 연결 / Direct MCP
+        - Companion 버튼 연결 (Codex 또는 Claude Desktop) / Companion button
         - 별도 Companion 앱 / Native Companion
         - 개발용 CLI / Development CLI
   - type: textarea

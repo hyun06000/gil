@@ -148,3 +148,44 @@ test('500 sequential Steps remain one lane and folding saves all hidden time slo
   assert.equal(closed.nodes.length,50);
   assert.equal(open.width-closed.width,450*40);
 });
+
+import { clampZoom, stepZoom, zoomAround, minimapFrame, minimapViewport, scrollToMinimapPoint, minimapNeeded,
+  ZOOM_MIN, ZOOM_MAX } from './viewport.mjs';
+
+test('zoom steps are bounded and keep the point under the pointer fixed', () => {
+  assert.equal(clampZoom(NaN), 1);
+  assert.equal(clampZoom(0.01), ZOOM_MIN);
+  assert.equal(clampZoom(99), ZOOM_MAX);
+  let z = 1; for (let i = 0; i < 20; i++) z = stepZoom(z, +1); assert.equal(z, ZOOM_MAX);
+  for (let i = 0; i < 40; i++) z = stepZoom(z, -1); assert.equal(z, ZOOM_MIN);
+  assert.ok(stepZoom(1, +1) > 1 && stepZoom(1, -1) < 1);
+  // The stage point under (pointer) before equals the one after.
+  const view = { scrollLeft: 120, scrollTop: 40 }, pointer = { x: 200, y: 100 }, from = 1, to = 1.5;
+  const after = zoomAround(view, pointer, from, to);
+  const before = { x: (view.scrollLeft + pointer.x) / from, y: (view.scrollTop + pointer.y) / from };
+  assert.ok(Math.abs((after.scrollLeft + pointer.x) / to - before.x) < 1e-9);
+  assert.ok(Math.abs((after.scrollTop + pointer.y) / to - before.y) < 1e-9);
+  assert.deepEqual(zoomAround({ scrollLeft: 0, scrollTop: 0 }, { x: 10, y: 10 }, 2, 0.5), { scrollLeft: 0, scrollTop: 0 });
+});
+
+test('minimap fits the stage, shows the visible window and maps a click back to a scroll', () => {
+  for (const view of fixtures) {
+    const plan = place(view, new Set(), 'horizontal');
+    const stage = { width: plan.width, height: plan.height };
+    const frame = minimapFrame(stage);
+    assert.ok(frame.width <= 220 && frame.height <= 130);
+    assert.ok(Math.abs(frame.width / frame.height - stage.width / stage.height) < 0.2 || frame.width === 24 || frame.height === 16);
+    const port = { scrollLeft: 0, scrollTop: 0, clientWidth: Math.min(300, stage.width / 2), clientHeight: Math.min(200, stage.height) };
+    const seen = minimapViewport(frame, stage, 1, port);
+    assert.equal(seen.x, 0); assert.equal(seen.y, 0);
+    assert.ok(seen.width > 0 && seen.width <= frame.width && seen.height <= frame.height);
+    // Zooming in shows a smaller window on the minimap.
+    assert.ok(minimapViewport(frame, stage, 2, port).width < seen.width + 1e-9);
+    // Clicking the minimap's far corner scrolls toward the stage's far corner, never negative.
+    const target = scrollToMinimapPoint(frame, 1, port, { x: frame.width, y: frame.height });
+    assert.ok(target.scrollLeft >= 0 && target.scrollTop >= 0);
+    assert.ok(target.scrollLeft + port.clientWidth / 2 >= stage.width - 1);
+    assert.equal(minimapNeeded(stage, 1, { clientWidth: stage.width, clientHeight: stage.height }), false);
+    assert.equal(minimapNeeded(stage, 1.2, { clientWidth: stage.width, clientHeight: stage.height }), true);
+  }
+});

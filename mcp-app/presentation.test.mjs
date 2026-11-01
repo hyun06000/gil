@@ -101,3 +101,33 @@ test('Host styles are adopted as reported and shape-checked, never inferred', ()
   assert.equal(hostStyles({ styles: { css: { fonts: 'x</STYLE><script>' } } }).fonts, null);
   assert.equal(hostStyles({ styles: { css: { fonts: 'a'.repeat(65537) } } }).fonts, null);
 });
+
+import { updateNotice, updateGuide } from './presentation.mjs';
+const latest = { version: '0.2.1-preview.9', release_url: 'https://github.com/x/r', install_doc: 'https://github.com/x/i', notes: 'n' };
+test('update notice shows a button only when a newer or unknown-relative version is known', () => {
+  assert.equal(updateNotice(undefined).show, false);
+  assert.equal(updateNotice({ state: 'not_installed' }).show, false);
+  assert.equal(updateNotice({ state: 'up_to_date', installed: '0.2.1-preview.9', latest }).show, false);
+  assert.equal(updateNotice({ state: 'disabled' }).show, false);
+  assert.equal(updateNotice({ state: 'checking' }).show, false);
+  assert.equal(updateNotice({ state: 'unavailable', error: 'feed request failed (22)' }).show, false);
+  const available = updateNotice({ state: 'available', installed: '0.2.1-preview.8', latest });
+  assert.equal(available.show, true);
+  assert.match(available.label, /0\.2\.1-preview\.9/);
+  assert.match(available.line, /사용자가 직접/);
+  const unknown = updateNotice({ state: 'unknown_installed', latest });
+  assert.equal(unknown.show, true);
+  assert.match(unknown.label, /최신 0\.2\.1-preview\.9/);
+});
+test('update guide lists both Hosts, never a command, and offers Companion only on Windows', () => {
+  const win = updateGuide({ platform: 'windows-x64', installed: '0.1.1-owner.7', latest });
+  assert.equal(win.companion, true);
+  assert.ok(win.steps.some(s => /업데이트 확인/.test(s)) && win.steps.some(s => /Claude Desktop/.test(s)));
+  const mac = updateGuide({ platform: 'darwin-arm64', installed: '0.2.1-preview.8', latest });
+  assert.equal(mac.companion, false);
+  assert.ok(mac.steps.some(s => /Codex/.test(s)) && mac.steps.some(s => /Claude Desktop/.test(s)));
+  for (const guide of [win, mac]) {
+    assert.ok(guide.steps.every(s => !/curl|npm|cargo|brew|\$ /.test(s)), 'guidance is prose, not commands');
+    assert.ok(guide.steps.some(s => s.includes(latest.release_url)));
+  }
+});

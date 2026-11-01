@@ -2,7 +2,8 @@
 
 GIL은 공개 opt-in preview 단계다. 안정판이나 상시 지원 서비스가 아니다.
 지원 플랫폼과 검수 범위는 [README](README.md)와 [Roadmap](spec/GIL_Roadmap.md)을 참고한다.
-첫 채널은 Codex/macOS Apple Silicon의 unsigned preview이며 [설치 안내](distribution/codex/INSTALL.md)를 따른다.
+현재 채널은 macOS Apple Silicon과 Windows x64의 unsigned preview이며, Codex와 Claude Desktop(Claude Code 탭)을
+같은 지원 대상으로 둔다. [설치 안내](INSTALL.md)의 네 조합 표를 따른다.
 
 ## 일반 질문·화면 문제·기능 제안
 

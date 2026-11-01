@@ -521,10 +521,12 @@ Companion settings를 쓰는 동안에도 GIL read adapter의 read-only 불변�
 | Host 표면 | Host 광고 | 요청 응답·event | 실측 범위 |
 | --- | --- | --- | --- |
 | Codex | inline, fullscreen | fullscreen | 오른쪽 패널과 대화 병행, 사용자 유지 확인 |
-| Claude Desktop Code | inline | inline | 지속형 fullscreen 표면 아님 |
-| Claude Desktop Cowork | inline, fullscreen | fullscreen | 확대 화면과 입력창 병행 |
+| Claude Desktop Code (2.9939.x, 2026-09-23) | inline | inline | 지속형 fullscreen 표면 아님 |
+| Claude Desktop Cowork (2026-09-23) | inline, fullscreen | fullscreen | 확대 화면과 입력창 병행 |
+| Claude Desktop Claude Code 탭 (4.4212.0, 2026-10-31) | inline, fullscreen | 사용자 동작 안의 요청만 fullscreen | inline 카드 뒤 첫 클릭에 펼침, 직접 등록 경로, 사용자 확인 |
 
-제품 기본은 **Codex / Claude Desktop Cowork의 MCP fullscreen**으로 옮긴다. PiP 성공이라고
+제품 기본은 **Codex / Claude Desktop(Claude Code 탭)의 MCP fullscreen**으로 옮긴다(2026-09-23 결정은 Cowork였고
+위 실측 행을 보존한다. 2026-11-02 갱신). PiP 성공이라고
 부르지 않는다. Companion은 삭제·축소하지 않고 Windows 검수와 Host 수명 미달에 대비해 유지한다.
 진단판 성공은 실제 GIL Project, live refresh, 작업 전환 및 재시작 검수와 별개다.
 

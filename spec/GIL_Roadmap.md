@@ -545,6 +545,14 @@ M6-D에서는 사람이 **Monitor의 승인/수정 요청 버튼**으로 정확�
       줄을 맨 아래로, 보조 손잡이를 머리줄로. Claude Code 탭 inline 카드는 사용자 확인("어울린다", 11/01).
       Codex는 연결 정보로 `chatgpt` 26.1027이 변수 76개·dark를 보내고 자동 fullscreen 유지 확인(11/01). Host
       분기 불필요. Codex dark 화면도 사용자 확인("어울린다"). 보지 않은 쪽 테마와 Claude Code 연결 정보 값은 남김.
+- [~] 2026-11-02: Codex와 Claude Desktop(Claude Code 탭)을 같은 지원 대상으로 정리. Windows Companion에
+      **Claude Desktop 연결** adapter(`companion/src/claude.rs`, 같은 고정 런처, Desktop 꺼진 상태에서만 백업·원자
+      교체·동시 변경 검사로 `claude_desktop_config.json` 편집), Windows Plugin 후보에 `.claude-plugin` 동봉, Monitor·
+      작업 폴더 문구의 Codex 전제 제거, INSTALL.md에 OS×Host 네 조합 상태표. Claude Code 탭의 등록 자리가 Desktop
+      설정 파일임을 소유자 Mac에서 확인. Windows Claude 버튼 경로의 실제 화면·업데이트 뒤 두 Host 버전 일치는
+      사용자 확인 대기([11/02 진단](../mcp-app/CLAUDE-DESKTOP-ROUTES.md)). 같은 날 Monitor에 **업데이트 안내**
+      버튼 추가: Core가 저장소 `update-feed.json`을 하루 1회 metadata만 읽고(끄기 가능) 두 OS·두 Host의 절차를 글로
+      보여 준다. 실제 Host 화면 확인 대기([Companion 계약 §13](GIL_Companion_Install_Update_v0.1.md)).
 - [ ] Desktop 일반 대화·Cowork·Code·터미널 CLI의 관측을 분리하고 한 경로의 성공을 다른
       경로의 성공으로 일반화하지 않는다. 직접 등록 probe와 Plugin 설치 경로도 구분한다.
 - [ ] 공용 Core·MCP·UI 계약 변경은 별도 branch/PR에서 영향과 Codex 회귀를 확인한 뒤 통합한다.

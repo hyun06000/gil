@@ -93,6 +93,7 @@ export function makeHost(app, initial, { now = Date.now, presence = () => ({}) }
     async tick() {
       const hint = await call('gil_monitor_poll', presence()); // counter only; no world scan
       await watchNotice(hint.watching);
+      if (hint.update) await emit('gil://update', hint.update);
       if (now() >= nextRead && (failures > 0 || hint.revision !== cursor || now() - worked >= RECONCILE_MS)) {
         await emit('gil://refresh');
       }

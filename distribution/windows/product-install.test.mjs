@@ -63,7 +63,7 @@ test('owner acceptance has a separate unsigned installer identity and cannot emi
   assert.doesNotMatch(script, /certificateThumbprint|timestampUrl/);
 });
 
-test('Companion keeps Codex connection visible and discovers the Desktop CLI without PATH', async () => {
+test('Companion keeps Host connections visible and discovers the Codex Desktop CLI without PATH', async () => {
   const clients = await read('companion/src/clients.rs');
   assert.match(clients, /cli_found: bool/);
   assert.match(clients, /join\("OpenAI"\).*join\("Codex"\).*join\("bin"\)/s);
@@ -72,12 +72,45 @@ test('Companion keeps Codex connection visible and discovers the Desktop CLI wit
   assert.match(clients, /starts_with\("codex-cli "\)/);
 
   const ui = await read('ui/companion.js');
-  assert.match(ui, /function showCodexUnavailable/);
-  assert.match(ui, /connectCodexButton\.hidden = false/);
-  assert.match(ui, /Codex 연결 다시 시도/);
+  assert.match(ui, /function showHostUnavailable\(key, message\)/);
+  assert.match(ui, /button\.hidden = false/);
+  assert.match(ui, /\$\{host\.label\} 연결 다시 시도/);
   assert.match(ui, /capability\.cli_found === false/);
   const startup = ui.slice(ui.indexOf('async function start()'));
-  assert.doesNotMatch(startup, /catch \(error\) \{\s*connectCodexButton\.hidden = true;/);
+  assert.match(startup, /for \(const key of Object\.keys\(HOSTS\)\) await startHostConnection\(key\)/);
+  assert.doesNotMatch(startup, /catch \(error\) \{\s*button\.hidden = true;/);
+  // Both Hosts have their own handle in the shared markup; the fixture Host keeps them hidden.
+  const markup = await read('ui/index.html');
+  assert.match(markup, /class="connect-host" data-host="codex" type="button" hidden/);
+  assert.match(markup, /class="connect-host" data-host="claude" type="button" hidden/);
+  assert.match(await read('ui/selftest.js'), /\.connect-host, \.update/);
+});
+
+test('Claude Desktop registration edits only its own entry, backs up, writes atomically and refuses a running Desktop', async () => {
+  const claude = await read('companion/src/claude.rs');
+  assert.match(claude, /claude_desktop_config\.json/);
+  assert.match(claude, /APPDATA/);
+  assert.match(claude, /Library.*Application Support.*Claude/s);
+  assert.match(claude, /pub const SERVER_NAME: &str = "gil"/);
+  assert.match(claude, /fn is_gil_executable/);
+  assert.match(claude, /\.gil-backup-/);
+  assert.match(claude, /create_new\(true\)/);
+  assert.match(claude, /sync_all\(\)/);
+  assert.match(claude, /fs::rename\(&temporary, path\)/);
+  assert.match(claude, /읽은 뒤에 바뀌어서 쓰지 않았다/);
+  assert.match(claude, /fn refuse_while_running/);
+  assert.match(claude, /IMAGENAME eq Claude\.exe/);
+  assert.match(claude, /pgrep.*"-x", "Claude"/s);
+  assert.match(claude, /이름이 같은 다른 gil 등록이 있다\. 자동으로 덮어쓰지 않는다/);
+  assert.match(claude, /GIL 실행 파일이 아니라서 교체하지 않는다/);
+  // Same launcher as Codex: one update serves both Hosts.
+  assert.match(claude, /use crate::clients::\{Registration, launcher_path, runtime_version\}/);
+  const main = await read('companion/src/main.rs');
+  for (const command of ['claude_capability', 'claude_connection', 'connect_claude', 'disconnect_claude', 'repair_claude_connection'])
+    assert.match(main, new RegExp(`claude::${command}`));
+  const host = await read('companion/src/host.js');
+  for (const door of ['claudeCapability', 'claudeConnection', 'connectClaude', 'disconnectClaude', 'repairClaudeConnection'])
+    assert.match(host, new RegExp(`async ${door}\\(\\)`));
 });
 
 test('installer stages immutable Core bytes and switches a recoverable receipt', async () => {
@@ -165,7 +198,7 @@ test('release GUI does not open a Windows console', async () => {
   assert.match(await read('companion/src/main.rs'), /windows_subsystem = "windows"/);
 });
 
-test('Codex registration is explicit, uses the official CLI shape, and does not overwrite', async () => {
+test('Host registration is explicit, uses the official Codex CLI shape, and does not overwrite', async () => {
   const clients = await read('companion/src/clients.rs');
   assert.match(clients, /\["mcp", "add", "gil", "--"\]/);
   assert.match(clients, /gil-launcher\.exe/);
@@ -178,18 +211,20 @@ test('Codex registration is explicit, uses the official CLI shape, and does not 
   assert.match(clients, /gil-companion-prototype/);
 
   const ui = await read('ui/companion.js');
-  const connect = ui.indexOf('async function connectCodex');
-  assert.ok(connect >= 0);
-  const body = ui.slice(connect, ui.indexOf('async function start', connect));
-  assert.ok(body.indexOf('window.confirm(') < body.indexOf('window.GIL_HOST.connectCodex()'));
-  const disconnect = ui.indexOf('async function disconnectCodex');
-  assert.ok(disconnect > connect);
-  const disconnectBody = ui.slice(disconnect, ui.indexOf('async function refreshCodexConnection', disconnect));
-  assert.ok(disconnectBody.indexOf('window.confirm(') < disconnectBody.indexOf('window.GIL_HOST.disconnectCodex()'));
-  const repair = ui.indexOf('async function repairCodexConnection');
-  assert.ok(repair > disconnect);
-  const repairBody = ui.slice(repair, ui.indexOf('async function refreshCodexConnection', repair));
-  assert.ok(repairBody.indexOf('window.confirm(') < repairBody.indexOf('window.GIL_HOST.repairCodexConnection()'));
+  // Every Host goes through the same three handlers; each asks before touching the Host.
+  for (const [name, door] of [['connectHost', 'connect'], ['disconnectHost', 'disconnect'], ['repairHostConnection', 'repair']]) {
+    const at = ui.indexOf(`async function ${name}(key)`);
+    assert.ok(at >= 0, name);
+    const body = ui.slice(at, ui.indexOf('\n}\n', at));
+    assert.ok(body.indexOf('window.confirm(') < body.indexOf(`hostApi(key, "${door}")()`), `${name} asks first`);
+  }
+  // The user's chosen Host alone changes; the handler never reads the other Host's state.
+  const refresh = ui.slice(ui.indexOf('async function refreshHostConnection(key)'), ui.indexOf('function showHostUnavailable'));
+  assert.match(refresh, /hostApi\(key, "connection"\)\(\)/);
+  assert.doesNotMatch(refresh, /hostState\.codex|hostState\.claude/);
+  assert.match(refresh, /"conflict"/);
+  assert.match(refresh, /등록된 실행 파일/);
+  for (const key of ['codex', 'claude']) assert.match(ui, new RegExp(`^  ${key}: \\{$`, 'm'));
 });
 
 test('signed product CI is manual, secret-gated, installed, and exercised before retention', async () => {

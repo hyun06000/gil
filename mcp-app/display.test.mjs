@@ -350,3 +350,29 @@ test('without Host styles nothing is applied and the evidence says so', async ()
   assert.deepEqual(JSON.parse(f.element('host-evidence').textContent).styles,
     { theme: null, variables: 0, fonts: false });
 });
+
+test('update guidance shows a button from Core metadata and a text panel on click, never a request', async () => {
+  const f = fixture();
+  const node = () => { const n = { children: [], textContent: '', hidden: false };
+    n.appendChild = c => n.children.push(c); n.replaceChildren = () => { n.children = []; }; return n; };
+  f.document.createElement = () => node();
+  const panel = f.element('update-guide'); panel.replaceChildren = () => { panel.children = []; }; panel.appendChild = c => (panel.children ??= []).push(c);
+  f.connected.resolve(); await settle();
+  const latest = { version: '0.1.1-owner.8', release_url: 'https://github.com/hyun06000/gil/releases/tag/x', install_doc: 'https://github.com/hyun06000/gil/blob/main/INSTALL.md', notes: 'n' };
+  const boot = f.app.ontoolresult({ ...data, update: { state: 'available', platform: 'windows-x64', installed: '0.1.1-owner.7', latest } });
+  await settle(); f.rendered.resolve(); await boot; await settle();
+  assert.equal(f.element('update').hidden, false);
+  assert.match(f.element('update').textContent, /0\.1\.1-owner\.8/);
+  assert.match(f.element('host-evidence').textContent, /"latest": "0\.1\.1-owner\.8"/);
+  const before = f.native.length;
+  await f.element('update').onclick();
+  assert.equal(panel.hidden, false);
+  assert.ok(panel.children.some(c => c.children?.some(li => /업데이트 확인/.test(li.textContent))), 'Windows steps mention the Companion button');
+  assert.equal(f.native.length, before, 'opening the guide calls no tool');
+  // An up-to-date Core hides the button again and closes the panel.
+  const g = fixture(); g.connected.resolve(); await settle();
+  const boot2 = g.app.ontoolresult({ ...data, update: { state: 'up_to_date', platform: 'darwin-arm64', installed: '0.2.1-preview.8', latest: { ...latest, version: '0.2.1-preview.8' } } });
+  await settle(); g.rendered.resolve(); await boot2; await settle();
+  assert.equal(g.element('update').hidden, true);
+  assert.equal(g.element('update-guide').hidden, true);
+});

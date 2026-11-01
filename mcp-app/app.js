@@ -2,7 +2,7 @@ import { App, applyDocumentTheme, applyHostStyleVariables, applyHostFonts } from
 import { makePlanReview } from './plans.mjs';
 import { makeRecoveryReview } from './recovery.mjs';
 import { makeHost, unwrap, retryAfter, connectionMessage } from './host.mjs';
-import { graphOrientation, initialFullscreen, hostIdentity, hostStyles, styleEvidence } from './presentation.mjs';
+import { graphOrientation, initialFullscreen, hostIdentity, hostStyles, styleEvidence, updateNotice, updateGuide } from './presentation.mjs';
 
 const app = new App({ name: 'GIL Monitor', version: '0.1.0' },
   { availableDisplayModes: ['inline', 'fullscreen'] });
@@ -128,6 +128,44 @@ for (const [id, mode] of [['expand', 'fullscreen'], ['inline', 'inline']]) {
     await requestMode(mode);
   };
 }
+// Update guidance: the Core's metadata becomes one button and a text panel. Opening the panel
+// runs nothing; the only action inside is the existing "open Companion" tool on Windows.
+let updateInfo = null, updateKey = null;
+function renderUpdate(update) {
+  if (!update || typeof update !== 'object') return;
+  const key = JSON.stringify([update.state, update.latest?.version, update.installed, update.error]);
+  if (key === updateKey) return;
+  updateKey = key; updateInfo = update;
+  evidence.update = { state: update.state, installed: update.installed ?? null, latest: update.latest?.version ?? null,
+    checked_at: update.checked_at ?? null, error: update.error ?? null };
+  const notice = updateNotice(update);
+  const button = el('update');
+  button.hidden = !notice.show;
+  if (notice.show) button.textContent = notice.label;
+  // New information collapses an open guide, so it is re-read from the current metadata.
+  el('update-guide').hidden = true;
+  if (notice.line && notice.show) modes(notice.line); else modes();
+}
+el('update').onclick = () => {
+  const panel = el('update-guide');
+  if (panel.hidden === false) { panel.hidden = true; return; }
+  const guide = updateGuide(updateInfo);
+  panel.replaceChildren();
+  const h = document.createElement('h2'); h.textContent = guide.title; panel.appendChild(h);
+  const list = document.createElement('ol');
+  for (const step of guide.steps) { const li = document.createElement('li'); li.textContent = step; list.appendChild(li); }
+  panel.appendChild(list);
+  if (guide.companion) {
+    const open = document.createElement('button'); open.type = 'button'; open.textContent = 'Companion 열기';
+    open.onclick = () => el('native').onclick();
+    panel.appendChild(open);
+  }
+  const small = document.createElement('small');
+  small.textContent = '이 화면은 안내만 합니다. 다운로드·설치는 사용자가 Companion 또는 설치 안내의 절차로 직접 진행합니다. 확인을 끄려면 Host 의 서버 환경에 GIL_UPDATE_CHECK=off 를 두거나 Monitor 상태 폴더에 update-check.off 파일을 둡니다.';
+  panel.appendChild(small);
+  panel.hidden = false;
+};
+
 el('native').onclick = async () => {
   initialDisplay.cancel(); clearTimeout(retryTimer); retryTimer = undefined;
   pending = true; modes('별도 Monitor 창을 요청하는 중…');
@@ -178,6 +216,7 @@ app.ontoolresult = async (result) => {
     if (data.plan_review_supported) planReview = makePlanReview({ app, scope: data.scope_id,
       panel: el('plan-review'), banner: el('plan-banner'), document, changed: () => { refreshOnReturn = true; } });
     window.GIL_HOST = makeHost(app, data, { presence });
+    window.GIL_HOST.listen('gil://update', renderUpdate);
     if (data.revisit_review_supported) {
       recoveryReview = makeRecoveryReview({app, scope:data.scope_id, panel:el('revisit-review'), document, changed:() => { refreshOnReturn = true; planNeedsRefresh = true; }});
       window.GIL_HOST.listen('gil://refresh', () => { recoveryReadAt = 0; });
@@ -197,6 +236,7 @@ app.ontoolresult = async (result) => {
     rendererReady = true;
     modes();
     if (!data.watching) modes('변화 감시를 시작하지 못했습니다. 수동 새로고침과 5분 재조회는 사용할 수 있습니다.');
+    renderUpdate(data.update);
     poll();
     maybeFullscreen();
   } catch (err) { renderFailed = true; void reportPresence(); modes(err?.said || 'Monitor 데이터를 받지 못했습니다. Project 를 지정해 다시 열어 주세요.'); }
@@ -230,7 +270,7 @@ app.connect().then(() => {
   modes(context.availableDisplayModes?.includes('fullscreen')
     ? 'Monitor 가 준비되면 전체 화면을 자동 요청합니다. 그대로라면 모니터 펼치기를 눌러 주세요.'
     : Array.isArray(context.availableDisplayModes)
-      ? '이 표면은 펼친 Monitor 를 지원하지 않습니다. Codex 또는 Claude Desktop Cowork 에서 다시 열거나 별도 창을 사용하세요.'
+      ? '이 표면은 펼친 Monitor 를 지원하지 않습니다. fullscreen 을 지원하는 Host(Codex, Claude Desktop 의 Claude Code 탭)에서 다시 열거나 별도 창을 사용하세요.'
       : 'Host 의 표시 모드 지원 정보를 기다리고 있습니다.');
   void poll();
   maybeFullscreen();

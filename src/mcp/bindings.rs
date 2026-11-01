@@ -98,20 +98,24 @@ impl Binding {
 #[derive(Debug)]
 pub(super) struct Store { dir: Option<PathBuf> }
 
+/// The per-user Monitor state directory: explicit override, else the platform default.
+/// Shared by the consent store and the update-notice cache; never inside a Project.
+pub(super) fn default_state_dir() -> Option<PathBuf> {
+    let dir = if let Some(at) = std::env::var_os("GIL_MONITOR_STATE_DIR") { Some(PathBuf::from(at)) }
+    else if cfg!(target_os = "macos") {
+        std::env::var_os("HOME").map(|p| PathBuf::from(p).join("Library/Application Support/GIL/monitor-bindings-v1"))
+    } else if cfg!(windows) {
+        std::env::var_os("LOCALAPPDATA").map(|p| PathBuf::from(p).join("GIL/monitor-bindings-v1"))
+    } else {
+        std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|p| PathBuf::from(p).join(".config")))
+            .map(|p| p.join("gil/monitor-bindings-v1"))
+    };
+    dir.filter(|p| p.is_absolute())
+}
+
 impl Default for Store {
-    fn default() -> Self {
-        let dir = if let Some(at) = std::env::var_os("GIL_MONITOR_STATE_DIR") { Some(PathBuf::from(at)) }
-        else if cfg!(target_os = "macos") {
-            std::env::var_os("HOME").map(|p| PathBuf::from(p).join("Library/Application Support/GIL/monitor-bindings-v1"))
-        } else if cfg!(windows) {
-            std::env::var_os("LOCALAPPDATA").map(|p| PathBuf::from(p).join("GIL/monitor-bindings-v1"))
-        } else {
-            std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from)
-                .or_else(|| std::env::var_os("HOME").map(|p| PathBuf::from(p).join(".config")))
-                .map(|p| p.join("gil/monitor-bindings-v1"))
-        };
-        Self { dir: dir.filter(|p| p.is_absolute()) }
-    }
+    fn default() -> Self { Self { dir: default_state_dir() } }
 }
 
 impl Store {

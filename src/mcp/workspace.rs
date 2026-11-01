@@ -73,7 +73,7 @@ pub fn call(input: Value) -> CallToolResult {
     };
     // Checked, not guaranteed: outside the roots OneDrive declares and without cloud-files
     // attributes. Other synchronization products are not detected (contract §8 1b).
-    let note = "사용자가 별도 로컬 작업 폴더를 명시적으로 요청한 경우에만 쓰는 선택 기능이다. OneDrive 안의 기존 작업 폴더를 옮길 필요는 없다. 폴더를 만드는 것과 Codex의 작업 폴더로 선택하는 것은 별개다.";
+    let note = "사용자가 별도 로컬 작업 폴더를 명시적으로 요청한 경우에만 쓰는 선택 기능이다. OneDrive 안의 기존 작업 폴더를 옮길 필요는 없다. 폴더를 만드는 것과 Host 앱(Codex 또는 Claude Desktop)에서 작업 폴더로 선택하는 것은 별개다.";
     let shown = plan.path.display().to_string();
     if !request.confirm {
         return CallToolResult::structured(json!({"ok": true, "stage": "planned", "path": shown,
@@ -92,7 +92,7 @@ pub fn call(input: Value) -> CallToolResult {
         Ok(created) => CallToolResult::structured(json!({"ok": true, "stage": "prepared", "path": shown,
             "parent": plan.parent.display().to_string(), "created_parent": plan.creates_parent,
             "created_by_this_call": created.iter().map(|p| p.display().to_string()).collect::<Vec<_>>(),
-            "said": format!("새 작업 폴더를 만들었다: {}. 이제 Codex 앱에서 이 폴더를 작업 폴더로 선택해 달라고 안내하고 기다린다. {}", plan.path.display(), note)})),
+            "said": format!("새 작업 폴더를 만들었다: {}. 이제 사용 중인 Host 앱(Codex 또는 Claude Desktop)에서 이 폴더를 작업 폴더로 선택해 달라고 안내하고 기다린다. {}", plan.path.display(), note)})),
         Err(failure) => with_created(refuse(failure.refusal), &failure.created),
     }
 }

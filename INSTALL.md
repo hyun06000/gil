@@ -1,9 +1,31 @@
 # GIL 설치 안내
 
 이 문서가 친구·외부 시험 사용자를 위한 설치 정본이다. 사용자는 터미널 사용법을 알 필요가 없다.
-설치 도움을 받는 경우 **로컬 폴더를 연 Codex 대화**에 아래 요청문을 붙여넣고, Agent가 앱에 포함된
-`codex` CLI와 OS 기본 도구를 사용한다. 일반 ChatGPT/Work 대화처럼 로컬 명령을 실행할 수 없는
-환경에서는 설치하지 않는다.
+GIL은 **Codex**와 **Claude Desktop의 Claude Code 탭**을 같은 지원 대상으로 둔다. 두 Host는 같은 Core,
+같은 Monitor UI, 같은 작업 규칙(`src/mcp/workflow.md`)을 쓰며, 다른 것은 설치·연결 방법뿐이다.
+여기서 “Claude”는 **Claude Desktop 안의 Claude Code 탭**을 뜻한다. 터미널 Claude Code, 일반 Chat 탭,
+Cowork의 결과를 이 환경의 결과로 대신 적지 않는다.
+
+설치 도움을 받는 경우 **로컬 폴더를 연 Codex 대화 또는 Claude Code 탭**에 아래 요청문을 붙여넣고,
+Agent가 앱에 포함된 CLI와 OS 기본 도구를 사용한다. 일반 ChatGPT/Work 대화처럼 로컬 명령을 실행할 수
+없는 환경에서는 설치하지 않는다.
+
+## 네 조합의 지원 상태 (2026-11-02)
+
+| OS | Codex | Claude Desktop (Claude Code 탭) |
+|---|---|---|
+| Windows 11 x64 | **실기기 확인** — Companion installer `0.1.1-owner.8`, **Codex 연결** 버튼 | **사용자 확인 대기** — 다음 Windows 후보의 **Claude Desktop 연결** 버튼(자동 테스트만 통과); owner.8은 직접 등록 |
+| macOS Apple Silicon | **실기기 확인** — Plugin `0.2.1-preview.9` 또는 Git 없는 archive | **사용자 확인(11/01)** — 같은 archive의 Core를 Desktop 설정에 직접 등록. Plugin 경로는 화면 미표시 |
+
+상태의 뜻:
+
+- **실기기 확인** — 사용자가 실제 화면(Monitor, fullscreen, 파일 작업)을 보고 확인했다.
+- **사용자 확인** — 특정 날짜·버전·경로에서 사용자가 화면을 확인했다. 아래 절에 범위를 적는다.
+- **자동 테스트만 통과** — 단위·계약·패키징 시험은 통과했지만 실제 앱 화면은 아직 아무도 보지 않았다.
+- **사용자 확인 대기** — 설치본과 절차는 있고, 사용자의 실제 확인만 남았다.
+
+두 Host 모두에서 Interview 종료, Experiment, Verify 파일 증거, Analysis, Outcome 학습, Monitor 승인
+규칙은 같은 Core 계약이 강제한다. Host별 workflow 사본은 없다.
 
 ## 현재 제공하는 시험판
 
@@ -18,6 +40,9 @@ Monitor 승인 버튼 → Interview 닫기 → 계획 항목별 Experiment → V
 되돌려도 형식 7 기록은 이전 형식으로 바뀌지 않는다. 닫힌 실패 Cycle의 revisit만 Monitor에서 변경 목록 확인·보존 승인을 거쳐 진행한다. 일반 restore와 Step revisit는 계속 차단한다.
 검증 범위와 정확한 배포물은 [게시 장부](distribution/codex/PREVIEW-10-PUBLICATION-20261102.md)에 남긴다.
 
+> 아래 Windows **Claude Desktop 연결** 버튼과 Monitor의 **업데이트 안내**는 `0.1.1-owner.8`·`0.2.1-preview.9`에 **아직 없다**.
+> 이 저장소의 다음 후보(이 변경을 포함한 빌드)부터 들어간다. owner.8 사용자는 Windows 절의 “직접 등록(임시)”을 따른다.
+
 둘 다 정식 서명판이 아니다. Windows Authenticode와 Apple Developer ID/공증을 제공하지 않는다.
 파일 hash는 손상·바이트 일치를 확인하지만 제작자 서명을 대신하지 않는다. OS가 정상적인 사용자 확인
 절차를 제공하면 대상·버전을 확인하고 선택할 수 있지만, 보안 기능을 끄거나 quarantine·SmartScreen·
@@ -25,7 +50,8 @@ Defender·Gatekeeper·ACL을 변경해 실행을 강제하지 않는다.
 
 설치와 업데이트는 Project 폴더나 `.gil` 기록을 삭제·이관하지 않는다. 기존 설치가 발견되면 Agent는
 출처와 버전을 먼저 보여 주고 사용자 승인 전에는 제거·교체하지 않는다. Plugin cache, Codex 설정 파일,
-registry를 손으로 편집하지 않는다.
+Claude Desktop 설정 파일, registry를 Agent가 손으로 편집하지 않는다. Claude Desktop 설정 파일은
+Companion의 버튼(Windows) 또는 아래 절차의 사용자 승인 뒤 **Desktop을 완전히 종료한 상태**에서만 바꾼다.
 
 ## Windows 11 x64
 
@@ -36,22 +62,51 @@ registry를 손으로 편집하지 않는다.
 - SHA-256: `d54b470a1905d9e15a7c5f93579d762df65773b75e41549272c4afe34cba8ca4`
 - 지원: x64만. ARM64 Windows에는 설치하지 않는다.
 
+Windows에서는 Host가 어느 쪽이든 Core는 한 곳에 있다. installer가 `%LOCALAPPDATA%\GIL\runtime\`에
+**고정 런처** `gil-launcher.exe`와 버전별 Core `versions\<버전>\gil.exe`, 선택 기록 `current.json`을 둔다.
+Codex와 Claude Desktop 모두 **고정 런처**를 등록하므로 업데이트 뒤에도 등록을 바꾸지 않으며,
+한쪽 Host만 새 버전으로 바뀌거나 구버전 경로를 계속 가리키는 일이 없다.
+
 사용자 절차:
 
 1. 위 릴리스에서 정확한 x64 설치 파일을 받는다.
 2. 파일명·크기·SHA-256을 확인하고 실행한다. 별도 관리자 권한은 요구하지 않는다.
 3. 설치 후 시작 메뉴에서 **GIL Companion (Unsigned Test)**를 연다.
-4. Companion에서 **Codex 연결**을 누른다. 이전 GIL이 있으면 표시되는 교체 내용을 확인한 뒤 승인한다.
-5. Codex를 다시 열고 새 대화에서 빈 테스트 폴더를 선택한다.
+4. 쓰는 Host의 버튼을 누른다. 두 버튼은 각각 그 Host만 바꾼다.
+   - **Codex 연결** — 공식 `codex mcp add` 명령으로 고정 런처를 등록한다. 이전 GIL이 있으면 표시되는
+     **이전 GIL 연결 교체** 내용을 확인한 뒤 승인한다.
+   - **Claude Desktop 연결** — `%APPDATA%\Claude\claude_desktop_config.json`의 `mcpServers.gil`에 고정
+     런처를 적는다. **Claude Desktop을 완전히 종료한 뒤** 눌러야 한다. 실행 중이면 Companion이 거절한다
+     (Desktop은 실행 중에 자체 설정을 같은 파일에 다시 써서 바깥 편집을 되돌릴 수 있다). 다른 MCP 서버
+     항목과 사용자가 직접 만든 동명 `gil` 등록은 건드리지 않으며, 이전 GIL 실행 파일을 가리키는 `gil`
+     항목만 **이전 GIL 연결 교체**로 바꿀 수 있다. 바꾸기 전 같은 폴더에 백업
+     `claude_desktop_config.json.gil-backup-<시각>`을 남긴다(최근 5개 보관).
+5. Host를 (다시) 열고 새 대화에서 빈 테스트 폴더를 선택한다.
 6. **“지금 폴더에서 GIL 프로젝트를 시작해 줘”**라고 말하고 실제 Monitor와 첫 단계가 보이는지 확인한다.
+   Claude Code 탭에서는 Monitor가 inline 카드로 먼저 뜨고 **카드를 한 번 클릭하면** fullscreen으로
+   펼쳐진다(아래 macOS Claude 절의 Host 동작과 같다).
+
+**직접 등록(임시, owner.8 사용자용).** owner.8 Companion에는 Claude Desktop 버튼이 없다. Claude Desktop을
+완전히 종료한 뒤 `%APPDATA%\Claude\claude_desktop_config.json`의 `mcpServers`에 다음 항목을 더하고 Desktop을
+다시 연다. `<사용자>`는 실제 Windows 사용자 이름이다. 버전 폴더가 아니라 **고정 런처**를 적는다.
+
+```json
+"gil": {
+  "command": "C:\\Users\\<사용자>\\AppData\\Local\\GIL\\runtime\\gil-launcher.exe",
+  "args": ["mcp", "--serve"]
+}
+```
 
 업데이트는 자동 적용하지 않는다. Companion의 **업데이트 확인** 후 사용자가 **업데이트**를 눌렀을 때만
-설치 창이 열린다. 기존 Codex 대화와 Core는 종료하지 않아도 되며 기존 연결은 기존 Core를 계속 쓰고,
-업데이트 뒤 만든 새 연결부터 새 Core를 사용한다. 설치 창이 실패하면 기존 선택과 Project는 보존되어야
-하며, 같은 버전 재설치는 정상적인 복구 설치로 끝나야 한다.
+설치 창이 열린다. Codex·Claude Desktop과 기존 GIL 대화는 종료하지 않아도 되며, 기존 연결은 기존 Core를
+계속 쓰고 업데이트 뒤 만든 새 연결부터 새 Core를 사용한다. 두 Host가 같은 고정 런처를 쓰므로 업데이트
+뒤 등록을 다시 할 필요가 없다. 설치 창이 실패하면 기존 선택과 Project는 보존되어야 하며, 같은 버전
+재설치는 정상적인 복구 설치로 끝나야 한다. Companion 머리줄의 `Core <버전>`은 **다음 새 연결**이 받을
+Core이고, 이미 열린 대화는 열 때의 Core를 끝까지 쓴다.
 
-제거 순서는 **Companion의 Codex 연결 해제 → 열린 GIL 대화 닫기 → Windows 앱 제거**다. 현재 제거기는
-실행 중 연결과 Project를 보호하기 위해 `%LOCALAPPDATA%\GIL\runtime`과 모든 `.gil` 기록을 보존한다.
+제거 순서는 **Companion의 Codex 연결 해제·Claude Desktop 연결 해제 → 열린 GIL 대화 닫기 → Windows 앱
+제거**다. 현재 제거기는 실행 중 연결과 Project를 보호하기 위해 `%LOCALAPPDATA%\GIL\runtime`과 모든
+`.gil` 기록을 보존한다.
 
 상세한 Agent 대응은 [Windows 설치 안내](distribution/windows/INSTALL.md)를 따른다.
 
@@ -66,6 +121,13 @@ registry를 손으로 편집하지 않는다.
 - archive 크기: `3,537,685` bytes
 - archive SHA-256: `803395f40ca59dde28b9faa8e83c1b3bed82e7c423b41f2a490e10e8e68fefd6`
 - 지원: Apple Silicon(`arm64`)만. Intel Mac에는 설치하지 않는다.
+
+archive 하나가 Codex용 `.agents/plugins/marketplace.json`과 Claude Code용 `.claude-plugin/marketplace.json`,
+같은 Core(`plugins/gil-companion-prototype/core/darwin-arm64/gil`)를 함께 담는다.
+macOS에는 아직 고정 런처와 Companion 버튼이 없다. Codex는 Plugin 관리자가 버전을 관리하고, Claude Desktop은
+**풀어 둔 버전 폴더의 Core를 직접 등록**한다. 그래서 macOS Claude 사용자는 **업데이트 뒤 등록 경로를
+새 버전 폴더로 다시 가리켜야 한다**(아래 “업데이트” 참고). 이 차이는 macOS Companion 런처가 들어올 때까지
+남는 제한이다.
 
 ### Codex에 붙여넣을 요청
 
@@ -123,8 +185,12 @@ codex plugin list --json으로 상태를 다시 읽어 끝나지 않은 단계�
 ### Claude Desktop(Claude Code 탭)에서 쓰기
 
 Claude Desktop의 **Claude Code** 탭에서도 같은 Core와 Monitor UI를 쓴다. Codex와 별도 제품이 아니다.
+Claude Desktop(Claude Code 탭 포함)은 MCP 서버를 자기 설정 파일
+`~/Library/Application Support/Claude/claude_desktop_config.json`에서 읽는다(2026-11-02 확인: 이 Mac의 Claude
+Code 탭이 그 파일의 `gil` 항목을 서비스로 띄웠고, 사용자 범위 `~/.claude.json`에는 서버가 없었다).
 2026-10-31 Desktop 4.4212.0 실측에서 **Desktop 설정에 직접 등록한 MCP 서버**의 Monitor는 inline 카드와
-**모니터 펼치기** fullscreen까지 사용자가 확인했다. 반면 **Plugin으로 설치한 서버**는 설치와 도구 호출이
+**모니터 펼치기** fullscreen까지 사용자가 확인했고, 2026-11-01에는 이 저장소 빌드(`dev-20261101-local`)의
+inline 카드가 주변 대화와 어울린다고 확인했다. 반면 **Plugin으로 설치한 서버**는 설치와 도구 호출이
 성공해도 Host가 App을 화면에 그리지 않았다(세 빌드·두 설치 방식 모두). 따라서 지금 Claude에서 Monitor를
 보는 경로는 직접 등록이다. 자세한 근거는 [호출 경로별 진단](mcp-app/CLAUDE-DESKTOP-ROUTES.md)을 본다.
 
@@ -132,12 +198,12 @@ Claude Desktop의 **Claude Code** 탭에서도 같은 Core와 Monitor UI를 쓴�
 사용자 전용 새 폴더(`$HOME/Library/Application Support/GIL/<버전>-local`, 0700)에 푼다. preview.10 archive는 최상위에 Codex용 `.agents/plugins/marketplace.json`과 Claude Code용
 `.claude-plugin/marketplace.json`을 함께 담는다. 이전 `0.2.1-preview.7` archive에는 `.claude-plugin`이 없다.
 
-**2단계 — 직접 등록(현재 화면이 성립하는 경로).** 먼저 Claude Desktop을 **완전히 종료**한다. Desktop은
-실행 중에 자체 설정을 같은 파일에 다시 쓰므로, 켜진 상태에서 고친 내용은 되돌아갈 수 있다(10/31 실측).
-종료한 뒤 `~/Library/Application Support/Claude/claude_desktop_config.json`의 `mcpServers`에 아래 항목을
-더하고 Desktop을 다시 연다.
-`<폴더>`는 1단계의 실제 절대경로다. 공용 작업 규칙은 Rust MCP 서버에 포함되어 Plugin Skill 없이도
-도구 설명과 `gil_help`로 전달된다.
+**2단계 — 직접 등록(현재 화면이 성립하는 경로).** 먼저 Claude Desktop을 **완전히 종료**한다(Dock에서
+종료, 주 프로세스 `Claude`가 없어야 한다. 브라우저 확장이 띄우는 보조 프로세스는 남아 있어도 된다).
+Desktop은 실행 중에 자체 설정을 같은 파일에 다시 쓰므로, 켜진 상태에서 고친 내용은 되돌아갈 수 있다
+(10/31 실측). 종료한 뒤 설정 파일의 `mcpServers`에 아래 항목을 더하고 Desktop을 다시 연다. 다른 서버
+항목은 그대로 둔다. `<폴더>`는 1단계의 실제 절대경로다. 공용 작업 규칙은 Rust MCP 서버에 포함되어 Plugin
+Skill 없이도 도구 설명과 `gil_help`로 전달된다.
 
 ```json
 "gil": {
@@ -145,6 +211,26 @@ Claude Desktop의 **Claude Code** 탭에서도 같은 Core와 Monitor UI를 쓴�
   "args": ["mcp", "--serve"]
 }
 ```
+
+Claude Code 탭에 붙여넣어 Agent에게 맡길 수 있는 요청문:
+
+```text
+GIL unsigned preview 0.2.1-preview.8을 Claude Desktop에 직접 등록해 줘. 내가 터미널을 직접 조작하게 하지 마.
+위 Git 없는 경로 그대로 archive를 받아 크기·SHA-256·tar 멤버를 검증하고
+$HOME/Library/Application Support/GIL/preview.8-local 에 풀어. 기존 폴더는 덮어쓰지 마.
+그다음 ~/Library/Application Support/Claude/claude_desktop_config.json 을 읽어 지금 mcpServers 에 무엇이
+있는지 보여 주고, gil 항목이 이미 있으면 어떤 실행 파일을 가리키는지 알려 준 뒤 내 승인을 기다려.
+내가 승인하면: Claude Desktop 이 완전히 종료됐는지(주 프로세스 Claude 가 없는지) 확인하고, 설정 파일을
+같은 폴더에 백업한 뒤, 다른 항목은 그대로 두고 mcpServers.gil 만 위 Core 경로와 ["mcp","--serve"] 로 적어.
+Desktop 이 실행 중이면 쓰지 말고 종료를 요청해. 쓰고 나서 파일을 다시 읽어 결과를 보여 줘.
+Gatekeeper 나 quarantine, 권한은 바꾸지 마. 화면이 실제로 보이기 전에는 Monitor 가 열렸다고 말하지 마.
+```
+
+**업데이트(macOS Claude).** 새 preview가 나오면 1단계를 새 `<버전>-local` 폴더에 반복하고, Desktop을
+완전히 종료한 뒤 `gil` 항목의 `command`를 새 폴더의 Core로 바꾼다. 이전 폴더는 지우지 않아도 된다(열린
+대화가 그 Core를 쓸 수 있다). 등록을 바꾸지 않으면 **Claude는 구버전 Core를 계속 쓰고 Codex Plugin만 새
+버전이 되므로** 두 Host의 버전이 어긋난다. Monitor **연결 정보**의 `host`·GIL 버전과 `gil_help`의 서버
+버전으로 어느 Core에 연결됐는지 확인한다.
 
 **2단계(대안) — Plugin 설치.** 아래 절차로 설치는 되지만, 2026-10-31 현재 Claude Code 탭은 Plugin 서버의
 Monitor App을 화면에 그리지 않는다. Host가 고쳐졌는지 확인하는 용도로만 쓰고, 설치 성공을 화면 성공으로
@@ -168,9 +254,27 @@ claude plugin install gil-companion-prototype@gil-preview-macos-arm64
 설치 뒤 **새 세션**을 열고 빈 테스트 폴더에서 **“지금 폴더에서 GIL 프로젝트를 시작해 줘”**라고 말한다.
 Agent의 도구 성공 문장과 실제 화면을 구분한다. Claude Code 탭은 사용자 동작 없이 보낸 표시 모드 요청을 적용하지
 않으므로(10/31 실측) Monitor는 inline 카드로 먼저 뜨고, **카드를 한 번 클릭하면** fullscreen으로 펼쳐진다.
-Codex처럼 자동으로 펼쳐지지는 않는다. Monitor의 **연결 정보**에는 Host가 보고한 이름·버전과
-광고한 표시 모드가 그대로 적히므로, 문제를 제보할 때 그 값을 함께 적는다. fullscreen 중 다른 도구의
-승인 창이 보이지 않으면 **대화 안으로**를 눌러 inline으로 돌아간 뒤 승인한다.
+Codex처럼 자동으로 펼쳐지지는 않는다. fullscreen 지원과 “항상 자동으로 열림”은 다른 것이다. Monitor의
+**연결 정보**에는 Host가 보고한 이름·버전과 광고한 표시 모드가 그대로 적히므로, 문제를 제보할 때 그 값을
+함께 적는다. fullscreen 중 다른 도구의 승인 창이 보이지 않으면 **대화 안으로**를 눌러 inline으로 돌아간 뒤
+승인한다.
+
+## Monitor의 업데이트 안내
+
+설치된 Core는 저장소의 [업데이트 피드](distribution/update-feed.json)를 **하루 한 번, metadata만** 읽어
+(OS 내장 `curl`, HTTPS만, 64KB 한도) 새 버전이 있으면 Monitor 맨 아래 표시 모드 줄에 **“새 버전 X 있음 · 업데이트
+안내”** 버튼을 띄운다. 버튼은 OS별 절차를 글로 보여 줄 뿐 다운로드·설치·등록 변경을 하지 않는다.
+
+- Windows: Companion → **업데이트 확인** → **업데이트** 절차와 **Companion 열기** 버튼. 두 Host가 같은 고정 런처를
+  쓰므로 재연결은 필요 없다.
+- macOS: Codex에 붙여넣을 업데이트 요청문과, Claude Desktop 직접 등록의 경로 재지정 절차(위 “업데이트(macOS Claude)”).
+
+설치 버전은 Core가 놓인 자리(Windows `runtime\versions\<버전>\`, Mac Plugin의 `.codex-plugin/plugin.json`)에서
+읽는다. 개발용 빌드는 설치본이 아니므로 확인하지 않는다. 설치 버전을 못 읽으면 “최신 X · 업데이트 안내”로만 표시한다.
+확인을 끄려면 Host의 MCP 서버 환경에 `GIL_UPDATE_CHECK=off`를 두거나 Monitor 상태 폴더
+(macOS `~/Library/Application Support/GIL/monitor-bindings-v1`, Windows `%LOCALAPPDATA%\GIL\monitor-bindings-v1`)에
+`update-check.off` 파일을 둔다. 결과와 마지막 확인 시각은 Monitor **연결 정보**의 `update`에 적힌다.
+새 버전을 게시할 때는 게시 장부와 같은 PR에서 피드 파일을 갱신한다.
 
 ## 실패 후 revisit가 막힌 기존 프로젝트 이어가기
 
@@ -203,7 +307,13 @@ Codex처럼 자동으로 펼쳐지지는 않는다. Monitor의 **연결 정보**
 | 같은 marketplace 또는 Plugin이 이미 있음 | 출처·버전을 보여 주고 사용자 승인 전에는 교체하지 않음 |
 | archive 크기/hash/member 검사가 실패 | 압축 해제·등록하지 않고 원문 오류와 생성된 임시 파일만 보고 |
 | 설치 명령은 성공했지만 화면이 없음 | 설치 성공과 UI 성공을 구분하고 새 대화·선택 폴더·실제 Monitor를 확인 |
+| Claude Desktop 설정을 고쳤는데 다시 열면 되돌아감 | Desktop이 실행 중이었다. 완전히 종료(주 프로세스 없음)한 뒤 다시 고치고 연다 |
+| Companion의 Claude Desktop 연결이 “실행 중” 거절 | Claude Desktop을 완전히 종료한 뒤 다시 누른다 |
+| Claude Desktop에 다른 `gil` 등록이 있음 | GIL은 사용자가 만든 동명 등록을 바꾸지 않는다. 그 등록을 직접 정리한 뒤 다시 연결 |
+| Claude에서 Monitor가 inline 카드로만 뜸 | 정상 동작이다. 카드를 한 번 클릭하면 펼쳐진다. 펼쳐지지 않으면 연결 정보 값과 함께 제보 |
 | OneDrive 폴더의 `.gil` 권한 거절 | Project를 자동 이동하거나 ACL을 강제 변경하지 않고 동기화 밖 로컬 폴더 선택을 안내 |
 
-오류 보고에는 OS/CPU, Codex 버전, GIL 버전, 설치 단계와 오류 원문만 포함한다. 개인 경로·대화·token·
-`.gil` 내용은 첨부하지 않는다. 보안 문제는 공개 issue가 아니라 [보안 안내](SECURITY.md)를 따른다.
+오류 보고에는 OS/CPU, Host 이름과 버전(Codex 버전 또는 Claude Desktop 버전과 탭 이름), 연결 방식(Plugin /
+직접 등록 / Companion 버튼), GIL 버전, 설치 단계와 오류 원문만 포함한다. Monitor가 떴다면 **연결 정보**의
+`host`·`advertised`·`current` 값을 함께 적는다. 개인 경로·대화·token·`.gil` 내용은 첨부하지 않는다.
+보안 문제는 공개 issue가 아니라 [보안 안내](SECURITY.md)를 따른다.

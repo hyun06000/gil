@@ -435,11 +435,12 @@ check("14. UI 에 쓰기 길이 없다 — .gil·Artifact·Journey·Will 을 건
   // ② 사람이 누를 수 있는 것은 **읽는 손잡이**뿐이다.
   // `목록에서 빼기` 도 읽는 손잡이다 — 이 창의 설정에서 한 칸을 지울 뿐, Project 의
   // 파일은 하나도 건드리지 않는다(§9.1.2). Rust 시험이 그 바이트를 지킨다.
-  const allowed = [".node", ".fold", ".cycle-report-hit", ".scope .open", ".scope .refresh", ".scope .forget"];
+  const allowed = [".node", ".fold", ".cycle-report-hit", ".scope .open", ".scope .refresh", ".scope .forget",
+    ".zoom-tools .zoom-in", ".zoom-tools .zoom-out", ".zoom-tools .zoom-reset"];
   for (const button of all("button")) {
     // Native application-management controls exist in shared markup but must stay
     // hidden when this fixture Host has no corresponding capability.
-    if (button.matches('.connect-codex, .update')) {
+    if (button.matches('.connect-host, .update')) {
       if (!button.hidden) throw new Error(`지원하지 않는 관리 button 이 보인다: .${button.className}`);
       continue;
     }
@@ -487,6 +488,8 @@ check("15. Project 마다 server·port·capability URL 이 없다", async () => 
 
 check("16. 좁은 창과 넓은 창 모두 control·node·카드가 겹치거나 잘리지 않는다", async () => {
   const map = at(".map");
+  // 스크롤은 `.map` 이 아니라 그 안의 viewport 가 한다 — 닿을 수 있는 범위는 거기서 읽는다.
+  const scroller = at(".map .viewport");
   const told = [];
   try {
     for (const width of [360, 520, 900]) {
@@ -514,9 +517,9 @@ check("16. 좁은 창과 넓은 창 모두 control·node·카드가 겹치거나
       const left = card.left - stage.left;
       const right = card.right - stage.left;
       if (left < -0.5) throw new Error(`${width}px: 카드가 왼쪽으로 잘렸다 (${left}px)`);
-      if (right > map.scrollWidth + 0.5)
+      if (right > scroller.scrollWidth + 0.5)
         throw new Error(`${width}px: 카드가 스크롤로도 닿지 않는다`);
-      if (card.bottom - stage.top > map.scrollHeight + 0.5)
+      if (card.bottom - stage.top > scroller.scrollHeight + 0.5)
         throw new Error(`${width}px: 카드가 아래로 잘렸다`);
       told.push(`${width}✓`);
     }
@@ -1008,7 +1011,9 @@ check("32. Project 를 오가도 절대 방향이 유지된다", async () => {
 // 여기서 재는 것은 **bundle 의 자동 스크롤**이다. 시험이 측정을 위해 직접 굴리는 것과
 // 섞지 않는다 — 아래 검사들은 스스로 스크롤하지 않고, 스크롤이 **저절로** 일어났는지만 본다.
 
-const viewport = () => ({ left: at(".map").scrollLeft, top: at(".map").scrollTop });
+// 스크롤 상자는 `.map .viewport` 다. `.map` 자체는 미니맵·확대 손잡이를 띄우는 틀일 뿐 구르지 않는다.
+const scrollBox = () => at(".map .viewport");
+const viewport = () => ({ left: scrollBox().scrollLeft, top: scrollBox().scrollTop });
 const showsAll = (node) => {
   const room = boxOf(at(".map"));
   const box = boxOf(node);
@@ -1018,8 +1023,8 @@ const showsAll = (node) => {
 
 check("33. 화면 밖 Step 을 고르면 그 자리와 카드가 viewport 안으로 들어온다", async () => {
   await show("fixture:dense");
-  at(".map").scrollTop = 0;
-  at(".map").scrollLeft = 0;
+  scrollBox().scrollTop = 0;
+  scrollBox().scrollLeft = 0;
   await wait(60);
   const far = C().plan().nodes.at(-1);            // 가장 아래 — 처음엔 보이지 않는다
   const node = at(`[data-step="${far.ref}"]`);
@@ -1038,8 +1043,8 @@ check("33. 화면 밖 Step 을 고르면 그 자리와 카드가 viewport 안으
 
 check("34. 이미 자리와 카드가 다 보이면 scroll 을 건드리지 않는다", async () => {
   await show("fixture:dense");
-  at(".map").scrollTop = 0;
-  at(".map").scrollLeft = 0;
+  scrollBox().scrollTop = 0;
+  scrollBox().scrollLeft = 0;
   await wait(60);
 
   // 첫 선택은 **카드까지** 보이게 하려고 조금 움직일 수 있다 — 그것이 규칙이다.

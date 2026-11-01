@@ -47,6 +47,7 @@
 mod adapter;
 mod appmenu;
 mod autostart;
+mod claude;
 mod clients;
 mod geometry;
 mod handshake;
@@ -119,6 +120,11 @@ fn main() {
             clients::connect_codex,
             clients::disconnect_codex,
             clients::repair_codex_connection,
+            claude::claude_capability,
+            claude::claude_connection,
+            claude::connect_claude,
+            claude::disconnect_claude,
+            claude::repair_claude_connection,
         ])
         .setup(|app| {
             let handle = app.handle().clone();

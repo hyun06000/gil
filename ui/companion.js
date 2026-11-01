@@ -20,6 +20,8 @@ import {
   cardArrow, ROW_H, NODE_R, SELECTED_NODE_R, BOX_W,
 } from "./layout.js";
 import { cycleReportDetail } from './cycle-report.js';
+import { clampZoom, stepZoom, zoomAround, minimapFrame, minimapViewport, scrollToMinimapPoint, minimapNeeded }
+  from './viewport.mjs';
 import { progressTracker, progressSummary } from './progress.mjs';
 
 const observeProgress = progressTracker();
@@ -40,11 +42,17 @@ const mapSection = el(".map");
 const openButton = el(".scope .open");
 const refreshButton = el(".scope .refresh");
 const forgetButton = el(".scope .forget");
-const connectCodexButton = el(".scope .connect-codex");
+const connectHostButtons = Array.from(root.querySelectorAll(".scope .connect-host"));
 const updateButton = el(".scope .update");
 const runtimeStatus = el(".title .runtime");
 const settingsSay = el(".settings-say");
 const stage = el(".stage");
+const viewport = el(".map .viewport");
+const zoomBox = el(".map .zoom");
+const minimap = el(".map .minimap");
+const zoomInButton = el(".zoom-tools .zoom-in");
+const zoomOutButton = el(".zoom-tools .zoom-out");
+const zoomResetButton = el(".zoom-tools .zoom-reset");
 const wires = el(".stage .wires");
 const layer = el(".stage .layer");
 const cardLayer = el(".stage .cards");
@@ -67,7 +75,6 @@ let current = null; // { scopeId, view, seat, plan }
 let orientation = "vertical"; // presentation only; native defaults remain unchanged
 let detailRequest = 0;
 let noticeOwner = null;
-let codexConnection = "unknown";
 
 /** Host 가 준 거절의 **종류**를 사람의 말로.
  *
@@ -120,8 +127,8 @@ const WORKING = {
   opening: "Project 를 읽는 중",
   refreshing: "다시 읽는 중",
   updating: "업데이트를 확인하는 중",
-  connecting: "Codex에 연결하는 중",
-  disconnecting: "Codex 연결을 해제하는 중",
+  connecting: "Host 에 연결하는 중",
+  disconnecting: "Host 연결을 해제하는 중",
 };
 /** 중복 눌림만 그 손잡이로 막는다. 창 전체를 잠그지 않는다. */
 const busyOn = (what, button) => {
@@ -337,8 +344,7 @@ function drawCardArrow(arrow, from, tip) {
 /** 고른 node 옆의 짧은 요약 카드와, 그 둘을 잇는 굵고 반투명한 화살표. */
 function drawCard() {
   cardLayer.innerHTML = "";
-  stage.style.minWidth = `${current.plan.width}px`;
-  stage.style.height = `${current.plan.height}px`;
+  fitStage(current.plan.width, current.plan.height);
   const seat = current.seat;
   if (!seat.selectedStep && !seat.selectedCycle) return;
   let anchor = seat.selectedCycle
@@ -386,8 +392,7 @@ function drawCard() {
     card.style.top = `${y}px`;
     const width = Math.max(current.plan.width, x + cardW + 8);
     const height = Math.max(current.plan.height, y + cardH + 8);
-    stage.style.minWidth = `${width}px`;
-    stage.style.height = `${height}px`;
+    fitStage(width, height);
     const tipX = Math.max(x + 10, Math.min(anchor.x, x + cardW - 10));
     const tipY = y - 5;
     const arrow = svg("svg", { class: "arrow", viewBox: `0 0 ${width} ${height}`, width, height });
@@ -407,7 +412,7 @@ function drawCard() {
   card.style.left = `${x}px`;
   card.style.top = `${y}px`;
   // 카드가 설 자리까지 무대가 지닌다 — 그래야 잘리지 않고 스크롤로 닿는다.
-  stage.style.minWidth = `${Math.max(current.plan.width, x + cardW + 8)}px`;
+  fitStage(Math.max(current.plan.width, x + cardW + 8), current.plan.height);
 
   // 화살표는 node 중심에서 카드의 가까운 모서리로. **화살촉은 언제나 카드 쪽이다.**
   const arrow = svg("svg", { class: "arrow" });
@@ -501,7 +506,7 @@ function revealSelection() {
     : a;
   // 가장자리에 딱 붙지 않게 조금 물린다.
   const edge = 8;
-  const room = map;
+  const room = viewport;
   room.scrollLeft = leastScroll(both.l - edge, both.r + edge, room.scrollLeft, room.clientWidth);
   room.scrollTop = leastScroll(both.t - edge, both.b + edge, room.scrollTop, room.clientHeight);
 }
@@ -511,15 +516,118 @@ function renderGraph() {
   current.plan = place(current.view, current.seat.collapsed, orientation);
   map.dataset.orientation = orientation;
   layer.innerHTML = "";
-  stage.style.height = `${current.plan.height}px`;
-  stage.style.minWidth = `${current.plan.width}px`;
+  fitStage(current.plan.width, current.plan.height);
   drawEdges();
   drawCycles();
   drawNodes();
   drawCard();
   giveBackTheirPlace(stood);
   revealSelection();
+  drawMinimap();
 }
+
+// ── 확대와 미니맵 ────────────────────────────────────────────────────
+//
+// plan 의 좌표는 그대로 두고 stage 하나에 `scale()` 을 건다. 스크롤 자리는 zoom 상자가 (plan 크기 × 배율)
+// 만큼 지니므로 Host 의 스크롤바가 실제 크기를 안다. 배율은 이 창이 사는 동안의 화면 상태다 —
+// `.gil`·View·detail 로 나가지 않고, Project 를 바꿔도 그대로다(사람의 눈높이이지 Project 의 사실이 아니다).
+let zoom = 1;
+let stageSize = { width: 0, height: 0 };
+function fitStage(width, height) {
+  stageSize = { width, height };
+  stage.style.width = `${width}px`;
+  stage.style.minWidth = `${width}px`;
+  stage.style.height = `${height}px`;
+  applyZoom();
+}
+function applyZoom() {
+  stage.style.transform = zoom === 1 ? "" : `scale(${zoom})`;
+  zoomBox.style.width = `${Math.ceil(stageSize.width * zoom)}px`;
+  zoomBox.style.height = `${Math.ceil(stageSize.height * zoom)}px`;
+  zoomResetButton.textContent = `${Math.round(zoom * 100)}%`;
+  zoomInButton.disabled = zoom >= 2.5;
+  zoomOutButton.disabled = zoom <= 0.4;
+  map.dataset.zoom = String(zoom);
+}
+/** 배율을 바꾸되 `pointer`(viewport 기준) 아래의 자리는 그대로 둔다. 없으면 가운데를 기준으로 삼는다. */
+function setZoom(next, pointer = null) {
+  const to = clampZoom(next);
+  if (to === zoom) return;
+  const from = zoom;
+  const anchor = pointer || { x: viewport.clientWidth / 2, y: viewport.clientHeight / 2 };
+  const scroll = zoomAround({ scrollLeft: viewport.scrollLeft, scrollTop: viewport.scrollTop }, anchor, from, to);
+  zoom = to;
+  applyZoom();
+  viewport.scrollLeft = scroll.scrollLeft;
+  viewport.scrollTop = scroll.scrollTop;
+  drawMinimap();
+}
+zoomInButton.onclick = () => setZoom(stepZoom(zoom, +1));
+zoomOutButton.onclick = () => setZoom(stepZoom(zoom, -1));
+zoomResetButton.onclick = () => { setZoom(1); revealSelection(); };
+// Ctrl/⌘ + 휠은 브라우저 확대 대신 Graph 확대다. 일반 휠은 그대로 스크롤이다.
+viewport.addEventListener("wheel", (event) => {
+  if (!(event.ctrlKey || event.metaKey)) return;
+  event.preventDefault();
+  const box = viewport.getBoundingClientRect();
+  setZoom(stepZoom(zoom, event.deltaY < 0 ? +1 : -1), { x: event.clientX - box.left, y: event.clientY - box.top });
+}, { passive: false });
+
+/** 미니맵: 전체 Graph 를 작은 상자에, 지금 보이는 범위를 네모로. 끌면 그 자리로 굴러간다. */
+let minimapFrameNow = null;
+// SVG 요소에는 `hidden` property 가 없다 — attribute 로만 다룬다.
+const hideMinimap = () => minimap.setAttribute("hidden", "");
+function drawMinimap() {
+  if (!current || !current.plan || !current.plan.nodes.length) { hideMinimap(); return; }
+  const view = { scrollLeft: viewport.scrollLeft, scrollTop: viewport.scrollTop,
+    clientWidth: viewport.clientWidth, clientHeight: viewport.clientHeight };
+  if (!minimapNeeded(stageSize, zoom, view)) { hideMinimap(); return; }
+  const frame = minimapFrame(stageSize);
+  minimapFrameNow = frame;
+  minimap.removeAttribute("hidden");
+  minimap.setAttribute("width", frame.width);
+  minimap.setAttribute("height", frame.height);
+  minimap.setAttribute("viewBox", `0 0 ${frame.width} ${frame.height}`);
+  minimap.innerHTML = "";
+  for (const cycle of current.plan.cycles || []) {
+    const bounds = cycleBounds(current.plan, cycle);
+    if (!bounds) continue;
+    minimap.appendChild(svg("rect", { class: "mini-cycle", x: bounds.x * frame.scale, y: bounds.y * frame.scale,
+      width: Math.max(1, bounds.width * frame.scale), height: Math.max(1, bounds.height * frame.scale), rx: 2 }));
+  }
+  for (const node of current.plan.nodes) {
+    const r = Math.max(1.5, radiusOf(node) * frame.scale);
+    const attrs = { cx: node.x * frame.scale, cy: node.y * frame.scale, r };
+    minimap.appendChild(node.kind === "cycle"
+      ? svg("circle", { class: "mini-cycle-node", ...attrs })
+      : svg("circle", { class: "mini-step", "data-kind": node.stepKind, "data-here": String(node.here), ...attrs }));
+  }
+  const seen = minimapViewport(frame, stageSize, zoom, view);
+  minimap.appendChild(svg("rect", { class: "mini-view", x: seen.x, y: seen.y, width: seen.width, height: seen.height, rx: 1.5 }));
+}
+function minimapPointOf(event) {
+  const box = minimap.getBoundingClientRect();
+  return { x: Math.min(box.width, Math.max(0, event.clientX - box.left)),
+    y: Math.min(box.height, Math.max(0, event.clientY - box.top)) };
+}
+function scrollToMinimap(event) {
+  if (!minimapFrameNow) return;
+  const view = { clientWidth: viewport.clientWidth, clientHeight: viewport.clientHeight };
+  const target = scrollToMinimapPoint(minimapFrameNow, zoom, view, minimapPointOf(event));
+  viewport.scrollLeft = target.scrollLeft;
+  viewport.scrollTop = target.scrollTop;
+}
+let draggingMinimap = false;
+minimap.addEventListener("pointerdown", (event) => {
+  draggingMinimap = true;
+  minimap.setPointerCapture?.(event.pointerId);
+  scrollToMinimap(event);
+  event.preventDefault();
+});
+minimap.addEventListener("pointermove", (event) => { if (draggingMinimap) scrollToMinimap(event); });
+for (const end of ["pointerup", "pointercancel"]) minimap.addEventListener(end, () => { draggingMinimap = false; });
+// 스크롤과 창 크기 변화는 보이는 범위의 네모만 옮긴다. Graph 를 다시 그리지 않는다.
+viewport.addEventListener("scroll", () => { if (current) drawMinimap(); }, { passive: true });
 
 function setOrientation(next) {
   if (!["vertical", "horizontal"].includes(next)) throw new Error("unknown DAG orientation");
@@ -848,8 +956,9 @@ async function showScope(scopeId) {
   layer.innerHTML = "";
   wires.innerHTML = "";
   cardLayer.innerHTML = "";
-  map.scrollLeft = 0;
-  map.scrollTop = 0;
+  viewport.scrollLeft = 0;
+  viewport.scrollTop = 0;
+  hideMinimap();
   renderDetail(null);
 
   markFresh();
@@ -940,15 +1049,16 @@ async function checkForUpdate() {
       `GIL Companion ${found.version} 업데이트를 설치할까요?` +
       `\n현재 버전: ${found.current_version}` +
       "\n\n다운로드가 끝나면 Windows 설치창이 열립니다." +
-      "\n\nCodex는 닫지 않아도 됩니다. 기존 GIL 대화는 현재 Core로 계속되고, " +
-      "새 대화부터 새 Core를 사용합니다. 설치 중에는 GIL Companion만 닫힐 수 있습니다." +
+      "\n\nCodex는 닫지 않아도 됩니다. Claude Desktop도 닫지 않아도 됩니다. 기존 GIL 대화는 현재 Core로 계속되고, " +
+      "새 대화부터 새 Core를 사용합니다. 연결된 모든 Host 가 같은 고정 런처를 쓰므로 한쪽만 바뀌는 일은 없습니다. " +
+      "설치 중에는 GIL Companion만 닫힐 수 있습니다." +
       notes,
     );
     if (!approved) return;
     working.textContent = "서명된 업데이트를 내려받는 중 — 완료되면 설치창이 열립니다";
     await window.GIL_HOST.installUpdate(found.version);
     say(
-      "업데이트 설치를 시작했다. Codex와 기존 GIL 대화는 계속 사용할 수 있다. " +
+      "업데이트 설치를 시작했다. Codex·Claude Desktop 과 기존 GIL 대화는 계속 사용할 수 있다. " +
       "Windows에서는 Companion만 닫힐 수 있으며 새 대화부터 새 Core가 적용된다.",
     );
   } catch (error) {
@@ -958,94 +1068,167 @@ async function checkForUpdate() {
   }
 }
 
-async function connectCodex() {
-  busyOn("connecting", connectCodexButton);
+// ── Host 연결 — Codex 와 Claude Desktop, 같은 손잡이 하나씩 ──────────────────
+//
+// 두 Host 는 **같은 고정 런처**를 등록한다. 다른 것은 등록을 적는 자리(공식 CLI / Desktop 설정
+// 파일)와 사람에게 보이는 이름뿐이다. 이 bundle 은 그 차이를 모른다 — Host 가 준 문의 이름과
+// 사람의 말만 다르다. 사용자가 고른 Host 하나만 바꾸고, 다른 Host 의 등록은 읽지도 않는다.
+const HOSTS = {
+  codex: {
+    label: "Codex",
+    capability: "codexCapability", connection: "codexConnection",
+    connect: "connectCodex", disconnect: "disconnectCodex", repair: "repairCodexConnection",
+    connectAsk: "Codex 사용자 설정에 GIL MCP 연결을 추가할까요?\n기존 gil 등록은 덮어쓰지 않습니다.",
+    disconnectAsk: "Codex에서 GIL MCP 연결을 해제할까요?\n열려 있는 GIL 대화는 닫은 뒤 앱 제거를 계속하세요.",
+    repairAsk: "예전 GIL 플러그인 또는 연결을 제거하고, 지금 설치된 GIL Core로 교체할까요?\n다른 플러그인과 Project 파일은 건드리지 않습니다.",
+    connectTitle: "공식 Codex CLI로 GIL MCP를 등록한다",
+    repairTitle: "사용자 확인 후 예전 GIL 플러그인·연결을 제거하고 설치된 Core에 연결한다",
+    toolMissing: "Codex 앱의 연결 도구를 찾지 못했다. Codex를 완전히 종료했다 다시 연 뒤 재시도한다.",
+  },
+  claude: {
+    label: "Claude Desktop",
+    capability: "claudeCapability", connection: "claudeConnection",
+    connect: "connectClaude", disconnect: "disconnectClaude", repair: "repairClaudeConnection",
+    connectAsk: "Claude Desktop 설정에 GIL MCP 연결을 추가할까요?\n기존 gil 등록은 덮어쓰지 않습니다. " +
+      "Claude Desktop 이 실행 중이면 먼저 완전히 종료해야 합니다(실행 중 바뀐 설정은 되돌아갈 수 있습니다).",
+    disconnectAsk: "Claude Desktop에서 GIL MCP 연결을 해제할까요?\n열려 있는 GIL 대화는 닫은 뒤 앱 제거를 계속하세요. " +
+      "Claude Desktop 이 실행 중이면 먼저 완전히 종료해야 합니다.",
+    repairAsk: "예전 GIL 연결을 지금 설치된 GIL 고정 런처로 교체할까요?\n다른 MCP 서버와 Project 파일은 건드리지 않습니다. " +
+      "Claude Desktop 이 실행 중이면 먼저 완전히 종료해야 합니다.",
+    connectTitle: "Claude Desktop 설정 파일(claude_desktop_config.json)에 GIL 고정 런처를 등록한다. Claude Code 탭도 같은 설정을 읽는다",
+    repairTitle: "사용자 확인 후 다른 GIL 실행 파일을 가리키는 gil 등록을 설치된 고정 런처로 교체한다",
+    toolMissing: "Claude Desktop 설정 폴더를 찾지 못했다. Claude Desktop을 설치하고 한 번 실행한 뒤 재시도한다.",
+  },
+};
+const hostState = { codex: "unknown", claude: "unknown" };
+const hostButton = (key) => connectHostButtons.find((one) => one.dataset.host === key);
+const hostApi = (key, name) => window.GIL_HOST[HOSTS[key][name]];
+
+async function connectHost(key) {
+  const host = HOSTS[key], button = hostButton(key);
+  busyOn("connecting", button);
   try {
-    const approved = window.confirm(
-      "Codex 사용자 설정에 GIL MCP 연결을 추가할까요?\n기존 gil 등록은 덮어쓰지 않습니다.",
-    );
-    if (!approved) return;
-    say(await window.GIL_HOST.connectCodex());
-    await refreshCodexConnection();
+    if (!window.confirm(host.connectAsk)) return;
+    say(await hostApi(key, "connect")());
+    await refreshHostConnection(key);
   } catch (error) {
-    say(`Codex에 연결하지 못했다 — ${why(error)}`);
+    say(`${host.label}에 연결하지 못했다 — ${why(error)}`);
   } finally {
-    busyOff(connectCodexButton);
-    connectCodexButton.disabled = codexConnection === "conflict";
+    busyOff(button);
+    button.disabled = hostState[key] === "conflict";
   }
 }
 
-async function disconnectCodex() {
-  busyOn("disconnecting", connectCodexButton);
+async function disconnectHost(key) {
+  const host = HOSTS[key], button = hostButton(key);
+  busyOn("disconnecting", button);
   try {
-    const approved = window.confirm(
-      "Codex에서 GIL MCP 연결을 해제할까요?\n열려 있는 GIL 대화는 닫은 뒤 앱 제거를 계속하세요.",
-    );
-    if (!approved) return;
-    say(await window.GIL_HOST.disconnectCodex());
-    await refreshCodexConnection();
+    if (!window.confirm(host.disconnectAsk)) return;
+    say(await hostApi(key, "disconnect")());
+    await refreshHostConnection(key);
   } catch (error) {
-    say(`Codex 연결을 해제하지 못했다 — ${why(error)}`);
+    say(`${host.label} 연결을 해제하지 못했다 — ${why(error)}`);
   } finally {
-    busyOff(connectCodexButton);
-    connectCodexButton.disabled = codexConnection === "conflict";
+    busyOff(button);
+    button.disabled = hostState[key] === "conflict";
   }
 }
 
-async function repairCodexConnection() {
-  busyOn("connecting", connectCodexButton);
+async function repairHostConnection(key) {
+  const host = HOSTS[key], button = hostButton(key);
+  busyOn("connecting", button);
   try {
-    const approved = window.confirm(
-      "예전 GIL 플러그인 또는 연결을 제거하고, 지금 설치된 GIL Core로 교체할까요?\n다른 플러그인과 Project 파일은 건드리지 않습니다.",
-    );
-    if (!approved) return;
-    say(await window.GIL_HOST.repairCodexConnection());
-    await refreshCodexConnection();
+    if (!window.confirm(host.repairAsk)) return;
+    say(await hostApi(key, "repair")());
+    await refreshHostConnection(key);
   } catch (error) {
-    say(`Codex 연결을 교체하지 못했다 — ${why(error)}`);
+    say(`${host.label} 연결을 교체하지 못했다 — ${why(error)}`);
   } finally {
-    busyOff(connectCodexButton);
+    busyOff(button);
   }
 }
 
-async function refreshCodexConnection() {
-  const connection = await window.GIL_HOST.codexConnection();
-  codexConnection = connection.state;
-  connectCodexButton.hidden = false;
-  connectCodexButton.disabled = false;
-  if (codexConnection === "connected") {
-    connectCodexButton.textContent = "Codex 연결 해제";
-    connectCodexButton.title = "GIL이 만든 MCP 등록만 확인 후 해제한다";
-    connectCodexButton.onclick = disconnectCodex;
-  } else if (codexConnection === "not_connected") {
-    connectCodexButton.textContent = "Codex 연결";
-    connectCodexButton.title = "공식 Codex CLI로 GIL MCP를 등록한다";
-    connectCodexButton.onclick = connectCodex;
+/** 연결 상태는 **그 Host 하나**를 다시 읽어 정한다. 다른 Host 의 상태를 섞지 않는다. */
+async function refreshHostConnection(key) {
+  const host = HOSTS[key], button = hostButton(key);
+  const connection = await hostApi(key, "connection")();
+  hostState[key] = connection.state;
+  button.hidden = false;
+  button.disabled = false;
+  // 등록이 가리키는 실행 파일을 그대로 보여 준다 — 사람이 옛 버전 폴더의 Core 와 고정 런처를 구분할 수 있게.
+  const registered = connection.command ? `\n등록된 실행 파일: ${connection.command}` : "";
+  const running = connection.desktop_running === true
+    ? `\n${host.label} 이 실행 중이다 — 설정을 바꾸기 전에 완전히 종료한다.` : "";
+  if (hostState[key] === "connected") {
+    button.textContent = `${host.label} 연결 해제`;
+    button.title = `GIL이 만든 MCP 등록만 확인 후 해제한다${registered}${running}`;
+    button.onclick = () => disconnectHost(key);
+  } else if (hostState[key] === "not_connected") {
+    button.textContent = `${host.label} 연결`;
+    button.title = `${host.connectTitle}${running}`;
+    button.onclick = () => connectHost(key);
+  } else if (hostState[key] === "conflict") {
+    // 사용자가 직접 만든 동명 등록. 읽기만 하고 바꾸지 않는다.
+    button.textContent = `${host.label} 에 다른 gil 등록 있음`;
+    button.title = `이름이 같은 다른 gil 등록이 있어 GIL 이 바꾸지 않는다${registered}`;
+    button.disabled = true;
+    button.onclick = null;
   } else {
-    connectCodexButton.textContent = "이전 GIL 연결 교체";
-    connectCodexButton.title = "사용자 확인 후 예전 GIL 플러그인·연결을 제거하고 설치된 Core에 연결한다";
-    connectCodexButton.onclick = repairCodexConnection;
+    button.textContent = `${host.label} 이전 GIL 연결 교체`;
+    button.title = `${host.repairTitle}${registered}${running}`;
+    button.onclick = () => repairHostConnection(key);
   }
 }
 
-function showCodexUnavailable(message) {
-  codexConnection = "unavailable";
-  connectCodexButton.hidden = false;
-  connectCodexButton.disabled = false;
-  connectCodexButton.textContent = "Codex 연결 다시 시도";
-  connectCodexButton.title = message;
-  connectCodexButton.onclick = async () => {
-    busyOn("connecting", connectCodexButton);
+function showHostUnavailable(key, message) {
+  const host = HOSTS[key], button = hostButton(key);
+  hostState[key] = "unavailable";
+  button.hidden = false;
+  button.disabled = false;
+  button.textContent = `${host.label} 연결 다시 시도`;
+  button.title = message;
+  button.onclick = async () => {
+    busyOn("connecting", button);
     try {
-      await refreshCodexConnection();
-      say("Codex 연결 상태를 다시 확인했다.");
+      await refreshHostConnection(key);
+      say(`${host.label} 연결 상태를 다시 확인했다.`);
     } catch (error) {
-      showCodexUnavailable(why(error));
-      say(`Codex 연결 상태를 확인하지 못했다 — ${why(error)}`);
+      showHostUnavailable(key, why(error));
+      say(`${host.label} 연결 상태를 확인하지 못했다 — ${why(error)}`);
     } finally {
-      busyOff(connectCodexButton);
+      busyOff(button);
     }
   };
+}
+
+/** 시작할 때 Host 하나의 손잡이를 세운다. 문이 그 Host 를 모르면 손잡이는 숨은 채로 남는다. */
+async function startHostConnection(key) {
+  const host = HOSTS[key], button = hostButton(key);
+  if (!button || typeof window.GIL_HOST[host.capability] !== "function" ||
+      typeof window.GIL_HOST[host.connection] !== "function") return;
+  try {
+    const capability = await hostApi(key, "capability")();
+    if (capability.runtime_version) {
+      runtimeStatus.textContent = `Core ${capability.runtime_version}`;
+    }
+    if (!capability.supported) {
+      button.hidden = true;
+    } else if (!capability.runtime_installed) {
+      hostState[key] = "unavailable";
+      button.hidden = false;
+      button.disabled = true;
+      button.textContent = "GIL 설치 확인 필요";
+      button.title = "GIL 런타임을 찾지 못했다. Companion 설치를 다시 실행한다";
+    } else if (capability.cli_found === false) {
+      showHostUnavailable(key, host.toolMissing);
+      say(host.toolMissing);
+    } else {
+      await refreshHostConnection(key);
+    }
+  } catch (error) {
+    showHostUnavailable(key, why(error));
+    say(`${host.label} 연결 상태를 확인하지 못했다 — ${why(error)}`);
+  }
 }
 
 async function start() {
@@ -1063,33 +1246,7 @@ async function start() {
 
   forgetButton.onclick = forgetProject;
 
-  if (typeof window.GIL_HOST.codexCapability === "function" &&
-      typeof window.GIL_HOST.codexConnection === "function") {
-    try {
-      const capability = await window.GIL_HOST.codexCapability();
-      if (capability.runtime_version) {
-        runtimeStatus.textContent = `Core ${capability.runtime_version}`;
-      }
-      if (!capability.supported) {
-        connectCodexButton.hidden = true;
-      } else if (!capability.runtime_installed) {
-        codexConnection = "unavailable";
-        connectCodexButton.hidden = false;
-        connectCodexButton.disabled = true;
-        connectCodexButton.textContent = "GIL 설치 확인 필요";
-        connectCodexButton.title = "GIL 런타임을 찾지 못했다. Companion 설치를 다시 실행한다";
-      } else if (capability.cli_found === false) {
-        const message = "Codex 앱의 연결 도구를 찾지 못했다. Codex를 완전히 종료했다 다시 연 뒤 재시도한다.";
-        showCodexUnavailable(message);
-        say(message);
-      } else {
-        await refreshCodexConnection();
-      }
-    } catch (error) {
-      showCodexUnavailable(why(error));
-      say(`Codex 연결 상태를 확인하지 못했다 — ${why(error)}`);
-    }
-  }
+  for (const key of Object.keys(HOSTS)) await startHostConnection(key);
 
   if (typeof window.GIL_HOST.updateCapability === "function") {
     try {
@@ -1173,6 +1330,7 @@ window.addEventListener("resize", () => {
   if (!current) return;
   drawCard();
   revealSelection();
+  drawMinimap();
 });
 
 // 시험이 들여다보는 자리 — 화면이 말하는 것을 프로그램으로도 물을 수 있게.
@@ -1181,6 +1339,8 @@ window.GIL_COMPANION = {
   scopeId: () => current && current.scopeId,
   plan: () => current && current.plan,
   setOrientation,
+  zoom: () => zoom,
+  setZoom,
   seats,
   showScope,
   selectStep,

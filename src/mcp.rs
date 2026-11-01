@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use serde_json::Value;
 mod monitor;
 mod presence;
+mod update;
 mod bindings;
 mod actions;
 mod native;

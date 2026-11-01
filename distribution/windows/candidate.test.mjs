@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {readFile} from 'node:fs/promises';
-import {inspectPE, noBuildPaths, TARGET, packTar, unpackTar, profileForArch, labels, runtimeProfile} from './candidate.mjs';
+import {inspectPE, noBuildPaths, TARGET, packTar, unpackTar, profileForArch, labels, runtimeProfile, claudeManifestFor, claudeCatalogFor, CLAUDE_ROOT} from './candidate.mjs';
 import {loadBundle, validatePolicy, collect, assertCoverage} from '../compliance/notices.mjs';
 
 function pe(dll = 'KERNEL32.dll') {
@@ -98,4 +98,22 @@ test('authoring development candidate is labeled apart from the public preview c
   assert.throws(() => labels('default', 'x64', 'abc'));
   assert.equal(runtimeProfile('default'), 'default');
   assert.throws(() => runtimeProfile('release'));
+});
+test('the Windows candidate carries a Claude Code adapter with the same identity and Core', async () => {
+  const codex = JSON.parse(await readFile(new URL('../../plugins/gil-companion-prototype/.codex-plugin/plugin.json', import.meta.url)));
+  codex.version = '0.2.1-preview.3+windows.x64.abc';
+  const claude = claudeManifestFor(codex, 'x64');
+  assert.equal(claude.name, codex.name);
+  assert.equal(claude.version, codex.version);
+  assert.equal(claude.description, codex.description);
+  assert.deepEqual(claude.mcpServers, {'gil-companion': {command: `${CLAUDE_ROOT}/core/windows-x64/gil.exe`, args: ['mcp', '--serve'], cwd: CLAUDE_ROOT}});
+  assert.deepEqual(Object.keys(claude).sort(), ['author', 'description', 'keywords', 'license', 'mcpServers', 'name', 'version']);
+  assert.equal(claudeManifestFor(codex, 'arm64').mcpServers['gil-companion'].command, `${CLAUDE_ROOT}/core/windows-arm64/gil.exe`);
+  assert.throws(() => claudeManifestFor({...codex, name: 'other'}, 'x64'));
+  const head = 'a'.repeat(40);
+  const catalog = claudeCatalogFor(labels('default', 'x64', head));
+  assert.equal(catalog.name, 'gil-preview-windows-x64', 'same marketplace name as the Codex catalog');
+  assert.equal(catalog.plugins.length, 1);
+  assert.equal(catalog.plugins[0].source, './plugins/gil-companion-prototype', 'resolves inside the extracted root');
+  assert.deepEqual(Object.keys(catalog).sort(), ['metadata', 'name', 'owner', 'plugins']);
 });
