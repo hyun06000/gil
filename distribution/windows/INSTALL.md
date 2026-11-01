@@ -5,10 +5,10 @@
 현재 설치본은 **Windows 11 x64 친구 테스트용 unsigned prerelease**다. 정식 공개판이나 서명된
 publisher 배포가 아니다. ARM64 Windows, 기업 배포와 일반 사용자 지원 완료를 주장하지 않는다.
 
-- release: [windows-owner-update-0.1.1-owner.9](https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.9)
-- installer: `GIL.Companion.Unsigned.Test._0.1.1-owner.9_x64-setup.exe`
-- 크기: `5,995,976` bytes
-- SHA-256: `d54b470a1905d9e15a7c5f93579d762df65773b75e41549272c4afe34cba8ca4`
+- release: [windows-owner-update-0.1.1-owner.10](https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.10)
+- installer: `GIL.Companion.Unsigned.Test._0.1.1-owner.10_x64-setup.exe`
+- 크기: `6,048,931` bytes
+- SHA-256: `d24356e3329e827f51e1fe2f63c7916ebdc11bcb3a2b8486b6ab137d0d5a7247`
 - 표시 이름: **GIL Companion (Unsigned Test)**
 
 이 파일은 Authenticode 서명이 없다. hash 일치는 바이트 무결성 확인이며 publisher 인증은 아니다.
@@ -27,7 +27,7 @@ publisher 배포가 아니다. ARM64 Windows, 기업 배포와 일반 사용자 
      `%APPDATA%\Claude\claude_desktop_config.json`의 `mcpServers.gil`에 같은 고정 launcher를 적는다.
      Desktop이 실행 중이면 거절한다(실행 중 바깥에서 바꾼 설정은 Desktop이 되돌릴 수 있다). 바꾸기 전
      같은 폴더에 `claude_desktop_config.json.gil-backup-<시각>` 백업을 남기고, 다른 MCP 서버 항목은 그대로
-     둔다. 이 버튼은 `0.1.1-owner.8`에는 없고 다음 Windows 후보부터 들어간다. owner.8에서는
+     둔다. 이 버튼은 `0.1.1-owner.10`부터 제공한다. owner.8/owner.9에서는
      [저장소 설치 안내](../../INSTALL.md)의 “직접 등록(임시)” 항목을 따른다.
 5. 이전 GIL Plugin 또는 `gil` MCP 등록이 있으면 Companion의 **이전 GIL 연결 교체** 내용을 확인하고
    승인한다. 다른 Plugin·다른 MCP 서버·Project는 대상이 아니다. Claude Desktop에서는 **GIL 실행 파일을
@@ -51,7 +51,7 @@ ACL 상속을 강제로 바꾸거나 Project를 Agent가 자동 이동하지 않
 - Codex 등록은 Companion의 버튼과 공식 `codex mcp` 명령만 사용한다. `config.toml`, registry,
   Plugin cache를 손으로 편집하지 않는다.
 - Claude Desktop 등록은 Companion의 **Claude Desktop 연결** 버튼을 사용한다. Agent가
-  `claude_desktop_config.json`을 직접 고치는 것은 owner.8처럼 버튼이 없는 설치본에서 사용자가 승인하고
+  `claude_desktop_config.json`을 직접 고치는 것은 owner.8/owner.9처럼 버튼이 없는 설치본에서 사용자가 승인하고
   Claude Desktop이 완전히 종료된 경우에만 한다. 그때도 다른 항목은 그대로 두고 `mcpServers.gil`만 고정
   launcher로 적으며, 먼저 백업을 남긴다.
 - 기존 GIL을 발견하면 출처·command·args를 보여 주고 사용자 승인 전에는 제거하지 않는다.
@@ -60,10 +60,10 @@ ACL 상속을 강제로 바꾸거나 Project를 Agent가 자동 이동하지 않
 사용자가 Codex에 도움을 요청할 때는 다음처럼 말할 수 있다.
 
 ```text
-Windows 11 x64용 GIL Companion unsigned test 0.1.1-owner.9 설치를 도와줘.
-고정 release https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.9 의
-GIL.Companion.Unsigned.Test._0.1.1-owner.9_x64-setup.exe만 사용해.
-크기 5995976 bytes와 SHA-256 d54b470a1905d9e15a7c5f93579d762df65773b75e41549272c4afe34cba8ca4를
+Windows 11 x64용 GIL Companion unsigned test 0.1.1-owner.10 설치를 도와줘.
+고정 release https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.10 의
+GIL.Companion.Unsigned.Test._0.1.1-owner.10_x64-setup.exe만 사용해.
+크기 6048931 bytes와 SHA-256 d24356e3329e827f51e1fe2f63c7916ebdc11bcb3a2b8486b6ab137d0d5a7247를
 확인하고, 내가 해야 할 다운로드·실행·OS 승인과 네가 확인할 단계를 구분해 줘.
 기존 GIL이 있으면 출처와 버전을 먼저 보여 주고 교체 전에 물어봐.
 보안 설정, registry, Codex 설정 파일이나 Plugin cache를 직접 수정하지 마.
@@ -88,20 +88,21 @@ Core나 Host Plugin cache의 실행 파일을 직접 등록하지 않는다.
 2. 새 버전·변경 설명을 읽는다.
 3. 사용자가 **업데이트**를 눌렀을 때만 다운로드와 검증을 진행한다.
 4. 검증이 통과하면 설치 창이 바로 열린다.
-5. 기존 Codex와 GIL을 미리 닫을 필요는 없다. 기존 연결은 기존 Core를 계속 사용하고 새 연결부터
+5. 기존 Codex·Claude Desktop과 GIL 대화를 미리 닫을 필요는 없다. 기존 연결은 기존 Core를 계속 사용하고 새 연결부터
    새 버전을 사용한다.
-6. 새 Codex 대화에서 실제 Core가 바뀌었는지 확인한다.
+6. 쓰는 Host의 새 연결·새 대화에서 실제 Core가 바뀌었는지 확인한다. Claude Desktop을 처음 연결하거나 등록을 바꿀 때만 Desktop을 완전히 종료한다.
 
 다운로드·서명·version binding·설치 중 하나라도 실패하면 오류 원문을 보존하고 기존 선택과 Project를
 유지한다. 설정이나 update manifest를 손으로 고쳐 성공처럼 만들지 않는다.
 
-이번 `0.1.1-owner.9`은 [PR #69](https://github.com/hyun06000/gil/pull/69)의 복구 완료 후 채팅 전달과
-승인 대기 뒤 현재 기록을 다시 읽는 공통 지침을 포함한다. Mac preview.10과 같은 시험 프로필이다.
+이번 `0.1.1-owner.10`은 [PR #66](https://github.com/hyun06000/gil/pull/66)의 Claude Desktop 연결 버튼,
+Monitor 확대·미니맵·업데이트 안내를 포함한다. 기존 복구 완료 후 채팅 전달과 공통 지침도 유지한다.
+Mac preview.11과 같은 시험 프로필이다.
 새 대화에서 **새 빈 테스트 폴더**를 선택한다. Monitor에서 제안 내용을 읽고 승인 버튼을 누른 뒤
 Interview가 닫히고, 계획 항목별 Experiment와 실제 Verify 증거 파일로 진행되는지 확인한다.
 새 프로젝트는 형식 7을 사용한다. 기존 기록의 형식은 자동 변환하지 않으며, 구버전으로 재설치해도
 기록 형식은 내려가지 않는다. 닫힌 실패 Cycle의 revisit만 Monitor 승인으로 진행하며 일반 restore와 Step revisit는 계속 차단한다. 실사용 Luna 검수는 사용자 시험이다.
-정확한 파일·CI·검증 범위는 [게시 장부](../codex/PREVIEW-10-PUBLICATION-20261102.md)를 따른다.
+정확한 파일·CI·검증 범위는 [게시 장부](../codex/PREVIEW-11-PUBLICATION-20261102.md)를 따른다.
 
 `0.1.1-owner.3` updater는 사용자가 누른 설치와 version-bound updater signature 흐름을 실제 Windows
 x64 PC에서 확인한 친구용 build다. Authenticode publisher 신뢰나 SmartScreen 평판을 통과했다는 뜻은
@@ -119,11 +120,11 @@ Verify마다 실제 파일을 저장하고 `evidence_files`로 지정해야 한�
 연결을 유지한 버전 전환·다음 연결의 새 Core 선택을 확인했다. Luna 합성 실제 작업은 런타임/진입
 네 조합에서 모두 열 개 검증을 통과하며 각각 실험 두 개·파일 두 개를 남겼다. 별도 다음 행동 시험은
 61/64 통과이며, 채팅만 있는 Verify에서 세 번 잘못된 행동 라벨을 선택한 한계가 남는다.
-이 수치는 이전 owner.6에 대한 기록이며 이번 owner.9의 모델 시험 결과가 아니다.
-업데이트 후 Companion 표시가 `0.1.1-owner.9`인지 확인하고 새 GIL 연결·새 대화에서 Luna로 시험한다.
+이 수치는 이전 owner.6에 대한 기록이며 이번 owner.10의 모델 시험 결과가 아니다.
+업데이트 후 Companion 표시가 `0.1.1-owner.10`인지 확인하고 새 GIL 연결·새 대화에서 Luna로 시험한다.
 기존 연결을 새 Core로 강제 교체하지 않는다. macOS Plugin은 이 Windows 업데이트로 교체되지 않는다.
-Codex와 Claude Desktop이 모두 같은 고정 launcher를 등록하므로 업데이트 뒤 어느 Host도 재등록할 필요가
-없고, 한쪽 Host만 새 Core를 받는 일이 없다. Companion 머리줄의 `Core <버전>`은 다음 새 연결이 받을
+Codex와 Claude Desktop이 모두 같은 고정 launcher를 등록했다면 업데이트 뒤 재등록할 필요가 없다.
+각 Host의 새 연결부터 같은 선택 버전을 사용한다. Companion 머리줄의 `Core <버전>`은 다음 새 연결이 받을
 Core다.
 
 기존 실패 프로젝트는 [공통 복구 절차](../../INSTALL.md#실패-후-revisit가-막힌-기존-프로젝트-이어가기)를 따른다.
