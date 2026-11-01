@@ -61,6 +61,8 @@ macOS Apple Silicon `0.2.1-preview.11`, Windows 11 x64 `0.1.1-owner.10`.
 - 인증 없는 공개 다운로드를 CI 원본과 byte-for-byte 비교했다. 검증 뒤 `owner-update.json`과
   공통 `update-feed.json`을 함께 새 버전으로 전환한다. 업데이트 feed 대조 검사 3개도 통과했다.
 - 설치는 사용자의 업데이트 버튼으로 시작한다. 실행 중인 Core를 덮어쓰거나 기존 연결을 강제 종료하지 않는다.
+- 배포 PR 첫 CI에서는 Companion의 updater manifest 시험이 이전 `owner.9`를 기대해 실패했다.
+  `cfg(test)`의 정확한 기대 버전을 `owner.10`으로 갱신했다. 런타임 코드·이미 게시한 설치본은 바꾸지 않았다.
 
 ## 사용자 인수
 
