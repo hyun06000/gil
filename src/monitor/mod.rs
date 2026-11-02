@@ -68,6 +68,7 @@ use crate::report::field::{
     QUESTION, RESPONSE, RESULT, STATEMENT, SUCCESS_CONDITION, VERDICT,
 };
 use crate::session::{ProjectSession, SessionError, WorldState};
+use crate::visual_report::registry::ReportOwner;
 
 // ── 시각 ───────────────────────────────────────────────────────────────────
 
@@ -227,6 +228,8 @@ pub struct CycleReportFacts {
     /// 판정의 교훈 — `outcome_ref` 가 가리킨 Outcome 에서 읽는다.
     pub outcome_lesson: Option<String>,
     pub next_direction: Option<NextDirection>,
+    /// Cycle Report 가 인용한 시각 자료의 요약. 기록이 없으면 `None`.
+    pub visuals: Option<VisualSummary>,
 }
 
 /// 그 Cycle 이 적어 둔 다음 방향.
@@ -253,6 +256,17 @@ pub struct StepFacts {
     /// escape 는 마지막 출력 경계에서 한다. read model 이 미리 자르면 상세 영역에서
     /// 원문을 되찾을 길이 사라진다.
     pub summary: Option<String>,
+    /// 이 Report 가 남긴 시각 자료의 **요약** — 상태와 개수뿐이다. 그림·설명·bytes 는 App 전용
+    /// 조회가 따로 나른다. 선언이 기록되지 않은 구형 Report 는 `None` 이다.
+    pub visuals: Option<VisualSummary>,
+}
+
+/// 보고서 하나의 시각 자료 요약. registry 의 상태를 **그대로** 옮긴 표지이지 판정이 아니다.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VisualSummary {
+    /// `attached` · `not_needed` · `missing` · `references`
+    pub state: &'static str,
+    pub count: u32,
 }
 
 /// 시간선 위의 Cycle 하나가 지금 걷는 갈래와 맺은 관계.
@@ -314,7 +328,7 @@ fn summary_field(kind: NodeKind) -> Option<&'static str> {
 }
 
 /// Step Node 하나를 사실로 — **Cycle 안이든 시간선 위든 같은 함수가 짓는다.**
-fn step_facts(cycle: &Cycle, node: &crate::walk::StepNode) -> StepFacts {
+fn step_facts(project: &Project, cycle: &Cycle, node: &crate::walk::StepNode) -> StepFacts {
     StepFacts {
         step_ref: cycle.step_ref(node.id),
         kind: node.kind,
@@ -322,7 +336,23 @@ fn step_facts(cycle: &Cycle, node: &crate::walk::StepNode) -> StepFacts {
         summary: summary_field(node.kind)
             .and_then(|field| node.report.as_ref()?.get(field))
             .map(str::to_string),
+        visuals: visual_summary(project, ReportOwner::Step(cycle.step_ref(node.id))),
     }
+}
+
+/// registry 에 기록된 선언을 요약한다. 기록이 없으면 **없다** — 구형 Report 를 `not_needed` 로
+/// 꾸미지 않는다.
+fn visual_summary(project: &Project, owner: ReportOwner) -> Option<VisualSummary> {
+    use crate::visual_report::{VisualDeclaration, registry::ReportVisuals};
+    let visuals = project.visual_state()?.registry().report(owner)?;
+    let count = u32::try_from(visuals.uses().len()).unwrap_or(u32::MAX);
+    let state = match visuals {
+        ReportVisuals::Verify(VisualDeclaration::Attached { .. }) => "attached",
+        ReportVisuals::Verify(VisualDeclaration::NotNeeded { .. }) => "not_needed",
+        ReportVisuals::Verify(VisualDeclaration::Missing { .. }) => "missing",
+        ReportVisuals::References(_) => "references",
+    };
+    Some(VisualSummary { state, count })
 }
 
 /// 지금 계보 위에 있지 않은 Cycle.
@@ -507,7 +537,7 @@ fn snapshot(
     // 다른 판정을 말하는 날이 온다.
     let active_lineage: Vec<CycleFacts> = lineage
         .iter()
-        .map(|cycle| cycle_facts(cycles, cycle))
+        .map(|cycle| cycle_facts(project, cycles, cycle))
         .collect();
     let on_lineage: Vec<CycleId> = lineage.iter().map(|cycle| cycle.id()).collect();
 
@@ -536,7 +566,7 @@ fn snapshot(
             state: cycle.status(),
             parent_cycle_ref: cycle.parent().map(CycleId::to_ref),
             revisit_from_cycle_ref: cycle.revisit_from().map(CycleId::to_ref),
-            report: report_facts(cycles, cycle),
+            report: report_facts(project, cycles, cycle),
             relation_to_current: relation(cycles, cycle.id(), &on_lineage),
         })
         .collect();
@@ -545,7 +575,7 @@ fn snapshot(
         .steps()
         .nodes()
         .iter()
-        .map(|node| step_facts(here, node))
+        .map(|node| step_facts(project, here, node))
         .collect();
 
     // **발급 순서 그대로.** `Cycles::nodes()` 도 `Walk::nodes()` 도 「만든 순서대로」를
@@ -553,11 +583,11 @@ fn snapshot(
     // 새 진실 판정이 된다.
     let timeline: Vec<TimelineCycleFacts> = project.cycle_graphs()
         .flat_map(|graph| graph.nodes().iter().map(|cycle| TimelineCycleFacts {
-            facts: cycle_facts(graph, cycle),
+            facts: cycle_facts(project, graph, cycle),
             relation_to_current: if graph.current_id() == cycles.current_id() {
                 timeline_relation(graph, cycle.id(), &on_lineage)
             } else { TimelineRelation::Other },
-            steps: cycle.steps().nodes().iter().map(|node| step_facts(cycle, node)).collect(),
+            steps: cycle.steps().nodes().iter().map(|node| step_facts(project, cycle, node)).collect(),
         })).collect();
     // 서 있는 자리 — 닫혀 있어도 그 자리에 서 있다. 아직 아무것도 열지 않았으면 없다.
     let current_step = here
@@ -578,7 +608,7 @@ fn snapshot(
         },
         // 계보의 마지막 항목과 **같은 정체성**이다 — 같은 함수가 지었다.
         current_cycle: CurrentCycleFacts {
-            facts: cycle_facts(cycles, here),
+            facts: cycle_facts(project, cycles, here),
             steps,
         },
         active_lineage,
@@ -605,7 +635,7 @@ fn snapshot(
 ///
 /// **Step Graph 를 보지 않는다.** 그것을 담을 자리가 반환 타입에 없으므로, 조상에 Step 을
 /// 싣는 일은 여기서 일어날 수 없다.
-fn cycle_facts(cycles: &Cycles, cycle: &Cycle) -> CycleFacts {
+fn cycle_facts(project: &Project, cycles: &Cycles, cycle: &Cycle) -> CycleFacts {
     CycleFacts {
         cycle_ref: cycle.id().to_ref(),
         kind: cycle.kind(),
@@ -614,7 +644,7 @@ fn cycle_facts(cycles: &Cycles, cycle: &Cycle) -> CycleFacts {
         revisit_from_cycle_ref: cycle.revisit_from().map(CycleId::to_ref),
         experiment_definition: definition(cycle),
         interview_question: interview_question(cycle),
-        report: report_facts(cycles, cycle),
+        report: report_facts(project, cycles, cycle),
     }
 }
 
@@ -730,7 +760,7 @@ fn interview_question(cycle: &Cycle) -> Option<InterviewQuestion> {
 }
 
 /// 닫힌 Cycle 의 Report 투영. 열려 있으면 없다.
-fn report_facts(cycles: &Cycles, cycle: &Cycle) -> Option<CycleReportFacts> {
+fn report_facts(project: &Project, cycles: &Cycles, cycle: &Cycle) -> Option<CycleReportFacts> {
     let report = cycle.report()?;
     // **둘은 닫힘의 조건이다.** 문법의 `close_requires` 가 요구하고, 닫을 때와 저장에서
     // 되살릴 때 **같은 검사**(`RuleSet::validate_cycle_close`)가 둘을 잰다. 그러니 닫힌
@@ -749,6 +779,7 @@ fn report_facts(cycles: &Cycles, cycle: &Cycle) -> Option<CycleReportFacts> {
             .to_string(),
         outcome_lesson: cycle.judged_lesson().map(str::to_string),
         next_direction: next_direction(cycles, cycle, report),
+        visuals: visual_summary(project, ReportOwner::Cycle(cycle.id().to_ref())),
     })
 }
 

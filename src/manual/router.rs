@@ -52,6 +52,7 @@ const OPEN_CONTRACT: Bundled = Bundled::OpenContract;
 const EXPERIMENT_CLOSE: Bundled = Bundled::ExperimentClose;
 const CYCLE_REVISIT: Bundled = Bundled::CycleRevisit;
 const REVISIT_TARGET: Bundled = Bundled::RevisitTarget;
+const REPORT_VISUALS: Bundled = Bundled::ReportVisuals;
 
 /// Router 가 보는 **공개 거절**.
 ///
@@ -156,6 +157,12 @@ pub(crate) fn help_for(refusal: &Refusal<'_>) -> Option<TopicId> {
         Refusal::Session(SessionError::Action(ActionError::RevisitPending { .. })) => {
             CYCLE_REVISIT
         }
+
+        // ── 시각 자료 계약 — 선언·인용·첨부가 거절됐다 ────────────────────
+        //
+        // Verify 의 선언, Analysis·Cycle Report 의 인용, 첨부 파일 검사는 모두 한 Topic 이
+        // 말한다. 어느 자리든 복구는 같다: 같은 close 를 올바른 visuals 로 한 번 다시 보낸다.
+        Refusal::Session(SessionError::Action(ActionError::Visual(_))) => REPORT_VISUALS,
 
         // ── Verify Report 가 지금 Grammar 와 맞지 않음 ────────────────────
         //

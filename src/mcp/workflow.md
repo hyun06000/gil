@@ -23,6 +23,8 @@ actual recorded position and the connected tool schema. Never repeat a call that
    that retry budget. Status covers this Project on this MCP connection. If a Host shares that
    connection across chats, it cannot identify which chat contains the App. App reports do not prove
    OS foreground visibility or that the human has looked.
+   `project_root` is always the exact string the Host, `gil_context`/`gil_status` or the last
+   receipt gave; copy it verbatim and never retype it (retyped Korean paths change their letters).
 2. **Agree, then finish Interview.** Interview clarifies and agrees scope; it never researches,
    calculates or writes deliverables. Synthesis waits for the user's reply to its proposed statement;
    silence, earlier requests and the agent's own judgment are not approval. Do not ask again for
@@ -80,26 +82,60 @@ actual recorded position and the connected tool schema. Never repeat a call that
    ```
 
    Record sources, inputs/method, observed results and limitations; never invent results or save
-   meaningless markers to satisfy the gate. Use visual evidence when it helps assess the work.
-   Image declarations `not_needed`/`missing` do not waive ordinary file evidence. If evidence is
-   refused, save truthful evidence while Verify remains open, then submit the corrected close.
+   meaningless markers to satisfy the gate. Image declarations `not_needed`/`missing` do not
+   waive ordinary file evidence. If evidence is refused, save truthful evidence while Verify
+   remains open, then submit the corrected close.
    Accepted: `evidence_files: evidence/load-test.md` where that file holds the measured numbers.
    Refused: an empty file, a file unchanged since the baseline, or the chat summary alone.
+
+   **Make the result visible — without being asked.** A Verify Report is read later by people
+   who were not there; a picture of the real result is the fastest handoff. Before closing a
+   Verify, decide which visual evidence fits the work and produce it as a static PNG inside the
+   project, using whatever the Host offers (Python matplotlib/pandas, Node canvas, Graphviz,
+   Mermaid CLI, a headless Chromium/Playwright or the ordinary browser's screenshot):
+
+   | What the Verify observed | Visual evidence to attach |
+   | --- | --- |
+   | Numbers, measurements, datasets | A plot drawn by code from the actual data (bars, trend, distribution) |
+   | Structure, flow, dependencies | A diagram generated from the real structure (graph, sequence, module map) |
+   | A web page, UI, rendered document | A screenshot of the real page in a headless or ordinary browser |
+   | Files or settings before/after | A rendered comparison table or diff image, with the raw files in `evidence_files` |
+   | Build/test runs | A results table image; keep the log file as ordinary evidence |
+
+   Visual evidence shows something that exists in the world. An AI-generated or decorative
+   picture is never visual evidence; `source_kind` is `captured` (real screen/page),
+   `generated` (drawn by code from data) or `provided` (supplied by the user), truthfully.
+   Save the PNG in the project, list it in `evidence_files` too, and attach it with
+   `visuals.attachments`/`uses` and `declaration: {state: "attached"}`. Choose `not_needed`
+   only when nothing visual exists to show (byte equality, an exit code, one number) and say
+   what replaces the image: `reason: "두 파일의 sha256 일치만 비교했고 화면이 없다"`. Refused:
+   one-word or boilerplate reasons (`없음`, `불필요`, `not needed`), and `not_needed` while an
+   image file is listed in `evidence_files`. Use `missing` with `reason` and `follow_up` when the
+   picture could not be produced; never relabel missing as unnecessary.
+   After Verify is closed and before the Cycle Report, create no project files: integrated reports
+   and deliverables are saved inside Verify, or in the next Experiment's Verify.
 5. **Learn from that evidence and close.** After Verify, write a nonblank `interpretation` in
    Analysis and a nonblank `lesson` in Experiment Outcome. Core links `evidence.verify_ref` and
    `learning.analysis_ref` to the actual current lineage; do not supply different references.
-   Finish Analysis, Outcome and the Cycle Report before the next independent problem or final
-   delivery. Deliver links to the saved evidence/deliverable alongside the chat summary.
+   **Cite the pictures.** When the Verify attached visuals, the Analysis and the Experiment Cycle
+   Report must cite at least one of them (Core refuses otherwise, listing the citable assets):
+   send `expected_owner` and `visuals` together, `attachments: []`, no `declaration`, and
+   `uses: [{source: {kind: "stored", owner: {kind: "step", ref: "<verify ref>"}, asset_id, sha256},
+   caption, alt, purpose}]` with the values from the Verify receipt or `gil_report_visuals`.
+   Outcome may cite them too. Finish Analysis, Outcome and the Cycle Report before the next
+   independent problem or final delivery. Deliver links to the saved evidence/deliverable
+   alongside the chat summary, and name the attached visuals.
 6. **Use the actual close contract.** Close both Steps and Cycles with `gil_close`; the legacy
    `gil_cycle` cannot accept a Report. Format-4 steps (including Verify) and format-5 non-Verify
    reports without stored images use `{project_root, report}`. Every format-5 Verify uses
    `{project_root, report, expected_owner, visuals}`, even without images. Supply both
    `expected_owner: {kind: "step", ref: "<actual open step ref>"}` and `visuals`; with no images,
-   use `visuals: {attachments: [], uses: [], declaration: {state: "not_needed", reason: "<actual reason>"}}`.
+   use `visuals: {attachments: [], uses: [], declaration: {state: "not_needed", reason: "<what replaces the image>"}}`.
    Format-5 non-Verify reports citing stored images also use both fields, per the connected schema.
    Keep `evidence_files` in the Report in every Verify. Available capabilities and project format,
    not the OS name, determine the input shape. Never migrate an existing project merely to follow
-   these instructions.
+   these instructions. The rules behind every visual refusal are one topic: `gil_help` with
+   `topic: report/visuals`.
 7. **Approved plans (only where recorded).** A project uses the approved-plan profile only when
    its `gil_context` says `승인 계획 프로필` or `gil_plan_read` answers `supported: true`, and the
    connected `tools/list` offers `gil_plan_propose`/`gil_plan_read`/`gil_plan_request_interview`.

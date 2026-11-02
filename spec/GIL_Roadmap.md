@@ -115,6 +115,10 @@ M6-D에서는 사람이 **Monitor의 승인/수정 요청 버튼**으로 정확�
       G1 합성 저장/참조 → G2 제한된 App 이미지 전송 → G3 상세 UI 자동시험 → G4 실제 Host
       화면 검수로 진행한다. Cycle Report 재사용도 포함한다. 공개 쓰기 UX·사용자 이관·배포는
       G5 별도 게이트이며 이번 명세 작성은 구현 또는 화면 검수 완료가 아니다.
+      **시각 증거 정책(2026-11-02):** 지침이 아니라 계약으로 — 한마디 `not_needed` 이유 거절, 이미지 증거와
+      `not_needed` 충돌 거절, Verify 가 첨부하면 Analysis·Cycle Report 의 인용 강제, Monitor 의 시각 자료 우선
+      표시·노드 배지·개수, 요구 없는 시각 자료 생성을 재는 평가 케이스. [정책](GIL_Visual_Evidence_Policy_v0.1.md).
+      합성 시험 통과; 실제 모델 측정과 Host 화면은 사용자 확인 대기.
       **G1 구현(2026-10-13):** 로컬 Report 시각 참조 DTO를 추가했다. 합성 PNG 확정 후
       원본 삭제·read-only 재개에서도 참조/digest를 유지하며 Analysis·Outcome·최종 Cycle·
       다음 Define에서 동일 자료의 서로 다른 설명을 보존한다. 과거 미기재/열린 Report/의도적

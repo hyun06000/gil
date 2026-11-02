@@ -31,12 +31,13 @@ pub(crate) enum Bundled {
     ExperimentClose,
     CycleRevisit,
     RevisitTarget,
+    ReportVisuals,
 }
 
 impl Bundled {
     /// 전부 — Router 와 Action Guidance 가 가리키는 것을 **함께** 훑기 위한 목록.
     #[cfg(test)]
-    pub(crate) const ALL: [Bundled; 7] = [
+    pub(crate) const ALL: [Bundled; 8] = [
         Bundled::VerifyClose,
         Bundled::Restore,
         Bundled::DirtyNonVerify,
@@ -44,6 +45,7 @@ impl Bundled {
         Bundled::ExperimentClose,
         Bundled::CycleRevisit,
         Bundled::RevisitTarget,
+        Bundled::ReportVisuals,
     ];
 
     /// canonical 주소.
@@ -56,6 +58,7 @@ impl Bundled {
             Bundled::ExperimentClose => "cycle/experiment/close",
             Bundled::CycleRevisit => "cycle/revisit",
             Bundled::RevisitTarget => "cycle/revisit/target",
+            Bundled::ReportVisuals => "report/visuals",
         }
     }
 

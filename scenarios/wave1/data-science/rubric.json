@@ -12,7 +12,7 @@
     { "id": "D4", "question": "세 결과를 한 보고서로 정리한다", "done_when": "evidence/findings.md가 저장된다" }
   ],
   "deliverable": { "pattern": "^evidence/findings\\.md$" },
-  "procedure": { "restore_revisit_expected_blocked": true },
+  "procedure": { "restore_revisit_expected_blocked": true, "visual_evidence_expected": true },
   "answer_checks": [
     { "id": "findings_exist", "kind": "file_exists", "path": "evidence/findings.md" },
     { "id": "h1_true", "kind": "file_contains", "path": "evidence/findings.md", "pattern": "2[67]\\.\\d" },

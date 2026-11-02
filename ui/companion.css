@@ -118,8 +118,11 @@ button, select { font: inherit; color: inherit; }
 .map .viewport { overflow: auto; max-height: 52vh; }
 /* 확대 상자: stage 의 (plan 크기 × 배율) 만큼 자리를 지니고, stage 는 transform 으로만 커진다. */
 .map .zoom { position: relative; transform-origin: 0 0; }
+/* 미니맵·확대 손잡이는 오른쪽 **아래**에 뜬다. 가로 Graph 의 최신 노드는 오른쪽 위에 서므로 거기에 두면 가린다.
+   아래에 둬도 마지막 줄을 덮을 수 있으니, 스크롤 상자 끝에 손잡이 높이만큼 빈 자리를 더해 언제나 굴려 빼낼 수 있게 한다. */
+.map .zoom::after { content: ""; display: block; height: 170px; }
 .stage { position: relative; transform-origin: 0 0; }
-.map-tools { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+.map-tools { position: absolute; bottom: 8px; right: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
   pointer-events: none; }
 .map-tools > * { pointer-events: auto; }
 .minimap { display: block; border: var(--gil-hair) solid var(--gil-line); border-radius: var(--gil-r-sm);
@@ -165,6 +168,19 @@ button, select { font: inherit; color: inherit; }
 .node.step[data-kind="interpretation"], .node.step[data-kind="verify"] { --kind: var(--gil-kind-verify); }
 .node.step[data-kind="define"], .node.step[data-kind="analysis"] { --kind: var(--gil-kind-analysis); }
 .node.step[data-kind="synthesis"], .node.step[data-kind="outcome"] { --kind: var(--gil-kind-synthesis); }
+
+/* 시각 자료 배지 — 기록된 선언만 그린다. 숫자는 첨부 개수, 0 은 「없음」을 사유와 함께 선언한 자리다. */
+.node.step[data-visuals] { overflow: visible; }
+.node.step[data-visuals]::after {
+  content: attr(data-visual-count); position: absolute; left: 100%; top: -9px; margin-left: 2px;
+  min-width: 14px; height: 14px; padding: 0 3px; box-sizing: border-box; border-radius: 7px;
+  font-size: 9px; font-weight: 700; line-height: 14px; text-align: center; letter-spacing: 0;
+  color: var(--gil-bg); background: var(--gil-fg-2); border: 1px solid var(--gil-bg);
+}
+.node.step[data-visuals="attached"]::after, .node.step[data-visuals="references"]::after { background: var(--gil-kind-verify); }
+.node.step[data-visuals="missing"]::after { background: var(--gil-kind-synthesis); }
+.node.step[data-visuals="not_needed"]::after { content: "–"; background: var(--gil-fg-3); }
+.card-visuals { margin: 4px 0 0; font-size: var(--gil-xs); font-weight: var(--gil-w-semibold); color: var(--gil-fg); }
 
 /* 접힌 Cycle — 조금 더 큰 원 하나에 식별자(§6.1-8). */
 .node.cycle {

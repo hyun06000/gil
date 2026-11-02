@@ -623,6 +623,7 @@ pub(super) mod tests {
             kind,
             state,
             summary: summary.map(str::to_string),
+            visuals: None,
         }
     }
 
@@ -650,6 +651,7 @@ pub(super) mod tests {
             handoff_summary: "넘긴 것".to_string(),
             outcome_lesson: None,
             next_direction: None,
+            visuals: None,
         }
     }
 

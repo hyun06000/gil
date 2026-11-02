@@ -111,7 +111,9 @@ export function replay(events, { externalTools = [] } = {}) {
         const kind = m[4];
         facts.steps.push({ seq: e.seq, action: 'close', ref: m[1], kind, cycleKind: st.cycleKind, fields });
         if (kind === 'synthesis') facts.synthesisCloses.push({ seq: e.seq, ref: m[1], cycleRef: st.cycleRef, chainIndex: st.chainIndex, approved: fields.approved ?? null, plan_revision: fields.plan_revision ? Number(fields.plan_revision) : null, plan_digest: fields.plan_digest ?? null, chain_verdict: fields.chain_verdict ?? null });
-        if (kind === 'verify') facts.verifyCloses.push({ seq: e.seq, ref: m[1], evidence: evidenceFiles(fields), plan_document: fields.plan_document ?? null, cycleRef: st.cycleRef });
+        if (kind === 'verify') facts.verifyCloses.push({ seq: e.seq, ref: m[1], evidence: evidenceFiles(fields), plan_document: fields.plan_document ?? null, cycleRef: st.cycleRef,
+          // The typed declaration as sent; absent for a plain (format-4) close. Nothing is inferred from chat.
+          visuals: args.visuals ? { state: args.visuals.declaration?.state ?? null, attachments: Array.isArray(args.visuals.attachments) ? args.visuals.attachments.length : 0, reason: args.visuals.declaration?.reason ?? null } : null });
         st.stepKind = null; st.stepRef = null;
       } else if ((m = said.match(CLOSE_CYCLE))) {
         facts.cycles.push({ seq: e.seq, action: 'close', ref: m[1], kind: m[3], verdict: m[4], next: fields['next_direction.action'] ?? null, chainIndex: st.chainIndex });

@@ -723,7 +723,7 @@ fn verify_requires_world_evidence_even_when_visuals_are_not_needed() {
     #[cfg(feature = "visual-authoring")]
     {
         args["expected_owner"] = json!({"kind":"step","ref":"step:C2/S3"});
-        args["visuals"] = json!({"attachments":[],"uses":[],"declaration":{"state":"not_needed","reason":"문서 증거"}});
+        args["visuals"] = json!({"attachments":[],"uses":[],"declaration":{"state":"not_needed","reason":"관측 숫자를 문서로만 남겼고 보여 줄 화면이 없다"}});
     }
     let refused = monitor_call(&mut client, "gil_close", args.clone());
     assert_eq!(refused["isError"], true, "{refused}");
@@ -1277,6 +1277,76 @@ fn starting_receipt_uses_the_requested_root_not_the_servers_directory() {
     std::fs::remove_dir_all(base).unwrap();
 }
 
+/// `한글` composed (NFC) and decomposed (NFD): the same folder name, different bytes.
+const HANGUL_NFC: &str = "\u{D55C}\u{AE00}";
+const HANGUL_NFD: &str = "\u{1112}\u{1161}\u{11AB}\u{1100}\u{1173}\u{11AF}";
+
+/// A Korean `project_root` retyped in the other Unicode normal form still reaches the folder the
+/// user chose, and the receipt says once which spelling was used. Where the file system itself
+/// matches both forms (APFS), the direct lookup succeeds and no note is added.
+#[test]
+fn a_korean_root_in_the_other_normal_form_reaches_the_same_project() {
+    let base = scratch("hangul-forms");
+    for (made, asked) in [(HANGUL_NFD, HANGUL_NFC), (HANGUL_NFC, HANGUL_NFD)] {
+        let root = base.join(format!("{made}-{}", made.chars().count()));
+        std::fs::create_dir_all(&root).unwrap();
+        let other = base.join(format!("{asked}-{}", made.chars().count()));
+        let other = other.to_str().unwrap();
+        let direct = std::fs::metadata(other).is_ok();
+
+        let mut mcp = Client::serve();
+        mcp.initialize();
+        let begun = monitor_call(&mut mcp, "gil_start", serde_json::json!({"project_root": other}));
+        assert_eq!(begun["isError"], false, "{begun}");
+        assert!(begun["content"].as_array().unwrap().iter().any(|c| c["text"].as_str().is_some_and(|t| t.contains("Monitor 준비도 완료"))), "{begun}");
+        #[cfg(feature = "visual-authoring")]
+        {
+            let read = monitor_call(&mut mcp, "gil_report_visuals", serde_json::json!({"project_root": other, "owner": {"kind":"cycle","ref":"cycle:C1"}}));
+            assert_ne!(read["isError"], true, "{read}");
+        }
+        let got = mcp.status(other);
+        assert_eq!(got["result"]["isError"], serde_json::json!(false), "{got}");
+        let said = got["result"]["content"].as_array().unwrap().iter()
+            .filter_map(|c| c["text"].as_str()).collect::<Vec<_>>().join("\n");
+        if direct {
+            assert!(!said.contains("project_root 글자를 맞춰"), "{said}");
+        } else {
+            let first = said.lines().next().unwrap();
+            assert!(first.starts_with("project_root 글자를 맞춰"), "{said}");
+            assert!(first.contains(root.to_str().unwrap()), "{said}");
+            assert_eq!(said.matches("project_root 글자를 맞춰").count(), 1, "{said}");
+        }
+        // The note is for the receipt only; a refusal from Core keeps its own first line.
+        mcp.eof();
+    }
+    std::fs::remove_dir_all(base).ok();
+}
+
+#[test]
+fn a_missing_root_says_what_to_copy_and_compatibility_jamo_are_refused_as_such() {
+    let base = scratch("hangul-refusals");
+    let mut mcp = Client::serve();
+    mcp.initialize();
+
+    let missing = base.join(HANGUL_NFC).join("없는자리");
+    let got = mcp.status(missing.to_str().unwrap());
+    assert_eq!(got["result"]["isError"], serde_json::json!(true), "{got}");
+    let said = text_of(&got);
+    assert!(said.starts_with("Project 자리를 열 수 없다: 경로가 존재하지 않는다."), "{said}");
+    assert!(said.contains("한글 정규화") && said.contains("글자 그대로 복사"), "{said}");
+    assert!(!missing.exists(), "거절이 폴더를 만들었다");
+
+    // Compatibility jamo (`ㅎㅏㄴㄱㅡㄹ`) spell no folder; normalization cannot repair them.
+    let apart = base.join("\u{314E}\u{314F}\u{3134}\u{3131}\u{3161}\u{3139}");
+    let got = mcp.status(apart.to_str().unwrap());
+    assert_eq!(got["result"]["isError"], serde_json::json!(true), "{got}");
+    let said = text_of(&got);
+    assert!(said.starts_with("Project 자리를 열 수 없다: 경로에 호환 자모"), "{said}");
+    assert!(said.contains("글자 그대로 복사"), "{said}");
+    mcp.eof();
+    std::fs::remove_dir_all(base).ok();
+}
+
 #[test]
 fn a_place_without_a_project_is_refused() {
     let empty = scratch("empty");
@@ -1551,7 +1621,7 @@ fn starting_a_project_leads_to_one_monitor_scope_and_the_first_interview_updates
     let nowhere = at.join("missing");
     let failed = agent_call(&mut mcp, "gil_start", serde_json::json!({ "project_root": nowhere }));
     assert_eq!(failed["structuredContent"]["ok"], false);
-    assert_eq!(failed["structuredContent"]["problem"], "Project 자리를 열 수 없다");
+    assert!(failed["structuredContent"]["problem"].as_str().unwrap().starts_with("Project 자리를 열 수 없다"), "{failed}");
     assert!(!nowhere.exists(), "실패한 start 가 폴더를 만들었다");
     let unprepared = agent_call(&mut mcp, "gil_monitor_prepare", serde_json::json!({ "project_root": nowhere }));
     assert_eq!(unprepared["isError"], true);

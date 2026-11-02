@@ -74,10 +74,110 @@ impl Project {
             }
             None => ReportVisuals::References(vec![]),
         };
+        self.require_verify_citation(&state.registry, owner, &report)?;
         graph
             .prepare_close(&state.registry, owner, vec![], |_| report)
             .map(Some)
-            .map_err(|err| crate::ActionError::Visual(format!("{err:?}")))
+            .map_err(|err| crate::ActionError::Visual(err.to_string()))
+    }
+
+    /// Analysis 와 Experiment Cycle Report 는 **그 Cycle 의 Verify 가 첨부한 시각 자료**를
+    /// 적어도 하나 인용해야 한다. 해석과 인계 문서가 증거를 가리키지 않으면 Monitor 의 그
+    /// 노드는 그림 없는 글만 남기고, 다음 협력자는 Verify 노드를 따로 뒤져야 한다.
+    ///
+    /// Verify 가 아무것도 첨부하지 않았으면(`not_needed`·`missing` 의 빈 uses·구형 미기재)
+    /// 요구하지 않는다. Outcome 은 인용할 수 있으나 요구하지 않는다 — 판정문은 짧고, 인계는
+    /// Cycle Report 가 맡는다. 새 쓰기에만 적용되며 과거 기록은 다시 재지 않는다.
+    fn require_verify_citation(
+        &self,
+        registry: &VisualRegistry,
+        owner: ReportOwner,
+        report: &ReportVisuals,
+    ) -> Result<(), crate::ActionError> {
+        let Some((verify, assets, subject)) = self.verify_citation_sources(registry, owner) else {
+            return Ok(());
+        };
+        let cited = report
+            .uses()
+            .iter()
+            .any(|usage| assets.iter().any(|(id, _)| *id == usage.asset));
+        if cited {
+            return Ok(());
+        }
+        let listed = assets
+            .iter()
+            .map(|(id, digest)| {
+                let hex: String = digest.iter().map(|b| format!("{b:02x}")).collect();
+                format!("asset_id \"{}\" sha256 \"{hex}\"", id.0)
+            })
+            .collect::<Vec<_>>()
+            .join(" · ");
+        Err(crate::ActionError::Visual(format!(
+            "[visual_citation_required] {subject}는 이 Cycle의 Verify {verify}가 첨부한 시각 자료를 \
+             적어도 하나 인용해야 한다. 닫힌 것은 없다. 같은 gil_close를 expected_owner와 visuals를 \
+             함께 넣어 다시 보낸다: attachments는 빈 배열, declaration은 생략, uses의 각 항목은 \
+             source {{\"kind\":\"stored\",\"owner\":{{\"kind\":\"step\",\"ref\":\"{verify}\"}},\
+             \"asset_id\":…,\"sha256\":…}}와 이 보고서의 caption·alt·purpose다. 인용 가능한 자료: {listed}"
+        )))
+    }
+
+    /// 인용 대상이 있는 자리인가 — (Verify 주소, 그 Verify 가 첨부한 자료, 이 보고서의 이름).
+    fn verify_citation_sources(
+        &self,
+        registry: &VisualRegistry,
+        owner: ReportOwner,
+    ) -> Option<(StepRef, Vec<(VisualAssetId, [u8; 32])>, &'static str)> {
+        let cycle_ref = match owner {
+            ReportOwner::Step(step) => step.cycle(),
+            ReportOwner::Cycle(cycle) => cycle,
+        };
+        let cycle = self
+            .all_cycles()
+            .find(|cycle| cycle.id().to_ref() == cycle_ref)?;
+        if cycle.kind() != crate::CycleKind::Experiment {
+            return None;
+        }
+        let subject = match owner {
+            ReportOwner::Cycle(_) => "Experiment Cycle Report",
+            ReportOwner::Step(step) => {
+                let node = cycle
+                    .steps()
+                    .nodes()
+                    .iter()
+                    .find(|node| cycle.step_ref(node.id) == step)?;
+                if node.kind != NodeKind::Analysis {
+                    return None;
+                }
+                "Analysis"
+            }
+        };
+        // 이 Cycle 에서 **가장 최근에 닫힌** Verify 가운데 실제로 자료를 첨부한 것.
+        let verify = cycle
+            .steps()
+            .nodes()
+            .iter()
+            .rev()
+            .filter(|node| node.kind == NodeKind::Verify && node.is_closed())
+            .map(|node| cycle.step_ref(node.id))
+            .find_map(|step| {
+                let visuals = registry.report(ReportOwner::Step(step))?;
+                let uses = match visuals {
+                    ReportVisuals::Verify(declaration) => declaration.uses(),
+                    ReportVisuals::References(_) => return None,
+                };
+                if uses.is_empty() {
+                    return None;
+                }
+                let assets = uses
+                    .iter()
+                    .filter_map(|usage| {
+                        let asset = registry.asset_for_report(ReportOwner::Step(step), usage.asset)?;
+                        Some((usage.asset, asset.metadata().digest))
+                    })
+                    .collect::<Vec<_>>();
+                Some((step, assets))
+            })?;
+        Some((verify.0, verify.1, subject))
     }
 
     pub(crate) fn apply_visual_close(

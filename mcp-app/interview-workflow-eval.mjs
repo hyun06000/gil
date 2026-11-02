@@ -13,6 +13,25 @@ let binary=(process.argv[2]==='--proxy'?process.argv[5]:process.env.GIL_BINARY) 
 const sourceTool={name:'read_synthetic_source',description:'Read one fictional source for this evaluation. IDs: price or earnings. No live market data.',
   annotations:{readOnlyHint:true,destructiveHint:false,idempotentHint:true,openWorldHint:false},
   inputSchema:{type:'object',properties:{id:{type:'string',enum:['price','earnings']}},required:['id'],additionalProperties:false}};
+// A deterministic PNG bar chart drawn by code from the values the model passes: the only way the
+// model can produce visual evidence in this fixture (no shell, no Python). Never an AI picture.
+import {deflateSync} from 'node:zlib';
+function pngChart(values) {
+  const width=320, height=200, pad=24, n=values.length, bar=Math.floor((width-2*pad)/n), max=Math.max(...values,1);
+  const rgb=new Uint8Array(width*height*3).fill(245);
+  const put=(x,y,c)=>{const i=(y*width+x)*3; rgb[i]=c[0]; rgb[i+1]=c[1]; rgb[i+2]=c[2];};
+  for(let x=pad;x<width-pad;x++) put(x,height-pad,[60,60,60]);
+  values.forEach((v,k)=>{const h=Math.round((height-2*pad)*v/max); for(let x=pad+k*bar+4;x<pad+(k+1)*bar-4;x++) for(let y=height-pad-h;y<height-pad;y++) put(x,y,[66,86,201]);});
+  const raw=Buffer.alloc((width*3+1)*height); for(let y=0;y<height;y++){raw[y*(width*3+1)]=0; Buffer.from(rgb.buffer,y*width*3,width*3).copy(raw,y*(width*3+1)+1);}
+  const crcTable=[...Array(256)].map((_,n)=>{let c=n;for(let k=0;k<8;k++)c=c&1?0xedb88320^(c>>>1):c>>>1;return c>>>0;});
+  const crc=b=>{let c=0xffffffff;for(const x of b)c=crcTable[(c^x)&255]^(c>>>8);return (c^0xffffffff)>>>0;};
+  const chunk=(type,data)=>{const t=Buffer.from(type);const len=Buffer.alloc(4);len.writeUInt32BE(data.length);const c=Buffer.alloc(4);c.writeUInt32BE(crc(Buffer.concat([t,data])));return Buffer.concat([len,t,data,c]);};
+  const ihdr=Buffer.alloc(13); ihdr.writeUInt32BE(width,0); ihdr.writeUInt32BE(height,4); ihdr[8]=8; ihdr[9]=2;
+  return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',ihdr),chunk('IDAT',deflateSync(raw)),chunk('IEND',Buffer.alloc(0))]);
+}
+const chartTool={name:'save_synthetic_chart',description:'Draw a PNG bar chart from numeric values you computed from the fictional sources and save it in this isolated evaluation project. Returns the project-relative path to use as a Verify attachment (source_kind generated). Use only real computed values.',
+  annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:false,openWorldHint:false},
+  inputSchema:{type:'object',properties:{values:{type:'array',minItems:1,maxItems:8,items:{type:'number'}},label:{type:'string',minLength:1,maxLength:120}},required:['values','label'],additionalProperties:false}};
 const writeTool={name:'save_synthetic_evidence',description:'Save your actual observations or report as a durable UTF-8 document in this isolated evaluation project. Returns the project-relative evidence_files path. Use factual content, source IDs, method, results and limitations.',
   annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:false,openWorldHint:false},
   inputSchema:{type:'object',properties:{text:{type:'string',minLength:1,maxLength:65536}},required:['text'],additionalProperties:false}};
@@ -44,6 +63,13 @@ if(process.argv[2]==='--proxy') {
       if(req.method==='tools/call' && req.params.name===sourceTool.name) {
         const text=sources[req.params.arguments?.id];
         result={content:[{type:'text',text:text || 'Unknown fictional source'}],isError:!text};
+      } else if(req.method==='tools/call' && req.params.name===chartTool.name) {
+        const values=req.params.arguments?.values, label=req.params.arguments?.label;
+        if(!Array.isArray(values)||!values.length||values.length>8||!values.every(Number.isFinite)||typeof label!=='string'||!label.trim())throw new Error('1–8 finite numbers and a label are required');
+        const path=`evidence/chart-${++written}.png`;
+        await mkdir(join(root,'evidence'),{recursive:true});
+        await writeFile(join(root,path),pngChart(values.map(v=>Math.max(0,v))),{flag:'wx'});
+        result={content:[{type:'text',text:JSON.stringify({saved:true,path,label})}],isError:false};
       } else if(req.method==='tools/call' && req.params.name===writeTool.name) {
         const text=req.params.arguments?.text;
         if(typeof text!=='string'||!text.trim()||Buffer.byteLength(text)>65536)throw new Error('Nonempty document up to 64 KiB required');
@@ -55,7 +81,7 @@ if(process.argv[2]==='--proxy') {
         throw new Error('Evaluation only permits the selected temporary project');
       } else {
         result=await core.rpc(req.method,req.params);
-        if(req.method==='tools/list') result.tools.push(sourceTool,writeTool);
+        if(req.method==='tools/list') result.tools.push(sourceTool,writeTool,chartTool);
       }
       if(req.method==='tools/call') appendFileSync(events,JSON.stringify({request:{name:req.params.name,arguments:req.params.arguments},result})+'\n');
       process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:req.id,result})+'\n');
@@ -114,13 +140,15 @@ if(process.argv[2]==='--proxy') {
     await writeFile(join(dir,'cli.jsonl'),log);
     const trace=(await readFile(events,'utf8')).trim().split('\n').filter(Boolean).map(JSON.parse);
     let kind=position, interviewClosed=false, cycleClosed=false, experiments=0;
-    const reads=[],badReads=[],writes=[],badWrites=[],verifyReports=[],firstSourceCycles=new Map();
+    const reads=[],badReads=[],writes=[],badWrites=[],verifyReports=[],firstSourceCycles=new Map(),charts=[],verifyDeclarations=[];
     for(const {request,result} of trace) {
       if(request.name===sourceTool.name) {
         const id=request.arguments.id;reads.push(id);
         if(!firstSourceCycles.has(id))firstSourceCycles.set(id,experiments);
         if(!interviewClosed||kind!=='verify')badReads.push({id,kind,interviewClosed});
       }
+      if(request.name===chartTool.name && !result.isError) charts.push(JSON.parse(result.content[0].text).path);
+      if(request.name==='gil_close' && kind==='verify' && request.arguments?.visuals) verifyDeclarations.push({state:request.arguments.visuals.declaration?.state??null,attachments:(request.arguments.visuals.attachments||[]).length,ok:result.structuredContent?.ok===true});
       if(request.name===writeTool.name && !result.isError) {
         writes.push(JSON.parse(result.content[0].text).path);
         if(!interviewClosed||kind!=='verify')badWrites.push({kind,interviewClosed});
@@ -147,8 +175,11 @@ if(process.argv[2]==='--proxy') {
       evidenceSavedInVerify:writes.length>=2&&!badWrites.length,
       everyVerifyCitesSavedEvidence:verifyReports.length>=2&&verifyReports.every(report=>savedFiles.some(f=>f.content.trim()&&report.includes(f.path)&&report.includes('evidence_files:'))),
       finalLinksEvidence:writes.some(path=>final.includes(path)),
+      // The prompt never asks for a picture: an `attached` Verify with a real chart file is the model's own choice.
+      visualAttachedUnprompted:charts.length>=1&&verifyDeclarations.some(d=>d.ok&&d.state==='attached'&&d.attachments>=1),
+      noWeakNotNeeded:verifyDeclarations.filter(d=>d.ok&&d.state==='not_needed').length<verifyDeclarations.filter(d=>d.ok).length,
       reportHasResults:/\b20(?:\.0+)?\s*%/.test(final)&&/\b50(?:\.0+)?\s*%/.test(final)};
-    summary.push({mode,position,checks,experiments,reads,badReads,writes,badWrites,verifyReports,calls:trace.length});
+    summary.push({mode,position,checks,experiments,reads,badReads,writes,badWrites,verifyReports,charts,verifyDeclarations,calls:trace.length});
     console.log(JSON.stringify(summary.at(-1)));
   }
   await writeFile(join(work,'summary.json'),JSON.stringify(summary,null,2));
