@@ -61,6 +61,7 @@ jobs:
           persist-credentials: false
       - run: rustup toolchain install 1.97.1 --profile minimal
       - name: Restore locked dependencies and compiler outputs
+        id: build_cache
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5, Node 24, pinned
         with:
           path: |
@@ -73,14 +74,9 @@ jobs:
             target/x86_64-pc-windows-msvc
             target/aarch64-pc-windows-msvc
             target/plugin-core-build
-          key: ${{ runner.os }}-${{ runner.arch }}-chain-core-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-${{ github.event.pull_request.head.sha || github.sha }}
+          key: ${{ runner.os }}-${{ runner.arch }}-chain-core-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-deps-v2-${{ hashFiles('.github/workflows/chain-core.yml', 'tools/ci/prune-workspace-cache.mjs') }}
           restore-keys: |
             ${{ runner.os }}-${{ runner.arch }}-chain-core-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-
-      - name: Native Windows recovery boundaries (pinned directories, links, journal cleanup)
-        if: runner.os == 'Windows'
-        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib restore::windows -- --test-threads=1
-      - name: Approval profile, M6-D contract over the real stdio process (Wave 1 E wire)
-        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test approved_plan_wire_wave1
       - name: Actual Chain, legacy preservation and domain regressions
         run: cargo test --locked -p gil --features chain-core --test chains --test chain_closing --test chain_handoff --test cycles --test context --test context_profiles --test will --test walk
       - name: Repeated failure and branch context inside a Chain
@@ -93,6 +89,11 @@ jobs:
         run: cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --test mcp
       - name: Compile all Core targets in the development product profile
         run: cargo build --locked -p gil --all-targets --features chain-core,visual-authoring,product-safety
+      - name: Native Windows recovery boundaries (pinned directories, links, journal cleanup)
+        if: runner.os == 'Windows'
+        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib restore::windows -- --test-threads=1
+      - name: Approval profile, M6-D contract over the real stdio process (Wave 1 E wire)
+        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test approved_plan_wire_wave1
       - name: Approval profile, complete library contracts (plan domain, tool catalog, guidance, profile fixtures)
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib -- --test-threads=1
       - name: Historical context projection stays readable without automatic approval migration
@@ -103,5 +104,8 @@ jobs:
         run: cargo build --locked -p gil --all-targets --features approved-plan,visual-authoring,product-safety
       - name: Shared workflow text, Skill catalog and scenario evaluator contracts (pure Node, no Core process)
         run: node --test plugins/gil-companion-prototype/skill.test.mjs plugins/gil-companion-prototype/workflow.test.mjs tools/scenarios/proxy.test.mjs tools/scenarios/redact.test.mjs tools/scenarios/report.test.mjs tools/scenarios/rpc.test.mjs tools/scenarios/scorer-cli.test.mjs tools/scenarios/trace-score.test.mjs tools/scenarios/approval-link.test.mjs tools/scenarios/state-path.test.mjs
+      - name: CI cache and ordering contracts
+        run: node --test tools/ci/*.test.mjs
       - name: Keep dependency outputs in cache after verification and artifact upload
+        if: steps.build_cache.outputs.cache-hit != 'true'
         run: node tools/ci/prune-workspace-cache.mjs

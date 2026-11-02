@@ -17,7 +17,20 @@ for (const target of ['target', 'target/plugin-core-build']) {
   const tag = `${target}/CACHEDIR.TAG`;
   if (!existsSync(tag)) writeFileSync(tag,
     'Signature: 8a477f597d28d172789f06886806bc55\n# GIL CI Cargo build cache.\n', {flag:'wx'});
-  const result = spawnSync('cargo', ['clean', '--locked', '-p', 'gil', '-p', 'gil-companion', '--target-dir', target], {stdio:'inherit'});
-  if (result.error) throw result.error;
-  assert.equal(result.status, 0, `workspace cache cleanup failed: ${target}`);
+  // Explicit --target builds have separate output trees, even for the host's
+  // own triple. Cleaning only the implicit host left Windows/Companion objects
+  // and incremental state in the supposedly dependency-only cache.
+  for (const triple of [null, 'aarch64-apple-darwin', 'x86_64-pc-windows-msvc', 'aarch64-pc-windows-msvc']) {
+    if (triple) {
+      const output = `${target}/${triple}`;
+      if (!existsSync(output)) continue;
+      assert.ok(lstatSync(output).isDirectory() && !lstatSync(output).isSymbolicLink());
+      assert.equal(realpathSync(output), resolve(realpathSync(target), triple));
+    }
+    const args = ['clean', '--locked', '-p', 'gil', '-p', 'gil-companion', '--target-dir', target];
+    if (triple) args.push('--target', triple);
+    const result = spawnSync('cargo', args, {stdio:'inherit'});
+    if (result.error) throw result.error;
+    assert.equal(result.status, 0, `workspace cache cleanup failed: ${target}/${triple || 'host'}`);
+  }
 }
