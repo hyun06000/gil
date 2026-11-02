@@ -1347,17 +1347,17 @@ fn opened_step(session: &Session, opened: crate::Opened) -> String {
         out.push_str("  증거 필수: 실제 관측·실행 결과를 프로젝트의 문서·로그·데이터·코드·시각자료 파일로 저장한다. 읽기만 한 작업도 관측 문서를 남긴다. Report의 evidence_files에 상대 경로를 한 줄에 하나씩 적는다. 파일 없음·빈 파일·이전 파일만 그대로 재사용하면 서버가 닫기를 거절한다. 채팅이나 visuals.not_needed/missing으로 대체할 수 없다.\n");
         out.push_str("  이 Verify 계약 안의 조사·출처 확인·계산·보고서 작성·구현·테스트를 수행한다. 관측을 마치기 전에 닫지 않는다. 완료 뒤에는 닫고 Analysis로 결과를 해석한다.\n");
     } else {
-        out.push_str("  이 단계에서는 산출물을 수정하지 않는다. 새 근거를 얻는 외부 자료 조회·측정·계산·원고 작성·구현·테스트는 Verify에서 수행한다. 이미 관측한 자료의 해석은 Analysis에서 한다.\n");
+        out.push_str("  이 단계에서는 산출물을 수정하지 않는다. 프로젝트 내부 파일 생성·변경과 보고서 제작은 열린 Verify에서 수행한다. 파일 없는 웹 조사·기존 증거 읽기·무관한 외부 작업은 허용한다. Analysis는 저장된 관측을 읽고 해석한다.\n");
     }
     if cycle.kind() == CycleKind::Interview {
-        out.push_str("  Interview는 목표·범위를 합의하는 자리다. 본격적인 웹 조사와 보고서 작성은 채팅으로만 전달하더라도 실행 작업이다. Interview를 닫은 뒤 Experiment의 Verify에서 수행한다.\n");
+        out.push_str("  Interview는 목표·범위를 합의하는 자리다. 파일 없는 웹 조사나 외부 작업이 이 Interview를 닫거나 프로젝트 완료를 대신하지 않는다. 프로젝트 내부 산출물 제작은 Interview를 닫은 뒤 Experiment의 Verify에서 수행한다.\n");
         match opened.kind {
             NodeKind::Synthesis => out.push_str("  제안에 대한 사용자의 답을 기다린다. 이미 그 제안에 동의했다면 다시 묻거나 작업을 시작하지 말고, 실제 승인을 Report에 기록해 이 Synthesis를 닫는다. 이후 영수증에 따라 Outcome을 열고 닫은 다음 Interview Cycle Report를 별도로 닫는다.\n"),
             NodeKind::Outcome => out.push_str("  이 Outcome은 승인된 목표에 대한 판정이다. 프로젝트 전체 실행이 끝날 때까지 열어 두지 않는다. 판정과 다음 방향이 정해지면 이 Step을 닫고, 이어 Interview Cycle Report를 별도로 닫는다.\n"),
             _ => {},
         }
     } else if opened.kind == NodeKind::Define {
-        out.push_str("  지금은 독립적으로 확인할 질문 하나와 성공 기준만 정한다. 성공 기준은 결과를 미리 알아야 정할 수 있는 값이 아니라 확인 방법·판정 조건이다. 자료를 조회하거나 답을 계산하지 말고 Define Report를 닫은 뒤 Hypothesis를 정한다. 주가 변화와 매출 변화처럼 각각 별도로 참·거짓을 판단할 수 있는 질문은 분리한다. 검색 한 번이나 문단 하나마다 나눌 필요는 없다.\n");
+        out.push_str("  지금은 독립적으로 확인할 질문 하나와 성공 기준만 정한다. 성공 기준은 결과를 미리 알아야 정할 수 있는 값이 아니라 확인 방법·판정 조건이다. Define의 완료 조건을 충족하면 그 Report를 닫은 뒤 Hypothesis를 정한다. 주가 변화와 매출 변화처럼 각각 별도로 참·거짓을 판단할 수 있는 질문은 분리한다. 검색 한 번이나 문단 하나마다 나눌 필요는 없다.\n");
     }
     // **닫기 전에 계약을 미리 알려 준다.** 허용값을 오류로 알아내게 두지 않는다
     // (실사용 M2C 보고). 말은 여기서 짓지 않고 문법에서 읽는다.
