@@ -114,6 +114,13 @@ pub fn valid_input(tool: &Tool, input: &Value) -> bool {
 /// field so the caller can correct the call, never echoes input values, and states that nothing
 /// was closed. Field grammar itself stays with Core; this only describes the wire shape.
 pub fn rejection(tool: &Tool, input: &Value) -> &'static str {
+    if tool.name == "gil_plan_propose" {
+        return if input.get("draft").is_none() {
+            "gil_plan_propose: 'draft' is missing. The call takes exactly {project_root, draft}; scope, items and synthesis belong inside draft, never at the top level, and exploration_checklist is a string field inside synthesis (item IDs, one per line). Nothing was recorded; wrap the same content in draft and send one corrected call."
+        } else {
+            "gil_plan_propose: 'draft' is present but malformed. draft takes exactly {scope:{goal,in_scope,out_of_scope,constraints,success_criteria}, items:[{id,question,done_when}] (1–64), synthesis:{string fields such as statement, basis_refs, exploration_checklist}}; every value is a string, no extra field at any level, and project_root is an absolute string. Nothing was recorded; correct the call instead of repeating it."
+        };
+    }
     if tool.name != "gil_close" {
         return "Invalid GIL tool arguments";
     }
@@ -152,6 +159,15 @@ mod tests {
             assert!(rejection(close,&owner_only).contains("text contract"));
         }
         assert_eq!(rejection(tools().iter().find(|t| t.name=="gil_status").unwrap(),&json!({})),"Invalid GIL tool arguments");
+        #[cfg(feature = "approved-plan")]
+        {
+            let propose=tools().iter().find(|t| t.name=="gil_plan_propose").unwrap();
+            let flat=json!({"project_root":secret,"scope":{},"items":[],"synthesis":{},"exploration_checklist":"A"});
+            let said=rejection(propose,&flat);
+            assert!(said.contains("'draft' is missing") && said.contains("inside draft") && !said.contains(secret),"{said}");
+            let wrapped=json!({"project_root":secret,"draft":{"scope":{},"items":[],"synthesis":{},"extra":1}});
+            assert!(rejection(propose,&wrapped).contains("malformed"));
+        }
     }
     #[test]
     fn visual_authoring_is_explicit_and_never_silently_dropped() {

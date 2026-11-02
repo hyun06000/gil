@@ -228,11 +228,23 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    connected `tools/list` offers `gil_plan_propose`/`gil_plan_read`/`gil_plan_request_interview`.
    Otherwise (legacy projects, default builds, tools absent) never require `gil_plan_*`; use the
    ordinary Synthesis. Do not infer this from the OS or the install kind.
-   - In an open Interview Synthesis, call `gil_plan_propose` with `scope` (`goal`, `in_scope`,
-     `out_of_scope`, `constraints`, `success_criteria`; write `없음` rather than leaving one empty),
-     ordered `items` (`id`, `question`, `done_when`) and `synthesis` (the Synthesis Report fields
-     such as `statement` and `basis_refs`). `exploration_checklist` lists the item IDs in the same
-     order, one per line. Never write `approved`, `plan_revision` or `plan_digest`: Core adds them.
+   - In an open Interview Synthesis, call `gil_plan_propose` with exactly two top-level fields,
+     `project_root` and `draft`. Everything else lives **inside `draft`**; an extra field at any
+     level refuses the whole call (`Invalid GIL tool arguments`, nothing recorded):
+
+     ```json
+     {"project_root": "<absolute path>",
+      "draft": {
+        "scope": {"goal": "…", "in_scope": "…", "out_of_scope": "…", "constraints": "…", "success_criteria": "…"},
+        "items": [{"id": "A", "question": "…", "done_when": "…"}],
+        "synthesis": {"statement": "…", "basis_refs": "step:C1/S1\nstep:C1/S2", "exploration_checklist": "A\nB"}}}
+     ```
+
+     `scope` has those five string fields (write `없음` rather than leaving one empty); `items`
+     is the ordered checklist (1–64) of `id`, `question`, `done_when`; `synthesis` holds the
+     Synthesis Report fields as strings, where `exploration_checklist` lists the item IDs in the same
+     order, one per line.
+     Never write `approved`, `plan_revision` or `plan_digest`: Core adds them.
    - Call `gil_await_user(project_root, question)` and end the response with that exact question;
      **end the turn and wait for the Monitor button.** Chat agreement is not approval. While
      waiting, make no project file changes or re-proposal. Check approval only with `gil_plan_read`.

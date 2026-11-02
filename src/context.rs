@@ -50,7 +50,7 @@ pub fn context(project: &Project) -> String {
     out.push_str("\n[프로젝트 파일 작업 범위]\n프로젝트 안 Artifact 파일 생성·수정·삭제·이동·외부 파일 가져오기는 실제로 열린 Experiment Verify에서만 수행한다. DOCX·PNG·PDF 제작과 렌더링도 포함한다. Closing Interview·승인 대기·열린 Step이 없는 경계·종료된 Chain을 포함한 나머지 자리에서는 파일을 변경하지 않는다. 프로젝트 밖 작업과 프로젝트 파일을 남기지 않는 웹 조사, 기존 증거 읽기는 이 제한 없이 수행할 수 있다. GIL 기록·승인·허용된 복구는 기존 도구와 계약을 따르며 .gil을 직접 편집하지 않는다. 이는 Agent 지침이며 OS 쓰기 차단을 뜻하지 않는다.\n");
     if let Some(plan) = project.approved_plan() {
         let chain = project.current_chain().unwrap();
-        out.push_str("\n승인 계획 프로필: Synthesis를 열고 gil_plan_propose → Monitor 버튼 응답 → gil_plan_read의 close_report로 닫기 → Outcome → Interview Cycle 닫기. 채팅 동의로 대체하지 않는다.\n");
+        out.push_str("\n승인 계획 프로필: Synthesis를 열고 gil_plan_propose({project_root, draft:{scope, items, synthesis}}) → Monitor 버튼 응답 → gil_plan_read의 close_report로 닫기 → Outcome → Interview Cycle 닫기. 채팅 동의로 대체하지 않는다.\n");
         out.push_str(&format!("승인 판: {:?} · 미실행 순서: {}\n실행 연결: {}\n", plan.active(chain).map(|p| p.revision), plan.pending(chain).iter().map(|i| i.id.as_str()).collect::<Vec<_>>().join(", "), serde_json::to_string(&plan.executed_cycles).unwrap()));
         let cycle = project.current_cycle();
         if !plan.awaiting_interview(chain).is_empty() {

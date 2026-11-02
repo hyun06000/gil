@@ -286,6 +286,11 @@ fn approval_contract_holds_over_the_real_stdio_process() {
 
     // propose / idempotent / read
     let d = draft(&["A", "B"], &basis, &[]);
+    // The field-test shape (scope/items/synthesis at the top level) is refused by name: the
+    // -32602 message says 'draft' is missing and where the fields belong, without echoing input.
+    let flat = rpc_error(r.model("gil_plan_propose", json!({"scope":d["scope"],"items":d["items"],"synthesis":d["synthesis"],"exploration_checklist":"A"})), "flat propose");
+    let message = flat["error"]["message"].as_str().unwrap_or_default().to_owned();
+    assert!(message.contains("'draft' is missing") && message.contains("inside draft"), "{message}");
     let first = ok(r.model("gil_plan_propose", json!({"draft":d})), "propose");
     assert_eq!(structured(&first)["proposal"]["revision"], 1);
     assert!(structured(&first)["proposal"]["receipt"].is_null());
