@@ -1,10 +1,10 @@
 {
-  "version": "0.1.1-owner.11",
-  "notes": "Monitor에서 승인 성공과 일시적인 조회 실패를 구분합니다. 확인된 승인 판을 유지한 채 짧은 간격으로 다시 조회하며, 저장 결과가 불확실하면 승인을 자동 재전송하지 않습니다. 기존 연결은 유지되며 새 연결부터 새 Core를 사용합니다.",
+  "version": "0.1.1-owner.12",
+  "notes": "Verify 시각 증거 선언·인용 검증, Monitor 시각 자료·누락 상태 표시와 한글 프로젝트 경로를 개선했습니다. 승인 성공·조회 재시도 구분은 유지하며 기존 기록은 자동 변환하지 않습니다. 사용자 버튼으로만 설치하며 기존 연결은 유지되고 새 연결부터 새 Core를 사용합니다.",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/hyun06000/gil/releases/download/windows-owner-update-0.1.1-owner.11/GIL.Companion.Unsigned.Test._0.1.1-owner.11_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRMmJnSHJ2eEhDbkxxc2FLWHR0VCtVT1I0cUpIOFdOc3dseU5xdHRvMGdrb1VUNmlqOEh1NlJLMUdSRWNCZitGbGhGWC9ZYVFDRERvbEZjTW9LM1ZCWUFzbi95cU1jZVFnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNTc1MjIzCWZpbGU6R0lMIENvbXBhbmlvbiAoVW5zaWduZWQgVGVzdClfMC4xLjEtb3duZXIuMTFfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMS4xLW93bmVyLjExCkxCQ3ZZZHVKeE1WaEx0Mk5xcUF6TXp2VFpyNFFjSE5XbVFuN2VFbDJQVWQ1QmpnaXVTQ2swd2ZxZFFjUXBsdDBsUzNkN0UrdENiNE5JT2IxdjAvS0F3PT0K"
+      "url": "https://github.com/hyun06000/gil/releases/download/windows-owner-update-0.1.1-owner.12/GIL.Companion.Unsigned.Test._0.1.1-owner.12_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRMmJnSHJ2eEhDblBvNXRGSVpXRGRTaFo2dmRNMW5DWHVCUFVWbVZQTm5sd3pjdGxGZHNXL0JGQ2RZb0w0SkhlcDVGajFCVlNLVXlWSFdZbXZlaWVKaFJVVDR5aUM5UWdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNTc4MTIwCWZpbGU6R0lMIENvbXBhbmlvbiAoVW5zaWduZWQgVGVzdClfMC4xLjEtb3duZXIuMTJfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMS4xLW93bmVyLjEyCm5kR1oyRklrTGtzOElhTVRyVEZ2M0crYTRXS2ZwUGhIcmpHbUJkZ3lRT1R6endRRjZ2ZUFDT3FmNnRVNnkxM3QxalA1NDRrbC9wYXgxWXMxSThqZkJnPT0K"
     }
   }
 }
