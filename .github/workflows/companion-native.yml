@@ -47,6 +47,7 @@ jobs:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Restore locked dependencies and compiler outputs
+        id: build_cache
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5, Node 24, pinned
         with:
           path: |
@@ -59,7 +60,7 @@ jobs:
             target/x86_64-pc-windows-msvc
             target/aarch64-pc-windows-msvc
             target/plugin-core-build
-          key: ${{ runner.os }}-${{ runner.arch }}-companion-native-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-${{ github.event.pull_request.head.sha || github.sha }}
+          key: ${{ runner.os }}-${{ runner.arch }}-companion-native-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-deps-v2-${{ hashFiles('.github/workflows/companion-native.yml', 'tools/ci/prune-workspace-cache.mjs') }}
           restore-keys: |
             ${{ runner.os }}-${{ runner.arch }}-companion-native-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-
       - name: Native toolchain and icon-source verification
@@ -88,5 +89,8 @@ jobs:
         run: |
           cargo test --locked -p gil --features runtime-testbed --target $env:GIL_COMPANION_TARGET --test companion_discovery -- --nocapture
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: CI cache and ordering contracts
+        run: node --test tools/ci/*.test.mjs
       - name: Keep dependency outputs in cache after verification and artifact upload
+        if: steps.build_cache.outputs.cache-hit != 'true'
         run: node tools/ci/prune-workspace-cache.mjs
