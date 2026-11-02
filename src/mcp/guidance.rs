@@ -62,7 +62,7 @@ fn refused(name: &str) -> Option<&'static str> {
         "gil_open" => "GIL 거절: 열린 것은 없다. 아래 이유를 읽고 현재 위치에서 허용되는 종류와 행동 계약(objective · next_action · done_when)으로 한 번 다시 보낸다. 위치가 불확실하면 gil_status를 읽는다.",
         "gil_revisit" => "GIL 거절: 되돌아가지 않았다. 이유가 dirty 세계·승인 계획 바인딩·적어 둔 방향 없음이면 그 조건을 사용자에게 알린다. gil_revisit을 반복하거나 restore를 자동 실행하지 않는다.",
         "gil_start" => "GIL 거절: 새 프로젝트를 만들지 않았다. 이미 프로젝트가 있다면 gil_context를 한 번 읽고 기록된 위치에서 이어간다. gil_start를 반복하지 않는다.",
-        "gil_plan_propose" => "GIL 거절: 제안이 기록되지 않았다. 열린 Interview Synthesis인지, scope 5칸·items(id · question · done_when)·synthesis 칸이 모두 있는지, exploration_checklist가 items의 id를 같은 순서로 한 줄씩 적었는지, approved · plan_revision · plan_digest를 넣지 않았는지 확인해 한 번 다시 보낸다. 이 프로젝트가 승인 계획 프로필이 아니라면 일반 Synthesis로 사용자의 답을 기다린다.",
+        "gil_plan_propose" => "GIL 거절: 제안이 기록되지 않았다. 입력은 {project_root, draft} 두 칸뿐이고 scope·items·synthesis는 모두 draft 안에 둔다. 열린 Interview Synthesis인지, draft.scope 5칸·draft.items(id · question · done_when)·draft.synthesis(statement · basis_refs · exploration_checklist: items의 id를 같은 순서로 한 줄씩, 값은 전부 문자열)가 모두 있는지, approved · plan_revision · plan_digest를 넣지 않았는지 확인해 한 번 다시 보낸다. 이 프로젝트가 승인 계획 프로필이 아니라면 일반 Synthesis로 사용자의 답을 기다린다.",
         "gil_plan_read" => "GIL 거절: 승인 상태를 읽지 못했다. 응답이 불확실하면 gil_plan_read를 한 번 다시 읽는다. 승인을 지어내거나 Synthesis를 닫지 않는다.",
         "gil_plan_request_interview" => "GIL 거절: 재인터뷰 요청이 기록되지 않았다. 열린 Experiment에서 1~4096 bytes 이유로 한 번 다시 보낸다. 현재 Step의 다음 호출은 바뀌지 않는다 — 마지막 receipt의 다음 행동을 그대로 이어간다.",
         _ => return None,
@@ -99,7 +99,7 @@ fn opened(result: &CallToolResult) -> String {
     let specific = match kind {
         "question" => "GIL 진행: Question을 열었다. gil_await_user(project_root, question)를 호출하고 그 질문 문장으로 응답을 끝낸다. 턴을 끝내 답을 기다린다. 답을 받으면 그 원문으로 gil_close한다. 사용자의 원 요청문을 response로 대신 적어 닫지 않는다 — 실제 답 없이는 닫지 않는다. 기다리는 동안 프로젝트 파일을 변경하지 않는다. 파일 없는 웹 조사·기존 증거 읽기·무관한 외부 작업은 허용하며 사용자 답변을 대신하지 않는다.",
         "interpretation" => "GIL 진행: Interpretation을 열었다. 받은 답에서 확정된 것과 모르는 것을 갈라 gil_close한다. 프로젝트 파일은 변경하지 않는다.",
-        "synthesis" => "GIL 진행: Synthesis를 열었다. 제안 statement를 사용자에게 보여 준다(승인 계획 프로필이면 먼저 gil_plan_propose로 제안하고 Monitor 버튼을 기다린다). gil_await_user(project_root, question)를 호출한 뒤 그 질문 문장으로 응답을 끝내 답을 기다린다. 명시적 동의가 있을 때만 gil_close한다. 침묵·이전 요청·자체 판단은 승인이 아니다. 기다리는 동안 프로젝트 파일을 변경하지 않는다.",
+        "synthesis" => "GIL 진행: Synthesis를 열었다. 제안 statement를 사용자에게 보여 준다(승인 계획 프로필이면 먼저 gil_plan_propose({project_root, draft:{scope, items, synthesis}})로 제안하고 Monitor 버튼을 기다린다 — scope·items·synthesis는 draft 안에, exploration_checklist는 synthesis 안의 문자열이다). gil_await_user(project_root, question)를 호출한 뒤 그 질문 문장으로 응답을 끝내 답을 기다린다. 명시적 동의가 있을 때만 gil_close한다. 침묵·이전 요청·자체 판단은 승인이 아니다. 기다리는 동안 프로젝트 파일을 변경하지 않는다.",
         "outcome" if said.contains("Interview") => "GIL 진행: Interview Outcome을 열었다. 승인된 범위를 판정해 gil_close한다. 프로젝트가 끝날 때까지 열어 두지 않는다. 닫은 뒤 Interview Cycle Report를 별도로 gil_close한다.",
         "outcome" => "GIL 진행: Experiment Outcome을 열었다. 실제 Analysis에 근거한 verdict·lesson·next_direction으로 gil_close한다. 닫은 뒤 Cycle Report를 별도로 gil_close한다.",
         "define" => "GIL 진행: Define을 열었다. 확인할 질문 하나와 판정 기준만 적어 gil_close한다. 프로젝트 파일 변경은 Verify에서 한다.",
