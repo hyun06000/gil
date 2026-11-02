@@ -99,7 +99,10 @@ macOS sandbox 시험·두 Host의 실제 훅 인수·실제 Monitor 화면 인�
 
 PR CI는 기존 필수 check와 플랫폼/기능 검사를 유지한다. 같은 PR의 이전 실행만 취소하며 수동 실행은
 취소하지 않는다. Rust 1.97.1·OS·아키텍처·matrix·lockfile별 의존성/빌드 캐시를 복원한 뒤 모든 검사를
-다시 실행한다. cache hit를 시험 성공으로 세지 않으며, 최초 cache miss나 runner 대기는 그대로 발생한다.
+다시 실행한다. 검증/산출물 업로드 후 workspace 자체 출력만 `cargo clean -p`로 제거하여 의존성
+출력만 캐시에 남긴다. 의존성·CI 입력이 main에 병합될 때만 기준 캐시를 갱신한다. 따라서 일반
+소스 PR은 main 캐시를 재사용하며, 매 병합마다 중복 검사를 추가하지 않는다. cache hit를 시험
+성공으로 세지 않으며, 최초 cache miss나 runner 대기는 그대로 발생한다.
 
 Companion을 변경하면 해당 package의 시험과 실제 플랫폼 검수를 추가한다. `gil` 시험 성공을
 Tauri 포함 workspace 전체 성공이라고 부르지 않는다. 시험마다 실행한 명령, 통과/실패/미실행,

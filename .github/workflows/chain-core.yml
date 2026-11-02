@@ -13,7 +13,19 @@ on:
       - 'mcp-app/**'
       - 'ui/**'
       - 'tools/scenarios/**'
+      - 'tools/ci/**'
       - 'scenarios/**'
+      - '.github/workflows/chain-core.yml'
+  # Seed reusable default-branch dependency caches only when their inputs change.
+  push:
+    branches: [main]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'companion/Cargo.toml'
+      - 'mcp-app/package-lock.json'
+      - 'plugins/gil-companion-prototype/package-lock.json'
+      - 'tools/ci/**'
       - '.github/workflows/chain-core.yml'
   workflow_dispatch:
 concurrency:
@@ -90,3 +102,5 @@ jobs:
         run: cargo build --locked -p gil --all-targets --features approved-plan,visual-authoring,product-safety
       - name: Shared workflow text, Skill catalog and scenario evaluator contracts (pure Node, no Core process)
         run: node --test plugins/gil-companion-prototype/skill.test.mjs plugins/gil-companion-prototype/workflow.test.mjs tools/scenarios/proxy.test.mjs tools/scenarios/redact.test.mjs tools/scenarios/report.test.mjs tools/scenarios/rpc.test.mjs tools/scenarios/scorer-cli.test.mjs tools/scenarios/trace-score.test.mjs tools/scenarios/approval-link.test.mjs tools/scenarios/state-path.test.mjs
+      - name: Keep dependency outputs in cache after verification and artifact upload
+        run: node tools/ci/prune-workspace-cache.mjs

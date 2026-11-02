@@ -3,6 +3,17 @@ name: Codex native marketplace preview (NOT a release)
 on:
   pull_request:
     branches: [main]
+  # Seed reusable default-branch dependency caches only when their inputs change.
+  push:
+    branches: [main]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'companion/Cargo.toml'
+      - 'mcp-app/package-lock.json'
+      - 'plugins/gil-companion-prototype/package-lock.json'
+      - 'tools/ci/**'
+      - '.github/workflows/codex-preview.yml'
   workflow_dispatch:
     inputs:
       unsigned_preview_version:
@@ -130,3 +141,5 @@ jobs:
             target/codex-preview/checks.json
           if-no-files-found: error
           retention-days: 7
+      - name: Keep dependency outputs in cache after verification and artifact upload
+        run: node tools/ci/prune-workspace-cache.mjs

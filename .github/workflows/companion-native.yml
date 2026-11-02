@@ -2,6 +2,17 @@ name: Companion native build and tests (no installation)
 on:
   pull_request:
     branches: [main]
+  # Seed reusable default-branch dependency caches only when their inputs change.
+  push:
+    branches: [main]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'companion/Cargo.toml'
+      - 'mcp-app/package-lock.json'
+      - 'plugins/gil-companion-prototype/package-lock.json'
+      - 'tools/ci/**'
+      - '.github/workflows/companion-native.yml'
   workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
@@ -76,3 +87,5 @@ jobs:
         run: |
           cargo test --locked -p gil --features runtime-testbed --target $env:GIL_COMPANION_TARGET --test companion_discovery -- --nocapture
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Keep dependency outputs in cache after verification and artifact upload
+        run: node tools/ci/prune-workspace-cache.mjs
