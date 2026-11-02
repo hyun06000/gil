@@ -37,8 +37,9 @@ format 4 Artifact Snapshot, dirty gate, 중단 복구 가능한 `gil restore`, �
 GIL의 주 사용자는 비개발자다. 인간은 명령과 저장 형식을 외우는 대신 지속형 **GIL Monitor**에서
 현재 실험, 실패한 시도와 다음 방향을 본다. Monitor는 선택 부가기능이 아니다. 현재 기본 경로는
 **MCP App fullscreen에서 가로 Graph와 채팅을 함께 보는 것**이다. Codex의 실제 화면·자동 갱신·
-기본 재시작 복원을 확인했다. Claude Desktop의 Claude Code 탭은 같은 Monitor를 inline 카드로 띄운 뒤
-**첫 클릭에 fullscreen**으로 펼친다(사용자 확인 10/31·11/01). Native Companion은 같은 UI를 별도 창으로
+기본 재시작 복원을 확인했다. Claude Desktop의 Claude Code 탭에서는 같은 Monitor가 inline 카드로 뜬 뒤
+**첫 클릭에 fullscreen**으로 펼쳐지는 것까지 사용자가 확인했다(10/31·11/01). 2026-11-02부터 App은 연결
+직후에도 fullscreen을 자동 요청하므로 Claude Code 탭의 자동 펼침은 **사용자 화면 확인 대기**다. Native Companion은 같은 UI를 별도 창으로
 제공하는 대안이자 Windows의 Host 연결·업데이트 관리 창이며, fullscreen 실패를 이유로 자동 실행하지
 않는다. Companion 창이 열린 것을 MCP App 표시 성공으로 세지 않는다. inline 카드는 미리보기이지 설치 완료
 상태가 아니다. PiP는 현재 지원을 주장하지 않는다.
@@ -64,8 +65,10 @@ Claude Desktop의 **Claude Code**는 2026-10-30 소유자 보고로 MCP App full
 같은 날 폴더가 연결된 Claude Code 세션에서 설치된 Plugin 경로의 `show_gil_monitor`가 View를
 반환했지만 사용자 화면에는 서지 않았고(10/31 이 브랜치 빌드의 marketplace 설치본도 같음), 같은 세션의
 직접 등록 Monitor는 사용자가 **모니터 펼치기**로 fullscreen을 확인했다(10/31 진단, 서버 로그 일치).
-따라서 Claude에서는 Desktop 설정 직접 등록이 현재의 표시 경로다. 그 경로에서도 Host는 사용자 동작 안의 표시
-모드 요청만 적용해, Monitor는 inline으로 뜬 뒤 **첫 클릭에 fullscreen**으로 펼쳐진다(자동 펼침은 Codex만).
+따라서 Claude에서는 Desktop 설정 직접 등록이 현재의 표시 경로다. 그 경로에서 10/31까지의 빌드는 Monitor 준비
+뒤에만 자동 요청을 보냈고 Host는 그것을 적용하지 않아 **첫 클릭에 fullscreen**으로 펼쳐졌다. 2026-11-02 빌드부터
+App은 연결 직후에도 요청하고 **연결 정보**의 `automatic`에 모든 자동 시도와 Host 응답을 적는다. Claude Code
+탭에서 그 요청이 적용되는지는 사용자 화면 확인 대기이며, 적용되지 않으면 첫 클릭이 그대로 펼친다.
 preview archive 하나에 Codex(`.agents/plugins`)와 Claude Code(`.claude-plugin`) 두 catalog를 함께 싣고,
 Windows Companion은 **Codex 연결**과 **Claude Desktop 연결** 버튼으로 같은 고정 런처를 각 Host에 등록한다
 (Claude 버튼은 owner.10부터, 실제 Windows Claude 화면은 사용자 확인 대기). 사용자 화면 인수와 fullscreen 중 도구 승인 창 병행은

@@ -248,3 +248,36 @@ Monitor의 **모니터 펼치기** 결과와 채팅 병행, (3) fullscreen 중 �
   버튼 경로의 실제 화면, (2) 업데이트 뒤 두 Host의 다음 연결이 같은 새 Core를 받는지, (3) fullscreen 중 승인 창
   병행(#1081), (4) Desktop 완전 종료 뒤 Monitor 복원은 모두 사용자 확인으로만 닫는다. 최소 재현 절차는 저장소
   `INSTALL.md`의 Windows 절과 PR 본문에 적었다.
+
+## 2026-11-02 Claude Code 탭 — 시작 직후 Monitor 미표시·inline 기본 점검
+
+보고된 두 문제(① `gil_start` 성공 뒤 Agent가 `show_gil_monitor`를 부르지 않음, ② 뜨더라도 inline 카드)를
+Host 이름으로 분기하지 않고 지침·계약·App 로직에서 점검했다. 사용자 화면 확인은 아직 없다.
+
+- **Host가 모델에 보여 주는 도구:** 폴더가 연결된 Claude Code 세션에서 직접 등록 `gil` 서버의 `gil_start`·
+  `show_gil_monitor`를 모델 쪽에서 읽었다. 두 도구 모두 이름·설명·inputSchema가 그대로 전달됐고
+  (`_meta.ui.visibility`·`outputSchema`·`pattern`은 Host가 제거), 설명은 잘리지 않았다. 따라서 ①의 원인은
+  가시성이나 설명 길이가 아니다.
+- **① 원인 — 지침·계약의 모호함:** 시작 receipt의 `said` 본문은 `다음 … 실행 gil open`으로 끝나고,
+  `show_gil_monitor({scope_id})` 안내는 그 앞에 붙는 별도 텍스트 블록에만 있었다. `structuredContent.said`만
+  읽거나 본문의 `실행` 줄을 우선하는 Host/Agent는 Monitor 호출을 건너뛸 수 있다. 고침: Core가 성공한
+  `gil_start` 응답의 마지막 텍스트 블록에 `Monitor / 다음 호출은 하나다: show_gil_monitor({...})`를 넣었다.
+  `structuredContent.said`는 CLI receipt와 동일하게 유지하므로 이 필드만 읽는 소비자는 추가 안내를 받지 못한다.
+  앞 힌트도 "다음 호출은 하나다 · Host 종류와 무관 · 인자는 그대로 복사"로 바꿨다. `workflow.md` 규칙 1과
+  `gil_start`·`show_gil_monitor` 도구 설명도 같은 문장으로 맞췄다. Plugin Skill은 동기화 스크립트로 같은 원문을 받는다.
+- **② 원인 — App 로직의 시점:** 10/31까지 App의 첫 자동 `requestDisplayMode({mode:'fullscreen'})`은 Monitor가
+  **렌더된 뒤**에만 나갔고(1.5초·4초 재요청 포함) Claude Code 탭은 그것을 적용하지 않았다. Host가 카드를 막
+  올리는 시점의 요청은 시도된 적이 없다. 고침: `availableDisplayModes`에 fullscreen이 있으면 **연결 직후**에
+  한 번 요청하고, 렌더 뒤 한 번, 거절되면 1.5초·4초 재요청, 그래도 inline이면 첫 클릭 — 같은 순서를 모든
+  Host에 보낸다. Codex처럼 첫 요청이 적용되면 나머지는 나가지 않는다(회귀시험 `display.test.mjs`).
+- **확인 가능성:** **연결 정보**의 `automatic`에 자동 시도마다 `{phase: connect|ready|retry|gesture, at_ms,
+  applied}`가 쌓인다. Claude Code 탭에서 `connect` 항목이 있고 `applied`가 `inline`이면 "요청은 나갔으나 Host가
+  적용하지 않음", 항목이 없으면 "광고 모드에 fullscreen이 없어 요청 자체가 나가지 않음"으로 가른다.
+- **Codex와의 차이(남는 것):** Codex는 첫 자동 요청이 적용된다. Claude Code 탭에서 연결 직후 요청이 적용되는지는
+  사용자 화면 확인 대기다. 적용되지 않으면 동작은 10/31과 같다(inline 카드 → 첫 클릭에 fullscreen).
+- **바꾸지 않은 것:** 저장 형식, 공개 schema, `presence.rs`의 표시 재시도 예산(미응답 2회에서 중단), Host 이름 분기 없음.
+
+사용자 확인 절차(Claude Code 탭, Desktop 완전 재시작 뒤 새 세션, 빈 테스트 폴더): "지금 폴더에서 GIL 프로젝트를
+시작해 줘" → Agent가 `gil_start` 바로 다음에 `show_gil_monitor`를 한 번 부르는지, Monitor가 시작 직후 자동으로
+fullscreen으로 뜨는지, 아니라면 inline 카드가 뜨고 첫 클릭에 펼쳐지는지, 그리고 **연결 정보**의 `automatic` 값을
+적는다. 도구 응답 성공은 화면 성공이 아니다.

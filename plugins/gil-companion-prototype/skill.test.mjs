@@ -184,7 +184,7 @@ test("시작 응답의 준비된 scope를 표시하고 옛 서버만 별도 prep
   assert.match(flow, /Do not wait for a separate "Monitor 열어 줘"/, "별도 Monitor 요청을 기다리지 않는다는 문장이 없다");
   assert.match(flow, /never guess one/, "폴더를 추측하지 않는다는 문장이 없다");
   assert.match(flow, /do not ask them to install anything/, "Companion 설치를 요구하지 않는다는 문장이 없다");
-  assert.match(flow, /requests\s+fullscreen once by itself/, "기존 자동 fullscreen 요청을 재사용한다는 문장이 없다");
+  assert.match(flow, /requests\s+fullscreen by itself/, "기존 자동 fullscreen 요청을 재사용한다는 문장이 없다");
   assert.match(flow, /from this first step on/, "첫 Step 부터 갱신된다는 문장이 없다");
 });
 

@@ -9,14 +9,34 @@ test('all MCP display modes default to horizontal without claiming fullscreen', 
 
 const ready = { connected: true, ready: true,
   context: { displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen'] } };
-test('initial fullscreen waits for both connection and rendered data, then requests once', () => {
-  const policy = initialFullscreen();
+test('initial fullscreen asks once at connect when the Host already advertises it, once more when rendered, never without a connection or a capability list', () => {
+  let t = 0;
+  const policy = initialFullscreen({ now: () => t });
   assert.equal(policy.next({ ...ready, connected: false }), null);
-  assert.equal(policy.next({ ...ready, ready: false }), null);
-  assert.equal(policy.next({ ...ready, context: { displayMode: 'inline' } }), null);
-  assert.equal(policy.next(ready), 'fullscreen');
+  assert.equal(policy.next({ ...ready, context: { displayMode: 'inline' } }), null, 'no capability list yet');
+  t = 10;
+  assert.equal(policy.next({ ...ready, ready: false }), 'fullscreen', 'connect-time request');
+  assert.equal(policy.next({ ...ready, ready: false }), null, 'only one connect-time request');
+  assert.equal(policy.next(ready), null, 'the connect-time request is still in flight');
+  assert.equal(policy.settle('inline'), null, 'a declined connect-time request schedules no retry');
+  assert.equal(policy.retrying, false);
+  t = 900;
+  assert.equal(policy.next(ready), 'fullscreen', 'ready-time request');
   // Includes rejected requests, inline replies and returning inline after success.
   for (let i = 0; i < 5; i++) assert.equal(policy.next(ready), null);
+  assert.deepEqual(policy.attempts, [
+    { phase: 'connect', at_ms: 10, applied: 'inline' }, { phase: 'ready', at_ms: 900, applied: undefined }]);
+  assert.equal(policy.settle('fullscreen'), null);
+  assert.equal(policy.attempts.at(-1).applied, 'fullscreen');
+  assert.equal(policy.retrying, false);
+});
+test('a Host that applies the connect-time request gets no further automatic request', () => {
+  const policy = initialFullscreen();
+  assert.equal(policy.next({ ...ready, ready: false }), 'fullscreen');
+  assert.equal(policy.settle('fullscreen'), null);
+  assert.equal(policy.next(ready), null);
+  assert.equal(policy.gesture(), null);
+  assert.equal(policy.attempts.length, 1);
 });
 test('already fullscreen and inline-only Hosts do not receive automatic requests', () => {
   for (const context of [{ displayMode: 'fullscreen' }, { availableDisplayModes: ['inline'] }]) {
@@ -51,15 +71,21 @@ test('host identity is copied as reported and never decides display policy', () 
 test('an inline reply to the automatic request retries a bounded number of times, then waits for a gesture', () => {
   const policy = initialFullscreen();
   assert.equal(policy.next(ready), 'fullscreen');
+  assert.equal(policy.retry(), null, 'no retry while a request is in flight');
   assert.equal(policy.settle('inline'), RETRY_DELAYS_MS[0]);
   assert.equal(policy.retrying, true);
+  assert.equal(policy.retry(), 'fullscreen');
   assert.equal(policy.settle(null), RETRY_DELAYS_MS[1]);
+  assert.equal(policy.retry(), 'fullscreen');
   assert.equal(policy.settle('inline'), null, 'automatic attempts are exhausted');
   assert.equal(policy.awaitingGesture, true);
+  assert.equal(policy.retry(), null);
   assert.equal(policy.next(ready), null, 'the consumed intent never re-requests by itself');
   assert.equal(policy.gesture(), 'fullscreen', 'the first user gesture carries the last request');
   assert.equal(policy.gesture(), null);
   assert.equal(policy.settle('inline'), null);
+  assert.deepEqual(policy.attempts.map(a => [a.phase, a.applied]),
+    [['ready', 'inline'], ['retry', null], ['retry', 'inline'], ['gesture', 'inline']]);
 });
 test('a confirmed fullscreen, a manual choice or a Host event ends automatic retries', () => {
   let policy = initialFullscreen();
@@ -67,6 +93,7 @@ test('a confirmed fullscreen, a manual choice or a Host event ends automatic ret
   assert.equal(policy.retrying, false); assert.equal(policy.gesture(), null);
   policy = initialFullscreen();
   policy.next(ready); policy.settle('inline'); policy.cancel();
+  assert.equal(policy.retry(), null);
   assert.equal(policy.settle('inline'), null); assert.equal(policy.gesture(), null);
   policy = initialFullscreen();
   policy.next(ready); policy.settle('inline'); policy.observe('fullscreen');

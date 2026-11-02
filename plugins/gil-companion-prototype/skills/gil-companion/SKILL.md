@@ -32,13 +32,18 @@ GIL's own record/approval writes and explicitly authorized recovery use their ex
 and contracts; never edit `.gil` by hand. These are agent instructions, not an OS write lock.
 The current dirty gate detects changes at GIL boundaries; it does not intercept other tools.
 
-1. **Start and show.** Start a new project once. After successful `gil_start`, follow its returned
-   `show_gil_monitor` call before opening the first Interview step. Do not prepare the Monitor again
-   if start returned its scope. Never repeat start to open a screen. If start succeeded but Monitor
-   preparation failed, report the display failure and continue the recorded Interview via `gil_open`.
-   A display failure alone does not block Project work. A successful tool response does not prove
-   that a screen is visible. In a new session, read `gil_context` once; its first block
-   `[지금 바로 할 호출]` is the next call. Resume there instead of starting again.
+1. **Start and show.** Start a new project once. A successful `gil_start` receipt carries the exact
+   next call, `show_gil_monitor({"scope_id": …})`, in its opening guidance and its final text block:
+   that single call is the next call on every Host (Codex, Claude Desktop's Claude Code tab, Plugin or
+   direct registration alike), before the first `gil_open`. Copy its argument verbatim and do not
+   skip it because no card is visible yet or because the body also names `gil open` for later. Do not
+   prepare the Monitor again if start returned its scope. Never repeat start to open a screen. If
+   start succeeded but Monitor preparation failed, report the display failure and continue the
+   recorded Interview via `gil_open`. A display failure alone does not block Project work. The App
+   requests fullscreen by itself (at connect, again when the Monitor renders, bounded retries, then
+   the user's first click); never call `show_gil_monitor` again to force fullscreen. A successful
+   tool response does not prove that a screen is visible. In a new session, read `gil_context` once;
+   its first block `[지금 바로 할 호출]` is the next call. Resume there instead of starting again.
    **Keep the in-host MCP App present:** successful Project calls check recent App display reports.
    When a receipt supplies `show_gil_monitor(scope_id)` because the Monitor is absent/hidden/unknown,
    call it once before further work, without asking the user to open a Companion. For an explicit
@@ -364,7 +369,8 @@ platform is not permission to fall back to a shell or silently create a text-onl
    `gil_monitor_prepare(project_root)` on that same root, then `show_gil_monitor(scope_id)` with the
    scope it returned. If start says preparation failed, report that failure and do not start again;
    apply the bounded display retry rules below. The App starts horizontal and requests
-   fullscreen once by itself; you do not request or re-render it.
+   fullscreen by itself (at connect, when rendered, bounded retries, then the user's first
+   click); you do not request or re-render it.
 3. Follow the start receipt: `gil_open` the first Interview step and ask the user what they want.
    The Monitor reads the project on its own, so the graph updates from this first step on without
    any further rendering call.
@@ -592,13 +598,16 @@ The unsigned preview targets **macOS Apple Silicon** in two Hosts that share one
 (Plugin) and **Claude Desktop's Claude Code tab**. The extracted archive root carries both catalogs
 (Codex reads `.agents/plugins`, Claude Code reads `.claude-plugin`). As of 2026-10-31 the Claude Code
 Host does not render the Monitor App of a Plugin-installed server, while the same Core registered
-directly in Desktop settings renders inline and goes fullscreen on the user's first click inside
-the Monitor (that Host applies display-mode requests only within a user action, so no automatic
-request succeeds there); in Claude, treat the direct registration as the display route, tell the
-user to click the Monitor once to expand it, and treat a Plugin install as not yet visible. The default is Plugin-only fullscreen in
+directly in Desktop settings renders inline and went fullscreen on the user's first click inside
+the Monitor (through 10/31 that Host applied only the request sent within a user action; the
+App's requests sent at connect, added 2026-11-02, await the user's screen confirmation there); in
+Claude, treat the direct registration as the display route, tell the user that one click on the
+Monitor expands it if it did not expand by itself, and treat a Plugin install as not yet visible.
+The default is Plugin-only fullscreen in
 Codex; a separate Companion installation is **not required**. Windows and Intel Macs are not
-accepted targets. The App sends the same one-shot fullscreen request to every Host and records the
-Host's reported name in its 연결 정보 panel; it never changes behaviour by Host name. A fullscreen
+accepted targets. The App sends the same automatic fullscreen requests to every Host and records
+the Host's reported name and every automatic attempt (`automatic`) in its 연결 정보 panel; it
+never changes behaviour by Host name. A fullscreen
 seen in one Host, conversation mode or Desktop version is not evidence for another: report the
 actual Host and what the user saw. Fresh-Mac installation is deferred, not passed; if macOS blocks
 execution, stop without bypassing its security checks.
@@ -606,9 +615,10 @@ execution, stop without bypassing its security checks.
 For the in-host Monitor, use `gil_monitor_prepare(project_root)` with the user's explicit project
 or a host-verified root, then `show_gil_monitor(scope_id)` with its returned scope. The first tool
 does not render a UI; the second receives no filesystem path. Ask for the project if it is unknown.
-The App defaults to horizontal layout and automatically requests fullscreen after its Monitor is
-ready and the Host advertises support. If the Host leaves it inline, the App retries briefly on its
-own and then uses the user's first click inside the Monitor to request it; the user can also press
+The App defaults to horizontal layout and automatically requests fullscreen as soon as the Host
+advertises support (at connect) and again once its Monitor is ready. If the Host leaves it inline,
+the App retries briefly on its own and then uses the user's first click inside the Monitor to
+request it; the user can also press
 **모니터 펼치기**. A user returning inline or choosing vertical must not be overridden. Do not call
 rendering tools repeatedly to refresh it: the App reads complete Views and exact Step details
 through its own read-only tools. Native Companion is never launched automatically by this App.

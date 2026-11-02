@@ -78,9 +78,14 @@ impl GilServer {
             if let Some(scope) = prepared.structured_content.as_ref()
                 .filter(|_| prepared.is_error != Some(true))
                 .and_then(|v| v["scope_id"].as_str()) {
+                let call = format!("show_gil_monitor({})", serde_json::json!({"scope_id": scope}));
+                // The handoff also closes the receipt, after the body's `실행: gil open` line, so the
+                // last word of the start receipt is the one next call on every Host. `said` itself
+                // stays byte-identical to the CLI receipt.
+                result.content.push(ContentBlock::text(format!(
+                    "Monitor: 다음 호출은 하나다 — {call}. 위 ‘실행’의 gil open은 그 다음이다. Codex와 Claude Desktop의 Claude Code 탭에서 같다.")));
                 guidance::prepend(&mut result, format!(
-                    "GIL 시작은 성공했다. Monitor 준비도 완료했다. 지금 다음 도구를 먼저 호출한다: show_gil_monitor({}). 그 뒤 같은 project_root로 첫 Interview의 gil_open을 호출한다. gil_start나 gil_monitor_prepare를 반복하지 않는다. 화면이 보인다고 아직 단정하지 않는다.",
-                    serde_json::json!({"scope_id": scope})));
+                    "GIL 시작은 성공했다. Monitor 준비도 완료했다. 다음 호출은 하나다: {call}. 이 호출은 Host 종류와 무관하게 gil_open보다 먼저이며, 인자는 그대로 복사한다. 그 뒤 같은 project_root로 첫 Interview의 gil_open을 호출한다. gil_start나 gil_monitor_prepare를 반복하지 않는다. 화면이 보인다고 아직 단정하지 않는다."));
             } else {
                 let detail = prepared.structured_content.as_ref()
                     .and_then(|v| v["said"].as_str()).unwrap_or("Monitor 준비 결과를 확인하지 못했다");
@@ -194,7 +199,7 @@ impl GilServer {
         }).await;
         if visual { got = visuals::bounded(got); }
         if show && got.is_error != Some(true) {
-            got.content = vec![ContentBlock::text("GIL Monitor 데이터를 준비했다. App은 가로보기로 시작하고 지원되는 Host에 fullscreen을 한 번 자동 요청한다. 그대로라면 모니터 펼치기를 누른다. 이 응답만으로 화면 표시나 지속 표시 성공을 판정하지 않는다.")];
+            got.content = vec![ContentBlock::text("GIL Monitor 데이터를 준비했다. App은 가로보기로 시작하고 fullscreen을 광고한 Host에는 연결 직후와 Monitor 준비 뒤 스스로 fullscreen을 요청하며, 그래도 inline이면 사용자의 첫 클릭에 다시 요청한다. 그대로라면 사용자가 Monitor를 한 번 클릭하거나 모니터 펼치기를 누른다. 이 응답만으로 화면 표시나 지속 표시 성공을 판정하지 않는다.")];
         }
         got
     }
