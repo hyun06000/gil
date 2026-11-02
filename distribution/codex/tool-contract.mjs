@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 
 const expected = JSON.parse(readFileSync(new URL('../../src/mcp/tools.json', import.meta.url)));
+expected.push(JSON.parse(readFileSync(new URL('../../src/mcp/handoff-tool.json', import.meta.url))));
 const authoring = JSON.parse(readFileSync(new URL('../../src/mcp/authoring-schema.json', import.meta.url)));
 const migration = JSON.parse(readFileSync(new URL('../../src/mcp/migration-tools.json', import.meta.url)));
 
@@ -27,7 +28,7 @@ export function withoutRecoveryTools(tools) {
 
 export function checkAuthoringTools(tools, platform = process.platform) {
   // Windows adds gil_prepare_workspace (approved local workspace preparation); macOS has 25.
-  assert.equal(tools.length, platform === 'win32' ? 26 : 25);
+  assert.equal(tools.length, platform === 'win32' ? 27 : 26);
   const workspace = tools.find(t => t.name === 'gil_prepare_workspace');
   if (platform === 'win32') {
     assert.ok(workspace, 'Windows authoring surface carries gil_prepare_workspace');
@@ -57,7 +58,7 @@ export function checkAuthoringTools(tools, platform = process.platform) {
 }
 
 export function checkDefaultTools(tools) {
-  assert.equal(expected.length, 20, 'review the packaging contract when the catalog changes');
+  assert.equal(expected.length, 21, 'review the packaging contract when the catalog changes');
   assert.equal(tools.length, expected.length, 'default artifact must not expose development tools');
   assert.deepEqual(tools.map(t => t.name).sort(), expected.map(t => t.name).sort(),
     'missing, duplicate or unexpected tool');
@@ -84,7 +85,7 @@ export function checkDefaultTools(tools) {
 // Approved-plan is an explicit test profile, never inferred from an arbitrary extra tool.
 export function checkApprovedPlanTools(tools, platform = process.platform) {
   const names = ['gil_plan_propose', 'gil_plan_request_interview', 'gil_plan_read', 'gil_plan_review', 'gil_plan_decide'];
-  assert.equal(tools.length, (platform === 'win32' ? 26 : 25) + names.length);
+  assert.equal(tools.length, (platform === 'win32' ? 27 : 26) + names.length);
   checkAuthoringTools(tools.filter(t => !names.includes(t.name)), platform);
   for (const name of names) {
     const matches = tools.filter(t => t.name === name);

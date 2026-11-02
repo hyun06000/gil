@@ -33,6 +33,7 @@ pub fn tools() -> &'static [Tool] {
         #[cfg(feature = "product-safety")]
         let tools = super::recovery::catalog(tools);
         let mut tools = tools;
+        tools.push(serde_json::from_str(include_str!("handoff-tool.json")).expect("handoff tool"));
         for tool in &mut tools {
             let hint = match tool.name.as_ref() {
                 "gil_start" => " Start also prepares the Monitor; the receipt names the exact show_gil_monitor({scope_id}) call, which is the only next call on every Host, before the first gil_open. Never repeat start after display failure.",
@@ -88,6 +89,7 @@ pub fn valid_input(tool: &Tool, input: &Value) -> bool {
     if matches!(tool.name.as_ref(), "gil_monitor_report_visuals" | "gil_monitor_report_image") {
         return super::visuals::valid(input, tool.name == "gil_monitor_report_image");
     }
+    if tool.name == "gil_await_user" && input.as_object().is_none_or(|v| v.keys().any(|k| !matches!(k.as_str(), "project_root" | "question"))) { return false; }
     if tool.name == "gil_monitor_poll" && !super::presence::valid(input) { return false; }
     let Some(object) = input.as_object() else { return false; };
     let schema = &tool.input_schema;

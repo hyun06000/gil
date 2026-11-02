@@ -1,5 +1,14 @@
 ## GIL shared workflow
 
+### Turn completion on Codex and Claude Code
+
+- Starting GIL means continuing its recorded workflow. A chat report is not GIL completion.
+- If the goal is unknown, open the first Question with the objective “ask the user for the goal”, then ask. Do not wait with zero Steps.
+- Before yielding for user input, call `gil_await_user(project_root, question)` from an actually open Question, or from Synthesis after registering the proposal. End the response with that exact question. After the user replies, continue and close that same Step; an old Question does not authorize a chat-only final report.
+- Installed Host hooks automatically enroll successful `gil_start`/`gil_context` projects, including roots outside the chat cwd. Enrollment does not prove Host hook activation. Missing/untrusted hooks must not be reported as protection.
+- File-free web research and unrelated outside work remain allowed. They do not close a requested GIL workflow. Honor user cancellation; `GIL 일시 중지` explicitly detaches this chat's turn gate while retaining file protection. `gil_context` resumes it.
+- `show_gil_monitor` is a display request. Read `gil_monitor_status` before claiming visible/fullscreen. If `display_mode=inline`, say the Host kept the preview inline and guide the Host widget's “show in another panel”/expand control. Never claim that more retries guarantee fullscreen.
+
 These rules apply to every GIL connection, with or without a Plugin, on every operating system.
 Use only the user's selected absolute `project_root`. Each receipt's text guidance names **one next
 call or one wait**; do it, then read the next receipt. Read `structuredContent` too, and follow the

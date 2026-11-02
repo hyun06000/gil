@@ -87,7 +87,7 @@ async function requestMode(mode, { automatic = false } = {}) {
     // Response is the applied mode; events are recorded separately. No timer-based guess.
     if (got?.mode) context = { ...context, displayMode: got.mode };
     modes(got?.mode === 'fullscreen' ? '펼친 Monitor 입니다. Host 의 채팅 입력창에서 대화를 이어가세요.'
-      : got?.mode === 'inline' ? '대화 안의 미리보기입니다. 계속 보려면 모니터 펼치기를 눌러 주세요.'
+      : got?.mode === 'inline' ? 'Host가 fullscreen 요청에 inline을 반환했습니다. 모니터 펼치기로 재요청하거나 위젯 머리의 다른 패널에 표시·확대 버튼을 사용해 주세요.'
       : 'Host 가 적용 모드를 반환하지 않았습니다. 화면이 그대로라면 모니터 펼치기를 눌러 주세요.');
   } catch {
     if (!stopped) { response = '요청 오류'; modes('전환을 확인하지 못했습니다. 모니터 펼치기를 눌러 다시 요청할 수 있습니다.'); }
@@ -109,7 +109,7 @@ function scheduleRetry(appliedMode) {
   if (delay !== null) {
     retryTimer = setTimeout(() => { retryTimer = undefined; maybeFullscreen(); }, delay);
   } else if (initialDisplay.awaitingGesture) {
-    modes('대화 안의 미리보기입니다. Monitor 를 한 번 클릭하면 펼칩니다. 모니터 펼치기도 사용할 수 있습니다.');
+    modes('Host가 자동 fullscreen 요청을 적용하지 않았습니다. 클릭으로 재요청하거나, 위젯 머리의 다른 패널에 표시·확대 버튼을 사용해 주세요.');
   }
 }
 function maybeFullscreen() {
