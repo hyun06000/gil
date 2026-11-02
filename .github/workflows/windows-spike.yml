@@ -66,7 +66,7 @@ jobs:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Restore locked dependencies and compiler outputs
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4, pinned
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5, Node 24, pinned
         with:
           path: |
             ~/.cargo/registry
@@ -77,9 +77,9 @@ jobs:
             target/x86_64-pc-windows-msvc
             target/aarch64-pc-windows-msvc
             target/plugin-core-build
-          key: ${{ runner.os }}-${{ runner.arch }}-windows-spike-${{ matrix.label || matrix.os || 'native' }}-rust-1.97.1-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-${{ github.event.pull_request.head.sha || github.sha }}
+          key: ${{ runner.os }}-${{ runner.arch }}-windows-spike-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-${{ github.event.pull_request.head.sha || github.sha }}
           restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-windows-spike-${{ matrix.label || matrix.os || 'native' }}-rust-1.97.1-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-
+            ${{ runner.os }}-${{ runner.arch }}-windows-spike-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-
       - name: Automatic installer target detection
         shell: powershell
         run: ./distribution/windows/install-target.test.ps1
