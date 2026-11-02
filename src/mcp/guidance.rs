@@ -11,6 +11,8 @@ use serde_json::Value;
 // The Plugin skill embeds this exact text; CI rejects a stale generated copy.
 pub const INSTRUCTIONS: &str = include_str!("workflow.md");
 
+const FILE_BOUNDARY: &str = "프로젝트 파일 생성·수정·삭제·이동·외부 파일 가져오기는 실제로 열린 Verify에서만 수행한다. DOCX·PNG·PDF 제작과 렌더링도 포함한다. 프로젝트 밖 작업과 프로젝트 파일을 남기지 않는 웹 조사는 이 제한의 대상이 아니다. 이는 Agent 지침이며 OS 쓰기 차단은 아니다.";
+
 pub fn prepend(result: &mut CallToolResult, text: impl Into<String>) {
     result.content.insert(0, ContentBlock::text(text.into()));
 }
@@ -30,7 +32,7 @@ pub fn after(name: &str, result: &mut CallToolResult) {
     let hint = match name {
         "gil_open" => opened(result),
         "gil_close" => closed(result),
-        "gil_context" => "GIL 재개: 아래 context의 [지금 바로 할 호출] 한 줄을 먼저 따른다. 완료 조건을 충족했다면 추가 작업보다 gil_close가 먼저다. 이미 닫힌 단계를 반복하지 않고, 기존 프로젝트에 gil_start를 다시 부르지 않는다. 조사·채팅 보고서는 열린 Interview에서 수행하지 않는다.".to_string(),
+        "gil_context" => "GIL 재개: 아래 context의 [지금 바로 할 호출] 한 줄을 먼저 따른다. 완료 조건을 충족했다면 추가 작업보다 gil_close가 먼저다. 이미 닫힌 단계를 반복하지 않고, 기존 프로젝트에 gil_start를 다시 부르지 않는다. 프로젝트 파일 변경은 열린 Verify에서만 수행한다.".to_string(),
         "gil_status" => "GIL 위치: 아래 '다음:' 줄 하나가 지금 밟을 수 있는 수다. 같은 세션에서 status를 반복 호출하지 않고 그 수를 실행한다.".to_string(),
         "gil_revisit" => "GIL 되돌아감 완료: 작업 폴더가 대상 Cycle의 세계로 복원됐다. 다음 호출은 gil_open(kind: interview|experiment)으로 새 Cycle을 여는 것이다. gil_revisit을 반복하지 않는다.".to_string(),
         "show_gil_monitor" => "GIL 진행: Monitor 표시를 요청했다. 신규 시작 흐름이면 같은 project_root로 첫 Interview의 gil_open을 호출하고 질문한다. 기존 프로젝트라면 현재 열린 단계를 이어간다. 실제 화면 표시 여부는 아직 확인되지 않았다.".to_string(),
@@ -40,7 +42,11 @@ pub fn after(name: &str, result: &mut CallToolResult) {
         },
         _ => return,
     };
-    prepend(result, hint);
+    if matches!(name, "gil_open" | "gil_close" | "gil_context" | "gil_status") {
+        prepend(result, format!("{hint}\n{FILE_BOUNDARY}"));
+    } else {
+        prepend(result, hint);
+    }
 }
 
 /// A refused action moved nothing. Say so once and point at the one recovery call.
@@ -81,44 +87,44 @@ fn first_line_kind<'a>(said: &'a str, lead: &str) -> Option<&'a str> {
 }
 
 fn opened(result: &CallToolResult) -> String {
-    let generic = "GIL 진행: 아래 '지금 할 일'만 수행한다. 완료 조건을 충족하면 관측한 결과로 gil_close한 뒤 다음 행동으로 간다. 다른 목적의 일을 이 노드에 계속 붙이지 않는다. Interview는 목표 합의까지만 한다. 조사·계산·보고서 작성(채팅 전달도 포함)·구현·테스트는 Experiment의 Verify에서 계약 범위만큼 수행한다.";
+    let generic = "GIL 진행: 아래 '지금 할 일'만 수행한다. 완료 조건을 충족하면 관측한 결과로 gil_close한 뒤 다음 행동으로 간다. 다른 목적의 일을 이 노드에 계속 붙이지 않는다. Interview는 목표 합의까지만 한다. 프로젝트 파일 변경은 실제로 열린 Experiment Verify에서 수행한다. 프로젝트 밖 작업과 파일을 남기지 않는 웹 조사는 GIL 단계로 제한하지 않는다.";
     let said = said(result);
     let Some(kind) = first_line_kind(said, "열었다: ") else { return generic.into(); };
     let specific = match kind {
-        "question" => "GIL 진행: Question을 열었다. 사용자에게 질문하고 턴을 끝내 답을 기다린다. 답을 받으면 그 원문으로 gil_close한다. 기다리는 동안 조사·보고서 작성을 하지 않는다.",
-        "interpretation" => "GIL 진행: Interpretation을 열었다. 받은 답에서 확정된 것과 모르는 것을 갈라 gil_close한다. 외부 조사는 하지 않는다.",
-        "synthesis" => "GIL 진행: Synthesis를 열었다. 제안 statement를 사용자에게 보여 주고 턴을 끝내 답을 기다린다(승인 계획 프로필이면 먼저 gil_plan_propose로 제안하고 Monitor 버튼을 기다린다). 명시적 동의가 있을 때만 gil_close한다. 침묵·이전 요청·자체 판단은 승인이 아니다. 기다리는 동안 조사·보고서 작성을 하지 않는다.",
+        "question" => "GIL 진행: Question을 열었다. 사용자에게 질문하고 턴을 끝내 답을 기다린다. 답을 받으면 그 원문으로 gil_close한다. 기다리는 동안 프로젝트 파일을 변경하지 않는다.",
+        "interpretation" => "GIL 진행: Interpretation을 열었다. 받은 답에서 확정된 것과 모르는 것을 갈라 gil_close한다. 프로젝트 파일은 변경하지 않는다.",
+        "synthesis" => "GIL 진행: Synthesis를 열었다. 제안 statement를 사용자에게 보여 주고 턴을 끝내 답을 기다린다(승인 계획 프로필이면 먼저 gil_plan_propose로 제안하고 Monitor 버튼을 기다린다). 명시적 동의가 있을 때만 gil_close한다. 침묵·이전 요청·자체 판단은 승인이 아니다. 기다리는 동안 프로젝트 파일을 변경하지 않는다.",
         "outcome" if said.contains("Interview") => "GIL 진행: Interview Outcome을 열었다. 승인된 범위를 판정해 gil_close한다. 프로젝트가 끝날 때까지 열어 두지 않는다. 닫은 뒤 Interview Cycle Report를 별도로 gil_close한다.",
         "outcome" => "GIL 진행: Experiment Outcome을 열었다. 실제 Analysis에 근거한 verdict·lesson·next_direction으로 gil_close한다. 닫은 뒤 Cycle Report를 별도로 gil_close한다.",
-        "define" => "GIL 진행: Define을 열었다. 확인할 질문 하나와 판정 기준만 적어 gil_close한다. 자료 조회·계산은 Verify에서 한다.",
-        "hypothesis" => "GIL 진행: Hypothesis를 열었다. 예상·근거·guardrail을 적어 gil_close한다. 닫힌 뒤 다음 호출은 Verify의 gil_open이며, 그 성공 전에는 조사·계산·파일 작성을 하지 않는다.",
+        "define" => "GIL 진행: Define을 열었다. 확인할 질문 하나와 판정 기준만 적어 gil_close한다. 프로젝트 파일 변경은 Verify에서 한다.",
+        "hypothesis" => "GIL 진행: Hypothesis를 열었다. 예상·근거·guardrail을 적어 gil_close한다. 닫힌 뒤 다음 호출은 Verify의 gil_open이며, 그 성공 전에는 프로젝트 파일을 변경하지 않는다.",
         "verify" => "GIL 진행: Verify를 열었다. 이제 계약의 next_action을 실제로 수행한다. 관측 결과를 프로젝트 파일로 저장하고 evidence_files를 포함해 gil_close한다. 채팅만으로는 닫히지 않는다. 시각 자료를 함께 남긴다: 데이터는 코드로 그린 플롯, 구조는 다이어그램, UI·웹은 실제 브라우저(헤드리스 가능) 스크린샷, 파일 변화는 비교표를 PNG로 저장해 visuals.attachments/uses와 declaration attached로 첨부한다(AI 생성 이미지는 시각 자료가 아니다). 정말 그림이 필요 없으면 not_needed에 무엇이 이미지를 대신하는지 구체적으로 적는다 — 한 단어 이유는 거절된다. 승인 계획 프로필이면 plan_document 파일과 별도 실행 증거를 모두 남긴다.",
-        "analysis" => "GIL 진행: Analysis를 열었다. 저장된 Verify 증거만 해석해 nonblank interpretation으로 gil_close한다. 새 조사는 하지 않는다. Verify가 시각 자료를 첨부했다면 이 close는 그 자료를 인용해야 한다: expected_owner와 visuals를 함께 보내고 uses에 Verify receipt의 owner·asset_id·sha256을 stored source로 적는다(attachments는 빈 배열, declaration 생략).",
-        "interview" => "GIL 진행: Interview Cycle을 열었다. 다음 호출은 gil_open(kind: question)에 행동 계약을 적는 것이다. 조사·보고서 작성은 Interview에서 하지 않는다.",
-        "experiment" => "GIL 진행: Experiment Cycle을 열었다. 다음 호출은 gil_open(kind: define)에 행동 계약을 적는 것이다. 질문 하나만 다루며 Define·Hypothesis를 닫기 전에는 조사하지 않는다.",
+        "analysis" => "GIL 진행: Analysis를 열었다. 저장된 Verify 증거만 해석해 nonblank interpretation으로 gil_close한다. 프로젝트 파일은 변경하지 않는다. Verify가 시각 자료를 첨부했다면 이 close는 그 자료를 인용해야 한다: expected_owner와 visuals를 함께 보내고 uses에 Verify receipt의 owner·asset_id·sha256을 stored source로 적는다(attachments는 빈 배열, declaration 생략).",
+        "interview" => "GIL 진행: Interview Cycle을 열었다. 다음 호출은 gil_open(kind: question)에 행동 계약을 적는 것이다. 프로젝트 파일 변경은 Interview에서 하지 않는다.",
+        "experiment" => "GIL 진행: Experiment Cycle을 열었다. 다음 호출은 gil_open(kind: define)에 행동 계약을 적는 것이다. 질문 하나만 다루며 실제로 Verify를 열기 전에는 프로젝트 파일을 변경하지 않는다.",
         _ => generic,
     };
     specific.into()
 }
 
 fn closed(result: &CallToolResult) -> String {
-    let generic = "GIL 진행: 이 닫기가 성공했다. 다음 작업 전에 아래 영수증의 다음 행동을 따른다. Hypothesis를 닫았다면 다음 행동은 Verify의 gil_open이다. 열기 성공을 확인하기 전에는 자료 읽기·검색·계산·파일 작성을 하지 않는다. 다음 안내가 없는 typed close라면 gil_status를 한 번 읽는다. 기록되지 않은 다음 단계를 먼저 수행하지 않는다.";
+    let generic = "GIL 진행: 이 닫기가 성공했다. 다음 작업 전에 아래 영수증의 다음 행동을 따른다. Hypothesis를 닫았다면 다음 행동은 Verify의 gil_open이다. 열기 성공을 확인하기 전에는 프로젝트 파일을 변경하지 않는다. 다음 안내가 없는 typed close라면 gil_status를 한 번 읽는다. 기록되지 않은 다음 단계를 먼저 수행하지 않는다.";
     let said = said(result);
     let Some(kind) = first_line_kind(said, "닫았다: ") else { return generic.into(); };
     let next = next_from_receipt(said);
     let specific = match (kind, next.as_ref()) {
-        ("hypothesis", _) => "다음 행동: gil_open(kind: verify)에 행동 계약을 적어 Verify를 연다. 열기 성공 전에는 자료 읽기·검색·계산·파일 작성을 하지 않는다.".to_string(),
+        ("hypothesis", _) => "다음 행동: gil_open(kind: verify)에 행동 계약을 적어 Verify를 연다. 열기 성공 전에는 프로젝트 파일을 변경하지 않는다.".to_string(),
         ("synthesis", Some(Next::Open(k))) if k == "outcome" => "다음 행동: gil_open(kind: outcome)으로 Interview Outcome을 연다. 승인을 다시 묻거나 Synthesis를 다시 열지 않는다. Outcome을 닫은 뒤 Interview Cycle Report도 별도로 닫는다.".to_string(),
         ("synthesis", Some(Next::Open(k))) if k == "question" => "다음 행동: 승인되지 않았다. gil_open(kind: question)으로 무엇을 바꿔야 하는지 묻는다. 이전 제안의 승인은 재사용하지 않는다.".to_string(),
-        ("verify", _) => "다음 행동: gil_open(kind: analysis)으로 저장된 증거를 해석하는 자리를 연다. 새 조사는 하지 않는다. 이 Verify가 시각 자료를 첨부했다면 Analysis와 Cycle Report의 close에서 그 자료(owner·asset_id·sha256)를 stored source로 인용한다.".to_string(),
-        ("outcome", Some(Next::CloseCycle)) if said.contains("Interview") => "다음 행동: gil_close로 Interview Cycle Report를 제출한다 (verdict · outcome_ref · handoff_summary · next_direction). Experiment·조사·보고서 작성은 그 성공 뒤에 시작한다.".to_string(),
+        ("verify", _) => "다음 행동: gil_open(kind: analysis)으로 저장된 증거를 해석하는 자리를 연다. 프로젝트 파일은 변경하지 않는다. 이 Verify가 시각 자료를 첨부했다면 Analysis와 Cycle Report의 close에서 그 자료(owner·asset_id·sha256)를 stored source로 인용한다.".to_string(),
+        ("outcome", Some(Next::CloseCycle)) if said.contains("Interview") => "다음 행동: gil_close로 Interview Cycle Report를 제출한다 (verdict · outcome_ref · handoff_summary · next_direction). Experiment는 그 성공 뒤에 열고 프로젝트 파일은 Verify에서 변경한다.".to_string(),
         ("outcome", Some(Next::CloseCycle)) => "다음 행동: gil_close로 이 Cycle의 Report를 제출한다. Verify가 시각 자료를 첨부했다면 Cycle Report도 expected_owner {kind: cycle}와 visuals.uses(stored source)로 그 자료를 인용한다. 다음 문제는 그 뒤에 연다.".to_string(),
         ("interview", Some(Next::OpenCycle)) => "다음 행동: Interview Cycle까지 닫혔다. gil_open(kind: experiment)으로 합의한 첫 질문의 Experiment를 연다. 승인 계획 프로필이면 첫 미실행 항목이 자동으로 묶인다. gil_start를 다시 부르지 않는다.".to_string(),
         ("interview", Some(Next::ChainReport)) | ("experiment", Some(Next::ChainReport)) => "다음 행동: Chain Report를 gil_close로 제출한다. 새 Cycle을 열지 않는다.".to_string(),
         ("experiment", Some(Next::Revisit)) if cfg!(feature = "product-safety") => "다음 행동: 이 Cycle은 failure·revisit으로 닫혔다. Monitor를 열고 변경 목록과 보존 위치를 사용자가 확인하도록 안내한 뒤 ‘보존 후 되돌아가기’ 버튼을 기다린다. 채팅 동의를 승인으로 옮겨 적거나 gil_revisit을 반복하지 않는다. 복원 완료 후 gil_open으로 새 Cycle을 연다. 실패 기록·증거·학습은 남는다.".to_string(),
         ("experiment", Some(Next::Revisit)) => "다음 행동: 이 Cycle은 failure·revisit으로 닫혔다. Artifact 복원이 따르므로 사용자에게 알린 뒤 gil_revisit(인수 없음)을 한 번 호출하고, 그 다음 gil_open으로 새 Cycle을 연다.".to_string(),
         ("experiment", Some(Next::OpenCycle)) => "다음 행동: Experiment Cycle이 닫혔다. 남은 독립 질문이 있으면 gil_open(kind: experiment), 목표를 다시 합의해야 하면 gil_open(kind: interview)을 연다. 일이 모두 끝났어도 채팅 보고만으로 끝내지 않는다: Chain이 있으면 gil_open(kind: interview)으로 Closing Interview를 열어 최종 판정을 승인받고 Chain Report를 닫는다.".to_string(),
-        (_, Some(Next::Open(k))) => format!("다음 행동: gil_open(kind: {k})에 행동 계약을 적어 연다. 그 전에 조사·파일 작성을 하지 않는다."),
+        (_, Some(Next::Open(k))) => format!("다음 행동: gil_open(kind: {k})에 행동 계약을 적어 연다. 실제로 Verify를 열기 전에는 프로젝트 파일을 변경하지 않는다."),
         (_, Some(Next::OpenMany(kinds))) => format!("다음 행동: gil_open으로 다음 중 하나를 연다: {kinds}. 고르는 기준은 아래 영수증에 있다."),
         (_, Some(Next::CloseCycle)) => "다음 행동: gil_close로 이 Cycle의 Report를 제출한다. gil_cycle(action=close)는 사용하지 않는다.".to_string(),
         (_, Some(Next::Blocked)) => "다음 행동: 여기서 할 수 있는 것이 없다. gil_status를 한 번 읽고 막힌 이유를 사용자에게 알린다.".to_string(),
@@ -183,7 +189,7 @@ fn plan(name: &str, result: &CallToolResult) -> Option<String> {
         && (cycle_state == Some("closed") || (current.is_some() && cycle_state != Some("open")))
     {
         return Some(if cycle_state == Some("closed") {
-            "승인 계획: 현재 Cycle은 이미 닫혔다. 항목 연결은 기록으로 남아 있다. 다음 호출은 gil_context다. 그 응답의 다음 행동에 따라 새 Cycle 또는 Chain Report를 이어간다. 닫힌 Step에서 조사·파일 작성을 계속하지 않는다.".into()
+            "승인 계획: 현재 Cycle은 이미 닫혔다. 항목 연결은 기록으로 남아 있다. 다음 호출은 gil_context다. 그 응답의 다음 행동에 따라 새 Cycle 또는 Chain Report를 이어간다. 닫힌 Step에서 프로젝트 파일을 계속 변경하지 않는다.".into()
         } else {
             "승인 계획: 항목 연결만으로 현재 Cycle이 열려 있는지 확인할 수 없다. 다음 호출은 gil_context다. 실제 열린 Step과 다음 행동을 확인한 뒤 이어간다.".into()
         });
@@ -191,7 +197,7 @@ fn plan(name: &str, result: &CallToolResult) -> Option<String> {
     Some(match name {
         "gil_plan_request_interview" => "승인 계획: 재인터뷰 요청을 보존했다. 아무것도 닫히거나 열리지 않았다. 지금 열린 Step은 마지막 receipt의 다음 행동대로 이어가고, 남은 Step과 Cycle Report가 실제 순서대로 닫힌 뒤에 gil_open(kind: interview)으로 다시 승인받는다. 요청은 그동안 보존되며, 그 전에는 새 Experiment를 열 수 없다. 요청을 취소하거나 Cycle을 중단하는 호출은 없다.".into(),
         _ => match (proposal, decision) {
-            (Some(_), None) => format!("승인 계획: 제안 판 {}이(가) 기록됐고 Monitor 버튼 응답을 기다린다. 턴을 끝내고 기다린다. 채팅 동의로 대체하거나 approved를 직접 적지 않는다. 그동안 조사·보고서 작성·재제안을 하지 않는다. 응답 여부는 gil_plan_read로만 확인한다.", revision.unwrap_or(0)),
+            (Some(_), None) => format!("승인 계획: 제안 판 {}이(가) 기록됐고 Monitor 버튼 응답을 기다린다. 턴을 끝내고 기다린다. 채팅 동의로 대체하거나 approved를 직접 적지 않는다. 그동안 프로젝트 파일 변경·재제안을 하지 않는다. 응답 여부는 gil_plan_read로만 확인한다.", revision.unwrap_or(0)),
             (Some(_), Some("approve")) => format!("승인 계획: 판 {}이(가) 승인됐다. 다음 호출은 close_report를 글자 그대로 넣은 gil_close(Synthesis)다. 그 뒤 gil_open(kind: outcome) → gil_close → Interview Cycle Report gil_close 순서로 닫은 다음에야 gil_open(kind: experiment)을 연다.", revision.unwrap_or(0)),
             (Some(_), Some(_)) => format!("승인 계획: 판 {}에 수정 요청이 왔다. close_report(approved: no)로 Synthesis를 gil_close하고 다음 Question에서 무엇을 바꿀지 묻는다. 수정한 제안은 새 판이며 이전 승인은 재사용되지 않는다.", revision.unwrap_or(0)),
             (None, _) if reinterview => "승인 계획: 재인터뷰 요청이 보존돼 있다. 현재 Cycle의 남은 Step을 receipt 순서대로 마치고 Cycle Report를 닫은 뒤 gil_open(kind: interview)으로 다시 승인받는다. 그 전에는 Experiment를 열 수 없다. 열린 Step이 있으면 그 Step의 close가 다음 호출이다.".into(),

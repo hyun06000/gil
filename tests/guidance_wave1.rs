@@ -48,7 +48,7 @@ fn a_fresh_interview_asks_for_the_first_question_not_another_start() {
 }
 
 #[test]
-fn open_interview_steps_wait_for_the_user_and_never_research() {
+fn open_interview_steps_wait_for_the_user_and_keep_project_files_unchanged() {
     let mut project = legacy("interview-steps");
     opened(&mut project, NodeKind::Question);
     says(&project, &["질문하고 턴을 끝내", "gil_close"], &["gil_open", "조사한다"]);
@@ -226,7 +226,7 @@ fn receipts_name_one_next_call_through_interview_and_into_an_experiment() {
 
     let opened = mcp.call("gil_open", &root, contract("synthesis"));
     let hint = hints(&opened);
-    assert!(hint.contains("명시적 동의가 있을 때만 gil_close") && hint.contains("기다리는 동안 조사"), "{hint}");
+    assert!(hint.contains("명시적 동의가 있을 때만 gil_close") && hint.contains("기다리는 동안 프로젝트 파일을 변경하지 않는다"), "{hint}");
     let basis = vec!["step:C1/S1".to_string(), "step:C1/S2".to_string()];
     let synthesis_report = if plan_record {
         // 승인 계획 프로필: 맨손 approved: yes 는 거절되고 아무것도 닫히지 않는다.

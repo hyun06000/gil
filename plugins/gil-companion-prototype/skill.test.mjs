@@ -286,7 +286,7 @@ test("Synthesis 는 사람의 승인을 기다린다 — approved:yes 를 이전
   assert.match(flow, /\*\*Synthesis waits for the human\.\*\*/);
   assert.match(flow, /present the concrete `statement`[\s\S]*?ask the user\s+whether it is right; then \*\*end your turn and wait for their answer\*\*/);
   assert.match(flow, /never derive it from an\s+earlier request to build something, from silence, from the user's absence, or from your own\s+judgement/);
-  assert.match(flow, /Until the user answers, the Synthesis and its Interview stay\s+open; do not close them, do not open an Experiment or any other Cycle, and do not start\s+implementing/);
+  assert.match(flow, /Until the user answers, the Synthesis and its Interview stay\s+open; do not close them, do not open an Experiment or any other Cycle, and do not start\s+changing project files/);
   assert.match(flow, /If the user says no or changes the proposal, record their words and revise within\s+the same Interview/);
 });
 

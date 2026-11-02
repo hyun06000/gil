@@ -47,6 +47,7 @@ pub fn context(project: &Project) -> String {
     let mut out = String::new();
     write_preamble(&mut out);
     out.push_str(&format!("\n[지금 바로 할 호출]\n{}\n", next_call(project)));
+    out.push_str("\n[프로젝트 파일 작업 범위]\n프로젝트 안 Artifact 파일 생성·수정·삭제·이동·외부 파일 가져오기는 실제로 열린 Experiment Verify에서만 수행한다. DOCX·PNG·PDF 제작과 렌더링도 포함한다. Closing Interview·승인 대기·열린 Step이 없는 경계·종료된 Chain을 포함한 나머지 자리에서는 파일을 변경하지 않는다. 프로젝트 밖 작업과 프로젝트 파일을 남기지 않는 웹 조사, 기존 증거 읽기는 이 제한 없이 수행할 수 있다. GIL 기록·승인·허용된 복구는 기존 도구와 계약을 따르며 .gil을 직접 편집하지 않는다. 이는 Agent 지침이며 OS 쓰기 차단을 뜻하지 않는다.\n");
     if let Some(plan) = project.approved_plan() {
         let chain = project.current_chain().unwrap();
         out.push_str("\n승인 계획 프로필: Synthesis를 열고 gil_plan_propose → Monitor 버튼 응답 → gil_plan_read의 close_report로 닫기 → Outcome → Interview Cycle 닫기. 채팅 동의로 대체하지 않는다.\n");
@@ -143,21 +144,21 @@ fn next_call_here(project: &Project) -> String {
         }
         return match (cycle.kind(), node.kind) {
             (CycleKind::Interview, NodeKind::Question) =>
-                "열린 Question: 사용자에게 질문하고 턴을 끝내 답을 기다린다. 답을 받으면 그 원문으로 gil_close한다. 조사·보고서 작성은 하지 않는다.".into(),
+                "열린 Question: 사용자에게 질문하고 턴을 끝내 답을 기다린다. 답을 받으면 그 원문으로 gil_close한다. 프로젝트 파일은 변경하지 않는다.".into(),
             (CycleKind::Interview, NodeKind::Interpretation) =>
-                "열린 Interpretation: 받은 답에서 확정된 것과 모르는 것을 갈라 gil_close한다. 외부 조사는 하지 않는다.".into(),
+                "열린 Interpretation: 받은 답에서 확정된 것과 모르는 것을 갈라 gil_close한다. 프로젝트 파일은 변경하지 않는다.".into(),
             (CycleKind::Interview, NodeKind::Synthesis) =>
-                "열린 Synthesis: 제안 statement를 사용자에게 보여 주고 턴을 끝내 답을 기다린다. 사용자가 명시적으로 동의했을 때만 approved: yes로 gil_close한다. 침묵·이전 요청·자체 판단은 승인이 아니다. 기다리는 동안 조사·보고서 작성을 하지 않는다.".into(),
+                "열린 Synthesis: 제안 statement를 사용자에게 보여 주고 턴을 끝내 답을 기다린다. 사용자가 명시적으로 동의했을 때만 approved: yes로 gil_close한다. 침묵·이전 요청·자체 판단은 승인이 아니다. 기다리는 동안 프로젝트 파일을 변경하지 않는다.".into(),
             (CycleKind::Interview, NodeKind::Outcome) =>
                 "열린 Interview Outcome: 승인된 범위를 판정해 gil_close한다 (verdict · lesson · synthesis_ref · next_direction). 프로젝트가 끝날 때까지 열어 두지 않는다. 닫은 뒤 Interview Cycle Report를 별도로 닫는다.".into(),
             (CycleKind::Experiment, NodeKind::Define) =>
-                "열린 Define: 확인할 질문 하나와 판정 기준만 적어 gil_close한다. 자료 조회·계산은 아직 하지 않는다.".into(),
+                "열린 Define: 확인할 질문 하나와 판정 기준만 적어 gil_close한다. 프로젝트 파일 변경은 Verify에서 한다.".into(),
             (CycleKind::Experiment, NodeKind::Hypothesis) =>
-                "열린 Hypothesis: 예상·근거·guardrail을 적어 gil_close한다. 닫힌 뒤 다음 호출은 Verify의 gil_open이며, 그 성공 전에는 자료 읽기·검색·파일 작성을 하지 않는다.".into(),
+                "열린 Hypothesis: 예상·근거·guardrail을 적어 gil_close한다. 닫힌 뒤 다음 호출은 Verify의 gil_open이며, 그 성공 전에는 프로젝트 파일을 변경하지 않는다.".into(),
             (CycleKind::Experiment, NodeKind::Verify) =>
                 "열린 Verify: 계약의 next_action을 실제로 수행하고 관측 결과를 프로젝트 파일로 저장한 뒤 evidence_files를 포함해 gil_close한다. 채팅만으로는 닫히지 않는다.".into(),
             (CycleKind::Experiment, NodeKind::Analysis) =>
-                "열린 Analysis: 저장된 Verify 증거를 해석해 nonblank interpretation으로 gil_close한다. 새 조사는 하지 않는다.".into(),
+                "열린 Analysis: 저장된 Verify 증거를 해석해 nonblank interpretation으로 gil_close한다. 프로젝트 파일은 변경하지 않는다.".into(),
             (CycleKind::Experiment, NodeKind::Outcome) =>
                 "열린 Experiment Outcome: verdict·lesson·next_direction을 적어 gil_close한다. 닫은 뒤 Cycle Report를 별도로 닫는다.".into(),
             (_, kind) => format!("열린 {kind}: 완료 조건을 충족하면 관측한 결과로 gil_close한다."),
@@ -171,7 +172,7 @@ fn next_call_here(project: &Project) -> String {
         let openable = cycle.openable_here();
         if cycle.can_close() {
             return match cycle.kind() {
-                CycleKind::Interview => "Outcome까지 닫혔고 Interview Cycle은 아직 열려 있다. gil_close로 Cycle Report를 제출한다 (verdict · outcome_ref · handoff_summary · next_direction). 조사·Experiment는 그 뒤다.".into(),
+                CycleKind::Interview => "Outcome까지 닫혔고 Interview Cycle은 아직 열려 있다. gil_close로 Cycle Report를 제출한다 (verdict · outcome_ref · handoff_summary · next_direction). Experiment는 그 뒤에 열고 프로젝트 파일은 Verify에서 변경한다.".into(),
                 CycleKind::Experiment => "Outcome까지 닫혔고 Experiment Cycle은 아직 열려 있다. gil_close로 Cycle Report를 제출한다. 다음 문제는 그 뒤에 연다.".into(),
             };
         }
@@ -187,7 +188,7 @@ fn next_call_here(project: &Project) -> String {
             (CycleKind::Experiment, [NodeKind::Define]) =>
                 "새 Experiment: gil_open(kind: define)에 행동 계약을 적어 연다. 확인할 질문 하나만 다룬다.".into(),
             (CycleKind::Experiment, [NodeKind::Verify]) =>
-                "Hypothesis가 닫혔다. gil_open(kind: verify)에 행동 계약을 적어 연다. 열기 성공 전에는 조사·계산·파일 작성을 하지 않는다.".into(),
+                "Hypothesis가 닫혔다. gil_open(kind: verify)에 행동 계약을 적어 연다. 열기 성공 전에는 프로젝트 파일을 변경하지 않는다.".into(),
             (CycleKind::Experiment, [NodeKind::Analysis]) =>
                 "Verify가 닫혔다. gil_open(kind: analysis)으로 저장된 증거를 해석하는 자리를 연다.".into(),
             (_, [only]) => format!("gil_open(kind: {})에 행동 계약을 적어 연다.", only.as_str()),
@@ -229,7 +230,7 @@ fn plan_next_call(project: &Project, kind: NodeKind) -> Option<String> {
                 return Some("열린 Synthesis (승인 계획 프로필): gil_plan_propose로 제안한다 — scope 5칸(goal · in_scope · out_of_scope · constraints · success_criteria), items(id · question · done_when), synthesis Report 칸. exploration_checklist에는 items의 id를 같은 순서로 한 줄씩 적고, approved · plan_revision · plan_digest는 적지 않는다. 채팅 동의로 대체하지 않는다.".into());
             };
             Some(match proposal.receipt.as_ref().map(|r| &r.decision) {
-                None => format!("제안 판 {}이(가) Monitor 버튼 응답을 기다린다. 턴을 끝내고 기다린다. 그동안 조사·보고서 작성·재제안을 하지 않는다. 응답이 왔는지는 gil_plan_read로만 확인한다.", proposal.revision),
+                None => format!("제안 판 {}이(가) Monitor 버튼 응답을 기다린다. 턴을 끝내고 기다린다. 그동안 프로젝트 파일 변경·재제안을 하지 않는다. 응답이 왔는지는 gil_plan_read로만 확인한다.", proposal.revision),
                 Some(crate::approved_plan::Decision::Approve) => format!("제안 판 {}이(가) 승인됐다. gil_plan_read의 close_report를 그대로 gil_close에 넣어 Synthesis를 닫는다. 내용을 고치거나 다시 묻지 않는다.", proposal.revision),
                 Some(crate::approved_plan::Decision::RequestChanges) => format!("제안 판 {}에 수정 요청이 왔다. gil_plan_read의 close_report(approved: no)로 Synthesis를 닫고 다음 Question에서 무엇을 바꿀지 묻는다. 이전 승인은 재사용하지 않는다.", proposal.revision),
             })
