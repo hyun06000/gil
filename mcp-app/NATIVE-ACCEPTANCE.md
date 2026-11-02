@@ -47,6 +47,24 @@ node monitor-stdio-check.mjs
   불변, 실제 파일 변경 hint→View 갱신, Agent 잠금 해제를 검사한다. macOS watcher는 정상 실행
   환경에서 검사한다. 샌드박스에서 OS 이벤트가 차단된 결과와 제품 결함을 구분한다.
 
+## Host 출력 스키마 검증
+
+Raw JSON-RPC에서 `ok: true`인 응답도 Host가 `outputSchema`로 거절할 수 있다. 2026-11-02
+로컬 preview.15의 `gil_start`는 `next_call`을 응답에 넣고 엄격한 출력 스키마에는 선언하지 않아
+이 경계에서 실패했다. 프로젝트 생성은 이미 커밋되므로 오류 후 start를 반복하지 않는다.
+
+`native-output-contract.mjs`는 잠금된 MCP SDK의 `Client.listTools`와 `Client.callTool`로 실제
+출력을 검증한다. 새 임시 프로젝트에서 시작 → 응답 유실을 가정한 연결 재시작 → context의 Monitor
+호출 복구 → show → 목표 확인용 첫 Question까지 실행한다. 사용자 프로젝트는 사용하지 않는다.
+
+```sh
+GIL_NATIVE_MCP="$PWD/target/debug/gil" node --test plugins/gil-companion-prototype/native-output-contract.test.mjs
+```
+
+`distribution/codex/build-preview.mjs`도 패키징할 정확한 release 실행 파일에 이 검사를 반드시
+실행하고 `checks.json.host_output_contract`에 결과를 남긴다. 검사 실패 시 패키지를 만들지 않는다.
+개발 SDK는 설치물에 포함하지 않으며 실제 Claude/Codex 화면의 표시 성공은 별도 검수다.
+
 ## 설치 전 게이트
 
 응답 동등성·회귀시험을 통과하기 전에는 동작 중인 Plugin을 교체하지 않는다. 패키징은 새 binary의

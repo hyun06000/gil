@@ -383,6 +383,36 @@
     "outputSchema": {
       "type": "object",
       "properties": {
+        "next_call": {
+          "type": "object",
+          "description": "Prepared Monitor handoff; absent when no display request is needed or preparation failed.",
+          "properties": {
+            "name": {
+              "type": "string",
+              "enum": [
+                "show_gil_monitor"
+              ]
+            },
+            "arguments": {
+              "type": "object",
+              "properties": {
+                "scope_id": {
+                  "type": "string",
+                  "pattern": "^project:[a-f0-9]{64}$"
+                }
+              },
+              "required": [
+                "scope_id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "name",
+            "arguments"
+          ],
+          "additionalProperties": false
+        },
         "ok": {
           "type": "boolean"
         },
@@ -581,6 +611,36 @@
     "outputSchema": {
       "type": "object",
       "properties": {
+        "next_call": {
+          "type": "object",
+          "description": "Prepared Monitor handoff; absent when no display request is needed or preparation failed.",
+          "properties": {
+            "name": {
+              "type": "string",
+              "enum": [
+                "show_gil_monitor"
+              ]
+            },
+            "arguments": {
+              "type": "object",
+              "properties": {
+                "scope_id": {
+                  "type": "string",
+                  "pattern": "^project:[a-f0-9]{64}$"
+                }
+              },
+              "required": [
+                "scope_id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "name",
+            "arguments"
+          ],
+          "additionalProperties": false
+        },
         "ok": {
           "type": "boolean"
         },
