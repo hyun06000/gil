@@ -944,14 +944,14 @@ fn initialize_succeeds_and_says_who_is_answering() {
 }
 
 #[test]
-fn tools_list_preserves_twenty_tools_and_the_read_only_app_boundary() {
+fn tools_list_includes_handoff_and_preserves_the_read_only_app_boundary() {
     let mut mcp = Client::serve();
     mcp.initialize();
     let got = mcp.request("tools/list", serde_json::json!({}));
     let tools = got["result"]["tools"].as_array().expect("tools");
     let mut names: Vec<_> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     names.sort();
-    let mut expected=vec!["gil_close", "gil_companion_status", "gil_context", "gil_cycle", "gil_help", "gil_monitor_detail", "gil_monitor_poll", "gil_monitor_prepare", "gil_monitor_read", "gil_monitor_report_image", "gil_monitor_report_visuals", "gil_monitor_status", "gil_open", "gil_restore", "gil_revisit", "gil_start", "gil_status", "gil_story", "show_gil_companion", "show_gil_monitor"];
+    let mut expected=vec!["gil_await_user", "gil_close", "gil_companion_status", "gil_context", "gil_cycle", "gil_help", "gil_monitor_detail", "gil_monitor_poll", "gil_monitor_prepare", "gil_monitor_read", "gil_monitor_report_image", "gil_monitor_report_visuals", "gil_monitor_status", "gil_open", "gil_restore", "gil_revisit", "gil_start", "gil_status", "gil_story", "show_gil_companion", "show_gil_monitor"];
     if cfg!(feature="visual-authoring") {
         expected.extend(["gil_report_visuals", "gil_migration_check", "gil_migration_prepare", "gil_migration_apply", "gil_migration_status"]);
         if cfg!(windows) { expected.push("gil_prepare_workspace"); }

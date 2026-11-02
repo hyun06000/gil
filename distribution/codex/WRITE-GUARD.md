@@ -19,32 +19,53 @@ GIL 산출물·제작 스크립트·중간 렌더링은 추적 가능한 프로�
 Snapshot 채택, 자동 복구를 하지 않는다. 상태가 없거나 손상됐거나 잠겼으면 프로젝트 편집은 거절한다.
 경로가 명확한 프로젝트 밖 편집은 GIL 상태를 읽을 필요도 없다.
 
-## 연결 준비
+## 새 프로젝트 자동 연결 (macOS)
 
-개발용 바이너리를 빌드한다:
-
-```sh
-cargo build --locked -p gil --bin gil-write-guard
-```
-
-사용자가 선택한 **별도 GIL 프로젝트**의 절대경로를 지정하면 두 Host가 읽을 수 있는 hooks JSON을
-stdout으로 출력한다. source 저장소에 `gil start`를 실행하지 않는다.
+설치된 native Core 하나로 동작한다. Node·Python·개발 checkout이 필요하지 않다. 사용자 요청으로
+설치/갱신할 때 다음 명령을 한 번 실행한다. 프로젝트 생성 때마다 설정을 수정하지 않는다.
 
 ```sh
-/absolute/path/to/gil-write-guard config --root /absolute/path/to/project
+/absolute/path/to/gil write-guard install --auto --host both
 ```
 
-이 명령은 설정 파일을 생성·수정하지 않는다. 출력에는 바이너리와 프로젝트의 절대경로가 들어가므로
-개발 로그·공개 PR에 실제 출력값을 넣지 않는다. 연결 시 기존 훅을 보존해 해당 Host의 hooks 설정에
-병합한다. **설정은 새 Host 세션을 열기 전에 준비한다.** 이미 열린 Codex 채팅에 파일만 추가해도
-그 채팅이 새 훅을 읽었다고 간주하지 않는다. Codex의 정상 `/hooks` 화면에서 정확한 실행 파일과
-root를 검토하고 활성화·Trusted 상태를 확인한 뒤, 같은 폴더의 새 세션에서 실제 도구 호출로 검사한다.
-trust 파일이나 해시를 직접 수정하지 않는다. Claude Code 탭도 기존 설정의 훅을 사용하지만 일반
-Desktop 채팅의 MCP 설정과는 다른 표면이다. Plugin 설치·설정 변경은 별도 작업이다.
+`~/.codex/hooks.json`과 `~/.claude/settings.json`의 기존 항목을 보존해 PreToolUse·PostToolUse·
+UserPromptSubmit·Stop 훅을 병합한다. 원본은 `~/.gil-host-guard`의 private 백업에 보존한다.
+이 명령은 trust·permissions를 수정하지 않는다. **새 Host 세션에서** 설정을 읽고 Codex의 정상
+`/hooks` 검토에서 이 실행 파일을 신뢰해야 한다. Claude Desktop의 **Code 탭**은 Claude Code
+훅을 사용한다. 일반 Desktop MCP 채팅에는 이 훅의 강제를 주장하지 않는다.
 
-프로젝트 경로는 설정에 고정되며 cwd에서 추측하지 않는다. 프로젝트를 옮기거나 다른 프로젝트로
-전환할 때 설정을 갱신해야 한다. 한 실행 환경에는 이 보호 대상 하나만 연결한다. 여러 root의 셸
-래퍼를 겹쳐 설치하는 구성은 지원하지 않는다.
+연결 후 성공한 `gil_start`, `gil_context`, `gil_open`, `gil_close`의 PostToolUse가 실제 Core 상태를
+검증하고 canonical root를 등록한다. 선택한 폴더는 채팅 cwd와 달라도 된다. 한글 NFC/NFD는 MCP와
+같은 명시적 경로 해석을 쓴다. 실패한 start는 등록하지 않는다. 프로젝트 내부에 `.claude`·`.codex`를
+만들지 않으므로 등록이 Artifact/Snapshot을 dirty로 만들지 않는다. 기존 프로젝트도 `gil_context`로
+재개하면 등록된다. CLI로만 만든 프로젝트는 Host에서 `gil_context`로 연결한다.
+
+`gil write-guard status --auto`는 등록 폴더 목록을 출력한다. 등록 사실만으로 Host의 활성화·신뢰를
+입증하지 않는다. 설정이 꺼졌거나 Host가 PostToolUse 결과를 전달하지 않으면 자동 연결은 보장되지 않는다.
+기존 `gil-write-guard hook|config|run --root …`는 호환용으로 남지만 공통 훅과 중복 설치하지 않는다.
+
+## 채팅으로만 종료하는 경로
+
+- 성공한 GIL 호출로 연결한 **그 채팅**만 Stop 검사한다. 다른 채팅에는 진행 의무를 만들지 않는다.
+- Chain이 실제 닫혔으면 종료를 허용한다. 열린 중간 단계·빈 Interview·미등록 승인 제안은 완료가 아니다.
+- 사용자 입력이 필요하면 `gil_await_user(project_root, question)`를 호출한다. 실제 열린 Question 또는
+  미승인 제안이 등록된 Synthesis만 허용한다. 응답 마지막에 그 질문을 그대로 적어 사용자가 답할 수 있게 한다.
+- 대기는 그 상태의 digest에 묶이고 다음 UserPromptSubmit에서 만료한다. 승인이나 Step 변경도 대기를
+  무효화한다. 옛 Question을 남겨 둔 채 다음 턴에서 웹 결과만 제시하면 다시 GIL로 돌아가도록 지시한다.
+- `gil_await_user`는 Model 전용 읽기 도구다. 사용자 승인·Step 닫기·Domain 기록 변경을 하지 않는다.
+- 사용자 중단은 항상 존중한다. `GIL 일시 중지`를 사용자 메시지로 보내면 그 채팅의 진행 검사만 일시 해제한다.
+  파일 보호는 유지되고 `gil_context`로 재개한다. 이 명령을 Agent가 완료 우회로 사용하지 않는다.
+- 파일 없는 웹 조사는 허용한다. 그것이 요청한 GIL 프로젝트의 최종 완료를 뜻하지는 않는다.
+  주제를 바꿔 무관한 작업을 할 때는 별도 채팅 또는 명시적 pause를 쓴다.
+- Stop 훅은 Host에게 계속 작업하도록 요청한다. 이미 표시된 답변을 지우거나 사람의 중단·Host의
+  반복 상한을 무력화하지 않는다. 모든 모델의 행동을 절대적으로 보장하는 기능은 아니다.
+
+## 여러 폴더 보호
+
+공통 셸 래퍼는 `gil write-guard run --auto -- '명령'`다. 등록된 모든 폴더를 한 sandbox로 보호하며,
+각 폴더의 실제 Verify 상태를 따로 검사한다. 기존 프로세스·다른 앱에는 소급 적용되지 않는다.
+등록 정보도 이 셸과 직접 파일 편집 도구로는 수정하지 못하게 한다. Host 설정 갱신은 명시적인
+설치 작업으로 수행한다. 사용자 파일·GIL 기록·Snapshot을 자동 이동·삭제·복구하지 않는다.
 
 ## 실행 방식
 

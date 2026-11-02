@@ -1,5 +1,6 @@
 // Maintainer-only SDK acceptance. Never runs in, or modifies, a user's project.
 import assert from 'node:assert/strict';
+import {spawnSync} from 'node:child_process';
 import {mkdtemp, mkdir, realpath, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
@@ -12,6 +13,13 @@ export async function checkNativeOutputContract(binary) {
   const home = join(scratch, 'home');
   const local = join(scratch, 'localappdata');
   for (const dir of [root, home, local]) await mkdir(dir);
+  const hook = input => {
+    const got = spawnSync(resolve(binary), ['write-guard','hook','--auto'], {
+      cwd:scratch, env:{...process.env,HOME:home,LOCALAPPDATA:local}, encoding:'utf8',
+      input:JSON.stringify({session_id:'sdk-host-session',cwd:home,...input}), timeout:15000});
+    assert.equal(got.status,0,got.stderr);
+    return JSON.parse(got.stdout);
+  };
   let client;
   const connect = async () => {
     client = new Client({name:'gil-output-contract-check', version:'1'});
@@ -28,6 +36,9 @@ export async function checkNativeOutputContract(binary) {
     await connect();
     const started = await call('gil_start', {project_root:root});
     assert.equal(started.structuredContent.ok, true);
+    hook({hook_event_name:'PostToolUse',tool_name:'mcp__gil__gil_start',tool_input:{project_root:root},tool_response:started});
+    assert.equal(hook({hook_event_name:'Stop',last_assistant_message:'report complete'}).decision,'block');
+    assert.equal(hook({hook_event_name:'PreToolUse',tool_name:'Write',tool_input:{file_path:join(root,'report.docx')}}).hookSpecificOutput.permissionDecision,'deny');
     const next = started.structuredContent.next_call;
     assert.equal(next.name, 'show_gil_monitor');
     assert.match(next.arguments.scope_id, /^project:[a-f0-9]{64}$/);
@@ -41,9 +52,19 @@ export async function checkNativeOutputContract(binary) {
     assert.equal(shown.isError, false);
     assert.equal(shown.structuredContent.view.timeline.length, 1);
     assert.equal(shown.structuredContent.view.current.step_ref, null);
+    const earlyWait = await call('gil_await_user', {project_root:root, question:'What is your goal?'});
+    assert.equal(earlyWait.isError, true);
     const opened = await call('gil_open', {project_root:root, kind:'question',
       contract:'objective: clarify the user goal\nnext_action: ask what result the user wants\ndone_when: the user states a goal or remaining uncertainty'});
     assert.equal(opened.structuredContent.ok, true);
+    const waiting = await call('gil_await_user', {project_root:root, question:'What is your goal?'});
+    assert.equal(waiting.structuredContent.ok, true);
+    assert.equal(waiting.structuredContent.handoff.status, 'awaiting_user');
+    assert.equal(waiting.structuredContent.handoff.question, 'What is your goal?');
+    hook({hook_event_name:'PostToolUse',tool_name:'mcp__gil__gil_await_user',tool_input:{project_root:root,question:'What is your goal?'},tool_response:waiting});
+    assert.deepEqual(hook({hook_event_name:'Stop',last_assistant_message:'What is your goal?'}),{});
+    hook({hook_event_name:'UserPromptSubmit',prompt:'Make my report'});
+    assert.equal(hook({hook_event_name:'Stop',last_assistant_message:'Here is the report'}).decision,'block');
     const again = await call('gil_start', {project_root:root});
     assert.equal(again.isError, true);
     const status = await call('gil_status', {project_root:root});

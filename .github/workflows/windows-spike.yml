@@ -8,6 +8,10 @@ on:
         description: 'Build unsigned review artifacts for every matrix entry (profile-labeled); never publish or install'
         type: boolean
         default: false
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 jobs:
@@ -61,6 +65,21 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Restore locked dependencies and compiler outputs
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4, pinned
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.npm
+            target/debug
+            target/aarch64-apple-darwin
+            target/x86_64-pc-windows-msvc
+            target/aarch64-pc-windows-msvc
+            target/plugin-core-build
+          key: ${{ runner.os }}-${{ runner.arch }}-windows-spike-${{ matrix.label || matrix.os || 'native' }}-rust-1.97.1-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-${{ github.event.pull_request.head.sha || github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-windows-spike-${{ matrix.label || matrix.os || 'native' }}-rust-1.97.1-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-
       - name: Automatic installer target detection
         shell: powershell
         run: ./distribution/windows/install-target.test.ps1

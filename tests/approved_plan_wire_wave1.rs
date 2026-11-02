@@ -74,6 +74,19 @@ fn guard_boundary(root: &Path, writable: bool) {
 }
 
 #[cfg(all(target_os = "macos", feature = "visual-authoring"))]
+fn auto_guard(settings: &Path, mut input: Value) -> Value {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    let home = settings.join("home"); std::fs::create_dir_all(&home).unwrap();
+    input["session_id"] = json!("closing-session"); input["cwd"] = json!(home);
+    let mut child = Command::new(gil()).args(["write-guard","hook","--auto"]).env("HOME",&home)
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap();
+    child.stdin.take().unwrap().write_all(input.to_string().as_bytes()).unwrap();
+    let out=child.wait_with_output().unwrap(); assert!(out.status.success());
+    serde_json::from_slice(&out.stdout).unwrap()
+}
+
+#[cfg(all(target_os = "macos", feature = "visual-authoring"))]
 #[test]
 fn guarded_project_completes_approved_closing_without_outside_write_regressions() {
     let root = scratch("guard-closing-project");
@@ -81,15 +94,23 @@ fn guarded_project_completes_approved_closing_without_outside_write_regressions(
     let record = product_state_path(&root, &private_local_app_data(&settings));
     let mut r = Rig { root: root.clone(), record, scope: String::new(), c: Client::serve(&settings) };
     let started = ok(r.model("gil_start", json!({})), "start");
+    auto_guard(&settings, json!({"hook_event_name":"PostToolUse","tool_name":"mcp__gil__gil_start","tool_input":{"project_root":root},"tool_response":started["result"]}));
+    assert_eq!(auto_guard(&settings,json!({"hook_event_name":"Stop","last_assistant_message":"done"}))["decision"],"block");
+    refused(r.model("gil_await_user",json!({"question":"What is the goal?"})),"wait before Question");
     let next = &structured(&started)["next_call"];
     assert_eq!(next["name"], "show_gil_monitor");
     r.scope = next["arguments"]["scope_id"].as_str().unwrap().to_owned();
     ok(r.c.call("show_gil_monitor", next["arguments"].clone()), "show");
     guard_boundary(&root, false);
     let (basis, synthesis) = r.ask_and_interpret();
+    refused(r.model("gil_await_user",json!({"question":"Approve the scope?"})),"wait before proposal");
     ok(r.model("gil_plan_propose", json!({"draft":draft(&["files"], &basis, &[])})), "propose");
+    let wait = ok(r.model("gil_await_user",json!({"question":"Approve the scope?"})),"wait for approval");
+    auto_guard(&settings,json!({"hook_event_name":"PostToolUse","tool_name":"mcp__gil__gil_await_user","tool_input":{"project_root":root,"question":"Approve the scope?"},"tool_response":wait["result"]}));
+    assert_eq!(auto_guard(&settings,json!({"hook_event_name":"Stop","last_assistant_message":"Approve the scope?"})),json!({}));
     guard_boundary(&root, false); // Opening approval wait.
     r.approve_via_app(1);
+    assert_eq!(auto_guard(&settings,json!({"hook_event_name":"Stop","last_assistant_message":"Approve the scope?"}))["decision"],"block");
     r.close_approved_interview(&synthesis, "open_child");
     guard_boundary(&root, false); // Between cycles.
     let (_, document) = r.open_experiment("files");
@@ -103,6 +124,8 @@ fn guarded_project_completes_approved_closing_without_outside_write_regressions(
     let opened = ok(r.model("gil_open", json!({"kind":"verify","contract":CONTRACT})), "verify");
     let verify = step_ref(&opened, "verify");
     guard_boundary(&root, true);
+    refused(r.model("gil_await_user",json!({"question":"Can I finish?"})),"Verify cannot masquerade as user wait");
+    assert_eq!(auto_guard(&settings,json!({"hook_event_name":"Stop","last_assistant_message":"done"}))["decision"],"block");
     std::fs::write(root.join("plan.md"), &document).unwrap();
     ok(r.c.call("gil_close", verify_args(&root, &verify,
         "execution: protected shell wrote the measured bytes\nresult: guard-result.txt contains measured\nplan_document: plan.md\nevidence_files: guard-result.txt\n")), "close verify");
@@ -136,6 +159,7 @@ fn guarded_project_completes_approved_closing_without_outside_write_regressions(
     guard_boundary(&root, false);
     ok(r.model("gil_close", json!({"report":format!("verdict: success\nclosing_synthesis_ref: {synthesis}\nhandoff_summary: guard output and Closing boundaries verified\n")})), "chain report");
     guard_boundary(&root, false); // Closed Chain.
+    assert_eq!(auto_guard(&settings,json!({"hook_event_name":"Stop","last_assistant_message":"Chain complete"})),json!({}));
 }
 
 impl Rig {
