@@ -88,17 +88,20 @@ function fixture({ modes = ['inline', 'fullscreen'], mode = 'inline', answer, ho
     } };
 }
 
-test('real App waits for rendering in either callback order and keeps horizontal after inline return', async () => {
+test('real App asks at connect when the Host advertises fullscreen, else once rendered, and keeps horizontal after inline return', async () => {
   for (const order of ['connection', 'data']) {
     const f = fixture();
     if (order === 'connection') { f.connected.resolve(); await settle(); }
     const boot = f.app.ontoolresult(data);
     await settle();
-    assert.deepEqual(f.calls, []);
+    // Connected first: the connect-time request already went out before any data rendered.
+    assert.deepEqual(f.calls, order === 'connection' ? ['fullscreen'] : []);
     f.rendered.resolve(); await boot;
     if (order === 'data') { assert.deepEqual(f.calls, []); f.connected.resolve(); }
     await settle();
-    assert.deepEqual(f.calls, ['fullscreen']);
+    assert.deepEqual(f.calls, ['fullscreen'], 'an applied request is never repeated');
+    const automatic = JSON.parse(f.element('host-evidence').textContent).automatic;
+    assert.deepEqual(automatic.map(a => [a.phase, a.applied]), [[order === 'connection' ? 'connect' : 'ready', 'fullscreen']]);
     assert.equal(f.document.body.dataset.displayMode, 'fullscreen');
     assert.match(f.element('host-evidence').textContent, /"host": \{\s*"name": "harness-host"/);
     assert.doesNotMatch(f.element('host-say').textContent, /Codex|Cowork/);
@@ -205,17 +208,17 @@ test('declined, undefined and rejected automatic requests retain a working manua
       return outcome === 'inline' ? { mode: 'inline' } : undefined;
     } });
     await f.start();
-    assert.deepEqual(f.calls, ['fullscreen']);
+    assert.deepEqual(f.calls, ['fullscreen', 'fullscreen'], 'connect-time and ready-time requests');
     assert.equal(f.document.body.dataset.displayMode, 'inline');
     assert.equal(f.element('expand').disabled, false);
     assert.match(f.element('host-say').textContent, /모니터 펼치기/);
     if (outcome === 'undefined') assert.equal(JSON.parse(f.element('host-evidence').textContent).response, 'undefined');
     f.app.onhostcontextchanged({ displayMode: 'inline' });
     await settle();
-    assert.deepEqual(f.calls, ['fullscreen']);
+    assert.deepEqual(f.calls, ['fullscreen', 'fullscreen'], 'a context event alone schedules nothing new');
     automatic = false;
     await f.element('expand').onclick();
-    assert.deepEqual(f.calls, ['fullscreen', 'fullscreen']);
+    assert.deepEqual(f.calls, ['fullscreen', 'fullscreen', 'fullscreen']);
     assert.equal(f.document.body.dataset.displayMode, 'fullscreen');
     assert.deepEqual(f.native, []);
   }
@@ -244,7 +247,7 @@ test('late capabilities trigger once, but manual inline or teardown cancels that
       g.connected.resolve(); await settle();
       await g.element('inline').onclick();
       await g.start();
-      assert.deepEqual(g.calls, ['inline']);
+      assert.deepEqual(g.calls, ['fullscreen', 'inline'], 'the connect-time request went out first; the manual inline choice then ends the intent');
       continue;
     }
     if (cancel === 'teardown') await f.app.onteardown();
@@ -274,21 +277,36 @@ test('App reports rendering, actual modes, hidden and teardown independently of 
   assert.deepEqual(f.native, []);
 });
 
-test('a Host that keeps the App inline gets bounded automatic retries, then the first gesture requests fullscreen', async () => {
+test('a Host that keeps the App inline gets a connect-time and a ready-time request, bounded retries, then the first gesture', async () => {
   const f = fixture({ answer: () => ({ mode: 'inline' }) }); await f.start();
-  assert.deepEqual(f.calls, ['fullscreen']);
+  assert.deepEqual(f.calls, ['fullscreen', 'fullscreen'], 'connect-time, then ready-time');
   assert.equal(f.document.body.dataset.displayMode, 'inline');
   await f.fireTimerOf(1500);
-  assert.deepEqual(f.calls, ['fullscreen', 'fullscreen']);
+  assert.equal(f.calls.length, 3);
   await f.fireTimerOf(4000);
-  assert.deepEqual(f.calls, ['fullscreen', 'fullscreen', 'fullscreen']);
+  assert.equal(f.calls.length, 4);
   assert.equal([...f.timers.values()].filter(t => t.ms === 1500 || t.ms === 4000).length, 0, 'no further automatic timer');
   assert.match(f.element('host-say').textContent, /클릭하면 펼칩니다/);
   await f.pointerdown();
-  assert.deepEqual(f.calls, ['fullscreen', 'fullscreen', 'fullscreen', 'fullscreen']);
+  assert.equal(f.calls.length, 5);
   await f.pointerdown();
-  assert.equal(f.calls.length, 4, 'one gesture-carried request only');
+  assert.equal(f.calls.length, 5, 'one gesture-carried request only');
   assert.equal(f.element('expand').disabled, false, 'manual expand stays available');
+  const automatic = JSON.parse(f.element('host-evidence').textContent).automatic;
+  assert.deepEqual(automatic.map(a => [a.phase, a.applied]),
+    [['connect', 'inline'], ['ready', 'inline'], ['retry', 'inline'], ['retry', 'inline'], ['gesture', 'inline']]);
+  assert.ok(automatic.every(a => Number.isInteger(a.at_ms) && a.at_ms >= 0));
+});
+
+test('a connect-time request still pending when the Monitor renders is followed by the ready-time request', async () => {
+  const held = deferred();
+  const f = fixture({ answer: async () => { await held.promise; return { mode: 'inline' }; } });
+  f.connected.resolve(); await settle();
+  assert.deepEqual(f.calls, ['fullscreen']);
+  const boot = f.app.ontoolresult(data); await settle(); f.rendered.resolve(); await boot; await settle();
+  assert.deepEqual(f.calls, ['fullscreen'], 'no second request while the first is in flight');
+  held.resolve(); await settle(); await settle();
+  assert.deepEqual(f.calls, ['fullscreen', 'fullscreen'], 'the ready-time request follows the answer');
 });
 
 test('a manual inline choice or a Host fullscreen event cancels pending automatic retries', async () => {
@@ -296,13 +314,13 @@ test('a manual inline choice or a Host fullscreen event cancels pending automati
   await f.element('inline').onclick();
   assert.equal([...f.timers.values()].some(t => t.ms === 1500), false);
   await f.pointerdown();
-  assert.deepEqual(f.calls, ['fullscreen', 'inline']);
+  assert.deepEqual(f.calls, ['fullscreen', 'fullscreen', 'inline']);
   f = fixture({ answer: () => ({ mode: 'inline' }) }); await f.start();
   f.app.onhostcontextchanged({ displayMode: 'fullscreen' });
   await f.fireTimerOf(1500);
-  assert.deepEqual(f.calls, ['fullscreen'], 'a Host-confirmed fullscreen ends the intent');
+  assert.deepEqual(f.calls, ['fullscreen', 'fullscreen'], 'a Host-confirmed fullscreen ends the intent');
   await f.pointerdown();
-  assert.deepEqual(f.calls, ['fullscreen']);
+  assert.deepEqual(f.calls, ['fullscreen', 'fullscreen']);
 });
 
 test('a Host that applies the automatic request schedules no retry and ignores later gestures', async () => {
@@ -318,10 +336,10 @@ test('gesture fallback never captures explicit inline or native controls', async
     const f = fixture({ answer: () => ({ mode: 'inline' }) }); await f.start();
     await f.fireTimerOf(1500); await f.fireTimerOf(4000);
     await f.click(id);
-    assert.deepEqual(f.calls, id === 'inline' ? ['fullscreen','fullscreen','fullscreen','inline'] : ['fullscreen','fullscreen','fullscreen']);
+    assert.deepEqual(f.calls, id === 'inline' ? ['fullscreen','fullscreen','fullscreen','fullscreen','inline'] : ['fullscreen','fullscreen','fullscreen','fullscreen']);
     assert.deepEqual(f.native, id === 'native' ? ['show_gil_companion'] : []);
     await f.pointerdown();
-    assert.equal(f.calls.filter(mode => mode === 'fullscreen').length, 3);
+    assert.equal(f.calls.filter(mode => mode === 'fullscreen').length, 4);
   }
 });
 

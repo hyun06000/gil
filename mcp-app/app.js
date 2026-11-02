@@ -59,7 +59,7 @@ function modes(message) {
   if (connectionIssue) el('host-say').textContent = connectionMessage(connectionIssue);
   else if (message) el('host-say').textContent = message;
   el('host-evidence').textContent = raw({ ...evidence, advertised: context.availableDisplayModes,
-    current: context.displayMode, response, event: eventMode });
+    current: context.displayMode, response, event: eventMode, automatic: initialDisplay.attempts });
 }
 
 el('layout').onclick = () => {
@@ -96,6 +96,9 @@ async function requestMode(mode, { automatic = false } = {}) {
     if (!stopped) {
       if (automatic) scheduleRetry(got?.mode ?? null);
       modes(); void reportPresence();
+      // A connect-time request may have been answered after the Monitor rendered: the
+      // ready-time request then follows here instead of waiting for another Host event.
+      if (automatic) maybeFullscreen();
     }
   }
 }
@@ -112,7 +115,8 @@ function scheduleRetry(appliedMode) {
 function maybeFullscreen() {
   if (stopped || suspended || document.hidden || pending) return;
   if (initialDisplay.retrying && context.displayMode !== 'fullscreen' && !retryTimer) {
-    void requestMode('fullscreen', { automatic: true });
+    const mode = initialDisplay.retry();
+    if (mode) void requestMode(mode, { automatic: true });
     return;
   }
   const mode = initialDisplay.next({ connected, ready: rendererReady, context });
@@ -121,7 +125,8 @@ function maybeFullscreen() {
 document.addEventListener('pointerdown', (event) => {
   // Explicit controls own their gesture; never preempt their click with fullscreen.
   if (event.target?.closest?.('button, a, input, select, textarea, [role="button"], [contenteditable]')) return;
-  if (initialDisplay.gesture() === 'fullscreen') void requestMode('fullscreen');
+  // Logged like the automatic attempts: the gesture's answer is evidence too.
+  if (initialDisplay.gesture() === 'fullscreen') void requestMode('fullscreen', { automatic: true });
 }, true);
 for (const [id, mode] of [['expand', 'fullscreen'], ['inline', 'inline']]) {
   el(id).onclick = async () => {
@@ -268,7 +273,7 @@ app.connect().then(() => {
   evidence.host = hostIdentity(app);
   adoptHostStyles();
   modes(context.availableDisplayModes?.includes('fullscreen')
-    ? 'Monitor 가 준비되면 전체 화면을 자동 요청합니다. 그대로라면 모니터 펼치기를 눌러 주세요.'
+    ? '전체 화면을 자동 요청합니다(연결 직후와 Monitor 준비 뒤). 그대로라면 Monitor 를 한 번 클릭하거나 모니터 펼치기를 눌러 주세요.'
     : Array.isArray(context.availableDisplayModes)
       ? '이 표면은 펼친 Monitor 를 지원하지 않습니다. fullscreen 을 지원하는 Host(Codex, Claude Desktop 의 Claude Code 탭)에서 다시 열거나 별도 창을 사용하세요.'
       : 'Host 의 표시 모드 지원 정보를 기다리고 있습니다.');

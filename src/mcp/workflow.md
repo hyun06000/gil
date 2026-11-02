@@ -5,13 +5,18 @@ Use only the user's selected absolute `project_root`. Each receipt's text guidan
 call or one wait**; do it, then read the next receipt. Read `structuredContent` too, and follow the
 actual recorded position and the connected tool schema. Never repeat a call that already succeeded.
 
-1. **Start and show.** Start a new project once. After successful `gil_start`, follow its returned
-   `show_gil_monitor` call before opening the first Interview step. Do not prepare the Monitor again
-   if start returned its scope. Never repeat start to open a screen. If start succeeded but Monitor
-   preparation failed, report the display failure and continue the recorded Interview via `gil_open`.
-   A display failure alone does not block Project work. A successful tool response does not prove
-   that a screen is visible. In a new session, read `gil_context` once; its first block
-   `[지금 바로 할 호출]` is the next call. Resume there instead of starting again.
+1. **Start and show.** Start a new project once. A successful `gil_start` receipt carries the exact
+   next call, `show_gil_monitor({"scope_id": …})`, both in its text guidance and in its `said` body:
+   that single call is the next call on every Host (Codex, Claude Desktop's Claude Code tab, Plugin or
+   direct registration alike), before the first `gil_open`. Copy its argument verbatim and do not
+   skip it because no card is visible yet or because the body also names `gil open` for later. Do not
+   prepare the Monitor again if start returned its scope. Never repeat start to open a screen. If
+   start succeeded but Monitor preparation failed, report the display failure and continue the
+   recorded Interview via `gil_open`. A display failure alone does not block Project work. The App
+   requests fullscreen by itself (at connect, again when the Monitor renders, bounded retries, then
+   the user's first click); never call `show_gil_monitor` again to force fullscreen. A successful
+   tool response does not prove that a screen is visible. In a new session, read `gil_context` once;
+   its first block `[지금 바로 할 호출]` is the next call. Resume there instead of starting again.
    **Keep the in-host MCP App present:** successful Project calls check recent App display reports.
    When a receipt supplies `show_gil_monitor(scope_id)` because the Monitor is absent/hidden/unknown,
    call it once before further work, without asking the user to open a Companion. For an explicit

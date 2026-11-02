@@ -1573,7 +1573,7 @@ fn starting_a_project_leads_to_one_monitor_scope_and_the_first_interview_updates
     assert_eq!(prepared["structuredContent"]["label"], "project");
     let shown = agent_call(&mut mcp, "show_gil_monitor", serde_json::json!({ "scope_id": scope }));
     assert_ne!(shown["isError"], true, "{shown}");
-    assert!(shown["content"].as_array().unwrap().iter().any(|v| v["text"].as_str().is_some_and(|s| s.contains("fullscreen을 한 번 자동 요청"))), "{shown}");
+    assert!(shown["content"].as_array().unwrap().iter().any(|v| v["text"].as_str().is_some_and(|s| s.contains("스스로 fullscreen을 요청"))), "{shown}");
     let view = &shown["structuredContent"]["view"];
     assert_eq!(view["schema_version"], 1);
     assert_eq!(view["current"]["cycle_ref"], "cycle:C1");

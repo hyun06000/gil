@@ -92,8 +92,8 @@ Codex와 Claude Desktop 모두 **고정 런처**를 등록하므로 업데이트
      `claude_desktop_config.json.gil-backup-<시각>`을 남긴다(최근 5개 보관).
 5. Host를 (다시) 열고 새 대화에서 빈 테스트 폴더를 선택한다.
 6. **“지금 폴더에서 GIL 프로젝트를 시작해 줘”**라고 말하고 실제 Monitor와 첫 단계가 보이는지 확인한다.
-   Claude Code 탭에서는 Monitor가 inline 카드로 먼저 뜨고 **카드를 한 번 클릭하면** fullscreen으로
-   펼쳐진다(아래 macOS Claude 절의 Host 동작과 같다).
+   Claude Code 탭에서는 App이 연결 직후와 Monitor 준비 뒤 fullscreen을 자동 요청한다. 자동으로 펼쳐지지
+   않으면 **카드를 한 번 클릭하면** 펼쳐진다(아래 macOS Claude 절의 Host 동작과 같다).
 
 **직접 등록(임시, owner.8/owner.9 사용자용).** owner.8/owner.9 Companion에는 Claude Desktop 버튼이 없다. Claude Desktop을
 완전히 종료한 뒤 `%APPDATA%\Claude\claude_desktop_config.json`의 `mcpServers`에 다음 항목을 더하고 Desktop을
@@ -261,11 +261,12 @@ claude plugin install gil-companion-prototype@gil-preview-macos-arm64
 ```
 
 설치 뒤 **새 세션**을 열고 빈 테스트 폴더에서 **“지금 폴더에서 GIL 프로젝트를 시작해 줘”**라고 말한다.
-Agent의 도구 성공 문장과 실제 화면을 구분한다. Claude Code 탭은 사용자 동작 없이 보낸 표시 모드 요청을 적용하지
-않으므로(10/31 실측) Monitor는 inline 카드로 먼저 뜨고, **카드를 한 번 클릭하면** fullscreen으로 펼쳐진다.
-Codex처럼 자동으로 펼쳐지지는 않는다. fullscreen 지원과 “항상 자동으로 열림”은 다른 것이다. Monitor의
-**연결 정보**에는 Host가 보고한 이름·버전과 광고한 표시 모드가 그대로 적히므로, 문제를 제보할 때 그 값을
-함께 적는다. fullscreen 중 다른 도구의 승인 창이 보이지 않으면 **대화 안으로**를 눌러 inline으로 돌아간 뒤
+Agent의 도구 성공 문장과 실제 화면을 구분한다. 10/31 실측에서 Claude Code 탭은 Monitor 준비 뒤에 보낸 자동
+표시 모드 요청을 적용하지 않았고 Monitor는 inline 카드로 뜬 뒤 **카드를 한 번 클릭하면** fullscreen으로
+펼쳐졌다. 2026-11-02 빌드부터 App은 연결 직후에도 fullscreen을 요청한다. 이 요청이 Claude Code 탭에서
+적용되는지는 사용자 화면 확인 대기이며, 적용되지 않으면 첫 클릭이 그대로 펼친다. fullscreen 지원과 “항상
+자동으로 열림”은 다른 것이다. Monitor의 **연결 정보**에는 Host가 보고한 이름·버전, 광고한 표시 모드, 그리고
+`automatic`(자동 시도의 단계·시각·Host 응답)이 그대로 적히므로, 문제를 제보할 때 그 값을 함께 적는다. fullscreen 중 다른 도구의 승인 창이 보이지 않으면 **대화 안으로**를 눌러 inline으로 돌아간 뒤
 승인한다.
 
 ## Monitor의 업데이트 안내
@@ -319,7 +320,7 @@ Codex처럼 자동으로 펼쳐지지는 않는다. fullscreen 지원과 “항�
 | Claude Desktop 설정을 고쳤는데 다시 열면 되돌아감 | Desktop이 실행 중이었다. 완전히 종료(주 프로세스 없음)한 뒤 다시 고치고 연다 |
 | Companion의 Claude Desktop 연결이 “실행 중” 거절 | Claude Desktop을 완전히 종료한 뒤 다시 누른다 |
 | Claude Desktop에 다른 `gil` 등록이 있음 | GIL은 사용자가 만든 동명 등록을 바꾸지 않는다. 그 등록을 직접 정리한 뒤 다시 연결 |
-| Claude에서 Monitor가 inline 카드로만 뜸 | 정상 동작이다. 카드를 한 번 클릭하면 펼쳐진다. 펼쳐지지 않으면 연결 정보 값과 함께 제보 |
+| Claude에서 Monitor가 inline 카드로만 뜸 | 카드를 한 번 클릭하면 펼쳐진다. 연결 정보의 `automatic`에 자동 시도가 적혀 있는지 보고, 펼쳐지지 않으면 그 값과 함께 제보 |
 | OneDrive 폴더의 `.gil` 권한 거절 | Project를 자동 이동하거나 ACL을 강제 변경하지 않고 동기화 밖 로컬 폴더 선택을 안내 |
 
 오류 보고에는 OS/CPU, Host 이름과 버전(Codex 버전 또는 Claude Desktop 버전과 탭 이름), 연결 방식(Plugin /

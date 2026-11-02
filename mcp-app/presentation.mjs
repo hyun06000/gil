@@ -5,32 +5,49 @@ export function graphOrientation(mode, choice = null) {
 }
 
 // One initial intent per App instance, not a rule that forces every mode event.
-// Wait for both a rendered Monitor and an explicit Host capability list. The intent is
-// consumed before the first request. If the Host leaves the App inline without the user
-// choosing so, the same intent may retry a few times (some Hosts ignore a request sent
-// while they are still mounting the card) and finally ride on the user's first gesture
-// (some Hosts apply display-mode changes only inside a user action). Any manual choice,
-// a Host-confirmed fullscreen, or teardown ends the intent for good.
+// The same sequence goes to every Host; nothing here reads the Host's name. Each automatic
+// attempt is logged (phase, time since the App was created, the Host's applied mode) so the
+// 연결 정보 panel can show whether the automatic requests were actually sent and what the Host
+// answered. Phases, in order:
+//   connect — the Host advertised fullscreen before the Monitor rendered: ask once at once
+//             (some Hosts apply a request only while they are still mounting the card).
+//   ready   — the Monitor rendered: ask once (this is the request Codex applies).
+//   retry   — the Host left the App inline without the user choosing so: a few bounded retries.
+//   gesture — the user's first click anywhere in the App carries one last request (some Hosts
+//             apply display-mode changes only inside a user action).
+// Any manual choice, a Host-confirmed fullscreen, or teardown ends the intent for good.
 export const RETRY_DELAYS_MS = [1500, 4000];
-export function initialFullscreen({ retries = RETRY_DELAYS_MS } = {}) {
-  let consumed = false, done = false, attempts = 0, gestureArmed = false;
+export function initialFullscreen({ retries = RETRY_DELAYS_MS, now = () => Date.now() } = {}) {
+  let early = false, consumed = false, done = false, attempts = 0, gestureArmed = false;
+  const born = now(), log = [];
+  let inflight = null;
   const finish = () => { done = true; gestureArmed = false; };
+  const begin = (phase) => { inflight = { phase, at_ms: Math.max(0, now() - born), applied: undefined }; log.push(inflight); return 'fullscreen'; };
   return {
     cancel: finish,
     next({ connected, ready, context }) {
-      if (consumed || done || !connected || !ready) return null;
+      if (done || !connected) return null;
       if (context.displayMode === 'fullscreen') { finish(); consumed = true; return null; }
       if (!Array.isArray(context.availableDisplayModes)) return null;
-      consumed = true;
-      if (!context.availableDisplayModes.includes('fullscreen')) { finish(); return null; }
-      attempts = 1;
-      return 'fullscreen';
+      if (!context.availableDisplayModes.includes('fullscreen')) { finish(); consumed = true; return null; }
+      if (!ready) { if (early || inflight) return null; early = true; return begin('connect'); }
+      if (consumed || inflight) return null;
+      consumed = true; attempts = 1;
+      return begin('ready');
+    },
+    // The retry the App scheduled after `settle` returned a delay.
+    retry() {
+      if (done || !consumed || gestureArmed || inflight) return null;
+      return begin('retry');
     },
     // Called with the mode the Host applied (or null when it gave none). Returns the delay
-    // before another automatic request, or null when automatic requests are over.
+    // before another automatic request, or null when no timer is due now.
     settle(appliedMode) {
-      if (done || !consumed) return null;
+      if (inflight) { inflight.applied = appliedMode ?? null; inflight = null; }
+      if (done) return null;
       if (appliedMode === 'fullscreen') { finish(); return null; }
+      // A declined connect-time request is not a retry: the ready-time request follows by itself.
+      if (!consumed) return null;
       if (attempts - 1 < retries.length) { const delay = retries[attempts - 1]; attempts += 1; return delay; }
       gestureArmed = true;
       return null;
@@ -41,10 +58,12 @@ export function initialFullscreen({ retries = RETRY_DELAYS_MS } = {}) {
     gesture() {
       if (!gestureArmed || done) return null;
       finish();
-      return 'fullscreen';
+      return begin('gesture');
     },
     get retrying() { return consumed && !done && !gestureArmed; },
     get awaitingGesture() { return gestureArmed && !done; },
+    /** Evidence only: copies of every attempt so far. */
+    get attempts() { return log.map((entry) => ({ ...entry })); },
   };
 }
 
