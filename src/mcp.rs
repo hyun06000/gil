@@ -119,6 +119,15 @@ impl GilServer {
                     if status["state"] == "unconfirmed" {
                         guidance::prepend(&mut result, "MCP App Monitor가 두 번의 표시 요청에도 응답하지 않았다. 자동 재열기를 멈추고 표시 문제를 알린다. Companion을 자동으로 열지 않는다.");
                     } else if status["should_open"] == true {
+                        // A lost/Host-rejected start receipt can be recovered through context,
+                        // including on Hosts that expose only structuredContent to the model.
+                        if name == "gil_context" {
+                            if let Some(fields) = result.structured_content.as_mut().and_then(Value::as_object_mut) {
+                                fields.insert("next_call".into(), serde_json::json!({
+                                    "name": "show_gil_monitor", "arguments": {"scope_id": status["scope_id"]}
+                                }));
+                            }
+                        }
                         guidance::prepend(&mut result, format!(
                             "MCP App Monitor가 표시 중이라는 신호가 없다 ({}). 작업을 계속하기 전에 show_gil_monitor({})를 한 번 호출한다. Companion으로 대체하지 않는다. 호출 성공만으로 표시됐다고 말하지 않는다.",
                             status["state"], serde_json::json!({"scope_id":status["scope_id"]})));

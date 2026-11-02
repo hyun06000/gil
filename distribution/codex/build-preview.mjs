@@ -6,6 +6,7 @@ import {homedir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {ARCHIVE_FLAGS, createTree, hash, inventory, repository, sourceSnapshot, verifyTree} from './artifact.mjs';
 import {smoke} from './smoke.mjs';
+import {checkNativeOutputContract} from '../../plugins/gil-companion-prototype/native-output-contract.mjs';
 import {check as checkNotices} from '../compliance/notices.mjs';
 
 assert.equal(process.platform, 'darwin');
@@ -36,6 +37,7 @@ await run('cargo', ['build', '--locked', '--release', '-p', 'gil', '--target', '
   ...process.env, RUSTFLAGS: rustflags, CARGO_TARGET_DIR: target,
 });
 assert.deepEqual(await sourceSnapshot(repository), source, 'source changed during build');
+const hostOutputContract = await checkNativeOutputContract(join(target, 'aarch64-apple-darwin/release/gil'));
 const marketplace = join(output, 'marketplace');
 const receipt = await createTree({binary: join(target, 'aarch64-apple-darwin/release/gil'), output: marketplace, profile});
 assert.deepEqual(receipt.source, source);
@@ -52,7 +54,7 @@ try {
   const archiveHash = hash(await readFile(archive));
   await writeFile(join(output, 'SHA256SUMS'), `${archiveHash}  gil-codex-macos-arm64-preview.tar.gz\n`, {flag: 'wx'});
   await writeFile(join(output, 'checks.json'), JSON.stringify({channel: 'development_unsigned', publishable: false,
-    source, profile, third_party_notices: notices, archive_sha256: archiveHash, roundtrip: 'passed', smoke: check}, null, 2) + '\n', {flag: 'wx'});
+    source, profile, host_output_contract: hostOutputContract, third_party_notices: notices, archive_sha256: archiveHash, roundtrip: 'passed', smoke: check}, null, 2) + '\n', {flag: 'wx'});
   console.log(JSON.stringify({channel: 'development_unsigned', publishable: false,
     archive_sha256: archiveHash, roundtrip: 'passed', tools: check.tools, source_dirty: source.dirty}));
 } finally {

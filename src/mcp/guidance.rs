@@ -35,7 +35,7 @@ pub fn after(name: &str, result: &mut CallToolResult) {
         "gil_context" => "GIL 재개: 아래 context의 [지금 바로 할 호출] 한 줄을 먼저 따른다. 완료 조건을 충족했다면 추가 작업보다 gil_close가 먼저다. 이미 닫힌 단계를 반복하지 않고, 기존 프로젝트에 gil_start를 다시 부르지 않는다. 프로젝트 파일 변경은 열린 Verify에서만 수행한다.".to_string(),
         "gil_status" => "GIL 위치: 아래 '다음:' 줄 하나가 지금 밟을 수 있는 수다. 같은 세션에서 status를 반복 호출하지 않고 그 수를 실행한다.".to_string(),
         "gil_revisit" => "GIL 되돌아감 완료: 작업 폴더가 대상 Cycle의 세계로 복원됐다. 다음 호출은 gil_open(kind: interview|experiment)으로 새 Cycle을 여는 것이다. gil_revisit을 반복하지 않는다.".to_string(),
-        "show_gil_monitor" => "GIL 진행: Monitor 표시를 요청했다. 신규 시작 흐름이면 같은 project_root로 첫 Interview의 gil_open을 호출하고 질문한다. 기존 프로젝트라면 현재 열린 단계를 이어간다. 실제 화면 표시 여부는 아직 확인되지 않았다.".to_string(),
+        "show_gil_monitor" => "GIL 진행: Monitor 표시를 요청했다. 신규 시작 흐름이면 같은 project_root로 gil_open(kind: question)을 먼저 호출하고 질문한다. 목표가 아직 없어도 목표·완료 기준을 묻는 행동 계약으로 Question을 연다. 기존 프로젝트라면 현재 열린 단계를 이어간다. 실제 화면 표시 여부는 아직 확인되지 않았다.".to_string(),
         "gil_plan_propose" | "gil_plan_read" | "gil_plan_request_interview" => match plan(name, result) {
             Some(hint) => hint,
             None => return,

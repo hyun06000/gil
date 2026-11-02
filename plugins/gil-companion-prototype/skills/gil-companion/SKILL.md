@@ -38,7 +38,12 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    that single call is the next call on every Host (Codex, Claude Desktop's Claude Code tab, Plugin or
    direct registration alike), before the first `gil_open`. Copy its argument verbatim and do not
    skip it because no card is visible yet or because the body also names `gil open` for later. Do not
-   prepare the Monitor again if start returned its scope. Never repeat start to open a screen. If
+   prepare the Monitor again if start returned its scope. Never repeat start to open a screen.
+   If the Host rejects/loses the start response (including output-schema validation), creation may
+   already be committed: read `gil_context` once, then follow its `structuredContent.next_call`.
+   If the project exists but no scope was delivered, call `gil_monitor_prepare(project_root)` once
+   and show that returned scope; a missing scope in the lost response is not a reason to omit Monitor.
+   If
    start succeeded but Monitor preparation failed, report the display failure and continue the
    recorded Interview via `gil_open`. A display failure alone does not block Project work. The App
    requests fullscreen by itself (at connect, again when the Monitor renders, bounded retries, then
@@ -58,7 +63,15 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    OS foreground visibility or that the human has looked.
    `project_root` is always the exact string the Host, `gil_context`/`gil_status` or the last
    receipt gave; copy it verbatim and never retype it (retyped Korean paths change their letters).
-2. **Agree, then finish Interview.** Interview clarifies and agrees scope; it never changes
+2. **Agree, then finish Interview.** An unknown goal is the reason to open Question, not a
+   prerequisite to opening it. Use a clarification contract, for example `objective: clarify the
+   user's goal`, `next_action: ask the user for the desired result and completion criteria`, and
+   `done_when: the user has answered or identified what remains uncertain`. Open Question before
+   asking, then record the user's actual reply with `gil_close`; never invent the goal.
+   Permitted outside work or file-free web research does not close that Question or replace an
+   explicitly requested GIL project's Interview, approval, and eventual Closing. Resume the recorded
+   next call after the user answers; do not treat a chat-only answer as completed project delivery.
+   Interview clarifies and agrees scope; it never changes
    project Artifact files. Synthesis waits for the user's reply to its proposed statement;
    silence, earlier requests and the agent's own judgment are not approval. Do not ask again for
    approval already given to that exact proposal. Outcome judges the approved scope; do not leave it
