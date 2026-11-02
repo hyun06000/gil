@@ -237,7 +237,18 @@ test('required build runs for every main PR against its exact head without a pri
   const workflow = await readFile(join(repository, '.github/workflows/codex-preview.yml'), 'utf8');
   const events = workflow.slice(workflow.indexOf('\non:'), workflow.indexOf('\npermissions:'));
   assert.match(events, /pull_request:\n    branches: \[main\]/);
-  assert.doesNotMatch(events, /paths(?:-ignore)?:|pull_request_target:|push:|tags:/);
+  const prEvent = events.match(/^  pull_request:\n([\s\S]*?)(?=^  \w+:|^concurrency:)/m)?.[1];
+  assert.ok(prEvent, 'required PR event must exist');
+  assert.doesNotMatch(prEvent, /paths(?:-ignore)?:/, 'no main PR may skip the required check');
+  assert.doesNotMatch(events, /pull_request_target:|tags:/);
+  // A narrow main push only seeds dependency caches for future PRs. It has the
+  // same read-only permissions and cannot opt in to candidate publication.
+  const pushEvent = events.match(/^  push:\n([\s\S]*?)(?=^  \w+:|^concurrency:)/m)?.[1];
+  assert.match(pushEvent, /^    branches: \[main\]\n    paths:\n/);
+  assert.deepEqual([...pushEvent.matchAll(/^      - '([^']+)'$/gm)].map(m => m[1]), [
+    'Cargo.toml', 'Cargo.lock', 'companion/Cargo.toml', 'mcp-app/package-lock.json',
+    'plugins/gil-companion-prototype/package-lock.json', 'tools/ci/**', '.github/workflows/codex-preview.yml',
+  ]);
   assert.match(workflow, /ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
   assert.match(workflow, /macos-arm64-preview:\n    runs-on:/);
   assert.match(workflow, /DEVELOPMENT-\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
