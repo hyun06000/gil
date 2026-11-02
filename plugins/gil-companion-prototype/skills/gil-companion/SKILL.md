@@ -13,6 +13,21 @@ Use only the user's selected absolute `project_root`. Each receipt's text guidan
 call or one wait**; do it, then read the next receipt. Read `structuredContent` too, and follow the
 actual recorded position and the connected tool schema. Never repeat a call that already succeeded.
 
+**Quick rules — read these first; the numbered rules below only add detail.**
+
+1. A GIL project is not finished in chat. Before answering the user, make the one GIL call the
+   last receipt named. If no receipt exists yet, read `gil_context` once (existing project) or call
+   `gil_start` once (new project).
+2. After `gil_start`: call the `show_gil_monitor(scope_id)` the receipt names, then
+   `gil_open(kind: question)` with `objective`, `next_action`, `done_when`.
+3. A Question is answered by the user, not by you. Ask, end the turn, and close it only with the
+   user's actual reply. Never paste the original request as the answer.
+4. Interview only agrees the goal. Reading data, calculating, writing documents, code, charts
+   and reports happen inside an open Experiment **Verify**, and their results are saved as
+   project files named in `evidence_files`. A chat summary is not a deliverable.
+5. A refusal closes nothing: fix the one thing it names and resend the same call. Never repeat
+   `gil_start`, skip a step, or invent approval.
+
 **Project file boundary — at every stage.** Creating, modifying, deleting, renaming or moving
 Artifact files inside the selected `project_root` requires a successfully opened Experiment
 Verify. This includes importing files made elsewhere, DOCX/PDF production, chart PNGs, rendering,

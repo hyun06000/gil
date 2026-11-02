@@ -32,10 +32,11 @@ pub fn after(name: &str, result: &mut CallToolResult) {
     let hint = match name {
         "gil_open" => opened(result),
         "gil_close" => closed(result),
-        "gil_context" => "GIL 재개: 아래 context의 [지금 바로 할 호출] 한 줄을 먼저 따른다. 완료 조건을 충족했다면 추가 작업보다 gil_close가 먼저다. 이미 닫힌 단계를 반복하지 않고, 기존 프로젝트에 gil_start를 다시 부르지 않는다. 프로젝트 파일 변경은 열린 Verify에서만 수행한다.".to_string(),
+        "gil_start" => "GIL 시작: 이 폴더는 이제 GIL 프로젝트다. 채팅으로 답하기 전에 아래 receipt가 적은 show_gil_monitor 호출을 scope_id 그대로 먼저 한다. 그다음 gil_open(kind: question)으로 사용자에게 목표를 묻고 턴을 끝낸다. 자료 읽기·계산·보고서 작성은 Experiment의 Verify에서만 하며, 결과를 채팅으로 먼저 내지 않는다.".to_string(),
+        "gil_context" => "GIL 재개: 채팅으로 답하기 전에 아래 context의 [지금 바로 할 호출] 한 줄을 먼저 따른다. 완료 조건을 충족했다면 추가 작업보다 gil_close가 먼저다. 이미 닫힌 단계를 반복하지 않고, 기존 프로젝트에 gil_start를 다시 부르지 않는다. 프로젝트 파일 변경은 열린 Verify에서만 수행한다.".to_string(),
         "gil_status" => "GIL 위치: 아래 '다음:' 줄 하나가 지금 밟을 수 있는 수다. 같은 세션에서 status를 반복 호출하지 않고 그 수를 실행한다.".to_string(),
         "gil_revisit" => "GIL 되돌아감 완료: 작업 폴더가 대상 Cycle의 세계로 복원됐다. 다음 호출은 gil_open(kind: interview|experiment)으로 새 Cycle을 여는 것이다. gil_revisit을 반복하지 않는다.".to_string(),
-        "show_gil_monitor" => "GIL 진행: Monitor 표시를 요청했다. 신규 시작 흐름이면 같은 project_root로 gil_open(kind: question)을 먼저 호출하고 질문한다. 목표가 아직 없어도 목표·완료 기준을 묻는 행동 계약으로 Question을 연다. 기존 프로젝트라면 현재 열린 단계를 이어간다. 실제 화면 표시 여부는 아직 확인되지 않았다.".to_string(),
+        "show_gil_monitor" => "GIL 진행: Monitor 표시를 요청했다. 신규 시작 흐름이면 같은 project_root로 gil_open(kind: question)을 먼저 호출하고 질문한다. 목표가 아직 없어도 목표·완료 기준을 묻는 행동 계약으로 Question을 연다. 질문한 뒤 턴을 끝내 사용자의 답을 기다린다 — 사용자의 요청문을 답으로 대신 적고 넘어가지 않는다. 기존 프로젝트라면 현재 열린 단계를 이어간다. 실제 화면 표시 여부는 아직 확인되지 않았다.".to_string(),
         "gil_plan_propose" | "gil_plan_read" | "gil_plan_request_interview" => match plan(name, result) {
             Some(hint) => hint,
             None => return,
@@ -44,6 +45,11 @@ pub fn after(name: &str, result: &mut CallToolResult) {
     };
     if matches!(name, "gil_open" | "gil_close" | "gil_context" | "gil_status") {
         prepend(result, format!("{hint}\n{FILE_BOUNDARY}"));
+    } else if name == "gil_start" {
+        // The display handoff (exact show_gil_monitor call) stays the first block; this
+        // imperative summary follows it so display recovery still precedes workflow guidance.
+        let at = result.content.len().min(1);
+        result.content.insert(at, ContentBlock::text(hint));
     } else {
         prepend(result, hint);
     }
@@ -91,7 +97,7 @@ fn opened(result: &CallToolResult) -> String {
     let said = said(result);
     let Some(kind) = first_line_kind(said, "열었다: ") else { return generic.into(); };
     let specific = match kind {
-        "question" => "GIL 진행: Question을 열었다. 사용자에게 질문하고 턴을 끝내 답을 기다린다. 답을 받으면 그 원문으로 gil_close한다. 기다리는 동안 프로젝트 파일을 변경하지 않는다.",
+        "question" => "GIL 진행: Question을 열었다. 사용자에게 질문하고 턴을 끝내 답을 기다린다. 답을 받으면 그 원문으로 gil_close한다. 사용자의 원 요청문을 response로 대신 적어 닫지 않는다 — 실제 답 없이는 닫지 않는다. 기다리는 동안 조사·계산·프로젝트 파일 변경을 하지 않는다.",
         "interpretation" => "GIL 진행: Interpretation을 열었다. 받은 답에서 확정된 것과 모르는 것을 갈라 gil_close한다. 프로젝트 파일은 변경하지 않는다.",
         "synthesis" => "GIL 진행: Synthesis를 열었다. 제안 statement를 사용자에게 보여 주고 턴을 끝내 답을 기다린다(승인 계획 프로필이면 먼저 gil_plan_propose로 제안하고 Monitor 버튼을 기다린다). 명시적 동의가 있을 때만 gil_close한다. 침묵·이전 요청·자체 판단은 승인이 아니다. 기다리는 동안 프로젝트 파일을 변경하지 않는다.",
         "outcome" if said.contains("Interview") => "GIL 진행: Interview Outcome을 열었다. 승인된 범위를 판정해 gil_close한다. 프로젝트가 끝날 때까지 열어 두지 않는다. 닫은 뒤 Interview Cycle Report를 별도로 gil_close한다.",
@@ -317,6 +323,23 @@ mod tests {
             assert!(!hint.contains(must_not), "{kind}: {hint}");
             assert!(hint.contains("gil_close") || kind == "experiment", "{kind}: {hint}");
         }
+    }
+
+    #[test]
+    fn a_successful_start_names_the_monitor_call_before_any_chat_answer() {
+        let mut r = receipt("시작했다: cycle:C1 · interview\n\n다음\n  show_gil_monitor({\"scope_id\":\"project:abc\"})\n");
+        after("gil_start", &mut r);
+        let hint = text(&r);
+        assert!(hint.contains("GIL 시작:"), "{hint}");
+        assert!(r.content[0].as_text().unwrap().text.starts_with("시작했다"), "handoff block stays first");
+        assert!(hint.contains("채팅으로 답하기 전에") && hint.contains("show_gil_monitor"), "{hint}");
+        assert!(hint.contains("gil_open(kind: question)") && hint.contains("Verify"), "{hint}");
+        let mut shown = receipt("Monitor 표시를 요청했다\n");
+        after("show_gil_monitor", &mut shown);
+        assert!(text(&shown).contains("요청문을 답으로 대신 적고 넘어가지 않는다"), "{}", text(&shown));
+        let mut q = receipt("열었다: step:C1/S1 · question\n\n지금 할 일\n  …\n");
+        after("gil_open", &mut q);
+        assert!(text(&q).contains("response로 대신 적어 닫지 않는다"), "{}", text(&q));
     }
 
     #[test]
