@@ -9,10 +9,11 @@ import {fileURLToPath} from 'node:url';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const cleaner = join(root, 'tools/ci/prune-workspace-cache.mjs');
 const workflows = ['codex-preview', 'chain-core', 'companion-native', 'windows-spike'];
+const workflowText = name => readFileSync(join(root, `.github/workflows/${name}.yml`), 'utf8').replace(/\r\n/g, '\n');
 
 test('dependency caches are stable across source commits; only cache maintenance is conditional', () => {
   for (const name of workflows) {
-    const text = readFileSync(join(root, `.github/workflows/${name}.yml`), 'utf8');
+    const text = workflowText(name);
     const key = text.match(/^          key: (.+)$/m)?.[1];
     assert.ok(key, name);
     assert.match(key, /runner.os.*runner.arch.*rust-1\.97\.1.*Cargo.lock.*package-lock.json.*deps-v2/);
@@ -25,7 +26,7 @@ test('dependency caches are stable across source commits; only cache maintenance
 });
 
 test('profile grouping retains both Windows CPUs and both profiles, and probes the product before testbed builds', () => {
-  const text = readFileSync(join(root, '.github/workflows/windows-spike.yml'), 'utf8');
+  const text = workflowText('windows-spike');
   assert.equal((text.match(/          - arch: x64/g) || []).length, 2);
   assert.equal((text.match(/          - arch: arm64/g) || []).length, 2);
   const at = name => text.indexOf(`      - name: ${name}`);
@@ -34,7 +35,7 @@ test('profile grouping retains both Windows CPUs and both profiles, and probes t
   assert.ok(at('Native protocol, read-only Monitor') < at('Companion sessions and Windows named pipes'));
   const detector = text.slice(at('Automatic installer target detection'), at('Install maintainer toolchain'));
   assert.match(detector, /if: matrix.profile == 'default'/);
-  const chain = readFileSync(join(root, '.github/workflows/chain-core.yml'), 'utf8');
+  const chain = workflowText('chain-core');
   assert.match(chain, /runner: macos-15/); assert.match(chain, /runner: windows-2025/);
   const features = [...chain.matchAll(/run: cargo (?:test|build).*?--features ([\w,-]+)/g)].map(m => m[1]);
   const groups = features.filter((f, i) => f !== features[i-1]);
