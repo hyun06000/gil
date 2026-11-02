@@ -241,6 +241,13 @@ fn hook(input: &Value, exe: &Path) -> Result<Value, String> {
                     "이 채팅의 GIL 진행 검사를 일시 해제했다. 프로젝트 파일 쓰기 보호는 유지한다. 재개하려면 gil_context를 호출한다. 완료·승인은 기록하지 않았다.",
                 ));
             }
+            // Once the recorded Chain has closed, later unrelated user requests in this
+            // chat must not receive an "unfinished GIL" instruction. File protection remains.
+            if store.data.sessions.get(id).is_some_and(|bound| session(&bound.root).is_ok_and(|s| finished(&s))) {
+                store.data.sessions.remove(id);
+                store.save()?;
+                return Ok(json!({}));
+            }
             if let Some(bound) = store.data.sessions.get_mut(id) {
                 bound.wait = None;
                 let message = correction(&bound.root);

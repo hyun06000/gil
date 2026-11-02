@@ -160,6 +160,8 @@ fn guarded_project_completes_approved_closing_without_outside_write_regressions(
     ok(r.model("gil_close", json!({"report":format!("verdict: success\nclosing_synthesis_ref: {synthesis}\nhandoff_summary: guard output and Closing boundaries verified\n")})), "chain report");
     guard_boundary(&root, false); // Closed Chain.
     assert_eq!(auto_guard(&settings,json!({"hook_event_name":"Stop","last_assistant_message":"Chain complete"})),json!({}));
+    assert_eq!(auto_guard(&settings,json!({"hook_event_name":"UserPromptSubmit","prompt":"An unrelated web-only question"})),json!({}));
+    assert_eq!(auto_guard(&settings,json!({"hook_event_name":"Stop","last_assistant_message":"Unrelated answer"})),json!({}));
 }
 
 impl Rig {
