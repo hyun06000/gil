@@ -23,6 +23,121 @@ mod revisit_cases;
 
 struct Rig { root: std::path::PathBuf, record: std::path::PathBuf, scope: String, c: Client }
 
+// Real Core/guard processes, with read-only records as in a restricted Host. This remains a
+// synthetic protocol acceptance test: the App decisions below are not human UI observations.
+#[cfg(all(target_os = "macos", feature = "visual-authoring"))]
+fn guard_boundary(root: &Path, writable: bool) {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    let profile = format!("(version 1)(allow default)(deny file-write* (subpath {}))",
+        serde_json::to_string(root.join(".gil").to_str().unwrap()).unwrap());
+    let command = |action: &str| {
+        // Direct hooks can observe read-only records. Shell guards run through the Host's
+        // normal per-command approval route, then apply their own mandatory sandbox.
+        let mut c = if action == "hook" {
+            let mut c = Command::new("/usr/bin/sandbox-exec");
+            c.args(["-p", &profile, env!("CARGO_BIN_EXE_gil-write-guard")]);
+            c
+        } else { Command::new(env!("CARGO_BIN_EXE_gil-write-guard")) };
+        c.args([action, "--root"]).arg(root).current_dir(root);
+        c
+    };
+    let hook = |name: &str, args: Value| {
+        let mut c = command("hook").stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap();
+        c.stdin.take().unwrap().write_all(json!({"hook_event_name":"PreToolUse", "tool_name":name,
+            "cwd":root,"tool_input":args}).to_string().as_bytes()).unwrap();
+        let out = c.wait_with_output().unwrap();
+        assert!(out.status.success());
+        serde_json::from_slice::<Value>(&out.stdout).unwrap()
+    };
+    for (tool, args) in [
+        ("Write", json!({"file_path":"report.docx"})),
+        ("Edit", json!({"file_path":"guard-result.txt"})),
+        ("apply_patch", json!({"input":"*** Begin Patch\n*** Add File: report.docx\n+probe\n*** End Patch"}))
+    ] {
+        let r = hook(tool, args);
+        assert_eq!(r["hookSpecificOutput"]["permissionDecision"] == "deny", !writable, "{tool}: {r}");
+        assert!(!r.to_string().contains("잠금 파일을 열지"), "unexpected lock failure: {r}");
+    }
+    assert_eq!(hook("Write", json!({"file_path":"../external.txt"})), json!({}));
+    assert_eq!(hook("WebSearch", json!({"query":"synthetic"})), json!({}));
+    assert_eq!(hook("Write", json!({"file_path":".gil/forbidden"}))["hookSpecificOutput"]["permissionDecision"], "deny");
+    let before = std::fs::read(root.join("guard-result.txt")).ok();
+    let out = command("run").args(["--", "printf outside > ../outside-probe.txt && printf measured > guard-result.txt"]).output().unwrap();
+    assert_eq!(out.status.success(), writable, "{}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(std::fs::read(root.join("../outside-probe.txt")).unwrap(), b"outside");
+    if writable { assert_eq!(std::fs::read(root.join("guard-result.txt")).unwrap(), b"measured"); }
+    else { assert_eq!(std::fs::read(root.join("guard-result.txt")).ok(), before); }
+    let out = command("run").args(["--", "printf forbidden > .gil/forbidden"]).output().unwrap();
+    assert!(!out.status.success());
+    assert!(!root.join(".gil/forbidden").exists());
+}
+
+#[cfg(all(target_os = "macos", feature = "visual-authoring"))]
+#[test]
+fn guarded_project_completes_approved_closing_without_outside_write_regressions() {
+    let root = scratch("guard-closing-project");
+    let settings = scratch("guard-closing-settings");
+    let record = product_state_path(&root, &private_local_app_data(&settings));
+    let mut r = Rig { root: root.clone(), record, scope: String::new(), c: Client::serve(&settings) };
+    let started = ok(r.model("gil_start", json!({})), "start");
+    let next = &structured(&started)["next_call"];
+    assert_eq!(next["name"], "show_gil_monitor");
+    r.scope = next["arguments"]["scope_id"].as_str().unwrap().to_owned();
+    ok(r.c.call("show_gil_monitor", next["arguments"].clone()), "show");
+    guard_boundary(&root, false);
+    let (basis, synthesis) = r.ask_and_interpret();
+    ok(r.model("gil_plan_propose", json!({"draft":draft(&["files"], &basis, &[])})), "propose");
+    guard_boundary(&root, false); // Opening approval wait.
+    r.approve_via_app(1);
+    r.close_approved_interview(&synthesis, "open_child");
+    guard_boundary(&root, false); // Between cycles.
+    let (_, document) = r.open_experiment("files");
+    for (kind, report) in [("define", "problem: protected output\nsuccess_condition: measured bytes saved"),
+        ("hypothesis", "hypothesis: Verify permits output\nrationale: guard follows Core state\nguardrail: outside writes remain allowed")] {
+        ok(r.model("gil_open", json!({"kind":kind,"contract":CONTRACT})), kind);
+        guard_boundary(&root, false);
+        ok(r.model("gil_close", json!({"report":report})), kind);
+        guard_boundary(&root, false);
+    }
+    let opened = ok(r.model("gil_open", json!({"kind":"verify","contract":CONTRACT})), "verify");
+    let verify = step_ref(&opened, "verify");
+    guard_boundary(&root, true);
+    std::fs::write(root.join("plan.md"), &document).unwrap();
+    ok(r.c.call("gil_close", verify_args(&root, &verify,
+        "execution: protected shell wrote the measured bytes\nresult: guard-result.txt contains measured\nplan_document: plan.md\nevidence_files: guard-result.txt\n")), "close verify");
+    guard_boundary(&root, false);
+    ok(r.model("gil_open", json!({"kind":"analysis","contract":CONTRACT})), "analysis");
+    guard_boundary(&root, false);
+    ok(r.model("gil_close", json!({"report":"interpretation: actual protected output matches the expected bytes\nhypothesis_fit: yes\nproblem_solved: yes\nsuccess_condition_met: yes\nguardrail_triggered: no\n"})), "close analysis");
+    let opened = ok(r.model("gil_open", json!({"kind":"outcome","contract":CONTRACT})), "outcome");
+    let outcome = step_ref(&opened, "outcome");
+    guard_boundary(&root, false);
+    ok(r.model("gil_close", json!({"report":"verdict: success\nlesson: Verify alone permits protected writes\nnext_direction.action: close_cycle\nnext_direction.reason: measured output preserved\n"})), "close outcome");
+    guard_boundary(&root, false);
+    ok(r.model("gil_close", json!({"report":format!("verdict: success\noutcome_ref: {outcome}\nhandoff_summary: measured protected output preserved\nnext_direction.action: open_child\nnext_direction.reason: final Closing review\n")})), "close experiment");
+    guard_boundary(&root, false); // Existing output unchanged after Verify.
+    ok(r.model("gil_open", json!({"kind":"interview"})), "closing");
+    let mut basis = Vec::new();
+    for (kind, report) in [("question", QUESTION), ("interpretation", INTERPRETATION)] {
+        let opened = ok(r.model("gil_open", json!({"kind":kind,"contract":CONTRACT})), kind);
+        basis.push(step_ref(&opened, kind));
+        guard_boundary(&root, false);
+        ok(r.model("gil_close", json!({"report":report})), kind);
+    }
+    let opened = ok(r.model("gil_open", json!({"kind":"synthesis","contract":CONTRACT})), "closing synthesis");
+    let synthesis = step_ref(&opened, "synthesis");
+    guard_boundary(&root, false); // Before proposal and while awaiting its decision.
+    ok(r.model("gil_plan_propose", json!({"draft":draft(&["files"], &basis, &[("chain_verdict","success")])})), "closing proposal");
+    guard_boundary(&root, false);
+    r.approve_via_app(2);
+    guard_boundary(&root, false); // Approval alone never permits Artifact writes.
+    r.close_approved_interview(&synthesis, "close_chain");
+    guard_boundary(&root, false);
+    ok(r.model("gil_close", json!({"report":format!("verdict: success\nclosing_synthesis_ref: {synthesis}\nhandoff_summary: guard output and Closing boundaries verified\n")})), "chain report");
+    guard_boundary(&root, false); // Closed Chain.
+}
+
 impl Rig {
     fn model(&mut self, name: &str, mut args: Value) -> Value {
         if name != "show_gil_monitor" { args["project_root"] = json!(self.root); }

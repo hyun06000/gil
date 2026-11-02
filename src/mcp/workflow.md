@@ -26,6 +26,7 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
 
 1. **Start and show.** Start a new project once. A successful `gil_start` receipt carries the exact
    next call, `show_gil_monitor({"scope_id": …})`, in its opening guidance and its final text block:
+   `structuredContent.next_call` carries the same name and arguments for structured-only Hosts;
    that single call is the next call on every Host (Codex, Claude Desktop's Claude Code tab, Plugin or
    direct registration alike), before the first `gil_open`. Copy its argument verbatim and do not
    skip it because no card is visible yet or because the body also names `gil open` for later. Do not

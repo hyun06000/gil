@@ -269,3 +269,58 @@ fn guarded_shell_really_denies_project_writes_and_permits_outside_output() {
     assert!(!output.status.success());
     assert!(root.exists());
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+fn read_only_records_allow_guard_lookup_without_write_access() {
+    let root = fixture("read-only-records");
+    let before = fs::read(root.join(STATE_PATH)).unwrap();
+    let profile = format!("(version 1)(allow default)(deny file-write* (subpath {}))",
+        serde_json::to_string(root.join(".gil").to_str().unwrap()).unwrap());
+    let input = json!({"hook_event_name":"PreToolUse","tool_name":"Write","cwd":root,
+        "tool_input":{"file_path":"report.docx"}});
+    let mut kid = Command::new("/usr/bin/sandbox-exec")
+        .args(["-p", &profile, env!("CARGO_BIN_EXE_gil-write-guard"), "hook", "--root"])
+        .arg(&root).stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap();
+    kid.stdin.take().unwrap().write_all(input.to_string().as_bytes()).unwrap();
+    let out = kid.wait_with_output().unwrap();
+    assert!(out.status.success());
+    let decision: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(denied(&decision));
+    assert!(decision["hookSpecificOutput"]["permissionDecisionReason"].as_str().unwrap()
+        .contains("열린 Experiment Verify"), "must read state, not deny on lock error: {decision}");
+    let out = Command::new("/usr/bin/sandbox-exec")
+        .args(["-p", &profile, env!("CARGO_BIN_EXE_gil-write-guard"), "run", "--root"])
+        .arg(&root).args(["--", "printf outside > ../read-only-outside.txt; printf blocked > report.docx"])
+        .current_dir(&root).output().unwrap();
+    assert!(!out.status.success());
+    // A restrictive macOS parent cannot install a second sandbox. The guard reports the
+    // approved-wrapper route before running any payload; it must not silently drop protection.
+    assert!(String::from_utf8_lossy(&out.stderr).contains("guard_sandbox_unavailable"));
+    assert!(!root.join("../read-only-outside.txt").exists());
+    assert!(!root.join("report.docx").exists());
+    assert_eq!(fs::read(root.join(STATE_PATH)).unwrap(), before);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn unavailable_state_restricts_project_but_does_not_block_external_shell_work() {
+    let root = fixture("unavailable-state");
+    let held = ProjectSession::open_read_only(RuleSet::builtin().unwrap(), root.join(STATE_PATH)).unwrap();
+    let run = || Command::new(env!("CARGO_BIN_EXE_gil-write-guard"))
+        .args(["run", "--root"]).arg(&root)
+        .args(["--", "printf outside > ../unavailable-outside.txt && printf blocked > report.docx"])
+        .current_dir(&root).output().unwrap();
+    let out = run();
+    assert!(!out.status.success());
+    assert_eq!(fs::read(root.join("../unavailable-outside.txt")).unwrap(), b"outside");
+    assert!(!root.join("report.docx").exists());
+    drop(held);
+    fs::write(root.join(STATE_PATH), "corrupt test record").unwrap();
+    fs::remove_file(root.join("../unavailable-outside.txt")).unwrap();
+    let out = run();
+    assert!(!out.status.success());
+    assert_eq!(fs::read(root.join("../unavailable-outside.txt")).unwrap(), b"outside");
+    assert!(!root.join("report.docx").exists());
+    assert_eq!(fs::read(root.join(STATE_PATH)).unwrap(), b"corrupt test record");
+}

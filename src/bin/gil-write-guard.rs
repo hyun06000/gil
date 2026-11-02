@@ -174,8 +174,11 @@ fn check(root: &Path, exe: &Path, input: &Value) -> Result<Value, String> {
             "--",
             command,
         ]);
+        let host_note = if name == "exec_command" {
+            " macOS의 제한된 Host sandbox 안에는 보호 sandbox를 중첩할 수 없다. Codex에서는 이 래퍼 명령만 sandbox_permissions=require_escalated와 구체적인 justification으로 정상 Host 승인을 요청한다. 승인이 거절되면 멈춘다. 전역 sandbox 설정을 바꾸거나 원래 명령만 재실행하지 않는다."
+        } else { "" };
         return Ok(deny(&format!(
-            "GIL 프로젝트 파일 보호: 다음 명령으로 다시 실행한다. 프로젝트 밖 작업과 읽기는 허용되며, 프로젝트 쓰기는 실제 열린 Verify에서만 허용된다. 기존 Host 승인은 그대로 적용된다.\n{command}"
+            "GIL 프로젝트 파일 보호: 다음 명령으로 다시 실행한다. 프로젝트 밖 작업과 읽기는 허용되며, 프로젝트 쓰기는 실제 열린 Verify에서만 허용된다. 기존 Host 승인은 그대로 적용된다.{host_note}\n{command}"
         )));
     }
     let fields: &[&str] = match name {
@@ -250,9 +253,11 @@ fn run(root: &Path, command: &str) -> Result<u8, String> {
     if !cfg!(target_os = "macos") {
         return Err("guarded shell currently supports macOS only".into());
     }
-    // Hold the normal GIL lock for the entire foreground command: a close cannot race this run.
-    let s = session(root)?;
-    let denied = if s.can_confirm_artifact() {
+    // Hold the normal GIL lock for the entire writable foreground command. If state cannot
+    // be read/locked, deny the entire project instead: external work needs no GIL permission.
+    // This is a stricter sandbox, never a fallback to an unguarded command.
+    let s = session(root).ok();
+    let denied = if s.as_ref().is_some_and(|s| s.can_confirm_artifact()) {
         root.join(".gil")
     } else {
         root.to_path_buf()
@@ -269,6 +274,17 @@ fn run(root: &Path, command: &str) -> Result<u8, String> {
         let path = ancestor.to_str().ok_or("non-UTF8 ancestor")?;
         let literal = format!("\"{}\"", path.replace('\\', "\\\\").replace('"', "\\\""));
         profile.push_str(&format!("(deny file-write-unlink (literal {literal}))"));
+    }
+    // Establish that this process can install the protection before starting any user command.
+    // macOS rejects tightening an already restrictive Host sandbox. Do not run an unprotected
+    // fallback, change Host permissions, or mistake a payload's exit 71 for sandbox failure.
+    let probe = Command::new("/usr/bin/sandbox-exec")
+        .args(["-p", &profile, "/usr/bin/true"]).output().map_err(|e| e.to_string())?;
+    if !probe.status.success() {
+        return Err(format!(
+            "[guard_sandbox_unavailable] 보호 sandbox를 적용하지 못해 요청한 명령을 실행하지 않았다. Codex에서는 동일한 GIL 래퍼 명령에 sandbox_permissions=require_escalated와 justification으로 정상 Host 승인을 요청한다. 승인 거절 시 중단하며 전역 sandbox 설정 변경이나 보호 없는 재실행은 하지 않는다. {}",
+            String::from_utf8_lossy(&probe.stderr).trim()
+        ));
     }
     let status = Command::new("/usr/bin/sandbox-exec")
         .args(["-p", &profile, "/bin/sh", "-c", command])

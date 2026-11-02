@@ -33,7 +33,10 @@ stdout으로 출력한다. source 저장소에 `gil start`를 실행하지 않�
 
 이 명령은 설정 파일을 생성·수정하지 않는다. 출력에는 바이너리와 프로젝트의 절대경로가 들어가므로
 개발 로그·공개 PR에 실제 출력값을 넣지 않는다. 연결 시 기존 훅을 보존해 해당 Host의 hooks 설정에
-병합한다. Codex는 훅 신뢰 검토가 필요하다. Claude Code 탭도 기존 설정의 훅을 사용하지만 일반
+병합한다. **설정은 새 Host 세션을 열기 전에 준비한다.** 이미 열린 Codex 채팅에 파일만 추가해도
+그 채팅이 새 훅을 읽었다고 간주하지 않는다. Codex의 정상 `/hooks` 화면에서 정확한 실행 파일과
+root를 검토하고 활성화·Trusted 상태를 확인한 뒤, 같은 폴더의 새 세션에서 실제 도구 호출로 검사한다.
+trust 파일이나 해시를 직접 수정하지 않는다. Claude Code 탭도 기존 설정의 훅을 사용하지만 일반
 Desktop 채팅의 MCP 설정과는 다른 표면이다. Plugin 설치·설정 변경은 별도 작업이다.
 
 프로젝트 경로는 설정에 고정되며 cwd에서 추측하지 않는다. 프로젝트를 옮기거나 다른 프로젝트로
@@ -48,11 +51,23 @@ Desktop 채팅의 MCP 설정과는 다른 표면이다. Plugin 설치·설정 �
 - `Bash` / `exec_command`: 명령 문자열에서 파일 쓰기를 추측하지 않는다. 원래 호출을 거절하고
   정확히 인용된 `gil-write-guard run --root … -- '원래 명령'` 재호출을 안내한다. 이 재호출은 기존
   Host 권한 검사에 맡긴다. `permissionDecision: allow`로 승인 절차를 생략하지 않는다.
+- Unix의 기존 잠금 파일은 읽기 전용 descriptor로 열고 **같은 배타 잠금**을 잡는다. `.gil` 쓰기
+  권한이 없는 보호 훅도 상태를 읽을 수 있다. 없는 잠금 파일의 생성 및 경로·identity 검증은 유지한다.
 - 보호 실행은 macOS `/usr/bin/sandbox-exec` 아래에서 `/bin/sh -c`로 실행한다. Verify 밖에서는
   프로젝트 경로의 `file-write*`를 거절하고, Verify 안에서는 `.gil` 직접 쓰기만 거절한다. 밖의 파일
-  쓰기와 읽기에는 추가 제한을 두지 않는다. Host 자체 sandbox 제한은 계속 적용된다.
+  쓰기와 읽기에는 추가 제한을 두지 않는다.
+- macOS는 이미 제한된 sandbox에서 두 번째 sandbox 적용을 거절한다. Codex의 `exec_command`는
+  **원래 명령이 아닌 정확한 GIL 래퍼 전체**에 `sandbox_permissions: require_escalated`와 구체적인
+  `justification`을 붙여 정상 Host 승인을 요청한다. 이 한 명령은 Host sandbox 밖에서 GIL sandbox를
+  적용한다. 이는 Host의 모든 파일·네트워크 제한을 복제하는 방식이 아니므로 Host 승인 판단은 여전히
+  필요하다. 훅은 승인을 자동 허용하거나 입력의 권한 필드를 변경하지 않는다. 승인이 거절되거나
+  해당 Host에 승인 실행 경로가 없으면 중단한다. 전역 sandbox 설정을 끄지 않는다.
+- 보호 sandbox의 사전 실행 검사가 실패하면 `[guard_sandbox_unavailable]`로 **요청한 명령을 실행하기
+  전에** 거절한다. 원래 명령을 보호 없이 재실행하지 않는다. Claude에서도 sandbox를 추가로 사용하는
+  설정이라면 같은 플랫폼 제약이 적용되며, 일반 로컬 Code 탭의 검증과 구분한다.
 - 정상 foreground 실행이 끝날 때까지 GIL 잠금을 유지하므로 그동안 Verify close는 거절된다.
-  쓰기 상태를 모르면 실행하지 않으며 sandbox 실행 실패 시 원래 명령으로 fallback하지 않는다.
+  쓰기 상태를 읽지 못하거나 잠금이 바쁘면 프로젝트 전체를 쓰기 금지한 보호 셸로 실행한다. 이 경우
+  외부 출력·읽기는 가능하고 프로젝트 쓰기는 항상 거절된다. 잠금 없는 writable 실행은 없다.
 - GIL 자체 기록·승인·허용된 복구는 기존 MCP 도구로 수행한다. 잠금을 잡은 보호 셸 안에서 GIL
   명령을 중첩 실행하지 않는다. 파일을 밖으로 옮겨 dirty를 해소해도 최초 위반 사실이 없어지지 않는다.
 
@@ -79,6 +94,18 @@ Desktop 채팅의 MCP 설정과는 다른 표면이다. Plugin 설치·설정 �
 공식 근거(2026-11-02 확인): [Codex Hooks](https://learn.chatgpt.com/docs/hooks),
 [Claude Code Hooks](https://code.claude.com/docs/en/hooks),
 [Claude Code Desktop 공유 설정](https://code.claude.com/docs/en/desktop#shared-configuration).
+
+## Closing 회귀 검증
+
+`cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test approved_plan_wire_wave1`
+에는 실제 stdio Core와 guard 프로세스로 Opening 승인 대기 → Define/Hypothesis → Verify → 종료 후
+경계 → Closing Question/Interpretation/Synthesis → 최종 제안·승인 → Chain 종료까지 검사하는 합성 시험이 있다.
+각 경계에서 직접 파일 도구의 훅 판단과 보호 셸의 실제 쓰기 결과를 확인하며, 외부 출력·`.gil` 보호·
+Verify 후 기존 파일 불변을 함께 검사한다. `.gil` 읽기 전용 훅과 정상 승인 경로의 보호 셸은 나누어
+실행한다. App 승인 입력은 시험 fixture이며 사람의 승인이나 실제 Host 화면 인수로 세지 않는다.
+
+`write_guard` 시험은 상태 잠금 경쟁·손상 시 외부 출력 허용, 프로젝트 쓰기 거절과 중첩 sandbox의
+명확한 사전 거절도 검사한다. 실제 Codex/Claude 필드테스트는 이 자동검증과 별도다.
 
 ## 로컬 검증 기록 (2026-11-02, macOS arm64)
 

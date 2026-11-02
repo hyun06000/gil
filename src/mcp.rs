@@ -79,6 +79,13 @@ impl GilServer {
                 .filter(|_| prepared.is_error != Some(true))
                 .and_then(|v| v["scope_id"].as_str()) {
                 let call = format!("show_gil_monitor({})", serde_json::json!({"scope_id": scope}));
+                // Some Hosts expose structuredContent without the surrounding text blocks.
+                // Keep the CLI receipt intact, but carry the same prepared handoff there too.
+                if let Some(fields) = result.structured_content.as_mut().and_then(serde_json::Value::as_object_mut) {
+                    fields.insert("next_call".into(), serde_json::json!({
+                        "name": "show_gil_monitor", "arguments": {"scope_id": scope}
+                    }));
+                }
                 // The handoff also closes the receipt, after the body's `실행: gil open` line, so the
                 // last word of the start receipt is the one next call on every Host. `said` itself
                 // stays byte-identical to the CLI receipt.

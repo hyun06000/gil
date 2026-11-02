@@ -1576,6 +1576,9 @@ fn starting_a_project_leads_to_one_monitor_scope_and_the_first_interview_updates
     assert!(blocks.first().unwrap()["text"].as_str().unwrap().contains(&handoff), "{started}");
     assert!(blocks.last().unwrap()["text"].as_str().unwrap().contains(&handoff), "{started}");
     assert!(!receipt.contains("show_gil_monitor"), "CLI receipt stays unchanged: {receipt}");
+    assert_eq!(started["structuredContent"]["next_call"], serde_json::json!({
+        "name":"show_gil_monitor", "arguments":{"scope_id":scope}
+    }), "structured-only Hosts need the same prepared handoff");
     let shown = agent_call(&mut mcp, "show_gil_monitor", serde_json::json!({ "scope_id": scope }));
     assert_ne!(shown["isError"], true, "{shown}");
     assert!(shown["content"].as_array().unwrap().iter().any(|v| v["text"].as_str().is_some_and(|s| s.contains("스스로 fullscreen을 요청"))), "{shown}");
