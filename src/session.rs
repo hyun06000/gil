@@ -1699,6 +1699,12 @@ impl ReadOnlySession {
         self.0.state_path()
     }
 
+    /// Host 쓰기 보호도 close/status/help와 같은 열린 Verify 판정을 쓴다.
+    /// 세션의 잠금이 유지되는 동안에만 이 관측이 유효하다.
+    pub fn can_confirm_artifact(&self) -> bool {
+        self.0.can_confirm_artifact()
+    }
+
     /// 지금의 Snapshot — 세계를 한 번 보고 짓는다. 객체를 확정하지 않는다.
     pub fn monitor(&self) -> Result<crate::MonitorSnapshot, SessionError> {
         self.0.monitor()

@@ -13,6 +13,25 @@ Use only the user's selected absolute `project_root`. Each receipt's text guidan
 call or one wait**; do it, then read the next receipt. Read `structuredContent` too, and follow the
 actual recorded position and the connected tool schema. Never repeat a call that already succeeded.
 
+**Project file boundary — at every stage.** Creating, modifying, deleting, renaming or moving
+Artifact files inside the selected `project_root` requires a successfully opened Experiment
+Verify. This includes importing files made elsewhere, DOCX/PDF production, chart PNGs, rendering,
+test output and temporary files written inside the project. Check the actual open Step before
+launching a tool that can change these files; if the position is unknown, read `gil_context` once.
+Finish all writers before closing Verify. A prepared contract or approved plan is not an open Verify.
+Outside Verify, keep project Artifact files unchanged: this applies to every Interview (including
+Closing), Define, Hypothesis, Analysis, Outcome, Cycle/Chain Reports, approval waits, boundaries
+with no open Step and closed Chains. Follow the current legal next call to reach Verify; never
+skip steps, invent approval or backfill an execution that happened earlier.
+
+Work outside the project and web research that leaves project files unchanged are outside this
+file boundary; do not require a GIL Step just for them. Existing evidence can be read in any stage.
+When bringing an external result into the project, open Verify first, record its actual provenance
+and verification, and cite the imported file in `evidence_files`; do not claim it was created there.
+GIL's own record/approval writes and explicitly authorized recovery use their existing GIL tools
+and contracts; never edit `.gil` by hand. These are agent instructions, not an OS write lock.
+The current dirty gate detects changes at GIL boundaries; it does not intercept other tools.
+
 1. **Start and show.** Start a new project once. After successful `gil_start`, follow its returned
    `show_gil_monitor` call before opening the first Interview step. Do not prepare the Monitor again
    if start returned its scope. Never repeat start to open a screen. If start succeeded but Monitor
@@ -33,8 +52,8 @@ actual recorded position and the connected tool schema. Never repeat a call that
    OS foreground visibility or that the human has looked.
    `project_root` is always the exact string the Host, `gil_context`/`gil_status` or the last
    receipt gave; copy it verbatim and never retype it (retyped Korean paths change their letters).
-2. **Agree, then finish Interview.** Interview clarifies and agrees scope; it never researches,
-   calculates or writes deliverables. Synthesis waits for the user's reply to its proposed statement;
+2. **Agree, then finish Interview.** Interview clarifies and agrees scope; it never changes
+   project Artifact files. Synthesis waits for the user's reply to its proposed statement;
    silence, earlier requests and the agent's own judgment are not approval. Do not ask again for
    approval already given to that exact proposal. Outcome judges the approved scope; do not leave it
    open until the whole project is finished. Choose the next call from the **current recorded state**,
@@ -45,7 +64,7 @@ actual recorded position and the connected tool schema. Never repeat a call that
    | New project, Monitor shown, no step open | `gil_open` Question with its action contract |
    | Question is open | Ask the user, end the turn, then `gil_close` with their actual response |
    | Interpretation is open | `gil_close` with what is settled and what is unresolved |
-   | Synthesis is open and the user has not answered | Show the statement, end the turn and wait; no research, no deliverable |
+   | Synthesis is open and the user has not answered | Show the statement (approved-plan profile: first `gil_plan_propose`), end the turn and wait; no project file changes |
    | Synthesis is open and the user approved its statement | `gil_close` with `approved: yes` (approved-plan profile: the exact `close_report`) |
    | Synthesis is open and the user declined | `gil_close` with `approved: no`, then `gil_open` Question |
    | Synthesis is closed and Outcome has not been opened | `gil_open` Outcome |
@@ -55,16 +74,16 @@ actual recorded position and the connected tool schema. Never repeat a call that
 
 3. **One checkable question at a time.** An Experiment handles one independently checkable
    question. Open a small action contract (`objective`, `next_action`, `done_when`), perform its
-   `next_action`, then `gil_close` when `done_when` is met, before further external work or final
-   delivery. A new request does not extend an already completed contract. Substantive research,
-   source checking, calculations, deliverable writing (even a report requested in chat),
-   implementation and tests belong in Experiment Verify, never an open Interview.
+   `next_action`, then `gil_close` when `done_when` is met, before further project file changes or
+   final project delivery. A new request does not extend an already completed contract. Deliverable
+   writing, implementation, calculations and tests that change project files belong in Experiment
+   Verify, never an open Interview. Web research without project file changes needs no Verify.
 
    | Current state | Next call |
    | --- | --- |
-   | Experiment Cycle just opened | `gil_open` Define: one question and its success criterion; no lookup yet |
+   | Experiment Cycle just opened | `gil_open` Define: one question and its success criterion; no project file changes yet |
    | Define is closed | `gil_open` Hypothesis, then `gil_close` it with expectation, rationale and guardrail |
-   | Hypothesis is closed | `gil_open` Verify. **Wait for its success** before reading sources, searching, calculating or writing files |
+   | Hypothesis is closed | `gil_open` Verify. **Wait for its success** before changing project files |
    | Verify is open | Do the contracted work, save the observation as project files, `gil_close` with `evidence_files` |
    | Verify is closed | `gil_open` Analysis, `gil_close` with a nonblank `interpretation` of the saved evidence |
    | Analysis is closed | `gil_open` Outcome, `gil_close` with `verdict`, `lesson`, `next_direction` |
@@ -72,9 +91,9 @@ actual recorded position and the connected tool schema. Never repeat a call that
    | Cycle closed `success` | `gil_open` the next Experiment (next independent question) or Interview. When no work remains and the project has a Chain, the Closing Interview and Chain Report follow; a chat summary alone never completes the project |
    | Cycle closed `failure` · `revisit` | When the Core receipt requires Monitor approval, open Monitor and wait for the user's “보존 후 되돌아가기” button after reviewing file changes; do not call App-only tools or invent consent. After confirmed recovery, `gil_open` a new Cycle. Otherwise follow the connected Core receipt; never bypass a product refusal |
 
-   A closed Hypothesis or a prepared Verify contract does not mean Verify is open. Do not gather
-   evidence first and then open Verify to record work already performed. This also applies between
-   cycles: finish the old cycle and reach a successfully opened Verify before the next investigation.
+   A closed Hypothesis or a prepared Verify contract does not mean Verify is open. Do not change
+   project files first and then open Verify to record work already performed. This also applies between
+   cycles: finish the old cycle and reach a successfully opened Verify before the next file change.
    Multiple related searches, edits and tests within the same unfinished Verify are valid.
 4. **Leave evidence in the world.** Every Verify must save its actual observations/results as
    project files: documents, logs, datasets, code or visual artifacts. Chat alone cannot complete
@@ -155,7 +174,7 @@ actual recorded position and the connected tool schema. Never repeat a call that
      such as `statement` and `basis_refs`). `exploration_checklist` lists the item IDs in the same
      order, one per line. Never write `approved`, `plan_revision` or `plan_digest`: Core adds them.
    - Then **end the turn and wait for the Monitor button.** Chat agreement is not approval. While
-     waiting, do no research, deliverable writing or re-proposal. Check only with `gil_plan_read`.
+     waiting, make no project file changes or re-proposal. Check approval only with `gil_plan_read`.
    - `receipt.decision: approve` → `gil_close` Synthesis with `close_report` **unchanged**, then
      `gil_open`/`gil_close` Outcome, then `gil_close` the Interview Cycle Report, then `gil_open`
      Experiment: the first pending item binds automatically. `request_changes` → close with that
@@ -303,16 +322,17 @@ that work is the Verify's content and is reported in its close. If a close is bl
 ask rather than skipping the step, and never record steps or reports after the fact to make
 skipped work look like it followed the loop.
 
-This boundary also covers substantive web research, source checking, calculations and drafting
-the user's report, including a report delivered only in chat. Reading supplied material to clarify
-the user's goal is still Interview work. After Interview closes, choose one independently
+This boundary concerns changes to Artifact files inside the selected project. Work outside the
+project and web research without project file changes need no GIL Step. Reading existing evidence
+is allowed. Importing external results, generating DOCX/PDF/PNG files, rendering and writing test
+output inside the project require an open Verify. Record external provenance truthfully.
+After Interview closes, choose one independently
 checkable question and success condition per Experiment. For example, checking a report's price
 data and checking a separate earnings claim need separate judgments; do not bundle every question
 and final drafting into one giant Verify. Related searches within one question can share a Verify;
 do not create a cycle per search or paragraph. Complete Analysis, Outcome and the Cycle Report
 before the next independent problem or final delivery. Base the final report on recorded evidence,
-and record any needed synthesis/drafting work in its own bounded action rather than hiding it in
-an already completed step.
+and put any further project file changes in an open Verify rather than an already completed step.
 
 **Run GIL actions on one project one at a time.** GIL takes a short exclusive lock on the
 project while it works, so two calls fired in parallel — even two reads like `gil_status` and
@@ -438,7 +458,7 @@ Keep these boundaries:
   earlier request to build something, from silence, from the user's absence, or from your own
   judgement that the scope is obvious. Until the user answers, the Synthesis and its Interview stay
   open; do not close them, do not open an Experiment or any other Cycle, and do not start
-  implementing. If the user says no or changes the proposal, record their words and revise within
+  changing project files. If the user says no or changes the proposal, record their words and revise within
   the same Interview.
 - **After assent, finish the handoff before execution.** If the user has already agreed to the
   statement you presented, record the actual approval and close Synthesis without asking again.
@@ -446,7 +466,7 @@ Keep these boundaries:
   then submit the separate Interview Cycle Report. Closing Outcome alone does not close its Cycle.
   If already at Outcome or the Cycle Report boundary, finish from that recorded position; do not
   repeat earlier steps. Only after the Cycle close succeeds, open the next bounded Experiment.
-  Do not perform research or write the deliverable while waiting to close the Interview's last node.
+  Do not change project files while waiting to close the Interview's last node.
 - **One open Cycle at a time.** `gil_start` opens the first Interview, and that is the only open
   Cycle. Do not open another Interview or Experiment while it is open, do not close it merely to
   satisfy a request, and do not leave it suspended to open a new one; close it through its own
