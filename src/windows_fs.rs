@@ -1700,7 +1700,7 @@ mod sync_root_tests {
     use super::*;
     use std::fs;
     use windows_sys::Win32::Foundation::ERROR_SUCCESS;
-    use windows_sys::Win32::System::Registry::{HKEY, HKEY_CURRENT_USER, KEY_ALL_ACCESS, REG_DWORD, REG_EXPAND_SZ, REG_OPTION_NON_VOLATILE, REG_SZ, RegCloseKey, RegCreateKeyExW, RegDeleteKeyW, RegDeleteTreeW, RegSetValueExW};
+    use windows_sys::Win32::System::Registry::{HKEY, HKEY_CURRENT_USER, KEY_ALL_ACCESS, REG_DWORD, REG_EXPAND_SZ, REG_OPTION_NON_VOLATILE, REG_SZ, RegCloseKey, RegCreateKeyExW, RegDeleteTreeW, RegSetValueExW};
 
     fn w(s: &str) -> Vec<u16> { s.encode_utf16().chain(std::iter::once(0)).collect() }
     struct Scratch { base: String, dir: PathBuf }
@@ -1708,7 +1708,7 @@ mod sync_root_tests {
         fn new(label: &str) -> Self {
             static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
             let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            let base = format!("Software\\GilTest\\sync-{label}-{}-{n}", std::process::id());
+            let base = format!("Software\\GilTest-sync-{label}-{}-{n}", std::process::id());
             let dir = std::env::temp_dir().join(format!("gil-sync-{label}-{}-{n}", std::process::id()));
             let _ = fs::remove_dir_all(&dir);
             fs::create_dir_all(&dir).unwrap();
@@ -1735,9 +1735,9 @@ mod sync_root_tests {
             workspace_hooks::REGISTRY_FAIL.with(|c| c.set(false));
             workspace_hooks::REGISTRY_ABSENT.with(|c| c.set(false));
             unsafe {
-                // Only this run's key; the shared `Software\\GilTest` parent goes only when empty.
+                // Each fixture owns its whole key under Software. Never delete a shared
+                // parent while another test may be creating its first child under it.
                 RegDeleteTreeW(HKEY_CURRENT_USER, w(&self.base).as_ptr());
-                RegDeleteKeyW(HKEY_CURRENT_USER, w("Software\\GilTest").as_ptr());
             }
             let _ = fs::remove_dir_all(&self.dir);
         }
