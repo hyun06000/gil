@@ -1571,6 +1571,11 @@ fn starting_a_project_leads_to_one_monitor_scope_and_the_first_interview_updates
     assert_ne!(prepared["isError"], true, "{prepared}");
     let scope = prepared["structuredContent"]["scope_id"].clone();
     assert_eq!(prepared["structuredContent"]["label"], "project");
+    let handoff = format!("show_gil_monitor({})", serde_json::json!({"scope_id": scope}));
+    let blocks = started["content"].as_array().unwrap();
+    assert!(blocks.first().unwrap()["text"].as_str().unwrap().contains(&handoff), "{started}");
+    assert!(blocks.last().unwrap()["text"].as_str().unwrap().contains(&handoff), "{started}");
+    assert!(!receipt.contains("show_gil_monitor"), "CLI receipt stays unchanged: {receipt}");
     let shown = agent_call(&mut mcp, "show_gil_monitor", serde_json::json!({ "scope_id": scope }));
     assert_ne!(shown["isError"], true, "{shown}");
     assert!(shown["content"].as_array().unwrap().iter().any(|v| v["text"].as_str().is_some_and(|s| s.contains("스스로 fullscreen을 요청"))), "{shown}");

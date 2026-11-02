@@ -27,7 +27,7 @@ const next = Object.fromEntries(rows.filter(([state, call]) => state && call && 
 
 test('each Interview state maps to one next call and approval is never derived', () => {
   assert.match(next['Question is open'], /end the turn.*gil_close/);
-  assert.match(next['Synthesis is open and the user has not answered'], /end the turn and wait; no research, no deliverable/);
+  assert.match(next['Synthesis is open and the user has not answered'], /gil_plan_propose.*end the turn and wait; no project file changes/);
   assert.match(next['Synthesis is open and the user approved its statement'], /gil_close.*approved: yes/);
   assert.match(next['Synthesis is open and the user declined'], /approved: no.*gil_open. Question/);
   assert.match(next['Synthesis is closed and Outcome has not been opened'], /^`gil_open` Outcome$/);
@@ -36,9 +36,9 @@ test('each Interview state maps to one next call and approval is never derived',
   assert.match(workflow, /silence, earlier requests and the agent's own judgment are not approval/);
 });
 
-test('each Experiment state names the next call and Verify is opened before any investigation', () => {
-  assert.match(next['Experiment Cycle just opened'], /Define.*no lookup yet/);
-  assert.match(next['Hypothesis is closed'], /`gil_open` Verify\. \*\*Wait for its success\*\* before reading sources/);
+test('each Experiment state names the next call and Verify is opened before project file changes', () => {
+  assert.match(next['Experiment Cycle just opened'], /Define.*no project file changes yet/);
+  assert.match(next['Hypothesis is closed'], /`gil_open` Verify\. \*\*Wait for its success\*\* before changing project files/);
   assert.match(next['Verify is open'], /save the observation as project files.*evidence_files/);
   assert.match(next['Verify is closed'], /Analysis.*interpretation/);
   assert.match(next['Analysis is closed'], /Outcome.*lesson/);
@@ -46,6 +46,16 @@ test('each Experiment state names the next call and Verify is opened before any 
   assert.match(next['Cycle closed `failure` · `revisit`'], /open Monitor and wait.*button.*do not call App-only tools or invent consent.*confirmed recovery.*gil_open/);
   assert.match(workflow, /Chat alone cannot complete\s+Verify/);
   assert.match(workflow, /Refused: an empty file, a file unchanged since the baseline, or the chat summary alone/);
+});
+
+test('file boundary covers Closing and imports without restricting outside work or claiming an OS lock', () => {
+  assert.match(workflow, /Creating, modifying, deleting, renaming or moving/);
+  assert.match(workflow, /importing files made elsewhere, DOCX\/PDF production, chart PNGs, rendering/);
+  assert.match(workflow, /Closing.*Define, Hypothesis, Analysis, Outcome, Cycle\/Chain Reports, approval waits, boundaries/s);
+  assert.match(workflow, /Work outside the project and web research that leaves project files unchanged are outside/);
+  assert.match(workflow, /not an OS write lock/);
+  assert.match(workflow, /do not claim it was created there/);
+  assert.doesNotMatch(workflow, /no research|before reading sources|never researches/);
 });
 
 test('approved plans are detected from the record and schema, never required on legacy projects', () => {

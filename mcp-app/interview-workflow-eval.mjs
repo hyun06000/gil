@@ -140,14 +140,15 @@ if(process.argv[2]==='--proxy') {
     await writeFile(join(dir,'cli.jsonl'),log);
     const trace=(await readFile(events,'utf8')).trim().split('\n').filter(Boolean).map(JSON.parse);
     let kind=position, interviewClosed=false, cycleClosed=false, experiments=0;
-    const reads=[],badReads=[],writes=[],badWrites=[],verifyReports=[],firstSourceCycles=new Map(),charts=[],verifyDeclarations=[];
+    const reads=[],writes=[],badWrites=[],verifyReports=[],charts=[],verifyDeclarations=[];
     for(const {request,result} of trace) {
       if(request.name===sourceTool.name) {
         const id=request.arguments.id;reads.push(id);
-        if(!firstSourceCycles.has(id))firstSourceCycles.set(id,experiments);
-        if(!interviewClosed||kind!=='verify')badReads.push({id,kind,interviewClosed});
       }
-      if(request.name===chartTool.name && !result.isError) charts.push(JSON.parse(result.content[0].text).path);
+      if(request.name===chartTool.name && !result.isError) {
+        charts.push(JSON.parse(result.content[0].text).path);
+        if(!interviewClosed||kind!=='verify')badWrites.push({kind,interviewClosed,tool:chartTool.name});
+      }
       if(request.name==='gil_close' && kind==='verify' && request.arguments?.visuals) verifyDeclarations.push({state:request.arguments.visuals.declaration?.state??null,attachments:(request.arguments.visuals.attachments||[]).length,ok:result.structuredContent?.ok===true});
       if(request.name===writeTool.name && !result.isError) {
         writes.push(JSON.parse(result.content[0].text).path);
@@ -168,8 +169,9 @@ if(process.argv[2]==='--proxy') {
     }
     const final=await readFile(output,'utf8').catch(()=>'');
     const savedFiles=await Promise.all(writes.map(async path=>({path,content:await readFile(join(root,path),'utf8')})));
-    const checks={cliCompleted:code===0,interviewClosed,allResearchInVerify:reads.length>0&&!badReads.length,
-      separateExperiments:experiments>=2&&firstSourceCycles.get('price')!==firstSourceCycles.get('earnings'),
+    // Source reads do not change project files and are allowed in any phase.
+    const checks={cliCompleted:code===0,interviewClosed,
+      separateExperiments:experiments>=2,
       bothSources:reads.includes('price')&&reads.includes('earnings'),
       finalCycleClosed:cycleClosed,
       evidenceSavedInVerify:writes.length>=2&&!badWrites.length,
@@ -179,7 +181,7 @@ if(process.argv[2]==='--proxy') {
       visualAttachedUnprompted:charts.length>=1&&verifyDeclarations.some(d=>d.ok&&d.state==='attached'&&d.attachments>=1),
       noWeakNotNeeded:verifyDeclarations.filter(d=>d.ok&&d.state==='not_needed').length<verifyDeclarations.filter(d=>d.ok).length,
       reportHasResults:/\b20(?:\.0+)?\s*%/.test(final)&&/\b50(?:\.0+)?\s*%/.test(final)};
-    summary.push({mode,position,checks,experiments,reads,badReads,writes,badWrites,verifyReports,charts,verifyDeclarations,calls:trace.length});
+    summary.push({mode,position,checks,experiments,reads,writes,badWrites,verifyReports,charts,verifyDeclarations,calls:trace.length});
     console.log(JSON.stringify(summary.at(-1)));
   }
   await writeFile(join(work,'summary.json'),JSON.stringify(summary,null,2));

@@ -401,6 +401,27 @@ GIL은 외부 프로세스의 파일 쓰기를 **운영체제 수준에서 물�
 
 ### Verify가 아닌 자리
 
+#### Agent 작업 범위 (2026-11-02)
+
+Agent가 선택된 프로젝트 안의 Artifact 파일을 생성·수정·삭제·이름 변경·이동하려면 실제로
+열린 Experiment Verify가 있어야 한다. 외부에서 만든 파일을 가져오기, DOCX·PNG·PDF 생성,
+렌더링과 테스트의 출력·임시 파일도 같은 범위다. 실행 중인 쓰기 작업을 마친 뒤 Verify를 닫는다.
+Closing을 포함한 모든 Interview, Define, Hypothesis, Analysis, Outcome, Cycle/Chain Report,
+승인 대기, 열린 Step이 없는 경계와 종료된 Chain에서는 Artifact 파일을 변경하지 않는다.
+
+프로젝트 밖 작업과 프로젝트 파일을 남기거나 변경하지 않는 웹 조사는 이 제한의 대상이 아니다.
+기존 증거 읽기도 가능하다. 외부 결과를 프로젝트로 가져오는 작업은 열린 Verify에서 수행하고,
+실제 출처와 수행한 검증을 기록한다. 가져오기 전에 한 작업을 Verify에서 했다고 소급하지 않는다.
+이미 연 Verify의 evidence_files·Report·승인 조건은 면제하지 않는다.
+
+GIL 자체의 기록·승인 저장과 명시적으로 허용된 복구는 기존 명령과 계약을 따른다. `.gil`을
+직접 편집하는 예외를 주지 않는다. 이 규칙은 Agent 작업 지침이며, 현재 구현의 OS 사전 차단
+보장을 추가하지 않는다. 아래 dirty gate와 Snapshot·저장 형식은 그대로 유지한다.
+
+별도 opt-in `gil-write-guard` Host 어댑터는 등록된 편집 호출을 사전 거절하고 macOS 보호 셸에서
+프로젝트 쓰기를 제한한다. 기본 MCP의 보장을 확대하지 않으며, 적용 범위·미검수 Host 경로·연결
+조건은 [개발용 쓰기 보호 안내](../distribution/codex/WRITE-GUARD.md)를 따른다.
+
 Verify가 아닌 Action Step을 닫을 때 관리 대상 Artifact가 현재 기준 Snapshot과 다르면 **닫기를
 거절한다.** 경고만 하고 닫거나, 자동으로 변경을 버리거나, 자동 복원과 Close를 한 동작으로 묶지
 않는다. 자동 복원은 기록되지 않은 작업을 조용히 삭제하기 때문이다.

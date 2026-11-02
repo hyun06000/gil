@@ -261,8 +261,9 @@ Host 이름으로 분기하지 않고 지침·계약·App 로직에서 점검했
 - **① 원인 — 지침·계약의 모호함:** 시작 receipt의 `said` 본문은 `다음 … 실행 gil open`으로 끝나고,
   `show_gil_monitor({scope_id})` 안내는 그 앞에 붙는 별도 텍스트 블록에만 있었다. `structuredContent.said`만
   읽거나 본문의 `실행` 줄을 우선하는 Host/Agent는 Monitor 호출을 건너뛸 수 있다. 고침: Core가 성공한
-  `gil_start`의 `said` 본문 끝에 `Monitor / 다음 호출은 하나다: show_gil_monitor({...})` 블록을 넣고(텍스트 사본도
-  동일), 앞 힌트도 "다음 호출은 하나다 · Host 종류와 무관 · 인자는 그대로 복사"로 바꿨다. `workflow.md` 규칙 1과
+  `gil_start` 응답의 마지막 텍스트 블록에 `Monitor / 다음 호출은 하나다: show_gil_monitor({...})`를 넣었다.
+  `structuredContent.said`는 CLI receipt와 동일하게 유지하므로 이 필드만 읽는 소비자는 추가 안내를 받지 못한다.
+  앞 힌트도 "다음 호출은 하나다 · Host 종류와 무관 · 인자는 그대로 복사"로 바꿨다. `workflow.md` 규칙 1과
   `gil_start`·`show_gil_monitor` 도구 설명도 같은 문장으로 맞췄다. Plugin Skill은 동기화 스크립트로 같은 원문을 받는다.
 - **② 원인 — App 로직의 시점:** 10/31까지 App의 첫 자동 `requestDisplayMode({mode:'fullscreen'})`은 Monitor가
   **렌더된 뒤**에만 나갔고(1.5초·4초 재요청 포함) Claude Code 탭은 그것을 적용하지 않았다. Host가 카드를 막

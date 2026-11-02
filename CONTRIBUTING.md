@@ -90,6 +90,10 @@ node --test distribution/codex/*.test.mjs distribution/compliance/notices.test.m
 실제 사용자 기록을 시험 데이터로 쓰지 않는다. native MCP/화면 인수는
 [NATIVE-ACCEPTANCE](mcp-app/NATIVE-ACCEPTANCE.md)와 [ACCEPTANCE](mcp-app/ACCEPTANCE.md)를 따른다.
 
+프로젝트 파일 쓰기의 Host 사전 제한은 별도 opt-in 개발용
+[쓰기 보호 어댑터](distribution/codex/WRITE-GUARD.md)로 시험한다. 기존 Plugin에 자동 설치되지
+않으며, macOS sandbox 시험과 두 Host의 실제 훅 인수를 구분한다.
+
 Companion을 변경하면 해당 package의 시험과 실제 플랫폼 검수를 추가한다. `gil` 시험 성공을
 Tauri 포함 workspace 전체 성공이라고 부르지 않는다. 시험마다 실행한 명령, 통과/실패/미실행,
 첫 실패와 재실행을 구분한다. protocol 성공은 화면 표시의 증거가 아니다.
