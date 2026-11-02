@@ -102,3 +102,15 @@ test('forbidden shortcuts never appear as instructions', () => {
   assert.match(workflow, /Never repeat a call that already succeeded/);
   assert.match(workflow, /^## GIL shared workflow\n/);
 });
+
+
+test('project deliverables default to tracked paths; necessary external outputs disclose the tracking gap before writing', () => {
+  assert.match(workflow, /Project deliverables belong in the project by default/);
+  assert.match(workflow, /intermediate renders and production scripts under `project_root` during an open Verify/);
+  assert.match(workflow, /Before invoking a file-producing tool, choose its output path inside this project explicitly/);
+  assert.match(workflow, /If external creation is genuinely necessary/);
+  assert.match(workflow, /first tell the user the concrete reason and destination/);
+  assert.match(workflow, /not tracked by GIL/);
+  assert.match(workflow, /Do not create an external file just to evade a gate/);
+  assert.match(workflow, /Unrelated external work remains allowed/);
+});

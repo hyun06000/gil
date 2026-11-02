@@ -133,3 +133,25 @@ App의 겉모습은 `ui/companion.css`의 토큰 계층(`--gil-*`)이 정한다.
 - 검증: `node build.mjs`가 index.html의 앵커를 정확히 한 번씩 찾지 못하면 실패한다. `display.test.mjs`는 연결·변경
   시 적용 호출과 증거 값을, `presentation.test.mjs`는 모양 검사를 고정한다. 고지 정책은 `monitor.html`과
   `build.mjs`의 지문을 세 곳(macOS·Windows x64·ARM64)에 고정하므로 번들을 다시 만들면 함께 갱신한다.
+
+
+## 2026-11-03: 산출물 위치 안내와 Monitor 갱신
+
+공통 workflow와 `gil_open` 안내는 GIL 산출물을 열린 Verify의 프로젝트 내부에 저장하도록 한다.
+외부 생성이 불가피하면 실행 전에 이유·저장 위치와 Snapshot/증거로 추적되지 않는다는 점을 알린다.
+프로젝트와 무관한 외부 작업과 파일 없는 웹 조사는 허용한다. 이 안내가 외부 쓰기를 가로채는
+새 OS 보호 장치라는 뜻은 아니다. 고정 root 훅은 다른 프로젝트로 자동 확장되지 않는다.
+
+View가 갱신된 뒤 선택한 Step 상세만 잠금 충돌로 실패하면 기존 cursor 때문에 다음 변경이나
+5분 재조회까지 옛 상태가 남을 수 있었다. 상세 실패를 별도 backoff로 재시도하고, 보존한 상세
+자체에도 이전 조회임을 표시한다. 성공하면 표시를 제거하며 선택·접힘·마지막 보고서는 보존한다.
+
+fullscreen은 계속 기본 요청이다. 초기 지원 목록에 inline만 있더라도 나중에 fullscreen이
+광고되면 요청할 수 있도록 초기 의도를 보존한다. 사용자 선택·이미 적용된 fullscreen은 존중한다.
+이는 모의 Host에서 재현한 경로 보정이며 실제 Claude 보고의 원인이라고 확정하지 않는다.
+실제 Host가 요청을 거절하면 강제로 전환할 수 없다. 자동 fullscreen의 실제 화면 인수는 별도다.
+
+검증: 공용 UI selftest 72/72, JS 181 통과·5 건너뜀, 패키징 102 통과·1 건너뜀.
+Core 기본 검사·all-targets build 통과. 기본 sandbox의 로컬 소켓/IPC 거절 후 권한 실행으로 검증했다.
+전체 `browser-check.mjs`는 로컬 Chrome에서 기존 기준판과 수정판 모두 동일한 Report-tail viewport
+assertion으로 실패했다. 이를 통과로 세지 않으며 공용 UI selftest는 별도 실행했다.

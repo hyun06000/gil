@@ -224,14 +224,15 @@ test('declined, undefined and rejected automatic requests retain a working manua
   }
 });
 
-test('inline-only and already-fullscreen Hosts receive no automatic request', async () => {
+test('inline-only waits for updated capabilities; already-fullscreen never forces a return', async () => {
   for (const settings of [{ modes: ['inline'] }, { mode: 'fullscreen' }]) {
     const f = fixture(settings);
     await f.start();
     assert.deepEqual(f.calls, []);
     assert.equal(f.directions.at(-1), 'horizontal');
     f.app.onhostcontextchanged({ displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen'] });
-    assert.deepEqual(f.calls, []);
+    await settle();
+    assert.deepEqual(f.calls, settings.mode === 'fullscreen' ? [] : ['fullscreen']);
     assert.deepEqual(f.native, []);
   }
 });

@@ -115,6 +115,7 @@ function scheduleRetry(appliedMode) {
 function maybeFullscreen() {
   if (stopped || suspended || document.hidden || pending) return;
   if (initialDisplay.retrying && context.displayMode !== 'fullscreen' && !retryTimer) {
+    if (!context.availableDisplayModes?.includes('fullscreen')) return;
     const mode = initialDisplay.retry();
     if (mode) void requestMode(mode, { automatic: true });
     return;

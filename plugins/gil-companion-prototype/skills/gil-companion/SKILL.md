@@ -24,8 +24,21 @@ Closing), Define, Hypothesis, Analysis, Outcome, Cycle/Chain Reports, approval w
 with no open Step and closed Chains. Follow the current legal next call to reach Verify; never
 skip steps, invent approval or backfill an execution that happened earlier.
 
+**Project deliverables belong in the project by default.** Save the requested report, code,
+charts, intermediate renders and production scripts under `project_root` during an open Verify,
+so Snapshot and `evidence_files` can track them. A Host scratchpad/default output directory is not
+an alternative delivery location merely because Interview, approval or Verify is unfinished.
+Before invoking a file-producing tool, choose its output path inside this project explicitly.
+If external creation is genuinely necessary (for example, a tool cannot write to the project),
+first tell the user the concrete reason and destination and explicitly say: "Files created there
+are not tracked by GIL; they are not included in this project's Snapshot or evidence." Do not
+claim those external files as GIL-verified delivery. If they are needed as project evidence, import
+and verify them inside a later open Verify; an external exception never completes the Interview,
+approval, Experiment or Closing on its own. Do not create an external file just to evade a gate.
+
 Work outside the project and web research that leaves project files unchanged are outside this
-file boundary; do not require a GIL Step just for them. Existing evidence can be read in any stage.
+file boundary; do not require a GIL Step just for them. Unrelated external work remains allowed.
+Existing evidence can be read in any stage.
 When bringing an external result into the project, open Verify first, record its actual provenance
 and verification, and cite the imported file in `evidence_files`; do not claim it was created there.
 GIL's own record/approval writes and explicitly authorized recovery use their existing GIL tools

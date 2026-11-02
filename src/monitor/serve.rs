@@ -2232,7 +2232,11 @@ mod tests {
 
     #[test]
     fn twenty_refreshes_before_the_deadline_do_not_look_again() {
-        let (window, _root, looks) = live("twenty-refreshes", brisk());
+        // This isolates GET from independent OS hints and periodic reconciliation. The live
+        // watcher/reconcile tests cover those triggers separately; fixture startup events
+        // must not masquerade as a read-triggered observation.
+        let (window, _root, looks) =
+            live_without_watcher("twenty-refreshes", only_the_watcher());
         let before = settle(&looks);
         for _ in 0..20 {
             assert!(status(&proper(&window, "GET")).contains("200"));
