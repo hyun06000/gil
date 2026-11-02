@@ -109,3 +109,46 @@ test('a temporary lost connection can recover without recreating the App or prep
   assert.match(connectionMessage({ code: 'project_moved' }), /다시 선택/);
   assert.doesNotMatch(connectionMessage({ code: 'reconnect_required' }), /이 창이 연 Project 가 아니다/);
 });
+
+
+test('detail lock contention retries without another revision, backs off across successful Views, then recovers', async () => {
+  let time = 0, fail = true, reads = 0;
+  const scope = 'project:test';
+  const initial = { scope_id: scope, revision: '2', watching: true, view: { schema_version: 1 } };
+  const host = makeHost({ async callServerTool({ name, arguments: args }) {
+    if (name === 'gil_monitor_detail') {
+      reads++;
+      if (fail) return { isError: true, structuredContent: { code: 'busy', said: 'locked' } };
+    }
+    return { structuredContent: { ...initial, detail: { step_ref: args.step_ref, state: 'closed' } } };
+  } }, initial, { now: () => time });
+  let detail;
+  host.listen('gil://refresh', async () => {
+    await host.loadView(scope);
+    try { detail = await host.loadDetail(scope, 'step:C1/S1'); } catch {}
+  });
+  await host.refresh();
+  assert.equal(reads, 1);
+  time = 1999; await host.tick(); assert.equal(reads, 1);
+  time = 2000; await host.tick(); assert.equal(reads, 2);
+  time = 5999; await host.tick(); assert.equal(reads, 2);
+  fail = false; time = 6000; await host.tick();
+  assert.equal(reads, 3); assert.equal(detail.state, 'closed');
+  time = 10000; await host.tick(); assert.equal(reads, 3);
+});
+
+test('clearing a failed detail selection retires its retry after the next refresh', async () => {
+  let time = 0, refreshes = 0;
+  const scope = 'project:test';
+  const initial = { scope_id: scope, revision: '1', watching: true, view: { schema_version: 1 } };
+  const host = makeHost({ async callServerTool({ name }) {
+    return name === 'gil_monitor_detail'
+      ? { isError: true, structuredContent: { code: 'busy' } }
+      : { structuredContent: initial };
+  } }, initial, { now: () => time });
+  await host.loadView(scope);
+  await assert.rejects(host.loadDetail(scope, 'step:C1/S1'));
+  host.listen('gil://refresh', async () => { refreshes++; await host.loadView(scope); });
+  time = 2000; await host.tick(); assert.equal(refreshes, 1);
+  time = 10000; await host.tick(); assert.equal(refreshes, 1);
+});

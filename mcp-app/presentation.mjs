@@ -29,7 +29,9 @@ export function initialFullscreen({ retries = RETRY_DELAYS_MS, now = () => Date.
       if (done || !connected) return null;
       if (context.displayMode === 'fullscreen') { finish(); consumed = true; return null; }
       if (!Array.isArray(context.availableDisplayModes)) return null;
-      if (!context.availableDisplayModes.includes('fullscreen')) { finish(); consumed = true; return null; }
+      // Capability updates may arrive after the initial inline-only context. Wait without
+      // sending unsupported requests; only an explicit choice or applied fullscreen cancels.
+      if (!context.availableDisplayModes.includes('fullscreen')) return null;
       if (!ready) { if (early || inflight) return null; early = true; return begin('connect'); }
       if (consumed || inflight) return null;
       consumed = true; attempts = 1;

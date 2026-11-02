@@ -2133,7 +2133,8 @@ check("65. 상세 재조회 실패에도 같은 Step 의 보고서를 보존하�
     },
   }), async () => {
     await C().refresh(); // View 는 성공하고 상세만 실패하는 경우다.
-    if (at(".detail").textContent !== kept) throw new Error("마지막 보고서가 지워졌다");
+    if (!at(".detail").textContent.includes(kept)) throw new Error("마지막 보고서가 지워졌다");
+    if (!at(".detail .detail-stale")) throw new Error("상세 자체에 이전 조회 표시가 없다");
     if (!at('.node.cycle[data-cycle="cycle:C1"]') || !at(`[data-step="${step}"][aria-selected="true"]`))
       throw new Error("접힘이나 선택이 사라졌다");
     if (at(".notice").dataset.shown !== "true" || !at(".notice").textContent.includes("마지막으로 확인한 보고서"))
@@ -2141,6 +2142,7 @@ check("65. 상세 재조회 실패에도 같은 Step 의 보고서를 보존하�
     fail = false;
     await C().refresh();
     if (!at(".detail").textContent.includes("새로 확인한 보고서")) throw new Error("새 보고서로 회복하지 못했다");
+    if (at(".detail .detail-stale")) throw new Error("회복 뒤 이전 조회 표시가 남았다");
     if (at(".notice").dataset.shown === "true") throw new Error("회복 뒤 상세 오류가 남았다");
   });
   return "View 성공·상세 실패 → Report·선택·접힘 보존 → 새 Report 로 회복";

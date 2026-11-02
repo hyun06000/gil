@@ -33,6 +33,7 @@ export function makeHost(app, initial, { now = Date.now, presence = () => ({}) }
   let worked = now();
   let nextRead = 0;
   let failures = 0;
+  let detailFailures = 0, detailNextRead = 0, detailRequest = 0;
   let watchWasLive = initial.watching;
   let disconnected = false;
   const emit = async (event, payload) => { for (const fn of listeners.get(event) || []) await fn(payload); };
@@ -82,7 +83,19 @@ export function makeHost(app, initial, { now = Date.now, presence = () => ({}) }
     },
     async loadDetail(wanted, stepRef) {
       if (wanted !== scope) throw { code: 'unknown_scope', said: '이 화면이 연 Project 가 아니다' };
-      return (await call('gil_monitor_detail', { step_ref: stepRef })).detail;
+      const request = ++detailRequest;
+      try {
+        const data = await call('gil_monitor_detail', { step_ref: stepRef });
+        if (request === detailRequest) { detailFailures = 0; detailNextRead = 0; }
+        return data.detail;
+      } catch (err) {
+        // A successful View already advanced the cursor. Retry a failed selected detail
+        // even when there is no later revision, independently of View's retry budget.
+        if (request === detailRequest) {
+          detailFailures += 1; detailNextRead = now() + retryAfter(detailFailures);
+        }
+        throw err;
+      }
     },
     listen(event, fn) {
       if (!listeners.has(event)) listeners.set(event, new Set());
@@ -94,8 +107,12 @@ export function makeHost(app, initial, { now = Date.now, presence = () => ({}) }
       const hint = await call('gil_monitor_poll', presence()); // counter only; no world scan
       await watchNotice(hint.watching);
       if (hint.update) await emit('gil://update', hint.update);
-      if (now() >= nextRead && (failures > 0 || hint.revision !== cursor || now() - worked >= RECONCILE_MS)) {
+      const detailDue = detailFailures > 0 && now() >= detailNextRead;
+      if (now() >= nextRead && (failures > 0 || hint.revision !== cursor || now() - worked >= RECONCILE_MS || detailDue)) {
+        // If selection was cleared, there is no detail request during refresh: retire the retry.
+        const before = detailRequest;
         await emit('gil://refresh');
+        if (detailDue && detailRequest === before) { detailFailures = 0; detailNextRead = 0; }
       }
     },
     refresh: () => emit('gil://refresh'),

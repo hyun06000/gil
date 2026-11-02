@@ -38,12 +38,26 @@ test('a Host that applies the connect-time request gets no further automatic req
   assert.equal(policy.gesture(), null);
   assert.equal(policy.attempts.length, 1);
 });
-test('already fullscreen and inline-only Hosts do not receive automatic requests', () => {
-  for (const context of [{ displayMode: 'fullscreen' }, { availableDisplayModes: ['inline'] }]) {
+test('already fullscreen ends the intent; late capability advertisement still opens by default', () => {
+  const applied = initialFullscreen();
+  assert.equal(applied.next({ ...ready, context: { displayMode: 'fullscreen' } }), null);
+  assert.equal(applied.next(ready), null);
+  for (const initiallyReady of [false, true]) {
     const policy = initialFullscreen();
-    assert.equal(policy.next({ ...ready, context }), null);
+    const inline = { ...ready, ready: initiallyReady, context: { displayMode: 'inline', availableDisplayModes: ['inline'] } };
+    assert.equal(policy.next(inline), null);
+    assert.equal(policy.next(inline), null);
+    assert.equal(policy.attempts.length, 0);
+    assert.equal(policy.next(ready), 'fullscreen');
+    assert.equal(policy.settle('fullscreen'), null);
     assert.equal(policy.next(ready), null);
   }
+});
+test('a manual inline choice while capabilities are incomplete prevents a late automatic request', () => {
+  const policy = initialFullscreen();
+  policy.next({ ...ready, context: { displayMode: 'inline', availableDisplayModes: ['inline'] } });
+  policy.cancel();
+  assert.equal(policy.next(ready), null);
 });
 test('a manual choice or teardown cancels a late initial request', () => {
   const policy = initialFullscreen();

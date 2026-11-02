@@ -727,6 +727,12 @@ function renderDetail(node) {
   const name = document.createElement("h2");
   name.textContent = reportOwner.ref;
   detail.append(head, name);
+  if (current?.seat.detailStale) {
+    const stale = document.createElement('p');
+    stale.className = 'detail-stale';
+    stale.textContent = '이 상세는 이전 조회 결과입니다. 상태·보고서가 최신이 아닐 수 있습니다.';
+    detail.prepend(stale);
+  }
   if (isCycle) {
     const note = document.createElement('p');
     note.textContent = '보고서 요약 — 판정·인계·당시 다음 방향. 세부 관측은 각 Step 보고서에서 확인합니다.';
@@ -773,17 +779,20 @@ async function selectStep(stepRef) {
   if (seat.selectedStep !== stepRef && noticeOwner === "detail") clearNotice();
   seat.selectedStep = stepRef;
   // 같은 자리의 마지막 Report 만 보존한다. 다른 Step 을 고르면 옛 Report 를 즉시 걷는다.
-  if (seat.detail?.step_ref !== stepRef) seat.detail = null;
+  if (seat.detail?.step_ref !== stepRef) { seat.detail = null; seat.detailStale = false; }
   renderGraph();
   renderDetail(seat.detail);
   try {
     const node = await window.GIL_HOST.loadDetail(scopeId, stepRef);
     if (!isCurrent()) return;
     seat.detail = node;
+    seat.detailStale = false;
     renderDetail(node);
     if (noticeOwner === "detail") clearNotice();
   } catch (error) {
     if (!isCurrent()) return;
+    seat.detailStale = true;
+    renderDetail(seat.detail);
     say(`상세를 읽지 못했다 — ${why(error)}` +
       (seat.detail ? " · 마지막으로 확인한 보고서를 표시하고 있다. 최신 내용은 확인하지 못했다." : ""), "detail");
   }
@@ -797,6 +806,7 @@ function selectCycle(cycleRef) {
   seat.selectedStep = null;
   seat.selectedCycle = cycle ? cycleRef : null;
   seat.detail = cycle ? cycleReportDetail(cycle) : null;
+  seat.detailStale = false;
   if (noticeOwner === 'detail') clearNotice();
   renderGraph();
   renderDetail(seat.detail);
