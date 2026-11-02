@@ -92,7 +92,16 @@ impl ProjectLock {
         // 파일은 **없으면 만들고, 있으면 그대로 쓴다.** 매번 만들고 지우면 그 자체가
         // 경쟁이 되고, 지우는 쪽이 남의 잠금을 들고 있는 파일을 치우게 된다.
         #[cfg(unix)]
-        let (directory, file) = crate::internal_fs::file(&path, true).map_err(|source| LockError::Unavailable {
+        // flock's exclusive lock does not require a writable descriptor on Unix. Reuse the
+        // existing entry read-only so observers/Host guards work with read-only .gil access.
+        // Only a genuinely absent entry may be created; never retry permission/boundary errors.
+        let (directory, file) = crate::internal_fs::file(&path, false).or_else(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                crate::internal_fs::file(&path, true)
+            } else {
+                Err(error)
+            }
+        }).map_err(|source| LockError::Unavailable {
             path: path.clone(), doing: "잠금 파일을 열지", source: source.to_string(),
         })?;
         // Windows: the entry itself under a pinned `.gil`; links, reparse points and directories refuse.
@@ -247,6 +256,22 @@ mod tests {
         let gil = scratch("release");
         drop(ProjectLock::acquire(&gil).expect("잡는다"));
         drop(ProjectLock::acquire(&gil).expect("풀린 뒤 다시 잡는다"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn existing_lock_is_read_only_but_still_exclusive() {
+        use std::os::fd::AsRawFd;
+        let gil = scratch("read-only-exclusive");
+        drop(ProjectLock::acquire(&gil).unwrap());
+        let held = ProjectLock::acquire(&gil).unwrap();
+        let flags = unsafe { libc::fcntl(held.file.as_raw_fd(), libc::F_GETFL) };
+        assert!(flags >= 0);
+        assert_eq!(flags & libc::O_ACCMODE, libc::O_RDONLY);
+        assert!(matches!(ProjectLock::acquire(&gil), Err(LockError::Busy { .. })));
+        held.validate(&gil.join(LOCK_FILE)).unwrap();
+        drop(held);
+        ProjectLock::acquire(&gil).unwrap();
     }
 
     #[test]
