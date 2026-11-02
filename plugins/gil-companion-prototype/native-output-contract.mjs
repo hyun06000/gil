@@ -57,6 +57,12 @@ export async function checkNativeOutputContract(binary) {
     const opened = await call('gil_open', {project_root:root, kind:'question',
       contract:'objective: clarify the user goal\nnext_action: ask what result the user wants\ndone_when: the user states a goal or remaining uncertainty'});
     assert.equal(opened.structuredContent.ok, true);
+    assert.ok(opened.content.some(c => c.type === 'text' && c.text.includes('gil_await_user(project_root, question)')),
+      'the actual Question receipt must give the handoff required by the Stop hook');
+    assert.equal(hook({hook_event_name:'Stop',last_assistant_message:'What is your goal?'}).decision,'block',
+      'asking the question alone cannot skip the explicit handoff');
+    assert.deepEqual(hook({hook_event_name:'PreToolUse',tool_name:'WebSearch',tool_input:{query:'file-free research'}}),{});
+    assert.deepEqual(hook({hook_event_name:'PreToolUse',tool_name:'Write',tool_input:{file_path:join(scratch,'unrelated.txt')}}),{});
     const waiting = await call('gil_await_user', {project_root:root, question:'What is your goal?'});
     assert.equal(waiting.structuredContent.ok, true);
     assert.equal(waiting.structuredContent.handoff.status, 'awaiting_user');
@@ -71,7 +77,7 @@ export async function checkNativeOutputContract(binary) {
     assert.equal(status.structuredContent.ok, true);
     assert.match(status.structuredContent.said, /step:C1\/S1/);
     return {passed:true, validator:'MCP SDK Client.callTool',
-      scope:'start, lost-receipt context recovery, Monitor response, first Question; no visible Host UI claim'};
+      scope:'start/recovery, Monitor response, Question guidance and expiring handoff, file boundary; no visible Host UI claim'};
   } finally {
     await client?.close();
     await rm(scratch, {recursive:true, force:true});

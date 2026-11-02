@@ -209,6 +209,10 @@ fn receipts_name_one_next_call_through_interview_and_into_an_experiment() {
     assert_eq!(opened["structuredContent"]["ok"], true, "{opened}");
     let hint = hints(&opened);
     assert!(hint.contains("턴을 끝내 답을 기다린다") && hint.contains("gil_close"), "{hint}");
+    assert!(hint.contains("gil_await_user(project_root, question)"), "{hint}");
+    let body = support::said(&opened);
+    assert!(body.contains("파일 없는 웹 조사·기존 증거 읽기·무관한 외부 작업은 허용"), "{body}");
+    assert!(!body.contains("본격적인 웹 조사와 보고서 작성은 채팅으로만 전달하더라도 실행 작업"), "{body}");
 
     let refused_close = mcp.call("gil_close", &root, serde_json::json!({"report": ""}));
     assert_eq!(refused_close["isError"], true);

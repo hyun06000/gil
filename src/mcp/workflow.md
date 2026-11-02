@@ -14,6 +14,24 @@ Use only the user's selected absolute `project_root`. Each receipt's text guidan
 call or one wait**; do it, then read the next receipt. Read `structuredContent` too, and follow the
 actual recorded position and the connected tool schema. Never repeat a call that already succeeded.
 
+**Quick rules — read these first; the numbered rules below only add detail.**
+
+1. A GIL project is not finished in chat. Follow the last receipt's next call **or wait**.
+   Do not close a step before its completion condition is met. If no receipt exists yet, read
+   `gil_context` once (existing project) or call `gil_start` once (new project).
+2. After `gil_start`: call the `show_gil_monitor(scope_id)` the receipt names, then
+   `gil_open(kind: question)` with `objective`, `next_action`, `done_when` in its `contract` string.
+3. A Question is answered by the user, not by you. Call `gil_await_user(project_root, question)`,
+   end the response with that exact question, and wait. Close it only with the user's actual reply;
+   never paste the original request as the answer. Synthesis also needs `gil_await_user` before
+   waiting; in the approved-plan profile, register its proposal with `gil_plan_propose` first.
+4. Project file changes and deliverable production belong inside an open Experiment **Verify**;
+   save its results as project files named in `evidence_files`. File-free web research, reading
+   existing evidence at any stage, and unrelated outside work remain allowed. Those activities
+   and a chat summary do not complete the requested GIL workflow.
+5. A refusal closes nothing. For a repairable input error, fix it and resend the same call once;
+   otherwise follow the stated recovery or wait. Never repeat `gil_start`, skip a step, or invent approval.
+
 **Project file boundary — at every stage.** Creating, modifying, deleting, renaming or moving
 Artifact files inside the selected `project_root` requires a successfully opened Experiment
 Verify. This includes importing files made elsewhere, DOCX/PDF production, chart PNGs, rendering,
@@ -81,7 +99,8 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    prerequisite to opening it. Use a clarification contract, for example `objective: clarify the
    user's goal`, `next_action: ask the user for the desired result and completion criteria`, and
    `done_when: the user has answered or identified what remains uncertain`. Open Question before
-   asking, then record the user's actual reply with `gil_close`; never invent the goal.
+   asking. Call `gil_await_user(project_root, question)` before yielding, end with that exact question,
+   then record the user's actual reply with `gil_close`; never invent the goal.
    Permitted outside work or file-free web research does not close that Question or replace an
    explicitly requested GIL project's Interview, approval, and eventual Closing. Resume the recorded
    next call after the user answers; do not treat a chat-only answer as completed project delivery.
@@ -95,9 +114,9 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    | Current state | Next call |
    | --- | --- |
    | New project, Monitor shown, no step open | `gil_open` Question with its action contract |
-   | Question is open | Ask the user, end the turn, then `gil_close` with their actual response |
+   | Question is open | `gil_await_user(project_root, question)`, end the turn with that exact question and wait, then `gil_close` after their actual response |
    | Interpretation is open | `gil_close` with what is settled and what is unresolved |
-   | Synthesis is open and the user has not answered | Show the statement (approved-plan profile: first `gil_plan_propose`), end the turn and wait; no project file changes |
+   | Synthesis is open and the user has not answered | Show the statement (approved-plan profile: first `gil_plan_propose`), call `gil_await_user`, end the turn with its exact question and wait; no project file changes |
    | Synthesis is open and the user approved its statement | `gil_close` with `approved: yes` (approved-plan profile: the exact `close_report`) |
    | Synthesis is open and the user declined | `gil_close` with `approved: no`, then `gil_open` Question |
    | Synthesis is closed and Outcome has not been opened | `gil_open` Outcome |
@@ -206,7 +225,8 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
      ordered `items` (`id`, `question`, `done_when`) and `synthesis` (the Synthesis Report fields
      such as `statement` and `basis_refs`). `exploration_checklist` lists the item IDs in the same
      order, one per line. Never write `approved`, `plan_revision` or `plan_digest`: Core adds them.
-   - Then **end the turn and wait for the Monitor button.** Chat agreement is not approval. While
+   - Call `gil_await_user(project_root, question)` and end the response with that exact question;
+     **end the turn and wait for the Monitor button.** Chat agreement is not approval. While
      waiting, make no project file changes or re-proposal. Check approval only with `gil_plan_read`.
    - `receipt.decision: approve` → `gil_close` Synthesis with `close_report` **unchanged**, then
      `gil_open`/`gil_close` Outcome, then `gil_close` the Interview Cycle Report, then `gil_open`
