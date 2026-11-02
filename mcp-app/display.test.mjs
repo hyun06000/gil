@@ -287,7 +287,7 @@ test('a Host that keeps the App inline gets a connect-time and a ready-time requ
   await f.fireTimerOf(4000);
   assert.equal(f.calls.length, 4);
   assert.equal([...f.timers.values()].filter(t => t.ms === 1500 || t.ms === 4000).length, 0, 'no further automatic timer');
-  assert.match(f.element('host-say').textContent, /클릭하면 펼칩니다/);
+  assert.match(f.element('host-say').textContent, /Host가 자동 fullscreen 요청을 적용하지 않았습니다/);
   await f.pointerdown();
   assert.equal(f.calls.length, 5);
   await f.pointerdown();

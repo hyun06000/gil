@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {checkDefaultTools, checkAuthoringTools, withoutRecoveryTools} from './tool-contract.mjs';
 
 const catalog = JSON.parse(readFileSync(new URL('../../src/mcp/tools.json', import.meta.url)));
+catalog.push(JSON.parse(readFileSync(new URL('../../src/mcp/handoff-tool.json', import.meta.url))));
 test('authoring profile is explicit, model-only and does not relax App reads', () => {
   const schemas=JSON.parse(readFileSync(new URL('../../src/mcp/authoring-schema.json', import.meta.url)));
   const tools=structuredClone(catalog), close=tools.find(t=>t.name==='gil_close');

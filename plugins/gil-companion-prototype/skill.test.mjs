@@ -72,7 +72,11 @@ test("Skill 이 부르는 도구 이름은 전부 실제 tool 표에 있다", ()
   assert.equal(TOOLS.length, 20);
   const named = new Set([...SKILL.matchAll(/`((?:gil|show_gil)_[a-z_]+)(?:\(|`)/g)].map((m) => m[1]));
   const plans = planCatalog();
+  const handoff = JSON.parse(readFileSync(join(REPO,"src","mcp","handoff-tool.json"),"utf8"));
+  assert.equal(handoff.name, "gil_await_user");
+  assert.deepEqual(handoff._meta.ui.visibility, ["model"]);
   for (const name of named) {
+    if (name === handoff.name) continue;
     if (name.startsWith("gil_migration_")) {
       const catalog=JSON.parse(readFileSync(join(REPO,"src","mcp","migration-tools.json"),"utf8"));
       assert.ok(catalog.some(t=>t.name===name));

@@ -1,0 +1,54 @@
+{
+  "name": "gil_await_user",
+  "title": "Wait for GIL user input",
+  "description": "Before ending a GIL turn for user input, validate an actually open Question or pending Synthesis proposal. Pass the exact question to ask. End your reply with that question. This neither approves nor closes anything. The next user message expires the handoff; continue the recorded step. Never use a stale open question to report a completed deliverable.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "project_root": {
+        "type": "string"
+      },
+      "question": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "project_root",
+      "question"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "ok": {
+        "type": "boolean"
+      },
+      "handoff": {
+        "type": "object"
+      },
+      "exit_code": {},
+      "said": {
+        "type": "string"
+      },
+      "problem": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "ok"
+    ]
+  },
+  "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "openWorldHint": false
+  },
+  "_meta": {
+    "ui": {
+      "visibility": [
+        "model"
+      ]
+    }
+  }
+}

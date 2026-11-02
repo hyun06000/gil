@@ -37,9 +37,10 @@ format 4 Artifact Snapshot, dirty gate, 중단 복구 가능한 `gil restore`, �
 GIL의 주 사용자는 비개발자다. 인간은 명령과 저장 형식을 외우는 대신 지속형 **GIL Monitor**에서
 현재 실험, 실패한 시도와 다음 방향을 본다. Monitor는 선택 부가기능이 아니다. 현재 기본 경로는
 **MCP App fullscreen에서 가로 Graph와 채팅을 함께 보는 것**이다. Codex의 실제 화면·자동 갱신·
-기본 재시작 복원을 확인했다. Claude Desktop의 Claude Code 탭에서는 같은 Monitor가 inline 카드로 뜬 뒤
-**첫 클릭에 fullscreen**으로 펼쳐지는 것까지 사용자가 확인했다(10/31·11/01). 2026-11-02부터 App은 연결
-직후에도 fullscreen을 자동 요청하므로 Claude Code 탭의 자동 펼침은 **사용자 화면 확인 대기**다. Native Companion은 같은 UI를 별도 창으로
+기본 재시작 복원을 확인했다. Claude Desktop Code 탭의 2026-11-03 실제 화면에서는 fullscreen 지원을
+광고했지만 연결·렌더·재시도·클릭의 다섯 요청 모두 `inline`을 반환했다. 자동 fullscreen은 미해결 Host
+제약이며, App은 이를 완료로 표시하지 않고 위젯 머리의 다른 패널에 표시·확대 조작을 안내한다.
+Native Companion은 같은 UI를 별도 창으로
 제공하는 대안이자 Windows의 Host 연결·업데이트 관리 창이며, fullscreen 실패를 이유로 자동 실행하지
 않는다. Companion 창이 열린 것을 MCP App 표시 성공으로 세지 않는다. inline 카드는 미리보기이지 설치 완료
 상태가 아니다. PiP는 현재 지원을 주장하지 않는다.

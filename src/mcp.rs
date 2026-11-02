@@ -116,7 +116,9 @@ impl GilServer {
             }).await;
             if health.is_error != Some(true) {
                 if let Some(status) = health.structured_content.as_ref() {
-                    if status["state"] == "unconfirmed" {
+                    if status["display_mode"] == "inline" {
+                        guidance::prepend(&mut result, "Monitor는 inline 미리보기로만 확인됐다. fullscreen 표시 완료라고 보고하지 않는다. Host가 자동 확대를 받아들이지 않으면 위젯 머리의 ‘다른 패널에 표시’ 또는 Host의 확대 버튼을 안내한다. 표시 문제와 GIL 진행은 별개다; 아래 다음 GIL 호출을 계속한다.");
+                    } else if status["state"] == "unconfirmed" {
                         guidance::prepend(&mut result, "MCP App Monitor가 두 번의 표시 요청에도 응답하지 않았다. 자동 재열기를 멈추고 표시 문제를 알린다. Companion을 자동으로 열지 않는다.");
                     } else if status["should_open"] == true {
                         // A lost/Host-rejected start receipt can be recovered through context,
@@ -157,6 +159,16 @@ impl GilServer {
         crate::command::action(&["status".into()], Some(std::path::Path::new(root)), "")
     }
     async fn dispatch(&self, name: String, input: Value) -> CallToolResult {
+        if name == "gil_await_user" {
+            return tokio::task::spawn_blocking(move || match crate::write_guard::automatic::await_user(
+                input["project_root"].as_str().unwrap_or_default(), input["question"].as_str().unwrap_or_default()) {
+                Ok(wait) => {
+                    let mut result = CallToolResult::success(vec![ContentBlock::text(format!("사용자 입력 대기: {}. 응답 마지막에 이 질문을 그대로 적는다. 사용자 답변 후 gil_context로 같은 단계를 이어간다. 완료·승인 기록은 바뀌지 않았다.", wait["question"].as_str().unwrap_or_default()))]);
+                    result.structured_content = Some(serde_json::json!({"ok":true,"handoff":wait})); result
+                }
+                Err(error) => actions::refusal(error),
+            }).await.unwrap_or_else(|_| actions::refusal("사용자 대기 상태를 확인하지 못했다. gil_context로 현재 단계를 확인한다."));
+        }
         #[cfg(feature = "product-safety")]
         if name.starts_with("gil_revisit_") {
             let monitor = self.monitor.clone(); let grants = self.recovery_grants.clone();
@@ -326,6 +338,7 @@ mod tests {
             expected.extend(PLAN_MODEL_SURFACE.iter().chain(PLAN_APP_SURFACE.iter()).map(|s| s.to_string()));
         }
         if cfg!(feature = "product-safety") { expected.extend(["gil_revisit_apply".into(), "gil_revisit_review".into()]); }
+        expected.push("gil_await_user".to_string());
         expected.sort();
         assert_eq!(registered_names(), expected);
     }
@@ -414,4 +427,9 @@ mod tests {
         assert_eq!(said, crate::RootError::NoProjectHere.to_string());
         std::fs::remove_dir_all(&at).ok();
     }
+}
+
+/// Reuse the exact MCP path resolution (including Hangul normalization) in Host hooks.
+pub(crate) fn resolve_guard_root(root: &str) -> Result<std::path::PathBuf, String> {
+    actions::resolve_root(root).map(|(root, _)| std::path::PathBuf::from(root))
 }
