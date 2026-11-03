@@ -118,7 +118,7 @@ pub fn rejection(tool: &Tool, input: &Value) -> &'static str {
         return if input.get("draft").is_none() {
             "gil_plan_propose: 'draft' is missing. The call takes exactly {project_root, draft}; scope, items and synthesis belong inside draft, never at the top level, and exploration_checklist is a string field inside synthesis (item IDs, one per line). Nothing was recorded; wrap the same content in draft and send one corrected call."
         } else {
-            "gil_plan_propose: 'draft' is present but malformed. draft takes exactly {scope:{goal,in_scope,out_of_scope,constraints,success_criteria}, items:[{id,question,done_when}] (1–64), synthesis:{string fields such as statement, basis_refs, exploration_checklist}}; every value is a string, no extra field at any level, and project_root is an absolute string. Nothing was recorded; correct the call instead of repeating it."
+            "gil_plan_propose: invalid arguments with 'draft' present. The call takes exactly {project_root, draft}; project_root must be an absolute string. draft takes exactly {scope, items, synthesis}. scope has five string fields: goal, in_scope, out_of_scope, constraints, success_criteria. items is an array (1–64) of {id, question, done_when}, all strings. No extra fields at the top level, in draft, scope or an item. synthesis is a map of string-valued Report fields: statement, basis_refs, exploration_checklist, plus chain_verdict (success or failure) for Closing; omit approved, plan_revision and plan_digest. The call must fit within 72 KiB. Nothing was recorded; correct the call instead of repeating it."
         };
     }
     if tool.name != "gil_close" {
@@ -159,14 +159,43 @@ mod tests {
             assert!(rejection(close,&owner_only).contains("text contract"));
         }
         assert_eq!(rejection(tools().iter().find(|t| t.name=="gil_status").unwrap(),&json!({})),"Invalid GIL tool arguments");
-        #[cfg(feature = "approved-plan")]
-        {
-            let propose=tools().iter().find(|t| t.name=="gil_plan_propose").unwrap();
-            let flat=json!({"project_root":secret,"scope":{},"items":[],"synthesis":{},"exploration_checklist":"A"});
-            let said=rejection(propose,&flat);
-            assert!(said.contains("'draft' is missing") && said.contains("inside draft") && !said.contains(secret),"{said}");
-            let wrapped=json!({"project_root":secret,"draft":{"scope":{},"items":[],"synthesis":{},"extra":1}});
-            assert!(rejection(propose,&wrapped).contains("malformed"));
+    }
+    #[cfg(feature = "approved-plan")]
+    #[test]
+    fn plan_wire_shape_keeps_report_strings_open_and_rejects_structural_extras_safely() {
+        let propose = tools().iter().find(|t| t.name == "gil_plan_propose").unwrap();
+        let secret = "/synthetic/private-plan-secret";
+        let valid = json!({"project_root":secret,"draft":{
+            "scope":{"goal":"g","in_scope":"i","out_of_scope":"o","constraints":"c","success_criteria":"s"},
+            "items":[{"id":"A","question":"q","done_when":"d"}],
+            "synthesis":{"statement":"s","basis_refs":"step:C1/S1","exploration_checklist":"A","chain_verdict":"success"}}});
+        assert!(valid_input(propose, &valid));
+        let mut report_extension = valid.clone();
+        report_extension["draft"]["synthesis"]["other_report_field"] = json!("string");
+        assert!(valid_input(propose, &report_extension), "the wire accepts Report string fields; Core validates semantics");
+        assert_eq!(propose.input_schema["properties"]["draft"]["properties"]["synthesis"]["additionalProperties"], json!({"type":"string"}));
+        let flat = json!({"project_root":secret,"scope":valid["draft"]["scope"],"items":valid["draft"]["items"],"synthesis":valid["draft"]["synthesis"]});
+        assert!(!valid_input(propose, &flat));
+        assert!(rejection(propose, &flat).contains("'draft' is missing"));
+        assert!(!rejection(propose, &flat).contains(secret));
+        for pointer in ["", "/draft", "/draft/scope", "/draft/items/0"] {
+            let mut input = valid.clone();
+            input.pointer_mut(pointer).unwrap().as_object_mut().unwrap().insert(secret.into(), json!(secret));
+            assert!(!valid_input(propose, &input), "extra field at {pointer}");
+            let said = rejection(propose, &input);
+            assert!(said.contains("invalid arguments with 'draft' present") && said.contains("chain_verdict"));
+            assert!(!said.contains(secret));
+        }
+        for pointer in ["/project_root", "/draft/scope/goal", "/draft/items/0/id", "/draft/synthesis/statement"] {
+            let mut input = valid.clone();
+            *input.pointer_mut(pointer).unwrap() = json!([secret]);
+            assert!(!valid_input(propose, &input), "non-string at {pointer}");
+            assert!(!rejection(propose, &input).contains(secret));
+        }
+        for (pointer, field) in [("", "project_root"), ("/draft", "items"), ("/draft/scope", "goal"), ("/draft/items/0", "done_when")] {
+            let mut input = valid.clone();
+            input.pointer_mut(pointer).unwrap().as_object_mut().unwrap().remove(field);
+            assert!(!valid_input(propose, &input), "missing {pointer}/{field}");
         }
     }
     #[test]

@@ -227,7 +227,7 @@ fn plan_next_call(project: &Project, kind: NodeKind) -> Option<String> {
     match kind {
         NodeKind::Synthesis => {
             let Some(proposal) = plan.current(project) else {
-                return Some("열린 Synthesis (승인 계획 프로필): gil_plan_propose로 제안한다 — scope 5칸(goal · in_scope · out_of_scope · constraints · success_criteria), items(id · question · done_when), synthesis Report 칸. exploration_checklist에는 items의 id를 같은 순서로 한 줄씩 적고, approved · plan_revision · plan_digest는 적지 않는다. 채팅 동의로 대체하지 않는다.".into());
+                return Some("열린 Synthesis (승인 계획 프로필): gil_plan_propose({project_root, draft:{scope, items, synthesis}})로 제안한다 — draft.scope 5칸(goal · in_scope · out_of_scope · constraints · success_criteria), draft.items(id · question · done_when), draft.synthesis Report 칸. draft.synthesis.exploration_checklist는 items의 id를 같은 순서로 한 줄씩 적은 문자열이다. Closing은 기존 items를 유지하고 draft.synthesis.chain_verdict(success 또는 failure)를 더한다. approved · plan_revision · plan_digest는 적지 않는다. 채팅 동의로 대체하지 않는다.".into());
             };
             Some(match proposal.receipt.as_ref().map(|r| &r.decision) {
                 None => format!("제안 판 {}이(가) Monitor 버튼 응답을 기다린다. 턴을 끝내고 기다린다. 그동안 프로젝트 파일 변경·재제안을 하지 않는다. 응답이 왔는지는 gil_plan_read로만 확인한다.", proposal.revision),
@@ -824,7 +824,7 @@ mod plan_guidance_tests {
     fn synthesis_waits_for_the_monitor_button_and_follows_the_recorded_decision() {
         let mut p = Project::start(h::spec(), h::first_world());
         let draft = synthesis(&mut p, &["A", "B"]);
-        says(&p, &["gil_plan_propose", "scope 5칸", "exploration_checklist", "approved · plan_revision · plan_digest는 적지 않는다"], &["approved: yes", "gil_close"]);
+        says(&p, &["gil_plan_propose({project_root, draft:{scope, items, synthesis}})", "scope 5칸", "draft.synthesis.exploration_checklist", "draft.synthesis.chain_verdict", "approved · plan_revision · plan_digest는 적지 않는다"], &["approved: yes", "gil_close"]);
         let first = p.propose_plan(draft.clone()).unwrap();
         says(&p, &["제안 판 1", "Monitor 버튼 응답을 기다린다", "턴을 끝내고"], &["gil_close", "gil_plan_propose", "조사를 시작"]);
         // 승인 후 제안을 고치면 새 판이다 — 이전 승인은 재사용되지 않는다.

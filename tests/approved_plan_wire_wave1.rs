@@ -246,6 +246,69 @@ impl Rig {
 }
 
 #[test]
+fn documented_proposal_opens_and_closes_with_schema_rejections_leaving_no_trace() {
+    let root = scratch("documented-plan-project");
+    let settings = scratch("documented-plan-settings");
+    let record = product_state_path(&root, &private_local_app_data(&settings));
+    let mut r = Rig { root: root.clone(), record, scope: String::new(), c: Client::serve(&settings) };
+    let started = ok(r.model("gil_start", json!({})), "start");
+    let next = &structured(&started)["next_call"];
+    r.scope = next["arguments"]["scope_id"].as_str().unwrap().to_owned();
+    ok(r.c.call("show_gil_monitor", next["arguments"].clone()), "show");
+    let (basis, synthesis) = r.ask_and_interpret();
+    // Parse the actual shared documentation, not a hand-copied fixture. Only the selected
+    // project path and real lineage refs are substituted as the instructions require.
+    let section = include_str!("../src/mcp/workflow.md").split("**Approved plans").nth(1).unwrap();
+    let example = section.split("```json").nth(1).unwrap().split("```").next().unwrap();
+    let mut input: Value = serde_json::from_str(example.trim()).unwrap();
+    input["project_root"] = json!(root);
+    input["draft"]["synthesis"]["basis_refs"] = json!(basis.join("\n"));
+    let before = record_bytes(&r.record);
+    let secret = "/synthetic/private-schema-secret";
+    let mut flat = input["draft"].clone();
+    flat["project_root"] = json!(secret);
+    let mut extra = input.clone();
+    extra["draft"][secret] = json!(secret);
+    let mut wrong_type = input.clone();
+    wrong_type["draft"]["synthesis"]["statement"] = json!([secret]);
+    let mut bad_root = input.clone();
+    bad_root["project_root"] = json!([secret]);
+    for invalid in [flat, extra, wrong_type, bad_root] {
+        let response = rpc_error(r.c.call("gil_plan_propose", invalid), "invalid proposal");
+        assert!(!response.to_string().contains(secret), "schema error echoed input");
+        assert_eq!(record_bytes(&r.record), before, "schema refusal changed the record");
+    }
+    // Valid wire shape can still fail Core's checklist/required-field grammar.
+    let mut mismatch = input.clone();
+    mismatch["draft"]["synthesis"]["exploration_checklist"] = json!("A\nB");
+    refused(r.c.call("gil_plan_propose", mismatch), "mismatched checklist");
+    for field in ["statement", "basis_refs", "exploration_checklist"] {
+        let mut missing = input.clone();
+        missing["draft"]["synthesis"].as_object_mut().unwrap().remove(field);
+        refused(r.c.call("gil_plan_propose", missing), "missing required Report field");
+    }
+    assert_eq!(record_bytes(&r.record), before);
+    ok(r.c.call("gil_plan_propose", input.clone()), "documented opening");
+    r.approve_via_app(1);
+    r.close_approved_interview(&synthesis, "open_child");
+    let (cycle, document) = r.open_experiment("A");
+    let verify = r.walk_to_verify("A");
+    r.finish_experiment(cycle, "A", &verify, &document);
+    ok(r.model("gil_open", json!({"kind":"interview"})), "closing interview");
+    let (basis, synthesis) = r.ask_and_interpret();
+    input["draft"]["synthesis"]["basis_refs"] = json!(basis.join("\n"));
+    input["draft"]["synthesis"]["chain_verdict"] = json!("failure");
+    ok(r.c.call("gil_plan_propose", input), "documented closing retains executed items");
+    r.approve_via_app(2);
+    r.close_approved_interview(&synthesis, "close_chain");
+    // Interview approval succeeds even when the human judges the Chain a failure.
+    ok(r.model("gil_close", json!({"report":format!("verdict: failure\nclosing_synthesis_ref: {synthesis}\nhandoff_summary: synthetic final judgment\n")})), "close chain");
+    let (status, noise, stderr) = r.c.eof_with_stderr();
+    assert!(status.success() && noise.is_empty());
+    assert!(!stderr.contains(secret), "schema rejection leaked input to stderr");
+}
+
+#[test]
 fn approval_contract_holds_over_the_real_stdio_process() {
     let root = scratch("plan-wire-project");
     let settings = scratch("plan-wire-settings");
