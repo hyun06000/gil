@@ -134,6 +134,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo +1.97.1 test --locked -p gil --test mcp --target $env:GIL_NATIVE_TARGET @features
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Host guard scope and direct file protection (both profiles)
+        shell: pwsh
+        run: |
+          $features = if ($env:GIL_RUNTIME_PROFILE -eq 'visual-authoring') { @('--features', 'visual-authoring') } else { @() }
+          cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET @features --test automatic_guard --test write_guard
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Runtime update state judge (pure; both profiles)
         shell: pwsh
         run: |

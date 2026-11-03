@@ -268,10 +268,10 @@ fn check(root: &Path, exe: &Path, input: &Value) -> Result<Value, String> {
 }
 
 fn run(root: &Path, command: &str) -> Result<u8, String> {
-    run_roots(&[root.to_path_buf()], command, &[])
+    run_roots(&[root.to_path_buf()], command, &[], "legacy")
 }
 
-fn run_roots(roots: &[PathBuf], command: &str, extra_readonly: &[PathBuf]) -> Result<u8, String> {
+fn run_roots(roots: &[PathBuf], command: &str, extra_readonly: &[PathBuf], host: &str) -> Result<u8, String> {
     if !cfg!(target_os = "macos") {
         return Err("guarded shell currently supports macOS only".into());
     }
@@ -318,8 +318,13 @@ fn run_roots(roots: &[PathBuf], command: &str, extra_readonly: &[PathBuf]) -> Re
         .output()
         .map_err(|e| e.to_string())?;
     if !probe.status.success() {
+        let guidance = match host {
+            "codex" => "Codex: 동일한 래퍼 전체에 sandbox_permissions=require_escalated와 justification으로 정상 Host 승인을 요청한다.",
+            "claude" => "Claude Code: 이 Host가 제공하는 래퍼 단일 명령의 sandbox 밖 실행 승인 경로만 사용할 수 있다. 지원하지 않거나 정책으로 금지됐으면 이 명령은 실행할 수 없다.",
+            _ => "현재 Host의 단일 명령 승인 기능을 확인한다. 다른 Host의 승인 필드를 추측하지 않는다.",
+        };
         return Err(format!(
-            "[guard_sandbox_unavailable] 보호 sandbox를 적용하지 못해 요청한 명령을 실행하지 않았다. Codex에서는 동일한 GIL 래퍼 명령에 sandbox_permissions=require_escalated와 justification으로 정상 Host 승인을 요청한다. 승인 거절 시 중단하며 전역 sandbox 설정 변경이나 보호 없는 재실행은 하지 않는다. {}",
+            "[guard_sandbox_unavailable] 보호 sandbox를 적용하지 못해 요청한 명령을 실행하지 않았다. {guidance} 승인 거절 시 중단한다. 전역 sandbox 설정 변경이나 보호 없는 재실행은 하지 않는다. {}",
             String::from_utf8_lossy(&probe.stderr).trim()
         ));
     }

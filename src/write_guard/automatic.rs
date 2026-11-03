@@ -134,6 +134,7 @@ fn tool(input: &Value) -> &str {
         .unwrap_or("")
 }
 fn context(event: &str, message: &str) -> Value {
+    if event == "Stop" { return json!({"systemMessage":message}); }
     json!({"hookSpecificOutput":{"hookEventName":event,"additionalContext":message}})
 }
 fn correction(root: &Path) -> String {
@@ -185,7 +186,10 @@ fn stop(store: &Store, input: &Value, id: &str) -> Result<Value, String> {
     let Some(bound) = store.data.sessions.get(id) else {
         return Ok(json!({}));
     };
-    let s = session(&bound.root)?;
+    let s = match session(&bound.root) {
+        Ok(s) => s,
+        Err(error) => return Ok(json!({"decision":"block","reason":format!("연결된 GIL 프로젝트 상태를 확인하지 못했다: {error}. 완료로 보고하지 않는다. 사용자 중단은 항상 가능하다.")})),
+    };
     if finished(&s) {
         return Ok(json!({}));
     }
@@ -218,14 +222,23 @@ fn response_ok(input: &Value) -> bool {
     text.and_then(|text| serde_json::from_str::<Value>(text).ok()).as_ref().is_some_and(explicit_success)
 }
 
-fn hook(input: &Value, exe: &Path) -> Result<Value, String> {
+fn hook(input: &Value, exe: &Path, host: &str) -> Result<Value, String> {
     let event = input["hook_event_name"]
         .as_str()
         .ok_or("missing hook_event_name")?;
-    let id = input["session_id"]
-        .as_str()
-        .filter(|s| !s.is_empty() && s.len() <= 200)
-        .ok_or("missing session_id")?;
+    // Host comes from the installed hook argv, never from model-controlled tool arguments.
+    // Old unqualified bindings remain on disk but cannot attach another Host's chat.
+    let session_id = input["session_id"].as_str().filter(|s| !s.is_empty() && s.len() <= 200);
+    let key = session_id.map(|id| format!("{host}:{id}"));
+    let id = key.as_deref().unwrap_or("");
+    if id.is_empty() && matches!(event, "Stop" | "UserPromptSubmit") {
+        return Ok(context(event, "GIL 세션 식별자가 없어 진행 검사를 적용하지 않았다. 파일 보호는 별도로 유지한다."));
+    }
+    // A global matcher being invoked does not itself establish GIL scope.
+    if event == "PreToolUse" && !matches!(tool(input),
+        "Bash" | "exec_command" | "Write" | "Edit" | "MultiEdit" | "NotebookEdit" | "apply_patch" | "wrap_up") {
+        return Ok(json!({}));
+    }
     let mut store = Store::open()?;
     match event {
         "UserPromptSubmit" => {
@@ -261,6 +274,7 @@ fn hook(input: &Value, exe: &Path) -> Result<Value, String> {
                 name,
                 "gil_start" | "gil_context" | "gil_open" | "gil_close" | "gil_await_user"
             ) {
+                if id.is_empty() { return Err("missing session_id; project enrollment not confirmed".into()); }
                 let root = resolved(
                     input["tool_input"]["project_root"]
                         .as_str()
@@ -323,7 +337,10 @@ fn hook(input: &Value, exe: &Path) -> Result<Value, String> {
                     .as_str()
                     .or_else(|| args["cmd"].as_str())
                     .ok_or("missing shell command")?;
-                let prefix = format!("{} ", invocation(exe, &["run", "--auto", "--"])?);
+                let mut runner = vec!["run", "--auto"];
+                if host != "legacy" { runner.extend(["--host", host]); }
+                runner.push("--");
+                let prefix = format!("{} ", invocation(exe, &runner)?);
                 if let Some(arg) = command.strip_prefix(&prefix) {
                     if let Some(body) = arg.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')) {
                         let decoded = body.replace("'\\''", "'");
@@ -335,9 +352,26 @@ fn hook(input: &Value, exe: &Path) -> Result<Value, String> {
                         }
                     }
                 }
-                let wrapped = invocation(exe, &["run", "--auto", "--", command])?;
+                runner.push(command);
+                let wrapped = invocation(exe, &runner)?;
+                if host == "claude" && name == "Bash" {
+                    // Claude evaluates permissions on the replacement input. Ask, never allow:
+                    // do not run the payload in the hook or silently widen Host permissions.
+                    let mut updated = args.clone();
+                    updated["command"] = json!(wrapped);
+                    return Ok(json!({"hookSpecificOutput":{
+                        "hookEventName":"PreToolUse", "permissionDecision":"ask",
+                        "permissionDecisionReason":"등록된 GIL 폴더만 쓰기 보호하는 명령이다. 이 채팅에 GIL 진행 의무를 추가하지 않는다. 외부 개발·설치 작업은 가능하며 Host 승인을 그대로 요청한다.",
+                        "updatedInput":updated
+                    }}));
+                }
+                let note = if host == "codex" {
+                    "Codex: 정확한 래퍼 전체에 sandbox_permissions=require_escalated와 구체적인 justification으로 정상 Host 승인을 요청한다."
+                } else {
+                    "Host가 확인되지 않았다. 설치된 Core의 write-guard install --auto --host codex 또는 --host claude로 Host를 명시해야 한다. 다른 Host의 승인 필드를 추측하지 않는다."
+                };
                 return Ok(deny(&format!(
-                    "GIL 등록 프로젝트 쓰기는 실제 Verify에서만 허용된다. 외부 작업·읽기는 허용한다. 다음 정확한 보호 래퍼로 실행한다 (Codex는 이 래퍼만 sandbox_permissions=require_escalated로 정상 승인을 요청한다; 거절 시 중단한다):\n{wrapped}"
+                    "GIL 파일 보호: 외부 작업에는 GIL 단계를 요구하지 않는다. {note} 승인 경로가 없거나 거절되면 중단한다.\n{wrapped}"
                 )));
             }
             let mut normalized = input.clone();
@@ -361,23 +395,31 @@ fn hook(input: &Value, exe: &Path) -> Result<Value, String> {
 
 pub(super) fn dispatch(args: &[String]) -> Result<u8, String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let host = if args.len() == 4 && args[2] == "--host" && matches!(args[0].as_str(), "hook" | "config") {
+        match args[3].as_str() {
+            "claude" | "codex" => args[3].as_str(),
+            _ => return Err("host must be codex or claude".into()),
+        }
+    } else { "legacy" };
     match args.first().map(String::as_str) {
-        Some("config") if args.len() == 2 => {
-            println!("{}", config(&exe)?); Ok(0)
+        Some("config") if args.len() == 2 || host != "legacy" => {
+            println!("{}", config(&exe, host)?); Ok(0)
         }
         Some("install") if args.len() == 4 && args[2] == "--host" => {
             println!("{}", install(&exe, &args[3])?); Ok(0)
         }
-        Some("hook") if args.len() == 2 => {
+        Some("hook") if args.len() == 2 || host != "legacy" => {
             let mut bytes = Vec::new(); io::stdin().take(LIMIT+1).read_to_end(&mut bytes).map_err(|e| e.to_string())?;
             if bytes.len() as u64 > LIMIT { return Err("hook input too large".into()); }
             let input: Value = serde_json::from_slice(&bytes).map_err(|_| "invalid hook JSON")?;
-            let value = match hook(&input, &exe) {
+            let value = match hook(&input, &exe, host) {
                 Ok(value) => value,
                 Err(error) => match input["hook_event_name"].as_str() {
+                    Some("PreToolUse") if tool(&input) == "wrap_up" => context("PreToolUse", &format!("GIL 진행 연결을 확인하지 못했다: {error}. GIL 완료 확인으로 간주하지 않는다.")),
                     Some("PreToolUse") => deny(&error),
-                    Some("UserPromptSubmit") => json!({"decision":"block","reason":format!("GIL 훅이 이번 입력의 대기를 만료하지 못했다: {error}. 잠시 뒤 입력을 다시 보낸다.")}),
-                    Some("Stop") => json!({"decision":"block","reason":format!("GIL 보호 상태를 확인하지 못했다: {error}. 자동 완료로 보고하지 말고 문제를 알린다. 사용자 중단은 항상 가능하다.")}),
+                    // A broken shared registry is not evidence this chat is bound. Do not
+                    // impose a global conversation gate. File tools still fail closed above.
+                    Some(event @ ("UserPromptSubmit" | "Stop")) => context(event, &format!("GIL 진행 검사 상태를 확인하지 못했다: {error}. GIL 완료로 보고하지 않는다. 파일 보호는 유지한다.")),
                     _ => context(input["hook_event_name"].as_str().unwrap_or("PostToolUse"), &format!("GIL 훅 연결 실패: {error}. 보호 적용 완료로 보고하지 않는다.")),
                 }
             };
@@ -387,18 +429,25 @@ pub(super) fn dispatch(args: &[String]) -> Result<u8, String> {
             let store = Store::open()?;
             let roots: Vec<_> = store.data.roots.iter().cloned().collect();
             let protected = vec![store.dir.clone()]; drop(store);
-            run_roots(&roots, &args[3], &protected)
+            run_roots(&roots, &args[3], &protected, "legacy")
+        }
+        Some("run") if args.len() == 6 && args[2] == "--host" && matches!(args[3].as_str(), "codex" | "claude") && args[4] == "--" => {
+            let store = Store::open()?;
+            let roots: Vec<_> = store.data.roots.iter().cloned().collect();
+            let protected = vec![store.dir.clone()]; drop(store);
+            run_roots(&roots, &args[5], &protected, &args[3])
         }
         Some("status") if args.len() == 2 => {
             let store = Store::open()?;
-            println!("{}",json!({"registered_roots":store.data.roots,"bound_sessions":store.data.sessions.len(),"host_activation":"not_proven_by_this_command"})); Ok(0)
+            println!("{}",json!({"registered_roots":store.data.roots,"bound_sessions":store.data.sessions.len(),"current_core":exe,"installed_hooks":installed_hooks(&exe, &store.dir)?,"host_activation":"not_proven_by_this_command"})); Ok(0)
         }
         _ => Err("usage: gil write-guard config|hook|status --auto; gil write-guard run --auto -- COMMAND".into()),
     }
 }
 
-fn config(exe: &Path) -> Result<Value, String> {
-    let command = invocation(exe, &["hook", "--auto"])?;
+fn config(exe: &Path, host: &str) -> Result<Value, String> {
+    let command = if host == "legacy" { invocation(exe, &["hook", "--auto"])? }
+        else { invocation(exe, &["hook", "--auto", "--host", host])? };
     let mut hooks = serde_json::Map::new();
     for event in ["PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop"] {
         let mut entry = json!({"hooks":[{"type":"command","command":command,"timeout":15}]});
@@ -421,9 +470,9 @@ fn install(exe: &Path, host: &str) -> Result<Value, String> {
     };
     let store = Store::open()?;
     let home = store.dir.parent().ok_or("missing home")?;
-    let config = config(exe)?;
     let mut updated = Vec::new();
     for host in hosts {
+        let config = config(exe, host)?;
         let path = home.join(if *host == "codex" {
             ".codex/hooks.json"
         } else {
@@ -458,10 +507,7 @@ fn install(exe: &Path, host: &str) -> Result<Value, String> {
                 };
                 !(commands.len() == 1
                     && commands[0]["type"] == "command"
-                    && commands[0]["command"].as_str().is_some_and(|c| {
-                        c.ends_with("'write-guard' 'hook' '--auto'")
-                            || c.ends_with("'gil-write-guard' 'hook' '--auto'")
-                    }))
+                    && commands[0]["command"].as_str().is_some_and(generated_hook))
             });
             list.extend(entries.as_array().unwrap().iter().cloned());
         }
@@ -501,4 +547,55 @@ fn install(exe: &Path, host: &str) -> Result<Value, String> {
     Ok(
         json!({"updated":updated,"activation":"Restart/new Host session required. Review and trust Codex hooks using /hooks. This command does not edit trust or permission settings."}),
     )
+}
+
+// Only replace our canonical generated command, never an arbitrary shell suffix or user hook.
+fn generated_hook(command: &str) -> bool {
+    let Some(rest) = command.strip_prefix('\'') else { return false; };
+    let mut executable = String::new();
+    let mut tail = rest;
+    loop {
+        let Some(end) = tail.find('\'') else { return false; };
+        executable.push_str(&tail[..end]);
+        tail = &tail[end + 1..];
+        if let Some(next) = tail.strip_prefix("\\''") {
+            executable.push('\'');
+            tail = next;
+        } else { break; }
+    }
+    let path = Path::new(&executable);
+    if !path.is_absolute() || !matches!(path.file_stem().and_then(|s| s.to_str()), Some("gil" | "gil-write-guard")) { return false; }
+    ["legacy", "codex", "claude"].iter().any(|host| {
+        let args = if *host == "legacy" { vec!["hook", "--auto"] }
+            else { vec!["hook", "--auto", "--host", host] };
+        invocation(path, &args).is_ok_and(|expected| expected == command)
+    })
+}
+
+// Read-only update check. Matching paths prove configuration agreement, not loaded Host state.
+fn installed_hooks(exe: &Path, dir: &Path) -> Result<Value, String> {
+    let home = dir.parent().ok_or("missing home")?;
+    let mut result = serde_json::Map::new();
+    for (host, relative) in [("codex", ".codex/hooks.json"), ("claude", ".claude/settings.json")] {
+        let path = home.join(relative);
+        let expected = config(exe, host)?;
+        let settings: Value = match fs::read(&path) {
+            Ok(bytes) => match serde_json::from_slice(&bytes) {
+                Ok(value) => value,
+                Err(_) => { result.insert(host.into(), json!({"status":"invalid_settings"})); continue; }
+            },
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                result.insert(host.into(), json!({"status":"not_installed"})); continue;
+            },
+            Err(_) => { result.insert(host.into(), json!({"status":"unreadable_settings"})); continue; }
+        };
+        let matched = expected["hooks"].as_object().unwrap().iter().all(|(event, entries)| {
+            let generated: Vec<_> = settings["hooks"][event].as_array().into_iter().flatten()
+                .filter(|entry| entry["hooks"].as_array().is_some_and(|hooks| hooks.iter()
+                    .any(|h| h["command"].as_str().is_some_and(generated_hook)))) .collect();
+            generated.len() == 1 && *generated[0] == entries[0]
+        });
+        result.insert(host.into(), json!({"status":if matched {"matches_current_core"} else {"refresh_required"}}));
+    }
+    Ok(Value::Object(result))
 }
