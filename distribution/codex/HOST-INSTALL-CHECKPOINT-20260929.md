@@ -62,6 +62,6 @@ The older first-launch timeout remains a historical unresolved observation.
 - Fresh-Mac installation/quarantine: explicitly deferred, **not passed**. Windows/Intel, Claude's
   folder-attached work route, Tauri redistribution and Apple-signed stable distribution are not claimed.
 - Public source/distribution audit closeout, privacy choices, security reporting/main protection at
-  public transition, and publication approval. See the [publication plan](PUBLICATION-PLAN-20260929.md).
+  public transition, and publication approval. See the [publication plan](https://github.com/hyun06000/gil/blob/a992efa43c10ef4dc3ad97699cb504663d07288a/distribution/codex/PUBLICATION-PLAN-20260929.md).
 
 Official installation reference: [OpenAI Plugin packaging and marketplace sources](https://developers.openai.com/plugins/build/plugins).

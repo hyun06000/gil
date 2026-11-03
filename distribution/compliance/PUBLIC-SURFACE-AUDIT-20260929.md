@@ -53,7 +53,7 @@ Do not mark publication ready until the maintainer approves the metadata disclos
 cleanup plan. No ordinary follow-up commit can erase that metadata from ancestors. No history rewrite,
 force push, repository deletion or private-to-public conversion occurred in this review.
 
-The [publication plan](../codex/PUBLICATION-PLAN-20260929.md) keeps public access, required-PR protection,
+The [publication plan](https://github.com/hyun06000/gil/blob/a992efa43c10ef4dc3ad97699cb504663d07288a/distribution/codex/PUBLICATION-PLAN-20260929.md) keeps public access, required-PR protection,
 live PVR/SECURITY, conduct-policy contact review and exact-byte publication as explicit gates.
 Private remote installation and visible fullscreen acceptance are recorded separately in the
 [Host checkpoint](../codex/HOST-INSTALL-CHECKPOINT-20260929.md). Fresh-Mac testing remains deferred.

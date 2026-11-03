@@ -101,7 +101,7 @@ preview.1 동일 bytes·fullscreen·노드 상세를 확인했다
   [native release gate](../distribution/codex/RELEASE-macos.md)를 따른다.
   직접 등록한 MCP 화면 성공은 Plugin 설치 경로 성공이 아니다.
 
-준비된 [게시 순서와 사용자 안내](../distribution/codex/PUBLICATION-PLAN-20260929.md)는 초안이다.
+준비된 [게시 순서와 사용자 안내](https://github.com/hyun06000/gil/blob/a992efa43c10ef4dc3ad97699cb504663d07288a/distribution/codex/PUBLICATION-PLAN-20260929.md)는 초안이다.
 저장소 공개·보호/PVR 설정·게시를 실행하지 않았다. Skill source 보정은 기존 설치본/후보의
 덮어쓰기를 승인하지 않으며 새 후보·배포 PR·설치 인수를 각각 거친다.
 
