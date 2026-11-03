@@ -75,7 +75,7 @@ acceptance; this checkpoint is not evidence that those future steps passed.
 Private main protection remained unenforced (protection/rulesets API 403); PVR intake was unverified
 (404); no releases/tags existed. Public visibility, required-PR enforcement, PVR/SECURITY activation,
 conduct-reporting policy, unauthenticated HTTPS installation and exact-version publication remain
-separate gates/approvals. See the [publication plan](PUBLICATION-PLAN-20260929.md).
+separate gates/approvals. See the [publication plan](https://github.com/hyun06000/gil/blob/a992efa43c10ef4dc3ad97699cb504663d07288a/distribution/codex/PUBLICATION-PLAN-20260929.md).
 
 The supported first-preview scope remains Codex/macOS arm64, Developer ID unsigned and unnotarized.
 Fresh-Mac validation is deferred, not passed. Windows, Intel, Claude work-Plugin rendering and new

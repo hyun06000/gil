@@ -1,16 +1,13 @@
 # Native MCP macOS release gates
 
-상태: **0.2.1-preview.7(공통 지침·증거 필수) unsigned prerelease 게시·격리 교체 검증** (2026-10-28).
-현재 [설치 안내](INSTALL.md)와 [배포 장부](PREVIEW-7-PUBLICATION-20261028.md)가 정본이다.
-이전 preview.6 게시·VM 검수는 [장부](PREVIEW-6-PUBLICATION-20261027.md)를 본다.
-이전: preview.5 게시·고정 tag 설치 확인(2026-10-18, [장부](PREVIEW-5-PUBLICATION-20261018.md)).
-이전: preview.4 게시·익명 설치 확인(2026-10-15, [장부](PREVIEW-4-PUBLICATION-20261014.md)).
-이전: preview.2 공식 설치·rollback·보호/PVR 검수(2026-09-30, [장부](PREVIEW-2-PUBLICATION-20260930.md)).
-날짜가 붙은 준비 기록은 당시 상태이며 릴리스 게시 여부는 장부의 versioned release 링크로 확인한다.
-첫 인수 대상은 macOS Apple Silicon의 Codex Plugin이다. 이는 제작자 문서이며 사용자에게
-Node·Cargo·clone·터미널 설치를 요구하지 않는다. Companion DMG는 별도 산출물이다.
+현재 macOS 검증판은 `0.2.1-preview.20`이다. [설치 안내](INSTALL.md)와
+[게시 장부](PREVIEW-20-PUBLICATION-20261103.md)에서 정확한 버전·소스·검증 범위를 확인한다.
+이 문서는 제작자의 배포 경계와 서명 채널 준비 절차다. 날짜가 붙은 과거 인수를 최신판에 승계하지 않는다.
+받는 사용자에게 Node·Cargo·clone·터미널 설치를 요구하지 않는다. Companion DMG는 별도 산출물이다.
 
-## 1. 첫 시험판의 준비 → 공개 → 배포
+## 1. 시험판 배포 경계
+
+아래 최초 게이트 표와 2026년 9월 준비 결정은 당시 기록이다. 현재판의 실제 인수 상태는 위 게시 장부를 따른다.
 
 유지관리자는 배포 준비를 마친 뒤 새 `gil`을 공개하고 배포하는 순서를 승인했다.
 이후 Apple 개발자 서명·공증 없는 시험판 진행과 새 Mac 검수 유예를 명시적으로 승인했다.
@@ -83,10 +80,10 @@ surface 2/format 4..5/requires_review를 담고 실제 24개 도구와 대조한
 
 사용자에게 보여 줄 핵심 고지:
 
-> macOS Apple Silicon의 Codex용 GIL 시험판입니다. Apple 개발자 서명·공증을 받지 않았고,
-> 새 Mac에서의 설치는 아직 확인하지 않았습니다. macOS가 실행을 차단할 수 있습니다.
-> 보안 설정을 끄지 말고 문제가 생기면 설치를 멈춰 주세요. 선택한 작업 폴더를 로컬에서 읽고
-> 승인한 GIL 행동으로 기록하며, Monitor는 읽기 전용입니다. 별도 Companion은 필요하지 않습니다.
+> macOS Apple Silicon용 GIL 시험판입니다. Apple 개발자 서명·공증은 없으며,
+> 이번 버전의 실제 Host 화면 검수 범위는 설치 안내를 확인해 주세요.
+> 정상적인 OS 확인 절차로 실행할 수 없으면 멈춥니다. 선택한 작업 폴더를 로컬에서 읽고
+> 승인한 GIL 행동을 기록합니다. 계획은 Monitor에서 확인·승인하며 별도 Companion은 필요하지 않습니다.
 
 새 폴더에서는 “지금 폴더에서 GIL 프로젝트를 시작해 줘”라고 요청한다. 기존 Project에서는
 “기록을 바꾸지 말고 GIL Monitor를 열어 줘”라고 요청한다. 그래프·fullscreen·대화 병행을 실제로
@@ -121,7 +118,7 @@ GitHub에서 새로 clone한 고정 commit의 파일·권한·native 17 tools·�
 이후 배포 Git 작성자 개인정보를 공개하지 않기로 하고 독립 이력의 `gil-marketplace`로 전환했다.
 PR #1 병합·공식 설치 출처 전환·preview.1의 같은 bytes와 화면 확인을
 [새 경로 장부](CLEAN-MARKETPLACE-CHECKPOINT-20260929.md)에 기록한다. 옛 `gil-distribution`은
-비공개 감사/복구 이력이다. 공개 전환/설치 안내는 [게시 계획](PUBLICATION-PLAN-20260929.md)을 따른다.
+비공개 감사/복구 이력이다. 당시 공개 전환 초안은 [과거 게시 계획](https://github.com/hyun06000/gil/blob/a992efa43c10ef4dc3ad97699cb504663d07288a/distribution/codex/PUBLICATION-PLAN-20260929.md)을 따른다.
 Skill 보정 뒤의 preview.2는 별도 후보이며 위 preview.1 인수를 그대로 승계하지 않는다.
 
 ## 2. 후속 서명 채널의 읽기 전용 preflight
