@@ -10,10 +10,10 @@
       "notes": "계획 제안의 draft 중첩·체크리스트 예시·Closing 승인 안내를 바로잡았습니다. 새 대화와 빈 테스트 폴더에서 제안부터 Chain 종료까지 확인하세요. 기존 기록은 자동 변환하지 않습니다. Claude Desktop 직접 등록은 새 Core 경로로 갱신합니다."
     },
     "windows-x64": {
-      "version": "0.1.1-owner.12",
-      "release_url": "https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.12",
+      "version": "0.1.1-owner.14",
+      "release_url": "https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.14",
       "install_doc": "https://github.com/hyun06000/gil/blob/main/INSTALL.md",
-      "notes": "Verify 시각 증거 선언·인용 검증, Monitor 시각 자료·누락 상태 표시와 한글 프로젝트 경로를 개선했습니다. 승인 성공·조회 재시도 구분은 유지하며 기존 기록은 자동 변환하지 않습니다. Companion에서 업데이트 확인 → 업데이트로 설치합니다."
+      "notes": "계획 제안의 draft 중첩·체크리스트 예시·Closing 승인 안내를 바로잡았습니다. Companion에서 업데이트 확인 → 업데이트로 설치한 뒤 새 연결·새 빈 테스트 폴더에서 확인하세요. 기존 연결과 기록은 유지합니다."
     }
   }
 }
