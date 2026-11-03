@@ -45,4 +45,4 @@ UI 시험은 합성 DOM/이벤트 fixture다. 실제 물리적 버튼 클릭이�
 - 버튼 경로는 정상 MCP Host의 App/model 분리와 임시 토큰을 전제로 한다. 개인 신원 인증이나 악성 로컬 프로세스 방어가 아니다.
 - Core는 GIL의 상태 전이·실행 연결·증거를 검증한다. 모델이 별도 외부 도구로 수행하는 모든 작업의 의미를 자동 판단하거나 차단하지는 않는다.
 - Cycle 재시도 바인딩·항목 취소·abort는 후속 계약이다. 승인 계획 프로필에서는 Cycle revisit를 상태 변경 전에 거절한다. 기존 일반 Core의 반복 revisit와 제품 `product-safety` 차단은 유지한다.
-- Claude 병렬 작업 범위는 [M3 프롬프트](CLAUDE-M3-SAFETY-PROMPT.md)에 정의했다. Claude가 실제 착수/완료했다고 주장하지 않는다.
+- Claude 병렬 작업 범위는 [M3 프롬프트](https://github.com/hyun06000/gil/blob/a992efa43c10ef4dc3ad97699cb504663d07288a/coordination/CLAUDE-M3-SAFETY-PROMPT.md)에 정의했다. Claude가 실제 착수/완료했다고 주장하지 않는다.

@@ -3,20 +3,11 @@
 이 디렉터리는 **제작자용 배포 도구**다. 받는 사람에게 Node·Cargo·clone·tar 명령을 요구하는
 설치 설명서가 아니다. 최종 UX는 Host의 Plugin 설치 한 번이다.
 
-2026-10-28: `0.2.1-preview.7`(공통 작업 지침·Verify 증거 필수)을 unsigned prerelease로 게시했다.
-사용자는 [설치 안내](INSTALL.md), 제작자는 [현재 배포 장부](PREVIEW-7-PUBLICATION-20261028.md)를 따른다.
-이전 preview.6의 게시·VM 검수는 [이전 장부](PREVIEW-6-PUBLICATION-20261027.md)를 본다.
-2026-10-18: `0.2.1-preview.5`(companion Skill 보정, 같은 이미지 보고서 계약) 게시.
-2026-10-14: `0.2.1-preview.4`(visual-authoring, 이미지 보고서) 게시 ([장부](PREVIEW-4-PUBLICATION-20261014.md)).
-2026-09-30: 공개 HTTPS 설치·preview.2↔preview.1 rollback·Project 보존과 main 보호/PVR를 확인했다
-([당시 장부](PREVIEW-2-PUBLICATION-20260930.md)).
-새 Mac·Apple 서명·공증은 미검수/미제공이다. 다음 9/29 절은 당시 준비 기록이다.
-
-2026-09-29 기록: 기존 Mac의 공식 원격 설치·제거/재설치에 이어, 독립 이력의 비공개
-`hyun06000/gil-marketplace`로 출처 전환과 실제 fullscreen·노드 상세를 확인했다.
-[현재 경로 장부](CLEAN-MARKETPLACE-CHECKPOINT-20260929.md)를 따른다. 옛 `gil-distribution`은
-비공개 감사/복구 이력으로 보존한다. 공개 HTTPS 설치·게시·새 Mac 검수는 별개로 남아 있다.
-Skill 보정은 새 `0.2.1-preview.2` 후보로 검수하며 설치된 preview.1을 덮지 않는다.
+현재 공개 macOS 검증판은 `0.2.1-preview.20`이다. 사용자 절차는
+[통합 설치 안내](../../INSTALL.md)와 [macOS 상세 안내](INSTALL.md), 정확한 소스·CI·해시·인수 범위는
+[preview.20 게시 장부](PREVIEW-20-PUBLICATION-20261103.md)를 따른다.
+Windows x64의 별도 installer는 [Windows 안내](../windows/INSTALL.md)에 있다.
+날짜별 과거 게시 장부는 해당 버전의 증거이며 최신 설치 절차로 사용하지 않는다.
 
 기본 산출물은 `development_unsigned`, `publishable: false`인 **개발 검수물**이다.
 사용자 승인으로 별도 `preview_unsigned` 시험판 채널을 준비한다. 검수한 clean tree에서
@@ -26,14 +17,10 @@ Skill 보정은 새 `0.2.1-preview.2` 후보로 검수하며 설치된 preview.1
 
 ## 구조와 정본
 
-2026-10-14 작성 후보: 기본 profile은 **19 tools / action surface 1 / format 4**,
-`build-preview.mjs <새 output> --visual-authoring`은 **24 tools / surface 2 / format 4..5**다.
-후자는 macOS arm64 합성 검수 후보이며 clean source에서 명시적인
-`unsigned-preview.mjs prepare ... --visual-authoring`으로만 공개용 후보 staging에 들어간다.
-이는 게시 승인이 아니다. 기본 profile은 바뀌지 않고 dirty source 차단도 유지한다.
-`release.json`의 compatibility/migration 선언과 fresh Core probe·도구 전체 schema가
-일치해야 smoke가 통과한다. 작성 후보는 `migration: requires_review`를 강제하며 구형과의
-자동 업데이트/롤백을 승인하지 않는다. 이전 개발 receipt는 새 계약으로 재빌드한다.
+프로필마다 도구 목록·action surface·저장 형식이 다르다. 공개판의 정확한 조합은 게시 장부와
+후보의 `release.json`을 따른다. receipt의 compatibility/migration 선언은 실제 Core의
+도구 schema·challenge 응답과 일치해야 smoke가 통과한다. `migration: requires_review`는
+자동 업데이트·롤백 승인이 아니며 별도 호환성 검토를 요구한다.
 
 ```text
 새 output/
@@ -43,7 +30,7 @@ Skill 보정은 새 `0.2.1-preview.2` 후보로 검수하며 설치된 preview.1
     plugins/gil-companion-prototype/
       .codex-plugin/plugin.json          기존 정본 byte 그대로
       .claude-plugin/plugin.json         Claude Code adapter · 같은 이름·설명·Core, ${CLAUDE_PLUGIN_ROOT} 기준
-      core/darwin-arm64/gil              Core + profile별 19/24 tools + 내장 MCP App
+      core/darwin-arm64/gil              프로필별 native Core + 내장 MCP App
       skills/gil-companion/SKILL.md       공용 Skill 그대로
       LICENSE
       THIRD-PARTY-NOTICES.txt             제3자 package 출처·원문 고지
@@ -60,7 +47,7 @@ Skill 보정은 새 `0.2.1-preview.2` 후보로 검수하며 설치된 preview.1
 unsigned 후보 제작에서만 출력 version을 명시적 `X.Y.Z-preview.N`으로 정한다.
 `catalog.json`은 plugin-creator의 `create_basic_plugin.py`로 생성한
 template다. `personal`과 구별하는 이름은 `gil-preview-macos-arm64`다. template 자체는 원격 주소나
-Host 등록을 생성하지 않는다. 현재의 승인된 비공개 Host 등록은 위 장부에 별도로 기록한다.
+Host 등록을 생성하지 않는다. 공개 설치 출처와 고정 ref는 설치 안내와 게시 장부에 기록한다.
 template를 산출물의 `.agents/plugins/marketplace.json`에 복사한다. 게시 뒤에는 저장소 `main`의
 `distribution/update-feed.json`에 플랫폼별 버전·release URL을 적어야 설치된 Core의 Monitor가 **업데이트 안내**
 버튼을 띄운다(metadata만 읽음; `distribution/codex/update-feed.test.mjs`가 INSTALL.md와의 일치를 검사한다). `claude-marketplace.json`은
@@ -90,7 +77,7 @@ output 부모는 있어야 하고 마지막 디렉터리는 **새 이름**이어
 다시 실행할 때 새 output 이름을 쓴다. 이전 실패를 재실행 성공으로 덮지 않는다.
 
 UI build → 오프라인 제3자 고지 coverage → remap된 Rust build → catalog/allowlist → archive → 새 디렉터리 압축 해제 → 파일·권한
-동치 → system dylib만 연결됨 확인 → 새 challenge/호환성 대조 → 19/24 tools schema → embedded resource/HTML hash 순서다.
+동치 → system dylib만 연결됨 확인 → 새 challenge/호환성 대조 → 프로필별 tools schema → embedded resource/HTML hash 순서다.
 tar owner/group은 root/wheel로 고정하고 ACL·xattr·resource-fork는 싣지 않는다. 파일별 hash/권한
 재현과 archive 자체의 bit-for-bit 재현은 다르다. archive timestamp 정규화는 아직 하지 않는다.
 정본의 platform Core나
@@ -122,20 +109,12 @@ smoke child는 PATH `/usr/bin:/bin`과 격리된 Monitor 설정만 받는다. �
 `.github/workflows/codex-preview.yml`은 **main 대상 PR 및 수동 실행**, `contents: read`, credential 비보존,
 full commit으로 고정한 Actions를 쓴다. tar와 검증 증거만 7일짜리 Actions artifact로 보관한다.
 PR은 정확한 head의 개발 검수물만 만들며 unsigned version 후보는 명시적 수동 입력에서만 만든다.
-push/tag에 자동 실행하지 않고 release·dist repo·공개 catalog에 게시하지 않는다. workflow 작성과
+push/tag로 release·dist repo·공개 catalog에 자동 게시하지 않는다. workflow 작성과
 GitHub runner 실제 성공은 별개다.
 
-이전 source의 원격 CI 인수는 그 저장소에 보존한다. 새 `gil`의 clean root commit `fbc4100`에서
-수동 CI·artifact 다운로드 검수를 통과했다 ([새 원격 체크포인트](CI-CHECKPOINT-20260928.md)).
-35개 패키징/고지 시험·84개 package 고지·source snapshot·실행 권한·17 tools·내장 UI를 확인했다.
-첫 실행의 Node 20 기반 Actions 경고는 그 기록에 보존한다. 현재 workflow는 공식
-[checkout v7.0.1](https://github.com/actions/checkout/releases/tag/v7.0.1)과
-[upload-artifact v7.0.1](https://github.com/actions/upload-artifact/releases/tag/v7.0.1)의 Node 24 실행점을
-full SHA로 고정했다. `archive: true`를 명시해 tar·checksum·증거를 기존처럼 하나의 artifact로 묶는다.
-보정한 PR #1의 clean `19fe57b`에서 원격 CI·다운로드 검수를 통과했고 annotation 0건으로
-Node 20 경고 해소를 확인했다 ([후속 기록](CI-CHECKPOINT-20260928.md#follow-up-node-24-actions-on-pr-1)).
-이 기록보다 뒤의 commit은 최종 PR head의 CI 성공을 따로 확인한 뒤 병합한다.
-[이전 경계](../../SOURCE-MIGRATION.md)와 새 기계·Host 설치 인수를 구분한다.
+과거 CI·Node 실행점 전환의 증거는 [초기 체크포인트](CI-CHECKPOINT-20260928.md)에 보존한다.
+현재 Actions·트리거·matrix는 `.github/workflows/codex-preview.yml`이 정본이다.
+각 PR은 최신 head의 전체 해당 CI를 확인한 뒤 병합한다. 과거 통과를 새 commit에 승계하지 않는다.
 
 source와 active built-dist 저장소는 공개됐다. CI 로그와 다운로드 가능한
 Actions artifact도 공개 범위에 포함된다. 개발용이라는 표시는 접근 제한이 아니며, 원격 실행·업로드 전에도
@@ -151,16 +130,15 @@ Actions artifact도 공개 범위에 포함된다. 개발용이라는 표시는 
    재현 build와 독립 CI 성공. dirty preview를 정식 release로 재명명하지 않음.
 2. 첫 unsigned 시험판에는 Apple Developer ID·공증이 없음을 고지하고 version/hash·출처를 고정.
    별도 후보 제작·검증·공식 설치 안내는 [release gate §1](RELEASE-macos.md)을 따른다.
-3. 새 Mac 검수는 사용자 결정으로 유예하고 **미통과**로 표시한다. 기존 Mac의 preview.1 원격
-   설치·제거/재설치·새 출처 전환·화면은 확인됐다. 새 후보의 version 쌍과 이전 판 rollback,
-   공개 비인증 설치는 별도 검수한다.
+3. 새 후보의 실제 설치·화면·이전 판과의 업데이트/rollback 범위를 따로 기록한다.
+   이전 판의 새 Mac VM 검수와 이번 판의 사용자 화면 검수를 구분하며 미실행은 그대로 표시한다.
 4. 승인 후 built-dist 원격 저장소/불변 version·게시 권한·rollback 정책 확정 및 게시.
 5. remote marketplace 등록은 public Plugins Directory 심사·등재와 별개임을 표시.
 
 Developer ID·공증·새 Mac 검수를 갖춘 정식 신뢰 채널은 후속 작업이다. 기존
 `release-preflight.mjs`는 그 서명 채널 점검이며 unsigned 후보의 선행 조건이 아니다.
 
-Intel·universal·Windows는 아직 지원 대상이 아니다. macOS 배포를 닫은 뒤 추가한다.
+이 제작 경로는 macOS arm64 전용이다. Windows는 별도 배포 경로이며 Intel Mac·universal을 지원한다고 주장하지 않는다.
 
 ## 참고 (2026-09-28 확인)
 
