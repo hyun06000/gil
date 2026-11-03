@@ -1,8 +1,7 @@
 # GIL 설치 안내
 
-macOS preview.20은 `gil_plan_propose`의 `draft` 중첩·체크리스트 예시와 Closing 승인 안내를 바로잡은 검증판이다.
+macOS preview.20과 Windows owner.14는 `gil_plan_propose`의 `draft` 중첩·체크리스트 예시와 Closing 승인 안내를 바로잡은 검증판이다.
 새 대화·새 빈 폴더에서 제안부터 Monitor 승인과 Chain 종료까지 확인한다. 기존 기록은 자동 변환하지 않는다.
-Windows 배포는 기존 owner.12를 유지하며 이번 macOS 보완의 반영을 주장하지 않는다.
 
 이 문서가 친구·외부 시험 사용자를 위한 설치 정본이다. 사용자는 터미널 사용법을 알 필요가 없다.
 GIL은 **Codex**와 **Claude Desktop의 Claude Code 탭**을 같은 지원 대상으로 둔다. 두 Host는 같은 Core,
@@ -18,7 +17,7 @@ Agent가 앱에 포함된 CLI와 OS 기본 도구를 사용한다. 일반 ChatGP
 
 | OS | Codex | Claude Desktop (Claude Code 탭) |
 |---|---|---|
-| Windows 11 x64 | **이전 판 실기기 확인 / 이번 판 사용자 확인 대기** — Companion installer `0.1.1-owner.12`, **Codex 연결** 버튼 | **사용자 확인 대기** — `0.1.1-owner.12`의 **Claude Desktop 연결** 버튼(자동 테스트 통과) |
+| Windows 11 x64 | **이전 판 실기기 확인 / 이번 판 사용자 확인 대기** — Companion installer `0.1.1-owner.14`, **Codex 연결** 버튼 | **사용자 확인 대기** — `0.1.1-owner.14`의 **Claude Desktop 연결** 버튼(자동 테스트 통과) |
 | macOS Apple Silicon | **이전 판 실기기 확인 / 이번 판 사용자 확인 대기** — Plugin `0.2.1-preview.20` 또는 Git 없는 archive | **이전 판 사용자 확인(11/01) / 이번 판 확인 대기** — 같은 archive의 Core를 Desktop 설정에 직접 등록. Plugin 경로는 화면 미표시 |
 
 상태의 뜻:
@@ -35,7 +34,7 @@ Agent가 앱에 포함된 CLI와 OS 기본 도구를 사용한다. 일반 ChatGP
 
 | 환경 | 버전 | 상태 |
 |---|---|---|
-| Windows 11 x64 | `0.1.1-owner.12` | 시각 증거·한글 경로 개선 시험판, 실사용 검수 대기 |
+| Windows 11 x64 | `0.1.1-owner.14` | 계획 입력·Closing 안내 검증판, 실사용 검수 대기 |
 | macOS Apple Silicon | `0.2.1-preview.20` | 계획 입력·Closing 안내 검증판, 실사용 검수 대기 |
 
 이번 판은 승인 저장과 최신 상태 조회를 구분한다. 승인 뒤 읽기가 잠시 실패하면 확인된 승인 판을 유지하고
@@ -47,7 +46,7 @@ Agent가 앱에 포함된 CLI와 OS 기본 도구를 사용한다. 일반 ChatGP
 Monitor 승인 버튼 → Interview 닫기 → 계획 항목별 Experiment → Verify 파일 증거를 시험한다.
 새 프로젝트는 저장 형식 7을 사용한다. 기존 기록의 형식은 자동 변환하지 않으며, 이전 설치본으로
 되돌려도 형식 7 기록은 이전 형식으로 바뀌지 않는다. 닫힌 실패 Cycle의 revisit만 Monitor에서 변경 목록 확인·보존 승인을 거쳐 진행한다. 일반 restore와 Step revisit는 계속 차단한다.
-macOS 검증 범위와 배포물은 [preview.20 장부](distribution/codex/PREVIEW-20-PUBLICATION-20261103.md), Windows owner.12는 [기존 장부](distribution/codex/PREVIEW-13-PUBLICATION-20261102.md)를 따른다.
+macOS 검증 범위와 배포물은 [preview.20 장부](distribution/codex/PREVIEW-20-PUBLICATION-20261103.md), Windows owner.14는 [게시 장부](distribution/windows/PUBLICATION-OWNER-14-20261103.md)를 따른다.
 
 > Windows **Claude Desktop 연결** 버튼은 `0.1.1-owner.10`부터, 공통 Monitor의 **업데이트 안내·확대·미니맵**은 owner.10/preview.11부터 포함된다.
 > 이전 owner.8/owner.9에는 Claude Desktop 연결 버튼이 없다. 업데이트 뒤 새 연결에서 확인한다.
@@ -64,11 +63,11 @@ Companion의 버튼(Windows) 또는 아래 절차의 사용자 승인 뒤 **Desk
 
 ## Windows 11 x64
 
-릴리스: [windows-owner-update-0.1.1-owner.12](https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.12)
+릴리스: [windows-owner-update-0.1.1-owner.14](https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.14)
 
-- 설치 파일: `GIL.Companion.Unsigned.Test._0.1.1-owner.12_x64-setup.exe`
-- 크기: `6,110,897` bytes
-- SHA-256: `b678ed008c4a09ea41ce475326ad56ea38181c5f9d9c2a92a9db7b312b1f0fde`
+- 설치 파일: `GIL.Companion.Unsigned.Test._0.1.1-owner.14_x64-setup.exe`
+- 크기: `6,165,288` bytes
+- SHA-256: `f1be0b1bc0cd102a4045be9ddb0c4f5aaf572d8faa9b539cfe867dba32f86267`
 - 지원: x64만. ARM64 Windows에는 설치하지 않는다.
 
 Windows에서는 Host가 어느 쪽이든 Core는 한 곳에 있다. installer가 `%LOCALAPPDATA%\GIL\runtime\`에

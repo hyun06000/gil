@@ -1,18 +1,18 @@
 # GIL Windows 친구용 preview 설치
 
-이번 시험판은 Verify의 부실한 시각 증거 선언을 거절하고 첨부 자료의 Analysis·Cycle Report 인용을 요구한다.
-Monitor의 시각 자료·누락 상태 표시와 한글 NFC/NFD 프로젝트 경로 처리를 개선했다. 승인 성공·조회 재시도 구분은 유지한다.
-기존 기록을 자동 변환하지 않으며, 새 쓰기에 검증 규칙이 적용된다. 일반 restore 차단도 유지한다.
+이번 시험판은 `gil_plan_propose`의 `draft` 중첩·체크리스트 예시와 Closing 승인 안내를 바로잡았다.
+새 대화·새 빈 폴더에서 제안부터 Monitor 승인과 Chain 종료까지 확인한다.
+시각 증거 검증·한글 경로 처리·승인 성공과 조회 재시도 구분은 유지하며, 기존 기록은 자동 변환하지 않는다.
 
 전체 안내의 시작점은 [저장소 설치 안내](../../INSTALL.md)다. 이 문서는 Windows 전용 상세 절차다.
 
 현재 설치본은 **Windows 11 x64 친구 테스트용 unsigned prerelease**다. 정식 공개판이나 서명된
 publisher 배포가 아니다. ARM64 Windows, 기업 배포와 일반 사용자 지원 완료를 주장하지 않는다.
 
-- release: [windows-owner-update-0.1.1-owner.12](https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.12)
-- installer: `GIL.Companion.Unsigned.Test._0.1.1-owner.12_x64-setup.exe`
-- 크기: `6,110,897` bytes
-- SHA-256: `b678ed008c4a09ea41ce475326ad56ea38181c5f9d9c2a92a9db7b312b1f0fde`
+- release: [windows-owner-update-0.1.1-owner.14](https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.14)
+- installer: `GIL.Companion.Unsigned.Test._0.1.1-owner.14_x64-setup.exe`
+- 크기: `6,165,288` bytes
+- SHA-256: `f1be0b1bc0cd102a4045be9ddb0c4f5aaf572d8faa9b539cfe867dba32f86267`
 - 표시 이름: **GIL Companion (Unsigned Test)**
 
 이 파일은 Authenticode 서명이 없다. hash 일치는 바이트 무결성 확인이며 publisher 인증은 아니다.
@@ -64,10 +64,10 @@ ACL 상속을 강제로 바꾸거나 Project를 Agent가 자동 이동하지 않
 사용자가 Codex에 도움을 요청할 때는 다음처럼 말할 수 있다.
 
 ```text
-Windows 11 x64용 GIL Companion unsigned test 0.1.1-owner.12 설치를 도와줘.
-고정 release https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.12 의
-GIL.Companion.Unsigned.Test._0.1.1-owner.12_x64-setup.exe만 사용해.
-크기 6110897 bytes와 SHA-256 b678ed008c4a09ea41ce475326ad56ea38181c5f9d9c2a92a9db7b312b1f0fde를
+Windows 11 x64용 GIL Companion unsigned test 0.1.1-owner.14 설치를 도와줘.
+고정 release https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.14 의
+GIL.Companion.Unsigned.Test._0.1.1-owner.14_x64-setup.exe만 사용해.
+크기 6165288 bytes와 SHA-256 f1be0b1bc0cd102a4045be9ddb0c4f5aaf572d8faa9b539cfe867dba32f86267를
 확인하고, 내가 해야 할 다운로드·실행·OS 승인과 네가 확인할 단계를 구분해 줘.
 기존 GIL이 있으면 출처와 버전을 먼저 보여 주고 교체 전에 물어봐.
 보안 설정, registry, Codex 설정 파일이나 Plugin cache를 직접 수정하지 마.
@@ -99,16 +99,17 @@ Core나 Host Plugin cache의 실행 파일을 직접 등록하지 않는다.
 다운로드·서명·version binding·설치 중 하나라도 실패하면 오류 원문을 보존하고 기존 선택과 Project를
 유지한다. 설정이나 update manifest를 손으로 고쳐 성공처럼 만들지 않는다.
 
-이번 `0.1.1-owner.12`은 [PR #73](https://github.com/hyun06000/gil/pull/73)의 승인 성공·조회 재시도 구분을 포함한다.
+이번 `0.1.1-owner.14`는 [PR #73](https://github.com/hyun06000/gil/pull/73)의 승인 성공·조회 재시도 구분을 포함한다.
 확인된 승인 판을 표시한 채 일시적 조회 실패를 회색 안내로 구분하고 2/4/8/15초 간격으로 다시 읽는다.
 저장 응답이 불확실하면 성공으로 표시하거나 자동 재승인하지 않는다. 새 제안은 별도 승인이 필요하다.
 기존 Claude Desktop 연결 버튼, 확대·미니맵·업데이트 안내와 복구 후 채팅 전달은 유지한다.
-Mac preview.13와 같은 시험 프로필이다.
+Mac preview.20과 같은 승인 계획 시험 프로필이며 [PR #86](https://github.com/hyun06000/gil/pull/86)과
+[보완 PR #87](https://github.com/hyun06000/gil/pull/87)의 계획 입력·Closing 안내를 포함한다.
 새 대화에서 **새 빈 테스트 폴더**를 선택한다. Monitor에서 제안 내용을 읽고 승인 버튼을 누른 뒤
 Interview가 닫히고, 계획 항목별 Experiment와 실제 Verify 증거 파일로 진행되는지 확인한다.
 새 프로젝트는 형식 7을 사용한다. 기존 기록의 형식은 자동 변환하지 않으며, 구버전으로 재설치해도
 기록 형식은 내려가지 않는다. 닫힌 실패 Cycle의 revisit만 Monitor 승인으로 진행하며 일반 restore와 Step revisit는 계속 차단한다. 실사용 Luna 검수는 사용자 시험이다.
-정확한 파일·CI·검증 범위는 [게시 장부](../codex/PREVIEW-13-PUBLICATION-20261102.md)를 따른다.
+정확한 파일·CI·검증 범위는 [게시 장부](PUBLICATION-OWNER-14-20261103.md)를 따른다.
 
 `0.1.1-owner.3` updater는 사용자가 누른 설치와 version-bound updater signature 흐름을 실제 Windows
 x64 PC에서 확인한 친구용 build다. Authenticode publisher 신뢰나 SmartScreen 평판을 통과했다는 뜻은
@@ -126,8 +127,8 @@ Verify마다 실제 파일을 저장하고 `evidence_files`로 지정해야 한�
 연결을 유지한 버전 전환·다음 연결의 새 Core 선택을 확인했다. Luna 합성 실제 작업은 런타임/진입
 네 조합에서 모두 열 개 검증을 통과하며 각각 실험 두 개·파일 두 개를 남겼다. 별도 다음 행동 시험은
 61/64 통과이며, 채팅만 있는 Verify에서 세 번 잘못된 행동 라벨을 선택한 한계가 남는다.
-이 수치는 이전 owner.6에 대한 기록이며 이번 owner.12의 모델 시험 결과가 아니다.
-업데이트 후 Companion 표시가 `0.1.1-owner.12`인지 확인하고 새 GIL 연결·새 대화에서 Luna로 시험한다.
+이 수치는 이전 owner.6에 대한 기록이며 이번 owner.14의 모델 시험 결과가 아니다.
+업데이트 후 Companion 표시가 `0.1.1-owner.14`인지 확인하고 새 GIL 연결·새 대화에서 Luna로 시험한다.
 기존 연결을 새 Core로 강제 교체하지 않는다. macOS Plugin은 이 Windows 업데이트로 교체되지 않는다.
 Codex와 Claude Desktop이 모두 같은 고정 launcher를 등록했다면 업데이트 뒤 재등록할 필요가 없다.
 각 Host의 새 연결부터 같은 선택 버전을 사용한다. Companion 머리줄의 `Core <버전>`은 다음 새 연결이 받을
