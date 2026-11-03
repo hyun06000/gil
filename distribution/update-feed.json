@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "updated": "2026-11-02",
+  "updated": "2026-11-03",
   "note": "Metadata only. The installed GIL Core reads this file at most once a day to show update guidance in the Monitor; it never downloads or installs from it. Update this file in the same pull request that records a publication ledger.",
   "platforms": {
     "darwin-arm64": {
-      "version": "0.2.1-preview.13",
-      "release_url": "https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.13",
+      "version": "0.2.1-preview.20",
+      "release_url": "https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.20",
       "install_doc": "https://github.com/hyun06000/gil/blob/main/INSTALL.md",
-      "notes": "Verify 시각 증거 선언·인용 검증, Monitor 시각 자료·누락 상태 표시와 한글 프로젝트 경로를 개선했습니다. 승인 성공·조회 재시도 구분은 유지하며 기존 기록은 자동 변환하지 않습니다. Mac Claude Desktop 직접 등록은 새 Core 경로로 갱신합니다."
+      "notes": "계획 제안의 draft 중첩·체크리스트 예시·Closing 승인 안내를 바로잡았습니다. 새 대화와 빈 테스트 폴더에서 제안부터 Chain 종료까지 확인하세요. 기존 기록은 자동 변환하지 않습니다. Claude Desktop 직접 등록은 새 Core 경로로 갱신합니다."
     },
     "windows-x64": {
       "version": "0.1.1-owner.12",
