@@ -9,7 +9,7 @@
 //! at the project root.
 #![allow(dead_code)]
 use serde_json::{Value, json};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{Receiver, channel};
@@ -177,7 +177,11 @@ impl Client {
         }
     }
     /// Close stdin and wait for exit (bounded); everything still on stdout is checked for noise.
-    pub fn eof(mut self) -> (std::process::ExitStatus, Vec<String>) {
+    pub fn eof(self) -> (std::process::ExitStatus, Vec<String>) {
+        let (status, noise, _) = self.eof_with_stderr();
+        (status, noise)
+    }
+    pub fn eof_with_stderr(mut self) -> (std::process::ExitStatus, Vec<String>, String) {
         drop(self.kid.stdin.take());
         let deadline = std::time::Instant::now() + FRAME_TIMEOUT;
         let status = loop {
@@ -189,7 +193,9 @@ impl Client {
             if line.trim().is_empty() { continue; }
             if serde_json::from_str::<Value>(&line).is_err() { self.noise.push(line.chars().take(200).collect()); }
         }
-        (status, std::mem::take(&mut self.noise))
+        let mut stderr = String::new();
+        self.kid.stderr.take().unwrap().read_to_string(&mut stderr).expect("stderr after exit");
+        (status, std::mem::take(&mut self.noise), stderr)
     }
 }
 

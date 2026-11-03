@@ -75,7 +75,7 @@ test('approved plans are detected from the record and schema, never required on 
   assert.match(section, /end the turn and wait for the Monitor button\.\*\* Chat agreement is not approval/);
   assert.match(section, /gil_await_user\(project_root, question\).*end the response with that exact question/);
   assert.match(section, /`close_report` \*\*unchanged\*\*/);
-  assert.match(section, /then `gil_close` the Interview Cycle Report, then `gil_open`\s+Experiment/);
+  assert.match(section, /then `gil_close` the Interview Cycle Report\. For execution,\s+then `gil_open` Experiment/);
   assert.match(section, /\*\*byte for byte\*\* \(UTF-8\)/);
   assert.match(section, /The plan file is not execution evidence/);
   assert.match(section, /an earlier approval is never reused/);

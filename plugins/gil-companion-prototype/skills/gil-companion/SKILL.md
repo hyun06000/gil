@@ -229,28 +229,35 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    Otherwise (legacy projects, default builds, tools absent) never require `gil_plan_*`; use the
    ordinary Synthesis. Do not infer this from the OS or the install kind.
    - In an open Interview Synthesis, call `gil_plan_propose` with exactly two top-level fields,
-     `project_root` and `draft`. Everything else lives **inside `draft`**; an extra field at any
-     level refuses the whole call (`Invalid GIL tool arguments`, nothing recorded):
+     `project_root` and `draft`. The three draft fields live **inside `draft`**. Extra fields at
+     the top level, in `draft`, in `scope` or in an item are refused; `synthesis` is a map of
+     string-valued Report fields, including `chain_verdict` when proposing Chain closure:
 
      ```json
      {"project_root": "<absolute path>",
       "draft": {
         "scope": {"goal": "…", "in_scope": "…", "out_of_scope": "…", "constraints": "…", "success_criteria": "…"},
         "items": [{"id": "A", "question": "…", "done_when": "…"}],
-        "synthesis": {"statement": "…", "basis_refs": "step:C1/S1\nstep:C1/S2", "exploration_checklist": "A\nB"}}}
+        "synthesis": {"statement": "…", "basis_refs": "step:C1/S1\nstep:C1/S2", "exploration_checklist": "A"}}}
      ```
 
      `scope` has those five string fields (write `없음` rather than leaving one empty); `items`
      is the ordered checklist (1–64) of `id`, `question`, `done_when`; `synthesis` holds the
      Synthesis Report fields as strings, where `exploration_checklist` lists the item IDs in the same
-     order, one per line.
+     order, one per line. Replace the example's basis refs with the actual closed Question and
+     Interpretation refs in the current Synthesis lineage. Opening and later Interviews use
+     the same wrapper. A Closing proposal keeps the existing items and checklist (including
+     executed items) and adds `draft.synthesis.chain_verdict` as `"success"` or `"failure"`.
      Never write `approved`, `plan_revision` or `plan_digest`: Core adds them.
    - Call `gil_await_user(project_root, question)` and end the response with that exact question;
      **end the turn and wait for the Monitor button.** Chat agreement is not approval. While
      waiting, make no project file changes or re-proposal. Check approval only with `gil_plan_read`.
    - `receipt.decision: approve` → `gil_close` Synthesis with `close_report` **unchanged**, then
-     `gil_open`/`gil_close` Outcome, then `gil_close` the Interview Cycle Report, then `gil_open`
-     Experiment: the first pending item binds automatically. `request_changes` → close with that
+     `gil_open`/`gil_close` Outcome, then `gil_close` the Interview Cycle Report. For execution,
+     then `gil_open` Experiment: the first pending item binds automatically. For Closing, use
+     `next_direction.action: close_chain` in the Interview Cycle Report, then submit the Chain
+     Report with the approved `chain_verdict` as its `verdict`; do not open another Experiment.
+     `request_changes` → close with that
      `close_report` (`approved: no`) and ask what to change in a new Question. Editing an open
      proposal makes a new revision; an earlier approval is never reused.
    - In that Experiment's Verify, save `gil_plan_read.document` **byte for byte** (UTF-8) as a
