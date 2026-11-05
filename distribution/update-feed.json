@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "updated": "2026-11-03",
+  "updated": "2026-11-05",
   "note": "Metadata only. The installed GIL Core reads this file at most once a day to show update guidance in the Monitor; it never downloads or installs from it. Update this file in the same pull request that records a publication ledger.",
   "platforms": {
     "darwin-arm64": {
-      "version": "0.2.1-preview.20",
-      "release_url": "https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.20",
+      "version": "0.2.1-preview.21",
+      "release_url": "https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.21",
       "install_doc": "https://github.com/hyun06000/gil/blob/main/INSTALL.md",
-      "notes": "계획 제안의 draft 중첩·체크리스트 예시·Closing 승인 안내를 바로잡았습니다. 새 대화와 빈 테스트 폴더에서 제안부터 Chain 종료까지 확인하세요. 기존 기록은 자동 변환하지 않습니다. Claude Desktop 직접 등록은 새 Core 경로로 갱신합니다."
+      "notes": "전역 보호 훅의 세션별 진행 검사와 프로젝트 경로 보호를 분리했습니다. 기존 전역 훅은 MCP와 같은 새 Core로 함께 갱신하고 새 연결에서 확인하세요. 실제 Codex·Claude Host 검증은 사용자 확인 대기이며 기존 기록은 자동 변환하지 않습니다."
     },
     "windows-x64": {
       "version": "0.1.1-owner.14",
