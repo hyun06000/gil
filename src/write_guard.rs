@@ -141,9 +141,16 @@ fn target(cwd: &Path, name: &str) -> Result<PathBuf, String> {
     } else {
         cwd.join(name)
     };
+    if !path.is_absolute() {
+        return Err("target path must resolve from an absolute cwd".into());
+    }
     let mut resolved = PathBuf::new();
     for component in path.components() {
         match component {
+            // A Windows drive prefix (including \\?\C:) is not a filesystem path
+            // until its root separator has been appended. Looking it up alone can
+            // return ERROR_INVALID_FUNCTION, or resolve against a drive-local cwd.
+            Component::Prefix(_) => resolved.push(component.as_os_str()),
             Component::ParentDir => {
                 resolved.pop();
             }
