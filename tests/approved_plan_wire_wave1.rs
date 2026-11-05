@@ -238,8 +238,12 @@ impl Rig {
         ok(self.model("gil_open", json!({"kind":"analysis","contract":CONTRACT})), "analysis");
         ok(self.model("gil_close", json!({"report":"hypothesis_fit: yes\nproblem_solved: yes\nsuccess_condition_met: yes\nguardrail_triggered: no\ninterpretation: 합성 결과가 가설과 일치했다\n"})), "close analysis");
         let o = ok(self.model("gil_open", json!({"kind":"outcome","contract":CONTRACT})), "experiment outcome");
+        assert!(said(&o).contains("Outcome Step의 close_cycle"));
         let outcome_ref = step_ref(&o, "outcome");
         ok(self.model("gil_close", json!({"report":format!("verdict: success\nlesson: 항목 {item}을 파일 증거로 확인했다\nnext_direction.action: close_cycle\nnext_direction.reason: 다음 항목으로 간다\n")})), "close experiment outcome");
+        let before = record_bytes(&self.record);
+        refused(self.model("gil_close", json!({"report":format!("verdict: success\noutcome_ref: {outcome_ref}\nhandoff_summary: synthetic result\nnext_direction.action: close_cycle\nnext_direction.reason: incorrect copied Step direction\n")})), "Step direction cannot close Experiment Cycle");
+        assert_eq!(record_bytes(&self.record), before);
         let closed = ok(self.model("gil_close", json!({"report":format!("verdict: success\noutcome_ref: {outcome_ref}\nhandoff_summary: 항목 {item} 완료\nnext_direction.action: open_child\nnext_direction.reason: 남은 항목을 이어간다\n")})), "close experiment cycle");
         assert!(said(&closed).contains(&format!("닫았다: cycle:C{n} · experiment · success")), "{closed}");
     }
@@ -433,15 +437,26 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     // Experiment gated until Outcome and the Interview Cycle close; then binds A
     refused(r.model("gil_open", json!({"kind":"experiment"})), "experiment after synthesis");
     let outcome = ok(r.model("gil_open", json!({"kind":"outcome","contract":CONTRACT})), "open outcome");
+    assert!(said(&outcome).contains("Outcome Step의 close_cycle"));
     let outcome_ref = step_ref(&outcome, "outcome");
     ok(r.model("gil_close", json!({"report":format!("verdict: success\nlesson: 합의한 범위를 기록했다\nsynthesis_ref: {synthesis}\nnext_direction.action: close_cycle\nnext_direction.reason: 승인된 범위를 실험으로 확인한다\n")})), "close outcome");
     refused(r.model("gil_open", json!({"kind":"experiment"})), "experiment before cycle close");
     refused(r.model("gil_cycle", json!({"action":"close"})), "legacy gil_cycle close");
+    let before_cycle = record_bytes(&r.record);
+    refused(r.model("gil_close", json!({"report":format!("verdict: success\noutcome_ref: {outcome_ref}\nhandoff_summary: synthetic scope\nnext_direction.action: close_cycle\nnext_direction.reason: incorrect copied Step direction\n")})), "Step direction cannot close Interview Cycle");
+    assert_eq!(record_bytes(&r.record), before_cycle);
     ok(r.model("gil_close", json!({"report":format!("verdict: success\noutcome_ref: {outcome_ref}\nhandoff_summary: 합성 범위를 승인받았다\nnext_direction.action: open_child\nnext_direction.reason: 승인 항목을 순서대로 실행한다\n")})), "close interview cycle");
     let read = r.read();
     assert_eq!(read["active_revision"], 2);
     assert_eq!(read["pending"].as_array().unwrap().iter().map(|i| i["id"].as_str().unwrap()).collect::<Vec<_>>(), ["A", "B"]);
+    assert!(read["document"].is_null(), "no binding before the Experiment opens");
     let (c2, document) = r.open_experiment("A");
+    let opened_read = r.read();
+    assert!(opened_read["next"].as_str().unwrap().contains("gil_open(kind: define)"));
+    assert!(!opened_read["next"].as_str().unwrap().contains("Monitor 응답 후"));
+    let read_only_bytes = record_bytes(&r.record);
+    assert_eq!(r.read(), opened_read);
+    assert_eq!(record_bytes(&r.record), read_only_bytes);
     assert!(document.contains("Revision: 2"));
     let context = r.context_readonly();
     assert!(context.contains("gil_open(kind: define)") && context.contains("이번 Experiment: A"), "{context}");
@@ -461,6 +476,12 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     refused(r.c.call("gil_close", verify_args(&root, &verify, &format!("execution: 확인했다\nresult: 저장했다\nplan_document: plan/approved-plan.md\nevidence_files: evidence/C{c2}-A.md\n"))), "wrong document bytes");
     refused(r.c.call("gil_close", verify_args(&root, &verify, "execution: 확인했다\nresult: 채팅으로 보고했다\n")), "no evidence_files");
     assert_eq!(state(&root), before);
+    let refused_read = r.read();
+    assert_eq!(refused_read["document"], opened_read["document"], "failed closes never materialize or change the document");
+    assert_eq!(refused_read["executed_cycles"], opened_read["executed_cycles"]);
+    assert_eq!(refused_read["pending"], opened_read["pending"]);
+    assert!(refused_read["next"].as_str().unwrap().contains("열린 Verify"));
+    assert!(!refused_read["next"].as_str().unwrap().contains("Synthesis를 닫"));
     r.finish_experiment(c2, "A", &verify, &document);
     let context = r.context_readonly();
     assert!(context.contains("gil_open(kind: experiment)"), "{context}");

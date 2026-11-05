@@ -1,4 +1,6 @@
 //! Opt-in development surface. No migration, no UI writes, no implicit attachment parsing.
+mod diagnostics;
+
 use crate::visual_report::{
     VisualAssetId, VisualDeclaration, VisualUse,
     image::VisualAttachment,
@@ -101,7 +103,7 @@ enum Reference {
 #[derive(Deserialize)]
 #[serde(tag = "state", rename_all = "snake_case", deny_unknown_fields)]
 enum Declaration {
-    Attached,
+    Attached {},
     NotNeeded { reason: String },
     Missing { reason: String, follow_up: String },
 }
@@ -118,58 +120,67 @@ fn hash(s: &str) -> bool {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 impl Close {
-    fn valid(&self) -> bool {
-        if !Path::new(&self.project_root).is_absolute()
-            || self.report.len() > 262144
-            || self.expected_owner.parsed().is_err()
-            || self.visuals.attachments.len() > 8
-            || self.visuals.uses.len() > 8
-        {
-            return false;
-        }
+    fn valid(&self) -> bool { self.problem().is_none() }
+    fn problem(&self) -> Option<String> {
+        let fail = |path: &str, why: &str| Some(format!("{path}: {why}"));
+        if !Path::new(&self.project_root).is_absolute() { return fail("$.project_root", "expected absolute path"); }
+        if self.report.len() > 262144 { return fail("$.report", "maximum 256 KiB"); }
+        if self.expected_owner.parsed().is_err() { return fail("$.expected_owner.ref", "expected canonical Step or Cycle ref; use the actual open owner from gil_status"); }
+        if self.visuals.attachments.len() > 8 { return fail("$.visuals.attachments", "maximum 8 entries"); }
+        if self.visuals.uses.len() > 8 { return fail("$.visuals.uses", "maximum 8 entries"); }
         let mut keys = BTreeSet::new();
-        for a in &self.visuals.attachments {
-            if !text(&a.key)
-                || !text(&a.path)
-                || !text(&a.source_description)
-                || !keys.insert(a.key.as_str())
-            {
-                return false;
+        for (i, a) in self.visuals.attachments.iter().enumerate() {
+            for (name, value) in [("key", &a.key), ("path", &a.path), ("source_description", &a.source_description)] {
+                if !text(value) { return fail(&format!("$.visuals.attachments[{i}].{name}"), "expected nonblank text, at most 4096 UTF-8 bytes, no NUL"); }
             }
+            if !keys.insert(a.key.as_str()) { return fail(&format!("$.visuals.attachments[{i}].key"), "duplicate attachment key"); }
         }
         let mut used = BTreeSet::new();
-        for u in &self.visuals.uses {
-            if !text(&u.caption) || !text(&u.alt) || !text(&u.purpose) {
-                return false;
+        for (i, u) in self.visuals.uses.iter().enumerate() {
+            for (name, value) in [("caption", &u.caption), ("alt", &u.alt), ("purpose", &u.purpose)] {
+                if !text(value) { return fail(&format!("$.visuals.uses[{i}].{name}"), "expected nonblank text, at most 4096 UTF-8 bytes, no NUL"); }
             }
+            let path = format!("$.visuals.uses[{i}].source");
             match &u.source {
                 Reference::New { key } => {
-                    if !keys.contains(key.as_str()) || !used.insert(key.as_str()) {
-                        return false;
-                    }
+                    if !keys.contains(key.as_str()) || !used.insert(key.as_str()) { return fail(&format!("{path}.key"), "must reference one attachment key exactly once"); }
                 }
-                Reference::Stored {
-                    owner,
-                    asset_id,
-                    sha256,
-                } => {
-                    if owner.parsed().is_err() || id(asset_id).is_none() || !hash(sha256) {
-                        return false;
-                    }
+                Reference::Stored { owner, asset_id, sha256 } => {
+                    if owner.parsed().is_err() { return fail(&format!("{path}.owner.ref"), "expected canonical owner from the stored receipt"); }
+                    if id(asset_id).is_none() { return fail(&format!("{path}.asset_id"), "expected canonical positive integer string from the receipt"); }
+                    if !hash(sha256) { return fail(&format!("{path}.sha256"), "expected 64 lowercase hexadecimal characters from the receipt"); }
                 }
             }
         }
-        if used != keys {
-            return false;
-        } // No orphan creation hidden from its own Report.
+        if used != keys { return fail("$.visuals.uses", "every new attachment needs exactly one source {kind: new, key}; stored does not consume an attachment key"); }
         match &self.visuals.declaration {
-            Some(Declaration::NotNeeded { reason }) => text(reason) && self.visuals.uses.is_empty(),
-            Some(Declaration::Missing { reason, follow_up }) => text(reason) && text(follow_up),
-            Some(Declaration::Attached) => !self.visuals.uses.is_empty(),
-            None => self.visuals.attachments.is_empty(),
+            Some(Declaration::NotNeeded { reason }) => {
+                if !text(reason) { return fail("$.visuals.declaration.reason", "expected nonblank text, at most 4096 UTF-8 bytes, no NUL"); }
+                if !self.visuals.uses.is_empty() { return fail("$.visuals.uses", "not_needed requires no uses; never change attached to not_needed to bypass an error"); }
+            }
+            Some(Declaration::Missing { reason, follow_up }) => {
+                for (name, value) in [("reason", reason), ("follow_up", follow_up)] {
+                    if !text(value) { return fail(&format!("$.visuals.declaration.{name}"), "expected nonblank text, at most 4096 UTF-8 bytes, no NUL"); }
+                }
+            }
+            Some(Declaration::Attached {}) if self.visuals.uses.is_empty() => return fail("$.visuals.uses", "attached requires at least one use; uses is beside declaration, not inside it"),
+            None if !self.visuals.attachments.is_empty() => return fail("$.visuals.declaration", "new attachments require a Verify declaration"),
+            _ => {}
         }
+        None
     }
 }
+/// Explains a rejected shape without reading any project or echoing supplied values.
+pub(super) fn rejection(input: &Value) -> String {
+    let problem = if serde_json::to_vec(input).map_or(true, |v| v.len() > 512 * 1024) {
+        "$: request exceeds 512 KiB".to_string()
+    } else {
+        diagnostics::shape(input).or_else(|| serde_json::from_value::<Close>(input.clone()).ok().and_then(|r| r.problem()))
+            .unwrap_or_else(|| "$.visuals: invalid typed close; use the connected schema".into())
+    };
+    format!("gil_close: {problem}. Nothing was closed. New PNG: attachments with key/path/source_kind/source_description, uses with source {{kind: new, key}} plus caption/alt/purpose, declaration {{state: attached}}. Stored citation: source {{kind: stored, owner: {{kind, ref}}, asset_id, sha256}} from a confirmed receipt, never a key. Read gil_help topic report/visuals for complete JSON and gil_status for the actual open owner; no example ref identifies your current step.")
+}
+
 pub fn valid(name: &str, input: &Value) -> bool {
     if serde_json::to_vec(input).map_or(true, |v| v.len() > 512 * 1024) {
         return false;
@@ -298,7 +309,11 @@ fn execute_inner(name: &str, input: Value) -> Result<Value, (String, Option<Stri
         None => ReportOwner::Cycle(c.id().to_ref()),
     };
     if owner != actual || projection(session.project(), owner).map_err(plain)?["confirmed"] == true {
-        return Err(plain("owner_mismatch"));
+        let actual = match actual {
+            ReportOwner::Step(r) => json!({"kind":"step","ref":r.to_string()}),
+            ReportOwner::Cycle(r) => json!({"kind":"cycle","ref":r.to_string()}),
+        };
+        return Err(("owner_mismatch".into(), Some(format!("expected_owner가 현재 보고 대상과 다르거나 대상이 이미 닫혔다. 현재 대상: {actual}. gil_status와 gil_report_visuals로 열림·확정 여부를 확인하고 닫힌 보고서는 반복 제출하지 않는다."))));
     }
     let is_verify = c
         .step_now_open()
@@ -374,7 +389,7 @@ fn execute_inner(name: &str, input: Value) -> Result<Value, (String, Option<Stri
             .collect();
         session
             .close_verify_with_images_and_commit(report, attachments, |ids| match declaration {
-                Declaration::Attached => VisualDeclaration::Attached {
+                Declaration::Attached {} => VisualDeclaration::Attached {
                     uses: make_uses(ids),
                 },
                 Declaration::NotNeeded { reason } => VisualDeclaration::NotNeeded {
@@ -407,7 +422,7 @@ pub fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
     // Legacy receipts remain unchanged; typed close returns its durable Report projection.
     raw.as_object_mut().unwrap().remove("outputSchema");
     raw["description"] = json!(
-        "Close the current Report. Two input shapes only. Ordinary close {project_root, report}: every step of a format-4 project (including its Verify), and format-5 non-Verify steps that cite no stored images. Typed close {project_root, report, expected_owner:{kind,ref}, visuals:{attachments,uses,declaration}} with expected_owner and visuals ALWAYS together: every format-5 Verify (with attachments/uses and declaration attached, or empty arrays and declaration not_needed (reason) / missing (reason, follow_up) when there are no images), and any format-5 non-Verify step or Cycle report that cites stored images (uses with source kind stored, empty attachments, no declaration). Sending expected_owner without visuals, or visuals without expected_owner, is rejected with -32602 naming the missing field; that call is not executed and nothing is closed — read gil_status/gil_context for the actual open step, then send one corrected call. After an uncertain or lost response use gil_report_visuals; never automatically repeat close. Every Verify also requires evidence_files in report: 1–32 unique project-relative paths, all nonempty files in its Snapshot, at least one new or changed. No-image declarations do not waive file evidence. Visual evidence means a PNG that shows the real result: a plot or diagram drawn by code from the data, a headless or ordinary browser screenshot of the actual page/UI, a before/after comparison table. AI-generated or decorative pictures are never visual evidence. Contract checks: not_needed/missing reason must say what replaces the image (one-word or boilerplate reasons such as 없음/not needed are refused, code visual_reason_weak); a Verify whose evidence_files include an image file cannot close not_needed (visual_declaration_conflict); when the Verify attached assets, the Analysis and the Experiment Cycle Report must cite at least one of them with a stored source (visual_citation_required; the refusal lists asset_id and sha256). Analysis interpretation and Outcome lesson must be nonblank; Core links their actual evidence lineage. No migration."
+        "Close the current Report. Two input shapes only. Ordinary close {project_root, report}: every step of a format-4 project (including its Verify), and format-5 non-Verify steps that cite no stored images. Typed close {project_root, report, expected_owner:{kind,ref}, visuals:{attachments,uses,declaration}} with expected_owner and visuals ALWAYS together: every format-5 Verify (with attachments/uses and declaration attached, or empty arrays and declaration not_needed (reason) / missing (reason, follow_up) when there are no images), and any format-5 non-Verify step or Cycle report that cites stored images (uses with source kind stored, empty attachments, no declaration). Sending expected_owner without visuals, or visuals without expected_owner, is rejected with -32602 naming the missing field; that call is not executed and nothing is closed — read gil_status/gil_context for the actual open step, then send one corrected call. New PNGs use attachments:[{key,path,source_kind,source_description}] and uses:[{source:{kind:new,key},caption,alt,purpose}], with declaration:{state:attached}; these three fields are siblings inside visuals. Stored reuse requires source:{kind:stored,owner:{kind,ref},asset_id,sha256} from the receipt, never a key. Complete JSON: gil_help topic report/visuals (CLI alias: gil help visuals). After an uncertain or lost response use gil_report_visuals; never automatically repeat close. Every Verify also requires evidence_files in report: 1–32 unique project-relative paths, all nonempty files in its Snapshot, at least one new or changed. No-image declarations do not waive file evidence. Visual evidence means a PNG that shows the real result: a plot or diagram drawn by code from the data, a headless or ordinary browser screenshot of the actual page/UI, a before/after comparison table. AI-generated or decorative pictures are never visual evidence. Contract checks: not_needed/missing reason must say what replaces the image (one-word or boilerplate reasons such as 없음/not needed are refused, code visual_reason_weak); a Verify whose evidence_files include an image file cannot close not_needed (visual_declaration_conflict); when the Verify attached assets, the Analysis and the Experiment Cycle Report must cite at least one of them with a stored source (visual_citation_required; the refusal lists asset_id and sha256). Analysis interpretation and Outcome lesson must be nonblank; Core links their actual evidence lineage. No migration."
     );
     *close = serde_json::from_value(raw).unwrap();
     tools.push(serde_json::from_value(json!({"name":"gil_report_visuals",
@@ -420,6 +435,56 @@ pub fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn documented_close() -> Value {
+        let manual = include_str!("../manual/topics/report/visuals.md");
+        let mut input: Value = serde_json::from_str(manual.split("```json\n").nth(1).unwrap().split("```").next().unwrap()).unwrap();
+        input["project_root"] = json!(if cfg!(windows) { "C:/synthetic" } else { "/synthetic" });
+        input
+    }
+    #[test]
+    fn documented_two_image_close_and_stored_citation_match_the_wire() {
+        let mut input = documented_close();
+        assert!(valid("gil_close", &input));
+        let mut falsely_unneeded = input.clone();
+        falsely_unneeded["visuals"]["declaration"] = json!({"state":"not_needed","reason":"synthetic byte comparison"});
+        assert!(!valid("gil_close", &falsely_unneeded), "changing only the declaration cannot bypass the two attached images");
+        let manual = include_str!("../manual/topics/report/visuals.md");
+        input["visuals"] = serde_json::from_str(manual.split("```json\n").nth(2).unwrap().split("```").next().unwrap()).unwrap();
+        input["expected_owner"] = json!({"kind":"step","ref":"step:C3/S4"});
+        assert!(valid("gil_close", &input));
+    }
+    #[test]
+    fn visual_errors_locate_fields_without_leaking_values_or_unknown_names() {
+        let secret = "synthetic-secret-never-echo";
+        for (path, value, expected) in [
+            ("/visuals/uses/0/source", json!({"kind":"stored","key":secret}), "$.visuals.uses[0].source.owner"),
+            ("/visuals/uses/0", json!({"key":secret,"source":{"kind":"new","key":"earnings"},"caption":"c","alt":"a","purpose":"p"}), "$.visuals.uses[0]"),
+            ("/visuals/declaration", json!({"state":"attached","uses":[secret]}), "$.visuals.declaration"),
+            ("/visuals/declaration", Value::Null, "$.visuals.declaration"),
+            ("/visuals/declaration/state", json!(secret), "$.visuals.declaration.state"),
+            ("/visuals/uses/0/source/kind", json!(secret), "$.visuals.uses[0].source.kind"),
+            ("/visuals/uses/0/source/key", json!(secret), "$.visuals.uses[0].source.key"),
+            ("/visuals/uses/0/caption", json!(12), "$.visuals.uses[0].caption"),
+            ("/visuals/uses/0/alt", json!(" "), "$.visuals.uses[0].alt"),
+            ("/visuals/attachments/1/source_kind", json!(secret), "$.visuals.attachments[1].source_kind"),
+            ("/expected_owner/ref", json!(secret), "$.expected_owner.ref"),
+        ] {
+            let mut input = documented_close();
+            *input.pointer_mut(path).unwrap() = value;
+            assert!(!valid("gil_close", &input), "{path}");
+            let error = rejection(&input);
+            assert!(error.contains(expected), "{error}");
+            assert!(!error.contains(secret) && !error.contains("step:C2/S3"), "{error}");
+        }
+        let mut input = documented_close();
+        input["visuals"][secret] = json!(secret);
+        assert!(!valid("gil_close", &input));
+        assert!(!rejection(&input).contains(secret));
+        let mut input = documented_close();
+        input.as_object_mut().unwrap().remove("report");
+        assert!(!valid("gil_close", &input));
+        assert!(rejection(&input).contains("$.report"));
+    }
     #[test]
     fn strict_typed_inputs_refuse_ambiguous_or_unbounded_authoring() {
         let root = if cfg!(windows) { "C:/synthetic" } else { "/synthetic" };

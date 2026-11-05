@@ -21,6 +21,12 @@ Cycle Model §12, §16–17, §21의 미정 저장 계약을 이 문서로 한�
 
 Interview에서는 프로젝트 파일을 쓰지 않는다. 승인 계획의 결정적 Markdown은 read/export로 제공한다. 해당 Experiment의 Verify에서 파일로 저장하고 `plan_document`에 안전한 상대 경로를 적는다. 확정될 Snapshot의 bytes가 바인딩된 승인 판의 export와 같아야 한다. 별도의 새/변경된 실제 작업 증거를 `evidence_files`에 기록해야 하며 계획 문서만으로 실행 증거를 대신하지 못한다. 계획·문서·증거·Analysis·Outcome의 기존 연결을 함께 보존한다.
 
+`document`는 Experiment 열기와 실행 항목 바인딩이 성공한 순간부터 조회되는 결정적 문자열이다.
+Interview 등 바인딩이 없는 현재 Cycle에서는 null이고, 조회나 실패한 close가 나중에 생성하지 않는다.
+한 Experiment는 정확히 한 항목에 바인딩된다. 다른 항목의 작업을 수행했다는 서술로 실행 기록을 추가하지 않는다.
+현재 Cycle이 닫혀도 바인딩과 그 판의 document는 보존한다. `next`는 현재 Graph의 다음 호출을 투영한다.
+`close_report`는 제안의 Synthesis 원문이며 Synthesis가 닫힌 뒤 현재 단계의 Report로 재사용하지 않는다.
+
 ## 범위와 수용 검증
 
 Core/저장 roundtrip, bare approval 거절, revision 교체, 중복 입력, 수정 요청, Interview 미종료 실행 거절, 큐 재정렬·과거 보존, 문서 bytes·실행 증거 검증, scope/token/digest 격리, UI 재연결을 자동 시험한다. 실제 Host 표시·물리적 버튼 클릭·Luna 실사용은 별도의 실제 환경 시험이다. 기본 배포 변경, 기존 기록 이전, M6-E 종료/취소 정책, M3 restore 안전성은 이 변경의 완료로 주장하지 않는다.

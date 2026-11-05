@@ -113,7 +113,15 @@ pub fn valid_input(tool: &Tool, input: &Value) -> bool {
 /// Static, safe explanation for a schema rejection (-32602). It names the missing or misplaced
 /// field so the caller can correct the call, never echoes input values, and states that nothing
 /// was closed. Field grammar itself stays with Core; this only describes the wire shape.
-pub fn rejection(tool: &Tool, input: &Value) -> &'static str {
+pub fn rejection(tool: &Tool, input: &Value) -> String {
+    #[cfg(feature = "visual-authoring")]
+    if tool.name == "gil_close" && input.get("expected_owner").is_some() && input.get("visuals").is_some() {
+        return super::authoring::rejection(input);
+    }
+    rejection_hint(tool, input).to_string()
+}
+
+fn rejection_hint(tool: &Tool, input: &Value) -> &'static str {
     if tool.name == "gil_plan_propose" {
         return if input.get("draft").is_none() {
             "gil_plan_propose: 'draft' is missing. The call takes exactly {project_root, draft}; scope, items and synthesis belong inside draft, never at the top level, and exploration_checklist is a string field inside synthesis (item IDs, one per line). Nothing was recorded; wrap the same content in draft and send one corrected call."
@@ -132,7 +140,7 @@ pub fn rejection(tool: &Tool, input: &Value) -> &'static str {
     match (owner, visuals) {
         (true, false) => "gil_close: 'expected_owner' was given without 'visuals'. This call was not executed. Nothing was closed. Ordinary close takes exactly {project_root, report}: every step of a format-4 project including its Verify, and format-5 non-Verify steps that cite no stored images. Typed close takes {project_root, report, expected_owner:{kind,ref}, visuals:{attachments,uses,declaration}} together: every format-5 Verify (empty arrays and declaration not_needed/missing when there are no images) and any format-5 report that cites stored images. Read gil_status/gil_context for the actual open step, then send one corrected call in the shape that step requires.",
         (false, true) => "gil_close: 'visuals' was given without 'expected_owner' {kind, ref}. This call was not executed. Nothing was closed. Ordinary close takes exactly {project_root, report} (all format-4 steps including Verify; format-5 non-Verify steps without stored-image citations); typed close takes {project_root, report, expected_owner, visuals} together (every format-5 Verify, even without images, and any format-5 report citing stored images). Read gil_status/gil_context for the actual open step, then send one corrected call.",
-        (true, true) => "gil_close: 'expected_owner' and 'visuals' are present but malformed. Owner ref looks like step:C2/S3 or cycle:C2; declaration must not be null; a Verify needs exactly one declaration (attached with uses, not_needed with a reason and no uses, missing with reason and follow_up); at most 8 attachments/uses with unique keys; report up to 256 KiB. Nothing was closed; correct the call instead of repeating it.",
+        (true, true) => "gil_close: 'expected_owner' and 'visuals' are present but malformed. Read gil_status for the actual open owner; declaration must not be null; a Verify needs exactly one declaration (attached with uses, not_needed with a reason and no uses, missing with reason and follow_up); at most 8 attachments/uses with unique keys; report up to 256 KiB. Nothing was closed; correct the call instead of repeating it.",
         (false, false) => "gil_close: invalid arguments. Expected {project_root (absolute string), report (string)}. Nothing was closed.",
     }
 }

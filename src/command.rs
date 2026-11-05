@@ -714,7 +714,7 @@ fn close(ctx: &Invocation<'_>) -> Result<String, String> {
 }
 
 fn typed_verify_hint(here: crate::StepRef) -> String {
-    format!("\n이 프로젝트는 format 5다. Verify는 일반 텍스트 close로 닫을 수 없다. 연결된 gil_close의 typed 입력을 쓴다.\n  project_root와 report(실제 execution/result/evidence_files)에 다음 두 인자를 함께 보낸다:\n  expected_owner: {{\"kind\":\"step\",\"ref\":\"{here}\"}}\n  이미지가 필요 없는 문서 증거라면 visuals: {{\"attachments\":[],\"uses\":[],\"declaration\":{{\"state\":\"not_needed\",\"reason\":\"이미지가 필요 없는 실제 이유\"}}}}\n  이미지를 남긴 경우 연결된 스키마의 attachments/uses와 attached 선언을 쓴다. 별도 시각 보고 도구를 찾거나 일반 close를 반복하지 않는다.\n")
+    format!("\n이 프로젝트는 시각 보고서 형식(format 5/7)이다. Verify는 일반 텍스트 close로 닫을 수 없다. 연결된 gil_close의 typed 입력을 쓴다.\n  project_root와 report(실제 execution/result/evidence_files)에 다음 두 인자를 함께 보낸다:\n  expected_owner: {{\"kind\":\"step\",\"ref\":\"{here}\"}}\n  이미지가 필요 없는 문서 증거라면 visuals: {{\"attachments\":[],\"uses\":[],\"declaration\":{{\"state\":\"not_needed\",\"reason\":\"이미지가 필요 없는 실제 이유\"}}}}\n  새 PNG는 attachments에 key/path/source_kind/source_description, uses에 source: {{\"kind\":\"new\",\"key\":\"같은 첨부 key\"}}와 caption/alt/purpose를 적고 declaration: {{\"state\":\"attached\"}}로 닫는다. uses는 declaration 밖에 둔다. stored는 이미 확정된 owner/asset_id/sha256의 인용에만 쓴다. 두 PNG의 정확한 JSON은 gil_help topic report/visuals (CLI: gil help visuals)에 있다. 선언을 not_needed로 바꿔 오류를 우회하거나 일반 close를 반복하지 않는다.\n")
 }
 
 fn close_step(ctx: &Invocation<'_>, session: &mut Session) -> Result<String, String> {
@@ -1359,6 +1359,9 @@ fn opened_step(session: &Session, opened: crate::Opened) -> String {
     } else if opened.kind == NodeKind::Define {
         out.push_str("  지금은 독립적으로 확인할 질문 하나와 성공 기준만 정한다. 성공 기준은 결과를 미리 알아야 정할 수 있는 값이 아니라 확인 방법·판정 조건이다. Define의 완료 조건을 충족하면 그 Report를 닫은 뒤 Hypothesis를 정한다. 주가 변화와 매출 변화처럼 각각 별도로 참·거짓을 판단할 수 있는 질문은 분리한다. 검색 한 번이나 문단 하나마다 나눌 필요는 없다.\n");
     }
+    if opened.kind == NodeKind::Outcome {
+        out.push_str("  Outcome Step의 close_cycle은 다음에 Cycle Report를 제출하라는 뜻이다. 이 Step을 닫아도 Cycle 자체는 열려 있다. Cycle Report에는 그때의 허용 방향을 쓰며 close_cycle을 복사하지 않는다.\n");
+    }
     // **닫기 전에 계약을 미리 알려 준다.** 허용값을 오류로 알아내게 두지 않는다
     // (실사용 M2C 보고). 말은 여기서 짓지 않고 문법에서 읽는다.
     if let Some(contract) = &contract
@@ -1387,6 +1390,10 @@ fn opened_cycle(session: &Session) -> String {
     }
     if cycle.kind() == CycleKind::Experiment {
         out.push_str("\n실험 범위\n  이번 Cycle은 독립적으로 확인할 질문 하나를 다룬다. Define에서 문제·판정 기준, Hypothesis에서 검증할 예상을 기록하고 닫는다. 그 뒤 Verify를 열고 자료 조회·계산 등 실제 검증을 시작한다. 별도 질문과 보고서 종합을 한 번에 실행하지 않는다.\n");
+    }
+    #[cfg(feature = "approved-plan")]
+    if let Some(item) = session.project().current_plan_item() {
+        out.push_str(&format!("  승인 계획 실행 연결: {} 한 항목만 이 Experiment에 바인딩됐다. gil_plan_read의 current_item과 document를 지금 읽을 수 있다. document 파일 저장은 Verify에서만 한다. 다른 항목을 함께 작업해도 그 항목의 executed_cycles는 추가되지 않는다.\n", item.id));
     }
     out.push_str(&format!("출발한 세계: {}\n", cycle.entry_snapshot()));
     out.push_str(&next_block(cycle));
@@ -1563,6 +1570,14 @@ fn skeleton_of(contract: &CloseContract, cycle: &crate::Cycle) -> String {
             && cycle.closing_synthesis(&Report::new().with("verdict", "success").with("next_direction.action", "close_chain")).is_ok() => Some("close_chain".into()),
         _ => None,
     });
+    if contract.subject().contains("outcome") {
+        hint.push_str("\n이것은 Outcome Step의 Report다. close_cycle은 이 Step을 닫은 뒤 Cycle Report를 별도로 제출하라는 방향이다. Cycle 자체가 닫히거나 다음 Experiment가 자동으로 열리지 않는다. 다음 Cycle Report의 허용 값은 그때의 계약을 읽고 close_cycle을 복사하지 않는다.\n");
+    } else if contract.subject().starts_with("cycle:") {
+        hint.push_str("\n이것은 Cycle Report다. Outcome Step의 close_cycle을 복사하지 않는다. open_child는 다음 자식 Cycle을 열 수 있는 방향만 기록하며 자동 실행하지 않는다. 실제 다음 gil_open 종류는 성공 receipt를 따른다.\n");
+        if cycle.rules().supports_chain_closing() && cycle.kind() == CycleKind::Interview {
+            hint.push_str("close_chain은 승인된 Closing Interview의 Chain 종료 방향이다.\n");
+        }
+    }
     if cycle.rules().supports_chain_closing() && cycle.step_now_open()
         .and_then(|id| cycle.steps().node(id)).is_some_and(|node| node.kind == NodeKind::Synthesis) {
         hint.push_str("\nChain 종료 제안이라면 chain_verdict: success 또는 failure를 함께 적는다. 탐색 경로·실패·남은 질문을 사용자에게 설명하고 실제 동의를 받은 경우에만 approved: yes를 적는다. 동의를 추측하지 않는다. 일반 계획 합의에는 chain_verdict를 넣지 않는다.\n");
