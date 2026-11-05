@@ -1,6 +1,6 @@
 # 프로젝트 파일 쓰기 보호 — 개발용 Host 어댑터
 
-상태: opt-in 소스 구현. 기존 Plugin/설치본에는 포함하거나 활성화하지 않았다.
+상태: native Core에 포함된 opt-in 어댑터. 훅 활성화는 별도 설치 단계이며, 소스 변경은 기존 설치본을 갱신하지 않는다.
 대상은 macOS의 Codex 데스크톱과 Claude Desktop **Code 탭의 로컬 세션**이다.
 Claude Desktop 일반 채팅·Cowork, 원격 세션과 Windows 셸 보호를 검수했다고 주장하지 않는다.
 
@@ -40,7 +40,14 @@ UserPromptSubmit·Stop 훅을 병합한다. 원본은 `~/.gil-host-guard`의 pri
 만들지 않으므로 등록이 Artifact/Snapshot을 dirty로 만들지 않는다. 기존 프로젝트도 `gil_context`로
 재개하면 등록된다. CLI로만 만든 프로젝트는 Host에서 `gil_context`로 연결한다.
 
-`gil write-guard status --auto`는 등록 폴더 목록을 출력한다. 등록 사실만으로 Host의 활성화·신뢰를
+설치 명령은 Host마다 `hook --auto --host codex|claude`를 기록한다. Host는 이 설치 argv로
+구분하며 `Bash` 이름·cwd·모델이 준 인자로 추측하지 않는다(Codex도 Bash 이름을 전달한다).
+진행 연결 키는 Host + session_id다. 기존 Host 미지정 연결 기록은 그대로 보존하되 새 Host에
+상속하지 않는다. 갱신 후 기존 프로젝트는 `gil_context`로 재연결한다. 보호 root 등록은 유지된다.
+
+`gil write-guard status --auto`는 등록 폴더 목록과 현재 Core, Host별 훅 일치 상태를 출력한다.
+`matches_current_core`는 네 event의 훅 경로·Host·matcher가 현재 Core와 일치한다는 뜻이며,
+`refresh_required`는 구버전·누락·중복 연결을 다시 확인해야 한다는 뜻이다. 등록 사실만으로 Host의 활성화·신뢰를
 입증하지 않는다. 설정이 꺼졌거나 Host가 PostToolUse 결과를 전달하지 않으면 자동 연결은 보장되지 않는다.
 기존 `gil-write-guard hook|config|run --root …`는 호환용으로 남지만 공통 훅과 중복 설치하지 않는다.
 
@@ -62,7 +69,7 @@ UserPromptSubmit·Stop 훅을 병합한다. 원본은 `~/.gil-host-guard`의 pri
 
 ## 여러 폴더 보호
 
-공통 셸 래퍼는 `gil write-guard run --auto -- '명령'`다. 등록된 모든 폴더를 한 sandbox로 보호하며,
+공통 셸 래퍼는 `gil write-guard run --auto -- '명령'`다. 등록된 모든 폴더의 경로만 한 sandbox에서 쓰기 보호하며,
 각 폴더의 실제 Verify 상태를 따로 검사한다. 기존 프로세스·다른 앱에는 소급 적용되지 않는다.
 등록 정보도 이 셸과 직접 파일 편집 도구로는 수정하지 못하게 한다. Host 설정 갱신은 명시적인
 설치 작업으로 수행한다. 사용자 파일·GIL 기록·Snapshot을 자동 이동·삭제·복구하지 않는다.
@@ -72,9 +79,14 @@ UserPromptSubmit·Stop 훅을 병합한다. 원본은 `~/.gil-host-guard`의 pri
 - `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `apply_patch`: 대상 경로를 해석하고 Verify 상태를
   검사한다. patch의 삭제·이동 원본과 목적지도 검사한다. 프로젝트 밖에서 안으로 향하는 symlink는
   해석해 검사한다. `.gil` 직접 편집과 프로젝트를 포함하는 상위 경로 편집은 거절한다.
-- `Bash` / `exec_command`: 명령 문자열에서 파일 쓰기를 추측하지 않는다. 원래 호출을 거절하고
-  정확히 인용된 `gil-write-guard run --root … -- '원래 명령'` 재호출을 안내한다. 이 재호출은 기존
-  Host 권한 검사에 맡긴다. `permissionDecision: allow`로 승인 절차를 생략하지 않는다.
+- Claude `Bash`: `updatedInput`으로 정확히 인용된 `gil write-guard run --auto -- '원래 명령'`을
+  제출하고 `permissionDecision: ask`로 Host 승인을 요청한다. 나머지 입력 필드는 보존한다.
+  훅 프로세스가 명령을 대신 실행하지 않는다. 자동 `allow`나 sandbox 해제 필드를 넣지 않는다.
+- Codex `Bash` / `exec_command`: 현재 계약은 입력 교체에 `allow`를 요구하고 `ask`를 지원하지
+  않으므로 자동 교체를 쓰지 않는다. 정확한 래퍼 재호출과 Codex의 단일 명령 승인을 안내한다.
+  Host 미지정 구형 훅에는 Host별 설치 갱신을 안내하며 Codex 승인 필드를 추측하지 않는다.
+- 어느 경우도 명령 키워드로 읽기 전용을 판단하거나 외부 cwd·비연결 세션을 무조건 면제하지 않는다.
+  경로가 명확한 외부 직접 편집과 웹 조사는 래퍼나 Verify를 요구하지 않는다.
 - Unix의 기존 잠금 파일은 읽기 전용 descriptor로 열고 **같은 배타 잠금**을 잡는다. `.gil` 쓰기
   권한이 없는 보호 훅도 상태를 읽을 수 있다. 없는 잠금 파일의 생성 및 경로·identity 검증은 유지한다.
 - 보호 실행은 macOS `/usr/bin/sandbox-exec` 아래에서 `/bin/sh -c`로 실행한다. Verify 밖에서는
@@ -85,15 +97,34 @@ UserPromptSubmit·Stop 훅을 병합한다. 원본은 `~/.gil-host-guard`의 pri
   `justification`을 붙여 정상 Host 승인을 요청한다. 이 한 명령은 Host sandbox 밖에서 GIL sandbox를
   적용한다. 이는 Host의 모든 파일·네트워크 제한을 복제하는 방식이 아니므로 Host 승인 판단은 여전히
   필요하다. 훅은 승인을 자동 허용하거나 입력의 권한 필드를 변경하지 않는다. 승인이 거절되거나
-  해당 Host에 승인 실행 경로가 없으면 중단한다. 전역 sandbox 설정을 끄지 않는다.
+  해당 Host에 승인 실행 경로가 없으면 그 셸 호출을 중단한다. 전역 sandbox 설정을 끄지 않는다.
 - 보호 sandbox의 사전 실행 검사가 실패하면 `[guard_sandbox_unavailable]`로 **요청한 명령을 실행하기
   전에** 거절한다. 원래 명령을 보호 없이 재실행하지 않는다. Claude에서도 sandbox를 추가로 사용하는
-  설정이라면 같은 플랫폼 제약이 적용되며, 일반 로컬 Code 탭의 검증과 구분한다.
+  설정이라면 같은 플랫폼 제약이 적용되며, 일반 로컬 Code 탭의 검증과 구분한다. Claude에서는 지원하는 단일 명령의 sandbox 밖 실행
+  승인만 사용할 수 있으며 Codex 필드를 안내하지 않는다. 해당 기능이 없거나 정책으로 금지됐으면
+  보호 없는 재실행·전역 설정 해제 없이 한계를 보고한다.
 - 정상 foreground 실행이 끝날 때까지 GIL 잠금을 유지하므로 그동안 Verify close는 거절된다.
   쓰기 상태를 읽지 못하거나 잠금이 바쁘면 프로젝트 전체를 쓰기 금지한 보호 셸로 실행한다. 이 경우
   외부 출력·읽기는 가능하고 프로젝트 쓰기는 항상 거절된다. 잠금 없는 writable 실행은 없다.
 - GIL 자체 기록·승인·허용된 복구는 기존 MCP 도구로 수행한다. 잠금을 잡은 보호 셸 안에서 GIL
   명령을 중첩 실행하지 않는다. 파일을 밖으로 옮겨 dirty를 해소해도 최초 위반 사실이 없어지지 않는다.
+
+## 세션·파일 보호 경계와 실패 정책
+
+등록 목록은 파일 보호 범위이고 Host + session_id 연결은 채팅 진행 범위다. cwd는 상대 파일 경로
+해석에만 쓰며 연결을 만들거나 면제하지 않는다. 성공한 GIL PostToolUse와 검증된 project_root만
+연결을 만든다. 별도 채팅, 다른 Host의 동일 ID와 pause에는 Stop 의무가 없다. 다른 프로젝트가
+연결된 세션도 모든 등록 root의 파일 보호를 받는다. 정상 연결된 프로젝트 상태가 손상·잠김이면
+그 채팅의 완료는 거절한다. 공용 registry 자체가 손상·잠겨 연결 여부를 모르면 Stop/입력에 경고만
+남긴다. 무관한 모든 채팅을 막지 않으며 GIL 완료를 확인한 것으로 처리하지 않는다. 이 경우 파일
+도구와 셸은 보호 범위를 알 수 없어 거절하며 registry 원본을 보존한다. 무관한 읽기 도구는 통과한다.
+
+**플랫폼 한계:** 현재 훅 입력에는 임의 셸의 실제 쓰기 대상 목록이나 기존 sandbox가 모든 GIL
+root를 보호한다는 증명이 없다. 따라서 “모든 일반 셸을 제약 없이 통과”와 “외부 cwd에서 임의
+보호 root 쓰기 거절”은 동시에 보장할 수 없다. Claude의 승인 가능한 자동 래핑으로 거절·재시도
+순환은 제거하지만 등록 root가 있으면 셸에 경로 보호는 남는다. 이는 모든 세션에 GIL 진행을
+강제하는 정책이 아니다. Codex의 명시적 재호출과 중첩 sandbox 불가 Host의 실행 제한은 남으며,
+지원하지 않는 Host까지 일반 셸 문제가 완전히 해결됐다고 주장하지 않는다.
 
 ## 보장의 한계와 실제 Host 인수
 
@@ -101,6 +132,8 @@ UserPromptSubmit·Stop 훅을 병합한다. 원본은 `~/.gil-host-guard`의 pri
 전체 우회 방지나 두 Host의 실제 적용 완료로 표시하지 않는다.
 
 - 훅이 활성화·신뢰되어야 한다. 훅 호출 자체의 실패·timeout 처리는 Host에 달려 있다.
+- 실행 중인 래퍼는 시작할 때의 등록 root 목록을 보호한다. 새로운 프로젝트 연결은 기존 writers가
+  끝난 뒤 수행한다. 이후 등록을 이미 실행 중인 프로세스에 소급하지 않는다.
 - 등록하지 않은 MCP 파일 도구, GUI, 기존 프로세스·기존 interactive shell은 보호하지 않는다.
   Codex `write_stdin`은 새 PreToolUse를 거치지 않는다. 연결 전의 실행 세션은 종료해야 한다.
 - 백그라운드 실행은 지원하지 않는다. 명시적 `run_in_background`는 거절하지만 스크립트 내부의
@@ -115,7 +148,7 @@ UserPromptSubmit·Stop 훅을 병합한다. 원본은 `~/.gil-host-guard`의 pri
 `.gil` 직접 쓰기 거절, 거절 뒤 정상 GIL 승인·기록 진행, 훅 비활성화 상태를 보호 중으로 오인하지
 않는지. Rust의 JSON/실제 sandbox 시험은 이 Host 인수를 대신하지 않는다.
 
-공식 근거(2026-11-02 확인): [Codex Hooks](https://learn.chatgpt.com/docs/hooks),
+공식 근거(2026-11-03 재확인): [Codex Hooks](https://learn.chatgpt.com/docs/hooks),
 [Claude Code Hooks](https://code.claude.com/docs/en/hooks),
 [Claude Code Desktop 공유 설정](https://code.claude.com/docs/en/desktop#shared-configuration).
 

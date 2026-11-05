@@ -32,11 +32,14 @@ impl Rig {
             home: home.canonicalize().unwrap(),
         }
     }
-    fn hook(&self, mut input: Value) -> Value {
+    fn hook(&self, input: Value) -> Value {
+        self.host_hook("codex", input)
+    }
+    fn host_hook(&self, host: &str, mut input: Value) -> Value {
         input["session_id"] = input.get("session_id").cloned().unwrap_or(json!("s1"));
         input["cwd"] = json!(self.home); // Selected project is outside the chat cwd.
         let mut child = Command::new(env!("CARGO_BIN_EXE_gil"))
-            .args(["write-guard", "hook", "--auto"])
+            .args(["write-guard", "hook", "--auto", "--host", host])
             .env("HOME", &self.home)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -246,4 +249,194 @@ fn one_sandbox_protects_multiple_roots_and_only_the_open_verify_is_writable() {
         "Bash",
         json!({"command":format!("{wrapped}; touch second/report.docx")})
     )));
+}
+
+#[test]
+fn host_identity_is_explicit_and_turn_scope_never_exempts_files() {
+    let r = Rig::new("host-scope");
+    r.post("mcp__gil__gil_context", json!({}));
+    // Both hosts expose Bash; tool name, cwd and session id alone are not Host identity.
+    assert_eq!(r.host_hook("claude", json!({"hook_event_name":"Stop"})), json!({}));
+    assert_eq!(r.stop("unfinished")["decision"], "block");
+    for host in ["claude", "codex"] {
+        let external = r.host_hook(host, json!({"hook_event_name":"PreToolUse", "session_id":"unbound",
+            "tool_name":"Write", "tool_input":{"file_path":r.base.join("external.txt")}}));
+        assert_eq!(external, json!({}));
+        let protected = r.host_hook(host, json!({"hook_event_name":"PreToolUse", "session_id":"unbound",
+            "tool_name":"Write", "tool_input":{"file_path":r.root.join("artifact.txt")}}));
+        assert!(denied(&protected));
+        assert_eq!(r.host_hook(host, json!({"hook_event_name":"PreToolUse", "session_id":"unbound",
+            "tool_name":"mcp__ccd_turn__wrap_up", "tool_input":{"ask":"done"}})), json!({}));
+    }
+    // No session id cannot turn off file protection.
+    assert!(denied(&r.host_hook("claude", json!({"hook_event_name":"PreToolUse", "session_id":null,
+        "tool_name":"Edit", "tool_input":{"file_path":r.root.join("artifact.txt")}}))));
+    let claude = r.host_hook("claude", json!({"hook_event_name":"PreToolUse", "session_id":"unbound",
+        "tool_name":"Bash", "tool_input":{"command":"printf 'hello'", "timeout":1234, "description":"ordinary build"}}));
+    let out = &claude["hookSpecificOutput"];
+    assert_eq!(out["permissionDecision"], "ask");
+    assert_eq!(out["updatedInput"]["timeout"], 1234);
+    assert_eq!(out["updatedInput"]["description"], "ordinary build");
+    assert!(out["updatedInput"]["command"].as_str().unwrap().contains("'run' '--auto' '--host' 'claude' '--'"));
+    assert!(!claude.to_string().contains("require_escalated"));
+    assert!(out["updatedInput"].get("dangerouslyDisableSandbox").is_none());
+    let codex = r.pre("Bash", json!({"command":"echo build"}));
+    assert!(denied(&codex));
+    assert!(codex.to_string().contains("require_escalated"));
+}
+
+#[test]
+fn shared_registry_failure_does_not_impose_a_global_turn_gate() {
+    let r = Rig::new("damaged-registry");
+    r.post("mcp__gil__gil_context", json!({}));
+    let registry = r.home.join(".gil-host-guard/registry.json");
+    fs::write(&registry, b"damaged fixture").unwrap();
+    for event in ["Stop", "UserPromptSubmit"] {
+        let v = r.hook(json!({"hook_event_name":event,"session_id":"unrelated","prompt":"ordinary work"}));
+        assert!(v.get("decision").is_none());
+        assert!(v.to_string().contains("확인하지 못했다"));
+    }
+    assert!(denied(&r.pre("Bash", json!({"command":"echo x"}))));
+    assert!(denied(&r.pre("Write", json!({"file_path":r.root.join("x")}))));
+    assert!(!denied(&r.pre("mcp__ccd_turn__wrap_up", json!({"ask":"outside complete"}))));
+    assert_eq!(r.pre("WebSearch", json!({"query":"no files"})), json!({}));
+    assert_eq!(fs::read(&registry).unwrap(), b"damaged fixture");
+}
+
+#[test]
+fn registry_lock_contention_preserves_scope_and_existing_records() {
+    let r = Rig::new("registry-lock");
+    r.post("mcp__gil__gil_context", json!({}));
+    let lock = fs::OpenOptions::new().read(true).write(true)
+        .open(r.home.join(".gil-host-guard/registry.lock")).unwrap();
+    lock.lock().unwrap();
+    assert!(denied(&r.pre("Bash", json!({"command":"echo x"}))));
+    assert!(r.hook(json!({"hook_event_name":"Stop","session_id":"other"})).get("decision").is_none());
+    drop(lock);
+    assert_eq!(r.stop("unfinished")["decision"], "block");
+    assert_eq!(r.hook(json!({"hook_event_name":"Stop","session_id":"other"})), json!({}));
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn claude_unbound_shell_runs_outside_work_but_cannot_reach_protected_paths() {
+    let r = Rig::new("claude-shell");
+    r.post("mcp__gil__gil_context", json!({}));
+    std::os::unix::fs::symlink(&r.root, r.base.join("alias")).unwrap();
+    let state = fs::read(r.root.join(STATE_PATH)).unwrap();
+    let execute = |command: String| {
+        let verdict = r.host_hook("claude", json!({"hook_event_name":"PreToolUse","session_id":"ordinary",
+            "tool_name":"Bash", "tool_input":{"command":command}}));
+        assert_eq!(verdict["hookSpecificOutput"]["permissionDecision"], "ask");
+        // Synthetic permission acceptance; never claims real Claude approval/UI acceptance.
+        Command::new("/bin/sh").args(["-c", verdict["hookSpecificOutput"]["updatedInput"]["command"].as_str().unwrap()])
+            .env("HOME", &r.home).current_dir(&r.base).output().unwrap()
+    };
+    assert!(execute("mkdir -p build && printf package > build/prepared.txt".into()).status.success());
+    for command in [format!("printf x > '{}/bad'", r.root.display()),
+        "cd project && printf x > bad".into(), "printf x > alias/bad".into(),
+        "mv project renamed".into()] {
+        assert!(!execute(command).status.success());
+        assert!(!r.root.join("bad").exists());
+    }
+    let held = ProjectSession::open_read_only(RuleSet::builtin().unwrap(), r.root.join(STATE_PATH)).unwrap();
+    assert!(execute("printf outside > outside.txt".into()).status.success());
+    assert!(!execute("printf x > project/bad".into()).status.success());
+    drop(held);
+    fs::write(r.root.join(STATE_PATH), b"damaged synthetic state").unwrap();
+    assert!(execute("printf outside > outside.txt".into()).status.success());
+    assert!(!execute("printf x > project/bad".into()).status.success());
+    assert_eq!(r.stop("done")["decision"], "block");
+    fs::write(r.root.join(STATE_PATH), state).unwrap();
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn update_replaces_old_core_hooks_preserves_settings_and_backups() {
+    let r = Rig::new("update");
+    r.post("mcp__gil__gil_context", json!({}));
+    let registry_path = r.home.join(".gil-host-guard/registry.json");
+    let registry_before = fs::read(&registry_path).unwrap();
+    let state_before = fs::read(r.root.join(STATE_PATH)).unwrap();
+    let install = |exe: &std::path::Path| {
+        let out = Command::new(exe).args(["write-guard","install","--auto","--host","both"])
+            .env("HOME", &r.home).output().unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    };
+    fs::create_dir(r.home.join(".claude")).unwrap();
+    let old = json!({"permissions":{"deny":["Read(secret)"]}, "sandbox":{"enabled":true},
+        "hooks":{"PreToolUse":[{"matcher":"Bash", "hooks":[{"type":"command",
+            "command":"'/old/core/gil' 'write-guard' 'hook' '--auto'"}]},
+            {"hooks":[{"type":"command","command":"echo custom; '/old/core/gil' 'write-guard' 'hook' '--auto'"}]}]}});
+    let old_bytes = serde_json::to_vec(&old).unwrap();
+    let settings_path = r.home.join(".claude/settings.json");
+    fs::write(&settings_path, &old_bytes).unwrap();
+    install(std::path::Path::new(env!("CARGO_BIN_EXE_gil")));
+    let first = fs::read(&settings_path).unwrap();
+    let next_dir = r.base.join("new core's version");
+    fs::create_dir(&next_dir).unwrap();
+    let next = next_dir.join("gil");
+    fs::copy(env!("CARGO_BIN_EXE_gil"), &next).unwrap();
+    install(&next);
+    let updated = fs::read(&settings_path).unwrap();
+    install(&next);
+    assert_eq!(fs::read(&settings_path).unwrap(), updated);
+    let v: Value = serde_json::from_slice(&updated).unwrap();
+    assert_eq!(v["permissions"], old["permissions"]);
+    assert_eq!(v["sandbox"], old["sandbox"]);
+    assert_eq!(v["hooks"]["PreToolUse"].as_array().unwrap().len(), 2);
+    assert_eq!(v["hooks"]["PreToolUse"][0], old["hooks"]["PreToolUse"][1]);
+    let backups: Vec<_> = fs::read_dir(r.home.join(".gil-host-guard")).unwrap()
+        .flatten().filter(|e| e.file_name().to_string_lossy().starts_with("claude-settings-"))
+        .map(|e| fs::read(e.path()).unwrap()).collect();
+    assert!(backups.contains(&old_bytes));
+    assert!(backups.contains(&first));
+    let status = |exe: &std::path::Path| -> Value {
+        let out = Command::new(exe).args(["write-guard","status","--auto"]).env("HOME", &r.home).output().unwrap();
+        assert!(out.status.success()); serde_json::from_slice(&out.stdout).unwrap()
+    };
+    assert_eq!(fs::read(&registry_path).unwrap(), registry_before);
+    assert_eq!(fs::read(r.root.join(STATE_PATH)).unwrap(), state_before);
+    for host in ["codex", "claude"] {
+        assert_eq!(status(&next)["installed_hooks"][host]["status"], "matches_current_core");
+    }
+    assert_eq!(status(std::path::Path::new(env!("CARGO_BIN_EXE_gil")))["installed_hooks"]["claude"]["status"], "refresh_required");
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn nested_sandbox_failure_is_preexecution_and_host_specific() {
+    let r = Rig::new("host-sandbox");
+    r.post("mcp__gil__gil_context", json!({}));
+    let profile = format!("(version 1)(allow default)(deny file-write* (subpath {}))",
+        serde_json::to_string(r.root.to_str().unwrap()).unwrap());
+    for host in ["claude", "codex"] {
+        let out = Command::new("/usr/bin/sandbox-exec")
+            .args(["-p", &profile, env!("CARGO_BIN_EXE_gil"), "write-guard", "run", "--auto", "--host", host, "--",
+                "printf should-not-run > outside.txt"])
+            .env("HOME", &r.home).current_dir(&r.base).output().unwrap();
+        assert!(!out.status.success());
+        let error = String::from_utf8_lossy(&out.stderr);
+        assert!(error.contains("guard_sandbox_unavailable"));
+        assert_eq!(error.contains("require_escalated"), host == "codex");
+        assert!(!r.base.join("outside.txt").exists());
+    }
+}
+
+#[test]
+fn legacy_bindings_are_preserved_without_attaching_a_new_host_session() {
+    let r = Rig::new("legacy-binding");
+    r.post("mcp__gil__gil_context", json!({}));
+    let registry = r.home.join(".gil-host-guard/registry.json");
+    let old = json!({"roots":[r.root], "sessions":{"s1":{"root":r.root,"wait":null}}});
+    fs::write(&registry, serde_json::to_vec(&old).unwrap()).unwrap();
+    for host in ["codex", "claude"] {
+        assert_eq!(r.host_hook(host, json!({"hook_event_name":"Stop"})), json!({}));
+        assert!(denied(&r.host_hook(host, json!({"hook_event_name":"PreToolUse", "tool_name":"Write",
+            "tool_input":{"file_path":r.root.join("x")}}))));
+    }
+    r.post("mcp__gil__gil_context", json!({}));
+    assert_eq!(r.stop("resumed")["decision"], "block");
+    let after: Value = serde_json::from_slice(&fs::read(&registry).unwrap()).unwrap();
+    assert_eq!(after["sessions"]["s1"], old["sessions"]["s1"]);
 }

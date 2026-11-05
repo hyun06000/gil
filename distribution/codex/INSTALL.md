@@ -139,6 +139,29 @@ codex plugin marketplace remove gil-preview-macos-arm64 --json
 각 명령 뒤 조회하여 완료한 단계는 반복하지 않는다. 새 설치가 끝나면 `plugin list`에서 preview.20을
 확인하고 새 대화를 연다. Plugin 제거는 프로젝트 폴더나 `.gil` 기록 삭제를 포함하지 않는다.
 
+### 별도로 설치한 전역 write-guard 갱신
+
+Plugin/MCP 교체만으로 사용자 설정의 절대 훅 경로는 바뀌지 않는다. 이전 Core를 지우기 전에
+두 Host의 훅과 실제 MCP 실행 경로를 읽어 확인한다. 기존 전역 guard 사용자는 **같은 검증된 새
+Core**의 `write-guard install --auto --host codex|claude|both`로 해당 Host 훅도 갱신한다.
+이 명령은 기존 비-GIL 설정·권한·sandbox 설정을 유지하고 private 원본 백업을 만든다.
+프로젝트 registry·기록·Snapshot은 이전하지 않는다. 새 Core의 `write-guard status --auto`에서
+사용하는 Host가 `matches_current_core`인지 확인하고, 새 Host 세션의 MCP identity와 경로도
+대조한다. 부분 실패면 완료로 표시하지 않고 이전 Core와 백업을 유지한다.
+
+기존 훅이 installer 셸 자체를 막으면 보호 없는 명령으로 재시도하지 않는다. 먼저 새 Core와
+`write-guard config --auto --host HOST` 출력, 기존 설정의 정확한 병합 diff와 백업 위치를 준비한다.
+승인된 설치 단계에서 Host가 제공하는 **경로 지정 파일 편집 도구**로 기존 설정 전체를 별도
+사용자 전용 백업 파일에 보존하고 GIL 항목만 교체할 수 있다. 보호 프로젝트 밖의 설정 파일임을
+확인하며, 기존 비-GIL 항목·권한·sandbox 설정은 그대로 둔다. `.gil-host-guard`는 보호 셸에서도
+쓰기 금지이므로 그 안에 백업을 만들거나 installer를 중첩 실행하지 않는다. 설정 편집 도구도
+사용할 수 없으면 필요한 정확한 파일 변경과 Host 제약을 보고한다. 전역 훅 삭제·자동 승인·
+사용자 터미널 실행을 기본 해결책으로 삼지 않는다.
+
+새 세션에서 훅 신뢰를 정상 검토하고 기존 프로젝트를 `gil_context`로 재연결한다. 임시 HOME의
+설치 시험과 실제 Codex/Claude의 훅 실행·승인 화면·sandbox 인수는 별개다. 소스 PR의 머지는
+배포/설치 완료가 아니다. [보호 범위와 한계](WRITE-GUARD.md)를 따른다.
+
 직전 공개 배포판은 `0.2.1-preview.13`, tag `v0.2.1-preview.13`, marketplace commit
 `311fa99fecb09dac019dca26014f1e186522bf90`다. preview.13은 시각 증거·한글 경로 개선과 승인 복구를 포함한다. 복구는 Plugin 버전 교체이며 Project Artifact를
 되돌리는 `gil restore`가 아니다. Plugin 제거·교체로 Project 폴더나 `.gil`을 삭제하지 않는다.
