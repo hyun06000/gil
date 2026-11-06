@@ -1,9 +1,9 @@
 # GIL macOS preview 설치
 
-이번 preview.23은 Stop·wrap_up 진행 차단과 UserPromptSubmit 강제 지시를 없앤다.
-파일 보호·자동 등록은 유지하며 GIL installer가 만든 옛 진행 훅만 정리하고 다른 사용자 훅은 보존한다.
-턴 종료·주제 변경·Monitor 복구 승인 대기에 별도 Step/Cycle이나 gil_await_user 호출을 요구하지 않는다.
-신규 설치에도 보호 훅 등록을 포함하고, 업데이트 때는 MCP와 같은 새 Core로 함께 갱신한다. 실제 Host 인수는 사용자 확인 대기이며 기존 기록은 자동 변환하지 않는다.
+GIL은 Host 훅을 설치하지 않는다. 선택한 GIL 프로젝트에는 공통 프롬프트와 단계별 MCP 응답으로 안내한다.
+아래 고정 배포물 preview.23에는 새 제거 명령이 아직 없으므로 기존 GIL 명령만 백업·검토해 정리한다.
+새 제거 명령·무동작 호환 처리는 다음 검증 배포본부터 제공한다. 구형 훅 installer는 실행하지 않는다.
+Core 승인·전이·증거 검사는 유지하지만 다른 세션의 도구나 파일 쓰기를 가로막지 않는다.
 
 전체 OS 안내의 시작점은 [저장소 설치 안내](../../INSTALL.md)다. 이 문서는 macOS 전용 상세 절차다.
 
@@ -60,7 +60,7 @@ git --version
 ## Codex에 붙여넣을 통합 요청
 
 ```text
-GIL unsigned preview 0.2.1-preview.23와 Codex용 보호 훅을 함께 설치해 줘. 내가 터미널을 직접 조작하게 하지 마.
+GIL unsigned preview 0.2.1-preview.23를 훅 없이 설치해 줘. 내가 터미널을 직접 조작하게 하지 마.
 플러그인 관리 MCP 도구만 보고 설치 불가라고 결론내리지 말고, 이 로컬 Codex 작업의 셸에서
 앱에 포함된 codex CLI를 사용해. 프로젝트를 초기화·이관하거나 .gil 기록을 바꾸지 마.
 
@@ -94,12 +94,9 @@ codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 이미 검증·해제한 파일을 다시 받거나 같은 marketplace를 무조건 재등록하지 마.
 Plugin cache를 직접 편집하거나 Gatekeeper·quarantine·권한을 강제로 변경하지 마.
 Git·Git 없는 경로 모두 Plugin 설치 뒤 실제 설치 응답의 installedPath와 manifest에서 Core 절대경로를 확인해.
-그 Core로 write-guard install --auto --host codex 와 write-guard status --auto 를 실행해.
-신규 설치이거나 훅을 지웠어도 생략하지 마. 다른 Host는 바꾸지 마.
-두 훅(PreToolUse·PostToolUse)과 codex의 matches_current_core, 백업·비-GIL 설정 보존을 확인해.
-설정 변경은 검토한 GIL 항목만 적용하고 훅 신뢰·권한·sandbox를 자동 허용하지 마.
-앱 재시작·새 세션의 정상 /hooks 검토와 버려도 되는 테스트 폴더의 보호 확인을 안내해.
-실제 보호를 확인하지 못하면 “설정 준비 완료, 실제 보호 확인 대기”로 보고해.
+아래 훅 제거 절차에 따라 기존 GIL 훅만 백업·정리하고 새 훅은 등록하지 마. 다른 Host는 바꾸지 마.
+비-GIL 설정·권한·sandbox를 보존해. 앱 재시작·새 세션에서 일반 프로젝트 비간섭과 GIL 단계별 안내를
+확인하도록 안내해. 실제 Host를 시험하지 못하면 확인 대기라고 보고하고 파일 쓰기의 강제 차단을 주장하지 마.
 
 마지막으로 codex plugin list --json에서 설치 버전이 정확히 0.2.1-preview.23인지 확인해 알려줘.
 화면이 실제로 보이기 전에는 Monitor가 열렸다고 말하지 마.
@@ -119,11 +116,11 @@ Git 없는 경로의 archive member·목적지·권한 검사와 유지관리자
 
 ## 설치 후 실제 동작 확인
 
-1. 아래 보호 훅 등록·설정 확인 뒤 앱을 재시작하고 **새 Codex 대화**에서 `/hooks`를 정상 검토한다. 설치 전 대화는 이전 MCP 연결을 유지할 수 있다.
+1. 아래 기존 GIL 훅 제거 확인 뒤 앱을 재시작하고 **새 Codex 대화**를 연다. 설치 전 대화는 이전 MCP 연결을 유지할 수 있다.
 2. 빈 테스트 폴더를 선택한다.
 3. **“지금 폴더에서 GIL 프로젝트를 시작해 줘”**라고 말한다.
 4. 실제 Monitor, 첫 Interview와 graph가 보이는지 확인한다. 도구 성공 문장만으로 UI 성공을 판정하지 않는다.
-5. [공통 활성화 확인](../../INSTALL.md#보호-훅-등록과-갱신--신규-설치에도-포함)에 따라 테스트 폴더의 자동 등록·Verify 밖 편집 거절·Verify 안 허용을 실제 Host에서 확인한다. 설정 일치와 실제 보호 성공은 별개다.
+5. [공통 확인 절차](../../INSTALL.md#훅-없는-설치와-기존-훅-제거)에 따라 일반 프로젝트 비간섭과 선택한 GIL 프로젝트의 단계별 안내를 확인한다. 훅의 파일 쓰기 차단은 제공하지 않는다.
 6. 기존 Project라면 **“기록을 바꾸지 말고 GIL Monitor를 열어 줘”**라고 말한다.
 
 이전 preview.6의 깨끗한 Mac VM에서 Git/Xcode Command Line Tools 부재 → Git 없는 archive 검증 → 로컬 marketplace 등록 →
@@ -146,45 +143,32 @@ codex plugin marketplace remove gil-preview-macos-arm64 --json
 ```
 
 각 명령 뒤 조회하여 완료한 단계는 반복하지 않는다. 새 설치가 끝나면 `plugin list`에서 preview.23을
-확인하고 아래 훅 등록·갱신도 마친 뒤 새 대화를 연다. Plugin 제거는 프로젝트 폴더나 `.gil` 기록 삭제를 포함하지 않는다.
+확인하고 아래 기존 GIL 훅 제거를 확인한 뒤 새 대화를 연다. Plugin 제거는 프로젝트 폴더나 `.gil` 기록 삭제를 포함하지 않는다.
 
 <a id="별도로-설치한-전역-write-guard-갱신"></a>
 
-### 보호 훅 등록과 갱신
+### 훅 없는 설치와 기존 훅 제거
 
-표준 macOS 설치에는 **신규·누락된 훅 등록과 기존 훅 갱신을 모두 포함한다**. Plugin/MCP 등록만으로
-훅이 자동 설치되지는 않는다. [공통 절차](../../INSTALL.md#보호-훅-등록과-갱신--신규-설치에도-포함)를 따라
-검증된 설치 Core를 사용하고 요청받은 Host만 바꾼다. 두 Host의 Core 경로가 다르면 각각 등록한다.
+[공통 제거 절차](../../INSTALL.md#훅-없는-설치와-기존-훅-제거)가 정본이다. 전역·프로젝트 로컬·Plugin·Skill
+훅은 등록하지 않는다. 구형 설정의 GIL 명령만 백업·제거하고 비-GIL 훅·권한·sandbox는 보존한다.
+훅 제거 기능이 있는 새 배포본에서, 공식 설치 응답·manifest로 확인한 Core 절대경로를 사용한다.
+preview.23 이하에는 아래 명령이 없으므로 정확한 설정 diff와 백업을 준비해 GIL 명령만 정리한다.
 
 ```sh
-# GIL_CORE는 실제 Plugin 설치 응답과 MCP manifest로 확인한 실행 파일의 절대경로다.
-"$GIL_CORE" write-guard install --auto --host codex
+"$GIL_CORE" write-guard uninstall --auto --host codex
 "$GIL_CORE" write-guard status --auto
 ```
 
-사용자가 보호 훅을 원하지 않으면 강제 설치하지 않고 “MCP만 연결, 보호 미설정”으로 남긴다.
-보호 설정·Host 활성화·Monitor 표시를 따로 보고한다. 훅 비활성화나 조직 정책도 임의로 해제하지 않는다.
+Claude만 요청받았으면 `--host claude`, 두 Host 모두 요청받았으면 `--host both`를 쓴다.
+`not_installed`는 검사한 설정의 결과이며 실제 Host 메모리·사용자 스크립트 검증을 대신하지 않는다.
+`custom_review_required`는 사용자 정의 명령의 정확한 검토가 필요하다는 뜻이다.
+프로젝트 registry·기록·승인·Snapshot은 읽거나 변경하지 않는다. 없는 설정은 만들지 않는다.
 
-Plugin/MCP 교체만으로 사용자 설정의 절대 훅 경로는 바뀌지 않는다. 이전 Core를 지우기 전에
-사용하는 Host의 훅과 실제 MCP 실행 경로를 읽어 확인하고, **같은 검증된 새 Core**로 훅도 갱신한다.
-훅이 없거나 삭제됐어도 위 등록 명령을 생략하지 않는다.
-이 명령은 기존 비-GIL 설정·권한·sandbox 설정을 유지하고 private 원본 백업을 만든다.
-프로젝트 registry·기록·Snapshot은 이전하지 않는다. 새 Core의 `write-guard status --auto`에서
-사용하는 Host가 `matches_current_core`인지 확인하고, 새 Host 세션의 MCP identity와 경로도
-대조한다. 부분 실패면 완료로 표시하지 않고 이전 Core와 백업을 유지한다.
-
-기존 훅이 installer 셸 자체를 막으면 보호 없는 명령으로 재시도하지 않는다. 먼저 새 Core와
-`write-guard config --auto --host HOST` 출력, 기존 설정의 정확한 병합 diff와 백업 위치를 준비한다.
-승인된 설치 단계에서 Host가 제공하는 **경로 지정 파일 편집 도구**로 기존 설정 전체를 별도
-사용자 전용 백업 파일에 보존하고 GIL 항목만 교체할 수 있다. 보호 프로젝트 밖의 설정 파일임을
-확인하며, 기존 비-GIL 항목·권한·sandbox 설정은 그대로 둔다. `.gil-host-guard`는 보호 셸에서도
-쓰기 금지이므로 그 안에 백업을 만들거나 installer를 중첩 실행하지 않는다. 설정 편집 도구도
-사용할 수 없으면 필요한 정확한 파일 변경과 Host 제약을 보고한다. 전역 훅 삭제·자동 승인·
-사용자 터미널 실행을 기본 해결책으로 삼지 않는다.
-
-새 세션에서 훅 신뢰를 정상 검토하고 기존 프로젝트를 `gil_context`로 재연결한다. 임시 HOME의
-설치 시험과 실제 Codex/Claude의 훅 실행·승인 화면·sandbox 인수는 별개다. 소스 PR의 머지는
-배포/설치 완료가 아니다. [보호 범위와 한계](WRITE-GUARD.md)를 따른다.
+구형 훅이 설치 셸을 막으면 반복 실행하지 않는다. 정확한 제거 diff와 원본 백업을 먼저 준비하고,
+Host가 지원하는 파일 편집 도구로 승인된 GIL 항목만 제거한다. 도구가 없으면 그 제한과 남은 변경을
+보고한다. 전체 훅 삭제·보안 해제·자동 승인이나 사용자의 수동 터미널 실행을 기본 해결책으로 삼지 않는다.
+새 세션에서 MCP 버전, 일반 프로젝트 비간섭과 선택한 GIL 프로젝트의 단계별 안내를 확인한다.
+임시 HOME 자동검증·실제 Host의 모델 준수·Monitor 화면은 구분한다. [범위와 한계](WRITE-GUARD.md)를 따른다.
 
 직전 공개 배포판은 `0.2.1-preview.22`, tag `v0.2.1-preview.22`, marketplace commit
 `10f89576df104362e3ff1007487f0dbf1c01c2af`다. preview.22는 시각자료·계획 안내 개선을 포함하지만 진행 차단 훅이 남아 있으므로 같은 교착이 재발할 수 있다. 복구는 Plugin 버전 교체이며 Project Artifact를

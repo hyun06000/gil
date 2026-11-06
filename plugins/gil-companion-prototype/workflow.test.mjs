@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
+import {readFile, access} from 'node:fs/promises';
 import {sync, render, begin, end} from './sync-workflow.mjs';
 
 const workflow = await readFile(new URL('../../src/mcp/workflow.md', import.meta.url), 'utf8');
@@ -125,7 +125,37 @@ test('conversation ending is independent of workflow completion and file protect
   assert.match(workflow, /No special pause phrase, exact final question, or `gil_await_user` call is required/);
   assert.match(workflow, /Do not create a Question, Interview or Experiment merely/);
   assert.match(workflow, /Recovery\/revisit approval and cycle boundaries do not require it/);
-  assert.match(workflow, /They do not block Stop or wrap_up, inject UserPromptSubmit instructions/);
-  assert.match(workflow, /Paused or unrelated chats still cannot edit protected project files outside Verify/);
+  assert.match(workflow, /GIL installs no global, project-local, Plugin or Skill hooks/);
+  assert.match(workflow, /it does not intercept Bash, Write or Edit/);
   assert.doesNotMatch(workflow, /End the response with that exact question|expires the handoff|detaches this chat.s turn gate/);
+});
+
+test('GIL guidance is scoped to the selected project and never registers Host hooks', () => {
+  assert.match(workflow, /only when the user is working on an explicitly selected GIL project/);
+  assert.match(workflow, /do not call GIL tools or demand GIL Steps just to proceed/);
+  assert.match(workflow, /Do not create hooks, enroll folders.*wrap ordinary shell commands/);
+  assert.match(workflow, /Use the Host's normal execution and approval flow/);
+  assert.match(workflow, /not an enforced file lock/);
+  assert.doesNotMatch(workflow, /Installed Host hooks automatically enroll|use the installed Host adapter/);
+});
+
+// The copy-paste installer must not restore hooks that the product retired.
+test('installation prompts remove only old GIL hooks and never install them', async () => {
+  for (const path of ['../../INSTALL.md', '../../distribution/codex/INSTALL.md']) {
+    const doc = await readFile(new URL(path, import.meta.url), 'utf8');
+    assert.doesNotMatch(doc, /write-guard install|matches_current_core/);
+    assert.match(doc, /write-guard uninstall --auto --host codex/);
+    assert.match(doc, /비-GIL/);
+    assert.match(doc, /강제 차단/);
+  }
+  const skill = await readFile(new URL('./skills/gil-companion/SKILL.md', import.meta.url), 'utf8');
+  assert.doesNotMatch(skill.split('---')[1], /^hooks:/m);
+});
+
+test('the shipped Plugin has no hook configuration on either Host', async () => {
+  for (const manifest of ['.codex-plugin/plugin.json', '.claude-plugin/plugin.json']) {
+    const doc = JSON.parse(await readFile(new URL(manifest, import.meta.url), 'utf8'));
+    assert.equal(doc.hooks, undefined);
+  }
+  await assert.rejects(access(new URL('hooks/hooks.json', import.meta.url)), {code:'ENOENT'});
 });

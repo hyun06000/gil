@@ -136,6 +136,14 @@ Project
 
 ## 핵심 설계
 
+### 선택한 프로젝트에만 적용하는 안내
+
+GIL은 전역·프로젝트 로컬·Plugin·Skill 훅을 설치하지 않는다. 사용자가 GIL을 요청한 프로젝트에서
+공통 프롬프트와 시작·재개·단계 전환의 MCP 응답으로 다음 행동을 안내한다. 일반 개발·설치·웹 조사나
+다른 프로젝트에 GIL 단계·셸 래퍼·별도 권한을 요구하지 않는다. 파일 작업은 실제 열린 Verify에서
+수행하도록 안내하지만 OS 쓰기 차단은 아니다. Core의 승인·전이·Report·증거·dirty 검사는 유지한다.
+기존 설치의 GIL 훅 제거와 배포 버전별 적용은 [설치 안내](INSTALL.md)를 따른다.
+
 ### Trace가 아니라 Protocol
 
 Observability 도구는 Agent가 무엇을 했는지 기록한다.
@@ -148,7 +156,7 @@ Define → Hypothesis → Verify → Analysis → Outcome
 
 - Report 없이는 Step을 닫을 수 없다.
 - 열린 Step을 둔 채 허용되지 않은 다음 Step으로 갈 수 없다.
-- Artifact를 변경하고 snapshot을 확정할 수 있는 Step은 Verify뿐이다.
+- Artifact 파일 변경은 열린 Verify에서 수행하도록 안내하며, Core는 Verify에서만 Snapshot 확정을 허용한다.
 - Cycle은 마지막 Outcome과 일치하는 Cycle Report가 있어야 닫힌다.
 
 ### 실패는 Graph를 성장시키는 사건

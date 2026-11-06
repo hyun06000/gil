@@ -38,7 +38,8 @@ export async function checkNativeOutputContract(binary) {
     assert.equal(started.structuredContent.ok, true);
     hook({hook_event_name:'PostToolUse',tool_name:'mcp__gil__gil_start',tool_input:{project_root:root},tool_response:started});
     assert.deepEqual(hook({hook_event_name:'Stop',last_assistant_message:'report complete'}),{});
-    assert.equal(hook({hook_event_name:'PreToolUse',tool_name:'Write',tool_input:{file_path:join(root,'report.docx')}}).hookSpecificOutput.permissionDecision,'deny');
+    assert.deepEqual(hook({hook_event_name:'PreToolUse',tool_name:'Write',tool_input:{file_path:join(root,'report.docx')}}),{});
+    assert.equal(await import('node:fs').then(({existsSync}) => existsSync(join(home,'.gil-host-guard'))), false);
     const next = started.structuredContent.next_call;
     assert.equal(next.name, 'show_gil_monitor');
     assert.match(next.arguments.scope_id, /^project:[a-f0-9]{64}$/);
@@ -47,6 +48,9 @@ export async function checkNativeOutputContract(binary) {
     await connect();
     const context = await call('gil_context', {project_root:root});
     assert.equal(context.structuredContent.ok, true);
+    const contextText = context.content.filter(c => c.type === 'text').map(c => c.text).join('\n');
+    assert.match(contextText, /무관한 주제의 답변을 위해 GIL 단계를 요구하지 않는다/);
+    assert.match(contextText, /GIL 훅은 설치하지 않으며 일반 셸·다른 프로젝트에는 적용하지 않는다/);
     assert.deepEqual(context.structuredContent.next_call, next);
     const shown = await call(next.name, next.arguments);
     assert.equal(shown.isError, false);
@@ -72,14 +76,14 @@ export async function checkNativeOutputContract(binary) {
     assert.deepEqual(hook({hook_event_name:'UserPromptSubmit',prompt:'Make my report'}),{});
     assert.deepEqual(hook({hook_event_name:'Stop',last_assistant_message:'Here is the report'}),{});
     assert.deepEqual(hook({hook_event_name:'PreToolUse',tool_name:'mcp__ccd_turn__wrap_up',tool_input:{ask:'Here is the report'}}),{});
-    assert.equal(hook({hook_event_name:'PreToolUse',tool_name:'Write',tool_input:{file_path:join(root,'forbidden.txt')}}).hookSpecificOutput.permissionDecision,'deny');
+    assert.deepEqual(hook({hook_event_name:'PreToolUse',tool_name:'Write',tool_input:{file_path:join(root,'forbidden.txt')}}),{});
     const again = await call('gil_start', {project_root:root});
     assert.equal(again.isError, true);
     const status = await call('gil_status', {project_root:root});
     assert.equal(status.structuredContent.ok, true);
     assert.match(status.structuredContent.said, /step:C1\/S1/);
     return {passed:true, validator:'MCP SDK Client.callTool',
-      scope:'start/recovery, Monitor response, Question guidance and optional read-only handoff, file boundary; no visible Host UI claim'};
+      scope:'start/recovery, Monitor response, Question guidance and optional read-only handoff, project-scoped guidance without Host hooks; no visible Host UI claim'};
   } finally {
     await client?.close();
     await rm(scratch, {recursive:true, force:true});

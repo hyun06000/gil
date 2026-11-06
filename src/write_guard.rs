@@ -1,4 +1,4 @@
-//! Opt-in native Host adapter. Never changes GIL domain records; explicit install merges Host hooks.
+//! Legacy hook retirement and explicit maintainer diagnostics. No Host hooks are installed.
 use crate::RuleSet;
 use serde_json::{Value, json};
 use std::io::{self, Read};
@@ -8,18 +8,27 @@ use std::process::{Command, ExitCode};
 const LIMIT: u64 = 1024 * 1024;
 
 pub fn cli(args: &[String]) -> ExitCode {
+    // Compatibility with old settings, including malformed events/argv: never consult HOME,
+    // a registry, cwd or project state, and never deny or rewrite a Host call.
+    if args.first().is_some_and(|s| s == "hook") {
+        let _ = io::copy(&mut io::stdin().take(LIMIT + 1), &mut io::sink());
+        println!("{{}}");
+        return ExitCode::SUCCESS;
+    }
+    if args.first().is_some_and(|s| s == "config") {
+        println!("{}", json!({"hooks":{}}));
+        return ExitCode::SUCCESS;
+    }
     let result = dispatch(args);
     match result {
         Ok(code) => ExitCode::from(code),
+        Err(error) if args.first().is_some_and(|s| s == "inspect") => {
+            println!("{}", deny(&error));
+            ExitCode::SUCCESS
+        }
         Err(error) => {
-            // A malformed hook must deny, not exit 1 (Hosts may fail open on hook errors).
-            if args.first().is_some_and(|s| s == "hook") {
-                println!("{}", deny(&error));
-                ExitCode::SUCCESS
-            } else {
-                eprintln!("GIL write guard: {error}");
-                ExitCode::FAILURE
-            }
+            eprintln!("GIL write guard: {error}");
+            ExitCode::FAILURE
         }
     }
 }
@@ -32,25 +41,14 @@ fn dispatch(args: &[String]) -> Result<u8, String> {
     }
     if args.len() < 3 || args[1] != "--root" {
         return Err(
-            "usage: gil-write-guard hook|config|run --root ABSOLUTE_PROJECT [-- SHELL_COMMAND]"
+            "usage: gil-write-guard inspect|run --root ABSOLUTE_PROJECT [-- SHELL_COMMAND]"
                 .into(),
         );
     }
     let root = project_root(Path::new(&args[2]))?;
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     match args[0].as_str() {
-        "config" if args.len() == 3 => {
-            let command = invocation(
-                &exe,
-                &["hook", "--root", root.to_str().ok_or("non-UTF8 root")?],
-            )?;
-            println!(
-                "{}",
-                json!({"hooks":{"PreToolUse":[{"matcher":"^(Bash|exec_command|apply_patch|Write|Edit|MultiEdit|NotebookEdit)$","hooks":[{"type":"command","command":command}]}]}})
-            );
-            Ok(0)
-        }
-        "hook" if args.len() == 3 => {
+        "inspect" if args.len() == 3 => {
             let mut bytes = Vec::new();
             io::stdin()
                 .take(LIMIT + 1)

@@ -1,4 +1,4 @@
-//! Native Host adapter contract tests; no installed Host/plugin or user project is touched.
+//! Explicit maintainer policy/sandbox diagnostics; no installed Host/plugin or user project is touched.
 use gil::{ProjectSession, RuleSet, STATE_PATH};
 #[cfg(not(feature = "approved-plan"))]
 use gil::NodeKind;
@@ -23,7 +23,7 @@ fn fixture(label: &str) -> PathBuf {
 
 fn hook(root: &Path, name: &str, args: Value) -> Value {
     let mut child = Command::new(env!("CARGO_BIN_EXE_gil-write-guard"))
-        .args(["hook", "--root"])
+        .args(["inspect", "--root"])
         .arg(root)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -280,7 +280,7 @@ fn read_only_records_allow_guard_lookup_without_write_access() {
     let input = json!({"hook_event_name":"PreToolUse","tool_name":"Write","cwd":root,
         "tool_input":{"file_path":"report.docx"}});
     let mut kid = Command::new("/usr/bin/sandbox-exec")
-        .args(["-p", &profile, env!("CARGO_BIN_EXE_gil-write-guard"), "hook", "--root"])
+        .args(["-p", &profile, env!("CARGO_BIN_EXE_gil-write-guard"), "inspect", "--root"])
         .arg(&root).stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap();
     kid.stdin.take().unwrap().write_all(input.to_string().as_bytes()).unwrap();
     let out = kid.wait_with_output().unwrap();

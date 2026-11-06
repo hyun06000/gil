@@ -90,12 +90,11 @@ node --test distribution/codex/*.test.mjs distribution/compliance/notices.test.m
 실제 사용자 기록을 시험 데이터로 쓰지 않는다. native MCP/화면 인수는
 [NATIVE-ACCEPTANCE](mcp-app/NATIVE-ACCEPTANCE.md)와 [ACCEPTANCE](mcp-app/ACCEPTANCE.md)를 따른다.
 
-프로젝트 파일 쓰기의 Host 제한과 대화 진행의 분리는
-[쓰기 보호 어댑터](distribution/codex/WRITE-GUARD.md)로 시험한다. 설치된 Core의
-`gil write-guard install --auto --host both`가 두 Host의 공통 훅을 보존 병합한다. 최초 Host 활성화·
-Codex 신뢰 검토 이후 성공한 프로젝트 시작·재개 호출이 새 폴더를 자동 등록한다. 프로젝트 안에는
-설정 파일을 추가하지 않는다. `cargo test --locked -p gil --test automatic_guard`는 이벤트 계약 시험이며,
-macOS sandbox 시험·두 Host의 실제 훅 인수·실제 Monitor 화면 인수와 구분한다.
+GIL은 Host 훅을 설치하지 않는다. 선택한 GIL 프로젝트의 단계별 MCP 응답과 공통 지침으로 파일 작업을
+안내하며 무관한 세션의 도구 호출에는 관여하지 않는다. 기존 훅의 정리는 [훅 제거 계약](distribution/codex/WRITE-GUARD.md)을
+따른다. `automatic_guard` 시험은 구형 훅의 무동작·정확한 제거·일반 세션 비간섭을 검사한다.
+`write_guard`의 explicit inspect/run은 개발자가 직접 실행하는 정책·macOS sandbox 회귀 도구이며
+설치된 Host 보호나 실제 화면 인수를 뜻하지 않는다. 기존 OS·프로필 검사 범위를 유지한다.
 
 PR CI는 기존 필수 check와 macOS·Windows x64/arm64·기능 프로필 검사를 유지한다. 같은 PR의
 이전 실행만 취소하며 수동 실행은 취소하지 않는다. 같은 기능 조합의 Cargo 검사를 연속 배치하여
