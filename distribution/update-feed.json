@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "updated": "2026-11-05",
+  "updated": "2026-11-06",
   "note": "Metadata only. The installed GIL Core reads this file at most once a day to show update guidance in the Monitor; it never downloads or installs from it. Update this file in the same pull request that records a publication ledger.",
   "platforms": {
     "darwin-arm64": {
-      "version": "0.2.1-preview.21",
-      "release_url": "https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.21",
+      "version": "0.2.1-preview.22",
+      "release_url": "https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.22",
       "install_doc": "https://github.com/hyun06000/gil/blob/main/INSTALL.md",
-      "notes": "전역 보호 훅의 세션별 진행 검사와 프로젝트 경로 보호를 분리했습니다. 기존 전역 훅은 MCP와 같은 새 Core로 함께 갱신하고 새 연결에서 확인하세요. 실제 Codex·Claude Host 검증은 사용자 확인 대기이며 기존 기록은 자동 변환하지 않습니다."
+      "notes": "시각자료 JSON 예시·필드별 오류·현재 owner와 계획·Cycle 진행 안내를 보완했습니다. 새 연결에서 gil help visuals를 확인하세요. 기존 MCP와 보호 훅을 같은 새 Core로 갱신하며 기록을 변환하거나 실행 기록을 소급 변경하지 않습니다. 실제 Host 검증은 사용자 확인 대기입니다."
     },
     "windows-x64": {
       "version": "0.1.1-owner.14",
