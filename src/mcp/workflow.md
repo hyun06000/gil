@@ -187,7 +187,12 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    picture is never visual evidence; `source_kind` is `captured` (real screen/page),
    `generated` (drawn by code from data) or `provided` (supplied by the user), truthfully.
    Save the PNG in the project, list it in `evidence_files` too, and attach it with
-   `visuals.attachments`/`uses` and `declaration: {state: "attached"}`. Choose `not_needed`
+   `visuals.attachments`/`uses` and `declaration: {state: "attached"}`. For each new PNG, use
+   `attachments: [{key: "plot", path: "report/plot.png", source_kind: "generated", source_description: "actual method"}]`
+   and `uses: [{source: {kind: "new", key: "plot"}, caption: "result", alt: "observed content", purpose: "evidence"}]`.
+   Arrays and declaration are siblings inside visuals. Never put uses/key/reason inside an attached
+   declaration or use `stored` with an attachment key. Read `gil_help(topic: "report/visuals")`
+   for complete two-image JSON; CLI alias is `gil help visuals`. Choose `not_needed`
    only when nothing visual exists to show (byte equality, an exit code, one number) and say
    what replaces the image: `reason: "두 파일의 sha256 일치만 비교했고 화면이 없다"`. Refused:
    one-word or boilerplate reasons (`없음`, `불필요`, `not needed`), and `not_needed` while an
@@ -207,7 +212,11 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    independent problem or final delivery. Deliver links to the saved evidence/deliverable
    alongside the chat summary, and name the attached visuals.
 6. **Use the actual close contract.** Close both Steps and Cycles with `gil_close`; the legacy
-   `gil_cycle` cannot accept a Report. Format-4 steps (including Verify) and format-5 non-Verify
+   `gil_cycle` cannot accept a Report. Outcome Step's `close_cycle` means submit the Cycle Report
+   next; do not copy it into that report. Cycle `open_child` records a direction, it neither opens
+   nor executes another Experiment. Follow the actual Cycle receipt for the allowed next kind.
+   Approved Closing Interview uses `close_chain`; ordinary execution uses its own Cycle contract.
+   Format-4 steps (including Verify) and format-5 non-Verify
    reports without stored images use `{project_root, report}`. Every format-5 Verify uses
    `{project_root, report, expected_owner, visuals}`, even without images. Supply both
    `expected_owner: {kind: "step", ref: "<actual open step ref>"}` and `visuals`; with no images,
@@ -254,6 +263,17 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
      `request_changes` → close with that
      `close_report` (`approved: no`) and ask what to change in a new Question. Editing an open
      proposal makes a new revision; an earlier approval is never reused.
+   - One Experiment binds exactly one `current_item`, the first pending item, when it opens.
+     `executed_cycles` records that binding, not success and not a semantic audit of every task.
+     Doing I2–I4 while bound to I1 does not mark those items executed. Do not backfill bindings or
+     repeat completed work just to change the ledger; disclose the mismatch and agree on the
+     remaining verification scope. A combined objective belongs in one item before approval.
+   - `document` is available immediately after the Experiment opens and binds its revision, before
+     Define/Verify. Before binding (including Interview) it is null; reading or a refused close
+     never creates it. It stays tied to that Cycle's revision, not a newer proposal. If an open,
+     bound Experiment returns null, preserve the response and check the current connection/state;
+     never invent a summary. `close_report` belongs to its Synthesis and is not the current Step's
+     report after Synthesis has closed; follow the current-state `next` instead.
    - In that Experiment's Verify, save `gil_plan_read.document` **byte for byte** (UTF-8) as a
      project file and name it in `plan_document`. The plan file is not execution evidence: save the
      separate observation of the real work and name it in `evidence_files`. Accepted:

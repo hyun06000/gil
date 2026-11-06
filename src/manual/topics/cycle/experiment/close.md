@@ -31,7 +31,8 @@ related:
   `revisit` 을 고르면 **어느 조상으로 돌아갈지도 함께** 적는다 —
   `next_direction.target_cycle_ref: cycle:C2`. 그 칸의 규칙은 `cycle/revisit/target` 에 있다.
 
-  next_direction 은 verdict 가 허락하는 것만 고를 수 있다 — 무엇이 허락되는지는 위에 있다.
+  next_direction 은 위의 verdict 허용값을 따른다. Outcome Step 의 close_cycle 은 "다음에 Cycle Report 를 제출"하는 방향이므로 여기에 복사하지 않는다.
+  Cycle 의 open_child 는 다음 자식 Cycle 방향만 기록한다. 자동 실행하지 않으며 다음 gil_open 종류는 성공 receipt 를 따른다.
 
   **Cycle Report 는 안의 Step 을 복제하지 않는다.** 무엇을 했는지는 이미 그 자리들에
   적혀 있고, 여기 옮겨 적으면 같은 사실이 두 자리에 살며 한쪽이 낡는다.

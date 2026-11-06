@@ -93,7 +93,7 @@ fn view(p: &Project) -> Value {
         "retry_pending":state.pending(chain).iter().filter(|i| state.executed_cycles.iter().any(|e| e.item_id == i.id)).map(|i| &i.id).collect::<Vec<_>>(),
         "current_item":p.current_plan_item(), "current_cycle":current_cycle, "pending":state.pending(chain), "reinterview_requests":state.awaiting_interview(chain), "executed_cycles":state.executed_cycles,
         "close_report":proposal.and_then(|p| p.report().ok()).map(|r| crate::approved_plan::report_text(&r)), "document":p.plan_document(),
-        "next":"Monitor 응답 후 close_report로 Synthesis를 닫고 Outcome, Interview Cycle까지 닫는다. Experiment Verify는 document와 별도 실행 증거를 파일로 남긴다."})
+        "next":format!("{}\ndocument는 Experiment를 열 때 바인딩된 승인 판의 UTF-8 원문이다. 바인딩 전에는 null이며 조회·실패한 close가 생성하지 않는다. 현재 Experiment에 바인딩이 있는데 null이면 요약을 만들어 쓰지 말고 현재 연결·상태를 확인한다. 파일 저장은 실제 열린 Verify에서만 한다. 한 Experiment는 current_item 하나에만 연결된다. executed_cycles는 열기 바인딩이며 성공 증명은 해당 Cycle Report다.", crate::context::next_call(p))})
 }
 impl Grants {
     fn token(&self, scope: &str, revision: u32, digest: &str) -> Result<String, String> {
@@ -226,7 +226,7 @@ pub(super) fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
         ),
         (
             "gil_plan_read",
-            "Read proposal/Monitor decision and exact close_report. Use close_report unchanged with gil_close. In Experiment, save document verbatim to a file during Verify; name plan_document and separate evidence_files. Never invent approval.",
+            "Read proposal/Monitor decision and current-state next guidance. close_report is the proposal's Synthesis report: use it unchanged only when that Synthesis is actually open. document is null before an Experiment binds; opening an Experiment immediately exposes the bound revision's exact UTF-8 document, even before Define/Verify. Reading or a failed close never creates it. Save it verbatim only during Verify; name plan_document and separate evidence_files. Each Experiment binds exactly one current_item; executed_cycles means opened/bound, not success or proof of all work. Other items stay pending even if a report mentions them. Never invent approval or summarize a missing document.",
             input(json!({"project_root":string}), vec!["project_root"]),
             false,
             true,

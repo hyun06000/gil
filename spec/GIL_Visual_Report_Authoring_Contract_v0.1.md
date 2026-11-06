@@ -163,6 +163,12 @@ caption/alt/purpose에 적는다. 새 파일이 없으면 attachments는 빈 배
 uses, missing은 이유·follow_up 및 선택적 uses를 받는다. 선언 없는 format-5 Verify close는
 기존 텍스트 호출로 우회할 수 없다. format-4 typed close는 `visual_upgrade_required`로 거절한다.
 
+입력 형식 거절은 schema가 소유한 필드 이름·배열 인덱스로 위치를 알린다(예: `$.visuals.uses[0].source.owner`).
+입력 값·알 수 없는 필드 이름·serde 오류 원문은 출력하지 않는다. 잘못된 형식의 요청은 프로젝트를 읽거나 쓰지 않는다.
+owner 예시를 현재 주소인 것처럼 안내하지 않으며, 형식 검사 뒤 실제 상태에서 owner가 불일치하면 현재 보고 대상을 알린다.
+`attached`에는 `state`만 허용한다. `uses`·`attachments`는 선언과 나란히 `visuals` 아래에 둔다.
+설치본의 `gil_help(topic: "report/visuals")` / `gil help visuals`가 두 PNG와 stored 인용의 JSON 예시를 제공한다.
+
 읽기 전용 `gil_report_visuals` 입력은 project_root와 owner다. 정확한 root만 사용하고,
 잠긴 ReadOnlySession으로 조회한다. recovery·원본 파일 읽기·이미지 bytes 전송은 하지 않는다.
 닫힌 보고서면 `confirmed:true`, 열린 보고서면 false이며, 찾을 수 없거나 판독이 불가능하면

@@ -222,6 +222,69 @@ fn format5_verify_without_images_uses_typed_close_with_a_declaration() {
 
 #[cfg(all(any(unix, windows), feature = "visual-authoring"))]
 #[test]
+fn documented_two_pngs_close_at_the_actual_c3_owner_and_can_be_cited() {
+    use serde_json::{Value, json};
+    use gil::{CycleKind, NodeKind};
+    let root = scratch("documented-two-pngs");
+    let mut mcp = Client::serve_with(&scratch("documented-two-pngs-settings"));
+    mcp.initialize();
+    monitor_call(&mut mcp, "gil_start", json!({"project_root":root}));
+    // Synthetic closed text history, then a visual-format project; never upgrade a user record.
+    let mut p = common::bootstrap();
+    let outcome = common::walk_to_the_exit(&mut p, "success");
+    p.close_cycle(common::cycle_report(p.current_cycle(), "success", outcome)).unwrap();
+    let mut p = p.prepare_visual_upgrade().unwrap();
+    p.open_child_cycle(CycleKind::Experiment).unwrap();
+    common::up_to_verify(&mut p);
+    save_product(&root, &p);
+    let actual = p.current_cycle().step_ref(p.current_cycle().step_now_open().unwrap()).to_string();
+    assert_eq!(actual, "step:C3/S3");
+    let manual = include_str!("../src/manual/topics/report/visuals.md");
+    let mut input: Value = serde_json::from_str(manual.split("```json\n").nth(1).unwrap().split("```").next().unwrap()).unwrap();
+    input["project_root"] = json!(root);
+    let mut png = Vec::new();
+    png::Encoder::new(&mut png, 1, 1).write_header().unwrap().write_image_data(&[91]).unwrap();
+    std::fs::create_dir(root.join("report")).unwrap();
+    for path in ["report/earnings.png", "report/targets.png"] { std::fs::write(root.join(path), &png).unwrap(); }
+    let before = std::fs::read(product_state_path(&root)).unwrap();
+    for (path, value, field) in [
+        ("/visuals/uses/0/source", json!({"kind":"stored","key":"synthetic-secret"}), "$.visuals.uses[0].source.owner"),
+        ("/visuals/declaration", json!({"state":"attached","uses":["synthetic-secret"]}), "$.visuals.declaration"),
+        ("/visuals/declaration", json!({"state":"not_needed","reason":"synthetic comparison without images"}), "$.visuals.uses"),
+    ] {
+        let mut bad = input.clone(); *bad.pointer_mut(path).unwrap() = value;
+        let error = mcp.request("tools/call", json!({"name":"gil_close","arguments":bad}));
+        assert_eq!(error["error"]["code"], -32602, "{error}");
+        let text = error["error"]["message"].as_str().unwrap();
+        assert!(text.contains(field) && !text.contains("synthetic-secret") && !text.contains("step:C2/S3"), "{text}");
+        assert_eq!(std::fs::read(product_state_path(&root)).unwrap(), before);
+    }
+    let mut wrong = input.clone(); wrong["expected_owner"]["ref"] = json!("step:C2/S3");
+    let refused = monitor_call(&mut mcp, "gil_close", wrong);
+    assert_eq!(refused["structuredContent"]["code"], "owner_mismatch");
+    assert!(refused["structuredContent"]["said"].as_str().unwrap().contains(&actual));
+    assert_eq!(std::fs::read(product_state_path(&root)).unwrap(), before);
+    let receipt = monitor_call(&mut mcp, "gil_close", input);
+    assert_eq!(receipt["structuredContent"]["confirmed"], true, "{receipt}");
+    assert_eq!(receipt["structuredContent"]["visuals"]["uses"].as_array().unwrap().len(), 2);
+    let stored = &receipt["structuredContent"]["visuals"]["uses"][0];
+    let mut visuals: Value = serde_json::from_str(manual.split("```json\n").nth(2).unwrap().split("```").next().unwrap()).unwrap();
+    visuals["uses"][0]["source"]["asset_id"] = stored["asset_id"].clone();
+    visuals["uses"][0]["source"]["sha256"] = stored["sha256"].clone();
+    {
+        let mut session = open_product(&root);
+        session.open_action_step(NodeKind::Analysis, common::plan(NodeKind::Analysis)).unwrap(); session.commit().unwrap();
+    }
+    let report = common::full_report(&common::spec(), CycleKind::Experiment, NodeKind::Analysis);
+    let report = report.field_names().map(|k| format!("{k}: {}\n", report.get(k).unwrap())).collect::<String>();
+    let cited = monitor_call(&mut mcp, "gil_close", json!({"project_root":root,"report":report,
+        "expected_owner":{"kind":"step","ref":"step:C3/S4"},"visuals":visuals}));
+    assert_eq!(cited["structuredContent"]["confirmed"], true, "{cited}");
+    mcp.eof();
+}
+
+#[cfg(all(any(unix, windows), feature = "visual-authoring"))]
+#[test]
 fn authoring_stdio_close_reuse_confirmation_and_rejections() {
     use serde_json::{Value, json};
     use gil::{CycleKind, NodeKind};

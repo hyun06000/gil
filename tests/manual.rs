@@ -842,3 +842,9 @@ fn the_state_aware_help_saves_nothing() {
     assert_eq!(ok(&dir, &["status"]), status);
     assert_eq!(ok(&dir, &["story"]), story);
 }
+
+#[test]
+fn visual_help_alias_answers_without_a_project() {
+    let dir = nowhere("visual-help-alias");
+    assert_eq!(ok(&dir, &["help", "visuals"]), ok(&dir, &["help", "report/visuals"]));
+}
