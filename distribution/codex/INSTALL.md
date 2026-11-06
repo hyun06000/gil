@@ -1,27 +1,27 @@
 # GIL macOS preview 설치
 
 GIL은 Host 훅을 설치하지 않는다. 선택한 GIL 프로젝트에는 공통 프롬프트와 단계별 MCP 응답으로 안내한다.
-아래 고정 배포물 preview.23에는 새 제거 명령이 아직 없으므로 기존 GIL 명령만 백업·검토해 정리한다.
-새 제거 명령·무동작 호환 처리는 다음 검증 배포본부터 제공한다. 구형 훅 installer는 실행하지 않는다.
+preview.24는 기존 GIL 명령의 정확한 제거·백업과 구형 훅 호출의 무동작 호환 처리를 제공한다.
+새 훅을 만들지 않으며 구형 훅 installer도 실행하지 않는다.
 Core 승인·전이·증거 검사는 유지하지만 다른 세션의 도구나 파일 쓰기를 가로막지 않는다.
 
 전체 OS 안내의 시작점은 [저장소 설치 안내](../../INSTALL.md)다. 이 문서는 macOS 전용 상세 절차다.
 
 대상은 **macOS Apple Silicon(`arm64`)의 로컬 Codex 작업**이다. 현재 배포판은
-`0.2.1-preview.23`이며 2026-11-06 게시한 unsigned prerelease다. Core, MCP server, Skill과
+`0.2.1-preview.24`이며 2026-11-06 게시한 unsigned prerelease다. Core, MCP server, Skill과
 fullscreen Monitor UI가 Plugin 하나에 들어 있으므로 Node·npm·Cargo·Homebrew·별도 Companion을
 설치하지 않는다. Intel Mac, Windows에는 이 파일을 사용하지 않는다. Claude Code(Claude Desktop)는
 같은 archive의 Core를 Desktop 설정에 직접 등록하는 경로를 사용한다. `.claude-plugin` catalog 설치는 가능하지만
 이전 시험에서는 Monitor가 표시되지 않았다. 직접 등록·업데이트 절차는 [저장소 설치 안내](../../INSTALL.md)를 따른다.
 
 - marketplace: `https://github.com/hyun06000/gil-marketplace.git`
-- 고정 tag: `v0.2.1-preview.23`
-- 고정 commit: `b3e9b6da119ff447a541e02c07281afa088a06ec`
+- 고정 tag: `v0.2.1-preview.24`
+- 고정 commit: `d36f6ba35f9e4e6ee43481580af51f98c0207f29`
 - Plugin: `gil-companion-prototype@gil-preview-macos-arm64`
-- 공개 archive: `gil-codex-macos-arm64-0.2.1-preview.23.tar.gz`
-- archive 크기: `3,673,299` bytes
-- archive SHA-256: `b0172f58e4546e223678dd51b4115c0d7e9764ae6ace533caa996bc6d9e72fbc`
-- 게시·검증 장부: [PREVIEW-23-PUBLICATION-20261106.md](PREVIEW-23-PUBLICATION-20261106.md)
+- 공개 archive: `gil-codex-macos-arm64-0.2.1-preview.24.tar.gz`
+- archive 크기: `3,647,594` bytes
+- archive SHA-256: `6e2d0dc92fefe73eb103c4d85cb1df6bf193146d899294113cb62a7bc534abc5`
+- 게시·검증 장부: [PREVIEW-24-PUBLICATION-20261106.md](PREVIEW-24-PUBLICATION-20261106.md)
 
 Apple Developer ID 서명과 공증은 없다. macOS가 정상적인 사용자 확인 뒤에도 실행을 차단하면 멈춘다.
 Gatekeeper를 끄거나 quarantine·권한·Plugin cache를 변경해 우회하지 않는다.
@@ -60,7 +60,7 @@ git --version
 ## Codex에 붙여넣을 통합 요청
 
 ```text
-GIL unsigned preview 0.2.1-preview.23를 훅 없이 설치해 줘. 내가 터미널을 직접 조작하게 하지 마.
+GIL unsigned preview 0.2.1-preview.24를 훅 없이 설치해 줘. 내가 터미널을 직접 조작하게 하지 마.
 플러그인 관리 MCP 도구만 보고 설치 불가라고 결론내리지 말고, 이 로컬 Codex 작업의 셸에서
 앱에 포함된 codex CLI를 사용해. 프로젝트를 초기화·이관하거나 .gil 기록을 바꾸지 마.
 
@@ -70,23 +70,23 @@ xcode-select -p, git --version으로 OS·CPU·CLI·기존 설치·Git 상태를 
 Darwin/arm64가 아니면 중단해. 기존 GIL이 있으면 출처와 버전을 알려주고 교체 전에 물어봐.
 
 Git이 실제로 동작하면 다음 고정 tag를 사용해:
-codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.23 --json
+codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.24 --json
 codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 
 Git 또는 Xcode Command Line Tools가 없거나 clone이 그 이유로 실패하면 개발 도구를 설치하지 말고
 Git 없는 경로로 전환해. 다음 파일을 임시 위치에 다운로드해:
-https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.23/gil-codex-macos-arm64-0.2.1-preview.23.tar.gz
+https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.24/gil-codex-macos-arm64-0.2.1-preview.24.tar.gz
 
-압축 해제 전에 크기가 정확히 3673299 bytes이고 SHA-256이
-b0172f58e4546e223678dd51b4115c0d7e9764ae6ace533caa996bc6d9e72fbc인지 확인해.
+압축 해제 전에 크기가 정확히 3647594 bytes이고 SHA-256이
+6e2d0dc92fefe73eb103c4d85cb1df6bf193146d899294113cb62a7bc534abc5인지 확인해.
 다르면 아무것도 풀거나 등록하지 말고 중단해.
 
 일치하면 tar 목록에서 절대경로, .. 경로 이동, 심볼릭 링크, 하드 링크와 특수 파일이 없는지 확인해.
 문제가 없으면 기존 폴더를 덮어쓰지 말고
-$HOME/Library/Application Support/GIL/preview.23-local 이라는 새 사용자 전용 폴더에 풀어.
-.agents/plugins/marketplace.json, release.json, Plugin version 0.2.1-preview.23와
+$HOME/Library/Application Support/GIL/preview.24-local 이라는 새 사용자 전용 폴더에 풀어.
+.agents/plugins/marketplace.json, release.json, Plugin version 0.2.1-preview.24와
 core/darwin-arm64/gil 실행 권한을 확인한 뒤 다음 명령을 사용해:
-codex plugin marketplace add "$HOME/Library/Application Support/GIL/preview.23-local" --json
+codex plugin marketplace add "$HOME/Library/Application Support/GIL/preview.24-local" --json
 codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 
 네트워크나 Codex 설정 저장 권한이 필요하면 무엇이 필요한지 설명하고 정상 승인 창으로 요청해.
@@ -98,7 +98,7 @@ Git·Git 없는 경로 모두 Plugin 설치 뒤 실제 설치 응답의 installe
 비-GIL 설정·권한·sandbox를 보존해. 앱 재시작·새 세션에서 일반 프로젝트 비간섭과 GIL 단계별 안내를
 확인하도록 안내해. 실제 Host를 시험하지 못하면 확인 대기라고 보고하고 파일 쓰기의 강제 차단을 주장하지 마.
 
-마지막으로 codex plugin list --json에서 설치 버전이 정확히 0.2.1-preview.23인지 확인해 알려줘.
+마지막으로 codex plugin list --json에서 설치 버전이 정확히 0.2.1-preview.24인지 확인해 알려줘.
 화면이 실제로 보이기 전에는 Monitor가 열렸다고 말하지 마.
 ```
 
@@ -125,7 +125,7 @@ Git 없는 경로의 archive member·목적지·권한 검사와 유지관리자
 
 이전 preview.6의 깨끗한 Mac VM에서 Git/Xcode Command Line Tools 부재 → Git 없는 archive 검증 → 로컬 marketplace 등록 →
 Plugin 설치 → GIL 동작을 사용자가 확인했다. 별도의 fullscreen 전환과 앱 완전 종료 후 복원을 그 VM에서
-확인하지 않았다면 그 항목까지 통과했다고 기록하지 않는다. 이번 preview.23은 별도 실사용 검수 대상이다.
+확인하지 않았다면 그 항목까지 통과했다고 기록하지 않는다. 이번 preview.24는 별도 실사용 검수 대상이다.
 
 ## 기존 설치·업데이트·제거
 
@@ -142,7 +142,7 @@ codex plugin remove gil-companion-prototype@gil-preview-macos-arm64 --json
 codex plugin marketplace remove gil-preview-macos-arm64 --json
 ```
 
-각 명령 뒤 조회하여 완료한 단계는 반복하지 않는다. 새 설치가 끝나면 `plugin list`에서 preview.23을
+각 명령 뒤 조회하여 완료한 단계는 반복하지 않는다. 새 설치가 끝나면 `plugin list`에서 preview.24를
 확인하고 아래 기존 GIL 훅 제거를 확인한 뒤 새 대화를 연다. Plugin 제거는 프로젝트 폴더나 `.gil` 기록 삭제를 포함하지 않는다.
 
 <a id="별도로-설치한-전역-write-guard-갱신"></a>
@@ -170,8 +170,9 @@ Host가 지원하는 파일 편집 도구로 승인된 GIL 항목만 제거한�
 새 세션에서 MCP 버전, 일반 프로젝트 비간섭과 선택한 GIL 프로젝트의 단계별 안내를 확인한다.
 임시 HOME 자동검증·실제 Host의 모델 준수·Monitor 화면은 구분한다. [범위와 한계](WRITE-GUARD.md)를 따른다.
 
-직전 공개 배포판은 `0.2.1-preview.22`, tag `v0.2.1-preview.22`, marketplace commit
-`10f89576df104362e3ff1007487f0dbf1c01c2af`다. preview.22는 시각자료·계획 안내 개선을 포함하지만 진행 차단 훅이 남아 있으므로 같은 교착이 재발할 수 있다. 복구는 Plugin 버전 교체이며 Project Artifact를
+직전 공개 배포판은 `0.2.1-preview.23`, tag `v0.2.1-preview.23`, marketplace commit
+`b3e9b6da119ff447a541e02c07281afa088a06ec`다. preview.23에는 전역 파일 보호 훅이 남아 있다.
+이전 Plugin으로 복구하더라도 폐기한 훅을 다시 등록하지 않는다. 복구는 Plugin 버전 교체이며 Project Artifact를
 되돌리는 `gil restore`가 아니다. Plugin 제거·교체로 Project 폴더나 `.gil`을 삭제하지 않는다.
 preview.4 이후 새 이미지 Project는 저장 형식 5를 사용할 수 있고 preview.3는 이를 읽지 못한다.
 
