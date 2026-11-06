@@ -1,8 +1,6 @@
 # GIL 설치 안내
 
-> 배포 전 안내: 아래 파일 보호 전용 두 훅 정책은 다음 macOS 배포에 적용된다. 현재 고정된 preview.22 Core는 아직 네 훅을 생성한다. 새 배포 확인 전에는 구형 설치를 두 훅 전환 완료로 보고하지 않는다.
-
-macOS preview.22는 시각자료 JSON 예시·필드별 오류·현재 owner와 계획·Cycle 진행 안내를 보완한 검증판이다.
+macOS preview.23은 Stop·wrap_up 진행 차단과 UserPromptSubmit 강제 지시를 없애고 파일 보호·자동 등록을 유지한 검증판이다.
 Windows owner.14는 기존 계획 입력·Closing 안내 검증판을 유지한다. 새 대화·새 빈 폴더에서 확인하며 기존 기록은 자동 변환하지 않는다.
 
 이 문서가 친구·외부 시험 사용자를 위한 설치 정본이다. 사용자는 터미널 사용법을 알 필요가 없다.
@@ -20,7 +18,7 @@ Agent가 앱에 포함된 CLI와 OS 기본 도구를 사용한다. 일반 ChatGP
 | OS | Codex | Claude Desktop (Claude Code 탭) |
 |---|---|---|
 | Windows 11 x64 | **이전 판 실기기 확인 / 이번 판 사용자 확인 대기** — Companion installer `0.1.1-owner.14`, **Codex 연결** 버튼 | **사용자 확인 대기** — `0.1.1-owner.14`의 **Claude Desktop 연결** 버튼(자동 테스트 통과) |
-| macOS Apple Silicon | **이전 판 실기기 확인 / 이번 판 사용자 확인 대기** — Plugin `0.2.1-preview.22` 또는 Git 없는 archive | **이전 판 사용자 확인(11/01) / 이번 판 확인 대기** — 같은 archive의 Core를 Desktop 설정에 직접 등록. Plugin 경로는 화면 미표시 |
+| macOS Apple Silicon | **이전 판 실기기 확인 / 이번 판 사용자 확인 대기** — Plugin `0.2.1-preview.23` 또는 Git 없는 archive | **이전 판 사용자 확인(11/01) / 이번 판 확인 대기** — 같은 archive의 Core를 Desktop 설정에 직접 등록. Plugin 경로는 화면 미표시 |
 
 상태의 뜻:
 
@@ -37,7 +35,7 @@ Agent가 앱에 포함된 CLI와 OS 기본 도구를 사용한다. 일반 ChatGP
 | 환경 | 버전 | 상태 |
 |---|---|---|
 | Windows 11 x64 | `0.1.1-owner.14` | 계획 입력·Closing 안내 검증판, 실사용 검수 대기 |
-| macOS Apple Silicon | `0.2.1-preview.22` | 시각자료·계획 진행 안내 수정판, 실제 Host 검수 대기 |
+| macOS Apple Silicon | `0.2.1-preview.23` | 파일 보호 전용 훅 전환판, 실제 Host 검수 대기 |
 
 이번 판은 승인 저장과 최신 상태 조회를 구분한다. 승인 뒤 읽기가 잠시 실패하면 확인된 승인 판을 유지하고
 회색 **최신 상태 다시 확인 중** 안내를 보인다. 연속 실패 때는 조회 실패로 알리며 **다시 읽기**를 제공한다.
@@ -48,7 +46,7 @@ Agent가 앱에 포함된 CLI와 OS 기본 도구를 사용한다. 일반 ChatGP
 Monitor 승인 버튼 → Interview 닫기 → 계획 항목별 Experiment → Verify 파일 증거를 시험한다.
 새 프로젝트는 저장 형식 7을 사용한다. 기존 기록의 형식은 자동 변환하지 않으며, 이전 설치본으로
 되돌려도 형식 7 기록은 이전 형식으로 바뀌지 않는다. 닫힌 실패 Cycle의 revisit만 Monitor에서 변경 목록 확인·보존 승인을 거쳐 진행한다. 일반 restore와 Step revisit는 계속 차단한다.
-macOS 검증 범위와 배포물은 [preview.22 장부](distribution/codex/PREVIEW-22-PUBLICATION-20261106.md), Windows owner.14는 [게시 장부](distribution/windows/PUBLICATION-OWNER-14-20261103.md)를 따른다.
+macOS 검증 범위와 배포물은 [preview.23 장부](distribution/codex/PREVIEW-23-PUBLICATION-20261106.md), Windows owner.14는 [게시 장부](distribution/windows/PUBLICATION-OWNER-14-20261103.md)를 따른다.
 
 > Windows **Claude Desktop 연결** 버튼은 `0.1.1-owner.10`부터, 공통 Monitor의 **업데이트 안내·확대·미니맵**은 owner.10/preview.11부터 포함된다.
 > 이전 owner.8/owner.9에는 Claude Desktop 연결 버튼이 없다. 업데이트 뒤 새 연결에서 확인한다.
@@ -124,14 +122,14 @@ Core이고, 이미 열린 대화는 열 때의 Core를 끝까지 쓴다.
 
 ## macOS Apple Silicon
 
-릴리스: [v0.2.1-preview.22](https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.22)
+릴리스: [v0.2.1-preview.23](https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.23)
 
 - Plugin: `gil-companion-prototype@gil-preview-macos-arm64`
-- marketplace tag: `v0.2.1-preview.22`
-- marketplace commit: `10f89576df104362e3ff1007487f0dbf1c01c2af`
-- Git 없는 설치 archive: `gil-codex-macos-arm64-0.2.1-preview.22.tar.gz`
-- archive 크기: `3,498,578` bytes
-- archive SHA-256: `789d966ad85bc5108600966a09729d7c8a8b89f7572e02e88e498d8b656599fa`
+- marketplace tag: `v0.2.1-preview.23`
+- marketplace commit: `b3e9b6da119ff447a541e02c07281afa088a06ec`
+- Git 없는 설치 archive: `gil-codex-macos-arm64-0.2.1-preview.23.tar.gz`
+- archive 크기: `3,673,299` bytes
+- archive SHA-256: `b0172f58e4546e223678dd51b4115c0d7e9764ae6ace533caa996bc6d9e72fbc`
 - 지원: Apple Silicon(`arm64`)만. Intel Mac에는 설치하지 않는다.
 
 archive 하나가 Codex용 `.agents/plugins/marketplace.json`과 Claude Code용 `.claude-plugin/marketplace.json`,
@@ -205,7 +203,7 @@ MCP/Plugin 설치만 바꾸면 `~/.codex/hooks.json`·`~/.claude/settings.json`�
 ### Codex에 붙여넣을 요청
 
 ```text
-GIL unsigned preview 0.2.1-preview.22와 Codex용 보호 훅을 함께 설치해 줘. 사용자가 터미널을 직접 조작하게 하지 마.
+GIL unsigned preview 0.2.1-preview.23와 Codex용 보호 훅을 함께 설치해 줘. 사용자가 터미널을 직접 조작하게 하지 마.
 플러그인 관리 MCP 도구만 보고 설치 불가라고 결론내리지 말고, 이 로컬 Codex 작업의 셸에서
 앱에 포함된 codex CLI를 사용해. 프로젝트를 초기화·이관하거나 .gil 기록을 바꾸지 마.
 
@@ -221,21 +219,21 @@ GIL unsigned preview 0.2.1-preview.22와 Codex용 보호 훅을 함께 설치해
 보호 훅이 없거나 지워졌어도 위 등록 절차를 포함해. 설정 변경은 검토한 GIL 항목만 적용해.
 
 Git이 실제로 동작하면 다음 고정 tag 경로를 사용해:
-codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.22 --json
+codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.23 --json
 codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 
 Git 또는 Xcode Command Line Tools를 찾지 못하면 개발 도구 설치를 제안하지 말고 Git 없는 경로로 전환해.
 다음 archive를 임시 파일로 받은 뒤 압축 해제 전에 크기와 SHA-256을 모두 확인해:
-https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.22/gil-codex-macos-arm64-0.2.1-preview.22.tar.gz
-크기: 3498578 bytes
-SHA-256: 789d966ad85bc5108600966a09729d7c8a8b89f7572e02e88e498d8b656599fa
+https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.23/gil-codex-macos-arm64-0.2.1-preview.23.tar.gz
+크기: 3673299 bytes
+SHA-256: b0172f58e4546e223678dd51b4115c0d7e9764ae6ace533caa996bc6d9e72fbc
 
 값이 다르면 아무것도 풀지 말고 중단해. 일치하면 tar 목록에서 절대경로, .. 경로 이동,
 심볼릭 링크, 하드 링크와 특수 파일이 없는지 확인해. 문제가 없으면 기존 폴더를 덮어쓰지 말고
-$HOME/Library/Application Support/GIL/preview.22-local 이라는 새 사용자 전용 폴더에 풀어.
-그 폴더의 .agents/plugins/marketplace.json, release.json, Plugin version 0.2.1-preview.22,
+$HOME/Library/Application Support/GIL/preview.23-local 이라는 새 사용자 전용 폴더에 풀어.
+그 폴더의 .agents/plugins/marketplace.json, release.json, Plugin version 0.2.1-preview.23,
 core/darwin-arm64/gil 실행 권한을 확인한 뒤 다음 공식 CLI 명령을 사용해:
-codex plugin marketplace add "$HOME/Library/Application Support/GIL/preview.22-local" --json
+codex plugin marketplace add "$HOME/Library/Application Support/GIL/preview.23-local" --json
 codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 
 네트워크나 Codex 설정 저장 권한이 필요하면 정상 승인 창으로 요청하고, 승인 뒤에는
@@ -246,7 +244,7 @@ Git·Git 없는 경로 모두 Plugin 설치 뒤에는 실제 설치 결과의 Co
 그 Core로 write-guard install --auto --host codex 와 write-guard status --auto 를 실행해.
 다른 Host는 바꾸지 마. 두 훅(PreToolUse·PostToolUse)과 codex의 matches_current_core, 원본 백업·비-GIL 설정 보존을 확인해.
 훅 신뢰·권한·sandbox를 자동 허용하거나 비활성화 설정을 임의로 해제하지 마.
-마지막으로 codex plugin list --json에서 설치 버전이 0.2.1-preview.22인지 확인해 알려줘.
+마지막으로 codex plugin list --json에서 설치 버전이 0.2.1-preview.23인지 확인해 알려줘.
 앱 재시작·새 세션의 정상 /hooks 검토와 버려도 되는 테스트 폴더의 보호 확인을 안내해.
 연결·설정 준비, 실제 Host 보호 활성화, Monitor 표시를 구분해서 보고해.
 화면이 실제로 보이기 전에는 Monitor가 열렸다고 말하지 마.
@@ -275,7 +273,7 @@ inline 카드가 주변 대화와 어울린다고 확인했다. 반면 **Plugin�
 보는 경로는 직접 등록이다. 자세한 근거는 [호출 경로별 진단](mcp-app/CLAUDE-DESKTOP-ROUTES.md)을 본다.
 
 **1단계 — archive 준비(공통).** 위 Git 없는 경로 그대로 archive를 받아 크기·SHA-256·멤버 목록을 검증하고
-사용자 전용 새 폴더(`$HOME/Library/Application Support/GIL/<버전>-local`, 0700)에 푼다. preview.22 archive는 최상위에 Codex용 `.agents/plugins/marketplace.json`과 Claude Code용
+사용자 전용 새 폴더(`$HOME/Library/Application Support/GIL/<버전>-local`, 0700)에 푼다. preview.23 archive는 최상위에 Codex용 `.agents/plugins/marketplace.json`과 Claude Code용
 `.claude-plugin/marketplace.json`을 함께 담는다. 이전 `0.2.1-preview.7` archive에는 `.claude-plugin`이 없다.
 
 **2단계 — 직접 등록(현재 화면이 성립하는 경로).** 먼저 Claude Desktop을 **완전히 종료**한다(Dock에서
@@ -304,9 +302,9 @@ Desktop 종료 뒤 로컬 설치 Agent에서 이어간다. 실행 중 Desktop �
 Claude Code 탭에 붙여넣어 Agent에게 맡길 수 있는 요청문:
 
 ```text
-GIL unsigned preview 0.2.1-preview.22를 Claude Desktop에 직접 등록하고 Claude용 보호 훅도 설치해 줘. 내가 터미널을 직접 조작하게 하지 마.
+GIL unsigned preview 0.2.1-preview.23를 Claude Desktop에 직접 등록하고 Claude용 보호 훅도 설치해 줘. 내가 터미널을 직접 조작하게 하지 마.
 위 Git 없는 경로 그대로 archive를 받아 크기·SHA-256·tar 멤버를 검증하고
-$HOME/Library/Application Support/GIL/preview.22-local 에 풀어. 기존 폴더는 덮어쓰지 마.
+$HOME/Library/Application Support/GIL/preview.23-local 에 풀어. 기존 폴더는 덮어쓰지 마.
 그다음 ~/Library/Application Support/Claude/claude_desktop_config.json 을 읽어 지금 mcpServers 에 무엇이
 있는지 보여 주고, gil 항목이 이미 있으면 어떤 실행 파일을 가리키는지 알려 준 뒤 내 승인을 기다려.
 내가 승인하면: Claude Desktop 이 완전히 종료됐는지(주 프로세스 Claude 가 없는지) 확인하고, 설정 파일을
