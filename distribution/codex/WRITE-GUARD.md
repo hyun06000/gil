@@ -33,8 +33,10 @@ Snapshot 채택, 자동 복구를 하지 않는다. 상태가 없거나 손상�
 # Codex 설치에는 --host codex를 사용한다.
 ```
 
-`~/.codex/hooks.json`과 `~/.claude/settings.json`의 기존 항목을 보존해 PreToolUse·PostToolUse·
-UserPromptSubmit·Stop 훅을 병합한다. 원본은 `~/.gil-host-guard`의 private 백업에 보존한다.
+`~/.codex/hooks.json`과 `~/.claude/settings.json`의 기존 항목을 보존해 PreToolUse(파일 보호)·PostToolUse(자동 등록) 두 훅을 병합한다.
+업데이트는 GIL installer가 생성한 정확한 명령만 제거·교체한다. 구형 Stop·UserPromptSubmit의
+GIL 명령도 제거하며 같은 항목에 섞인 사용자 훅·matcher는 보존한다. 임의 shell 조합의 사용자 명령은
+자동 삭제하지 않으므로 별도로 검토한다. 원본은 `~/.gil-host-guard`의 private 백업에 보존한다.
 이 명령은 trust·permissions를 수정하지 않는다. **새 Host 세션에서** 설정을 읽고 Codex의 정상
 `/hooks` 검토에서 이 실행 파일을 신뢰해야 한다. Claude Desktop의 **Code 탭**은 Claude Code
 훅을 사용한다. 일반 Desktop MCP 채팅에는 이 훅의 강제를 주장하지 않는다.
@@ -47,30 +49,28 @@ UserPromptSubmit·Stop 훅을 병합한다. 원본은 `~/.gil-host-guard`의 pri
 
 설치 명령은 Host마다 `hook --auto --host codex|claude`를 기록한다. Host는 이 설치 argv로
 구분하며 `Bash` 이름·cwd·모델이 준 인자로 추측하지 않는다(Codex도 Bash 이름을 전달한다).
-진행 연결 키는 Host + session_id다. 기존 Host 미지정 연결 기록은 그대로 보존하되 새 Host에
-상속하지 않는다. 갱신 후 기존 프로젝트는 `gil_context`로 재연결한다. 보호 root 등록은 유지된다.
+자동 등록은 세션 ID 없이도 성공한 호출의 실제 프로젝트를 검증한다. 기존 session/wait 기록은
+호환성을 위해 보존하지만 읽어 진행을 강제하거나 갱신하지 않는다. 보호 root 등록은 유지된다.
 
 `gil write-guard status --auto`는 등록 폴더 목록과 현재 Core, Host별 훅 일치 상태를 출력한다.
-`matches_current_core`는 네 event의 훅 경로·Host·matcher가 현재 Core와 일치한다는 뜻이며,
+`matches_current_core`는 두 event의 훅 경로·Host·matcher가 현재 Core와 일치하고
+GIL이 생성한 구형 Stop·UserPromptSubmit 명령이 없다는 뜻이며,
 `refresh_required`는 구버전·누락·중복 연결을 다시 확인해야 한다는 뜻이다. 등록 사실만으로 Host의 활성화·신뢰를
 입증하지 않는다. 설정이 꺼졌거나 Host가 PostToolUse 결과를 전달하지 않으면 자동 연결은 보장되지 않는다.
 기존 `gil-write-guard hook|config|run --root …`는 호환용으로 남지만 공통 훅과 중복 설치하지 않는다.
 
-## 채팅으로만 종료하는 경로
+## 대화와 프로젝트 완료
 
-- 성공한 GIL 호출로 연결한 **그 채팅**만 Stop 검사한다. 다른 채팅에는 진행 의무를 만들지 않는다.
-- Chain이 실제 닫혔으면 종료를 허용한다. 열린 중간 단계·빈 Interview·미등록 승인 제안은 완료가 아니다.
-- 사용자 입력이 필요하면 `gil_await_user(project_root, question)`를 호출한다. 실제 열린 Question 또는
-  미승인 제안이 등록된 Synthesis만 허용한다. 응답 마지막에 그 질문을 그대로 적어 사용자가 답할 수 있게 한다.
-- 대기는 그 상태의 digest에 묶이고 다음 UserPromptSubmit에서 만료한다. 승인이나 Step 변경도 대기를
-  무효화한다. 옛 Question을 남겨 둔 채 다음 턴에서 웹 결과만 제시하면 다시 GIL로 돌아가도록 지시한다.
-- `gil_await_user`는 Model 전용 읽기 도구다. 사용자 승인·Step 닫기·Domain 기록 변경을 하지 않는다.
-- 사용자 중단은 항상 존중한다. `GIL 일시 중지`를 사용자 메시지로 보내면 그 채팅의 진행 검사만 일시 해제한다.
-  파일 보호는 유지되고 `gil_context`로 재개한다. 이 명령을 Agent가 완료 우회로 사용하지 않는다.
-- 파일 없는 웹 조사는 허용한다. 그것이 요청한 GIL 프로젝트의 최종 완료를 뜻하지는 않는다.
-  주제를 바꿔 무관한 작업을 할 때는 별도 채팅 또는 명시적 pause를 쓴다.
-- Stop 훅은 Host에게 계속 작업하도록 요청한다. 이미 표시된 답변을 지우거나 사람의 중단·Host의
-  반복 상한을 무력화하지 않는다. 모든 모델의 행동을 절대적으로 보장하는 기능은 아니다.
+- Stop·wrap_up의 진행 차단과 UserPromptSubmit의 강제 지시는 없다. 구형 설정이 남아 해당 이벤트를
+  호출해도 새 Core는 registry를 읽거나 쓰기 전에 빈 결과로 끝낸다. 상태 손상·잠금도 대화를 막지 않는다.
+- 사용자 요청에 따라 어느 단계에서든 대화를 끝내거나 주제를 바꾸고 Monitor 복구 승인을 기다릴 수 있다.
+  특별한 pause 문장이나 마지막 질문 일치, 임시 Question/Interview/Experiment 생성은 필요 없다.
+- 턴 종료를 GIL 완료로 보고하지 않는다. 실제 사용자 승인·Verify 증거·Chain 완료 요건은 유지한다.
+- `gil_await_user`는 열린 Question 또는 미승인 제안 Synthesis의 선택적 Model 전용 읽기 확인이다.
+  입출력 계약은 유지하되 대기 등록·진행 허가·승인·Step 닫기를 하지 않는다. Recovery 승인이나 Cycle
+  경계에서는 요구하지 않는다. 호출 거절도 턴 종료를 막거나 새 Step 생성을 요구하지 않는다.
+- 파일 없는 조사·외부 작업은 계속 허용하며, 중단·비연결 세션도 다른 등록 프로젝트의 보호 파일을
+  Verify 밖에서 변경할 수 없다. 이어서 GIL을 진행할 때는 `gil_context`로 기록된 위치를 확인한다.
 
 ## 여러 폴더 보호
 
@@ -116,13 +116,11 @@ UserPromptSubmit·Stop 훅을 병합한다. 원본은 `~/.gil-host-guard`의 pri
 
 ## 세션·파일 보호 경계와 실패 정책
 
-등록 목록은 파일 보호 범위이고 Host + session_id 연결은 채팅 진행 범위다. cwd는 상대 파일 경로
-해석에만 쓰며 연결을 만들거나 면제하지 않는다. 성공한 GIL PostToolUse와 검증된 project_root만
-연결을 만든다. 별도 채팅, 다른 Host의 동일 ID와 pause에는 Stop 의무가 없다. 다른 프로젝트가
-연결된 세션도 모든 등록 root의 파일 보호를 받는다. 정상 연결된 프로젝트 상태가 손상·잠김이면
-그 채팅의 완료는 거절한다. 공용 registry 자체가 손상·잠겨 연결 여부를 모르면 Stop/입력에 경고만
-남긴다. 무관한 모든 채팅을 막지 않으며 GIL 완료를 확인한 것으로 처리하지 않는다. 이 경우 파일
-도구와 셸은 보호 범위를 알 수 없어 거절하며 registry 원본을 보존한다. 무관한 읽기 도구는 통과한다.
+등록 목록만 파일 보호 범위로 사용한다. cwd는 상대 파일 경로 해석에만 쓰며 등록이나 면제를
+만들지 않는다. 성공한 GIL PostToolUse와 검증된 project_root만 root를 등록한다. 세션 ID·Host·pause는
+경로 보호의 면제 조건이 아니다. 프로젝트 상태 손상·잠김이면 해당 프로젝트 쓰기는 거절하지만
+외부 작업은 보호 셸에서 계속 가능하다. registry 자체가 손상·잠기면 파일 도구와 셸은 보호 범위를
+알 수 없어 거절하고 원본을 보존한다. Stop·wrap_up·UserPromptSubmit과 무관한 읽기 도구는 빈 결과로 통과한다.
 
 **플랫폼 한계:** 현재 훅 입력에는 임의 셸의 실제 쓰기 대상 목록이나 기존 sandbox가 모든 GIL
 root를 보호한다는 증명이 없다. 따라서 “모든 일반 셸을 제약 없이 통과”와 “외부 cwd에서 임의

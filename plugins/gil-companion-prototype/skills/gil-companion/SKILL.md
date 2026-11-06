@@ -8,20 +8,21 @@ description: Use GIL from this plugin — start a GIL project in the folder the 
 <!-- BEGIN GENERATED SHARED WORKFLOW -->
 ## GIL shared workflow
 
-### Turn completion on Codex and Claude Code
+### Conversation and file protection on Codex and Claude Code
 
-- Starting GIL means continuing its recorded workflow. A chat report is not GIL completion.
-- If the goal is unknown, open the first Question with the objective “ask the user for the goal”, then ask. Do not wait with zero Steps.
-- Before yielding for user input, call `gil_await_user(project_root, question)` from an actually open Question, or from Synthesis after registering the proposal. End the response with that exact question. After the user replies, continue and close that same Step; an old Question does not authorize a chat-only final report.
-- Installed Host hooks automatically enroll successful `gil_start`/`gil_context` projects, including roots outside the chat cwd. Enrollment does not prove Host hook activation. Missing/untrusted hooks must not be reported as protection.
-- A global write-guard matcher is not a GIL session binding. Only a successful GIL call binds that Host's session to its explicit project root. Other chats and paused chats have no GIL turn obligation, but cannot edit protected project files outside Verify.
+- Ending a chat turn is not GIL project completion. Report the recorded state truthfully; never fabricate approval, evidence or a completed Chain.
+- The user may pause, change topic, request a chat report, or wait for Monitor approval at any stage. No special pause phrase, exact final question, or `gil_await_user` call is required to end a turn. Do not create a Question, Interview or Experiment merely to make ending a turn possible.
+- When continuing a requested GIL workflow with an unknown goal, open the first Question with the objective “ask the user for the goal”, then ask and wait for the actual answer.
+- `gil_await_user(project_root, question)` is an optional read-only check for an open Question or pending Synthesis proposal. It does not authorize turn completion or register a wait. Recovery/revisit approval and cycle boundaries do not require it. If it refuses, read the current context; do not manufacture a supported Step just to call it.
+- Installed Host hooks automatically enroll successful `gil_start`/`gil_context`/`gil_open`/`gil_close` projects, including roots outside the chat cwd. Enrollment does not prove Host hook activation. Missing/untrusted hooks must not be reported as protection.
+- The hooks protect registered file paths, independently of session identity. They do not block Stop or wrap_up, inject UserPromptSubmit instructions, or attach a conversation obligation. Legacy session/wait records are preserved but inactive. Paused or unrelated chats still cannot edit protected project files outside Verify.
 - For guarded shell calls, use the installed Host adapter: Claude presents the rewritten wrapper for permission; Codex requests a retry of the exact wrapper with its supported approval fields. Never send Codex `sandbox_permissions` to Claude, auto-approve a command, or retry the original command without protection. If the Host cannot launch the guard sandbox, explain that limitation and stop that command; do not require a GIL Step for unrelated outside work.
-- File-free web research and unrelated outside work remain allowed. They do not close a requested GIL workflow. Honor user cancellation; `GIL 일시 중지` explicitly detaches this chat's turn gate while retaining file protection. `gil_context` resumes it.
+- File-free web research and unrelated outside work remain allowed. They do not close a requested GIL workflow. Honor user cancellation without changing project records; use `gil_context` to resume the recorded position when requested.
 - `show_gil_monitor` is a display request. Read `gil_monitor_status` before claiming visible/fullscreen. If `display_mode=inline`, say the Host kept the preview inline and guide the Host widget's “show in another panel”/expand control. Never claim that more retries guarantee fullscreen.
 
 These rules apply to every GIL connection, with or without a Plugin, on every operating system.
 Use only the user's selected absolute `project_root`. Each receipt's text guidance names **one next
-call or one wait**; do it, then read the next receipt. Read `structuredContent` too, and follow the
+call or one wait** for continuing GIL; when continuing, do it, then read the next receipt. Read `structuredContent` too, and follow the
 actual recorded position and the connected tool schema. Never repeat a call that already succeeded.
 
 **Quick rules — read these first; the numbered rules below only add detail.**
@@ -31,10 +32,9 @@ actual recorded position and the connected tool schema. Never repeat a call that
    `gil_context` once (existing project) or call `gil_start` once (new project).
 2. After `gil_start`: call the `show_gil_monitor(scope_id)` the receipt names, then
    `gil_open(kind: question)` with `objective`, `next_action`, `done_when` in its `contract` string.
-3. A Question is answered by the user, not by you. Call `gil_await_user(project_root, question)`,
-   end the response with that exact question, and wait. Close it only with the user's actual reply;
-   never paste the original request as the answer. Synthesis also needs `gil_await_user` before
-   waiting; in the approved-plan profile, register its proposal with `gil_plan_propose` first.
+3. A Question is answered by the user, not by you. Ask and wait. Close it only with the user's actual reply;
+   never paste the original request as the answer. Synthesis needs explicit approval;
+   in the approved-plan profile, register its proposal with `gil_plan_propose` and wait for the Monitor button.
 4. Project file changes and deliverable production belong inside an open Experiment **Verify**;
    save its results as project files named in `evidence_files`. File-free web research, reading
    existing evidence at any stage, and unrelated outside work remain allowed. Those activities
@@ -109,8 +109,7 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    prerequisite to opening it. Use a clarification contract, for example `objective: clarify the
    user's goal`, `next_action: ask the user for the desired result and completion criteria`, and
    `done_when: the user has answered or identified what remains uncertain`. Open Question before
-   asking. Call `gil_await_user(project_root, question)` before yielding, end with that exact question,
-   then record the user's actual reply with `gil_close`; never invent the goal.
+   asking, then wait. The optional `gil_await_user` check is not needed to yield. Later record the user's actual reply with `gil_close`; never invent the goal.
    Permitted outside work or file-free web research does not close that Question or replace an
    explicitly requested GIL project's Interview, approval, and eventual Closing. Resume the recorded
    next call after the user answers; do not treat a chat-only answer as completed project delivery.
@@ -124,9 +123,9 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    | Current state | Next call |
    | --- | --- |
    | New project, Monitor shown, no step open | `gil_open` Question with its action contract |
-   | Question is open | `gil_await_user(project_root, question)`, end the turn with that exact question and wait, then `gil_close` after their actual response |
+   | Question is open | Ask and wait, then `gil_close` after their actual response |
    | Interpretation is open | `gil_close` with what is settled and what is unresolved |
-   | Synthesis is open and the user has not answered | Show the statement (approved-plan profile: first `gil_plan_propose`), call `gil_await_user`, end the turn with its exact question and wait; no project file changes |
+   | Synthesis is open and the user has not answered | Show the statement (approved-plan profile: first `gil_plan_propose`), wait for explicit approval; no project file changes |
    | Synthesis is open and the user approved its statement | `gil_close` with `approved: yes` (approved-plan profile: the exact `close_report`) |
    | Synthesis is open and the user declined | `gil_close` with `approved: no`, then `gil_open` Question |
    | Synthesis is closed and Outcome has not been opened | `gil_open` Outcome |
@@ -260,8 +259,7 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
      the same wrapper. A Closing proposal keeps the existing items and checklist (including
      executed items) and adds `draft.synthesis.chain_verdict` as `"success"` or `"failure"`.
      Never write `approved`, `plan_revision` or `plan_digest`: Core adds them.
-   - Call `gil_await_user(project_root, question)` and end the response with that exact question;
-     **end the turn and wait for the Monitor button.** Chat agreement is not approval. While
+   - **End the turn and wait for the Monitor button.** Chat agreement is not approval. While
      waiting, make no project file changes or re-proposal. Check approval only with `gil_plan_read`.
    - `receipt.decision: approve` → `gil_close` Synthesis with `close_report` **unchanged**, then
      `gil_open`/`gil_close` Outcome, then `gil_close` the Interview Cycle Report. For execution,

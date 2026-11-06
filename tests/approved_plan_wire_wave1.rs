@@ -95,7 +95,7 @@ fn guarded_project_completes_approved_closing_without_outside_write_regressions(
     let mut r = Rig { root: root.clone(), record, scope: String::new(), c: Client::serve(&settings) };
     let started = ok(r.model("gil_start", json!({})), "start");
     auto_guard(&settings, json!({"hook_event_name":"PostToolUse","tool_name":"mcp__gil__gil_start","tool_input":{"project_root":root},"tool_response":started["result"]}));
-    assert_eq!(auto_guard(&settings,json!({"hook_event_name":"Stop","last_assistant_message":"done"}))["decision"],"block");
+    assert_eq!(auto_guard(&settings,json!({"hook_event_name":"Stop","last_assistant_message":"done"})),json!({}));
     refused(r.model("gil_await_user",json!({"question":"What is the goal?"})),"wait before Question");
     let next = &structured(&started)["next_call"];
     assert_eq!(next["name"], "show_gil_monitor");
@@ -110,7 +110,7 @@ fn guarded_project_completes_approved_closing_without_outside_write_regressions(
     assert_eq!(auto_guard(&settings,json!({"hook_event_name":"Stop","last_assistant_message":"Approve the scope?"})),json!({}));
     guard_boundary(&root, false); // Opening approval wait.
     r.approve_via_app(1);
-    assert_eq!(auto_guard(&settings,json!({"hook_event_name":"Stop","last_assistant_message":"Approve the scope?"}))["decision"],"block");
+    assert_eq!(auto_guard(&settings,json!({"hook_event_name":"Stop","last_assistant_message":"Approve the scope?"})),json!({}));
     r.close_approved_interview(&synthesis, "open_child");
     guard_boundary(&root, false); // Between cycles.
     let (_, document) = r.open_experiment("files");
@@ -125,7 +125,7 @@ fn guarded_project_completes_approved_closing_without_outside_write_regressions(
     let verify = step_ref(&opened, "verify");
     guard_boundary(&root, true);
     refused(r.model("gil_await_user",json!({"question":"Can I finish?"})),"Verify cannot masquerade as user wait");
-    assert_eq!(auto_guard(&settings,json!({"hook_event_name":"Stop","last_assistant_message":"done"}))["decision"],"block");
+    assert_eq!(auto_guard(&settings,json!({"hook_event_name":"Stop","last_assistant_message":"done"})),json!({}));
     std::fs::write(root.join("plan.md"), &document).unwrap();
     ok(r.c.call("gil_close", verify_args(&root, &verify,
         "execution: protected shell wrote the measured bytes\nresult: guard-result.txt contains measured\nplan_document: plan.md\nevidence_files: guard-result.txt\n")), "close verify");
