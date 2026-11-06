@@ -1,7 +1,7 @@
 {
   "name": "gil_await_user",
   "title": "Wait for GIL user input",
-  "description": "Before ending a GIL turn for user input, validate an actually open Question or pending Synthesis proposal. Pass the exact question to ask. End your reply with that question. This neither approves nor closes anything. The next user message expires the handoff; continue the recorded step. Never use a stale open question to report a completed deliverable.",
+  "description": "Optional read-only check for an actually open Question or pending Synthesis proposal. This tool is not required to end a turn, wait for Monitor recovery approval, pause or change topics. It neither registers a wait nor approves or closes anything. A refusal does not require opening a Step or Cycle. Continue the recorded workflow only when requested; never invent approval or project completion.",
   "inputSchema": {
     "type": "object",
     "properties": {

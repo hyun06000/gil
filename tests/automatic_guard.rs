@@ -106,40 +106,53 @@ fn new_projects_enroll_without_local_hook_files_and_other_chats_are_not_gated() 
     assert_eq!(r.hook(json!({"hook_event_name":"Stop","session_id":"other-chat","last_assistant_message":"ordinary answer"})),json!({}));
     assert!(!r.root.join(".claude").exists());
     assert!(!r.root.join(".codex").exists());
-    assert_eq!(r.stop("report complete")["decision"], "block");
-    assert!(denied(&r.pre(
-        "mcp__ccd_turn__wrap_up",
-        json!({"ask":"what goal?","blocked":true})
-    )));
+    assert_eq!(r.stop("report complete"), json!({}));
+    assert_eq!(r.pre("mcp__ccd_turn__wrap_up", json!({"ask":"what goal?","blocked":true})), json!({}));
 }
 #[test]
-fn waiting_requires_current_open_question_and_expires_on_next_user_message() {
+fn all_conversation_events_are_inert_and_preserve_legacy_waits_and_project_state() {
     let r = Rig::new("turns");
-    r.post("mcp__gil_companion__gil_context", json!({}));
-    let invalid = r.post(
-        "mcp__gil__gil_await_user",
-        json!({"question":"What is the goal?"}),
-    );
-    assert!(invalid.to_string().contains("실패"));
     r.question();
-    assert_eq!(r.stop("report complete")["decision"], "block");
-    r.post(
-        "mcp__gil__gil_await_user",
-        json!({"question":"What is the goal?"}),
-    );
-    assert_eq!(r.stop("Question opened. What is the goal?"), json!({}));
-    assert_eq!(r.stop("Here is the completed report.")["decision"], "block");
-    r.hook(json!({"hook_event_name":"UserPromptSubmit","prompt":"a report please"}));
-    assert_eq!(r.stop("What is the goal?")["decision"], "block");
-    // A continuation never silently bypasses the gate merely because stop_hook_active is true.
-    assert_eq!(r.hook(json!({"hook_event_name":"Stop","stop_hook_active":true,"last_assistant_message":"done"}))["decision"],"block");
-    r.hook(json!({"hook_event_name":"UserPromptSubmit","prompt":"GIL 일시 중지"}));
-    assert_eq!(r.stop("unrelated outside answer"), json!({}));
-    assert!(denied(
-        &r.pre("Edit", json!({"file_path":r.root.join("report.docx")}))
-    ));
-    r.post("mcp__gil__gil_context", json!({}));
-    assert_eq!(r.stop("resumed but unfinished")["decision"], "block");
+    r.post("mcp__gil_companion__gil_context", json!({}));
+    let registry = r.home.join(".gil-host-guard/registry.json");
+    let old = json!({"roots":[r.root],"sessions":{"codex:s1":{"root":r.root,
+        "wait":{"question":"What is the goal?","state_digest":"legacy-digest"}}}});
+    let old_bytes = serde_json::to_vec(&old).unwrap();
+    fs::write(&registry, &old_bytes).unwrap();
+    let state = fs::read(r.root.join(STATE_PATH)).unwrap();
+    for host in ["claude", "codex"] {
+        for id in [json!("s1"), json!("other"), Value::Null] {
+            for prompt in ["a report please", "GIL 일시 중지", "continue GIL"] {
+                assert_eq!(r.host_hook(host, json!({"hook_event_name":"UserPromptSubmit","session_id":id,"prompt":prompt})), json!({}));
+            }
+            for _ in 0..10 {
+                assert_eq!(r.host_hook(host, json!({"hook_event_name":"Stop","session_id":id,"stop_hook_active":true,"last_assistant_message":"ordinary report"})), json!({}));
+                assert_eq!(r.host_hook(host, json!({"hook_event_name":"PreToolUse","session_id":id,"tool_name":"mcp__ccd_turn__wrap_up","tool_input":{"ask":"unrelated answer"}})), json!({}));
+            }
+        }
+    }
+    // Resume and the retired handoff event neither attach chats nor clear old waits.
+    assert_eq!(r.post("mcp__gil__gil_context", json!({})), json!({}));
+    assert_eq!(r.post("mcp__gil__gil_await_user", json!({"question":"another question"})), json!({}));
+    assert_eq!(fs::read(&registry).unwrap(), old_bytes);
+    assert_eq!(fs::read(r.root.join(STATE_PATH)).unwrap(), state);
+    assert!(denied(&r.pre("Edit", json!({"file_path":r.root.join("report.docx")}))));
+}
+#[test]
+fn enrollment_needs_success_and_a_real_project_but_no_session_identity() {
+    let r = Rig::new("no-session");
+    for response in [json!({"isError":true}), json!({"ok":false}), json!({})] {
+        assert_eq!(r.host_hook("claude", json!({"hook_event_name":"PostToolUse","session_id":null,
+            "tool_name":"mcp__gil__gil_start","tool_input":{"project_root":r.root},"tool_response":response})), json!({}));
+        assert!(!r.home.join(".gil-host-guard/registry.json").exists());
+    }
+    let result = r.host_hook("claude", json!({"hook_event_name":"PostToolUse","session_id":null,
+        "tool_name":"mcp__gil__gil_context","tool_input":{"project_root":r.root},"tool_response":{"ok":true}}));
+    assert!(result.to_string().contains("파일 보호 폴더 등록"));
+    assert!(!result.to_string().contains("진행 검사"));
+    assert!(denied(&r.pre("Write", json!({"file_path":r.root.join("x")}))));
+    let registry: Value = serde_json::from_slice(&fs::read(r.home.join(".gil-host-guard/registry.json")).unwrap()).unwrap();
+    assert_eq!(registry["sessions"], json!({}));
 }
 #[test]
 fn failed_start_does_not_bind_or_register_and_registry_edits_are_denied() {
@@ -179,13 +192,16 @@ fn installer_preserves_settings_is_idempotent_and_never_writes_trust() {
     );
     let v: Value = serde_json::from_slice(&before).unwrap();
     assert_eq!(v["permissions"]["allow"], json!(["Read"]));
-    assert_eq!(v["hooks"]["Stop"].as_array().unwrap().len(), 2);
+    assert_eq!(v["hooks"]["Stop"].as_array().unwrap().len(), 1);
     let c: Value =
         serde_json::from_slice(&fs::read(r.home.join(".codex/hooks.json")).unwrap()).unwrap();
-    for event in ["PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop"] {
+    for event in ["PreToolUse", "PostToolUse"] {
         assert_eq!(c["hooks"][event].as_array().unwrap().len(), 1);
     }
     assert_eq!(fs::read_dir(r.home.join(".codex")).unwrap().count(), 1);
+    assert!(c["hooks"].get("Stop").is_none());
+    assert!(c["hooks"].get("UserPromptSubmit").is_none());
+    assert!(!c["hooks"]["PreToolUse"][0]["matcher"].as_str().unwrap().contains("wrap_up"));
 }
 
 #[cfg(all(target_os = "macos", not(feature = "approved-plan")))]
@@ -257,7 +273,7 @@ fn host_identity_is_explicit_and_turn_scope_never_exempts_files() {
     r.post("mcp__gil__gil_context", json!({}));
     // Both hosts expose Bash; tool name, cwd and session id alone are not Host identity.
     assert_eq!(r.host_hook("claude", json!({"hook_event_name":"Stop"})), json!({}));
-    assert_eq!(r.stop("unfinished")["decision"], "block");
+    assert_eq!(r.stop("unfinished"), json!({}));
     for host in ["claude", "codex"] {
         let external = r.host_hook(host, json!({"hook_event_name":"PreToolUse", "session_id":"unbound",
             "tool_name":"Write", "tool_input":{"file_path":r.base.join("external.txt")}}));
@@ -293,8 +309,7 @@ fn shared_registry_failure_does_not_impose_a_global_turn_gate() {
     fs::write(&registry, b"damaged fixture").unwrap();
     for event in ["Stop", "UserPromptSubmit"] {
         let v = r.hook(json!({"hook_event_name":event,"session_id":"unrelated","prompt":"ordinary work"}));
-        assert!(v.get("decision").is_none());
-        assert!(v.to_string().contains("확인하지 못했다"));
+        assert_eq!(v, json!({}));
     }
     assert!(denied(&r.pre("Bash", json!({"command":"echo x"}))));
     assert!(denied(&r.pre("Write", json!({"file_path":r.root.join("x")}))));
@@ -311,9 +326,12 @@ fn registry_lock_contention_preserves_scope_and_existing_records() {
         .open(r.home.join(".gil-host-guard/registry.lock")).unwrap();
     lock.lock().unwrap();
     assert!(denied(&r.pre("Bash", json!({"command":"echo x"}))));
-    assert!(r.hook(json!({"hook_event_name":"Stop","session_id":"other"})).get("decision").is_none());
+    for event in ["Stop", "UserPromptSubmit"] {
+        assert_eq!(r.hook(json!({"hook_event_name":event,"session_id":"s1"})), json!({}));
+    }
+    assert_eq!(r.pre("wrap_up", json!({})), json!({}));
     drop(lock);
-    assert_eq!(r.stop("unfinished")["decision"], "block");
+    assert_eq!(r.stop("unfinished"), json!({}));
     assert_eq!(r.hook(json!({"hook_event_name":"Stop","session_id":"other"})), json!({}));
 }
 
@@ -346,7 +364,7 @@ fn claude_unbound_shell_runs_outside_work_but_cannot_reach_protected_paths() {
     fs::write(r.root.join(STATE_PATH), b"damaged synthetic state").unwrap();
     assert!(execute("printf outside > outside.txt".into()).status.success());
     assert!(!execute("printf x > project/bad".into()).status.success());
-    assert_eq!(r.stop("done")["decision"], "block");
+    assert_eq!(r.stop("done"), json!({}));
     fs::write(r.root.join(STATE_PATH), state).unwrap();
 }
 
@@ -364,10 +382,18 @@ fn update_replaces_old_core_hooks_preserves_settings_and_backups() {
         assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     };
     fs::create_dir(r.home.join(".claude")).unwrap();
-    let old = json!({"permissions":{"deny":["Read(secret)"]}, "sandbox":{"enabled":true},
+    let mut old = json!({"permissions":{"deny":["Read(secret)"]}, "sandbox":{"enabled":true},
         "hooks":{"PreToolUse":[{"matcher":"Bash", "hooks":[{"type":"command",
             "command":"'/old/core/gil' 'write-guard' 'hook' '--auto'"}]},
             {"hooks":[{"type":"command","command":"echo custom; '/old/core/gil' 'write-guard' 'hook' '--auto'"}]}]}});
+    // Legacy generated commands coexist with unrelated commands in the same row.
+    for event in ["Stop", "UserPromptSubmit"] {
+        old["hooks"][event] = json!([
+            {"matcher":"*", "hooks":[
+                {"type":"command","command":"'/old/core/gil' 'write-guard' 'hook' '--auto' '--host' 'claude'"},
+                {"type":"command","command":"unrelated-check"}]},
+            {"hooks":[{"type":"command","command":"'/old/core/gil' 'write-guard' 'hook' '--auto'"}]}]);
+    }
     let old_bytes = serde_json::to_vec(&old).unwrap();
     let settings_path = r.home.join(".claude/settings.json");
     fs::write(&settings_path, &old_bytes).unwrap();
@@ -384,6 +410,9 @@ fn update_replaces_old_core_hooks_preserves_settings_and_backups() {
     let v: Value = serde_json::from_slice(&updated).unwrap();
     assert_eq!(v["permissions"], old["permissions"]);
     assert_eq!(v["sandbox"], old["sandbox"]);
+    for event in ["Stop", "UserPromptSubmit"] {
+        assert_eq!(v["hooks"][event], json!([{"matcher":"*", "hooks":[{"type":"command","command":"unrelated-check"}]}]));
+    }
     assert_eq!(v["hooks"]["PreToolUse"].as_array().unwrap().len(), 2);
     assert_eq!(v["hooks"]["PreToolUse"][0], old["hooks"]["PreToolUse"][1]);
     let backups: Vec<_> = fs::read_dir(r.home.join(".gil-host-guard")).unwrap()
@@ -400,6 +429,13 @@ fn update_replaces_old_core_hooks_preserves_settings_and_backups() {
     for host in ["codex", "claude"] {
         assert_eq!(status(&next)["installed_hooks"][host]["status"], "matches_current_core");
     }
+    // A leftover generated turn hook makes status stale even if both file events match.
+    let mut stale = v.clone();
+    stale["hooks"]["Stop"].as_array_mut().unwrap().push(old["hooks"]["Stop"][1].clone());
+    fs::write(&settings_path, serde_json::to_vec(&stale).unwrap()).unwrap();
+    assert_eq!(status(&next)["installed_hooks"]["claude"]["status"], "refresh_required");
+    install(&next);
+    assert_eq!(status(&next)["installed_hooks"]["claude"]["status"], "matches_current_core");
     assert_eq!(status(std::path::Path::new(env!("CARGO_BIN_EXE_gil")))["installed_hooks"]["claude"]["status"], "refresh_required");
 }
 
@@ -436,7 +472,7 @@ fn legacy_bindings_are_preserved_without_attaching_a_new_host_session() {
             "tool_input":{"file_path":r.root.join("x")}}))));
     }
     r.post("mcp__gil__gil_context", json!({}));
-    assert_eq!(r.stop("resumed")["decision"], "block");
+    assert_eq!(r.stop("resumed"), json!({}));
     let after: Value = serde_json::from_slice(&fs::read(&registry).unwrap()).unwrap();
     assert_eq!(after["sessions"]["s1"], old["sessions"]["s1"]);
 }

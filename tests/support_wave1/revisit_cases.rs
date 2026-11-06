@@ -113,6 +113,8 @@ fn old_failure_requires_exact_app_consent_preserves_evidence_and_retries_twice()
         r.model("gil_open", json!({"kind":"experiment"})),
         "no implicit bypass",
     );
+    #[cfg(all(target_os = "macos", feature = "visual-authoring"))]
+    conversation_and_files_at_recovery(&mut r, &settings);
     let (v, t) = review(&mut r);
     assert_eq!(original, record_bytes(&r.record));
     assert!(
@@ -132,6 +134,8 @@ fn old_failure_requires_exact_app_consent_preserves_evidence_and_retries_twice()
     fs::remove_file(r.root.join("unrecorded.txt")).unwrap();
     let done = ok(apply(&mut r, &v, &t), "approved recovery");
     assert_eq!(structured(&done)["state"], "completed");
+    #[cfg(all(target_os = "macos", feature = "visual-authoring"))]
+    conversation_and_files_at_recovery(&mut r, &settings);
     // The chat continuation must re-read Core, not repeat the pre-click approval wait.
     let resumed_context = r.context_readonly();
     let next = resumed_context.split("[지금 바로 할 호출]\n").nth(1).unwrap().lines().next().unwrap();
@@ -372,4 +376,27 @@ fn failed_item_can_be_reinterviewed_and_rebound_to_the_new_approved_revision() {
     let verify = r.walk_to_verify("A");
     r.finish_experiment(n, "A", &verify, &doc);
     assert_eq!(r.read()["pending"][0]["id"], "B");
+}
+
+#[cfg(all(target_os = "macos", feature = "visual-authoring"))]
+fn conversation_and_files_at_recovery(r: &mut Rig, settings: &Path) {
+    let before = record_bytes(&r.record);
+    let artifacts = tree(&r.root);
+    let context = ok(r.model("gil_context", json!({})), "resume");
+    auto_guard(settings, json!({"hook_event_name":"PostToolUse","tool_name":"mcp__gil__gil_context",
+        "tool_input":{"project_root":r.root},"tool_response":context["result"]}));
+    // Neither recovery approval nor the recovered cycle boundary needs a dummy Question.
+    refused(r.model("gil_await_user", json!({"question":"Approve recovery?"})), "optional check unsupported here");
+    for _ in 0..10 {
+        assert_eq!(auto_guard(settings, json!({"hook_event_name":"Stop","stop_hook_active":true,
+            "last_assistant_message":"Here is the requested chat-only report"})), json!({}));
+        assert_eq!(auto_guard(settings, json!({"hook_event_name":"PreToolUse","tool_name":"mcp__ccd_turn__wrap_up",
+            "tool_input":{"ask":"Waiting for your decision"}})), json!({}));
+    }
+    assert_eq!(auto_guard(settings, json!({"hook_event_name":"UserPromptSubmit","prompt":"An unrelated question"})), json!({}));
+    let deny = auto_guard(settings, json!({"hook_event_name":"PreToolUse","tool_name":"Write",
+        "tool_input":{"file_path":r.root.join("report.txt")}}));
+    assert_eq!(deny["hookSpecificOutput"]["permissionDecision"], "deny");
+    assert_eq!(before, record_bytes(&r.record));
+    assert_eq!(artifacts, tree(&r.root));
 }

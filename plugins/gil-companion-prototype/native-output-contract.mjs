@@ -37,7 +37,7 @@ export async function checkNativeOutputContract(binary) {
     const started = await call('gil_start', {project_root:root});
     assert.equal(started.structuredContent.ok, true);
     hook({hook_event_name:'PostToolUse',tool_name:'mcp__gil__gil_start',tool_input:{project_root:root},tool_response:started});
-    assert.equal(hook({hook_event_name:'Stop',last_assistant_message:'report complete'}).decision,'block');
+    assert.deepEqual(hook({hook_event_name:'Stop',last_assistant_message:'report complete'}),{});
     assert.equal(hook({hook_event_name:'PreToolUse',tool_name:'Write',tool_input:{file_path:join(root,'report.docx')}}).hookSpecificOutput.permissionDecision,'deny');
     const next = started.structuredContent.next_call;
     assert.equal(next.name, 'show_gil_monitor');
@@ -58,9 +58,9 @@ export async function checkNativeOutputContract(binary) {
       contract:'objective: clarify the user goal\nnext_action: ask what result the user wants\ndone_when: the user states a goal or remaining uncertainty'});
     assert.equal(opened.structuredContent.ok, true);
     assert.ok(opened.content.some(c => c.type === 'text' && c.text.includes('gil_await_user(project_root, question)')),
-      'the actual Question receipt must give the handoff required by the Stop hook');
-    assert.equal(hook({hook_event_name:'Stop',last_assistant_message:'What is your goal?'}).decision,'block',
-      'asking the question alone cannot skip the explicit handoff');
+      'the actual Question receipt describes the optional compatibility check');
+    assert.deepEqual(hook({hook_event_name:'Stop',last_assistant_message:'What is your goal?'}),{},
+      'a Question can wait without a handoff call');
     assert.deepEqual(hook({hook_event_name:'PreToolUse',tool_name:'WebSearch',tool_input:{query:'file-free research'}}),{});
     assert.deepEqual(hook({hook_event_name:'PreToolUse',tool_name:'Write',tool_input:{file_path:join(scratch,'unrelated.txt')}}),{});
     const waiting = await call('gil_await_user', {project_root:root, question:'What is your goal?'});
@@ -69,15 +69,17 @@ export async function checkNativeOutputContract(binary) {
     assert.equal(waiting.structuredContent.handoff.question, 'What is your goal?');
     hook({hook_event_name:'PostToolUse',tool_name:'mcp__gil__gil_await_user',tool_input:{project_root:root,question:'What is your goal?'},tool_response:waiting});
     assert.deepEqual(hook({hook_event_name:'Stop',last_assistant_message:'What is your goal?'}),{});
-    hook({hook_event_name:'UserPromptSubmit',prompt:'Make my report'});
-    assert.equal(hook({hook_event_name:'Stop',last_assistant_message:'Here is the report'}).decision,'block');
+    assert.deepEqual(hook({hook_event_name:'UserPromptSubmit',prompt:'Make my report'}),{});
+    assert.deepEqual(hook({hook_event_name:'Stop',last_assistant_message:'Here is the report'}),{});
+    assert.deepEqual(hook({hook_event_name:'PreToolUse',tool_name:'mcp__ccd_turn__wrap_up',tool_input:{ask:'Here is the report'}}),{});
+    assert.equal(hook({hook_event_name:'PreToolUse',tool_name:'Write',tool_input:{file_path:join(root,'forbidden.txt')}}).hookSpecificOutput.permissionDecision,'deny');
     const again = await call('gil_start', {project_root:root});
     assert.equal(again.isError, true);
     const status = await call('gil_status', {project_root:root});
     assert.equal(status.structuredContent.ok, true);
     assert.match(status.structuredContent.said, /step:C1\/S1/);
     return {passed:true, validator:'MCP SDK Client.callTool',
-      scope:'start/recovery, Monitor response, Question guidance and expiring handoff, file boundary; no visible Host UI claim'};
+      scope:'start/recovery, Monitor response, Question guidance and optional read-only handoff, file boundary; no visible Host UI claim'};
   } finally {
     await client?.close();
     await rm(scratch, {recursive:true, force:true});

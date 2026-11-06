@@ -1,4 +1,4 @@
-//! Host-local enrollment, scoped turn handoffs, and one sandbox for all enrolled roots.
+//! Host-local file protection, project enrollment, and one sandbox for all enrolled roots.
 //! No Project/Graph writes. This registry is not an authorization or OS-wide security boundary.
 use super::*;
 use serde::{Deserialize, Serialize};
@@ -13,6 +13,7 @@ use std::{
 #[serde(deny_unknown_fields)]
 struct Registry {
     roots: BTreeSet<PathBuf>,
+    // Retained for on-disk compatibility only. Never used as a conversation gate; enrollment does not update bindings.
     sessions: BTreeMap<String, Bound>,
 }
 #[derive(Serialize, Deserialize)]
@@ -134,14 +135,8 @@ fn tool(input: &Value) -> &str {
         .unwrap_or("")
 }
 fn context(event: &str, message: &str) -> Value {
-    if event == "Stop" { return json!({"systemMessage":message}); }
     json!({"hookSpecificOutput":{"hookEventName":event,"additionalContext":message}})
 }
-fn correction(root: &Path) -> String {
-    let first = json!({"project_root":root,"kind":"question","contract":"objective: 사용자 목표 확인\nnext_action: 목표와 원하는 결과를 사용자에게 질문\ndone_when: 사용자 답변으로 목표 또는 남은 불확실성 확인"});
-    format!("GIL 작업이 미완료다: {}. gil_context를 읽고 실제 다음 행동을 수행한다. 목표를 모르면 먼저 gil_open({first})을 연다. 사용자 입력이 필요하면 열린 Question 또는 제안이 등록된 승인 대기 Synthesis에서 gil_await_user(project_root, question)를 호출하고 그 질문으로 응답을 끝낸다. 답변을 받으면 기존 Question을 이어서 닫는다. 채팅 결과·웹 조사만으로 GIL 완료를 선언하지 않는다. 사용자 중단 요청은 존중한다; 사용자는 ‘GIL 일시 중지’ 메시지로 이 채팅의 진행 검사만 일시 해제할 수 있다. 파일 보호는 유지된다.",root.display())
-}
-
 fn fingerprint(s: &crate::ReadOnlySession) -> Result<String, String> {
     Ok(format!(
         "{:x}",
@@ -173,39 +168,11 @@ pub(crate) fn await_user(root: &str, question: &str) -> Result<Value, String> {
     let root = resolved(root)?;
     let s = session(&root)?;
     if !waiting(&s) {
-        return Err(correction(&root));
+        return Err("gil_await_user는 열린 Question 또는 제안이 등록된 승인 대기 Synthesis의 선택적 읽기 확인이다. 이 도구 없이도 턴을 끝내거나 Monitor 승인을 기다릴 수 있다. 현재 위치는 gil_context로 확인하며 대기 확인을 위해 Step/Cycle을 만들지 않는다.".into());
     }
     Ok(
         json!({"project_root":root,"state_digest":fingerprint(&s)?,"question":question,"status":"awaiting_user"}),
     )
-}
-fn finished(s: &crate::ReadOnlySession) -> bool {
-    s.project().current_chain().is_some_and(|c| c.is_closed())
-}
-fn stop(store: &Store, input: &Value, id: &str) -> Result<Value, String> {
-    let Some(bound) = store.data.sessions.get(id) else {
-        return Ok(json!({}));
-    };
-    let s = match session(&bound.root) {
-        Ok(s) => s,
-        Err(error) => return Ok(json!({"decision":"block","reason":format!("연결된 GIL 프로젝트 상태를 확인하지 못했다: {error}. 완료로 보고하지 않는다. 사용자 중단은 항상 가능하다.")})),
-    };
-    if finished(&s) {
-        return Ok(json!({}));
-    }
-    if let Some(wait) = &bound.wait {
-        let question = wait["question"].as_str().unwrap_or("");
-        if waiting(&s)
-            && wait["state_digest"] == fingerprint(&s)?
-            && !question.is_empty()
-            && input["last_assistant_message"]
-                .as_str()
-                .is_some_and(|m| m.trim_end().ends_with(question))
-        {
-            return Ok(json!({}));
-        }
-    }
-    Ok(json!({"decision":"block","reason":correction(&bound.root)}))
 }
 fn response_ok(input: &Value) -> bool {
     fn explicit_success(r: &Value) -> bool {
@@ -226,55 +193,30 @@ fn hook(input: &Value, exe: &Path, host: &str) -> Result<Value, String> {
     let event = input["hook_event_name"]
         .as_str()
         .ok_or("missing hook_event_name")?;
-    // Host comes from the installed hook argv, never from model-controlled tool arguments.
-    // Old unqualified bindings remain on disk but cannot attach another Host's chat.
-    let session_id = input["session_id"].as_str().filter(|s| !s.is_empty() && s.len() <= 200);
-    let key = session_id.map(|id| format!("{host}:{id}"));
-    let id = key.as_deref().unwrap_or("");
-    if id.is_empty() && matches!(event, "Stop" | "UserPromptSubmit") {
-        return Ok(context(event, "GIL 세션 식별자가 없어 진행 검사를 적용하지 않았다. 파일 보호는 별도로 유지한다."));
+    // Compatibility with old installed matchers: conversational events are inert even
+    // when the registry/project is missing, damaged or locked. Never inspect user text.
+    if matches!(event, "Stop" | "UserPromptSubmit")
+        || (event == "PreToolUse" && tool(input) == "wrap_up")
+    {
+        return Ok(json!({}));
     }
-    // A global matcher being invoked does not itself establish GIL scope.
     if event == "PreToolUse" && !matches!(tool(input),
-        "Bash" | "exec_command" | "Write" | "Edit" | "MultiEdit" | "NotebookEdit" | "apply_patch" | "wrap_up") {
+        "Bash" | "exec_command" | "Write" | "Edit" | "MultiEdit" | "NotebookEdit" | "apply_patch") {
+        return Ok(json!({}));
+    }
+    // Enrollment is about verified project paths, not session identity or turn completion.
+    if event == "PostToolUse" && (!response_ok(input) || !matches!(tool(input),
+        "gil_start" | "gil_context" | "gil_open" | "gil_close")) {
         return Ok(json!({}));
     }
     let mut store = Store::open()?;
     match event {
-        "UserPromptSubmit" => {
-            // Only a real user prompt can detach. No tool parameter or assistant final text can.
-            if input["prompt"]
-                .as_str()
-                .is_some_and(|p| p.trim() == "GIL 일시 중지")
-            {
-                store.data.sessions.remove(id);
-                store.save()?;
-                return Ok(context(
-                    event,
-                    "이 채팅의 GIL 진행 검사를 일시 해제했다. 프로젝트 파일 쓰기 보호는 유지한다. 재개하려면 gil_context를 호출한다. 완료·승인은 기록하지 않았다.",
-                ));
-            }
-            // Once the recorded Chain has closed, later unrelated user requests in this
-            // chat must not receive an "unfinished GIL" instruction. File protection remains.
-            if store.data.sessions.get(id).is_some_and(|bound| session(&bound.root).is_ok_and(|s| finished(&s))) {
-                store.data.sessions.remove(id);
-                store.save()?;
-                return Ok(json!({}));
-            }
-            if let Some(bound) = store.data.sessions.get_mut(id) {
-                bound.wait = None;
-                let message = correction(&bound.root);
-                store.save()?;
-                return Ok(context(event, &message));
-            }
-        }
         "PostToolUse" if response_ok(input) => {
             let name = tool(input);
             if matches!(
                 name,
-                "gil_start" | "gil_context" | "gil_open" | "gil_close" | "gil_await_user"
+                "gil_start" | "gil_context" | "gil_open" | "gil_close"
             ) {
-                if id.is_empty() { return Err("missing session_id; project enrollment not confirmed".into()); }
                 let root = resolved(
                     input["tool_input"]["project_root"]
                         .as_str()
@@ -282,51 +224,18 @@ fn hook(input: &Value, exe: &Path, host: &str) -> Result<Value, String> {
                 )?;
                 // A real validated GIL project is required even if another MCP mimics a name.
                 drop(session(&root)?);
-                store.data.roots.insert(root.clone());
-                let wait = if name == "gil_await_user" {
-                    Some(await_user(
-                        root.to_str().ok_or("non-UTF8 root")?,
-                        input["tool_input"]["question"]
-                            .as_str()
-                            .ok_or("missing question")?,
-                    )?)
-                } else {
-                    None
-                };
-                store.data.sessions.insert(
-                    id.to_owned(),
-                    Bound {
-                        root: root.clone(),
-                        wait,
-                    },
-                );
-                store.save()?;
-                return Ok(context(
-                    event,
-                    &format!(
-                        "GIL 보호 폴더 자동 연결 완료: {}. 이 채팅의 사용자 대기·종료 검사를 적용한다. {}",
-                        root.display(),
-                        correction(&root)
-                    ),
-                ));
+                if store.data.roots.insert(root.clone()) {
+                    store.save()?;
+                    return Ok(context(event, &format!(
+                        "GIL 파일 보호 폴더 등록: {}. 등록은 실제 Host 보호 활성화나 프로젝트 완료의 증명이 아니다.", root.display()
+                    )));
+                }
             }
         }
-        "Stop" => return stop(&store, input, id),
         "PreToolUse" => {
             let name = tool(input);
             if store.data.roots.is_empty() {
                 return Ok(json!({}));
-            }
-            if name == "wrap_up" {
-                // Claude Code may expose a structured turn-end tool before Stop.
-                let verdict = stop(
-                    &store,
-                    &json!({"last_assistant_message":input["tool_input"]["ask"]}),
-                    id,
-                )?;
-                if let Some(reason) = verdict["reason"].as_str() {
-                    return Ok(deny(reason));
-                }
             }
             if matches!(name, "Bash" | "exec_command") && !store.data.roots.is_empty() {
                 let args = &input["tool_input"];
@@ -415,11 +324,7 @@ pub(super) fn dispatch(args: &[String]) -> Result<u8, String> {
             let value = match hook(&input, &exe, host) {
                 Ok(value) => value,
                 Err(error) => match input["hook_event_name"].as_str() {
-                    Some("PreToolUse") if tool(&input) == "wrap_up" => context("PreToolUse", &format!("GIL 진행 연결을 확인하지 못했다: {error}. GIL 완료 확인으로 간주하지 않는다.")),
                     Some("PreToolUse") => deny(&error),
-                    // A broken shared registry is not evidence this chat is bound. Do not
-                    // impose a global conversation gate. File tools still fail closed above.
-                    Some(event @ ("UserPromptSubmit" | "Stop")) => context(event, &format!("GIL 진행 검사 상태를 확인하지 못했다: {error}. GIL 완료로 보고하지 않는다. 파일 보호는 유지한다.")),
                     _ => context(input["hook_event_name"].as_str().unwrap_or("PostToolUse"), &format!("GIL 훅 연결 실패: {error}. 보호 적용 완료로 보고하지 않는다.")),
                 }
             };
@@ -449,10 +354,10 @@ fn config(exe: &Path, host: &str) -> Result<Value, String> {
     let command = if host == "legacy" { invocation(exe, &["hook", "--auto"])? }
         else { invocation(exe, &["hook", "--auto", "--host", host])? };
     let mut hooks = serde_json::Map::new();
-    for event in ["PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop"] {
+    for event in ["PreToolUse", "PostToolUse"] {
         let mut entry = json!({"hooks":[{"type":"command","command":command,"timeout":15}]});
-        if event == "PreToolUse" { entry["matcher"] = json!("^(Bash|exec_command|apply_patch|Write|Edit|MultiEdit|NotebookEdit)$|(^|__)wrap_up$"); }
-        if event == "PostToolUse" { entry["matcher"] = json!("(^|__)(gil_start|gil_context|gil_open|gil_close|gil_await_user)$"); }
+        if event == "PreToolUse" { entry["matcher"] = json!("^(Bash|exec_command|apply_patch|Write|Edit|MultiEdit|NotebookEdit)$"); }
+        if event == "PostToolUse" { entry["matcher"] = json!("(^|__)(gil_start|gil_context|gil_open|gil_close)$"); }
         hooks.insert(event.into(), json!([entry]));
     }
     Ok(json!({"hooks":hooks}))
@@ -494,21 +399,25 @@ fn install(exe: &Path, host: &str) -> Result<Value, String> {
             .or_insert(json!({}))
             .as_object_mut()
             .ok_or("invalid existing hooks; preserved")?;
+        // Retire only our canonical generated commands, including in mixed rows.
+        // Preserve all other hooks, matchers and settings. Old turn events are not reinstalled.
+        for event in ["PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop"] {
+            if let Some(value) = hooks.get_mut(event) {
+                let list = value.as_array_mut().ok_or("invalid hook event; preserved")?;
+                list.retain_mut(|entry| {
+                    let Some(commands) = entry.get_mut("hooks").and_then(Value::as_array_mut) else {
+                        return true;
+                    };
+                    let before = commands.len();
+                    commands.retain(|h| !is_generated_command(h));
+                    before == commands.len() || !commands.is_empty()
+                });
+                if list.is_empty() { hooks.remove(event); }
+            }
+        }
         for (event, entries) in config["hooks"].as_object().unwrap() {
-            let list = hooks
-                .entry(event)
-                .or_insert(json!([]))
-                .as_array_mut()
+            let list = hooks.entry(event).or_insert(json!([])).as_array_mut()
                 .ok_or("invalid hook event; preserved")?;
-            // Replace only a previously generated, single-command automatic GIL entry.
-            list.retain(|entry| {
-                let Some(commands) = entry["hooks"].as_array() else {
-                    return true;
-                };
-                !(commands.len() == 1
-                    && commands[0]["type"] == "command"
-                    && commands[0]["command"].as_str().is_some_and(generated_hook))
-            });
             list.extend(entries.as_array().unwrap().iter().cloned());
         }
         let mut next = serde_json::to_vec_pretty(&settings).map_err(|e| e.to_string())?;
@@ -572,6 +481,10 @@ fn generated_hook(command: &str) -> bool {
     })
 }
 
+fn is_generated_command(hook: &Value) -> bool {
+    hook["type"] == "command" && hook["command"].as_str().is_some_and(generated_hook)
+}
+
 // Read-only update check. Matching paths prove configuration agreement, not loaded Host state.
 fn installed_hooks(exe: &Path, dir: &Path) -> Result<Value, String> {
     let home = dir.parent().ok_or("missing home")?;
@@ -592,10 +505,13 @@ fn installed_hooks(exe: &Path, dir: &Path) -> Result<Value, String> {
         let matched = expected["hooks"].as_object().unwrap().iter().all(|(event, entries)| {
             let generated: Vec<_> = settings["hooks"][event].as_array().into_iter().flatten()
                 .filter(|entry| entry["hooks"].as_array().is_some_and(|hooks| hooks.iter()
-                    .any(|h| h["command"].as_str().is_some_and(generated_hook)))) .collect();
+                    .any(is_generated_command))) .collect();
             generated.len() == 1 && *generated[0] == entries[0]
         });
-        result.insert(host.into(), json!({"status":if matched {"matches_current_core"} else {"refresh_required"}}));
+        let retired_absent = ["Stop", "UserPromptSubmit"].iter().all(|event|
+            !settings["hooks"][event].as_array().into_iter().flatten().any(|entry|
+                entry["hooks"].as_array().is_some_and(|commands| commands.iter().any(is_generated_command))));
+        result.insert(host.into(), json!({"status":if matched && retired_absent {"matches_current_core"} else {"refresh_required"}}));
     }
     Ok(Value::Object(result))
 }

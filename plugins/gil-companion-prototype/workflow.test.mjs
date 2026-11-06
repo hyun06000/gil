@@ -26,8 +26,8 @@ const rows = workflow.split('\n').filter(line => line.trim().startsWith('|')).ma
 const next = Object.fromEntries(rows.filter(([state, call]) => state && call && !state.startsWith('---') && state !== 'Current state' && state !== 'Situation').map(([state, call]) => [state, call]));
 
 test('each Interview state maps to one next call and approval is never derived', () => {
-  assert.match(next['Question is open'], /gil_await_user.*end the turn with that exact question and wait.*gil_close.*actual response/);
-  assert.match(next['Synthesis is open and the user has not answered'], /gil_plan_propose.*gil_await_user.*end the turn with its exact question and wait; no project file changes/);
+  assert.match(next['Question is open'], /Ask and wait.*gil_close.*actual response/);
+  assert.match(next['Synthesis is open and the user has not answered'], /gil_plan_propose.*wait for explicit approval; no project file changes/);
   assert.match(next['Synthesis is open and the user approved its statement'], /gil_close.*approved: yes/);
   assert.match(next['Synthesis is open and the user declined'], /approved: no.*gil_open. Question/);
   assert.match(next['Synthesis is closed and Outcome has not been opened'], /^`gil_open` Outcome$/);
@@ -59,7 +59,7 @@ test('file boundary covers Closing and imports without restricting outside work 
   const quick = workflow.slice(workflow.indexOf('**Quick rules'), workflow.indexOf('**Project file boundary'));
   assert.match(quick, /next call \*\*or wait\*\*/);
   assert.match(quick, /File-free web research, reading\s+existing evidence at any stage, and unrelated outside work remain allowed/);
-  assert.match(quick, /gil_await_user.*\n\s*end the response with that exact question, and wait/);
+  assert.match(quick, /Ask and wait.*user.s actual reply/);
 });
 
 test('approved plans are detected from the record and schema, never required on legacy projects', () => {
@@ -72,8 +72,8 @@ test('approved plans are detected from the record and schema, never required on 
     assert.ok(section.includes(field), field);
   assert.match(section, /`exploration_checklist` lists the item IDs in the same\s+order, one per line/);
   assert.match(section, /Never write `approved`, `plan_revision` or `plan_digest`/);
-  assert.match(section, /end the turn and wait for the Monitor button\.\*\* Chat agreement is not approval/);
-  assert.match(section, /gil_await_user\(project_root, question\).*end the response with that exact question/);
+  assert.match(section, /End the turn and wait for the Monitor button\.\*\* Chat agreement is not approval/);
+  assert.doesNotMatch(section, /Call `gil_await_user/);
   assert.match(section, /`close_report` \*\*unchanged\*\*/);
   assert.match(section, /then `gil_close` the Interview Cycle Report\. For execution,\s+then `gil_open` Experiment/);
   assert.match(section, /\*\*byte for byte\*\* \(UTF-8\)/);
@@ -118,4 +118,14 @@ test('project deliverables default to tracked paths; necessary external outputs 
   assert.match(workflow, /not tracked by GIL/);
   assert.match(workflow, /Do not create an external file just to evade a gate/);
   assert.match(workflow, /Unrelated external work remains allowed/);
+});
+
+test('conversation ending is independent of workflow completion and file protection', () => {
+  assert.match(workflow, /Ending a chat turn is not GIL project completion/);
+  assert.match(workflow, /No special pause phrase, exact final question, or `gil_await_user` call is required/);
+  assert.match(workflow, /Do not create a Question, Interview or Experiment merely/);
+  assert.match(workflow, /Recovery\/revisit approval and cycle boundaries do not require it/);
+  assert.match(workflow, /They do not block Stop or wrap_up, inject UserPromptSubmit instructions/);
+  assert.match(workflow, /Paused or unrelated chats still cannot edit protected project files outside Verify/);
+  assert.doesNotMatch(workflow, /End the response with that exact question|expires the handoff|detaches this chat.s turn gate/);
 });

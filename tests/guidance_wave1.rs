@@ -208,8 +208,8 @@ fn receipts_name_one_next_call_through_interview_and_into_an_experiment() {
     let opened = mcp.call("gil_open", &root, contract("question"));
     assert_eq!(opened["structuredContent"]["ok"], true, "{opened}");
     let hint = hints(&opened);
-    assert!(hint.contains("턴을 끝내 답을 기다린다") && hint.contains("gil_close"), "{hint}");
-    assert!(hint.contains("gil_await_user(project_root, question)"), "{hint}");
+    assert!(hint.contains("답을 기다린다") && hint.contains("gil_close"), "{hint}");
+    assert!(hint.contains("gil_await_user(project_root, question)") && hint.contains("선택적 읽기 확인이며 턴 종료 조건이 아니다"), "{hint}");
     let body = support::said(&opened);
     assert!(body.contains("파일 없는 웹 조사·기존 증거 읽기·무관한 외부 작업은 허용"), "{body}");
     assert!(!body.contains("본격적인 웹 조사와 보고서 작성은 채팅으로만 전달하더라도 실행 작업"), "{body}");

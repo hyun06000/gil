@@ -1,5 +1,7 @@
 # GIL macOS preview 설치
 
+> 배포 전 안내: 아래 파일 보호 전용 두 훅 정책은 다음 macOS 배포에 적용된다. 현재 고정된 preview.22 Core는 아직 네 훅을 생성한다. 새 배포 확인 전에는 구형 설치를 두 훅 전환 완료로 보고하지 않는다.
+
 이번 preview.22는 시각자료의 정확한 JSON 예시·필드별 오류·현재 owner와 계획·Cycle 진행 안내를 보완한다.
 `gil help visuals`로 새 첨부(new + key)와 기존 시각자료 인용(stored + owner/asset_id/sha256)을 구분한다.
 신규 설치에도 보호 훅 등록을 포함하고, 업데이트 때는 MCP와 같은 새 Core로 함께 갱신한다. 실제 Host 인수는 사용자 확인 대기이며 기존 기록은 자동 변환하지 않는다.
@@ -95,7 +97,7 @@ Plugin cache를 직접 편집하거나 Gatekeeper·quarantine·권한을 강제�
 Git·Git 없는 경로 모두 Plugin 설치 뒤 실제 설치 응답의 installedPath와 manifest에서 Core 절대경로를 확인해.
 그 Core로 write-guard install --auto --host codex 와 write-guard status --auto 를 실행해.
 신규 설치이거나 훅을 지웠어도 생략하지 마. 다른 Host는 바꾸지 마.
-네 훅과 codex의 matches_current_core, 백업·비-GIL 설정 보존을 확인해.
+두 훅(PreToolUse·PostToolUse)과 codex의 matches_current_core, 백업·비-GIL 설정 보존을 확인해.
 설정 변경은 검토한 GIL 항목만 적용하고 훅 신뢰·권한·sandbox를 자동 허용하지 마.
 앱 재시작·새 세션의 정상 /hooks 검토와 버려도 되는 테스트 폴더의 보호 확인을 안내해.
 실제 보호를 확인하지 못하면 “설정 준비 완료, 실제 보호 확인 대기”로 보고해.

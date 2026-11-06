@@ -32,11 +32,11 @@ pub fn after(name: &str, result: &mut CallToolResult) {
     let hint = match name {
         "gil_open" => opened(result),
         "gil_close" => closed(result),
-        "gil_start" => "GIL 시작: 이 폴더는 이제 GIL 프로젝트다. 채팅으로 답하기 전에 아래 receipt가 적은 show_gil_monitor 호출을 scope_id 그대로 먼저 한다. 그다음 gil_open(kind: question)을 열고 gil_await_user(project_root, question)를 호출한 뒤 그 질문 문장으로 응답을 끝내 목표를 묻는다. 프로젝트 내부 파일 변경·보고서 제작은 열린 Experiment Verify에서 수행한다. 파일 없는 웹 조사·기존 증거 읽기·무관한 외부 작업은 허용하지만 GIL 완료를 대신하지 않는다.".to_string(),
+        "gil_start" => "GIL 시작: 이 폴더는 이제 GIL 프로젝트다. 채팅으로 답하기 전에 아래 receipt가 적은 show_gil_monitor 호출을 scope_id 그대로 먼저 한다. 그다음 gil_open(kind: question)을 열고 목표를 묻고 실제 답을 기다린다. gil_await_user(project_root, question)는 선택적 읽기 확인이며 턴 종료 조건이 아니다. 프로젝트 내부 파일 변경·보고서 제작은 열린 Experiment Verify에서 수행한다. 파일 없는 웹 조사·기존 증거 읽기·무관한 외부 작업은 허용하지만 GIL 완료를 대신하지 않는다.".to_string(),
         "gil_context" => "GIL 재개: 채팅으로 답하기 전에 아래 context의 [지금 바로 할 호출] 한 줄을 먼저 따른다. 완료 조건을 충족했다면 추가 작업보다 gil_close가 먼저다. 이미 닫힌 단계를 반복하지 않고, 기존 프로젝트에 gil_start를 다시 부르지 않는다. 프로젝트 파일 변경은 열린 Verify에서만 수행한다.".to_string(),
         "gil_status" => "GIL 위치: 아래 '다음:' 줄 하나가 지금 밟을 수 있는 수다. 같은 세션에서 status를 반복 호출하지 않고 그 수를 실행한다.".to_string(),
         "gil_revisit" => "GIL 되돌아감 완료: 작업 폴더가 대상 Cycle의 세계로 복원됐다. 다음 호출은 gil_open(kind: interview|experiment)으로 새 Cycle을 여는 것이다. gil_revisit을 반복하지 않는다.".to_string(),
-        "show_gil_monitor" => "GIL 진행: Monitor 표시를 요청했다. 신규 시작 흐름이면 같은 project_root로 gil_open(kind: question)을 먼저 호출하고 질문한다. 목표가 아직 없어도 목표·완료 기준을 묻는 행동 계약으로 Question을 연다. 신규 Question에서 gil_await_user(project_root, question)를 호출한 뒤 그 질문 문장으로 응답을 끝내 사용자의 답을 기다린다 — 사용자의 요청문을 답으로 대신 적고 넘어가지 않는다. 기존 프로젝트라면 현재 열린 단계를 이어간다. 실제 화면 표시 여부는 아직 확인되지 않았다.".to_string(),
+        "show_gil_monitor" => "GIL 진행: Monitor 표시를 요청했다. 신규 시작 흐름이면 같은 project_root로 gil_open(kind: question)을 먼저 호출하고 질문한다. 목표가 아직 없어도 목표·완료 기준을 묻는 행동 계약으로 Question을 연다. 신규 Question에서 질문하고 사용자의 답을 기다린다(gil_await_user(project_root, question)는 선택적 읽기 확인이며 턴 종료 조건이 아니다) — 사용자의 요청문을 답으로 대신 적고 넘어가지 않는다. 기존 프로젝트라면 현재 열린 단계를 이어간다. 실제 화면 표시 여부는 아직 확인되지 않았다.".to_string(),
         "gil_plan_propose" | "gil_plan_read" | "gil_plan_request_interview" => match plan(name, result) {
             Some(hint) => hint,
             None => return,
@@ -97,9 +97,9 @@ fn opened(result: &CallToolResult) -> String {
     let said = said(result);
     let Some(kind) = first_line_kind(said, "열었다: ") else { return generic.into(); };
     let specific = match kind {
-        "question" => "GIL 진행: Question을 열었다. gil_await_user(project_root, question)를 호출하고 그 질문 문장으로 응답을 끝낸다. 턴을 끝내 답을 기다린다. 답을 받으면 그 원문으로 gil_close한다. 사용자의 원 요청문을 response로 대신 적어 닫지 않는다 — 실제 답 없이는 닫지 않는다. 기다리는 동안 프로젝트 파일을 변경하지 않는다. 파일 없는 웹 조사·기존 증거 읽기·무관한 외부 작업은 허용하며 사용자 답변을 대신하지 않는다.",
+        "question" => "GIL 진행: Question을 열었다. 사용자에게 질문하고 답을 기다린다. gil_await_user(project_root, question)는 선택적 읽기 확인이며 턴 종료 조건이 아니다. 답을 받으면 그 원문으로 gil_close한다. 사용자의 원 요청문을 response로 대신 적어 닫지 않는다 — 실제 답 없이는 닫지 않는다. 기다리는 동안 프로젝트 파일을 변경하지 않는다. 파일 없는 웹 조사·기존 증거 읽기·무관한 외부 작업은 허용하며 사용자 답변을 대신하지 않는다.",
         "interpretation" => "GIL 진행: Interpretation을 열었다. 받은 답에서 확정된 것과 모르는 것을 갈라 gil_close한다. 프로젝트 파일은 변경하지 않는다.",
-        "synthesis" => "GIL 진행: Synthesis를 열었다. 제안 statement를 사용자에게 보여 준다(승인 계획 프로필이면 먼저 gil_plan_propose({project_root, draft:{scope, items, synthesis}})로 제안하고 Monitor 버튼을 기다린다 — scope·items·synthesis는 draft 안에, exploration_checklist는 synthesis 안의 문자열이다. Closing은 기존 items를 유지하고 draft.synthesis.chain_verdict(success 또는 failure)를 더한다). gil_await_user(project_root, question)를 호출한 뒤 그 질문 문장으로 응답을 끝내 답을 기다린다. 명시적 동의가 있을 때만 gil_close한다. 침묵·이전 요청·자체 판단은 승인이 아니다. 기다리는 동안 프로젝트 파일을 변경하지 않는다.",
+        "synthesis" => "GIL 진행: Synthesis를 열었다. 제안 statement를 사용자에게 보여 준다(승인 계획 프로필이면 먼저 gil_plan_propose({project_root, draft:{scope, items, synthesis}})로 제안하고 Monitor 버튼을 기다린다 — scope·items·synthesis는 draft 안에, exploration_checklist는 synthesis 안의 문자열이다. Closing은 기존 items를 유지하고 draft.synthesis.chain_verdict(success 또는 failure)를 더한다). 답을 기다린다. gil_await_user(project_root, question)는 선택적 읽기 확인이며 턴 종료 조건이 아니다. 명시적 동의가 있을 때만 gil_close한다. 침묵·이전 요청·자체 판단은 승인이 아니다. 기다리는 동안 프로젝트 파일을 변경하지 않는다.",
         "outcome" if said.contains("Interview") => "GIL 진행: Interview Outcome을 열었다. 승인된 범위를 판정해 gil_close한다. 프로젝트가 끝날 때까지 열어 두지 않는다. 닫은 뒤 Interview Cycle Report를 별도로 gil_close한다.",
         "outcome" => "GIL 진행: Experiment Outcome을 열었다. 실제 Analysis에 근거한 verdict·lesson·next_direction으로 gil_close한다. 닫은 뒤 Cycle Report를 별도로 gil_close한다.",
         "define" => "GIL 진행: Define을 열었다. 확인할 질문 하나와 판정 기준만 적어 gil_close한다. 프로젝트 파일 변경은 Verify에서 한다.",
@@ -179,7 +179,7 @@ fn next_from_receipt(said: &str) -> Option<Next> {
 fn plan(name: &str, result: &CallToolResult) -> Option<String> {
     let view = result.structured_content.as_ref()?;
     if view.get("supported") == Some(&Value::Bool(false)) {
-        return Some("승인 계획: 이 프로젝트는 승인 계획 프로필이 아니다. gil_plan_* 를 요구하지 않는다. 일반 Synthesis에서 gil_await_user(project_root, question)를 호출하고 그 질문 문장으로 응답을 끝내 사용자의 답을 기다린다.".into());
+        return Some("승인 계획: 이 프로젝트는 승인 계획 프로필이 아니다. gil_plan_* 를 요구하지 않는다. 일반 Synthesis에서 사용자의 답을 기다린다. gil_await_user(project_root, question)는 선택적 읽기 확인이며 턴 종료 조건이 아니다.".into());
     }
     let proposal = view.get("proposal").filter(|p| !p.is_null());
     let decision = proposal.and_then(|p| p.pointer("/receipt/decision")).and_then(Value::as_str);
@@ -203,7 +203,7 @@ fn plan(name: &str, result: &CallToolResult) -> Option<String> {
     Some(match name {
         "gil_plan_request_interview" => "승인 계획: 재인터뷰 요청을 보존했다. 아무것도 닫히거나 열리지 않았다. 지금 열린 Step은 마지막 receipt의 다음 행동대로 이어가고, 남은 Step과 Cycle Report가 실제 순서대로 닫힌 뒤에 gil_open(kind: interview)으로 다시 승인받는다. 요청은 그동안 보존되며, 그 전에는 새 Experiment를 열 수 없다. 요청을 취소하거나 Cycle을 중단하는 호출은 없다.".into(),
         _ => match (proposal, decision) {
-            (Some(_), None) => format!("승인 계획: 제안 판 {}이(가) 기록됐고 Monitor 버튼 응답을 기다린다. gil_await_user(project_root, question)를 호출하고 그 질문 문장으로 응답을 끝낸다. 턴을 끝내고 기다린다. 채팅 동의로 대체하거나 approved를 직접 적지 않는다. 그동안 프로젝트 파일 변경·재제안을 하지 않는다. 응답 여부는 gil_plan_read로만 확인한다.", revision.unwrap_or(0)),
+            (Some(_), None) => format!("승인 계획: 제안 판 {}이(가) 기록됐고 Monitor 버튼 응답을 기다린다. 턴을 끝내고 기다린다. gil_await_user(project_root, question)는 선택적 읽기 확인이며 턴 종료 조건이 아니다. 채팅 동의로 대체하거나 approved를 직접 적지 않는다. 그동안 프로젝트 파일 변경·재제안을 하지 않는다. 응답 여부는 gil_plan_read로만 확인한다.", revision.unwrap_or(0)),
             (Some(_), Some("approve")) => format!("승인 계획: 판 {}이(가) 승인됐다. 다음 호출은 close_report를 글자 그대로 넣은 gil_close(Synthesis)다. 그 뒤 gil_open(kind: outcome) → gil_close → Interview Cycle Report gil_close 순서로 닫은 다음에야 gil_open(kind: experiment)을 연다.", revision.unwrap_or(0)),
             (Some(_), Some(_)) => format!("승인 계획: 판 {}에 수정 요청이 왔다. close_report(approved: no)로 Synthesis를 gil_close하고 다음 Question에서 무엇을 바꿀지 묻는다. 수정한 제안은 새 판이며 이전 승인은 재사용되지 않는다.", revision.unwrap_or(0)),
             (None, _) if reinterview => "승인 계획: 재인터뷰 요청이 보존돼 있다. 현재 Cycle의 남은 Step을 receipt 순서대로 마치고 Cycle Report를 닫은 뒤 gil_open(kind: interview)으로 다시 승인받는다. 그 전에는 Experiment를 열 수 없다. 열린 Step이 있으면 그 Step의 close가 다음 호출이다.".into(),
@@ -309,7 +309,7 @@ mod tests {
     #[test]
     fn opened_steps_say_wait_or_act_without_shortcuts() {
         for (kind, must, must_not) in [
-            ("question", "턴을 끝내", "조사한다"),
+            ("question", "답을 기다린다", "조사한다"),
             ("synthesis", "명시적 동의", "approved: yes로 바로"),
             ("verify", "evidence_files", "채팅만으로 닫"),
             ("define", "Verify에서 한다", "검색"),
@@ -323,7 +323,7 @@ mod tests {
             assert!(!hint.contains(must_not), "{kind}: {hint}");
             assert!(hint.contains("gil_close") || kind == "experiment", "{kind}: {hint}");
             if matches!(kind, "question" | "synthesis") {
-                assert!(hint.contains("gil_await_user(project_root, question)") && hint.contains("그 질문 문장으로 응답을 끝"), "{kind}: {hint}");
+                assert!(hint.contains("gil_await_user(project_root, question)") && hint.contains("선택적 읽기 확인이며 턴 종료 조건이 아니다"), "{kind}: {hint}");
             }
         }
     }

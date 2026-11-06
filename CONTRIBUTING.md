@@ -90,7 +90,7 @@ node --test distribution/codex/*.test.mjs distribution/compliance/notices.test.m
 실제 사용자 기록을 시험 데이터로 쓰지 않는다. native MCP/화면 인수는
 [NATIVE-ACCEPTANCE](mcp-app/NATIVE-ACCEPTANCE.md)와 [ACCEPTANCE](mcp-app/ACCEPTANCE.md)를 따른다.
 
-프로젝트 파일 쓰기와 GIL 턴 종료의 Host 제한은
+프로젝트 파일 쓰기의 Host 제한과 대화 진행의 분리는
 [쓰기 보호 어댑터](distribution/codex/WRITE-GUARD.md)로 시험한다. 설치된 Core의
 `gil write-guard install --auto --host both`가 두 Host의 공통 훅을 보존 병합한다. 최초 Host 활성화·
 Codex 신뢰 검토 이후 성공한 프로젝트 시작·재개 호출이 새 폴더를 자동 등록한다. 프로젝트 안에는

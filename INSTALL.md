@@ -1,5 +1,7 @@
 # GIL 설치 안내
 
+> 배포 전 안내: 아래 파일 보호 전용 두 훅 정책은 다음 macOS 배포에 적용된다. 현재 고정된 preview.22 Core는 아직 네 훅을 생성한다. 새 배포 확인 전에는 구형 설치를 두 훅 전환 완료로 보고하지 않는다.
+
 macOS preview.22는 시각자료 JSON 예시·필드별 오류·현재 owner와 계획·Cycle 진행 안내를 보완한 검증판이다.
 Windows owner.14는 기존 계획 입력·Closing 안내 검증판을 유지한다. 새 대화·새 빈 폴더에서 확인하며 기존 기록은 자동 변환하지 않는다.
 
@@ -168,7 +170,9 @@ Claude는 `mcpServers.gil.command`를 사용한다. 캐시 경로를 추측하�
 
 두 Host 모두를 설치하도록 요청받았고 같은 Core를 쓸 때만 `--host both`를 쓴다. 각각 다른 설치 경로라면
 각 Host의 Core로 별도 등록하고, 같은 배포 버전·Core bytes인지 대조한다. 다른 Host까지 임의로 바꾸지 않는다.
-installer가 PreToolUse·PostToolUse·UserPromptSubmit·Stop을 병합하며 원본을 private 백업에 남긴다.
+파일 보호 전용 Core의 installer는 PreToolUse·PostToolUse 두 훅을 병합하고, GIL이 생성한
+옛 Stop·UserPromptSubmit 명령을 정리하며 원본을 private 백업에 남긴다. 같은 항목의 다른 훅도 보존한다.
+Stop·wrap_up의 진행 차단과 UserPromptSubmit 강제 지시는 없으며, 파일 보호와 자동 등록은 유지한다.
 권한·sandbox·훅 신뢰를 자동 허용하지 않는다. Host 설정이나 조직 정책이 훅을 막으면 임의로 해제하지 않는다.
 
 MCP/Plugin 설치만 바꾸면 `~/.codex/hooks.json`·`~/.claude/settings.json`의 절대 훅 경로가
@@ -177,7 +181,7 @@ MCP/Plugin 설치만 바꾸면 `~/.codex/hooks.json`·`~/.claude/settings.json`�
 새 Core의 `write-guard status --auto`에서 해당 Host가 `matches_current_core`인지 확인한다.
 이 값은 설정 일치이며 Host 활성화 증명이 아니다. 세 결과를 나누어 보고한다.
 
-1. **연결·설정 준비:** 설치 버전·MCP 경로·선택 Host의 네 훅·`matches_current_core`와 백업을 확인한다.
+1. **연결·설정 준비:** 설치 버전·MCP 경로·선택 Host의 두 훅(PreToolUse·PostToolUse)·`matches_current_core`와 백업을 확인한다.
    실패하면 완료로 표시하지 않고 성공한 부분과 미완료 단계를 적는다.
 2. **Host 보호 활성화:** 앱을 재시작하고 새 세션에서 정상 훅 검토를 진행한다(Codex는 `/hooks`).
    사용자가 선택한 버려도 되는 테스트 폴더에서 `gil_start` 또는 `gil_context`를 호출하고,
@@ -240,7 +244,7 @@ codex plugin list --json으로 상태를 다시 읽어 끝나지 않은 단계�
 
 Git·Git 없는 경로 모두 Plugin 설치 뒤에는 실제 설치 결과의 Core 절대경로를 확인해서
 그 Core로 write-guard install --auto --host codex 와 write-guard status --auto 를 실행해.
-다른 Host는 바꾸지 마. 네 훅과 codex의 matches_current_core, 원본 백업·비-GIL 설정 보존을 확인해.
+다른 Host는 바꾸지 마. 두 훅(PreToolUse·PostToolUse)과 codex의 matches_current_core, 원본 백업·비-GIL 설정 보존을 확인해.
 훅 신뢰·권한·sandbox를 자동 허용하거나 비활성화 설정을 임의로 해제하지 마.
 마지막으로 codex plugin list --json에서 설치 버전이 0.2.1-preview.22인지 확인해 알려줘.
 앱 재시작·새 세션의 정상 /hooks 검토와 버려도 되는 테스트 폴더의 보호 확인을 안내해.
@@ -310,7 +314,7 @@ $HOME/Library/Application Support/GIL/preview.22-local 에 풀어. 기존 폴더
 Desktop 이 실행 중이면 쓰지 말고 종료를 요청해. 이미 교체를 승인했다면 다시 묻지 마.
 직접 등록한 Core로 write-guard install --auto --host claude 와 write-guard status --auto 를 실행해.
 훅이 없거나 지워졌어도 생략하지 마. Codex 설정은 바꾸지 마.
-네 훅과 claude의 matches_current_core, 백업·비-GIL 설정 보존을 확인해.
+두 훅(PreToolUse·PostToolUse)과 claude의 matches_current_core, 백업·비-GIL 설정 보존을 확인해.
 훅 신뢰·권한·sandbox를 자동 허용하거나 비활성화 설정을 임의로 해제하지 마.
 새 Code 세션에서 버려도 되는 테스트 폴더로 실제 보호를 확인하도록 안내하고,
 연결·설정 준비, 실제 Host 보호 활성화, Monitor 표시를 나눠 보고해.
