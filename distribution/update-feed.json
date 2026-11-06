@@ -4,10 +4,10 @@
   "note": "Metadata only. The installed GIL Core reads this file at most once a day to show update guidance in the Monitor; it never downloads or installs from it. Update this file in the same pull request that records a publication ledger.",
   "platforms": {
     "darwin-arm64": {
-      "version": "0.2.1-preview.22",
-      "release_url": "https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.22",
+      "version": "0.2.1-preview.23",
+      "release_url": "https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.23",
       "install_doc": "https://github.com/hyun06000/gil/blob/main/INSTALL.md",
-      "notes": "시각자료 JSON 예시·필드별 오류·현재 owner와 계획·Cycle 진행 안내를 보완했습니다. 새 연결에서 gil help visuals를 확인하세요. 기존 MCP와 보호 훅을 같은 새 Core로 갱신하며 기록을 변환하거나 실행 기록을 소급 변경하지 않습니다. 실제 Host 검증은 사용자 확인 대기입니다."
+      "notes": "Stop·wrap_up 진행 차단과 UserPromptSubmit 강제 지시를 없앴습니다. 파일 보호·새 프로젝트 자동 등록은 유지합니다. MCP와 훅을 같은 새 Core로 갱신하면 GIL이 만든 옛 진행 훅만 정리하며 사용자 설정·프로젝트 기록은 보존합니다. 새 세션에서 필드테스트해 주세요. 실제 Host 검증은 사용자 확인 대기입니다."
     },
     "windows-x64": {
       "version": "0.1.1-owner.14",
