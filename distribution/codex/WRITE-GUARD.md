@@ -1,6 +1,7 @@
 # 프로젝트 파일 쓰기 보호 — 개발용 Host 어댑터
 
-상태: native Core에 포함된 opt-in 어댑터. 훅 활성화는 별도 설치 단계이며, 소스 변경은 기존 설치본을 갱신하지 않는다.
+상태: native Core에 포함된 사용자 승인 기반 어댑터. macOS 표준 설치 안내는 별도 훅 등록 단계를 포함한다.
+Plugin/MCP 설치가 훅을 자동 생성하지 않으며, 소스 변경은 기존 설치본을 갱신하지 않는다.
 대상은 macOS의 Codex 데스크톱과 Claude Desktop **Code 탭의 로컬 세션**이다.
 Claude Desktop 일반 채팅·Cowork, 원격 세션과 Windows 셸 보호를 검수했다고 주장하지 않는다.
 
@@ -22,10 +23,14 @@ Snapshot 채택, 자동 복구를 하지 않는다. 상태가 없거나 손상�
 ## 새 프로젝트 자동 연결 (macOS)
 
 설치된 native Core 하나로 동작한다. Node·Python·개발 checkout이 필요하지 않다. 사용자 요청으로
-설치/갱신할 때 다음 명령을 한 번 실행한다. 프로젝트 생성 때마다 설정을 수정하지 않는다.
+설치/갱신할 때 사용하는 Host의 명령을 실행한다. 신규 설치·삭제된 훅 복구도 같은 절차다.
+프로젝트 생성 때마다 설정을 수정하지 않는다. 실제 MCP Core의 절대경로를 확인하고 다른 Host를 임의로 바꾸지 않는다.
 
 ```sh
-/absolute/path/to/gil write-guard install --auto --host both
+# 사용하는 Host만 선택한다. 두 Host 모두 같은 Core를 쓰도록 요청받았을 때만 --host both.
+/absolute/path/to/gil write-guard install --auto --host claude
+/absolute/path/to/gil write-guard status --auto
+# Codex 설치에는 --host codex를 사용한다.
 ```
 
 `~/.codex/hooks.json`과 `~/.claude/settings.json`의 기존 항목을 보존해 PreToolUse·PostToolUse·

@@ -56,7 +56,9 @@ template를 산출물의 `.agents/plugins/marketplace.json`에 복사한다. 게
 unsigned 후보 제작은 두 manifest의 version을 같은 `X.Y.Z-preview.N`으로 바꾼다.
 
 UI는 Rust 실행 파일에 내장된다. `server.mjs`, `node_modules`, Cargo source, 독립 `assets`, 설치
-hook은 싣지 않는다. Companion을 싣거나 자동 실행하지 않는다. **도구·Skill 성공은 fullscreen
+hook은 싣지 않는다. 사용자 설치 안내에서 Core의 `write-guard install --auto --host codex|claude|both`로
+사용 Host의 보호 훅을 별도 등록·검증한다(신규·누락·업데이트 모두). Plugin 설치 자체가 훅을 등록하는 것은 아니다.
+Companion을 싣거나 자동 실행하지 않는다. **도구·Skill 성공은 fullscreen
 성공이 아니며**, Codex와 Claude Code의 실제 화면 인수는 Host별로 따로 기록한다.
 
 ## 제작자 실행
