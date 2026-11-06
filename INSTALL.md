@@ -60,7 +60,7 @@ Defender·Gatekeeper·ACL을 변경해 실행을 강제하지 않는다.
 출처와 버전을 먼저 보여 주고 사용자 승인 전에는 제거·교체하지 않는다. Plugin cache, Codex 설정 파일,
 Claude Desktop 설정 파일, registry를 Agent가 손으로 편집하지 않는다. Claude Desktop 설정 파일은
 Companion의 버튼(Windows) 또는 아래 절차의 사용자 승인 뒤 **Desktop을 완전히 종료한 상태**에서만 바꾼다.
-별도로 설치한 전역 훅의 승인된 갱신은 아래 **기존 전역 write-guard 갱신** 절차의 좁은 예외다.
+보호 훅의 승인된 등록·갱신은 아래 **보호 훅 등록과 갱신** 절차를 따른다.
 기존 비-GIL 설정·권한·sandbox를 보존하고 원본 백업과 정확한 변경 내용을 확인한다.
 
 ## Windows 11 x64
@@ -139,15 +139,55 @@ macOS에는 아직 고정 런처와 Companion 버튼이 없다. Codex는 Plugin 
 새 버전 폴더로 다시 가리켜야 한다**(아래 “업데이트” 참고). 이 차이는 macOS Companion 런처가 들어올 때까지
 남는 제한이다.
 
-### 기존 전역 write-guard 갱신
+<a id="기존-전역-write-guard-갱신"></a>
+
+### 보호 훅 등록과 갱신 — 신규 설치에도 포함
+
+macOS의 표준 설치는 **Plugin/MCP 연결 → 사용하는 Host의 보호 훅 등록 → 설정 일치 확인 →
+새 세션 활성화 확인**까지다. Plugin 설치나 MCP 등록 자체가 훅을 자동 생성하지는 않는다.
+아래 요청문은 설치 Agent에게 보호 훅 등록도 요청한다. 훅이 없거나 일부를 지웠어도 같은 명령으로
+등록·복구하며, 사용자가 보호 훅을 원하지 않으면 강제로 설치하지 않고 “MCP만 연결, 보호 미설정”으로 보고한다.
+이 절차는 macOS 로컬 Codex·Claude Desktop Code 탭용이다. Windows owner.14에는 적용하지 않는다.
+
+Agent는 실제 설치 결과와 MCP manifest/직접 등록에서 실행 파일의 절대경로·버전을 확인한다.
+Codex는 공식 `plugin add --json`의 `installedPath`와 manifest의 상대 실행 경로를 대조하고,
+Claude는 `mcpServers.gil.command`를 사용한다. 캐시 경로를 추측하거나 전역 PATH의 다른 `gil`을 쓰지 않는다.
+다음 `GIL_CORE`는 그 검증된 절대경로를 담은 변수다. **사용하는 Host만** 등록한다.
+
+```sh
+# Codex 설치를 돕는 Agent
+"$GIL_CORE" write-guard install --auto --host codex
+"$GIL_CORE" write-guard status --auto
+```
+
+```sh
+# Claude Desktop Code 탭 설치를 돕는 Agent
+"$GIL_CORE" write-guard install --auto --host claude
+"$GIL_CORE" write-guard status --auto
+```
+
+두 Host 모두를 설치하도록 요청받았고 같은 Core를 쓸 때만 `--host both`를 쓴다. 각각 다른 설치 경로라면
+각 Host의 Core로 별도 등록하고, 같은 배포 버전·Core bytes인지 대조한다. 다른 Host까지 임의로 바꾸지 않는다.
+installer가 PreToolUse·PostToolUse·UserPromptSubmit·Stop을 병합하며 원본을 private 백업에 남긴다.
+권한·sandbox·훅 신뢰를 자동 허용하지 않는다. Host 설정이나 조직 정책이 훅을 막으면 임의로 해제하지 않는다.
 
 MCP/Plugin 설치만 바꾸면 `~/.codex/hooks.json`·`~/.claude/settings.json`의 절대 훅 경로가
-구 Core에 남을 수 있다. 기존 훅이 있으면 이전 Core를 지우기 전에 두 Host의 실제 MCP·훅 경로를
-읽고 **같은 검증된 새 Core**로 함께 갱신한다. 사용하는 Host에 맞춰 새 Core의
-`write-guard install --auto --host codex|claude|both`를 실행한다. 비-GIL 설정과 원본 백업은 보존한다.
+구 Core에 남을 수 있다. 업데이트도 위 명령으로 새 Core에 맞추고, 훅이 없다는 이유로 생략하지 않는다.
+이전 Core는 갱신·검증이 끝날 때까지 보존한다. 비-GIL 설정과 원본 백업은 보존한다.
 새 Core의 `write-guard status --auto`에서 해당 Host가 `matches_current_core`인지 확인한다.
-이 값은 설정 일치이며 Host 활성화 증명이 아니다. 새 연결에서 훅 신뢰를 정상 검토하고 기존
-프로젝트는 `gil_context`로 다시 연결한다. 프로젝트 등록 목록·기록·Snapshot은 바꾸지 않는다.
+이 값은 설정 일치이며 Host 활성화 증명이 아니다. 세 결과를 나누어 보고한다.
+
+1. **연결·설정 준비:** 설치 버전·MCP 경로·선택 Host의 네 훅·`matches_current_core`와 백업을 확인한다.
+   실패하면 완료로 표시하지 않고 성공한 부분과 미완료 단계를 적는다.
+2. **Host 보호 활성화:** 앱을 재시작하고 새 세션에서 정상 훅 검토를 진행한다(Codex는 `/hooks`).
+   사용자가 선택한 버려도 되는 테스트 폴더에서 `gil_start` 또는 `gil_context`를 호출하고,
+   `status --auto`의 해당 root 등록과 실제 Host의 Verify 밖 편집 거절·Verify 안 편집 허용을 확인한다.
+   정책·비활성화·신뢰 미완료 또는 필드테스트 미실시면 “설정 준비 완료, 실제 보호 확인 대기”로 보고한다.
+   실제 사용자 프로젝트에 시험 파일을 쓰거나 시험용 승인을 생성하지 않는다.
+3. **Monitor 표시:** 실제 화면 표시·fullscreen 여부를 따로 확인한다. 위 두 결과로 UI 성공을 대신하지 않는다.
+
+기존 프로젝트는 새 연결에서 `gil_context`로 재개한다. 성공한 시작·재개 뒤의 프로젝트 등록은 자동이므로
+새 폴더마다 설정을 편집하지 않는다. 설치 단계에서는 프로젝트 등록 목록·기록·Snapshot을 바꾸지 않는다.
 
 기존 훅이 설치 셸을 막으면 원래 명령을 보호 없이 다시 실행하지 않는다.
 [정확한 설정 diff·백업을 준비하는 갱신 절차](distribution/codex/INSTALL.md#별도로-설치한-전역-write-guard-갱신)를
@@ -161,7 +201,7 @@ MCP/Plugin 설치만 바꾸면 `~/.codex/hooks.json`·`~/.claude/settings.json`�
 ### Codex에 붙여넣을 요청
 
 ```text
-GIL unsigned preview 0.2.1-preview.22을 설치해 줘. 사용자가 터미널을 직접 조작하게 하지 마.
+GIL unsigned preview 0.2.1-preview.22와 Codex용 보호 훅을 함께 설치해 줘. 사용자가 터미널을 직접 조작하게 하지 마.
 플러그인 관리 MCP 도구만 보고 설치 불가라고 결론내리지 말고, 이 로컬 Codex 작업의 셸에서
 앱에 포함된 codex CLI를 사용해. 프로젝트를 초기화·이관하거나 .gil 기록을 바꾸지 마.
 
@@ -174,7 +214,7 @@ GIL unsigned preview 0.2.1-preview.22을 설치해 줘. 사용자가 터미널�
 
 기존 GIL이나 gil-preview-macos-arm64가 있으면 자동으로 제거·교체하지 말고 출처와 버전을
 알려준 뒤 내 승인을 기다려. 이미 승인했다면 다시 묻지 마. Plugin cache는 직접 편집하지 마.
-기존 전역 훅이 있으면 위 갱신 절차로 MCP와 같은 새 Core에 맞춰. 설정 변경은 검토한 GIL 항목만 적용해.
+보호 훅이 없거나 지워졌어도 위 등록 절차를 포함해. 설정 변경은 검토한 GIL 항목만 적용해.
 
 Git이 실제로 동작하면 다음 고정 tag 경로를 사용해:
 codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.22 --json
@@ -198,7 +238,13 @@ codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 codex plugin list --json으로 상태를 다시 읽어 끝나지 않은 단계만 이어가. 다시 다운로드·압축 해제하거나
 무조건 재등록하지 마. Gatekeeper를 끄거나 quarantine·권한을 강제로 변경하지 마.
 
+Git·Git 없는 경로 모두 Plugin 설치 뒤에는 실제 설치 결과의 Core 절대경로를 확인해서
+그 Core로 write-guard install --auto --host codex 와 write-guard status --auto 를 실행해.
+다른 Host는 바꾸지 마. 네 훅과 codex의 matches_current_core, 원본 백업·비-GIL 설정 보존을 확인해.
+훅 신뢰·권한·sandbox를 자동 허용하거나 비활성화 설정을 임의로 해제하지 마.
 마지막으로 codex plugin list --json에서 설치 버전이 0.2.1-preview.22인지 확인해 알려줘.
+앱 재시작·새 세션의 정상 /hooks 검토와 버려도 되는 테스트 폴더의 보호 확인을 안내해.
+연결·설정 준비, 실제 Host 보호 활성화, Monitor 표시를 구분해서 보고해.
 화면이 실제로 보이기 전에는 Monitor가 열렸다고 말하지 마.
 ```
 
@@ -231,7 +277,7 @@ inline 카드가 주변 대화와 어울린다고 확인했다. 반면 **Plugin�
 **2단계 — 직접 등록(현재 화면이 성립하는 경로).** 먼저 Claude Desktop을 **완전히 종료**한다(Dock에서
 종료, 주 프로세스 `Claude`가 없어야 한다. 브라우저 확장이 띄우는 보조 프로세스는 남아 있어도 된다).
 Desktop은 실행 중에 자체 설정을 같은 파일에 다시 쓰므로, 켜진 상태에서 고친 내용은 되돌아갈 수 있다
-(10/31 실측). 종료한 뒤 설정 파일의 `mcpServers`에 아래 항목을 더하고 Desktop을 다시 연다. 다른 서버
+(10/31 실측). 종료한 뒤 설정 파일의 `mcpServers`에 아래 항목을 더한다. 다른 서버
 항목은 그대로 둔다. `<폴더>`는 1단계의 실제 절대경로다. 공용 작업 규칙은 Rust MCP 서버에 포함되어 Plugin
 Skill 없이도 도구 설명과 `gil_help`로 전달된다.
 
@@ -242,22 +288,39 @@ Skill 없이도 도구 설명과 `gil_help`로 전달된다.
 }
 ```
 
+**3단계 — 보호 훅 등록과 확인.** Desktop을 다시 열기 전에 위에 등록한 같은 Core로
+`write-guard install --auto --host claude`와 `write-guard status --auto`를 실행한다.
+신규 설치·삭제된 훅 복구·업데이트 모두 포함한다. 위 **보호 훅 등록과 갱신** 절차로 백업과
+`installed_hooks.claude.status`가 `matches_current_core`인지 확인한 뒤 Desktop을 다시 열고,
+새 Code 세션에서 실제 보호를 확인한다.
+직접 MCP 등록 파일과 훅 설정 파일(`~/.claude/settings.json`)은 서로 다르다.
+Claude 안에서 설치를 돕는 중이라 종료로 작업을 이어갈 수 없으면 준비한 경로·백업·남은 단계를 남기고,
+Desktop 종료 뒤 로컬 설치 Agent에서 이어간다. 실행 중 Desktop 설정을 바꾸거나 완료로 보고하지 않는다.
+
 Claude Code 탭에 붙여넣어 Agent에게 맡길 수 있는 요청문:
 
 ```text
-GIL unsigned preview 0.2.1-preview.22을 Claude Desktop에 직접 등록해 줘. 내가 터미널을 직접 조작하게 하지 마.
+GIL unsigned preview 0.2.1-preview.22를 Claude Desktop에 직접 등록하고 Claude용 보호 훅도 설치해 줘. 내가 터미널을 직접 조작하게 하지 마.
 위 Git 없는 경로 그대로 archive를 받아 크기·SHA-256·tar 멤버를 검증하고
 $HOME/Library/Application Support/GIL/preview.22-local 에 풀어. 기존 폴더는 덮어쓰지 마.
 그다음 ~/Library/Application Support/Claude/claude_desktop_config.json 을 읽어 지금 mcpServers 에 무엇이
 있는지 보여 주고, gil 항목이 이미 있으면 어떤 실행 파일을 가리키는지 알려 준 뒤 내 승인을 기다려.
 내가 승인하면: Claude Desktop 이 완전히 종료됐는지(주 프로세스 Claude 가 없는지) 확인하고, 설정 파일을
 같은 폴더에 백업한 뒤, 다른 항목은 그대로 두고 mcpServers.gil 만 위 Core 경로와 ["mcp","--serve"] 로 적어.
-Desktop 이 실행 중이면 쓰지 말고 종료를 요청해. 쓰고 나서 파일을 다시 읽어 결과를 보여 줘.
+Desktop 이 실행 중이면 쓰지 말고 종료를 요청해. 이미 교체를 승인했다면 다시 묻지 마.
+직접 등록한 Core로 write-guard install --auto --host claude 와 write-guard status --auto 를 실행해.
+훅이 없거나 지워졌어도 생략하지 마. Codex 설정은 바꾸지 마.
+네 훅과 claude의 matches_current_core, 백업·비-GIL 설정 보존을 확인해.
+훅 신뢰·권한·sandbox를 자동 허용하거나 비활성화 설정을 임의로 해제하지 마.
+새 Code 세션에서 버려도 되는 테스트 폴더로 실제 보호를 확인하도록 안내하고,
+연결·설정 준비, 실제 Host 보호 활성화, Monitor 표시를 나눠 보고해.
+종료 때문에 현재 Agent가 이어갈 수 없으면 남은 단계를 적고, 종료 뒤 로컬 설치 Agent에서 이어가.
+쓰고 나서 파일을 다시 읽어 결과를 보여 줘.
 Gatekeeper 나 quarantine, 권한은 바꾸지 마. 화면이 실제로 보이기 전에는 Monitor 가 열렸다고 말하지 마.
 ```
 
 **업데이트(macOS Claude).** 새 preview가 나오면 1단계를 새 `<버전>-local` 폴더에 반복하고, Desktop을
-완전히 종료한 뒤 `gil` 항목의 `command`를 새 폴더의 Core로 바꾼다. 이전 폴더는 지우지 않아도 된다(열린
+완전히 종료한 뒤 `gil` 항목의 `command`를 새 폴더의 Core로 바꾸고 **3단계의 훅 등록·확인도 반복한다**. 이전 폴더는 지우지 않아도 된다(열린
 대화가 그 Core를 쓸 수 있다). 등록을 바꾸지 않으면 **Claude는 구버전 Core를 계속 쓰고 Codex Plugin만 새
 버전이 되므로** 두 Host의 버전이 어긋난다. Monitor **연결 정보**의 `host`·GIL 버전과 `gil_help`의 서버
 버전으로 어느 Core에 연결됐는지 확인한다.
@@ -271,6 +334,8 @@ Monitor App을 화면에 그리지 않는다. Host가 고쳐졌는지 확인하�
 그다음 Claude Code 플러그인 명령으로 그 폴더를 marketplace로 더하고
 gil-companion-prototype@gil-preview-macos-arm64 를 설치해 줘. 설정 파일이나 플러그인 cache를
 직접 편집하지 말고, 설치 뒤 플러그인 목록에서 버전을 확인해 알려 줘.
+이 대안 경로도 같은 Core로 write-guard install --auto --host claude 와 write-guard status --auto 를 수행해.
+백업·비-GIL 설정 보존과 claude의 matches_current_core를 확인하고 실제 Host 보호·화면 확인은 구분해.
 ```
 
 ```bash

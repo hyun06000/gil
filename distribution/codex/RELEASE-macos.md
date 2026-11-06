@@ -73,7 +73,10 @@ surface 2/format 4..5/requires_review를 담고 실제 24개 도구와 대조한
 받는다. Plugin을 구형으로 되돌려도 format 5 기록이 format 4로 바뀌지는 않는다.
 이 계약은 preview 후보 제작이며 stable 공개 버전/지원 범위·정확한 CI bytes 게시 승인은 별개다.
 
-최종 기본 UX는 **검증된 marketplace의 GIL Plugin 설치 → 작업 폴더 선택 → 자연어 요청**이다.
+최종 macOS 기본 UX는 **검증된 Plugin/MCP 설치 → 사용 Host의 보호 훅 등록·설정 확인 →
+새 세션의 정상 신뢰 검토·보호 활성화 확인 → 작업 폴더 선택·자연어 요청**이다.
+훅 설치는 Agent가 새 Core의 정식 installer로 수행하며 Plugin 설치 자체의 자동 동작은 아니다.
+설정 준비·실제 Host 보호·Monitor 표시를 구분하고, 사용자가 훅을 원하지 않으면 보호 미설정으로 보고한다.
 공개 고정 ref와 공식 명령은 [INSTALL.md](INSTALL.md)에 있다. 셸 설치를 도와야
 한다면 Agent가 제품·출처·고정 version/hash·미공증 사실·로컬 접근 범위를 설명하고 승인을 받는다.
 무검증 `curl | sh`, 보안 검사 해제, Homebrew/Node/Cargo 선행 설치를 기본 UX로 추가하지 않는다.
