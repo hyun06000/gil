@@ -594,13 +594,14 @@ fullscreen 응답만으로 Windows와 다른 작업/재시작 수명까지 통�
 > 운영체제는 신뢰 경계에서 승인한다.**
 
 
-### 2026-11-06 Host 파일 보호와 대화의 분리
+### 2026-11-06 다른 프로젝트 비간섭과 훅 없는 진행 안내
 
-명시적으로 설치·신뢰된 공통 Host 훅은 성공한 GIL 시작/재개의 root를 프로젝트 밖에 등록한다.
-모든 등록 프로젝트의 파일 변경은 실제 열린 Verify 계약을 따르며 세션 ID·cwd·대화의 중단 여부로
-면제하지 않는다. Stop·wrap_up은 진행을 차단하지 않고 UserPromptSubmit은 지시를 주입하지 않는다.
-채팅 보고·무관한 주제·Monitor 복구 승인 대기는 어느 단계에서도 가능하며 가짜 Step/Cycle을 만들지 않는다.
-턴 종료는 GIL 완료가 아니다. 실제 승인·증거·Chain 완료만 기록한다.
-`gil_await_user(project_root, question)`는 열린 Question/미승인 제안 Synthesis의 선택적 읽기 확인이다.
-기존 도구 입출력과 registry의 session/wait 기록은 호환성을 위해 보존하되 진행 판단에는 쓰지 않는다.
-Domain schema, Graph, 승인 권한, Artifact 증거는 바꾸지 않는다. 실제 Host 훅 활성화는 별도 검증한다.
+GIL은 전역·프로젝트 로컬·Plugin·Skill 훅을 설치하지 않는다. 일반 세션의 도구 호출과 사용자 입력을
+검사하거나 셸 명령을 감싸지 않는다. Host 프로젝트와 GIL의 선택 project_root가 다를 수 있으므로
+Host의 로컬 훅 기능만으로 GIL 프로젝트 비간섭을 검증한 것으로 보지 않는다.
+GIL을 요청한 선택 프로젝트의 시작·재개·open·close 응답이 실제 다음 호출 또는 대기와 파일 작업 기준을
+안내한다. 무관한 개발·설치·웹 조사에는 GIL 호출이나 단계를 요구하지 않는다. 프로젝트 파일 작업은
+열린 Verify에서 수행하도록 안내하지만 Bash/Write/Edit의 OS 쓰기를 강제 차단한다고 주장하지 않는다.
+Core의 승인·전이·증거·dirty 검사와 기록 형식은 유지한다. 프로젝트 기록·Snapshot은 손대지 않는다.
+구형 generated 훅은 명시적 uninstall에서 정확한 명령만 백업 후 제거한다. 다른 훅·설정·권한은 보존한다.
+구형 hook entrypoint는 빈 결과만 돌려준다. 기존 registry는 읽거나 갱신하지 않는다.

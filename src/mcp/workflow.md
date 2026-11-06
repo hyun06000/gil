@@ -1,14 +1,14 @@
 ## GIL shared workflow
 
-### Conversation and file protection on Codex and Claude Code
+### Scope and guidance on Codex and Claude Code
 
 - Ending a chat turn is not GIL project completion. Report the recorded state truthfully; never fabricate approval, evidence or a completed Chain.
 - The user may pause, change topic, request a chat report, or wait for Monitor approval at any stage. No special pause phrase, exact final question, or `gil_await_user` call is required to end a turn. Do not create a Question, Interview or Experiment merely to make ending a turn possible.
 - When continuing a requested GIL workflow with an unknown goal, open the first Question with the objective “ask the user for the goal”, then ask and wait for the actual answer.
 - `gil_await_user(project_root, question)` is an optional read-only check for an open Question or pending Synthesis proposal. It does not authorize turn completion or register a wait. Recovery/revisit approval and cycle boundaries do not require it. If it refuses, read the current context; do not manufacture a supported Step just to call it.
-- Installed Host hooks automatically enroll successful `gil_start`/`gil_context`/`gil_open`/`gil_close` projects, including roots outside the chat cwd. Enrollment does not prove Host hook activation. Missing/untrusted hooks must not be reported as protection.
-- The hooks protect registered file paths, independently of session identity. They do not block Stop or wrap_up, inject UserPromptSubmit instructions, or attach a conversation obligation. Legacy session/wait records are preserved but inactive. Paused or unrelated chats still cannot edit protected project files outside Verify.
-- For guarded shell calls, use the installed Host adapter: Claude presents the rewritten wrapper for permission; Codex requests a retry of the exact wrapper with its supported approval fields. Never send Codex `sandbox_permissions` to Claude, auto-approve a command, or retry the original command without protection. If the Host cannot launch the guard sandbox, explain that limitation and stop that command; do not require a GIL Step for unrelated outside work.
+- GIL installs no global, project-local, Plugin or Skill hooks. Do not create hooks, enroll folders in a Host guard registry, wrap ordinary shell commands, or request elevated permissions on GIL's behalf. Use the Host's normal execution and approval flow.
+- These instructions apply only when the user is working on an explicitly selected GIL project. An enabled Plugin, another project's records, a cwd, or old registry entries do not make an unrelated task a GIL task. For unrelated chats, development, installation or file-free research, do not call GIL tools or demand GIL Steps just to proceed.
+- Project file discipline is guidance, not an enforced file lock. The Core still validates its own transitions, approvals, reports, evidence and dirty boundaries; it does not intercept Bash, Write or Edit. Never claim that prompts prevent all out-of-Verify writes or protect a project from other sessions.
 - File-free web research and unrelated outside work remain allowed. They do not close a requested GIL workflow. Honor user cancellation without changing project records; use `gil_context` to resume the recorded position when requested.
 - `show_gil_monitor` is a display request. Read `gil_monitor_status` before claiming visible/fullscreen. If `display_mode=inline`, say the Host kept the preview inline and guide the Host widget's “show in another panel”/expand control. Never claim that more retries guarantee fullscreen.
 
@@ -19,7 +19,7 @@ actual recorded position and the connected tool schema. Never repeat a call that
 
 **Quick rules — read these first; the numbered rules below only add detail.**
 
-1. A GIL project is not finished in chat. Follow the last receipt's next call **or wait**.
+1. A GIL project is not finished in chat. When continuing that project, follow the last receipt's next call **or wait**.
    Do not close a step before its completion condition is met. If no receipt exists yet, read
    `gil_context` once (existing project) or call `gil_start` once (new project).
 2. After `gil_start`: call the `show_gil_monitor(scope_id)` the receipt names, then

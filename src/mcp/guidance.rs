@@ -11,7 +11,7 @@ use serde_json::Value;
 // The Plugin skill embeds this exact text; CI rejects a stale generated copy.
 pub const INSTRUCTIONS: &str = include_str!("workflow.md");
 
-const FILE_BOUNDARY: &str = "프로젝트 파일 생성·수정·삭제·이동·외부 파일 가져오기는 실제로 열린 Verify에서만 수행한다. DOCX·PNG·PDF 제작과 렌더링도 포함한다. 프로젝트 밖 작업과 프로젝트 파일을 남기지 않는 웹 조사는 이 제한의 대상이 아니다. 이는 Agent 지침이며 OS 쓰기 차단은 아니다.";
+const FILE_BOUNDARY: &str = "프로젝트 파일 생성·수정·삭제·이동·외부 파일 가져오기는 실제로 열린 Verify에서만 수행한다. DOCX·PNG·PDF 제작과 렌더링도 포함한다. 프로젝트 밖 작업과 프로젝트 파일을 남기지 않는 웹 조사는 이 제한의 대상이 아니다. 이는 선택한 GIL 프로젝트의 Agent 지침이며 OS 쓰기 차단은 아니다. GIL 훅은 설치하지 않으며 일반 셸·다른 프로젝트에는 적용하지 않는다.";
 
 pub fn prepend(result: &mut CallToolResult, text: impl Into<String>) {
     result.content.insert(0, ContentBlock::text(text.into()));
@@ -33,7 +33,7 @@ pub fn after(name: &str, result: &mut CallToolResult) {
         "gil_open" => opened(result),
         "gil_close" => closed(result),
         "gil_start" => "GIL 시작: 이 폴더는 이제 GIL 프로젝트다. 채팅으로 답하기 전에 아래 receipt가 적은 show_gil_monitor 호출을 scope_id 그대로 먼저 한다. 그다음 gil_open(kind: question)을 열고 목표를 묻고 실제 답을 기다린다. gil_await_user(project_root, question)는 선택적 읽기 확인이며 턴 종료 조건이 아니다. 프로젝트 내부 파일 변경·보고서 제작은 열린 Experiment Verify에서 수행한다. 파일 없는 웹 조사·기존 증거 읽기·무관한 외부 작업은 허용하지만 GIL 완료를 대신하지 않는다.".to_string(),
-        "gil_context" => "GIL 재개: 채팅으로 답하기 전에 아래 context의 [지금 바로 할 호출] 한 줄을 먼저 따른다. 완료 조건을 충족했다면 추가 작업보다 gil_close가 먼저다. 이미 닫힌 단계를 반복하지 않고, 기존 프로젝트에 gil_start를 다시 부르지 않는다. 프로젝트 파일 변경은 열린 Verify에서만 수행한다.".to_string(),
+        "gil_context" => "GIL 재개: 이 프로젝트 작업을 이어갈 때 아래 context의 [지금 바로 할 호출] 한 줄을 먼저 따른다. 무관한 주제의 답변을 위해 GIL 단계를 요구하지 않는다. 완료 조건을 충족했다면 추가 작업보다 gil_close가 먼저다. 이미 닫힌 단계를 반복하지 않고, 기존 프로젝트에 gil_start를 다시 부르지 않는다. 프로젝트 파일 변경은 열린 Verify에서만 수행한다.".to_string(),
         "gil_status" => "GIL 위치: 아래 '다음:' 줄 하나가 지금 밟을 수 있는 수다. 같은 세션에서 status를 반복 호출하지 않고 그 수를 실행한다.".to_string(),
         "gil_revisit" => "GIL 되돌아감 완료: 작업 폴더가 대상 Cycle의 세계로 복원됐다. 다음 호출은 gil_open(kind: interview|experiment)으로 새 Cycle을 여는 것이다. gil_revisit을 반복하지 않는다.".to_string(),
         "show_gil_monitor" => "GIL 진행: Monitor 표시를 요청했다. 신규 시작 흐름이면 같은 project_root로 gil_open(kind: question)을 먼저 호출하고 질문한다. 목표가 아직 없어도 목표·완료 기준을 묻는 행동 계약으로 Question을 연다. 신규 Question에서 질문하고 사용자의 답을 기다린다(gil_await_user(project_root, question)는 선택적 읽기 확인이며 턴 종료 조건이 아니다) — 사용자의 요청문을 답으로 대신 적고 넘어가지 않는다. 기존 프로젝트라면 현재 열린 단계를 이어간다. 실제 화면 표시 여부는 아직 확인되지 않았다.".to_string(),

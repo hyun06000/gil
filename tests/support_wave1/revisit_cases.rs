@@ -396,7 +396,7 @@ fn conversation_and_files_at_recovery(r: &mut Rig, settings: &Path) {
     assert_eq!(auto_guard(settings, json!({"hook_event_name":"UserPromptSubmit","prompt":"An unrelated question"})), json!({}));
     let deny = auto_guard(settings, json!({"hook_event_name":"PreToolUse","tool_name":"Write",
         "tool_input":{"file_path":r.root.join("report.txt")}}));
-    assert_eq!(deny["hookSpecificOutput"]["permissionDecision"], "deny");
+    assert_eq!(deny, json!({})); // Retired Host hooks do not enforce file policy.
     assert_eq!(before, record_bytes(&r.record));
     assert_eq!(artifacts, tree(&r.root));
 }

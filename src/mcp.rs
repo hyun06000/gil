@@ -429,7 +429,7 @@ mod tests {
     }
 }
 
-/// Reuse the exact MCP path resolution (including Hangul normalization) in Host hooks.
+/// Reuse MCP path resolution (including Hangul normalization) for the optional read-only handoff.
 pub(crate) fn resolve_guard_root(root: &str) -> Result<std::path::PathBuf, String> {
     actions::resolve_root(root).map(|(root, _)| std::path::PathBuf::from(root))
 }

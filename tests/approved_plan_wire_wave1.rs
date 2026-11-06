@@ -23,7 +23,7 @@ mod revisit_cases;
 
 struct Rig { root: std::path::PathBuf, record: std::path::PathBuf, scope: String, c: Client }
 
-// Real Core/guard processes, with read-only records as in a restricted Host. This remains a
+// Explicit maintainer policy/sandbox diagnostics with read-only records; not installed Host hooks. This remains a
 // synthetic protocol acceptance test: the App decisions below are not human UI observations.
 #[cfg(all(target_os = "macos", feature = "visual-authoring"))]
 fn guard_boundary(root: &Path, writable: bool) {
@@ -34,7 +34,7 @@ fn guard_boundary(root: &Path, writable: bool) {
     let command = |action: &str| {
         // Direct hooks can observe read-only records. Shell guards run through the Host's
         // normal per-command approval route, then apply their own mandatory sandbox.
-        let mut c = if action == "hook" {
+        let mut c = if action == "inspect" {
             let mut c = Command::new("/usr/bin/sandbox-exec");
             c.args(["-p", &profile, env!("CARGO_BIN_EXE_gil-write-guard")]);
             c
@@ -43,7 +43,7 @@ fn guard_boundary(root: &Path, writable: bool) {
         c
     };
     let hook = |name: &str, args: Value| {
-        let mut c = command("hook").stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap();
+        let mut c = command("inspect").stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap();
         c.stdin.take().unwrap().write_all(json!({"hook_event_name":"PreToolUse", "tool_name":name,
             "cwd":root,"tool_input":args}).to_string().as_bytes()).unwrap();
         let out = c.wait_with_output().unwrap();
