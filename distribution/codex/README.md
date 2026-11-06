@@ -3,9 +3,9 @@
 이 디렉터리는 **제작자용 배포 도구**다. 받는 사람에게 Node·Cargo·clone·tar 명령을 요구하는
 설치 설명서가 아니다. Agent가 Plugin/MCP와 보호 훅의 설치를 함께 조율한다.
 
-현재 공개 macOS 검증판은 `0.2.1-preview.23`이다. 사용자 절차는
+현재 공개 macOS 검증판은 `0.2.1-preview.24`이다. 사용자 절차는
 [통합 설치 안내](../../INSTALL.md)와 [macOS 상세 안내](INSTALL.md), 정확한 소스·CI·해시·인수 범위는
-[preview.23 게시 장부](PREVIEW-23-PUBLICATION-20261106.md)를 따른다.
+[preview.24 게시 장부](PREVIEW-24-PUBLICATION-20261106.md)를 따른다.
 Windows x64의 별도 installer는 [Windows 안내](../windows/INSTALL.md)에 있다.
 날짜별 과거 게시 장부는 해당 버전의 증거이며 최신 설치 절차로 사용하지 않는다.
 
