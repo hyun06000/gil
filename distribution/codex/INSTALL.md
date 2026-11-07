@@ -26,6 +26,25 @@ fullscreen Monitor UI가 Plugin 하나에 들어 있으므로 Node·npm·Cargo·
 Apple Developer ID 서명과 공증은 없다. macOS가 정상적인 사용자 확인 뒤에도 실행을 차단하면 멈춘다.
 Gatekeeper를 끄거나 quarantine·권한·Plugin cache를 변경해 우회하지 않는다.
 
+
+## Core 버전 확인과 구형 표기
+
+새 버전 표기 수정판부터는 실제 MCP가 실행하는 Core의 `--version`, MCP initialize의
+`serverInfo.version`, agent probe의 `core_version`이 배포 버전과 일치해야 한다.
+아래에 고정된 preview.24와 그 이전 판은 이 수정 전이므로 `gil 0.1.0`을 출력할 수 있다.
+이는 Cargo 패키지 버전이며 **그 한 줄만으로 설치 실패나 구버전이라고 단정하지 않는다.**
+Windows owner.14도 기존 배포이므로 같은 구형 확인 절차를 따른다.
+
+설치 Agent는 PATH의 임의 `gil` 대신 공식 설치 응답·manifest 또는 직접 MCP 등록에서 확인한
+실행 파일을 검사한다. macOS는 공개 archive의 크기·SHA-256, `release.json`의 배포 버전과
+실제 Core 파일 해시, Codex·Claude manifest 버전을 대조한다. Core 해시가 receipt와 다르면
+정상 설치로 보고하지 않는다. Windows는 선택된 `current.json`과 실제 Core 해시를 대조한다.
+
+새 표기 수정판에서 `--version`만 구버전이면 실제 실행 경로를 다시 확인한다. 디스크의 버전은
+맞지만 MCP 서버 정보만 다르면 기존 연결이 살아 있는지 확인하고 앱 재시작·새 세션으로 연결한다.
+버전 문구는 무결성·제작자 인증을 대신하지 않으므로 해시 검증을 생략하지 않는다.
+이 확인을 위해 프로젝트를 초기화하거나 기록·설정·보안 정책을 임의로 바꾸지 않는다.
+
 ## 사용자에게 보장할 설치 경험
 
 사용자는 터미널 명령을 직접 입력하지 않는다. Codex에서 빈 폴더를 선택해 **로컬 명령을 실행할 수 있는

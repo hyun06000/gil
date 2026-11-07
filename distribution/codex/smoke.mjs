@@ -9,8 +9,9 @@ import {fileURLToPath} from 'node:url';
 import {CORE, MANIFEST, PREFIX, checkLibraries, hash, verifyTree} from './artifact.mjs';
 import {checkDefaultTools, checkAuthoringTools, checkApprovedPlanTools, withoutRecoveryTools} from './tool-contract.mjs';
 import {checkCore, compatibility, developmentFeatures} from './compatibility.mjs';
+import {checkVersionAgreement} from './build-version.mjs';
 
-export async function smoke(root, expectedHtml, verify = verifyTree, profile = 'default') {
+export async function smoke(root, expectedHtml, verify = verifyTree, profile = 'default', expectedVersion) {
   assert.ok(['default', 'visual-authoring', 'approved-plan'].includes(profile));
   assert.equal(process.platform, 'darwin');
   assert.equal(process.arch, 'arm64');
@@ -30,6 +31,8 @@ export async function smoke(root, expectedHtml, verify = verifyTree, profile = '
     const loaded = spawnSync('/usr/bin/otool', ['-L', binary], {encoding: 'utf8', timeout: 10000});
     assert.equal(loaded.status, 0, 'load-command inspection failed');
     const libraries = checkLibraries(loaded.stdout);
+    const version = spawnSync(binary, ['--version'], {cwd: state, env, encoding: 'utf8', timeout: 10000});
+    assert.equal(version.status, 0, 'Core version query failed');
     const started = performance.now();
     const challenge = randomUUID();
     const first = spawnSync(binary, ['--gil-agent-probe', challenge], {
@@ -87,9 +90,10 @@ export async function smoke(root, expectedHtml, verify = verifyTree, profile = '
       child.stdin.write(JSON.stringify({jsonrpc: '2.0', id, method, params}) + '\n');
     });
     const at = performance.now();
-    await request('initialize', {protocolVersion: '2025-06-18',
+    const initialized = await request('initialize', {protocolVersion: '2025-06-18',
       capabilities: {extensions: {'io.modelcontextprotocol/ui': {mimeTypes: ['text/html;profile=mcp-app']}}},
       clientInfo: {name: 'gil-dist-check', version: '1'}});
+    checkVersionAgreement(expectedVersion ?? receipt.version, version.stdout, core.core_version, initialized.serverInfo.version);
     child.stdin.write(JSON.stringify({jsonrpc: '2.0', method: 'notifications/initialized'}) + '\n');
     const initMs = Math.round(performance.now() - at);
     const {tools} = await request('tools/list', {});

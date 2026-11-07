@@ -57,6 +57,7 @@ if ($LASTEXITCODE -ne 0 -or $TauriVersion -ne 'tauri-cli 2.11.5') {
 
 Push-Location $Here
 try {
+    $env:GIL_BUILD_VERSION = (Get-Content -Raw (Join-Path $Here 'tauri.conf.json') | ConvertFrom-Json).version
     cargo build --locked --release -p gil --bin gil --bin gil-launcher --features product-safety
     if ($LASTEXITCODE -ne 0) {
         throw '제품 Core와 고정 런처 빌드가 실패했습니다.'

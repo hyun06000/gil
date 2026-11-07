@@ -60,7 +60,7 @@ impl DescriptorV1 {
         Self {
             schema_version: SCHEMA_VERSION,
             product: PRODUCT.to_string(),
-            core_version: env!("CARGO_PKG_VERSION").to_string(),
+            core_version: crate::CORE_VERSION.to_string(),
             protocol: RangeV1::exact(PROTOCOL_VERSION),
             storage_format: RangeV1 { min: crate::FORMAT,
                 max: if cfg!(feature = "chain-core") { crate::CHAIN_VISUAL_FORMAT } else if IMAGE_STORAGE_SUPPORTED { 5 } else { crate::FORMAT } },

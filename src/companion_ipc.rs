@@ -131,7 +131,7 @@ impl McpSession {
             }
             self.release = Some(
                 Release::new(
-                    env!("CARGO_PKG_VERSION"),
+                    crate::CORE_VERSION,
                     &format!("{:x}", digest.finalize()),
                 )
                 .map_err(|_| io::Error::other("invalid running Core identity"))?,

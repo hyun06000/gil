@@ -7,7 +7,7 @@ import {join, resolve} from 'node:path';
 import {Client} from '@modelcontextprotocol/sdk/client/index.js';
 import {StdioClientTransport} from '@modelcontextprotocol/sdk/client/stdio.js';
 
-export async function checkNativeOutputContract(binary) {
+export async function checkNativeOutputContract(binary, expectedVersion) {
   const scratch = await realpath(await mkdtemp(join(tmpdir(), 'gil-sdk-output-')));
   const root = join(scratch, 'project');
   const home = join(scratch, 'home');
@@ -20,6 +20,14 @@ export async function checkNativeOutputContract(binary) {
     assert.equal(got.status,0,got.stderr);
     return JSON.parse(got.stdout);
   };
+  const versionResult = spawnSync(resolve(binary), ['--version'], {encoding:'utf8', timeout:15000,
+    env:{...process.env, GIL_BUILD_VERSION:'9.9.9-runtime-spoof'}});
+  assert.equal(versionResult.status, 0);
+  const version = versionResult.stdout.trim().replace(/^gil /, '');
+  if (expectedVersion !== undefined) assert.equal(version, expectedVersion, 'Core was not compiled for this release');
+  const probe = spawnSync(resolve(binary), ['--gil-agent-probe','version-contract'], {encoding:'utf8', timeout:15000});
+  assert.equal(probe.status, 0);
+  assert.equal(JSON.parse(probe.stdout).core.core_version, version);
   let client;
   const connect = async () => {
     client = new Client({name:'gil-output-contract-check', version:'1'});
@@ -27,6 +35,7 @@ export async function checkNativeOutputContract(binary) {
       cwd:scratch, stderr:'pipe', env:{PATH:'/usr/bin:/bin', HOME:home, LOCALAPPDATA:local,
         GIL_MONITOR_STATE_DIR:join(scratch, 'bindings')}});
     await client.connect(transport);
+    assert.equal(client.getServerVersion().version, version, 'MCP, CLI and probe versions must agree');
     transport.stderr?.resume();
     // listTools installs the SDK's real output-schema validators. Raw JSON-RPC misses this boundary.
     await client.listTools();

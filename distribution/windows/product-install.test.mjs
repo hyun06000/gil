@@ -337,3 +337,9 @@ test('approval owner candidate opts in for both Core and Companion and exercises
   const workflow = await read('.github/workflows/windows-product.yml');
   assert.match(workflow, /--gil target\/release\/gil.exe --features approved-plan,visual-authoring,product-safety/);
 });
+
+test('future owner installers compile Core with the selected installer version', async () => {
+  const script = await read('companion/build-windows-unsigned-updater-test.ps1');
+  assert.ok(script.indexOf('$env:GIL_BUILD_VERSION = $Version') < script.indexOf('cargo build --locked'));
+  assert.match(script, /\(& \$Core --version\)\.Trim\(\) -ne "gil \$Version"/);
+});
