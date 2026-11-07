@@ -1,7 +1,7 @@
 # Native MCP macOS release gates
 
-현재 macOS 검증판은 `0.2.1-preview.24`이다. [설치 안내](INSTALL.md)와
-[게시 장부](PREVIEW-24-PUBLICATION-20261106.md)에서 정확한 버전·소스·검증 범위를 확인한다.
+현재 macOS 검증판은 `0.2.1-preview.25`이다. [설치 안내](INSTALL.md)와
+[게시 장부](PREVIEW-25-PUBLICATION-20261107.md)에서 정확한 버전·소스·검증 범위를 확인한다.
 이 문서는 제작자의 배포 경계와 서명 채널 준비 절차다. 날짜가 붙은 과거 인수를 최신판에 승계하지 않는다.
 받는 사용자에게 Node·Cargo·clone·터미널 설치를 요구하지 않는다. Companion DMG는 별도 산출물이다.
 
