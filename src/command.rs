@@ -114,7 +114,7 @@ fn run(ctx: &Invocation<'_>, args: &[String]) -> Result<String, String> {
         }
         "context" => {
             let session = open_session(ctx)?;
-            Ok(context(session.project()))
+            Ok(format!("{}{}", context(session.project()), crate::project_resume::status(&session.root().map_err(say)?)))
         }
         "monitor" => monitor(ctx, args.get(1)),
         "mcp" => mcp(args.get(1).map(String::as_str)),
@@ -286,7 +286,7 @@ fn start(ctx: &Invocation<'_>) -> Result<String, String> {
 
     // **여기서부터 잠금 안이다.** `.gil/` 을 만들며 잠그고, 잠근 뒤에 다시 한 번
     // 무엇이 이미 있는지 본다 — 두 `gil start` 가 나란히 「비어 있다」를 읽지 못하게.
-    let session = ProjectSession::start(rules()?, state_path_here(ctx)?).map_err(|err| match err {
+    let session = ProjectSession::start_guided(rules()?, &state_path_here(ctx)?).map_err(|err| match err {
         SessionError::AlreadyStarted { path } => refusal(
             "여기서 새로 시작할 수 없다.",
             &format!("이미 걷고 있다 ({path})."),
@@ -350,10 +350,10 @@ pub(crate) fn start_visual_action(root: &Path) -> Result<String, String> {
         let storage_root = crate::project_state::external_storage_root(root)?;
         std::fs::create_dir_all(&storage_root)
             .map_err(|e| format!("Windows 개인 저장소를 준비하지 못했다: {e}"))?;
-        ProjectSession::start_visual_at(rules()?, root, storage_root)
+        ProjectSession::start_visual_guided(rules()?, root, &storage_root)
     };
     #[cfg(not(windows))]
-    let session = ProjectSession::start_visual(rules()?, root);
+    let session = ProjectSession::start_visual_guided(rules()?, root, root);
     let session = session
         .map_err(|e| format!("시작 완료 여부를 확인해야 한다. 남은 기록을 보존하고 시작을 반복하지 않는다.\n{e}"))?;
     Ok(start_receipt(&ctx, &session))
@@ -385,7 +385,7 @@ pub(crate) fn visual_read_action(root: &Path, command: &str) -> Result<String, S
         .map_err(|e| e.to_string())?;
     match command {
         "status" => Ok(session.status_said()),
-        "context" => Ok(context(session.project())),
+        "context" => Ok(format!("{}{}", context(session.project()), crate::project_resume::status(root))),
         _ => Err("허용되지 않은 읽기".into()),
     }
 }
@@ -411,7 +411,7 @@ fn start_receipt(ctx: &Invocation<'_>, session: &ProjectSession) -> String {
         cycle.id().to_ref(),
         cycle.kind(),
         record
-    )
+    ) + &crate::project_resume::status(&session.root().expect("session root"))
 }
 
 /// 지금 이 자리가 무엇을 여는 자리인가.
@@ -570,7 +570,11 @@ fn open_step(ctx: &Invocation<'_>,
             with_help(&Refusal::Session(&err), said)
         })?;
     write(&session)?;
-    Ok(opened_step(session, opened))
+    // The open transition is durable before any Artifact change, under the same Project lock.
+    let setup = if kind == crate::NodeKind::Verify {
+        crate::project_resume::ensure(&session.root().map_err(say)?)
+    } else { String::new() };
+    Ok(opened_step(session, opened) + &setup)
 }
 
 /// Cycle 하나를 연다 — **평범한 자식인지 갈래인지는 부르는 쪽이 이미 판정했다.**

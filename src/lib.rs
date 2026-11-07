@@ -118,6 +118,7 @@ const _: () = assert!(!CORE_VERSION.is_empty(), "GIL_BUILD_VERSION must not be e
 // [`ManifestAddress`] 와 [`RegistryError`] 뿐이다 — 세계를 여는 문이 세계의 주소를 받아야
 // 하기 때문이다. 그 주소는 **사람이 보는 이름이 아니다**: 공개 표면은 `snapshot:A1` 이다.
 
+mod project_resume;
 pub mod agent;
 mod artifact;
 pub mod capability;

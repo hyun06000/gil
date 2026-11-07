@@ -249,6 +249,45 @@ impl Rig {
     }
 }
 
+// A legacy format-7 project predates project-local prompts. Read-only resumption must not
+// change its baseline; the real product Verify transition adopts guides, then captures them.
+#[cfg(all(feature="visual-authoring", target_os="macos", target_arch="aarch64"))]
+#[test]
+fn legacy_project_resumes_without_rewriting_guides_or_old_snapshot() {
+    let root=scratch("legacy-guidance-project");let settings=scratch("legacy-guidance-settings");
+    std::fs::write(root.join("CLAUDE.md"), b"Keep old rules\r\n").unwrap();
+    let original=gil::ProjectSession::start_visual(gil::RuleSet::builtin().unwrap(), &root).unwrap();
+    drop(original);
+    let record=root.join(gil::STATE_PATH);
+    let initial=record_bytes(&record);
+    let mut r=Rig {root:root.clone(),record,scope:String::new(),c:Client::serve(&settings)};
+    let context=ok(r.model("gil_context",json!({})),"read legacy context");
+    assert!(said(&context).contains("pending/review_required"));
+    assert_eq!(record_bytes(&r.record),initial);
+    assert!(!root.join("AGENTS.md").exists());
+    let next=&structured(&context)["next_call"];
+    r.scope=next["arguments"]["scope_id"].as_str().unwrap().to_owned();
+    ok(r.c.call("show_gil_monitor",next["arguments"].clone()),"show");
+    let (basis,synthesis)=r.ask_and_interpret();
+    ok(r.model("gil_plan_propose",json!({"draft":draft(&["charts"],&basis,&[])})),"propose");
+    r.approve_via_app(1);r.close_approved_interview(&synthesis,"open_child");
+    let (n,document)=r.open_experiment("charts");
+    assert_eq!(std::fs::read(root.join("CLAUDE.md")).unwrap(),b"Keep old rules\r\n");
+    fn objects(at:&Path)->Vec<(std::path::PathBuf,Vec<u8>)> {
+        let mut out=Vec::new();for e in std::fs::read_dir(at).unwrap(){let p=e.unwrap().path();
+            if p.is_dir(){out.extend(objects(&p));}else{out.push((p.clone(),std::fs::read(p).unwrap()));}}out
+    }
+    let before=objects(&root.join(".gil/artifacts"));
+    let verify=r.walk_to_verify("charts");
+    assert!(std::fs::read_to_string(root.join("AGENTS.md")).unwrap().contains("GIL PROJECT RESUME v1"));
+    assert!(std::fs::read(root.join("CLAUDE.md")).unwrap().starts_with(b"Keep old rules\r\n"));
+    r.finish_experiment(n,"charts",&verify,&document);
+    for (path,bytes) in before {assert_eq!(std::fs::read(path).unwrap(),bytes);}
+    let guides=["AGENTS.md","CLAUDE.md"].map(|name|std::fs::read(root.join(name)).unwrap());
+    r.context_readonly();
+    assert_eq!(["AGENTS.md","CLAUDE.md"].map(|name|std::fs::read(root.join(name)).unwrap()),guides);
+}
+
 #[test]
 fn documented_proposal_opens_and_closes_with_schema_rejections_leaving_no_trace() {
     let root = scratch("documented-plan-project");

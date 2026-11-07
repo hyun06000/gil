@@ -143,6 +143,8 @@ GIL은 전역·프로젝트 로컬·Plugin·Skill 훅을 설치하지 않는다.
 다른 프로젝트에 GIL 단계·셸 래퍼·별도 권한을 요구하지 않는다. 파일 작업은 실제 열린 Verify에서
 수행하도록 안내하지만 OS 쓰기 차단은 아니다. Core의 승인·전이·Report·증거·dirty 검사는 유지한다.
 기존 설치의 GIL 훅 제거와 배포 버전별 적용은 [설치 안내](INSTALL.md)를 따른다.
+기존 프로젝트의 새 세션도 산출물 작업 전에 context를 읽고 현재 계약에서 재개한다. 프로젝트 내부 안내의
+초기 Snapshot·Verify 경계와 기존 안내 보존은 [재개 계약](distribution/codex/PROJECT-RESUME.md)을 따른다.
 
 ### Trace가 아니라 Protocol
 

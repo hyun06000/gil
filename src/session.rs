@@ -214,8 +214,17 @@ impl ProjectSession {
         project_root: impl AsRef<Path>,
         state_path: impl AsRef<Path>,
     ) -> Result<Self, SessionError> {
-        let project_root = project_root.as_ref().to_path_buf();
-        let state_path = state_path.as_ref().to_path_buf();
+        Self::start_at_internal(rules, project_root.as_ref(), state_path.as_ref(), false)
+    }
+
+    pub(crate) fn start_guided(rules: RuleSet, state_path: &Path) -> Result<Self, SessionError> {
+        let root = project_root(&gil_dir(state_path)?)?;
+        Self::start_at_internal(rules, &root, state_path, true)
+    }
+
+    fn start_at_internal(rules: RuleSet, project_root: &Path, state_path: &Path, guidance: bool) -> Result<Self, SessionError> {
+        let project_root = project_root.to_path_buf();
+        let state_path = state_path.to_path_buf();
         let gil = gil_dir(&state_path)?;
 
         // `.gil/` 을 만들며 잠근다. 초기화가 실패해 잠금 파일 하나가 남는 것은 손상이
@@ -229,6 +238,7 @@ impl ProjectSession {
 
         // **최초 세계는 지금 여기 있는 파일들이다.** 빈 세계로 만들지 않는다 — 그러면
         // 첫 Verify 가 「전부 새로 생겼다」로 보이고, 그것은 일어난 일이 아니다(§4).
+        if guidance { crate::project_resume::ensure(&project_root); }
         let world = capture(&project_root, &store)?;
 
         Ok(ProjectSession {

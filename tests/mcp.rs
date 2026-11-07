@@ -230,13 +230,22 @@ fn documented_two_pngs_close_at_the_actual_c3_owner_and_can_be_cited() {
     mcp.initialize();
     monitor_call(&mut mcp, "gil_start", json!({"project_root":root}));
     // Synthetic closed text history, then a visual-format project; never upgrade a user record.
-    let mut p = common::bootstrap();
-    let outcome = common::walk_to_the_exit(&mut p, "success");
+    // Use the actual initial world (including local guides), not the empty-world fixture:
+    // every referenced manifest must already exist in this project's object store.
+    let initial = load_product(&root).world_manifest(common::snapshot(1)).unwrap().clone();
+    let mut p = common::bootstrap_from(gil::Project::start(common::spec(), initial.clone()));
+    for kind in [NodeKind::Define, NodeKind::Hypothesis] { common::walked(&mut p, kind); }
+    p.open_action_step(NodeKind::Verify, common::plan(NodeKind::Verify)).unwrap();
+    p.close_verify_step(common::full_report(p.current_cycle().rules(), CycleKind::Experiment, NodeKind::Verify), initial).unwrap();
+    common::walked(&mut p, NodeKind::Analysis);
+    let outcome = common::walked(&mut p, NodeKind::Outcome);
+    let outcome = common::step_id(&p, outcome);
     p.close_cycle(common::cycle_report(p.current_cycle(), "success", outcome)).unwrap();
     let mut p = p.prepare_visual_upgrade().unwrap();
     p.open_child_cycle(CycleKind::Experiment).unwrap();
     common::up_to_verify(&mut p);
     save_product(&root, &p);
+    gil::open_project_root(common::spec(), &root).expect("synthetic history must reference stored worlds");
     let actual = p.current_cycle().step_ref(p.current_cycle().step_now_open().unwrap()).to_string();
     assert_eq!(actual, "step:C3/S3");
     let manual = include_str!("../src/manual/topics/report/visuals.md");
@@ -261,7 +270,7 @@ fn documented_two_pngs_close_at_the_actual_c3_owner_and_can_be_cited() {
     }
     let mut wrong = input.clone(); wrong["expected_owner"]["ref"] = json!("step:C2/S3");
     let refused = monitor_call(&mut mcp, "gil_close", wrong);
-    assert_eq!(refused["structuredContent"]["code"], "owner_mismatch");
+    assert_eq!(refused["structuredContent"]["code"], "owner_mismatch", "{refused}");
     assert!(refused["structuredContent"]["said"].as_str().unwrap().contains(&actual));
     assert_eq!(std::fs::read(product_state_path(&root)).unwrap(), before);
     let receipt = monitor_call(&mut mcp, "gil_close", input);
@@ -1328,12 +1337,15 @@ fn starting_receipt_uses_the_requested_root_not_the_servers_directory() {
     {
         assert_eq!(reply["result"]["structuredContent"]["said"], String::from_utf8(cli.stdout).unwrap());
         let relative = Path::new(".gil").join("state.yaml");
-        assert!(reply["result"]["structuredContent"]["said"].as_str().unwrap().ends_with(&format!("기록: {}\n", relative.display())));
+        let said = reply["result"]["structuredContent"]["said"].as_str().unwrap();
+        assert!(said.contains(&format!("기록: {}\n", relative.display())));
+        assert!(said.contains("프로젝트 재개 안내: ready"), "{said}");
     }
     #[cfg(all(windows, feature = "visual-authoring"))]
     {
         let said = reply["result"]["structuredContent"]["said"].as_str().unwrap();
-        assert!(said.ends_with("기록: Windows 개인 앱 데이터의 보호된 기록\n"), "{said}");
+        assert!(said.contains("기록: Windows 개인 앱 데이터의 보호된 기록\n"), "{said}");
+        assert!(said.contains("프로젝트 재개 안내: ready"), "{said}");
         assert!(!said.contains("project-state-v1") && !said.contains("LOCALAPPDATA"), "{said}");
     }
     mcp.eof();
@@ -1753,8 +1765,15 @@ fn onedrive_working_folder_stays_put_and_workspace_prep_still_needs_approval() {
     assert_eq!(started_here["structuredContent"]["ok"], true, "{started_here}");
     assert_eq!(started_here["structuredContent"]["record_storage"], "private_app_data");
     assert!(!selected.join(".gil").exists(), "private records must not be placed in OneDrive");
-    let after: Vec<_> = std::fs::read_dir(&selected).unwrap().map(|e| e.unwrap().file_name()).collect();
-    assert_eq!(after, before);
+    let mut after: Vec<_> = std::fs::read_dir(&selected).unwrap().map(|e| e.unwrap().file_name()).collect();
+    let mut expected = before;
+    for name in ["AGENTS.md", "CLAUDE.md"] {
+        expected.push(name.into());
+        assert!(std::fs::read_to_string(selected.join(name)).unwrap().contains("GIL PROJECT RESUME v1"));
+    }
+    after.sort(); expected.sort(); assert_eq!(after, expected);
+    assert!(matches!(open_product(&selected).world_state().unwrap(), gil::WorldState::Clean {..}));
+    assert_eq!(std::fs::read(selected.join("existing.txt")).unwrap(), b"keep");
     // A supported folder outside that root starts normally (same server, same environment).
     let fine = base.join("정상 폴더");
     std::fs::create_dir(&fine).unwrap();
@@ -1901,8 +1920,15 @@ fn registry_declared_sync_root_stays_selected_without_inline_records() {
     assert_eq!(started_here["structuredContent"]["ok"], true, "{started_here}");
     assert_eq!(started_here["structuredContent"]["record_storage"], "private_app_data");
     assert!(!selected.join(".gil").exists(), "no private record belongs in the sync root");
-    let after: Vec<_> = std::fs::read_dir(&selected).unwrap().map(|e| e.unwrap().file_name()).collect();
-    assert_eq!(after, before);
+    let mut after: Vec<_> = std::fs::read_dir(&selected).unwrap().map(|e| e.unwrap().file_name()).collect();
+    let mut expected = before;
+    for name in ["AGENTS.md", "CLAUDE.md"] {
+        expected.push(name.into());
+        assert!(std::fs::read_to_string(selected.join(name)).unwrap().contains("GIL PROJECT RESUME v1"));
+    }
+    after.sort(); expected.sort(); assert_eq!(after, expected);
+    assert!(matches!(open_product(&selected).world_state().unwrap(), gil::WorldState::Clean {..}));
+    assert_eq!(std::fs::read(selected.join("keep.txt")).unwrap(), b"user file");
     // Preparing a workspace under the registered root is refused the same way; outside it works.
     let inside = tool_result(&mut mcp, "gil_prepare_workspace", json!({"name": "x", "parent": root, "confirm": false}));
     assert_eq!(inside["structuredContent"]["code"], "unsupported_location", "{inside}");
