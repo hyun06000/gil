@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "updated": "2026-11-06",
+  "updated": "2026-11-07",
   "note": "Metadata only. The installed GIL Core reads this file at most once a day to show update guidance in the Monitor; it never downloads or installs from it. Update this file in the same pull request that records a publication ledger.",
   "platforms": {
     "darwin-arm64": {
-      "version": "0.2.1-preview.24",
-      "release_url": "https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.24",
+      "version": "0.2.1-preview.25",
+      "release_url": "https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.25",
       "install_doc": "https://github.com/hyun06000/gil/blob/main/INSTALL.md",
-      "notes": "GIL Host 훅을 없앴습니다. 기존 GIL 훅만 백업·제거하고 다른 설정과 프로젝트 기록은 보존합니다. 일반 프로젝트·세션에는 GIL 단계나 셸 래퍼를 요구하지 않습니다. 선택한 GIL 프로젝트는 공통 프롬프트와 단계별 MCP 안내를 따르며 Core 승인·증거 검사는 유지됩니다. 파일 쓰기의 강제 차단은 제공하지 않습니다. 새 세션의 실제 Host 검증은 사용자 확인 대기입니다."
+      "notes": "Core의 --version, MCP 서버 정보와 probe가 배포 버전 0.2.1-preview.25를 표시합니다. preview.24 이하의 gil 0.1.0은 구형 내부 표기이므로 실제 경로·receipt·해시로 확인합니다. 훅 없는 설치와 기존 설정·프로젝트 기록 보존은 유지합니다. 업데이트 후 새 세션에서 연결 버전을 확인해 주세요. 실제 Host 화면·모델 필드테스트는 별도입니다."
     },
     "windows-x64": {
       "version": "0.1.1-owner.14",
