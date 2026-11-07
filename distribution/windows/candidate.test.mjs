@@ -117,3 +117,9 @@ test('the Windows candidate carries a Claude Code adapter with the same identity
   assert.equal(catalog.plugins[0].source, './plugins/gil-companion-prototype', 'resolves inside the extracted root');
   assert.deepEqual(Object.keys(catalog).sort(), ['metadata', 'name', 'owner', 'plugins']);
 });
+
+test('Windows native candidates compile and verify the manifest version, independently of inherited environment', async () => {
+  const script = await readFile(new URL('./candidate.mjs', import.meta.url), 'utf8');
+  assert.match(script, /GIL_BUILD_VERSION: label.version/);
+  assert.match(script, /\['--version'\]\)\.trim\(\), `gil \$\{label.version\}`/);
+});

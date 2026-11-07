@@ -151,7 +151,7 @@ export async function prepare(output) {
   assert.equal(selected.receipt.prerelease, false);
   assert.equal(selected.receipt.architecture, arch);
   assert.ok(selected.environment[profile.linkerKey]);
-  const env = {...process.env, ...selected.environment, CARGO_ENCODED_RUSTFLAGS: [
+  const env = {...process.env, ...selected.environment, GIL_BUILD_VERSION: label.version, CARGO_ENCODED_RUSTFLAGS: [
     '-Ctarget-feature=+crt-static', `--remap-path-prefix=${ROOT}=/gil`,
     `--remap-path-prefix=${process.env.USERPROFILE}=/builder`,
     ...(process.env.CARGO_HOME ? [`--remap-path-prefix=${process.env.CARGO_HOME}=/cargo`] : [])
@@ -196,6 +196,7 @@ export async function prepare(output) {
   // The driver launches only the extracted executable, with a system-only child PATH.
   const smoke = JSON.parse(run(process.execPath, [join(ROOT, 'distribution/windows/spike.mjs'),
     join(extracted, PREFIX, `core/windows-${arch}/gil.exe`)], {env: {...process.env, GIL_RUNTIME_PROFILE: runtime, GIL_PRODUCT_SAFETY: '1'}}));
+  assert.equal(run(join(extracted, PREFIX, `core/windows-${arch}/gil.exe`), ['--version']).trim(), `gil ${label.version}`);
   assert.equal(smoke.profile, runtime);
   assert.equal(smoke.mcp_tools, label.tools);
   assert.equal(smoke.stored_format, label.storage_format);

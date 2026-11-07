@@ -513,7 +513,7 @@ fn gil_says_which_build_it_is() {
     let dir = scratch("cli-version");
     let said = ok(&dir, &["--version"], None);
     assert!(
-        said.contains(env!("CARGO_PKG_VERSION")),
+        said == format!("gil {}\n", gil::CORE_VERSION),
         "판을 밝히지 않는다: {said}"
     );
 }
@@ -2036,4 +2036,22 @@ fn what_gil_says_never_carries_the_project_root() {
     assert!(started.contains(gil::STATE_PATH), "기록이 무엇인지 말하지 않는다:\n{started}");
     let below_said = ok(&below(&one), &["status"], None);
     assert!(below_said.contains(".."), "기록이 여기 없다는 사실이 사라졌다:\n{below_said}");
+}
+
+#[test]
+fn build_version_is_not_overridden_by_the_runtime_environment() {
+    let dir = scratch("cli-version-immutable").join("empty");
+    std::fs::create_dir(&dir).unwrap();
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_gil"))
+        .arg("--version").current_dir(&dir)
+        .env("GIL_BUILD_VERSION", "9.9.9-runtime-spoof").output().unwrap();
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), format!("gil {}\n", gil::CORE_VERSION));
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_gil"))
+        .args(["--gil-agent-probe", "version-regression"]).current_dir(&dir)
+        .env("GIL_BUILD_VERSION", "9.9.9-runtime-spoof").output().unwrap();
+    assert!(output.status.success());
+    let probe: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(probe["core"]["core_version"], gil::CORE_VERSION);
+    assert!(!dir.join(".gil").exists());
 }

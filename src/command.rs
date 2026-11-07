@@ -88,7 +88,7 @@ fn run(ctx: &Invocation<'_>, args: &[String]) -> Result<String, String> {
         "help" if args.get(1).is_some() => help_topic(args.get(1).expect("방금 봤다")),
         "help" => help_here(ctx),
         "--help" | "-h" => Ok(help()),
-        "--version" | "-V" | "version" => Ok(format!("gil {}\n", env!("CARGO_PKG_VERSION"))),
+        "--version" | "-V" | "version" => Ok(format!("gil {}\n", crate::CORE_VERSION)),
         "start" => start(ctx),
         // **`--help` 는 요청이 아니다.** stdin 없는 실제 Open·Close 로 읽으면, 계약을
         // 물어본 사람이 빈 Report 를 낸 것으로 거절당한다(실사용 M2C 보고).

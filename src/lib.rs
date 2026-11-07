@@ -105,9 +105,19 @@
 //! assert_eq!(project.active_will().unwrap().target(), opened.step);
 //! ```
 
+/// One immutable build identity for CLI, MCP, agent probe and Companion Core handshake.
+/// Packaging supplies this at compile time; a plain source build is explicitly a development build.
+pub const CORE_VERSION: &str = match option_env!("GIL_BUILD_VERSION") {
+    Some(version) => version,
+    None => concat!(env!("CARGO_PKG_VERSION"), "-dev"),
+};
+const _: () = assert!(!CORE_VERSION.is_empty(), "GIL_BUILD_VERSION must not be empty");
+
+
 // **필요한 만큼만 연다.** 관측기·창고·codec·registry 는 안에 남고, 밖으로 나가는 것은
 // [`ManifestAddress`] 와 [`RegistryError`] 뿐이다 — 세계를 여는 문이 세계의 주소를 받아야
 // 하기 때문이다. 그 주소는 **사람이 보는 이름이 아니다**: 공개 표면은 `snapshot:A1` 이다.
+
 pub mod agent;
 mod artifact;
 pub mod capability;

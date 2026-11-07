@@ -235,7 +235,7 @@ impl GilServer {
 impl ServerHandler for GilServer {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().enable_resources().build())
-            .with_server_info(Implementation::new("gil", env!("CARGO_PKG_VERSION")))
+            .with_server_info(Implementation::new("gil", crate::CORE_VERSION))
             .with_instructions(guidance::INSTRUCTIONS)
     }
     fn get_tool(&self, name: &str) -> Option<Tool> {
@@ -402,13 +402,13 @@ mod tests {
 
     /// 판 번호를 두 자리에 적었으므로 **두 자리가 같다는 것**을 시험이 지킨다.
     #[test]
-    fn the_version_it_reports_is_the_crate_version() {
+    fn the_version_it_reports_is_the_core_build_version() {
         let info = GilServer::new().get_info();
         assert_eq!(info.server_info.name, "gil");
         assert_eq!(
             info.server_info.version,
-            env!("CARGO_PKG_VERSION"),
-            "Cargo.toml 의 판과 MCP 가 말하는 판이 갈렸다"
+            crate::CORE_VERSION,
+            "Core 빌드의 판과 MCP 가 말하는 판이 갈렸다"
         );
     }
 

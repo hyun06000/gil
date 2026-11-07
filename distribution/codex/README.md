@@ -1,7 +1,7 @@
 # Codex native marketplace preview
 
 이 디렉터리는 **제작자용 배포 도구**다. 받는 사람에게 Node·Cargo·clone·tar 명령을 요구하는
-설치 설명서가 아니다. Agent가 Plugin/MCP와 보호 훅의 설치를 함께 조율한다.
+설치 설명서가 아니다. Agent가 Plugin/MCP 설치와 기존 GIL 훅 제거를 조율하며 새 훅은 등록하지 않는다.
 
 현재 공개 macOS 검증판은 `0.2.1-preview.24`이다. 사용자 절차는
 [통합 설치 안내](../../INSTALL.md)와 [macOS 상세 안내](INSTALL.md), 정확한 소스·CI·해시·인수 범위는
@@ -44,7 +44,13 @@ Windows x64의 별도 installer는 [Windows 안내](../windows/INSTALL.md)에 �
 ```
 
 기본 build는 identity/version을 재발명하지 않는다. 정본의 개발 cachebuster도 보존한다.
-unsigned 후보 제작에서만 출력 version을 명시적 `X.Y.Z-preview.N`으로 정한다.
+후보 제작에서는 **컴파일 전에** `GIL_PREVIEW_VERSION=X.Y.Z-preview.N`을 선택한다.
+`build-preview.mjs`는 검증한 값을 `GIL_BUILD_VERSION`으로 Cargo에 전달한다. 미지정 개발 묶음은
+개발 manifest 버전을 사용한다. 일반 Cargo 소스 빌드는 `<crate-version>-dev`로 구분한다.
+CLI·MCP initialize·agent probe·Companion Core handshake는 하나의 컴파일된 버전을 사용하며
+실행 시 환경 변수로 바뀌지 않는다. staging은 Core를 재빌드·패치하지 않고 bytes를 보존한다.
+최종 smoke가 CLI·MCP·probe와 최종 receipt 버전 불일치를 거절한다. 구형 Core에 새 manifest만
+붙여도 정상 후보가 되지 않는다. 기존 불변 릴리스는 소급 수정하지 않는다.
 `catalog.json`은 plugin-creator의 `create_basic_plugin.py`로 생성한
 template다. `personal`과 구별하는 이름은 `gil-preview-macos-arm64`다. template 자체는 원격 주소나
 Host 등록을 생성하지 않는다. 공개 설치 출처와 고정 ref는 설치 안내와 게시 장부에 기록한다.
@@ -56,8 +62,8 @@ template를 산출물의 `.agents/plugins/marketplace.json`에 복사한다. 게
 unsigned 후보 제작은 두 manifest의 version을 같은 `X.Y.Z-preview.N`으로 바꾼다.
 
 UI는 Rust 실행 파일에 내장된다. `server.mjs`, `node_modules`, Cargo source, 독립 `assets`, 설치
-hook은 싣지 않는다. 사용자 설치 안내에서 Core의 `write-guard install --auto --host codex|claude|both`로
-사용 Host의 보호 훅을 별도 등록·검증한다(신규·누락·업데이트 모두). Plugin 설치 자체가 훅을 등록하는 것은 아니다.
+hook은 싣지 않는다. 기존 GIL 생성 명령만 `write-guard uninstall --auto --host codex|claude|both`로
+백업·제거하며 전역·프로젝트 로컬·Plugin·Skill 훅을 새로 만들지 않는다.
 Companion을 싣거나 자동 실행하지 않는다. **도구·Skill 성공은 fullscreen
 성공이 아니며**, Codex와 Claude Code의 실제 화면 인수는 Host별로 따로 기록한다.
 

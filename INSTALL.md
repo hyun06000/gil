@@ -15,6 +15,25 @@ Cowork의 결과를 이 환경의 결과로 대신 적지 않는다.
 Agent가 앱에 포함된 CLI와 OS 기본 도구를 사용한다. 일반 ChatGPT/Work 대화처럼 로컬 명령을 실행할 수
 없는 환경에서는 설치하지 않는다.
 
+
+## Core 버전 확인과 구형 표기
+
+새 버전 표기 수정판부터는 실제 MCP가 실행하는 Core의 `--version`, MCP initialize의
+`serverInfo.version`, agent probe의 `core_version`이 배포 버전과 일치해야 한다.
+아래에 고정된 preview.24와 그 이전 판은 이 수정 전이므로 `gil 0.1.0`을 출력할 수 있다.
+이는 Cargo 패키지 버전이며 **그 한 줄만으로 설치 실패나 구버전이라고 단정하지 않는다.**
+Windows owner.14도 기존 배포이므로 같은 구형 확인 절차를 따른다.
+
+설치 Agent는 PATH의 임의 `gil` 대신 공식 설치 응답·manifest 또는 직접 MCP 등록에서 확인한
+실행 파일을 검사한다. macOS는 공개 archive의 크기·SHA-256, `release.json`의 배포 버전과
+실제 Core 파일 해시, Codex·Claude manifest 버전을 대조한다. Core 해시가 receipt와 다르면
+정상 설치로 보고하지 않는다. Windows는 선택된 `current.json`과 실제 Core 해시를 대조한다.
+
+새 표기 수정판에서 `--version`만 구버전이면 실제 실행 경로를 다시 확인한다. 디스크의 버전은
+맞지만 MCP 서버 정보만 다르면 기존 연결이 살아 있는지 확인하고 앱 재시작·새 세션으로 연결한다.
+버전 문구는 무결성·제작자 인증을 대신하지 않으므로 해시 검증을 생략하지 않는다.
+이 확인을 위해 프로젝트를 초기화하거나 기록·설정·보안 정책을 임의로 바꾸지 않는다.
+
 ## 네 조합의 지원 상태 (2026-11-06)
 
 | OS | Codex | Claude Desktop (Claude Code 탭) |
@@ -302,8 +321,7 @@ Gatekeeper 나 quarantine, 권한은 바꾸지 마. 화면이 실제로 보이�
 **업데이트(macOS Claude).** 새 preview가 나오면 1단계를 새 `<버전>-local` 폴더에 반복하고, Desktop을
 완전히 종료한 뒤 `gil` 항목의 `command`를 새 폴더의 Core로 바꾸고 **3단계의 기존 훅 제거 확인도 반복한다**. 이전 폴더는 지우지 않아도 된다(열린
 대화가 그 Core를 쓸 수 있다). 등록을 바꾸지 않으면 **Claude는 구버전 Core를 계속 쓰고 Codex Plugin만 새
-버전이 되므로** 두 Host의 버전이 어긋난다. Monitor **연결 정보**의 `host`·GIL 버전과 `gil_help`의 서버
-버전으로 어느 Core에 연결됐는지 확인한다.
+버전이 되므로** 두 Host의 버전이 어긋난다. Monitor **연결 정보**의 `host`·GIL 버전과 MCP initialize의 `serverInfo.version`으로 어느 Core에 연결됐는지 확인한다.
 
 **2단계(대안) — Plugin 설치.** 아래 절차로 설치는 되지만, 2026-10-31 현재 Claude Code 탭은 Plugin 서버의
 Monitor App을 화면에 그리지 않는다. Host가 고쳐졌는지 확인하는 용도로만 쓰고, 설치 성공을 화면 성공으로

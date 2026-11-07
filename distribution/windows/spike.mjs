@@ -77,9 +77,10 @@ function serve() {
     }
   };
   const initialize = async () => {
-    await request('initialize', {protocolVersion: '2025-06-18', capabilities: {},
+    const info = await request('initialize', {protocolVersion: '2025-06-18', capabilities: {},
       clientInfo: {name: 'gil-windows-spike', version: '1'}});
     child.stdin.write(JSON.stringify({jsonrpc: '2.0', method: 'notifications/initialized'}) + '\n');
+    return info;
   };
   return {request, call, stop, initialize, faulted: () => fault};
 }
@@ -99,8 +100,11 @@ try {
   assert.equal(descriptor.core.action_surface.min, profile === 'visual-authoring' ? 2 : 1);
   assert.equal(descriptor.core.storage_format.max, profile === 'visual-authoring' ? 5 : 4);
 
+  const version = spawnSync(binary, ['--version'], {cwd: root, env, encoding:'utf8', timeout:10000});
+  assert.equal(version.status, 0);
+  assert.equal(version.stdout.trim(), `gil ${descriptor.core.core_version}`);
   server = serve();
-  await server.initialize();
+  assert.equal((await server.initialize()).serverInfo.version, descriptor.core.core_version);
   const {tools} = await server.request('tools/list', {});
   const checked = process.env.GIL_PRODUCT_SAFETY === '1' ? withoutRecoveryTools(tools) : tools;
   if (profile === 'visual-authoring') checkAuthoringTools(checked); else checkDefaultTools(checked);

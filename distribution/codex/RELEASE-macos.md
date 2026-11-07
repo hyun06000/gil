@@ -45,15 +45,17 @@ source에서 Skill만 바꾸더라도 새 payload이므로 기존 후보를 덮�
 인증 도구가 아니다. 출처가 불명확한 binary는 입력하지 않는다.
 
 ```sh
-node distribution/codex/unsigned-preview.mjs prepare target/codex-preview/marketplace 0.2.1-preview.2 target/codex-unsigned-candidate-2
-node distribution/codex/unsigned-preview.mjs verify target/codex-unsigned-candidate-2/marketplace
+GIL_PREVIEW_VERSION=0.2.1-preview.25 node distribution/codex/build-preview.mjs target/codex-preview-25 --approved-plan
+node distribution/codex/unsigned-preview.mjs prepare target/codex-preview-25/marketplace 0.2.1-preview.25 target/codex-unsigned-candidate-25 --approved-plan
+node distribution/codex/unsigned-preview.mjs verify target/codex-unsigned-candidate-25/marketplace
 ```
 
 - 새 output만 사용한다. 입력·설치 cache를 덮거나 기존 `release.json`의 flag를 뒤집지 않는다.
 - `development_unsigned`의 dirty source는 거절한다. `X.Y.Z-preview.N`만 허용하고 stable·개발
   cachebuster는 거절한다. 입력 개발판보다 version 순서가 높아야 한다.
-  `0.2.1-preview.1`은 이미 검수·설치된 불변 후보다. 위 preview.2 예시는 새 Skill 후보의 제작
-  절차이지 게시·설치 승인 또는 공개 tag가 아니다.
+  위 버전은 명시적 후보 제작 예시이며 게시·설치 승인 또는 공개 tag의 존재를 뜻하지 않는다.
+  후보 버전은 컴파일 전에 선택한다. CLI·MCP initialize·probe의 빌드 버전과 최종 receipt가
+  다르면 smoke가 거절하며, 기존 binary를 새 버전으로 재표기해서 통과시키지 않는다.
 - 정본 manifest는 건드리지 않고 출력 manifest의 version만 바꾼다. catalog·Core·Skill·고지는
   byte 그대로 유지한다. 바뀐 설치 metadata는 Host에서 별도 확인해야 한다.
 - 압축 왕복 뒤 Node 없는 PATH로 native challenge·MCP initialize·17 tools·내장 UI를 새로 확인한다.

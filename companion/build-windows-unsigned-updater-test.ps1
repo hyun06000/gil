@@ -45,9 +45,11 @@ try {
         # Companion's embedded gil library must understand the same record/action contract.
         $TauriFeatures = @('--features', 'gil/approved-plan,gil/visual-authoring,gil/product-safety')
     }
+    $env:GIL_BUILD_VERSION = $Version
     cargo build --locked --release -p gil --bin gil --bin gil-launcher --features $CoreFeatures
     if ($LASTEXITCODE -ne 0) { throw '시험 Core와 고정 런처 빌드가 실패했습니다.' }
     $Core = Join-Path $Root 'target\release\gil.exe'
+    if ((& $Core --version).Trim() -ne "gil $Version") { throw 'Core와 installer의 빌드 버전이 다릅니다.' }
     $Digest = (Get-FileHash -LiteralPath $Core -Algorithm SHA256).Hash.ToLowerInvariant()
     $Bootstrap = Join-Path $Root 'target\windows-bootstrap'
     New-Item -ItemType Directory -Force -Path $Bootstrap | Out-Null
