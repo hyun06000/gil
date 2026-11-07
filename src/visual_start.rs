@@ -43,6 +43,22 @@ fn create(
     _check_working_location: bool,
     checkpoint: &mut impl FnMut(&str) -> std::io::Result<()>,
 ) -> Result<ProjectSession, SessionError> {
+    create_inner(rules, root, storage_root, _check_working_location, checkpoint, false)
+}
+
+impl ProjectSession {
+    pub(crate) fn start_visual_guided(rules: RuleSet, root: &Path, storage_root: &Path) -> Result<Self, SessionError> {
+        #[cfg(any(all(target_os = "macos", target_arch = "aarch64"), windows))]
+        { create_inner(rules, root, storage_root, cfg!(not(windows)), &mut |_| Ok(()), true) }
+        #[cfg(not(any(all(target_os = "macos", target_arch = "aarch64"), windows)))]
+        { let _ = storage_root; Self::start_visual(rules, root) }
+    }
+}
+
+#[cfg(any(all(target_os = "macos", target_arch = "aarch64"), windows))]
+fn create_inner(rules: RuleSet, root: &Path, storage_root: &Path, _check_working_location: bool,
+    checkpoint: &mut impl FnMut(&str) -> std::io::Result<()>, guidance: bool,
+) -> Result<ProjectSession, SessionError> {
     let error = |source| {
         SessionError::Store(StoreError::Write {
             path: "새 이미지 프로젝트 (실패 시 남은 기록을 보존하고 읽기로 확인한다)".into(),
@@ -75,6 +91,7 @@ fn create(
     identity().map_err(error)?;
     initializable(&gil, &state_path)?;
     let objects = ObjectStore::owner_only(&gil);
+    if guidance { crate::project_resume::ensure(&root); }
     let world = capture(&root, &objects)?;
     checkpoint("captured").map_err(error)?;
     // This is an in-memory initial boundary, not migration of a persisted format-4 state.

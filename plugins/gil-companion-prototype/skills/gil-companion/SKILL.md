@@ -1,6 +1,6 @@
 ---
 name: gil-companion
-description: Use GIL from this plugin — start a GIL project in the folder the user selected and open its Monitor in that same flow, open and close steps, read context and status, restore or revisit — and open the persistent GIL Monitor when the user asks to show, pin, or keep the journey visible.
+description: Start a GIL project and show its Monitor, or resume work on an existing GIL project's reports, charts, code and other deliverables in a new session even when the user does not say GIL. Read context before producing files and follow the recorded steps. Also show the persistent GIL Monitor. Do not apply to ordinary projects, unrelated chat or file-free research.
 ---
 
 # GIL
@@ -15,7 +15,7 @@ description: Use GIL from this plugin — start a GIL project in the folder the 
 - When continuing a requested GIL workflow with an unknown goal, open the first Question with the objective “ask the user for the goal”, then ask and wait for the actual answer.
 - `gil_await_user(project_root, question)` is an optional read-only check for an open Question or pending Synthesis proposal. It does not authorize turn completion or register a wait. Recovery/revisit approval and cycle boundaries do not require it. If it refuses, read the current context; do not manufacture a supported Step just to call it.
 - GIL installs no global, project-local, Plugin or Skill hooks. Do not create hooks, enroll folders in a Host guard registry, wrap ordinary shell commands, or request elevated permissions on GIL's behalf. Use the Host's normal execution and approval flow.
-- These instructions apply only when the user is working on an explicitly selected GIL project. An enabled Plugin, another project's records, a cwd, or old registry entries do not make an unrelated task a GIL task. For unrelated chats, development, installation or file-free research, do not call GIL tools or demand GIL Steps just to proceed.
+- These instructions apply only when the user is working on an explicitly selected GIL project. Selecting an existing GIL project and requesting changes to its deliverables selects that workflow again, even in a new session and without saying "GIL". An enabled Plugin, another project's records, a cwd alone, or old registry entries do not make an unrelated task a GIL task. For unrelated chats, development, installation or file-free research, do not call GIL tools or demand GIL Steps just to proceed.
 - Project file discipline is guidance, not an enforced file lock. The Core still validates its own transitions, approvals, reports, evidence and dirty boundaries; it does not intercept Bash, Write or Edit. Never claim that prompts prevent all out-of-Verify writes or protect a project from other sessions.
 - File-free web research and unrelated outside work remain allowed. They do not close a requested GIL workflow. Honor user cancellation without changing project records; use `gil_context` to resume the recorded position when requested.
 - `show_gil_monitor` is a display request. Read `gil_monitor_status` before claiming visible/fullscreen. If `display_mode=inline`, say the Host kept the preview inline and guide the Host widget's “show in another panel”/expand control. Never claim that more retries guarantee fullscreen.
@@ -24,6 +24,32 @@ These rules apply to every GIL connection, with or without a Plugin, on every op
 Use only the user's selected absolute `project_root`. Each receipt's text guidance names **one next
 call or one wait** for continuing GIL; when continuing, do it, then read the next receipt. Read `structuredContent` too, and follow the
 actual recorded position and the connected tool schema. Never repeat a call that already succeeded.
+
+**New-session project discovery — before producing files.** For a request to create or change
+artifacts in the user's selected task folder, read its project instructions and check for GIL
+record markers (`.gil` at that root, or a GIL project continuity instruction). This is a bounded
+read-only check of the selected task folder, not a scan of HOME, registries or other projects.
+A plain folder with no GIL evidence stays an ordinary project; never call `gil_start` merely to
+check membership. Do not enroll a folder because a GIL plugin is enabled. File-free research and
+unrelated questions need no discovery or GIL Steps. If the selected root is unclear, resolve it
+with the user before file work; do not guess an ancestor or another session's project.
+
+For an existing GIL project, call `gil_context(project_root)` once **before any file-producing
+tool**, then follow the actual receipt and current plan/contract. "Add charts to this report"
+is project continuation, not permission to skip to image generation. A new request outside an
+old open Verify's unfinished contract requires the legal plan/Cycle/Step transition first.
+A new session alone does not require a new Cycle, and a closed Chain or a refusal is not permission
+to work untracked. Missing/corrupt/inaccessible records or a disconnected MCP require an explanation
+and resolution before project writes, not silent fallback, `gil_start`, manual `.gil` edits or
+fabricated history. Never copy records or bind a different checkout/worktree to an old root by guess.
+
+New starts prepare local Codex/Claude continuity instructions before the initial Snapshot.
+Existing projects gain them at the next successful Verify open; context/status remain read-only.
+Preserve existing instruction bytes and obey a `pending/review_required` receipt; do not overwrite
+custom instructions or alter old Snapshots to hide a missing guide. If a Verify is already open,
+any guide adoption must stay within that write boundary and preserve the original instructions.
+Guide installation alone is not evidence that the requested report, chart or code work is complete.
+No global/project/Plugin/Skill hooks or global instruction edits are part of this flow.
 
 **Quick rules — read these first; the numbered rules below only add detail.**
 
@@ -766,7 +792,7 @@ the Monitor:
 
 ## Rules
 
-- Do not substitute `gil monitor`, a browser page, a local server, or filesystem inspection.
+- Do not substitute `gil monitor`, a browser page, a local server, or filesystem inspection for the Monitor. The bounded read-only project discovery above is allowed; it is not Monitor rendering.
 - Do not search for or run an executable path yourself; the tools use a fixed bundle identity.
 - Do not install, download, or update anything without the user's explicit approval.
 - Do not choose or guess a GIL Project. An MCP App binds to the explicitly prepared scope;

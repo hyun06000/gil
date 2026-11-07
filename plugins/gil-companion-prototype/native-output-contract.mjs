@@ -1,7 +1,7 @@
 // Maintainer-only SDK acceptance. Never runs in, or modifies, a user's project.
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {mkdtemp, mkdir, realpath, rm} from 'node:fs/promises';
+import {mkdtemp, mkdir, realpath, rm, readFile, writeFile, readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {Client} from '@modelcontextprotocol/sdk/client/index.js';
@@ -43,8 +43,18 @@ export async function checkNativeOutputContract(binary, expectedVersion) {
   const call = (name, args) => client.callTool({name, arguments:args}, undefined, {timeout:30000});
   try {
     await connect();
+    const ordinary = join(scratch, 'ordinary'); await mkdir(ordinary);
+    const notGil = await call('gil_context', {project_root:ordinary});
+    assert.equal(notGil.structuredContent.ok, false);
+    assert.deepEqual(await readdir(ordinary), [], 'a plain project was enrolled by discovery');
+    const custom = 'Existing project conventions\r\n';
+    await writeFile(join(root, 'CLAUDE.md'), custom);
     const started = await call('gil_start', {project_root:root});
     assert.equal(started.structuredContent.ok, true);
+    const guides = await Promise.all(['AGENTS.md','CLAUDE.md'].map(name => readFile(join(root,name),'utf8')));
+    assert.ok(guides[1].startsWith(custom), 'existing Claude guidance was overwritten');
+    for (const guide of guides) assert.ok(guide.includes('GIL PROJECT RESUME v1') && guide.includes('`gil_context`'));
+
     hook({hook_event_name:'PostToolUse',tool_name:'mcp__gil__gil_start',tool_input:{project_root:root},tool_response:started});
     assert.deepEqual(hook({hook_event_name:'Stop',last_assistant_message:'report complete'}),{});
     assert.deepEqual(hook({hook_event_name:'PreToolUse',tool_name:'Write',tool_input:{file_path:join(root,'report.docx')}}),{});
@@ -57,6 +67,8 @@ export async function checkNativeOutputContract(binary, expectedVersion) {
     await connect();
     const context = await call('gil_context', {project_root:root});
     assert.equal(context.structuredContent.ok, true);
+    assert.deepEqual(await Promise.all(['AGENTS.md','CLAUDE.md'].map(name => readFile(join(root,name),'utf8'))), guides,
+      'a new connection rewrote or duplicated project instructions');
     const contextText = context.content.filter(c => c.type === 'text').map(c => c.text).join('\n');
     assert.match(contextText, /무관한 주제의 답변을 위해 GIL 단계를 요구하지 않는다/);
     assert.match(contextText, /GIL 훅은 설치하지 않으며 일반 셸·다른 프로젝트에는 적용하지 않는다/);
