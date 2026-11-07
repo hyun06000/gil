@@ -4,10 +4,10 @@
   "note": "Metadata only. The installed GIL Core reads this file at most once a day to show update guidance in the Monitor; it never downloads or installs from it. Update this file in the same pull request that records a publication ledger.",
   "platforms": {
     "darwin-arm64": {
-      "version": "0.2.1-preview.25",
-      "release_url": "https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.25",
+      "version": "0.2.1-preview.26",
+      "release_url": "https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.26",
       "install_doc": "https://github.com/hyun06000/gil/blob/main/INSTALL.md",
-      "notes": "Core의 --version, MCP 서버 정보와 probe가 배포 버전 0.2.1-preview.25를 표시합니다. preview.24 이하의 gil 0.1.0은 구형 내부 표기이므로 실제 경로·receipt·해시로 확인합니다. 훅 없는 설치와 기존 설정·프로젝트 기록 보존은 유지합니다. 업데이트 후 새 세션에서 연결 버전을 확인해 주세요. 실제 Host 화면·모델 필드테스트는 별도입니다."
+      "notes": "훅 없이 프로젝트 내부 Codex/Claude 안내로 새 세션의 GIL 재개를 유도합니다. 기존 안내와 과거 기록·Snapshot을 보존하며, 구형 프로젝트는 다음 정상 Verify open에서 안내를 채택합니다. 다른 프로젝트나 전역 설정을 수정하지 않습니다. 안내 없는 구형 프로젝트의 최초 인지와 실제 Host 모델 준수는 별도 확인이 필요합니다."
     },
     "windows-x64": {
       "version": "0.1.1-owner.14",
