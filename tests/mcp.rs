@@ -1328,12 +1328,15 @@ fn starting_receipt_uses_the_requested_root_not_the_servers_directory() {
     {
         assert_eq!(reply["result"]["structuredContent"]["said"], String::from_utf8(cli.stdout).unwrap());
         let relative = Path::new(".gil").join("state.yaml");
-        assert!(reply["result"]["structuredContent"]["said"].as_str().unwrap().ends_with(&format!("기록: {}\n", relative.display())));
+        let said = reply["result"]["structuredContent"]["said"].as_str().unwrap();
+        assert!(said.contains(&format!("기록: {}\n", relative.display())));
+        assert!(said.contains("프로젝트 재개 안내: ready"), "{said}");
     }
     #[cfg(all(windows, feature = "visual-authoring"))]
     {
         let said = reply["result"]["structuredContent"]["said"].as_str().unwrap();
-        assert!(said.ends_with("기록: Windows 개인 앱 데이터의 보호된 기록\n"), "{said}");
+        assert!(said.contains("기록: Windows 개인 앱 데이터의 보호된 기록\n"), "{said}");
+        assert!(said.contains("프로젝트 재개 안내: ready"), "{said}");
         assert!(!said.contains("project-state-v1") && !said.contains("LOCALAPPDATA"), "{said}");
     }
     mcp.eof();

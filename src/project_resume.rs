@@ -38,8 +38,11 @@ fn inspect(file: &mut File, name: &str) -> io::Result<bool> {
 fn access(root: &Path, name: &str, write: bool) -> io::Result<(File, File)> {
     use std::os::fd::{AsRawFd, FromRawFd};
     if !root.is_absolute() { return Err(io::Error::other("absolute project root required")); }
+    // Match Core's selected-root identity (e.g. macOS /var -> /private/var),
+    // then pin each canonical component; instruction entries themselves never follow links.
+    let canonical = root.canonicalize()?;
     let mut dir = File::open("/")?;
-    for part in root.components() {
+    for part in canonical.components() {
         match part {
             std::path::Component::RootDir => {},
             std::path::Component::Normal(part) => {
@@ -196,5 +199,9 @@ mod tests {
         fs::set_permissions(safe.join("CLAUDE.md"),fs::Permissions::from_mode(0o600)).unwrap();
         assert!(ensure(&safe).contains("added"));
         assert_eq!(fs::metadata(safe.join("CLAUDE.md")).unwrap().permissions().mode() & 0o777,0o600);
+        let safe_alias=t.0.join("safe-alias");symlink(&safe,&safe_alias).unwrap();
+        let before=fs::read(safe.join("CLAUDE.md")).unwrap();
+        assert!(ensure(&safe_alias).contains("ready"));
+        assert_eq!(fs::read(safe.join("CLAUDE.md")).unwrap(),before);
     }
 }
