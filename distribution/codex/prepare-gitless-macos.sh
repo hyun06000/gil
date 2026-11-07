@@ -35,11 +35,11 @@ while [ "$cursor" != / ]; do
   [ -n "$cursor" ] || cursor=/
 done
 
-# Published 0.2.1-preview.25 (unsigned prerelease, 2026-11-07). Changing these pins requires a new reviewed release.
-version=0.2.1-preview.25
-expected=cb9b448d2c5dd3370ae795eb778cbd155ea30df3d8c751658aedb5484ad4a9a4
-expected_bytes=3646256
-url=https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.25/gil-codex-macos-arm64-0.2.1-preview.25.tar.gz
+# Published 0.2.1-preview.26 (unsigned prerelease, 2026-11-07). Changing these pins requires a new reviewed release.
+version=0.2.1-preview.26
+expected=81a6401b9125c7f8d56f34a7ecdd8da18c5e01d442186cf70a9fa7401d3243fc
+expected_bytes=3653973
+url=https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.26/gil-codex-macos-arm64-0.2.1-preview.26.tar.gz
 stage=$(/usr/bin/mktemp -d /private/tmp/gil-preview-download.XXXXXX)
 if [ -z "$archive" ]; then
   # Download to a partial file first; only a complete, hash-verified file is ever extracted.
