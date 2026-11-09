@@ -57,6 +57,10 @@ export async function registerMonitor(server, bridge = monitorBridge()) {
   if (createHash('sha256').update(html).digest('hex') !== asset.sha256) throw new Error('Monitor bundle digest mismatch');
   const uri = asset.resource_uri;
   const scope = { scope_id: z.string().regex(/^project:[0-9a-f]{64}$/) };
+  // The App's ephemeral display observation (see Core gil_monitor_poll). The Core validates the
+  // triple and the intent word; this adapter only lets them through to it instead of refusing.
+  const observation = { instance_id: z.string().optional(), presentation: z.string().optional(), sequence: z.string().optional(),
+    automatic_fullscreen: z.string().optional() };
   const annotations = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
   server.registerResource('gil-monitor', uri, { title: 'GIL Monitor', mimeType: 'text/html;profile=mcp-app' }, async () => ({
     contents: [{ uri, mimeType: 'text/html;profile=mcp-app', text: html,
@@ -83,7 +87,8 @@ export async function registerMonitor(server, bridge = monitorBridge()) {
     server.registerTool(name, {
       description: name === 'gil_monitor_poll' ? 'Read a change hint and renew the visible Monitor watch lease; no project scan.'
         : 'Read canonical GIL Monitor data. No write, recovery, path or layout operation.',
-      inputSchema: z.object(name === 'gil_monitor_detail' ? { ...scope, step_ref: z.string() } : scope).strict(), annotations,
+      inputSchema: z.object(name === 'gil_monitor_detail' ? { ...scope, step_ref: z.string() }
+        : name === 'gil_monitor_poll' ? { ...scope, ...observation } : scope).strict(), annotations,
       _meta: { ui: { visibility: ['app'] } },
     }, (args) => bridge.call(name, args));
   }

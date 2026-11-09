@@ -1,6 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { graphOrientation, initialFullscreen, hostIdentity, hostStyles, styleEvidence, RETRY_DELAYS_MS } from './presentation.mjs';
+import { graphOrientation, initialFullscreen, fullscreenFailure, hostIdentity, hostStyles, styleEvidence, RETRY_DELAYS_MS } from './presentation.mjs';
+
+test('only explicit fresh-press evidence classifies a refusal; unknown and transport failures do not', () => {
+  const message = "fullscreen request refused: it needs a fresh press in this app's own frame, not elsewhere on the page";
+  assert.equal(fullscreenFailure(new Error(message)), 'refused');
+  assert.equal(fullscreenFailure({code: -32603, message: `MCP error -32603: ${message}`}), 'refused');
+  for (const error of [undefined, null, {}, 'needs a fresh press', new Error('Permission denied'),
+    new Error('Request timed out'), new Error('Connection closed'), new Error('needs a fresh press'),
+    {code: -32000, message}, {code: -32001, message}]) {
+    assert.equal(fullscreenFailure(error), 'error');
+  }
+});
 
 test('all MCP display modes default to horizontal without claiming fullscreen', () => {
   for (const mode of ['fullscreen', 'inline', 'pip', undefined, null])
