@@ -123,7 +123,7 @@ export function updateNotice(update) {
     case 'available':
       return { show: true, state: 'available', version, latest,
         label: `새 버전 ${version} 있음 · 업데이트 안내`,
-        line: `설치된 GIL ${update.installed ?? '?'} → 새 버전 ${version} 이 있습니다. 업데이트는 사용자가 직접 진행합니다.` };
+        line: `설치된 GIL ${update.installed ?? '?'} → 새 버전 ${version} 이 있습니다. 업데이트 안내를 눌러 진행 방법을 확인하세요.` };
     case 'unknown_installed':
       return { show: true, state: 'unknown_installed', version, latest,
         label: `최신 ${version} · 업데이트 안내`,
@@ -162,8 +162,18 @@ export function updateGuide(update) {
       '4. 새 대화에서 Monitor 연결 정보의 GIL 버전이 바뀌었는지 확인합니다.',
     ]) };
   }
-  return { title: 'macOS — 설치 안내의 절차로 업데이트', companion: false, steps: common.concat([
-    'Codex: 새 대화에 "GIL 을 ' + version + ' 으로 업데이트해 줘. 설치 안내(INSTALL.md)의 공식 Plugin 절차로 GIL 등록만 교체하고, 다른 등록과 프로젝트·.gil 기록은 바꾸지 마." 라고 요청합니다.',
-    'Claude Desktop(Claude Code 탭): 설치 안내대로 새 archive 를 새 폴더에 풀고, Claude Desktop 을 완전히 종료한 뒤 설정의 gil 항목을 새 Core 경로로 바꿉니다. 바꾸지 않으면 Claude 만 이전 버전에 남습니다.',
-  ]) };
+  return { title: 'Mac에서 GIL 업데이트하기', companion: false,
+    summary: `새 버전 ${version}${update?.installed ? ` · 현재 ${update.installed}` : ''}`,
+    details: common.slice(1, -1),
+    steps: [
+      '아래에서 GIL을 업데이트할 앱을 선택하세요.',
+      '요청문을 복사해 내 Mac의 파일을 다룰 수 있는 에이전트의 새 대화에 붙여넣으세요. 다운로드와 설정 변경은 에이전트가 안내에 따라 처리합니다.',
+      '에이전트가 완료했다고 알려주면 업데이트한 앱을 완전히 종료했다가 다시 여세요. 새 대화에서 GIL Monitor를 열고 연결 정보의 버전을 확인하세요.',
+    ], targets: ['Codex', 'Claude Desktop', 'Codex와 Claude Desktop'].map(target => ({
+      label: target,
+      hint: target === 'Codex'
+        ? 'Codex의 새 대화에 붙여넣으세요. 업데이트가 끝난 뒤 Codex를 다시 여세요.'
+        : 'Claude 안에서 진행하면 앱 종료 뒤 설정 변경을 마칠 수 없습니다. 먼저 Codex 등 Claude 밖의 로컬 에이전트에 요청문을 전달하세요. 종료 요청을 받으면 작업을 저장하고 Claude 메뉴 → Claude 종료(⌘Q)를 누르세요. 창만 닫으면 종료되지 않습니다.',
+      request: `다음 공식 설치 안내를 읽고 이 Mac의 ${target}에서 GIL을 ${version} 버전으로 업데이트해 줘.\n${latest.install_doc ?? 'https://github.com/hyun06000/gil/blob/main/INSTALL.md'}\n터미널 명령과 설정 파일 편집을 내가 직접 하지 않도록 처리해 줘. 안내의 배포본과 버전이 다르면 임의로 설치하지 말고 차이를 알려줘. 선택한 앱의 GIL만 갱신하고 다른 설정, 기존 프로젝트, 안내 파일, .gil 기록과 Snapshot은 보존해 줘. 훅은 설치하지 마. 기존 설정을 백업하고 공식 설치 절차와 배포본 검증을 따라 줘.${target === 'Codex' ? '' : ' Claude 설정 변경 전에는 작업을 저장하고 앱을 완전히 종료하도록 안내하고, 종료를 확인한 뒤 변경해 줘.'} 완료하면 앱별 적용 버전과 다시 열어야 할 앱을 알려줘.`,
+    })) };
 }

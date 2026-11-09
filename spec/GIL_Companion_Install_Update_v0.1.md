@@ -405,7 +405,10 @@ Desktop에서 버튼 → 새 대화 → Monitor 표시는 아직 아무도 확�
 - **끄기:** `GIL_UPDATE_CHECK=off` 환경변수 또는 상태 폴더의 `update-check.off` 파일.
 - **App:** `available`/`unknown_installed`일 때만 **업데이트 안내** 버튼을 보이고, 누르면 OS별 절차를 글로 보여 준다.
   Windows 패널의 **Companion 열기**는 기존 `show_gil_companion` 도구다. Host 이름으로 갈라지지 않으며 두 Host의 절차를
-  함께 적는다. 연결 정보에 `update` 요약(state·installed·latest·checked_at·error)을 남긴다.
+  함께 적는다. macOS는 사용자가 업데이트할 앱(Codex / Claude Desktop / 둘 다)을 선택하고 공식 설치 URL·목표 버전이
+  포함된 요청문을 복사한다. 자동 복사 거절/미지원 시 읽기 전용 요청문을 선택해 수동 복사를 안내한다.
+  Claude 설정 변경은 앱 종료가 필요하므로 Claude 밖의 로컬 에이전트로 요청하도록 안내한다. 앱 재시작과 새 대화의
+  버전 확인까지 설명한다. 선택·복사는 도구 호출이나 다운로드·설치를 실행하지 않는다. 연결 정보에 `update` 요약(state·installed·latest·checked_at·error)을 남긴다.
 - **검증 범위:** Rust 단위 시험(SemVer, 판정, 피드 모양, 설치 자리, 캐시·끄기), MCP 통합 시험(poll 필드), App 하네스 시험
   (버튼·패널·도구 호출 없음), 피드 schema 시험. **실제 Host 화면에서 버튼이 보이는지, 설치본에서 하루 1회 조회가 일어나는지는
   사용자 확인 대기**다.
