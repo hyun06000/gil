@@ -140,12 +140,9 @@ fn help_topic(input: &str) -> Result<String, String> {
 /// 프로젝트를 찾으면 다른 상태 명령과 같은 길을 지난다: 잠금 → 복구 → 상태 읽기.
 /// 못 찾으면 `.gil` 도 잠금 파일도 만들지 않고 Bootstrap 만 말한다.
 fn help_here(ctx: &Invocation<'_>) -> Result<String, String> {
-    match find_gil(ctx)? {
+    match session_for_help(ctx)? {
         None => crate::help_outside().map_err(|err| err.to_string()),
-        Some(_) => {
-            let session = open_session(ctx)?;
-            crate::help_here(&session).map_err(|err| err.to_string())
-        }
+        Some(session) => crate::help_here(&session).map_err(|err| err.to_string()),
     }
 }
 
@@ -1318,6 +1315,15 @@ fn open_help(ctx: &Invocation<'_>) -> Result<String, String> {
 
 /// 저장이 있으면 세우고, 아직 없으면 없다고 답한다 — help 는 없다고 실패하지 않는다.
 fn session_for_help(ctx: &Invocation<'_>) -> Result<Option<Session>, String> {
+    // MCP's explicit root uses the product record resolver, including Windows private
+    // app-data storage. An inline-only existence probe would hide a real Project.
+    if let Root::Exact(root) = ctx.root {
+        return match crate::open_project_root(rules()?, root) {
+            Ok(session) => Ok(Some(session)),
+            Err(crate::RootError::NoProjectHere) => Ok(None),
+            Err(error) => Err(error.to_string()),
+        };
+    }
     match find_gil(ctx)? {
         None => Ok(None),
         Some(_) => open_session(ctx).map(Some),

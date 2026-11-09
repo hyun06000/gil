@@ -668,6 +668,8 @@ fn misplaced_report_and_plan_extension_recover_from_exact_readonly_mcp_data() {
     let message = said(&invalid);
     assert!(message.contains("gil_help") && message.contains("topic: \"close\""), "{message}");
     assert!(!message.contains("gil close --help") && !message.contains("<<'EOF'"), "{message}");
+    #[cfg(all(windows, feature = "visual-authoring"))]
+    assert!(!root.join(gil::STATE_PATH).exists(), "help must resolve the external product record");
     let help = said(&ok(r.model("gil_help", json!({"topic":"close"})), "current close help"));
     for field in ["question", "choices", "response", "gil_close", "\"report\""] { assert!(help.contains(field), "{help}"); }
     assert!(help.contains(&question_ref));
