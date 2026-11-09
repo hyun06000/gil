@@ -203,7 +203,11 @@ pub(super) fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
         "scope":{"type":"object","additionalProperties":false,"required":["goal","in_scope","out_of_scope","constraints","success_criteria"],"properties":{
             "goal":string,"in_scope":string,"out_of_scope":string,"constraints":string,"success_criteria":string}},
         "items":{"type":"array","minItems":1,"maxItems":64,"items":{"type":"object","additionalProperties":false,"required":["id","question","done_when"],"properties":{"id":string,"question":string,"done_when":string}}},
-        "synthesis":{"type":"object","additionalProperties":{"type":"string"},"description":"Complete Synthesis Report fields, including statement, basis_refs and exploration_checklist (item IDs, one per line in order); omit approved, plan_revision, plan_digest."}}});
+        "synthesis":{"type":"object","additionalProperties":{"type":"string"},"required":["statement","basis_refs","exploration_checklist"],"properties":{
+            "statement":{"type":"string","description":"Proposed agreement. Explain previous-cycle/external background here; it does not replace current Interview basis_refs."},
+            "basis_refs":{"type":"string","description":crate::cycle::BASIS_REFS_RULES,"examples":["step:C5/S1\nstep:C5/S2"]},
+            "exploration_checklist":{"type":"string","description":"All items IDs in the same order, one per line."},
+            "chain_verdict":{"type":"string","description":"For Closing only: success or failure."}},"description":"Complete Synthesis Report fields, including statement, basis_refs and exploration_checklist (item IDs, one per line in order); omit approved, plan_revision, plan_digest."}}});
     for (name, description, schema, app, read) in [
         (
             "gil_plan_propose",
@@ -266,6 +270,45 @@ pub(super) fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
 mod tests {
     use super::*;
     use crate::plan_test_helpers as h;
+    #[test]
+    fn synthesis_schema_exposes_basis_rules_and_required_string_fields() {
+        let tools = catalog(vec![]);
+        let tool = tools.iter().find(|tool| tool.name == "gil_plan_propose").unwrap();
+        let wire = serde_json::to_value(tool).unwrap();
+        let synthesis = &wire["inputSchema"]["properties"]["draft"]["properties"]["synthesis"];
+        assert_eq!(synthesis["properties"]["basis_refs"]["type"], "string");
+        assert_eq!(synthesis["properties"]["basis_refs"]["description"], crate::cycle::BASIS_REFS_RULES);
+        assert_eq!(synthesis["required"], json!(["statement", "basis_refs", "exploration_checklist"]));
+        assert_eq!(synthesis["additionalProperties"], json!({"type":"string"}));
+    }
+
+    #[test]
+    fn plan_propose_reports_all_basis_errors_and_preserves_saved_state() {
+        let root = h::scratch("plan-basis-diagnostics");
+        let mut p = Project::start(h::spec(), h::first_world());
+        let draft = crate::approved_plan::tests::synthesis(&mut p, &["A"]);
+        crate::save(&p, root.join(crate::STATE_PATH)).unwrap();
+        let before = std::fs::read(root.join(crate::STATE_PATH)).unwrap();
+        let monitor = Monitor::with_store(super::super::bindings::Store::at(root.with_extension("consent")));
+        let grants = Grants::default();
+        let mut request = json!({"project_root":root,"draft":draft});
+        let original_statement = request["draft"]["synthesis"]["statement"].clone();
+        request["draft"]["synthesis"]["basis_refs"] = json!("step:C1/S1, explanation\ncycle:C9\nstep:C9/S1");
+        let result = call(&monitor, &grants, "gil_plan_propose", request.clone());
+        assert_eq!(result.is_error, Some(true), "{result:?}");
+        let message = serde_json::to_string(&result).unwrap();
+        for needle in ["$.draft.synthesis.basis_refs", "line 1", "line 2", "line 3", "다른 Cycle", "Question", "statement"] {
+            assert!(message.contains(needle), "{message}");
+        }
+        assert_eq!(std::fs::read(root.join(crate::STATE_PATH)).unwrap(), before);
+        request["draft"]["synthesis"]["basis_refs"] = json!("step:C1/S1\nstep:C1/S2");
+        let success = call(&monitor, &grants, "gil_plan_propose", request);
+        assert_ne!(success.is_error, Some(true), "{success:?}");
+        let saved = crate::load(h::spec(), root.join(crate::STATE_PATH)).unwrap();
+        assert_eq!(serde_json::to_value(saved.approved_plan().unwrap().current(&saved).unwrap()).unwrap()["draft"]["synthesis"]["statement"], original_statement);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn approved_plan_private_token_stale_revision_restart_and_idempotent_receipt() {
         let root = h::scratch("plan-mcp-capability");

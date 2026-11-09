@@ -588,7 +588,7 @@ fn a_basis_ref_that_is_not_a_step_address_is_refused() {
             .close_step(synthesis_with(&cycle, &bad))
             .unwrap_err_or_panic(&format!("{bad:?} 가 근거로 받아들여졌다"));
         assert!(
-            matches!(err, CycleError::BasisRefs(BasisRefError::Unreadable { .. })),
+            matches!(basis_reason(&err), BasisRefError::Unreadable { .. }),
             "{bad:?}: {err}"
         );
         // 그리고 어떤 꼴로 적어야 하는지 보여 준다.
@@ -608,7 +608,7 @@ fn a_basis_ref_outside_this_interview_is_refused() {
         .close_step(synthesis_with(&cycle, &elsewhere))
         .unwrap_err_or_panic("다른 Cycle 의 자리가 근거가 됐다");
     assert!(
-        matches!(err, CycleError::BasisRefs(BasisRefError::OtherCycle { .. })),
+        matches!(basis_reason(&err), BasisRefError::OtherCycle { .. }),
         "{err}"
     );
 }
@@ -622,7 +622,7 @@ fn a_basis_ref_that_does_not_exist_is_refused() {
         .close_step(synthesis_with(&cycle, &ghost))
         .unwrap_err_or_panic("없는 자리가 근거가 됐다");
     assert!(
-        matches!(err, CycleError::BasisRefs(BasisRefError::NotFound { .. })),
+        matches!(basis_reason(&err), BasisRefError::NotFound { .. }),
         "{err}"
     );
 }
@@ -638,9 +638,9 @@ fn a_basis_ref_of_the_wrong_kind_is_refused() {
         .clone()
         .close_step(synthesis_with(&cycle, &basis))
         .unwrap_err_or_panic("제안이 제 근거가 됐다");
-    match err {
-        CycleError::BasisRefs(BasisRefError::WrongKind { kind, .. }) => {
-            assert_eq!(kind, NodeKind::Synthesis);
+    match basis_reason(&err) {
+        BasisRefError::WrongKind { kind, .. } => {
+            assert_eq!(*kind, NodeKind::Synthesis);
         }
         other => panic!("다른 이유로 거절됐다: {other}"),
     }
@@ -671,7 +671,7 @@ fn the_same_basis_ref_twice_is_refused() {
         .close_step(synthesis_with(&cycle, &twice))
         .unwrap_err_or_panic("같은 근거를 두 번 적고 닫혔다");
     assert!(
-        matches!(err, CycleError::BasisRefs(BasisRefError::Duplicated { .. })),
+        matches!(basis_reason(&err), BasisRefError::Duplicated { .. }),
         "{err}"
     );
 }
@@ -798,4 +798,39 @@ fn the_report_keeps_what_was_written() {
         .get("basis_refs")
         .expect("적어 둔 근거가 있다");
     assert_eq!(stored, basis, "적은 원문이 달라졌다");
+}
+
+// Legacy boundary tests still inspect the precise reason; aggregation must not weaken it.
+fn basis_reason(error: &CycleError) -> &BasisRefError {
+    match error {
+        CycleError::BasisRefs(BasisRefError::InvalidLines { issues, .. }) => {
+            assert_eq!(issues.len(), 1, "{error}");
+            &issues[0].1
+        },
+        CycleError::BasisRefs(reason) => reason,
+        other => panic!("expected basis_refs failure: {other}"),
+    }
+}
+
+#[test]
+fn basis_refs_collects_every_bad_line_without_rewriting_the_report() {
+    let (cycle, question, _) = interview_at_a_synthesis();
+    let good = cycle.step_ref(question).to_string();
+    let bad = format!("{good}, explanation\n\ncycle:C9\nstep:C9/S1\n{good}\n{good}\nstep:{}/S99", cycle.id().to_ref().id());
+    let report = synthesis_with(&cycle, &bad);
+    let original = report.clone();
+    let err = cycle.clone().close_step(report.clone()).unwrap_err_or_panic("bad proposal accepted");
+    let CycleError::BasisRefs(BasisRefError::InvalidLines { issues, .. }) = &err else { panic!("{err}"); };
+    assert_eq!(issues.iter().map(|(n, _)| *n).collect::<Vec<_>>(), vec![1, 3, 4, 6, 7]);
+    assert!(matches!(issues[0].1, BasisRefError::Unreadable { .. }));
+    assert!(matches!(issues[1].1, BasisRefError::Unreadable { .. }));
+    assert!(matches!(issues[2].1, BasisRefError::OtherCycle { .. }));
+    assert!(matches!(issues[3].1, BasisRefError::Duplicated { .. }));
+    assert!(matches!(issues[4].1, BasisRefError::NotFound { .. }));
+    let message = err.to_string();
+    for needle in ["$.draft.synthesis.basis_refs", "line 7", "한 줄에 하나씩", "Question", "부모 사슬", "statement", "자동 이동"] {
+        assert!(message.contains(needle), "{message}");
+    }
+    assert_eq!(report, original);
+    cycle.clone().close_step(synthesis_with(&cycle, &good)).expect("valid correction still accepted");
 }

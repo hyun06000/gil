@@ -368,6 +368,13 @@ fn approval_contract_holds_over_the_real_stdio_process() {
         assert_eq!(t["_meta"]["ui"]["visibility"], json!([if app { "app" } else { "model" }]), "{name}");
     }
 
+    let propose_schema = &tools.iter().find(|t| t["name"] == "gil_plan_propose").unwrap()["inputSchema"];
+    let basis_schema = &propose_schema["properties"]["draft"]["properties"]["synthesis"]["properties"]["basis_refs"];
+    assert_eq!(basis_schema["type"], "string");
+    for constraint in ["현재 Interview", "닫힌", "Question", "Interpretation", "한 줄에 하나씩", "statement"] {
+        assert!(basis_schema["description"].as_str().unwrap().contains(constraint));
+    }
+
     // start once; follow the returned show_gil_monitor; display stays unconfirmed.
     let started = ok(r.model("gil_start", json!({})), "gil_start");
     let text = started["result"]["content"].as_array().unwrap().iter().filter_map(|c| c["text"].as_str()).collect::<String>();
@@ -397,6 +404,15 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     let flat = rpc_error(r.model("gil_plan_propose", json!({"scope":d["scope"],"items":d["items"],"synthesis":d["synthesis"],"exploration_checklist":"A"})), "flat propose");
     let message = flat["error"]["message"].as_str().unwrap_or_default().to_owned();
     assert!(message.contains("'draft' is missing") && message.contains("inside draft"), "{message}");
+    let unchanged = state(&root);
+    let mut invalid = d.clone();
+    invalid["synthesis"]["basis_refs"] = json!("step:C1/S1, explanation\n\ncycle:C9\nstep:C9/S1");
+    let rejected = refused(r.model("gil_plan_propose", json!({"draft":invalid})), "all invalid basis lines");
+    let message = rejected.to_string();
+    for needle in ["$.draft.synthesis.basis_refs", "line 1", "line 3", "line 4", "다른 Cycle", "자동 이동"] {
+        assert!(message.contains(needle), "{message}");
+    }
+    assert_eq!(state(&root), unchanged);
     let first = ok(r.model("gil_plan_propose", json!({"draft":d})), "propose");
     assert_eq!(structured(&first)["proposal"]["revision"], 1);
     assert!(structured(&first)["proposal"]["receipt"].is_null());

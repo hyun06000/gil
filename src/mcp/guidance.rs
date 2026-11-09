@@ -114,7 +114,18 @@ fn opened(result: &CallToolResult) -> String {
         "experiment" => "GIL 진행: Experiment Cycle을 열었다. 다음 호출은 gil_open(kind: define)에 행동 계약을 적는 것이다. 질문 하나만 다루며 실제로 Verify를 열기 전에는 프로젝트 파일을 변경하지 않는다.",
         _ => generic,
     };
-    specific.into()
+    match kind {
+        "synthesis" => {
+            let here = said.lines().next().and_then(|line| line.strip_prefix("열었다: "))
+                .and_then(|line| line.split(" · ").next()).and_then(|r| r.parse::<crate::StepRef>().ok());
+            let location = here.map(|r| format!("현재 Synthesis: {r}, Interview: {}. 실제 닫힌 참조는 gil_context에서 확인한다. ", r.cycle())).unwrap_or_default();
+            let cycle = here.map(|r| r.cycle().id().to_string()).unwrap_or_else(|| "Cn".into());
+            let example = serde_json::json!({"basis_refs": format!("step:{cycle}/S1\nstep:{cycle}/S2")});
+            format!("{specific}\n제안 입력 $.draft.synthesis.basis_refs: {location}{} JSON 문자열에서는 줄바꿈을 \\n으로 표현한다. 구조 예시(S1/S2는 실제 닫힌 참조로 교체): {example}", crate::cycle::BASIS_REFS_RULES)
+        },
+        "verify" => format!("{specific}\n{}", crate::visual_report::image::limits_guidance()),
+        _ => specific.into(),
+    }
 }
 
 fn closed(result: &CallToolResult) -> String {
@@ -308,6 +319,19 @@ mod tests {
         let mut o = receipt("something else\n");
         after("gil_open", &mut o);
         assert!(text(&o).contains("gil_close"), "{}", text(&o));
+    }
+
+    #[test]
+    fn synthesis_and_verify_open_expose_authoring_constraints_before_close() {
+        let mut synthesis = receipt("열었다: step:C7/S9 · synthesis\n");
+        after("gil_open", &mut synthesis);
+        let hint = text(&synthesis);
+        for needle in ["$.draft.synthesis.basis_refs", "step:C7/S9", "cycle:C7", "부모 사슬", "Question", "Interpretation", "중복 없이", "한 줄에 하나씩", "statement", "자동 이동"] {
+            assert!(hint.contains(needle), "{hint}");
+        }
+        let mut verify = receipt("열었다: step:C8/S3 · verify\n");
+        after("gil_open", &mut verify);
+        assert!(text(&verify).contains(&crate::visual_report::image::limits_guidance()));
     }
 
     #[test]
