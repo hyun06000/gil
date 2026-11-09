@@ -169,11 +169,22 @@ fn executed_a_then_reinterview_inserts_d_without_rewriting_a_or_old_approval() {
     p.open_child_cycle(CycleKind::Interview).unwrap();
     let d = synthesis(&mut p, &["A", "D", "B", "C"]);
     let mut changed = d.clone();
+    changed.items[0].question = "changed question".into();
     changed.items[0].done_when = "rewritten".into();
-    assert!(p.propose_plan(changed).is_err());
+    let before = p.approved_plan().unwrap().clone();
+    let error = p.propose_plan(changed).unwrap_err();
+    for text in ["draft.items[id=\"A\"].question", "draft.items[id=\"A\"].done_when", "Question A", "changed question", "Evidence A", "rewritten", "active_plan.items"] {
+        assert!(error.contains(text), "{error}");
+    }
+    assert_eq!(p.approved_plan().unwrap(), &before);
     let mut removed = d.clone();
     removed.items.retain(|i| i.id != "B");
-    assert!(p.propose_plan(removed).is_err());
+    removed.synthesis.insert("exploration_checklist".into(), "A\nD\nC".into());
+    let error = p.propose_plan(removed).unwrap_err();
+    assert!(error.contains("draft.items[id=\"B\"]: 누락"), "{error}");
+    assert_eq!(p.approved_plan().unwrap(), &before);
+    let mut d = d;
+    d.scope.in_scope = "New scope for inserted D".into();
     approve_close(&mut p, d);
     let state = p.approved_plan().unwrap();
     assert_eq!(state.proposals[0], old);
@@ -365,4 +376,16 @@ fn editing_an_approved_open_proposal_preserves_old_receipt_but_requires_new_cons
         .unwrap()
         .validate(p.current_chain().unwrap())
         .unwrap();
+}
+
+#[test]
+fn retained_item_diagnostics_bound_and_escape_values_without_weakening_equality() {
+    let previous: Vec<_> = (0..12).map(|i| Item {id:i.to_string(),question:"한글\n\"".repeat(1000),done_when:"d".into()}).collect();
+    let mut proposed = previous.clone();
+    for item in &mut proposed { item.question = "changed".into(); }
+    let error = retained_items(&previous, &proposed).unwrap_err();
+    assert!(error.contains("…(생략)") && error.contains("그 밖의 차이 4개"));
+    assert!(error.contains("\\n\\\""), "newlines and quotes are escaped");
+    assert!(error.len() < 10000);
+    assert!(retained_items(&previous, &previous).is_ok());
 }

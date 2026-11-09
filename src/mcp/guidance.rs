@@ -25,7 +25,11 @@ pub fn after(name: &str, result: &mut CallToolResult) {
             let hint = if name == "gil_close" && (problem.contains("기준 세계") || problem.contains("dirty")) {
                 format!("{hint} {DIRTY_CLOSE_RECOVERY}")
             } else { hint.to_string() };
-            prepend(result, hint);
+            if name == "gil_plan_propose" {
+                result.content.push(ContentBlock::text(hint));
+            } else {
+                prepend(result, hint);
+            }
         }
         return;
     }
@@ -62,7 +66,7 @@ fn refused(name: &str) -> Option<&'static str> {
         "gil_open" => "GIL 거절: 열린 것은 없다. 아래 이유를 읽고 현재 위치에서 허용되는 종류와 행동 계약(objective · next_action · done_when)으로 한 번 다시 보낸다. 위치가 불확실하면 gil_status를 읽는다.",
         "gil_revisit" => "GIL 거절: 되돌아가지 않았다. 이유가 dirty 세계·승인 계획 바인딩·적어 둔 방향 없음이면 그 조건을 사용자에게 알린다. gil_revisit을 반복하거나 restore를 자동 실행하지 않는다.",
         "gil_start" => "GIL 거절: 새 프로젝트를 만들지 않았다. 이미 프로젝트가 있다면 gil_context를 한 번 읽고 기록된 위치에서 이어간다. gil_start를 반복하지 않는다.",
-        "gil_plan_propose" => "GIL 거절: 제안이 기록되지 않았다. 입력은 {project_root, draft} 두 칸뿐이고 scope·items·synthesis는 모두 draft 안에 둔다. 열린 Interview Synthesis인지, draft.scope 5칸·draft.items(id · question · done_when)·draft.synthesis(statement · basis_refs · exploration_checklist: items의 id를 같은 순서로 한 줄씩, Report 값은 전부 문자열)가 모두 있는지, Closing이면 기존 items를 유지하고 draft.synthesis.chain_verdict(success 또는 failure)를 더했는지, approved · plan_revision · plan_digest를 넣지 않았는지 확인해 한 번 다시 보낸다. 이 프로젝트가 승인 계획 프로필이 아니라면 일반 Synthesis로 사용자의 답을 기다린다.",
+        "gil_plan_propose" => "제안은 기록되지 않았다. 위의 구체적 원인을 고친다. 기존 항목은 gil_plan_read.active_plan.items 전체를 그대로 복사하고 새 ID를 추가한다. 입력 형식은 연결된 gil_plan_propose 스키마를 읽는다.",
         "gil_plan_read" => "GIL 거절: 승인 상태를 읽지 못했다. 응답이 불확실하면 gil_plan_read를 한 번 다시 읽는다. 승인을 지어내거나 Synthesis를 닫지 않는다.",
         "gil_plan_request_interview" => "GIL 거절: 재인터뷰 요청이 기록되지 않았다. 열린 Experiment에서 1~4096 bytes 이유로 한 번 다시 보낸다. 현재 Step의 다음 호출은 바뀌지 않는다 — 마지막 receipt의 다음 행동을 그대로 이어간다.",
         _ => return None,
@@ -363,6 +367,14 @@ mod tests {
         assert_eq!(text(&plain), "x", "unlisted refusals keep their exact text");
     }
 
+    #[test]
+    fn plan_refusal_keeps_the_specific_cause_before_recovery_guidance() {
+        let mut result = super::super::actions::refusal("draft.items[id=A].question: mismatch");
+        after("gil_plan_propose", &mut result);
+        assert!(text(&result).starts_with("draft.items[id=A].question"));
+        assert!(text(&result).contains("active_plan.items"));
+        assert!(!text(&result).contains("scope 5칸"));
+    }
     #[test]
     fn plan_hints_follow_the_recorded_decision_and_never_require_plans_on_legacy_projects() {
         let mut legacy = CallToolResult::structured(json!({"supported": false}));

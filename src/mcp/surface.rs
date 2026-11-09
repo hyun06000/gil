@@ -65,8 +65,15 @@ pub fn contents() -> ResourceContents {
 }
 
 /// The frozen inputs contain only string properties. Domain grammar stays in Core.
-/// Monitor inputs are strict, as in the previous JS adapter. Other inputs ignore extras.
+/// Honor additionalProperties:false consistently for text and specialized tools.
 pub fn valid_input(tool: &Tool, input: &Value) -> bool {
+    // Enforce the catalog's top-level boundary before specialized dispatch too. Ordinary
+    // text actions previously ignored misspelled keys despite additionalProperties:false.
+    if tool.input_schema.get("additionalProperties") == Some(&Value::Bool(false)) {
+        let Some(object) = input.as_object() else { return false; };
+        let Some(properties) = tool.input_schema.get("properties").and_then(Value::as_object) else { return false; };
+        if object.keys().any(|key| !properties.contains_key(key)) { return false; }
+    }
     #[cfg(feature = "product-safety")]
     if tool.name.starts_with("gil_revisit_") { return super::recovery::valid(tool.name.as_ref(), input); }
     #[cfg(feature = "approved-plan")]
@@ -115,6 +122,12 @@ pub fn valid_input(tool: &Tool, input: &Value) -> bool {
 /// field so the caller can correct the call, never echoes input values, and states that nothing
 /// was closed. Field grammar itself stays with Core; this only describes the wire shape.
 pub fn rejection(tool: &Tool, input: &Value) -> String {
+    if tool.name == "gil_close" && input.get("contract").is_some() {
+        return "gil_close: unknown field 'contract'. Use 'report' for the Report string; 'contract' belongs to gil_open. Keep the same body in report, preserving expected_owner/visuals when required. Nothing was closed. Read gil_help({project_root, topic: \"close\"}) for the current Report fields.".into();
+    }
+    if tool.name == "gil_open" && input.get("report").is_some() {
+        return "gil_open: unknown field 'report'. Use 'contract' for the action contract string (objective, next_action, done_when); 'report' belongs to gil_close. Nothing was opened.".into();
+    }
     #[cfg(feature = "visual-authoring")]
     if tool.name == "gil_close" && input.get("expected_owner").is_some() && input.get("visuals").is_some() {
         return super::authoring::rejection(input);
@@ -149,6 +162,30 @@ fn rejection_hint(tool: &Tool, input: &Value) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn action_extras_are_rejected_before_reports_or_typed_visuals_are_dispatched() {
+        for (name, wrong, right) in [("gil_close", "contract", "report"), ("gil_open", "report", "contract")] {
+            let tool = tools().iter().find(|t| t.name == name).unwrap();
+            let mut input = json!({"project_root":"/synthetic"});
+            input[wrong] = json!("private body text");
+            assert!(!valid_input(tool, &input));
+            let message = rejection(tool, &input);
+            assert!(message.contains(wrong) && message.contains(right), "{message}");
+            assert!(!message.contains("private body text"));
+            input[right] = json!("correct body");
+            assert!(!valid_input(tool, &input), "both keys is still invalid");
+            input.as_object_mut().unwrap().remove(wrong);
+            assert!(valid_input(tool, &input));
+            input["typo"] = json!(true);
+            assert!(!valid_input(tool, &input));
+        }
+        let close = tools().iter().find(|t| t.name == "gil_close").unwrap();
+        let typed = json!({"project_root":"/synthetic","report":"body","contract":"private body text",
+            "expected_owner":{"kind":"step","ref":"step:C1/S1"},
+            "visuals":{"attachments":[],"uses":[],"declaration":{"state":"not_needed","reason":"byte comparison"}}});
+        assert!(!valid_input(close, &typed));
+        assert!(rejection(close, &typed).contains("unknown field 'contract'"));
+    }
     #[test]
     fn rejections_name_the_missing_field_without_echoing_input() {
         let close=tools().iter().find(|t| t.name=="gil_close").unwrap();

@@ -17,6 +17,19 @@ Cycle Model §12, §16–17, §21의 미정 저장 계약을 이 문서로 한�
 - 열린 Experiment 중 `gil_plan_request_interview`로 범위 변경 이유를 보존한다. 열린 Step/Cycle은 그대로 두며, 현재 Cycle을 사실대로 닫고 다음 Interview에서 승인하기 전에는 추가 Experiment를 열지 않는다.
 - 일반 destructive restore와 승인 없는 제품 revisit는 차단한다. 닫힌 실패의 재시도는 [M4-R 승인 복구](GIL_Revisit_Recovery_v0.1.md)를 따른다. 이전 실행 바인딩은 보존하고 직전 실패의 revisit 계보에서만 같은 항목을 다시 바인딩한다. 최신 실패 항목은 pending으로 돌아오며 읽기 응답의 retry_pending에 표시한다. 취소·abort는 여전히 M6-E 별도 계약이다.
 
+## MCP 입력 오류 복구
+
+`gil_plan_read`/`gil_plan_review`의 `active_plan`은 실행 가능한 최신 승인 판의
+`{revision, digest, scope, items}`를 원문 그대로 반환한다. 실행된 항목도 모두 포함하며,
+승인 판이 아직 실행 가능하지 않으면 null이다. 열린 제안(`proposal`)·Experiment 바인딩 문서(`document`)와
+구분한다. 이 읽기 투영은 저장 형식·승인·기록·Snapshot을 변경하지 않는다.
+
+항목 추가 시 `active_plan.items` 전체를 복사해 새 ID를 넣는다. 기존 항목 누락과 question/done_when
+변경은 각각 id·필드 경로로 거절한다. 불일치는 저장·받은 값을 escape한 미리보기(120자)로 보여 주고
+최대 8개 차이와 나머지 개수를 표시한다. 전체 원문은 `active_plan`에서 읽는다. scope·순서 변경은
+기존 계약대로 새 승인 대상이다. 거절문은 구체적 원인부터 보여 주고 실패한 제안을 저장하지 않는다.
+새 append 모드나 기존 항목 자동 보정은 제공하지 않는다.
+
 ## 문서와 증거
 
 Interview에서는 프로젝트 파일을 쓰지 않는다. 승인 계획의 결정적 Markdown은 read/export로 제공한다. 해당 Experiment의 Verify에서 파일로 저장하고 `plan_document`에 안전한 상대 경로를 적는다. 확정될 Snapshot의 bytes가 바인딩된 승인 판의 export와 같아야 한다. 별도의 새/변경된 실제 작업 증거를 `evidence_files`에 기록해야 하며 계획 문서만으로 실행 증거를 대신하지 못한다. 계획·문서·증거·Analysis·Outcome의 기존 연결을 함께 보존한다.

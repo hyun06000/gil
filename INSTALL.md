@@ -364,6 +364,15 @@ Agent의 도구 성공 문장과 실제 화면을 구분한다. 10/31 실측에�
 `automatic`(자동 시도의 단계·시각·Host 응답)이 그대로 적히므로, 문제를 제보할 때 그 값을 함께 적는다. fullscreen 중 다른 도구의 승인 창이 보이지 않으면 **대화 안으로**를 눌러 inline으로 돌아간 뒤
 승인한다.
 
+### MCP와 터미널의 버전이 다르게 보일 때
+
+MCP는 앱에 등록된 실행 파일을 사용한다. 터미널에서 단순히 `gil`을 실행하면 PATH에 남은 다른
+설치본이 실행될 수 있다. `gil dev`가 나오거나 `gil --version`을 모른다고 해도 이를 바로 현재 MCP
+버전으로 보고하지 않는다. 설치 에이전트는 앱에 등록된 **정확한 실행 파일 경로**로 `--version`과
+설치 검증을 수행하고 Monitor 연결 정보와 대조한다. 기존 전역 명령은 사용자 요청 없이 교체·삭제하지 않는다.
+MCP의 현재 Report 도움말은 `gil_help({project_root, topic: "close"})`로 읽는다(이 보완을 포함한 배포본부터).
+이전 설치본은 `gil_open` receipt와 연결된 도구 schema를 따른다.
+
 ## Monitor의 업데이트 안내
 
 설치된 Core는 저장소의 [업데이트 피드](distribution/update-feed.json)를 **하루 한 번, metadata만** 읽어

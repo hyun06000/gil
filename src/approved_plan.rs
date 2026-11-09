@@ -81,6 +81,32 @@ pub struct PlanState {
 fn bad(message: &str) -> String {
     format!("승인 계획: {message}")
 }
+// Diagnostics are bounded and escaped; full, exact text is available in active_plan.
+// Validation remains atomic and compares definitions, not just IDs or executed status.
+fn retained_items(previous: &[Item], proposed: &[Item]) -> Result<(), String> {
+    fn preview(value: &str) -> String {
+        let text: String = value.chars().take(120).collect();
+        format!("{}{}", serde_json::to_string(&text).unwrap(), if text.len() < value.len() { "…(생략)" } else { "" })
+    }
+    let mut differences = Vec::new();
+    for old in previous {
+        let Some(new) = proposed.iter().find(|i| i.id == old.id) else {
+            differences.push(format!("draft.items[id={}]: 누락 (삭제 금지)", preview(&old.id)));
+            continue;
+        };
+        for (field, stored, received) in [("question", &old.question, &new.question), ("done_when", &old.done_when, &new.done_when)] {
+            if stored != received {
+                differences.push(format!("draft.items[id={}].{field}: 불일치 — 저장: {} / 받음: {}", preview(&old.id), preview(stored), preview(received)));
+            }
+        }
+    }
+    if differences.is_empty() { return Ok(()); }
+    let count = differences.len();
+    differences.truncate(8);
+    Err(bad(&format!("{}{}\n기존 승인 항목은 실행 여부와 관계없이 모두 원문 그대로 포함한다. gil_plan_read.active_plan.items를 복사한 뒤 새 ID로 추가한다. 항목 순서와 scope는 새 승인으로 변경할 수 있다.{}",
+        differences.join("\n"), if count > 8 { format!("\n그 밖의 차이 {}개", count - 8) } else { String::new() },
+        " 제안은 기록되지 않았다.")))
+}
 fn failed_execution(chain: &Chain, e: &Execution) -> bool {
     chain.cycles().nodes().iter().find(|c| c.id().to_ref().to_string() == e.cycle_ref)
         .is_some_and(|c| c.is_closed() && c.report().is_some_and(|r| r.get("verdict") == Some("failure")))
@@ -222,13 +248,7 @@ impl PlanState {
                     )
                     .filter(|b| b.revision < p.revision && self.activated(chain, b))
                     .ok_or_else(|| bad("기준 승인 판이 없다"))?;
-                for old in &prev.draft.items {
-                    if !p.draft.items.contains(old) {
-                        return Err(bad(
-                            "이전 승인 항목을 지우거나 바꿀 수 없다; 새 ID로 추가한다",
-                        ));
-                    }
-                }
+                retained_items(&prev.draft.items, &p.draft.items)?;
             }
             let target: StepRef = p
                 .synthesis_ref
