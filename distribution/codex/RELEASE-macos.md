@@ -1,7 +1,7 @@
 # Native MCP macOS release gates
 
-현재 macOS 검증판은 `0.2.1-preview.27`이다. [설치 안내](INSTALL.md)와
-[게시 장부](PREVIEW-27-PUBLICATION-20261109.md)에서 정확한 버전·소스·검증 범위를 확인한다.
+현재 macOS 검증판은 `0.2.1-preview.28`이다. [설치 안내](INSTALL.md)와
+[게시 장부](PREVIEW-28-PUBLICATION-20261109.md)에서 정확한 버전·소스·검증 범위를 확인한다.
 이 문서는 제작자의 배포 경계와 서명 채널 준비 절차다. 날짜가 붙은 과거 인수를 최신판에 승계하지 않는다.
 받는 사용자에게 Node·Cargo·clone·터미널 설치를 요구하지 않는다. Companion DMG는 별도 산출물이다.
 
@@ -45,9 +45,9 @@ source에서 Skill만 바꾸더라도 새 payload이므로 기존 후보를 덮�
 인증 도구가 아니다. 출처가 불명확한 binary는 입력하지 않는다.
 
 ```sh
-GIL_PREVIEW_VERSION=0.2.1-preview.27 node distribution/codex/build-preview.mjs target/codex-preview-27 --approved-plan
-node distribution/codex/unsigned-preview.mjs prepare target/codex-preview-27/marketplace 0.2.1-preview.27 target/codex-unsigned-candidate-27 --approved-plan
-node distribution/codex/unsigned-preview.mjs verify target/codex-unsigned-candidate-27/marketplace
+GIL_PREVIEW_VERSION=0.2.1-preview.28 node distribution/codex/build-preview.mjs target/codex-preview-28 --approved-plan
+node distribution/codex/unsigned-preview.mjs prepare target/codex-preview-28/marketplace 0.2.1-preview.28 target/codex-unsigned-candidate-28 --approved-plan
+node distribution/codex/unsigned-preview.mjs verify target/codex-unsigned-candidate-28/marketplace
 ```
 
 - 새 output만 사용한다. 입력·설치 cache를 덮거나 기존 `release.json`의 flag를 뒤집지 않는다.

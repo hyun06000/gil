@@ -105,7 +105,7 @@ View 준비나 파일 watcher 성공으로 표시를 추정하지 않는다. 표
   `declined`는 Host가 자동 요청에 inline을 적용한 경우, `unavailable`은 표면이 fullscreen을 광고하지
   않는 경우, `manual`은 사용자가 직접 고른 경우, `applied`/`pending`은 적용·대기다. Core는 이 값으로
   inline 안내문을 고를 뿐 스스로 fullscreen을 요청하지 않는다. 보내지 않는 구형 App은 `null`이다.
-  현재 공개 preview.27/owner.14에는 이 필드와 개선이 없으며 후속 검증·게시 버전부터 적용된다.
+  macOS preview.28부터 이 필드와 개선을 포함한다. 이전 preview.27과 Windows owner.14에는 없다.
 
 성공한 Project 도구 호출(새 세션의 `gil_context` 포함)은 이 상태를 검사하고, 필요하면 정확한 scope의
 `show_gil_monitor` 다음 호출을 응답에 넣는다. Agent는 사용자에게 별도 창을 요구하지 않고 이 호출을

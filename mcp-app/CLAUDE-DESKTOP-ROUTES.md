@@ -330,4 +330,4 @@ preview.27 Core(`gil 0.2.1-preview.27`, serverInfo 동일)를 Claude Code 탭 �
 있을 때만 `refused`로 분류한다. MCP 타임아웃·연결 종료와 알 수 없는 오류는 `error`이며 1.5초·4초의
 제한된 재시도와 수동 재요청을 유지한다. 오류 원문은 presence나 모델 안내로 보내지 않는다.
 Host 로그에만 이유가 있고 App 응답에 없으면 `error`로 남는다. 이는 실제 Host에서의 클릭 성공 검증이 아니다.
-현재 배포 preview.27/owner.14에는 이 변경이 없으며 후속 배포가 필요하다.
+위 관측 당시 배포 preview.27/owner.14에는 이 변경이 없었다. 이후 macOS preview.28에 포함됐으며 Windows owner.14는 유지한다.
