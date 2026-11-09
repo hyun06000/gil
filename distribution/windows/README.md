@@ -1,6 +1,6 @@
 # Windows 배포 상태
 
-> 상태: **친구·테스터용 unsigned x64 preview는 설치·연결·업데이트 인수 완료. 서명된 일반 공개판은 NO-GO.**
+> 상태: **친구·테스터용 unsigned x64 preview. 이전 판 실기기 인수 기록 있음 / owner.15 사용자 확인 대기. 서명된 일반 공개판은 NO-GO.**
 
 Windows x64와 ARM64용 native Core 후보는 CI에서 빌드·실행된다. 제품 경로는 우선 x64로 좁혔다.
 사용자용 NSIS, 사용자가 누르는 서명 검증 updater, 고정 런처, 버전별 Core 설치와 Codex 연결 버튼이
@@ -17,6 +17,10 @@ Plugin 묶음이며 receipt도 `publishable: false`다.
 - “archive를 풀고 Plugin을 등록하면 설치가 끝난다.”
 - “업데이트가 다음 연결부터 자동으로 적용된다.”
 - “CI에서 통과했으므로 모든 일반 사용자 PC에서도 설치·화면·업데이트가 동작한다.”
+
+현재 배포는 **`0.1.1-owner.15`**다. macOS preview.29의 최신 공통 Core·Monitor 개선을 포함한다.
+새 버전의 자동 설치 인수와 실제 사용자 검수 범위는 [게시 장부](PUBLICATION-OWNER-15-20261110.md)를 따른다.
+owner.3의 과거 실기기 경험을 owner.15의 필드테스트 성공으로 옮겨 적지 않는다.
 
 ## 현재 코드의 두 실행 경로
 
