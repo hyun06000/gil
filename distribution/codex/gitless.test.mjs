@@ -11,15 +11,15 @@ const checker = new URL('./check-archive-members.sh', import.meta.url).pathname;
 const source = readFileSync(script, 'utf8');
 const checkerSource = readFileSync(checker, 'utf8');
 const PIN = {
-  version: '0.2.1-preview.26',
-  sha256: '81a6401b9125c7f8d56f34a7ecdd8da18c5e01d442186cf70a9fa7401d3243fc',
-  bytes: 3653973,
-  url: 'https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.26/gil-codex-macos-arm64-0.2.1-preview.26.tar.gz',
+  version: '0.2.1-preview.27',
+  sha256: 'ca0f0c616630c0d6afc3ec136cf6887f542fec5cf7bcc2146678aaafad05e365',
+  bytes: 3665233,
+  url: 'https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.27/gil-codex-macos-arm64-0.2.1-preview.27.tar.gz',
 };
 const darwinArm = process.platform === 'darwin' && process.arch === 'arm64';
 const run = (args, env = {}) => spawnSync('/bin/sh', [script, ...args], {encoding: 'utf8', env: {...process.env, ...env}});
 
-test('preparation pins the published preview.26 bytes and does not install or weaken trust', () => {
+test('preparation pins the published preview.27 bytes and does not install or weaken trust', () => {
   assert.match(source, new RegExp(`expected=${PIN.sha256}`));
   assert.match(source, new RegExp(`expected_bytes=${PIN.bytes}`));
   assert.ok(source.includes(`url=${PIN.url}`));
@@ -133,11 +133,11 @@ test('the exact published archive prepares a complete local marketplace root', {
   assert.equal(createHash('sha256').update(readFileSync(archive)).digest('hex'), PIN.sha256, 'env archive is not the published bytes');
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'gil-gitless-ok-')));
   try {
-    const dest = join(root, 'Application Support', 'GIL', 'preview.26-local');
+    const dest = join(root, 'Application Support', 'GIL', 'preview.27-local');
     mkdirSync(join(root, 'Application Support', 'GIL'), {recursive: true});
     const r = run(['--destination', dest, '--archive', archive]);
     assert.equal(r.status, 0, r.stderr);
-    assert.match(r.stdout, /Verified and prepared unsigned preview 0\.2\.1-preview\.26\. NOT installed yet\./);
+    assert.match(r.stdout, /Verified and prepared unsigned preview 0\.2\.1-preview\.27\. NOT installed yet\./);
     assert.match(r.stdout, new RegExp(`GIL_MARKETPLACE_ROOT=${dest.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
     assert.equal(statSync(dest).mode & 0o777, 0o700);
     assert.equal(statSync(join(dest, 'plugins/gil-companion-prototype/core/darwin-arm64/gil')).mode & 0o777, 0o755);
