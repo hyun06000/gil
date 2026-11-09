@@ -284,6 +284,13 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
      Interpretation refs in the current Synthesis lineage. Opening and later Interviews use
      the same wrapper. A Closing proposal keeps the existing items and checklist (including
      executed items) and adds `draft.synthesis.chain_verdict` as `"success"` or `"failure"`.
+     To extend an existing plan, first read `gil_plan_read.active_plan`. It returns the exact
+     executable approved revision's `scope` and ALL `items`, including executed items, even
+     in an Interview where `document` is null. Copy every existing item verbatim, then insert
+     new IDs and update `exploration_checklist` in that order. Never reconstruct item text
+     from memory or send only new items. Scope and order may change with a new approval;
+     existing `question`/`done_when` may not. `active_plan: null` means no executable approved
+     revision yet; a pending proposal is separate. `document` keeps its Experiment binding meaning.
      Never write `approved`, `plan_revision` or `plan_digest`: Core adds them.
    - **End the turn and wait for the Monitor button.** Chat agreement is not approval. While
      waiting, make no project file changes or re-proposal. Check approval only with `gil_plan_read`.
@@ -339,6 +346,7 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    | --- | --- |
    | `gil_start` refused because a project exists | Read `gil_context` once and continue there; never start again |
    | Close response lost or uncertain | Read `gil_status`/`gil_context`; close again only if the step is still open |
+   | `gil_close` input/Report rejected | Put the Report STRING in `report`, not `contract` (the latter is for `gil_open`). Read `gil_help({project_root, topic: "close"})` for the current Report contract from the connected Core; do not run a PATH `gil` binary that may be a different build. Preserve typed `expected_owner`/`visuals` when required. |
    | Plan decision or save result uncertain | `gil_plan_read`; never assume approval or re-propose blindly |
    | Approved earlier, proposal edited since | The old approval is gone; wait for the new revision's button |
    | Asked to re-interview during an Experiment | The request is preserved and closes nothing; keep following each receipt's next call and close the Cycle only when its receipt offers the Cycle Report, then `gil_open` Interview |

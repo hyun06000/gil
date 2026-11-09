@@ -129,15 +129,14 @@ impl CloseContract {
     /// `fill` 이 값을 주면 `…` 대신 그 값을 적는다 — Cycle Report 의 `outcome_ref` 처럼
     /// **가리켜야 하는 주소가 이미 정해진** 칸이 있기 때문이다.
     pub fn skeleton(&self, fill: impl Fn(&str) -> Option<String>) -> String {
-        let mut out = format!("  gil close <<'EOF'   # {}\n", self.subject);
-        for field in &self.fields {
-            match fill(&field.name) {
-                Some(value) => out.push_str(&format!("  {}: {value}\n", field.name)),
-                None => out.push_str(&format!("  {}: …\n", field.name)),
-            }
-        }
-        out.push_str("  EOF");
-        out
+        let body = self.report_body(fill).lines().map(|line| format!("  {line}\n")).collect::<String>();
+        format!("  gil close <<'EOF'   # {}\n{body}  EOF", self.subject)
+    }
+
+    /// Same grammar projection without a CLI wrapper, for the MCP report string.
+    pub(crate) fn report_body(&self, fill: impl Fn(&str) -> Option<String>) -> String {
+        self.fields.iter().map(|field| format!("{}: {}\n", field.name,
+            fill(&field.name).unwrap_or_else(|| "…".into()))).collect()
     }
 
     /// 칸마다 무엇을 적을 수 있는지 — **지금 이 자리에 필요한 것만.**

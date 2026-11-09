@@ -659,3 +659,16 @@ gil help cycle/experiment/close
 > 하나를 안정된 주소로 가리키는 자기 설명형 지식 계층이다.**
 
 > **명령의 수를 늘리지 말고, 기존 명령이 다음 행동과 필요한 Topic을 가리키게 한다.**
+
+
+## 2026-11-09 MCP Report 오류 복구
+
+`gil_help({project_root, topic: "close"})`는 연결된 Core에서 현재 Step/Cycle/Chain의 닫기 계약을
+조회한다. `close`는 정적 Topic 주소가 아니라 `gil close --help`와 같은 상태 기반 조회의 예약 이름이다
+(CLI `gil help close`도 같은 경로). project_root는 선택한 기존 프로젝트이며 실제 close를 실행하거나
+Report를 입력받지 않는다. 일반 정적 Topic의 잠금 없는 조회 계약은 유지한다.
+
+MCP의 Step/Cycle 도움말과 Report 거절문은 같은 grammar에서 필드와 JSON 입력 골격을 투영한다.
+본문 키는 열 때 `contract`, 닫을 때 `report`다. 스키마의 additionalProperties:false는 네이티브 입력
+검증에서도 적용한다. 잘못된 키는 내용을 빈 Report로 해석하기 전에 거절한다. CLI의 heredoc 문법은
+CLI 호출에 유지하며 MCP는 PATH에서 다른 gil 실행 파일을 찾도록 안내하지 않는다.

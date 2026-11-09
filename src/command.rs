@@ -85,6 +85,7 @@ fn run(ctx: &Invocation<'_>, args: &[String]) -> Result<String, String> {
             "주제 하나를 적거나, 인수 없이 지금 상태에 맞는 주제를 본다.",
             "gil help <주제>",
         )),
+        "help" if args.get(1).is_some_and(|topic| topic == "close") => close_help(ctx),
         "help" if args.get(1).is_some() => help_topic(args.get(1).expect("방금 봤다")),
         "help" => help_here(ctx),
         "--help" | "-h" => Ok(help()),
@@ -139,12 +140,9 @@ fn help_topic(input: &str) -> Result<String, String> {
 /// 프로젝트를 찾으면 다른 상태 명령과 같은 길을 지난다: 잠금 → 복구 → 상태 읽기.
 /// 못 찾으면 `.gil` 도 잠금 파일도 만들지 않고 Bootstrap 만 말한다.
 fn help_here(ctx: &Invocation<'_>) -> Result<String, String> {
-    match find_gil(ctx)? {
+    match session_for_help(ctx)? {
         None => crate::help_outside().map_err(|err| err.to_string()),
-        Some(_) => {
-            let session = open_session(ctx)?;
-            crate::help_here(&session).map_err(|err| err.to_string())
-        }
+        Some(session) => crate::help_here(&session).map_err(|err| err.to_string()),
     }
 }
 
@@ -733,7 +731,7 @@ fn close_step(ctx: &Invocation<'_>, session: &mut Session) -> Result<String, Str
     let contract = cycle
         .step_contract(node.id, kind)
         .expect("열린 자리의 종류는 문법이 선언한 것이다");
-    let mut hint = skeleton_of(&contract, cycle);
+    let mut hint = skeleton_for(&contract, cycle, Some(ctx));
     if kind == crate::NodeKind::Verify && session.project().visual_state.is_some() {
         hint.push_str(&typed_verify_hint(here));
     }
@@ -749,7 +747,7 @@ fn close_step(ctx: &Invocation<'_>, session: &mut Session) -> Result<String, Str
             false => refusal(
                 &format!("{here} · {kind} 를 닫을 수 없다."),
                 &err.to_string(),
-                &format!("{}\n\n{hint}", FIX_IT),
+                &format!("{}\n\n{hint}", fix_it(ctx)),
                 "gil close",
             ),
         };
@@ -765,7 +763,7 @@ fn close_cycle(ctx: &Invocation<'_>, session: &mut Session) -> Result<String, St
     let here = cycle.id().to_ref();
     let kind = cycle.kind();
     let contract = cycle.close_contract().expect("문법이 이 Cycle Kind 를 선언했다");
-    let hint = skeleton_of(&contract, cycle);
+    let hint = skeleton_for(&contract, cycle, Some(ctx));
 
     let report = read_report(ctx, &hint)?;
     let closed = session.close_cycle(report).map_err(|err| {
@@ -774,7 +772,7 @@ fn close_cycle(ctx: &Invocation<'_>, session: &mut Session) -> Result<String, St
             false => refusal(
                 &format!("{here} · {kind} 를 닫을 수 없다."),
                 &err.to_string(),
-                &format!("{}\n\n{hint}", FIX_IT),
+                &format!("{}\n\n{hint}", fix_it(ctx)),
                 "gil close",
             ),
         };
@@ -1195,7 +1193,12 @@ fn close_help(ctx: &Invocation<'_>) -> Result<String, String> {
     let contract = match place(&session) {
         Place::CloseThisStep => step_contract(cycle),
         Place::CloseThisCycle => cycle_contract(cycle),
-        Place::CloseThisChain => return Ok(session.project().current_chain().unwrap().close_hint()),
+        Place::CloseThisChain => {
+            let hint = session.project().current_chain().unwrap().close_hint();
+            return Ok(if matches!(ctx.input, Input::Body(_)) {
+                hint.replacen("Chain Report를 gil close로 제출한다.", "Chain Report 본문을 gil_close({project_root, report})의 report 문자열로 제출한다.", 1)
+            } else { hint });
+        },
         // 닫을 자리가 아니면 **무엇을 먼저 해야 하는지**를 말한다.
         Place::Step(openable) => {
             return Ok(format!(
@@ -1226,11 +1229,17 @@ fn close_help(ctx: &Invocation<'_>) -> Result<String, String> {
     let Some(contract) = contract else {
         return Ok(String::from("지금 자리의 Close 계약을 문법에서 찾지 못했다.\n"));
     };
+    let mut skeleton = skeleton_for(&contract, cycle, Some(ctx));
+    if session.project().visual_state.is_some() {
+        if let Some(id) = cycle.step_now_open().filter(|id| cycle.steps().node(*id).is_some_and(|n| n.kind == NodeKind::Verify)) {
+            skeleton.push_str(&typed_verify_hint(cycle.step_ref(id)));
+        }
+    }
     Ok(format!(
         "닫을 대상\n  {}\n\n필요한 Report\n{}\n입력 골격\n{}{}\n",
         contract.subject(),
         contract.constraints("  "),
-        skeleton_of(&contract, cycle), if session.can_confirm_artifact() {
+        skeleton, if session.can_confirm_artifact() {
             "\n추가 종료 조건: 실제 증거 파일을 저장하고 evidence_files에 상대 경로를 한 줄에 하나씩 적는다. 모든 파일은 Snapshot에 있고 비어 있지 않아야 하며, 적어도 하나는 기준 세계보다 새롭거나 내용이 달라야 한다.\n"
         } else { "" }
     ))
@@ -1306,6 +1315,15 @@ fn open_help(ctx: &Invocation<'_>) -> Result<String, String> {
 
 /// 저장이 있으면 세우고, 아직 없으면 없다고 답한다 — help 는 없다고 실패하지 않는다.
 fn session_for_help(ctx: &Invocation<'_>) -> Result<Option<Session>, String> {
+    // MCP's explicit root uses the product record resolver, including Windows private
+    // app-data storage. An inline-only existence probe would hide a real Project.
+    if let Root::Exact(root) = ctx.root {
+        return match crate::open_project_root(rules()?, root) {
+            Ok(session) => Ok(Some(session)),
+            Err(crate::RootError::NoProjectHere) => Ok(None),
+            Err(error) => Err(error.to_string()),
+        };
+    }
     match find_gil(ctx)? {
         None => Ok(None),
         Some(_) => open_session(ctx).map(Some),
@@ -1564,16 +1582,24 @@ fn cycle_contract(cycle: &crate::Cycle) -> Option<CloseContract> {
 
 /// 그 계약의 골격. Cycle Report 의 `outcome_ref` 만 값을 미리 채워 준다.
 fn skeleton_of(contract: &CloseContract, cycle: &crate::Cycle) -> String {
+    skeleton_for(contract, cycle, None)
+}
+fn skeleton_for(contract: &CloseContract, cycle: &crate::Cycle, ctx: Option<&Invocation<'_>>) -> String {
     let last = cycle
         .steps()
         .current()
         .map(|id| cycle.step_ref(id).to_string());
-    let mut hint = contract.skeleton(|field| match field {
+    let fill = |field: &str| match field {
         "outcome_ref" => last.clone(),
         "next_direction.action" if cycle.can_close() && cycle.rules().supports_chain_closing()
             && cycle.closing_synthesis(&Report::new().with("verdict", "success").with("next_direction.action", "close_chain")).is_ok() => Some("close_chain".into()),
         _ => None,
-    });
+    };
+    let mut hint = match ctx {
+        Some(Invocation { root: Root::Exact(root), input: Input::Body(_) }) => format!("gil_close 입력 (…를 실제 관측으로 채운다):\n{}",
+            serde_json::to_string_pretty(&serde_json::json!({"project_root":root,"report":contract.report_body(fill)})).unwrap()),
+        _ => contract.skeleton(fill),
+    };
     if contract.subject().contains("outcome") {
         hint.push_str("\n이것은 Outcome Step의 Report다. close_cycle은 이 Step을 닫은 뒤 Cycle Report를 별도로 제출하라는 방향이다. Cycle 자체가 닫히거나 다음 Experiment가 자동으로 열리지 않는다. 다음 Cycle Report의 허용 값은 그때의 계약을 읽고 close_cycle을 복사하지 않는다.\n");
     } else if contract.subject().starts_with("cycle:") {
@@ -1636,6 +1662,12 @@ fn where_now(ctx: &Invocation<'_>, session: &Session) -> String {
 /// 거절은 빠진 값과 고치는 법에 집중하고, 어떤 값을 적을 수 있는지는 `gil close --help` 와
 /// Open Receipt 가 같은 문법에서 읽어 말한다. 셋이 각자 설명을 지으면 반드시 갈린다.
 const FIX_IT: &str = "아래 꼴로 다시 적는다 — 어떤 값을 적을 수 있는지는 `gil close --help`.";
+fn fix_it(ctx: &Invocation<'_>) -> &'static str {
+    if matches!(ctx.input, Input::Body(_)) {
+        "report 문자열을 아래 꼴로 다시 적는다. 현재 Report 계약은 gil_help({project_root, topic: \"close\"})로 읽는다. 연결된 Core의 도움말을 사용하며 PATH의 gil 명령을 실행하지 않는다."
+    } else { FIX_IT }
+}
+
 
 /// Report 는 stdin 으로만 받는다.
 ///
@@ -1649,7 +1681,7 @@ fn read_report(ctx: &Invocation<'_>, skeleton: &str) -> Result<Report, String> {
         return Err(refusal(
             "Report 를 받지 못했다.",
             "Report 는 stdin 으로 받는데 터미널이 붙어 있다 — 여기서 기다리지 않는다.",
-            &format!("{FIX_IT}\n\n{skeleton}"),
+            &format!("{}\n\n{skeleton}", fix_it(ctx)),
             "gil close",
         ));
     }
@@ -1661,7 +1693,7 @@ fn read_report(ctx: &Invocation<'_>, skeleton: &str) -> Result<Report, String> {
         refusal(
             "적어 준 글을 Report 로 읽지 못했다.",
             &err.to_string(),
-            &format!("{FIX_IT}\n\n{skeleton}"),
+            &format!("{}\n\n{skeleton}", fix_it(ctx)),
             "gil close",
         )
     })

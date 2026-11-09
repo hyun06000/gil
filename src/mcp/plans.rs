@@ -90,10 +90,11 @@ fn view(p: &Project) -> Value {
     let cycle = p.current_cycle();
     let current_cycle = json!({"ref":cycle.id().to_ref().to_string(), "state":if cycle.is_closed() {"closed"} else {"open"}});
     json!({"supported":true, "proposal":proposal, "active_revision":state.active(chain).map(|p| p.revision),
+        "active_plan":state.active(chain).map(|p| json!({"revision":p.revision,"digest":p.digest,"scope":p.draft.scope,"items":p.draft.items})),
         "retry_pending":state.pending(chain).iter().filter(|i| state.executed_cycles.iter().any(|e| e.item_id == i.id)).map(|i| &i.id).collect::<Vec<_>>(),
         "current_item":p.current_plan_item(), "current_cycle":current_cycle, "pending":state.pending(chain), "reinterview_requests":state.awaiting_interview(chain), "executed_cycles":state.executed_cycles,
         "close_report":proposal.and_then(|p| p.report().ok()).map(|r| crate::approved_plan::report_text(&r)), "document":p.plan_document(),
-        "next":format!("{}\ndocument는 Experiment를 열 때 바인딩된 승인 판의 UTF-8 원문이다. 바인딩 전에는 null이며 조회·실패한 close가 생성하지 않는다. 현재 Experiment에 바인딩이 있는데 null이면 요약을 만들어 쓰지 말고 현재 연결·상태를 확인한다. 파일 저장은 실제 열린 Verify에서만 한다. 한 Experiment는 current_item 하나에만 연결된다. executed_cycles는 열기 바인딩이며 성공 증명은 해당 Cycle Report다.", crate::context::next_call(p))})
+        "next":format!("{}\n새 Interview 제안은 active_plan.items 전체(실행된 항목 포함)를 원문 그대로 복사하고 새 ID를 추가한다. 순서와 scope는 새 승인으로 바꿀 수 있지만 기존 항목의 question/done_when은 바꿀 수 없다. active_plan은 실행 가능한 승인 판이며 아직 없으면 null이다. document는 Experiment를 열 때 바인딩된 승인 판의 UTF-8 원문이다. 바인딩 전에는 null이며 조회·실패한 close가 생성하지 않는다. 현재 Experiment에 바인딩이 있는데 null이면 요약을 만들어 쓰지 말고 현재 연결·상태를 확인한다. 파일 저장은 실제 열린 Verify에서만 한다. 한 Experiment는 current_item 하나에만 연결된다. executed_cycles는 열기 바인딩이며 성공 증명은 해당 Cycle Report다.", crate::context::next_call(p))})
 }
 impl Grants {
     fn token(&self, scope: &str, revision: u32, digest: &str) -> Result<String, String> {
@@ -206,7 +207,7 @@ pub(super) fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
     for (name, description, schema, app, read) in [
         (
             "gil_plan_propose",
-            "Propose the complete scope and ordered experiment checklist in an OPEN Interview Synthesis. No file creation. Wait for the user's Monitor button; chat approval is insufficient. Then gil_plan_read and close Synthesis, Outcome and Interview before execution.",
+            "Propose the complete scope and ordered experiment checklist in an OPEN Interview Synthesis. To extend an existing plan, read gil_plan_read.active_plan and copy ALL its items verbatim (including executed items), then add new IDs. Scope and item order may change subject to new approval; existing item definitions may not. Do not send only new items or reconstruct old text from memory. No file creation. Wait for the user's Monitor button; chat approval is insufficient. Then gil_plan_read and close Synthesis, Outcome and Interview before execution.",
             input(
                 json!({"project_root":string,"draft":draft}),
                 vec!["project_root", "draft"],
@@ -226,7 +227,7 @@ pub(super) fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
         ),
         (
             "gil_plan_read",
-            "Read proposal/Monitor decision and current-state next guidance. close_report is the proposal's Synthesis report: use it unchanged only when that Synthesis is actually open. document is null before an Experiment binds; opening an Experiment immediately exposes the bound revision's exact UTF-8 document, even before Define/Verify. Reading or a failed close never creates it. Save it verbatim only during Verify; name plan_document and separate evidence_files. Each Experiment binds exactly one current_item; executed_cycles means opened/bound, not success or proof of all work. Other items stay pending even if a report mentions them. Never invent approval or summarize a missing document.",
+            "Read proposal/Monitor decision and current-state next guidance. active_plan is the complete executable approved revision {revision,digest,scope,items}, including executed items, even in an unbound Interview where document is null. Copy its items verbatim when extending a plan; null means no executable approved plan yet. close_report is the proposal's Synthesis report: use it unchanged only when that Synthesis is actually open. document is null before an Experiment binds; opening an Experiment immediately exposes the bound revision's exact UTF-8 document, even before Define/Verify. Reading or a failed close never creates it. Save it verbatim only during Verify; name plan_document and separate evidence_files. Each Experiment binds exactly one current_item; executed_cycles means opened/bound, not success or proof of all work. Other items stay pending even if a report mentions them. Never invent approval or summarize a missing document.",
             input(json!({"project_root":string}), vec!["project_root"]),
             false,
             true,
@@ -371,8 +372,11 @@ mod tests {
         use crate::{CycleKind, NodeKind};
         let mut p = Project::start(h::spec(), h::first_world());
         assert!(view(&p)["current_cycle"].is_object(), "supported projects always carry current_cycle");
+        assert_eq!(view(&p)["active_plan"], Value::Null);
         let draft = crate::approved_plan::tests::synthesis(&mut p, &["A", "B"]);
+        let expected = json!({"scope":draft.scope,"items":draft.items});
         let proposal = p.propose_plan(draft).unwrap();
+        assert_eq!(view(&p)["active_plan"], Value::Null, "proposal is not executable approval");
         let receipt = p
             .decide_plan(proposal.revision, &proposal.digest, Decision::Approve)
             .unwrap();
@@ -415,6 +419,15 @@ mod tests {
         assert_eq!(closed["pending"], open["pending"], "the projection changes no approval or queue meaning");
         assert_eq!(closed["executed_cycles"], open["executed_cycles"]);
         assert_eq!(view(&p).as_object().unwrap().keys().filter(|k| *k == "current_cycle").count(), 1);
+        p.open_child_cycle(CycleKind::Interview).unwrap();
+        let reopened = view(&p);
+        assert_eq!(reopened["document"], Value::Null);
+        assert_eq!(reopened["active_plan"]["items"], expected["items"]);
+        assert_eq!(reopened["active_plan"]["scope"], expected["scope"]);
+        assert_eq!(reopened["active_plan"]["revision"], reopened["active_revision"]);
+        assert_eq!(reopened["active_plan"]["digest"], proposal.digest);
+        assert_eq!(reopened["pending"].as_array().unwrap().len(), 1);
+        assert_eq!(reopened["active_plan"]["items"].as_array().unwrap().len(), 2);
     }
     #[test]
     fn approved_plan_wire_schema_is_strict_and_app_tools_are_not_model_tools() {

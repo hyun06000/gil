@@ -1789,6 +1789,7 @@ fn close_help_is_not_an_empty_close_request() {
 
     let before = state_bytes(&dir);
     let said = ok(&dir, &["close", "--help"], None);
+    assert_eq!(ok(&dir, &["help", "close"], None), said, "state-aware help alias uses the same contract");
     assert_eq!(state_bytes(&dir), before, "help 가 저장을 건드렸다");
 
     assert!(said.contains("닫을 대상"), "{said}");

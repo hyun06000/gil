@@ -643,3 +643,83 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     std::fs::remove_dir_all(root).ok();
     std::fs::remove_dir_all(settings).ok();
 }
+
+#[test]
+fn misplaced_report_and_plan_extension_recover_from_exact_readonly_mcp_data() {
+    let root = scratch("plan-extension-recovery");
+    let settings = scratch("plan-extension-recovery-settings");
+    let record = product_state_path(&root, &private_local_app_data(&settings));
+    let mut r = Rig { root: root.clone(), record, scope: String::new(), c: Client::serve(&settings) };
+    let started = ok(r.model("gil_start", json!({})), "start");
+    let next = &structured(&started)["next_call"];
+    r.scope = next["arguments"]["scope_id"].as_str().unwrap().to_owned();
+    ok(r.c.call("show_gil_monitor", next["arguments"].clone()), "show");
+    assert!(r.read()["active_plan"].is_null());
+    rpc_error(r.model("gil_open", json!({"kind":"question","report":CONTRACT})), "wrong open body key");
+    let opened = ok(r.model("gil_open", json!({"kind":"question","contract":CONTRACT})), "question");
+    let question_ref = step_ref(&opened, "question");
+    let before = record_bytes(&r.record);
+    for input in [json!({"contract":QUESTION}), json!({"contract":QUESTION,"report":QUESTION}), json!({"report":QUESTION,"typo":true})] {
+        let bad = rpc_error(r.model("gil_close", input), "unknown close key");
+        if bad.to_string().contains("contract") { assert!(bad.to_string().contains("report")); }
+        assert_eq!(record_bytes(&r.record), before);
+    }
+    let invalid = refused(r.model("gil_close", json!({"report":"question: only one field"})), "missing fields");
+    let message = said(&invalid);
+    assert!(message.contains("gil_help") && message.contains("topic: \"close\""), "{message}");
+    assert!(!message.contains("gil close --help") && !message.contains("<<'EOF'"), "{message}");
+    #[cfg(all(windows, feature = "visual-authoring"))]
+    assert!(!root.join(gil::STATE_PATH).exists(), "help must resolve the external product record");
+    let help = said(&ok(r.model("gil_help", json!({"topic":"close"})), "current close help"));
+    for field in ["question", "choices", "response", "gil_close", "\"report\""] { assert!(help.contains(field), "{help}"); }
+    assert!(help.contains(&question_ref));
+    assert!(!help.contains("<<'EOF'"));
+    assert_eq!(record_bytes(&r.record), before, "help and refusals must not close Question");
+    ok(r.model("gil_close", json!({"report":QUESTION})), "same body under correct key");
+    let interpretation = ok(r.model("gil_open", json!({"kind":"interpretation","contract":CONTRACT})), "interpretation");
+    ok(r.model("gil_close", json!({"report":INTERPRETATION})), "close interpretation");
+    let syn = ok(r.model("gil_open", json!({"kind":"synthesis","contract":CONTRACT})), "synthesis");
+    let first = draft(&["A","B","C","D"], &[question_ref, step_ref(&interpretation,"interpretation")], &[]);
+    ok(r.model("gil_plan_propose", json!({"draft":first})), "first plan");
+    r.approve_via_app(1);
+    assert!(r.read()["active_plan"].is_null(), "approval is not activated until Interview closes");
+    r.close_approved_interview(&step_ref(&syn,"synthesis"), "open_child");
+    let (n, document) = r.open_experiment("A");
+    let verify = r.walk_to_verify("A");
+    r.finish_experiment(n,"A",&verify,&document);
+    ok(r.model("gil_open", json!({"kind":"interview"})), "extension interview");
+    let (basis, _) = r.ask_and_interpret();
+    let before = record_bytes(&r.record);
+    let (status, noise) = r.c.eof(); assert!(status.success() && noise.is_empty());
+    r.c = Client::serve(&settings);
+    let read = r.read();
+    assert!(read["document"].is_null() && read["proposal"].is_null());
+    assert_eq!(read["active_plan"]["items"], first["items"], "executed A is returned verbatim after restart");
+    assert_eq!(read["active_plan"]["scope"], first["scope"]);
+    assert_eq!(read["active_plan"]["revision"], 1);
+    assert_eq!(read["pending"].as_array().unwrap().len(), 3);
+    let mut extension = draft(&["E"], &basis, &[]);
+    extension["scope"] = read["active_plan"]["scope"].clone();
+    extension["scope"]["in_scope"] = json!("Expanded synthetic scope");
+    let extra = extension["items"][0].clone();
+    let missing = refused(r.model("gil_plan_propose", json!({"draft":extension})), "missing retained items");
+    assert!(said(&missing).contains("누락 (삭제 금지)"));
+    extension["items"] = read["active_plan"]["items"].clone();
+    extension["items"].as_array_mut().unwrap().push(extra);
+    extension["synthesis"]["exploration_checklist"] = json!("A\nB\nC\nD\nE");
+    let mut altered = extension.clone();
+    altered["items"][0]["question"] = json!("one changed word");
+    altered["items"][0]["done_when"] = json!("another changed word");
+    let mismatch = refused(r.model("gil_plan_propose", json!({"draft":altered})), "two changed fields");
+    let first_message = mismatch["result"]["content"][0]["text"].as_str().unwrap();
+    for text in ["draft.items[id=\"A\"].question", "draft.items[id=\"A\"].done_when", "one changed word", "another changed word", "active_plan.items"] {
+        assert!(first_message.contains(text), "{first_message}");
+    }
+    assert_eq!(record_bytes(&r.record), before, "reads and all refused proposals preserve state");
+    let accepted = ok(r.model("gil_plan_propose", json!({"draft":extension})), "exact copied items with changed scope and new item");
+    assert_eq!(structured(&accepted)["proposal"]["revision"], 2);
+    assert_eq!(structured(&accepted)["active_plan"], read["active_plan"], "unapproved proposal cannot replace executable plan");
+    let (status, noise, stderr) = r.c.eof_with_stderr();
+    assert!(status.success() && noise.is_empty());
+    assert!(!stderr.contains("one changed word"));
+}
