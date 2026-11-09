@@ -1,7 +1,7 @@
 # GIL 설치 안내
 
 GIL 설치는 Host 훅을 등록하지 않는다. 선택한 GIL 프로젝트에만 공통 프롬프트와 단계별 MCP 응답으로 안내한다.
-macOS preview.27은 Monitor의 Mac 업데이트 안내와 MCP 입력 오류 복구를 보완한다. 훅 없는 프로젝트별 새 세션 재개와 기존 기록 보존을 유지한다.
+macOS preview.28은 Monitor의 명시적 클릭 요구와 타임아웃·연결 오류를 구분하고 표시 안내를 보완한다. 훅 없는 프로젝트별 새 세션 재개와 기존 기록 보존을 유지한다.
 전역·프로젝트 로컬·Plugin·Skill 훅은 등록하지 않는다. 구형 Core의 훅 installer를 실행하지 않는다.
 Windows owner.14는 기존 배포를 유지한다. 기존 프로젝트 기록은 자동 변환하지 않는다.
 
@@ -21,7 +21,7 @@ Agent가 앱에 포함된 CLI와 OS 기본 도구를 사용한다. 일반 ChatGP
 기존 보고서·차트·코드의 후속 작업은 GIL을 다시 언급하지 않아도 프로젝트 재개다. 파일 작업 전에
 `gil_context`로 현재 계획·Step을 읽고 실제 열린 Verify를 따른다. 새 목적을 기존 완료된 계약에 붙이지 않는다.
 
-macOS preview.27은 프로젝트 내부 Codex/Claude 안내를 최초 Snapshot 또는 다음 정상 Verify open에 포함한다.
+macOS preview.28은 프로젝트 내부 Codex/Claude 안내를 최초 Snapshot 또는 다음 정상 Verify open에 포함한다.
 기존 안내·과거 기록을 보존하며 훅·전역 지침은 만들지 않는다. 설치만으로 기존 프로젝트를 순회해
 수정하지 않는다. 아직 안내가 없는 기존 프로젝트의 최초 채택·Host 로딩 한계는
 [프로젝트 재개 계약](distribution/codex/PROJECT-RESUME.md)을 따른다. 연결 실패를 이유로 기록 없이 산출물을 먼저 만들지 않는다.
@@ -30,7 +30,7 @@ macOS preview.27은 프로젝트 내부 Codex/Claude 안내를 최초 Snapshot �
 
 macOS preview.25부터는 실제 MCP가 실행하는 Core의 `--version`, MCP initialize의
 `serverInfo.version`, agent probe의 `core_version`이 배포 버전과 일치해야 한다.
-이번 판의 정확한 CLI 출력은 `gil 0.2.1-preview.27`이며 MCP·probe 버전은 `0.2.1-preview.27`다.
+이번 판의 정확한 CLI 출력은 `gil 0.2.1-preview.28`이며 MCP·probe 버전은 `0.2.1-preview.28`다.
 preview.24와 그 이전 판은 수정 전이므로 `gil 0.1.0`을 출력할 수 있다.
 이는 Cargo 패키지 버전이며 **그 한 줄만으로 설치 실패나 구버전이라고 단정하지 않는다.**
 Windows owner.14도 기존 배포이므로 같은 구형 확인 절차를 따른다.
@@ -50,7 +50,7 @@ preview.25 이후에 `--version`만 구버전이면 실제 실행 경로를 다�
 | OS | Codex | Claude Desktop (Claude Code 탭) |
 |---|---|---|
 | Windows 11 x64 | **이전 판 실기기 확인 / 이번 판 사용자 확인 대기** — Companion installer `0.1.1-owner.14`, **Codex 연결** 버튼 | **사용자 확인 대기** — `0.1.1-owner.14`의 **Claude Desktop 연결** 버튼(자동 테스트 통과) |
-| macOS Apple Silicon | **이전 판 실기기 확인 / 이번 판 사용자 확인 대기** — Plugin `0.2.1-preview.27` 또는 Git 없는 archive | **이전 판 사용자 확인(11/01) / 이번 판 확인 대기** — 같은 archive의 Core를 Desktop 설정에 직접 등록. Plugin 경로는 화면 미표시 |
+| macOS Apple Silicon | **이전 판 실기기 확인 / 이번 판 사용자 확인 대기** — Plugin `0.2.1-preview.28` 또는 Git 없는 archive | **이전 판 사용자 확인(11/01) / 이번 판 확인 대기** — 같은 archive의 Core를 Desktop 설정에 직접 등록. Plugin 경로는 화면 미표시 |
 
 상태의 뜻:
 
@@ -67,7 +67,7 @@ preview.25 이후에 `--version`만 구버전이면 실제 실행 경로를 다�
 | 환경 | 버전 | 상태 |
 |---|---|---|
 | Windows 11 x64 | `0.1.1-owner.14` | 계획 입력·Closing 안내 검증판, 실사용 검수 대기 |
-| macOS Apple Silicon | `0.2.1-preview.27` | Mac 업데이트 안내·MCP 오류 복구 보완판, 실제 Host 검수 대기 |
+| macOS Apple Silicon | `0.2.1-preview.28` | Monitor fullscreen 오류 구분·복구 보완판, 실제 Host 검수 대기 |
 
 이번 판은 승인 저장과 최신 상태 조회를 구분한다. 승인 뒤 읽기가 잠시 실패하면 확인된 승인 판을 유지하고
 회색 **최신 상태 다시 확인 중** 안내를 보인다. 연속 실패 때는 조회 실패로 알리며 **다시 읽기**를 제공한다.
@@ -78,7 +78,7 @@ preview.25 이후에 `--version`만 구버전이면 실제 실행 경로를 다�
 Monitor 승인 버튼 → Interview 닫기 → 계획 항목별 Experiment → Verify 파일 증거를 시험한다.
 새 프로젝트는 저장 형식 7을 사용한다. 기존 기록의 형식은 자동 변환하지 않으며, 이전 설치본으로
 되돌려도 형식 7 기록은 이전 형식으로 바뀌지 않는다. 닫힌 실패 Cycle의 revisit만 Monitor에서 변경 목록 확인·보존 승인을 거쳐 진행한다. 일반 restore와 Step revisit는 계속 차단한다.
-macOS 검증 범위와 배포물은 [preview.27 장부](distribution/codex/PREVIEW-27-PUBLICATION-20261109.md), Windows owner.14는 [게시 장부](distribution/windows/PUBLICATION-OWNER-14-20261103.md)를 따른다.
+macOS 검증 범위와 배포물은 [preview.28 장부](distribution/codex/PREVIEW-28-PUBLICATION-20261109.md), Windows owner.14는 [게시 장부](distribution/windows/PUBLICATION-OWNER-14-20261103.md)를 따른다.
 
 > Windows **Claude Desktop 연결** 버튼은 `0.1.1-owner.10`부터, 공통 Monitor의 **업데이트 안내·확대·미니맵**은 owner.10/preview.11부터 포함된다.
 > 이전 owner.8/owner.9에는 Claude Desktop 연결 버튼이 없다. 업데이트 뒤 새 연결에서 확인한다.
@@ -155,14 +155,14 @@ Core이고, 이미 열린 대화는 열 때의 Core를 끝까지 쓴다.
 
 ## macOS Apple Silicon
 
-릴리스: [v0.2.1-preview.27](https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.27)
+릴리스: [v0.2.1-preview.28](https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.28)
 
 - Plugin: `gil-companion-prototype@gil-preview-macos-arm64`
-- marketplace tag: `v0.2.1-preview.27`
-- marketplace commit: `ab80e77ffce178c92199511ab6c865cebcc10da1`
-- Git 없는 설치 archive: `gil-codex-macos-arm64-0.2.1-preview.27.tar.gz`
-- archive 크기: `3,665,233` bytes
-- archive SHA-256: `ca0f0c616630c0d6afc3ec136cf6887f542fec5cf7bcc2146678aaafad05e365`
+- marketplace tag: `v0.2.1-preview.28`
+- marketplace commit: `8bcf893a0af179bffe59659fb7bcd3cfe5229c3a`
+- Git 없는 설치 archive: `gil-codex-macos-arm64-0.2.1-preview.28.tar.gz`
+- archive 크기: `3,666,609` bytes
+- archive SHA-256: `71c5565009c8cc5f178abe9dad95fc1343d78e5d4fa0cdc449c494994c882a1c`
 - 지원: Apple Silicon(`arm64`)만. Intel Mac에는 설치하지 않는다.
 
 archive 하나가 Codex용 `.agents/plugins/marketplace.json`과 Claude Code용 `.claude-plugin/marketplace.json`,
@@ -184,7 +184,7 @@ macOS에는 아직 고정 런처와 Companion 버튼이 없다. Codex는 Plugin 
 
 Agent는 실제 Plugin 설치 응답의 `installedPath`와 MCP manifest, 또는 Claude의 `mcpServers.gil.command`에서
 Core의 절대경로·버전을 확인한다. 캐시 경로나 PATH의 `gil`을 추측하지 않는다.
-preview.27에서는 그 경로를 `GIL_CORE`로 사용한다. preview.23 이하에는 이 제거 명령을 실행하지 않는다.
+preview.28에서는 그 경로를 `GIL_CORE`로 사용한다. preview.23 이하에는 이 제거 명령을 실행하지 않는다.
 
 ```sh
 "$GIL_CORE" write-guard uninstall --auto --host codex
@@ -218,7 +218,7 @@ GIL Core의 승인·전이·Report·증거·dirty 검사는 유지한다. 프롬
 ### Codex에 붙여넣을 요청
 
 ```text
-GIL unsigned preview 0.2.1-preview.27을 훅 없이 설치해 줘. 사용자가 터미널을 직접 조작하게 하지 마.
+GIL unsigned preview 0.2.1-preview.28을 훅 없이 설치해 줘. 사용자가 터미널을 직접 조작하게 하지 마.
 플러그인 관리 MCP 도구만 보고 설치 불가라고 결론내리지 말고, 이 로컬 Codex 작업의 셸에서
 앱에 포함된 codex CLI를 사용해. 프로젝트를 초기화·이관하거나 .gil 기록을 바꾸지 마.
 
@@ -234,21 +234,21 @@ GIL unsigned preview 0.2.1-preview.27을 훅 없이 설치해 줘. 사용자가 
 GIL 훅은 새로 만들거나 복구하지 마. 기존 GIL 훅만 위 제거 절차에 따라 백업·정리해.
 
 Git이 실제로 동작하면 다음 고정 tag 경로를 사용해:
-codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.27 --json
+codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.28 --json
 codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 
 Git 또는 Xcode Command Line Tools를 찾지 못하면 개발 도구 설치를 제안하지 말고 Git 없는 경로로 전환해.
 다음 archive를 임시 파일로 받은 뒤 압축 해제 전에 크기와 SHA-256을 모두 확인해:
-https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.27/gil-codex-macos-arm64-0.2.1-preview.27.tar.gz
-크기: 3665233 bytes
-SHA-256: ca0f0c616630c0d6afc3ec136cf6887f542fec5cf7bcc2146678aaafad05e365
+https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.28/gil-codex-macos-arm64-0.2.1-preview.28.tar.gz
+크기: 3666609 bytes
+SHA-256: 71c5565009c8cc5f178abe9dad95fc1343d78e5d4fa0cdc449c494994c882a1c
 
 값이 다르면 아무것도 풀지 말고 중단해. 일치하면 tar 목록에서 절대경로, .. 경로 이동,
 심볼릭 링크, 하드 링크와 특수 파일이 없는지 확인해. 문제가 없으면 기존 폴더를 덮어쓰지 말고
-$HOME/Library/Application Support/GIL/preview.27-local 이라는 새 사용자 전용 폴더에 풀어.
-그 폴더의 .agents/plugins/marketplace.json, release.json, Plugin version 0.2.1-preview.27,
+$HOME/Library/Application Support/GIL/preview.28-local 이라는 새 사용자 전용 폴더에 풀어.
+그 폴더의 .agents/plugins/marketplace.json, release.json, Plugin version 0.2.1-preview.28,
 core/darwin-arm64/gil 실행 권한을 확인한 뒤 다음 공식 CLI 명령을 사용해:
-codex plugin marketplace add "$HOME/Library/Application Support/GIL/preview.27-local" --json
+codex plugin marketplace add "$HOME/Library/Application Support/GIL/preview.28-local" --json
 codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 
 네트워크나 Codex 설정 저장 권한이 필요하면 정상 승인 창으로 요청하고, 승인 뒤에는
@@ -257,7 +257,7 @@ codex plugin list --json으로 상태를 다시 읽어 끝나지 않은 단계�
 
 Git·Git 없는 경로 모두 실제 설치 결과에서 Core 절대경로·버전을 확인해.
 위 훅 제거 절차를 적용하고 다른 Host는 바꾸지 마. 원본 백업·비-GIL 설정·권한·sandbox를 보존해.
-마지막으로 codex plugin list --json에서 설치 버전이 0.2.1-preview.27인지 확인해 알려줘.
+마지막으로 codex plugin list --json에서 설치 버전이 0.2.1-preview.28인지 확인해 알려줘.
 앱 재시작·새 세션에서 일반 프로젝트 비간섭과 선택한 GIL 프로젝트의 단계별 안내를 확인하도록 안내해.
 연결·설정, 실제 Host 필드테스트, Monitor 표시를 구분해 보고해. 파일 쓰기를 강제 차단한다고 말하지 마.
 화면이 실제로 보이기 전에는 Monitor가 열렸다고 말하지 마.
@@ -286,7 +286,7 @@ inline 카드가 주변 대화와 어울린다고 확인했다. 반면 **Plugin�
 보는 경로는 직접 등록이다. 자세한 근거는 [호출 경로별 진단](mcp-app/CLAUDE-DESKTOP-ROUTES.md)을 본다.
 
 **1단계 — archive 준비(공통).** 위 Git 없는 경로 그대로 archive를 받아 크기·SHA-256·멤버 목록을 검증하고
-사용자 전용 새 폴더(`$HOME/Library/Application Support/GIL/<버전>-local`, 0700)에 푼다. preview.27 archive는 최상위에 Codex용 `.agents/plugins/marketplace.json`과 Claude Code용
+사용자 전용 새 폴더(`$HOME/Library/Application Support/GIL/<버전>-local`, 0700)에 푼다. preview.28 archive는 최상위에 Codex용 `.agents/plugins/marketplace.json`과 Claude Code용
 `.claude-plugin/marketplace.json`을 함께 담는다. 이전 `0.2.1-preview.7` archive에는 `.claude-plugin`이 없다.
 
 **2단계 — 직접 등록(현재 화면이 성립하는 경로).** 먼저 Claude Desktop을 **완전히 종료**한다(Dock에서
@@ -313,9 +313,9 @@ Desktop 종료 뒤 로컬 설치 Agent에서 이어간다. 실행 중 Desktop �
 Claude Code 탭에 붙여넣어 Agent에게 맡길 수 있는 요청문:
 
 ```text
-GIL unsigned preview 0.2.1-preview.27을 Claude Desktop에 훅 없이 직접 등록해 줘. 내가 터미널을 직접 조작하게 하지 마.
+GIL unsigned preview 0.2.1-preview.28을 Claude Desktop에 훅 없이 직접 등록해 줘. 내가 터미널을 직접 조작하게 하지 마.
 위 Git 없는 경로 그대로 archive를 받아 크기·SHA-256·tar 멤버를 검증하고
-$HOME/Library/Application Support/GIL/preview.27-local 에 풀어. 기존 폴더는 덮어쓰지 마.
+$HOME/Library/Application Support/GIL/preview.28-local 에 풀어. 기존 폴더는 덮어쓰지 마.
 그다음 ~/Library/Application Support/Claude/claude_desktop_config.json 을 읽어 지금 mcpServers 에 무엇이
 있는지 보여 주고, gil 항목이 이미 있으면 어떤 실행 파일을 가리키는지 알려 준 뒤 내 승인을 기다려.
 내가 승인하면: Claude Desktop 이 완전히 종료됐는지(주 프로세스 Claude 가 없는지) 확인하고, 설정 파일을
@@ -367,14 +367,14 @@ Host 로그는 이 자동 요청을 모두 `fullscreen request refused: it needs
 `automatic`(자동 시도의 단계·시각·Host 응답)이 그대로 적히므로, 문제를 제보할 때 그 값을 함께 적는다. fullscreen 중 다른 도구의 승인 창이 보이지 않으면 **대화 안으로**를 눌러 inline으로 돌아간 뒤
 승인한다.
 
-**배포 버전 경계:** 현재 이 안내가 설치하는 macOS **preview.27**과 Windows **owner.14**에는
-아래 PR #107 개선이 아직 포함되지 않았다. 위의 기존 수동 확대 절차를 사용하며,
-`gil_monitor_status.automatic_fullscreen` 필드가 없어도 설치 오류로 판단하지 않는다.
+**배포 버전 경계:** macOS **preview.28**에는 PR #107의 표시 상태·오류 구분 개선이 포함된다.
+이전 macOS **preview.27**과 Windows **owner.14**에는 포함되지 않았다. 구버전은 기존 수동 확대 절차를
+사용하며 `gil_monitor_status.automatic_fullscreen` 필드가 없어도 설치 오류로 판단하지 않는다.
 
-PR #107을 포함해 별도로 검증·게시된 후속 배포본부터 App은 명시적인 새 클릭 요구 응답만 `refused`로
-보고하고 타이머 재시도 없이 클릭을 기다린다. 타임아웃·연결 종료·알 수 없는 실패는 `error`로 보고하며
-제한된 자동 재시도를 유지한다. 이 개선은 소스 머지만으로 기존 설치본에 적용되지 않는다.
+preview.28의 App은 명시적인 새 클릭 요구 응답만 `refused`로 보고하고 타이머 재시도 없이 클릭을
+기다린다. 타임아웃·연결 종료·알 수 없는 실패는 `error`로 보고하며 제한된 자동 재시도를 유지한다.
 실제 App 응답에 클릭 요구 이유가 전달되지 않으면 로그 내용만으로 `refused`를 만들어 내지 않는다.
+카드 안 또는 모니터 펼치기로 재요청하고 실제 화면을 확인한다. 설치 성공은 클릭·fullscreen 성공의 증거가 아니다.
 
 ### MCP와 터미널의 버전이 다르게 보일 때
 
