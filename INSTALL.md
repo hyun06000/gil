@@ -126,8 +126,8 @@ Codex와 Claude Desktop 모두 **고정 런처**를 등록하므로 업데이트
 5. Host를 (다시) 열고 새 대화에서 빈 테스트 폴더를 선택한다.
 6. **“지금 폴더에서 GIL 프로젝트를 시작해 줘”**라고 말하고 실제 Monitor와 첫 단계가 보이는지 확인한다.
    Claude Code 탭에서는 App이 연결 직후와 Monitor 준비 뒤 fullscreen을 자동 요청하지만, Desktop 4.23118.0은
-   이 요청을 "App 안에서의 새 클릭이 필요하다"며 거부한다(2026-11-09 Host 로그 실측). Monitor는 inline 카드로
-   뜨고 **카드를 한 번 클릭하면** 펼쳐진다(아래 macOS Claude 절의 Host 동작과 같다).
+   이 요청을 "App 안에서의 새 클릭이 필요하다"며 거부한 로그가 있다(2026-11-09 macOS 관측이며 Windows 검수가 아님).
+   카드가 보이면 **카드 안 또는 모니터 펼치기**를 눌러 재요청한다. 실제 확대 여부는 화면에서 확인한다.
 
 **직접 등록(임시, owner.8/owner.9 사용자용).** owner.8/owner.9 Companion에는 Claude Desktop 버튼이 없다. Claude Desktop을
 완전히 종료한 뒤 `%APPDATA%\Claude\claude_desktop_config.json`의 `mcpServers`에 다음 항목을 더하고 Desktop을
@@ -361,11 +361,20 @@ Agent의 도구 성공 문장과 실제 화면을 구분한다. 10/31 실측에�
 표시 모드 요청을 적용하지 않았고 Monitor는 inline 카드로 뜬 뒤 **카드를 한 번 클릭하면** fullscreen으로
 펼쳐졌다. 2026-11-02 빌드부터 App은 연결 직후에도 fullscreen을 요청한다. 2026-11-09 Desktop 4.23118.0의
 Host 로그는 이 자동 요청을 모두 `fullscreen request refused: it needs a fresh press in this app's own frame`으로
-거부했다. 즉 Claude Code 탭은 App 안에서의 사용자 클릭으로만 펼치며, 그때 App은 타이머 재시도 대신 첫 클릭에
-요청을 싣고 `gil_monitor_status.automatic_fullscreen=refused`로 그 사실을 Agent에 알린다. fullscreen 지원과 “항상
+거부했다. 이 로그는 해당 버전의 클릭 요구 관측이며 모든 오류의 원인이나 클릭 성공을 보장하지 않는다.
+카드 안 또는 **모니터 펼치기**를 눌러 재요청하고 실제 화면을 확인한다. fullscreen 지원과 “항상
 자동으로 열림”은 다른 것이다. Monitor의 **연결 정보**에는 Host가 보고한 이름·버전, 광고한 표시 모드, 그리고
 `automatic`(자동 시도의 단계·시각·Host 응답)이 그대로 적히므로, 문제를 제보할 때 그 값을 함께 적는다. fullscreen 중 다른 도구의 승인 창이 보이지 않으면 **대화 안으로**를 눌러 inline으로 돌아간 뒤
 승인한다.
+
+**배포 버전 경계:** 현재 이 안내가 설치하는 macOS **preview.27**과 Windows **owner.14**에는
+아래 PR #107 개선이 아직 포함되지 않았다. 위의 기존 수동 확대 절차를 사용하며,
+`gil_monitor_status.automatic_fullscreen` 필드가 없어도 설치 오류로 판단하지 않는다.
+
+PR #107을 포함해 별도로 검증·게시된 후속 배포본부터 App은 명시적인 새 클릭 요구 응답만 `refused`로
+보고하고 타이머 재시도 없이 클릭을 기다린다. 타임아웃·연결 종료·알 수 없는 실패는 `error`로 보고하며
+제한된 자동 재시도를 유지한다. 이 개선은 소스 머지만으로 기존 설치본에 적용되지 않는다.
+실제 App 응답에 클릭 요구 이유가 전달되지 않으면 로그 내용만으로 `refused`를 만들어 내지 않는다.
 
 ### MCP와 터미널의 버전이 다르게 보일 때
 

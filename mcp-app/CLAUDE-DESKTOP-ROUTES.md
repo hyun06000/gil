@@ -300,8 +300,9 @@ preview.27 Core(`gil 0.2.1-preview.27`, serverInfo 동일)를 Claude Code 탭 �
   `state: visible, display_mode: inline, last_seen_ms: 103`을 돌려줬다. App iframe이 부팅해 폴링 중이라는 뜻이며
   "표시 자체가 안 됨"은 이 경로에서 재현되지 않았다. 같은 시각 Desktop의 `claude.ai-web.log`에는
   `[MCP] [Epitaxy MCP App] fullscreen request refused: it needs a fresh press in this app's own frame, not elsewhere on the page`
-  가 App의 자동 요청 수(연결·준비·재시도 2회)만큼 4번 적혔다. 즉 이 Host는 프로그램 fullscreen 요청을 거부하고
-  **App 프레임 안의 새 사용자 클릭**에서만 펼친다. 이것이 "inline은 뜨는데 자동 fullscreen이 안 됨"의 원인이다.
+  가 App의 자동 요청 수(연결·준비·재시도 2회)만큼 4번 적혔다. 이 관측에서 Host는
+  **App 프레임 안의 새 사용자 클릭**을 요구하며 자동 요청을 거부했다. 클릭 성공이나 다른 오류의 원인까지
+  확인한 것은 아니며, 로그와 실제 App 요청 응답은 별개다.
 - **같은 Mac의 Plugin 경로:** Claude Code marketplace `gil-preview-macos-arm64`가 `dev-20261031-local`(Core `gil 0.1.0`,
   #78 이전 빌드)을 가리킨다. 그 서버에 preview.27이 만든 Project로 `gil_monitor_prepare`를 호출하면
   `unsupported_format`으로 거절되어 `show_gil_monitor`까지 가지 못한다. 구형 Plugin과 신형 직접 등록이 함께 켜진
@@ -309,9 +310,9 @@ preview.27 Core(`gil 0.2.1-preview.27`, serverInfo 동일)를 Claude Code 탭 �
 
 이 결과로 바꾼 것(Host 이름으로 분기하지 않는다):
 
-- App은 자동 요청이 **오류(거부)**로 끝나면 타이머 재시도를 하지 않고 즉시 클릭 경로를 무장한다. 거부된 클릭
+- App은 자동 요청에 **명시적인 새 클릭 요구 응답**을 받으면 타이머 재시도를 하지 않고 즉시 클릭 경로를 무장한다. 거부된 클릭
   요청은 세 번까지 다시 무장한다. Host가 `inline`을 **적용**한 경우의 기존 동작(유한 재시도 뒤 클릭 한 번)은 그대로다.
-- App은 presence 보고에 `automatic_fullscreen`(`pending|applied|declined|refused|unavailable|manual`)을 싣고, Core는
+- App은 presence 보고에 `automatic_fullscreen`(`pending|applied|declined|refused|error|unavailable|manual`)을 싣고, Core는
   `gil_monitor_status`로 그대로 노출하며 inline 안내문을 그 값에 맞춘다(`refused`면 "Monitor 카드를 한 번 클릭").
   Core는 fullscreen을 스스로 요청하지 않는다. 구형 App은 값을 보내지 않으며 `null`로 남는다.
 - Node 어댑터(`plugins/gil-companion-prototype/monitor.mjs`)의 `gil_monitor_poll` 스키마가 presence 필드를 거부하던
@@ -321,3 +322,12 @@ preview.27 Core(`gil 0.2.1-preview.27`, serverInfo 동일)를 Claude Code 탭 �
 확인하지 않은 것: 실제 화면의 inline 카드·클릭 뒤 fullscreen 전환은 이 세션이 스스로 볼 수 없어 사용자 확인
 대기다. Desktop Console 캡처는 받지 못했다. Host의 "fresh press" 판정이 `pointerdown`을 인정하는지는 사용자의
 첫 클릭 결과(연결 정보의 `automatic` 마지막 항목 `gesture`의 `applied`)로 확인한다.
+
+### PR #107 검토 보완: 요청 오류와 Host 정책을 구분
+
+타임아웃을 App 시험에 주입했을 때 이전 초안은 모든 예외를 `refused`로 분류하고 타이머 재시도를
+없앴으며 "클릭으로만 펼친다"고 안내했다. 수정본은 실제 응답 메시지에 관측된 명시적 새 클릭 요구가
+있을 때만 `refused`로 분류한다. MCP 타임아웃·연결 종료와 알 수 없는 오류는 `error`이며 1.5초·4초의
+제한된 재시도와 수동 재요청을 유지한다. 오류 원문은 presence나 모델 안내로 보내지 않는다.
+Host 로그에만 이유가 있고 App 응답에 없으면 `error`로 남는다. 이는 실제 Host에서의 클릭 성공 검증이 아니다.
+현재 배포 preview.27/owner.14에는 이 변경이 없으며 후속 배포가 필요하다.

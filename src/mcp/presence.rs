@@ -9,10 +9,10 @@ const OPEN_GRACE: Duration = Duration::from_secs(30);
 const MAX_INSTANCES: usize = 32;
 
 /// What the App reports about its own automatic fullscreen intent. Observations, never a
-/// request: `refused` means the Host answered programmatic requests with an error and accepts
-/// fullscreen only from a user press inside the App; `declined` means it applied `inline`;
+/// request: `refused` means the App received an explicit fresh-press requirement;
+/// `error` means a transport/unknown failure, not evidence of a Host policy; `declined` means it applied `inline`;
 /// `unavailable` means the surface does not advertise fullscreen; `manual` an explicit choice.
-const AUTOMATIC_FULLSCREEN: [&str; 6] = ["pending", "applied", "declined", "refused", "unavailable", "manual"];
+const AUTOMATIC_FULLSCREEN: [&str; 7] = ["pending", "applied", "declined", "refused", "error", "unavailable", "manual"];
 
 #[derive(Debug)]
 struct Seen { sequence: u64, state: String, at: Instant, automatic_fullscreen: Option<String> }

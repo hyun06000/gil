@@ -39,9 +39,10 @@ GIL의 주 사용자는 비개발자다. 인간은 명령과 저장 형식을 �
 **MCP App fullscreen에서 가로 Graph와 채팅을 함께 보는 것**이다. Codex의 실제 화면·자동 갱신·
 기본 재시작 복원을 확인했다. Claude Desktop Code 탭의 2026-11-03 실제 화면에서는 fullscreen 지원을
 광고했지만 연결·렌더·재시도·클릭의 다섯 요청 모두 `inline`을 반환했다. 2026-11-09 Desktop 4.23118.0의 Host
-로그는 그 이유를 적는다: 프로그램 요청은 거부되고 App 안에서의 새 클릭만 fullscreen을 연다. 자동 fullscreen은
-Host 정책이며, App은 이를 완료로 표시하지 않고 거부를 받으면 첫 클릭에 요청을 실어 "Monitor를 한 번 클릭"하라고
-안내하며, 그 사실을 `gil_monitor_status.automatic_fullscreen`으로 Agent에 알린다.
+로그에는 App 안의 새 클릭을 요구하며 프로그램 요청을 거부한 관측이 있다. 이 관측을 다른 오류의 원인으로
+일반화하지 않는다. PR #107의 개발 정본은 명시적인 새 클릭 요구 응답을 `refused`, 타임아웃·연결 오류 등은
+`error`로 구분한다. 현재 공개 preview.27/owner.14에는 이 개선과 `automatic_fullscreen` 필드가 아직 없으며
+후속 배포본부터 적용된다. 클릭 뒤 실제 fullscreen 성공 여부도 별도로 확인한다.
 Native Companion은 같은 UI를 별도 창으로
 제공하는 대안이자 Windows의 Host 연결·업데이트 관리 창이며, fullscreen 실패를 이유로 자동 실행하지
 않는다. Companion 창이 열린 것을 MCP App 표시 성공으로 세지 않는다. inline 카드는 미리보기이지 설치 완료
@@ -71,8 +72,8 @@ Claude Desktop의 **Claude Code**는 2026-10-30 소유자 보고로 MCP App full
 따라서 Claude에서는 Desktop 설정 직접 등록이 현재의 표시 경로다. 그 경로에서 10/31까지의 빌드는 Monitor 준비
 뒤에만 자동 요청을 보냈고 Host는 그것을 적용하지 않아 **첫 클릭에 fullscreen**으로 펼쳐졌다. 2026-11-02 빌드부터
 App은 연결 직후에도 요청하고 **연결 정보**의 `automatic`에 모든 자동 시도와 Host 응답을 적는다. 2026-11-09
-Desktop 4.23118.0 실측에서 Claude Code 탭은 그 자동 요청을 "App 안에서의 새 클릭 필요"로 거부했으므로 첫 클릭이
-펼친다. 펼쳐진 화면 자체는 사용자 확인 대상이다.
+Desktop 4.23118.0 로그에서 Claude Code 탭은 그 자동 요청을 "App 안에서의 새 클릭 필요"로 거부했다.
+카드 안 또는 모니터 펼치기로 재요청하며 펼쳐진 화면 자체는 사용자 확인 대상이다.
 preview archive 하나에 Codex(`.agents/plugins`)와 Claude Code(`.claude-plugin`) 두 catalog를 함께 싣고,
 Windows Companion은 **Codex 연결**과 **Claude Desktop 연결** 버튼으로 같은 고정 런처를 각 Host에 등록한다
 (Claude 버튼은 owner.10부터, 실제 Windows Claude 화면은 사용자 확인 대기). 사용자 화면 인수와 fullscreen 중 도구 승인 창 병행은

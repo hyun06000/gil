@@ -17,15 +17,24 @@ export function graphOrientation(mode, choice = null) {
 //             apply display-mode changes only inside a user action).
 // Any manual choice, a Host-confirmed fullscreen, or teardown ends the intent for good.
 export const RETRY_DELAYS_MS = [1500, 4000];
-// A Host may refuse a programmatic request outright (an error instead of an applied mode) and
-// accept fullscreen only from a user press inside the App's own frame. Timer retries cannot
+// A Host may explicitly require a fresh press inside the App's own frame. Timer retries cannot
 // satisfy that, so a refusal arms the gesture at once, and a refused gesture re-arms it a few
 // times: the user's natural act is to click the card. An applied `inline` answer keeps the
 // bounded timer retries and one gesture, as before.
 export const GESTURE_ATTEMPTS = 3;
 // What the App reports to the Core about its automatic fullscreen intent (gil_monitor_poll
 // `automatic_fullscreen`). Observations only; the Core never requests fullscreen itself.
-export const AUTOMATIC_FULLSCREEN = ['pending', 'applied', 'declined', 'refused', 'unavailable', 'manual'];
+export const AUTOMATIC_FULLSCREEN = ['pending', 'applied', 'declined', 'refused', 'error', 'unavailable', 'manual'];
+// Only an explicit gesture-required response is evidence of that policy. A timeout,
+// disconnected transport or unknown exception cannot establish why the Host stayed inline.
+// Recognize the observed message, not a Host name; new/unknown wording stays an error.
+export function fullscreenFailure(error) {
+  if (error?.code === -32000 || error?.code === -32001) return 'error'; // MCP transport errors
+  const message = error?.message;
+  return typeof message === 'string' && message.length <= 1000 &&
+    message.includes("fullscreen request refused: it needs a fresh press in this app's own frame")
+    ? 'refused' : 'error';
+}
 export function initialFullscreen({ retries = RETRY_DELAYS_MS, gestures = GESTURE_ATTEMPTS, now = () => Date.now() } = {}) {
   let early = false, consumed = false, done = false, attempts = 0, gestureArmed = false;
   let gesturesUsed = 0, manual = false, lastAnswer = null;
@@ -54,12 +63,13 @@ export function initialFullscreen({ retries = RETRY_DELAYS_MS, gestures = GESTUR
       return begin('retry');
     },
     // Called with the mode the Host applied (or null when it gave none); `refused` marks a
-    // request the Host answered with an error. Returns the delay before another automatic
+    // request explicitly rejected for needing a fresh press; `failed` is an unknown/transport error.
+    // Returns the delay before another automatic
     // request, or null when no timer is due now.
-    settle(appliedMode, { refused = false } = {}) {
+    settle(appliedMode, { refused = false, failed = false } = {}) {
       const phase = inflight?.phase;
-      if (inflight) { inflight.applied = appliedMode ?? null; if (refused) inflight.refused = true; inflight = null; }
-      lastAnswer = refused ? 'refused' : appliedMode ?? 'none';
+      if (inflight) { inflight.applied = appliedMode ?? null; if (refused) inflight.refused = true; if (failed) inflight.failed = true; inflight = null; }
+      lastAnswer = refused ? 'refused' : failed ? 'error' : appliedMode ?? 'error';
       if (done) return null;
       if (appliedMode === 'fullscreen') { finish(); return null; }
       // A declined connect-time request is not a retry: the ready-time request follows by itself.
@@ -92,7 +102,7 @@ export function initialFullscreen({ retries = RETRY_DELAYS_MS, gestures = GESTUR
       if (Array.isArray(context.availableDisplayModes) && !context.availableDisplayModes.includes('fullscreen')) return 'unavailable';
       if (lastAnswer === null) return 'pending';
       if (lastAnswer === 'fullscreen') return 'applied';
-      return lastAnswer === 'refused' ? 'refused' : 'declined';
+      return ['refused', 'error'].includes(lastAnswer) ? lastAnswer : 'declined';
     },
   };
 }

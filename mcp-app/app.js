@@ -3,7 +3,7 @@ import { makePlanReview } from './plans.mjs';
 import { makePlanPolling } from './plan-poll.mjs';
 import { makeRecoveryReview } from './recovery.mjs';
 import { makeHost, unwrap, retryAfter, connectionMessage } from './host.mjs';
-import { graphOrientation, initialFullscreen, hostIdentity, hostStyles, styleEvidence, updateNotice, updateGuide } from './presentation.mjs';
+import { graphOrientation, initialFullscreen, fullscreenFailure, hostIdentity, hostStyles, styleEvidence, updateNotice, updateGuide } from './presentation.mjs';
 
 const app = new App({ name: 'GIL Monitor', version: '0.1.0' },
   { availableDisplayModes: ['inline', 'fullscreen'] });
@@ -82,7 +82,7 @@ let retryTimer;
 async function requestMode(mode, { automatic = false } = {}) {
   if (stopped || pending || !connected || !context.availableDisplayModes?.includes(mode)) return;
   pending = true; modes('Host 에 표시 전환을 요청하는 중…');
-  let got, refused = false;
+  let got, failure = null;
   try {
     got = await app.requestDisplayMode({ mode }, { timeout: 10000 });
     if (stopped) return;
@@ -92,15 +92,18 @@ async function requestMode(mode, { automatic = false } = {}) {
     modes(got?.mode === 'fullscreen' ? '펼친 Monitor 입니다. Host 의 채팅 입력창에서 대화를 이어가세요.'
       : got?.mode === 'inline' ? 'Host가 fullscreen 요청에 inline을 반환했습니다. 모니터 펼치기로 재요청하거나 위젯 머리의 다른 패널에 표시·확대 버튼을 사용해 주세요.'
       : 'Host 가 적용 모드를 반환하지 않았습니다. 화면이 그대로라면 모니터 펼치기를 눌러 주세요.');
-  } catch {
-    // An error is a refusal, not an applied mode. Some Hosts accept fullscreen only from a
-    // user press inside this frame; the gesture path below asks again at the user's click.
-    refused = true;
-    if (!stopped) { response = '요청 거부(오류)'; modes('Host 가 전환 요청을 거부했습니다. Monitor 안을 직접 클릭하거나 Host 의 확대 버튼을 사용해 주세요.'); }
+  } catch (error) {
+    failure = fullscreenFailure(error);
+    if (!stopped) {
+      response = failure === 'refused' ? '새 클릭 필요 응답' : '요청 오류(원인 미확인)';
+      modes(failure === 'refused'
+        ? 'Host가 App 안의 새 클릭이 필요하다고 응답했습니다. Monitor 안을 클릭하거나 모니터 펼치기를 눌러 다시 요청해 주세요.'
+        : '표시 전환 요청의 결과를 확인하지 못했습니다. 연결 상태를 확인하거나 모니터 펼치기로 다시 요청할 수 있습니다.');
+    }
   } finally {
     pending = false;
     if (!stopped) {
-      if (automatic) scheduleRetry(got?.mode ?? null, refused);
+      if (automatic) scheduleRetry(got?.mode ?? null, failure);
       modes(); void reportPresence();
       // A connect-time request may have been answered after the Monitor rendered: the
       // ready-time request then follows here instead of waiting for another Host event.
@@ -109,15 +112,18 @@ async function requestMode(mode, { automatic = false } = {}) {
   }
 }
 // Automatic requests only. A manual choice cancels the intent, so this never fights the user.
-function scheduleRetry(appliedMode, refused = false) {
+function scheduleRetry(appliedMode, failure = null) {
+  const refused = failure === 'refused';
   clearTimeout(retryTimer);
-  const delay = initialDisplay.settle(appliedMode, { refused });
+  const delay = initialDisplay.settle(appliedMode, { refused, failed: failure === 'error' });
   if (delay !== null) {
     retryTimer = setTimeout(() => { retryTimer = undefined; maybeFullscreen(); }, delay);
   } else if (initialDisplay.awaitingGesture) {
     modes(refused
-      ? 'Host 는 이 Monitor 안에서의 클릭으로만 펼칩니다. Monitor 를 한 번 클릭하거나 모니터 펼치기를 눌러 주세요.'
-      : 'Host가 자동 fullscreen 요청을 적용하지 않았습니다. 클릭으로 재요청하거나, 위젯 머리의 다른 패널에 표시·확대 버튼을 사용해 주세요.');
+      ? 'Host가 App 안의 새 클릭이 필요하다고 응답했습니다. Monitor를 클릭하거나 모니터 펼치기를 눌러 다시 요청해 주세요.'
+      : failure === 'error'
+        ? '자동 표시 전환 요청이 실패했습니다. 원인은 확인되지 않았습니다. 연결 상태를 확인하거나 모니터 펼치기로 다시 요청해 주세요.'
+        : 'Host가 자동 fullscreen 요청을 적용하지 않았습니다. 클릭으로 재요청하거나, 위젯 머리의 다른 패널에 표시·확대 버튼을 사용해 주세요.');
   }
 }
 function maybeFullscreen() {

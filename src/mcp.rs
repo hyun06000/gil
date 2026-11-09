@@ -119,7 +119,8 @@ impl GilServer {
                     if status["display_mode"] == "inline" {
                         // The App's own account of its automatic attempt chooses the guidance; the Core never guesses Host policy.
                         let hint = match status["automatic_fullscreen"].as_str() {
-                            Some("refused") => "Monitor는 inline 미리보기로 확인됐고 Host는 App의 자동 fullscreen 요청을 거부했다(이 Host는 App 안에서의 사용자 클릭으로만 펼친다). fullscreen 표시 완료라고 보고하지 않는다. 사용자에게 Monitor 카드 안을 한 번 클릭하거나 ‘모니터 펼치기’를 누르라고 안내한다. 표시 문제와 GIL 진행은 별개다; 아래 다음 GIL 호출을 계속한다.",
+                            Some("refused") => "Monitor는 inline 미리보기로 확인됐고 App 보고에 따르면 Host가 App 안의 새 클릭이 필요하다고 응답했다. fullscreen 표시 완료라고 보고하지 않는다. 사용자에게 Monitor 카드 안을 한 번 클릭하거나 ‘모니터 펼치기’를 누르라고 안내한다. 표시 문제와 GIL 진행은 별개다; 아래 다음 GIL 호출을 계속한다.",
+                            Some("error") => "Monitor는 inline 미리보기로 확인됐지만 자동 fullscreen 요청의 결과는 오류로 확인하지 못했다. 타임아웃·연결 문제 등을 특정 Host 정책으로 단정하지 않는다. 연결 상태를 확인하거나 ‘모니터 펼치기’로 재요청하도록 안내한다. 표시 문제와 GIL 진행은 별개다; 아래 다음 GIL 호출을 계속한다.",
                             Some("unavailable") => "Monitor는 inline 미리보기로 확인됐고 이 Host 표면은 fullscreen을 광고하지 않는다. fullscreen 표시 완료라고 보고하지 않는다. 위젯 머리의 ‘다른 패널에 표시’ 또는 Host의 확대 버튼을 안내한다. 표시 문제와 GIL 진행은 별개다; 아래 다음 GIL 호출을 계속한다.",
                             _ => "Monitor는 inline 미리보기로만 확인됐다. fullscreen 표시 완료라고 보고하지 않는다. Host가 자동 확대를 받아들이지 않으면 위젯 머리의 ‘다른 패널에 표시’ 또는 Host의 확대 버튼을 안내한다. 표시 문제와 GIL 진행은 별개다; 아래 다음 GIL 호출을 계속한다.",
                         };

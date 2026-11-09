@@ -447,11 +447,11 @@ test('Mac guide selects the destination, copies only on click, and offers manual
 // mock answers the same way: an error, never an applied mode, until a press is granted.
 test('a Host that refuses programmatic requests gets no timer retries; presses carry the request, re-armed while refused, bounded', async () => {
   let grant = false;
-  const f = fixture({ answer(request) { if (grant) return request; throw new Error('needs a fresh press'); } });
+  const f = fixture({ answer(request) { if (grant) return request; throw new Error("fullscreen request refused: it needs a fresh press in this app's own frame, not elsewhere on the page"); } });
   await f.start();
   assert.deepEqual(f.calls, ['fullscreen', 'fullscreen'], 'connect-time and ready-time requests');
   assert.equal([...f.timers.values()].filter(t => t.ms === 1500 || t.ms === 4000).length, 0, 'a refusal schedules no timer retry');
-  assert.match(f.element('host-say').textContent, /Monitor 안에서의 클릭으로만/);
+  assert.match(f.element('host-say').textContent, /App 안의 새 클릭이 필요/);
   assert.equal(f.observations.at(-1).automatic_fullscreen, 'refused');
   assert.equal(f.observations.at(-1).presentation, 'inline');
   await f.pointerdown(); await f.pointerdown(); await f.pointerdown();
@@ -470,7 +470,7 @@ test('a Host that refuses programmatic requests gets no timer retries; presses c
 
 test('a press the Host accepts after refusals ends the intent and the App reports applied', async () => {
   let grant = false;
-  const f = fixture({ answer(request) { if (grant) return request; throw new Error('needs a fresh press'); } });
+  const f = fixture({ answer(request) { if (grant) return request; throw new Error("fullscreen request refused: it needs a fresh press in this app's own frame, not elsewhere on the page"); } });
   await f.start();
   await f.pointerdown();
   assert.equal(f.calls.length, 3);
@@ -493,4 +493,39 @@ test('the presence report names why the Monitor is not fullscreen: declined, una
   f = fixture(); await f.start();
   assert.equal(f.observations.at(-1).automatic_fullscreen, 'applied');
   assert.ok(f.observations.every(x => AUTOMATIC_FULLSCREEN.includes(x.automatic_fullscreen)));
+});
+
+test('transport and unknown failures keep bounded retries without claiming a click-only Host policy', async () => {
+  for (const error of [Object.assign(new Error('Request timed out'), {code: -32001}),
+    Object.assign(new Error('Connection closed'), {code: -32000}), new Error('Unknown display failure')]) {
+    const f = fixture({answer() { throw error; }}); await f.start();
+    assert.equal(f.observations.at(-1).automatic_fullscreen, 'error');
+    await f.fireTimerOf(1500); await f.fireTimerOf(4000);
+    assert.equal(f.calls.length, 4, 'connect, ready and two bounded retries');
+    assert.equal([...f.timers.values()].filter(t => [1500, 4000].includes(t.ms)).length, 0);
+    assert.match(f.element('host-say').textContent, /원인은 확인되지 않았습니다/);
+    assert.doesNotMatch(f.element('host-say').textContent, /클릭으로만|새 클릭이 필요|거부/);
+    const evidence = JSON.parse(f.element('host-evidence').textContent).automatic;
+    assert.ok(evidence.every(a => a.failed === true && a.refused === undefined));
+    await f.pointerdown(); await f.pointerdown();
+    assert.equal(f.calls.length, 5, 'one optional gesture, never an endless retry');
+    assert.equal(f.observations.at(-1).automatic_fullscreen, 'error');
+    assert.equal(f.element('expand').disabled, false);
+  }
+});
+
+test('a transient timeout can recover automatically and manual inline still cancels recovery', async () => {
+  let recovered = false;
+  const f = fixture({answer(request) {
+    if (!recovered) throw Object.assign(new Error('Request timed out'), {code: -32001});
+    return request;
+  }});
+  await f.start(); recovered = true; await f.fireTimerOf(1500);
+  assert.equal(f.observations.at(-1).automatic_fullscreen, 'applied');
+  assert.equal(f.document.body.dataset.displayMode, 'fullscreen');
+  const g = fixture({answer() { throw new Error('Connection closed'); }}); await g.start();
+  await g.element('inline').onclick();
+  assert.equal(g.observations.at(-1).automatic_fullscreen, 'manual');
+  assert.equal([...g.timers.values()].filter(t => [1500, 4000].includes(t.ms)).length, 0);
+  const count = g.calls.length; await g.pointerdown(); assert.equal(g.calls.length, count);
 });
