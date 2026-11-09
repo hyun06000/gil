@@ -281,3 +281,43 @@ Host 이름으로 분기하지 않고 지침·계약·App 로직에서 점검했
 시작해 줘" → Agent가 `gil_start` 바로 다음에 `show_gil_monitor`를 한 번 부르는지, Monitor가 시작 직후 자동으로
 fullscreen으로 뜨는지, 아니라면 inline 카드가 뜨고 첫 클릭에 펼쳐지는지, 그리고 **연결 정보**의 `automatic` 값을
 적는다. 도구 응답 성공은 화면 성공이 아니다.
+
+## 2026-11-09 추가 — Claude Desktop 4.23118.0, Claude Code 탭: 자동 fullscreen 거부 로그
+
+증상 보고: "`gil_start` → `show_gil_monitor` 뒤 Monitor가 전혀 뜨지 않는다(이전에는 inline 카드는 떴지만
+자동 fullscreen이 되지 않았다)". 아래는 같은 Mac에서 Desktop 설정 `mcpServers.gil`에 직접 등록된
+preview.27 Core(`gil 0.2.1-preview.27`, serverInfo 동일)를 Claude Code 탭 세션에서 호출해 확인한 것이다.
+자동 시험·합성 측정·사용자 화면 확인을 구분한다.
+
+- **자동 시험 (저장소):** `mcp-app` 102개, `plugins/gil-companion-prototype` 80개, `distribution/compliance/notices`
+  15개 JS 시험 통과. 번들 `monitor.html`은 `node mcp-app/build.mjs`로 재현되며 inline script 1개, `node --check`
+  통과, `</script` 문자열 없음. Core `presence` 단위 시험과 `tests/mcp.rs`의 presence 통합 시험 통과.
+- **합성 측정 (protocol, stdio):** 설치판 Core의 `tools/list`에서 `show_gil_monitor`의 `_meta.ui.resourceUri`와
+  `_meta["ui/resourceUri"]`가 같은 `ui://gil-monitor/<sha20>.html`을 가리키고, `resources/list`·`resources/read`가
+  `text/html;profile=mcp-app`로 HTML을 돌려준다. 공식 `@modelcontextprotocol/server-map` 2.0.4(같은 ext-apps 2.0.0)의
+  응답 모양과 `_meta`·mimeType·csp 키가 일치한다. 계약층의 회귀는 찾지 못했다.
+- **합성 측정 (실제 Host, 이 세션):** scratch Project에 `gil_start` → `show_gil_monitor` 뒤 `gil_monitor_status`가
+  `state: visible, display_mode: inline, last_seen_ms: 103`을 돌려줬다. App iframe이 부팅해 폴링 중이라는 뜻이며
+  "표시 자체가 안 됨"은 이 경로에서 재현되지 않았다. 같은 시각 Desktop의 `claude.ai-web.log`에는
+  `[MCP] [Epitaxy MCP App] fullscreen request refused: it needs a fresh press in this app's own frame, not elsewhere on the page`
+  가 App의 자동 요청 수(연결·준비·재시도 2회)만큼 4번 적혔다. 즉 이 Host는 프로그램 fullscreen 요청을 거부하고
+  **App 프레임 안의 새 사용자 클릭**에서만 펼친다. 이것이 "inline은 뜨는데 자동 fullscreen이 안 됨"의 원인이다.
+- **같은 Mac의 Plugin 경로:** Claude Code marketplace `gil-preview-macos-arm64`가 `dev-20261031-local`(Core `gil 0.1.0`,
+  #78 이전 빌드)을 가리킨다. 그 서버에 preview.27이 만든 Project로 `gil_monitor_prepare`를 호출하면
+  `unsupported_format`으로 거절되어 `show_gil_monitor`까지 가지 못한다. 구형 Plugin과 신형 직접 등록이 함께 켜진
+  환경에서는 Agent가 어느 서버를 부르느냐에 따라 "아무것도 뜨지 않음"이 재현될 수 있다. 사용자 확인 대상이다.
+
+이 결과로 바꾼 것(Host 이름으로 분기하지 않는다):
+
+- App은 자동 요청이 **오류(거부)**로 끝나면 타이머 재시도를 하지 않고 즉시 클릭 경로를 무장한다. 거부된 클릭
+  요청은 세 번까지 다시 무장한다. Host가 `inline`을 **적용**한 경우의 기존 동작(유한 재시도 뒤 클릭 한 번)은 그대로다.
+- App은 presence 보고에 `automatic_fullscreen`(`pending|applied|declined|refused|unavailable|manual`)을 싣고, Core는
+  `gil_monitor_status`로 그대로 노출하며 inline 안내문을 그 값에 맞춘다(`refused`면 "Monitor 카드를 한 번 클릭").
+  Core는 fullscreen을 스스로 요청하지 않는다. 구형 App은 값을 보내지 않으며 `null`로 남는다.
+- Node 어댑터(`plugins/gil-companion-prototype/monitor.mjs`)의 `gil_monitor_poll` 스키마가 presence 필드를 거부하던
+  것을 통과시킨다.
+- inline-only 안내문에서 Host 이름을 뺐다.
+
+확인하지 않은 것: 실제 화면의 inline 카드·클릭 뒤 fullscreen 전환은 이 세션이 스스로 볼 수 없어 사용자 확인
+대기다. Desktop Console 캡처는 받지 못했다. Host의 "fresh press" 판정이 `pointerdown`을 인정하는지는 사용자의
+첫 클릭 결과(연결 정보의 `automatic` 마지막 항목 `gesture`의 `applied`)로 확인한다.

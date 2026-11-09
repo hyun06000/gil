@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { build } from 'esbuild';
 import { retryAfter } from './host.mjs';
+import { AUTOMATIC_FULLSCREEN } from './presentation.mjs';
 
 // Execute the real entrypoint, replacing only its Host and renderer boundaries.
 // This checks callback ordering and button wiring, not merely the policy helper.
@@ -439,4 +440,57 @@ test('Mac guide selects the destination, copies only on click, and offers manual
     assert.equal(f.native.length, before, 'opening, choosing and copying call no tool');
     await f.element('update').onclick(); assert.equal(panel.hidden, true);
   }
+});
+
+// Claude Desktop 4.23118.0's Claude Code tab logs "fullscreen request refused: it needs a fresh
+// press in this app's own frame" for every programmatic request (2026-11-09 observation). The
+// mock answers the same way: an error, never an applied mode, until a press is granted.
+test('a Host that refuses programmatic requests gets no timer retries; presses carry the request, re-armed while refused, bounded', async () => {
+  let grant = false;
+  const f = fixture({ answer(request) { if (grant) return request; throw new Error('needs a fresh press'); } });
+  await f.start();
+  assert.deepEqual(f.calls, ['fullscreen', 'fullscreen'], 'connect-time and ready-time requests');
+  assert.equal([...f.timers.values()].filter(t => t.ms === 1500 || t.ms === 4000).length, 0, 'a refusal schedules no timer retry');
+  assert.match(f.element('host-say').textContent, /Monitor 안에서의 클릭으로만/);
+  assert.equal(f.observations.at(-1).automatic_fullscreen, 'refused');
+  assert.equal(f.observations.at(-1).presentation, 'inline');
+  await f.pointerdown(); await f.pointerdown(); await f.pointerdown();
+  assert.equal(f.calls.length, 5, 'three refused gestures carry three requests');
+  await f.pointerdown();
+  assert.equal(f.calls.length, 5, 'then the automatic intent stops fighting the Host');
+  const automatic = JSON.parse(f.element('host-evidence').textContent).automatic;
+  assert.deepEqual(automatic.map(a => [a.phase, a.applied, a.refused]),
+    [['connect', null, true], ['ready', null, true], ['gesture', null, true], ['gesture', null, true], ['gesture', null, true]]);
+  assert.equal(f.element('expand').disabled, false, 'manual expand stays available');
+  grant = true;
+  await f.element('expand').onclick();
+  assert.equal(f.document.body.dataset.displayMode, 'fullscreen');
+  assert.equal(f.observations.at(-1).automatic_fullscreen, 'manual', 'an explicit choice is reported as such');
+});
+
+test('a press the Host accepts after refusals ends the intent and the App reports applied', async () => {
+  let grant = false;
+  const f = fixture({ answer(request) { if (grant) return request; throw new Error('needs a fresh press'); } });
+  await f.start();
+  await f.pointerdown();
+  assert.equal(f.calls.length, 3);
+  grant = true;
+  await f.pointerdown();
+  assert.equal(f.calls.length, 4);
+  assert.equal(f.document.body.dataset.displayMode, 'fullscreen');
+  assert.equal(f.observations.at(-1).automatic_fullscreen, 'applied');
+  await f.pointerdown();
+  assert.equal(f.calls.length, 4, 'nothing more once fullscreen was applied');
+});
+
+test('the presence report names why the Monitor is not fullscreen: declined, unavailable, applied', async () => {
+  let f = fixture({ answer: () => ({ mode: 'inline' }) }); await f.start();
+  assert.equal(f.observations.at(-1).automatic_fullscreen, 'declined');
+  f = fixture({ modes: ['inline'] }); await f.start();
+  assert.deepEqual(f.calls, []);
+  assert.equal(f.observations.at(-1).automatic_fullscreen, 'unavailable');
+  assert.doesNotMatch(f.element('host-say').textContent, /Codex|Claude/, 'no Host is named');
+  f = fixture(); await f.start();
+  assert.equal(f.observations.at(-1).automatic_fullscreen, 'applied');
+  assert.ok(f.observations.every(x => AUTOMATIC_FULLSCREEN.includes(x.automatic_fullscreen)));
 });

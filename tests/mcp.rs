@@ -2107,8 +2107,18 @@ fn monitor_presence_reopens_on_resume_and_close_but_not_while_visible_and_does_n
     assert_eq!(visible["structuredContent"]["state"],"visible");
     assert_eq!(visible["structuredContent"]["display_mode"],"fullscreen");
     assert!(!needs_show(&monitor_call(&mut mcp,"gil_context",args.clone())));
-    monitor_call(&mut mcp,"gil_monitor_poll",observation("2","inline"));
-    assert!(!needs_show(&monitor_call(&mut mcp,"gil_context",args.clone())));
+    // The App's own account of a Host that accepts fullscreen only from a press inside the App
+    // reaches the model through status and through the inline guidance; the Core never guesses it.
+    let mut refused = observation("2","inline"); refused["automatic_fullscreen"] = json!("refused");
+    monitor_call(&mut mcp,"gil_monitor_poll",refused);
+    let inline = monitor_call(&mut mcp,"gil_monitor_status",args.clone());
+    assert_eq!(inline["structuredContent"]["display_mode"],"inline");
+    assert_eq!(inline["structuredContent"]["automatic_fullscreen"],"refused");
+    let guided = monitor_call(&mut mcp,"gil_context",args.clone());
+    assert!(!needs_show(&guided));
+    assert!(guided["content"][0]["text"].as_str().unwrap().contains("사용자 클릭으로만 펼친다"), "{guided}");
+    let bogus = mcp.request("tools/call",json!({"name":"gil_monitor_poll","arguments":{"scope_id":scope,"instance_id":"test-app","sequence":"3","presentation":"inline","automatic_fullscreen":"always"}}));
+    assert!(bogus.get("error").is_some(), "{bogus}");
     let other = at.join("other-project"); std::fs::create_dir(&other).unwrap(); started(&other);
     assert_eq!(monitor_call(&mut mcp,"gil_monitor_status",json!({"project_root":other}))["structuredContent"]["state"],"unknown");
     monitor_call(&mut mcp,"gil_monitor_poll",observation("3","hidden"));

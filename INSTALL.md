@@ -125,8 +125,9 @@ Codex와 Claude Desktop 모두 **고정 런처**를 등록하므로 업데이트
      `claude_desktop_config.json.gil-backup-<시각>`을 남긴다(최근 5개 보관).
 5. Host를 (다시) 열고 새 대화에서 빈 테스트 폴더를 선택한다.
 6. **“지금 폴더에서 GIL 프로젝트를 시작해 줘”**라고 말하고 실제 Monitor와 첫 단계가 보이는지 확인한다.
-   Claude Code 탭에서는 App이 연결 직후와 Monitor 준비 뒤 fullscreen을 자동 요청한다. 자동으로 펼쳐지지
-   않으면 **카드를 한 번 클릭하면** 펼쳐진다(아래 macOS Claude 절의 Host 동작과 같다).
+   Claude Code 탭에서는 App이 연결 직후와 Monitor 준비 뒤 fullscreen을 자동 요청하지만, Desktop 4.23118.0은
+   이 요청을 "App 안에서의 새 클릭이 필요하다"며 거부한다(2026-11-09 Host 로그 실측). Monitor는 inline 카드로
+   뜨고 **카드를 한 번 클릭하면** 펼쳐진다(아래 macOS Claude 절의 Host 동작과 같다).
 
 **직접 등록(임시, owner.8/owner.9 사용자용).** owner.8/owner.9 Companion에는 Claude Desktop 버튼이 없다. Claude Desktop을
 완전히 종료한 뒤 `%APPDATA%\Claude\claude_desktop_config.json`의 `mcpServers`에 다음 항목을 더하고 Desktop을
@@ -358,8 +359,10 @@ claude plugin install gil-companion-prototype@gil-preview-macos-arm64
 설치 뒤 **새 세션**을 열고 빈 테스트 폴더에서 **“지금 폴더에서 GIL 프로젝트를 시작해 줘”**라고 말한다.
 Agent의 도구 성공 문장과 실제 화면을 구분한다. 10/31 실측에서 Claude Code 탭은 Monitor 준비 뒤에 보낸 자동
 표시 모드 요청을 적용하지 않았고 Monitor는 inline 카드로 뜬 뒤 **카드를 한 번 클릭하면** fullscreen으로
-펼쳐졌다. 2026-11-02 빌드부터 App은 연결 직후에도 fullscreen을 요청한다. 이 요청이 Claude Code 탭에서
-적용되는지는 사용자 화면 확인 대기이며, 적용되지 않으면 첫 클릭이 그대로 펼친다. fullscreen 지원과 “항상
+펼쳐졌다. 2026-11-02 빌드부터 App은 연결 직후에도 fullscreen을 요청한다. 2026-11-09 Desktop 4.23118.0의
+Host 로그는 이 자동 요청을 모두 `fullscreen request refused: it needs a fresh press in this app's own frame`으로
+거부했다. 즉 Claude Code 탭은 App 안에서의 사용자 클릭으로만 펼치며, 그때 App은 타이머 재시도 대신 첫 클릭에
+요청을 싣고 `gil_monitor_status.automatic_fullscreen=refused`로 그 사실을 Agent에 알린다. fullscreen 지원과 “항상
 자동으로 열림”은 다른 것이다. Monitor의 **연결 정보**에는 Host가 보고한 이름·버전, 광고한 표시 모드, 그리고
 `automatic`(자동 시도의 단계·시각·Host 응답)이 그대로 적히므로, 문제를 제보할 때 그 값을 함께 적는다. fullscreen 중 다른 도구의 승인 창이 보이지 않으면 **대화 안으로**를 눌러 inline으로 돌아간 뒤
 승인한다.

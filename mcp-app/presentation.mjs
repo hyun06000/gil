@@ -17,14 +17,25 @@ export function graphOrientation(mode, choice = null) {
 //             apply display-mode changes only inside a user action).
 // Any manual choice, a Host-confirmed fullscreen, or teardown ends the intent for good.
 export const RETRY_DELAYS_MS = [1500, 4000];
-export function initialFullscreen({ retries = RETRY_DELAYS_MS, now = () => Date.now() } = {}) {
+// A Host may refuse a programmatic request outright (an error instead of an applied mode) and
+// accept fullscreen only from a user press inside the App's own frame. Timer retries cannot
+// satisfy that, so a refusal arms the gesture at once, and a refused gesture re-arms it a few
+// times: the user's natural act is to click the card. An applied `inline` answer keeps the
+// bounded timer retries and one gesture, as before.
+export const GESTURE_ATTEMPTS = 3;
+// What the App reports to the Core about its automatic fullscreen intent (gil_monitor_poll
+// `automatic_fullscreen`). Observations only; the Core never requests fullscreen itself.
+export const AUTOMATIC_FULLSCREEN = ['pending', 'applied', 'declined', 'refused', 'unavailable', 'manual'];
+export function initialFullscreen({ retries = RETRY_DELAYS_MS, gestures = GESTURE_ATTEMPTS, now = () => Date.now() } = {}) {
   let early = false, consumed = false, done = false, attempts = 0, gestureArmed = false;
+  let gesturesUsed = 0, manual = false, lastAnswer = null;
   const born = now(), log = [];
   let inflight = null;
   const finish = () => { done = true; gestureArmed = false; };
   const begin = (phase) => { inflight = { phase, at_ms: Math.max(0, now() - born), applied: undefined }; log.push(inflight); return 'fullscreen'; };
   return {
-    cancel: finish,
+    // An explicit user choice (expand, inline or the native window) ends the automatic intent.
+    cancel() { manual = true; finish(); },
     next({ connected, ready, context }) {
       if (done || !connected) return null;
       if (context.displayMode === 'fullscreen') { finish(); consumed = true; return null; }
@@ -42,30 +53,47 @@ export function initialFullscreen({ retries = RETRY_DELAYS_MS, now = () => Date.
       if (done || !consumed || gestureArmed || inflight) return null;
       return begin('retry');
     },
-    // Called with the mode the Host applied (or null when it gave none). Returns the delay
-    // before another automatic request, or null when no timer is due now.
-    settle(appliedMode) {
-      if (inflight) { inflight.applied = appliedMode ?? null; inflight = null; }
+    // Called with the mode the Host applied (or null when it gave none); `refused` marks a
+    // request the Host answered with an error. Returns the delay before another automatic
+    // request, or null when no timer is due now.
+    settle(appliedMode, { refused = false } = {}) {
+      const phase = inflight?.phase;
+      if (inflight) { inflight.applied = appliedMode ?? null; if (refused) inflight.refused = true; inflight = null; }
+      lastAnswer = refused ? 'refused' : appliedMode ?? 'none';
       if (done) return null;
       if (appliedMode === 'fullscreen') { finish(); return null; }
       // A declined connect-time request is not a retry: the ready-time request follows by itself.
       if (!consumed) return null;
-      if (attempts - 1 < retries.length) { const delay = retries[attempts - 1]; attempts += 1; return delay; }
+      if (phase === 'gesture') {
+        // Only a refusal re-arms: a Host that applied inline to a user press made its decision.
+        if (refused && gesturesUsed < gestures) gestureArmed = true; else finish();
+        return null;
+      }
+      if (!refused && attempts - 1 < retries.length) { const delay = retries[attempts - 1]; attempts += 1; return delay; }
       gestureArmed = true;
       return null;
     },
     // A Host-reported fullscreen (via a context event) also ends the intent.
     observe(mode) { if (mode === 'fullscreen') finish(); },
-    // The user's first interaction anywhere in the App may carry the one remaining request.
+    // The user's interaction anywhere in the App may carry the remaining request(s).
     gesture() {
       if (!gestureArmed || done) return null;
-      finish();
+      gestureArmed = false; gesturesUsed += 1;
       return begin('gesture');
     },
     get retrying() { return consumed && !done && !gestureArmed; },
     get awaitingGesture() { return gestureArmed && !done; },
     /** Evidence only: copies of every attempt so far. */
     get attempts() { return log.map((entry) => ({ ...entry })); },
+    /** One word for the Core: the state of the automatic intent given the Host context. */
+    summary(context = {}) {
+      if (manual) return 'manual';
+      if (context.displayMode === 'fullscreen') return 'applied';
+      if (Array.isArray(context.availableDisplayModes) && !context.availableDisplayModes.includes('fullscreen')) return 'unavailable';
+      if (lastAnswer === null) return 'pending';
+      if (lastAnswer === 'fullscreen') return 'applied';
+      return lastAnswer === 'refused' ? 'refused' : 'declined';
+    },
   };
 }
 

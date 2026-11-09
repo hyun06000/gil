@@ -8,8 +8,14 @@ const FRESH: Duration = Duration::from_secs(15);
 const OPEN_GRACE: Duration = Duration::from_secs(30);
 const MAX_INSTANCES: usize = 32;
 
+/// What the App reports about its own automatic fullscreen intent. Observations, never a
+/// request: `refused` means the Host answered programmatic requests with an error and accepts
+/// fullscreen only from a user press inside the App; `declined` means it applied `inline`;
+/// `unavailable` means the surface does not advertise fullscreen; `manual` an explicit choice.
+const AUTOMATIC_FULLSCREEN: [&str; 6] = ["pending", "applied", "declined", "refused", "unavailable", "manual"];
+
 #[derive(Debug)]
-struct Seen { sequence: u64, state: String, at: Instant }
+struct Seen { sequence: u64, state: String, at: Instant, automatic_fullscreen: Option<String> }
 #[derive(Debug, Default)]
 pub struct Presence {
     instances: BTreeMap<String, Seen>,
@@ -19,7 +25,10 @@ pub struct Presence {
 
 pub fn valid(input: &Value) -> bool {
     let fields = ["instance_id", "presentation", "sequence"];
-    if fields.iter().all(|key| input.get(key).is_none()) { return true; }
+    // The intent travels only with a display observation; alone it would say nothing about an instance.
+    let intent_valid = input.get("automatic_fullscreen").is_none_or(|v| v.as_str().is_some_and(|s| AUTOMATIC_FULLSCREEN.contains(&s)));
+    if fields.iter().all(|key| input.get(key).is_none()) { return input.get("automatic_fullscreen").is_none(); }
+    if !intent_valid { return false; }
     let Some(id) = input["instance_id"].as_str() else { return false; };
     let Some(sequence) = input["sequence"].as_str() else { return false; };
     !id.is_empty() && id.len() <= 64 && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
@@ -41,7 +50,8 @@ impl Presence {
         }
         if matches!(input["presentation"].as_str(), Some("fullscreen" | "inline")) { self.unanswered = 0; }
         self.instances.insert(id.to_owned(), Seen { sequence,
-            state: input["presentation"].as_str().unwrap().to_owned(), at: now });
+            state: input["presentation"].as_str().unwrap().to_owned(), at: now,
+            automatic_fullscreen: input["automatic_fullscreen"].as_str().map(str::to_owned) });
     }
     pub fn requested(&mut self, now: Instant) { self.requested = Some(now); self.unanswered = self.unanswered.saturating_add(1); }
     pub fn status(&self, scope: &str, now: Instant) -> Value {
@@ -56,7 +66,9 @@ impl Presence {
             else if pending { ("opening", None) }
             else if self.unanswered >= 2 { ("unconfirmed", None) }
             else { (latest.map_or("unknown", |s| s.state.as_str()), None) };
-        json!({"scope_id":scope,"state":state,"display_mode":mode,
+        // The visible instance's own account of its automatic fullscreen attempt, when it sent one.
+        let automatic_fullscreen = visible.or(latest).and_then(|s| s.automatic_fullscreen.as_deref());
+        json!({"scope_id":scope,"state":state,"display_mode":mode,"automatic_fullscreen":automatic_fullscreen,
             "should_open": visible.is_none() && !pending && self.unanswered < 2,
             "last_seen_ms":self.instances.values().map(|s| now.saturating_duration_since(s.at).as_millis() as u64).min(),
             "evidence":"app_report", "scope":"this_mcp_connection"})
@@ -128,5 +140,19 @@ mod tests {
             observation("x",0,"hidden"),observation("x",1,"pretend-visible")] {
             assert!(!valid(&input));
         }
+    }
+    #[test]
+    fn the_apps_automatic_fullscreen_account_is_an_enum_that_travels_only_with_an_observation() {
+        let with = |state:&str, intent:&str| { let mut v = observation("a",1,state); v["automatic_fullscreen"] = json!(intent); v };
+        for intent in AUTOMATIC_FULLSCREEN { assert!(valid(&with("inline", intent)), "{intent}"); }
+        assert!(!valid(&with("inline","always")));
+        assert!(!valid(&json!({"scope_id":"s","automatic_fullscreen":"refused"})), "intent without an instance says nothing");
+        let mut p=Presence::default();let now=Instant::now();
+        assert_eq!(p.status("s",now)["automatic_fullscreen"],Value::Null);
+        p.observe(&with("inline","refused"),now);
+        assert_eq!(p.status("s",now)["display_mode"],"inline");
+        assert_eq!(p.status("s",now)["automatic_fullscreen"],"refused");
+        p.observe(&observation("a",2,"inline"),now);
+        assert_eq!(p.status("s",now)["automatic_fullscreen"],Value::Null,"an older App that sends no account is not invented one");
     }
 }

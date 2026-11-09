@@ -28,6 +28,10 @@ test('render tool alone links a content-addressed self-contained MCP App resourc
     assert.equal(tools.get(name).config._meta.ui.resourceUri, undefined);
     assert.equal(tools.get(name).config.inputSchema.safeParse({ scope_id: 'project:' + 'a'.repeat(64), project_root: '/private' }).success, false);
   }
+  // The App's display observation must reach the Core through this adapter, not be refused here.
+  assert.equal(tools.get('gil_monitor_poll').config.inputSchema.safeParse({ scope_id: 'project:' + 'a'.repeat(64),
+    instance_id: 'app', sequence: '1', presentation: 'inline', automatic_fullscreen: 'refused' }).success, true);
+  assert.equal(tools.get('gil_monitor_read').config.inputSchema.safeParse({ scope_id: 'project:' + 'a'.repeat(64), presentation: 'inline' }).success, false);
   await render.handler({ scope_id: 'project:' + 'a'.repeat(64) });
   assert.equal(called[0].name, 'gil_monitor_read');
 });

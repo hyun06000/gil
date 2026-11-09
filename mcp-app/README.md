@@ -99,6 +99,11 @@ View 준비나 파일 watcher 성공으로 표시를 추정하지 않는다. 표
 - `unknown`: 아직 보고가 없거나 마지막 신호가 15초보다 오래됨. 서버 재시작도 unknown부터 시작한다.
 - `opening`: show 이후 최대 30초 동안의 표시 확인 대기. 화면 성공을 뜻하지 않는다.
 - `unconfirmed`: 표시 응답 없는 show 두 번 이후. 추가 자동 카드를 만들지 않고 문제를 알린다.
+- `automatic_fullscreen` (2026-11-09): App이 같은 보고에 실어 보내는 자동 fullscreen 의도의 상태.
+  `refused`는 Host가 프로그램 요청을 오류로 거부해 App 안의 사용자 클릭으로만 펼치는 경우,
+  `declined`는 Host가 자동 요청에 inline을 적용한 경우, `unavailable`은 표면이 fullscreen을 광고하지
+  않는 경우, `manual`은 사용자가 직접 고른 경우, `applied`/`pending`은 적용·대기다. Core는 이 값으로
+  inline 안내문을 고를 뿐 스스로 fullscreen을 요청하지 않는다. 보내지 않는 구형 App은 `null`이다.
 
 성공한 Project 도구 호출(새 세션의 `gil_context` 포함)은 이 상태를 검사하고, 필요하면 정확한 scope의
 `show_gil_monitor` 다음 호출을 응답에 넣는다. Agent는 사용자에게 별도 창을 요구하지 않고 이 호출을

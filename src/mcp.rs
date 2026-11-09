@@ -117,7 +117,13 @@ impl GilServer {
             if health.is_error != Some(true) {
                 if let Some(status) = health.structured_content.as_ref() {
                     if status["display_mode"] == "inline" {
-                        guidance::prepend(&mut result, "Monitor는 inline 미리보기로만 확인됐다. fullscreen 표시 완료라고 보고하지 않는다. Host가 자동 확대를 받아들이지 않으면 위젯 머리의 ‘다른 패널에 표시’ 또는 Host의 확대 버튼을 안내한다. 표시 문제와 GIL 진행은 별개다; 아래 다음 GIL 호출을 계속한다.");
+                        // The App's own account of its automatic attempt chooses the guidance; the Core never guesses Host policy.
+                        let hint = match status["automatic_fullscreen"].as_str() {
+                            Some("refused") => "Monitor는 inline 미리보기로 확인됐고 Host는 App의 자동 fullscreen 요청을 거부했다(이 Host는 App 안에서의 사용자 클릭으로만 펼친다). fullscreen 표시 완료라고 보고하지 않는다. 사용자에게 Monitor 카드 안을 한 번 클릭하거나 ‘모니터 펼치기’를 누르라고 안내한다. 표시 문제와 GIL 진행은 별개다; 아래 다음 GIL 호출을 계속한다.",
+                            Some("unavailable") => "Monitor는 inline 미리보기로 확인됐고 이 Host 표면은 fullscreen을 광고하지 않는다. fullscreen 표시 완료라고 보고하지 않는다. 위젯 머리의 ‘다른 패널에 표시’ 또는 Host의 확대 버튼을 안내한다. 표시 문제와 GIL 진행은 별개다; 아래 다음 GIL 호출을 계속한다.",
+                            _ => "Monitor는 inline 미리보기로만 확인됐다. fullscreen 표시 완료라고 보고하지 않는다. Host가 자동 확대를 받아들이지 않으면 위젯 머리의 ‘다른 패널에 표시’ 또는 Host의 확대 버튼을 안내한다. 표시 문제와 GIL 진행은 별개다; 아래 다음 GIL 호출을 계속한다.",
+                        };
+                        guidance::prepend(&mut result, hint);
                     } else if status["state"] == "unconfirmed" {
                         guidance::prepend(&mut result, "MCP App Monitor가 두 번의 표시 요청에도 응답하지 않았다. 자동 재열기를 멈추고 표시 문제를 알린다. Companion을 자동으로 열지 않는다.");
                     } else if status["should_open"] == true {

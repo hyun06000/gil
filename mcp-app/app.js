@@ -39,7 +39,10 @@ function presence() {
   const presentation = stopped ? 'closed' : suspended || document.hidden ? 'hidden'
     : renderFailed ? 'error' : !rendererReady ? 'loading'
     : ['inline', 'fullscreen'].includes(context.displayMode) ? context.displayMode : 'loading';
-  return { instance_id: evidence.instance, sequence: String(++presenceSequence), presentation };
+  // The automatic fullscreen intent travels with the same report, so the Core can say why a
+  // Monitor is inline (Host refused, surface without fullscreen, user choice) instead of guessing.
+  return { instance_id: evidence.instance, sequence: String(++presenceSequence), presentation,
+    automatic_fullscreen: initialDisplay.summary(context) };
 }
 function reportPresence() {
   if (!connected || !window.GIL_HOST) return Promise.resolve();
@@ -79,7 +82,7 @@ let retryTimer;
 async function requestMode(mode, { automatic = false } = {}) {
   if (stopped || pending || !connected || !context.availableDisplayModes?.includes(mode)) return;
   pending = true; modes('Host 에 표시 전환을 요청하는 중…');
-  let got;
+  let got, refused = false;
   try {
     got = await app.requestDisplayMode({ mode }, { timeout: 10000 });
     if (stopped) return;
@@ -90,11 +93,14 @@ async function requestMode(mode, { automatic = false } = {}) {
       : got?.mode === 'inline' ? 'Host가 fullscreen 요청에 inline을 반환했습니다. 모니터 펼치기로 재요청하거나 위젯 머리의 다른 패널에 표시·확대 버튼을 사용해 주세요.'
       : 'Host 가 적용 모드를 반환하지 않았습니다. 화면이 그대로라면 모니터 펼치기를 눌러 주세요.');
   } catch {
-    if (!stopped) { response = '요청 오류'; modes('전환을 확인하지 못했습니다. 모니터 펼치기를 눌러 다시 요청할 수 있습니다.'); }
+    // An error is a refusal, not an applied mode. Some Hosts accept fullscreen only from a
+    // user press inside this frame; the gesture path below asks again at the user's click.
+    refused = true;
+    if (!stopped) { response = '요청 거부(오류)'; modes('Host 가 전환 요청을 거부했습니다. Monitor 안을 직접 클릭하거나 Host 의 확대 버튼을 사용해 주세요.'); }
   } finally {
     pending = false;
     if (!stopped) {
-      if (automatic) scheduleRetry(got?.mode ?? null);
+      if (automatic) scheduleRetry(got?.mode ?? null, refused);
       modes(); void reportPresence();
       // A connect-time request may have been answered after the Monitor rendered: the
       // ready-time request then follows here instead of waiting for another Host event.
@@ -103,13 +109,15 @@ async function requestMode(mode, { automatic = false } = {}) {
   }
 }
 // Automatic requests only. A manual choice cancels the intent, so this never fights the user.
-function scheduleRetry(appliedMode) {
+function scheduleRetry(appliedMode, refused = false) {
   clearTimeout(retryTimer);
-  const delay = initialDisplay.settle(appliedMode);
+  const delay = initialDisplay.settle(appliedMode, { refused });
   if (delay !== null) {
     retryTimer = setTimeout(() => { retryTimer = undefined; maybeFullscreen(); }, delay);
   } else if (initialDisplay.awaitingGesture) {
-    modes('Host가 자동 fullscreen 요청을 적용하지 않았습니다. 클릭으로 재요청하거나, 위젯 머리의 다른 패널에 표시·확대 버튼을 사용해 주세요.');
+    modes(refused
+      ? 'Host 는 이 Monitor 안에서의 클릭으로만 펼칩니다. Monitor 를 한 번 클릭하거나 모니터 펼치기를 눌러 주세요.'
+      : 'Host가 자동 fullscreen 요청을 적용하지 않았습니다. 클릭으로 재요청하거나, 위젯 머리의 다른 패널에 표시·확대 버튼을 사용해 주세요.');
   }
 }
 function maybeFullscreen() {
@@ -310,7 +318,7 @@ app.connect().then(() => {
   modes(context.availableDisplayModes?.includes('fullscreen')
     ? '전체 화면을 자동 요청합니다(연결 직후와 Monitor 준비 뒤). 그대로라면 Monitor 를 한 번 클릭하거나 모니터 펼치기를 눌러 주세요.'
     : Array.isArray(context.availableDisplayModes)
-      ? '이 표면은 펼친 Monitor 를 지원하지 않습니다. fullscreen 을 지원하는 Host(Codex, Claude Desktop 의 Claude Code 탭)에서 다시 열거나 별도 창을 사용하세요.'
+      ? '이 표면은 펼친 Monitor 를 광고하지 않습니다. 위젯 머리의 다른 패널에 표시·확대 버튼을 쓰거나 별도 창을 사용하세요.'
       : 'Host 의 표시 모드 지원 정보를 기다리고 있습니다.');
   void poll();
   maybeFullscreen();
