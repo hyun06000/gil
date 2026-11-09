@@ -155,7 +155,7 @@ test('update notice shows a button only when a newer or unknown-relative version
   const available = updateNotice({ state: 'available', installed: '0.2.1-preview.8', latest });
   assert.equal(available.show, true);
   assert.match(available.label, /0\.2\.1-preview\.9/);
-  assert.match(available.line, /사용자가 직접/);
+  assert.match(available.line, /업데이트 안내/);
   const unknown = updateNotice({ state: 'unknown_installed', latest });
   assert.equal(unknown.show, true);
   assert.match(unknown.label, /최신 0\.2\.1-preview\.9/);
@@ -166,9 +166,17 @@ test('update guide lists both Hosts, never a command, and offers Companion only 
   assert.ok(win.steps.some(s => /업데이트 확인/.test(s)) && win.steps.some(s => /Claude Desktop/.test(s)));
   const mac = updateGuide({ platform: 'darwin-arm64', installed: '0.2.1-preview.8', latest });
   assert.equal(mac.companion, false);
-  assert.ok(mac.steps.some(s => /Codex/.test(s)) && mac.steps.some(s => /Claude Desktop/.test(s)));
+  assert.deepEqual(mac.targets.map(t => t.label), ['Codex', 'Claude Desktop', 'Codex와 Claude Desktop']);
+  for (const target of mac.targets) {
+    assert.ok(target.request.includes(latest.install_doc));
+    assert.ok(target.request.includes(latest.version));
+    assert.ok(target.request.includes(target.label));
+    assert.match(target.request, /훅은 설치하지 마/);
+  }
+  assert.match(mac.targets[1].hint, /Claude 밖/);
+  assert.match(mac.targets[2].request, /종료를 확인한 뒤/);
   for (const guide of [win, mac]) {
     assert.ok(guide.steps.every(s => !/curl|npm|cargo|brew|\$ /.test(s)), 'guidance is prose, not commands');
-    assert.ok(guide.steps.some(s => s.includes(latest.release_url)));
+    assert.ok([...guide.steps, ...(guide.details ?? [])].some(s => s.includes(latest.release_url)));
   }
 });
