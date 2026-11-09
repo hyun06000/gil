@@ -1,15 +1,15 @@
 # GIL 설치 안내
 
 GIL 설치는 Host 훅을 등록하지 않는다. 선택한 GIL 프로젝트에만 공통 프롬프트와 단계별 MCP 응답으로 안내한다.
-macOS preview.29는 계획 근거 입력 안내·오류 일괄 표시와 PNG 제한값 안내를 보완한다. 훅 없는 프로젝트별 새 세션 재개와 기존 기록 보존을 유지한다.
-이번 개선은 preview.29부터 포함된다. preview.28 이하와 Windows owner.14에는 이 입력 안내 보완이 없다.
+macOS preview.29와 Windows owner.15는 계획 근거 입력 안내·오류 일괄 표시와 PNG 제한값 안내를 보완한다. 훅 없는 프로젝트별 새 세션 재개와 기존 기록 보존을 유지한다.
+이번 개선은 macOS preview.29와 Windows owner.15부터 포함된다. preview.28 이하와 Windows owner.14 이하에는 이 입력 안내 보완이 없다.
 `basis_refs`는 현재 Interview의 닫힌 Question/Interpretation 참조를 한 줄에 하나씩 적으며,
 다른 Cycle 참조를 자동 이동하지 않는다. PNG는 가로·세로 각각 최대 8192px, 총 16,777,216픽셀,
 파일당 16 MiB(새 첨부 최대 8개·합계 32 MiB)이며 기존 검증·승인 규칙은 유지한다.
 실제 Host의 안내 활용과 필드테스트는 사용자 확인 대기다.
 
 전역·프로젝트 로컬·Plugin·Skill 훅은 등록하지 않는다. 구형 Core의 훅 installer를 실행하지 않는다.
-Windows owner.14는 기존 배포를 유지한다. 기존 프로젝트 기록은 자동 변환하지 않는다.
+Windows는 기존 채널의 새 버전 owner.15로 최신 공통 기능을 제공한다. 기존 프로젝트 기록은 자동 변환하지 않는다.
 
 이 문서가 친구·외부 시험 사용자를 위한 설치 정본이다. 사용자는 터미널 사용법을 알 필요가 없다.
 GIL은 **Codex**와 **Claude Desktop의 Claude Code 탭**을 같은 지원 대상으로 둔다. 두 Host는 같은 Core,
@@ -27,7 +27,7 @@ Agent가 앱에 포함된 CLI와 OS 기본 도구를 사용한다. 일반 ChatGP
 기존 보고서·차트·코드의 후속 작업은 GIL을 다시 언급하지 않아도 프로젝트 재개다. 파일 작업 전에
 `gil_context`로 현재 계획·Step을 읽고 실제 열린 Verify를 따른다. 새 목적을 기존 완료된 계약에 붙이지 않는다.
 
-macOS preview.29는 프로젝트 내부 Codex/Claude 안내를 최초 Snapshot 또는 다음 정상 Verify open에 포함한다.
+macOS preview.29와 Windows owner.15는 프로젝트 내부 Codex/Claude 안내를 최초 Snapshot 또는 다음 정상 Verify open에 포함한다.
 기존 안내·과거 기록을 보존하며 훅·전역 지침은 만들지 않는다. 설치만으로 기존 프로젝트를 순회해
 수정하지 않는다. 아직 안내가 없는 기존 프로젝트의 최초 채택·Host 로딩 한계는
 [프로젝트 재개 계약](distribution/codex/PROJECT-RESUME.md)을 따른다. 연결 실패를 이유로 기록 없이 산출물을 먼저 만들지 않는다.
@@ -39,7 +39,8 @@ macOS preview.25부터는 실제 MCP가 실행하는 Core의 `--version`, MCP in
 이번 판의 정확한 CLI 출력은 `gil 0.2.1-preview.29`이며 MCP·probe 버전은 `0.2.1-preview.29`다.
 preview.24와 그 이전 판은 수정 전이므로 `gil 0.1.0`을 출력할 수 있다.
 이는 Cargo 패키지 버전이며 **그 한 줄만으로 설치 실패나 구버전이라고 단정하지 않는다.**
-Windows owner.14도 기존 배포이므로 같은 구형 확인 절차를 따른다.
+Windows owner.15의 CLI는 `gil 0.1.1-owner.15`, MCP·probe는 `0.1.1-owner.15`를 반환한다.
+Windows owner.14 이하는 같은 구형 확인 절차를 따른다.
 
 설치 Agent는 PATH의 임의 `gil` 대신 공식 설치 응답·manifest 또는 직접 MCP 등록에서 확인한
 실행 파일을 검사한다. macOS는 공개 archive의 크기·SHA-256, `release.json`의 배포 버전과
@@ -51,11 +52,11 @@ preview.25 이후에 `--version`만 구버전이면 실제 실행 경로를 다�
 버전 문구는 무결성·제작자 인증을 대신하지 않으므로 해시 검증을 생략하지 않는다.
 이 확인을 위해 프로젝트를 초기화하거나 기록·설정·보안 정책을 임의로 바꾸지 않는다.
 
-## 네 조합의 지원 상태 (2026-11-07)
+## 네 조합의 지원 상태 (2026-11-10)
 
 | OS | Codex | Claude Desktop (Claude Code 탭) |
 |---|---|---|
-| Windows 11 x64 | **이전 판 실기기 확인 / 이번 판 사용자 확인 대기** — Companion installer `0.1.1-owner.14`, **Codex 연결** 버튼 | **사용자 확인 대기** — `0.1.1-owner.14`의 **Claude Desktop 연결** 버튼(자동 테스트 통과) |
+| Windows 11 x64 | **이전 판 실기기 확인 / 이번 판 사용자 확인 대기** — Companion installer `0.1.1-owner.15`, **Codex 연결** 버튼 | **사용자 확인 대기** — `0.1.1-owner.15`의 **Claude Desktop 연결** 버튼(자동 테스트 통과) |
 | macOS Apple Silicon | **이전 판 실기기 확인 / 이번 판 사용자 확인 대기** — Plugin `0.2.1-preview.29` 또는 Git 없는 archive | **이전 판 사용자 확인(11/01) / 이번 판 확인 대기** — 같은 archive의 Core를 Desktop 설정에 직접 등록. Plugin 경로는 화면 미표시 |
 
 상태의 뜻:
@@ -72,7 +73,7 @@ preview.25 이후에 `--version`만 구버전이면 실제 실행 경로를 다�
 
 | 환경 | 버전 | 상태 |
 |---|---|---|
-| Windows 11 x64 | `0.1.1-owner.14` | 계획 입력·Closing 안내 검증판, 실사용 검수 대기 |
+| Windows 11 x64 | `0.1.1-owner.15` | 최신 공통 Core·Monitor·계획 근거·PNG 안내 보완판, 실사용 검수 대기 |
 | macOS Apple Silicon | `0.2.1-preview.29` | 계획 근거·PNG 입력 안내 보완판, 실제 Host 검수 대기 |
 
 이번 판은 승인 저장과 최신 상태 조회를 구분한다. 승인 뒤 읽기가 잠시 실패하면 확인된 승인 판을 유지하고
@@ -84,7 +85,7 @@ preview.25 이후에 `--version`만 구버전이면 실제 실행 경로를 다�
 Monitor 승인 버튼 → Interview 닫기 → 계획 항목별 Experiment → Verify 파일 증거를 시험한다.
 새 프로젝트는 저장 형식 7을 사용한다. 기존 기록의 형식은 자동 변환하지 않으며, 이전 설치본으로
 되돌려도 형식 7 기록은 이전 형식으로 바뀌지 않는다. 닫힌 실패 Cycle의 revisit만 Monitor에서 변경 목록 확인·보존 승인을 거쳐 진행한다. 일반 restore와 Step revisit는 계속 차단한다.
-macOS 검증 범위와 배포물은 [preview.29 장부](distribution/codex/PREVIEW-29-PUBLICATION-20261110.md), Windows owner.14는 [게시 장부](distribution/windows/PUBLICATION-OWNER-14-20261103.md)를 따른다.
+macOS 검증 범위와 배포물은 [preview.29 장부](distribution/codex/PREVIEW-29-PUBLICATION-20261110.md), Windows owner.15는 [게시 장부](distribution/windows/PUBLICATION-OWNER-15-20261110.md)를 따른다.
 
 > Windows **Claude Desktop 연결** 버튼은 `0.1.1-owner.10`부터, 공통 Monitor의 **업데이트 안내·확대·미니맵**은 owner.10/preview.11부터 포함된다.
 > 이전 owner.8/owner.9에는 Claude Desktop 연결 버튼이 없다. 업데이트 뒤 새 연결에서 확인한다.
@@ -103,11 +104,11 @@ Companion의 버튼(Windows) 또는 아래 절차의 사용자 승인 뒤 **Desk
 
 ## Windows 11 x64
 
-릴리스: [windows-owner-update-0.1.1-owner.14](https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.14)
+릴리스: [windows-owner-update-0.1.1-owner.15](https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.15)
 
-- 설치 파일: `GIL.Companion.Unsigned.Test._0.1.1-owner.14_x64-setup.exe`
-- 크기: `6,165,288` bytes
-- SHA-256: `f1be0b1bc0cd102a4045be9ddb0c4f5aaf572d8faa9b539cfe867dba32f86267`
+- 설치 파일: `GIL.Companion.Unsigned.Test._0.1.1-owner.15_x64-setup.exe`
+- 크기: `6,113,782` bytes
+- SHA-256: `fefcd6c22cf787130db0a63151af869c64caac393d1a15d22dcfe9b11f3aeaf2`
 - 지원: x64만. ARM64 Windows에는 설치하지 않는다.
 
 Windows에서는 Host가 어느 쪽이든 Core는 한 곳에 있다. installer가 `%LOCALAPPDATA%\GIL\runtime\`에
@@ -129,8 +130,10 @@ Codex와 Claude Desktop 모두 **고정 런처**를 등록하므로 업데이트
      항목과 사용자가 직접 만든 동명 `gil` 등록은 건드리지 않으며, 이전 GIL 실행 파일을 가리키는 `gil`
      항목만 **이전 GIL 연결 교체**로 바꿀 수 있다. 바꾸기 전 같은 폴더에 백업
      `claude_desktop_config.json.gil-backup-<시각>`을 남긴다(최근 5개 보관).
-5. Host를 (다시) 열고 새 대화에서 빈 테스트 폴더를 선택한다.
-6. **“지금 폴더에서 GIL 프로젝트를 시작해 줘”**라고 말하고 실제 Monitor와 첫 단계가 보이는지 확인한다.
+5. Agent는 선택된 Core의 버전·해시와 [기존 GIL 훅 여부](distribution/windows/INSTALL.md#기존-gil-훅-확인)를 확인한다.
+   이전 훅이 남았다면 해당 Host의 GIL 항목만 백업 후 정리한다. 새 훅은 등록하지 않는다.
+6. Host를 (다시) 열고 새 대화에서 빈 테스트 폴더를 선택한다.
+7. **“지금 폴더에서 GIL 프로젝트를 시작해 줘”**라고 말하고 실제 Monitor와 첫 단계가 보이는지 확인한다.
    Claude Code 탭에서는 App이 연결 직후와 Monitor 준비 뒤 fullscreen을 자동 요청하지만, Desktop 4.23118.0은
    이 요청을 "App 안에서의 새 클릭이 필요하다"며 거부한 로그가 있다(2026-11-09 macOS 관측이며 Windows 검수가 아님).
    카드가 보이면 **카드 안 또는 모니터 펼치기**를 눌러 재요청한다. 실제 확대 여부는 화면에서 확인한다.
@@ -190,7 +193,9 @@ macOS에는 아직 고정 런처와 Companion 버튼이 없다. Codex는 Plugin 
 
 Agent는 실제 Plugin 설치 응답의 `installedPath`와 MCP manifest, 또는 Claude의 `mcpServers.gil.command`에서
 Core의 절대경로·버전을 확인한다. 캐시 경로나 PATH의 `gil`을 추측하지 않는다.
-preview.29에서는 그 경로를 `GIL_CORE`로 사용한다. preview.23 이하에는 이 제거 명령을 실행하지 않는다.
+macOS preview.29에서는 그 경로를 `GIL_CORE`로 사용한다. Windows owner.15는 `current.json`의 버전·해시로
+검증한 Core를 사용하며 [Windows의 기존 훅 확인](distribution/windows/INSTALL.md#기존-gil-훅-확인)을 따른다.
+preview.23 이하나 Windows owner.14 이하의 Core에는 이 제거 명령을 실행하지 않는다.
 
 ```sh
 "$GIL_CORE" write-guard uninstall --auto --host codex
@@ -373,11 +378,11 @@ Host 로그는 이 자동 요청을 모두 `fullscreen request refused: it needs
 `automatic`(자동 시도의 단계·시각·Host 응답)이 그대로 적히므로, 문제를 제보할 때 그 값을 함께 적는다. fullscreen 중 다른 도구의 승인 창이 보이지 않으면 **대화 안으로**를 눌러 inline으로 돌아간 뒤
 승인한다.
 
-**배포 버전 경계:** macOS **preview.29**에는 PR #107의 표시 상태·오류 구분 개선이 포함된다.
+**배포 버전 경계:** macOS **preview.29**와 Windows **owner.15**에는 PR #107의 표시 상태·오류 구분 개선이 포함된다.
 이전 macOS **preview.27**과 Windows **owner.14**에는 포함되지 않았다. 구버전은 기존 수동 확대 절차를
 사용하며 `gil_monitor_status.automatic_fullscreen` 필드가 없어도 설치 오류로 판단하지 않는다.
 
-preview.29의 App은 명시적인 새 클릭 요구 응답만 `refused`로 보고하고 타이머 재시도 없이 클릭을
+preview.29/owner.15의 App은 명시적인 새 클릭 요구 응답만 `refused`로 보고하고 타이머 재시도 없이 클릭을
 기다린다. 타임아웃·연결 종료·알 수 없는 실패는 `error`로 보고하며 제한된 자동 재시도를 유지한다.
 실제 App 응답에 클릭 요구 이유가 전달되지 않으면 로그 내용만으로 `refused`를 만들어 내지 않는다.
 카드 안 또는 모니터 펼치기로 재요청하고 실제 화면을 확인한다. 설치 성공은 클릭·fullscreen 성공의 증거가 아니다.

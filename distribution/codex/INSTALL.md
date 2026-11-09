@@ -44,7 +44,8 @@ macOS preview.25부터는 실제 MCP가 실행하는 Core의 `--version`, MCP in
 이번 판의 정확한 CLI 출력은 `gil 0.2.1-preview.29`이며 MCP·probe 버전은 `0.2.1-preview.29`다.
 preview.24와 그 이전 판은 수정 전이므로 `gil 0.1.0`을 출력할 수 있다.
 이는 Cargo 패키지 버전이며 **그 한 줄만으로 설치 실패나 구버전이라고 단정하지 않는다.**
-Windows owner.14도 기존 배포이므로 같은 구형 확인 절차를 따른다.
+Windows owner.14 이하는 같은 구형 확인 절차를 따른다. 최신 Windows owner.15의 Core·MCP·probe는
+`0.1.1-owner.15`로 일치해야 한다. [Windows 설치 안내](../windows/INSTALL.md)를 따른다.
 
 설치 Agent는 PATH의 임의 `gil` 대신 공식 설치 응답·manifest 또는 직접 MCP 등록에서 확인한
 실행 파일을 검사한다. macOS는 공개 archive의 크기·SHA-256, `release.json`의 배포 버전과

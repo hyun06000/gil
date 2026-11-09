@@ -1,10 +1,10 @@
 {
-  "version": "0.1.1-owner.14",
-  "notes": "계획 제안의 draft 중첩·체크리스트 예시·Closing 승인 안내를 바로잡았습니다. 사용자 버튼으로만 설치하며 기존 연결과 기록은 유지합니다. 새 연결·새 빈 테스트 폴더에서 제안부터 Chain 종료까지 확인하세요.",
+  "version": "0.1.1-owner.15",
+  "notes": "macOS preview.29와 같은 최신 공통 Core·Monitor, 훅 없는 프로젝트 재개, 계획 근거의 일괄 오류·PNG 제한값 안내를 포함합니다. 업데이트 뒤 새 연결에서 확인하세요. 기존 연결·기록은 유지하며 필드테스트는 별도입니다.",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/hyun06000/gil/releases/download/windows-owner-update-0.1.1-owner.14/GIL.Companion.Unsigned.Test._0.1.1-owner.14_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRMmJnSHJ2eEhDbkxuT1dlL1JRdVRZOFIxOWpwNzBLT05VSFRFak5Jd2V2cWh3UTk0Q0dsTFZ5eFNYWE1iY09LRHdnZDJhTSsvclBwTFdrVFBzMDZiTXk4ZmZQdVYwMkFFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNjgxMzMxCWZpbGU6R0lMIENvbXBhbmlvbiAoVW5zaWduZWQgVGVzdClfMC4xLjEtb3duZXIuMTRfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMS4xLW93bmVyLjE0CnBmUmpJRmFBdkpjLzFqNDZqNzM0YTBOQlRYMVlaT1dlUFRnZ3B2VVY1dWtSSFRtQkpxYjV0Q1hsdWYyZ3BUZUVHMEpHV0M4UmVpTU5JSWNkNjh3UEF3PT0K"
+      "url": "https://github.com/hyun06000/gil/releases/download/windows-owner-update-0.1.1-owner.15/GIL.Companion.Unsigned.Test._0.1.1-owner.15_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRMmJnSHJ2eEhDbk4yYTJ4NjhFbHVZTDI4NktXbmRBcHBrUjN5Ylp1R3VMU3hwMFlEaTdmTjlKN0hOVm5zeGNuUERadkNPdm5WbzlRejRPZzAyM1E4SXJBN3RtMWY0QUFzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0MjQ4NDcxCWZpbGU6R0lMIENvbXBhbmlvbiAoVW5zaWduZWQgVGVzdClfMC4xLjEtb3duZXIuMTVfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMS4xLW93bmVyLjE1CjgzS2NOQU9RRHJ5YkFBUnBhOGFmdG5rSWNETHdCUHRBeG4rMmVXTDNWL1Z2blJtSGg1NHkrNFl6dzlsTjlETHh0azdkQXhSYkVoQitXU2MycXhUMENRPT0K"
     }
   }
 }

@@ -41,8 +41,8 @@ GIL의 주 사용자는 비개발자다. 인간은 명령과 저장 형식을 �
 광고했지만 연결·렌더·재시도·클릭의 다섯 요청 모두 `inline`을 반환했다. 2026-11-09 Desktop 4.23118.0의 Host
 로그에는 App 안의 새 클릭을 요구하며 프로그램 요청을 거부한 관측이 있다. 이 관측을 다른 오류의 원인으로
 일반화하지 않는다. PR #107을 포함한 macOS preview.29는 명시적인 새 클릭 요구 응답을 `refused`, 타임아웃·연결 오류 등은
-`error`로 구분한다. macOS preview.29에는 이 개선과 `automatic_fullscreen` 필드가 포함된다.
-이전 preview.27과 Windows owner.14에는 없으며 Windows 배포는 그대로 유지한다. 클릭 뒤 실제 fullscreen 성공 여부도 별도로 확인한다.
+`error`로 구분한다. macOS preview.29와 Windows owner.15에는 이 개선과 `automatic_fullscreen` 필드가 포함된다.
+이전 preview.27과 Windows owner.14에는 없다. 클릭 뒤 실제 fullscreen 성공 여부도 별도로 확인한다.
 Native Companion은 같은 UI를 별도 창으로
 제공하는 대안이자 Windows의 Host 연결·업데이트 관리 창이며, fullscreen 실패를 이유로 자동 실행하지
 않는다. Companion 창이 열린 것을 MCP App 표시 성공으로 세지 않는다. inline 카드는 미리보기이지 설치 완료
@@ -51,9 +51,10 @@ Native Companion은 같은 UI를 별도 창으로
 소스는 [MIT 라이선스](LICENSE)로 공개한다. 현재 친구·테스터용 채널은 **서명되지 않은 preview**다.
 [통합 설치 안내](INSTALL.md)에서 OS와 CPU에 맞는 검수본을 확인한 뒤 설치한다. macOS Apple
 Silicon은 Codex Plugin `0.2.1-preview.29`, Windows x64는 Companion installer
-`0.1.1-owner.14`이다.
-macOS preview.29는 계획 근거의 입력 조건·줄별 일괄 오류와 PNG 제한값 안내를 보완한다.
-참조 자동 이동 없이 기존 승인·기록·Snapshot을 보존한다. [게시 장부](distribution/codex/PREVIEW-29-PUBLICATION-20261110.md)를 따른다.
+`0.1.1-owner.15`이다.
+macOS preview.29와 Windows owner.15는 계획 근거의 입력 조건·줄별 일괄 오류와 PNG 제한값 안내를 보완한다.
+참조 자동 이동 없이 기존 승인·기록·Snapshot을 보존한다. [Mac 게시 장부](distribution/codex/PREVIEW-29-PUBLICATION-20261110.md)와
+[Windows 게시 장부](distribution/windows/PUBLICATION-OWNER-15-20261110.md)를 따른다.
 **사용자에게 Node·Cargo·Homebrew 설치를 요구하지 않는다.** Mac Plugin은 별도 Companion 없이
 [gil-marketplace](https://github.com/hyun06000/gil-marketplace)에서 설치하며, 범용 Plugins Directory
 등재와는 다르다. Windows는 위 Companion installer를 사용한다.
@@ -436,7 +437,7 @@ layer를 목표로 한다.
 ## Project status
 
 **현재 사용자 채널은 unsigned preview 둘이다.** macOS Apple Silicon은 Plugin/archive `0.2.1-preview.29`,
-Windows x64는 Companion installer `0.1.1-owner.14`이며, 두 채널 모두 Codex와 Claude Desktop(Claude Code 탭)을
+Windows x64는 Companion installer `0.1.1-owner.15`이며, 두 채널 모두 Codex와 Claude Desktop(Claude Code 탭)을
 같은 Core·Monitor·작업 규칙으로 지원한다. 네 조합의 확인 상태(실기기 확인 / 사용자 확인 / 자동 테스트만 통과 /
 사용자 확인 대기)는 [설치 안내](INSTALL.md)의 표를 따른다. 서명된 일반 공개판·Intel Mac·Windows ARM64는 없다.
 
