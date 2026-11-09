@@ -15,7 +15,7 @@
   font: var(--gil-xs)/1.45 var(--gil-mono); color: var(--gil-fg-2); }
 .host-bar #update { border-color: var(--gil-kind-synthesis); color: var(--gil-fg); }
 .host-bar #update[hidden] { display: none; }
-/* Update guidance: text and one existing action, under the display-mode row. Never a download. */
+/* Update guidance under the display-mode row. Never a download. */
 .update-guide { padding: 10px 16px 14px; border-top: var(--gil-hair) solid var(--gil-line-soft);
   font-size: var(--gil-sm); line-height: 1.5; color: var(--gil-fg-2); overflow-wrap: anywhere; }
 .update-guide[hidden] { display: none; }
@@ -24,6 +24,12 @@
 .update-guide li { margin: 4px 0; white-space: pre-wrap; }
 .update-guide button { margin-top: 8px; font: inherit; font-size: var(--gil-xs); padding: 5px 10px;
   border: var(--gil-hair) solid var(--gil-line); border-radius: var(--gil-r-md); background: transparent; color: var(--gil-fg-2); cursor: pointer; }
+.update-guide p { margin: 8px 0; }
+.update-guide label { display: block; margin-top: 12px; }
+.update-guide select, .update-guide textarea { font: inherit; color: var(--gil-fg);
+  background: var(--gil-bg); border: var(--gil-hair) solid var(--gil-line); border-radius: var(--gil-r-md); padding: 8px; }
+.update-guide textarea { display: block; box-sizing: border-box; width: 100%; margin-top: 6px; resize: vertical; }
+.update-guide details { margin-top: 10px; }
 .update-guide small { display: block; margin-top: 8px; font-size: var(--gil-xs); color: var(--gil-fg-3); }
 body[data-display-mode="fullscreen"] .map .viewport { max-height:55vh; min-height:220px; }
 /* Host owns the chat composer. The Monitor never draws or intercepts another chat UI. */

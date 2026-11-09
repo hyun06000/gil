@@ -29,7 +29,7 @@ const deferred = () => {
 };
 const settle = () => new Promise(done => setImmediate(done));
 const data = { scope_id: `project:${'a'.repeat(64)}`, view: {}, watching: true };
-function fixture({ modes = ['inline', 'fullscreen'], mode = 'inline', answer, hostContext = {} } = {}) {
+function fixture({ modes = ['inline', 'fullscreen'], mode = 'inline', answer, hostContext = {}, clipboard } = {}) {
   const connected = deferred(), rendered = deferred(), calls = [], directions = [], native = [], observations = [];
   const timers = new Map(), documentEvents = new Map(), windowEvents = new Map();
   let serial = 0, ticks = 0, refreshes = 0, tickWork = async () => {};
@@ -52,7 +52,7 @@ function fixture({ modes = ['inline', 'fullscreen'], mode = 'inline', answer, ho
   const document = { body: { dataset: {} }, hidden: false, getElementById: element,
     addEventListener: (name, fn) => documentEvents.set(name, fn) };
   const window = { addEventListener: (name, fn) => windowEvents.set(name, fn) };
-  vm.runInNewContext(code, { harness, document, window,
+  vm.runInNewContext(code, { harness, document, window, navigator: { clipboard },
     crypto: { randomUUID: () => 'test' },
     setTimeout: (fn, ms) => { const id = ++serial; timers.set(id, { fn, ms }); return id; },
     clearTimeout: id => timers.delete(id) });
@@ -394,4 +394,49 @@ test('update guidance shows a button from Core metadata and a text panel on clic
   await settle(); g.rendered.resolve(); await boot2; await settle();
   assert.equal(g.element('update').hidden, true);
   assert.equal(g.element('update-guide').hidden, true);
+});
+
+
+test('Mac guide selects the destination, copies only on click, and offers manual copy on denial', async () => {
+  for (const mode of ['success', 'denied', 'unavailable']) {
+    const copied = [];
+    const f = fixture({ clipboard: mode === 'unavailable' ? undefined : { writeText: async value => {
+      if (mode === 'denied') throw new Error('denied'); copied.push(value);
+    } } });
+    const nodes = [];
+    f.document.createElement = tag => {
+      const node = { tag, children: [], textContent: '', appendChild(c) { this.children.push(c); },
+        setAttribute(k, v) { this[k] = v; }, focus() { this.focused = true; }, select() { this.selected = true; } };
+      nodes.push(node); return node;
+    };
+    const panel = f.element('update-guide');
+    panel.replaceChildren = () => { panel.children = []; }; panel.appendChild = c => panel.children.push(c);
+    f.connected.resolve(); await settle();
+    const boot = f.app.ontoolresult({ ...data, update: { state: 'available', platform: 'darwin-arm64',
+      installed: '0.2.1-preview.8', latest: { version: '0.2.1-preview.9', install_doc: 'https://example.org/INSTALL.md' } } });
+    await settle(); f.rendered.resolve(); await boot; await settle();
+    const before = f.native.length;
+    await f.element('update').onclick();
+    const select = nodes.find(n => n.tag === 'select');
+    const request = nodes.find(n => n.tag === 'textarea');
+    const copy = nodes.find(n => n.tag === 'button');
+    const status = nodes.find(n => n.role === 'status');
+    assert.equal(request.readOnly, true);
+    assert.match(request.value, /Mac의 Codex에서/);
+    for (const [index, target] of ['Codex', 'Claude Desktop', 'Codex와 Claude Desktop'].entries()) {
+      select.value = String(index); select.onchange();
+      assert.ok(request.value.includes(`Mac의 ${target}에서`));
+    }
+    assert.equal(copied.length, 0);
+    await copy.onclick();
+    if (mode === 'success') {
+      assert.deepEqual(copied, [request.value]); assert.match(status.textContent, /복사했어요/);
+    } else {
+      assert.equal(request.focused, true); assert.equal(request.selected, true);
+      assert.match(status.textContent, /⌘C/); assert.equal(copied.length, 0);
+    }
+    select.value = '0'; select.onchange(); assert.equal(status.textContent, '');
+    assert.equal(f.native.length, before, 'opening, choosing and copying call no tool');
+    await f.element('update').onclick(); assert.equal(panel.hidden, true);
+  }
 });

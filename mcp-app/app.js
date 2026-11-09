@@ -136,11 +136,11 @@ for (const [id, mode] of [['expand', 'fullscreen'], ['inline', 'inline']]) {
   };
 }
 // Update guidance: the Core's metadata becomes one button and a text panel. Opening the panel
-// runs nothing; the only action inside is the existing "open Companion" tool on Windows.
+// runs nothing. Mac copies a request; Windows can invoke the existing "open Companion" tool.
 let updateInfo = null, updateKey = null;
 function renderUpdate(update) {
   if (!update || typeof update !== 'object') return;
-  const key = JSON.stringify([update.state, update.latest?.version, update.installed, update.error]);
+  const key = JSON.stringify([update.state, update.platform, update.latest, update.installed, update.error]);
   if (key === updateKey) return;
   updateKey = key; updateInfo = update;
   evidence.update = { state: update.state, installed: update.installed ?? null, latest: update.latest?.version ?? null,
@@ -159,16 +159,50 @@ el('update').onclick = () => {
   const guide = updateGuide(updateInfo);
   panel.replaceChildren();
   const h = document.createElement('h2'); h.textContent = guide.title; panel.appendChild(h);
+  if (guide.summary) { const p = document.createElement('p'); p.textContent = guide.summary; panel.appendChild(p); }
   const list = document.createElement('ol');
   for (const step of guide.steps) { const li = document.createElement('li'); li.textContent = step; list.appendChild(li); }
   panel.appendChild(list);
+  if (guide.targets) {
+    const label = document.createElement('label'); label.textContent = '업데이트할 앱 ';
+    const select = document.createElement('select');
+    guide.targets.forEach((target, index) => {
+      const option = document.createElement('option'); option.value = String(index); option.textContent = target.label;
+      select.appendChild(option);
+    });
+    select.value = '0'; label.appendChild(select); panel.appendChild(label);
+    const hint = document.createElement('p'); panel.appendChild(hint);
+    const requestLabel = document.createElement('label'); requestLabel.textContent = '에이전트에게 보낼 요청문';
+    const request = document.createElement('textarea'); request.readOnly = true; request.rows = 7;
+    requestLabel.appendChild(request); panel.appendChild(requestLabel);
+    const copy = document.createElement('button'); copy.type = 'button'; copy.textContent = '요청문 복사';
+    const status = document.createElement('p'); status.setAttribute('role', 'status');
+    const choose = () => { hint.textContent = guide.targets[Number(select.value)].hint;
+      request.value = guide.targets[Number(select.value)].request; status.textContent = ''; };
+    select.onchange = choose; choose();
+    copy.onclick = async () => {
+      const value = request.value;
+      try {
+        await navigator.clipboard.writeText(value);
+        if (value === request.value) status.textContent = '복사했어요. 안내된 에이전트의 새 대화에 붙여넣으세요.';
+      } catch {
+        request.focus(); request.select();
+        status.textContent = '자동 복사를 사용할 수 없습니다. 선택된 요청문을 ⌘C로 복사하세요.';
+      }
+    };
+    panel.appendChild(copy); panel.appendChild(status);
+    const details = document.createElement('details');
+    const summary = document.createElement('summary'); summary.textContent = '릴리스와 설치 안내 보기'; details.appendChild(summary);
+    for (const line of guide.details) { const p = document.createElement('p'); p.textContent = line; details.appendChild(p); }
+    panel.appendChild(details);
+  }
   if (guide.companion) {
     const open = document.createElement('button'); open.type = 'button'; open.textContent = 'Companion 열기';
     open.onclick = () => el('native').onclick();
     panel.appendChild(open);
   }
   const small = document.createElement('small');
-  small.textContent = '이 화면은 안내만 합니다. 다운로드·설치는 사용자가 Companion 또는 설치 안내의 절차로 직접 진행합니다. 확인을 끄려면 Host 의 서버 환경에 GIL_UPDATE_CHECK=off 를 두거나 Monitor 상태 폴더에 update-check.off 파일을 둡니다.';
+  small.textContent = guide.targets ? '요청문을 복사해도 설치는 시작되지 않습니다. 설치는 에이전트와 대화하며 진행하세요.' : '이 화면은 안내만 합니다. 다운로드·설치는 사용자가 Companion 또는 설치 안내의 절차로 직접 진행합니다. 확인을 끄려면 Host 의 서버 환경에 GIL_UPDATE_CHECK=off 를 두거나 Monitor 상태 폴더에 update-check.off 파일을 둡니다.';
   panel.appendChild(small);
   panel.hidden = false;
 };
