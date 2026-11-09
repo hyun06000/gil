@@ -3,9 +3,9 @@
 이 디렉터리는 **제작자용 배포 도구**다. 받는 사람에게 Node·Cargo·clone·tar 명령을 요구하는
 설치 설명서가 아니다. Agent가 Plugin/MCP 설치와 기존 GIL 훅 제거를 조율하며 새 훅은 등록하지 않는다.
 
-현재 공개 macOS 검증판은 `0.2.1-preview.26`이다. 사용자 절차는
+현재 공개 macOS 검증판은 `0.2.1-preview.27`이다. 사용자 절차는
 [통합 설치 안내](../../INSTALL.md)와 [macOS 상세 안내](INSTALL.md), 정확한 소스·CI·해시·인수 범위는
-[preview.26 게시 장부](PREVIEW-26-PUBLICATION-20261107.md)를 따른다.
+[preview.27 게시 장부](PREVIEW-27-PUBLICATION-20261109.md)를 따른다.
 Windows x64의 별도 installer는 [Windows 안내](../windows/INSTALL.md)에 있다.
 날짜별 과거 게시 장부는 해당 버전의 증거이며 최신 설치 절차로 사용하지 않는다.
 
