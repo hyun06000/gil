@@ -227,7 +227,7 @@ fn plan_next_call(project: &Project, kind: NodeKind) -> Option<String> {
     match kind {
         NodeKind::Synthesis => {
             let Some(proposal) = plan.current(project) else {
-                return Some("열린 Synthesis (승인 계획 프로필): gil_plan_propose({project_root, draft:{scope, items, synthesis}})로 제안한다 — draft.scope 5칸(goal · in_scope · out_of_scope · constraints · success_criteria), draft.items(id · question · done_when), draft.synthesis Report 칸. draft.synthesis.exploration_checklist는 items의 id를 같은 순서로 한 줄씩 적은 문자열이다. Closing은 기존 items를 유지하고 draft.synthesis.chain_verdict(success 또는 failure)를 더한다. approved · plan_revision · plan_digest는 적지 않는다. 채팅 동의로 대체하지 않는다.".into());
+                return Some("열린 Synthesis (승인 계획 프로필): gil_plan_propose({project_root, draft:{scope, items, synthesis}})로 제안한다 — draft.scope 5칸(goal · in_scope · out_of_scope · constraints · success_criteria), draft.items(id · question · done_when), draft.synthesis Report 칸. draft.synthesis.exploration_checklist는 items의 id를 같은 순서로 한 줄씩 적은 문자열이다. Closing은 기존 items를 유지하고 draft.synthesis.chain_verdict(success 또는 failure)를 더한다. approved · plan_revision · plan_digest는 적지 않는다. 채팅 동의로 대체하지 않는다. ".to_owned() + crate::cycle::BASIS_REFS_RULES);
             };
             Some(match proposal.receipt.as_ref().map(|r| &r.decision) {
                 None => format!("제안 판 {}이(가) Monitor 버튼 응답을 기다린다. 턴을 끝내고 기다린다. 그동안 프로젝트 파일 변경·재제안을 하지 않는다. 응답이 왔는지는 gil_plan_read로만 확인한다.", proposal.revision),

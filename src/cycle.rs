@@ -23,6 +23,8 @@
 
 use std::fmt;
 
+pub(crate) const BASIS_REFS_RULES: &str = "basis_refs는 현재 Interview Cycle에서 이 Synthesis로 이어지는 부모 사슬의 닫힌 Question 또는 Interpretation Step 참조를 최소 하나, 중복 없이 한 줄에 하나씩 적는다(step:Cn/Sm). 쉼표 목록·설명·Cycle 참조·다른 Cycle의 Step·버려진 가지는 허용하지 않는다. 이전 Cycle이나 외부 자료의 배경은 statement에 설명하며 basis_refs를 대신하지 않는다. 참조를 자동 이동하거나 고치지 않는다.";
+
 use crate::node::{NodeKind, NodeStatus};
 use crate::report::Report;
 use crate::rules::RuleSet;
@@ -481,55 +483,67 @@ impl Cycle {
         let raw = report.get(BASIS_REFS).unwrap_or_default();
 
         let mut seen: Vec<StepRef> = Vec::new();
-        for line in raw.lines() {
+        let mut issues = Vec::new();
+        for (index, line) in raw.lines().enumerate() {
             let line = line.trim();
             if line.is_empty() {
                 continue;
             }
-            let target: StepRef = line.parse().map_err(|source| BasisRefError::Unreadable {
-                value: line.to_string(),
-                source,
-                cycle: self.id.to_ref(),
-            })?;
-            if target.cycle() != self.id.to_ref() {
-                return Err(BasisRefError::OtherCycle {
-                    target,
+            let checked = (|| -> Result<(), CycleError> {
+                let target: StepRef = line.parse().map_err(|source| BasisRefError::Unreadable {
+                    value: line.to_string(),
+                    source,
                     cycle: self.id.to_ref(),
+                })?;
+                if target.cycle() != self.id.to_ref() {
+                    return Err(BasisRefError::OtherCycle {
+                        target,
+                        cycle: self.id.to_ref(),
+                    }
+                    .into());
                 }
-                .into());
-            }
-            if seen.contains(&target) {
-                return Err(BasisRefError::Duplicated { target }.into());
-            }
+                if seen.contains(&target) {
+                    return Err(BasisRefError::Duplicated { target }.into());
+                }
 
-            let step = NodeId::from_raw(target.step());
-            let basis = self
-                .steps
-                .node(step)
-                .ok_or(BasisRefError::NotFound { target })?;
-            if !matches!(basis.kind, NodeKind::Question | NodeKind::Interpretation) {
-                return Err(BasisRefError::WrongKind {
-                    target,
-                    kind: basis.kind,
+                let step = NodeId::from_raw(target.step());
+                let basis = self
+                    .steps
+                    .node(step)
+                    .ok_or(BasisRefError::NotFound { target })?;
+                if !matches!(basis.kind, NodeKind::Question | NodeKind::Interpretation) {
+                    return Err(BasisRefError::WrongKind {
+                        target,
+                        kind: basis.kind,
+                    }
+                    .into());
                 }
-                .into());
-            }
-            if !basis.is_closed() {
-                return Err(BasisRefError::StillOpen {
-                    target,
-                    here: self.step_ref(node.id),
+                if !basis.is_closed() {
+                    return Err(BasisRefError::StillOpen {
+                        target,
+                        here: self.step_ref(node.id),
+                    }
+                    .into());
                 }
-                .into());
-            }
-            // 딛고 온 길 위에 있는가. 이름의 크기도 닫힌 시각도 보지 않는다.
-            if !self.in_lineage_of(node.id, step)? {
-                return Err(BasisRefError::NotInLineage {
-                    target,
-                    here: self.step_ref(node.id),
+                // 딛고 온 길 위에 있는가. 이름의 크기도 닫힌 시각도 보지 않는다.
+                if !self.in_lineage_of(node.id, step)? {
+                    return Err(BasisRefError::NotInLineage {
+                        target,
+                        here: self.step_ref(node.id),
+                    }
+                    .into());
                 }
-                .into());
+                seen.push(target);
+                Ok(())
+            })();
+            match checked {
+                Err(CycleError::BasisRefs(reason)) => issues.push((index + 1, reason)),
+                Err(other) => return Err(other),
+                Ok(()) => {},
             }
-            seen.push(target);
+        }
+        if !issues.is_empty() {
+            return Err(BasisRefError::InvalidLines { cycle: self.id.to_ref(), issues }.into());
         }
 
         match seen.is_empty() {
@@ -930,6 +944,8 @@ pub enum CycleError {
 /// `basis_refs` 가 이 Interview 안에서 성립하지 않는 이유.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BasisRefError {
+    /// All invalid nonblank lines, with original 1-based line numbers. Never stored as Report data.
+    InvalidLines { cycle: CycleRef, issues: Vec<(usize, BasisRefError)> },
     /// 한 줄이 Step 주소로 읽히지 않는다 — bare `1` · `#1` · 쉼표로 이은 목록이 여기로 온다.
     Unreadable {
         value: String,
@@ -962,16 +978,20 @@ impl From<BasisRefError> for CycleError {
 impl fmt::Display for BasisRefError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            BasisRefError::InvalidLines { cycle, issues } => {
+                writeln!(f, "basis_refs (gil_plan_propose: $.draft.synthesis.basis_refs): {}개 줄 오류. 현재 Interview: {cycle}.\n{BASIS_REFS_RULES}", issues.len())?;
+                for (line, reason) in issues {
+                    writeln!(f, "- basis_refs line {line}: {reason}")?;
+                }
+                Ok(())
+            },
             BasisRefError::Unreadable {
                 value,
                 source,
                 cycle,
             } => write!(
                 f,
-                "{BASIS_REFS} 의 {value:?} 는 Step 주소로 읽히지 않는다 — {source}.\n\
-                 한 줄에 하나씩 적는다: {BASIS_REFS}: |\n    step:{}/S1\n    step:{}/S2",
-                cycle.id(),
-                cycle.id()
+                "{BASIS_REFS} 의 {value:?} 는 Step 주소로 읽히지 않는다 — {source}. 현재 {cycle}의 실제 닫힌 참조를 한 줄에 하나씩 적는다"
             ),
             BasisRefError::OtherCycle { target, cycle } => write!(
                 f,
@@ -1003,10 +1023,7 @@ impl fmt::Display for BasisRefError {
             ),
             BasisRefError::Empty { cycle } => write!(
                 f,
-                "{BASIS_REFS} 에 근거가 하나도 없다 — Synthesis 는 근거 없는 목표나 제약을 \
-                 더하지 않는다.\n\
-                 한 줄에 하나씩 적는다: {BASIS_REFS}: |\n    step:{}/S1",
-                cycle.id()
+                "basis_refs (gil_plan_propose: $.draft.synthesis.basis_refs)에 근거가 하나도 없다. 현재 Interview: {cycle}. {BASIS_REFS_RULES}"
             ),
         }
     }

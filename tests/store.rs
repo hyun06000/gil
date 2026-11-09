@@ -993,7 +993,13 @@ fn a_synthesis_with_its_basis_emptied_out_is_refused_from_the_file_too() {
 /// 되살리기가 Step Report 때문에 멈췄다면, 그 안의 까닭.
 fn inside(err: RestoreError) -> CycleError {
     match err {
-        RestoreError::StepReport { source, .. } => *source,
+        RestoreError::StepReport { source, .. } => match *source {
+            CycleError::BasisRefs(BasisRefError::InvalidLines { mut issues, .. }) => {
+                assert_eq!(issues.len(), 1, "legacy fixture expects exactly one invalid line");
+                CycleError::BasisRefs(issues.remove(0).1)
+            },
+            other => other,
+        },
         other => panic!("Step Report 가 아닌 이유로 거절됐다: {other}"),
     }
 }

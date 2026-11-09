@@ -475,17 +475,17 @@ impl ProjectSession {
             return Err(error("이미지는 열린 Verify에서만 확정한다".into()));
         }
         let state = self.project.visual_state().ok_or_else(|| error("명시적 시각 Report 이관이 먼저 필요하다".into()))?;
-        if attachments.len() > 8 { return Err(error("한 번에 첨부할 수 있는 자료는 8개까지다".into())); }
+        if attachments.len() > crate::visual_report::image::MAX_ATTACHMENTS { return Err(error("한 번에 첨부할 수 있는 자료는 8개까지다".into())); }
         let root = self.root()?;
         let mut files = Vec::new();
         let mut metadata = Vec::new();
         let mut paths = std::collections::BTreeSet::new();
         let mut total = 0usize;
-        for input in &attachments {
+        for (index, input) in attachments.iter().enumerate() {
             if !paths.insert(input.path.clone()) { return Err(error("같은 첨부 경로를 두 번 지정했다".into())); }
-            let file = AttachmentFile::read(&root, &input.path).map_err(error)?;
+            let file = AttachmentFile::read(&root, &input.path).map_err(|reason| error(format!("$.visuals.attachments[{index}].path: {reason}")))?;
             total += file.image.bytes().len();
-            if total > 32 * 1024 * 1024 { return Err(error("첨부 전체 용량이 32 MiB를 넘었다".into())); }
+            if total > crate::visual_report::image::MAX_ATTACHMENT_BYTES { return Err(error("첨부 전체 용량이 32 MiB를 넘었다".into())); }
             metadata.push(file.image.metadata(input.source_kind, input.source_description.clone()).map_err(|e| error(e.to_string()))?);
             files.push(file);
         }

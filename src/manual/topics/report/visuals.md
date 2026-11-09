@@ -28,6 +28,15 @@ related:
   source_kind 는 captured(실제 화면 캡처) · generated(코드가 데이터로 그림) · provided(사용자 제공)
   가운데 사실대로 고른다.
 
+[PNG 제한]
+  정적 PNG만 받는다. 가로·세로 각각 1–8192px, 총 16,777,216픽셀 이하,
+  파일당 16,777,216 bytes (16 MiB) 이하이다. 한 close의 새 첨부는 최대 8개,
+  합계 33,554,432 bytes (32 MiB) 이하이다. PNG 전체 디코딩·무결성 검사도 통과해야 한다.
+  디코더 메모리 32 MiB, 디코딩 출력 128 MiB, chunk 최대 4096개의 자원 제한도 유지한다.
+  예를 들어 1100×8671 PNG는 파일 용량이 작아도 높이 8192px를 넘어 거절된다.
+  열린 Verify에서 긴 그림을 나누거나 축소하고 글자·수치가 읽히는지 확인한다.
+  Core가 첨부를 자동 축소·이동하거나 Report를 대신 수정하지 않는다.
+
 [지금 할 일]
   Verify 가 열린 동안 PNG 를 프로젝트 안에 저장하고, 파일 증거와 함께 typed close 로 닫는다.
   MCP 에서는 gil_help {project_root, topic: "report/visuals"}, CLI 에서는 gil help report/visuals
