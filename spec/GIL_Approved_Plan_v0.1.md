@@ -30,6 +30,20 @@ Cycle Model §12, §16–17, §21의 미정 저장 계약을 이 문서로 한�
 기존 계약대로 새 승인 대상이다. 거절문은 구체적 원인부터 보여 주고 실패한 제안을 저장하지 않는다.
 새 append 모드나 기존 항목 자동 보정은 제공하지 않는다.
 
+### Synthesis 근거 입력의 사전 안내와 일괄 진단
+
+`synthesis` 스키마는 `statement`, `basis_refs`, `exploration_checklist`를 명시한다.
+`basis_refs`의 유효성은 Cycle Model §16 그대로다: 현재 Interview에서 해당 Synthesis의
+부모 사슬에 속한 닫힌 Question/Interpretation의 canonical StepRef를 최소 하나,
+중복 없이 한 줄에 하나씩 적는다. JSON에서는 `"step:C5/S1\nstep:C5/S2"`와 같은 문자열이다.
+예시 번호는 현재 프로젝트의 실제 닫힌 참조로 바꾼다. Cycle 참조·다른 Cycle·설명·쉼표 목록은
+허용하지 않는다. 이전 Cycle/외부 배경은 statement에 설명하며 현재 Interview 근거를 대체하지 않는다.
+
+열기 영수증과 Context에도 이 조건을 제공한다. 잘못된 참조는 모든 비어 있지 않은 줄을 검사해
+필드 경로와 원래 1-based 줄 번호별 이유를 한 응답에 반환한다. 한 줄은 먼저 실패한 조건을
+설명하고 전체 규칙도 함께 보여 준다. 거절된 제안은 저장하지 않으며 참조를 statement로
+자동 이동하거나 Report·승인·기록·Snapshot을 수정하지 않는다. 저장 loader도 같은 검증을 유지한다.
+
 ## 문서와 증거
 
 Interview에서는 프로젝트 파일을 쓰지 않는다. 승인 계획의 결정적 Markdown은 read/export로 제공한다. 해당 Experiment의 Verify에서 파일로 저장하고 `plan_document`에 안전한 상대 경로를 적는다. 확정될 Snapshot의 bytes가 바인딩된 승인 판의 export와 같아야 한다. 별도의 새/변경된 실제 작업 증거를 `evidence_files`에 기록해야 하며 계획 문서만으로 실행 증거를 대신하지 못한다. 계획·문서·증거·Analysis·Outcome의 기존 연결을 함께 보존한다.

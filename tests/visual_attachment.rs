@@ -710,3 +710,26 @@ fn visual_evidence_refusals_preserve_open_verify_and_accept_a_corrected_attachme
     let reopened = ProjectSession::open_read_only(common::spec(), root.join(gil::STATE_PATH)).unwrap();
     assert_eq!(reopened.project().report_visuals_v1(owner()).unwrap(), view);
 }
+
+#[test]
+fn oversized_png_reports_field_and_dimensions_without_closing_or_changing_files() {
+    let (root, mut session) = setup("visual-attach-dimensions");
+    let mut bytes = Vec::new();
+    // A small compressed synthetic image still exceeds the independent height limit.
+    png::Encoder::new(&mut bytes, 1, 8193).write_header().unwrap()
+        .write_image_data(&vec![0; 8193]).unwrap();
+    fs::write(root.join("screen.png"), &bytes).unwrap();
+    let before = fs::read(root.join(gil::STATE_PATH)).unwrap();
+    let memory = format!("{:?}", session.project());
+    let error = session.close_verify_with_images_and_commit(report(&session), input("screen.png"), attached)
+        .unwrap_err().to_string();
+    for needle in ["$.visuals.attachments[0].path", "1×8193", "8192", "16777216"] {
+        assert!(error.contains(needle), "{error}");
+    }
+    assert_eq!(fs::read(root.join(gil::STATE_PATH)).unwrap(), before);
+    assert_eq!(format!("{:?}", session.project()), memory);
+    assert_eq!(fs::read(root.join("screen.png")).unwrap(), bytes);
+    assert!(session.can_confirm_artifact());
+    fs::write(root.join("screen.png"), png()).unwrap();
+    session.close_verify_with_images_and_commit(report(&session), input("screen.png"), attached).unwrap();
+}

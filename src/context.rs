@@ -213,7 +213,7 @@ fn plan_next_call(project: &Project, kind: NodeKind) -> Option<String> {
     match kind {
         NodeKind::Synthesis => {
             let Some(proposal) = plan.current(project) else {
-                return Some(text("ctx.plan.synthesis_propose").into());
+                return Some(format!("{} {}", text("ctx.plan.synthesis_propose"), text("cycle.basis_refs_rules")));
             };
             Some(match proposal.receipt.as_ref().map(|r| &r.decision) {
                 None => tr!("ctx.plan.waiting", revision = proposal.revision),

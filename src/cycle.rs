@@ -23,6 +23,10 @@
 
 use std::fmt;
 
+/// Agent-facing wording of the `basis_refs` rules for the tool schema (English, like every tool
+/// description). User-facing messages read the same rules from the `cycle.basis_refs_rules` key.
+pub(crate) const BASIS_REFS_RULES: &str = "basis_refs lists, one per line (step:Cn/Sm), at least one closed Question or Interpretation Step reference from the parent chain that leads to this Synthesis within the current Interview Cycle, without duplicates. Comma lists, prose, Cycle references, Steps of other Cycles and abandoned branches are not allowed. Background from earlier Cycles or outside material is explained in statement and does not replace basis_refs. References are never moved or fixed automatically.";
+
 use crate::node::{NodeKind, NodeStatus};
 use crate::report::Report;
 use crate::rules::RuleSet;
@@ -481,55 +485,67 @@ impl Cycle {
         let raw = report.get(BASIS_REFS).unwrap_or_default();
 
         let mut seen: Vec<StepRef> = Vec::new();
-        for line in raw.lines() {
+        let mut issues = Vec::new();
+        for (index, line) in raw.lines().enumerate() {
             let line = line.trim();
             if line.is_empty() {
                 continue;
             }
-            let target: StepRef = line.parse().map_err(|source| BasisRefError::Unreadable {
-                value: line.to_string(),
-                source,
-                cycle: self.id.to_ref(),
-            })?;
-            if target.cycle() != self.id.to_ref() {
-                return Err(BasisRefError::OtherCycle {
-                    target,
+            let checked = (|| -> Result<(), CycleError> {
+                let target: StepRef = line.parse().map_err(|source| BasisRefError::Unreadable {
+                    value: line.to_string(),
+                    source,
                     cycle: self.id.to_ref(),
+                })?;
+                if target.cycle() != self.id.to_ref() {
+                    return Err(BasisRefError::OtherCycle {
+                        target,
+                        cycle: self.id.to_ref(),
+                    }
+                    .into());
                 }
-                .into());
-            }
-            if seen.contains(&target) {
-                return Err(BasisRefError::Duplicated { target }.into());
-            }
+                if seen.contains(&target) {
+                    return Err(BasisRefError::Duplicated { target }.into());
+                }
 
-            let step = NodeId::from_raw(target.step());
-            let basis = self
-                .steps
-                .node(step)
-                .ok_or(BasisRefError::NotFound { target })?;
-            if !matches!(basis.kind, NodeKind::Question | NodeKind::Interpretation) {
-                return Err(BasisRefError::WrongKind {
-                    target,
-                    kind: basis.kind,
+                let step = NodeId::from_raw(target.step());
+                let basis = self
+                    .steps
+                    .node(step)
+                    .ok_or(BasisRefError::NotFound { target })?;
+                if !matches!(basis.kind, NodeKind::Question | NodeKind::Interpretation) {
+                    return Err(BasisRefError::WrongKind {
+                        target,
+                        kind: basis.kind,
+                    }
+                    .into());
                 }
-                .into());
-            }
-            if !basis.is_closed() {
-                return Err(BasisRefError::StillOpen {
-                    target,
-                    here: self.step_ref(node.id),
+                if !basis.is_closed() {
+                    return Err(BasisRefError::StillOpen {
+                        target,
+                        here: self.step_ref(node.id),
+                    }
+                    .into());
                 }
-                .into());
-            }
-            // 딛고 온 길 위에 있는가. 이름의 크기도 닫힌 시각도 보지 않는다.
-            if !self.in_lineage_of(node.id, step)? {
-                return Err(BasisRefError::NotInLineage {
-                    target,
-                    here: self.step_ref(node.id),
+                // 딛고 온 길 위에 있는가. 이름의 크기도 닫힌 시각도 보지 않는다.
+                if !self.in_lineage_of(node.id, step)? {
+                    return Err(BasisRefError::NotInLineage {
+                        target,
+                        here: self.step_ref(node.id),
+                    }
+                    .into());
                 }
-                .into());
+                seen.push(target);
+                Ok(())
+            })();
+            match checked {
+                Err(CycleError::BasisRefs(reason)) => issues.push((index + 1, reason)),
+                Err(other) => return Err(other),
+                Ok(()) => {},
             }
-            seen.push(target);
+        }
+        if !issues.is_empty() {
+            return Err(BasisRefError::InvalidLines { cycle: self.id.to_ref(), issues }.into());
         }
 
         match seen.is_empty() {
@@ -930,6 +946,8 @@ pub enum CycleError {
 /// `basis_refs` 가 이 Interview 안에서 성립하지 않는 이유.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BasisRefError {
+    /// All invalid nonblank lines, with original 1-based line numbers. Never stored as Report data.
+    InvalidLines { cycle: CycleRef, issues: Vec<(usize, BasisRefError)> },
     /// 한 줄이 Step 주소로 읽히지 않는다 — bare `1` · `#1` · 쉼표로 이은 목록이 여기로 온다.
     Unreadable {
         value: String,
@@ -962,18 +980,25 @@ impl From<BasisRefError> for CycleError {
 impl fmt::Display for BasisRefError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            BasisRefError::InvalidLines { cycle, issues } => {
+                writeln!(f, "{}", crate::tr!("cycle.basis.invalid_lines", n = issues.len(), cycle = cycle, rules = crate::locale::text("cycle.basis_refs_rules")))?;
+                for (line, reason) in issues {
+                    writeln!(f, "{}", crate::tr!("cycle.basis.invalid_line", line = line, reason = reason))?;
+                }
+                Ok(())
+            },
             BasisRefError::Unreadable {
                 value,
                 source,
                 cycle,
-            } => f.write_str(&crate::tr!("cycle.basis.unreadable", field = BASIS_REFS, value = format!("{value:?}"), source = source, cycle = cycle.id())),
+            } => f.write_str(&crate::tr!("cycle.basis.unreadable", field = BASIS_REFS, value = format!("{value:?}"), source = source, cycle = cycle)),
             BasisRefError::OtherCycle { target, cycle } => f.write_str(&crate::tr!("cycle.basis.other_cycle", field = BASIS_REFS, target = target, cycle = cycle)),
             BasisRefError::Duplicated { target } => f.write_str(&crate::tr!("cycle.basis.duplicated", field = BASIS_REFS, target = target)),
             BasisRefError::NotFound { target } => f.write_str(&crate::tr!("cycle.basis.not_found", field = BASIS_REFS, target = target)),
             BasisRefError::WrongKind { target, kind } => f.write_str(&crate::tr!("cycle.basis.wrong_kind", field = BASIS_REFS, target = target, kind = kind)),
             BasisRefError::StillOpen { target, here } => f.write_str(&crate::tr!("cycle.basis.still_open", target = target, here = here)),
             BasisRefError::NotInLineage { target, here } => f.write_str(&crate::tr!("cycle.basis.not_in_lineage", target = target, here = here)),
-            BasisRefError::Empty { cycle } => f.write_str(&crate::tr!("cycle.basis.empty", field = BASIS_REFS, cycle = cycle.id())),
+            BasisRefError::Empty { cycle } => f.write_str(&crate::tr!("cycle.basis.empty", cycle = cycle, rules = crate::locale::text("cycle.basis_refs_rules"))),
         }
     }
 }

@@ -12,6 +12,12 @@ pub const MAX_PIXELS: u64 = 16 * 1024 * 1024;
 const MAX_DECODED_BYTES: usize = 128 * 1024 * 1024;
 const MAX_DECODER_BYTES: usize = 32 * 1024 * 1024;
 const MAX_CHUNKS: usize = 4096;
+pub const MAX_ATTACHMENTS: usize = 8;
+pub const MAX_ATTACHMENT_BYTES: usize = 32 * 1024 * 1024;
+
+pub fn limits_guidance() -> String {
+    format!("정적 PNG만 허용: 가로·세로 각각 1..{MAX_DIMENSION}px, 총 {MAX_PIXELS} pixels 이하, 파일당 {MAX_ENCODED_BYTES} bytes (16 MiB) 이하. 한 close의 새 첨부 최대 {MAX_ATTACHMENTS}개, 합계 {MAX_ATTACHMENT_BYTES} bytes (32 MiB) 이하. 전체 PNG 디코딩 검사도 통과해야 한다(디코더 메모리 {MAX_DECODER_BYTES} bytes, 디코딩 출력 {MAX_DECODED_BYTES} bytes, chunk 최대 {MAX_CHUNKS}개). 긴 그림은 열린 Verify에서 축소하거나 나누고 텍스트·수치의 가독성을 확인한다.")
+}
 
 /// Explicit Project-relative path and author-supplied provenance; never inferred from Report text.
 pub struct VisualAttachment {
@@ -22,6 +28,8 @@ pub struct VisualAttachment {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ImageError {
+    DimensionsObserved { width: u32, height: u32 },
+    EncodedBytes { at_least: usize },
     TooLarge,
     Unsupported,
     Animated,
@@ -35,8 +43,14 @@ pub enum ImageError {
 }
 impl std::fmt::Display for ImageError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::TooLarge => "시각 자료의 용량 한도를 넘었다",
+        match self {
+            Self::DimensionsObserved { width, height } => return write!(f, "PNG 크기 {width}×{height}px ({} pixels)가 한도를 넘었다. {}", u64::from(*width) * u64::from(*height), limits_guidance()),
+            Self::EncodedBytes { at_least } => return write!(f, "PNG 입력은 최소 {at_least} bytes로 파일 용량 한도를 넘었다. {}", limits_guidance()),
+            _ => {},
+        }
+        let reason = match self {
+            Self::DimensionsObserved { .. } | Self::EncodedBytes { .. } => unreachable!(),
+            Self::TooLarge => "PNG 용량 또는 chunk 수 한도를 넘었다",
             Self::Unsupported => "현재 정적 PNG만 시각 자료로 받을 수 있다",
             Self::Animated => "움직이는 PNG는 아직 지원하지 않는다",
             Self::Malformed => "PNG 전체를 정상적으로 디코딩하지 못했다",
@@ -46,7 +60,12 @@ impl std::fmt::Display for ImageError {
             Self::Object => "보존된 시각 자료 객체를 쓰거나 검증하지 못했다",
             Self::MetadataMismatch => "시각 자료의 기록과 실제 바이트가 다르다",
             Self::BlankSource => "시각 자료의 출처 설명이 비어 있다",
-        })
+        };
+        if matches!(self, Self::TooLarge | Self::Unsupported | Self::Animated | Self::Malformed | Self::Dimensions | Self::Allocation) {
+            write!(f, "{reason}. {}", limits_guidance())
+        } else {
+            f.write_str(reason)
+        }
     }
 }
 impl std::error::Error for ImageError {}
@@ -80,7 +99,7 @@ impl VerifiedImage {
 
     pub fn decode(bytes: Vec<u8>) -> Result<Self, ImageError> {
         if bytes.len() > MAX_ENCODED_BYTES {
-            return Err(ImageError::TooLarge);
+            return Err(ImageError::EncodedBytes { at_least: bytes.len() });
         }
         check_envelope(&bytes)?;
         let mut options = png::DecodeOptions::default();
@@ -100,7 +119,7 @@ impl VerifiedImage {
             || height > MAX_DIMENSION
             || u64::from(width) * u64::from(height) > MAX_PIXELS
         {
-            return Err(ImageError::Dimensions);
+            return Err(ImageError::DimensionsObserved { width, height });
         }
         let mut reader = decoder.read_info().map_err(|_| ImageError::Malformed)?;
         if reader.info().animation_control.is_some() {
@@ -336,7 +355,7 @@ mod tests {
     fn encoded_input_is_bounded_even_for_an_infinite_reader() {
         assert_eq!(
             VerifiedImage::read(std::io::repeat(0)).unwrap_err(),
-            ImageError::TooLarge
+            ImageError::EncodedBytes { at_least: MAX_ENCODED_BYTES + 1 }
         );
     }
     #[test]
@@ -352,7 +371,7 @@ mod tests {
         bytes.extend_from_slice(&[0, 0, 0, 0, b'I', b'E', b'N', b'D', 174, 66, 96, 130]);
         assert_eq!(
             VerifiedImage::decode(bytes).unwrap_err(),
-            ImageError::Dimensions
+            ImageError::DimensionsObserved { width: MAX_DIMENSION + 1, height: 1 }
         );
     }
     #[test]
@@ -438,8 +457,31 @@ mod tests {
         bytes.extend_from_slice(&[0, 0, 0, 0, b'I', b'E', b'N', b'D', 174, 66, 96, 130]);
         assert_eq!(
             VerifiedImage::decode(bytes).unwrap_err(),
-            ImageError::Dimensions
+            ImageError::DimensionsObserved { width: 8192, height: 4096 }
         );
+    }
+
+    #[test]
+    fn tall_chart_rejection_names_observed_dimensions_and_all_numeric_limits() {
+        fn chart(width: u32, height: u32) -> Vec<u8> {
+            let mut bytes = Vec::new();
+            let mut encoder = png::Encoder::new(&mut bytes, width, height);
+            encoder.set_color(png::ColorType::Grayscale);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder.write_header().unwrap().write_image_data(&vec![0; (width * height) as usize]).unwrap();
+            bytes
+        }
+        let err = VerifiedImage::decode(chart(1100, 8671)).unwrap_err();
+        assert_eq!(err, ImageError::DimensionsObserved { width: 1100, height: 8671 });
+        let reason = err.to_string();
+        for needle in ["1100×8671", "8192", "16777216", "33554432", "16 MiB", "32 MiB"] {
+            assert!(reason.contains(needle), "{reason}");
+        }
+        VerifiedImage::decode(chart(1100, 3251)).unwrap();
+        VerifiedImage::decode(chart(1, MAX_DIMENSION)).unwrap();
+        let bytes_error = VerifiedImage::decode(vec![0; MAX_ENCODED_BYTES + 1]).unwrap_err();
+        assert!(bytes_error.to_string().contains("16777217"));
+        assert!(bytes_error.to_string().contains("16777216"));
     }
 
     #[test]

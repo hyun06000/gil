@@ -116,7 +116,19 @@ fn opened(result: &CallToolResult) -> String {
         "experiment" => "guide.opened.experiment",
         _ => "guide.opened.generic",
     };
-    text(key).to_string()
+    let specific = text(key);
+    match kind {
+        "synthesis" => {
+            let here = said.lines().next().and_then(|line| line.strip_prefix(text("receipt.opened_lead")))
+                .and_then(|line| line.split(" · ").next()).and_then(|r| r.parse::<crate::StepRef>().ok());
+            let location = here.map(|r| tr!("guide.opened.synthesis_location", here = r, cycle = r.cycle())).unwrap_or_default();
+            let cycle = here.map(|r| r.cycle().id().to_string()).unwrap_or_else(|| "Cn".into());
+            let example = serde_json::json!({"basis_refs": format!("step:{cycle}/S1\nstep:{cycle}/S2")});
+            tr!("guide.opened.synthesis_basis", specific = specific, location = location, rules = text("cycle.basis_refs_rules"), example = example)
+        },
+        "verify" => format!("{specific}\n{}", crate::visual_report::image::limits_guidance()),
+        _ => specific.to_string(),
+    }
 }
 
 fn closed(result: &CallToolResult) -> String {
@@ -305,6 +317,19 @@ mod tests {
         let mut o = receipt("something else\n");
         after("gil_open", &mut o);
         assert!(text(&o).contains("gil_close"), "{}", text(&o));
+    }
+
+    #[test]
+    fn synthesis_and_verify_open_expose_authoring_constraints_before_close() {
+        let mut synthesis = receipt("열었다: step:C7/S9 · synthesis\n");
+        after("gil_open", &mut synthesis);
+        let hint = text(&synthesis);
+        for needle in ["$.draft.synthesis.basis_refs", "step:C7/S9", "cycle:C7", "부모 사슬", "Question", "Interpretation", "중복 없이", "한 줄에 하나씩", "statement", "자동 이동"] {
+            assert!(hint.contains(needle), "{hint}");
+        }
+        let mut verify = receipt("열었다: step:C8/S3 · verify\n");
+        after("gil_open", &mut verify);
+        assert!(text(&verify).contains(&crate::visual_report::image::limits_guidance()));
     }
 
     #[test]

@@ -475,17 +475,17 @@ impl ProjectSession {
             return Err(error(crate::locale::text("session.visual.only_verify").into()));
         }
         let state = self.project.visual_state().ok_or_else(|| error(crate::locale::text("session.visual.needs_migration").into()))?;
-        if attachments.len() > 8 { return Err(error(crate::locale::text("session.visual.max_attachments").into())); }
+        if attachments.len() > crate::visual_report::image::MAX_ATTACHMENTS { return Err(error(crate::locale::text("session.visual.max_attachments").into())); }
         let root = self.root()?;
         let mut files = Vec::new();
         let mut metadata = Vec::new();
         let mut paths = std::collections::BTreeSet::new();
         let mut total = 0usize;
-        for input in &attachments {
+        for (index, input) in attachments.iter().enumerate() {
             if !paths.insert(input.path.clone()) { return Err(error(crate::locale::text("session.visual.duplicate_path").into())); }
-            let file = AttachmentFile::read(&root, &input.path).map_err(error)?;
+            let file = AttachmentFile::read(&root, &input.path).map_err(|reason| error(format!("$.visuals.attachments[{index}].path: {reason}")))?;
             total += file.image.bytes().len();
-            if total > 32 * 1024 * 1024 { return Err(error(crate::locale::text("session.visual.too_large").into())); }
+            if total > crate::visual_report::image::MAX_ATTACHMENT_BYTES { return Err(error(crate::locale::text("session.visual.too_large").into())); }
             metadata.push(file.image.metadata(input.source_kind, input.source_description.clone()).map_err(|e| error(e.to_string()))?);
             files.push(file);
         }

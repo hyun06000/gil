@@ -1,19 +1,19 @@
 {
   "schema": 1,
-  "updated": "2026-11-09",
+  "updated": "2026-11-10",
   "note": "Metadata only. The installed GIL Core reads this file at most once a day to show update guidance in the Monitor; it never downloads or installs from it. Update this file in the same pull request that records a publication ledger.",
   "platforms": {
     "darwin-arm64": {
-      "version": "0.2.1-preview.28",
-      "release_url": "https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.28",
+      "version": "0.2.1-preview.29",
+      "release_url": "https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.29",
       "install_doc": "https://github.com/hyun06000/gil/blob/main/INSTALL.md",
-      "notes": "Monitor의 명시적인 새 클릭 요구와 타임아웃·연결 오류를 구분합니다. 일반 오류는 제한된 재시도를 유지하고, 상태와 에이전트 안내에 원인 미확인을 정확히 표시합니다. 훅 없는 설치·기존 기록·Snapshot은 유지합니다. 실제 Host의 클릭·fullscreen 성공 여부는 별도 필드테스트 대상입니다."
+      "notes": "계획 근거의 입력 조건을 호출 전에 안내하고 잘못된 모든 줄을 한 번에 표시합니다. PNG의 픽셀·용량 제한과 실제 초과 크기를 안내합니다. 참조 자동 이동 없이 기존 승인·기록·Snapshot과 훅 없는 설치를 유지합니다. 설치와 실제 Host 필드테스트는 별도입니다."
     },
     "windows-x64": {
-      "version": "0.1.1-owner.14",
-      "release_url": "https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.14",
+      "version": "0.1.1-owner.15",
+      "release_url": "https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.15",
       "install_doc": "https://github.com/hyun06000/gil/blob/main/INSTALL.md",
-      "notes": "계획 제안의 draft 중첩·체크리스트 예시·Closing 승인 안내를 바로잡았습니다. Companion에서 업데이트 확인 → 업데이트로 설치한 뒤 새 연결·새 빈 테스트 폴더에서 확인하세요. 기존 연결과 기록은 유지합니다."
+      "notes": "최신 공통 Core·Monitor, 훅 없는 프로젝트 재개, 계획 근거의 일괄 오류·PNG 제한값 안내를 포함합니다. Companion에서 업데이트 확인 → 업데이트 후 새 연결에서 확인하세요. 기존 연결·기록은 유지하며 실제 필드테스트는 별도입니다."
     }
   }
 }

@@ -74,6 +74,13 @@ Artifact files inside the selected `project_root` requires a successfully opened
 Verify. This includes importing files made elsewhere, DOCX/PDF production, chart PNGs, rendering,
 test output and temporary files written inside the project. Check the actual open Step before
 launching a tool that can change these files; if the position is unknown, read `gil_context` once.
+PNG attachments must be static: each dimension 1–8192 pixels, at most 16,777,216 total pixels,
+and at most 16,777,216 bytes (16 MiB) per file. A close accepts at most 8 new attachments and
+33,554,432 bytes (32 MiB) total. PNG decoding/integrity and resource checks still apply
+(decoder memory 32 MiB, decoded output 128 MiB, at most 4096 chunks). Split or resize long
+charts inside the open Verify and check readability. Analysis and the Experiment Cycle Report
+must cite the Verify's attached assets using the confirmed stored source metadata.
+
 Finish all writers before closing Verify. A prepared contract or approved plan is not an open Verify.
 Outside Verify, keep project Artifact files unchanged: this applies to every Interview (including
 Closing), Define, Hypothesis, Analysis, Outcome, Cycle/Chain Reports, approval waits, boundaries
@@ -282,7 +289,13 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
      is the ordered checklist (1–64) of `id`, `question`, `done_when`; `synthesis` holds the
      Synthesis Report fields as strings, where `exploration_checklist` lists the item IDs in the same
      order, one per line. Replace the example's basis refs with the actual closed Question and
-     Interpretation refs in the current Synthesis lineage. Opening and later Interviews use
+     Interpretation refs in the current Synthesis lineage. `basis_refs` is a nonempty newline-separated
+     string of unique canonical `step:Cn/Sm` references, one per line, in this same Interview only.
+     Do not add commas, prose, Cycle references, other-Cycle steps, open steps or abandoned branches.
+     Previous-Cycle/external background belongs in `statement` prose and cannot replace these current
+     Interview references. Never silently move or correct references; correct the draft explicitly.
+     A refusal lists every invalid line with its original 1-based line number and field path.
+     Opening and later Interviews use
      the same wrapper. A Closing proposal keeps the existing items and checklist (including
      executed items) and adds `draft.synthesis.chain_verdict` as `"success"` or `"failure"`.
      To extend an existing plan, first read `gil_plan_read.active_plan`. It returns the exact
