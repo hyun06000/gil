@@ -23,7 +23,22 @@ pub struct Presence {
     unanswered: u8,
 }
 
+/// A BCP 47 tag as the wire accepts it: 2–35 ASCII characters, a letter first, then letters,
+/// digits, `-` or `_`. The same rule bounds `gil_start(locale)` and the App's presence report;
+/// what the tag means is decided later by `Locale::normalize`, never here.
+pub(super) fn locale_tag_valid(value: &Value) -> bool {
+    value.as_str().is_some_and(|s| (2..=35).contains(&s.len())
+        && s.as_bytes().first().is_some_and(u8::is_ascii_alphabetic)
+        && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'))
+}
+
+/// The Host locale the App shows. Optional; an older App sends none.
+fn locale_valid(input: &Value) -> bool {
+    input.get("locale").is_none_or(locale_tag_valid)
+}
+
 pub fn valid(input: &Value) -> bool {
+    if !locale_valid(input) { return false; }
     let fields = ["instance_id", "presentation", "sequence"];
     // The intent travels only with a display observation; alone it would say nothing about an instance.
     let intent_valid = input.get("automatic_fullscreen").is_none_or(|v| v.as_str().is_some_and(|s| AUTOMATIC_FULLSCREEN.contains(&s)));
@@ -132,6 +147,17 @@ mod tests {
         assert_eq!(p.instances.len(),1);
         assert_eq!(p.status("s",now+OPEN_GRACE)["state"],"visible");
     }
+    #[test]
+    fn the_locale_field_is_optional_bounded_and_independent_of_the_observation() {
+        let mut with = observation("app-1", 1, "inline"); with["locale"] = json!("zh-Hant-TW");
+        assert!(valid(&with));
+        assert!(valid(&json!({"scope_id":"s","locale":"ja"})), "a locale alone is a harmless report");
+        for bad in [json!(""), json!("x"), json!("1ko"), json!("a".repeat(36)), json!("ko KR"), json!(12), json!(null)] {
+            let mut v = observation("app-1", 1, "inline"); v["locale"] = bad.clone();
+            assert!(!valid(&v), "{bad}");
+        }
+    }
+
     #[test]
     fn partial_or_unbounded_observations_are_rejected() {
         assert!(valid(&json!({"scope_id":"s"})));

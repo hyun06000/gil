@@ -34,10 +34,8 @@ use super::graph::{
 };
 
 /// 화면 reader 가 먼저 읽는 두 줄. **고정된 글이다.**
-const TITLE: &str = "현재 GIL 여정";
-const DESC: &str =
-    "위에서 아래로 흐르는 Step 시간선이다. 왼쪽 세로줄이 지금까지 이어지는 경로이고, \
-     옆줄에서 끝난 것은 두고 온 시도다.";
+fn title() -> &'static str { crate::locale::text("mon.svg.title") }
+fn desc() -> &'static str { crate::locale::text("mon.svg.desc") }
 /// 이 문서 안에서만 쓰는 이름표 — renderer 가 소유한 상수다.
 const TITLE_ID: &str = "gil-graph-title";
 const DESC_ID: &str = "gil-graph-desc";
@@ -57,8 +55,8 @@ pub(crate) fn render_monitor_svg(plan: &VisualGraph) -> String {
         span(plan.width),
         span(plan.height)
     );
-    let _ = writeln!(out, "<title id=\"{TITLE_ID}\">{}</title>", text(TITLE));
-    let _ = writeln!(out, "<desc id=\"{DESC_ID}\">{}</desc>", text(DESC));
+    let _ = writeln!(out, "<title id=\"{TITLE_ID}\">{}</title>", text(title()));
+    let _ = writeln!(out, "<desc id=\"{DESC_ID}\">{}</desc>", text(desc()));
 
     // 그리는 차례가 곧 겹침의 차례다 — 그룹, 줄, 선, 그리고 마지막에 점과 글.
     for group in &plan.groups {
@@ -135,9 +133,10 @@ fn group_band(out: &mut String, group: &VisualGroup, plan: &VisualGraph) {
     if group.standing == Standing::Here {
         let _ = writeln!(
             out,
-            "<text class=\"g-here\" x=\"{}\" y=\"{}\">현재 Cycle</text>",
+            "<text class=\"g-here\" x=\"{}\" y=\"{}\">{}</text>",
             span(right - 12),
-            span(group.y + 16)
+            span(group.y + 16),
+            text(crate::locale::text("mon.svg.here_cycle"))
         );
     }
     // **되돌아감은 여기서 글이 된다.** 위로 향하는 선을 그리는 대신, 이 lane 이 어디서
@@ -344,9 +343,10 @@ fn step_row(out: &mut String, row: &VisualRow) {
     if row.standing == Standing::Here {
         let _ = writeln!(
             out,
-            "<text class=\"g-here\" x=\"{}\" y=\"{}\">현재</text>",
+            "<text class=\"g-here\" x=\"{}\" y=\"{}\">{}</text>",
             span(at),
-            span(row.y + 5)
+            span(row.y + 5),
+            text(crate::locale::text("mon.svg.here"))
         );
         at += 36;
     }
@@ -471,7 +471,7 @@ mod tests {
             svg.contains(&format!("aria-labelledby=\"{TITLE_ID} {DESC_ID}\"")),
             "이름표가 이어져 있지 않다"
         );
-        assert!(svg.contains(&format!("<title id=\"{TITLE_ID}\">{TITLE}</title>")), "{svg}");
+        assert!(svg.contains(&format!("<title id=\"{TITLE_ID}\">{}</title>", title())), "{svg}");
         assert!(svg.contains(&format!("id=\"{DESC_ID}\"")), "{svg}");
         // 설명이 이 그림의 문법을 말한다 — 위에서 아래로, 옆줄은 두고 온 것.
         assert!(svg.contains("위에서 아래로"), "{svg}");

@@ -79,33 +79,32 @@ pub struct PlanState {
 }
 
 fn bad(message: &str) -> String {
-    format!("승인 계획: {message}")
+    crate::tr!("plan.err.prefix", message = message)
 }
 // Diagnostics are bounded and escaped; full, exact text is available in active_plan.
 // Validation remains atomic and compares definitions, not just IDs or executed status.
 fn retained_items(previous: &[Item], proposed: &[Item]) -> Result<(), String> {
     fn preview(value: &str) -> String {
         let text: String = value.chars().take(120).collect();
-        format!("{}{}", serde_json::to_string(&text).unwrap(), if text.len() < value.len() { "…(생략)" } else { "" })
+        format!("{}{}", serde_json::to_string(&text).unwrap(), if text.len() < value.len() { crate::locale::text("plan.err.omitted") } else { "" })
     }
     let mut differences = Vec::new();
     for old in previous {
         let Some(new) = proposed.iter().find(|i| i.id == old.id) else {
-            differences.push(format!("draft.items[id={}]: 누락 (삭제 금지)", preview(&old.id)));
+            differences.push(crate::tr!("plan.err.item_missing", id = preview(&old.id)));
             continue;
         };
         for (field, stored, received) in [("question", &old.question, &new.question), ("done_when", &old.done_when, &new.done_when)] {
             if stored != received {
-                differences.push(format!("draft.items[id={}].{field}: 불일치 — 저장: {} / 받음: {}", preview(&old.id), preview(stored), preview(received)));
+                differences.push(crate::tr!("plan.err.item_mismatch", id = preview(&old.id), field = field, stored = preview(stored), received = preview(received)));
             }
         }
     }
     if differences.is_empty() { return Ok(()); }
     let count = differences.len();
     differences.truncate(8);
-    Err(bad(&format!("{}{}\n기존 승인 항목은 실행 여부와 관계없이 모두 원문 그대로 포함한다. gil_plan_read.active_plan.items를 복사한 뒤 새 ID로 추가한다. 항목 순서와 scope는 새 승인으로 변경할 수 있다.{}",
-        differences.join("\n"), if count > 8 { format!("\n그 밖의 차이 {}개", count - 8) } else { String::new() },
-        " 제안은 기록되지 않았다.")))
+    Err(bad(&crate::tr!("plan.err.retained", differences = differences.join("\n"),
+        more = if count > 8 { crate::tr!("plan.err.more_differences", n = count - 8) } else { String::new() })))
 }
 fn failed_execution(chain: &Chain, e: &Execution) -> bool {
     chain.cycles().nodes().iter().find(|c| c.id().to_ref().to_string() == e.cycle_ref)
@@ -126,7 +125,7 @@ impl Proposal {
         let receipt = self
             .receipt
             .as_ref()
-            .ok_or_else(|| bad("Monitor에서 이 판을 승인하거나 수정 요청해야 한다"))?;
+            .ok_or_else(|| bad(crate::locale::text("plan.err.decide_in_monitor")))?;
         let mut report: Report = self.draft.synthesis.clone().into_iter().collect();
         report.insert("approved", receipt.decision.approved());
         report.insert("plan_revision", self.revision.to_string());
@@ -218,7 +217,7 @@ impl PlanState {
     }
     pub(crate) fn validate(&self, chain: &Chain) -> Result<(), String> {
         if !cfg!(feature = "approved-plan") {
-            return Err(bad("이 개발 프로필을 지원하는 Core가 필요하다"));
+            return Err(bad(crate::locale::text("plan.err.core_required")));
         }
         for request in &self.reinterview_requests {
             if request.reason.trim().is_empty()
@@ -228,14 +227,14 @@ impl PlanState {
                         && c.id().to_ref().to_string() == request.cycle_ref
                 })
             {
-                return Err(bad("재인터뷰 요청의 출처 또는 내용이 올바르지 않다"));
+                return Err(bad(crate::locale::text("plan.err.bad_reinterview")));
             }
         }
         let mut definitions = BTreeMap::<String, Item>::new();
         let mut prior_step = (0, 0);
         for (idx, p) in self.proposals.iter().enumerate() {
             if p.revision as usize != idx + 1 || p.digest != p.hash() {
-                return Err(bad("제안 판 또는 digest가 다르다"));
+                return Err(bad(crate::locale::text("plan.err.revision_or_digest")));
             }
             p.draft.validate()?;
             if let Some(base) = p.base_revision {
@@ -243,23 +242,23 @@ impl PlanState {
                     .proposals
                     .get(
                         base.checked_sub(1)
-                            .ok_or_else(|| bad("기준 승인 판은 1부터 시작한다"))?
+                            .ok_or_else(|| bad(crate::locale::text("plan.err.base_from_one")))?
                             as usize,
                     )
                     .filter(|b| b.revision < p.revision && self.activated(chain, b))
-                    .ok_or_else(|| bad("기준 승인 판이 없다"))?;
+                    .ok_or_else(|| bad(crate::locale::text("plan.err.base_missing")))?;
                 retained_items(&prev.draft.items, &p.draft.items)?;
             }
             let target: StepRef = p
                 .synthesis_ref
                 .parse()
-                .map_err(|_| bad("Synthesis 주소가 올바르지 않다"))?;
+                .map_err(|_| bad(crate::locale::text("plan.err.synthesis_address")))?;
             if target.to_string() != p.synthesis_ref {
-                return Err(bad("Synthesis 주소는 정규 주소여야 한다"));
+                return Err(bad(crate::locale::text("plan.err.synthesis_canonical")));
             }
             let order = (target.cycle().number(), target.step());
             if order < prior_step {
-                return Err(bad("제안 이력의 Synthesis 순서가 거꾸로다"));
+                return Err(bad(crate::locale::text("plan.err.synthesis_order")));
             }
             prior_step = order;
             let cycle = chain
@@ -267,15 +266,15 @@ impl PlanState {
                 .nodes()
                 .iter()
                 .find(|c| c.id().to_ref() == target.cycle())
-                .ok_or_else(|| bad("Synthesis Cycle이 없다"))?;
+                .ok_or_else(|| bad(crate::locale::text("plan.err.synthesis_cycle_missing")))?;
             let node = cycle
                 .steps()
                 .nodes()
                 .iter()
                 .find(|n| cycle.step_ref(n.id) == target)
-                .ok_or_else(|| bad("Synthesis가 없다"))?;
+                .ok_or_else(|| bad(crate::locale::text("plan.err.synthesis_missing")))?;
             if cycle.kind() != CycleKind::Interview || node.kind != NodeKind::Synthesis {
-                return Err(bad("Interview Synthesis만 승인한다"));
+                return Err(bad(crate::locale::text("plan.err.interview_only")));
             }
             let expected_base = self.proposals[..idx]
                 .iter()
@@ -289,25 +288,25 @@ impl PlanState {
                 })
                 .map(|old| old.revision);
             if p.base_revision != expected_base {
-                return Err(bad("제안 기준 판이 당시의 최신 승인 판과 다르다"));
+                return Err(bad(crate::locale::text("plan.err.base_not_latest")));
             }
             if p.receipt
                 .as_ref()
                 .is_some_and(|r| r.source != "monitor_button")
             {
-                return Err(bad("승인 입력 경로가 다르다"));
+                return Err(bad(crate::locale::text("plan.err.input_path")));
             }
             // Superseded decisions stay in history; only the latest proposal may close the Step.
             let last = !self.proposals[idx + 1..]
                 .iter()
                 .any(|new| new.synthesis_ref == p.synthesis_ref);
             if last && node.is_closed() && node.report.as_ref() != Some(&p.report()?) {
-                return Err(bad("Synthesis Report와 승인 제안이 다르다"));
+                return Err(bad(crate::locale::text("plan.err.report_mismatch")));
             }
             if self.activated(chain, p) {
                 for item in &p.draft.items {
                     if definitions.get(&item.id).is_some_and(|old| old != item) {
-                        return Err(bad("승인 항목 정의가 변경됐다"));
+                        return Err(bad(crate::locale::text("plan.err.item_changed")));
                     }
                     definitions.insert(item.id.clone(), item.clone());
                 }
@@ -325,7 +324,7 @@ impl PlanState {
                     .iter()
                     .any(|p| p.synthesis_ref == c.step_ref(n.id).to_string())
                 {
-                    return Err(bad("승인 제안 없는 Synthesis가 있다"));
+                    return Err(bad(crate::locale::text("plan.err.synthesis_without_proposal")));
                 }
             }
         }
@@ -336,11 +335,11 @@ impl PlanState {
                 .proposals
                 .iter()
                 .find(|p| p.revision == e.revision && self.activated(chain, p))
-                .ok_or_else(|| bad("실행의 승인 판이 없다"))?;
+                .ok_or_else(|| bad(crate::locale::text("plan.err.execution_revision_missing")))?;
             let expected = p.draft.items.iter().find(|i| seen.get(i.id.as_str())
                 .is_none_or(|prior| failed_execution(chain, prior)));
             if expected.map(|i| i.id.as_str()) != Some(e.item_id.as_str()) {
-                return Err(bad("중복 또는 승인 순서와 다른 실행 항목"));
+                return Err(bad(crate::locale::text("plan.err.execution_order")));
             }
             let c = chain
                 .cycles()
@@ -349,7 +348,7 @@ impl PlanState {
                 .find(|c| {
                     c.id().to_ref().to_string() == e.cycle_ref && c.kind() == CycleKind::Experiment
                 })
-                .ok_or_else(|| bad("실행 Cycle이 없다"))?;
+                .ok_or_else(|| bad(crate::locale::text("plan.err.execution_cycle_missing")))?;
             if let Some(prior) = seen.get(e.item_id.as_str()) {
                 // A retry must descend from the declared revisit of the last failed attempt.
                 // A fresh Interview may intervene, but cannot erase the origin of the retry.
@@ -358,7 +357,7 @@ impl PlanState {
                 let mut inherited = false;
                 while let Some(id) = todo.pop() {
                     if !visited.insert(id) { continue; }
-                    let node = chain.cycles().node(id).ok_or_else(|| bad("재시도 계보가 없다"))?;
+                    let node = chain.cycles().node(id).ok_or_else(|| bad(crate::locale::text("plan.err.retry_lineage_missing")))?;
                     if let Some(from) = node.revisit_from() {
                         if from.to_ref().to_string() == prior.cycle_ref { inherited = true; break; }
                         todo.push(from);
@@ -366,12 +365,12 @@ impl PlanState {
                     if let Some(parent) = node.parent() { todo.push(parent); }
                 }
                 if !inherited {
-                    return Err(bad("재시도는 직전 실패의 revisit 계보를 이어야 한다"));
+                    return Err(bad(crate::locale::text("plan.err.retry_lineage")));
                 }
             }
             seen.insert(&e.item_id, e);
             if c.id().to_ref().number() <= prior_cycle {
-                return Err(bad("실행 바인딩의 순서가 다르다"));
+                return Err(bad(crate::locale::text("plan.err.binding_order")));
             }
             prior_cycle = c.id().to_ref().number();
             let latest = self.proposals.iter().rev().find(|q| {
@@ -381,11 +380,11 @@ impl PlanState {
                         .is_ok_and(|r| r.cycle().number() < c.id().to_ref().number())
             });
             if latest.map(|q| q.revision) != Some(e.revision) {
-                return Err(bad("실행에 오래된 승인 판을 사용할 수 없다"));
+                return Err(bad(crate::locale::text("plan.err.stale_revision")));
             }
             let approved: StepRef = p.synthesis_ref.parse().unwrap();
             if c.id().to_ref().number() <= approved.cycle().number() {
-                return Err(bad("승인 이전 실행은 허용하지 않는다"));
+                return Err(bad(crate::locale::text("plan.err.before_approval")));
             }
         }
         for c in chain
@@ -401,7 +400,7 @@ impl PlanState {
                 .count()
                 != 1
             {
-                return Err(bad("Experiment에는 정확히 하나의 실행 바인딩이 필요하다"));
+                return Err(bad(crate::locale::text("plan.err.one_binding")));
             }
         }
         Ok(())
@@ -419,13 +418,13 @@ impl Draft {
         .iter()
         .any(|s| s.trim().is_empty())
         {
-            return Err(bad("범위의 모든 칸을 적는다(없으면 없음)"));
+            return Err(bad(crate::locale::text("plan.err.scope_fields")));
         }
         if self.items.is_empty()
             || self.items.len() > 64
             || serde_json::to_vec(self).unwrap().len() > 64 * 1024
         {
-            return Err(bad("항목은 1~64개, 제안은 64 KiB 이하여야 한다"));
+            return Err(bad(crate::locale::text("plan.err.items_bounds")));
         }
         let mut ids = BTreeSet::new();
         for i in &self.items {
@@ -439,14 +438,12 @@ impl Draft {
                 || i.question.trim().is_empty()
                 || i.done_when.trim().is_empty()
             {
-                return Err(bad("항목 ID는 고유해야 하며 질문과 확인 조건이 필요하다"));
+                return Err(bad(crate::locale::text("plan.err.item_fields")));
             }
         }
         let report: Report = self.synthesis.clone().into_iter().collect();
         if Report::parse(&report_text(&report)).ok().as_ref() != Some(&report) {
-            return Err(bad(
-                "Synthesis 본문의 끝 빈 줄·들여쓰기 또는 필드 이름을 Report 형식으로 정확히 표현할 수 없다",
-            ));
+            return Err(bad(crate::locale::text("plan.err.synthesis_shape")));
         }
         if self.synthesis.get("exploration_checklist")
             != Some(
@@ -458,15 +455,13 @@ impl Draft {
                     .join("\n"),
             )
         {
-            return Err(bad(
-                "exploration_checklist에는 items의 ID를 같은 순서로 한 줄씩 적는다",
-            ));
+            return Err(bad(crate::locale::text("plan.err.checklist")));
         }
         if ["approved", "plan_revision", "plan_digest"]
             .iter()
             .any(|k| self.synthesis.contains_key(*k))
         {
-            return Err(bad("approved와 plan 필드는 Core가 승인 결과에서 만든다"));
+            return Err(bad(crate::locale::text("plan.err.core_fields")));
         }
         Ok(())
     }
@@ -477,35 +472,35 @@ impl Project {
     }
     fn plan_mut(&mut self) -> Result<&mut PlanState, String> {
         let crate::project::WorldGraph::Chains(chains) = &mut self.world else {
-            return Err(bad("이 프로젝트는 승인 계획 프로필이 아니다"));
+            return Err(bad(crate::locale::text("plan.err.not_profile")));
         };
         chains
             .last_mut()
             .and_then(|c| c.approved_plan.as_mut())
-            .ok_or_else(|| bad("기존 프로젝트는 자동 이전하지 않는다"))
+            .ok_or_else(|| bad(crate::locale::text("plan.err.no_auto_migration")))
     }
     pub fn propose_plan(&mut self, draft: Draft) -> Result<Proposal, String> {
         draft.validate()?;
         let c = self.current_cycle();
         let at = c
             .step_now_open()
-            .ok_or_else(|| bad("먼저 Synthesis를 연다"))?;
+            .ok_or_else(|| bad(crate::locale::text("plan.err.open_synthesis_first")))?;
         if c.kind() != CycleKind::Interview
             || c.steps().node(at).unwrap().kind != NodeKind::Synthesis
         {
-            return Err(bad("열린 Interview Synthesis에서만 제안한다"));
+            return Err(bad(crate::locale::text("plan.err.open_interview_synthesis")));
         }
         let target = c.step_ref(at).to_string();
         let state = self
             .approved_plan()
-            .ok_or_else(|| bad("기존 프로젝트는 자동 이전하지 않는다"))?;
+            .ok_or_else(|| bad(crate::locale::text("plan.err.no_auto_migration")))?;
         if let Some(last) = state.proposals.last().filter(|p| p.synthesis_ref == target) {
             if last.draft == draft {
                 return Ok(last.clone());
             }
         }
         let mut p = Proposal {
-            revision: u32::try_from(state.proposals.len() + 1).map_err(|_| bad("판 한도"))?,
+            revision: u32::try_from(state.proposals.len() + 1).map_err(|_| bad(crate::locale::text("plan.err.revision_limit")))?,
             base_revision: state
                 .active(self.current_chain().unwrap())
                 .map(|p| p.revision),
@@ -550,13 +545,13 @@ impl Project {
         let p = self
             .approved_plan()
             .and_then(|s| s.current(self))
-            .ok_or_else(|| bad("현재 승인할 Synthesis가 없다"))?;
+            .ok_or_else(|| bad(crate::locale::text("plan.err.no_synthesis_to_approve")))?;
         if p.revision != revision || p.digest != digest {
-            return Err(bad("제안이 바뀌었다. Monitor에서 새 판을 읽는다"));
+            return Err(bad(crate::locale::text("plan.err.proposal_changed")));
         }
         if let Some(r) = &p.receipt {
             if r.decision != decision {
-                return Err(bad("이미 기록한 응답을 바꾸지 않는다"));
+                return Err(bad(crate::locale::text("plan.err.response_final")));
             }
             return Ok(p.clone());
         }
@@ -576,11 +571,9 @@ impl Project {
         }
         let p = s
             .current(self)
-            .ok_or_else(|| bad("gil_plan_propose로 제안한 뒤 Monitor 버튼 응답을 기다린다"))?;
+            .ok_or_else(|| bad(crate::locale::text("plan.err.propose_then_wait")))?;
         if &p.report()? != report {
-            return Err(bad(
-                "승인한 내용 그대로 닫는다. gil_plan_read의 close_report를 사용한다",
-            ));
+            return Err(bad(crate::locale::text("plan.err.close_as_approved")));
         }
         Ok(())
     }
@@ -590,18 +583,16 @@ impl Project {
         };
         let c = self.current_chain().unwrap();
         if !s.awaiting_interview(c).is_empty() {
-            return Err(bad(
-                "보존된 재인터뷰 요청이 있다. 현재 Cycle을 정상적으로 닫고 새 Interview에서 승인받는다",
-            ));
+            return Err(bad(crate::locale::text("plan.err.reinterview_pending")));
         }
         let p = s
             .active(c)
-            .ok_or_else(|| bad("승인 후 Outcome와 Interview Cycle을 먼저 닫는다"))?;
+            .ok_or_else(|| bad(crate::locale::text("plan.err.close_outcome_first")))?;
         let item = s
             .pending(c)
             .first()
             .copied()
-            .ok_or_else(|| bad("미실행 항목이 없다. 새 Interview에서 계획을 승인한다"))?;
+            .ok_or_else(|| bad(crate::locale::text("plan.err.no_pending_items")))?;
         Ok(Some((p.revision, item.id.clone())))
     }
     pub(crate) fn bind_plan_execution(
@@ -621,7 +612,7 @@ impl Project {
             || reason.len() > 4096
             || self.current_cycle().kind() != CycleKind::Experiment
         {
-            return Err(bad("Experiment에서 재인터뷰 이유를 1~4096 bytes로 적는다"));
+            return Err(bad(crate::locale::text("plan.err.reinterview_reason")));
         }
         let request = ReinterviewRequest {
             cycle_ref: self.current_cycle().id().to_ref().to_string(),

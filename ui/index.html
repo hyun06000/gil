@@ -10,16 +10,16 @@
 <main id="gil-companion">
   <header class="top">
     <div class="mark">gil</div>
-    <div class="title"><b>GIL Companion</b><small class="runtime">현재 여정 · read only</small></div>
+    <div class="title"><b>GIL Companion</b><small class="runtime" data-i18n="html.runtime">현재 여정 · read only</small></div>
     <div class="scope">
       <label for="scope">Project</label>
       <select id="scope"></select>
-      <button class="open" type="button" hidden>폴더 열기</button>
-      <button class="refresh" type="button" title="완전한 View 를 다시 읽는다">새로고침</button>
-      <button class="forget" type="button" hidden>목록에서 빼기</button>
-      <button class="connect-host" data-host="codex" type="button" hidden>Codex 연결</button>
-      <button class="connect-host" data-host="claude" type="button" hidden>Claude Desktop 연결</button>
-      <button class="update" type="button" hidden>업데이트 확인</button>
+      <button class="open" type="button" data-i18n="html.open_folder" hidden>폴더 열기</button>
+      <button class="refresh" type="button" data-i18n="html.refresh" data-i18n-title="html.refresh_title" title="완전한 View 를 다시 읽는다">새로고침</button>
+      <button class="forget" type="button" data-i18n="html.forget" hidden>목록에서 빼기</button>
+      <button class="connect-host" data-host="codex" type="button" data-i18n="html.connect_codex" hidden>Codex 연결</button>
+      <button class="connect-host" data-host="claude" type="button" data-i18n="html.connect_claude" hidden>Claude Desktop 연결</button>
+      <button class="update" type="button" data-i18n="html.check_update" hidden>업데이트 확인</button>
     </div>
   </header>
   <div class="notice"></div>
@@ -30,22 +30,22 @@
   <!-- 이 창의 설정을 읽지 못했다. 이번 실행은 아무것도 적지 않는다(§9.1.2). -->
   <div class="settings-say" role="status"></div>
   <div class="empty" hidden>
-    <p>아직 연 Project 가 없다.</p>
-    <p class="how">위의 <b>폴더 열기</b>로 GIL Project 의 root 를 고른다.</p>
+    <p data-i18n="html.empty_none">아직 연 Project 가 없다.</p>
+    <p class="how" data-i18n="html.empty_how">위의 폴더 열기로 GIL Project 의 root 를 고른다.</p>
   </div>
   <section class="intro" hidden>
-    <small>지금</small>
+    <small data-i18n="html.now">지금</small>
     <h1></h1>
     <p></p>
     <span class="world"></span>
-    <section class="gil-progress" aria-label="GIL 기록 진행">
+    <section class="gil-progress" aria-label="GIL 기록 진행" data-i18n-aria="html.progress_aria">
       <strong class="progress-position"></strong>
-      <dl><dt>지금 할 일</dt><dd class="progress-action"></dd>
-        <dt>완료 조건</dt><dd class="progress-done"></dd></dl>
+      <dl><dt data-i18n="html.todo">지금 할 일</dt><dd class="progress-action"></dd>
+        <dt data-i18n="html.done_when">완료 조건</dt><dd class="progress-done"></dd></dl>
       <p class="progress-records"></p>
       <p class="progress-observed"></p>
       <p class="progress-connection" role="status"></p>
-      <small>GIL에 기록된 상태입니다. 에이전트의 생각이나 다른 도구 사용 여부는 여기서 확인할 수 없습니다.</small>
+      <small data-i18n="html.progress_note">GIL에 기록된 상태입니다. 에이전트의 생각이나 다른 도구 사용 여부는 여기서 확인할 수 없습니다.</small>
     </section>
   </section>
   <section class="map" aria-label="Step DAG" hidden>
@@ -61,11 +61,11 @@
     </div>
     <!-- 오른쪽 위: 미니맵과 확대 손잡이. 읽는 손잡이뿐이다 — Project 의 무엇도 바꾸지 않는다. -->
     <div class="map-tools">
-      <svg class="minimap" role="img" aria-label="Graph 미니맵 — 보이는 범위를 끌어 이동한다" hidden></svg>
-      <div class="zoom-tools" role="group" aria-label="Graph 확대">
-        <button class="zoom-out" type="button" title="축소 (Ctrl/⌘ + 휠)" aria-label="축소">−</button>
-        <button class="zoom-reset" type="button" title="원래 크기로" aria-label="원래 크기로">100%</button>
-        <button class="zoom-in" type="button" title="확대 (Ctrl/⌘ + 휠)" aria-label="확대">+</button>
+      <svg class="minimap" role="img" aria-label="Graph 미니맵 — 보이는 범위를 끌어 이동한다" data-i18n-aria="html.minimap_aria" hidden></svg>
+      <div class="zoom-tools" role="group" aria-label="Graph 확대" data-i18n-aria="html.zoom_aria">
+        <button class="zoom-out" type="button" title="축소 (Ctrl/⌘ + 휠)" aria-label="축소" data-i18n-title="html.zoom_out_title" data-i18n-aria="html.zoom_out">−</button>
+        <button class="zoom-reset" type="button" title="원래 크기로" aria-label="원래 크기로" data-i18n-title="html.zoom_reset" data-i18n-aria="html.zoom_reset">100%</button>
+        <button class="zoom-in" type="button" title="확대 (Ctrl/⌘ + 휠)" aria-label="확대" data-i18n-title="html.zoom_in_title" data-i18n-aria="html.zoom_in">+</button>
       </div>
     </div>
   </section>

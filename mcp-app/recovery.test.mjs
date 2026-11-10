@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {makeRecoveryReview} from './recovery.mjs';
+// These assertions read the Korean table; the language-specific cases live in locale.test.mjs.
+import { setLocale } from '../ui/locale.js';
+setLocale('ko');
 class Element {
   constructor(tag) { this.tag=tag; this.children=[]; this.listeners={}; this.textContent=''; this.hidden=false; }
   append(...nodes) {this.children.push(...nodes);}

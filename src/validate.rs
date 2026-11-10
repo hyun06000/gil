@@ -223,52 +223,32 @@ pub enum GrammarError {
 impl fmt::Display for GrammarError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            GrammarError::UnknownStepKind(kind) => {
-                write!(f, "{kind} 은(는) 명세의 step_kinds 에 없다 — Step 이 아니다")
-            }
-            GrammarError::UnknownCycleKind(kind) => {
-                write!(f, "{kind} 은(는) 명세의 cycle_kinds 에 없다 — 닫는 규칙이 없다")
-            }
-            GrammarError::ParentNotClosed { parent, child } => write!(
-                f,
-                "{parent} 이(가) 아직 열려 있어 {child} 을(를) 열 수 없다 \
-                 — 먼저 {parent} 을(를) 닫아라",
-            ),
+            GrammarError::UnknownStepKind(kind) => f.write_str(&crate::tr!("grammar.unknown_step_kind", kind = kind)),
+            GrammarError::UnknownCycleKind(kind) => f.write_str(&crate::tr!("grammar.unknown_cycle_kind", kind = kind)),
+            GrammarError::ParentNotClosed { parent, child } => f.write_str(&crate::tr!("grammar.parent_not_closed", parent = parent, child = child)),
             GrammarError::TransitionNotAllowed {
                 parent,
                 child,
                 allowed_children,
             } => {
-                write!(f, "{parent} 뒤에 {child} 을(를) 열 수 없다 — ")?;
+                f.write_str(&crate::tr!("grammar.transition_lead", parent = parent, child = child))?;
                 if allowed_children.is_empty() {
-                    write!(f, "{parent} 뒤에 열 수 있는 것이 명세에 없다")
+                    f.write_str(&crate::tr!("grammar.transition_none", parent = parent))
                 } else {
                     let names: Vec<&str> =
                         allowed_children.iter().map(|kind| kind.as_str()).collect();
-                    write!(f, "여기서 열 수 있는 것: {}", names.join(", "))
+                    f.write_str(&crate::tr!("grammar.transition_allowed", names = names.join(", ")))
                 }
             }
-            GrammarError::MissingReportFields { subject, missing } => write!(
-                f,
-                "{subject} 을(를) 닫으려면 Report 에 다음 칸이 있어야 한다 (빠진 것: {})",
-                missing.join(", ")
-            ),
-            GrammarError::EmptyReportField { subject, field } => write!(
-                f,
-                "{subject} 의 {field} 는 비워 둘 수 없다 — 나중에 이유를 되짚을 수 있어야 한다"
-            ),
+            GrammarError::MissingReportFields { subject, missing } => f.write_str(&crate::tr!("grammar.missing_fields", subject = subject, missing = missing.join(", "))),
+            GrammarError::EmptyReportField { subject, field } => f.write_str(&crate::tr!("grammar.empty_field", subject = subject, field = field)),
             GrammarError::FieldValueNotYetBuilt {
                 subject,
                 field,
                 value,
                 why,
                 allowed,
-            } => write!(
-                f,
-                "{subject} 의 {field} 에 {value:?} 는 **아직** 쓸 수 없다 — {why}.\n\
-                 명세에는 있지만 지금 밟을 수 있는 수가 아니다. 지금 쓸 수 있는 값: {}",
-                allowed.join(", ")
-            ),
+            } => f.write_str(&crate::tr!("grammar.not_yet_built", subject = subject, field = field, value = format!("{value:?}"), why = why, allowed = allowed.join(", "))),
             GrammarError::FieldValueNotAllowed {
                 subject,
                 field,
@@ -276,14 +256,10 @@ impl fmt::Display for GrammarError {
                 allowed,
                 narrowed_by,
             } => {
-                write!(
-                    f,
-                    "{subject} 의 {field} 에 {value:?} 는 쓸 수 없다 — 여기 올 수 있는 값: {}",
-                    allowed.join(", ")
-                )?;
+                f.write_str(&crate::tr!("grammar.not_allowed", subject = subject, field = field, value = format!("{value:?}"), allowed = allowed.join(", ")))?;
                 match narrowed_by {
                     Some((deciding_field, deciding_value)) => {
-                        write!(f, " ({deciding_field} 가 {deciding_value:?} 이기 때문이다)")
+                        f.write_str(&crate::tr!("grammar.narrowed_by", deciding_field = deciding_field, deciding_value = format!("{deciding_value:?}")))
                     }
                     None => Ok(()),
                 }

@@ -156,7 +156,7 @@ pub(super) fn open_document() -> String {
 /// JavaScript 도 외부 자원도 더하지 않는다.
 pub(super) fn open_document_refreshing(refresh: Option<(u64, &str)>) -> String {
     let mut out = String::new();
-    out.push_str("<!doctype html>\n<html lang=\"ko\">\n<head>\n");
+    let _ = writeln!(out, "<!doctype html>\n<html lang=\"{}\">\n<head>", crate::locale::current().tag());
     out.push_str("<meta charset=\"utf-8\">\n");
     out.push_str("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n");
     if let Some((seconds, path)) = refresh {
@@ -212,20 +212,20 @@ pub(super) fn facts(out: &mut String, seen: &MonitorSnapshot) {
 fn focus_now(out: &mut String, seen: &MonitorSnapshot) {
     let cycle = &seen.current_cycle.facts;
     out.push_str("<section class=\"focus\">\n");
-    heading(out, "지금");
+    heading(out, crate::locale::text("mon.h.now"));
     // **Cycle 종류마다 근거가 다르다.** Experiment 는 Define 에서, Interview 는 제 첫
     // Question 에서 읽는다. 한쪽 규칙을 다른 쪽에 적용하면 화면이 있는 것을 없다고 말한다.
     if cycle.kind == CycleKind::Experiment && cycle.experiment_definition.is_none() {
-        note(out, say::NO_DEFINITION);
+        note(out, say::no_definition());
     }
     if let Some(InterviewQuestion::NotAsked) = &cycle.interview_question {
-        note(out, say::NOT_ASKED);
+        note(out, say::not_asked());
     }
     out.push_str("<dl>\n");
     match &cycle.experiment_definition {
         Some(define) => {
-            pair(out, say::PROBLEM, &define.problem);
-            pair(out, say::SUCCESS_CONDITION, &define.success_condition);
+            pair(out, say::problem(), &define.problem);
+            pair(out, say::success_condition(), &define.success_condition);
         }
         // 없는 질문을 지어내지 않는다. **이름표조차 붙이지 않는다** — `질문:` 이라고
         // 적는 순간 없는 것에 자리가 생기고, 그 자리는 언젠가 채워지고 싶어 한다.
@@ -233,19 +233,19 @@ fn focus_now(out: &mut String, seen: &MonitorSnapshot) {
     }
     match &cycle.interview_question {
         Some(InterviewQuestion::Asked { question, response }) => {
-            pair(out, say::PROBLEM, question);
+            pair(out, say::problem(), question);
             if let Some(response) = response {
-                pair(out, say::RESPONSE, response);
+                pair(out, say::response(), response);
             }
         }
-        Some(InterviewQuestion::Asking) => pair(out, say::PROBLEM, say::ASKING),
+        Some(InterviewQuestion::Asking) => pair(out, say::problem(), say::asking()),
         Some(InterviewQuestion::NotAsked) | None => {}
     }
     match &seen.current_step {
-        Some(step) => pair(out, "여기", &format!("{} · {}", say::here_title(cycle.kind), step_line(step))),
-        None => pair(out, "여기", &format!("{} · {}", say::here_title(cycle.kind), say::NO_STEP_YET)),
+        Some(step) => pair(out, crate::locale::text("mon.h.here"), &format!("{} · {}", say::here_title(cycle.kind), step_line(step))),
+        None => pair(out, crate::locale::text("mon.h.here"), &format!("{} · {}", say::here_title(cycle.kind), say::no_step_yet())),
     }
-    pair(out, say::WORLD, say::world_of(seen.world.state));
+    pair(out, say::world(), say::world_of(seen.world.state));
     out.push_str("</dl>\n</section>\n");
 }
 
@@ -263,22 +263,22 @@ fn focus_now(out: &mut String, seen: &MonitorSnapshot) {
 /// **하나를 다른 하나로 대신하지 않는다.** 셋은 서로 다른 일이다.
 fn focus_todo(out: &mut String, seen: &MonitorSnapshot) {
     out.push_str("<section class=\"focus\">\n");
-    heading(out, "지금 할 일");
+    heading(out, crate::locale::text("mon.h.todo"));
     out.push_str("<dl>\n");
     match &seen.current_will {
         Some(will) => {
-            pair(out, "작업 행동", &will.next_action);
-            pair(out, say::DONE_WHEN, &will.done_when);
+            pair(out, crate::locale::text("mon.h.work_action"), &will.next_action);
+            pair(out, say::done_when(), &will.done_when);
         }
-        None => pair(out, "작업 행동", say::NO_WILL),
+        None => pair(out, crate::locale::text("mon.h.work_action"), say::no_will()),
     }
     match seen
         .next_actions
         .iter()
         .find_map(|action| action.command.as_deref())
     {
-        Some(command) => pair_code(out, "그 일이 끝나면", command),
-        None => pair(out, "그 일이 끝나면", say::NO_MOVE),
+        Some(command) => pair_code(out, crate::locale::text("mon.h.after_that"), command),
+        None => pair(out, crate::locale::text("mon.h.after_that"), say::no_move()),
     }
     out.push_str("</dl>\n</section>\n");
 }
@@ -290,7 +290,7 @@ fn focus_todo(out: &mut String, seen: &MonitorSnapshot) {
 fn picture(out: &mut String, seen: &MonitorSnapshot) {
     let plan = graph::render_monitor_graph(seen);
     out.push_str("<section class=\"picture\">\n");
-    heading(out, "여정");
+    heading(out, crate::locale::text("mon.h.journey"));
     out.push_str(&svg::render_monitor_svg(&plan));
     // SVG 를 보지 못하는 환경과 화면 reader 를 위한 같은 사실의 목록 — **그림의 순서
     // 그대로.** ASCII 그림이 아니라 목록이다.
@@ -301,9 +301,9 @@ fn picture(out: &mut String, seen: &MonitorSnapshot) {
     out.push_str("<ol class=\"legend\">\n");
     for group in &plan.groups {
         let standing = match group.standing {
-            graph::Standing::Here => "현재 Cycle",
-            graph::Standing::Active => "활성 경로",
-            graph::Standing::LeftBehind => "지나온 갈래",
+            graph::Standing::Here => crate::locale::text("mon.standing.here"),
+            graph::Standing::Active => crate::locale::text("mon.standing.active"),
+            graph::Standing::LeftBehind => crate::locale::text("mon.standing.left_behind"),
         };
         let _ = writeln!(
             out,
@@ -326,7 +326,7 @@ fn picture(out: &mut String, seen: &MonitorSnapshot) {
                 "<li>{}{} — {} (<code>{}</code>){}</li>",
                 text(row.kind),
                 match row.standing {
-                    graph::Standing::Here => " · 현재",
+                    graph::Standing::Here => crate::locale::text("mon.row_here"),
                     _ => "",
                 },
                 text(row.mark.word()),
@@ -362,14 +362,14 @@ fn focus_why(out: &mut String, seen: &MonitorSnapshot) {
         .find(|cycle| &cycle.cycle_ref == came_from);
 
     out.push_str("<section class=\"focus\">\n");
-    heading(out, "왜 여기 왔는가");
+    heading(out, crate::locale::text("mon.h.why_here"));
     out.push_str("<dl>\n");
     match source {
         Some(source) => {
             // 사람의 이름이 먼저, typed reference 는 괄호 안에.
             pair(
                 out,
-                "이전 시도",
+                crate::locale::text("mon.h.previous_attempt"),
                 &format!(
                     "{} — {} ({})",
                         graph::name_of(source.kind, &source.cycle_ref.to_string()),
@@ -383,22 +383,22 @@ fn focus_why(out: &mut String, seen: &MonitorSnapshot) {
                 ),
             );
             if let Some(report) = &source.report {
-                pair(out, "실패 이유", &report.handoff_summary);
+                pair(out, crate::locale::text("mon.h.failure_reason"), &report.handoff_summary);
                 if let Some(lesson) = &report.outcome_lesson {
-                    pair(out, "배운 것", lesson);
+                    pair(out, crate::locale::text("mon.h.learned"), lesson);
                 }
                 // **과거의 방향은 과거의 것이다.** 지금 할 일 위가 아니라 여기, 그리고
                 // 이름에 「당시」를 붙여 둔다.
                 if let Some(direction) = &report.next_direction {
-                    pair(out, "당시 다음 방향", say::direction_of(&direction.action));
+                    pair(out, crate::locale::text("mon.h.direction_then"), say::direction_of(&direction.action));
                 }
             }
         }
-        None => pair(out, "이전 시도", &came_from.to_string()),
+        None => pair(out, crate::locale::text("mon.h.previous_attempt"), &came_from.to_string()),
     }
     pair(
         out,
-        "되돌아간 지점",
+        crate::locale::text("mon.h.returned_to"),
         &format!(
             "{} ({})",
             graph::name_of(
@@ -409,7 +409,7 @@ fn focus_why(out: &mut String, seen: &MonitorSnapshot) {
         ),
     );
     if let Some(define) = &seen.current_cycle.facts.experiment_definition {
-        pair(out, "현재의 새 가설", &define.problem);
+        pair(out, crate::locale::text("mon.h.new_hypothesis"), &define.problem);
     }
     out.push_str("</dl>\n</section>\n");
 }
@@ -419,7 +419,7 @@ fn focus_why(out: &mut String, seen: &MonitorSnapshot) {
 /// 줄이는 것은 기록의 양이 아니라 **첫 30초에 읽어야 하는 양**이다. 그래서 지우지 않고
 /// 접는다. `<details>` 는 browser 가 이미 아는 것이라 JavaScript 를 더하지 않는다.
 fn record(out: &mut String, seen: &MonitorSnapshot) {
-    out.push_str("<details class=\"record\">\n<summary>지나온 기록</summary>\n");
+    let _ = writeln!(out, "<details class=\"record\">\n<summary>{}</summary>", text(crate::locale::text("mon.h.record")));
     here(out, seen);
     active_path(out, seen);
     left_behind(out, seen);
@@ -508,23 +508,20 @@ fn here(out: &mut String, seen: &MonitorSnapshot) {
     pair_code(out, say::CYCLE, &cycle_line(cycle));
     match &seen.current_step {
         Some(step) => pair_code(out, say::STEP, &step_line(step)),
-        None => pair(out, say::STEP, say::NO_STEP_YET),
+        None => pair(out, say::STEP, say::no_step_yet()),
     }
 
     // Define 이 없으면 빈 질문을 지어내지 않는다.
     if let Some(define) = &cycle.experiment_definition {
-        pair(out, say::PROBLEM, &define.problem);
-        pair(out, say::SUCCESS_CONDITION, &define.success_condition);
+        pair(out, say::problem(), &define.problem);
+        pair(out, say::success_condition(), &define.success_condition);
     }
     if let Some(pending) = &seen.pending_revisit {
         // **새 Cycle 이 아직 없다**는 사실을 여기서 말한다.
         pair(
             out,
-            "되돌아왔다",
-            &format!(
-                "{} 에서 갈라져 {} 에 섰다 — 새 Cycle 은 아직 없다",
-                pending.from_cycle_ref, pending.target_cycle_ref
-            ),
+            crate::locale::text("mon.revisited"),
+            &crate::tr!("mon.revisited_line", from = pending.from_cycle_ref, target = pending.target_cycle_ref),
         );
     }
     if let Some(report) = &cycle.report {
@@ -543,10 +540,10 @@ fn cycle_line(cycle: &CycleFacts) -> String {
         say::state_of(cycle.state)
     );
     if let Some(parent) = cycle.parent_cycle_ref {
-        let _ = write!(line, " · {} {parent}", say::PARENT);
+        let _ = write!(line, " · {} {parent}", say::parent());
     }
     if let Some(from) = cycle.revisit_from_cycle_ref {
-        let _ = write!(line, " · {from} 에서 갈라짐");
+        line.push_str(&crate::tr!("mon.branched_from", from = from));
     }
     line
 }
@@ -557,19 +554,19 @@ fn step_line(step: &StepFacts) -> String {
 
 /// 닫힌 Cycle 의 Report 투영 — **세 절이 이 한 자리를 쓴다.**
 fn report_pairs(out: &mut String, report: &CycleReportFacts) {
-    pair(out, say::VERDICT, &report.verdict);
+    pair(out, say::verdict(), &report.verdict);
     if let Some(lesson) = &report.outcome_lesson {
-        pair(out, say::LESSON, lesson);
+        pair(out, say::lesson(), lesson);
     }
-    pair(out, say::HANDOFF, &report.handoff_summary);
+    pair(out, say::handoff(), &report.handoff_summary);
     if let Some(direction) = &report.next_direction {
         let mut line = direction.action.clone();
         if let Some(target) = direction.target_cycle_ref {
             let _ = write!(line, " → {target}");
         }
-        pair(out, say::NEXT_DIRECTION, &line);
+        pair(out, say::next_direction(), &line);
         if let Some(reason) = &direction.reason {
-            pair(out, say::WHY, reason);
+            pair(out, say::why(), reason);
         }
     }
 }
@@ -582,8 +579,8 @@ fn report_pairs(out: &mut String, report: &CycleReportFacts) {
 /// 남는다.
 fn active_path(out: &mut String, seen: &MonitorSnapshot) {
     out.push_str("<section>\n");
-    heading(out, say::ACTIVE_PATH);
-    note(out, say::ACTIVE_PATH_IS);
+    heading(out, say::active_path());
+    note(out, say::active_path_is());
 
     let last = seen.active_lineage.len().saturating_sub(1);
     for (depth, cycle) in seen.active_lineage.iter().enumerate() {
@@ -594,8 +591,8 @@ fn active_path(out: &mut String, seen: &MonitorSnapshot) {
         if depth < last {
             out.push_str("<dl>\n");
             if let Some(define) = &cycle.experiment_definition {
-                pair(out, say::PROBLEM, &define.problem);
-                pair(out, say::SUCCESS_CONDITION, &define.success_condition);
+                pair(out, say::problem(), &define.problem);
+                pair(out, say::success_condition(), &define.success_condition);
             }
             if let Some(report) = &cycle.report {
                 report_pairs(out, report);
@@ -615,8 +612,8 @@ fn left_behind(out: &mut String, seen: &MonitorSnapshot) {
         return;
     }
     out.push_str("<section>\n");
-    heading(out, say::LEFT_BEHIND);
-    note(out, say::LEFT_BEHIND_IS);
+    heading(out, say::left_behind());
+    note(out, say::left_behind_is());
     out.push_str("<ul>\n");
     for cycle in &seen.inactive_cycles {
         one_left_behind(out, cycle, &seen.current_cycle.facts);
@@ -638,20 +635,20 @@ fn one_left_behind(out: &mut String, cycle: &InactiveCycle, here: &CycleFacts) {
         ))
     );
     out.push_str("<dl>\n");
-    pair(out, say::RELATION, say::relation_of(cycle.relation_to_current));
+    pair(out, say::relation(), say::relation_of(cycle.relation_to_current));
     if let Some(parent) = cycle.parent_cycle_ref {
         let mut line = parent.to_string();
         // **형제는 부모가 같을 때만.**
         if here.parent_cycle_ref == Some(parent) {
-            let _ = write!(line, " ({})", say::SAME_PARENT);
+            let _ = write!(line, " ({})", say::same_parent());
         }
-        pair(out, say::PARENT, &line);
+        pair(out, say::parent(), &line);
     }
     if let Some(from) = cycle.revisit_from_cycle_ref {
         pair(
             out,
-            say::BRANCH_SOURCE,
-            &format!("{from} ({})", say::NOT_A_LINEAGE_EDGE),
+            say::branch_source(),
+            &format!("{from} ({})", say::not_a_lineage_edge()),
         );
     }
     // **실패는 Report 만 말한다.**
@@ -668,7 +665,7 @@ fn doing(out: &mut String, seen: &MonitorSnapshot) {
         return;
     };
     out.push_str("<section>\n");
-    heading(out, say::DOING);
+    heading(out, say::doing());
     one_will(out, will);
     out.push_str("</section>\n");
 }
@@ -678,11 +675,11 @@ fn one_will(out: &mut String, will: &WillFacts) {
     pair_code(
         out,
         "Will",
-        &format!("{} · {} 에 걸려 있다", will.will_ref, will.target_step_ref),
+        &crate::tr!("mon.will_at", will = will.will_ref, target = will.target_step_ref),
     );
-    pair(out, say::OBJECTIVE, &will.objective);
-    pair(out, say::NEXT_ACTION, &will.next_action);
-    pair(out, say::DONE_WHEN, &will.done_when);
+    pair(out, say::objective(), &will.objective);
+    pair(out, say::next_action(), &will.next_action);
+    pair(out, say::done_when(), &will.done_when);
     out.push_str("</dl>\n");
 }
 
@@ -690,16 +687,16 @@ fn one_will(out: &mut String, will: &WillFacts) {
 
 fn world(out: &mut String, world: &WorldFacts) {
     out.push_str("<section>\n");
-    heading(out, say::WORLD);
+    heading(out, say::world());
     out.push_str("<dl>\n");
-    pair_code(out, say::BASELINE, &world.baseline_snapshot_ref.to_string());
-    pair(out, say::WORLD_STATE, say::world_of(world.state));
+    pair_code(out, say::baseline(), &world.baseline_snapshot_ref.to_string());
+    pair(out, say::world_state(), say::world_of(world.state));
     if let Some(reason) = &world.reason {
-        pair(out, say::WHY_UNKNOWN, reason);
+        pair(out, say::why_unknown(), reason);
     }
     out.push_str("</dl>\n");
     if world.verify_can_confirm {
-        note(out, say::VERIFY_CAN_CONFIRM);
+        note(out, say::verify_can_confirm());
     }
     out.push_str("</section>\n");
 }
@@ -709,9 +706,9 @@ fn world(out: &mut String, world: &WorldFacts) {
 /// **Snapshot 이 준 것만 적는다.** 그리고 명령은 **누를 수 없다** — `<code>` 의 글자다.
 fn next(out: &mut String, actions: &[NextAction]) {
     out.push_str("<section>\n");
-    heading(out, say::NEXT);
+    heading(out, say::next());
     if actions.is_empty() {
-        note(out, say::NO_MOVE);
+        note(out, say::no_move());
         out.push_str("</section>\n");
         return;
     }
@@ -720,13 +717,13 @@ fn next(out: &mut String, actions: &[NextAction]) {
         out.push_str("<li>\n");
         let _ = writeln!(out, "<h3>{}</h3>", text(&say::what_it_does(action.kind)));
         out.push_str("<dl>\n");
-        pair(out, say::REASON, &action.reason);
+        pair(out, say::reason(), &action.reason);
         // 명령이 없는 수는 실행할 글자를 지어내지 않는다.
         if let Some(command) = &action.command {
-            pair_code(out, say::RUN, command);
+            pair_code(out, say::run(), command);
         }
         if let Some(topic) = &action.help_ref {
-            pair_code(out, say::HELP, &format!("gil help {}", topic.as_str()));
+            pair_code(out, say::help(), &format!("gil help {}", topic.as_str()));
         }
         out.push_str("</dl>\n</li>\n");
     }

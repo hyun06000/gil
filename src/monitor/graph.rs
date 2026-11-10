@@ -133,10 +133,10 @@ impl Mark {
     /// 사람이 읽는 한 낱말. **색을 못 봐도 이것이 남는다.**
     pub(crate) fn word(self) -> &'static str {
         match self {
-            Mark::Open => "열림",
-            Mark::Closed => "닫힘",
-            Mark::Succeeded => "성공",
-            Mark::Failed => "실패",
+            Mark::Open => crate::locale::text("mon.mark.open"),
+            Mark::Closed => crate::locale::text("mon.mark.closed"),
+            Mark::Succeeded => crate::locale::text("mon.mark.succeeded"),
+            Mark::Failed => crate::locale::text("mon.mark.failed"),
         }
     }
 }
@@ -210,8 +210,8 @@ impl Origin {
     /// 사람이 읽는 한 줄.
     pub(crate) fn says(&self) -> String {
         match &self.resumed {
-            Some(resumed) => format!("{} 실패 뒤 {} 자리에서 다시 시도", self.after, resumed),
-            None => format!("{} 실패 뒤 다시 시도", self.after),
+            Some(resumed) => crate::tr!("mon.origin_resumed", after = self.after, resumed = resumed),
+            None => crate::tr!("mon.origin", after = self.after),
         }
     }
 }
@@ -235,7 +235,7 @@ pub(crate) struct Folded {
 
 impl Folded {
     pub(crate) fn says(&self) -> String {
-        format!("이전 Cycle {}개 · Step {}개", self.cycles, self.rows)
+        crate::tr!("mon.folded", cycles = self.cycles, rows = self.rows)
     }
 }
 
@@ -508,8 +508,8 @@ fn chosen(seen: &MonitorSnapshot) -> Vec<String> {
 /// 사람이 먼저 읽는 이름 — typed reference 는 작은 글씨로 따로 남는다.
 pub(super) fn name_of(kind: CycleKind, address: &str) -> String {
     let word = match kind {
-        CycleKind::Experiment => "실험",
-        CycleKind::Interview => "인터뷰",
+        CycleKind::Experiment => crate::locale::text("mon.kind.experiment"),
+        CycleKind::Interview => crate::locale::text("mon.kind.interview"),
     };
     match address.rsplit(':').next() {
         Some(id) if !id.is_empty() && id != address => format!("{word} {id}"),
@@ -565,16 +565,16 @@ fn is_placeholder(said: &str) -> bool {
 /// Step 종류의 사람 이름.
 fn korean(kind: NodeKind) -> &'static str {
     match kind {
-        NodeKind::Question => "질문",
-        NodeKind::Interpretation => "해석",
-        NodeKind::Synthesis => "제안",
-        NodeKind::Define => "문제",
-        NodeKind::Hypothesis => "가설",
-        NodeKind::Verify => "검증",
-        NodeKind::Analysis => "해석",
-        NodeKind::Outcome => "판정",
-        NodeKind::CycleEntry => "시작",
-        NodeKind::CycleExit => "끝",
+        NodeKind::Question => crate::locale::text("mon.step.question"),
+        NodeKind::Interpretation => crate::locale::text("mon.step.interpretation"),
+        NodeKind::Synthesis => crate::locale::text("mon.step.synthesis"),
+        NodeKind::Define => crate::locale::text("mon.step.define"),
+        NodeKind::Hypothesis => crate::locale::text("mon.step.hypothesis"),
+        NodeKind::Verify => crate::locale::text("mon.step.verify"),
+        NodeKind::Analysis => crate::locale::text("mon.step.analysis"),
+        NodeKind::Outcome => crate::locale::text("mon.step.outcome"),
+        NodeKind::CycleEntry => crate::locale::text("mon.step.cycle_entry"),
+        NodeKind::CycleExit => crate::locale::text("mon.step.cycle_exit"),
     }
 }
 

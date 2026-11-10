@@ -80,12 +80,10 @@ impl Chain {
         let (target, verdict) = approved
             .map(|(id, report)| (id.to_string(), report.get("chain_verdict").unwrap_or("")))
             .unwrap_or((
-                "<승인된 종료 Synthesis StepRef>".into(),
+                crate::locale::text("chain.close_hint_target").into(),
                 "<success|failure>",
             ));
-        format!(
-            "Chain Report를 gil close로 제출한다.\nverdict: {verdict}\nclosing_synthesis_ref: {target}\nhandoff_summary: <탐색한 경로·실패·남은 질문 요약>\n"
-        )
+        crate::tr!("chain.close_hint", marker = crate::locale::text("receipt.marker.chain_report"), verdict = verdict, target = target)
     }
 
     pub(crate) fn close(&mut self, report: Report) -> Result<(), ChainError> {
@@ -233,21 +231,11 @@ impl std::fmt::Display for ChainError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Plan(reason) => write!(f, "{reason}"),
-            Self::AlreadyClosed => {
-                write!(f, "이 Chain은 이미 닫혔다. 기존 Report와 기록을 보존한다")
-            }
-            Self::IdExhausted => {
-                write!(f, "Chain 또는 Cycle 식별자 공간이 소진되었다. 기록을 보존한다")
-            }
-            Self::ParentOpen(id) => write!(
-                f,
-                "{id}이 열려 있어 자식 Chain을 만들 수 없다. 승인된 Closing Interview와 Chain Report로 먼저 닫는다"
-            ),
-            Self::LegacyProject => write!(
-                f,
-                "기존 format 4/5에는 Chain이 없다. 기록을 보존하며 자동 이전하지 않는다"
-            ),
-            Self::Invalid(why) => write!(f, "잘못된 Chain: {why}"),
+            Self::AlreadyClosed => f.write_str(crate::locale::text("chain.err.already_closed")),
+            Self::IdExhausted => f.write_str(crate::locale::text("chain.err.id_exhausted")),
+            Self::ParentOpen(id) => f.write_str(&crate::tr!("chain.err.parent_open", id = id)),
+            Self::LegacyProject => f.write_str(crate::locale::text("chain.err.legacy")),
+            Self::Invalid(why) => f.write_str(&crate::tr!("chain.err.invalid", why = why)),
         }
     }
 }

@@ -13,18 +13,24 @@ use crate::node::NodeStatus;
 use super::{ActionKind, CycleRelation, WorldMark};
 
 // ── 절의 이름 ──────────────────────────────────────────────────────────────
+//
+// Every word comes from the language tables (`mon.*`) in the current locale; the two
+// renderers call these functions instead of constants so one table change reaches both.
 
-pub(super) const ACTIVE_PATH: &str = "활성 경로";
-pub(super) const LEFT_BEHIND: &str = "지나온 갈래";
-pub(super) const DOING: &str = "현재 행동";
-pub(super) const WORLD: &str = "현재 세계";
-pub(super) const NEXT: &str = "다음 행동";
+use crate::locale::text;
+use crate::tr;
+
+pub(super) fn active_path() -> &'static str { text("mon.active_path") }
+pub(super) fn left_behind() -> &'static str { text("mon.left_behind") }
+pub(super) fn doing() -> &'static str { text("mon.doing") }
+pub(super) fn world() -> &'static str { text("mon.world") }
+pub(super) fn next() -> &'static str { text("mon.next") }
 
 /// 지금 자리의 절 이름 — **Interview 를 「현재 실험」이라 부르지 않는다.**
 pub(super) fn here_title(kind: CycleKind) -> &'static str {
     match kind {
-        CycleKind::Experiment => "현재 실험",
-        CycleKind::Interview => "현재 인터뷰",
+        CycleKind::Experiment => text("mon.here_experiment"),
+        CycleKind::Interview => text("mon.here_interview"),
     }
 }
 
@@ -32,46 +38,46 @@ pub(super) fn here_title(kind: CycleKind) -> &'static str {
 
 pub(super) const CYCLE: &str = "Cycle";
 pub(super) const STEP: &str = "Step";
-pub(super) const PROBLEM: &str = "질문";
-pub(super) const SUCCESS_CONDITION: &str = "성공 기준";
-pub(super) const VERDICT: &str = "판정";
-pub(super) const LESSON: &str = "판정의 교훈";
-pub(super) const HANDOFF: &str = "넘긴 것";
-pub(super) const NEXT_DIRECTION: &str = "다음 방향";
-pub(super) const WHY: &str = "그 까닭";
-pub(super) const PARENT: &str = "부모";
-pub(super) const BRANCH_SOURCE: &str = "갈래 출처";
-pub(super) const RELATION: &str = "관계";
-pub(super) const OBJECTIVE: &str = "목표";
-pub(super) const NEXT_ACTION: &str = "지금 할 일";
-pub(super) const DONE_WHEN: &str = "완료 조건";
-pub(super) const BASELINE: &str = "기준";
-pub(super) const WORLD_STATE: &str = "상태";
-pub(super) const WHY_UNKNOWN: &str = "보지 못한 까닭";
-pub(super) const REASON: &str = "까닭";
-pub(super) const RUN: &str = "실행";
-pub(super) const HELP: &str = "도움말";
+pub(super) fn problem() -> &'static str { text("mon.problem") }
+pub(super) fn success_condition() -> &'static str { text("mon.success_condition") }
+pub(super) fn verdict() -> &'static str { text("mon.verdict") }
+pub(super) fn lesson() -> &'static str { text("mon.lesson") }
+pub(super) fn handoff() -> &'static str { text("mon.handoff") }
+pub(super) fn next_direction() -> &'static str { text("mon.next_direction") }
+pub(super) fn why() -> &'static str { text("mon.why") }
+pub(super) fn parent() -> &'static str { text("mon.parent") }
+pub(super) fn branch_source() -> &'static str { text("mon.branch_source") }
+pub(super) fn relation() -> &'static str { text("mon.relation") }
+pub(super) fn objective() -> &'static str { text("mon.objective") }
+pub(super) fn next_action() -> &'static str { text("mon.next_action") }
+pub(super) fn done_when() -> &'static str { text("mon.done_when") }
+pub(super) fn baseline() -> &'static str { text("mon.baseline") }
+pub(super) fn world_state() -> &'static str { text("mon.world_state") }
+pub(super) fn why_unknown() -> &'static str { text("mon.why_unknown") }
+pub(super) fn reason() -> &'static str { text("mon.reason") }
+pub(super) fn run() -> &'static str { text("mon.run") }
+pub(super) fn help() -> &'static str { text("mon.help") }
 
 /// 아직 아무 자리도 열지 않았다는 사실 — 다음에 무엇을 할지와 곧바로 이어진다.
-pub(super) const NO_STEP_YET: &str = "아직 아무것도 열지 않았다";
+pub(super) fn no_step_yet() -> &'static str { text("mon.no_step_yet") }
 /// 밟을 수 있는 GIL 명령이 하나도 없다는 사실.
-pub(super) const NO_MOVE: &str = "지금 밟을 수 있는 GIL 명령이 없다.";
+pub(super) fn no_move() -> &'static str { text("mon.no_move") }
 
 /// 아직 실험이 정의되지 않았다 — **없는 질문을 지어내지 않는다.**
 ///
 /// **Experiment 에만 쓴다.** Interview 에 이 말을 붙이면 이미 닫힌 Question 이 있는데도
 /// 화면이 「질문이 없다」고 말하게 된다 — 실제로 그렇게 말한 적이 있다.
-pub(super) const NO_DEFINITION: &str = "아직 이 Cycle 의 질문이 정의되지 않았다";
+pub(super) fn no_definition() -> &'static str { text("mon.no_definition") }
 
 /// Interview 가 아직 Question 을 열지 않았다.
-pub(super) const NOT_ASKED: &str = "아직 이 Cycle 의 질문을 열지 않았다";
+pub(super) fn not_asked() -> &'static str { text("mon.not_asked") }
 /// Question 이 열려 있고 질문 글은 닫을 때 적힌다.
-pub(super) const ASKING: &str = "질문을 열어 두었다 — 묻고 답을 받는 중이다";
+pub(super) fn asking() -> &'static str { text("mon.asking") }
 /// 사람이 준 답. 질문 아래 붙는다.
-pub(super) const RESPONSE: &str = "응답";
+pub(super) fn response() -> &'static str { text("mon.response") }
 
 /// 지금 걸린 행동이 없다.
-pub(super) const NO_WILL: &str = "지금 걸린 작업 행동이 없다";
+pub(super) fn no_will() -> &'static str { text("mon.no_will") }
 
 /// Cycle Report 에 적힌 **다음 방향의 낱말**을 사람의 말로.
 ///
@@ -80,24 +86,23 @@ pub(super) const NO_WILL: &str = "지금 걸린 작업 행동이 없다";
 /// 그대로 둔다 — 없는 뜻을 붙이는 것이 더 나쁘다.
 pub(super) fn direction_of(action: &str) -> &str {
     match action {
-        "open_child" => "이 결과를 바탕으로 다음 실험을 시작한다",
-        "revisit" => "이전 질문으로 돌아가 다른 방법을 시도한다",
-        "close_chain" => "승인된 종료 제안으로 Chain Report를 제출한다",
-        "close_cycle" => "이 Cycle 을 판정으로 닫는다",
+        "open_child" => text("mon.direction.open_child"),
+        "revisit" => text("mon.direction.revisit"),
+        "close_chain" => text("mon.direction.close_chain"),
+        "close_cycle" => text("mon.direction.close_cycle"),
         other => other,
     }
 }
 /// 활성 경로가 무엇인지 한 줄로.
-pub(super) const ACTIVE_PATH_IS: &str = "뿌리부터 지금까지 — 부모만 따라간 길이다.";
+pub(super) fn active_path_is() -> &'static str { text("mon.active_path_is") }
 /// 지나온 갈래가 무엇인지 한 줄로.
-pub(super) const LEFT_BEHIND_IS: &str =
-    "계보 밖의 Cycle 이다 — 사라지지 않았고, 지금 걷는 길 위에 있지 않을 뿐이다.";
+pub(super) fn left_behind_is() -> &'static str { text("mon.left_behind_is") }
 /// 갈래의 출처가 계보의 변이 아니라는 사실 — 두 화면 모두 이것을 말한다.
-pub(super) const NOT_A_LINEAGE_EDGE: &str = "계보의 변이 아니다";
+pub(super) fn not_a_lineage_edge() -> &'static str { text("mon.not_a_lineage_edge") }
 /// 지금 Cycle 과 부모가 같다는 사실.
-pub(super) const SAME_PARENT: &str = "지금 Cycle 과 같은 부모 — 형제다";
+pub(super) fn same_parent() -> &'static str { text("mon.same_parent") }
 /// 지금 열린 자리가 세계를 확정할 수 있다는 사실.
-pub(super) const VERIFY_CAN_CONFIRM: &str = "지금 열린 자리는 Verify — 바뀐 세계를 확정할 수 있다";
+pub(super) fn verify_can_confirm() -> &'static str { text("mon.verify_can_confirm") }
 
 // ── 상태와 관계 ────────────────────────────────────────────────────────────
 //
@@ -106,16 +111,16 @@ pub(super) const VERIFY_CAN_CONFIRM: &str = "지금 열린 자리는 Verify — 
 
 pub(super) fn state_of(state: NodeStatus) -> &'static str {
     match state {
-        NodeStatus::Open => "열림",
-        NodeStatus::Closed => "닫힘",
+        NodeStatus::Open => text("mon.state.open"),
+        NodeStatus::Closed => text("mon.state.closed"),
     }
 }
 
 pub(super) fn world_of(state: WorldMark) -> &'static str {
     match state {
-        WorldMark::Clean => "clean — 기준 세계와 같다",
-        WorldMark::Dirty => "dirty — 기준 세계 이후 파일이 바뀌었다",
-        WorldMark::Unknown => "unknown — 지금 폴더를 보지 못했다",
+        WorldMark::Clean => text("mon.world.clean"),
+        WorldMark::Dirty => text("mon.world.dirty"),
+        WorldMark::Unknown => text("mon.world.unknown"),
     }
 }
 
@@ -124,25 +129,25 @@ pub(super) fn world_of(state: WorldMark) -> &'static str {
 /// enum 이름을 그대로 내보이지 않는다. 사람이 읽는 것은 관계이지 Rust 의 variant 가 아니다.
 pub(super) fn relation_of(relation: CycleRelation) -> &'static str {
     match relation {
-        CycleRelation::RevisitSource => "지금 걷는 갈래가 여기서 갈라져 나왔다",
-        CycleRelation::Abandoned => "같은 자리에서 갈라져 두고 온 가지다",
+        CycleRelation::RevisitSource => text("mon.relation.revisit_source"),
+        CycleRelation::Abandoned => text("mon.relation.abandoned"),
         // **Graph 가 끊겼다는 뜻이 아니다.** 두고 온 가지의 자손처럼, 같은 Graph 안에 있되
         // 지금 걷는 길과 곧바로 맞닿지 않는 자리다.
-        CycleRelation::Other => "현재 활성 경로 밖에 있고, 그 경로와 직접 맞닿지 않는다",
+        CycleRelation::Other => text("mon.relation.other"),
     }
 }
 
 /// 그 수가 무엇을 하는가 — **variant 이름이 아니라 사람의 말로.**
 pub(super) fn what_it_does(kind: ActionKind) -> String {
     match kind {
-        ActionKind::CloseStep(step) => format!("열린 {step} 자리를 Report 로 닫는다"),
-        ActionKind::OpenStep(step) => format!("{step} 자리를 연다"),
-        ActionKind::OpenChain => "새 Chain의 Opening Interview를 연다".into(),
-        ActionKind::CloseChain => "승인된 종료 제안으로 Chain을 닫는다".into(),
-        ActionKind::CloseCycle(cycle) => format!("이 {cycle} Cycle 을 Cycle Report 로 닫는다"),
-        ActionKind::OpenCycle(cycle) => format!("다음 {cycle} Cycle 을 연다"),
-        ActionKind::OpenBranch(cycle) => format!("되돌아온 자리에 새 {cycle} 갈래를 연다"),
-        ActionKind::Revisit => "적어 둔 조상으로 되돌아간다".to_string(),
-        ActionKind::Restore => "작업 폴더를 기준 세계로 되돌린다".to_string(),
+        ActionKind::CloseStep(step) => tr!("mon.does.close_step", step = step),
+        ActionKind::OpenStep(step) => tr!("mon.does.open_step", step = step),
+        ActionKind::OpenChain => tr!("mon.does.open_chain"),
+        ActionKind::CloseChain => tr!("mon.does.close_chain"),
+        ActionKind::CloseCycle(cycle) => tr!("mon.does.close_cycle", cycle = cycle),
+        ActionKind::OpenCycle(cycle) => tr!("mon.does.open_cycle", cycle = cycle),
+        ActionKind::OpenBranch(cycle) => tr!("mon.does.open_branch", cycle = cycle),
+        ActionKind::Revisit => tr!("mon.does.revisit"),
+        ActionKind::Restore => tr!("mon.does.restore"),
     }
 }

@@ -4,6 +4,9 @@ import {readFile} from 'node:fs/promises';
 
 const here = new URL('../../', import.meta.url);
 const read = path => readFile(new URL(path, here), 'utf8');
+// The sentences the UI shows live in the language tables; the Korean table is the wording these
+// tests protect, and the source is checked for the key that reaches it.
+const ko = (await import(new URL('ui/i18n/ko.js', here))).default;
 
 test('Windows product bundle is a current-user NSIS installer with signed updater artifacts', async () => {
   // Do not name this tauri.windows.conf.json: Tauri automatically merges that platform file into
@@ -74,15 +77,16 @@ test('Companion keeps Host connections visible and discovers the Codex Desktop C
   const ui = await read('ui/companion.js');
   assert.match(ui, /function showHostUnavailable\(key, message\)/);
   assert.match(ui, /button\.hidden = false/);
-  assert.match(ui, /\$\{host\.label\} 연결 다시 시도/);
+  assert.match(ui, /t\('ui\.host\.retry', \{ host: host\.label \}\)/);
+  assert.equal(ko['ui.host.retry'], '{host} 연결 다시 시도');
   assert.match(ui, /capability\.cli_found === false/);
   const startup = ui.slice(ui.indexOf('async function start()'));
   assert.match(startup, /for \(const key of Object\.keys\(HOSTS\)\) await startHostConnection\(key\)/);
   assert.doesNotMatch(startup, /catch \(error\) \{\s*button\.hidden = true;/);
   // Both Hosts have their own handle in the shared markup; the fixture Host keeps them hidden.
   const markup = await read('ui/index.html');
-  assert.match(markup, /class="connect-host" data-host="codex" type="button" hidden/);
-  assert.match(markup, /class="connect-host" data-host="claude" type="button" hidden/);
+  assert.match(markup, /class="connect-host" data-host="codex" type="button"(?: data-i18n="[a-z_.]+")? hidden/);
+  assert.match(markup, /class="connect-host" data-host="claude" type="button"(?: data-i18n="[a-z_.]+")? hidden/);
   assert.match(await read('ui/selftest.js'), /\.connect-host, \.update/);
 });
 
@@ -186,12 +190,14 @@ test('the update UI keeps Codex open and explains the connection boundary', asyn
   const check = ui.indexOf('async function checkForUpdate');
   const connect = ui.indexOf('async function connectCodex', check);
   const body = ui.slice(check, connect);
-  assert.match(body, /Codex는 닫지 않아도 됩니다/);
-  assert.match(body, /다운로드가 끝나면 Windows 설치창이 열립니다/);
-  assert.match(body, /완료되면 설치창이 열립니다/);
-  assert.match(body, /기존 GIL 대화는 현재 Core로 계속/);
-  assert.match(body, /새 대화부터 새 Core/);
-  assert.match(body, /Companion만 닫힐 수/);
+  for (const key of ['ui.update_confirm', 'ui.downloading', 'ui.update_started']) assert.match(body, new RegExp(`t\\('${key.replace('.', '\\.')}'`), key);
+  const confirm = ko['ui.update_confirm'], started = ko['ui.update_started'];
+  assert.match(confirm, /Codex는 닫지 않아도 됩니다/);
+  assert.match(confirm, /다운로드가 끝나면 Windows 설치창이 열립니다/);
+  assert.match(ko['ui.downloading'], /완료되면 설치창이 열립니다/);
+  assert.match(confirm, /기존 GIL 대화는 현재 Core로 계속/);
+  assert.match(confirm + started, /새 대화부터 새 Core/);
+  assert.match(confirm + started, /Companion만 닫힐 수/);
 });
 
 test('release GUI does not open a Windows console', async () => {
@@ -223,7 +229,8 @@ test('Host registration is explicit, uses the official Codex CLI shape, and does
   assert.match(refresh, /hostApi\(key, "connection"\)\(\)/);
   assert.doesNotMatch(refresh, /hostState\.codex|hostState\.claude/);
   assert.match(refresh, /"conflict"/);
-  assert.match(refresh, /등록된 실행 파일/);
+  assert.match(refresh, /t\('ui\.host\.registered', \{ command: connection\.command \}\)/);
+  assert.match(ko['ui.host.registered'], /등록된 실행 파일/);
   for (const key of ['codex', 'claude']) assert.match(ui, new RegExp(`^  ${key}: \\{$`, 'm'));
 });
 

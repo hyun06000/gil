@@ -14,39 +14,31 @@ use crate::capability::{CompanionState, Outcome};
 const APP_NAME: &str = "GIL Monitor";
 
 /// Monitor 가 없어도 GIL 은 계속 쓸 수 있다 — 매번 같은 말로 붙인다.
-const STILL_USABLE: &str = "Monitor를 열 수 없지만 GIL 기록 작업은 계속할 수 있다.";
+fn still_usable() -> &'static str { crate::locale::text("companion.still_usable") }
 
 /// 실제로 밟을 수 있는 다음 행동만 적는다. 없는 길을 안내하지 않는다.
-const NEXT_IN_TEXT: &str = "지금 상태는 `gil context`로 이어서 볼 수 있다.";
+fn next_in_text() -> &'static str { crate::locale::text("companion.next_in_text") }
 
 pub fn outcome(outcome: Outcome) -> String {
     match outcome {
-        Outcome::OpenedPersistentHost => format!("{APP_NAME}를 이 Host의 지속형 화면에 열었다."),
-        Outcome::FocusedExistingCompanion => format!("이미 열려 있던 {APP_NAME} 창을 앞으로 가져왔다."),
-        Outcome::StartedAndOpenedCompanion => format!("{APP_NAME}를 열고 응답을 확인했다."),
-        Outcome::NeedsCompanionInstall => format!(
-            "{APP_NAME}가 아직 설치되어 있지 않다. 설치하면 이 여정을 창으로 계속 볼 수 있다. \
-             설치는 승인을 받은 뒤에만 진행한다. {STILL_USABLE}"
-        ),
-        Outcome::NeedsCompanionUpdate => format!(
-            "설치된 {APP_NAME}가 지금 판과 호환되지 않는다. 호환판으로 업데이트해야 열 수 있다. \
-             낡은 판을 대신 열지 않는다. {STILL_USABLE}"
-        ),
-        Outcome::MonitorUnavailable => format!("{STILL_USABLE} {NEXT_IN_TEXT}"),
+        Outcome::OpenedPersistentHost => crate::tr!("companion.opened_host", app = APP_NAME),
+        Outcome::FocusedExistingCompanion => crate::tr!("companion.focused", app = APP_NAME),
+        Outcome::StartedAndOpenedCompanion => crate::tr!("companion.started", app = APP_NAME),
+        Outcome::NeedsCompanionInstall => crate::tr!("companion.needs_install", app = APP_NAME, still = still_usable()),
+        Outcome::NeedsCompanionUpdate => crate::tr!("companion.needs_update", app = APP_NAME, still = still_usable()),
+        Outcome::MonitorUnavailable => crate::tr!("companion.unavailable", still = still_usable(), next = next_in_text()),
     }
 }
 
 /// 네 상태를 사람 말로. 판 번호는 사람이 업데이트를 판단할 근거라서 남긴다.
 /// `app_version` 이 없으면 JS 와 같이 "알 수 없음" 이다.
 pub fn state(state: CompanionState, app_version: Option<&str>) -> String {
-    let version = app_version.unwrap_or("알 수 없음");
+    let version = app_version.unwrap_or(crate::locale::text("companion.unknown_version"));
     match state {
-        CompanionState::Missing => format!("{APP_NAME}가 설치되어 있지 않다."),
-        CompanionState::Stopped => {
-            format!("{APP_NAME} 호환판 {version}이 설치되어 있고 지금은 닫혀 있다.")
-        }
-        CompanionState::Outdated => format!("{APP_NAME}가 설치되어 있지만 지금 판과 호환되지 않는다."),
-        CompanionState::Ready => format!("{APP_NAME} 호환판 {version}이 열려 있고 응답한다."),
+        CompanionState::Missing => crate::tr!("companion.state.missing", app = APP_NAME),
+        CompanionState::Stopped => crate::tr!("companion.state.stopped", app = APP_NAME, version = version),
+        CompanionState::Outdated => crate::tr!("companion.state.outdated", app = APP_NAME),
+        CompanionState::Ready => crate::tr!("companion.state.ready", app = APP_NAME, version = version),
     }
 }
 

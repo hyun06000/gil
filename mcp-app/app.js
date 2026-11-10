@@ -4,6 +4,7 @@ import { makePlanPolling } from './plan-poll.mjs';
 import { makeRecoveryReview } from './recovery.mjs';
 import { makeHost, unwrap, retryAfter, connectionMessage } from './host.mjs';
 import { graphOrientation, initialFullscreen, fullscreenFailure, hostIdentity, hostStyles, styleEvidence, updateNotice, updateGuide } from './presentation.mjs';
+import { setLocale, getLocale, normalizeLocale, t, applyStaticText } from '../ui/locale.js';
 
 const app = new App({ name: 'GIL Monitor', version: '0.1.0' },
   { availableDisplayModes: ['inline', 'fullscreen'] });
@@ -12,13 +13,13 @@ const raw = (v) => v === undefined ? 'undefined' : JSON.stringify(v, null, 2);
 let context = {}, connected = false, pending = false, booted = false, stopped = false;
 let rendererReady = false, planReview = null, planPolling = null;
 let recoveryReview = null, recoveryReadAt = 0;
-let response = '요청 전', eventMode = '이벤트 전', timer, pollFailures = 0;
+let response = null, eventMode = null, timer, pollFailures = 0;
 let suspended = false, polling = false, refreshOnReturn = false;
 let connectionIssue = null;
 let layoutChoice = null;
 let presenceSequence = 0, renderFailed = false;
 // Host identity is recorded as reported, never inferred; policy does not branch on it.
-const evidence = { declared: ['inline', 'fullscreen'], instance: crypto.randomUUID(), host: null, styles: null };
+const evidence = { declared: ['inline', 'fullscreen'], instance: crypto.randomUUID(), host: null, styles: null, locale: null };
 const initialDisplay = initialFullscreen();
 
 // The Host's theme, standard style variables and font CSS are adopted as given. The
@@ -34,6 +35,20 @@ function adoptHostStyles() {
   evidence.styles = styleEvidence(context);
 }
 
+// The Host's locale (MCP Apps hostContext.locale, BCP 47) chooses the Monitor's language; a Host
+// that says nothing gets English. The language is adopted as given and never inferred from the
+// Host's name. A change re-renders the static labels and, once the renderer is up, the graph.
+let hostLocale = null;
+function adoptLocale(source) {
+  const given = typeof source?.locale === 'string' && source.locale.trim() ? source.locale : null;
+  const before = getLocale();
+  hostLocale = given;
+  const chosen = setLocale(given);
+  applyStaticText(document);
+  evidence.locale = { host: given, chosen };
+  return chosen !== before;
+}
+
 // Report only this rendered App's observations. Host display mode is not OS occlusion proof.
 function presence() {
   const presentation = stopped ? 'closed' : suspended || document.hidden ? 'hidden'
@@ -41,8 +56,11 @@ function presence() {
     : ['inline', 'fullscreen'].includes(context.displayMode) ? context.displayMode : 'loading';
   // The automatic fullscreen intent travels with the same report, so the Core can say why a
   // Monitor is inline (Host refused, surface without fullscreen, user choice) instead of guessing.
+  // The Host's locale travels with the same report so the Core can answer the user in the language
+  // the App shows. Omitted when the Host gave none: the Core keeps its own default or the Agent's choice.
   return { instance_id: evidence.instance, sequence: String(++presenceSequence), presentation,
-    automatic_fullscreen: initialDisplay.summary(context) };
+    automatic_fullscreen: initialDisplay.summary(context),
+    ...(hostLocale ? { locale: normalizeLocale(hostLocale) } : {}) };
 }
 function reportPresence() {
   if (!connected || !window.GIL_HOST) return Promise.resolve();
@@ -53,7 +71,7 @@ function modes(message) {
   document.body.dataset.displayMode = context.displayMode || 'unknown';
   const direction = graphOrientation(context.displayMode, layoutChoice);
   window.GIL_COMPANION?.setOrientation(direction);
-  el('layout').textContent = direction === 'horizontal' ? '세로로 보기' : '가로로 보기';
+  el('layout').textContent = direction === 'horizontal' ? t('app.layout_vertical') : t('app.layout_horizontal');
   el('layout').disabled = !rendererReady;
   for (const [id, mode] of [['expand', 'fullscreen'], ['inline', 'inline']]) {
     el(id).disabled = !connected || pending || !context.availableDisplayModes?.includes(mode);
@@ -62,7 +80,8 @@ function modes(message) {
   if (connectionIssue) el('host-say').textContent = connectionMessage(connectionIssue);
   else if (message) el('host-say').textContent = message;
   el('host-evidence').textContent = raw({ ...evidence, advertised: context.availableDisplayModes,
-    current: context.displayMode, response, event: eventMode, automatic: initialDisplay.attempts });
+    current: context.displayMode, response: response ?? t('app.response_none'), event: eventMode ?? t('app.event_none'),
+    automatic: initialDisplay.attempts });
 }
 
 el('layout').onclick = () => {
@@ -74,6 +93,7 @@ app.onhostcontextchanged = (change) => {
   context = { ...context, ...change };
   if ('displayMode' in change) { eventMode = change.displayMode; initialDisplay.observe(change.displayMode); }
   if ('theme' in change || 'styles' in change) adoptHostStyles();
+  if ('locale' in change && adoptLocale(context) && rendererReady && !stopped) { refreshOnReturn = true; void poll(); }
   modes();
   maybeFullscreen();
   void reportPresence();
@@ -81,7 +101,7 @@ app.onhostcontextchanged = (change) => {
 let retryTimer;
 async function requestMode(mode, { automatic = false } = {}) {
   if (stopped || pending || !connected || !context.availableDisplayModes?.includes(mode)) return;
-  pending = true; modes('Host 에 표시 전환을 요청하는 중…');
+  pending = true; modes(t('app.requesting'));
   let got, failure = null;
   try {
     got = await app.requestDisplayMode({ mode }, { timeout: 10000 });
@@ -89,16 +109,14 @@ async function requestMode(mode, { automatic = false } = {}) {
     response = raw(got);
     // Response is the applied mode; events are recorded separately. No timer-based guess.
     if (got?.mode) context = { ...context, displayMode: got.mode };
-    modes(got?.mode === 'fullscreen' ? '펼친 Monitor 입니다. Host 의 채팅 입력창에서 대화를 이어가세요.'
-      : got?.mode === 'inline' ? 'Host가 fullscreen 요청에 inline을 반환했습니다. 모니터 펼치기로 재요청하거나 위젯 머리의 다른 패널에 표시·확대 버튼을 사용해 주세요.'
-      : 'Host 가 적용 모드를 반환하지 않았습니다. 화면이 그대로라면 모니터 펼치기를 눌러 주세요.');
+    modes(got?.mode === 'fullscreen' ? t('app.fullscreen_applied')
+      : got?.mode === 'inline' ? t('app.inline_returned')
+      : t('app.no_mode'));
   } catch (error) {
     failure = fullscreenFailure(error);
     if (!stopped) {
-      response = failure === 'refused' ? '새 클릭 필요 응답' : '요청 오류(원인 미확인)';
-      modes(failure === 'refused'
-        ? 'Host가 App 안의 새 클릭이 필요하다고 응답했습니다. Monitor 안을 클릭하거나 모니터 펼치기를 눌러 다시 요청해 주세요.'
-        : '표시 전환 요청의 결과를 확인하지 못했습니다. 연결 상태를 확인하거나 모니터 펼치기로 다시 요청할 수 있습니다.');
+      response = failure === 'refused' ? t('app.response_refused') : t('app.response_error');
+      modes(failure === 'refused' ? t('app.refused_click') : t('app.request_unconfirmed'));
     }
   } finally {
     pending = false;
@@ -119,11 +137,7 @@ function scheduleRetry(appliedMode, failure = null) {
   if (delay !== null) {
     retryTimer = setTimeout(() => { retryTimer = undefined; maybeFullscreen(); }, delay);
   } else if (initialDisplay.awaitingGesture) {
-    modes(refused
-      ? 'Host가 App 안의 새 클릭이 필요하다고 응답했습니다. Monitor를 클릭하거나 모니터 펼치기를 눌러 다시 요청해 주세요.'
-      : failure === 'error'
-        ? '자동 표시 전환 요청이 실패했습니다. 원인은 확인되지 않았습니다. 연결 상태를 확인하거나 모니터 펼치기로 다시 요청해 주세요.'
-        : 'Host가 자동 fullscreen 요청을 적용하지 않았습니다. 클릭으로 재요청하거나, 위젯 머리의 다른 패널에 표시·확대 버튼을 사용해 주세요.');
+    modes(refused ? t('app.refused_click') : failure === 'error' ? t('app.auto_failed') : t('app.auto_declined'));
   }
 }
 function maybeFullscreen() {
@@ -178,7 +192,7 @@ el('update').onclick = () => {
   for (const step of guide.steps) { const li = document.createElement('li'); li.textContent = step; list.appendChild(li); }
   panel.appendChild(list);
   if (guide.targets) {
-    const label = document.createElement('label'); label.textContent = '업데이트할 앱 ';
+    const label = document.createElement('label'); label.textContent = t('app.update_target_label');
     const select = document.createElement('select');
     guide.targets.forEach((target, index) => {
       const option = document.createElement('option'); option.value = String(index); option.textContent = target.label;
@@ -186,10 +200,10 @@ el('update').onclick = () => {
     });
     select.value = '0'; label.appendChild(select); panel.appendChild(label);
     const hint = document.createElement('p'); panel.appendChild(hint);
-    const requestLabel = document.createElement('label'); requestLabel.textContent = '에이전트에게 보낼 요청문';
+    const requestLabel = document.createElement('label'); requestLabel.textContent = t('app.request_label');
     const request = document.createElement('textarea'); request.readOnly = true; request.rows = 7;
     requestLabel.appendChild(request); panel.appendChild(requestLabel);
-    const copy = document.createElement('button'); copy.type = 'button'; copy.textContent = '요청문 복사';
+    const copy = document.createElement('button'); copy.type = 'button'; copy.textContent = t('app.copy');
     const status = document.createElement('p'); status.setAttribute('role', 'status');
     const choose = () => { hint.textContent = guide.targets[Number(select.value)].hint;
       request.value = guide.targets[Number(select.value)].request; status.textContent = ''; };
@@ -198,36 +212,36 @@ el('update').onclick = () => {
       const value = request.value;
       try {
         await navigator.clipboard.writeText(value);
-        if (value === request.value) status.textContent = '복사했어요. 안내된 에이전트의 새 대화에 붙여넣으세요.';
+        if (value === request.value) status.textContent = t('app.copied');
       } catch {
         request.focus(); request.select();
-        status.textContent = '자동 복사를 사용할 수 없습니다. 선택된 요청문을 ⌘C로 복사하세요.';
+        status.textContent = t('app.copy_failed');
       }
     };
     panel.appendChild(copy); panel.appendChild(status);
     const details = document.createElement('details');
-    const summary = document.createElement('summary'); summary.textContent = '릴리스와 설치 안내 보기'; details.appendChild(summary);
+    const summary = document.createElement('summary'); summary.textContent = t('app.release_details'); details.appendChild(summary);
     for (const line of guide.details) { const p = document.createElement('p'); p.textContent = line; details.appendChild(p); }
     panel.appendChild(details);
   }
   if (guide.companion) {
-    const open = document.createElement('button'); open.type = 'button'; open.textContent = 'Companion 열기';
+    const open = document.createElement('button'); open.type = 'button'; open.textContent = t('app.open_companion');
     open.onclick = () => el('native').onclick();
     panel.appendChild(open);
   }
   const small = document.createElement('small');
-  small.textContent = guide.targets ? '요청문을 복사해도 설치는 시작되지 않습니다. 설치는 에이전트와 대화하며 진행하세요.' : '이 화면은 안내만 합니다. 다운로드·설치는 사용자가 Companion 또는 설치 안내의 절차로 직접 진행합니다. 확인을 끄려면 Host 의 서버 환경에 GIL_UPDATE_CHECK=off 를 두거나 Monitor 상태 폴더에 update-check.off 파일을 둡니다.';
+  small.textContent = guide.targets ? t('app.copy_note') : t('app.guide_note');
   panel.appendChild(small);
   panel.hidden = false;
 };
 
 el('native').onclick = async () => {
   initialDisplay.cancel(); clearTimeout(retryTimer); retryTimer = undefined;
-  pending = true; modes('별도 Monitor 창을 요청하는 중…');
+  pending = true; modes(t('app.native_requesting'));
   try {
     const data = unwrap(await app.callServerTool({ name: 'show_gil_companion', arguments: {} }));
-    modes(data.said + ' 별도 창의 Project 선택은 이 화면과 독립입니다.');
-  } catch (err) { modes(err.said || '별도 창을 열지 못했습니다.'); }
+    modes(t('app.native_note', { said: data.said }));
+  } catch (err) { modes(err.said || t('app.native_failed')); }
   finally { pending = false; modes(); }
 };
 
@@ -279,8 +293,10 @@ app.ontoolresult = async (result) => {
     void reportPresence();
     window.GIL_HOST.listen('gil://connection', (error) => {
       connectionIssue = error;
-      modes(error ? undefined : '프로젝트 연결을 다시 확인했습니다.');
+      modes(error ? undefined : t('app.connection_rechecked'));
     });
+    // The language is chosen before the shared renderer draws its first label.
+    adoptLocale(context);
     // One shared renderer. The native and fixture entrypoints use this exact module too.
     await import('../ui/companion.js');
     if (stopped) return;
@@ -289,11 +305,11 @@ app.ontoolresult = async (result) => {
     if (stopped) return;
     rendererReady = true;
     modes();
-    if (!data.watching) modes('변화 감시를 시작하지 못했습니다. 수동 새로고침과 5분 재조회는 사용할 수 있습니다.');
+    if (!data.watching) modes(t('app.watch_failed'));
     renderUpdate(data.update);
     poll();
     maybeFullscreen();
-  } catch (err) { renderFailed = true; void reportPresence(); modes(err?.said || 'Monitor 데이터를 받지 못했습니다. Project 를 지정해 다시 열어 주세요.'); }
+  } catch (err) { renderFailed = true; void reportPresence(); modes(err?.said || t('app.data_failed')); }
 };
 function stop() { stopped = true; planReview?.stop(); recoveryReview?.stop(); initialDisplay.cancel(); clearTimeout(timer); clearTimeout(retryTimer); window.GIL_COMPANION?.clearVisuals?.(); return reportPresence(); }
 function resume() {
@@ -321,11 +337,12 @@ app.connect().then(() => {
   connected = true; context = { ...app.getHostContext(), ...context };
   evidence.host = hostIdentity(app);
   adoptHostStyles();
+  if (adoptLocale(context) && rendererReady) refreshOnReturn = true;
   modes(context.availableDisplayModes?.includes('fullscreen')
-    ? '전체 화면을 자동 요청합니다(연결 직후와 Monitor 준비 뒤). 그대로라면 Monitor 를 한 번 클릭하거나 모니터 펼치기를 눌러 주세요.'
+    ? t('app.connect_auto')
     : Array.isArray(context.availableDisplayModes)
-      ? '이 표면은 펼친 Monitor 를 광고하지 않습니다. 위젯 머리의 다른 패널에 표시·확대 버튼을 쓰거나 별도 창을 사용하세요.'
-      : 'Host 의 표시 모드 지원 정보를 기다리고 있습니다.');
+      ? t('app.connect_no_fullscreen')
+      : t('app.connect_waiting'));
   void poll();
   maybeFullscreen();
-}).catch(() => modes('MCP Apps 연결에 실패했습니다. Agent 에게 별도 GIL Monitor 창을 요청하세요.'));
+}).catch(() => modes(t('app.connect_failed')));

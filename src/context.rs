@@ -38,6 +38,8 @@ use crate::node::NodeKind;
 use crate::project::Project;
 use crate::report::Report;
 use crate::rules::RuleSet;
+use crate::locale::text;
+use crate::tr;
 
 /// 지금 자리에서 이어 걷기 위해 알아야 하는 것 전부.
 ///
@@ -46,43 +48,41 @@ pub fn context(project: &Project) -> String {
     let cycles = project.cycles();
     let mut out = String::new();
     write_preamble(&mut out);
-    out.push_str(&format!("\n[지금 바로 할 호출]\n{}\n", next_call(project)));
-    out.push_str("\n[프로젝트 파일 작업 범위]\n프로젝트 안 Artifact 파일 생성·수정·삭제·이동·외부 파일 가져오기는 실제로 열린 Experiment Verify에서만 수행한다. DOCX·PNG·PDF 제작과 렌더링도 포함한다. Closing Interview·승인 대기·열린 Step이 없는 경계·종료된 Chain을 포함한 나머지 자리에서는 파일을 변경하지 않는다. 프로젝트 밖 작업과 프로젝트 파일을 남기지 않는 웹 조사, 기존 증거 읽기는 이 제한 없이 수행할 수 있다. GIL 기록·승인·허용된 복구는 기존 도구와 계약을 따르며 .gil을 직접 편집하지 않는다. 이는 Agent 지침이며 OS 쓰기 차단을 뜻하지 않는다.\n");
+    out.push_str(&format!("\n{}\n{}\n", text("context.next_call_heading"), next_call(project)));
+    out.push_str(text("ctx.file_scope"));
     if let Some(plan) = project.approved_plan() {
         let chain = project.current_chain().unwrap();
-        out.push_str("\n승인 계획 프로필: Synthesis를 열고 gil_plan_propose({project_root, draft:{scope, items, synthesis}}) → Monitor 버튼 응답 → gil_plan_read의 close_report로 닫기 → Outcome → Interview Cycle 닫기. 채팅 동의로 대체하지 않는다.\n");
-        out.push_str(&format!("승인 판: {:?} · 미실행 순서: {}\n실행 연결: {}\n", plan.active(chain).map(|p| p.revision), plan.pending(chain).iter().map(|i| i.id.as_str()).collect::<Vec<_>>().join(", "), serde_json::to_string(&plan.executed_cycles).unwrap()));
+        out.push_str(text("ctx.plan_profile"));
+        out.push_str(&tr!("ctx.plan_state", revision = format!("{:?}", plan.active(chain).map(|p| p.revision)), pending = plan.pending(chain).iter().map(|i| i.id.as_str()).collect::<Vec<_>>().join(", "), executed = serde_json::to_string(&plan.executed_cycles).unwrap()));
         let cycle = project.current_cycle();
         if !plan.awaiting_interview(chain).is_empty() {
-            out.push_str(&format!("보존된 재인터뷰 요청: {}. ", serde_json::to_string(&plan.awaiting_interview(chain)).unwrap()));
+            out.push_str(&tr!("ctx.plan_reinterview_requests", requests = serde_json::to_string(&plan.awaiting_interview(chain)).unwrap()));
             if cycle.is_closed() {
-                out.push_str("현재 Cycle은 닫혔다. gil_open(kind: interview)으로 새 승인을 받는다. 요청을 자동 취소하거나 새 Experiment로 건너뛰지 않는다.\n");
+                out.push_str(text("ctx.plan_reinterview_closed"));
             } else {
-                out.push_str("요청은 이 Cycle이 끝날 때까지 보존된다. 현재 Cycle의 남은 Step을 실제 순서대로 마치고 Cycle Report까지 닫은 뒤에 Interview를 연다. 요청을 자동 취소하거나 Step을 건너뛰거나 동시에 다른 Cycle을 열지 않는다.\n");
+                out.push_str(text("ctx.plan_reinterview_open"));
             }
         }
-        if let Some(p) = plan.current(project) { out.push_str(&format!("제안 판 {} · 응답 {:?}. gil_plan_read로 정확한 결과를 읽는다.\n", p.revision, p.receipt)); }
+        if let Some(p) = plan.current(project) { out.push_str(&tr!("ctx.plan_proposal", revision = p.revision, receipt = format!("{:?}", p.receipt))); }
         if let Some(item) = project.current_plan_item() {
-            let label = if cycle.is_closed() { "닫힌 Experiment의 실행 연결" } else { "이번 Experiment" };
-            out.push_str(&format!("{label}: {} · 질문: {} · 확인 조건: {}\n", item.id, item.question, item.done_when));
+            let label = if cycle.is_closed() { text("ctx.plan_label_closed") } else { text("ctx.plan_label_current") };
+            out.push_str(&tr!("ctx.plan_item", label = label, id = item.id, question = item.question, done_when = item.done_when));
         }
         let verify_open = cycle.step_now_open().and_then(|id| cycle.steps().node(id))
             .is_some_and(|node| node.kind == NodeKind::Verify);
         if verify_open && project.plan_document().is_some() {
-            out.push_str("열린 Verify에서 gil_plan_read.document를 파일로 저장하고 plan_document에 경로를 적는다. 별도의 실제 작업 증거도 evidence_files로 남긴다.\n");
+            out.push_str(text("ctx.plan_verify_doc"));
         }
     }
     if let Some(chain) = project.current_chain() {
-        out.push_str(&format!("\n현재 Chain: {} · {} · {}\nEntry: {} · 현재 Cycle: {}\n",
-            chain.id(), if chain.is_closed() { "closed" } else { "open" }, chain.existence(), chain.entry_snapshot(), chain.current_cycle()));
+        out.push_str(&tr!("ctx.chain_current", id = chain.id(), state = if chain.is_closed() { "closed" } else { "open" }, existence = chain.existence(), entry = chain.entry_snapshot(), cycle = chain.current_cycle()));
         if let Some(report) = chain.report() {
-            out.push_str(&format!("Chain 판정: {} · Exit: {}\n승인 근거: {}\n인계 요약: {}\n", report.get("verdict").unwrap(), chain.exit_snapshot().unwrap(), report.get("closing_synthesis_ref").unwrap(), report.get("handoff_summary").unwrap()));
-        } else { out.push_str("Cycle 성공은 Chain 종료가 아니다. 최종 판정은 Closing Interview에서 사용자에게 제안하고 실제 답변을 받은 뒤 기록한다. 승인된 Synthesis에 chain_verdict를 남기고 Interview를 close_chain 방향으로 닫은 후 Chain Report를 제출한다.\n"); }
+            out.push_str(&tr!("ctx.chain_report", verdict = report.get("verdict").unwrap(), exit = chain.exit_snapshot().unwrap(), basis = report.get("closing_synthesis_ref").unwrap(), handoff = report.get("handoff_summary").unwrap()));
+        } else { out.push_str(text("ctx.chain_open_note")); }
     }
     for previous in project.chains().iter().filter(|chain| Some(chain.id()) != project.current_chain().map(|current| current.id())) {
         let report = previous.report().expect("historical Chains are closed");
-        out.push_str(&format!("\n이전 Chain: {} · {}\n승인 근거: {}\n인계 요약: {}\n", previous.id(),
-            report.get("verdict").unwrap(), report.get("closing_synthesis_ref").unwrap(), report.get("handoff_summary").unwrap()));
+        out.push_str(&tr!("ctx.chain_previous", id = previous.id(), verdict = report.get("verdict").unwrap(), basis = report.get("closing_synthesis_ref").unwrap(), handoff = report.get("handoff_summary").unwrap()));
     }
     write_previous_cycles(&mut out, cycles);
     write_failed_cycles(&mut out, cycles);
@@ -121,16 +121,16 @@ fn reinterview_notice(project: &Project) -> Option<&'static str> {
     if cycle.kind() != CycleKind::Experiment || cycle.is_closed() || plan.awaiting_interview(chain).is_empty() {
         return None;
     }
-    Some("재인터뷰 요청이 보존돼 있다: 이 Cycle이 닫힌 뒤 Interview를 열어 다시 승인받는다. 그때까지 요청은 그대로 남고, 지금 Step을 건너뛰거나 증거를 지어내 Cycle을 서둘러 닫지 않는다.")
+    Some(text("ctx.reinterview_notice"))
 }
 
 fn next_call_here(project: &Project) -> String {
     if let Some(chain) = project.current_chain() {
         if chain.is_closed() {
-            return "Chain이 닫혔다. 새 주제가 있을 때만 gil_open(kind: chain)을 명시적으로 호출한다. gil_start는 부르지 않는다.".into();
+            return text("ctx.next.chain_closed").into();
         }
         if chain.awaiting_report() {
-            return "Chain Report를 gil_close로 제출한다 (verdict · closing_synthesis_ref · handoff_summary). 새 Cycle을 열지 않는다.".into();
+            return text("ctx.next.chain_report").into();
         }
     }
     let cycles = project.cycles();
@@ -143,25 +143,16 @@ fn next_call_here(project: &Project) -> String {
             return said;
         }
         return match (cycle.kind(), node.kind) {
-            (CycleKind::Interview, NodeKind::Question) =>
-                "열린 Question: 사용자에게 질문하고 턴을 끝내 답을 기다린다. 답을 받으면 그 원문으로 gil_close한다. 프로젝트 파일은 변경하지 않는다.".into(),
-            (CycleKind::Interview, NodeKind::Interpretation) =>
-                "열린 Interpretation: 받은 답에서 확정된 것과 모르는 것을 갈라 gil_close한다. 프로젝트 파일은 변경하지 않는다.".into(),
-            (CycleKind::Interview, NodeKind::Synthesis) =>
-                "열린 Synthesis: 제안 statement를 사용자에게 보여 주고 턴을 끝내 답을 기다린다. 사용자가 명시적으로 동의했을 때만 approved: yes로 gil_close한다. 침묵·이전 요청·자체 판단은 승인이 아니다. 기다리는 동안 프로젝트 파일을 변경하지 않는다.".into(),
-            (CycleKind::Interview, NodeKind::Outcome) =>
-                "열린 Interview Outcome: 승인된 범위를 판정해 gil_close한다 (verdict · lesson · synthesis_ref · next_direction). 프로젝트가 끝날 때까지 열어 두지 않는다. 닫은 뒤 Interview Cycle Report를 별도로 닫는다.".into(),
-            (CycleKind::Experiment, NodeKind::Define) =>
-                "열린 Define: 확인할 질문 하나와 판정 기준만 적어 gil_close한다. 프로젝트 파일 변경은 Verify에서 한다.".into(),
-            (CycleKind::Experiment, NodeKind::Hypothesis) =>
-                "열린 Hypothesis: 예상·근거·guardrail을 적어 gil_close한다. 닫힌 뒤 다음 호출은 Verify의 gil_open이며, 그 성공 전에는 프로젝트 파일을 변경하지 않는다.".into(),
-            (CycleKind::Experiment, NodeKind::Verify) =>
-                "열린 Verify: 계약의 next_action을 실제로 수행하고 관측 결과를 프로젝트 파일로 저장한 뒤 evidence_files를 포함해 gil_close한다. 채팅만으로는 닫히지 않는다.".into(),
-            (CycleKind::Experiment, NodeKind::Analysis) =>
-                "열린 Analysis: 저장된 Verify 증거를 해석해 nonblank interpretation으로 gil_close한다. 프로젝트 파일은 변경하지 않는다.".into(),
-            (CycleKind::Experiment, NodeKind::Outcome) =>
-                "열린 Experiment Outcome: verdict·lesson·next_direction을 적어 gil_close한다. 닫은 뒤 Cycle Report를 별도로 닫는다.".into(),
-            (_, kind) => format!("열린 {kind}: 완료 조건을 충족하면 관측한 결과로 gil_close한다."),
+            (CycleKind::Interview, NodeKind::Question) => text("ctx.next.question").into(),
+            (CycleKind::Interview, NodeKind::Interpretation) => text("ctx.next.interpretation").into(),
+            (CycleKind::Interview, NodeKind::Synthesis) => text("ctx.next.synthesis").into(),
+            (CycleKind::Interview, NodeKind::Outcome) => text("ctx.next.interview_outcome").into(),
+            (CycleKind::Experiment, NodeKind::Define) => text("ctx.next.define").into(),
+            (CycleKind::Experiment, NodeKind::Hypothesis) => text("ctx.next.hypothesis").into(),
+            (CycleKind::Experiment, NodeKind::Verify) => text("ctx.next.verify").into(),
+            (CycleKind::Experiment, NodeKind::Analysis) => text("ctx.next.analysis").into(),
+            (CycleKind::Experiment, NodeKind::Outcome) => text("ctx.next.experiment_outcome").into(),
+            (_, kind) => tr!("ctx.next.generic_open", kind = kind),
         };
     }
 
@@ -172,52 +163,47 @@ fn next_call_here(project: &Project) -> String {
         let openable = cycle.openable_here();
         if cycle.can_close() {
             return match cycle.kind() {
-                CycleKind::Interview => "Outcome까지 닫혔고 Interview Cycle은 아직 열려 있다. gil_close로 Cycle Report를 제출한다 (verdict · outcome_ref · handoff_summary · next_direction). Experiment는 그 뒤에 열고 프로젝트 파일은 Verify에서 변경한다.".into(),
-                CycleKind::Experiment => "Outcome까지 닫혔고 Experiment Cycle은 아직 열려 있다. gil_close로 Cycle Report를 제출한다. 다음 문제는 그 뒤에 연다.".into(),
+                CycleKind::Interview => text("ctx.next.cycle_close_interview").into(),
+                CycleKind::Experiment => text("ctx.next.cycle_close_experiment").into(),
             };
         }
         if openable.is_empty() {
-            return "여기서 열거나 닫을 수 있는 것이 없다. gil_status를 한 번 읽는다.".into();
+            return text("ctx.next.nothing").into();
         }
         let names: Vec<&str> = openable.iter().map(|kind| kind.as_str()).collect();
         return match (cycle.kind(), openable.as_slice()) {
-            (CycleKind::Interview, [NodeKind::Outcome]) =>
-                "승인된 Synthesis만 닫혔다. gil_open(kind: outcome)으로 Interview Outcome을 연다. Synthesis를 다시 열거나 승인을 다시 묻지 않는다.".into(),
-            (CycleKind::Interview, [NodeKind::Question]) if walk.nodes().is_empty() =>
-                "새 Interview: gil_open(kind: question)에 행동 계약(objective · next_action · done_when)을 적어 첫 질문을 연다. gil_start나 Monitor 준비를 반복하지 않는다.".into(),
-            (CycleKind::Experiment, [NodeKind::Define]) =>
-                "새 Experiment: gil_open(kind: define)에 행동 계약을 적어 연다. 확인할 질문 하나만 다룬다.".into(),
-            (CycleKind::Experiment, [NodeKind::Verify]) =>
-                "Hypothesis가 닫혔다. gil_open(kind: verify)에 행동 계약을 적어 연다. 열기 성공 전에는 프로젝트 파일을 변경하지 않는다.".into(),
-            (CycleKind::Experiment, [NodeKind::Analysis]) =>
-                "Verify가 닫혔다. gil_open(kind: analysis)으로 저장된 증거를 해석하는 자리를 연다.".into(),
-            (_, [only]) => format!("gil_open(kind: {})에 행동 계약을 적어 연다.", only.as_str()),
-            _ => format!("gil_open으로 다음 중 하나를 연다: {}. 행동 계약(objective · next_action · done_when)을 함께 적는다.", names.join(", ")),
+            (CycleKind::Interview, [NodeKind::Outcome]) => text("ctx.next.synthesis_closed_outcome").into(),
+            (CycleKind::Interview, [NodeKind::Question]) if walk.nodes().is_empty() => text("ctx.next.new_interview").into(),
+            (CycleKind::Experiment, [NodeKind::Define]) => text("ctx.next.new_experiment").into(),
+            (CycleKind::Experiment, [NodeKind::Verify]) => text("ctx.next.hypothesis_closed").into(),
+            (CycleKind::Experiment, [NodeKind::Analysis]) => text("ctx.next.verify_closed").into(),
+            (_, [only]) => tr!("ctx.next.open_only", kind = only.as_str()),
+            _ => tr!("ctx.next.open_many", names = names.join(", ")),
         };
     }
 
     // 닫힌 Cycle — 밟을 수 있는 수만 말한다(`next_moves`와 같은 판정).
     if let Some(from) = cycles.pending_revisit() {
         if cfg!(feature = "product-safety") {
-            return format!("{}에서 되돌아왔다. Monitor에서 파일 복원 완료를 확인한 뒤 gil_open(kind: interview|experiment)으로 새 Cycle을 연다. gil_revisit을 반복하지 않는다. 저장된 승인 복원이 중단된 경우에만 gil_revisit으로 재개한다.", from.to_ref());
+            return tr!("ctx.next.revisited_product", from = from.to_ref());
         }
-        return format!("{}에서 되돌아왔다. gil_open(kind: interview|experiment)으로 이 자리 아래에 새 Cycle을 연다. gil_revisit을 반복하지 않는다.", from.to_ref());
+        return tr!("ctx.next.revisited_dev", from = from.to_ref());
     }
     if cycles.can_revisit() {
         if cfg!(feature = "product-safety") {
-            return format!("{}이(가) failure·revisit으로 닫혔다. Monitor에서 파일 변경 목록을 확인하고 ‘보존 후 되돌아가기’ 버튼 승인을 기다린다. gil_revisit을 반복하지 않는다. 복원 완료 후 gil_open으로 새 Cycle을 연다.", cycle.id());
+            return tr!("ctx.next.can_revisit_product", cycle = cycle.id());
         }
-        return format!("{}이(가) failure·revisit으로 닫혔다. gil_revisit(인수 없음)을 한 번 호출한 뒤 gil_open으로 새 Cycle을 연다. 되돌아가기는 Artifact를 복원하므로 사용자에게 먼저 알린다.", cycle.id());
+        return tr!("ctx.next.can_revisit_dev", cycle = cycle.id());
     }
     if let Some(said) = plan_next_call_after_cycle(project) {
         return said;
     }
     match cycles.why_not_open_child() {
         None => match cycle.kind() {
-            CycleKind::Interview => "Interview Cycle까지 닫혔다. gil_open(kind: experiment)으로 합의한 첫 질문의 Experiment를 연다. gil_start를 다시 부르지 않는다.".into(),
-            CycleKind::Experiment => "Experiment Cycle이 닫혔다. 남은 독립 질문이 있으면 gil_open(kind: experiment), 목표를 다시 합의해야 하면 gil_open(kind: interview)을 연다.".into(),
+            CycleKind::Interview => text("ctx.next.interview_closed").into(),
+            CycleKind::Experiment => text("ctx.next.experiment_closed").into(),
         },
-        Some(why) => format!("{why}. 적어 둔 방향은 gil_story에서 읽는다. 막힌 이유를 사용자에게 알린다."),
+        Some(why) => tr!("ctx.next.blocked", why = why),
     }
 }
 
@@ -227,17 +213,15 @@ fn plan_next_call(project: &Project, kind: NodeKind) -> Option<String> {
     match kind {
         NodeKind::Synthesis => {
             let Some(proposal) = plan.current(project) else {
-                return Some("열린 Synthesis (승인 계획 프로필): gil_plan_propose({project_root, draft:{scope, items, synthesis}})로 제안한다 — draft.scope 5칸(goal · in_scope · out_of_scope · constraints · success_criteria), draft.items(id · question · done_when), draft.synthesis Report 칸. draft.synthesis.exploration_checklist는 items의 id를 같은 순서로 한 줄씩 적은 문자열이다. Closing은 기존 items를 유지하고 draft.synthesis.chain_verdict(success 또는 failure)를 더한다. approved · plan_revision · plan_digest는 적지 않는다. 채팅 동의로 대체하지 않는다.".into());
+                return Some(text("ctx.plan.synthesis_propose").into());
             };
             Some(match proposal.receipt.as_ref().map(|r| &r.decision) {
-                None => format!("제안 판 {}이(가) Monitor 버튼 응답을 기다린다. 턴을 끝내고 기다린다. 그동안 프로젝트 파일 변경·재제안을 하지 않는다. 응답이 왔는지는 gil_plan_read로만 확인한다.", proposal.revision),
-                Some(crate::approved_plan::Decision::Approve) => format!("제안 판 {}이(가) 승인됐다. gil_plan_read의 close_report를 그대로 gil_close에 넣어 Synthesis를 닫는다. 내용을 고치거나 다시 묻지 않는다.", proposal.revision),
-                Some(crate::approved_plan::Decision::RequestChanges) => format!("제안 판 {}에 수정 요청이 왔다. gil_plan_read의 close_report(approved: no)로 Synthesis를 닫고 다음 Question에서 무엇을 바꿀지 묻는다. 이전 승인은 재사용하지 않는다.", proposal.revision),
+                None => tr!("ctx.plan.waiting", revision = proposal.revision),
+                Some(crate::approved_plan::Decision::Approve) => tr!("ctx.plan.approved", revision = proposal.revision),
+                Some(crate::approved_plan::Decision::RequestChanges) => tr!("ctx.plan.changes", revision = proposal.revision),
             })
         }
-        NodeKind::Verify if project.plan_document().is_some() => Some(
-            "열린 Verify (승인 계획 프로필): gil_plan_read.document를 bytes 그대로 파일로 저장하고 Report의 plan_document에 그 상대 경로를 적는다. 실제 작업의 관측 결과는 별도 파일로 저장해 evidence_files에 적는다. 계획 문서만으로는 닫히지 않는다.".into(),
-        ),
+        NodeKind::Verify if project.plan_document().is_some() => Some(text("ctx.plan.verify_doc").into()),
         // 다른 열린 Step의 다음 호출은 프로필과 무관하다. 보존된 재인터뷰 요청은 `next_call`이
         // 알림으로 덧붙이며, 그 Step의 합법적인 close를 가리지 않는다.
         _ => None,
@@ -252,7 +236,7 @@ fn plan_next_call_between_steps(project: &Project) -> Option<String> {
     if cycle.kind() == CycleKind::Interview && cycle.openable_here().as_slice() == [NodeKind::Outcome] {
         // Grammar only reaches this position through a closed `approved: yes` Synthesis, and in
         // this profile that close required the recorded Monitor receipt.
-        return Some("승인된 Synthesis가 닫혔다. gil_open(kind: outcome)으로 Interview Outcome을 연다. 승인을 다시 묻거나 gil_plan_propose를 반복하지 않는다.".into());
+        return Some(text("ctx.plan.synthesis_closed").into());
     }
     // Experiment의 Step 사이에서는 실제 openable/can_close가 다음 호출을 정한다. 보존된
     // 재인터뷰 요청이 있어도 Cycle close를 앞당겨 권하지 않는다(R4).
@@ -265,27 +249,22 @@ fn plan_next_call_after_cycle(project: &Project) -> Option<String> {
     let plan = project.approved_plan()?;
     let chain = project.current_chain()?;
     if !plan.awaiting_interview(chain).is_empty() {
-        return Some("재인터뷰 요청이 보존돼 있다. gil_open(kind: interview)으로 새 Interview를 열어 변경된 범위를 다시 승인받는다. Experiment는 그 전에 열 수 없다.".into());
+        return Some(text("ctx.plan.reinterview_pending").into());
     }
     match plan.active(chain) {
-        None => Some("승인된 실행 계획이 없다. gil_open(kind: interview)으로 Interview를 열고 Synthesis에서 gil_plan_propose로 승인받는다. 이전 판의 승인은 재사용되지 않는다.".into()),
+        None => Some(text("ctx.plan.no_active").into()),
         Some(active) => {
             let pending = plan.pending(chain);
             match pending.first() {
-                Some(item) => Some(format!("승인 판 {} · 다음 항목 {}: gil_open(kind: experiment)을 열면 이 항목이 자동으로 묶인다. 질문: {} · 확인 조건: {}", active.revision, item.id, item.question, item.done_when)),
-                None => Some("승인된 항목을 모두 실행했다. gil_open(kind: interview)으로 Closing Interview를 열어 최종 판정(chain_verdict)을 제안하고 승인받은 뒤 Chain Report를 닫는다. 채팅 보고만으로 끝내지 않는다. 남은 작업이 있으면 같은 Interview에서 새 계획을 승인받는다.".into()),
+                Some(item) => Some(tr!("ctx.plan.next_item", revision = active.revision, item = item.id, question = item.question, done_when = item.done_when)),
+                None => Some(text("ctx.plan.all_done").into()),
             }
         }
     }
 }
 
 fn write_preamble(out: &mut String) {
-    out.push_str(
-        "GIL context — 지금 자리에서 이어 걷기 위해 알아야 하는 것.\n\n\
-         해상도는 거리가 정한다: 지나온 Cycle 은 그 Cycle 을 대표하는 투영까지, 지금 Cycle 은\n\
-         Step Report 까지, 서 있는 자리는 규칙까지. 지나온 Cycle 의 Step Graph 는 여기 접혀\n\
-         있을 뿐 사라지지 않고 원본 Graph 에 보존된다.\n",
-    );
+    out.push_str(text("ctx.preamble"));
 }
 
 // ── ① 이전 Cycle — Cycle Report 해상도 ─────────────────────────────────────
@@ -326,15 +305,7 @@ fn write_previous_cycles(out: &mut String, cycles: &Cycles) {
         return;
     }
 
-    let _ = write!(
-        out,
-        "\n═══ 이전 Cycle ═══\n\
-         ({}개 · 이 자리로 이어진 조상만 · 조상마다 Cycle 해상도의 투영 하나)\n\
-         읽은 원본 — 실험 목적·성공 기준: 그 Cycle 의 유일한 Define · 판정의 교훈:\n\
-         그 Cycle 의 outcome_ref 가 가리킨 Outcome · 나머지: 그 Cycle 의 Report.\n\
-         안의 Step Graph 는 펼치지 않는다 — 시도와 전환의 전개는 원본 Graph 에 그대로 있다.\n",
-        ancestors.len()
-    );
+    out.push_str(&tr!("ctx.previous_head", n = ancestors.len()));
 
     for cycle in ancestors {
         write_one_previous_cycle(out, cycle);
@@ -356,17 +327,10 @@ fn write_failed_cycles(out: &mut String, cycles: &Cycles) {
     let failures = failure_context(cycles);
     if failures.is_empty() { return; }
 
-    let _ = write!(
-        out,
-        "\n═══ 되돌아오며 버린 Cycle ═══\n\
-         (누적 실패 {}개 · 계보의 조상이 **아니다** — parent와 revisit 출처를 따라 이어받은\n\
-         경험이다. 앞선 실패부터 한 번씩 읽는다. 같은 실패를 되풀이하지 않으려면 이 Report들을\n\
-         읽어야 한다. 조상과 같은 해상도로 싣고 내부 Step Graph는 펼치지 않는다.)\n",
-        failures.len()
-    );
+    out.push_str(&tr!("ctx.failed_head", n = failures.len()));
     for cycle in failures {
         write_one_previous_cycle(out, cycle);
-        let _ = writeln!(out, "  원본 Cycle: {}", cycle.id().to_ref());
+        out.push_str(&tr!("ctx.failed_source", cycle = cycle.id().to_ref()));
     }
 }
 
@@ -409,7 +373,7 @@ fn write_one_previous_cycle(out: &mut String, cycle: &Cycle) {
         // 닫힌 Cycle 은 Report 를 지닌다(그것이 닫힘의 조건이다). 그래도 파일이 두 번째
         // 통로라 여기 닿을 수 있다 — 그때는 없다고 말한다. 조용히 건너뛰면 이어받을
         // 것이 하나 사라진 줄 모른다.
-        let _ = writeln!(out, " (Cycle Report 가 없다)");
+        out.push_str(text("ctx.no_cycle_report"));
         return;
     };
     match report.get(VERDICT) {
@@ -424,20 +388,20 @@ fn write_one_previous_cycle(out: &mut String, cycle: &Cycle) {
     let mut projected: Vec<(&str, String)> = Vec::new();
     if let Some(define) = cycle.define() {
         if let Some(problem) = define.get(PROBLEM) {
-            projected.push(("실험 목적", problem.to_string()));
+            projected.push((text("ctx.label.purpose"), problem.to_string()));
         }
         if let Some(condition) = define.get(SUCCESS_CONDITION) {
-            projected.push(("성공 기준", condition.to_string()));
+            projected.push((text("ctx.label.success"), condition.to_string()));
         }
     }
     if let Some(lesson) = cycle.judged_lesson() {
-        projected.push(("판정의 교훈", lesson.to_string()));
+        projected.push((text("ctx.label.lesson"), lesson.to_string()));
     }
     if let Some(summary) = report.get(HANDOFF_SUMMARY) {
-        projected.push(("다음 Cycle 에 넘긴 것", summary.to_string()));
+        projected.push((text("ctx.label.handoff"), summary.to_string()));
     }
     if let Some(direction) = next_direction_of(report) {
-        projected.push(("다음 방향", direction));
+        projected.push((text("ctx.label.direction"), direction));
     }
     write_block(out, &projected);
 }
@@ -469,43 +433,32 @@ fn write_block(out: &mut String, fields: &[(&str, String)]) {
 /// 지금 Cycle 안에서 지금까지 난 Step 들. **닫힌 것은 Report 째로, 열린 것은 상태로.**
 fn write_current_cycle(out: &mut String, cycles: &Cycles) {
     let cycle = cycles.current();
-    let _ = write!(
-        out,
-        "\n═══ 현재 Cycle ═══\n{} · {} · {}",
-        cycle.id(),
-        cycle.kind(),
-        match cycle.is_closed() {
-            true => "닫힘",
-            false => "열림",
-        }
-    );
+    out.push_str(&tr!("ctx.current_head", id = cycle.id(), kind = cycle.kind(),
+        state = if cycle.is_closed() { text("ctx.closed") } else { text("ctx.open") }));
     match cycle.parent() {
         Some(parent) => {
-            let _ = writeln!(out, " · 부모 {parent}");
+            out.push_str(&tr!("ctx.parent", parent = parent));
             // 이어받은 것을 여기 다시 적지 않는다 — 원본은 바로 위 절에 이미 있다.
-            let _ = match cycles.inherited_report(cycle.id()).is_some() {
-                true => writeln!(
-                    out,
-                    "이어받은 것: {parent} 의 Cycle Report — 바로 위 [이전 Cycle] 에 있다."
-                ),
-                false => writeln!(out, "이어받은 것: {parent} (Cycle Report 가 없다)"),
+            match cycles.inherited_report(cycle.id()).is_some() {
+                true => out.push_str(&tr!("ctx.inherited", parent = parent)),
+                false => out.push_str(&tr!("ctx.inherited_none", parent = parent)),
             };
         }
         None => {
-            let _ = writeln!(out, " · 뿌리 (이어받은 Cycle 이 없다)");
+            out.push_str(text("ctx.root"));
         }
     }
 
     let walk = cycle.steps();
     if walk.nodes().is_empty() {
-        let _ = writeln!(out, "\n아직 아무 Step 도 열지 않았다.");
+        out.push_str(text("ctx.no_steps"));
         return;
     }
 
     for node in walk.nodes() {
         let _ = write!(out, "\n{} {} · {}", node.id, node.kind, node.status);
         if let Some(from) = node.revisit_from {
-            let _ = write!(out, " · {from} 에서 되돌아와 낸 갈래");
+            out.push_str(&tr!("ctx.branched_from", from = from));
         }
         let _ = writeln!(out);
         match &node.report {
@@ -514,13 +467,13 @@ fn write_current_cycle(out: &mut String, cycles: &Cycles) {
                 write_report_fields(out, &declared, report, "  ");
             }
             None => {
-                let _ = writeln!(out, "  (아직 Report 를 적지 않았다)");
+                out.push_str(text("ctx.no_report_yet"));
             }
         }
     }
 
     if let Some(report) = cycle.report() {
-        let _ = writeln!(out, "\n이 Cycle 의 Cycle Report");
+        out.push_str(text("ctx.cycle_report_head"));
         let declared = cycle_close_requires(cycle);
         write_report_fields(out, &declared, report, "  ");
     }
@@ -533,37 +486,23 @@ fn write_here(out: &mut String, project: &Project) {
     let cycle = cycles.current();
     let walk = cycle.steps();
 
-    let _ = write!(
-        out,
-        "\n═══ 지금 자리 ═══\n{} · {} · {}\n",
-        cycle.id(),
-        cycle.kind(),
-        match cycle.is_closed() {
-            true => "닫힘",
-            false => "열림",
-        }
-    );
+    out.push_str(&tr!("ctx.here_head", id = cycle.id(), kind = cycle.kind(),
+        state = if cycle.is_closed() { text("ctx.closed") } else { text("ctx.open") }));
     match walk.current().and_then(|id| walk.node(id)) {
         Some(node) => {
-            let _ = writeln!(out, "자리: {} {} · {}", node.id, node.kind, node.status);
+            out.push_str(&tr!("ctx.position", id = node.id, kind = node.kind, status = node.status));
         }
         None => {
-            let _ = writeln!(out, "자리: 이 Cycle 에서 아직 아무것도 열지 않았다");
+            out.push_str(text("ctx.position_none"));
         }
     }
-    let _ = writeln!(
-        out,
-        "걸어온 것: Cycle {}개 · 이 Cycle 의 Step {}개 (닫힘 {})",
-        cycles.nodes().len(),
-        walk.nodes().len(),
-        walk.history().count()
-    );
+    out.push_str(&tr!("ctx.walked", cycles = cycles.nodes().len(), steps = walk.nodes().len(), closed = walk.history().count()));
 
     write_current_will(out, project);
 
-    let _ = writeln!(out, "\n[다음에 할 수 있는 것]");
+    out.push_str(text("ctx.next_moves_head"));
     match project.current_chain() {
-        Some(chain) if chain.is_closed() => out.push_str("Chain이 닫혔다. 새 주제를 시작하려면 gil open chain을 명시적으로 호출한다.\n"),
+        Some(chain) if chain.is_closed() => out.push_str(text("ctx.chain_closed_moves")),
         Some(chain) if chain.awaiting_report() => out.push_str(&chain.close_hint()),
         _ => out.push_str(&next_moves(cycles)),
     }
@@ -581,25 +520,13 @@ fn write_here(out: &mut String, project: &Project) {
 /// 없으면 없다고 말한다. GIL 은 다음 행동을 추측하지 않는다(Will Model §10).
 fn write_current_will(out: &mut String, project: &Project) {
     let existence = project.current_existence();
-    let _ = write!(
-        out,
-        "\n[지금 하려는 행동]\n존재: {} · {}\n",
-        existence.id(),
-        existence.current_journey()
-    );
+    out.push_str(&tr!("ctx.will_head", existence = existence.id(), journey = existence.current_journey()));
     let Some(will) = project.active_will() else {
-        out.push_str("걸린 행동이 없다 — 다음에 무엇을 할지는 `gil open` 에서 적는다.\n");
+        out.push_str(text("ctx.will_none"));
         return;
     };
-    let _ = write!(
-        out,
-        "{} · {}\n  목표: {}\n  지금 할 일: {}\n  완료 조건: {}\n",
-        will.id(),
-        will.target(),
-        indent_more(will.objective()),
-        indent_more(will.next_action()),
-        indent_more(will.done_when())
-    );
+    out.push_str(&tr!("ctx.will", will = will.id(), target = will.target(),
+        objective = indent_more(will.objective()), action = indent_more(will.next_action()), done = indent_more(will.done_when())));
 }
 
 /// 여러 줄로 적힌 값이 다음 항목처럼 보이지 않게.
@@ -620,61 +547,45 @@ pub fn next_moves(cycles: &Cycles) -> String {
     if !cycle.is_closed() {
         let here = cycle.steps().current().and_then(|id| cycle.steps().node(id));
         if here.is_some_and(|node| !node.is_closed()) {
-            return "다음: 여기를 먼저 닫는다 — `gil close` (Report 는 stdin 으로)\n".to_string();
+            return text("moves.close_here").to_string();
         }
 
         let mut out = String::new();
         let openable = cycle.openable_here();
         let names: Vec<&str> = openable.iter().map(|kind| kind.as_str()).collect();
         if !names.is_empty() {
-            out.push_str(&format!("다음: 열 수 있는 것 — {}\n", names.join(", ")));
+            out.push_str(&tr!("moves.openable", names = names.join(", ")));
         }
         if cycle.can_close() {
             let lead = match names.is_empty() {
-                true => "다음",
-                false => "또는",
+                true => text("moves.next"),
+                false => text("moves.or"),
             };
-            out.push_str(&format!(
-                "{lead}: 이 Cycle 을 닫는다 — `gil close` (Cycle Report 는 stdin 으로)\n"
-            ));
+            out.push_str(&tr!("moves.close_cycle", lead = lead));
         }
         if out.is_empty() {
-            out.push_str("다음: 여기서 할 수 있는 것이 없다\n");
+            out.push_str(text("moves.nothing"));
         }
         return out;
     }
 
     // **되돌아온 자리** — 여기서 할 일은 하나뿐이다.
     if let Some(from) = cycles.pending_revisit() {
-        return format!(
-            "다음: {} 에서 되돌아왔다 — 이 자리 아래에 새 Cycle 을 연다\n\
-             \x20     `gil open interview` · `gil open experiment`\n",
-            from.to_ref()
-        );
+        return tr!("moves.revisited", from = from.to_ref());
     }
 
     // 닫힌 Cycle 이 되돌아가겠다고 적었는가 — **밟아 보고 답한다.**
     if cycles.can_revisit() {
         if cfg!(feature = "product-safety") {
-            return "다음: Monitor에서 변경 목록을 확인하고 ‘보존 후 되돌아가기’ 버튼을 승인한다. 복원 완료 후 새 Cycle을 연다.\n".into();
+            return text("moves.revisit_product").into();
         }
-        return format!(
-            "다음: {} 이(가) 적어 둔 대로 조상으로 되돌아간다 — `gil revisit` (인수 없음)\n\
-             \x20     그 뒤 그 자리 아래에 새 Cycle 을 연다 — `gil open <종류>`\n",
-            cycle.id()
-        );
+        return tr!("moves.revisit_dev", cycle = cycle.id());
     }
 
     // 닫힌 Cycle — 적어 둔 방향을 밟을 수 있는가.
     match cycles.why_not_open_child() {
-        None => format!(
-            "다음: {} 이(가) 적어 둔 대로 다음 Cycle 을 연다 — `gil open <종류>`\n",
-            cycle.id()
-        ),
-        Some(why) => format!(
-            "다음: {why}\n\
-             \x20     적어 둔 방향은 `gil story` 에서 읽을 수 있다.\n"
-        ),
+        None => tr!("moves.open_next", cycle = cycle.id()),
+        Some(why) => tr!("moves.blocked", why = why),
     }
 }
 
@@ -711,7 +622,7 @@ fn write_rules_here(out: &mut String, cycles: &Cycles) {
     if blocks.is_empty() {
         return;
     }
-    let _ = writeln!(out, "\n[닫는 데 필요한 칸]");
+    out.push_str(text("ctx.rules_head"));
     for (index, contract) in blocks.into_iter().enumerate() {
         // 블록은 빈 줄로 갈린다 — 색에 기대지 않고 눈으로 갈려야 한다.
         if index > 0 {
@@ -729,13 +640,7 @@ fn write_rules_here(out: &mut String, cycles: &Cycles) {
 /// 새 세션에는 이것이 필요하다 — 없이 걸은 실제 dogfood 가 정의되지 않은 내부 단계명
 /// `S1` 을 Report 에 남겼고, 그 Cycle 에 없던 사람은 그 Report 를 읽지 못했다.
 fn write_report_principles(out: &mut String) {
-    out.push_str(
-        "\n[Report 를 쓰는 원칙]  (GIL Specification v0.1 「Report 작성 불변식」)\n\
-         이 Node 에 참여하지 않은 협업자가 혼자 읽어도 같은 대상과 근거를 짚을 수 있게 적는다.\n\
-         정의하지 않은 약어·내부 단계 코드·이슈 번호만으로 대상이나 결론을 말하지 않는다.\n\
-         관측(verify)과 해석(analysis)을 섞지 않고, 성공·실패 주장은 미리 정한 기준과\n\
-         Report·Artifact 증거로 이을 수 있게 적는다.\n",
-    );
+    out.push_str(text("ctx.report_principles"));
 }
 
 // ── 명세에서 읽어 오는 것들 ────────────────────────────────────────────────

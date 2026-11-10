@@ -231,13 +231,8 @@ pub(crate) enum ServeError {
 impl std::fmt::Display for ServeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ServeError::NoEntropy { said } => write!(
-                f,
-                "안전한 난수를 얻지 못해 Monitor 창을 열지 않았다 — {said}"
-            ),
-            ServeError::NoAddress { said } => {
-                write!(f, "127.0.0.1 에 자리를 얻지 못했다 — {said}")
-            }
+            ServeError::NoEntropy { said } => f.write_str(&crate::tr!("mon.serve.no_entropy", said = said)),
+            ServeError::NoAddress { said } => f.write_str(&crate::tr!("mon.serve.no_address", said = said)),
         }
     }
 }
@@ -254,8 +249,9 @@ pub(crate) type Clock = Box<dyn Fn() -> Moment + Send>;
 /// 셋을 한 통로로 모으는 까닭은 하나다 — `Refresh` 를 한 갈래만 소유하면 잠금도, 경합도,
 /// 「지금 상태가 무엇인가」를 둘이 다르게 보는 순간도 없다.
 enum Wish {
-    /// 화면 한 장 주세요 — 답은 이 통로로.
-    Screen(SyncSender<String>),
+    /// 화면 한 장 주세요 — 답은 이 통로로. The reader's language rides along: the loopback page
+    /// speaks the browser's Accept-Language, else the Core default.
+    Screen(SyncSender<String>, crate::locale::Locale),
     /// 무언가 바뀌었을지도 모른다. **그뿐이다.**
     Hint,
     /// 그만.
@@ -367,7 +363,7 @@ fn greet(
         let _ = stream.set_write_timeout(Some(READ_TIMEOUT));
 
         let answer = match read_request(&mut stream, &host, &path) {
-            Ok(asked) => match ask_for_screen(&wishes) {
+            Ok((asked, locale)) => match ask_for_screen(&wishes, locale) {
                 Some(page) => Answer::page(asked, page),
                 // worker 가 제때 답하지 못했다. 프로젝트의 사실을 지어내지 않는다.
                 None => Refused::Malformed.answer(),
@@ -385,9 +381,9 @@ fn greet(
 }
 
 /// worker 에게 화면 한 장을 청한다 — **상한을 두고 기다린다.**
-fn ask_for_screen(wishes: &SyncSender<Wish>) -> Option<String> {
+fn ask_for_screen(wishes: &SyncSender<Wish>, locale: crate::locale::Locale) -> Option<String> {
     let (reply, answer) = sync_channel(1);
-    wishes.try_send(Wish::Screen(reply)).ok()?;
+    wishes.try_send(Wish::Screen(reply, locale)).ok()?;
     answer.recv_timeout(SCREEN_WAIT).ok()
 }
 
@@ -415,13 +411,13 @@ fn tend(
         let wish = incoming.recv_timeout(quiet);
         let now = clock();
         match wish {
-            Ok(Wish::Screen(reply)) => {
+            Ok(Wish::Screen(reply, locale)) => {
                 let cached = engine.wake(now, Wake::ScreenRead, &mut *observer);
-                let page = render_cached_page(
+                let page = crate::locale::with(locale, || render_cached_page(
                     cached,
                     Some((REFRESH_SECONDS, &path)),
                     blind.as_deref(),
-                );
+                ));
                 // 받을 사람이 이미 떠났어도 그것뿐이다.
                 let _ = reply.try_send(page);
             }
@@ -476,8 +472,11 @@ impl Refused {
 ///
 /// 검사 순서가 중요하다 — Host 를 path 보다 **먼저** 본다. 그래야 Host 가 틀린 탐색이
 /// path 가 맞았는지 아닌지를 알아내는 통로가 되지 않는다.
-fn read_request(stream: &mut TcpStream, host: &str, path: &str) -> Result<Asked, Refused> {
+fn read_request(stream: &mut TcpStream, host: &str, path: &str) -> Result<(Asked, crate::locale::Locale), Refused> {
     let mut reader = BufReader::new(stream);
+    // The browser's first Accept-Language tag chooses the page's language; the Core default
+    // speaks when the header is absent. The header never changes what is shown, only its words.
+    let mut locale = crate::locale::current();
 
     // ── 첫 줄 ────────────────────────────────────────────────────────────
     let line = read_line(&mut reader, REQUEST_LINE_MAX)?;
@@ -556,6 +555,11 @@ fn read_request(stream: &mut TcpStream, host: &str, path: &str) -> Result<Asked,
                     return Err(Refused::Malformed);
                 }
             }
+            "accept-language" => {
+                if let Some(first) = value.split(',').next().map(|tag| tag.split(';').next().unwrap_or("").trim()) {
+                    if !first.is_empty() && first != "*" { locale = crate::locale::Locale::normalize(first); }
+                }
+            }
             // 문법이 맞는 모르는 header 는 뜻을 주지 않고 지나친다.
             _ => {}
         }
@@ -570,7 +574,7 @@ fn read_request(stream: &mut TcpStream, host: &str, path: &str) -> Result<Asked,
     //
     // **바이트가 같아야 한다.** 앞부분만 맞는 것도, 뒤에 무언가 붙은 것도 남이다.
     match target == path {
-        true => Ok(asked),
+        true => Ok((asked, locale)),
         false => Err(Refused::Elsewhere),
     }
 }
@@ -761,7 +765,7 @@ impl MonitorServer {
     pub fn wait(&mut self) -> Result<(), String> {
         // ① 신호를 소유할 수 있는 것은 한 번에 하나뿐이다.
         let _turn = Turn::take().ok_or_else(|| {
-            "이 프로세스에서 이미 다른 Monitor 가 신호를 기다리고 있다".to_string()
+            crate::locale::text("mon.serve.signal_busy").to_string()
         })?;
         // ② 앞 실행이 남긴 값이 이번 기다림을 즉시 끝내지 않게.
         INTERRUPTED.store(false, Ordering::SeqCst);
@@ -783,7 +787,7 @@ impl MonitorServer {
     // has its own lifetime and must still compile; do not emulate signal safety.
     #[cfg(not(unix))]
     pub fn wait(&mut self) -> Result<(), String> {
-        Err("이 환경의 loopback Monitor 신호 대기는 아직 지원하지 않는다".to_string())
+        Err(crate::locale::text("mon.serve.signal_unsupported").to_string())
     }
 }
 
@@ -856,10 +860,7 @@ fn install(signal: libc::c_int) -> Result<Restore, String> {
         let mut old: libc::sigaction = std::mem::zeroed();
         match libc::sigaction(signal, &new, &mut old) {
             0 => Ok(Restore { signal, old }),
-            _ => Err(format!(
-                "신호 {signal} 을 받아 둘 수 없었다: {}",
-                std::io::Error::last_os_error()
-            )),
+            _ => Err(crate::tr!("mon.serve.signal_failed", signal = signal, err = std::io::Error::last_os_error())),
         }
     }
 }
@@ -891,7 +892,7 @@ pub fn serve_monitor(
     let root = state_path
         .parent()
         .and_then(Path::parent)
-        .ok_or_else(|| "프로젝트 루트를 찾지 못했다".to_string())?
+        .ok_or_else(|| crate::locale::text("mon.serve.no_root").to_string())?
         .to_path_buf();
     let observer = Box::new(ProjectObserver::new(rules, state_path));
     let window = serve(observer, Pace::default(), wall_clock(), Some(&root))

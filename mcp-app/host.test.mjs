@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeHost, retryAfter, RECONCILE_MS, connectionMessage } from './host.mjs';
+// These assertions read the Korean table; the language-specific cases live in locale.test.mjs.
+import { setLocale } from '../ui/locale.js';
+setLocale('ko');
 
 function rig() {
   let time = 0, revision = '1', fail = false;

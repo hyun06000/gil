@@ -127,7 +127,7 @@ test("승인 계획 도구는 기본 표에 없고, Skill 은 모델용 셋만 c
   const gate = SKILL.match(/A project uses the approved-plan profile only when[\s\S]*?Otherwise \(legacy projects, default builds, tools absent\) never require `gil_plan_\*`/);
   assert.ok(gate, "승인 계획 도구의 사용 조건(기록·supported·tools/list)이 Skill 에 없다");
   for (const name of model) assert.ok(gate[0].includes(`\`${name}\``), `조건문이 ${name} 를 들지 않는다`);
-  assert.match(gate[0], /`gil_context` says `승인 계획 프로필`/);
+  assert.match(gate[0], /`gil_context` names the approved-plan profile \(`Approved-plan profile`, `승인 계획 프로필`\)/);
   assert.match(gate[0], /`gil_plan_read` answers `supported: true`/);
   assert.match(gate[0], /connected `tools\/list` offers/);
   assert.match(SKILL, /Do not infer this from the OS or the install kind/);
@@ -225,8 +225,9 @@ test("회귀 방지: 도구 응답을 화면 성공으로 단정하는 문장이
 });
 
 test("이미 시작된 Project 의 거절 문구는 Core 가 실제로 말하는 글자다", () => {
-  const core = readFileSync(join(REPO, "src", "command.rs"), "utf8");
-  assert.ok(core.includes('"이미 걷고 있다 ({})."'), "Core 의 거절 문구가 바뀌었다 — Skill 도 함께 고친다");
+  // Core 의 문구는 언어 테이블에 산다 — 한국어 표의 그 줄이 Skill 이 인용하는 글자다.
+  const table = JSON.parse(readFileSync(join(REPO, "src", "i18n", "ko.json"), "utf8"));
+  assert.equal(table["cmd.start_exists.why"], "이미 걷고 있다 ({path}).", "Core 의 거절 문구가 바뀌었다 — Skill 도 함께 고친다");
   const flow = section(START);
   assert.match(flow, /「이미 걷고 있다」/, "Skill 이 Core 의 거절 문구를 모른다");
   assert.match(flow, /never reinitialised/);

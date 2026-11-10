@@ -14,6 +14,8 @@ use crate::{
 };
 #[cfg(not(feature = "product-safety"))]
 use crate::Usage;
+use crate::locale::text;
+use crate::tr;
 
 // Shared command execution. CLI owns ambient cwd/stdin; MCP supplies both explicitly.
 // Never chdir or spawn this binary to execute a domain action.
@@ -30,7 +32,7 @@ impl Invocation<'_> {
     }
     fn directory(&self) -> Result<PathBuf, String> {
         match self.root {
-            Root::Current => std::env::current_dir().map_err(|err| format!("지금 어디인지 알 수 없다: {err}")),
+            Root::Current => std::env::current_dir().map_err(|err| tr!("cmd.cwd_unknown", err = err)),
             Root::Exact(path) => Ok(path.to_path_buf()),
             Root::Outside => Ok(PathBuf::new()),
         }
@@ -43,7 +45,7 @@ impl Input<'_> {
             Self::Body(body) => Ok((*body).to_string()),
             Self::Stdin => {
                 let mut text = String::new();
-                io::stdin().read_to_string(&mut text).map_err(|err| format!("stdin 을 읽지 못했다: {err}"))?;
+                io::stdin().read_to_string(&mut text).map_err(|err| tr!("cmd.stdin_failed", err = err))?;
                 Ok(text)
             }
         }
@@ -58,7 +60,7 @@ pub fn cli(args: &[String]) -> Result<String, String> {
 /// Only the typed MCP action adapter can call this; no monitor/transport escape hatch.
 pub(crate) fn action(args: &[String], root: Option<&Path>, body: &str) -> Result<String, String> {
     if !matches!(args.first().map(String::as_str), Some("status" | "context" | "story" | "help" | "start" | "open" | "close" | "restore" | "revisit" | "cycle")) {
-        return Err("허용되지 않은 GIL 동작".into());
+        return Err(text("action.disallowed").into());
     }
     if root.is_some_and(|p| !p.is_absolute()) || (root.is_none() && args[0] != "help") {
         return Err(crate::RootError::NotAbsolute.to_string());
@@ -80,10 +82,10 @@ fn run(ctx: &Invocation<'_>, args: &[String]) -> Result<String, String> {
         // 두 도움말은 **잠금 계약이 다르다.** 정확 조회는 프로젝트를 찾지 않고, 상태 기반
         // 조회는 상태를 읽어야 하므로 다른 상태 명령과 같은 안전 경계를 지난다.
         "help" if args.len() > 2 => Err(refusal(
-            &format!("`gil help` 는 주제 하나만 받는다 ({}개를 받았다).", args.len() - 1),
-            "여러 낱말을 이어 붙여 자연어 검색으로 읽지 않는다.",
-            "주제 하나를 적거나, 인수 없이 지금 상태에 맞는 주제를 본다.",
-            "gil help <주제>",
+            &tr!("cmd.help_many.what", n = args.len() - 1),
+            text("cmd.help_many.why"),
+            text("cmd.help_many.todo"),
+            text("cmd.help_many.run"),
         )),
         "help" if args.get(1).is_some_and(|topic| topic == "close") => close_help(ctx),
         "help" if args.get(1).is_some() => help_topic(args.get(1).expect("방금 봤다")),
@@ -120,10 +122,7 @@ fn run(ctx: &Invocation<'_>, args: &[String]) -> Result<String, String> {
         "monitor" => monitor(ctx, args.get(1)),
         "mcp" => mcp(args.get(1).map(String::as_str)),
         "cycle" => cycle(ctx, args.get(1).map(String::as_str), args.get(2)),
-        other => Err(format!(
-            "{other:?} 는 gil 이 아는 명령이 아니다.\n\n{}",
-            help()
-        )),
+        other => Err(tr!("cmd.unknown_command", other = format!("{other:?}"), help = help())),
     }
 }
 
@@ -208,7 +207,7 @@ fn found_above(ctx: &Invocation<'_>, path: &Path) -> bool {
 }
 
 fn rules() -> Result<RuleSet, String> {
-    RuleSet::builtin().map_err(|err| format!("함께 실린 명세를 읽지 못했다: {err}"))
+    RuleSet::builtin().map_err(|err| tr!("cmd.spec_unreadable", err = err))
 }
 
 /// 프로젝트를 찾아 **잠그고** 세운다 — 상태를 읽는 모든 명령의 유일한 입구.
@@ -228,17 +227,14 @@ fn open_session(ctx: &Invocation<'_>) -> Result<Session, String> {
             .to_string());
         }
         None => {
-            return Err(format!(
-                "여기서도 그 위 어디에서도 걷기를 못 찾았다 ({}) — `gil start` 로 시작한다",
-                crate::STATE_PATH
-            ));
+            return Err(tr!("cmd.no_walk_found", path = crate::STATE_PATH));
         }
     };
 
     ProjectSession::open(rules()?, &path).map_err(|err| match err {
         // 방금 있는 것을 보고 왔다. 그새 사라졌다면 그건 다른 이야기다.
         SessionError::Store(StoreError::NotFound { .. }) => {
-            format!("저장된 것이 사라졌다: {}", ctx.said_path(&path))
+            tr!("cmd.state_vanished", path = ctx.said_path(&path))
         }
         other => say(other),
     })
@@ -266,10 +262,9 @@ fn start(ctx: &Invocation<'_>) -> Result<String, String> {
     match find_gil(ctx)? {
         Some(Found::State(existing)) => {
             return Err(refusal(
-                "여기서 새로 시작할 수 없다.",
-                &format!("이미 걷고 있다 ({}).", ctx.said_path(&existing)),
-                "여기서 따로 시작하면 한 프로젝트에 기록이 둘이 된다.\n\
-                 정말 다시 시작하려면 그 파일을 직접 치워라 — gil 은 적힌 사고를 지우지 않는다.",
+                text("cmd.start_exists.what"),
+                &tr!("cmd.start_exists.why", path = ctx.said_path(&existing)),
+                text("cmd.start_exists.todo"),
                 "gil status",
             ));
         }
@@ -286,10 +281,9 @@ fn start(ctx: &Invocation<'_>) -> Result<String, String> {
     // 무엇이 이미 있는지 본다 — 두 `gil start` 가 나란히 「비어 있다」를 읽지 못하게.
     let session = ProjectSession::start_guided(rules()?, &state_path_here(ctx)?).map_err(|err| match err {
         SessionError::AlreadyStarted { path } => refusal(
-            "여기서 새로 시작할 수 없다.",
-            &format!("이미 걷고 있다 ({path})."),
-            "여기서 따로 시작하면 한 프로젝트에 기록이 둘이 된다.\n\
-             정말 다시 시작하려면 그 파일을 직접 치워라 — gil 은 적힌 사고를 지우지 않는다.",
+            text("cmd.start_exists.what"),
+            &tr!("cmd.start_exists.why", path = path),
+            text("cmd.start_exists.todo"),
             "gil status",
         ),
         other => other.to_string(),
@@ -312,7 +306,7 @@ pub(crate) fn start_visual_action(root: &Path) -> Result<String, String> {
         let external = crate::project_state::external_storage_root(root)?;
         let inline = root.join(".gil");
         if !external.exists() && inline.exists() && !root.join(crate::STATE_PATH).is_file() {
-            return Err("기존 .gil 흔적이 있다. 기록 여부를 확정할 수 없다. 모두 보존하고 시작을 반복하거나 삭제·이관하지 않는다.".into());
+            return Err(text("cmd.visual.trace").into());
         }
     }
     #[cfg(windows)]
@@ -328,32 +322,32 @@ pub(crate) fn start_visual_action(root: &Path) -> Result<String, String> {
             if dir.is_dir() && regular("state.yaml") && regular("project.lock") {
                 #[cfg(windows)]
                 ProjectSession::open_read_only_at(rules()?, root, &state)
-                    .map_err(|e| format!("기존 기록을 확인하지 못했다. 모두 보존하고 시작을 반복하지 않는다.\n{e}"))?;
+                    .map_err(|e| tr!("cmd.visual.existing_unverified", e = e))?;
                 #[cfg(not(windows))]
                 ProjectSession::open_read_only(rules()?, &state)
-                    .map_err(|e| format!("기존 기록을 확인하지 못했다. 모두 보존하고 시작을 반복하지 않는다.\n{e}"))?;
+                    .map_err(|e| tr!("cmd.visual.existing_unverified", e = e))?;
                 #[cfg(windows)]
                 if externalized {
-                    return Ok("기존 GIL 기록을 Windows 개인 앱 데이터의 보호된 저장소로 복사하고 검증했다. 원래 기록은 변경하거나 삭제하지 않았다. 작업 폴더는 그대로 사용한다.\n".into());
+                    return Ok(text("cmd.visual.externalized").into());
                 }
-                return Err("여기서 새로 시작할 수 없다. 이미 걷고 있다.\n기존 기록을 보존한다. gil status / gil context로 현재 자리에서 이어간다.\n".into());
+                return Err(text("cmd.visual.already_walking").into());
             }
-            return Err("기존 .gil 흔적이 있다. 기록 여부를 확정할 수 없다. 모두 보존하고 시작을 반복하거나 삭제·이관하지 않는다.".into());
+            return Err(text("cmd.visual.trace").into());
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {},
-        Err(e) => return Err(format!("기록 여부를 확인하지 못했다. 모두 보존하고 시작을 반복하지 않는다.\n{e}")),
+        Err(e) => return Err(tr!("cmd.visual.record_unverified", e = e)),
     }
     #[cfg(windows)]
     let session = {
         let storage_root = crate::project_state::external_storage_root(root)?;
         std::fs::create_dir_all(&storage_root)
-            .map_err(|e| format!("Windows 개인 저장소를 준비하지 못했다: {e}"))?;
+            .map_err(|e| tr!("cmd.visual.windows_store", e = e))?;
         ProjectSession::start_visual_guided(rules()?, root, &storage_root)
     };
     #[cfg(not(windows))]
     let session = ProjectSession::start_visual_guided(rules()?, root, root);
     let session = session
-        .map_err(|e| format!("시작 완료 여부를 확인해야 한다. 남은 기록을 보존하고 시작을 반복하지 않는다.\n{e}"))?;
+        .map_err(|e| tr!("cmd.visual.start_unknown", e = e))?;
     Ok(start_receipt(&ctx, &session))
 }
 
@@ -368,11 +362,11 @@ pub(crate) fn visual_read_action(root: &Path, command: &str) -> Result<String, S
     match std::fs::symlink_metadata(&gil) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(crate::RootError::NoProjectHere.to_string()),
         Ok(dir) if dir.is_dir() => {},
-        _ => return Err("기록 여부를 확인할 수 없다. 기존 흔적을 보존하고 시작을 반복하지 않는다.".into()),
+        _ => return Err(text("cmd.visual.read_unverified").into()),
     }
     for name in ["state.yaml", "project.lock"] {
         if !std::fs::symlink_metadata(gil.join(name)).is_ok_and(|m| m.is_file()) {
-            return Err("기록 여부를 확인할 수 없다. 기존 흔적을 보존하고 시작을 반복하지 않는다.".into());
+            return Err(text("cmd.visual.read_unverified").into());
         }
     }
     #[cfg(windows)]
@@ -384,7 +378,7 @@ pub(crate) fn visual_read_action(root: &Path, command: &str) -> Result<String, S
     match command {
         "status" => Ok(session.status_said()),
         "context" => Ok(format!("{}{}", context(session.project()), crate::project_resume::status(root))),
-        _ => Err("허용되지 않은 읽기".into()),
+        _ => Err(text("cmd.visual.read_disallowed").into()),
     }
 }
 
@@ -393,22 +387,15 @@ fn start_receipt(ctx: &Invocation<'_>, session: &ProjectSession) -> String {
     #[cfg(windows)]
     let record = match session.root() {
         Ok(root) if session.state_path() == root.join(crate::STATE_PATH) => ctx.said_path(session.state_path()),
-        _ => "Windows 개인 앱 데이터의 보호된 기록".to_owned(),
+        _ => text("cmd.windows_record").to_owned(),
     };
     #[cfg(not(windows))]
     let record = ctx.said_path(session.state_path());
-    format!(
-        "프로젝트를 시작했다.\n{}\
-         현재: {} · {}\n\n\
-         다음\n  \
-         사용자가 무엇을 원하는지 확인한다.\n\n\
-         실행\n  \
-         gil open\n\n\
-         기록: {}\n",
-        session.project().current_chain().map(|chain| format!("Chain: {} · open · Entry {}\n", chain.id(), chain.entry_snapshot())).unwrap_or_default(),
-        cycle.id().to_ref(),
-        cycle.kind(),
-        record
+    tr!("cmd.start_receipt",
+        chain = session.project().current_chain().map(|chain| tr!("cmd.start_chain_line", id = chain.id(), entry = chain.entry_snapshot())).unwrap_or_default(),
+        cycle = cycle.id().to_ref(),
+        kind = cycle.kind(),
+        record = record
     ) + &crate::project_resume::status(&session.root().expect("session root"))
 }
 
@@ -434,7 +421,7 @@ enum Place {
 
 fn place(session: &Session) -> Place {
     if let Some(chain) = session.project().current_chain() {
-        if chain.is_closed() { return Place::Nothing("Chain이 닫혔다. 새 주제를 시작하려면 gil open chain을 명시적으로 호출한다".into()); }
+        if chain.is_closed() { return Place::Nothing(text("cmd.chain_closed_open_chain").into()); }
         if chain.awaiting_report() { return Place::CloseThisChain; }
     }
     let cycles = session.project().cycles();
@@ -468,7 +455,7 @@ fn place(session: &Session) -> Place {
     }
     match cycle.can_close() {
         true => Place::CloseThisCycle,
-        false => Place::Nothing("이 Cycle 안에서 더 갈 곳이 없다".to_string()),
+        false => Place::Nothing(text("cmd.nowhere_in_cycle").to_string()),
     }
 }
 
@@ -486,30 +473,30 @@ fn open_with(ctx: &Invocation<'_>, mut session: Session, name: Option<&String>) 
     if name.is_some_and(|name| name == "chain") {
         let id = session.open_child_chain().map_err(|err| err.to_string())?;
         session.commit().map_err(|err| err.to_string())?;
-        return Ok(format!("열었다: {id} · Opening Interview {}\n이전 Chain Report를 gil context로 읽고 새 주제를 사용자와 확인한다.\n", session.project().current_cycle().id().to_ref()));
+        return Ok(tr!("cmd.opened_chain", lead = text("receipt.opened_lead"), id = id, cycle = session.project().current_cycle().id().to_ref()));
     }
     match place(&session) {
         Place::CloseThisStep => {
             let cycle = session.project().cycles().current();
             let here = here_ref(cycle).expect("열려 있는 자리가 있다");
             Err(refusal(
-                "지금은 열 자리가 아니다.",
-                &format!("{here} 이(가) 아직 열려 있다."),
-                "그 자리의 Report 를 적어 먼저 닫는다.",
+                text("cmd.not_open_place"),
+                &tr!("cmd.still_open", here = here),
+                text("cmd.close_it_first"),
                 "gil close",
             ))
         }
         Place::CloseThisChain => Err(session.project().current_chain().unwrap().close_hint()),
         Place::CloseThisCycle => Err(refusal(
-            "지금은 열 자리가 아니다.",
-            "이 Cycle 안의 판정이 닫혀 이제 Cycle 을 닫을 자리다.",
-            "Cycle Report 를 적어 이 Cycle 을 닫는다.",
+            text("cmd.not_open_place"),
+            text("cmd.cycle_judged.why"),
+            text("cmd.cycle_judged.todo"),
             "gil close",
         )),
         Place::Nothing(why) => Err(refusal(
-            "여기서는 아무것도 열 수 없다.",
+            text("cmd.nothing_to_open"),
             &why,
-            "지금 어디인지 확인한다.",
+            text("cmd.check_where"),
             "gil status",
         )),
         Place::Step(openable) => open_step(ctx, &mut session, name, &openable),
@@ -526,9 +513,9 @@ fn open_step(ctx: &Invocation<'_>,
     let kind = match name {
         Some(name) => NodeKind::parse(name).ok_or_else(|| {
             refusal(
-                &format!("{name:?} 는 gil 이 아는 종류가 아니다."),
-                "이름을 잘못 적었다.",
-                &format!("지금 열 수 있는 것: {}", names(openable)),
+                &tr!("cmd.unknown_kind", name = format!("{name:?}")),
+                text("cmd.misspelled"),
+                &tr!("cmd.now_openable", names = names(openable)),
                 "gil open",
             )
         })?,
@@ -537,13 +524,10 @@ fn open_step(ctx: &Invocation<'_>,
             [only] => *only,
             many => {
                 return Err(refusal(
-                    "무엇을 열지 정해야 한다.",
-                    &format!("지금 열 수 있는 것이 {}개다.", many.len()),
-                    &format!(
-                        "종류를 골라 적는다.\n  {}",
-                        choices(session.project().cycles().current(), many)
-                    ),
-                    "gil open <종류>",
+                    text("cmd.choose_kind"),
+                    &tr!("cmd.openable_count", n = many.len()),
+                    &tr!("cmd.pick_kind", choices = choices(session.project().cycles().current(), many)),
+                    text("cmd.run_open_kind"),
                 ));
             }
         },
@@ -560,9 +544,9 @@ fn open_step(ctx: &Invocation<'_>,
         // 두 자리에서 서로 다르게 말하게 된다. 더하는 것은 복구로 가는 길뿐이다.
         .map_err(|err| {
             let said = refusal(
-                &format!("{kind} 를 열 수 없다."),
+                &tr!("cmd.cannot_open", kind = kind),
                 &err.to_string(),
-                &format!("지금 열 수 있는 것: {}", names(openable)),
+                &tr!("cmd.now_openable", names = names(openable)),
                 "gil open",
             );
             with_help(&Refusal::Session(&err), said)
@@ -591,13 +575,10 @@ fn open_cycle(
             return open_this_cycle(session, *only, branch);
         }
         return Err(refusal(
-            "무엇을 열지 정해야 한다.",
-            &format!("지금 열 수 있는 것이 {}개다.", openable.len()),
-            &format!(
-                "종류를 골라 적는다.\n  {}",
-                cycle_choices(session, openable)
-            ),
-            "gil open <종류>",
+            text("cmd.choose_kind"),
+            &tr!("cmd.openable_count", n = openable.len()),
+            &tr!("cmd.pick_kind", choices = cycle_choices(session, openable)),
+            text("cmd.run_open_kind"),
         ));
     };
     let kind = CycleKind::parse(name).ok_or_else(|| {
@@ -605,23 +586,19 @@ fn open_cycle(
         // 사람이 할 일이 다르다 — 후자는 지금 여는 것이 무엇인지부터 알아야 한다.
         let (why, todo) = match NodeKind::parse(name) {
             Some(step) => (
-                format!("{step} 은(는) Step 종류이고, 지금은 Cycle 을 여는 자리다."),
-                format!(
-                    "Cycle 을 먼저 연다. 그 안에서 첫 Step 을 여는 것이 다음 걸음이다.\n\
-                     지금 열 수 있는 것: {}",
-                    cycle_names(openable)
-                ),
+                tr!("cmd.step_not_cycle", step = step),
+                tr!("cmd.open_cycle_first", names = cycle_names(openable)),
             ),
             None => (
-                "이름을 잘못 적었다.".to_string(),
-                format!("지금 열 수 있는 것: {}", cycle_names(openable)),
+                text("cmd.misspelled").to_string(),
+                tr!("cmd.now_openable", names = cycle_names(openable)),
             ),
         };
         refusal(
-            &format!("{name:?} 로는 지금 열 수 없다."),
+            &tr!("cmd.cannot_open_with", name = format!("{name:?}")),
             &why,
             &todo,
-            "gil open <종류>",
+            text("cmd.run_open_kind"),
         )
     })?;
     open_this_cycle(session, kind, branch)
@@ -640,9 +617,9 @@ fn open_this_cycle(
     }
     .map_err(|err| {
         let said = refusal(
-            &format!("{kind} Cycle 을 열 수 없다."),
+            &tr!("cmd.cannot_open_cycle", kind = kind),
             &err.to_string(),
-            "지금 어디인지 확인한다.",
+            text("cmd.check_where"),
             "gil status",
         );
         with_help(&Refusal::Session(&err), said)
@@ -686,37 +663,37 @@ fn close(ctx: &Invocation<'_>) -> Result<String, String> {
             let report = read_report(ctx, &hint)?;
             let id = session.close_chain(report).map_err(|err| format!("{err}\n{hint}"))?;
             write(&session)?;
-            Ok(format!("닫았다: {id} · {}\nChain Report와 Exit을 보존했다. Will·Journey 판은 늘지 않는다.\n", session.project().current_chain().unwrap().report().unwrap().get("verdict").unwrap()))
+            Ok(tr!("cmd.closed_chain", lead = text("receipt.closed_lead"), id = id, verdict = session.project().current_chain().unwrap().report().unwrap().get("verdict").unwrap()))
         },
         Place::Step(openable) => Err(refusal(
-            "닫을 것이 없다.",
-            "열려 있는 자리가 없다.",
-            &format!("먼저 다음 자리를 연다 — 지금 열 수 있는 것: {}", names(&openable)),
+            text("cmd.nothing_to_close"),
+            text("cmd.no_open_place"),
+            &tr!("cmd.open_next_first", names = names(&openable)),
             "gil open",
         )),
         Place::Cycle(_) => Err(refusal(
-            "닫을 것이 없다.",
-            "이 Cycle 은 이미 닫혔다.",
-            "다음 Cycle 을 연다.",
-            "gil open <종류>",
+            text("cmd.nothing_to_close"),
+            text("cmd.cycle_already_closed"),
+            text("cmd.open_next_cycle"),
+            text("cmd.run_open_kind"),
         )),
         Place::Branch(openable) => Err(refusal(
-            "닫을 것이 없다.",
-            "되돌아온 자리라 아직 새 Cycle 이 없다.",
-            "이 자리 아래에 새 Cycle 을 연다.",
+            text("cmd.nothing_to_close"),
+            text("cmd.revisited_no_cycle"),
+            text("cmd.open_cycle_below"),
             &format!("gil open {}", cycle_names(&openable)),
         )),
         Place::Nothing(why) => Err(refusal(
-            "닫을 것이 없다.",
+            text("cmd.nothing_to_close"),
             &why,
-            "지금 어디인지 확인한다.",
+            text("cmd.check_where"),
             "gil status",
         )),
     }
 }
 
 fn typed_verify_hint(here: crate::StepRef) -> String {
-    format!("\n이 프로젝트는 시각 보고서 형식(format 5/7)이다. Verify는 일반 텍스트 close로 닫을 수 없다. 연결된 gil_close의 typed 입력을 쓴다.\n  project_root와 report(실제 execution/result/evidence_files)에 다음 두 인자를 함께 보낸다:\n  expected_owner: {{\"kind\":\"step\",\"ref\":\"{here}\"}}\n  이미지가 필요 없는 문서 증거라면 visuals: {{\"attachments\":[],\"uses\":[],\"declaration\":{{\"state\":\"not_needed\",\"reason\":\"이미지가 필요 없는 실제 이유\"}}}}\n  새 PNG는 attachments에 key/path/source_kind/source_description, uses에 source: {{\"kind\":\"new\",\"key\":\"같은 첨부 key\"}}와 caption/alt/purpose를 적고 declaration: {{\"state\":\"attached\"}}로 닫는다. uses는 declaration 밖에 둔다. stored는 이미 확정된 owner/asset_id/sha256의 인용에만 쓴다. 두 PNG의 정확한 JSON은 gil_help topic report/visuals (CLI: gil help visuals)에 있다. 선언을 not_needed로 바꿔 오류를 우회하거나 일반 close를 반복하지 않는다.\n")
+    tr!("cmd.typed_verify_hint", here = here)
 }
 
 fn close_step(ctx: &Invocation<'_>, session: &mut Session) -> Result<String, String> {
@@ -745,7 +722,7 @@ fn close_step(ctx: &Invocation<'_>, session: &mut Session) -> Result<String, Str
         let said = match err.is_receipt() {
             true => err.to_string(),
             false => refusal(
-                &format!("{here} · {kind} 를 닫을 수 없다."),
+                &tr!("cmd.cannot_close", here = here, kind = kind),
                 &err.to_string(),
                 &format!("{}\n\n{hint}", fix_it(ctx)),
                 "gil close",
@@ -770,7 +747,7 @@ fn close_cycle(ctx: &Invocation<'_>, session: &mut Session) -> Result<String, St
         let said = match err.is_receipt() {
             true => err.to_string(),
             false => refusal(
-                &format!("{here} · {kind} 를 닫을 수 없다."),
+                &tr!("cmd.cannot_close", here = here, kind = kind),
                 &err.to_string(),
                 &format!("{}\n\n{hint}", fix_it(ctx)),
                 "gil close",
@@ -799,10 +776,9 @@ fn restore(ctx: &Invocation<'_>, extra: Option<&String>) -> Result<String, Strin
         return Err(with_help(
             &Refusal::Usage(Usage::RestoreTakesNoArgument),
             refusal(
-                &format!("`gil restore` 는 {extra:?} 를 받지 않는다."),
-                "되돌아갈 세계는 지금 위치가 이미 정한다 — 고르는 값이 아니다.\n\
-                 일부 파일만 되돌리면 그 결과는 어느 Snapshot 에도 속하지 않는 세계가 된다.",
-                "인수 없이 그대로 실행한다.",
+                &tr!("cmd.restore_no_arg", extra = format!("{extra:?}")),
+                text("cmd.restore_why"),
+                text("cmd.run_without_args"),
                 "gil restore",
             ),
         ));
@@ -813,9 +789,9 @@ fn restore(ctx: &Invocation<'_>, extra: Option<&String>) -> Result<String, Strin
         let said = match err.is_receipt() {
             true => err.to_string(),
             false => refusal(
-                "Artifact 세계를 복원하지 못했다.",
+                text("cmd.restore_failed"),
                 &err.to_string(),
-                "지금 어디인지 확인한다.",
+                text("cmd.check_where"),
                 "gil status",
             ),
         };
@@ -832,19 +808,16 @@ fn restore(ctx: &Invocation<'_>, extra: Option<&String>) -> Result<String, Strin
 #[cfg(not(feature = "product-safety"))]
 fn restored(session: &Session, done: &crate::Restored) -> String {
     let mut out = match done.no_op {
-        true => format!(
-            "복원할 변경이 없다.\n\n현재 Artifact 세계는 기준 Snapshot {} 와 같다.\n",
-            done.world
-        ),
+        true => tr!("cmd.restore_noop", world = done.world),
         false => {
-            let mut out = format!("Artifact 세계를 {} 로 복원했다.\n\n", done.world);
+            let mut out = tr!("cmd.restored_to", world = done.world);
             for (label, count) in [
-                ("교체", done.replaced),
-                ("생성", done.created),
-                ("삭제", done.deleted),
+                (text("cmd.count.replaced"), done.replaced),
+                (text("cmd.count.created"), done.created),
+                (text("cmd.count.deleted"), done.deleted),
             ] {
                 if count > 0 {
-                    out.push_str(&format!("{label}  {count}개\n"));
+                    out.push_str(&tr!("cmd.count_line", label = label, count = count));
                 }
             }
             out
@@ -852,7 +825,7 @@ fn restored(session: &Session, done: &crate::Restored) -> String {
     };
 
     // **없는 것을 지어내지 않는다.** 열린 자리가 없는 합법적 경계면 Cycle 만 말한다.
-    out.push_str("\n현재 위치\n");
+    out.push_str(text("cmd.current_position"));
     let cycle = session.project().cycles().current();
     match here_ref(cycle) {
         Some(here) => {
@@ -866,7 +839,7 @@ fn restored(session: &Session, done: &crate::Restored) -> String {
         None => out.push_str(&format!("  {} · {}\n", cycle.id().to_ref(), cycle.kind())),
     }
     match session.project().active_will() {
-        Some(will) => out.push_str(&format!("  {} · 유지\n", will.id())),
+        Some(will) => out.push_str(&tr!("cmd.will_kept", will = will.id())),
         None => {}
     }
     out
@@ -883,10 +856,10 @@ fn restored(session: &Session, done: &crate::Restored) -> String {
 /// 고르게 하면 근거와 이동이 갈린다 — Snapshot 을 고를 수 없는 것과 같은 까닭이다.
 #[cfg(feature = "product-safety")]
 fn revisit(ctx: &Invocation<'_>, extra: Option<&String>) -> Result<String, String> {
-    if extra.is_some() { return Err("gil revisit은 인수를 받지 않는다".into()); }
+    if extra.is_some() { return Err(text("cmd.revisit_no_arg_short").into()); }
     let mut session = open_session(ctx)?;
     let result = session.resume_revisit()?;
-    Ok(format!("보존 후 되돌아갔다. 실패 기록과 증거는 유지했다.\n{}\n", result))
+    Ok(tr!("cmd.revisited_preserved", result = result))
 }
 
 #[cfg(not(feature = "product-safety"))]
@@ -895,10 +868,9 @@ fn revisit(ctx: &Invocation<'_>, extra: Option<&String>) -> Result<String, Strin
         return Err(with_help(
             &Refusal::Usage(Usage::RevisitTakesNoArgument),
             refusal(
-                &format!("`gil revisit` 는 {extra:?} 를 받지 않는다."),
-                "되돌아갈 곳은 닫을 때 Cycle Report 에 이미 확정됐다 — 고르는 값이 아니다.\n\
-                 여기서 다시 고르면 왜 그리로 가는지와 실제 이동이 갈린다.",
-                "인수 없이 그대로 실행한다.",
+                &tr!("cmd.revisit_no_arg", extra = format!("{extra:?}")),
+                text("cmd.revisit_why"),
+                text("cmd.run_without_args"),
                 "gil revisit",
             ),
         ));
@@ -917,9 +889,9 @@ fn revisit(ctx: &Invocation<'_>, extra: Option<&String>) -> Result<String, Strin
 #[cfg(feature = "product-safety")]
 fn product_artifact_rollback_refusal(command: &str) -> String {
     refusal(
-        &format!("이 제품판에서는 `gil {command}` 를 사용할 수 없다."),
-        "현재 Artifact 추적 범위가 안전하게 제한되지 않아, 복원하면 추적하지 않아야 할 파일까지 바뀔 수 있다.",
-        "파일은 한 글자도 바꾸지 않았다. 필요한 변경은 Git 또는 별도 백업에서 직접 복구한다.",
+        &tr!("cmd.product_rollback.what", command = command),
+        text("cmd.product_rollback.why"),
+        text("cmd.product_rollback.todo"),
         "gil status",
     )
 }
@@ -941,8 +913,7 @@ fn revisit_cycle(session: &mut Session) -> Result<String, String> {
 #[cfg(not(feature = "product-safety"))]
 fn revisited(session: &Session, done: &crate::CycleRevisited) -> String {
     let cycles = session.project().cycles();
-    let mut out = String::from("되돌아갔다
-");
+    let mut out = String::from(text("cmd.revisited_head"));
 
     let from = cycles
         .node(done.moved.from.into())
@@ -950,53 +921,29 @@ fn revisited(session: &Session, done: &crate::CycleRevisited) -> String {
     let verdict = from
         .report()
         .and_then(|report| report.get("verdict"))
-        .unwrap_or("판정 없음");
-    out.push_str(&format!(
-        "  출처: {} · {} · {verdict}
-",
-        done.moved.from,
-        from.kind()
-    ));
-    out.push_str(&format!(
-        "  대상: {} · {}
-",
-        done.moved.target,
-        cycles.current().status()
-    ));
+        .unwrap_or(text("cmd.no_verdict"));
+    out.push_str(&tr!("cmd.revisit_source", from = done.moved.from, kind = from.kind(), verdict = verdict));
+    out.push_str(&tr!("cmd.revisit_target", target = done.moved.target, status = cycles.current().status()));
 
-    out.push_str("
-Artifact 세계
-");
+    out.push_str(text("cmd.artifact_world_head"));
     match done.world.no_op {
-        true => out.push_str(&format!(
-            "  복원할 변경이 없다 — 현재 세계는 {} 와 같다
-",
-            done.world.world
-        )),
+        true => out.push_str(&tr!("cmd.world_noop", world = done.world.world)),
         false => {
-            out.push_str(&format!("  {} 로 복원했다
-", done.world.world));
+            out.push_str(&tr!("cmd.world_restored", world = done.world.world));
             for (label, count) in [
-                ("교체", done.world.replaced),
-                ("생성", done.world.created),
-                ("삭제", done.world.deleted),
+                (text("cmd.count.replaced"), done.world.replaced),
+                (text("cmd.count.created"), done.world.created),
+                (text("cmd.count.deleted"), done.world.deleted),
             ] {
                 if count > 0 {
-                    out.push_str(&format!("  {label}  {count}개
-"));
+                    out.push_str(&tr!("cmd.count_line_indented", label = label, count = count));
                 }
             }
         }
     }
 
     let existence = session.project().current_existence();
-    out.push_str(&format!(
-        "
-존재: {} · {}
-",
-        existence.id(),
-        existence.current_journey()
-    ));
+    out.push_str(&tr!("cmd.existence_line", existence = existence.id(), journey = existence.current_journey()));
     out.push_str(&branch_block());
     out
 }
@@ -1005,21 +952,11 @@ Artifact 세계
 #[cfg(not(feature = "product-safety"))]
 fn branch_block() -> String {
     let openable = CycleKind::ALL.to_vec();
-    format!(
-        "
-지금 할 일
-  이 자리 아래에 새 Cycle 을 연다.
-
-실행
-  {}
-",
-        openable
+    tr!("cmd.branch_block", commands = openable
             .iter()
             .map(|kind| format!("gil open {}", kind.as_str()))
             .collect::<Vec<_>>()
-            .join("
-  ")
-    )
+            .join("\n  "))
 }
 
 /// `gil monitor` — **사람이 지금 상태와 그 근거를 읽는 화면.**
@@ -1047,10 +984,9 @@ fn monitor(ctx: &Invocation<'_>, extra: Option<&String>) -> Result<String, Strin
         Some("--serve") => return watch_here(ctx),
         Some(other) => {
             return Err(refusal(
-                &format!("`gil monitor` 는 {other:?} 를 받지 않는다."),
-                "지금 상태를 그대로 보이는 명령이라 고를 것이 거의 없다.\n\
-                 한 번 읽거나, 문서 하나로 저장하거나, 계속 지켜보거나 셋뿐이다.",
-                "인수 없이 실행하거나 `--html` 이나 `--serve` 하나만 적는다.",
+                &tr!("cmd.monitor_no_arg", other = format!("{other:?}")),
+                text("cmd.monitor_why"),
+                text("cmd.monitor_todo"),
                 "gil monitor · gil monitor --html · gil monitor --serve",
             ));
         }
@@ -1085,31 +1021,28 @@ fn watch_here(ctx: &Invocation<'_>) -> Result<String, String> {
             .to_string());
         }
         None => {
-            return Err(format!(
-                "여기서도 그 위 어디에서도 걷기를 못 찾았다 ({}) — `gil start` 로 시작한다",
-                crate::STATE_PATH
-            ));
+            return Err(tr!("cmd.no_walk_found", path = crate::STATE_PATH));
         }
     };
     let mut server = crate::serve_monitor(rules()?, &path)?;
 
     // **주소 한 줄뿐이다.** token 을 따로 되풀이하지 않고, 프로젝트 경로도 `.gil` 자리도
     // 창고 주소도 적지 않는다 — 사람이 이 화면을 그대로 붙여 넣을 자리가 있기 때문이다.
-    println!("GIL Monitor가 이 주소에서 현재 프로젝트를 보여 준다.");
+    println!("{}", text("cmd.serve.intro"));
     println!("{}", server.url());
     println!();
     if server.blind().is_some() {
-        println!("이 실행에서는 파일 감시가 서지 못했다 — 화면은 느린 주기로만 새로 관측한다.");
+        println!("{}", text("cmd.serve.blind"));
         println!();
     }
-    println!("이 주소는 이 실행 동안만 유효하다.");
-    println!("종료하려면 Ctrl-C.");
+    println!("{}", text("cmd.serve.valid"));
+    println!("{}", text("cmd.serve.quit"));
 
     server.wait().map_err(|said| {
         refusal(
-            &format!("Monitor 를 계속 지켜볼 수 없다 — {said}."),
-            "Ctrl-C 를 받는 자리는 프로세스에 하나뿐이라, 둘이 나눠 가질 수 없다.",
-            "먼저 열어 둔 `gil monitor --serve` 를 끝낸 뒤 다시 실행한다.",
+            &tr!("cmd.serve_busy", said = said),
+            text("cmd.serve_busy_why"),
+            text("cmd.serve_busy_todo"),
             "gil monitor --serve",
         )
     })?;
@@ -1124,15 +1057,15 @@ fn mcp(sub: Option<&str>) -> Result<String, String> {
     match sub {
         Some("--serve") => crate::mcp::serve_stdio().map(|()| String::new()),
         Some(other) => Err(refusal(
-            &format!("{other:?} 는 `gil mcp` 가 아는 것이 아니다."),
-            "`gil mcp` 는 `--serve` 하나만 안다.",
-            "이 문은 Agent 가 stdio 로 부르는 자리다. 사람이 읽을 것은 여기서 나오지 않는다.",
+            &tr!("cmd.mcp_unknown", other = format!("{other:?}")),
+            text("cmd.mcp_only_serve"),
+            text("cmd.mcp_agent_door"),
             "gil mcp --serve",
         )),
         None => Err(refusal(
-            "`gil mcp` 뒤에 무엇을 할지 적지 않았다.",
-            "이 명령은 스스로 서서 stdin 을 기다리는 자리라, 실수로 서면 터미널이 멈춘 것처럼 보인다.",
-            "그래서 명시적으로 적게 한다.",
+            text("cmd.mcp_missing"),
+            text("cmd.mcp_missing_why"),
+            text("cmd.mcp_missing_todo"),
             "gil mcp --serve",
         )),
     }
@@ -1161,15 +1094,15 @@ fn cycle(ctx: &Invocation<'_>, sub: Option<&str>, argument: Option<&String>) -> 
             }
         }
         Some(other) => Err(refusal(
-            &format!("{other:?} 는 `gil cycle` 이 아는 것이 아니다."),
-            "`gil cycle` 은 `open` 과 `close` 만 안다.",
-            "이제 두 계층을 함께 판정하는 짧은 이름을 쓴다.",
+            &tr!("cmd.cycle_unknown", other = format!("{other:?}")),
+            text("cmd.cycle_only"),
+            text("cmd.cycle_short_names"),
             "gil open · gil close",
         )),
         None => Err(refusal(
-            "`gil cycle` 뒤에 무엇을 할지 적지 않았다.",
-            "무엇을 하려는지 알 수 없다.",
-            "이제 두 계층을 함께 판정하는 짧은 이름을 쓴다.",
+            text("cmd.cycle_missing"),
+            text("cmd.cycle_missing_why"),
+            text("cmd.cycle_short_names"),
             "gil open · gil close",
         )),
     }
@@ -1196,38 +1129,26 @@ fn close_help(ctx: &Invocation<'_>) -> Result<String, String> {
         Place::CloseThisChain => {
             let hint = session.project().current_chain().unwrap().close_hint();
             return Ok(if matches!(ctx.input, Input::Body(_)) {
-                hint.replacen("Chain Report를 gil close로 제출한다.", "Chain Report 본문을 gil_close({project_root, report})의 report 문자열로 제출한다.", 1)
+                hint.replacen(&format!("{}.", text("receipt.marker.chain_report")), text("cmd.chain_report_mcp"), 1)
             } else { hint });
         },
         // 닫을 자리가 아니면 **무엇을 먼저 해야 하는지**를 말한다.
         Place::Step(openable) => {
-            return Ok(format!(
-                "지금은 닫을 자리가 아니다.\n\n먼저 할 일\n  다음 걸음을 연다 — \
-                 열 수 있는 것: {}\n\n실행\n  gil open --help\n",
-                names(&openable)
-            ));
+            return Ok(tr!("cmd.help_not_close_step", names = names(&openable)));
         }
         Place::Cycle(_) => {
-            return Ok(String::from(
-                "지금은 닫을 자리가 아니다.\n\n먼저 할 일\n  이 Cycle 은 이미 닫혔다. \
-                 다음 Cycle 을 연다.\n\n실행\n  gil open --help\n",
-            ));
+            return Ok(text("cmd.help_not_close_cycle").to_string());
         }
         Place::Branch(_) => {
-            return Ok(String::from(
-                "지금은 닫을 자리가 아니다.\n\n먼저 할 일\n  되돌아온 자리다. \
-                 이 자리 아래에 새 Cycle 을 연다.\n\n실행\n  gil open --help\n",
-            ));
+            return Ok(text("cmd.help_not_close_branch").to_string());
         }
         Place::Nothing(why) => {
-            return Ok(format!(
-                "지금은 닫을 자리가 아니다.\n\n이유\n  {why}\n\n실행\n  gil status\n"
-            ));
+            return Ok(tr!("cmd.help_not_close_nothing", why = why));
         }
     };
 
     let Some(contract) = contract else {
-        return Ok(String::from("지금 자리의 Close 계약을 문법에서 찾지 못했다.\n"));
+        return Ok(text("cmd.help_no_contract").to_string());
     };
     let mut skeleton = skeleton_for(&contract, cycle, Some(ctx));
     if session.project().visual_state.is_some() {
@@ -1235,13 +1156,11 @@ fn close_help(ctx: &Invocation<'_>) -> Result<String, String> {
             skeleton.push_str(&typed_verify_hint(cycle.step_ref(id)));
         }
     }
-    Ok(format!(
-        "닫을 대상\n  {}\n\n필요한 Report\n{}\n입력 골격\n{}{}\n",
-        contract.subject(),
-        contract.constraints("  "),
-        skeleton, if session.can_confirm_artifact() {
-            "\n추가 종료 조건: 실제 증거 파일을 저장하고 evidence_files에 상대 경로를 한 줄에 하나씩 적는다. 모든 파일은 Snapshot에 있고 비어 있지 않아야 하며, 적어도 하나는 기준 세계보다 새롭거나 내용이 달라야 한다.\n"
-        } else { "" }
+    Ok(tr!("cmd.help_close",
+        subject = contract.subject(),
+        constraints = contract.constraints("  "),
+        skeleton = skeleton,
+        extra = if session.can_confirm_artifact() { text("cmd.help_close_evidence") } else { "" }
     ))
 }
 
@@ -1259,57 +1178,37 @@ fn open_help(ctx: &Invocation<'_>) -> Result<String, String> {
         Place::CloseThisStep => {
             let here = here_ref(cycle).expect("열려 있는 자리가 있다");
             let will = session.project().active_will();
-            let mut out = format!("지금은 열 자리가 아니다.\n\n이유\n  {here} 이(가) 아직 열려 있다.\n");
+            let mut out = tr!("cmd.help_not_open_step", here = here);
             if let Some(will) = will {
-                out.push_str(&format!("\n지금 할 일\n{}\n", indent(will.next_action())));
-                out.push_str(&format!("\n완료 조건\n{}\n", indent(will.done_when())));
+                out.push_str(&tr!("cmd.help_todo", text = indent(will.next_action())));
+                out.push_str(&tr!("cmd.help_done_when", text = indent(will.done_when())));
             }
-            out.push_str("\n먼저 할 일\n  실제 작업을 마친 뒤 그 자리를 닫는다.\n\n실행\n  gil close --help\n");
+            out.push_str(text("cmd.help_close_first"));
             Ok(out)
         }
         Place::CloseThisChain => Ok(session.project().current_chain().unwrap().close_hint()),
-        Place::CloseThisCycle => Ok(String::from(
-            "지금은 열 자리가 아니다.\n\n이유\n  이 Cycle 안의 판정이 닫혀 이제 Cycle 을 \
-             닫을 자리다.\n\n실행\n  gil close --help\n",
-        )),
-        Place::Nothing(why) => Ok(format!(
-            "지금은 열 자리가 아니다.\n\n이유\n  {why}\n\n실행\n  gil status\n"
-        )),
+        Place::CloseThisCycle => Ok(text("cmd.help_not_open_cycle").to_string()),
+        Place::Nothing(why) => Ok(tr!("cmd.help_not_open_nothing", why = why)),
         // 실행형 Step — **행동 계약이 필요하다.**
         Place::Step(openable) => {
-            let mut out = String::from("열 수 있는 것\n");
+            let mut out = String::from(text("cmd.help_openable_head"));
             match openable.as_slice() {
                 [only] => {
                     out.push_str(&format!("  {only}  {}\n", step_description(cycle, *only)));
-                    out.push_str(&format!("\n행동 계약\n{}\n", action_skeleton(None)));
+                    out.push_str(&tr!("cmd.help_contract", skeleton = action_skeleton(None)));
                 }
                 many => {
                     out.push_str(&format!("  {}\n", choices(cycle, many)));
-                    out.push_str(&format!("\n행동 계약\n{}\n", action_skeleton(Some("<종류>"))));
+                    out.push_str(&tr!("cmd.help_contract", skeleton = action_skeleton(Some(text("cmd.kind_placeholder")))));
                 }
             }
-            out.push_str(
-                "\n세 칸은 지금 대화와 작업에 맞게 **네가** 적는다 — GIL 은 Node 종류만 보고 \
-                 그 내용을 지어내지 않는다.\n",
-            );
+            out.push_str(text("cmd.help_you_write"));
             Ok(out)
         }
         // 컨테이너 Cycle — **행동 계약이 필요 없다.**
-        Place::Cycle(openable) => Ok(format!(
-            "열 수 있는 것 (Cycle)\n  {}\n\n\
-             Cycle 은 안의 Graph 를 담는 그릇이라 행동 계약 없이 연다.\n\n\
-             실행\n  gil open <종류>\n",
-            cycle_choices(&session, &openable)
-        )),
+        Place::Cycle(openable) => Ok(tr!("cmd.help_open_cycle", choices = cycle_choices(&session, &openable))),
         // 되돌아온 자리 — 같은 명령이 **갈래**를 연다.
-        Place::Branch(openable) => Ok(format!(
-            "열 수 있는 것 (Cycle · 갈래)\n  {}\n\n\
-             되돌아온 자리라 여는 Cycle 이 갈래가 된다 — 부모는 지금 이 자리이고, \
-             갈래의 출처로 방금 버린 실패 Cycle 이 남는다.\n\
-             Cycle 은 안의 Graph 를 담는 그릇이라 행동 계약 없이 연다.\n\n\
-             실행\n  gil open <종류>\n",
-            cycle_choices(&session, &openable)
-        )),
+        Place::Branch(openable) => Ok(tr!("cmd.help_open_branch", choices = cycle_choices(&session, &openable))),
     }
 }
 
@@ -1332,14 +1231,7 @@ fn session_for_help(ctx: &Invocation<'_>) -> Result<Option<Session>, String> {
 
 /// 아직 프로젝트가 없다 — 일반적인 사용법과 시작하는 법.
 fn no_project_yet(command: &str) -> String {
-    format!(
-        "아직 이 자리에 프로젝트가 없다 ({}).\n\n\
-         {command} 는 **지금 자리의 계약**을 보여 주는 명령이라, 걷기가 있어야 답할 수 있다.\n\n\
-         한 바퀴\n  \
-         start → open(행동 계약) → 실제 작업 → close(Report) → open → …\n\n\
-         실행\n  gil start\n",
-        crate::STATE_PATH
-    )
+    tr!("cmd.no_project_yet", path = crate::STATE_PATH, command = command)
 }
 
 // ── 명령이 돌려주는 영수증 ─────────────────────────────────────────────────
@@ -1358,38 +1250,38 @@ fn opened_step(session: &Session, opened: crate::Opened) -> String {
 
     // `지금 할 일` 과 `완료 조건` 은 방금 저장한 Will 에서 **투영한다** — 여기서 다시 쓰지
     // 않는다. `objective` 는 저장하되 무조건 되풀이하지 않는다(Agent UX Model §4.2).
-    let mut out = format!("열었다: {} · {}\n", opened.step, opened.kind);
-    out.push_str(&format!("\n지금 할 일\n{}\n", indent(will.next_action())));
-    out.push_str(&format!("\n완료 조건\n{}\n", indent(will.done_when())));
-    out.push_str("\n진행 경계\n  이 완료 조건을 충족하면 실제 결과를 Report로 적어 닫고 다음 행동으로 간다.\n  다른 목적의 일을 이 노드에 계속 붙이거나, 나중에 기록을 몰아 채우지 않는다.\n");
+    let mut out = format!("{}{} · {}\n", text("receipt.opened_lead"), opened.step, opened.kind);
+    out.push_str(&tr!("cmd.help_todo", text = indent(will.next_action())));
+    out.push_str(&tr!("cmd.help_done_when", text = indent(will.done_when())));
+    out.push_str(text("cmd.opened_boundary"));
     if opened.kind == crate::NodeKind::Verify {
         if session.project().visual_state.is_some() {
             out.push_str(&typed_verify_hint(opened.step));
         }
-        out.push_str("  증거 필수: 실제 관측·실행 결과를 프로젝트의 문서·로그·데이터·코드·시각자료 파일로 저장한다. 읽기만 한 작업도 관측 문서를 남긴다. Report의 evidence_files에 상대 경로를 한 줄에 하나씩 적는다. 파일 없음·빈 파일·이전 파일만 그대로 재사용하면 서버가 닫기를 거절한다. 채팅이나 visuals.not_needed/missing으로 대체할 수 없다.\n");
-        out.push_str("  이 Verify 계약 안의 조사·출처 확인·계산·보고서 작성·구현·테스트를 수행한다. 관측을 마치기 전에 닫지 않는다. 완료 뒤에는 닫고 Analysis로 결과를 해석한다.\n");
+        out.push_str(text("cmd.opened_verify_evidence"));
+        out.push_str(text("cmd.opened_verify_do"));
     } else {
-        out.push_str("  이 단계에서는 산출물을 수정하지 않는다. 프로젝트 내부 파일 생성·변경과 보고서 제작은 열린 Verify에서 수행한다. 파일 없는 웹 조사·기존 증거 읽기·무관한 외부 작업은 허용한다. Analysis는 저장된 관측을 읽고 해석한다.\n");
+        out.push_str(text("cmd.opened_no_artifacts"));
     }
     if cycle.kind() == CycleKind::Interview {
-        out.push_str("  Interview는 목표·범위를 합의하는 자리다. 파일 없는 웹 조사나 외부 작업이 이 Interview를 닫거나 프로젝트 완료를 대신하지 않는다. 프로젝트 내부 산출물 제작은 Interview를 닫은 뒤 Experiment의 Verify에서 수행한다.\n");
+        out.push_str(text("cmd.opened_interview_note"));
         match opened.kind {
-            NodeKind::Synthesis => out.push_str("  제안에 대한 사용자의 답을 기다린다. 이미 그 제안에 동의했다면 다시 묻거나 작업을 시작하지 말고, 실제 승인을 Report에 기록해 이 Synthesis를 닫는다. 이후 영수증에 따라 Outcome을 열고 닫은 다음 Interview Cycle Report를 별도로 닫는다.\n"),
-            NodeKind::Outcome => out.push_str("  이 Outcome은 승인된 목표에 대한 판정이다. 프로젝트 전체 실행이 끝날 때까지 열어 두지 않는다. 판정과 다음 방향이 정해지면 이 Step을 닫고, 이어 Interview Cycle Report를 별도로 닫는다.\n"),
+            NodeKind::Synthesis => out.push_str(text("cmd.opened_synthesis_note")),
+            NodeKind::Outcome => out.push_str(text("cmd.opened_interview_outcome_note")),
             _ => {},
         }
     } else if opened.kind == NodeKind::Define {
-        out.push_str("  지금은 독립적으로 확인할 질문 하나와 성공 기준만 정한다. 성공 기준은 결과를 미리 알아야 정할 수 있는 값이 아니라 확인 방법·판정 조건이다. Define의 완료 조건을 충족하면 그 Report를 닫은 뒤 Hypothesis를 정한다. 주가 변화와 매출 변화처럼 각각 별도로 참·거짓을 판단할 수 있는 질문은 분리한다. 검색 한 번이나 문단 하나마다 나눌 필요는 없다.\n");
+        out.push_str(text("cmd.opened_define_note"));
     }
     if opened.kind == NodeKind::Outcome {
-        out.push_str("  Outcome Step의 close_cycle은 다음에 Cycle Report를 제출하라는 뜻이다. 이 Step을 닫아도 Cycle 자체는 열려 있다. Cycle Report에는 그때의 허용 방향을 쓰며 close_cycle을 복사하지 않는다.\n");
+        out.push_str(text("cmd.opened_outcome_note"));
     }
     // **닫기 전에 계약을 미리 알려 준다.** 허용값을 오류로 알아내게 두지 않는다
     // (실사용 M2C 보고). 말은 여기서 짓지 않고 문법에서 읽는다.
     if let Some(contract) = &contract
         && !contract.fields().is_empty()
     {
-        out.push_str("\n닫을 때 필요한 것\n");
+        out.push_str(text("cmd.opened_close_needs"));
         out.push_str(&contract.constraints("  "));
     }
     // **`실행` 블록을 두지 않는다.** 여기서 `gil close` 를 강조하면 실제 작업 전에 Node 부터
@@ -1400,24 +1292,24 @@ fn opened_step(session: &Session, opened: crate::Opened) -> String {
 fn opened_cycle(session: &Session) -> String {
     let cycles = session.project().cycles();
     let cycle = cycles.current();
-    let mut out = format!("열었다: {} · {}", cycle.id().to_ref(), cycle.kind());
+    let mut out = format!("{}{} · {}", text("receipt.opened_lead"), cycle.id().to_ref(), cycle.kind());
     match cycle.parent() {
-        Some(parent) => out.push_str(&format!(" · 부모 {}\n", parent.to_ref())),
+        Some(parent) => out.push_str(&tr!("cmd.parent_suffix", parent = parent.to_ref())),
         None => out.push('\n'),
     }
     // **갈래로 열렸다면 그 사실을 말한다.** 부모만 보면 평범하게 이어 난 것과 구별되지
     // 않는데, 이 Cycle 은 어느 실패에서 갈라진 것이다.
     if let Some(from) = cycle.revisit_from() {
-        out.push_str(&format!("갈래 출처: {}\n", from.to_ref()));
+        out.push_str(&tr!("cmd.branch_source", from = from.to_ref()));
     }
     if cycle.kind() == CycleKind::Experiment {
-        out.push_str("\n실험 범위\n  이번 Cycle은 독립적으로 확인할 질문 하나를 다룬다. Define에서 문제·판정 기준, Hypothesis에서 검증할 예상을 기록하고 닫는다. 그 뒤 Verify를 열고 자료 조회·계산 등 실제 검증을 시작한다. 별도 질문과 보고서 종합을 한 번에 실행하지 않는다.\n");
+        out.push_str(text("cmd.opened_experiment_scope"));
     }
     #[cfg(feature = "approved-plan")]
     if let Some(item) = session.project().current_plan_item() {
-        out.push_str(&format!("  승인 계획 실행 연결: {} 한 항목만 이 Experiment에 바인딩됐다. gil_plan_read의 current_item과 document를 지금 읽을 수 있다. document 파일 저장은 Verify에서만 한다. 다른 항목을 함께 작업해도 그 항목의 executed_cycles는 추가되지 않는다.\n", item.id));
+        out.push_str(&tr!("cmd.opened_plan_item", item = item.id));
     }
-    out.push_str(&format!("출발한 세계: {}\n", cycle.entry_snapshot()));
+    out.push_str(&tr!("cmd.entry_world", snapshot = cycle.entry_snapshot()));
     out.push_str(&next_block(cycle));
     out
 }
@@ -1425,13 +1317,7 @@ fn opened_cycle(session: &Session) -> String {
 fn closed_step(session: &Session, closed: &crate::Closed) -> String {
     let cycle = session.project().cycles().current();
     // 방금 낸 판을 한 줄로 적는다 — 방금 제출한 Report 도 Will 전체도 되풀이하지 않는다.
-    format!(
-        "닫았다: {} · {}\n기록됨: {}\n{}",
-        closed.step,
-        closed.kind,
-        closed.journey,
-        next_block(cycle)
-    )
+    tr!("cmd.closed_step", lead = text("receipt.closed_lead"), step = closed.step, kind = closed.kind, journey = closed.journey, next = next_block(cycle))
 }
 
 fn closed_cycle(session: &Session, closed: &crate::ClosedCycle) -> String {
@@ -1444,10 +1330,7 @@ fn closed_cycle(session: &Session, closed: &crate::ClosedCycle) -> String {
         .unwrap_or("");
 
     // 컨테이너는 판을 만들지 않는다 — 그때 서 있던 판을 그대로 provenance 로 적었다.
-    let mut out = format!(
-        "닫았다: {here} · {kind} · {verdict}\n기록됨: {} (판은 늘지 않는다)\n\n다음\n",
-        closed.journey
-    );
+    let mut out = tr!("cmd.closed_cycle_head", lead = text("receipt.closed_lead"), here = here, kind = kind, verdict = verdict, journey = closed.journey);
     if let Some(chain) = session.project().current_chain().filter(|chain| chain.awaiting_report()) {
         out.push_str(&chain.close_hint());
         return out;
@@ -1455,26 +1338,21 @@ fn closed_cycle(session: &Session, closed: &crate::ClosedCycle) -> String {
     // **적어 둔 방향이 곧 다음 수다.** 되돌아감도 자식을 여는 것과 같은 자격으로 밟는다.
     if cycles.can_revisit() {
         if cfg!(feature = "product-safety") {
-            out.push_str("  적어 둔 조상으로 되돌아간다 — 먼저 Monitor에서 변경 목록을 확인하고 ‘보존 후 되돌아가기’를 승인한다.\n  승인 전 gil revisit을 반복하지 않는다. 복원 후 gil open으로 새 Cycle을 연다.\n");
+            out.push_str(&tr!("cmd.closed_cycle_revisit_product", marker = text("receipt.marker.revisit")));
             return out;
         }
-        out.push_str(
-            "  적어 둔 조상으로 되돌아간다 — 그 자리의 Artifact 세계가 함께 복원된다\n\n             실행\n  gil revisit\n",
-        );
+        out.push_str(&tr!("cmd.closed_cycle_revisit_dev", marker = text("receipt.marker.revisit")));
         return out;
     }
     match cycles.why_not_open_child() {
         None => {
             if kind == CycleKind::Interview {
-                out.push_str("  Interview Cycle까지 닫혔다. 합의한 작업을 수행할 때는 독립적으로 확인할 질문 하나를 골라 Experiment → Define → Hypothesis → Verify로 간다. 여러 독립된 문제라면 각 실험의 Analysis·Outcome·Cycle Report를 마친 뒤 다음 문제로 간다. 목표를 다시 확인해야 한다면 Interview를 선택할 수 있다.\n  다음 계약을 쓰기 전에 이번에 검증할 질문 하나와 나중에 다룰 질문을 구분해 사용자에게 짧게 알린다. 예를 들어 주가 변화와 매출 변화는 각각 따로 확인할 수 있으므로 별도 실험이다. 같은 계산식을 쓴다는 이유로 두 문제와 보고서 전체를 한 Define에 넣지 않는다. 남은 문제가 있다는 이유로 완료된 실험을 열어 두지도 않는다.\n");
+                out.push_str(text("cmd.closed_interview_note"));
             }
-            out.push_str(&format!(
-                "  열 수 있는 것\n  {}\n\n실행\n  gil open <종류>\n",
-                cycle_choices(session, &CycleKind::ALL)
-            ));
+            out.push_str(&tr!("cmd.closed_openable", heading = text("receipt.openable_heading"), choices = cycle_choices(session, &CycleKind::ALL)));
         }
         Some(why) => {
-            out.push_str(&format!("  {why}\n\n실행\n  gil status\n"));
+            out.push_str(&tr!("cmd.closed_blocked", why = why));
         }
     }
     out
@@ -1486,25 +1364,19 @@ fn next_block(cycle: &crate::Cycle) -> String {
     let mut out = String::new();
     if cycle.kind() == CycleKind::Interview {
         if cycle.can_close() {
-            out.push_str("\nInterview 마무리\n  Outcome Step만 닫혔고 Interview Cycle은 아직 열려 있다. 다음 행동은 Cycle Report를 별도로 닫는 것이다. 조사·보고서 작성이나 새 Experiment는 그 닫기가 성공한 뒤에 시작한다.\n");
+            out.push_str(text("cmd.next_interview_wrap_cycle"));
         } else if openable.as_slice() == [NodeKind::Outcome] {
-            out.push_str("\nInterview 마무리\n  승인된 Synthesis만 닫혔다. 다음은 Interview Outcome을 열어 판정하고 닫는 것이다. 그 뒤 Cycle Report도 별도로 닫아야 실행 작업으로 넘어갈 수 있다.\n");
+            out.push_str(text("cmd.next_interview_wrap_outcome"));
         }
     }
     out.push_str(&match openable.as_slice() {
         [] if cycle.can_close() => {
             let report = cycle.close_contract().map(|contract| skeleton_of(&contract, cycle)).unwrap_or_default();
-            format!("\n다음\n  이 Cycle 의 Report 를 적어 닫는다. MCP에서는 gil_close(project_root, report)를 사용한다. gil_cycle(action=close)는 Report를 받을 수 없으므로 사용하지 않는다.\n\n{report}\n\n실행\n  gil close\n")
+            tr!("cmd.next_close_cycle", marker = text("receipt.marker.close_cycle"), report = report)
         }
-        [] => "\n다음\n  여기서 할 수 있는 것이 없다\n\n실행\n  gil status\n".to_string(),
-        [_only] => format!(
-            "\n다음\n  열 수 있는 것: {}\n\n실행\n  gil open\n",
-            names(&openable)
-        ),
-        many => format!(
-            "\n다음\n  열 수 있는 것\n  {}\n\n실행\n  gil open <종류>\n",
-            choices(cycle, many)
-        ),
+        [] => tr!("cmd.next_blocked", marker = text("receipt.marker.blocked")),
+        [_only] => tr!("cmd.next_open_one", prefix = text("receipt.openable_prefix"), names = names(&openable)),
+        many => tr!("cmd.next_open_many", heading = text("receipt.openable_heading"), choices = choices(cycle, many)),
     });
     out
 }
@@ -1547,11 +1419,7 @@ fn step_description(cycle: &crate::Cycle, kind: NodeKind) -> &str {
 /// 짧게 만들려고 까닭이나 복구를 빼지 않는다(Agent UX Model §9). 전체 문맥을 붙이지도
 /// 않는다 — 복구에 필요한 국소 정보만.
 fn refusal(what: &str, why: &str, todo: &str, run: &str) -> String {
-    format!(
-        "거절: {what}\n\n이유\n{}\n\n지금 해야 할 일\n{}\n\n실행\n  {run}\n",
-        indent(why),
-        indent(todo)
-    )
+    tr!("cmd.refusal", what = what, why = indent(why), todo = indent(todo), run = run)
 }
 
 /// 여러 줄짜리 토막을 한 단 들여쓴다 — 뒷줄이 제목처럼 보이지 않게.
@@ -1596,21 +1464,21 @@ fn skeleton_for(contract: &CloseContract, cycle: &crate::Cycle, ctx: Option<&Inv
         _ => None,
     };
     let mut hint = match ctx {
-        Some(Invocation { root: Root::Exact(root), input: Input::Body(_) }) => format!("gil_close 입력 (…를 실제 관측으로 채운다):\n{}",
-            serde_json::to_string_pretty(&serde_json::json!({"project_root":root,"report":contract.report_body(fill)})).unwrap()),
+        Some(Invocation { root: Root::Exact(root), input: Input::Body(_) }) => tr!("cmd.skeleton_mcp",
+            json = serde_json::to_string_pretty(&serde_json::json!({"project_root":root,"report":contract.report_body(fill)})).unwrap()),
         _ => contract.skeleton(fill),
     };
     if contract.subject().contains("outcome") {
-        hint.push_str("\n이것은 Outcome Step의 Report다. close_cycle은 이 Step을 닫은 뒤 Cycle Report를 별도로 제출하라는 방향이다. Cycle 자체가 닫히거나 다음 Experiment가 자동으로 열리지 않는다. 다음 Cycle Report의 허용 값은 그때의 계약을 읽고 close_cycle을 복사하지 않는다.\n");
+        hint.push_str(text("cmd.skeleton_outcome"));
     } else if contract.subject().starts_with("cycle:") {
-        hint.push_str("\n이것은 Cycle Report다. Outcome Step의 close_cycle을 복사하지 않는다. open_child는 다음 자식 Cycle을 열 수 있는 방향만 기록하며 자동 실행하지 않는다. 실제 다음 gil_open 종류는 성공 receipt를 따른다.\n");
+        hint.push_str(text("cmd.skeleton_cycle"));
         if cycle.rules().supports_chain_closing() && cycle.kind() == CycleKind::Interview {
-            hint.push_str("close_chain은 승인된 Closing Interview의 Chain 종료 방향이다.\n");
+            hint.push_str(text("cmd.skeleton_close_chain"));
         }
     }
     if cycle.rules().supports_chain_closing() && cycle.step_now_open()
         .and_then(|id| cycle.steps().node(id)).is_some_and(|node| node.kind == NodeKind::Synthesis) {
-        hint.push_str("\nChain 종료 제안이라면 chain_verdict: success 또는 failure를 함께 적는다. 탐색 경로·실패·남은 질문을 사용자에게 설명하고 실제 동의를 받은 경우에만 approved: yes를 적는다. 동의를 추측하지 않는다. 일반 계획 합의에는 chain_verdict를 넣지 않는다.\n");
+        hint.push_str(text("cmd.skeleton_chain_verdict"));
     }
     hint
 }
@@ -1661,11 +1529,8 @@ fn where_now(ctx: &Invocation<'_>, session: &Session) -> String {
 ///
 /// 거절은 빠진 값과 고치는 법에 집중하고, 어떤 값을 적을 수 있는지는 `gil close --help` 와
 /// Open Receipt 가 같은 문법에서 읽어 말한다. 셋이 각자 설명을 지으면 반드시 갈린다.
-const FIX_IT: &str = "아래 꼴로 다시 적는다 — 어떤 값을 적을 수 있는지는 `gil close --help`.";
 fn fix_it(ctx: &Invocation<'_>) -> &'static str {
-    if matches!(ctx.input, Input::Body(_)) {
-        "report 문자열을 아래 꼴로 다시 적는다. 현재 Report 계약은 gil_help({project_root, topic: \"close\"})로 읽는다. 연결된 Core의 도움말을 사용하며 PATH의 gil 명령을 실행하지 않는다."
-    } else { FIX_IT }
+    if matches!(ctx.input, Input::Body(_)) { text("cmd.fix_it_mcp") } else { text("cmd.fix_it_cli") }
 }
 
 
@@ -1679,8 +1544,8 @@ fn fix_it(ctx: &Invocation<'_>) -> &'static str {
 fn read_report(ctx: &Invocation<'_>, skeleton: &str) -> Result<Report, String> {
     if ctx.input.is_terminal() {
         return Err(refusal(
-            "Report 를 받지 못했다.",
-            "Report 는 stdin 으로 받는데 터미널이 붙어 있다 — 여기서 기다리지 않는다.",
+            text("cmd.no_report"),
+            text("cmd.report_stdin_terminal"),
             &format!("{}\n\n{skeleton}", fix_it(ctx)),
             "gil close",
         ));
@@ -1691,7 +1556,7 @@ fn read_report(ctx: &Invocation<'_>, skeleton: &str) -> Result<Report, String> {
     // 빈 글도 그대로 넘긴다 — 무엇이 빠졌는지는 문법이 말한다(여기서 짐작하지 않는다).
     Report::parse(&text).map_err(|err| {
         refusal(
-            "적어 준 글을 Report 로 읽지 못했다.",
+            crate::locale::text("cmd.report_unparsed"),
             &err.to_string(),
             &format!("{}\n\n{skeleton}", fix_it(ctx)),
             "gil close",
@@ -1729,20 +1594,15 @@ fn action_skeleton(kind: Option<&str>) -> String {
 fn read_contract(ctx: &Invocation<'_>, skeleton: &str) -> Result<ActionContract, String> {
     let refuse = |why: String| {
         refusal(
-            "무엇을 하려는지 적지 않았다.",
+            text("cmd.no_contract"),
             &why,
-            &format!(
-                "아래 꼴로 적는다 — 지금 대화와 작업에 맞는 내용을 **네가** 적는다.\n\n{skeleton}"
-            ),
+            &tr!("cmd.contract_todo", skeleton = skeleton),
             "gil open",
         )
     };
 
     if ctx.input.is_terminal() {
-        return Err(refuse(
-            "실행형 자리는 행동 계약과 함께 열리는데 터미널이 붙어 있다 — 여기서 기다리지 않는다."
-                .to_string(),
-        ));
+        return Err(refuse(text("cmd.contract_stdin_terminal").to_string()));
     }
     let text = ctx.input.text()?;
 
@@ -1760,48 +1620,5 @@ fn read_contract(ctx: &Invocation<'_>, skeleton: &str) -> Result<ActionContract,
 /// 전체 문법도, 모든 Step Kind 도 여기 늘어놓지 않는다(Agent UX Model §2·§9). 지금 무엇을
 /// 열 수 있는지는 **매 명령의 출력이** 말하고, 그것이 이 도구가 가르치는 방식이다.
 fn help() -> String {
-    String::from(
-        "gil — 사고의 한 걸음을 열고, 실제로 하고, 적어서 닫는다.\n\n\
-         평상시\n  \
-         gil start   프로젝트를 시작하고 최초 Interview 를 연다\n  \
-         gil open    다음 한 걸음을 연다 — **무엇을 하려는지 적어서** (stdin)\n  \
-         gil close   실제 작업을 마친 뒤 Report 를 적어 그 걸음을 닫는다 (stdin)\n\n\
-         실행형 걸음은 행동 계약과 함께 열린다. GIL 은 그 내용을 지어내지 않는다.\n\n  \
-         gil open <<'EOF'\n  \
-         objective:   무엇을 이루려는가\n  \
-         next_action: 지금 실제 세계에서 가장 먼저 할 일 (gil 명령이 아니다)\n  \
-         done_when:   무엇을 보면 끝났다고 할 수 있는가\n  \
-         EOF\n\n\
-         Cycle 은 그릇이라 계약 없이 열린다 — `gil open <종류>`.\n\n\
-         한 바퀴\n  \
-         start → open → 실제 작업 → close → open → …\n  \
-         Step 과 Cycle 의 경계는 gil 이 판정한다. 어느 계층인지 외우지 않아도 된다.\n\n\
-         지금 자리의 계약이 궁금하면 — **읽기만 하고 아무것도 바꾸지 않는다.**\n  \
-         gil open --help    지금 열 수 있는 것과 행동 계약의 꼴\n  \
-         gil close --help   지금 자리를 닫는 데 필요한 칸과 그 값들의 뜻\n\n\
-         이어받을 때\n  \
-         gil context   새 세션·인수인계·맥락을 잃었을 때 지금 자리를 복원한다\n  \
-         gil status    지금 어디인지 세 줄로 답한다\n  \
-         gil story     걸어온 것을 사람의 말로 읽는다\n  \
-         gil monitor   지금 상태와 그 근거를 한 화면으로 읽는다\n  \
-         gil monitor --html   같은 것을 저장해서 열 수 있는 HTML 문서 하나로\n  \
-         gil monitor --serve   browser 로 계속 지켜본다 (Ctrl-C 로 끝)\n\n\
-         Artifact 를 바꿔 놓고 되돌리고 싶을 때 — **인수를 받지 않는다.**\n  \
-         gil restore   지금 위치가 요구하는 세계로 작업 폴더를 되돌린다\n\n\
-         Report 를 적는 꼴 — 적은 글자가 그대로 값이 된다. 주석도, 인용도, 형 변환도 없다.\n\n  \
-         gil close <<'EOF'\n  \
-         problem: 줄 끝까지 그대로다 — #7 도 3.10 도 그냥 글자다\n  \
-         next_direction:\n  \
-         \x20 action: close_cycle          (들여쓰면 이름이 점으로 이어진다)\n  \
-         interpretation: |\n  \
-         \x20 여러 줄은 이렇게 연다.\n  \
-         EOF\n\n\
-         Cycle 을 닫을 때 판정을 가리키는 칸은 **주소**다 — 화면의 `#4` 가 아니라:\n\n  \
-         outcome_ref: step:C1/S4\n\n\
-         무엇을 적어야 하는지는 `gil open` 과 `gil close` 가 그 자리에서 알려 준다.\n\n\
-         옛 이름 (호환)\n  \
-         gil cycle open · gil cycle close   이제 `gil open` · `gil close` 가 함께 판정한다\n  \
-         gil revisit                        닫힌 판정에 이미 적혀 있는 되돌아감을 밟는다\n  \
-         gil --version                      판을 밝힌다\n",
-    )
+    text("cmd.help_text").to_string()
 }

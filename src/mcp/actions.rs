@@ -3,6 +3,8 @@
 use std::path::Path;
 use rmcp::model::{CallToolResult, ContentBlock};
 use serde_json::{Value, json};
+use crate::locale::text;
+use crate::tr;
 
 pub const NAMES: &[&str] = &["gil_status", "gil_context", "gil_story", "gil_help", "gil_start",
     "gil_open", "gil_close", "gil_restore", "gil_revisit", "gil_cycle"];
@@ -41,12 +43,12 @@ fn annotate_code(mut out: CallToolResult, problem: &str) -> CallToolResult {
 
 fn positional(value: Option<&str>, what: &str, required: bool) -> Result<Option<String>, String> {
     let Some(value) = value.filter(|v| !v.is_empty()) else {
-        return if required { Err(format!("{what} 가 필요하다")) } else { Ok(None) };
+        return if required { Err(tr!("action.required", what = what)) } else { Ok(None) };
     };
-    if value.starts_with('-') { return Err(format!("{what} 는 '-' 로 시작할 수 없다")); }
-    if value.contains(['\n', '\r', '\0']) { return Err(format!("{what} 에 줄바꿈이나 NUL 이 있다")); }
+    if value.starts_with('-') { return Err(tr!("action.no_dash", what = what)); }
+    if value.contains(['\n', '\r', '\0']) { return Err(tr!("action.no_newline", what = what)); }
     // JS String.length counts UTF-16 code units, not UTF-8 bytes or scalar values.
-    if value.encode_utf16().count() > 200 { return Err(format!("{what} 가 너무 길다")); }
+    if value.encode_utf16().count() > 200 { return Err(tr!("action.too_long", what = what)); }
     Ok(Some(value.to_owned()))
 }
 
@@ -55,13 +57,13 @@ pub fn call(name: &str, input: &Value) -> CallToolResult {
         "gil_status" => "status", "gil_context" => "context", "gil_story" => "story",
         "gil_help" => "help", "gil_start" => "start", "gil_open" => "open",
         "gil_close" => "close", "gil_restore" => "restore", "gil_revisit" => "revisit",
-        "gil_cycle" => "cycle", _ => return refusal("허용되지 않은 GIL 동작"),
+        "gil_cycle" => "cycle", _ => return refusal(text("action.disallowed")),
     };
     let given = input.get("project_root").and_then(Value::as_str);
     let mut resolved: Option<String> = None;
     let mut normalized_note: Option<String> = None;
     if name != "gil_help" || given.is_some() {
-        let Some(given) = given.filter(|r| !r.is_empty()) else { return refusal("Project 자리가 비었다"); };
+        let Some(given) = given.filter(|r| !r.is_empty()) else { return refusal(text("action.root_empty")); };
         if !Path::new(given).is_absolute() { return refusal(crate::RootError::NotAbsolute.to_string()); }
         match resolve_root(given) {
             Ok((used, note)) => { resolved = Some(used); normalized_note = note; }
@@ -107,9 +109,9 @@ pub fn call(name: &str, input: &Value) -> CallToolResult {
         });
     }
     let slots: &[(&str, &str, bool)] = match name {
-        "gil_help" => &[("topic", "주제", false)],
-        "gil_open" => &[("kind", "Cycle 종류", false)],
-        "gil_cycle" => &[("action", "cycle 동작", true), ("kind", "Cycle 종류", false)],
+        "gil_help" => &[("topic", text("action.slot.topic"), false)],
+        "gil_open" => &[("kind", text("action.slot.kind"), false)],
+        "gil_cycle" => &[("action", text("action.slot.action"), true), ("kind", text("action.slot.kind"), false)],
         _ => &[],
     };
     for (key, what, required) in slots {
@@ -118,7 +120,7 @@ pub fn call(name: &str, input: &Value) -> CallToolResult {
         };
         if let Some(value) = value {
             if *key == "action" && !matches!(value.as_str(), "open" | "close") {
-                return refusal("cycle 동작 는 open 또는 close 중 하나다");
+                return refusal(text("action.cycle_action_enum"));
             }
             args.push(value);
         }
@@ -130,15 +132,15 @@ pub fn call(name: &str, input: &Value) -> CallToolResult {
         // The old CLI stderr boundary used eprintln!; preserve its final newline.
         Err(problem) => {
             let problem = if name == "gil_cycle" && input.get("action").and_then(Value::as_str) == Some("close") {
-                format!("도구 선택 안내: gil_cycle은 Report를 받는 입력이 없어 닫기에 사용할 수 없다. 같은 gil_cycle 호출을 반복하지 않는다. 아래 Report를 작성해 gil_close(project_root, report)로 제출한다. Cycle도 gil_close로 닫는다. 이 실패로 닫힌 것은 없다.\n\n{problem}")
+                tr!("action.cycle_close_hint", problem = problem)
             } else { problem };
             annotate_code(result(false, Some(1), String::new(), format!("{problem}\n")), &problem)
         },
     })
 }
 
-pub const ROOT_UNREADABLE: &str = "Project 자리를 열 수 없다";
-const COPY_ROOT_VERBATIM: &str = "gil_context/gil_status/receipt가 돌려준 project_root를 글자 그대로 복사해 다시 보낸다. 다시 타이핑하지 않는다.";
+pub fn root_unreadable() -> &'static str { text("action.root_unreadable") }
+fn copy_root_verbatim() -> &'static str { text("action.copy_root") }
 
 /// The folder the Host selected, found from the string the Agent sent.
 ///
@@ -151,36 +153,34 @@ pub(super) fn resolve_root(given: &str) -> Result<(String, Option<String>), Stri
 }
 
 fn resolve_root_with(given: &str, mut is_dir: impl FnMut(&str) -> std::io::Result<bool>) -> Result<(String, Option<String>), String> {
-    let inaccessible = |error: std::io::Error| format!("{ROOT_UNREADABLE}: 경로 접근을 확인하지 못했다 ({error}). 권한·디스크 오류를 경로 없음으로 판단하거나 다른 폴더로 바꾸지 않는다. {COPY_ROOT_VERBATIM}");
+    let inaccessible = |error: std::io::Error| tr!("action.root_inaccessible", unreadable = root_unreadable(), error = error, copy = copy_root_verbatim());
     match is_dir(given) {
         Ok(true) => return Ok((given.to_owned(), None)),
-        Ok(false) => return Err("Project 자리가 폴더가 아니다".to_owned()),
+        Ok(false) => return Err(text("action.root_not_dir").to_owned()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
         Err(error) => return Err(inaccessible(error)),
     }
     if super::hangul::has_compatibility_jamo(given) {
-        return Err(format!(
-            "{ROOT_UNREADABLE}: 경로에 호환 자모(ㄱ·ㅏ 같은 낱자)가 있어 정규화로 폴더를 추측하지 않는다. {COPY_ROOT_VERBATIM}"
-        ));
+        return Err(tr!("action.root_jamo", unreadable = root_unreadable(), copy = copy_root_verbatim()));
     }
     let mut found = Vec::new();
     for candidate in [super::hangul::nfc(given), super::hangul::nfd(given)] {
         if candidate == given || found.contains(&candidate) { continue; }
         match is_dir(&candidate) {
             Ok(true) => found.push(candidate),
-            Ok(false) => return Err("Project 자리가 폴더가 아니다".to_owned()),
+            Ok(false) => return Err(text("action.root_not_dir").to_owned()),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
             Err(error) => return Err(inaccessible(error)),
         }
     }
     if found.len() > 1 {
-        return Err(format!("{ROOT_UNREADABLE}: 정규화 후보 폴더가 여러 개라 Project를 선택하지 않았다. {COPY_ROOT_VERBATIM}"));
+        return Err(tr!("action.root_ambiguous", unreadable = root_unreadable(), copy = copy_root_verbatim()));
     }
     if let Some(candidate) = found.pop() {
-        let note = format!("project_root 글자를 맞춰 {candidate} 를 사용했다 — 받은 경로의 한글 정규화(NFC/NFD)가 실제 폴더와 달랐다. 다음 호출부터 이 경로를 글자 그대로 복사한다.");
+        let note = tr!("action.root_normalized", candidate = candidate);
         return Ok((candidate, Some(note)));
     }
-    Err(format!("{ROOT_UNREADABLE}: 경로가 존재하지 않는다. 받은 경로의 글자가 사용자가 고른 폴더와 다를 수 있다(한글 정규화). {COPY_ROOT_VERBATIM}"))
+    Err(tr!("action.root_missing", unreadable = root_unreadable(), copy = copy_root_verbatim()))
 }
 
 #[cfg(test)]

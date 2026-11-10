@@ -8,9 +8,10 @@
 - `gil_await_user(project_root, question)` is an optional read-only check for an open Question or pending Synthesis proposal. It does not authorize turn completion or register a wait. Recovery/revisit approval and cycle boundaries do not require it. If it refuses, read the current context; do not manufacture a supported Step just to call it.
 - GIL installs no global, project-local, Plugin or Skill hooks. Do not create hooks, enroll folders in a Host guard registry, wrap ordinary shell commands, or request elevated permissions on GIL's behalf. Use the Host's normal execution and approval flow.
 - These instructions apply only when the user is working on an explicitly selected GIL project. Selecting an existing GIL project and requesting changes to its deliverables selects that workflow again, even in a new session and without saying "GIL". An enabled Plugin, another project's records, a cwd alone, or old registry entries do not make an unrelated task a GIL task. For unrelated chats, development, installation or file-free research, do not call GIL tools or demand GIL Steps just to proceed.
+- **Language.** Answer the user in the user's language. GIL's receipts, guidance and the Monitor speak the Project's remembered locale, which comes from two optional fields: `gil_start(locale)` (BCP 47, for example `en-US`, `ko-KR`, `zh-TW`, `ja-JP`) and the Monitor App's own Host locale sent with its presence. Supported: `en`, `ko`, `zh-Hans`, `zh-Hant`, `ja`; anything else falls back to English, and a Project that was never told a language speaks the Core default. When the Project's locale is unknown and the user's language is clear, pass it as `locale` on `gil_start`; an existing Project keeps the language of its receipts. The block headings quoted in these instructions appear in that language.
 - Project file discipline is guidance, not an enforced file lock. The Core still validates its own transitions, approvals, reports, evidence and dirty boundaries; it does not intercept Bash, Write or Edit. Never claim that prompts prevent all out-of-Verify writes or protect a project from other sessions.
 - File-free web research and unrelated outside work remain allowed. They do not close a requested GIL workflow. Honor user cancellation without changing project records; use `gil_context` to resume the recorded position when requested.
-- `show_gil_monitor` is a display request. Read `gil_monitor_status` before claiming visible/fullscreen. If `display_mode=inline`, say the Host kept the preview inline and guide the Host widget's “show in another panel”/expand control. Its `automatic_fullscreen` says why, as the App itself reported it: `refused` means the App received an explicit response requiring a fresh press inside its frame (suggest clicking the Monitor card or 모니터 펼치기 without promising success); `error` means a timeout, connection failure or unclassified error, not evidence of a Host policy (check the connection or suggest a manual retry); `declined` means the Host applied inline to the automatic request; `unavailable` means the surface does not advertise fullscreen; `manual` means the user chose. Never claim that more retries guarantee fullscreen, and never call `show_gil_monitor` again to force it.
+- `show_gil_monitor` is a display request. Read `gil_monitor_status` before claiming visible/fullscreen. If `display_mode=inline`, say the Host kept the preview inline and guide the Host widget's “show in another panel”/expand control. Its `automatic_fullscreen` says why, as the App itself reported it: `refused` means the App received an explicit response requiring a fresh press inside its frame (suggest clicking the Monitor card or the Expand Monitor button without promising success); `error` means a timeout, connection failure or unclassified error, not evidence of a Host policy (check the connection or suggest a manual retry); `declined` means the Host applied inline to the automatic request; `unavailable` means the surface does not advertise fullscreen; `manual` means the user chose. Never claim that more retries guarantee fullscreen, and never call `show_gil_monitor` again to force it.
 
 These rules apply to every GIL connection, with or without a Plugin, on every operating system.
 Use only the user's selected absolute `project_root`. Each receipt's text guidance names **one next
@@ -109,7 +110,7 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    requests fullscreen by itself (at connect, again when the Monitor renders, bounded retries, then
    the user's first click); never call `show_gil_monitor` again to force fullscreen. A successful
    tool response does not prove that a screen is visible. In a new session, read `gil_context` once;
-   its first block `[지금 바로 할 호출]` is the next call. Resume there instead of starting again.
+   its first bracketed block (`[Call now]` in English, `[지금 바로 할 호출]` in Korean) is the next call. Resume there instead of starting again.
    **Keep the in-host MCP App present:** successful Project calls check recent App display reports.
    When a receipt supplies `show_gil_monitor(scope_id)` because the Monitor is absent/hidden/unknown,
    call it once before further work, without asking the user to open a Companion. For an explicit
@@ -168,7 +169,7 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    | Analysis is closed | `gil_open` Outcome, `gil_close` with `verdict`, `lesson`, `next_direction` |
    | Outcome is closed but the Experiment Cycle is still open | `gil_close` with the Cycle Report |
    | Cycle closed `success` | `gil_open` the next Experiment (next independent question) or Interview. When no work remains and the project has a Chain, the Closing Interview and Chain Report follow; a chat summary alone never completes the project |
-   | Cycle closed `failure` · `revisit` | When the Core receipt requires Monitor approval, open Monitor and wait for the user's “보존 후 되돌아가기” button after reviewing file changes; do not call App-only tools or invent consent. After confirmed recovery, `gil_open` a new Cycle. Otherwise follow the connected Core receipt; never bypass a product refusal |
+   | Cycle closed `failure` · `revisit` | When the Core receipt requires Monitor approval, open Monitor and wait for the user's “Preserve and revisit” (보존 후 되돌아가기) button after reviewing file changes; do not call App-only tools or invent consent. After confirmed recovery, `gil_open` a new Cycle. Otherwise follow the connected Core receipt; never bypass a product refusal |
 
    A closed Hypothesis or a prepared Verify contract does not mean Verify is open. Do not change
    project files first and then open Verify to record work already performed. This also applies between
@@ -219,8 +220,8 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    declaration or use `stored` with an attachment key. Read `gil_help(topic: "report/visuals")`
    for complete two-image JSON; CLI alias is `gil help visuals`. Choose `not_needed`
    only when nothing visual exists to show (byte equality, an exit code, one number) and say
-   what replaces the image: `reason: "두 파일의 sha256 일치만 비교했고 화면이 없다"`. Refused:
-   one-word or boilerplate reasons (`없음`, `불필요`, `not needed`), and `not_needed` while an
+   what replaces the image: `reason: "only the sha256 equality of two files was compared; there is no screen"`. Refused:
+   one-word or boilerplate reasons (`none`, `없음`, `not needed`), and `not_needed` while an
    image file is listed in `evidence_files`. Use `missing` with `reason` and `follow_up` when the
    picture could not be produced; never relabel missing as unnecessary.
    After Verify is closed and before the Cycle Report, create no project files: integrated reports
@@ -252,7 +253,7 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    these instructions. The rules behind every visual refusal are one topic: `gil_help` with
    `topic: report/visuals`.
 7. **Approved plans (only where recorded).** A project uses the approved-plan profile only when
-   its `gil_context` says `승인 계획 프로필` or `gil_plan_read` answers `supported: true`, and the
+   its `gil_context` names the approved-plan profile (`Approved-plan profile`, `승인 계획 프로필`) or `gil_plan_read` answers `supported: true`, and the
    connected `tools/list` offers `gil_plan_propose`/`gil_plan_read`/`gil_plan_request_interview`.
    Otherwise (legacy projects, default builds, tools absent) never require `gil_plan_*`; use the
    ordinary Synthesis. Do not infer this from the OS or the install kind.
@@ -269,7 +270,7 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
         "synthesis": {"statement": "…", "basis_refs": "step:C1/S1\nstep:C1/S2", "exploration_checklist": "A"}}}
      ```
 
-     `scope` has those five string fields (write `없음` rather than leaving one empty); `items`
+     `scope` has those five string fields (write `none`, or its equivalent in the user's language, rather than leaving one empty); `items`
      is the ordered checklist (1–64) of `id`, `question`, `done_when`; `synthesis` holds the
      Synthesis Report fields as strings, where `exploration_checklist` lists the item IDs in the same
      order, one per line. Replace the example's basis refs with the actual closed Question and
@@ -332,7 +333,7 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    Read the current recorded next call before asking for another click. Chat text itself is not
    approval: if Core still requires approval, keep waiting; if recovery completed, follow Core's
    next call without repeating restore/revisit or reopening a Cycle already opened. Never require
-   the user to repeat a special phrase such as “눌렀어”. Do not poll while waiting for user input.
+   the user to repeat a special phrase such as “I pressed it”. Do not poll while waiting for user input.
 
    | Situation | Recovery |
    | --- | --- |

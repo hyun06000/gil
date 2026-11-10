@@ -23,10 +23,16 @@ import { cycleReportDetail } from './cycle-report.js';
 import { clampZoom, stepZoom, zoomAround, minimapFrame, minimapViewport, scrollToMinimapPoint, minimapNeeded }
   from './viewport.mjs';
 import { progressTracker, progressSummary } from './progress.mjs';
+import { t, setLocale, localeChosen, applyStaticText } from './locale.js';
 
 const observeProgress = progressTracker();
 
 const SUPPORTED_SCHEMA = 1;
+
+// The MCP App chooses the language from its Host context before importing this module. A window
+// without such a Host (the native Companion, the fixture page) follows the browser's own language.
+if (!localeChosen()) setLocale(typeof navigator !== "undefined" ? navigator.language : null);
+applyStaticText(document);
 
 const root = document.getElementById("gil-companion");
 const el = (name) => root.querySelector(name);
@@ -80,29 +86,16 @@ let noticeOwner = null;
  *
  * 글을 뜯어 뜻을 짐작하지 않는다 — `code` 가 갈래를 정하고, Host 가 함께 준 한 줄은
  * **글자 그대로** 덧붙일 뿐이다(§9.1.1-7 · §10). 모르는 code 는 지어내지 않고 그대로 보인다. */
-const REFUSAL = {
-  not_a_project: "이 자리에 GIL Project 가 없다",
-  unsupported_format: "이 Companion 이 읽지 않는 저장 판이다",
-  busy: "다른 GIL 명령이 이 Project 를 쥐고 있다 — 잠시 뒤 새로고침",
-  needs_recovery: "끝나지 않은 복원이 남아 있다 — 창은 그것을 고치지 않는다. " +
-                  "그 Project 에서 GIL 명령을 하나 실행하면 제자리로 돌아간다",
-  damaged: "저장된 것을 읽었지만 말이 되지 않는다",
-  observe_failed: "Project 의 세계를 들여다보지 못했다",
-  unreadable: "그 자리를 읽지 못했다",
-  unknown_scope: "이 창이 연 Project 가 아니다",
-  reconnect_required: "프로젝트 연결을 다시 확인해야 한다",
-  settings_unreadable: "Monitor 연결 설정을 읽지 못했다",
-  settings_damaged: "Monitor 연결 설정이 손상되어 자동 복원을 멈췄다",
-  settings_unsupported: "Monitor 연결 설정의 판을 지원하지 않는다",
-  scope_collision: "서로 다른 두 Project 가 같은 주소를 받았다 — 섞지 않고 멈춘다",
-  project_missing: "등록해 둔 자리를 찾을 수 없다",
-  project_moved: "그 자리에 다른 Project 가 있다",
-  settings_unwritable: "이 창의 설정을 적지 못했다",
-  unsupported_vocabulary: "이 Companion 이 모르는 Grammar 낱말이 있다",
+// Known refusal codes have a sentence in every language table (ui.refusal.<code>).
+const refusalText = (code) => {
+  if (!code) return null;
+  const key = `ui.refusal.${code}`;
+  const found = t(key);
+  return found === key ? null : found;
 };
 const why = (error) => {
   const code = error && error.code;
-  const known = code && REFUSAL[code];
+  const known = refusalText(code);
   const said = error && error.said ? error.said : (error && error.message) || String(error);
   if (known) return `${known} — ${said}`;
   return code ? `${code} — ${said}` : said;
@@ -122,17 +115,9 @@ const say = (message, owner = null) => {
 //
 // **Graph 를 지우지 않는다.** 진행 줄은 위에 한 줄로 서고, 아래는 마지막으로 검증된
 // 화면 그대로다.
-const WORKING = {
-  picking: "폴더를 고르는 중",
-  opening: "Project 를 읽는 중",
-  refreshing: "다시 읽는 중",
-  updating: "업데이트를 확인하는 중",
-  connecting: "Host 에 연결하는 중",
-  disconnecting: "Host 연결을 해제하는 중",
-};
 /** 중복 눌림만 그 손잡이로 막는다. 창 전체를 잠그지 않는다. */
 const busyOn = (what, button) => {
-  working.textContent = WORKING[what];
+  working.textContent = t(`ui.working.${what}`);
   working.dataset.shown = "true";
   if (button) button.disabled = true;
 };
@@ -149,19 +134,15 @@ const clearNotice = () => {
 const text = (value) => (value === null || value === undefined ? "" : String(value));
 
 // ── 사람이 읽는 낱말 ────────────────────────────────────────────────
-const CYCLE_KIND = { interview: "인터뷰", experiment: "실험" };
-const STEP_KIND = {
-  question: "질문", interpretation: "해석", synthesis: "제안", define: "문제",
-  hypothesis: "가설", verify: "검증", analysis: "해석", outcome: "판정",
+// Closed vocabularies are spoken from the language tables: ui.cycle.*, ui.step.*, ui.relation.*,
+// ui.world.*. An unknown word is shown as it came; nothing is invented for it.
+const CYCLE_KIND = "ui.cycle", STEP_KIND = "ui.step", RELATION = "ui.relation", WORLD = "ui.world";
+const word = (prefix, value) => {
+  if (value === null || value === undefined || value === "") return "";
+  const key = `${prefix}.${value}`;
+  const found = t(key);
+  return found === key ? text(value) : found;
 };
-const RELATION = {
-  active_path: "지금 길", revisit_source: "여기서 갈라짐",
-  abandoned: "두고 온 갈래", other: "지난 갈래",
-};
-const WORLD = { clean: "clean — 기준 세계와 같다", dirty: "dirty — 파일이 바뀌었다",
-                unknown: "unknown — 보지 못했다" };
-const VERDICT = { success: "성공", failure: "실패" };
-const word = (table, value) => table[value] || text(value);
 const cycleName = (ref, kind) => `${word(CYCLE_KIND, kind)} ${text(ref).split(":").pop()}`;
 const shortId = (ref) => text(ref).split(":").pop();
 
@@ -262,7 +243,7 @@ function drawCycles() {
     const report = document.createElement('button');
     report.type = 'button';
     report.className = 'cycle-report-hit';
-    report.setAttribute('aria-label', `${cycleName(cycle.ref, cycle.kind)} 사이클 보고서`);
+    report.setAttribute('aria-label', t('ui.cycle_report_aria', { cycle: cycleName(cycle.ref, cycle.kind) }));
     report.setAttribute('aria-selected', String(current.seat.selectedCycle === cycle.ref));
     report.onclick = () => selectCycle(cycle.ref);
     box.appendChild(report);
@@ -280,7 +261,7 @@ function drawCycles() {
     fold.setAttribute("aria-expanded", "true");
     fold.setAttribute(
       "aria-label",
-      `${cycleName(cycle.ref, cycle.kind)} 접기 — Step ${cycle.toRow - cycle.fromRow + 1}개를 감춘다`,
+      t('ui.fold_aria', { cycle: cycleName(cycle.ref, cycle.kind), n: cycle.toRow - cycle.fromRow + 1 }),
     );
     fold.onclick = (event) => {
       event.stopPropagation();
@@ -306,7 +287,7 @@ function drawNodes() {
       button.setAttribute("aria-expanded", "false");
       button.setAttribute(
         "aria-label",
-        `${cycleName(node.ref, node.cycleKind)} — 접혀 있다. Step ${node.stepCount}개. 펼치려면 누른다`,
+        t('ui.collapsed_aria', { cycle: cycleName(node.ref, node.cycleKind), n: node.stepCount }),
       );
       button.dataset.verdict = one && one.report ? one.report.verdict : "";
       button.onclick = () => expandCycle(node.ref);
@@ -320,7 +301,7 @@ function drawNodes() {
       button.setAttribute(
         "aria-label",
         `${word(STEP_KIND, node.stepKind)} · ${node.ref}` +
-          `${node.here ? " · 현재 자리" : ""}${node.summary ? ` · ${node.summary}` : ""}${visuals ? ` · ${visuals.label}` : ""}`,
+          `${node.here ? t('ui.here') : ""}${node.summary ? ` · ${node.summary}` : ""}${visuals ? ` · ${visuals.label}` : ""}`,
       );
       button.onclick = () => selectStep(node.ref);
     }
@@ -337,10 +318,10 @@ export function visualBadge(visuals) {
   if (!visuals || typeof visuals !== 'object') return null;
   if (visuals.state === 'attached' || visuals.state === 'references') {
     const count = Number.isInteger(visuals.count) ? visuals.count : 0;
-    return count > 0 ? { count: String(count), label: `시각 자료 ${count}개` } : null;
+    return count > 0 ? { count: String(count), label: t('ui.visuals_n', { n: count }) } : null;
   }
-  if (visuals.state === 'not_needed') return { count: '0', label: '시각 자료 없음 (사유 기록됨)' };
-  if (visuals.state === 'missing') return { count: String(visuals.count || 0), label: `시각 자료 미완${visuals.count ? ` (${visuals.count}개 첨부)` : ''}` };
+  if (visuals.state === 'not_needed') return { count: '0', label: t('ui.visuals_none') };
+  if (visuals.state === 'missing') return { count: String(visuals.count || 0), label: t('ui.visuals_missing', { attached: visuals.count ? t('ui.visuals_missing_attached', { n: visuals.count }) : '' }) };
   return null;
 }
 
@@ -381,7 +362,7 @@ function drawCard() {
   const step = one && one.steps.find((s) => s.step_ref === seat.selectedStep);
   const head = document.createElement("small");
   head.textContent = folded
-    ? `${cycleName(stepCycle, one ? one.kind : "")} · 접힘`
+    ? t('ui.card_collapsed', { cycle: cycleName(stepCycle, one ? one.kind : "") })
     : `${cycleName(stepCycle, one ? one.kind : "")} · ${word(RELATION, one ? one.relation_to_current : "")}`;
   const name = document.createElement("b");
   name.textContent = step ? `${word(STEP_KIND, step.kind)} · ${seat.selectedStep}` : seat.selectedStep;
@@ -389,13 +370,13 @@ function drawCard() {
   said.textContent = step && step.summary
     ? step.summary
     : folded
-      ? "접힌 Cycle 안의 자리다. 펼치면 그 Step 으로 돌아간다."
-      : "아직 닫히지 않아 요약이 없다.";
+      ? t('ui.card_in_collapsed')
+      : t('ui.card_no_summary');
   let badge = step ? visualBadge(step.visuals) : null;
   if (seat.selectedCycle) {
-    head.textContent = `${cycleName(stepCycle, one.kind)} · ${one.state === 'open' ? '진행 중' : '닫힘'}`;
-    name.textContent = `사이클 보고서 · ${stepCycle}`;
-    said.textContent = one.report?.handoff_summary || '아직 닫히지 않아 최종 보고서가 없다.';
+    head.textContent = `${cycleName(stepCycle, one.kind)} · ${one.state === 'open' ? t('ui.in_progress') : t('ui.closed')}`;
+    name.textContent = t('ui.card_cycle_report', { cycle: stepCycle });
+    said.textContent = one.report?.handoff_summary || t('ui.card_no_report');
     badge = one.report ? visualBadge(one.report.visuals) : null;
   }
   card.append(head, name, said);
@@ -668,19 +649,19 @@ function setOrientation(next) {
 function askedNow(here) {
   const define = here && here.experiment_definition;
   if (define) {
-    return { title: define.problem, under: `성공 기준 · ${define.success_condition}` };
+    return { title: define.problem, under: t('ui.success_criterion', { condition: define.success_condition }) };
   }
   const asked = here && here.interview_question;
   if (asked && asked.state === "asked") {
-    return { title: asked.question, under: asked.response ? `응답 · ${asked.response}` : null };
+    return { title: asked.question, under: asked.response ? t('ui.response', { response: asked.response }) : null };
   }
   if (asked && asked.state === "asking") {
-    return { title: "질문을 열어 두었다 — 묻고 답을 받는 중이다", under: null };
+    return { title: t('ui.asking'), under: null };
   }
   if (asked && asked.state === "not_asked") {
-    return { title: "아직 이 Cycle 의 질문을 열지 않았다", under: null };
+    return { title: t('ui.not_asked'), under: null };
   }
-  return { title: "아직 이 Cycle 의 질문이 정의되지 않았다", under: null };
+  return { title: t('ui.undefined_question'), under: null };
 }
 
 function renderIntro() {
@@ -690,10 +671,10 @@ function renderIntro() {
   intro.querySelector("h1").textContent = asked.title;
   // 질문과 **지금 서 있는 자리**를 섞지 않는다. 자리는 아래 줄과 status 가 따로 말한다.
   intro.querySelector("p").textContent =
-    asked.under ?? `${cycleName(view.current.cycle_ref, here ? here.kind : "")} 안에 서 있다`;
+    asked.under ?? t('ui.standing_in', { cycle: cycleName(view.current.cycle_ref, here ? here.kind : "") });
   intro.querySelector(".world").textContent = word(WORLD, view.world.state);
   status.textContent =
-    `${view.current.chain_ref ? `${view.current.chain_ref} · ${view.chain?.state === "closed" ? "Chain 닫힘" : "Chain 열림"} · ` : ""}${view.current.cycle_ref} · ${view.current.step_ref || "Cycle 경계"} · 읽기 전용`;
+    `${view.current.chain_ref ? `${view.current.chain_ref} · ${view.chain?.state === "closed" ? t('ui.chain_closed') : t('ui.chain_open')} · ` : ""}${view.current.cycle_ref} · ${view.current.step_ref || t('ui.cycle_boundary')} · ${t('ui.read_only')}`;
   const summary = progressSummary(view);
   for (const field of ['position', 'action', 'done']) {
     intro.querySelector(`.progress-${field}`).textContent = summary[field];
@@ -702,9 +683,9 @@ function renderIntro() {
   const observed = observeProgress(current.scopeId, view);
   const at = new Date(observed.observedAt).toLocaleTimeString();
   intro.querySelector('.progress-observed').textContent = observed.changed
-    ? `이 화면에서 마지막 기록 변화 확인: ${at}`
-    : `이 화면에서 기록 확인: ${at} · 이후 기록 변화는 아직 확인되지 않았습니다.`;
-  intro.querySelector('.progress-connection').textContent = 'Monitor 조회 성공 · 기록된 작업을 표시합니다.';
+    ? t('ui.observed_changed', { at })
+    : t('ui.observed', { at });
+  intro.querySelector('.progress-connection').textContent = t('ui.connection_ok');
 }
 
 let disposeVisuals = () => {};
@@ -714,7 +695,7 @@ function renderDetail(node) {
   if (!node) {
     const empty = document.createElement("p");
     empty.className = "empty";
-    empty.textContent = "노드 또는 사이클 보고서를 선택하면 그 보고서를 보여 준다.";
+    empty.textContent = t('ui.select_hint');
     detail.appendChild(empty);
     return;
   }
@@ -722,20 +703,20 @@ function renderDetail(node) {
   const reportOwner = node.owner || {kind:'step',ref:node.step_ref};
   const isCycle = reportOwner.kind === 'cycle';
   head.textContent = isCycle
-    ? `${cycleName(node.cycle_ref,node.kind)} · 사이클 보고서 · ${node.state === 'open' ? '열림' : '닫힘'}`
-    : `${node.cycle_ref} · ${word(STEP_KIND, node.kind)} · ${node.state === "open" ? "열림" : "닫힘"}`;
+    ? t('ui.detail_cycle_head', { cycle: cycleName(node.cycle_ref,node.kind), state: node.state === 'open' ? t('ui.open') : t('ui.closed') })
+    : `${node.cycle_ref} · ${word(STEP_KIND, node.kind)} · ${node.state === "open" ? t('ui.open') : t('ui.closed')}`;
   const name = document.createElement("h2");
   name.textContent = reportOwner.ref;
   detail.append(head, name);
   if (current?.seat.detailStale) {
     const stale = document.createElement('p');
     stale.className = 'detail-stale';
-    stale.textContent = '이 상세는 이전 조회 결과입니다. 상태·보고서가 최신이 아닐 수 있습니다.';
+    stale.textContent = t('ui.detail_stale');
     detail.prepend(stale);
   }
   if (isCycle) {
     const note = document.createElement('p');
-    note.textContent = '보고서 요약 — 판정·인계·당시 다음 방향. 세부 관측은 각 Step 보고서에서 확인합니다.';
+    note.textContent = t('ui.cycle_report_note');
     detail.append(note);
   }
   // **시각 자료가 먼저다.** 사람은 그림으로 결과를 먼저 보고, 그 다음 글을 읽는다. Host 가
@@ -748,7 +729,7 @@ function renderDetail(node) {
   if (!node.report) {
     const empty = document.createElement("p");
     empty.className = "empty";
-    empty.textContent = "아직 닫히지 않아 Report 가 없다.";
+    empty.textContent = t('ui.no_report');
     detail.appendChild(empty);
     attachVisuals();
     return;
@@ -793,8 +774,7 @@ async function selectStep(stepRef) {
     if (!isCurrent()) return;
     seat.detailStale = true;
     renderDetail(seat.detail);
-    say(`상세를 읽지 못했다 — ${why(error)}` +
-      (seat.detail ? " · 마지막으로 확인한 보고서를 표시하고 있다. 최신 내용은 확인하지 못했다." : ""), "detail");
+    say(t('ui.detail_failed', { why: why(error) }) + (seat.detail ? t('ui.detail_last') : ""), "detail");
   }
 }
 
@@ -834,9 +814,9 @@ function expandCycle(cycleRef) {
  * 옆에 적는다.
  */
 function markStale(error) {
-  stale.textContent = `마지막으로 확인된 화면이다. 다시 읽지 못했다: ${why(error)}`;
+  stale.textContent = t('ui.stale', { why: why(error) });
   stale.dataset.shown = "true";
-  intro.querySelector('.progress-connection').textContent = 'Monitor 조회 실패 · 아래는 마지막으로 확인한 기록입니다.';
+  intro.querySelector('.progress-connection').textContent = t('ui.connection_failed');
 }
 function markFresh() {
   stale.textContent = "";
@@ -886,7 +866,7 @@ async function readOnce() {
     if (!current || current.scopeId !== scopeId) return; // 그새 Project 가 바뀌었다
     if (view.schema_version !== SUPPORTED_SCHEMA) {
       markStale({ code: "unsupported_vocabulary",
-                  said: `schema_version ${view.schema_version} 을 읽을 수 없다` });
+                  said: t('ui.schema_unreadable', { version: view.schema_version }) });
       return;
     }
     // **통째로 갈아 끼운다.** 옛 View 에 새 조각을 얹어 사실을 만들지 않는다.
@@ -1002,14 +982,13 @@ async function showScope(scopeId) {
   try {
     view = await window.GIL_HOST.loadView(scopeId);
   } catch (error) {
-    say(`이 Project 를 읽지 못했다 — ${why(error)}`);
+    say(t('ui.project_failed', { why: why(error) }));
     return;
   } finally {
     busyOff(null);
   }
   if (view.schema_version !== SUPPORTED_SCHEMA) {
-    say(`이 Companion 은 schema_version ${view.schema_version} 을 읽을 수 없다 ` +
-        `(v${SUPPORTED_SCHEMA} 만 안다).`);
+    say(t('ui.schema_unsupported', { version: view.schema_version, supported: SUPPORTED_SCHEMA }));
     return;
   }
   current = { scopeId, view, seat: seatOf(scopeId), plan: null };
@@ -1053,7 +1032,7 @@ async function listScopes() {
       ? ` · Cycle ${one.cycles} · Step ${one.steps}`
       : "";
     // 못 여는 것도 목록에 남는다 — 사람이 등록해 둔 사실은 사라지지 않는다(§9.1.2).
-    const gone = one.unavailable ? ` — ${word(REFUSAL, one.unavailable) || one.unavailable}` : "";
+    const gone = one.unavailable ? ` — ${refusalText(one.unavailable) || one.unavailable}` : "";
     if (one.unavailable) option.dataset.unavailable = one.unavailable;
     option.textContent = `${naming(one)}${size}${gone}`;
     scopeSelect.appendChild(option);
@@ -1076,28 +1055,17 @@ async function checkForUpdate() {
   try {
     const found = await window.GIL_HOST.checkUpdate();
     if (!found) {
-      say("최신 버전을 사용하고 있다.");
+      say(t('ui.up_to_date'));
       return;
     }
     const notes = found.body ? `\n\n${found.body}` : "";
-    const approved = window.confirm(
-      `GIL Companion ${found.version} 업데이트를 설치할까요?` +
-      `\n현재 버전: ${found.current_version}` +
-      "\n\n다운로드가 끝나면 Windows 설치창이 열립니다." +
-      "\n\nCodex는 닫지 않아도 됩니다. Claude Desktop도 닫지 않아도 됩니다. 기존 GIL 대화는 현재 Core로 계속되고, " +
-      "새 대화부터 새 Core를 사용합니다. 연결된 모든 Host 가 같은 고정 런처를 쓰므로 한쪽만 바뀌는 일은 없습니다. " +
-      "설치 중에는 GIL Companion만 닫힐 수 있습니다." +
-      notes,
-    );
+    const approved = window.confirm(t('ui.update_confirm', { version: found.version, current: found.current_version, notes }));
     if (!approved) return;
-    working.textContent = "서명된 업데이트를 내려받는 중 — 완료되면 설치창이 열립니다";
+    working.textContent = t('ui.downloading');
     await window.GIL_HOST.installUpdate(found.version);
-    say(
-      "업데이트 설치를 시작했다. Codex·Claude Desktop 과 기존 GIL 대화는 계속 사용할 수 있다. " +
-      "Windows에서는 Companion만 닫힐 수 있으며 새 대화부터 새 Core가 적용된다.",
-    );
+    say(t('ui.update_started'));
   } catch (error) {
-    say(`업데이트하지 못했다 — ${why(error)}`);
+    say(t('ui.update_failed', { why: why(error) }));
   } finally {
     busyOff(updateButton);
   }
@@ -1108,33 +1076,20 @@ async function checkForUpdate() {
 // 두 Host 는 **같은 고정 런처**를 등록한다. 다른 것은 등록을 적는 자리(공식 CLI / Desktop 설정
 // 파일)와 사람에게 보이는 이름뿐이다. 이 bundle 은 그 차이를 모른다 — Host 가 준 문의 이름과
 // 사람의 말만 다르다. 사용자가 고른 Host 하나만 바꾸고, 다른 Host 의 등록은 읽지도 않는다.
+// The sentences live in the language tables under ui.host.<key>.*; only the door names stay here.
 const HOSTS = {
   codex: {
     label: "Codex",
     capability: "codexCapability", connection: "codexConnection",
     connect: "connectCodex", disconnect: "disconnectCodex", repair: "repairCodexConnection",
-    connectAsk: "Codex 사용자 설정에 GIL MCP 연결을 추가할까요?\n기존 gil 등록은 덮어쓰지 않습니다.",
-    disconnectAsk: "Codex에서 GIL MCP 연결을 해제할까요?\n열려 있는 GIL 대화는 닫은 뒤 앱 제거를 계속하세요.",
-    repairAsk: "예전 GIL 플러그인 또는 연결을 제거하고, 지금 설치된 GIL Core로 교체할까요?\n다른 플러그인과 Project 파일은 건드리지 않습니다.",
-    connectTitle: "공식 Codex CLI로 GIL MCP를 등록한다",
-    repairTitle: "사용자 확인 후 예전 GIL 플러그인·연결을 제거하고 설치된 Core에 연결한다",
-    toolMissing: "Codex 앱의 연결 도구를 찾지 못했다. Codex를 완전히 종료했다 다시 연 뒤 재시도한다.",
   },
   claude: {
     label: "Claude Desktop",
     capability: "claudeCapability", connection: "claudeConnection",
     connect: "connectClaude", disconnect: "disconnectClaude", repair: "repairClaudeConnection",
-    connectAsk: "Claude Desktop 설정에 GIL MCP 연결을 추가할까요?\n기존 gil 등록은 덮어쓰지 않습니다. " +
-      "Claude Desktop 이 실행 중이면 먼저 완전히 종료해야 합니다(실행 중 바뀐 설정은 되돌아갈 수 있습니다).",
-    disconnectAsk: "Claude Desktop에서 GIL MCP 연결을 해제할까요?\n열려 있는 GIL 대화는 닫은 뒤 앱 제거를 계속하세요. " +
-      "Claude Desktop 이 실행 중이면 먼저 완전히 종료해야 합니다.",
-    repairAsk: "예전 GIL 연결을 지금 설치된 GIL 고정 런처로 교체할까요?\n다른 MCP 서버와 Project 파일은 건드리지 않습니다. " +
-      "Claude Desktop 이 실행 중이면 먼저 완전히 종료해야 합니다.",
-    connectTitle: "Claude Desktop 설정 파일(claude_desktop_config.json)에 GIL 고정 런처를 등록한다. Claude Code 탭도 같은 설정을 읽는다",
-    repairTitle: "사용자 확인 후 다른 GIL 실행 파일을 가리키는 gil 등록을 설치된 고정 런처로 교체한다",
-    toolMissing: "Claude Desktop 설정 폴더를 찾지 못했다. Claude Desktop을 설치하고 한 번 실행한 뒤 재시도한다.",
   },
 };
+const hostSay = (key, what, args) => t(`ui.host.${key}.${what}`, args);
 const hostState = { codex: "unknown", claude: "unknown" };
 const hostButton = (key) => connectHostButtons.find((one) => one.dataset.host === key);
 const hostApi = (key, name) => window.GIL_HOST[HOSTS[key][name]];
@@ -1143,11 +1098,11 @@ async function connectHost(key) {
   const host = HOSTS[key], button = hostButton(key);
   busyOn("connecting", button);
   try {
-    if (!window.confirm(host.connectAsk)) return;
+    if (!window.confirm(hostSay(key, "connect_ask"))) return;
     say(await hostApi(key, "connect")());
     await refreshHostConnection(key);
   } catch (error) {
-    say(`${host.label}에 연결하지 못했다 — ${why(error)}`);
+    say(t('ui.host.connect_failed', { host: host.label, why: why(error) }));
   } finally {
     busyOff(button);
     button.disabled = hostState[key] === "conflict";
@@ -1158,11 +1113,11 @@ async function disconnectHost(key) {
   const host = HOSTS[key], button = hostButton(key);
   busyOn("disconnecting", button);
   try {
-    if (!window.confirm(host.disconnectAsk)) return;
+    if (!window.confirm(hostSay(key, "disconnect_ask"))) return;
     say(await hostApi(key, "disconnect")());
     await refreshHostConnection(key);
   } catch (error) {
-    say(`${host.label} 연결을 해제하지 못했다 — ${why(error)}`);
+    say(t('ui.host.disconnect_failed', { host: host.label, why: why(error) }));
   } finally {
     busyOff(button);
     button.disabled = hostState[key] === "conflict";
@@ -1173,11 +1128,11 @@ async function repairHostConnection(key) {
   const host = HOSTS[key], button = hostButton(key);
   busyOn("connecting", button);
   try {
-    if (!window.confirm(host.repairAsk)) return;
+    if (!window.confirm(hostSay(key, "repair_ask"))) return;
     say(await hostApi(key, "repair")());
     await refreshHostConnection(key);
   } catch (error) {
-    say(`${host.label} 연결을 교체하지 못했다 — ${why(error)}`);
+    say(t('ui.host.repair_failed', { host: host.label, why: why(error) }));
   } finally {
     busyOff(button);
   }
@@ -1191,26 +1146,25 @@ async function refreshHostConnection(key) {
   button.hidden = false;
   button.disabled = false;
   // 등록이 가리키는 실행 파일을 그대로 보여 준다 — 사람이 옛 버전 폴더의 Core 와 고정 런처를 구분할 수 있게.
-  const registered = connection.command ? `\n등록된 실행 파일: ${connection.command}` : "";
-  const running = connection.desktop_running === true
-    ? `\n${host.label} 이 실행 중이다 — 설정을 바꾸기 전에 완전히 종료한다.` : "";
+  const registered = connection.command ? t('ui.host.registered', { command: connection.command }) : "";
+  const running = connection.desktop_running === true ? t('ui.host.running', { host: host.label }) : "";
   if (hostState[key] === "connected") {
-    button.textContent = `${host.label} 연결 해제`;
-    button.title = `GIL이 만든 MCP 등록만 확인 후 해제한다${registered}${running}`;
+    button.textContent = t('ui.host.disconnect', { host: host.label });
+    button.title = t('ui.host.disconnect_title', { registered, running });
     button.onclick = () => disconnectHost(key);
   } else if (hostState[key] === "not_connected") {
-    button.textContent = `${host.label} 연결`;
-    button.title = `${host.connectTitle}${running}`;
+    button.textContent = t('ui.host.connect', { host: host.label });
+    button.title = `${hostSay(key, "connect_title")}${running}`;
     button.onclick = () => connectHost(key);
   } else if (hostState[key] === "conflict") {
     // 사용자가 직접 만든 동명 등록. 읽기만 하고 바꾸지 않는다.
-    button.textContent = `${host.label} 에 다른 gil 등록 있음`;
-    button.title = `이름이 같은 다른 gil 등록이 있어 GIL 이 바꾸지 않는다${registered}`;
+    button.textContent = t('ui.host.conflict', { host: host.label });
+    button.title = t('ui.host.conflict_title', { registered });
     button.disabled = true;
     button.onclick = null;
   } else {
-    button.textContent = `${host.label} 이전 GIL 연결 교체`;
-    button.title = `${host.repairTitle}${registered}${running}`;
+    button.textContent = t('ui.host.repair', { host: host.label });
+    button.title = `${hostSay(key, "repair_title")}${registered}${running}`;
     button.onclick = () => repairHostConnection(key);
   }
 }
@@ -1220,16 +1174,16 @@ function showHostUnavailable(key, message) {
   hostState[key] = "unavailable";
   button.hidden = false;
   button.disabled = false;
-  button.textContent = `${host.label} 연결 다시 시도`;
+  button.textContent = t('ui.host.retry', { host: host.label });
   button.title = message;
   button.onclick = async () => {
     busyOn("connecting", button);
     try {
       await refreshHostConnection(key);
-      say(`${host.label} 연결 상태를 다시 확인했다.`);
+      say(t('ui.host.rechecked', { host: host.label }));
     } catch (error) {
       showHostUnavailable(key, why(error));
-      say(`${host.label} 연결 상태를 확인하지 못했다 — ${why(error)}`);
+      say(t('ui.host.check_failed', { host: host.label, why: why(error) }));
     } finally {
       busyOff(button);
     }
@@ -1252,23 +1206,23 @@ async function startHostConnection(key) {
       hostState[key] = "unavailable";
       button.hidden = false;
       button.disabled = true;
-      button.textContent = "GIL 설치 확인 필요";
-      button.title = "GIL 런타임을 찾지 못했다. Companion 설치를 다시 실행한다";
+      button.textContent = t('ui.host.install_check');
+      button.title = t('ui.host.runtime_missing');
     } else if (capability.cli_found === false) {
-      showHostUnavailable(key, host.toolMissing);
-      say(host.toolMissing);
+      showHostUnavailable(key, hostSay(key, "tool_missing"));
+      say(hostSay(key, "tool_missing"));
     } else {
       await refreshHostConnection(key);
     }
   } catch (error) {
     showHostUnavailable(key, why(error));
-    say(`${host.label} 연결 상태를 확인하지 못했다 — ${why(error)}`);
+    say(t('ui.host.check_failed', { host: host.label, why: why(error) }));
   }
 }
 
 async function start() {
   if (!window.GIL_HOST) {
-    say("이 Host 가 GIL_HOST 를 제공하지 않는다.");
+    say(t('ui.no_host'));
     return;
   }
   // **문이 할 수 있는 것만 켠다.** bundle 은 어느 Host 인지 모르지만, 그 문에 폴더를 고르는
@@ -1302,9 +1256,7 @@ async function start() {
     });
     window.GIL_HOST.listen("gil://connection", (error) => {
       if (!current) return;
-      intro.querySelector('.progress-connection').textContent = error
-        ? 'Monitor 연결 실패 · 아래는 마지막으로 확인한 기록입니다.'
-        : 'Monitor 연결 회복 · 아래는 마지막 조회에서 확인한 기록입니다.';
+      intro.querySelector('.progress-connection').textContent = error ? t('ui.connection_lost') : t('ui.connection_restored');
     });
     // 이 창의 사정. Graph 를 건드리지 않고 한 줄로 알린다.
     window.GIL_HOST.listen("gil://say", (said) => {
@@ -1312,10 +1264,10 @@ async function start() {
       // 자동 갱신이 (다시) 섰다 — 앞서 적어 둔 그 말만 걷는다. 남의 알림은 건드리지
       // 않는다. 성공했다고 따로 알리지도 않는다(토스트를 쌓지 않는다).
       if (said.code === "watch_live") {
-        if (notice.textContent.includes("자동 갱신을 시작하지 못했다")) clearNotice();
+        if (noticeOwner === "say:watch_unavailable") clearNotice();
         return;
       }
-      if (said.said) say(said.said);
+      if (said.said) say(said.said, said.code ? `say:${said.code}` : null);
     });
   }
 
@@ -1354,7 +1306,7 @@ async function start() {
     chooseNothing();
     // 열 수 없다는 사실만 말하고 **다른 Project 로 물러서지 않는다.**
     scopeSelect.value = start.scope_id;
-    say(`마지막으로 보던 Project 를 열 수 없다 — ${word(REFUSAL, start.unavailable) || start.unavailable}`);
+    say(t('ui.last_unavailable', { why: refusalText(start.unavailable) || start.unavailable }));
     return;
   }
   scopeSelect.value = start.scope_id;

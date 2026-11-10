@@ -372,7 +372,7 @@ impl StoredState {
     /// 두 축을 각자 세운 뒤 [`Project::restore`] 가 **서로 맞물리는지**를 잰다.
     fn into_project(self, rules: RuleSet) -> Result<Project, StoreError> {
         if matches!(self.format, VISUAL_FORMAT | CHAIN_VISUAL_FORMAT) != self.visuals.is_some() {
-            return Err(StoreError::VisualState("저장 형식과 시각 registry가 일치하지 않는다".into()));
+            return Err(StoreError::VisualState(crate::locale::text("store.visual_registry_mismatch").into()));
         }
         let world = match (self.format, self.cycles, self.chains) {
             (CHAIN_FORMAT | CHAIN_VISUAL_FORMAT, None, Some(stored)) => {
@@ -442,7 +442,7 @@ impl StoredState {
             for entry in visuals.boundary {
                 let owner = read_ref(&entry.existence_ref, "visuals.boundary.existence_ref")?;
                 if heads.insert(owner, entry.revision).is_some() {
-                    return Err(StoreError::VisualState("중복 이관 경계".into()));
+                    return Err(StoreError::VisualState(crate::locale::text("store.duplicate_migration_boundary").into()));
                 }
             }
             let boundary = MigrationBoundary { heads };
@@ -1093,76 +1093,35 @@ pub enum StoreError {
 impl fmt::Display for StoreError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            StoreError::ChainState(why) => write!(f, "Chain 저장 상태를 거절했다: {why}"),
-            StoreError::VisualState(reason) => write!(f, "시각 Report 저장 상태가 맞지 않다: {reason}"),
-            StoreError::NotFound { path } => {
-                write!(f, "저장된 것이 없다: {path}")
-            }
-            StoreError::LegacyFormat { path } => write!(
-                f,
-                "여기 있는 {path} 는 **앞 형식**이라 이 gil 이 읽지 않는다.\n\
-                 조용히 무시하지 않으려고 알린다 — 그 안의 기록은 그대로 있다.\n\
-                 새로 시작하려면 그 파일을 직접 치우고 `gil start` 를 한다."
-            ),
-            StoreError::Read { path, source } => {
-                write!(f, "저장된 것을 읽지 못했다: {path} — {source}")
-            }
-            StoreError::Write { path, source } => {
-                write!(f, "상태를 쓰지 못했다: {path} — {source}")
-            }
-            StoreError::Encode(source) => write!(f, "저장할 꼴로 옮기지 못했다: {source}"),
-            StoreError::Decode(source) => write!(f, "저장 파일의 형식이 맞지 않다: {source}"),
-            StoreError::UnknownFormat { found, known } => write!(
-                f,
-                "저장 형식 {found} 은(는) 이 gil 이 모른다 (아는 것: {known}) \
-                 — 모르는 형식을 짐작해 읽지 않는다"
-            ),
+            StoreError::ChainState(why) => f.write_str(&crate::tr!("store.chain_state", why = why)),
+            StoreError::VisualState(reason) => f.write_str(&crate::tr!("store.visual_state", reason = reason)),
+            StoreError::NotFound { path } => f.write_str(&crate::tr!("store.not_found", path = path)),
+            StoreError::LegacyFormat { path } => f.write_str(&crate::tr!("store.legacy_format", path = path)),
+            StoreError::Read { path, source } => f.write_str(&crate::tr!("store.read", path = path, source = source)),
+            StoreError::Write { path, source } => f.write_str(&crate::tr!("store.write", path = path, source = source)),
+            StoreError::Encode(source) => f.write_str(&crate::tr!("store.encode", source = source)),
+            StoreError::Decode(source) => f.write_str(&crate::tr!("store.decode", source = source)),
+            StoreError::UnknownFormat { found, known } => f.write_str(&crate::tr!("store.unknown_format", found = found, known = known)),
             StoreError::PreviousFormat {
                 found,
                 current,
                 path,
-            } => write!(
-                f,
-                "여기 있는 {path} 는 **저장 형식 {found}** 이고, 이 gil 은 {current} 를 읽는다.\n\
-                 조용히 무시하지 않으려고 알린다 — 그 안의 기록은 그대로 있다.\n\
-                 새로 시작하려면 그 파일을 직접 치우고 `gil start` 를 한다."
-            ),
-            StoreError::JourneyWithoutState => write!(
-                f,
-                "Journey 판에 existence_state_ref 가 없다 — 모든 판은 실재하는 \
-                 Existence State 를 가리켜야 한다"
-            ),
+            } => f.write_str(&crate::tr!("store.previous_format", path = path, found = found, current = current)),
+            StoreError::JourneyWithoutState => f.write_str(crate::locale::text("store.journey_without_state")),
             StoreError::BadRef {
                 field,
                 value,
                 source,
-            } => write!(f, "{field} 의 {value:?} 를 읽지 못했다 — {source}"),
-            StoreError::NotWhole(source) => write!(
-                f,
-                "저장 파일의 세계와 존재가 서로 맞물리지 않는다 — {source}"
-            ),
-            StoreError::NotValid(source) => write!(
-                f,
-                "저장 파일이 걸어서 만들 수 없는 꼴을 담고 있다 — {source}"
-            ),
-            StoreError::Registry(source) => write!(
-                f,
-                "Snapshot registry 가 걸어서 만들 수 없는 꼴이다 — {source}"
-            ),
-            StoreError::DigestNotCanonical { value } => write!(
-                f,
-                "manifest 주소 {value:?} 가 소문자 canonical 16진수가 아니다 — \
-                 같은 세계가 두 글자꼴을 가지면 이름이 세계를 가리키지 못한다"
-            ),
+            } => f.write_str(&crate::tr!("store.bad_ref", field = field, value = format!("{value:?}"), source = source)),
+            StoreError::NotWhole(source) => f.write_str(&crate::tr!("store.not_whole", source = source)),
+            StoreError::NotValid(source) => f.write_str(&crate::tr!("store.not_valid", source = source)),
+            StoreError::Registry(source) => f.write_str(&crate::tr!("store.registry", source = source)),
+            StoreError::DigestNotCanonical { value } => f.write_str(&crate::tr!("store.digest_not_canonical", value = format!("{value:?}"))),
             StoreError::Manifest {
                 world,
                 address,
                 said,
-            } => write!(
-                f,
-                "{world} 가 가리키는 manifest(sha256:{address}) 를 읽지 못했다 — {said}\n\
-                 Node·Will·Journey 는 닫히지도 움직이지도 않았다."
-            ),
+            } => f.write_str(&crate::tr!("store.manifest", world = world, address = address, said = said)),
         }
     }
 }

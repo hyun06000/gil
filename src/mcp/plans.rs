@@ -74,7 +74,7 @@ pub(super) fn valid(name: &str, input: &Value) -> bool {
 fn session(root: &str) -> Result<ProjectSession, String> {
     let root = Path::new(root);
     if !root.is_absolute() {
-        return Err("명시한 Project 절대경로가 필요하다".into());
+        return Err(crate::locale::text("plan_tool.abs_root").into());
     }
     let state = crate::project_state::state_for_root(root).map_err(|e| e.to_string())?;
     ProjectSession::open_plan_editor(root, &state).map_err(|e| e.to_string())
@@ -94,11 +94,11 @@ fn view(p: &Project) -> Value {
         "retry_pending":state.pending(chain).iter().filter(|i| state.executed_cycles.iter().any(|e| e.item_id == i.id)).map(|i| &i.id).collect::<Vec<_>>(),
         "current_item":p.current_plan_item(), "current_cycle":current_cycle, "pending":state.pending(chain), "reinterview_requests":state.awaiting_interview(chain), "executed_cycles":state.executed_cycles,
         "close_report":proposal.and_then(|p| p.report().ok()).map(|r| crate::approved_plan::report_text(&r)), "document":p.plan_document(),
-        "next":format!("{}\n새 Interview 제안은 active_plan.items 전체(실행된 항목 포함)를 원문 그대로 복사하고 새 ID를 추가한다. 순서와 scope는 새 승인으로 바꿀 수 있지만 기존 항목의 question/done_when은 바꿀 수 없다. active_plan은 실행 가능한 승인 판이며 아직 없으면 null이다. document는 Experiment를 열 때 바인딩된 승인 판의 UTF-8 원문이다. 바인딩 전에는 null이며 조회·실패한 close가 생성하지 않는다. 현재 Experiment에 바인딩이 있는데 null이면 요약을 만들어 쓰지 말고 현재 연결·상태를 확인한다. 파일 저장은 실제 열린 Verify에서만 한다. 한 Experiment는 current_item 하나에만 연결된다. executed_cycles는 열기 바인딩이며 성공 증명은 해당 Cycle Report다.", crate::context::next_call(p))})
+        "next":crate::tr!("plan_tool.next", next = crate::context::next_call(p))})
 }
 impl Grants {
     fn token(&self, scope: &str, revision: u32, digest: &str) -> Result<String, String> {
-        let mut grants = self.0.lock().map_err(|_| "승인 연결을 열지 못했다")?;
+        let mut grants = self.0.lock().map_err(|_| crate::locale::text("plan_tool.grants_lock"))?;
         if let Some(g) = grants
             .get(scope)
             .filter(|g| g.revision == revision && g.digest == digest)
@@ -106,10 +106,10 @@ impl Grants {
             return Ok(g.token.clone());
         }
         if !grants.contains_key(scope) && grants.len() >= 32 {
-            return Err("승인 연결 한도".into());
+            return Err(crate::locale::text("plan_tool.grants_limit").into());
         }
         let mut bytes = [0u8; 32];
-        getrandom::fill(&mut bytes).map_err(|_| "안전한 승인 연결을 만들지 못했다")?;
+        getrandom::fill(&mut bytes).map_err(|_| crate::locale::text("plan_tool.grants_random"))?;
         let token = bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
         grants.insert(
             scope.into(),
@@ -122,13 +122,13 @@ impl Grants {
         Ok(token)
     }
     fn check(&self, request: &Decide) -> Result<(), String> {
-        let grants = self.0.lock().map_err(|_| "승인 연결을 열지 못했다")?;
+        let grants = self.0.lock().map_err(|_| crate::locale::text("plan_tool.grants_lock"))?;
         if grants.get(&request.scope_id).is_some_and(|g| {
             g.revision == request.revision && g.digest == request.digest && g.token == request.token
         }) {
             Ok(())
         } else {
-            Err("승인 화면 연결이 오래됐거나 일치하지 않는다. Monitor에서 새 제안을 읽는다".into())
+            Err(crate::locale::text("plan_tool.stale_grant").into())
         }
     }
 }
@@ -136,7 +136,7 @@ pub(super) fn call(monitor: &Monitor, grants: &Grants, name: &str, input: Value)
     let run = || -> Result<CallToolResult, String> {
         match name {
             "gil_plan_propose" => {
-                let r: Propose = serde_json::from_value(input).map_err(|_| "잘못된 제안 입력")?;
+                let r: Propose = serde_json::from_value(input).map_err(|_| crate::locale::text("plan_tool.bad_propose"))?;
                 let mut s = session(&r.project_root)?;
                 s.project_mut().propose_plan(r.draft)?;
                 s.commit().map_err(|e| e.to_string())?;
@@ -144,22 +144,22 @@ pub(super) fn call(monitor: &Monitor, grants: &Grants, name: &str, input: Value)
             }
             "gil_plan_request_interview" => {
                 let r: RequestInterview =
-                    serde_json::from_value(input).map_err(|_| "잘못된 재인터뷰 요청")?;
+                    serde_json::from_value(input).map_err(|_| crate::locale::text("plan_tool.bad_reinterview"))?;
                 let mut s = session(&r.project_root)?;
                 s.project_mut().request_plan_interview(r.reason)?;
                 s.commit().map_err(|e| e.to_string())?;
                 Ok(CallToolResult::structured(view(s.project())))
             }
             "gil_plan_read" => {
-                let r: Read = serde_json::from_value(input).map_err(|_| "잘못된 조회 입력")?;
+                let r: Read = serde_json::from_value(input).map_err(|_| crate::locale::text("plan_tool.bad_read"))?;
                 let s = session(&r.project_root)?;
                 Ok(CallToolResult::structured(view(s.project())))
             }
             "gil_plan_review" => {
-                let r: Review = serde_json::from_value(input).map_err(|_| "잘못된 화면 입력")?;
+                let r: Review = serde_json::from_value(input).map_err(|_| crate::locale::text("plan_tool.bad_review"))?;
                 let root = monitor.root(&r.scope_id).map_err(|e| e.said)?;
-                let s = session(root.to_str().ok_or("Project 경로 인코딩")?).map_err(
-                    |_| "프로젝트 기록을 읽지 못했다. 다른 작업이 끝난 뒤 다시 확인한다",
+                let s = session(root.to_str().ok_or(crate::locale::text("plan_tool.path_encoding"))?).map_err(
+                    |_| crate::locale::text("plan_tool.record_unreadable"),
                 )?;
                 monitor.root(&r.scope_id).map_err(|e| e.said)?;
                 let value = view(s.project());
@@ -173,24 +173,24 @@ pub(super) fn call(monitor: &Monitor, grants: &Grants, name: &str, input: Value)
                         result["_meta"] = json!({"gil/planApprovalToken": grants.token(&r.scope_id, p.revision, &p.digest)?});
                     }
                 }
-                serde_json::from_value(result).map_err(|_| "승인 화면 응답을 만들지 못했다".into())
+                serde_json::from_value(result).map_err(|_| crate::locale::text("plan_tool.review_response").into())
             }
             "gil_plan_decide" => {
-                let r: Decide = serde_json::from_value(input).map_err(|_| "잘못된 승인 입력")?;
+                let r: Decide = serde_json::from_value(input).map_err(|_| crate::locale::text("plan_tool.bad_decide"))?;
                 grants.check(&r)?;
                 let root = monitor.root(&r.scope_id).map_err(|e| e.said)?;
-                let mut s = session(root.to_str().ok_or("Project 경로 인코딩")?).map_err(
-                    |_| "프로젝트 기록을 읽지 못했다. 다른 작업이 끝난 뒤 다시 확인한다",
+                let mut s = session(root.to_str().ok_or(crate::locale::text("plan_tool.path_encoding"))?).map_err(
+                    |_| crate::locale::text("plan_tool.record_unreadable"),
                 )?;
                 monitor.root(&r.scope_id).map_err(|e| e.said)?;
                 s.project_mut()
                     .decide_plan(r.revision, &r.digest, r.decision)?;
                 s.commit().map_err(
-                    |_| "승인 저장 결과를 확인하지 못했다. 다시 조회하고 기록 여부를 확인한다",
+                    |_| crate::locale::text("plan_tool.save_unknown"),
                 )?;
                 Ok(CallToolResult::structured(view(s.project())))
             }
-            _ => Err("알 수 없는 승인 도구".into()),
+            _ => Err(crate::locale::text("plan_tool.unknown").into()),
         }
     };
     run().unwrap_or_else(|why| super::actions::refusal(&why))

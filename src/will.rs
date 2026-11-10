@@ -177,13 +177,7 @@ pub enum ContractError {
 impl fmt::Display for ContractError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ContractError::Missing { fields } => write!(
-                f,
-                "행동 계약에 {} 이(가) 없다 — 실행형 Node 는 무엇을 하려는지 적지 않고 \
-                 열지 않는다.\n\
-                 GIL 은 Node 종류만 보고 그 내용을 지어내지 않는다.",
-                fields.join(", ")
-            ),
+            ContractError::Missing { fields } => f.write_str(&crate::tr!("will.missing", fields = fields.join(", "))),
         }
     }
 }

@@ -794,47 +794,18 @@ pub enum NextDirectionError {
 impl fmt::Display for NextDirectionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            NextDirectionError::TargetMissing { cycle } => write!(
-                f,
-                "{ACTION_REVISIT} 인데 {NEXT_TARGET} 이(가) 없다 — 어디로 돌아갈지 적어야 한다.\n\
-                 꼴: {NEXT_TARGET}: step:{}/S<번호>",
-                cycle.id()
-            ),
-            NextDirectionError::TargetNotAllowed(action) => write!(
-                f,
-                "{action:?} 에는 {NEXT_TARGET} 을(를) 적을 수 없다 — 돌아갈 자리가 없는 방향이다"
-            ),
+            NextDirectionError::TargetMissing { cycle } => f.write_str(&crate::tr!("walk.dir.target_missing", action = ACTION_REVISIT, field = NEXT_TARGET, cycle = cycle.id())),
+            NextDirectionError::TargetNotAllowed(action) => f.write_str(&crate::tr!("walk.dir.target_not_allowed", action = format!("{action:?}"), field = NEXT_TARGET)),
             NextDirectionError::TargetUnreadable {
                 value,
                 source,
                 suggestion,
-            } => write!(
-                f,
-                "{NEXT_TARGET} 의 {value:?} 는 Step 주소로 읽히지 않는다 — {source}.\n\
-                 여기 적을 것: {NEXT_TARGET}: {suggestion}"
-            ),
-            NextDirectionError::TargetOtherCycle { target, cycle } => write!(
-                f,
-                "{NEXT_TARGET} 가 {target} 을(를) 가리키는데 그것은 다른 Cycle 의 자리다 — \
-                 되돌아감은 이 Cycle 안에서만 성립한다.\n\
-                 여기 적을 것: {NEXT_TARGET}: step:{}/S<번호>",
-                cycle.id()
-            ),
-            NextDirectionError::UnknownTarget(target) => {
-                write!(f, "{target} 은(는) 이 Step Graph 에 없는 Node 다")
-            }
-            NextDirectionError::TargetIsOpen(target) => write!(
-                f,
-                "{target} 은(는) 아직 열려 있다 — 확정된 자리로만 되돌아갈 수 있다"
-            ),
-            NextDirectionError::TargetNotAnAncestor(target) => write!(
-                f,
-                "{target} 은(는) 지금 자리의 조상이 아니다 — 걸어온 길 위의 자리로만 되돌아간다"
-            ),
-            NextDirectionError::TargetCannotBranch { target, kind } => write!(
-                f,
-                "{target} 은(는) {kind} 라 새 가설을 열 수 없다 — 갈래는 언제나 가설에서 시작한다"
-            ),
+            } => f.write_str(&crate::tr!("walk.dir.target_unreadable", field = NEXT_TARGET, value = format!("{value:?}"), source = source, suggestion = suggestion)),
+            NextDirectionError::TargetOtherCycle { target, cycle } => f.write_str(&crate::tr!("walk.dir.target_other_cycle", field = NEXT_TARGET, target = target, cycle = cycle.id())),
+            NextDirectionError::UnknownTarget(target) => f.write_str(&crate::tr!("walk.dir.unknown_target", target = target)),
+            NextDirectionError::TargetIsOpen(target) => f.write_str(&crate::tr!("walk.dir.target_open", target = target)),
+            NextDirectionError::TargetNotAnAncestor(target) => f.write_str(&crate::tr!("walk.dir.not_ancestor", target = target)),
+            NextDirectionError::TargetCannotBranch { target, kind } => f.write_str(&crate::tr!("walk.dir.cannot_branch", target = target, kind = kind)),
         }
     }
 }
@@ -878,38 +849,14 @@ impl fmt::Display for WalkError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             WalkError::Grammar(err) => write!(f, "{err}"),
-            WalkError::NothingToClose => {
-                write!(f, "지금 열려 있는 Node 가 없어 닫을 것이 없다")
-            }
-            WalkError::BoundaryIsNotAStep { kind } => write!(
-                f,
-                "{kind} 은(는) Step 이 아니라 Cycle 의 경계다 — 여는 것이 아니라 지나가는 자리다"
-            ),
-            WalkError::UnknownNode(id) => {
-                write!(f, "{id} 은(는) 이 Step Graph 에 없는 Node 다")
-            }
+            WalkError::NothingToClose => f.write_str(crate::locale::text("walk.nothing_to_close")),
+            WalkError::BoundaryIsNotAStep { kind } => f.write_str(&crate::tr!("walk.boundary_not_step", kind = kind)),
+            WalkError::UnknownNode(id) => f.write_str(&crate::tr!("walk.unknown_node", id = id)),
             WalkError::NextDirection(err) => write!(f, "{err}"),
-            WalkError::NothingToRevisit => write!(
-                f,
-                "지금 자리에 실행할 되돌아감이 없다 — 되돌아가겠다고 적어 둔 \
-                 닫힌 Outcome 에 서 있어야 한다"
-            ),
-            WalkError::ExpectedHypothesis { opened } => write!(
-                f,
-                "되돌아온 자리에서는 새 가설만 열 수 있다 — {opened} 이(가) 아니라 hypothesis 다"
-            ),
-            WalkError::VerifyNeedsAWorld { at } => write!(
-                f,
-                "S{} 는 verify 라 관측한 세계 없이 닫을 수 없다 — \
-                 세계를 확정하는 것은 Report 의 문장이 아니라 관측이다",
-                at.raw()
-            ),
-            WalkError::OnlyVerifyConfirmsAWorld { at, kind } => write!(
-                f,
-                "S{} 는 {kind} 라 Artifact 세계를 확정할 권한이 없다 — \
-                 세계를 확정하는 것은 verify 뿐이다",
-                at.raw()
-            ),
+            WalkError::NothingToRevisit => f.write_str(crate::locale::text("walk.nothing_to_revisit")),
+            WalkError::ExpectedHypothesis { opened } => f.write_str(&crate::tr!("walk.expected_hypothesis", opened = opened)),
+            WalkError::VerifyNeedsAWorld { at } => f.write_str(&crate::tr!("walk.verify_needs_world", at = at.raw())),
+            WalkError::OnlyVerifyConfirmsAWorld { at, kind } => f.write_str(&crate::tr!("walk.only_verify_confirms", at = at.raw(), kind = kind)),
         }
     }
 }

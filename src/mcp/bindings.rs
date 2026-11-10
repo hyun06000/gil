@@ -12,6 +12,7 @@ use std::sync::atomic::Ordering;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use super::monitor::Refusal;
+use crate::locale::text;
 #[cfg(windows)]
 #[path = "bindings_windows.rs"]
 mod windows;
@@ -28,13 +29,13 @@ impl Identity {
     fn at(root: &Path) -> Result<Self, Refusal> {
         #[cfg(windows)]
         let gil = crate::project_state::state_for_root(root)
-            .map_err(|_| Refusal::new("unreadable", "Project 기록 위치를 확인할 수 없다"))?
+            .map_err(|_| Refusal::new("unreadable", text("binding.state_location")))?
             .parent().expect("state path has a parent").to_path_buf();
         #[cfg(not(windows))]
         let gil = root.join(".gil");
         let meta = fs::metadata(&gil).map_err(|e| match e.kind() {
-            std::io::ErrorKind::NotFound => Refusal::new("project_missing", "선택했던 Project 폴더를 찾을 수 없다"),
-            _ => Refusal::new("unreadable", "선택했던 Project 를 확인할 수 없다"),
+            std::io::ErrorKind::NotFound => Refusal::new("project_missing", text("binding.project_missing")),
+            _ => Refusal::new("unreadable", text("binding.project_unverifiable")),
         })?;
         if !meta.is_dir() { return Err(moved()); }
         // state.yaml is atomically replaced on every commit. Identify the stable .gil
@@ -46,23 +47,23 @@ impl Identity {
         }
         #[cfg(windows)] {
             let (device, inode, created_ns) = windows::identity(&gil).map_err(|_| {
-                Refusal::new("resume_unavailable", "이 Project 의 안전한 Windows identity 를 확인할 수 없다 — 로컬 NTFS 폴더가 필요하다")
+                Refusal::new("resume_unavailable", text("binding.windows_identity"))
             })?;
             Ok(Self { device, inode, created_ns: Some(created_ns) })
         }
         #[cfg(not(any(unix, windows)))] {
             // Do not substitute a timestamp/label for an OS identity. Windows identity
             // and installation acceptance remain a separate distribution checkpoint.
-            Err(Refusal::new("resume_unavailable", "이 환경의 안전한 Project 자동 복원은 아직 지원하지 않는다 — Companion 을 사용한다"))
+            Err(Refusal::new("resume_unavailable", text("binding.resume_unsupported")))
         }
     }
 }
 
-fn moved() -> Refusal { Refusal::new("project_moved", "선택했던 자리의 Project 가 바뀌었다 — 폴더를 다시 선택한다") }
-fn damaged() -> Refusal { Refusal::new("settings_damaged", "Monitor 연결 설정을 검증하지 못했다 — 기존 설정은 보존했다") }
-fn unreadable() -> Refusal { Refusal::new("settings_unreadable", "Monitor 연결 설정을 읽지 못했다") }
-fn unwritable() -> Refusal { Refusal::new("settings_unwritable", "Monitor 연결 설정을 저장하지 못했다 — 자동 복원이 준비되지 않았다") }
-pub(super) fn unknown() -> Refusal { Refusal::new("reconnect_required", "저장된 Project 연결이 없다 — 이 Project 의 Monitor 를 한 번 열어 주세요") }
+fn moved() -> Refusal { Refusal::new("project_moved", text("binding.moved")) }
+fn damaged() -> Refusal { Refusal::new("settings_damaged", text("binding.damaged")) }
+fn unreadable() -> Refusal { Refusal::new("settings_unreadable", text("binding.unreadable")) }
+fn unwritable() -> Refusal { Refusal::new("settings_unwritable", text("binding.unwritable")) }
+pub(super) fn unknown() -> Refusal { Refusal::new("reconnect_required", text("binding.unknown")) }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -86,8 +87,8 @@ impl Binding {
     }
     pub fn validate(&self) -> Result<(), Refusal> {
         let root = self.root.canonicalize().map_err(|e| match e.kind() {
-            std::io::ErrorKind::NotFound => Refusal::new("project_missing", "선택했던 Project 폴더를 찾을 수 없다"),
-            _ => Refusal::new("unreadable", "선택했던 Project 를 확인할 수 없다"),
+            std::io::ErrorKind::NotFound => Refusal::new("project_missing", text("binding.project_missing")),
+            _ => Refusal::new("unreadable", text("binding.project_unverifiable")),
         })?;
         if root != self.root || Identity::at(&root)? != self.identity { return Err(moved()); }
         Ok(())
@@ -165,7 +166,7 @@ impl Store {
         if bytes.len() as u64 > MAX_BYTES { return Err(damaged()); }
         let peek: serde_json::Value = serde_json::from_slice(&bytes).map_err(|_| damaged())?;
         if peek.get("schema_version").and_then(|v| v.as_u64()) != Some(u64::from(SCHEMA)) {
-            return Err(Refusal::new("settings_unsupported", "Monitor 연결 설정의 판을 지원하지 않는다 — 기존 설정은 보존했다"));
+            return Err(Refusal::new("settings_unsupported", text("binding.settings_unsupported")));
         }
         let binding: Binding = serde_json::from_slice(&bytes).map_err(|_| damaged())?;
         if !binding.root.is_absolute() || binding.scope() != scope { return Err(damaged()); }

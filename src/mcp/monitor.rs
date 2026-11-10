@@ -10,6 +10,7 @@ use sha2::{Digest, Sha256};
 use rmcp::model::CallToolResult;
 use crate::{ProjectSession, ReadOnlySession, RuleSet, SessionError, StoreError};
 use super::bindings::{Binding, Store};
+use crate::locale::text;
 
 const LEASE: Duration = Duration::from_secs(90);
 const MAX_PROJECTS: usize = 32;
@@ -47,22 +48,22 @@ impl Refusal {
 
 fn refuse(err: SessionError) -> Refusal {
     match err {
-        SessionError::Busy { .. } => Refusal::new("busy", "다른 GIL 명령이 Project 를 사용 중이다"),
-        SessionError::NeedsRecovery { .. } => Refusal::new("needs_recovery", "끝나지 않은 복원이 남아 있다 — GIL 명령으로 복구한 뒤 다시 읽는다"),
-        SessionError::LegacyFormat { .. } => Refusal::new("unsupported_format", "이 Monitor 가 읽지 않는 저장 판이다"),
-        SessionError::Store(StoreError::UnknownFormat { .. } | StoreError::PreviousFormat { .. } | StoreError::LegacyFormat { .. }) => Refusal::new("unsupported_format", "이 Monitor 가 읽지 않는 저장 판이다"),
-        SessionError::Store(StoreError::NotFound { .. }) | SessionError::NoProjectDir { .. } => Refusal::new("not_a_project", "이 자리에 GIL Project 가 없다"),
-        SessionError::Unreadable { .. } | SessionError::LockUnavailable { .. } | SessionError::Store(StoreError::Read { .. }) => Refusal::new("unreadable", "Project 기록을 읽지 못했다"),
-        SessionError::Observe { .. } | SessionError::Object { .. } => Refusal::new("observe_failed", "Project 세계를 관측하지 못했다"),
-        _ => Refusal::new("damaged", "Project 기록을 검증하지 못했다"),
+        SessionError::Busy { .. } => Refusal::new("busy", text("madapter.busy")),
+        SessionError::NeedsRecovery { .. } => Refusal::new("needs_recovery", text("madapter.needs_recovery")),
+        SessionError::LegacyFormat { .. } => Refusal::new("unsupported_format", text("madapter.unsupported_format")),
+        SessionError::Store(StoreError::UnknownFormat { .. } | StoreError::PreviousFormat { .. } | StoreError::LegacyFormat { .. }) => Refusal::new("unsupported_format", text("madapter.unsupported_format")),
+        SessionError::Store(StoreError::NotFound { .. }) | SessionError::NoProjectDir { .. } => Refusal::new("not_a_project", text("madapter.not_a_project")),
+        SessionError::Unreadable { .. } | SessionError::LockUnavailable { .. } | SessionError::Store(StoreError::Read { .. }) => Refusal::new("unreadable", text("madapter.unreadable")),
+        SessionError::Observe { .. } | SessionError::Object { .. } => Refusal::new("observe_failed", text("madapter.observe_failed")),
+        _ => Refusal::new("damaged", text("madapter.damaged")),
     }
 }
 
 fn opened(root: &Path) -> Result<ReadOnlySession, Refusal> {
     let state = crate::project_state::state_for_root(root)
-        .map_err(|_| Refusal::new("unreadable", "Project 기록 위치를 확인하지 못했다"))?;
-    if !state.is_file() { return Err(Refusal::new("not_a_project", "이 자리에 GIL Project 가 없다")); }
-    let rules = RuleSet::builtin().map_err(|_| Refusal::new("damaged", "함께 실린 명세를 읽지 못했다"))?;
+        .map_err(|_| Refusal::new("unreadable", text("madapter.state_location")))?;
+    if !state.is_file() { return Err(Refusal::new("not_a_project", text("madapter.not_a_project"))); }
+    let rules = RuleSet::builtin().map_err(|_| Refusal::new("damaged", text("madapter.spec_unreadable")))?;
     #[cfg(windows)]
     let opened = if state == root.join(crate::STATE_PATH) {
         ProjectSession::open_read_only(rules, &state)
@@ -85,18 +86,18 @@ impl Monitor {
 
     pub fn prepare(&self, root: &str) -> Result<Value, Refusal> {
         let path = Path::new(root);
-        if !path.is_absolute() { return Err(Refusal::new("invalid_root", "명시적인 Project 절대경로가 필요하다")); }
-        let root = path.canonicalize().map_err(|_| Refusal::new("unreadable", "Project 자리를 읽지 못했다"))?;
+        if !path.is_absolute() { return Err(Refusal::new("invalid_root", text("madapter.invalid_root"))); }
+        let root = path.canonicalize().map_err(|_| Refusal::new("unreadable", text("madapter.root_unreadable")))?;
         // Exact root; never an ancestor search, cwd guess, or Companion's selection.
         let session = opened(&root)?;
         let binding = Binding::capture(root)?;
         let scope = binding.scope();
         let label = binding.label();
-        let mut entries = self.entries.lock().map_err(|_| Refusal::new("unavailable", "Monitor 등록부를 열지 못했다"))?;
+        let mut entries = self.entries.lock().map_err(|_| Refusal::new("unavailable", text("madapter.registry")))?;
         if let Some(old) = entries.get(&scope) {
-            if old.binding != binding { return Err(Refusal::new("scope_collision", "서로 다른 Project 주소가 겹쳤다 — 섞지 않는다")); }
+            if old.binding != binding { return Err(Refusal::new("scope_collision", text("madapter.scope_collision"))); }
         } else if entries.len() >= MAX_PROJECTS {
-            return Err(Refusal::new("limit", "이 연결의 Project 한도에 도달했다 — 새 연결에서 연다"));
+            return Err(Refusal::new("limit", text("madapter.limit")));
         }
         // Preparation (including a successful MCP start) writes LOCAL consent settings. The session's Project
         // lock is released here; neither persistence nor restoration holds a long-lived lock.
@@ -109,18 +110,18 @@ impl Monitor {
     /// Read-only status: do not prepare/register a Project just to inspect display.
     pub fn presence_status(&self, root: &str) -> Result<Value, Refusal> {
         let path = Path::new(root);
-        if !path.is_absolute() { return Err(Refusal::new("invalid_root", "명시적인 Project 절대경로가 필요하다")); }
-        let root = path.canonicalize().map_err(|_| Refusal::new("unreadable", "Project 자리를 읽지 못했다"))?;
+        if !path.is_absolute() { return Err(Refusal::new("invalid_root", text("madapter.invalid_root"))); }
+        let root = path.canonicalize().map_err(|_| Refusal::new("unreadable", text("madapter.root_unreadable")))?;
         let _session = opened(&root)?;
         let scope = Binding::capture(root)?.scope();
-        let entries = self.entries.lock().map_err(|_| Refusal::new("unavailable", "Monitor 등록부를 열지 못했다"))?;
+        let entries = self.entries.lock().map_err(|_| Refusal::new("unavailable", text("madapter.registry")))?;
         Ok(entries.get(&scope).map(|e| e.presence.status(&scope, Instant::now()))
             .unwrap_or_else(|| super::presence::Presence::default().status(&scope, Instant::now())))
     }
 
     pub fn show(&self, scope: &str) -> Result<Value, Refusal> {
         let mut view = self.view(scope)?;
-        let mut entries = self.entries.lock().map_err(|_| Refusal::new("unavailable", "Monitor 등록부를 열지 못했다"))?;
+        let mut entries = self.entries.lock().map_err(|_| Refusal::new("unavailable", text("madapter.registry")))?;
         let e = entries.get_mut(scope).ok_or_else(super::bindings::unknown)?;
         e.presence.requested(Instant::now());
         drop(entries);
@@ -130,9 +131,9 @@ impl Monitor {
     }
 
     pub fn app_poll(&self, scope: &str, input: &Value) -> Result<Value, Refusal> {
-        if !super::presence::valid(input) { return Err(Refusal::new("invalid_presence", "Monitor 표시 상태 형식이 맞지 않는다")); }
+        if !super::presence::valid(input) { return Err(Refusal::new("invalid_presence", text("madapter.invalid_presence"))); }
         let hint = self.poll(scope)?;
-        let mut entries = self.entries.lock().map_err(|_| Refusal::new("unavailable", "Monitor 등록부를 열지 못했다"))?;
+        let mut entries = self.entries.lock().map_err(|_| Refusal::new("unavailable", text("madapter.registry")))?;
         let e = entries.get_mut(scope).ok_or_else(super::bindings::unknown)?;
         e.presence.observe(input, Instant::now());
         drop(entries);
@@ -142,12 +143,12 @@ impl Monitor {
     }
 
     pub(super) fn root(&self, scope: &str) -> Result<PathBuf, Refusal> {
-        let mut entries = self.entries.lock().map_err(|_| Refusal::new("unavailable", "Monitor 등록부를 열지 못했다"))?;
+        let mut entries = self.entries.lock().map_err(|_| Refusal::new("unavailable", text("madapter.registry")))?;
         if !entries.contains_key(scope) {
             // Load ONLY this App's saved consent, never enumerate projects or infer cwd.
             let binding = self.store.load(scope)?;
             binding.validate()?;
-            if entries.len() >= MAX_PROJECTS { return Err(Refusal::new("limit", "이 연결의 Project 한도에 도달했다 — 새 연결에서 연다")); }
+            if entries.len() >= MAX_PROJECTS { return Err(Refusal::new("limit", text("madapter.limit"))); }
             entries.insert(scope.to_owned(), Entry::new(binding));
         }
         let e = &entries[scope];
@@ -166,7 +167,7 @@ impl Monitor {
     /// No project scan here. A quiet App checks only this counter every two seconds.
     pub fn poll(&self, scope: &str) -> Result<Value, Refusal> {
         let root = self.root(scope)?;
-        let mut entries = self.entries.lock().map_err(|_| Refusal::new("unavailable", "Monitor 등록부를 열지 못했다"))?;
+        let mut entries = self.entries.lock().map_err(|_| Refusal::new("unavailable", text("madapter.registry")))?;
         let e = entries.get_mut(scope).ok_or_else(super::bindings::unknown)?;
         e.touched = Instant::now();
         // Retry a failed watcher at most once a minute, not every UI heartbeat.
@@ -189,8 +190,8 @@ impl Monitor {
         let hint = self.poll(scope)?;
         let session = self.session(scope)?;
         let snapshot = session.monitor().map_err(refuse)?;
-        let view = crate::monitor_view_v1(&snapshot).map_err(|_| Refusal::new("unsupported_vocabulary", "이 Monitor 가 모르는 판정·종류·시각이 있다"))?;
-        let label = self.entries.lock().map_err(|_| Refusal::new("unavailable", "Monitor 등록부를 열지 못했다"))?[scope].binding.label();
+        let view = crate::monitor_view_v1(&snapshot).map_err(|_| Refusal::new("unsupported_vocabulary", text("madapter.unsupported_vocabulary")))?;
+        let label = self.entries.lock().map_err(|_| Refusal::new("unavailable", text("madapter.registry")))?[scope].binding.label();
         let mut value = json!({ "scope_id": scope, "label": label, "view": view,
             "revision": hint["revision"], "watching": hint["watching"] });
         if cfg!(feature = "approved-plan") && session.project().approved_plan().is_some() { value["plan_review_supported"] = json!(true); }
@@ -199,20 +200,20 @@ impl Monitor {
     }
 
     pub fn detail(&self, scope: &str, step: &str) -> Result<Value, Refusal> {
-        let step = step.parse::<crate::StepRef>().map_err(|_| Refusal::new("not_found", "정확한 Step 주소가 필요하다"))?;
+        let step = step.parse::<crate::StepRef>().map_err(|_| Refusal::new("not_found", text("madapter.step_address")))?;
         let session = self.session(scope)?;
-        let detail = session.node_detail_v1(step).map_err(|_| Refusal::new("not_found", "그 Step 은 이 Project 에 없다"))?;
+        let detail = session.node_detail_v1(step).map_err(|_| Refusal::new("not_found", text("madapter.step_not_found")))?;
         Ok(json!({ "scope_id": scope, "detail": detail }))
     }
 
     pub(crate) fn report_visuals(&self, scope: &str, owner: crate::visual_report::registry::ReportOwner) -> Result<Value, Refusal> {
         let session = self.session(scope)?;
         let detail = session.project().report_visuals_v1(owner)
-            .map_err(|_| Refusal::new("not_found", "그 Report는 이 Project에 없다"))?;
-        let mut value = serde_json::to_value(detail).map_err(|_| Refusal::new("unavailable", "보고서를 표시하지 못했다"))?;
+            .map_err(|_| Refusal::new("not_found", text("madapter.report_not_found")))?;
+        let mut value = serde_json::to_value(detail).map_err(|_| Refusal::new("unavailable", text("madapter.report_unavailable")))?;
         value["scope_id"] = json!(scope);
-        if serde_json::to_vec(&value).map_err(|_| Refusal::new("unavailable", "보고서를 표시하지 못했다"))?.len() > 1024*1024 {
-            return Err(Refusal::new("response_too_large", "시각 자료 목록이 응답 한도를 넘었다"));
+        if serde_json::to_vec(&value).map_err(|_| Refusal::new("unavailable", text("madapter.report_unavailable")))?.len() > 1024*1024 {
+            return Err(Refusal::new("response_too_large", text("madapter.visuals_too_large")));
         }
         self.root(scope)?;
         Ok(value)
@@ -229,7 +230,7 @@ impl Monitor {
     ) -> Result<crate::visual_report::image::VerifiedImage, Refusal> {
         let session = self.session(scope)?;
         let image = session.read_report_image(owner, asset)
-            .map_err(|_| Refusal::new("visual_unavailable", "이 Report의 시각 자료를 검증하여 읽지 못했다"))?;
+            .map_err(|_| Refusal::new("visual_unavailable", text("madapter.visual_unverified")))?;
         // Keep the read-only lock through the final consent/identity check. Return no paths.
         self.root(scope)?;
         Ok(image)
@@ -263,7 +264,7 @@ pub async fn run(work: impl FnOnce() -> Result<Value, Refusal> + Send + 'static)
     match tokio::task::spawn_blocking(work).await {
         Ok(Ok(value)) => CallToolResult::structured(value),
         other => {
-            let err = match other { Ok(Err(e)) => e, _ => Refusal::new("unavailable", "Monitor 조회를 끝내지 못했다") };
+            let err = match other { Ok(Err(e)) => e, _ => Refusal::new("unavailable", text("madapter.run_failed")) };
             let mut result = CallToolResult::structured(json!({ "code": err.code, "said": err.said }));
             result.is_error = Some(true);
             result

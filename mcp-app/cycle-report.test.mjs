@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {cycleReportDetail} from '../ui/cycle-report.js';
+// These assertions read the Korean table; the language-specific cases live in locale.test.mjs.
+import { setLocale } from '../ui/locale.js';
+setLocale('ko');
 test('cycle projection preserves identity, literal text and source without mutation',()=>{
   const c={cycle_ref:'cycle:C3',kind:'experiment',state:'closed',report:{verdict:'success',handoff_summary:'<img src=x onerror=alert(1)>',outcome_lesson:'stored lesson',next_direction:{action:'open_child',reason:'next',target_cycle_ref:null}}};
   const before=structuredClone(c),d=cycleReportDetail(c);

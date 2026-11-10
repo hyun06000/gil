@@ -72,7 +72,7 @@ impl std::fmt::Display for DetailError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             DetailError::NotFound { step_ref } => {
-                write!(f, "{step_ref} 은 이 Project 에 없다")
+                f.write_str(&crate::tr!("mon.detail_not_found", step_ref = step_ref))
             }
         }
     }

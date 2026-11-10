@@ -966,48 +966,14 @@ impl fmt::Display for BasisRefError {
                 value,
                 source,
                 cycle,
-            } => write!(
-                f,
-                "{BASIS_REFS} 의 {value:?} 는 Step 주소로 읽히지 않는다 — {source}.\n\
-                 한 줄에 하나씩 적는다: {BASIS_REFS}: |\n    step:{}/S1\n    step:{}/S2",
-                cycle.id(),
-                cycle.id()
-            ),
-            BasisRefError::OtherCycle { target, cycle } => write!(
-                f,
-                "{BASIS_REFS} 가 {target} 을(를) 가리키는데 그것은 다른 Cycle 의 자리다 — \
-                 근거는 이 Interview({}) 안에 있어야 한다",
-                cycle
-            ),
-            BasisRefError::Duplicated { target } => {
-                write!(f, "{BASIS_REFS} 에 {target} 이(가) 두 번 적혔다")
-            }
-            BasisRefError::NotFound { target } => {
-                write!(f, "{BASIS_REFS} 가 가리키는 {target} 이(가) 이 Cycle 에 없다")
-            }
-            BasisRefError::WrongKind { target, kind } => write!(
-                f,
-                "{target} 은(는) {kind} 라 근거가 될 수 없다 — {BASIS_REFS} 는 이미 닫힌 \
-                 question 또는 interpretation 을 가리킨다"
-            ),
-            BasisRefError::StillOpen { target, here } => write!(
-                f,
-                "{target} 은(는) 아직 열려 있다 — {here} 는 이미 닫힌 question 또는 \
-                 interpretation 만 근거로 삼는다"
-            ),
-            BasisRefError::NotInLineage { target, here } => write!(
-                f,
-                "{target} 은(는) {here} 가 딛고 온 길 위에 없다 — 근거는 이 제안의 \
-                 Lineage(부모 사슬) 안에 있어야 한다. 버려진 가지나 되돌아감으로만 닿는 \
-                 자리는 이름이 더 작아도 근거가 아니다"
-            ),
-            BasisRefError::Empty { cycle } => write!(
-                f,
-                "{BASIS_REFS} 에 근거가 하나도 없다 — Synthesis 는 근거 없는 목표나 제약을 \
-                 더하지 않는다.\n\
-                 한 줄에 하나씩 적는다: {BASIS_REFS}: |\n    step:{}/S1",
-                cycle.id()
-            ),
+            } => f.write_str(&crate::tr!("cycle.basis.unreadable", field = BASIS_REFS, value = format!("{value:?}"), source = source, cycle = cycle.id())),
+            BasisRefError::OtherCycle { target, cycle } => f.write_str(&crate::tr!("cycle.basis.other_cycle", field = BASIS_REFS, target = target, cycle = cycle)),
+            BasisRefError::Duplicated { target } => f.write_str(&crate::tr!("cycle.basis.duplicated", field = BASIS_REFS, target = target)),
+            BasisRefError::NotFound { target } => f.write_str(&crate::tr!("cycle.basis.not_found", field = BASIS_REFS, target = target)),
+            BasisRefError::WrongKind { target, kind } => f.write_str(&crate::tr!("cycle.basis.wrong_kind", field = BASIS_REFS, target = target, kind = kind)),
+            BasisRefError::StillOpen { target, here } => f.write_str(&crate::tr!("cycle.basis.still_open", target = target, here = here)),
+            BasisRefError::NotInLineage { target, here } => f.write_str(&crate::tr!("cycle.basis.not_in_lineage", target = target, here = here)),
+            BasisRefError::Empty { cycle } => f.write_str(&crate::tr!("cycle.basis.empty", field = BASIS_REFS, cycle = cycle.id())),
         }
     }
 }
@@ -1047,40 +1013,16 @@ impl From<SynthesisRefError> for CycleError {
 impl fmt::Display for SynthesisRefError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SynthesisRefError::Unreadable { value, source } => write!(
-                f,
-                "{SYNTHESIS_REF} 의 {value:?} 는 Step 주소로 읽히지 않는다 — {source}"
-            ),
-            SynthesisRefError::OtherCycle { target, here } => write!(
-                f,
-                "{SYNTHESIS_REF} 가 {target} 을(를) 가리키는데 여기는 {here} 다 — \
-                 근거는 이 Interview 안에 있어야 한다"
-            ),
-            SynthesisRefError::NotASynthesis { target } => write!(
-                f,
-                "{target} 에는 닫힌 Synthesis 가 없다 — {SYNTHESIS_REF} 는 승인을 받은 제안을 \
-                 가리켜야 한다"
-            ),
-            SynthesisRefError::NotInLineage { target, here } => write!(
-                f,
-                "{target} 은(는) {here} 가 딛고 온 길 위에 없다 — success 는 이 Outcome 의 \
-                 Lineage(부모 사슬) 안에 있는 승인된 Synthesis 로만 닫는다"
-            ),
-            SynthesisRefError::NotApproved { approved } => write!(
-                f,
-                "그 Synthesis 의 {APPROVED} 는 {approved:?} 다 — 인간이 {YES} 로 승인한 제안만 \
-                 Interview 의 근거가 된다"
-            ),
+            SynthesisRefError::Unreadable { value, source } => f.write_str(&crate::tr!("cycle.synth.unreadable", field = SYNTHESIS_REF, value = format!("{value:?}"), source = source)),
+            SynthesisRefError::OtherCycle { target, here } => f.write_str(&crate::tr!("cycle.synth.other_cycle", field = SYNTHESIS_REF, target = target, here = here)),
+            SynthesisRefError::NotASynthesis { target } => f.write_str(&crate::tr!("cycle.synth.not_synthesis", field = SYNTHESIS_REF, target = target)),
+            SynthesisRefError::NotInLineage { target, here } => f.write_str(&crate::tr!("cycle.synth.not_in_lineage", target = target, here = here)),
+            SynthesisRefError::NotApproved { approved } => f.write_str(&crate::tr!("cycle.synth.not_approved", field = APPROVED, approved = format!("{approved:?}"), yes = YES)),
             SynthesisRefError::WrongBranch {
                 approved,
                 asked,
                 wanted,
-            } => write!(
-                f,
-                "그 Synthesis 의 {APPROVED} 가 {approved:?} 라 다음은 {wanted} 다 — \
-                 {asked} 는 이 갈래가 아니다.\n\
-                 승인 여부가 다음 자리를 가른다: yes 면 판정으로, 아니면 다시 묻는 질문으로."
-            ),
+            } => f.write_str(&crate::tr!("cycle.synth.wrong_branch", field = APPROVED, approved = format!("{approved:?}"), wanted = wanted, asked = asked)),
         }
     }
 }
@@ -1125,16 +1067,10 @@ impl From<OutcomeRefError> for CycleError {
 impl fmt::Display for CycleError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CycleError::ClosingInterview => write!(f, "Chain 종료에는 성공한 Interview의 마지막 Outcome이 가리키는 승인된 Synthesis와 chain_verdict: success 또는 failure가 필요하다. 이 종료 제안을 담은 Cycle Report의 방향은 close_chain이어야 한다"),
+            CycleError::ClosingInterview => f.write_str(crate::locale::text("cycle.closing_interview")),
             CycleError::Step(err) => write!(f, "{err}"),
-            CycleError::AlreadyClosed => write!(
-                f,
-                "이 Cycle 은 이미 닫혔다 — 닫힌 Cycle 안에서는 아무것도 움직이지 않는다"
-            ),
-            CycleError::StepsNotDone => write!(
-                f,
-                "아직 이 Cycle 을 닫을 수 없다 — 안의 Outcome 이 닫혀 있어야 한다"
-            ),
+            CycleError::AlreadyClosed => f.write_str(crate::locale::text("cycle.already_closed")),
+            CycleError::StepsNotDone => f.write_str(crate::locale::text("cycle.steps_not_done")),
             CycleError::Grammar(err) => write!(f, "{err}"),
             CycleError::OutcomeRef(err) => write!(f, "{err}"),
             CycleError::SynthesisRef(err) => write!(f, "{err}"),
@@ -1150,45 +1086,20 @@ impl fmt::Display for OutcomeRefError {
                 value,
                 source,
                 expected,
-            } => write!(
-                f,
-                "{OUTCOME_REF} 의 {value:?} 는 Step 주소로 읽히지 않는다 — {source}.\n\
-                 여기 적을 것: {OUTCOME_REF}: {expected}"
-            ),
-            OutcomeRefError::OtherCycle { target, expected } => write!(
-                f,
-                "{OUTCOME_REF} 가 {target} 을(를) 가리키는데 그것은 다른 Cycle 의 자리다.\n\
-                 여기 적을 것: {OUTCOME_REF}: {expected}"
-            ),
-            OutcomeRefError::NotFound { target, expected } => write!(
-                f,
-                "{OUTCOME_REF} 가 가리키는 {target} 이(가) 이 Cycle 에 없다.\n\
-                 여기 적을 것: {OUTCOME_REF}: {expected}"
-            ),
+            } => f.write_str(&crate::tr!("cycle.outcome.unreadable", field = OUTCOME_REF, value = format!("{value:?}"), source = source, expected = expected)),
+            OutcomeRefError::OtherCycle { target, expected } => f.write_str(&crate::tr!("cycle.outcome.other_cycle", field = OUTCOME_REF, target = target, expected = expected)),
+            OutcomeRefError::NotFound { target, expected } => f.write_str(&crate::tr!("cycle.outcome.not_found", field = OUTCOME_REF, target = target, expected = expected)),
             OutcomeRefError::NotAnOutcome {
                 target,
                 kind,
                 expected,
-            } => write!(
-                f,
-                "{target} 은(는) {kind} 라 판정이 아니다 — {OUTCOME_REF} 는 판정을 가리킨다.\n\
-                 여기 적을 것: {OUTCOME_REF}: {expected}"
-            ),
-            OutcomeRefError::NotTheLastOutcome { target, expected } => write!(
-                f,
-                "{OUTCOME_REF} 는 이 Cycle 의 **마지막 판정**을 가리켜야 한다 \
-                 — {target} 이(가) 아니라 {expected} 다.\n\
-                 지나간 판정을 근거로 삼으면 Cycle Report 가 제 안의 기록과 다른 말을 하게 된다."
-            ),
+            } => f.write_str(&crate::tr!("cycle.outcome.not_outcome", field = OUTCOME_REF, target = target, kind = kind, expected = expected)),
+            OutcomeRefError::NotTheLastOutcome { target, expected } => f.write_str(&crate::tr!("cycle.outcome.not_last", field = OUTCOME_REF, target = target, expected = expected)),
             OutcomeRefError::VerdictDisagrees {
                 target,
                 cycle,
                 outcome,
-            } => write!(
-                f,
-                "Cycle 은 {cycle:?} 라 하고 {target} 은(는) {outcome:?} 라 한다 — \
-                 두 판정은 계층이 다르지만 값은 같아야 한다"
-            ),
+            } => f.write_str(&crate::tr!("cycle.outcome.verdict_disagrees", cycle = format!("{cycle:?}"), target = target, outcome = format!("{outcome:?}"))),
         }
     }
 }

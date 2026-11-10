@@ -484,11 +484,7 @@ pub enum MonitorError {
 impl std::fmt::Display for MonitorError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MonitorError::PendingTargetMissing { from } => write!(
-                f,
-                "{from} 에서 되돌아왔다는데 {from} 이(가) 되돌아갈 곳을 적어 두지 않았다 — \
-                 밟지 않은 되돌아감이다"
-            ),
+            MonitorError::PendingTargetMissing { from } => f.write_str(&crate::tr!("mon.err.pending_target", from = from)),
         }
     }
 }
@@ -888,7 +884,7 @@ fn next_actions(project: &Project, world: WorldMark) -> Vec<NextAction> {
     out.push(action(
         ActionKind::Restore,
         "gil restore".to_string(),
-        "지금 폴더가 기준 세계와 다르다 — 기준 세계로 되돌린다",
+        crate::locale::text("mon.act.restore"),
     ));
     out.retain(|next| world_allows(next.kind, world));
     out
@@ -897,7 +893,7 @@ fn next_actions(project: &Project, world: WorldMark) -> Vec<NextAction> {
 /// 이 자리에서 **구조적으로** 가능한 수들. 세계는 아직 보지 않는다.
 fn possible_here(project: &Project) -> Vec<NextAction> {
     if let Some(chain) = project.current_chain() {
-        if chain.is_closed() { return vec![action(ActionKind::OpenChain, "gil open chain".into(), "이전 Chain 보고서를 보존하고 새 주제를 Opening Interview로 시작한다")]; }
+        if chain.is_closed() { return vec![action(ActionKind::OpenChain, "gil open chain".into(), crate::locale::text("mon.act.open_chain"))]; }
         if chain.awaiting_report() { return vec![action(ActionKind::CloseChain, "gil close".into(), &chain.close_hint())]; }
     }
     let cycles = project.cycles();
@@ -910,7 +906,7 @@ fn possible_here(project: &Project) -> Vec<NextAction> {
             out.push(action(
                 ActionKind::OpenBranch(kind),
                 format!("gil open {}", kind.as_str()),
-                "되돌아온 자리 아래에 새 갈래를 연다",
+                crate::locale::text("mon.act.open_branch"),
             ));
         }
         return out;
@@ -921,7 +917,7 @@ fn possible_here(project: &Project) -> Vec<NextAction> {
             out.push(action(
                 ActionKind::Revisit,
                 "gil revisit".to_string(),
-                "이 Cycle 이 적어 둔 조상으로 되돌아가고 그 세계를 복원한다",
+                crate::locale::text("mon.act.revisit"),
             ));
         }
         if cycles.why_not_open_child().is_none() {
@@ -929,7 +925,7 @@ fn possible_here(project: &Project) -> Vec<NextAction> {
                 out.push(action(
                     ActionKind::OpenCycle(kind),
                     format!("gil open {}", kind.as_str()),
-                    "이 Cycle 을 부모로 다음 Cycle 을 연다",
+                    crate::locale::text("mon.act.open_cycle"),
                 ));
             }
         }
@@ -942,7 +938,7 @@ fn possible_here(project: &Project) -> Vec<NextAction> {
         out.push(action(
             ActionKind::CloseStep(kind),
             "gil close".to_string(),
-            "열려 있는 이 자리를 Report 로 닫는다",
+            crate::locale::text("mon.act.close_step"),
         ));
         return out;
     }
@@ -951,14 +947,14 @@ fn possible_here(project: &Project) -> Vec<NextAction> {
         out.push(action(
             ActionKind::OpenStep(kind),
             format!("gil open {}", kind.as_str()),
-            "이 Cycle 안에서 다음 걸음을 연다",
+            crate::locale::text("mon.act.open_step"),
         ));
     }
     if here.can_close() {
         out.push(action(
             ActionKind::CloseCycle(here.kind()),
             "gil close".to_string(),
-            "안의 판정이 끝났다 — Cycle Report 로 이 Cycle 을 닫는다",
+            crate::locale::text("mon.act.close_cycle"),
         ));
     }
     out

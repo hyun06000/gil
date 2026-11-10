@@ -196,7 +196,7 @@ impl Cycles {
             // 부모는 언제나 자신보다 먼저 난 Cycle 이라 사슬은 반드시 끝난다.
             assert!(
                 path.len() <= self.nodes.len(),
-                "parent 사슬이 Cycle 수보다 길다 — 이 Cycle Graph 에 순환이 있다"
+                "{}", crate::locale::text("cycles.parent_cycle")
             );
         }
 

@@ -162,3 +162,18 @@ fullscreen은 계속 기본 요청이다. 초기 지원 목록에 inline만 있�
 Core 기본 검사·all-targets build 통과. 기본 sandbox의 로컬 소켓/IPC 거절 후 권한 실행으로 검증했다.
 전체 `browser-check.mjs`는 로컬 Chrome에서 기존 기준판과 수정판 모두 동일한 Report-tail viewport
 assertion으로 실패했다. 이를 통과로 세지 않으며 공용 UI selftest는 별도 실행했다.
+
+## 2026-11-10: 다국어 (en · ko · zh-Hans · zh-Hant · ja)
+
+App 문구는 `ui/i18n/{en,ko,zh-Hans,zh-Hant,ja}.js` 테이블로 옮겼고 `ui/locale.js`가 정규화·선택·치환을 맡는다.
+`ui/index.html`과 `build.mjs`의 정적 라벨은 `data-i18n`·`data-i18n-title`·`data-i18n-aria`로 런타임에 바꾼다.
+언어는 Host의 `hostContext.locale`로 고르고(없으면 en), `hostcontextchanged`로 바뀌면 라벨을 다시 적용하고
+그래프를 한 번 재조회한다. presence 보고(`gil_monitor_poll`)에는 Host가 locale을 준 경우에만 정규화한 `locale`을
+싣는다 — Host가 말하지 않으면 필드를 생략해 Core의 기본값이나 Agent가 `gil_start`에 넘긴 선택을 덮지 않는다.
+정규화 규칙은 Rust(`src/locale.rs`)와 같고 공용 사례표 `src/i18n/locale-cases.json`을 양쪽 시험이 읽는다.
+Agent에게 보내는 continuation 문구(승인·복원)는 영어 단일본이며 끝에 “Answer the user in their language.”를 붙인다.
+공용 렌더러(`ui/companion.js`)는 App이 locale을 고르지 않은 창(Tauri Companion 등)에서 `navigator.language`를 따른다.
+
+시험: `mcp-app/locale.test.mjs`(사례표·5개 언어 키 완전성·자리표시 일치), `display.test.mjs`의 Host locale
+en-US/ko-KR/zh-TW/ja-JP 시나리오. 기존 한국어 단언은 `setLocale('ko')`로 고정했다. 모의 Host 기준이며 실제 Host
+화면 확인은 별도다.

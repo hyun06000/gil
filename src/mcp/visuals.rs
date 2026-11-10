@@ -10,7 +10,7 @@ pub const CHUNK: usize = 256 * 1024;
 pub fn bounded(mut result: rmcp::model::CallToolResult) -> rmcp::model::CallToolResult {
     if serde_json::to_vec(&result).map_or(true, |bytes| bytes.len() > 1024 * 1024) {
         result = rmcp::model::CallToolResult::structured(
-            json!({"code":"response_too_large","said":"시각 자료 응답이 한도를 넘었다"}),
+            json!({"code":"response_too_large","said":crate::locale::text("visual_tool.too_large")}),
         );
         result.is_error = Some(true);
     }
@@ -36,10 +36,7 @@ struct Request {
     offset: Option<u64>,
 }
 fn invalid() -> Refusal {
-    Refusal::new(
-        "invalid_request",
-        "정확한 보고서·자료 주소와 조각 위치가 필요하다",
-    )
+    Refusal::new("invalid_request", crate::locale::text("visual_tool.invalid"))
 }
 impl Request {
     fn owner(&self) -> Result<ReportOwner, Refusal> {

@@ -292,8 +292,8 @@
           "app"
         ]
       },
-      "openai/toolInvocation/invoking": "GIL Monitor 를 여는 중…",
-      "openai/toolInvocation/invoked": "GIL Monitor 를 앞으로 가져왔습니다."
+      "openai/toolInvocation/invoking": "Opening the GIL Monitor…",
+      "openai/toolInvocation/invoked": "Brought the GIL Monitor to the front."
     }
   },
   {
@@ -593,13 +593,20 @@
   {
     "name": "gil_start",
     "title": "Start a GIL project",
-    "description": "Create the project and open its first Interview. Runs the GIL core bundled with this plugin; never a global or repository build.",
+    "description": "Create the project and open its first Interview. Runs the GIL core bundled with this plugin; never a global or repository build. Pass the user's language as locale (BCP 47) so receipts and guidance speak it.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "project_root": {
           "type": "string",
           "description": "Absolute path of the GIL project to act on. The host-verified workspace root, or a path the user named. It is never guessed."
+        },
+        "locale": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 35,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "description": "Optional BCP 47 tag of the user's language (for example en-US, ko-KR, zh-TW, ja-JP). GIL answers in that language and remembers it for this project; the Monitor App's Host locale is used when this is absent. Supported: en, ko, zh-Hans, zh-Hant, ja; anything else falls back to English."
         }
       },
       "required": [
@@ -1081,7 +1088,7 @@
   {
     "name": "show_gil_monitor",
     "title": "GIL Monitor",
-    "description": "Show the GIL MCP App for a prepared scope. Call it once right after gil_start or gil_monitor_prepare returns the scope_id. The App defaults to horizontal layout and requests fullscreen by itself wherever the Host advertises it: at connect, again when the Monitor renders, a few bounded retries, then the user's first click inside the App; if it stays inline, the user can click 모니터 펼치기. Its 연결 정보 panel lists every automatic attempt and the Host's answer. A returned View is not proof of display or persistent success. Keep the native Companion fallback available.",
+    "description": "Show the GIL MCP App for a prepared scope. Call it once right after gil_start or gil_monitor_prepare returns the scope_id. The App defaults to horizontal layout and requests fullscreen by itself wherever the Host advertises it: at connect, again when the Monitor renders, a few bounded retries, then the user's first click inside the App; if it stays inline, the user can click Expand Monitor (모니터 펼치기). Its Connection info (연결 정보) panel lists every automatic attempt and the Host's answer. A returned View is not proof of display or persistent success. Keep the native Companion fallback available.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1215,6 +1222,13 @@
             "unavailable",
             "manual"
           ]
+        },
+        "locale": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 35,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "description": "App-only optional: the Host's locale (BCP 47) that the App shows. The Core remembers it for the project so its texts match the Monitor's language."
         }
       },
       "required": [

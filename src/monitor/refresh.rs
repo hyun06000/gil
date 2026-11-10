@@ -407,10 +407,9 @@ pub(crate) fn render_cached_page(
     if let Some(said) = blind {
         html::banner(
             &mut out,
-            "변화를 스스로 알아채지 못한다",
-            "이 실행에서는 파일 감시를 시작하지 못했다. 아래의 사실은 느린 주기로 다시 \
-             관측될 뿐, 무언가를 고친 직후에 곧바로 따라오지 않는다.",
-            &[("감시가 서지 못한 까닭", said.to_string())],
+            crate::locale::text("mon.blind.title"),
+            crate::locale::text("mon.blind.said"),
+            &[(crate::locale::text("mon.blind.why"), said.to_string())],
         );
     }
     match cached {
@@ -423,13 +422,12 @@ pub(crate) fn render_cached_page(
         } => {
             html::banner(
                 &mut out,
-                "이 내용은 최신이 아니다",
-                "새 관측이 실패해 마지막으로 성공한 결과를 보이고 있다. \
-                 아래의 모든 절은 그때의 사실이며 지금의 사실이 아니다.",
+                crate::locale::text("mon.stale.title"),
+                crate::locale::text("mon.stale.said"),
                 &[
-                    ("마지막 성공 관측", elapsed(*succeeded_at)),
-                    ("실패한 시각", elapsed(*failed_at)),
-                    ("실패한 까닭", error.clone()),
+                    (crate::locale::text("mon.stale.last_ok"), elapsed(*succeeded_at)),
+                    (crate::locale::text("mon.stale.failed_at"), elapsed(*failed_at)),
+                    (crate::locale::text("mon.stale.failed_why"), error.clone()),
                 ],
             );
             html::facts(&mut out, snapshot);
@@ -437,12 +435,11 @@ pub(crate) fn render_cached_page(
         Cached::Unavailable { error, failed_at } => {
             html::banner(
                 &mut out,
-                "아직 보여 줄 것이 없다",
-                "관측에 실패했고, 성공한 Snapshot 이 아직 하나도 없다. \
-                 그래서 이 화면에는 GIL 의 사실이 하나도 실려 있지 않다.",
+                crate::locale::text("mon.unavailable.title"),
+                crate::locale::text("mon.unavailable.said"),
                 &[
-                    ("실패한 시각", elapsed(*failed_at)),
-                    ("실패한 까닭", error.clone()),
+                    (crate::locale::text("mon.stale.failed_at"), elapsed(*failed_at)),
+                    (crate::locale::text("mon.stale.failed_why"), error.clone()),
                 ],
             );
         }
@@ -456,7 +453,7 @@ pub(crate) fn render_cached_page(
 /// 벽시계를 지어내지 않는다 — 이 상태기계는 지금이 몇 시인지 모르고, 알 필요도 없다.
 /// 사람에게 필요한 것은 **얼마나 된 값인가**이지 그 값이 몇 시에 생겼는지가 아니다.
 fn elapsed(moment: Moment) -> String {
-    format!("시작으로부터 {}ms", moment.0.as_millis())
+    crate::tr!("mon.elapsed", ms = moment.0.as_millis())
 }
 
 // ── 시험 ───────────────────────────────────────────────────────────────────

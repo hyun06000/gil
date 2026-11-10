@@ -1,3 +1,4 @@
+import { t } from '../ui/locale.js';
 // Reuse the single decoded, verified image. No new URL, request or stored state.
 export function imageZoom(img, doc = document) {
   const viewport = doc.createElement('div');
@@ -10,12 +11,12 @@ export function imageZoom(img, doc = document) {
   function set(value) {
     expanded = value;
     viewport.classList.toggle('is-original', value);
-    const label = value ? '미리보기로 돌아가기' : '원본 크기로 확대';
+    const label = value ? t('zoom.to_preview') : t('zoom.to_original');
     trigger.setAttribute('aria-label', label);
     trigger.setAttribute('aria-expanded', String(value));
     hint.textContent = value
-      ? `원본 크기 ${img.naturalWidth} × ${img.naturalHeight} · 스크롤로 이동 · Esc로 미리보기`
-      : '이미지를 누르면 원본 크기로 볼 수 있습니다.';
+      ? t('zoom.hint_original', { w: img.naturalWidth, h: img.naturalHeight })
+      : t('zoom.hint_preview');
     viewport.tabIndex = value ? 0 : -1;
     if (value) viewport.focus({preventScroll:true});
     else { viewport.scrollTop = 0; viewport.scrollLeft = 0; }

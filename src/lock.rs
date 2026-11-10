@@ -77,12 +77,12 @@ impl ProjectLock {
     pub(crate) fn bootstrap(gil_dir: &Path) -> Result<ProjectLock, LockError> {
         #[cfg(unix)]
         crate::internal_fs::directory(gil_dir, true).map_err(|source| LockError::Unavailable {
-            path: gil_dir.to_path_buf(), doing: "내부 저장소 자리를 만들지", source: source.to_string(),
+            path: gil_dir.to_path_buf(), doing: "lock.doing.make_store", source: source.to_string(),
         })?;
         #[cfg(not(unix))]
         fs::create_dir_all(gil_dir).map_err(|source| LockError::Unavailable {
             path: gil_dir.to_path_buf(),
-            doing: "내부 저장소 자리를 만들지",
+            doing: "lock.doing.make_store",
             source: source.to_string(),
         })?;
         ProjectLock::acquire(gil_dir)
@@ -102,12 +102,12 @@ impl ProjectLock {
                 Err(error)
             }
         }).map_err(|source| LockError::Unavailable {
-            path: path.clone(), doing: "잠금 파일을 열지", source: source.to_string(),
+            path: path.clone(), doing: "lock.doing.open_lock", source: source.to_string(),
         })?;
         // Windows: the entry itself under a pinned `.gil`; links, reparse points and directories refuse.
         #[cfg(windows)]
         let (directory, file) = crate::windows_fs::control_file(&path, true).map_err(|source| LockError::Unavailable {
-            path: path.clone(), doing: "잠금 파일을 열지", source: source.to_string(),
+            path: path.clone(), doing: "lock.doing.open_lock", source: source.to_string(),
         })?;
         #[cfg(not(any(unix, windows)))]
         let file = File::options()
@@ -118,7 +118,7 @@ impl ProjectLock {
             .open(&path)
             .map_err(|source| LockError::Unavailable {
                 path: path.clone(),
-                doing: "잠금 파일을 열지",
+                doing: "lock.doing.open_lock",
                 source: source.to_string(),
             })?;
 
@@ -126,7 +126,7 @@ impl ProjectLock {
             Ok(()) => {
                 let lock = ProjectLock { file, #[cfg(any(unix, windows))] directory };
                 lock.validate(&path).map_err(|source| LockError::Unavailable {
-                    path, doing: "잠근 프로젝트 identity를 확인하지", source: source.to_string(),
+                    path, doing: "lock.doing.check_identity", source: source.to_string(),
                 })?;
                 Ok(lock)
             },
@@ -136,7 +136,7 @@ impl ProjectLock {
             // 말한다 — 사람이 할 일이 서로 다르다.
             Err(TryLockError::Error(source)) => Err(LockError::Unavailable {
                 path,
-                doing: "이 프로젝트를 잠그지",
+                doing: "lock.doing.lock_project",
                 source: source.to_string(),
             }),
         }
@@ -185,24 +185,12 @@ pub(crate) enum LockError {
 impl fmt::Display for LockError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            LockError::Busy { .. } => write!(
-                f,
-                "다른 GIL 명령이 이 프로젝트를 사용하고 있다.\n\n\
-                 현재 상태를 읽거나 변경하지 않았다.\n\
-                 앞선 명령이 끝난 뒤 다시 시도한다."
-            ),
+            LockError::Busy { .. } => f.write_str(crate::locale::text("lock.busy")),
             LockError::Unavailable {
                 path,
                 doing,
                 source,
-            } => write!(
-                f,
-                "{doing} 못했다 ({}) — {source}.\n\n\
-                 현재 상태를 읽거나 변경하지 않았다.\n\
-                 `.gil` 이 잠금을 지원하는 파일 시스템에 있는지 확인한다 \
-                 (네트워크 파일 시스템에서는 지원되지 않을 수 있다).",
-                path.display()
-            ),
+            } => f.write_str(&crate::tr!("lock.unavailable", doing = crate::locale::text(doing), path = path.display(), source = source)),
         }
     }
 }

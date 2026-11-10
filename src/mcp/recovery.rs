@@ -41,7 +41,7 @@ pub(super) fn call(monitor: &Monitor, grants: &Grants, name: &str, input: Value)
     let run = || -> Result<CallToolResult, String> {
         let scope = input["scope_id"]
             .as_str()
-            .ok_or("Monitor 연결이 필요하다")?;
+            .ok_or(crate::locale::text("recovery_tool.scope_required"))?;
         let root = monitor.root(scope).map_err(|e| e.said)?;
         let state = crate::project_state::state_for_root(&root).map_err(|e| e.to_string())?;
         let rules = RuleSet::builtin().map_err(|e| e.to_string())?;
@@ -52,13 +52,13 @@ pub(super) fn call(monitor: &Monitor, grants: &Grants, name: &str, input: Value)
             monitor.root(scope).map_err(|e| e.said)?;
             let mut out = serde_json::to_value(CallToolResult::structured(value.clone())).unwrap();
             if let Some(digest) = value["digest"].as_str() {
-                let mut entries = grants.0.lock().map_err(|_| "복원 승인 연결 오류")?;
+                let mut entries = grants.0.lock().map_err(|_| crate::locale::text("recovery_tool.grants_lock"))?;
                 if !entries.contains_key(scope) && entries.len() >= 32 {
-                    return Err("복원 승인 연결 한도".into());
+                    return Err(crate::locale::text("recovery_tool.grants_limit").into());
                 }
                 if entries.get(scope).is_none_or(|(d, _)| d != digest) {
                     let mut bytes = [0u8; 32];
-                    getrandom::fill(&mut bytes).map_err(|_| "안전한 승인 연결 오류")?;
+                    getrandom::fill(&mut bytes).map_err(|_| crate::locale::text("recovery_tool.grants_random"))?;
                     let token: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
                     entries.insert(scope.to_owned(), (digest.to_owned(), token));
                 }
@@ -68,12 +68,12 @@ pub(super) fn call(monitor: &Monitor, grants: &Grants, name: &str, input: Value)
         }
         let request: Apply = serde_json::from_value(input).map_err(|e| e.to_string())?;
         {
-            let entries = grants.0.lock().map_err(|_| "복원 승인 연결 오류")?;
+            let entries = grants.0.lock().map_err(|_| crate::locale::text("recovery_tool.grants_lock"))?;
             if !entries
                 .get(&request.scope_id)
                 .is_some_and(|(d, t)| d == &request.digest && t == &request.token)
             {
-                return Err("현재 Monitor에서 변경 목록을 읽고 직접 승인해야 한다".into());
+                return Err(crate::locale::text("recovery_tool.approve_in_monitor").into());
             }
         }
         let mut s = ProjectSession::open_at(rules, &root, &state).map_err(|e| e.to_string())?;
