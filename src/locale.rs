@@ -179,6 +179,7 @@ pub const MEMORY_FILE: &str = "locale.json";
 const MEMORY_SCHEMA: u32 = 1;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Memory {
     schema_version: u32,
     /// The language the Agent named in `gil_start(locale)`.
@@ -196,51 +197,78 @@ impl Memory {
     }
 }
 
-fn memory_path(root: &Path) -> Option<std::path::PathBuf> {
-    let state = crate::project_state::state_for_root(root).ok()?;
-    // Only a Project that exists has a language to remember; never create `.gil/` here.
-    state.parent().filter(|dir| dir.is_dir()).map(|dir| dir.join(MEMORY_FILE))
+// Read only single regular control-file entries through the existing pinned-directory helpers.
+fn control_file(path: &Path) -> std::io::Result<std::fs::File> {
+    #[cfg(unix)]
+    { crate::internal_fs::file(path, false).map(|(_, file)| file) }
+    #[cfg(windows)]
+    { crate::windows_fs::control_file(path, false).map(|(_, file)| file) }
+    #[cfg(not(any(unix, windows)))]
+    { let _ = path; Err(std::io::Error::other("locale persistence is unsupported here")) }
 }
 
-fn read_memory(root: &Path) -> Option<Memory> {
-    let path = memory_path(root)?;
-    let bytes = std::fs::read(path).ok()?;
-    if bytes.len() > 4096 { return None; }
-    serde_json::from_slice::<Memory>(&bytes).ok().filter(|m| m.schema_version == MEMORY_SCHEMA)
+fn memory_path(root: &Path) -> std::io::Result<std::path::PathBuf> {
+    let state = crate::project_state::state_for_root(root).map_err(std::io::Error::other)?;
+    // An orphan directory is not an existing Project. Never create a record or follow a link.
+    control_file(&state)?;
+    Ok(state.parent().ok_or_else(|| std::io::Error::other("no project record here"))?.join(MEMORY_FILE))
 }
 
-fn write_memory(root: &Path, memory: &Memory) -> std::io::Result<()> {
-    let Some(path) = memory_path(root) else { return Err(std::io::Error::other("no project record here")); };
-    let encoded = serde_json::to_vec_pretty(memory).map_err(std::io::Error::other)?;
-    let tmp = path.with_file_name(format!("{MEMORY_FILE}.writing"));
-    std::fs::write(&tmp, encoded)?;
-    std::fs::rename(&tmp, &path)
+fn read_memory(path: &Path) -> std::io::Result<Option<Memory>> {
+    use std::io::Read;
+    let file = match control_file(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    let mut bytes = Vec::new();
+    file.take(4097).read_to_end(&mut bytes)?;
+    if bytes.len() > 4096 { return Err(std::io::Error::other("locale sidecar is too large")); }
+    let memory: Memory = serde_json::from_slice(&bytes).map_err(std::io::Error::other)?;
+    if memory.schema_version != MEMORY_SCHEMA
+        || [&memory.start, &memory.app].into_iter().any(|tag| tag.as_deref().is_some_and(|s| Locale::from_tag(s).is_none())) {
+        return Err(std::io::Error::other("unsupported locale sidecar; preserved"));
+    }
+    Ok(Some(memory))
 }
 
 /// The language remembered for the Project at `root`, if any was ever reported.
-pub fn remembered(root: &Path) -> Option<Locale> { read_memory(root).and_then(|m| m.resolve()) }
+/// Unreadable preferences fall back without repairing or rewriting them.
+pub fn remembered(root: &Path) -> Option<Locale> {
+    read_memory(&memory_path(root).ok()?).ok().flatten().and_then(|m| m.resolve())
+}
 
 /// The language to speak for the Project at `root`: remembered, else [`DEFAULT_LOCALE`].
 pub fn for_project(root: &Path) -> Locale { remembered(root).unwrap_or(DEFAULT_LOCALE) }
 
-/// Remember the language named by `gil_start`. It outranks later App reports.
-pub fn remember_start(root: &Path, locale: Locale) -> std::io::Result<()> {
-    let mut memory = read_memory(root).unwrap_or_default();
+fn remember(root: &Path, locale: Locale, explicit: bool) -> std::io::Result<()> {
+    let path = memory_path(root)?;
+    let parent = path.parent().expect("sidecar has a parent");
+    // Serialize read/modify/publish with other GIL writers. Busy is best-effort failure for
+    // display preferences, never permission to touch the Project's state or Snapshot objects.
+    let lock = crate::lock::ProjectLock::acquire(parent).map_err(std::io::Error::other)?;
+    memory_path(root)?;
+    let mut memory = read_memory(&path)?.unwrap_or_default();
     memory.schema_version = MEMORY_SCHEMA;
-    if memory.start.as_deref() == Some(locale.tag()) { return Ok(()); }
-    memory.start = Some(locale.tag().to_owned());
-    write_memory(root, &memory)
+    let field = if explicit { &mut memory.start } else { &mut memory.app };
+    if field.as_deref() == Some(locale.tag()) { return Ok(()); }
+    *field = Some(locale.tag().to_owned());
+    let encoded = serde_json::to_vec_pretty(&memory).map_err(std::io::Error::other)?;
+    lock.validate(&parent.join(crate::lock::LOCK_FILE))?;
+    // This publisher works for a named .gil control file: exclusive no-follow temporary,
+    // pinned parent, verified bytes, fsync, and atomic replacement on Unix and Windows.
+    // A stale temporary is preserved and refused, never truncated or automatically deleted.
+    #[cfg(any(unix, windows))]
+    { crate::visual_report::state_file::write(&path, &encoded) }
+    #[cfg(not(any(unix, windows)))]
+    { let _ = encoded; Err(std::io::Error::other("locale persistence is unsupported here")) }
 }
 
-/// Remember the most recent locale the Monitor App reported. A no-op when unchanged, so a
-/// quiet App polling every two seconds never rewrites the file.
-pub fn remember_app(root: &Path, locale: Locale) -> std::io::Result<()> {
-    let mut memory = read_memory(root).unwrap_or_default();
-    memory.schema_version = MEMORY_SCHEMA;
-    if memory.app.as_deref() == Some(locale.tag()) { return Ok(()); }
-    memory.app = Some(locale.tag().to_owned());
-    write_memory(root, &memory)
-}
+/// Remember the language named by `gil_start`. It outranks later App reports.
+pub fn remember_start(root: &Path, locale: Locale) -> std::io::Result<()> { remember(root, locale, true) }
+
+/// Remember the most recent App locale. An unchanged value leaves the file untouched.
+pub fn remember_app(root: &Path, locale: Locale) -> std::io::Result<()> { remember(root, locale, false) }
 
 #[cfg(test)]
 mod tests {
@@ -364,6 +392,8 @@ mod tests {
         assert!(remember_app(&root, Locale::Ja).is_err(), "no .gil → nothing to remember");
         assert!(!root.join(".gil").exists());
         std::fs::create_dir_all(root.join(".gil")).unwrap();
+        assert!(remember_app(&root, Locale::Ja).is_err(), "an orphan .gil is not a Project");
+        std::fs::write(root.join(crate::STATE_PATH), b"existing record fixture").unwrap();
         remember_app(&root, Locale::ZhHant).unwrap();
         assert_eq!(remembered(&root), Some(Locale::ZhHant));
         assert_eq!(for_project(&root), Locale::ZhHant);
@@ -379,4 +409,111 @@ mod tests {
         assert_eq!(for_project(&root), DEFAULT_LOCALE);
         std::fs::remove_dir_all(&root).ok();
     }
+
+    fn memory_fixture(label: &str) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!("gil-locale-{label}-{}-{:?}", std::process::id(), std::thread::current().id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join(".gil")).unwrap();
+        std::fs::write(root.join(crate::STATE_PATH), b"preserved record fixture").unwrap();
+        root
+    }
+
+    #[test]
+    fn locale_updates_preserve_records_and_refuse_busy_or_damaged_preferences() {
+        let root = memory_fixture("preserve");
+        let state = std::fs::read(root.join(crate::STATE_PATH)).unwrap();
+        let path = root.join(".gil").join(MEMORY_FILE);
+        let lock = crate::lock::ProjectLock::acquire(&root.join(".gil")).unwrap();
+        assert!(remember_start(&root, Locale::Ja).is_err());
+        assert!(!path.exists());
+        drop(lock);
+        remember_start(&root, Locale::Ja).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+        remember_start(&root, Locale::Ja).unwrap();
+        assert_eq!(std::fs::metadata(&path).unwrap().modified().unwrap(), modified);
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        for damaged in [b"invalid JSON".to_vec(), br#"{"schema_version":2,"start":"en"}"#.to_vec(), vec![b' '; 4097]] {
+            std::fs::write(&path, &damaged).unwrap();
+            assert_eq!(remembered(&root), None);
+            assert!(remember_app(&root, Locale::En).is_err());
+            assert_eq!(std::fs::read(&path).unwrap(), damaged);
+        }
+        assert_eq!(std::fs::read(root.join(crate::STATE_PATH)).unwrap(), state);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn occupied_temporary_and_hardlinked_sidecar_never_change_existing_bytes() {
+        let root = memory_fixture("links");
+        let state = root.join(crate::STATE_PATH);
+        let bytes = std::fs::read(&state).unwrap();
+        let tmp = root.join(".gil/locale.json.writing");
+        std::fs::write(&tmp, b"preserved interrupted write").unwrap();
+        assert!(remember_app(&root, Locale::En).is_err());
+        assert_eq!(std::fs::read(&tmp).unwrap(), b"preserved interrupted write");
+        assert_eq!(std::fs::read(&state).unwrap(), bytes);
+        std::fs::remove_file(&tmp).unwrap();
+        // Simulate a leftover entry aliased to a record: it must never be truncated.
+        std::fs::hard_link(&state, &tmp).unwrap();
+        assert!(remember_app(&root, Locale::En).is_err());
+        assert_eq!(std::fs::read(&state).unwrap(), bytes);
+        assert_eq!(std::fs::read(&tmp).unwrap(), bytes);
+        std::fs::remove_file(&tmp).unwrap();
+        let sidecar = root.join(".gil").join(MEMORY_FILE);
+        std::fs::hard_link(&state, &sidecar).unwrap();
+        assert_eq!(remembered(&root), None);
+        assert!(remember_start(&root, Locale::Ja).is_err());
+        assert_eq!(std::fs::read(&state).unwrap(), bytes);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn linked_preference_and_parent_are_never_followed() {
+        use std::os::unix::fs::symlink;
+        let root = memory_fixture("symlink");
+        let target = root.join("preserved.json");
+        std::fs::write(&target, br#"{"schema_version":1,"start":"ja"}"#).unwrap();
+        let bytes = std::fs::read(&target).unwrap();
+        let sidecar = root.join(".gil").join(MEMORY_FILE);
+        symlink(&target, &sidecar).unwrap();
+        assert_eq!(remembered(&root), None);
+        assert!(remember_start(&root, Locale::En).is_err());
+        assert!(std::fs::symlink_metadata(&sidecar).unwrap().file_type().is_symlink());
+        assert_eq!(std::fs::read(&target).unwrap(), bytes);
+        std::fs::remove_file(sidecar).unwrap();
+        std::fs::rename(root.join(".gil"), root.join("saved-records")).unwrap();
+        symlink(root.join("saved-records"), root.join(".gil")).unwrap();
+        assert!(remember_app(&root, Locale::En).is_err());
+        assert!(!root.join("saved-records").join(MEMORY_FILE).exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn concurrent_start_and_app_updates_keep_both_fields() {
+        let root = memory_fixture("concurrent");
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+        std::thread::scope(|threads| {
+            for explicit in [true, false] {
+                let root = &root;
+                let barrier = barrier.clone();
+                threads.spawn(move || {
+                    barrier.wait();
+                    let mut saved = false;
+                    for _ in 0..1000 {
+                        if remember(root, if explicit { Locale::Ja } else { Locale::En }, explicit).is_ok() { saved = true; break; }
+                        std::thread::sleep(std::time::Duration::from_millis(1));
+                    }
+                    assert!(saved, "bounded test retry after a busy lock");
+                });
+            }
+        });
+        assert_eq!(remembered(&root), Some(Locale::Ja));
+        let memory = read_memory(&memory_path(&root).unwrap()).unwrap().unwrap();
+        assert_eq!(memory.start.as_deref(), Some("ja"));
+        assert_eq!(memory.app.as_deref(), Some("en"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
 }

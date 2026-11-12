@@ -177,3 +177,6 @@ Agent에게 보내는 continuation 문구(승인·복원)는 영어 단일본이
 시험: `mcp-app/locale.test.mjs`(사례표·5개 언어 키 완전성·자리표시 일치), `display.test.mjs`의 Host locale
 en-US/ko-KR/zh-TW/ja-JP 시나리오. 기존 한국어 단언은 `setLocale('ko')`로 고정했다. 모의 Host 기준이며 실제 Host
 화면 확인은 별도다.
+
+언어 설정의 기록·Snapshot 보존과 잠금/손상 처리 계약은 [저장 계약 §2.1](../spec/GIL_Storage_Model_v0.1.md)을 따른다.
+이 다국어 변경은 기존 preview.29/owner.15 배포물의 기능이라고 주장하지 않는다.
