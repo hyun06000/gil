@@ -187,6 +187,8 @@ pub mod visual_migration;
 mod restore;
 pub mod mcp;
 pub mod command;
+/// `gil install` · `gil doctor` · `gil uninstall` — Host registration without an installer.
+pub mod install;
 pub mod write_guard;
 mod root;
 pub mod say;

@@ -121,6 +121,8 @@ fn run(ctx: &Invocation<'_>, args: &[String]) -> Result<String, String> {
         }
         "monitor" => monitor(ctx, args.get(1)),
         "mcp" => mcp(args.get(1).map(String::as_str)),
+        // `gil serve` — the same MCP stdio surface under the name the install guide uses.
+        "serve" => mcp(Some("--serve")),
         "cycle" => cycle(ctx, args.get(1).map(String::as_str), args.get(2)),
         other => Err(tr!("cmd.unknown_command", other = format!("{other:?}"), help = help())),
     }

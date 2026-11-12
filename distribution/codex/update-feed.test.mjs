@@ -24,9 +24,12 @@ test('update feed has exactly the published shape and one entry per supported pl
 });
 
 test('update feed versions match the published install guide', async () => {
-  const install = await readFile(new URL('../../INSTALL.md', import.meta.url), 'utf8');
-  assert.ok(install.includes(`\`${feed.platforms['darwin-arm64'].version}\``), 'INSTALL.md names the macOS version');
-  assert.ok(install.includes(`\`${feed.platforms['windows-x64'].version}\``), 'INSTALL.md names the Windows version');
+  // The root INSTALL.md is the short agent procedure (2026-11-12); the detailed guide carries
+  // the per-channel pins. Either may name the published version.
+  const install = (await readFile(new URL('../../INSTALL.md', import.meta.url), 'utf8'))
+    + (await readFile(new URL('../INSTALL-GUIDE.md', import.meta.url), 'utf8'));
+  assert.ok(install.includes(`\`${feed.platforms['darwin-arm64'].version}\``), 'the install docs name the macOS version');
+  assert.ok(install.includes(`\`${feed.platforms['windows-x64'].version}\``), 'the install docs name the Windows version');
   assert.ok(install.includes(feed.platforms['darwin-arm64'].release_url));
   assert.ok(install.includes(feed.platforms['windows-x64'].release_url));
 });

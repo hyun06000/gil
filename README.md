@@ -49,15 +49,26 @@ Native Companion은 같은 UI를 별도 창으로
 상태가 아니다. PiP는 현재 지원을 주장하지 않는다.
 
 소스는 [MIT 라이선스](LICENSE)로 공개한다. 현재 친구·테스터용 채널은 **서명되지 않은 preview**다.
-[통합 설치 안내](INSTALL.md)에서 OS와 CPU에 맞는 검수본을 확인한 뒤 설치한다. macOS Apple
-Silicon은 Codex Plugin `0.2.1-preview.29`, Windows x64는 Companion installer
+**Windows x64 — 한 줄 설치 (2026-11-12 결정, 서명·설치 프로그램·Store 없음).** 사람은 PowerShell에 붙여 넣는다:
+
+```powershell
+irm https://raw.githubusercontent.com/hyun06000/gil/main/install.ps1 | iex
+```
+
+에이전트(Codex 또는 Claude Code 탭)에게는 한 문장만 말한다:
+`https://raw.githubusercontent.com/hyun06000/gil/main/INSTALL.md 를 읽고 설치해줘`.
+단일 실행 파일 `gil.exe`가 `%LOCALAPPDATA%\Programs\gil`에 놓이고 `gil install`이 Claude Desktop·Codex 설정에
+스스로 등록하며 `gil doctor`가 결과를 보고한다. 첫 릴리스 `v0.3.0`은 [Windows 릴리스 절차](distribution/windows/RELEASE.md)로 게시한다.
+
+[상세 통합 안내](distribution/INSTALL-GUIDE.md)에서 OS와 CPU에 맞는 검수본을 확인한 뒤 설치한다. macOS Apple
+Silicon은 Codex Plugin `0.2.1-preview.29`, Windows x64의 구형 채널은 Companion installer
 `0.1.1-owner.15`이다.
 macOS preview.29와 Windows owner.15는 계획 근거의 입력 조건·줄별 일괄 오류와 PNG 제한값 안내를 보완한다.
 참조 자동 이동 없이 기존 승인·기록·Snapshot을 보존한다. [Mac 게시 장부](distribution/codex/PREVIEW-29-PUBLICATION-20261110.md)와
 [Windows 게시 장부](distribution/windows/PUBLICATION-OWNER-15-20261110.md)를 따른다.
 **사용자에게 Node·Cargo·Homebrew 설치를 요구하지 않는다.** Mac Plugin은 별도 Companion 없이
 [gil-marketplace](https://github.com/hyun06000/gil-marketplace)에서 설치하며, 범용 Plugins Directory
-등재와는 다르다. Windows는 위 Companion installer를 사용한다.
+등재와는 다르다. Windows는 위 한 줄 설치를 사용한다.
 
 이전 preview.6의 깨끗한 Apple Silicon Mac VM에서 Git/Xcode Command Line Tools가 없는 상태의 Git 없는 설치와
 GIL 동작을 확인했다. 그 VM의 fullscreen 전환과 앱 완전 종료 뒤 복원은 별도 확인 사항이다.

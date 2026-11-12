@@ -141,13 +141,16 @@ test('GIL guidance is scoped to the selected project and never registers Host ho
 
 // The copy-paste installer must not restore hooks that the product retired.
 test('installation prompts remove only old GIL hooks and never install them', async () => {
-  for (const path of ['../../INSTALL.md', '../../distribution/codex/INSTALL.md']) {
+  for (const path of ['../../distribution/INSTALL-GUIDE.md', '../../distribution/codex/INSTALL.md']) {
     const doc = await readFile(new URL(path, import.meta.url), 'utf8');
     assert.doesNotMatch(doc, /write-guard install|matches_current_core/);
     assert.match(doc, /write-guard uninstall --auto --host codex/);
     assert.match(doc, /비-GIL/);
     assert.match(doc, /강제 차단/);
   }
+  const root = await readFile(new URL('../../INSTALL.md', import.meta.url), 'utf8');
+  assert.doesNotMatch(root, /write-guard install|hooks\.json|settings\.json/);
+  assert.match(root, /gil(-new)?\.exe" install/);
   const skill = await readFile(new URL('./skills/gil-companion/SKILL.md', import.meta.url), 'utf8');
   assert.doesNotMatch(skill.split('---')[1], /^hooks:/m);
 });

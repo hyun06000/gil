@@ -1,0 +1,106 @@
+name: Windows release (GitHub Releases, no signing)
+# One static `gil.exe` per tag. No installer, no code signing, no Store: the 2026-11-12
+# deployment decision record. Asset names carry no version so that
+# `releases/latest/download/<asset>` stays valid across releases.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build, verify and publish gil.exe (x64)
+    runs-on: windows-2025
+    timeout-minutes: 45
+    env:
+      RUSTUP_TOOLCHAIN: 1.97.1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Version from tag
+        id: version
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          if ($tag -notmatch '^v(\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?)$') { throw "Tag is not vX.Y.Z[-pre]: $tag" }
+          $version = $Matches[1]
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "prerelease=$([bool]$Matches[2])" >> $env:GITHUB_OUTPUT
+      - name: Locked toolchain and dependencies
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo fetch --locked --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build static x64 gil.exe (product profile)
+        shell: pwsh
+        env:
+          GIL_BUILD_VERSION: ${{ steps.version.outputs.version }}
+          RUSTFLAGS: -C target-feature=+crt-static
+        run: |
+          cargo build --locked --release --target x86_64-pc-windows-msvc -p gil --bin gil --features approved-plan,visual-authoring,product-safety
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify the executable before publishing
+        shell: pwsh
+        env:
+          EXPECTED: ${{ steps.version.outputs.version }}
+        run: |
+          $exe = 'target\x86_64-pc-windows-msvc\release\gil.exe'
+          $line = (& $exe --version).Trim()
+          if ($line -ne "gil $env:EXPECTED") { throw "Unexpected version line: $line" }
+          # No Host on the runner: install places the exe at the fixed path, and doctor run from
+          # that installed copy must report NOT_INSTALLED for both Hosts and exit 0.
+          & $exe install --no-wait
+          if ($LASTEXITCODE -ne 0) { throw "gil install failed on a clean runner" }
+          $installed = Join-Path $env:LOCALAPPDATA 'Programs\gil\gil.exe'
+          if (-not (Test-Path $installed)) { throw 'install did not place gil.exe at the fixed path' }
+          $doctor = (& $installed doctor) -join "`n"
+          if ($LASTEXITCODE -ne 0 -or $doctor -notmatch 'binary: OK' -or $doctor -notmatch 'claude-desktop: NOT_INSTALLED' -or $doctor -notmatch 'codex: NOT_INSTALLED') {
+            throw "Unexpected doctor output:`n$doctor"
+          }
+          # A static CRT build must not import the VC++ runtime DLLs.
+          $dumpbin = Get-ChildItem 'C:\Program Files\Microsoft Visual Studio' -Recurse -Filter dumpbin.exe -ErrorAction SilentlyContinue | Where-Object FullName -match 'Hostx64\\x64' | Select-Object -First 1
+          if ($dumpbin) {
+            $imports = & $dumpbin.FullName /nologo /dependents $exe
+            if ($imports -match 'VCRUNTIME|MSVCP') { throw "gil.exe still depends on the VC++ runtime:`n$imports" }
+          } else { Write-Host 'dumpbin not found; static CRT check skipped' }
+      - name: Stage assets with checksums
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item 'target\x86_64-pc-windows-msvc\release\gil.exe' 'dist\gil-x86_64-pc-windows-msvc.exe'
+          $lines = Get-ChildItem dist -File | ForEach-Object {
+            "$((Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant())  $($_.Name)"
+          }
+          [IO.File]::WriteAllText("$PWD\dist\checksums.txt", ($lines -join "`n") + "`n")
+          Get-Content dist\checksums.txt
+      - name: Publish the GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          # Every line of the here-string carries the YAML block indent; the block scalar strips it,
+          # so PowerShell still sees the closing "@ at column 0.
+          $notes = @"
+          GIL $env:VERSION — Windows x64, single static executable, unsigned.
+
+          Install (PowerShell, no admin):
+
+              irm https://raw.githubusercontent.com/$env:GITHUB_REPOSITORY/main/install.ps1 | iex
+
+          Or ask your agent: "https://raw.githubusercontent.com/$env:GITHUB_REPOSITORY/main/INSTALL.md 를 읽고 설치해줘"
+
+          Assets: gil-x86_64-pc-windows-msvc.exe, checksums.txt (SHA-256).
+          "@
+          $flags = @()
+          if ($env:PRERELEASE -eq 'True') { $flags += '--prerelease' }
+          gh release create $env:TAG dist/gil-x86_64-pc-windows-msvc.exe dist/checksums.txt --title "GIL $env:VERSION (Windows x64)" --notes $notes @flags
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

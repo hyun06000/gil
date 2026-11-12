@@ -234,22 +234,18 @@ test('Host registration is explicit, uses the official Codex CLI shape, and does
   for (const key of ['codex', 'claude']) assert.match(ui, new RegExp(`^  ${key}: \\{$`, 'm'));
 });
 
-test('signed product CI is manual, secret-gated, installed, and exercised before retention', async () => {
-  const workflow = await read('.github/workflows/windows-product.yml');
-  assert.match(workflow, /workflow_dispatch:/);
-  assert.match(workflow, /if: github\.event_name == 'workflow_dispatch' && inputs\.build_signed_candidate/);
-  assert.match(workflow, /environment: windows-product-signing/);
-  for (const secret of [
-    'GIL_UPDATER_PRIVATE_KEY',
-    'GIL_WINDOWS_CERTIFICATE_PFX_BASE64',
-    'GIL_WINDOWS_CERTIFICATE_PASSWORD',
-  ]) assert.match(workflow, new RegExp(`secrets\\.${secret}`));
-  assert.match(workflow, /cargo install tauri-cli --version 2\.11\.5 --locked/);
-  assert.match(workflow, /1\.3\.6\.1\.5\.5\.7\.3\.3/);
-  assert.match(workflow, /product-e2e\.ps1/);
-  assert.match(workflow, /DisplayName 'GIL Companion \(Unsigned Test\)' -SeedLegacyRuntime/);
-  assert.match(workflow, /Owner candidate is missing its content-specific version/);
-  assert.ok(workflow.indexOf('product-e2e.ps1') < workflow.indexOf('actions\/upload-artifact'));
+test('the signed/NSIS product workflow is retired; the single-executable release workflow replaces it', async () => {
+  // 2026-11-12 deployment decision: no installer, no signing, no Store. The legacy acceptance
+  // script stays for the retired Companion channel; the release path is windows-release.yml.
+  await assert.rejects(read('.github/workflows/windows-product.yml'), { code: 'ENOENT' });
+  const release = await read('.github/workflows/windows-release.yml');
+  assert.match(release, /tags:\n\s+- 'v\[0-9\]\+\.\[0-9\]\+\.\[0-9\]\+'/);
+  assert.match(release, /RUSTFLAGS: -C target-feature=\+crt-static/);
+  assert.match(release, /--features approved-plan,visual-authoring,product-safety/);
+  assert.match(release, /gil-x86_64-pc-windows-msvc\.exe/);
+  assert.match(release, /checksums\.txt/);
+  assert.doesNotMatch(release, /certificate|signtool|tauri|nsis|msix/i);
+  assert.ok(release.indexOf('& $exe doctor') < release.indexOf('gh release create'), 'verified before publishing');
 
   const acceptance = await read('distribution/windows/product-e2e.ps1');
   assert.match(acceptance, /\[switch\]\$SeedLegacyRuntime/);
@@ -277,46 +273,6 @@ test('signed product CI is manual, secret-gated, installed, and exercised before
   assert.match(launcherSmoke, /version_switch_while_mcp_connected: 'passed'/);
 });
 
-test('unsigned owner acceptance CI is manual, isolated, install-tested and never published', async () => {
-  const workflow = await read('.github/workflows/windows-product.yml');
-  assert.match(workflow, /build_unsigned_test_candidate:/);
-  assert.match(workflow, /if: github\.event_name == 'workflow_dispatch' && inputs\.build_unsigned_test_candidate/);
-  assert.match(workflow, /UNSIGNED owner acceptance candidate/);
-  assert.match(workflow, /build-windows-unsigned-test\.ps1/);
-  assert.match(workflow, /-ExpectedSignature NotSigned/);
-  assert.match(workflow, /GIL Companion \(Unsigned Test\)/);
-  assert.match(workflow, /retention-days: 3/);
-  assert.doesNotMatch(workflow.slice(workflow.indexOf('unsigned-test-candidate:'), workflow.indexOf('unsigned-updater-candidate:')), /environment: windows-product-signing|secrets\./);
-
-  const acceptance = await read('distribution/windows/product-e2e.ps1');
-  assert.match(acceptance, /ValidateSet\('Valid', 'NotSigned'\)/);
-  assert.match(acceptance, /expected \$\{ExpectedSignature\}:/);
-  assert.match(acceptance, /Where-Object DisplayName -eq \$DisplayName/);
-  assert.match(acceptance, /if \(\$Signature\.SignerCertificate\)/);
-});
-
-test('owner updater CI needs a monotonic version and updater secrets but no paid certificate', async () => {
-  const workflow = await read('.github/workflows/windows-product.yml');
-  assert.match(workflow, /build_unsigned_updater_candidate:/);
-  assert.match(workflow, /owner_update_version:/);
-  const start = workflow.indexOf('  unsigned-updater-candidate:');
-  const end = workflow.indexOf('  signed-candidate:', start);
-  assert.ok(start >= 0 && end > start);
-  const job = workflow.slice(start, end);
-  assert.match(job, /inputs\.build_unsigned_updater_candidate/);
-  assert.match(job, /build-windows-unsigned-updater-test\.ps1 -Version/);
-  assert.match(job, /secrets\.GIL_UPDATER_PRIVATE_KEY/);
-  assert.match(job, /secrets\.GIL_UPDATER_PRIVATE_KEY_PASSWORD/);
-  assert.match(job, /Get-AuthenticodeSignature/);
-  assert.match(job, /NotSigned/);
-  assert.match(job, /Get-ChildItem target\\release\\bundle\\nsis -File -Filter '\*\.sig'/);
-  const buildScript = await read('companion/build-windows-unsigned-updater-test.ps1');
-  assert.match(buildScript, /Tauri CLI 2\.11\.5/);
-  assert.match(buildScript, /FromBase64String/);
-  assert.match(buildScript, /version:\$Version/);
-  assert.doesNotMatch(job, /GIL_WINDOWS_CERTIFICATE|Import-PfxCertificate|timestampUrl/);
-});
-
 test('the owner update manifest is produced by a validated static-manifest writer', async () => {
   const writer = await read('distribution/windows/write-owner-update-manifest.mjs');
   assert.match(writer, /windows-x86_64/);
@@ -341,8 +297,6 @@ test('approval owner candidate opts in for both Core and Companion and exercises
   assert.match(script, /\$CoreFeatures = 'approved-plan,visual-authoring,product-safety'/);
   assert.match(script, /gil\/approved-plan,gil\/visual-authoring,gil\/product-safety/);
   assert.match(script, /cargo tauri build.*@TauriFeatures/);
-  const workflow = await read('.github/workflows/windows-product.yml');
-  assert.match(workflow, /--gil target\/release\/gil.exe --features approved-plan,visual-authoring,product-safety/);
 });
 
 test('future owner installers compile Core with the selected installer version', async () => {

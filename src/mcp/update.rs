@@ -66,10 +66,20 @@ pub fn installed_version() -> Option<String> {
 }
 
 pub(crate) fn installed_version_of(exe: &Path) -> Option<String> {
+    if let Some(version) = version_from_install_receipt(exe) {
+        return Some(version);
+    }
     if let Some(version) = version_from_runtime_path(exe) {
         return Some(version);
     }
     version_from_plugin_manifest(exe)
+}
+
+/// `…\Programs\gil\gil.exe` beside the `install.json` that `gil install` writes — the
+/// installer-free Windows layout (2026-11-12). Development binaries have no receipt.
+fn version_from_install_receipt(exe: &Path) -> Option<String> {
+    let version = crate::install::receipt_version(exe.parent()?)?;
+    parse_version(&version).map(|_| version)
 }
 
 /// `…/GIL/runtime/versions/<version>/gil.exe` — the Windows product layout.
@@ -401,6 +411,21 @@ mod tests {
         for platform in ["darwin-arm64", "windows-x64"] {
             assert!(latest_for(&actual, platform).unwrap().is_some(), "repository feed covers {platform}");
         }
+    }
+
+    #[test]
+    fn installed_version_reads_the_install_receipt_beside_the_executable() {
+        let dir = std::env::temp_dir().join(format!("gil-update-receipt-{}-{}", std::process::id(),
+            std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let exe = dir.join("gil.exe");
+        std::fs::write(&exe, b"x").unwrap();
+        assert_eq!(installed_version_of(&exe), None);
+        std::fs::write(dir.join("install.json"), r#"{"schema":1,"version":"0.3.0","sha256":"ab"}"#).unwrap();
+        assert_eq!(installed_version_of(&exe).as_deref(), Some("0.3.0"));
+        std::fs::write(dir.join("install.json"), r#"{"schema":1,"version":"not-semver"}"#).unwrap();
+        assert_eq!(installed_version_of(&exe), None, "a receipt that is not SemVer is ignored");
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
