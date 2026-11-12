@@ -5,7 +5,10 @@
 시각자료 typed close·계획 안내·Monitor 표시 상태 개선, 훅 없는 프로젝트별 새 세션 재개도 포함한다.
 참조 자동 이동 없이 기존 승인·안내 파일·기록·Snapshot을 보존한다. 새 대화·새 빈 폴더에서 필드테스트한다.
 
-전체 안내의 시작점은 [저장소 설치 안내](../../INSTALL.md)다. 이 문서는 Windows 전용 상세 절차다.
+> **구형 채널 안내 (2026-11-12).** 현행 Windows 설치는 루트 [INSTALL.md](../../INSTALL.md)의 단일 실행 파일 경로다.
+> 이 문서는 NSIS Companion `0.1.1-owner.15` 사용자를 위한 과거 절차이며, 새 설치에는 쓰지 않는다.
+
+전체 안내의 시작점은 [저장소 설치 절차서](../../INSTALL.md)다. 이 문서는 구형 Windows Companion 채널의 상세 절차다.
 
 현재 설치본은 **Windows 11 x64 친구 테스트용 unsigned prerelease**다. 정식 공개판이나 서명된
 publisher 배포가 아니다. ARM64 Windows, 기업 배포와 일반 사용자 지원 완료를 주장하지 않는다.
@@ -33,7 +36,7 @@ publisher 배포가 아니다. ARM64 Windows, 기업 배포와 일반 사용자 
      Desktop이 실행 중이면 거절한다(실행 중 바깥에서 바꾼 설정은 Desktop이 되돌릴 수 있다). 바꾸기 전
      같은 폴더에 `claude_desktop_config.json.gil-backup-<시각>` 백업을 남기고, 다른 MCP 서버 항목은 그대로
      둔다. 이 버튼은 `0.1.1-owner.10`부터 제공한다. owner.8/owner.9에서는
-     [저장소 설치 안내](../../INSTALL.md)의 “직접 등록(임시)” 항목을 따른다.
+     [상세 통합 안내](../INSTALL-GUIDE.md)의 “직접 등록(임시)” 항목을 따른다.
 5. 이전 GIL Plugin 또는 `gil` MCP 등록이 있으면 Companion의 **이전 GIL 연결 교체** 내용을 확인하고
    승인한다. 다른 Plugin·다른 MCP 서버·Project는 대상이 아니다. Claude Desktop에서는 **GIL 실행 파일을
    가리키는** `gil` 항목만 교체 대상이고, 사용자가 직접 만든 다른 `gil` 등록은 “다른 gil 등록 있음”으로
@@ -158,7 +161,7 @@ Codex와 Claude Desktop이 모두 같은 고정 launcher를 등록했다면 업�
 각 Host의 새 연결부터 같은 선택 버전을 사용한다. Companion 머리줄의 `Core <버전>`은 다음 새 연결이 받을
 Core다.
 
-기존 실패 프로젝트는 [공통 복구 절차](../../INSTALL.md#실패-후-revisit가-막힌-기존-프로젝트-이어가기)를 따른다.
+기존 실패 프로젝트는 [공통 복구 절차](../INSTALL-GUIDE.md#실패-후-revisit가-막힌-기존-프로젝트-이어가기)를 따른다.
 Windows에서도 같은 Monitor 버튼을 쓰며 작업 폴더와 기록 저장소가 같은 볼륨이어야 한다.
 
 ## 연결 해제와 제거

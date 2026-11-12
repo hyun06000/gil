@@ -70,7 +70,7 @@ preview.20과 compatibility 범위는 같고 `migration:requires_review`도 유�
 
 실제 설치본·사용자 설정은 이번 게시로 갱신하지 않았다. [설치 안내](../../INSTALL.md)의 새 버전을 준비한 뒤
 사용자 승인된 적용 단계에서 MCP와 기존 보호 훅을 같은 Core로 맞춘다. 구형 훅이 갱신을 막으면
-[검토한 설정 diff·백업을 통한 좁은 갱신 절차](INSTALL.md#별도로-설치한-전역-write-guard-갱신)를 따른다.
+[검토한 설정 diff·백업을 통한 좁은 갱신 절차](../INSTALL-GUIDE.md#별도로-설치한-전역-write-guard-갱신)를 따른다.
 전역 훅 삭제·보호 없는 재시도·보안 설정 해제를 사용하지 않는다.
 
 두 Host의 새 연결과 버려도 되는 테스트 폴더에서 각각 확인한다.

@@ -417,6 +417,16 @@ Plugin 실행 파일의 서명/공증 성공으로 대체하지 않는다.
 - 게시 증거와 테스터 결과는 별도 기록한다. 자동 업데이트·사용자 설치본 교체·Mac 채널 변경은
   이번 승인에 포함되지 않는다. 재배포 조건이 미해결이면 게시하지 않는다.
 
+### 6.2c Windows 단일 실행 파일 채널 (2026-11-12)
+
+소유자의 배포 설계 결정서에 따라 Windows의 설치 프로그램(NSIS)·Authenticode 서명·Microsoft Store/MSIX·Companion을
+**중단**하고, 정적 링크한 `gil.exe` 하나를 GitHub Releases(`releases/latest/download/…`)로 배포한다. 사람은 PowerShell
+한 줄(`install.ps1`), 에이전트는 루트 `INSTALL.md`로 설치하며, `gil install`이 Claude Desktop(`claude_desktop_config.json`,
+MSIX 패키지 캐시와 `%APPDATA%` 두 곳)과 Codex(`config.toml`, 서식 보존 직접 편집)에 자기 항목을 쓴다. `gil doctor`가
+고정 형식으로 결과를 보고한다. §6.2b의 "PowerShell 스크립트·`config.toml` 손편집 금지"는 이 채널에 적용하지 않는다.
+금지의 본뜻 — 보안 기능 해제, 실행 정책 변경, 관리자 권한, cache 손편집 금지 — 는 그대로다. 서명·Store는
+미서명 exe가 실기기에서 실제로 차단되거나(특히 Smart App Control) 차단·오탐 신고가 들어올 때만 재검토한다.
+
 ### 6.3 정식 배포 전 오픈소스 공개 준비 게이트
 
 GIL은 GitHub 소스를 공개하는 오픈소스 프로젝트로 배포한다. 새 정본 `hyun06000/gil`은

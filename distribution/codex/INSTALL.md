@@ -5,14 +5,14 @@ preview.29는 계획 근거 입력 안내·오류 일괄 표시와 PNG 제한값
 새 훅을 만들지 않으며 구형 훅 installer도 실행하지 않는다.
 Core 승인·전이·증거 검사는 유지하지만 다른 세션의 도구나 파일 쓰기를 가로막지 않는다.
 
-전체 OS 안내의 시작점은 [저장소 설치 안내](../../INSTALL.md)다. 이 문서는 macOS 전용 상세 절차다.
+전체 OS 안내의 시작점은 [저장소 설치 절차서](../../INSTALL.md)와 [상세 통합 안내](../INSTALL-GUIDE.md)다. 이 문서는 macOS 전용 상세 절차다.
 
 대상은 **macOS Apple Silicon(`arm64`)의 로컬 Codex 작업**이다. 현재 배포판은
 `0.2.1-preview.29`이며 2026-11-10 게시한 unsigned prerelease다. Core, MCP server, Skill과
 fullscreen Monitor UI가 Plugin 하나에 들어 있으므로 Node·npm·Cargo·Homebrew·별도 Companion을
 설치하지 않는다. Intel Mac, Windows에는 이 파일을 사용하지 않는다. Claude Code(Claude Desktop)는
 같은 archive의 Core를 Desktop 설정에 직접 등록하는 경로를 사용한다. `.claude-plugin` catalog 설치는 가능하지만
-이전 시험에서는 Monitor가 표시되지 않았다. 직접 등록·업데이트 절차는 [저장소 설치 안내](../../INSTALL.md)를 따른다.
+이전 시험에서는 Monitor가 표시되지 않았다. 직접 등록·업데이트 절차는 [상세 통합 안내](../INSTALL-GUIDE.md)를 따른다.
 
 - marketplace: `https://github.com/hyun06000/gil-marketplace.git`
 - 고정 tag: `v0.2.1-preview.29`
@@ -145,7 +145,7 @@ Git 없는 경로의 archive member·목적지·권한 검사와 유지관리자
 저장 형식은 새 프로젝트에서 7이며 기존 기록의 형식은 자동 변환하지 않는다. 이전 Plugin으로
 되돌려도 기록 형식은 내려가지 않는다. 닫힌 실패 Cycle의 revisit만 Monitor 승인으로 진행하며 일반 restore와 Step revisit는 계속 차단한다. Luna 실사용은 사용자 검수다.
 
-기존 실패 프로젝트는 [공통 복구 절차](../../INSTALL.md#실패-후-revisit가-막힌-기존-프로젝트-이어가기)를 따른다.
+기존 실패 프로젝트는 [공통 복구 절차](../INSTALL-GUIDE.md#실패-후-revisit가-막힌-기존-프로젝트-이어가기)를 따른다.
 
 ## 설치 후 실제 동작 확인
 
@@ -153,7 +153,7 @@ Git 없는 경로의 archive member·목적지·권한 검사와 유지관리자
 2. 빈 테스트 폴더를 선택한다.
 3. **“지금 폴더에서 GIL 프로젝트를 시작해 줘”**라고 말한다.
 4. 실제 Monitor, 첫 Interview와 graph가 보이는지 확인한다. 도구 성공 문장만으로 UI 성공을 판정하지 않는다.
-5. [공통 확인 절차](../../INSTALL.md#훅-없는-설치와-기존-훅-제거)에 따라 일반 프로젝트 비간섭과 선택한 GIL 프로젝트의 단계별 안내를 확인한다. 훅의 파일 쓰기 차단은 제공하지 않는다.
+5. [공통 확인 절차](../INSTALL-GUIDE.md#훅-없는-설치와-기존-훅-제거)에 따라 일반 프로젝트 비간섭과 선택한 GIL 프로젝트의 단계별 안내를 확인한다. 훅의 파일 쓰기 차단은 제공하지 않는다.
 6. 기존 Project라면 **“기록을 바꾸지 말고 GIL Monitor를 열어 줘”**라고 말한다.
 
 이전 preview.6의 깨끗한 Mac VM에서 Git/Xcode Command Line Tools 부재 → Git 없는 archive 검증 → 로컬 marketplace 등록 →
@@ -182,7 +182,7 @@ codex plugin marketplace remove gil-preview-macos-arm64 --json
 
 ### 훅 없는 설치와 기존 훅 제거
 
-[공통 제거 절차](../../INSTALL.md#훅-없는-설치와-기존-훅-제거)가 정본이다. 전역·프로젝트 로컬·Plugin·Skill
+[공통 제거 절차](../INSTALL-GUIDE.md#훅-없는-설치와-기존-훅-제거)가 정본이다. 전역·프로젝트 로컬·Plugin·Skill
 훅은 등록하지 않는다. 구형 설정의 GIL 명령만 백업·제거하고 비-GIL 훅·권한·sandbox는 보존한다.
 훅 제거 기능이 있는 새 배포본에서, 공식 설치 응답·manifest로 확인한 Core 절대경로를 사용한다.
 preview.23 이하에는 아래 명령이 없으므로 정확한 설정 diff와 백업을 준비해 GIL 명령만 정리한다.

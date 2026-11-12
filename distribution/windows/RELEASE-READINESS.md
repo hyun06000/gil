@@ -1,6 +1,10 @@
 # Windows release readiness
 
-현재 판정: **서명된 일반 공개판은 NO-GO. 친구·테스터용 unsigned x64 preview는 제한 인수 완료.**
+> 2026-11-12: 소유자 결정서 §3에 따라 Authenticode 서명·SmartScreen publisher·NSIS installer 게이트는 **보류**한다.
+> 현행 출시 경로는 [RELEASE.md](RELEASE.md)(단일 실행 파일, `v*` 태그)이며, 그 인수 항목은
+> [SIMPLE-INSTALL §10](SIMPLE-INSTALL-20261112.md)과 [TESTER-CHECK](TESTER-CHECK.md)다. 아래는 구형 NSIS 채널의 게이트다.
+
+현재 판정(구형 NSIS 채널): **서명된 일반 공개판은 NO-GO. 친구·테스터용 unsigned x64 preview는 제한 인수 완료.**
 
 ## 출시 필수 게이트
 

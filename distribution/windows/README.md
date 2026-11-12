@@ -1,6 +1,11 @@
 # Windows 배포 상태
 
-> 상태: **친구·테스터용 unsigned x64 preview. 이전 판 실기기 인수 기록 있음 / owner.15 사용자 확인 대기. 서명된 일반 공개판은 NO-GO.**
+> 상태 (2026-11-12): **단일 실행 파일 경로로 전환.** 설치 프로그램·서명·Store·Companion은 쓰지 않는다
+> (소유자 결정서 §3). 현행 설치는 루트 [INSTALL.md](../../INSTALL.md)(에이전트)와 `install.ps1`(사람), 게시는
+> [RELEASE.md](RELEASE.md)(`v*` 태그 → `windows-release.yml`), 설계는 [SIMPLE-INSTALL](SIMPLE-INSTALL-20261112.md)을 따른다.
+> 첫 릴리스 `v0.3.0`은 아직 게시되지 않았다. 아래는 그 전까지의 **구형 NSIS Companion 채널** 기록이다.
+
+> 구형 채널 상태: 친구·테스터용 unsigned x64 preview. 이전 판 실기기 인수 기록 있음 / owner.15 사용자 확인 대기. 서명된 일반 공개판은 NO-GO.
 
 Windows x64와 ARM64용 native Core 후보는 CI에서 빌드·실행된다. 제품 경로는 우선 x64로 좁혔다.
 사용자용 NSIS, 사용자가 누르는 서명 검증 updater, 고정 런처, 버전별 Core 설치와 Codex 연결 버튼이
@@ -45,7 +50,7 @@ Core를 덮어쓰지 않고 새 버전 디렉터리를 만든 뒤 작은 선택 
 설치·연결·작업·업데이트 증거다. 서명된 NSIS, clean standard-user PC, SmartScreen publisher,
 uninstall과 런처 자체를 바꾸는 업데이트 경로는 별도 후보에서 확인해야 한다.
 
-`.github/workflows/windows-product.yml`은 이 간극을 좁히는 수동 제품 후보 작업이다. PR에서는
+(2026-11-12 삭제) `.github/workflows/windows-product.yml`은 이 간극을 좁히려던 수동 제품 후보 작업이었다. 현행 게시는 [RELEASE.md](RELEASE.md)의 `windows-release.yml`이다. 과거 기록: PR에서는
 계약만 검사하고, 승인된 `workflow_dispatch`에서만 updater 개인키와 Authenticode PFX를 읽는다.
 서명된 NSIS를 실제 설치한 뒤 receipt/digest, MCP 초기화, 실행 중 Core 쓰기 거절과 격리된
 Codex CLI 등록을 확인한 경우에만 3일짜리 후보 artifact를 남긴다. 이 작업은 release를 만들거나
