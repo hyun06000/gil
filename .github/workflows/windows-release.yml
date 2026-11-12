@@ -86,17 +86,19 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           PRERELEASE: ${{ steps.version.outputs.prerelease }}
         run: |
+          # Every line of the here-string carries the YAML block indent; the block scalar strips it,
+          # so PowerShell still sees the closing "@ at column 0.
           $notes = @"
-GIL $env:VERSION — Windows x64, single static executable, unsigned.
+          GIL $env:VERSION — Windows x64, single static executable, unsigned.
 
-Install (PowerShell, no admin):
+          Install (PowerShell, no admin):
 
-    irm https://raw.githubusercontent.com/$env:GITHUB_REPOSITORY/main/install.ps1 | iex
+              irm https://raw.githubusercontent.com/$env:GITHUB_REPOSITORY/main/install.ps1 | iex
 
-Or ask your agent: "https://raw.githubusercontent.com/$env:GITHUB_REPOSITORY/main/INSTALL.md 를 읽고 설치해줘"
+          Or ask your agent: "https://raw.githubusercontent.com/$env:GITHUB_REPOSITORY/main/INSTALL.md 를 읽고 설치해줘"
 
-Assets: gil-x86_64-pc-windows-msvc.exe, checksums.txt (SHA-256).
-"@
+          Assets: gil-x86_64-pc-windows-msvc.exe, checksums.txt (SHA-256).
+          "@
           $flags = @()
           if ($env:PRERELEASE -eq 'True') { $flags += '--prerelease' }
           gh release create $env:TAG dist/gil-x86_64-pc-windows-msvc.exe dist/checksums.txt --title "GIL $env:VERSION (Windows x64)" --notes $notes @flags
