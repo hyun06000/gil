@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "version": "0.3.0",
+  "tag": "v0.3.0",
+  "release_url": "https://github.com/hyun06000/gil/releases/tag/v0.3.0",
+  "published": "2026-11-12",
+  "source_commit": "9f1e526",
+  "workflow_run": "https://github.com/hyun06000/gil/actions/runs/43240833076",
+  "assets": {
+    "gil-x86_64-pc-windows-msvc.exe": {
+      "bytes": 11857920,
+      "sha256": "6120b15367f11d757e449de6a134f0cdbf08b19d41153f036363cc0afd5417bd"
+    },
+    "checksums.txt": {
+      "bytes": 97
+    }
+  },
+  "note": "Current single-executable Windows release. Updated in the same pull request as the publication ledger and update-feed.json; the legacy owner-update.json belongs to the retired Companion channel."
+}

@@ -388,7 +388,7 @@ test('update guidance shows a button from Core metadata and a text panel on clic
   const before = f.native.length;
   await f.element('update').onclick();
   assert.equal(panel.hidden, false);
-  assert.ok(panel.children.some(c => c.children?.some(li => /업데이트 확인/.test(li.textContent))), 'Windows steps mention the Companion button');
+  assert.ok(panel.children.some(c => c.children?.some(li => /install\.ps1/.test(li.textContent))), 'Windows steps name the one-line install');
   assert.equal(f.native.length, before, 'opening the guide calls no tool');
   // An up-to-date Core hides the button again and closes the panel.
   const g = fixture(); g.connected.resolve(); await settle();

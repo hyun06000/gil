@@ -2,7 +2,9 @@
 
 > 2026-11-12부터 저장소 루트의 [INSTALL.md](../INSTALL.md)가 짧은 설치 절차서다. 이 문서는 macOS 채널의 상세 절차,
 > Host별 확인 사항, 기존 훅 정리, 버전 확인 규칙을 담은 **상세 안내**이며 루트 절차서에서 링크한다.
-> Windows 절의 NSIS Companion(`0.1.1-owner.15`)은 구형 채널이다. 현행 Windows 설치는 루트 INSTALL.md를 따른다.
+> 현행 Windows 릴리스는 `0.3.0` 단일 실행 파일([v0.3.0](https://github.com/hyun06000/gil/releases/tag/v0.3.0),
+> [게시 장부](windows/PUBLICATION-V0.3.0-20261113.md))이며 설치는 루트 INSTALL.md를 따른다.
+> 아래 Windows 절의 NSIS Companion(`0.1.1-owner.15`)은 구형 채널이다.
 
 GIL 설치는 Host 훅을 등록하지 않는다. 선택한 GIL 프로젝트에만 공통 프롬프트와 단계별 MCP 응답으로 안내한다.
 macOS preview.29와 Windows owner.15는 계획 근거 입력 안내·오류 일괄 표시와 PNG 제한값 안내를 보완한다. 훅 없는 프로젝트별 새 세션 재개와 기존 기록 보존을 유지한다.
@@ -92,7 +94,8 @@ preview.25 이후에 `--version`만 구버전이면 실제 실행 경로를 다�
 
 | 환경 | 버전 | 상태 |
 |---|---|---|
-| Windows 11 x64 | `0.1.1-owner.15` | 최신 공통 Core·Monitor·계획 근거·PNG 안내 보완판, 실사용 검수 대기 |
+| Windows 10/11 x64 | `0.3.0` (단일 실행 파일, 루트 INSTALL.md) | 2026-11-12 게시. 다국어 Monitor·`gil install`/`doctor` 포함, 실기기 검수 대기 |
+| Windows 11 x64 (구형) | `0.1.1-owner.15` | NSIS Companion 채널. 신규 설치에 쓰지 않음 |
 | macOS Apple Silicon | `0.2.1-preview.29` | 계획 근거·PNG 입력 안내 보완판, 실제 Host 검수 대기 |
 
 이번 판은 승인 저장과 최신 상태 조회를 구분한다. 승인 뒤 읽기가 잠시 실패하면 확인된 승인 판을 유지하고

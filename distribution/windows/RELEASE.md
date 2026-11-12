@@ -39,7 +39,8 @@ git push origin v0.3.0
 
 ## 게시 뒤 할 일
 
-- `distribution/update-feed.json`의 `windows-x64`를 새 버전·release URL로 갱신한다(게시 장부와 같은 PR).
+- `distribution/update-feed.json`의 `windows-x64`와 `distribution/windows/current-release.json`(현재 릴리스 핀: 버전·태그·자산 SHA-256)을
+  새 버전으로 갱신한다(게시 장부와 같은 PR). `update-feed.test.mjs`가 둘의 일치를 검사한다.
   `install_doc`은 루트 `INSTALL.md`의 raw 주소다.
 - [TESTER-CHECK](TESTER-CHECK.md)의 체크리스트와 [SIMPLE-INSTALL §10](SIMPLE-INSTALL-20261112.md)의 추가 항목을
   실기기에서 확인하고 결과를 장부로 남긴다. 특히 Smart App Control이 켜진 PC의 결과는 서명 재검토 조건이다.

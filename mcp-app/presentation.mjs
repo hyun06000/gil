@@ -194,7 +194,8 @@ export function updateGuide(update) {
     t('upd.common_note'),
   ].filter(Boolean);
   if (update?.platform?.startsWith('windows')) {
-    return { title: t('upd.windows_title'), companion: true, steps: common.concat([
+    // Single-executable channel (v0.3.0+): the one-line install replaces the Companion button.
+    return { title: t('upd.windows_title'), companion: false, steps: common.concat([
       t('upd.windows_step1'), t('upd.windows_step2'), t('upd.windows_step3'), t('upd.windows_step4'),
     ]) };
   }

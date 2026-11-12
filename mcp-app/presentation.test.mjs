@@ -174,10 +174,11 @@ test('update notice shows a button only when a newer or unknown-relative version
   assert.equal(unknown.show, true);
   assert.match(unknown.label, /최신 0\.2\.1-preview\.9/);
 });
-test('update guide lists both Hosts, never a command, and offers Companion only on Windows', () => {
+test('update guide lists both Hosts, keeps Mac guidance free of commands, and names the Windows one-line install', () => {
   const win = updateGuide({ platform: 'windows-x64', installed: '0.1.1-owner.7', latest });
-  assert.equal(win.companion, true);
-  assert.ok(win.steps.some(s => /업데이트 확인/.test(s)) && win.steps.some(s => /Claude Desktop/.test(s)));
+  assert.equal(win.companion, false, 'single-exe channel: no Companion button');
+  assert.ok(win.steps.some(s => /install\.ps1/.test(s)) && win.steps.some(s => /Claude Desktop/.test(s)));
+  assert.ok(win.steps.every(s => !/Companion/.test(s)), 'no Companion button or step on the single-exe channel');
   const mac = updateGuide({ platform: 'darwin-arm64', installed: '0.2.1-preview.8', latest });
   assert.equal(mac.companion, false);
   assert.deepEqual(mac.targets.map(t => t.label), ['Codex', 'Claude Desktop', 'Codex와 Claude Desktop']);
@@ -190,6 +191,7 @@ test('update guide lists both Hosts, never a command, and offers Companion only 
   assert.match(mac.targets[1].hint, /Claude 밖/);
   assert.match(mac.targets[2].request, /종료를 확인한 뒤/);
   for (const guide of [win, mac]) {
+    // The Windows one-liner is the documented install itself; no other tooling is suggested.
     assert.ok(guide.steps.every(s => !/curl|npm|cargo|brew|\$ /.test(s)), 'guidance is prose, not commands');
     assert.ok([...guide.steps, ...(guide.details ?? [])].some(s => s.includes(latest.release_url)));
   }

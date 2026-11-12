@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-11-10",
+  "updated": "2026-11-13",
   "note": "Metadata only. The installed GIL Core reads this file at most once a day to show update guidance in the Monitor; it never downloads or installs from it. Update this file in the same pull request that records a publication ledger.",
   "platforms": {
     "darwin-arm64": {
@@ -10,10 +10,10 @@
       "notes": "계획 근거의 입력 조건을 호출 전에 안내하고 잘못된 모든 줄을 한 번에 표시합니다. PNG의 픽셀·용량 제한과 실제 초과 크기를 안내합니다. 참조 자동 이동 없이 기존 승인·기록·Snapshot과 훅 없는 설치를 유지합니다. 설치와 실제 Host 필드테스트는 별도입니다."
     },
     "windows-x64": {
-      "version": "0.1.1-owner.15",
-      "release_url": "https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.15",
+      "version": "0.3.0",
+      "release_url": "https://github.com/hyun06000/gil/releases/tag/v0.3.0",
       "install_doc": "https://github.com/hyun06000/gil/blob/main/INSTALL.md",
-      "notes": "최신 공통 Core·Monitor, 훅 없는 프로젝트 재개, 계획 근거의 일괄 오류·PNG 제한값 안내를 포함합니다. Companion에서 업데이트 확인 → 업데이트 후 새 연결에서 확인하세요. 기존 연결·기록은 유지하며 실제 필드테스트는 별도입니다."
+      "notes": "Windows 배포가 설치 프로그램·Companion 없이 gil.exe 하나를 받는 방식으로 바뀌었습니다. Companion의 업데이트 버튼은 이 판을 받지 못하므로, PowerShell에서 irm https://raw.githubusercontent.com/hyun06000/gil/main/install.ps1 | iex 를 실행하거나 에이전트에게 설치 안내를 읽고 설치해 달라고 하세요. gil install 이 Claude Desktop·Codex 등록을 새 경로로 바꾸고, 기존 Companion·기록은 그대로 둡니다. 다국어 Monitor와 gil doctor 를 포함하며 실기기 필드테스트는 별도입니다."
     }
   }
 }
