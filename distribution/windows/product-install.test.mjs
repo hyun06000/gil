@@ -244,7 +244,13 @@ test('the signed/NSIS product workflow is retired; the single-executable release
   assert.match(release, /--features approved-plan,visual-authoring,product-safety/);
   assert.match(release, /gil-x86_64-pc-windows-msvc\.exe/);
   assert.match(release, /checksums\.txt/);
-  assert.doesNotMatch(release, /certificate|signtool|tauri|nsis|msix/i);
+  assert.doesNotMatch(release, /tauri|nsis/i);
+  // The only signing in the pipeline is a per-job self-signed certificate for the MSIX sideload
+  // check; the Store upload is packaged unsigned and no secret holds a certificate.
+  assert.doesNotMatch(release, /secrets\.GIL_WINDOWS_CERTIFICATE|secrets\.TAURI/);
+  assert.match(release, /New-SelfSignedCertificate -Type Custom -Subject 'CN=GIL Dev'/);
+  assert.match(release, /build-msix\.ps1[\s\S]{0,400}-Out 'target\\msix\\gil-store-upload\.msix'/);
+  assert.ok(release.indexOf('Remove-AppxPackage') < release.indexOf('gh release create'), 'the sideload is removed before publishing');
   assert.ok(release.indexOf('& $exe doctor') < release.indexOf('gh release create'), 'verified before publishing');
 
   const acceptance = await read('distribution/windows/product-e2e.ps1');

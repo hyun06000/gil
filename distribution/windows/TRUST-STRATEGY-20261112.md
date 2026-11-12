@@ -1,6 +1,6 @@
 # Windows 설치 신뢰 전략 — 2026-11-12
 
-> 상태: **보류 (2026-11-12 결정서 §3).** 서명·Store·MSIX 작업은 중단한다. 재검토 조건: 미서명 exe가 실기기에서 실제로 차단되거나(특히 Smart App Control) 사용자 증가 뒤 차단·오탐 신고가 들어올 때. 현행 시나리오는 [SIMPLE-INSTALL-20261112.md](SIMPLE-INSTALL-20261112.md)다.
+> 상태: **변형 B(Store MSIX) 진행 중 (2026-11-13 소유자 승인).** 구현·제출 절차는 [STORE.md](STORE.md). 재검토 조건 충족 경위: 소유자 PC(Smart App Control 켜짐)에서 미서명 `gil.exe`가 실행 단계에서 차단됐다([v0.3.0 장부](PUBLICATION-V0.3.0-20261113.md) 실기기 결과). 결정서 §3에 따라 결제·계정 개설은 소유자 결정 전에는 진행하지 않는다. 후보: §9 변형 B(Store MSIX, `gil.exe` + 실행 별칭). 현행 미서명 채널은 [SIMPLE-INSTALL-20261112.md](SIMPLE-INSTALL-20261112.md)이며 SAC가 꺼진 PC에만 해당한다.
 > 범위: Windows 11 x64 사용자가 OS 보호 기능을 끄지 않고 GIL Companion을 설치·업데이트하는 경로.
 > 비범위: macOS 채널, Core/Monitor 기능, 실제 Store 제출·계정 개설(별도 승인 작업).
 

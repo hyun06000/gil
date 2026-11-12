@@ -179,6 +179,10 @@ test('update guide lists both Hosts, keeps Mac guidance free of commands, and na
   assert.equal(win.companion, false, 'single-exe channel: no Companion button');
   assert.ok(win.steps.some(s => /install\.ps1/.test(s)) && win.steps.some(s => /Claude Desktop/.test(s)));
   assert.ok(win.steps.every(s => !/Companion/.test(s)), 'no Companion button or step on the single-exe channel');
+  const store = updateGuide({ platform: 'windows-x64', installed: '0.3.0', packaged: true, latest });
+  assert.equal(store.companion, false);
+  assert.ok(store.steps.some(s => /Microsoft Store/.test(s)) && store.steps.every(s => !/install\.ps1|Companion/.test(s)), 'Store channel: no download, no Companion');
+  assert.ok(store.steps.some(s => s.includes(latest.release_url)));
   const mac = updateGuide({ platform: 'darwin-arm64', installed: '0.2.1-preview.8', latest });
   assert.equal(mac.companion, false);
   assert.deepEqual(mac.targets.map(t => t.label), ['Codex', 'Claude Desktop', 'Codex와 Claude Desktop']);

@@ -2,7 +2,7 @@
 
 > 기준 문서: 소유자의 **「MCP 서버 배포 설계 결정서」(2026-11-12)**. 이 문서는 그 결정서를 GIL 저장소의
 > 실제 코드·배포 상태에 대응시킨 것이다. 결정서와 어긋나는 곳은 §12 "열린 질문"에 모아 소유자 확인을 기다린다.
-> 상태: **구현됨 (2026-11-12, 이 브랜치, 미게시).** `src/install/`, `install.ps1`, 루트 `INSTALL.md`, `windows-release.yml`. 실기기 검증·첫 태그 게시는 남았다. [TRUST-STRATEGY-20261112.md](TRUST-STRATEGY-20261112.md)(서명·Store)는
+> 상태: **구현·게시됨 (v0.3.0). SAC 켜진 PC는 차단 확인(2026-11-13) → Microsoft Store 채널을 [STORE.md](STORE.md)로 병행한다.** `src/install/`, `install.ps1`, 루트 `INSTALL.md`, `windows-release.yml`. 실기기 검증·첫 태그 게시는 남았다. [TRUST-STRATEGY-20261112.md](TRUST-STRATEGY-20261112.md)(서명·Store)는
 > 결정서 §3에 따라 **보류**한다.
 
 ## 0. 플레이스홀더 대응과 전제 확인
@@ -161,7 +161,7 @@ irm https://raw.githubusercontent.com/hyun06000/gil/main/install.ps1 | iex
 
 | 위험 | 상태 | 대응 |
 |---|---|---|
-| 미서명 exe를 SmartScreen·Defender·**Smart App Control**이 차단 | 미확인 | 깨끗한 Windows 11에서 두 진입점 테스트. SmartScreen은 더블클릭 경로가 아니므로 개입하지 않을 것으로 예상. SAC는 Microsoft 문서상 미서명 프로세스 생성을 막으므로 **SAC 켜진 PC는 차단될 가능성이 높다** → 확인되면 결정서 §3 재검토 조건 보고 |
+| 미서명 exe를 SmartScreen·Defender·**Smart App Control**이 차단 | **SAC 차단 확인됨 (2026-11-13 소유자 PC, [장부](PUBLICATION-V0.3.0-20261113.md))**. SmartScreen·Defender는 미관측 | 깨끗한 Windows 11에서 두 진입점 테스트. SmartScreen은 더블클릭 경로가 아니므로 개입하지 않을 것으로 예상. SAC는 Microsoft 문서상 미서명 프로세스 생성을 막으므로 **SAC 켜진 PC는 차단될 가능성이 높다** → 확인되면 결정서 §3 재검토 조건 보고 |
 | Claude Desktop MSIX가 `mcpServers` 무시(#29100) | 미확인 | 실기기 확인. 재현 시 `.mcpb` 대체 |
 | Windows Desktop이 실행 중 외부 편집을 되돌림 | 미확인(Mac에서 관측) | §4-5 대기 도우미로 회피. 되돌리지 않으면 `--no-wait` 기본으로 완화 |
 | Claude Desktop(MSIX) 자식 프로세스의 `.gil` 쓰기 위치 | 현 상태와 동일 | 테스트 폴더에서 `.gil` 실제 위치 확인 |

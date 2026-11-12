@@ -193,6 +193,12 @@ export function updateGuide(update) {
     latest.notes ? t('upd.notes', { notes: latest.notes }) : null,
     t('upd.common_note'),
   ].filter(Boolean);
+  if (update?.platform?.startsWith('windows') && update.packaged === true) {
+    // Microsoft Store channel: the Store updates the app; nothing to download or register.
+    return { title: t('upd.store_title'), companion: false, steps: common.concat([
+      t('upd.store_step1'), t('upd.store_step2'), t('upd.store_step3'),
+    ]) };
+  }
   if (update?.platform?.startsWith('windows')) {
     // Single-executable channel (v0.3.0+): the one-line install replaces the Companion button.
     return { title: t('upd.windows_title'), companion: false, steps: common.concat([
