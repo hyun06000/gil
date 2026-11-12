@@ -1,7 +1,18 @@
 name: Companion native build and tests (no installation)
+# The Windows Companion left the product path on 2026-11-12 (single-executable decision);
+# only the macOS Companion crate is still built, and only when something it depends on changes.
 on:
   pull_request:
     branches: [main]
+    paths:
+      - 'companion/**'
+      - 'src/companion*'
+      - 'src/companion*/**'
+      - 'ui/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'tools/ci/**'
+      - '.github/workflows/companion-native.yml'
   # Seed reusable default-branch dependency caches only when their inputs change.
   push:
     branches: [main]
@@ -27,12 +38,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - label: windows-x64
-            runner: windows-2025
-            target: x86_64-pc-windows-msvc
-          - label: windows-arm64
-            runner: windows-11-arm
-            target: aarch64-pc-windows-msvc
           - label: macos-arm64
             runner: macos-15
             target: aarch64-apple-darwin

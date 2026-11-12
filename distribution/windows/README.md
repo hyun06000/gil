@@ -7,7 +7,8 @@
 
 > 구형 채널 상태: 친구·테스터용 unsigned x64 preview. 이전 판 실기기 인수 기록 있음 / owner.15 사용자 확인 대기. 서명된 일반 공개판은 NO-GO.
 
-Windows x64와 ARM64용 native Core 후보는 CI에서 빌드·실행된다. 제품 경로는 우선 x64로 좁혔다.
+Windows x64 native Core는 PR CI(`windows-spike.yml`, x64 두 프로필)에서 빌드·실행된다. ARM64는 2026-11-12 결정에 따라
+별도 native 빌드·CI 없이 x64 에뮬레이션으로 시작한다. 제품 경로는 x64다.
 사용자용 NSIS, 사용자가 누르는 서명 검증 updater, 고정 런처, 버전별 Core 설치와 Codex 연결 버튼이
 연결됐다. 2026-10-27 Windows x64 실기기에서 unsigned `0.1.1-owner.3` 설치, Companion 실행,
 Codex 연결·이전 GIL 연결 교체, 파일 생성과 사용자 버튼 업데이트를 확인했다. 친구용 설치 절차와
