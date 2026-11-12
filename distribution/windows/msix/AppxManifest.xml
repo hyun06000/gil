@@ -35,7 +35,8 @@
     ProcessorArchitecture="x64" />
 
   <Properties>
-    <DisplayName>GIL</DisplayName>
+    <!-- Must equal a name reserved in Partner Center for this app (reserved 2026-11-13: gil-companion). -->
+    <DisplayName>gil-companion</DisplayName>
     <PublisherDisplayName>{{PUBLISHER_DISPLAY_NAME}}</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
     <Description>GIL Core and MCP server for Claude Desktop and Codex. Run `gil install` once to register it; the Monitor appears inside the agent Host.</Description>
@@ -64,7 +65,7 @@
       uap10:RuntimeBehavior="packagedClassicApp"
       uap10:TrustLevel="mediumIL">
       <uap:VisualElements
-        DisplayName="GIL"
+        DisplayName="gil-companion"
         Description="GIL Core and MCP server. Open a terminal and run: gil install"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png"

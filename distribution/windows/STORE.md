@@ -28,7 +28,8 @@ Host 등록: command = %LOCALAPPDATA%\Microsoft\WindowsApps\gil.exe, args = ["mc
 
 1. **Partner Center 개발자 계정** — https://partner.microsoft.com/dashboard 에서 개인 계정으로 등록한다
    (무료 또는 소액 1회, 가입 화면에서 확정). 결제·신원 확인은 소유자만 할 수 있다.
-2. **앱 이름 예약** — Apps and games → New product → MSIX or PWA app → 이름 `GIL`(불가하면 `GIL Monitor` 등).
+2. **앱 이름 예약** — Apps and games → New product → MSIX or PWA app. `gil`·`GIL`은 예약할 수 없었고 **`gil-companion`**으로
+   예약했다(2026-11-13). manifest의 `DisplayName` 두 곳은 이 예약 이름과 같아야 한다.
 3. **Product identity 값 복사** — Product management → Product identity 의 세 값:
    `Package/Identity/Name`, `Package/Identity/Publisher`(`CN=…` 형식), `Package/Properties/PublisherDisplayName`.
 4. **GitHub repository variables 설정** — Settings → Secrets and variables → Actions → Variables:

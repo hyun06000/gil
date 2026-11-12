@@ -18,6 +18,9 @@ test('the manifest template declares exactly the capabilities the single exe nee
   assert.match(xml, /<uap5:ExecutionAlias Alias="gil\.exe" \/>/);
   assert.match(xml, /Executable="gil\.exe"\s+EntryPoint="Windows\.FullTrustApplication"\s+desktop4:Subsystem="console"/);
   assert.match(xml, /ProcessorArchitecture="x64"/);
+  // Store validation requires the package display name to be a reserved name of the app.
+  assert.match(xml, /<DisplayName>gil-companion<\/DisplayName>/);
+  assert.match(xml, /VisualElements\s+DisplayName="gil-companion"/);
   // Nothing that would reach outside the user's profile or run at install time.
   assert.doesNotMatch(xml, /internetClient|broadFileSystemAccess|startupTask|desktop:Extension|windows\.service|allowElevation/);
   assert.doesNotMatch(xml, /http:\/\/(?!schemas\.microsoft\.com)/);
