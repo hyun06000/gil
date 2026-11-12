@@ -1,8 +1,9 @@
 // App-only visual transport and lifecycle. No filesystem URLs or model messages.
 import {imageZoom} from './image-zoom.mjs';
+import { t } from '../ui/locale.js';
 const CHUNK = 256 * 1024, MAX = 16 * 1024 * 1024;
 const sameOwner = (a, b) => a?.kind === b.kind && a?.ref === b.ref;
-const invalid = () => Object.assign(new Error('시각 자료 응답을 검증하지 못했습니다.'), { code: 'invalid_visual' });
+const invalid = () => Object.assign(new Error(t('visual.invalid')), { code: 'invalid_visual' });
 const check = (data, scope, owner) => {
   if (data?.schema_version !== 1 || data.scope_id !== scope || !sameOwner(data.owner, owner)) throw invalid();
 };
@@ -50,20 +51,20 @@ async function assembleImage(call, scope, owner, item, alive = () => true, stage
 export function visualFailure(stage, error) {
   const stages = ['list','metadata','image_tool','chunk_validation','digest','blob_url','png_decode','data_png','dimensions'];
   const codes = ['invalid_visual','digest_unavailable','visual_unavailable','response_too_large','busy','connection_closed'];
-  return `이미지를 읽지 못했습니다. 보고서 본문은 보존되어 있습니다. [${stages.includes(stage) ? stage : 'unknown'}/${codes.includes(error?.code) ? error.code : 'failed'}]`;
+  return t('visual.failure', { stage: stages.includes(stage) ? stage : 'unknown', code: codes.includes(error?.code) ? error.code : 'failed' });
 }
 
 // One sentence per recorded state. Only the recorded declaration speaks; nothing is inferred.
 export function visualSummary(data) {
   const n = Array.isArray(data?.uses) ? data.uses.length : 0;
   switch (data?.state) {
-    case 'attached': return { title: `시각 자료 ${n}개`, status: '이 보고서가 첨부한 확정 자료입니다. 누르면 원본 크기로 봅니다.', tone: 'attached' };
-    case 'references': return { title: `인용한 시각 자료 ${n}개`, status: '다른 보고서(원래 Verify)가 확정한 자료를 이 보고서가 인용했습니다.', tone: 'attached' };
-    case 'not_needed': return { title: '시각 자료 없음', status: `사유: ${data.reason}`, tone: 'none' };
-    case 'missing': return { title: n ? `시각 자료 미완 · ${n}개 첨부` : '시각 자료 미완', status: `사유: ${data.reason} · 후속 계획: ${data.follow_up}`, tone: 'missing' };
-    case 'open_report': return { title: '시각 자료', status: '아직 확정되지 않은 보고서입니다.', tone: 'pending' };
-    case 'legacy_unspecified': return { title: '시각 자료', status: '당시 시각 자료 선언이 기록되지 않았습니다.', tone: 'pending' };
-    default: return { title: '시각 자료', status: '', tone: 'pending' };
+    case 'attached': return { title: t('visual.attached_title', { n }), status: t('visual.attached_status'), tone: 'attached' };
+    case 'references': return { title: t('visual.references_title', { n }), status: t('visual.references_status'), tone: 'attached' };
+    case 'not_needed': return { title: t('visual.none_title'), status: t('visual.reason', { reason: data.reason }), tone: 'none' };
+    case 'missing': return { title: n ? t('visual.missing_title_n', { n }) : t('visual.missing_title'), status: t('visual.missing_status', { reason: data.reason, follow_up: data.follow_up }), tone: 'missing' };
+    case 'open_report': return { title: t('visual.title'), status: t('visual.open_report'), tone: 'pending' };
+    case 'legacy_unspecified': return { title: t('visual.title'), status: t('visual.legacy'), tone: 'pending' };
+    default: return { title: t('visual.title'), status: '', tone: 'pending' };
   }
 }
 
@@ -72,8 +73,8 @@ export function mountVisuals(container, scope, initialOwner, call) {
   const releases = new Set();
   const node = (tag, text) => { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; return el; };
   const section = node('section'); section.className = 'report-visuals';
-  section.setAttribute('aria-label', '보고서 시각 자료');
-  const title = node('h3','시각 자료'), status = node('p'), gallery = node('div');
+  section.setAttribute('aria-label', t('visual.section_aria'));
+  const title = node('h3', t('visual.title')), status = node('p'), gallery = node('div');
   gallery.className = 'visual-gallery';
   status.setAttribute('role','status');
   section.append(title, status, gallery); container.append(section);
@@ -87,7 +88,7 @@ export function mountVisuals(container, scope, initialOwner, call) {
   };
   async function load(owner) {
     if (disposed) return;
-    const serial = ++epoch; release(); status.textContent = '시각 자료 목록을 읽는 중…';
+    const serial = ++epoch; release(); status.textContent = t('visual.loading_list');
     const alive = () => !disposed && serial === epoch;
     try {
       const data = await invoke('gil_monitor_report_visuals',{owner});
@@ -106,8 +107,8 @@ export function mountVisuals(container, scope, initialOwner, call) {
       section.dataset.tone = summary.tone;
       async function choose(item) {
         if (!alive()) return;
-        const frame = node('figure'), transport = node('p'), loading = node('p','이미지 읽는 중…');
-        transport.setAttribute('aria-label','이미지 표시 진단');
+        const frame = node('figure'), transport = node('p'), loading = node('p', t('visual.loading_image'));
+        transport.setAttribute('aria-label', t('visual.transport_aria'));
         loading.setAttribute('role','status'); frame.append(loading); gallery.append(frame,transport);
         let image=null, url=null;
         const cleanup = () => { if(image) image.removeAttribute('src'); image=null; if(url) URL.revokeObjectURL(url); url=null; };
@@ -131,10 +132,10 @@ export function mountVisuals(container, scope, initialOwner, call) {
           document.addEventListener('securitypolicyviolation',violation);
           try {
             await img.decode();
-            if (current()) transport.textContent='Blob PNG: 표시 성공';
+            if (current()) transport.textContent = t('visual.blob_ok');
           } catch {
             if (!current()) return;
-            const blobResult=()=>blobBlocked ? 'CSP img-src 차단 확인' : 'decode 실패 (차단 여부 미확인)';
+            const blobResult=()=>blobBlocked ? t('visual.blob_blocked') : t('visual.blob_decode_failed');
             URL.revokeObjectURL(url); url=null; img.removeAttribute('src');
             stage='data_png';
             const data = await new Promise((resolve,reject)=>{
@@ -144,15 +145,15 @@ export function mountVisuals(container, scope, initialOwner, call) {
             if (typeof data !== 'string' || !data.startsWith('data:image/png;base64,')) throw invalid();
             img.src=data;
             try { await img.decode(); }
-            catch (error) { if(current()) transport.textContent=`Blob PNG: ${blobResult()} · data PNG: decode 실패`; throw error; }
-            if(current()) transport.textContent=`Blob PNG: ${blobResult()} · data PNG: 표시 성공 (동일 검증 bytes)`;
+            catch (error) { if(current()) transport.textContent = t('visual.data_failed', { blob: blobResult() }); throw error; }
+            if(current()) transport.textContent = t('visual.data_ok', { blob: blobResult() });
           } finally { document.removeEventListener('securitypolicyviolation',violation); }
           if (!current()) return;
           stage='dimensions';
           if (img.naturalWidth !== item.width || img.naturalHeight !== item.height) throw invalid();
-          const caption=node('figcaption',item.caption), purpose=node('p',`용도: ${item.purpose}`);
-          const kinds={captured:'캡처',generated:'생성',provided:'제공'};
-          const source=node('p',`출처: ${kinds[item.source_kind] || item.source_kind} (작성자 기재) · ${item.source_description} · 원래 Verify: ${item.origin_step_ref}`);
+          const caption=node('figcaption',item.caption), purpose=node('p', t('visual.purpose', { purpose: item.purpose }));
+          const kindKey = `visual.kind.${item.source_kind}`, kindText = t(kindKey);
+          const source=node('p', t('visual.source', { kind: kindText === kindKey ? item.source_kind : kindText, description: item.source_description, origin: item.origin_step_ref }));
           const zoom = imageZoom(img);
           frame.replaceChildren(zoom.hint,zoom.viewport,caption,purpose,source);
         } catch (error) { if (current()) { cleanup(); loading.textContent=visualFailure(stage,error); frame.replaceChildren(loading); } }
@@ -164,7 +165,7 @@ export function mountVisuals(container, scope, initialOwner, call) {
   // Display only the selected report's references. Reuse belongs to storage,
   // not an implicit switch to a different report owner inside node details.
   void load(initialOwner);
-  const dispose = () => { disposed=true; epoch++; release(); status.textContent='이미지 연결이 종료되었습니다. 보고서 본문은 유지합니다.'; };
+  const dispose = () => { disposed=true; epoch++; release(); status.textContent = t('visual.disposed'); };
   window.addEventListener('pagehide',dispose,{once:true});
   return () => { dispose(); window.removeEventListener('pagehide',dispose); };
 }

@@ -42,21 +42,8 @@ pub enum RootError {
 impl std::fmt::Display for RootError {
     fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::NotAbsolute => out.write_str(
-                "project_root 는 온전한 경로여야 한다.\n\n\
-                 이유\n  \
-                 반쪽 경로는 서 있는 자리에 따라 다른 것을 가리킨다.\n\n\
-                 다음\n  \
-                 GIL Project 의 절대경로를 적는다.\n",
-            ),
-            Self::NoProjectHere => out.write_str(
-                "그 자리에 걷기가 없다.\n\n\
-                 이유\n  \
-                 준 자리에서 기록을 찾지 못했다. 위로 거슬러 오르지 않았다 — \
-                 project_root 는 찾기 시작할 곳이 아니라 Project 그 자체다.\n\n\
-                 다음\n  \
-                 Project 의 root 를 정확히 적거나, 거기서 `gil start` 로 시작한다.\n",
-            ),
+            Self::NotAbsolute => out.write_str(crate::locale::text("root.not_absolute")),
+            Self::NoProjectHere => out.write_str(crate::locale::text("root.no_project_here")),
             Self::Session(said) => out.write_str(said),
         }
     }
@@ -73,7 +60,7 @@ pub fn open_project_root(rules: RuleSet, root: &Path) -> Result<ProjectSession, 
         Ok(meta) if meta.is_dir() => {}
         Ok(_) => return Err(RootError::NoProjectHere),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Err(RootError::NoProjectHere),
-        Err(error) => return Err(RootError::Session(format!("Project 자리를 읽지 못했다: {error}"))),
+        Err(error) => return Err(RootError::Session(crate::tr!("root.unreadable", error = error))),
     }
     let state = crate::project_state::state_for_root(root).map_err(RootError::Session)?;
     if !state.exists() {
@@ -120,7 +107,7 @@ pub fn open_project_root_read_only(
         Ok(meta) if meta.is_dir() => {}
         Ok(_) => return Err(RootError::NoProjectHere),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Err(RootError::NoProjectHere),
-        Err(error) => return Err(RootError::Session(format!("Project 자리를 읽지 못했다: {error}"))),
+        Err(error) => return Err(RootError::Session(crate::tr!("root.unreadable", error = error))),
     }
     let state = crate::project_state::state_for_root(root).map_err(RootError::Session)?;
     if !state.exists() {

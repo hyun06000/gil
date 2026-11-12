@@ -22,6 +22,21 @@ Agent가 앱에 포함된 CLI와 OS 기본 도구를 사용한다. 일반 ChatGP
 없는 환경에서는 설치하지 않는다.
 
 
+## 언어
+
+아래 다국어 기능은 개발 소스의 변경이며, 기존 배포 macOS preview.29·Windows owner.15에는 아직 포함되지 않는다.
+새 배포본이 게시된 뒤 적용한다.
+
+GIL은 영어(기준·fallback)·한국어·중국어 간체(zh-Hans)·중국어 번체(zh-Hant)·일본어를 지원한다.
+Monitor 화면은 Host가 알려 준 언어(`hostContext.locale`)를 따르고, Host가 언어를 알려 주지 않으면 영어다.
+Core의 도구 응답·안내문·`gil monitor` 화면은 프로젝트 단위로 정한다: Agent가 `gil_start`에 사용자 언어를
+`locale`로 넘기면 그 언어, 없으면 Monitor App이 보고한 Host 언어, 그것도 없으면 한국어다. 선택은
+실제 기록 저장소의 `.gil/locale.json`에 기억되며 저장 형식 번호는 바뀌지 않는다. Windows 외부 기록 배치에서는
+작업 폴더가 아닌 선택된 개인 기록 저장소 옆에 둔다. 기록·승인·Snapshot·기존 안내 파일은 갱신하지 않는다.
+설정 손상·잠금 경쟁·남은 임시 파일이 있으면 자동 복구나 기록 변경 없이 언어 저장을 보류한다. `zh-CN`·`zh-SG`는 zh-Hans, `zh-TW`·`zh-HK`·`zh-MO`는
+zh-Hant로 정규화되고 지원하지 않는 언어는 영어로 떨어진다. Codex와 Claude Desktop에서 같은 규칙이다.
+Agent가 읽는 도구 설명과 작업 규칙(`src/mcp/workflow.md`)은 영어 단일본이며 “사용자의 언어로 답한다”는 규칙을 담는다.
+
 ## 기존 GIL 프로젝트에서 새 세션 시작하기
 
 기존 보고서·차트·코드의 후속 작업은 GIL을 다시 언급하지 않아도 프로젝트 재개다. 파일 작업 전에

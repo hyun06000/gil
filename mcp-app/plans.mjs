@@ -4,21 +4,21 @@
 // The panel speaks only about observable facts: a recorded receipt, an open proposal, a bound
 // item, a reply this screen did or did not get. It never claims that the agent is working.
 
-export const PLAN_STATE = {
-  checking: '승인 상태 확인 중',
-  retrying: '최신 상태 다시 확인 중',
-  idle: '승인 계획 없음',
-  requested: '승인 요청',
-  reapproval: '새 판 재승인 필요',
-  no_token: '승인 버튼 연결 없음',
-  approved: '승인됨',
-  changes_requested: '수정 요청됨',
-  executing: '승인된 계획',
-  uncertain: '저장 결과 불확실',
-  unreadable: '읽기 실패',
-  unsupported: '',
-};
-const ITEM_STATUS = { executed: '실행함', current: '지금 열린 Cycle', bound: '현재 Cycle에 연결됨 (열림 여부 미확인)', pending: '남음', retry: '재시도 대기 (실패 기록 유지)' };
+import { t } from '../ui/locale.js';
+
+const PLAN_STATES = ['checking', 'retrying', 'idle', 'requested', 'reapproval', 'no_token', 'approved',
+  'changes_requested', 'executing', 'uncertain', 'unreadable', 'unsupported'];
+const planState = (state) => state === 'unsupported' ? '' : t(`plan.state.${state}`);
+// Read like a plain table, but in the Monitor's current language.
+export const PLAN_STATE = new Proxy({}, {
+  get: (_, key) => typeof key === 'string' && PLAN_STATES.includes(key) ? planState(key) : undefined,
+  has: (_, key) => PLAN_STATES.includes(key),
+  ownKeys: () => PLAN_STATES,
+  getOwnPropertyDescriptor: (_, key) => PLAN_STATES.includes(key)
+    ? { value: planState(key), enumerable: true, configurable: true, writable: false } : undefined,
+});
+const itemStatus = (status) => t(`plan.item.${status}`);
+const decisionWord = (decision) => t(decision === 'approve' ? 'plan.decision.approve' : 'plan.decision.request_changes');
 
 /** The real state of the current Cycle, or 'unknown' when the wire does not say. Never inferred from current_item. */
 export function currentCycle(value) {
@@ -83,36 +83,36 @@ export function planItems(value) {
 export function verdictSentence(synthesis, itemCount) {
   const verdict = synthesis?.chain_verdict;
   if (verdict === undefined || verdict === null || verdict === '') {
-    return `이 제안은 실행할 항목 ${itemCount}개를 담은 계획입니다. 전체 결과(Chain)를 끝내자는 제안은 아닙니다.`;
+    return t('plan.verdict_items', { count: itemCount });
   }
-  if (verdict === 'success') return '이 제안은 전체 결과(Chain)를 성공으로 마치자는 제안입니다. 승인하면 성공으로 끝내는 데 동의합니다.';
-  if (verdict === 'failure') return '이 제안은 전체 결과(Chain)를 실패로 마치자는 제안입니다. 승인하면 실패로 끝내는 데 동의합니다.';
-  return `이 제안의 chain_verdict 값은 "${verdict}" 입니다. 성공이나 실패로 해석하지 않습니다. 아래 원문을 확인하세요.`;
+  if (verdict === 'success') return t('plan.verdict_success');
+  if (verdict === 'failure') return t('plan.verdict_failure');
+  return t('plan.verdict_other', { verdict });
 }
 
 /** The one line at the top of the Monitor. Empty when nothing waits for the person. */
 export function bannerLine(summary, delivery = null) {
-  const v = summary.revision != null ? `계획 v${summary.revision}` : '계획';
-  const known = summary.confirmed ? `계획 v${summary.confirmed.revision} ${summary.confirmed.decision === 'approve' ? '승인' : '수정 요청'} 기록을 확인했습니다. ` : '';
+  const plan = summary.revision != null ? t('plan.plan_v', { revision: summary.revision }) : t('plan.plan');
+  const known = summary.confirmed ? t('plan.known', { revision: summary.confirmed.revision, decision: decisionWord(summary.confirmed.decision) }) : '';
   switch (summary.state) {
-    case 'checking': return '승인 상태를 확인하고 있습니다.';
-    case 'retrying': return `${known}최신 상태를 잠시 읽지 못해 다시 확인 중입니다. 승인 저장 실패를 뜻하지 않습니다.`;
-    case 'requested': return `승인 대기 · ${v} — 내용을 확인하고 승인 또는 수정 요청을 눌러 주세요.`;
-    case 'reapproval': return `새 판 재승인 필요 · ${v} — ${summary.base_revision != null ? `이전 승인(v${summary.base_revision})은 ` : '이전 승인은 '}이 판에 적용되지 않습니다. 다시 확인해 주세요.`;
-    case 'no_token': return `승인 대기 · ${v} — 승인 버튼 연결을 아직 받지 못했습니다. 자동으로 다시 읽습니다.`;
-    case 'approved': return delivery === 'undelivered'
-      ? `승인 기록됨 · ${v} — 채팅에 전달하지 못했습니다. 아래 안내대로 채팅에서 이어가 주세요.`
-      : `승인 기록됨 · ${v} — 제안 단계가 아직 열려 있습니다. 에이전트가 이어가지 않으면 채팅에서 확인을 요청하세요.`;
-    case 'changes_requested': return `수정 요청 기록됨 · ${v} — 바꿀 내용을 채팅으로 알려 주세요.`;
-    case 'uncertain': return `저장 결과 불확실 · ${v} — 응답을 받지 못했습니다. 다시 읽어 기록 여부를 확인합니다. 응답을 다시 보내지 않습니다.`;
-    case 'unreadable': return `${known}최신 승인 상태 조회가 계속 실패하고 있습니다. 아래 원인을 확인하거나 다시 읽어 주세요.`;
+    case 'checking': return t('plan.banner.checking');
+    case 'retrying': return t('plan.banner.retrying', { known });
+    case 'requested': return t('plan.banner.requested', { plan });
+    case 'reapproval': return t('plan.banner.reapproval', { plan,
+      previous: summary.base_revision != null ? t('plan.banner.previous_v', { revision: summary.base_revision }) : t('plan.banner.previous') });
+    case 'no_token': return t('plan.banner.no_token', { plan });
+    case 'approved': return delivery === 'undelivered' ? t('plan.banner.approved_undelivered', { plan }) : t('plan.banner.approved', { plan });
+    case 'changes_requested': return t('plan.banner.changes_requested', { plan });
+    case 'uncertain': return t('plan.banner.uncertain', { plan });
+    case 'unreadable': return t('plan.banner.unreadable', { known });
     default: return '';
   }
 }
 
-const continuation = (p, decision) =>
-  `GIL Monitor에서 계획 v${p.revision} (${p.synthesis_ref})에 ${decision === 'approve' ? '승인' : '수정 요청'}을 기록했습니다. gil_plan_read로 실제 기록을 확인하고 close_report로 Synthesis를 닫아 다음 단계를 진행해 주세요. 승인했다면 Outcome와 Interview Cycle도 닫은 뒤 Experiment로 진행하세요. 수정 요청이라면 다음 Question에서 변경 내용을 물어보세요.`;
-export const MANUAL_CONTINUE = '채팅에서 “GIL 승인 결과를 확인하고 계속해 줘”라고 입력해 주세요.';
+// Addressed to the Agent, so it stays English whatever language the Monitor shows.
+export const continuation = (p, decision) =>
+  `The GIL Monitor recorded ${decision === 'approve' ? 'an approval' : 'a change request'} for plan v${p.revision} (${p.synthesis_ref}). Read the actual record with gil_plan_read and close the Synthesis with its close_report to proceed. If approved, also close the Outcome and the Interview Cycle, then proceed to the Experiment. If changes were requested, ask about them in the next Question. Answer the user in their language.`;
+const manualContinue = () => t('plan.manual_continue');
 
 export function makePlanReview({ app, scope, panel, banner = null, document, changed = () => {} }) {
   let current = null, token = null, busy = false, dead = false, rendered = null, heading = null;
@@ -175,7 +175,7 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
     if (!line) return;
     banner.append(text('span', line, 'plan-banner-text'));
     if (summary.state !== 'checking') {
-      const go = button('승인 화면으로', { action: 'jump', className: 'plan-jump' });
+      const go = button(t('plan.jump'), { action: 'jump', className: 'plan-jump' });
       go.addEventListener('click', jump);
       banner.append(go);
     }
@@ -183,7 +183,7 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
   function head(summary, title) {
     heading = text('h2', '');
     heading.tabIndex = -1;
-    const badge = text('span', PLAN_STATE[summary.state], 'plan-state');
+    const badge = text('span', planState(summary.state), 'plan-state');
     badge.dataset.state = summary.state;
     heading.append(badge, text('span', title));
     panel.append(heading);
@@ -193,7 +193,7 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
     list.className = 'plan-items';
     for (const item of planItems(value)) {
       const where = (item.status === 'executed' || item.status === 'current') && item.cycle_ref ? ` (${item.cycle_ref})` : '';
-      const li = text('li', `${ITEM_STATUS[item.status]}${where} · ${item.id}${item.question ? `: ${item.question}` : ''}${item.done_when ? `\n확인: ${item.done_when}` : ''}`);
+      const li = text('li', `${itemStatus(item.status)}${where} · ${item.id}${item.question ? `: ${item.question}` : ''}${item.done_when ? `\n${t('plan.check_label', { done_when: item.done_when })}` : ''}`);
       li.dataset.status = item.status;
       list.append(li);
     }
@@ -202,12 +202,12 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
   function counts(value) {
     const items = planItems(value);
     const n = (status) => items.filter(i => i.status === status).length;
-    const open = currentCycle(value).state === 'unknown' ? `연결됨(열림 미확인) ${n('bound')}개` : `지금 열린 Cycle ${n('current')}개`;
-    return `실행함 ${n('executed')}개 · ${open} · 남음 ${n('pending')}개${n('retry') ? ` · 재시도 대기 ${n('retry')}개` : ''}`;
+    const open = currentCycle(value).state === 'unknown' ? t('plan.counts_bound', { n: n('bound') }) : t('plan.counts_current', { n: n('current') });
+    return t('plan.counts', { executed: n('executed'), open, pending: n('pending'), retry: n('retry') ? t('plan.counts_retry', { n: n('retry') }) : '' });
   }
   function reinterview(value) {
     for (const request of value.reinterview_requests || []) {
-      panel.append(text('p', `재인터뷰 요청 기록 (${request.cycle_ref}): ${request.reason} — 현재 Cycle을 닫은 뒤 다음 Interview에서 확인합니다.`, 'plan-reinterview'));
+      panel.append(text('p', t('plan.reinterview', { cycle: request.cycle_ref, reason: request.reason }), 'plan-reinterview'));
     }
   }
   // This message is a consequence of an explicit button click, never of polling/rendering.
@@ -223,11 +223,11 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
   }
   function deliveryNote(p, decision) {
     const state = delivery?.digest === p.digest ? delivery.state : null;
-    if (state === 'delivered') { panel.append(text('p', '채팅에 계속 요청을 전달했습니다.', 'plan-delivered')); return; }
+    if (state === 'delivered') { panel.append(text('p', t('plan.delivered'), 'plan-delivered')); return; }
     panel.append(text('p', state === 'undelivered'
-      ? `응답은 저장됐지만 채팅에 전달하지 못했습니다. 저장된 응답은 다시 보내지 않습니다. ${MANUAL_CONTINUE}`
-      : `이 화면에서 채팅 전달 여부를 확인하지 못했습니다. 에이전트가 이어가지 않으면 ${MANUAL_CONTINUE}`, 'plan-delivery'));
-    const retry = button('채팅에 계속 요청 보내기', { action: 'notify' });
+      ? t('plan.undelivered', { manual: manualContinue() })
+      : t('plan.delivery_unknown', { manual: manualContinue() }), 'plan-delivery'));
+    const retry = button(t('plan.send_continue'), { action: 'notify' });
     retry.disabled = busy;
     retry.addEventListener('click', async (event) => {
       if (!event.isTrusted || busy || dead || current?.digest !== p.digest) return;
@@ -238,7 +238,7 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
     panel.append(retry);
   }
   function decisionButtons(p) {
-    for (const [decision, label] of [['approve', '이 계획 승인하고 계속'], ['request_changes', '수정 요청']]) {
+    for (const [decision, label] of [['approve', t('plan.approve_button')], ['request_changes', t('plan.request_changes_button')]]) {
       const b = button(label, { decision });
       b.disabled = busy || !token;
       b.addEventListener('click', async (event) => {
@@ -248,10 +248,10 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
         try {
           const result = await app.callServerTool({ name: 'gil_plan_decide', arguments: request }, { timeout: 10000 });
           if (dead) return;
-          if (result.isError) throw new Error(result.structuredContent?.said || '승인 결과를 확인하지 못했습니다.');
+          if (result.isError) throw new Error(result.structuredContent?.said || t('plan.decide_failed'));
           const saved = result.structuredContent?.proposal;
           if (saved?.revision !== p.revision || saved?.digest !== p.digest || saved?.receipt?.decision !== decision) {
-            throw new Error('저장된 승인 기록이 응답에 없어 다시 확인해야 합니다.');
+            throw new Error(t('plan.decide_missing'));
           }
           token = null; current = result.structuredContent?.proposal; last = result.structuredContent;
           lastState = planSummary(last); readFailures = 0;
@@ -265,7 +265,7 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
         } catch (err) {
           if (!dead) {
             token = null; current = null; rendered = null;
-            uncertain = { revision: p.revision, decision, said: err?.message || '응답을 받지 못했습니다.' };
+            uncertain = { revision: p.revision, decision, said: err?.message || t('plan.no_reply') };
             render(last);
           }
         } finally { busy = false; }
@@ -275,59 +275,50 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
   }
   function proposal(value, summary) {
     const p = value.proposal;
-    head(summary, ` · 계획 v${p.revision}${summary.base_revision != null ? ` (이전 승인 판 v${summary.base_revision})` : ''}`);
-    if (replaced) panel.append(text('p', '보고 있던 제안이 새 판으로 바뀌었습니다. 이전 판에 대한 응답은 이 판에 적용되지 않습니다.', 'plan-replaced'));
+    head(summary, t('plan.head_revision', { revision: p.revision, base: summary.base_revision != null ? t('plan.head_base', { revision: summary.base_revision }) : '' }));
+    if (replaced) panel.append(text('p', t('plan.replaced'), 'plan-replaced'));
     // What the decision means, then what it covers, then the controls. Full texts stay below as
     // collapsible, verifiable reference: nothing is dropped, it only comes after the decision.
     const synthesis = p.draft.synthesis || {};
     panel.append(text('p', verdictSentence(synthesis, p.draft.items.length), 'plan-verdict'));
     if (synthesis.statement) panel.append(text('p', synthesis.statement, 'plan-statement'));
-    const labels = { goal: '목표', in_scope: '포함 범위', out_of_scope: '제외 범위', constraints: '제약', success_criteria: '성공 조건' };
     const dl = document.createElement('dl');
-    for (const [k, label] of Object.entries(labels)) dl.append(text('dt', label), text('dd', p.draft.scope[k]));
-    panel.append(dl, text('h3', '실행할 항목과 확인 조건'), text('p', counts(value), 'plan-counts'), itemList(value));
+    for (const k of ['goal', 'in_scope', 'out_of_scope', 'constraints', 'success_criteria']) dl.append(text('dt', t(`plan.scope.${k}`)), text('dd', p.draft.scope[k]));
+    panel.append(dl, text('h3', t('plan.items_heading')), text('p', counts(value), 'plan-counts'), itemList(value));
     reinterview(value);
     if (p.receipt) {
       const approve = p.receipt.decision === 'approve';
-      panel.append(text('p', approve
-        ? '승인을 기록했습니다. 제안 단계가 아직 열려 있습니다. 에이전트가 이어서 진행하지 않으면 채팅에서 승인 결과를 확인해 달라고 요청하세요.'
-        : '수정 요청을 기록했습니다. 바꿀 내용을 채팅으로 알려 주면 에이전트가 다음 질문에서 확인합니다.', 'plan-receipt'));
+      panel.append(text('p', approve ? t('plan.receipt_approved') : t('plan.receipt_changes'), 'plan-receipt'));
       deliveryNote(p, p.receipt.decision);
     } else {
-      panel.append(text('p', summary.state === 'no_token'
-        ? '승인 버튼 연결을 아직 받지 못해 버튼을 비활성화했습니다. 자동으로 다시 읽습니다. 그대로라면 Monitor를 다시 열어 주세요.'
-        : '이 내용에 동의하는 경우 승인하세요. 내용을 바꾸려면 수정 요청 후 채팅으로 알려 주세요.', 'plan-hint'));
+      panel.append(text('p', summary.state === 'no_token' ? t('plan.hint_no_token') : t('plan.hint_decide'), 'plan-hint'));
       decisionButtons(p);
     }
     const full = document.createElement('details');
-    full.append(text('summary', '승인할 제안문 전체 (참조·점검표 포함)'));
+    full.append(text('summary', t('plan.full_summary')));
     const rest = document.createElement('dl');
     for (const k of Object.keys(synthesis)) rest.append(text('dt', k), text('dd', synthesis[k]));
     full.append(rest, text('pre', JSON.stringify(synthesis, null, 2)));
     const trace = document.createElement('details');
-    trace.append(text('summary', '승인 기록 정보 (판·제안 주소·digest)'), text('p', `기준 승인 판: ${p.base_revision ?? '없음'} · 제안: ${p.synthesis_ref} · SHA-256: ${p.digest}`));
+    trace.append(text('summary', t('plan.trace_summary')), text('p', t('plan.trace', { base: p.base_revision ?? t('plan.none'), ref: p.synthesis_ref, digest: p.digest })));
     panel.append(full, trace);
   }
   function executing(value, summary) {
-    head(summary, ` · 계획 v${value.active_revision}`);
+    head(summary, t('plan.last_state_revision', { revision: value.active_revision }));
     const item = value.current_item;
     const cycle = currentCycle(value);
     const where = cycle.ref ? ` ${cycle.ref}` : '';
-    const bound = item ? `${item.id} — ${item.question}\n확인 조건: ${item.done_when}` : null;
+    const bound = item ? t('plan.bound_item', { id: item.id, question: item.question, done_when: item.done_when }) : null;
     let line;
-    if (cycle.state === 'open') line = bound ? `지금 열린 Cycle${where}에 묶인 항목: ${bound}` : `지금 열린 Cycle${where}에 묶인 항목이 없습니다.`;
-    else if (cycle.state === 'closed') line = bound
-      ? `현재 Cycle${where}은 닫혔습니다. 지금 열린 Cycle은 없습니다. 마지막으로 연결된 항목: ${bound}\n결과는 그 Cycle Report가 진실원이며 여기서 성공으로 보지 않습니다.`
-      : `현재 Cycle${where}은 닫혔습니다. 지금 열린 Cycle은 없습니다.`;
-    else line = bound
-      ? `현재 Cycle에 연결된 항목: ${bound}\n이 서버 응답에는 Cycle 열림 여부가 없어 열려 있다고 보지 않습니다.`
-      : '현재 Cycle에 연결된 항목이 없습니다. 이 서버 응답에는 Cycle 열림 여부가 없습니다.';
+    if (cycle.state === 'open') line = bound ? t('plan.exec_open_bound', { where, bound }) : t('plan.exec_open_none', { where });
+    else if (cycle.state === 'closed') line = bound ? t('plan.exec_closed_bound', { where, bound }) : t('plan.exec_closed_none', { where });
+    else line = bound ? t('plan.exec_unknown_bound', { bound }) : t('plan.exec_unknown_none');
     const current = text('p', line, 'plan-current');
     current.dataset.cycle = cycle.state;
     panel.append(current);
     panel.append(text('p', counts(value), 'plan-counts'), itemList(value));
     reinterview(value);
-    panel.append(text('small', 'GIL에 기록된 사실입니다. “실행함”은 Cycle이 열렸다는 기록이며 성공 여부는 해당 Cycle Report가 진실원입니다. 에이전트가 지금 작업 중인지는 여기서 알 수 없습니다.'));
+    panel.append(text('small', t('plan.exec_note')));
   }
   function render(value) {
     const stood = standing();
@@ -342,34 +333,35 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
     if (panel.hidden) return;
     switch (summary.state) {
       case 'uncertain': {
-        head(summary, ` · 계획 v${uncertain.revision}`);
-        panel.append(text('p', `${uncertain.decision === 'approve' ? '승인' : '수정 요청'} 응답을 보냈지만 결과를 받지 못했습니다: ${uncertain.said}`, 'plan-uncertain'));
-        panel.append(text('p', '응답은 다시 보내지 않습니다. 다시 읽어 실제 기록을 확인합니다. 기록이 없으면 새 버튼이 나타납니다.', 'plan-hint'));
-        const again = button('다시 읽기', { action: 'reread' });
+        head(summary, t('plan.last_state_revision', { revision: uncertain.revision }));
+        panel.append(text('p', t('plan.uncertain_sent', { decision: decisionWord(uncertain.decision), said: uncertain.said }), 'plan-uncertain'));
+        panel.append(text('p', t('plan.uncertain_hint'), 'plan-hint'));
+        const again = button(t('plan.reread'), { action: 'reread' });
         again.addEventListener('click', () => api.refresh());
         panel.append(again);
         break;
       }
       case 'checking':
         head(summary, '');
-        panel.append(text('p', '저장된 승인 상태를 확인한 뒤 버튼을 표시합니다.', 'plan-hint'));
+        panel.append(text('p', t('plan.checking_hint'), 'plan-hint'));
         break;
       case 'retrying':
       case 'unreadable': {
         head(summary, summary.said ? ` · ${summary.said}` : '');
         panel.append(text('p', bannerLine(summary), 'plan-hint'));
-        panel.append(text('p', '마지막 확인 기록과 최신 상태는 다를 수 있습니다. 짧은 간격으로 다시 조회하며, 읽기에 성공하기 전에는 승인 버튼을 표시하지 않습니다.', 'plan-hint'));
+        panel.append(text('p', t('plan.unreadable_hint'), 'plan-hint'));
         if (lastState) {
-          panel.append(text('p', `마지막으로 읽은 상태: ${PLAN_STATE[lastState.state] || lastState.state}${lastState.revision != null ? ` · 계획 v${lastState.revision}` : ''}`, 'plan-last'));
+          panel.append(text('p', t('plan.last_state', { state: planState(lastState.state) || lastState.state,
+            revision: lastState.revision != null ? t('plan.last_state_revision', { revision: lastState.revision }) : '' }), 'plan-last'));
         }
-        const again = button('다시 읽기', { action: 'reread' });
+        const again = button(t('plan.reread'), { action: 'reread' });
         again.addEventListener('click', () => api.refresh());
         panel.append(again);
         break;
       }
       case 'idle':
         head(summary, '');
-        panel.append(text('p', '에이전트가 Interview의 제안 단계에서 계획을 제안하면 여기서 승인하거나 수정을 요청합니다.', 'plan-hint'));
+        panel.append(text('p', t('plan.idle_hint'), 'plan-hint'));
         reinterview(value);
         break;
       case 'executing':
@@ -389,7 +381,7 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
       try {
         const result = await app.callServerTool({ name: 'gil_plan_review', arguments: { scope_id: scope } }, { timeout: 10000 });
         if (dead) return { status: 'stopped' };
-        if (result.isError || typeof result.structuredContent?.supported !== 'boolean') throw new Error(result.structuredContent?.said || '계획 승인 상태를 읽지 못했습니다.');
+        if (result.isError || typeof result.structuredContent?.supported !== 'boolean') throw new Error(result.structuredContent?.said || t('plan.review_failed'));
         const value = result.structuredContent;
         current = value.proposal; last = value; uncertain = null;
         token = result._meta?.['gil/planApprovalToken'] ?? null;

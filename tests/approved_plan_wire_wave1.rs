@@ -371,7 +371,7 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     let propose_schema = &tools.iter().find(|t| t["name"] == "gil_plan_propose").unwrap()["inputSchema"];
     let basis_schema = &propose_schema["properties"]["draft"]["properties"]["synthesis"]["properties"]["basis_refs"];
     assert_eq!(basis_schema["type"], "string");
-    for constraint in ["현재 Interview", "닫힌", "Question", "Interpretation", "한 줄에 하나씩", "statement"] {
+    for constraint in ["current Interview Cycle", "closed", "Question", "Interpretation", "one per line", "statement", "without duplicates", "other Cycles", "abandoned branches", "never moved or fixed automatically"] {
         assert!(basis_schema["description"].as_str().unwrap().contains(constraint));
     }
 
@@ -550,6 +550,30 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     let read = r.read();
     assert_eq!(read["executed_cycles"][0]["item_id"], "A");
     assert_eq!(read["executed_cycles"][0]["revision"], 2);
+
+    // Display preferences cannot rewrite an approved revision, Reports, evidence or Snapshot objects.
+    fn preserved_files(at: &Path) -> std::collections::BTreeMap<std::path::PathBuf, Vec<u8>> {
+        let mut files = std::collections::BTreeMap::new();
+        for entry in std::fs::read_dir(at).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() { files.extend(preserved_files(&path)); }
+            else if path.file_name().unwrap() != gil::locale::MEMORY_FILE {
+                files.insert(path.clone(), std::fs::read(path).unwrap());
+            }
+        }
+        files
+    }
+    let before_records = preserved_files(r.record.parent().unwrap());
+    let before_work = preserved_files(&root);
+    assert!(before_records.keys().any(|p| p.components().any(|c| c.as_os_str() == "manifests")));
+    for (sequence, tag, language) in [(1, "en", gil::Locale::En), (2, "ja", gil::Locale::Ja), (3, "ko", gil::Locale::Ko)] {
+        ok(r.app("gil_monitor_poll", json!({"instance_id":"locale-preservation","sequence":sequence.to_string(),"presentation":"inline","locale":tag})), "locale poll");
+        let context = ok(r.model("gil_context", json!({})), "localized context");
+        assert!(context.to_string().contains(gil::locale::text_in(language, "guide.file_boundary")));
+        r.read();
+        assert_eq!(preserved_files(r.record.parent().unwrap()), before_records);
+        assert_eq!(preserved_files(&root), before_work);
+    }
 
     // restore / revisit stay blocked (product-safety / approved-plan lock) and change nothing
     let before = state(&root);

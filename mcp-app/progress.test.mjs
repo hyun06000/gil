@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { progressTracker, progressSummary, visualCounts } from '../ui/progress.mjs';
+// These assertions read the Korean table; the language-specific cases live in locale.test.mjs.
+import { setLocale } from '../ui/locale.js';
+setLocale('ko');
 const fixture = () => JSON.parse(readFileSync(new URL('../ui/fixtures/first-interview/view.json', import.meta.url)));
 
 test('polls and Artifact changes do not impersonate GIL record progress; scopes stay isolated', () => {

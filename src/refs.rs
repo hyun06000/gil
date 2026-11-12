@@ -93,39 +93,17 @@ pub enum RefSyntaxError {
 impl fmt::Display for RefSyntaxError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RefSyntaxError::Empty => write!(f, "빈 글은 주소가 아니다"),
-            RefSyntaxError::NoKind { text } => write!(
-                f,
-                "{text:?} 에는 종류가 없다 — 영구 reference 는 `cycle:C2` 처럼 종류를 지닌다.\n\
-                 `#3` 같은 축약은 현재 Cycle 이 자명한 화면에서만 쓴다"
-            ),
-            RefSyntaxError::UnknownKind { kind } => {
-                write!(f, "{kind:?} 는 gil 이 아는 종류가 아니다 — 아는 것: {}", KINDS.join(", "))
-            }
-            RefSyntaxError::WrongKind { expected, found } => {
-                write!(f, "여기는 {expected} 의 자리인데 {found:?} 를 적었다")
-            }
-            RefSyntaxError::WrongLetter { expected, text } => {
-                write!(f, "{text:?} 는 {expected:?} 로 시작해야 한다")
-            }
-            RefSyntaxError::Shape { expected, text } => {
-                write!(f, "{text:?} 는 {expected} 꼴이 아니다")
-            }
-            RefSyntaxError::EmptyNumber { text } => write!(f, "{text:?} 에 수가 없다"),
-            RefSyntaxError::NotANumber { text } => {
-                write!(f, "{text:?} 의 수 자리가 십진수가 아니다")
-            }
-            RefSyntaxError::LeadingZero { text } => {
-                write!(f, "{text:?} 는 선행 0 을 지녔다 — 같은 것을 두 가지로 적게 된다")
-            }
-            RefSyntaxError::ZeroNotAllowed { text } => write!(
-                f,
-                "{text:?} 는 0 을 쓸 수 없는 종류다 — 0 은 초기 revision(J0)과 초기 \
-                 Existence State(ES0)의 것이다"
-            ),
-            RefSyntaxError::Whitespace { text } => {
-                write!(f, "{text:?} 에 빈칸이 섞였다")
-            }
+            RefSyntaxError::Empty => f.write_str(crate::locale::text("ref.empty")),
+            RefSyntaxError::NoKind { text } => f.write_str(&crate::tr!("ref.no_kind", text = format!("{text:?}"))),
+            RefSyntaxError::UnknownKind { kind } => f.write_str(&crate::tr!("ref.unknown_kind", kind = format!("{kind:?}"), known = KINDS.join(", "))),
+            RefSyntaxError::WrongKind { expected, found } => f.write_str(&crate::tr!("ref.wrong_kind", expected = expected, found = format!("{found:?}"))),
+            RefSyntaxError::WrongLetter { expected, text } => f.write_str(&crate::tr!("ref.wrong_letter", text = format!("{text:?}"), expected = format!("{expected:?}"))),
+            RefSyntaxError::Shape { expected, text } => f.write_str(&crate::tr!("ref.shape", text = format!("{text:?}"), expected = expected)),
+            RefSyntaxError::EmptyNumber { text } => f.write_str(&crate::tr!("ref.empty_number", text = format!("{text:?}"))),
+            RefSyntaxError::NotANumber { text } => f.write_str(&crate::tr!("ref.not_a_number", text = format!("{text:?}"))),
+            RefSyntaxError::LeadingZero { text } => f.write_str(&crate::tr!("ref.leading_zero", text = format!("{text:?}"))),
+            RefSyntaxError::ZeroNotAllowed { text } => f.write_str(&crate::tr!("ref.zero_not_allowed", text = format!("{text:?}"))),
+            RefSyntaxError::Whitespace { text } => f.write_str(&crate::tr!("ref.whitespace", text = format!("{text:?}"))),
         }
     }
 }

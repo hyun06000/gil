@@ -21,7 +21,7 @@
 
   const read = async (path) => {
     const answer = await fetch(path, { cache: "no-store" });
-    if (!answer.ok) throw new Error(`${path} 을 읽지 못했다 (${answer.status})`);
+    if (!answer.ok) throw new Error(`Could not read ${path} (${answer.status})`);
     return answer.json();
   };
 

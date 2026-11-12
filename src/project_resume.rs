@@ -107,7 +107,7 @@ pub(crate) fn ensure(root: &Path) -> String {
         })();
         results.push(match outcome {Ok(s) => format!("{name}: {s}"), Err(e) => format!("{name}: review_required ({e}); preserve remaining files")});
     }
-    format!("\n프로젝트 재개 안내: {}. Host가 이 파일을 로딩하는 새 세션부터 적용되며 실제 모델 준수·화면은 별도 확인한다.\n", results.join("; "))
+    crate::tr!("resume.ensured", results = results.join("; "))
 }
 
 pub(crate) fn status(root: &Path) -> String {
@@ -120,8 +120,8 @@ pub(crate) fn status(root: &Path) -> String {
             Err(e) => pending.push(format!("{name}: {e}")),
         }
     }
-    if pending.is_empty() { "\n프로젝트 재개 안내: ready (프로젝트 로컬 지침, 훅 없음; 실제 Host 로딩은 별도 확인).\n".into() }
-    else { format!("\n프로젝트 재개 안내: pending/review_required ({}). 안내상태 조회는 파일·기록·Snapshot을 바꾸지 않는다. 기존 프로젝트는 다음 gil_open Verify 성공 시 안전한 안내만 자동 추가한다. 이미 열린 Verify라면 현재 계약 안에서 안내를 보존하며 추가한다. 훅·전역 안내·과거 Snapshot을 바꾸지 않는다.\n", pending.join(", ")) }
+    if pending.is_empty() { crate::locale::text("resume.ready").into() }
+    else { crate::tr!("resume.pending", pending = pending.join(", ")) }
 }
 
 #[cfg(test)]

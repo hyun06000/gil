@@ -119,6 +119,8 @@ const _: () = assert!(!CORE_VERSION.is_empty(), "GIL_BUILD_VERSION must not be e
 // 하기 때문이다. 그 주소는 **사람이 보는 이름이 아니다**: 공개 표면은 `snapshot:A1` 이다.
 
 mod project_resume;
+pub mod locale;
+pub use locale::{DEFAULT_LOCALE, Locale};
 pub mod agent;
 mod artifact;
 pub mod capability;

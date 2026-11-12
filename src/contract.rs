@@ -153,7 +153,7 @@ impl CloseContract {
             }
             let _ = write!(out, "{indent}{}", field.name);
             if field.non_empty && field.is_free_text() {
-                out.push_str("  (비울 수 없다)");
+                out.push_str(crate::locale::text("contract.non_empty"));
             }
             out.push('\n');
 
@@ -164,7 +164,7 @@ impl CloseContract {
                 say(&mut out, indent, "  ", choice, &mut said);
             }
             for branch in &field.branches {
-                let _ = writeln!(out, "{indent}  {}가 {}이면", branch.deciding, branch.when);
+                out.push_str(&crate::tr!("contract.branch", indent = indent, deciding = branch.deciding, when = branch.when));
                 for choice in &branch.values {
                     say(&mut out, indent, "    ", choice, &mut said);
                 }
@@ -172,7 +172,7 @@ impl CloseContract {
             // 아직 밟을 수 없는 값은 **허용값 목록에 섞지 않는다.** 섞으면 읽는 쪽이 그것을
             // 적고, 적은 뒤에야 아직임을 알게 된다.
             if !field.not_yet.is_empty() {
-                let _ = writeln!(out, "{indent}  아직 없음");
+                out.push_str(&crate::tr!("contract.not_yet", indent = indent));
                 for (value, why) in &field.not_yet {
                     let _ = writeln!(out, "{indent}    {value} — {why}");
                 }

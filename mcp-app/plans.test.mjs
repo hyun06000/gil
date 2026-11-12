@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makePlanReview, planSummary, planItems, currentCycle, verdictSentence, bannerLine, PLAN_STATE } from './plans.mjs';
 import { makePlanPolling } from './plan-poll.mjs';
+// These assertions read the Korean table; the language-specific cases live in locale.test.mjs.
+import { setLocale } from '../ui/locale.js';
+setLocale('ko');
 
 // Deterministic controller fixture. Synthetic trusted flags test event routing, not physical user identity.
 class Element {
@@ -338,7 +341,8 @@ test('an undelivered continuation stays visible across polls and can be re-sent 
   r.state.refuseMessage = false;
   await retry.click(true);
   assert.equal(r.messages.length, 1);
-  assert.match(r.messages[0].content[0].text, /계획 v1 \(step:C1\/S3\)에 승인을 기록했습니다/);
+  // The continuation addresses the Agent, so it is English whatever language the Monitor shows.
+  assert.match(r.messages[0].content[0].text, /recorded an approval for plan v1 \(step:C1\/S3\)/);
   assert.equal(r.decides(), 1, 'retrying the message never repeats the write');
   assert.equal(r.actions('notify').length, 0);
   assert.match(r.panel.allText(), /채팅에 계속 요청을 전달했습니다/);

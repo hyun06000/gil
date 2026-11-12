@@ -13,20 +13,20 @@ impl ProjectSession {
     ) -> Result<(), SessionError> {
         for field in ["execution", "result"] {
             if report.get(field).is_none_or(|s| s.trim().is_empty()) {
-                return Err(refused(format!("{field}에 실제 실행과 관측 결과를 적는다")));
+                return Err(refused(crate::tr!("evidence.field_required", field = field)));
             }
         }
         let declared = report.get("evidence_files").unwrap_or("");
         let mut paths = BTreeSet::new();
         for line in declared.lines().filter(|s| !s.trim().is_empty()) {
             let path = crate::visual_report::file::relative(line)
-                .map_err(|_| refused("evidence_files는 프로젝트 안의 안전한 상대 파일 경로를 한 줄에 하나씩 적는다"))?;
+                .map_err(|_| refused(crate::locale::text("evidence.paths_shape")))?;
             if !paths.insert(path) || paths.len() > 32 {
-                return Err(refused("evidence_files는 중복 없이 1~32개 파일을 적는다"));
+                return Err(refused(crate::locale::text("evidence.paths_count")));
             }
         }
         if paths.is_empty() {
-            return Err(refused("채팅과 Report 본문만으로 Verify를 닫을 수 없다. 관측 문서·실행 결과·시각자료를 실제 파일로 저장하고 evidence_files에 상대 경로를 적는다"));
+            return Err(refused(crate::locale::text("evidence.files_required")));
         }
         let objects = self.store()?;
         let found = objects.read_manifest(world)
@@ -39,20 +39,20 @@ impl ProjectSession {
         let empty = artifact::digest_of(std::io::empty()).expect("empty reader");
         let plan_path = if let Some(document) = self.project.plan_document() {
             let path = crate::visual_report::file::relative(report.get("plan_document").unwrap_or(""))
-                .map_err(|_| refused("승인 계획의 상대 파일 경로가 필요하다"))?;
+                .map_err(|_| refused(crate::locale::text("evidence.plan_path")))?;
             let expected = artifact::digest_of(std::io::Cursor::new(document.as_bytes())).expect("document bytes");
-            if found.get(&path) != Some(&expected) { return Err(refused("plan_document가 이 Experiment에 바인딩된 승인 계획과 다르다. gil_plan_read의 document를 그대로 저장한다")); }
+            if found.get(&path) != Some(&expected) { return Err(refused(crate::locale::text("evidence.plan_mismatch"))); }
             Some(path)
         } else { None };
         let mut fresh = false;
         for path in paths {
             let digest = found.get(&path)
-                .ok_or_else(|| refused(format!("증거 파일이 확정할 Snapshot에 없다: {path}")))?;
-            if digest == &empty { return Err(refused(format!("빈 파일은 증거가 아니다: {path}"))); }
+                .ok_or_else(|| refused(crate::tr!("evidence.not_in_snapshot", path = path)))?;
+            if digest == &empty { return Err(refused(crate::tr!("evidence.empty_file", path = path))); }
             fresh |= plan_path.as_ref() != Some(&path) && before.get(&path) != Some(digest);
         }
         if !fresh {
-            return Err(refused("지정한 증거가 모두 이전 Snapshot과 같다. 읽기·검사만 했어도 이번 관측 결과를 새 문서나 갱신한 실행 기록으로 남긴다"));
+            return Err(refused(crate::locale::text("evidence.not_fresh")));
         }
         Ok(())
     }
@@ -69,14 +69,14 @@ impl ProjectSession {
             _ => return Ok(report),
         };
         if report.get(text).is_none_or(|s| s.trim().is_empty()) {
-            return Err(refused(format!("{text}에 관측에서 얻은 해석·배움을 적는다. 빈 내용으로 자아의 성장을 기록하지 않는다")));
+            return Err(refused(crate::tr!("evidence.lesson_required", text = text)));
         }
         let lineage = cycle.steps().lineage(here).map_err(|e| refused(e.to_string()))?;
         let source = lineage.iter().rev().find(|n| n.kind == source_kind && n.is_closed())
-            .ok_or_else(|| refused("현재 계보에 닫힌 근거 단계가 없다"))?;
+            .ok_or_else(|| refused(crate::locale::text("evidence.no_basis_step")))?;
         let expected = cycle.step_ref(source.id).to_string();
         if report.get(field).is_some_and(|given| given != expected) {
-            return Err(refused(format!("{field}는 현재 계보의 근거 {expected}를 가리켜야 한다")));
+            return Err(refused(crate::tr!("evidence.basis_ref", field = field, expected = expected)));
         }
         report.insert(field, expected);
         Ok(report)

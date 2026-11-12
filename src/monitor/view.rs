@@ -396,27 +396,27 @@ impl std::fmt::Display for ViewError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ViewError::BeforeEpoch => {
-                write!(f, "관측 시각이 Unix epoch 이전이라 wire 로 옮길 수 없다")
+                f.write_str(crate::locale::text("mon.view.epoch"))
             }
             ViewError::BeyondSafeInteger { millis } => write!(
                 f,
-                "관측 시각 {millis}ms 가 정수의 안전 범위({MAX_SAFE_INTEGER})를 넘었다"
+                "{}", crate::tr!("mon.view.millis", millis = millis, max = MAX_SAFE_INTEGER)
             ),
             ViewError::UnknownVerdict { cycle_ref, said } => write!(
                 f,
-                "{cycle_ref} 의 판정 {said:?} 은 이 판(v{SCHEMA_VERSION})이 아는 낱말이 아니다"
+                "{}", crate::tr!("mon.view.verdict", cycle_ref = cycle_ref, said = format!("{said:?}"), version = SCHEMA_VERSION)
             ),
             ViewError::UnknownDirection { cycle_ref, said } => write!(
                 f,
-                "{cycle_ref} 의 다음 방향 {said:?} 은 이 판(v{SCHEMA_VERSION})이 아는 낱말이 아니다"
+                "{}", crate::tr!("mon.view.direction", cycle_ref = cycle_ref, said = format!("{said:?}"), version = SCHEMA_VERSION)
             ),
             ViewError::BoundaryIsNotAStep { step_ref, kind } => write!(
                 f,
-                "{step_ref} 의 {kind} 는 Cycle 경계이지 Step 이 아니다"
+                "{}", crate::tr!("mon.view.boundary", step_ref = step_ref, kind = kind)
             ),
             ViewError::BoundaryInNextAction { action, kind } => write!(
                 f,
-                "다음 행동 {action} 이 Cycle 경계 {kind} 를 대상으로 삼았다"
+                "{}", crate::tr!("mon.view.boundary_action", action = action, kind = kind)
             ),
         }
     }

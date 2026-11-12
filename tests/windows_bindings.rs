@@ -1,6 +1,8 @@
 //! Run the real binding module's tests without compiling unrelated Unix loopback unit tests.
 #![cfg(windows)]
 #![allow(dead_code)]
+// The included production module uses the library's real localization table.
+use gil::locale;
 mod monitor {
     #[derive(Debug)]
     pub struct Refusal { pub code: &'static str, pub said: &'static str }

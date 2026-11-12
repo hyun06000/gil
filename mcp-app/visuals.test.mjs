@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readImage,visualFailure,visualSummary} from './visuals.mjs';
+// These assertions read the Korean table; the language-specific cases live in locale.test.mjs.
+import { setLocale } from '../ui/locale.js';
+setLocale('ko');
 const scope='project:test', owner={kind:'step',ref:'step:C2/S3'};
 function fixture(size=600000) {
   const bytes=Buffer.alloc(size,37);

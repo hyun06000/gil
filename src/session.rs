@@ -286,7 +286,7 @@ impl ProjectSession {
         let error = |message| SessionError::Action(ActionError::Visual(message));
         let metadata = self.project.visual_state()
             .and_then(|state| state.registry().asset_for_report(owner, asset))
-            .ok_or_else(|| error("이 Project의 해당 Report에 연결된 시각 자료가 아니다".into()))?
+            .ok_or_else(|| error(crate::locale::text("session.visual.not_this_report").into()))?
             .metadata();
         let storage_root = project_root(&gil_dir(&self.state_path)?)?;
         crate::visual_report::file::read_stored(&storage_root, metadata, true).map_err(error)
@@ -472,20 +472,20 @@ impl ProjectSession {
         let error = |reason: String| SessionError::Action(ActionError::Visual(reason));
         self.project.no_pending_revisit().map_err(SessionError::Action)?;
         if !self.can_confirm_artifact() {
-            return Err(error("이미지는 열린 Verify에서만 확정한다".into()));
+            return Err(error(crate::locale::text("session.visual.only_verify").into()));
         }
-        let state = self.project.visual_state().ok_or_else(|| error("명시적 시각 Report 이관이 먼저 필요하다".into()))?;
-        if attachments.len() > crate::visual_report::image::MAX_ATTACHMENTS { return Err(error("한 번에 첨부할 수 있는 자료는 8개까지다".into())); }
+        let state = self.project.visual_state().ok_or_else(|| error(crate::locale::text("session.visual.needs_migration").into()))?;
+        if attachments.len() > crate::visual_report::image::MAX_ATTACHMENTS { return Err(error(crate::locale::text("session.visual.max_attachments").into())); }
         let root = self.root()?;
         let mut files = Vec::new();
         let mut metadata = Vec::new();
         let mut paths = std::collections::BTreeSet::new();
         let mut total = 0usize;
         for (index, input) in attachments.iter().enumerate() {
-            if !paths.insert(input.path.clone()) { return Err(error("같은 첨부 경로를 두 번 지정했다".into())); }
+            if !paths.insert(input.path.clone()) { return Err(error(crate::locale::text("session.visual.duplicate_path").into())); }
             let file = AttachmentFile::read(&root, &input.path).map_err(|reason| error(format!("$.visuals.attachments[{index}].path: {reason}")))?;
             total += file.image.bytes().len();
-            if total > crate::visual_report::image::MAX_ATTACHMENT_BYTES { return Err(error("첨부 전체 용량이 32 MiB를 넘었다".into())); }
+            if total > crate::visual_report::image::MAX_ATTACHMENT_BYTES { return Err(error(crate::locale::text("session.visual.too_large").into())); }
             metadata.push(file.image.metadata(input.source_kind, input.source_description.clone()).map_err(|e| error(e.to_string()))?);
             files.push(file);
         }
@@ -504,22 +504,18 @@ impl ProjectSession {
         // A Verify that saved an image as evidence cannot declare images unnecessary.
         if let Some(ReportVisuals::Verify(crate::visual_report::VisualDeclaration::NotNeeded { .. })) = registry.report(owner) {
             if let Some(path) = crate::visual_report::image_evidence_path(report.get("evidence_files").unwrap_or("")) {
-                return Err(error(format!(
-                    "[visual_declaration_conflict] evidence_files에 이미지 파일 {path}이(가) 있는데 시각 자료가 \
-                     필요 없다고 선언했다. PNG면 attachments/uses로 첨부해 attached로 닫고, 첨부할 수 없으면 \
-                     missing에 이유와 follow_up을 적는다. 닫힌 것은 없다"
-                )));
+                return Err(error(crate::tr!("session.visual.declaration_conflict", path = path)));
             }
         }
         let objects = self.store()?;
         let world = capture(&root, &objects)?;
-        let manifest = objects.read_manifest(&world).map_err(|_| error("확정할 세계를 읽지 못했다".into()))?;
+        let manifest = objects.read_manifest(&world).map_err(|_| error(crate::locale::text("session.visual.world_unreadable").into()))?;
         for ((file, input), meta) in files.iter_mut().zip(&attachments).zip(&metadata) {
             file.revalidate().map_err(error)?;
             let path = crate::visual_report::file::relative(&input.path).map_err(error)?;
             // Tracked files must agree with this Verify's world. Attachment is not scope expansion.
             if let Some(digest) = manifest.get(&path) {
-                if *digest != artifact::digest_from_raw(meta.digest) { return Err(error("첨부와 Snapshot의 파일 내용이 다르다".into())); }
+                if *digest != artifact::digest_from_raw(meta.digest) { return Err(error(crate::locale::text("session.visual.content_mismatch").into())); }
             }
         }
         let mut next = self.project.clone();
@@ -546,7 +542,7 @@ impl ProjectSession {
         if let Some(opened) = cycle.step_now_open() {
             let kind = cycle.steps().node(opened).expect("open node").kind;
             if kind == crate::NodeKind::Verify {
-                return Err(SessionError::Action(ActionError::Visual("Verify에는 시각 선언이 필요하다".into())));
+                return Err(SessionError::Action(ActionError::Visual(crate::locale::text("session.visual.verify_needs_declaration").into())));
             }
             self.require_clean(Gate::Step(cycle.step_ref(opened), kind))?;
             next.close_step_with_visuals(report, None, ReportVisuals::References(uses))
@@ -640,7 +636,7 @@ impl ProjectSession {
         match self.world_state()? {
             WorldState::Clean { .. } => Ok(()),
             WorldState::Dirty { .. } if cfg!(feature = "product-safety") && self.project.cycles().pending_revisit().is_some() => {
-                Err(SessionError::Evidence("승인한 되돌아감의 파일 복원이 아직 완료되지 않았다. gil_revisit으로 저장된 승인의 복구를 재개한다. 새 사용자 변경이 있으면 보존하고 중단한다".into()))
+                Err(SessionError::Evidence(crate::locale::text("session.revisit_restore_pending").into()))
             }
             WorldState::Dirty { world, changes } => Err(SessionError::Dirty {
                 gate,
@@ -786,9 +782,7 @@ pub enum Gate {
 /// product-safety 빌드의 dirty 복구 — `gil restore` 가 거부되는 빌드에서 **실제로 할 수 있는 일**만 적는다.
 ///
 /// 위 변경 목록(새로 생김 · 바뀜 · 사라짐)이 이 글의 대상이다. GIL 은 파일을 지우거나 되돌리지 않는다.
-pub const DIRTY_RECOVERY_WITHOUT_RESTORE: &str = "이 빌드는 Artifact 되돌리기(restore)를 거부한다. 위 변경 목록을 보고 사람이 정리한다:\n\
-  · 새로 생긴 파일은 프로젝트 밖의 새 보존 위치로 옮긴다. 그 내용을 남기려면 지금 자리를 닫은 뒤 다음 Experiment 의 Verify 에서 다시 만들고 evidence_files 에 적는다.\n\
-  · 바뀐 기존 파일은 현재 내용을 별도로 보존한 뒤 기준 내용으로 되돌린다. 사라진 파일은 기준 내용대로 다시 둔다.";
+pub fn dirty_recovery_without_restore() -> &'static str { crate::locale::text("session.dirty_recovery_without_restore") }
 
 /// 두 세계가 어떻게 다른가 — **사람이 읽을 만큼만.**
 const SHOWN: usize = 12;
@@ -797,23 +791,23 @@ fn differences(expected: &Manifest, found: &Manifest) -> Vec<String> {
     let mut out = Vec::new();
     for entry in found.entries() {
         match expected.get(&entry.path) {
-            None => out.push(format!("새로 생김  {}", entry.path.as_str())),
+            None => out.push(crate::tr!("session.diff.added", path = entry.path.as_str())),
             Some(before) if before != &entry.content => {
-                out.push(format!("바뀜      {}", entry.path.as_str()))
+                out.push(crate::tr!("session.diff.changed", path = entry.path.as_str()))
             }
             Some(_) => {}
         }
     }
     for entry in expected.entries() {
         if found.get(&entry.path).is_none() {
-            out.push(format!("사라짐    {}", entry.path.as_str()));
+            out.push(crate::tr!("session.diff.removed", path = entry.path.as_str()));
         }
     }
     // 잘라 낼 때는 **잘랐다고 말한다.** 조용히 줄이면 목록이 전부인 줄 안다.
     if out.len() > SHOWN {
         let hidden = out.len() - SHOWN;
         out.truncate(SHOWN);
-        out.push(format!("… 그리고 {hidden} 개 더"));
+        out.push(crate::tr!("session.diff.more", hidden = hidden));
     }
     out
 }
@@ -1284,23 +1278,10 @@ impl From<LockError> for SessionError {
 impl fmt::Display for SessionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SessionError::Evidence(reason) => write!(f, "[verify_evidence_required] {reason}\nVerify 증거 파일과 Snapshot → Analysis 해석 → Outcome 배움의 연결을 보존해야 한다. 현재 단계는 닫히지 않았다."),
-            SessionError::Busy { .. } => write!(
-                f,
-                "다른 GIL 명령이 이 프로젝트를 사용하고 있다.\n\n\
-                 현재 상태를 읽거나 변경하지 않았다.\n\
-                 앞선 명령이 끝난 뒤 다시 시도한다."
-            ),
-            SessionError::LockUnavailable { path, source } => write!(
-                f,
-                "이 프로젝트를 잠그지 못했다 ({path}) — {source}.\n\n\
-                 현재 상태를 읽거나 변경하지 않았다.\n\
-                 `.gil` 이 잠금을 지원하는 파일 시스템에 있는지 확인한다 \
-                 (네트워크 파일 시스템에서는 지원되지 않을 수 있다)."
-            ),
-            SessionError::AlreadyStarted { path } => {
-                write!(f, "이미 걷고 있다 ({path}).")
-            }
+            SessionError::Evidence(reason) => f.write_str(&crate::tr!("session.evidence", reason = reason)),
+            SessionError::Busy { .. } => f.write_str(crate::locale::text("session.busy")),
+            SessionError::LockUnavailable { path, source } => f.write_str(&crate::tr!("session.lock_unavailable", path = path, source = source)),
+            SessionError::AlreadyStarted { path } => f.write_str(&crate::tr!("session.already_started", path = path)),
             SessionError::LegacyFormat { path } => write!(
                 f,
                 "{}",
@@ -1308,43 +1289,18 @@ impl fmt::Display for SessionError {
                     path: path.clone()
                 }
             ),
-            SessionError::NotEmpty { path, found } => write!(
-                f,
-                "{path} 안에 GIL 이 모르는 것이 있다 ({found}).\n\n\
-                 새 프로젝트를 세우면 그것을 덮어쓸 수 있어 시작하지 않는다.\n\
-                 그 자리를 직접 정리한 뒤 다시 시도한다 — GIL 은 남의 파일을 치우지 않는다."
-            ),
-            SessionError::NoProjectDir { path } => {
-                write!(f, "{path} 는 프로젝트 안의 자리가 아니다.")
-            }
-            SessionError::NeedsRecovery { path, found } => write!(
-                f,
-                "{path} 에 끝나지 않은 복원이 남아 있다 ({found}) — 읽기만 하는 열기는 \
-                 그것을 건드리지 않는다. GIL 명령 하나를 실행하면 제자리로 돌아간다."
-            ),
-            SessionError::Unreadable { path, source } => {
-                write!(f, "{path} 를 들여다보지 못했다 — {source}.")
-            }
+            SessionError::NotEmpty { path, found } => f.write_str(&crate::tr!("session.not_empty", path = path, found = found)),
+            SessionError::NoProjectDir { path } => f.write_str(&crate::tr!("session.no_project_dir", path = path)),
+            SessionError::NeedsRecovery { path, found } => f.write_str(&crate::tr!("session.needs_recovery", path = path, found = found)),
+            SessionError::Unreadable { path, source } => f.write_str(&crate::tr!("session.unreadable", path = path, source = source)),
             SessionError::Store(source) => write!(f, "{source}"),
 
             SessionError::Action(source) => write!(f, "{source}"),
             SessionError::Cycles(source) => write!(f, "{source}"),
-            SessionError::Observe { said } => write!(
-                f,
-                "{said}\n\n어떤 Snapshot 도 확정하지 않았다. \
-                 Node·Will·Journey 는 닫히지도 움직이지도 않았다."
-            ),
+            SessionError::Observe { said } => f.write_str(&crate::tr!("session.observe", said = said)),
             SessionError::Object { said } => write!(f, "{said}"),
-            SessionError::Manifest { world, said } => write!(
-                f,
-                "기준 세계 {world} 의 manifest 를 읽지 못했다 — {said}\n\
-                 Node·Will·Journey 는 닫히지도 움직이지도 않았다."
-            ),
-            SessionError::UnknownWorld { world } => write!(
-                f,
-                "{world} 가 이 프로젝트의 registry 에 없다 — \
-                 이름 순서나 지금 위치로 추측해 고치지 않는다."
-            ),
+            SessionError::Manifest { world, said } => f.write_str(&crate::tr!("session.manifest", world = world, said = said)),
+            SessionError::UnknownWorld { world } => f.write_str(&crate::tr!("session.unknown_world", world = world)),
             SessionError::Dirty {
                 gate,
                 world,
@@ -1355,52 +1311,43 @@ impl fmt::Display for SessionError {
                     // Interview 안에서는 밟을 수 없는 길이다 — Interview 에 verify 가 없고,
                     // 이 Cycle 을 닫는 것도 같은 gate 에 막힌다. 그러니 먼저 되돌린다.
                     Gate::Step(step, kind) => (
-                        format!("{step} · {kind} 에서는 Artifact 변경을 확정할 수 없다."),
+                        crate::tr!("session.dirty.step_what", step = step, kind = kind),
                         if cfg!(feature = "product-safety") {
-                            format!("{DIRTY_RECOVERY_WITHOUT_RESTORE}\n그런 뒤 이 Step 을 닫는다.")
+                            crate::tr!("session.dirty.step_todo_product", recovery = dirty_recovery_without_restore())
                         } else {
-                            format!(
-                                "`gil restore` 로 현재 변경을 되돌린 뒤 이 Step 을 닫는다.\n\
-                                 Artifact 를 변경해야 하는 작업은 Verify Step 에서 수행한다."
-                            )
+                            crate::tr!("session.dirty.step_todo_dev")
                         },
                     ),
                     Gate::OpenChain => (
-                        "다음 Chain을 열 수 없다.".to_owned(),
-                        "새 Chain은 이전 Chain의 확정된 Exit에서 시작한다. 변경 파일을 별도 위치에 보존하고 기준 세계와 차이를 확인한 뒤 다시 시도한다. GIL은 파일을 자동으로 지우거나 복원하지 않았다.".to_owned(),
+                        crate::tr!("session.dirty.chain_what"),
+                        crate::tr!("session.dirty.chain_todo"),
                     ),
                     Gate::Cycle(cycle) => (
-                        format!("{cycle} 을(를) 닫을 수 없다."),
+                        crate::tr!("session.dirty.cycle_what", cycle = cycle),
                         if cfg!(feature = "product-safety") {
-                            format!("Cycle 을 닫는 것은 새 세계를 만들지 않는다.\n{DIRTY_RECOVERY_WITHOUT_RESTORE}\n그런 뒤 닫는다.")
+                            crate::tr!("session.dirty.cycle_todo_product", recovery = dirty_recovery_without_restore())
                         } else {
-                            format!(
-                                "Cycle 을 닫는 것은 새 세계를 만들지 않는다.\n\
-                                 `gil restore` 로 현재 변경을 되돌린 뒤 닫는다."
-                            )
+                            crate::tr!("session.dirty.cycle_todo_dev")
                         },
                     ),
                 };
-                write!(
-                    f,
-                    "거절: {what}\n\n이유\n  기준 세계 {world} 이후 프로젝트 파일이 바뀌었다.\n{}\n\n\
-                     지금 해야 할 일\n{}\n\n\
-                     {}",
-                    changes
+                f.write_str(&crate::tr!("session.dirty.body",
+                    what = what, world = world,
+                    changes = changes
                         .iter()
                         .map(|line| format!("    {line}"))
                         .collect::<Vec<_>>()
                         .join("\n"),
-                    todo.lines()
+                    todo = todo.lines()
                         .map(|line| format!("  {line}"))
                         .collect::<Vec<_>>()
                         .join("\n"),
-                    if matches!(gate, Gate::OpenChain) {
-                        "이전 Chain·Current·Will·Journey와 프로젝트 파일은 바뀌지 않았다."
+                    tail = if matches!(gate, Gate::OpenChain) {
+                        crate::locale::text("session.dirty.tail_chain")
                     } else {
-                        "현재 Step 과 Active Will 은 그대로 열려 있다 — Node 도 Will 도 Journey 도 움직이지 않았다."
+                        crate::locale::text("session.dirty.tail_step")
                     }
-                )
+                ))
             }
             SessionError::StrangeTemp { path } => write!(
                 f,

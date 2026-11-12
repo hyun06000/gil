@@ -15,7 +15,7 @@ impl capability::Clock for Clock {
 
 pub fn call(show: bool) -> CallToolResult {
     let Some(platform) = crate::launcher::this_machine() else {
-        return super::actions::refusal("이 기계의 Companion 연결은 아직 지원하지 않는다");
+        return super::actions::refusal(crate::locale::text("native.unsupported"));
     };
     let companion = crate::launcher::PlatformCompanion::new(platform);
     let agent = AgentCoreState::of_this_process();
@@ -34,7 +34,7 @@ pub fn call(show: bool) -> CallToolResult {
             "companion_state": seen.state, "agent_state": agent, "appVersion": version, "said": said}), said, false)
     };
     if crate::say::assert_no_leak(&said).is_err() {
-        return CallToolResult::error(vec![ContentBlock::text("Monitor 응답을 안전하게 전달하지 못했다.")]);
+        return CallToolResult::error(vec![ContentBlock::text(crate::locale::text("native.unsafe_response"))]);
     }
     let mut out = CallToolResult::success(vec![ContentBlock::text(said)]);
     out.structured_content = Some(data);

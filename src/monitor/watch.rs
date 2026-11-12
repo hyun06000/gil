@@ -84,7 +84,7 @@ pub fn watch_project_hints(
     let state = crate::project_state::state_for_root(root)?;
     if state != root.join(crate::STATE_PATH) {
         let storage_root = state.parent().and_then(Path::parent)
-            .ok_or_else(|| "GIL 기록 감시 위치를 확인하지 못했다".to_string())?;
+            .ok_or_else(|| crate::locale::text("mon.watch_location").to_string())?;
         // The generic watcher is also used while a caller is choosing or testing a plain folder.
         // Add the product record watch only after that record root has actually been published.
         if storage_root.is_dir() {

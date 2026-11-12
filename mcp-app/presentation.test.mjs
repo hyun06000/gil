@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { graphOrientation, initialFullscreen, fullscreenFailure, hostIdentity, hostStyles, styleEvidence, RETRY_DELAYS_MS } from './presentation.mjs';
+// These assertions read the Korean table; the language-specific cases live in locale.test.mjs.
+import { setLocale } from '../ui/locale.js';
+setLocale('ko');
 
 test('only explicit fresh-press evidence classifies a refusal; unknown and transport failures do not', () => {
   const message = "fullscreen request refused: it needs a fresh press in this app's own frame, not elsewhere on the page";

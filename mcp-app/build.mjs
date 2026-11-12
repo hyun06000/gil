@@ -24,25 +24,25 @@ must('<b>GIL Companion</b>', '<b>GIL Monitor</b>');
 must('<div class="notice"></div>', (line) => `${line}
   <section id="plan-banner" class="plan-banner" role="status" aria-live="polite" hidden></section>`);
 // Secondary controls sit in the header beside the Project switcher, as ghost buttons.
-must('<button class="refresh" type="button" title="완전한 View 를 다시 읽는다">새로고침</button>',
+must('<button class="refresh" type="button" data-i18n="html.refresh" data-i18n-title="html.refresh_title" title="완전한 View 를 다시 읽는다">새로고침</button>',
   (line) => `${line}
-      <button id="layout" type="button" disabled>세로로 보기</button>
-      <button id="native" type="button" disabled>별도 창 열기</button>`);
+      <button id="layout" type="button" data-i18n="app.layout_vertical" disabled>세로로 보기</button>
+      <button id="native" type="button" data-i18n="html.native" disabled>별도 창 열기</button>`);
 // The display-mode row sits at the bottom. The Host card and the header already carry the title.
 must('<footer class="status"><i></i><span></span></footer>',
   (line) => `${line}
   <div class="plan-panels">
-  <section id="plan-review" class="plan-review" role="region" aria-label="사용자 계획 승인" hidden></section>
-  <section id="revisit-review" class="plan-review" role="region" aria-label="되돌아가기 변경 목록과 승인" hidden></section>
+  <section id="plan-review" class="plan-review" role="region" aria-label="사용자 계획 승인" data-i18n-aria="html.plan_review_aria" hidden></section>
+  <section id="revisit-review" class="plan-review" role="region" aria-label="되돌아가기 변경 목록과 승인" data-i18n-aria="html.revisit_review_aria" hidden></section>
   </div>
-  <section class="host-bar" aria-label="Monitor 표시 모드">
-    <span id="host-say" role="status">MCP Apps 연결 중…</span>
-    <button id="expand" type="button" disabled>모니터 펼치기</button>
-    <button id="inline" type="button" disabled>대화 안으로</button>
-    <button id="update" type="button" hidden>업데이트 안내</button>
-    <details><summary>연결 정보</summary><pre id="host-evidence"></pre></details>
+  <section class="host-bar" aria-label="Monitor 표시 모드" data-i18n-aria="html.host_bar_aria">
+    <span id="host-say" role="status" data-i18n="html.connecting">MCP Apps 연결 중…</span>
+    <button id="expand" type="button" data-i18n="html.expand" disabled>모니터 펼치기</button>
+    <button id="inline" type="button" data-i18n="html.inline" disabled>대화 안으로</button>
+    <button id="update" type="button" data-i18n="html.update" hidden>업데이트 안내</button>
+    <details><summary data-i18n="html.evidence">연결 정보</summary><pre id="host-evidence"></pre></details>
   </section>
-  <section id="update-guide" class="update-guide" role="region" aria-label="업데이트 안내" hidden></section>`);
+  <section id="update-guide" class="update-guide" role="region" aria-label="업데이트 안내" data-i18n-aria="html.update" hidden></section>`);
 must('<script src="host.js"></script>\n<script type="module" src="companion.js"></script>',
   `<script>${result.outputFiles[0].text.replace(/<\/script/gi, '<\\/script')}</script>`);
 const digest = createHash('sha256').update(html).digest('hex');

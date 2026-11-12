@@ -48,9 +48,9 @@ const DEEPER: &str = "    ";
 pub fn render_monitor_text(seen: &MonitorSnapshot) -> String {
     let mut out = String::from("GIL Monitor\n");
     if let Some(chain) = &seen.current_chain {
-        out.push_str(&format!("Chain: {} · {} · Entry {} · 현재 {}\n", chain.chain_ref, if chain.exit_snapshot_ref.is_some() { "closed" } else { "open" }, chain.entry_snapshot_ref, chain.current_cycle_ref));
+        out.push_str(&crate::tr!("mon.chain_line", chain = chain.chain_ref, state = if chain.exit_snapshot_ref.is_some() { "closed" } else { "open" }, entry = chain.entry_snapshot_ref, cycle = chain.current_cycle_ref));
         if let Some(report) = &chain.report {
-            out.push_str(&format!("Chain 판정: {} · Exit: {}\n승인 근거: {}\n인계 요약: {}\n", report.get("verdict").unwrap_or(""), chain.exit_snapshot_ref.unwrap(), report.get("closing_synthesis_ref").unwrap_or(""), report.get("handoff_summary").unwrap_or("")));
+            out.push_str(&crate::tr!("mon.chain_report", verdict = report.get("verdict").unwrap_or(""), exit = chain.exit_snapshot_ref.unwrap(), basis = report.get("closing_synthesis_ref").unwrap_or(""), handoff = report.get("handoff_summary").unwrap_or("")));
         }
     }
     write_here(&mut out, seen);
@@ -80,26 +80,26 @@ fn write_here(out: &mut String, seen: &MonitorSnapshot) {
         // **부재가 판단에 필요한 자리다.** 이 Cycle 안에서 아직 아무것도 열지 않았다는
         // 사실은 다음에 무엇을 할지와 곧바로 이어진다.
         None => {
-            let _ = writeln!(out, "{INDENT}{}: {}", say::STEP, say::NO_STEP_YET);
+            let _ = writeln!(out, "{INDENT}{}: {}", say::STEP, say::no_step_yet());
         }
     }
 
     // Define 이 없으면 빈 질문을 지어내지 않는다 — 절만 조용히 짧아진다.
     if let Some(define) = &cycle.experiment_definition {
-        field(out, say::PROBLEM, &define.problem);
-        field(out, say::SUCCESS_CONDITION, &define.success_condition);
+        field(out, say::problem(), &define.problem);
+        field(out, say::success_condition(), &define.success_condition);
     }
 
     // Interview 는 **제 질문**으로 말한다. Define 이 없다는 사실은 Interview 에 대해
     // 아무것도 말해 주지 않으므로, Experiment 의 규칙을 빌려 오지 않는다.
     match &cycle.interview_question {
         Some(InterviewQuestion::Asked { question, response }) => {
-            field(out, say::PROBLEM, question);
+            field(out, say::problem(), question);
             if let Some(response) = response {
-                field(out, say::RESPONSE, response);
+                field(out, say::response(), response);
             }
         }
-        Some(InterviewQuestion::Asking) => field(out, say::PROBLEM, say::ASKING),
+        Some(InterviewQuestion::Asking) => field(out, say::problem(), say::asking()),
         // 아직 묻지 않았으면 **이름표조차 붙이지 않는다** — `질문:` 이라고 적는 순간
         // 없는 것에 자리가 생기고, 그 자리는 언젠가 채워지고 싶어 한다. 「아직 묻지
         // 않았다」는 제목 자리가 말할 몫이지 이 절이 말할 몫이 아니다.
@@ -108,11 +108,7 @@ fn write_here(out: &mut String, seen: &MonitorSnapshot) {
 
     // 되돌아온 자리라면 **새 Cycle 이 아직 없다**는 사실을 여기서 말한다.
     if let Some(pending) = &seen.pending_revisit {
-        let _ = writeln!(
-            out,
-            "{INDENT}되돌아왔다: {} 에서 갈라져 {} 에 섰다 — 새 Cycle 은 아직 없다",
-            pending.from_cycle_ref, pending.target_cycle_ref
-        );
+        out.push_str(&crate::tr!("mon.text_revisited", indent = INDENT, from = pending.from_cycle_ref, target = pending.target_cycle_ref));
     }
 
     if let Some(report) = &cycle.report {
@@ -132,10 +128,10 @@ fn cycle_line(cycle: &CycleFacts) -> String {
         say::state_of(cycle.state)
     );
     if let Some(parent) = cycle.parent_cycle_ref {
-        let _ = write!(line, " · {} {parent}", say::PARENT);
+        let _ = write!(line, " · {} {parent}", say::parent());
     }
     if let Some(from) = cycle.revisit_from_cycle_ref {
-        let _ = write!(line, " · {from} 에서 갈라짐");
+        line.push_str(&crate::tr!("mon.branched_from", from = from));
     }
     line
 }
@@ -149,19 +145,19 @@ fn step_line(step: &StepFacts) -> String {
 /// 현재 자리도, 활성 경로의 조상도, 지나온 갈래도 같은 낱말로 판정을 읽는다. 절마다 따로
 /// 그리면 같은 `verdict` 가 자리에 따라 다른 뜻으로 읽히기 시작한다.
 fn write_report(out: &mut String, indent: &str, report: &CycleReportFacts) {
-    write_lines(out, indent, say::VERDICT, &report.verdict);
+    write_lines(out, indent, say::verdict(), &report.verdict);
     if let Some(lesson) = &report.outcome_lesson {
-        write_lines(out, indent, say::LESSON, lesson);
+        write_lines(out, indent, say::lesson(), lesson);
     }
-    write_lines(out, indent, say::HANDOFF, &report.handoff_summary);
+    write_lines(out, indent, say::handoff(), &report.handoff_summary);
     if let Some(direction) = &report.next_direction {
         let mut line = direction.action.clone();
         if let Some(target) = direction.target_cycle_ref {
             let _ = write!(line, " → {target}");
         }
-        write_lines(out, indent, say::NEXT_DIRECTION, &line);
+        write_lines(out, indent, say::next_direction(), &line);
         if let Some(reason) = &direction.reason {
-            write_lines(out, indent, say::WHY, reason);
+            write_lines(out, indent, say::why(), reason);
         }
     }
 }
@@ -177,8 +173,8 @@ fn write_report(out: &mut String, indent: &str, report: &CycleReportFacts) {
 /// 되고, 그것은 다른 독자의 몫이다. Snapshot 의 타입이 이미 그것을 막아 둔다 —
 /// 계보의 항목에는 Step 목록을 담을 자리가 없다.
 fn write_active_lineage(out: &mut String, seen: &MonitorSnapshot) {
-    section(out, say::ACTIVE_PATH);
-    let _ = writeln!(out, "{INDENT}{}", say::ACTIVE_PATH_IS);
+    section(out, say::active_path());
+    let _ = writeln!(out, "{INDENT}{}", say::active_path_is());
 
     let last = seen.active_lineage.len().saturating_sub(1);
     for (depth, cycle) in seen.active_lineage.iter().enumerate() {
@@ -195,8 +191,8 @@ fn write_active_lineage(out: &mut String, seen: &MonitorSnapshot) {
             continue;
         }
         if let Some(define) = &cycle.experiment_definition {
-            write_lines(out, &body, say::PROBLEM, &define.problem);
-            write_lines(out, &body, say::SUCCESS_CONDITION, &define.success_condition);
+            write_lines(out, &body, say::problem(), &define.problem);
+            write_lines(out, &body, say::success_condition(), &define.success_condition);
         }
         if let Some(report) = &cycle.report {
             write_report(out, &body, report);
@@ -212,8 +208,8 @@ fn write_left_behind(out: &mut String, seen: &MonitorSnapshot) {
     if seen.inactive_cycles.is_empty() {
         return;
     }
-    section(out, say::LEFT_BEHIND);
-    let _ = writeln!(out, "{INDENT}{}", say::LEFT_BEHIND_IS);
+    section(out, say::left_behind());
+    let _ = writeln!(out, "{INDENT}{}", say::left_behind_is());
     for cycle in &seen.inactive_cycles {
         out.push('\n');
         write_one_left_behind(out, cycle, &seen.current_cycle.facts);
@@ -231,14 +227,14 @@ fn write_one_left_behind(out: &mut String, cycle: &InactiveCycle, here: &CycleFa
     let _ = writeln!(
         out,
         "{DEEPER}{}: {}",
-        say::RELATION,
+        say::relation(),
         say::relation_of(cycle.relation_to_current)
     );
     if let Some(parent) = cycle.parent_cycle_ref {
-        let mut line = format!("{}: {parent}", say::PARENT);
+        let mut line = format!("{}: {parent}", say::parent());
         // **형제는 부모가 같을 때만.** 그 판정을 여기서 새로 만들지 않고 두 부모를 견준다.
         if here.parent_cycle_ref == Some(parent) {
-            let _ = write!(line, " ({})", say::SAME_PARENT);
+            let _ = write!(line, " ({})", say::same_parent());
         }
         let _ = writeln!(out, "{DEEPER}{line}");
     }
@@ -246,8 +242,8 @@ fn write_one_left_behind(out: &mut String, cycle: &InactiveCycle, here: &CycleFa
         let _ = writeln!(
             out,
             "{DEEPER}{}: {from} ({})",
-            say::BRANCH_SOURCE,
-            say::NOT_A_LINEAGE_EDGE
+            say::branch_source(),
+            say::not_a_lineage_edge()
         );
     }
     // **실패는 Report 만 말한다.** Report 가 없으면 판정도 없다.
@@ -264,15 +260,15 @@ fn write_will(out: &mut String, seen: &MonitorSnapshot) {
     let Some(will) = &seen.current_will else {
         return;
     };
-    section(out, say::DOING);
+    section(out, say::doing());
     write_one_will(out, will);
 }
 
 fn write_one_will(out: &mut String, will: &WillFacts) {
-    let _ = writeln!(out, "{INDENT}{} · {} 에 걸려 있다", will.will_ref, will.target_step_ref);
-    field(out, say::OBJECTIVE, &will.objective);
-    field(out, say::NEXT_ACTION, &will.next_action);
-    field(out, say::DONE_WHEN, &will.done_when);
+    let _ = writeln!(out, "{INDENT}{}", crate::tr!("mon.will_at", will = will.will_ref, target = will.target_step_ref));
+    field(out, say::objective(), &will.objective);
+    field(out, say::next_action(), &will.next_action);
+    field(out, say::done_when(), &will.done_when);
 }
 
 // ── 지금 세계 ──────────────────────────────────────────────────────────────
@@ -282,19 +278,19 @@ fn write_one_will(out: &mut String, will: &WillFacts) {
 /// 파일 목록도, 내부 주소도, digest 도 적지 않는다 — 공개 표면은 `snapshot:A*` 하나다.
 /// **못 본 것을 dirty 라 하지 않고**, 왜 못 봤는지를 함께 남긴다.
 fn write_world(out: &mut String, world: &WorldFacts) {
-    section(out, say::WORLD);
-    let _ = writeln!(out, "{INDENT}{}: {}", say::BASELINE, world.baseline_snapshot_ref);
+    section(out, say::world());
+    let _ = writeln!(out, "{INDENT}{}: {}", say::baseline(), world.baseline_snapshot_ref);
     let _ = writeln!(
         out,
         "{INDENT}{}: {}",
-        say::WORLD_STATE,
+        say::world_state(),
         say::world_of(world.state)
     );
     if let Some(reason) = &world.reason {
-        write_lines(out, INDENT, say::WHY_UNKNOWN, reason);
+        write_lines(out, INDENT, say::why_unknown(), reason);
     }
     if world.verify_can_confirm {
-        let _ = writeln!(out, "{INDENT}{}", say::VERIFY_CAN_CONFIRM);
+        let _ = writeln!(out, "{INDENT}{}", say::verify_can_confirm());
     }
 }
 
@@ -305,9 +301,9 @@ fn write_world(out: &mut String, world: &WorldFacts) {
 /// 목록이 비었다는 것은 지금 밟을 수 있는 GIL 명령이 없다는 뜻이고, 그 사실은 사람의
 /// 판단에 필요하므로 「없음」이라 적는다.
 fn write_next(out: &mut String, actions: &[NextAction]) {
-    section(out, say::NEXT);
+    section(out, say::next());
     if actions.is_empty() {
-        let _ = writeln!(out, "{INDENT}{}", say::NO_MOVE);
+        let _ = writeln!(out, "{INDENT}{}", say::no_move());
         return;
     }
     for (at, next) in actions.iter().enumerate() {
@@ -316,13 +312,13 @@ fn write_next(out: &mut String, actions: &[NextAction]) {
             out.push('\n');
         }
         let _ = writeln!(out, "{INDENT}{}", say::what_it_does(next.kind));
-        write_lines(out, DEEPER, say::REASON, &next.reason);
+        write_lines(out, DEEPER, say::reason(), &next.reason);
         // 명령이 없는 수는 실행할 글자를 지어내지 않는다.
         if let Some(command) = &next.command {
-            let _ = writeln!(out, "{DEEPER}{}: {command}", say::RUN);
+            let _ = writeln!(out, "{DEEPER}{}: {command}", say::run());
         }
         if let Some(topic) = &next.help_ref {
-            let _ = writeln!(out, "{DEEPER}{}: gil help {}", say::HELP, topic.as_str());
+            let _ = writeln!(out, "{DEEPER}{}: gil help {}", say::help(), topic.as_str());
         }
     }
 }

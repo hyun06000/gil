@@ -163,9 +163,7 @@ impl Report {
             if names.is_empty() && indent > 0 {
                 return Err(ReportSyntaxError {
                     line,
-                    detail: "이 줄의 들여쓰기가 어디에도 붙지 않는다 — 여러 줄 값이라면 \
-                             윗줄을 `이름: |` 로 열어라"
-                        .to_string(),
+                    detail: crate::locale::text("report.dangling_indent").to_string(),
                 });
             }
 
@@ -173,14 +171,14 @@ impl Report {
             let Some((name, rest)) = raw.trim().split_once(':') else {
                 return Err(ReportSyntaxError {
                     line,
-                    detail: "칸 이름이 없다 — `이름: 값` 꼴이어야 한다".to_string(),
+                    detail: crate::locale::text("report.no_name").to_string(),
                 });
             };
             let name = name.trim_end();
             if name.is_empty() || name.contains(char::is_whitespace) {
                 return Err(ReportSyntaxError {
                     line,
-                    detail: format!("{name:?} 는 칸 이름으로 쓸 수 없다 — 이름에 빈칸이 없어야 한다"),
+                    detail: crate::tr!("report.bad_name", name = format!("{name:?}")),
                 });
             }
             if let Some((_, _, got_child)) = names.last_mut() {
@@ -229,7 +227,7 @@ fn indent_of(raw: &str, line: usize) -> Result<usize, ReportSyntaxError> {
     match raw[..width].contains('\t') {
         true => Err(ReportSyntaxError {
             line,
-            detail: "들여쓰기에 탭이 있다 — 빈칸으로 들여써라".to_string(),
+            detail: crate::locale::text("report.tab_indent").to_string(),
         }),
         false => Ok(width),
     }
@@ -245,7 +243,7 @@ pub struct ReportSyntaxError {
 
 impl fmt::Display for ReportSyntaxError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}번째 줄: {}", self.line, self.detail)
+        f.write_str(&crate::tr!("report.line", line = self.line, detail = self.detail))
     }
 }
 

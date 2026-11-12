@@ -1,3 +1,4 @@
+import { t } from '../ui/locale.js';
 // Layout is independent of the Host's applied display mode.
 export function graphOrientation(mode, choice = null) {
   if (choice === 'horizontal' || choice === 'vertical') return choice;
@@ -160,23 +161,23 @@ export function updateNotice(update) {
   switch (update.state) {
     case 'available':
       return { show: true, state: 'available', version, latest,
-        label: `새 버전 ${version} 있음 · 업데이트 안내`,
-        line: `설치된 GIL ${update.installed ?? '?'} → 새 버전 ${version} 이 있습니다. 업데이트 안내를 눌러 진행 방법을 확인하세요.` };
+        label: t('upd.available_label', { version }),
+        line: t('upd.available_line', { installed: update.installed ?? '?', version }) };
     case 'unknown_installed':
       return { show: true, state: 'unknown_installed', version, latest,
-        label: `최신 ${version} · 업데이트 안내`,
-        line: `최신 버전은 ${version} 입니다. 설치된 버전은 이 Core 가 확인하지 못했습니다.` };
+        label: t('upd.unknown_label', { version }),
+        line: t('upd.unknown_line', { version }) };
     case 'up_to_date':
-      return { show: false, state: 'up_to_date', version, latest, line: `GIL ${update.installed} 은 최신 버전입니다.` };
+      return { show: false, state: 'up_to_date', version, latest, line: t('upd.up_to_date', { installed: update.installed }) };
     case 'disabled':
-      return { show: false, state: 'disabled', line: '업데이트 확인이 꺼져 있습니다.' };
+      return { show: false, state: 'disabled', line: t('upd.disabled') };
     case 'checking':
-      return { show: false, state: 'checking', line: '업데이트 정보를 확인하는 중입니다.' };
+      return { show: false, state: 'checking', line: t('upd.checking') };
     case 'not_installed':
       return { show: false, state: 'not_installed', line: null };
     default:
       return { show: false, state: update.state ?? 'unavailable',
-        line: update.error ? `업데이트 정보를 읽지 못했습니다 (${update.error}).` : null };
+        line: update.error ? t('upd.error', { error: update.error }) : null };
   }
 }
 
@@ -186,32 +187,26 @@ export function updateGuide(update) {
   const latest = update?.latest ?? {};
   const version = latest.version ?? '?';
   const common = [
-    `새 버전: ${version}${update?.installed ? ` (설치됨: ${update.installed})` : ''}`,
-    `릴리스: ${latest.release_url ?? ''}`,
-    `설치 안내: ${latest.install_doc ?? ''}`,
-    latest.notes ? `변경: ${latest.notes}` : null,
-    '열린 대화는 지금 Core 를 끝까지 쓰고, 새 대화부터 새 버전이 적용됩니다. Project 와 .gil 기록은 그대로 둡니다.',
+    t('upd.new_version', { version, installed: update?.installed ? t('upd.new_version_installed', { installed: update.installed }) : '' }),
+    t('upd.release', { url: latest.release_url ?? '' }),
+    t('upd.install_doc', { url: latest.install_doc ?? '' }),
+    latest.notes ? t('upd.notes', { notes: latest.notes }) : null,
+    t('upd.common_note'),
   ].filter(Boolean);
   if (update?.platform?.startsWith('windows')) {
-    return { title: 'Windows — GIL Companion 에서 업데이트', companion: true, steps: common.concat([
-      '1. GIL Companion 을 엽니다(아래 "Companion 열기" 또는 시작 메뉴).',
-      '2. 업데이트 확인 → 내용을 읽고 업데이트 를 누릅니다. 설치 창이 열립니다.',
-      '3. Codex·Claude Desktop 은 미리 닫지 않아도 됩니다. 두 Host 모두 같은 고정 런처를 쓰므로 다시 연결할 필요가 없습니다.',
-      '4. 새 대화에서 Monitor 연결 정보의 GIL 버전이 바뀌었는지 확인합니다.',
+    return { title: t('upd.windows_title'), companion: true, steps: common.concat([
+      t('upd.windows_step1'), t('upd.windows_step2'), t('upd.windows_step3'), t('upd.windows_step4'),
     ]) };
   }
-  return { title: 'Mac에서 GIL 업데이트하기', companion: false,
-    summary: `새 버전 ${version}${update?.installed ? ` · 현재 ${update.installed}` : ''}`,
+  return { title: t('upd.mac_title'), companion: false,
+    summary: t('upd.mac_summary', { version, installed: update?.installed ? t('upd.mac_summary_installed', { installed: update.installed }) : '' }),
     details: common.slice(1, -1),
-    steps: [
-      '아래에서 GIL을 업데이트할 앱을 선택하세요.',
-      '요청문을 복사해 내 Mac의 파일을 다룰 수 있는 에이전트의 새 대화에 붙여넣으세요. 다운로드와 설정 변경은 에이전트가 안내에 따라 처리합니다.',
-      '에이전트가 완료했다고 알려주면 업데이트한 앱을 완전히 종료했다가 다시 여세요. 새 대화에서 GIL Monitor를 열고 연결 정보의 버전을 확인하세요.',
-    ], targets: ['Codex', 'Claude Desktop', 'Codex와 Claude Desktop'].map(target => ({
+    steps: [t('upd.mac_step1'), t('upd.mac_step2'), t('upd.mac_step3')],
+    targets: ['Codex', 'Claude Desktop', t('upd.target_both')].map(target => ({
       label: target,
-      hint: target === 'Codex'
-        ? 'Codex의 새 대화에 붙여넣으세요. 업데이트가 끝난 뒤 Codex를 다시 여세요.'
-        : 'Claude 안에서 진행하면 앱 종료 뒤 설정 변경을 마칠 수 없습니다. 먼저 Codex 등 Claude 밖의 로컬 에이전트에 요청문을 전달하세요. 종료 요청을 받으면 작업을 저장하고 Claude 메뉴 → Claude 종료(⌘Q)를 누르세요. 창만 닫으면 종료되지 않습니다.',
-      request: `다음 공식 설치 안내를 읽고 이 Mac의 ${target}에서 GIL을 ${version} 버전으로 업데이트해 줘.\n${latest.install_doc ?? 'https://github.com/hyun06000/gil/blob/main/INSTALL.md'}\n터미널 명령과 설정 파일 편집을 내가 직접 하지 않도록 처리해 줘. 안내의 배포본과 버전이 다르면 임의로 설치하지 말고 차이를 알려줘. 선택한 앱의 GIL만 갱신하고 다른 설정, 기존 프로젝트, 안내 파일, .gil 기록과 Snapshot은 보존해 줘. 훅은 설치하지 마. 기존 설정을 백업하고 공식 설치 절차와 배포본 검증을 따라 줘.${target === 'Codex' ? '' : ' Claude 설정 변경 전에는 작업을 저장하고 앱을 완전히 종료하도록 안내하고, 종료를 확인한 뒤 변경해 줘.'} 완료하면 앱별 적용 버전과 다시 열어야 할 앱을 알려줘.`,
+      hint: target === 'Codex' ? t('upd.hint_codex') : t('upd.hint_claude'),
+      request: t('upd.request', { target, version,
+        doc: latest.install_doc ?? 'https://github.com/hyun06000/gil/blob/main/INSTALL.md',
+        claude_extra: target === 'Codex' ? '' : t('upd.request_claude_extra') }),
     })) };
 }

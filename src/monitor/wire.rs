@@ -47,12 +47,9 @@ pub enum WireError {
 impl std::fmt::Display for WireError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            WireError::Encode { said } => write!(f, "View 를 JSON 으로 옮기지 못했다: {said}"),
-            WireError::Decode { said } => write!(f, "JSON 을 View 로 되읽지 못했다: {said}"),
-            WireError::UnsupportedSchema { found } => write!(
-                f,
-                "schema_version {found} 은 이 판(v{SCHEMA_VERSION})이 읽을 수 없다"
-            ),
+            WireError::Encode { said } => f.write_str(&crate::tr!("mon.wire.encode", said = said)),
+            WireError::Decode { said } => f.write_str(&crate::tr!("mon.wire.decode", said = said)),
+            WireError::UnsupportedSchema { found } => f.write_str(&crate::tr!("mon.wire.schema", found = found, version = SCHEMA_VERSION)),
         }
     }
 }

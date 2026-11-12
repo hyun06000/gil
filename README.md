@@ -261,6 +261,9 @@ GIL은 모델의 비공개 chain-of-thought를 저장하려는 시스템이 아�
 - Rust 단일 MCP 실행 파일의 17개 도구와 내장 MCP App (설치본 실행에 Node 불필요)
 - Codex MCP fullscreen의 가로 DAG·접기·선택 카드·상세 Report·자동 갱신
 - Codex 대화 왕복 및 Host 재시작 뒤 수동 재연결 없는 기본 Monitor 복원
+- 다국어: Core 응답·안내·Monitor 화면이 en(기준·fallback)·ko·zh-Hans·zh-Hant·ja 테이블로 나뉜다.
+  Monitor App은 Host의 `locale`을, Core는 `gil_start`의 선택 필드 `locale`(없으면 App이 보고한 Host locale,
+  그것도 없으면 기본값 ko)을 따르고 프로젝트 단위로 기억한다. 기존 저장 형식과 Host별 분기는 바꾸지 않았다
 
 ### 확인됨
 

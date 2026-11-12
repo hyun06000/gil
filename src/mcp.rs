@@ -5,6 +5,8 @@ use rmcp::model::*;
 use rmcp::service::RequestContext;
 use std::sync::{Arc, Mutex};
 use serde_json::Value;
+use crate::locale::{self, Locale, DEFAULT_LOCALE, text};
+use crate::tr;
 mod monitor;
 mod presence;
 mod update;
@@ -65,7 +67,19 @@ impl GilServer {
                 .and_then(|root| actions::resolve_root(root).ok())
         } else { None };
         if let Some((root, _)) = &normalized_note { input["project_root"] = serde_json::json!(root); }
-        let mut result = self.dispatch(name.clone(), input.clone()).await;
+        // The language of this answer: the Agent's explicit choice on gil_start, else what the
+        // Project remembers (gil_start > latest App presence), else the Core default. Reading the
+        // memory touches the record folder, so it runs on a worker like every other Core read.
+        let explicit = if name == "gil_start" { input.get("locale").and_then(Value::as_str).map(Locale::normalize) } else { None };
+        let locale = match explicit {
+            Some(chosen) => chosen,
+            None => {
+                let monitor = self.monitor.clone();
+                let (for_name, for_input) = (name.clone(), input.clone());
+                tokio::task::spawn_blocking(move || locale_for_call(&monitor, &for_name, &for_input)).await.unwrap_or(DEFAULT_LOCALE)
+            }
+        };
+        let mut result = self.dispatch(name.clone(), input.clone(), locale).await;
         let succeeded = result.is_error != Some(true)
             && result.structured_content.as_ref().is_none_or(|v| v["ok"] != false);
         if name == "gil_start" && succeeded
@@ -74,38 +88,43 @@ impl GilServer {
             // that success into a failed start or encourage a duplicate creation.
             let monitor = self.monitor.clone();
             let root = input["project_root"].as_str().unwrap_or_default().to_owned();
-            let prepared = monitor::run(move || monitor.prepare(&root)).await;
-            if let Some(scope) = prepared.structured_content.as_ref()
-                .filter(|_| prepared.is_error != Some(true))
-                .and_then(|v| v["scope_id"].as_str()) {
-                let call = format!("show_gil_monitor({})", serde_json::json!({"scope_id": scope}));
-                // Some Hosts expose structuredContent without the surrounding text blocks.
-                // Keep the CLI receipt intact, but carry the same prepared handoff there too.
-                if let Some(fields) = result.structured_content.as_mut().and_then(serde_json::Value::as_object_mut) {
-                    fields.insert("next_call".into(), serde_json::json!({
-                        "name": "show_gil_monitor", "arguments": {"scope_id": scope}
-                    }));
-                }
-                // The handoff also closes the receipt, after the body's `실행: gil open` line, so the
-                // last word of the start receipt is the one next call on every Host. `said` itself
-                // stays byte-identical to the CLI receipt.
-                result.content.push(ContentBlock::text(format!(
-                    "Monitor: 다음 호출은 하나다 — {call}. 위 ‘실행’의 gil open은 그 다음이다. Codex와 Claude Desktop의 Claude Code 탭에서 같다.")));
-                guidance::prepend(&mut result, format!(
-                    "GIL 시작은 성공했다. Monitor 준비도 완료했다. 다음 호출은 하나다: {call}. 이 호출은 Host 종류와 무관하게 gil_open보다 먼저이며, 인자는 그대로 복사한다. 그 뒤 같은 project_root로 첫 Interview의 gil_open을 호출한다. gil_start나 gil_monitor_prepare를 반복하지 않는다. 화면이 보인다고 아직 단정하지 않는다."));
-            } else {
-                let detail = prepared.structured_content.as_ref()
-                    .and_then(|v| v["said"].as_str()).unwrap_or("Monitor 준비 결과를 확인하지 못했다");
-                guidance::prepend(&mut result, format!(
-                    "GIL 시작은 성공했으나 Monitor 준비는 실패했다: {detail}. gil_start를 반복하지 않는다. 표시 실패를 사용자에게 알리고 기록된 Interview를 이어간다. Monitor 재시도는 일시적 실패일 때만 gil_monitor_prepare로 한 번 한다."));
+            if let Some(chosen) = explicit {
+                // The Agent named the user's language: remember it beside the new record. A
+                // failure to write the sidecar never changes the successful start.
+                let at = root.clone();
+                let _ = tokio::task::spawn_blocking(move || locale::remember_start(std::path::Path::new(&at), chosen)).await;
             }
+            let prepared = monitor::run(move || monitor.prepare(&root)).await;
+            locale::with(locale, || {
+                if let Some(scope) = prepared.structured_content.as_ref()
+                    .filter(|_| prepared.is_error != Some(true))
+                    .and_then(|v| v["scope_id"].as_str()) {
+                    let call = format!("show_gil_monitor({})", serde_json::json!({"scope_id": scope}));
+                    // Some Hosts expose structuredContent without the surrounding text blocks.
+                    // Keep the CLI receipt intact, but carry the same prepared handoff there too.
+                    if let Some(fields) = result.structured_content.as_mut().and_then(serde_json::Value::as_object_mut) {
+                        fields.insert("next_call".into(), serde_json::json!({
+                            "name": "show_gil_monitor", "arguments": {"scope_id": scope}
+                        }));
+                    }
+                    // The handoff also closes the receipt, after the body's `Run: gil open` line, so the
+                    // last word of the start receipt is the one next call on every Host. `said` itself
+                    // stays byte-identical to the CLI receipt.
+                    result.content.push(ContentBlock::text(tr!("mcp.start_handoff", call = call)));
+                    guidance::prepend(&mut result, tr!("mcp.start_ok", call = call));
+                } else {
+                    let detail = prepared.structured_content.as_ref()
+                        .and_then(|v| v["said"].as_str()).unwrap_or(text("mcp.prepare_unknown"));
+                    guidance::prepend(&mut result, tr!("mcp.start_monitor_failed", detail = detail));
+                }
+            });
         } else if name == "gil_monitor_prepare" && result.is_error != Some(true) {
             if let Some(scope) = result.structured_content.as_ref().and_then(|v| v["scope_id"].as_str()) {
-                let hint = format!("다음 호출: show_gil_monitor({}). 준비만으로 화면이 표시되지는 않는다.", serde_json::json!({"scope_id": scope}));
+                let hint = locale::with(locale, || tr!("mcp.prepare_next", scope = serde_json::json!({"scope_id": scope})));
                 guidance::prepend(&mut result, hint);
             }
         }
-        guidance::after(&name, &mut result);
+        locale::with(locale, || guidance::after(&name, &mut result));
         if project_use && succeeded && name != "gil_start" && name != "gil_monitor_prepare" {
             let monitor = self.monitor.clone();
             let root = input["project_root"].as_str().unwrap_or_default().to_owned();
@@ -114,37 +133,38 @@ impl GilServer {
                 if status["should_open"] == true { monitor.prepare(&root)?; }
                 Ok(status)
             }).await;
-            if health.is_error != Some(true) {
-                if let Some(status) = health.structured_content.as_ref() {
-                    if status["display_mode"] == "inline" {
-                        // The App's own account of its automatic attempt chooses the guidance; the Core never guesses Host policy.
-                        let hint = match status["automatic_fullscreen"].as_str() {
-                            Some("refused") => "Monitor는 inline 미리보기로 확인됐고 App 보고에 따르면 Host가 App 안의 새 클릭이 필요하다고 응답했다. fullscreen 표시 완료라고 보고하지 않는다. 사용자에게 Monitor 카드 안을 한 번 클릭하거나 ‘모니터 펼치기’를 누르라고 안내한다. 표시 문제와 GIL 진행은 별개다; 아래 다음 GIL 호출을 계속한다.",
-                            Some("error") => "Monitor는 inline 미리보기로 확인됐지만 자동 fullscreen 요청의 결과는 오류로 확인하지 못했다. 타임아웃·연결 문제 등을 특정 Host 정책으로 단정하지 않는다. 연결 상태를 확인하거나 ‘모니터 펼치기’로 재요청하도록 안내한다. 표시 문제와 GIL 진행은 별개다; 아래 다음 GIL 호출을 계속한다.",
-                            Some("unavailable") => "Monitor는 inline 미리보기로 확인됐고 이 Host 표면은 fullscreen을 광고하지 않는다. fullscreen 표시 완료라고 보고하지 않는다. 위젯 머리의 ‘다른 패널에 표시’ 또는 Host의 확대 버튼을 안내한다. 표시 문제와 GIL 진행은 별개다; 아래 다음 GIL 호출을 계속한다.",
-                            _ => "Monitor는 inline 미리보기로만 확인됐다. fullscreen 표시 완료라고 보고하지 않는다. Host가 자동 확대를 받아들이지 않으면 위젯 머리의 ‘다른 패널에 표시’ 또는 Host의 확대 버튼을 안내한다. 표시 문제와 GIL 진행은 별개다; 아래 다음 GIL 호출을 계속한다.",
-                        };
-                        guidance::prepend(&mut result, hint);
-                    } else if status["state"] == "unconfirmed" {
-                        guidance::prepend(&mut result, "MCP App Monitor가 두 번의 표시 요청에도 응답하지 않았다. 자동 재열기를 멈추고 표시 문제를 알린다. Companion을 자동으로 열지 않는다.");
-                    } else if status["should_open"] == true {
-                        // A lost/Host-rejected start receipt can be recovered through context,
-                        // including on Hosts that expose only structuredContent to the model.
-                        if name == "gil_context" {
-                            if let Some(fields) = result.structured_content.as_mut().and_then(Value::as_object_mut) {
-                                fields.insert("next_call".into(), serde_json::json!({
-                                    "name": "show_gil_monitor", "arguments": {"scope_id": status["scope_id"]}
-                                }));
+            locale::with(locale, || {
+                if health.is_error != Some(true) {
+                    if let Some(status) = health.structured_content.as_ref() {
+                        if status["display_mode"] == "inline" {
+                            // The App's own account of its automatic attempt chooses the guidance; the Core never guesses Host policy.
+                            let hint = match status["automatic_fullscreen"].as_str() {
+                                Some("refused") => text("mcp.inline_refused"),
+                                Some("error") => text("mcp.inline_error"),
+                                Some("unavailable") => text("mcp.inline_unavailable"),
+                                _ => text("mcp.inline_default"),
+                            };
+                            guidance::prepend(&mut result, hint);
+                        } else if status["state"] == "unconfirmed" {
+                            guidance::prepend(&mut result, text("mcp.unconfirmed"));
+                        } else if status["should_open"] == true {
+                            // A lost/Host-rejected start receipt can be recovered through context,
+                            // including on Hosts that expose only structuredContent to the model.
+                            if name == "gil_context" {
+                                if let Some(fields) = result.structured_content.as_mut().and_then(Value::as_object_mut) {
+                                    fields.insert("next_call".into(), serde_json::json!({
+                                        "name": "show_gil_monitor", "arguments": {"scope_id": status["scope_id"]}
+                                    }));
+                                }
                             }
+                            guidance::prepend(&mut result, tr!("mcp.should_open",
+                                state = status["state"], scope = serde_json::json!({"scope_id":status["scope_id"]})));
                         }
-                        guidance::prepend(&mut result, format!(
-                            "MCP App Monitor가 표시 중이라는 신호가 없다 ({}). 작업을 계속하기 전에 show_gil_monitor({})를 한 번 호출한다. Companion으로 대체하지 않는다. 호출 성공만으로 표시됐다고 말하지 않는다.",
-                            status["state"], serde_json::json!({"scope_id":status["scope_id"]})));
                     }
+                } else {
+                    guidance::prepend(&mut result, text("mcp.status_unknown"));
                 }
-            } else {
-                guidance::prepend(&mut result, "MCP App Monitor 표시 상태를 확인하지 못했다. 표시 성공으로 보고하지 않는다. 기록된 작업 결과는 유지한다.");
-            }
+            });
         }
         if project_use && succeeded {
             let session = self.companion_session.clone();
@@ -165,60 +185,62 @@ impl GilServer {
     pub fn status_said(root: &str) -> Result<String, String> {
         crate::command::action(&["status".into()], Some(std::path::Path::new(root)), "")
     }
-    async fn dispatch(&self, name: String, input: Value) -> CallToolResult {
+    /// Every worker that produces user-facing text runs under `locale`; the receipt and the
+    /// guidance that reads it therefore always speak the same language.
+    async fn dispatch(&self, name: String, input: Value, locale: Locale) -> CallToolResult {
         if name == "gil_await_user" {
-            return tokio::task::spawn_blocking(move || match crate::write_guard::automatic::await_user(
+            return tokio::task::spawn_blocking(move || locale::with(locale, || match crate::write_guard::automatic::await_user(
                 input["project_root"].as_str().unwrap_or_default(), input["question"].as_str().unwrap_or_default()) {
                 Ok(wait) => {
-                    let mut result = CallToolResult::success(vec![ContentBlock::text(format!("사용자 입력 대기: {}. 응답 마지막에 이 질문을 그대로 적는다. 사용자 답변 후 gil_context로 같은 단계를 이어간다. 완료·승인 기록은 바뀌지 않았다.", wait["question"].as_str().unwrap_or_default()))]);
+                    let mut result = CallToolResult::success(vec![ContentBlock::text(tr!("mcp.await_user", question = wait["question"].as_str().unwrap_or_default()))]);
                     result.structured_content = Some(serde_json::json!({"ok":true,"handoff":wait})); result
                 }
                 Err(error) => actions::refusal(error),
-            }).await.unwrap_or_else(|_| actions::refusal("사용자 대기 상태를 확인하지 못했다. gil_context로 현재 단계를 확인한다."));
+            })).await.unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "mcp.await_user_failed")));
         }
         #[cfg(feature = "product-safety")]
         if name.starts_with("gil_revisit_") {
             let monitor = self.monitor.clone(); let grants = self.recovery_grants.clone();
-            return tokio::task::spawn_blocking(move || recovery::call(&monitor, &grants, &name, input)).await
-                .unwrap_or_else(|_| actions::refusal("복원 결과가 불확실하다. Monitor에서 다시 읽는다. 기존 보존본을 삭제하지 않는다."));
+            return tokio::task::spawn_blocking(move || locale::with(locale, || recovery::call(&monitor, &grants, &name, input))).await
+                .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "mcp.revisit_uncertain")));
         }
         #[cfg(feature = "approved-plan")]
         if name.starts_with("gil_plan_") {
             let monitor = self.monitor.clone();
             let grants = self.plan_grants.clone();
-            return tokio::task::spawn_blocking(move || plans::call(&monitor, &grants, &name, input)).await
-                .unwrap_or_else(|_| actions::refusal("승인 기록 결과가 불확실하다. gil_plan_read로 확인한다."));
+            return tokio::task::spawn_blocking(move || locale::with(locale, || plans::call(&monitor, &grants, &name, input))).await
+                .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "mcp.plan_uncertain")));
         }
         #[cfg(feature = "visual-authoring")]
         if name.starts_with("gil_migration_") {
-            return tokio::task::spawn_blocking(move || migration::call(&name, input)).await
-                .unwrap_or_else(|_| actions::refusal("이관 결과가 불확실하다. 기록과 백업을 보존하고 gil_migration_status만 읽는다. 자동 재시도하지 않는다."));
+            return tokio::task::spawn_blocking(move || locale::with(locale, || migration::call(&name, input))).await
+                .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "mcp.migration_uncertain")));
         }
         #[cfg(all(feature = "visual-authoring", windows))]
         if name == workspace::NAME {
-            return tokio::task::spawn_blocking(move || workspace::call(input)).await
-                .unwrap_or_else(|_| actions::refusal("작업 폴더 준비 결과가 불확실하다. 폴더 존재 여부를 확인하고 반복하지 않는다."));
+            return tokio::task::spawn_blocking(move || locale::with(locale, || workspace::call(input))).await
+                .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "mcp.workspace_uncertain")));
         }
         #[cfg(feature = "visual-authoring")]
         if name == "gil_report_visuals" || (name == "gil_close" && input.get("visuals").is_some()) {
-            return tokio::task::spawn_blocking(move || authoring::call(&name, input)).await
-                .unwrap_or_else(|_| actions::refusal("확정 여부를 알 수 없다. gil_report_visuals로 확인하고 close를 반복하지 않는다."));
+            return tokio::task::spawn_blocking(move || locale::with(locale, || authoring::call(&name, input))).await
+                .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "mcp.visual_uncertain")));
         }
         if actions::NAMES.contains(&name.as_str()) {
-            return tokio::task::spawn_blocking(move || actions::call(&name, &input)).await
-                .unwrap_or_else(|_| actions::refusal("GIL 동작을 끝내지 못했다. 상태를 확인한 뒤 이어간다."));
+            return tokio::task::spawn_blocking(move || locale::with(locale, || actions::call(&name, &input))).await
+                .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "mcp.action_unfinished")));
         }
         if matches!(name.as_str(), "gil_companion_status" | "show_gil_companion") {
             let gate = self.native_gate.clone();
-            return tokio::task::spawn_blocking(move || {
-                let Ok(_guard) = gate.lock() else { return actions::refusal("Monitor 연결을 확인하지 못했다."); };
+            return tokio::task::spawn_blocking(move || locale::with(locale, || {
+                let Ok(_guard) = gate.lock() else { return actions::refusal(text("mcp.companion_unavailable")); };
                 native::call(name == "show_gil_companion")
-            }).await.unwrap_or_else(|_| actions::refusal("Monitor 연결을 확인하지 못했다."));
+            })).await.unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "mcp.companion_unavailable")));
         }
         let monitor = self.monitor.clone();
         let show = name == "show_gil_monitor";
         let visual = matches!(name.as_str(), "gil_monitor_report_visuals" | "gil_monitor_report_image");
-        let mut got = monitor::run(move || {
+        let mut got = monitor::run(move || locale::with(locale, || {
             let scope = input["scope_id"].as_str().unwrap_or_default();
             match name.as_str() {
                 "gil_monitor_report_visuals" => visuals::call(&monitor, &input, false),
@@ -228,16 +250,38 @@ impl GilServer {
                 "show_gil_monitor" => monitor.show(scope),
                 "gil_monitor_status" => monitor.presence_status(input["project_root"].as_str().unwrap_or_default()),
                 "gil_monitor_detail" => monitor.detail(scope, input["step_ref"].as_str().unwrap_or_default()),
-                "gil_monitor_poll" => monitor.app_poll(scope, &input),
-                _ => Err(monitor::Refusal::new("unavailable", "알 수 없는 Monitor 동작")),
+                "gil_monitor_poll" => {
+                    let hint = monitor.app_poll(scope, &input)?;
+                    // The App's Host locale is remembered for the Project so later Core texts match the
+                    // Monitor's language. The Monitor itself stays read-only; this is a display preference
+                    // beside the record, never part of it, and its failure never fails the poll.
+                    if let Some(tag) = input["locale"].as_str() {
+                        if let Ok(root) = monitor.root(scope) { let _ = locale::remember_app(&root, Locale::normalize(tag)); }
+                    }
+                    Ok(hint)
+                }
+                _ => Err(monitor::Refusal::new("unavailable", text("mcp.unknown_monitor_action"))),
             }
-        }).await;
+        })).await;
         if visual { got = visuals::bounded(got); }
         if show && got.is_error != Some(true) {
-            got.content = vec![ContentBlock::text("GIL Monitor 데이터를 준비했다. App은 가로보기로 시작하고 fullscreen을 광고한 Host에는 연결 직후와 Monitor 준비 뒤 스스로 fullscreen을 요청하며, 그래도 inline이면 사용자의 첫 클릭에 다시 요청한다. 그대로라면 사용자가 Monitor를 한 번 클릭하거나 모니터 펼치기를 누른다. 이 응답만으로 화면 표시나 지속 표시 성공을 판정하지 않는다.")];
+            got.content = vec![ContentBlock::text(locale::text_in(locale, "mcp.show_monitor"))];
         }
         got
     }
+}
+
+/// The Project whose language this call speaks: by `project_root` for model-facing tools, by the
+/// App's `scope_id` for Monitor tools. Nothing is prepared or registered here; an unknown scope
+/// simply speaks the default.
+fn locale_for_call(monitor: &Monitor, name: &str, input: &Value) -> Locale {
+    let root = match input.get("project_root").and_then(Value::as_str) {
+        Some(root) if std::path::Path::new(root).is_absolute() => Some(std::path::PathBuf::from(root)),
+        _ if name.starts_with("gil_monitor_") || matches!(name, "show_gil_monitor" | "gil_plan_review" | "gil_plan_decide" | "gil_revisit_review" | "gil_revisit_apply") =>
+            input.get("scope_id").and_then(Value::as_str).and_then(|scope| monitor.root(scope).ok()),
+        _ => None,
+    };
+    root.as_deref().map(locale::for_project).unwrap_or(DEFAULT_LOCALE)
 }
 impl ServerHandler for GilServer {
     fn get_info(&self) -> ServerConfig {
@@ -281,7 +325,7 @@ pub fn serve_stdio() -> Result<(), String> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_time()
         .build()
-        .map_err(|err| format!("MCP 실행기를 세우지 못했다: {err}"))?;
+        .map_err(|err| tr!("mcp.runtime_failed", err = err))?;
 
     runtime.block_on(async {
         let server = GilServer::with_companion_endpoint(std::env::var_os(crate::companion_ipc::ENV_ENDPOINT).map(Into::into));
@@ -292,13 +336,13 @@ pub fn serve_stdio() -> Result<(), String> {
             // **손님이 말없이 떠난 것은 고장이 아니다.** Host 가 server 를 세워 두고
             // 초기화 없이 닫는 일은 흔하다 — 조용히 0 으로 끝낸다.
             Err(rmcp::service::ServerInitializeError::ConnectionClosed(_)) => return Ok(()),
-            Err(err) => return Err(format!("MCP 연결을 세우지 못했다: {err}")),
+            Err(err) => return Err(tr!("mcp.connect_failed", err = err)),
         };
         // stdin 이 닫히면 여기서 깨끗이 돌아온다. `Closed`·`Cancelled` 는 **끝난 것**이지
         // 실패가 아니다. 매달려 기다리지 않는다.
         let result = match service.waiting().await {
             Ok(_) => Ok(()),
-            Err(err) => Err(format!("MCP 연결이 끊겼다: {err}")),
+            Err(err) => Err(tr!("mcp.disconnected", err = err)),
         };
         // rmcp handler clones may outlive waiting(); the transport owns this disconnect.
         if let Ok(mut session) = companion_session.lock() { session.close(); }

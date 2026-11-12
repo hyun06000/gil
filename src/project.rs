@@ -1169,66 +1169,33 @@ impl std::fmt::Display for ActionError {
         match self {
             ActionError::Plan(reason) => write!(f, "{reason}"),
             ActionError::Chain(reason) => write!(f, "{reason}"),
-            ActionError::Visual(reason) => write!(f, "시각 Report를 확정하지 못했다: {reason}"),
+            ActionError::Visual(reason) => f.write_str(&crate::tr!("action.visual_failed", reason = reason)),
             ActionError::Registry(source) => write!(f, "{source}"),
-            ActionError::NothingOpen => write!(f, "지금 열려 있는 실행형 자리가 없다"),
-            ActionError::WillAlreadyActive { will, target } => write!(
-                f,
-                "{will} 이(가) 이미 {target} 에 걸려 있다 — 지금 하려는 행동은 하나다.\n\
-                 그 자리를 먼저 닫아라"
-            ),
-            ActionError::NoActiveWill { target } => write!(
-                f,
-                "{target} 이(가) 열려 있는데 걸린 행동이 없다 — 실행형 자리는 Will 과 함께 \
-                 열린다. 이 파일은 걸어서 만든 것이 아니다"
-            ),
-            ActionError::WillTargetsElsewhere { will, target, here } => write!(
-                f,
-                "{will} 은(는) {target} 을(를) 향하는데 지금 닫으려는 자리는 {here} 다"
-            ),
+            ActionError::NothingOpen => f.write_str(crate::locale::text("action.nothing_open")),
+            ActionError::WillAlreadyActive { will, target } => f.write_str(&crate::tr!("action.will_active", will = will, target = target)),
+            ActionError::NoActiveWill { target } => f.write_str(&crate::tr!("action.no_active_will", target = target)),
+            ActionError::WillTargetsElsewhere { will, target, here } => f.write_str(&crate::tr!("action.will_elsewhere", will = will, target = target, here = here)),
             ActionError::WillOfAnotherExistence {
                 will,
                 owner,
                 current,
-            } => write!(
-                f,
-                "{will} 의 주인은 {owner} 이고 지금 행동하는 것은 {current} 다"
-            ),
+            } => f.write_str(&crate::tr!("action.will_other_existence", will = will, owner = owner, current = current)),
             ActionError::NotTheOwner {
                 target,
                 owner,
                 current,
-            } => write!(
-                f,
-                "{target} 을(를) 연 것은 {owner} 이고 지금 행동하는 것은 {current} 다 — \
-                 하나의 Node 를 시작한 존재와 끝내는 존재는 같아야 한다"
-            ),
+            } => f.write_str(&crate::tr!("action.not_owner", target = target, owner = owner, current = current)),
             ActionError::CycleNotOwned {
                 cycle,
                 owner,
                 current,
-            } => write!(
-                f,
-                "{cycle} 을(를) 연 것은 {owner} 이고 지금 행동하는 것은 {current} 다"
-            ),
-            ActionError::InnerStepStillOpen { cycle, step } => write!(
-                f,
-                "{cycle} 안의 {step} 이(가) 아직 열려 있다 — 안이 끝나야 그릇이 닫힌다"
-            ),
-            ActionError::WillStillActive { will, target } => write!(
-                f,
-                "{will} 이(가) {target} 에 아직 걸려 있다 — 컨테이너를 닫기 전에 \
-                 그 행동을 끝낸다"
-            ),
+            } => f.write_str(&crate::tr!("action.cycle_not_owned", cycle = cycle, owner = owner, current = current)),
+            ActionError::InnerStepStillOpen { cycle, step } => f.write_str(&crate::tr!("action.inner_step_open", cycle = cycle, step = step)),
+            ActionError::WillStillActive { will, target } => f.write_str(&crate::tr!("action.will_still_active", will = will, target = target)),
             ActionError::Cycle(err) => write!(f, "{err}"),
             ActionError::CycleReport { source, .. } => write!(f, "{source}"),
             ActionError::CycleDirection { source, .. } => write!(f, "{source}"),
-            ActionError::RevisitPending { from, target } => write!(
-                f,
-                "{from} 에서 {target} 로 되돌아온 자리다 — 아직 새 Cycle 이 없어 \
-                 Step 을 열거나 닫을 자리가 없다.\n\
-                 먼저 이 자리 아래에 새 Cycle 을 연다: `gil open interview` · `gil open experiment`"
-            ),
+            ActionError::RevisitPending { from, target } => f.write_str(&crate::tr!("action.revisit_pending", from = from, target = target)),
         }
     }
 }

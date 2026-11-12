@@ -99,6 +99,8 @@ pub fn valid_input(tool: &Tool, input: &Value) -> bool {
     }
     if tool.name == "gil_await_user" && input.as_object().is_none_or(|v| v.keys().any(|k| !matches!(k.as_str(), "project_root" | "question"))) { return false; }
     if tool.name == "gil_monitor_poll" && !super::presence::valid(input) { return false; }
+    // The optional language tag has the same bounds everywhere it travels.
+    if tool.name == "gil_start" && !input.get("locale").is_none_or(super::presence::locale_tag_valid) { return false; }
     let Some(object) = input.as_object() else { return false; };
     let schema = &tool.input_schema;
     let Some(properties) = schema.get("properties").and_then(Value::as_object) else { return false; };

@@ -133,3 +133,77 @@ fn a_preserved_reinterview_request_never_hides_the_legal_next_call() {
     mcp.done();
     std::fs::remove_dir_all(root).ok(); std::fs::remove_dir_all(settings).ok();
 }
+
+// Both macOS and Windows CI already execute this guidance suite in the approval profile.
+// Language is presentation only, including after a real MCP process restart.
+mod locale_preservation {
+use super::{common, support};
+use support::{Mcp, hints, ok, said, scope_from_start, scratch};
+use std::path::{Path, PathBuf};
+use std::collections::BTreeMap;
+use gil::{Locale, locale::text_in};
+use serde_json::{Value, json};
+
+fn speaks(result: &Value, locale: Locale) -> bool {
+    let all = format!("{}\n{}", hints(result), said(result));
+    all.contains(text_in(locale, "guide.file_boundary")) || all.contains(text_in(locale, "guide.start"))
+}
+
+fn files(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
+    fn visit(path: &Path, out: &mut BTreeMap<PathBuf, Vec<u8>>) {
+        if !path.exists() { return; }
+        for entry in std::fs::read_dir(path).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            assert!(!entry.file_type().unwrap().is_symlink());
+            if path.is_dir() { visit(&path, out); }
+            else if path.file_name().unwrap() != gil::locale::MEMORY_FILE {
+                out.insert(path.clone(), std::fs::read(path).unwrap());
+            }
+        }
+    }
+    let mut out = BTreeMap::new(); visit(root, &mut out); out
+}
+
+fn project_bytes(root: &Path, settings: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
+    let mut out = files(root);
+    out.extend(files(&settings.join("LocalAppData")));
+    out
+}
+
+#[test]
+fn locale_switch_and_restart_preserve_historical_and_current_records_snapshots_and_guides() {
+    for historical in [true, false] {
+        let settings = scratch(if historical { "preserve-old-settings" } else { "preserve-new-settings" });
+        let root = scratch(if historical { "preserve-old-project" } else { "preserve-new-project" });
+        if historical {
+            // Real empty Snapshot objects plus a synthetic format-4 record; no user data.
+            common::sow_world(&root);
+            support::legacy_record(&root);
+        }
+        std::fs::write(root.join("report.md"), "Existing report bytes.\n").unwrap();
+        std::fs::write(root.join("AGENTS.md"), "Existing Codex guidance.\n").unwrap();
+        std::fs::write(root.join("CLAUDE.md"), "Existing Claude guidance.\n").unwrap();
+        let mut mcp = Mcp::serve(&settings);
+        let scope = if historical {
+            let prepared = ok(mcp.call("gil_monitor_prepare", &root, json!({})), "prepare legacy");
+            prepared["structuredContent"]["scope_id"].as_str().unwrap().to_owned()
+        } else { scope_from_start(&ok(mcp.call("gil_start", &root, json!({})), "start")) };
+        let before = project_bytes(&root, &settings);
+        assert!(before.keys().any(|p| p.file_name().unwrap() == "state.yaml"));
+        assert!(before.keys().any(|p| p.components().any(|c| c.as_os_str() == "manifests")), "real Snapshot objects");
+        for (n, tag, language) in [(1_u32, "en-US", Locale::En), (2, "zh-TW", Locale::ZhHant), (3, "ja-JP", Locale::Ja)] {
+            ok(mcp.call_raw("gil_monitor_poll", json!({"scope_id": scope, "instance_id": "locale-preservation", "sequence": n.to_string(), "presentation": "inline", "locale": tag})), "locale poll");
+            let context = ok(mcp.call("gil_context", &root, json!({})), "context");
+            assert!(speaks(&context, language));
+            assert_eq!(project_bytes(&root, &settings), before, "locale must not rewrite records, objects or user guidance");
+        }
+        mcp.done();
+        let mut restarted = Mcp::serve(&settings);
+        assert!(speaks(&ok(restarted.call("gil_context", &root, json!({})), "restart context"), Locale::Ja));
+        assert_eq!(project_bytes(&root, &settings), before);
+        restarted.done();
+    }
+}
+
+}

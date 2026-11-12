@@ -30,7 +30,8 @@ const deferred = () => {
 };
 const settle = () => new Promise(done => setImmediate(done));
 const data = { scope_id: `project:${'a'.repeat(64)}`, view: {}, watching: true };
-function fixture({ modes = ['inline', 'fullscreen'], mode = 'inline', answer, hostContext = {}, clipboard } = {}) {
+// The existing assertions read Korean; a Host without a locale is covered by its own test below.
+function fixture({ modes = ['inline', 'fullscreen'], mode = 'inline', answer, hostContext = { locale: 'ko-KR' }, clipboard } = {}) {
   const connected = deferred(), rendered = deferred(), calls = [], directions = [], native = [], observations = [];
   const timers = new Map(), documentEvents = new Map(), windowEvents = new Map();
   let serial = 0, ticks = 0, refreshes = 0, tickWork = async () => {};
@@ -528,4 +529,28 @@ test('a transient timeout can recover automatically and manual inline still canc
   assert.equal(g.observations.at(-1).automatic_fullscreen, 'manual');
   assert.equal([...g.timers.values()].filter(t => [1500, 4000].includes(t.ms)).length, 0);
   const count = g.calls.length; await g.pointerdown(); assert.equal(g.calls.length, count);
+});
+
+test('the Host locale chooses the Monitor language and travels with presence; a silent Host gets English and no locale field', async () => {
+  const { TABLES } = await import('../ui/locale.js');
+  const said = (locale, key) => TABLES[locale][key] ?? TABLES.en[key];
+  for (const [tag, locale] of [['en-US', 'en'], ['ko-KR', 'ko'], ['zh-TW', 'zh-Hant'], ['ja-JP', 'ja']]) {
+    const f = fixture({ hostContext: { locale: tag } }); await f.start();
+    assert.equal(f.element('host-say').textContent, said(locale, 'app.fullscreen_applied'), tag);
+    assert.equal(f.element('layout').textContent, said(locale, 'app.layout_vertical'), tag);
+    assert.equal(f.observations.at(-1).locale, locale, `${tag} presence carries the normalized Host locale`);
+    const evidence = JSON.parse(f.element('host-evidence').textContent);
+    assert.deepEqual(evidence.locale, { host: tag, chosen: locale });
+    assert.deepEqual(f.native, []);
+  }
+  const silent = fixture({ hostContext: {} }); await silent.start();
+  assert.equal(silent.element('host-say').textContent, TABLES.en['app.fullscreen_applied']);
+  assert.equal(Object.hasOwn(silent.observations.at(-1), 'locale'), false, 'nothing is asserted for a Host that said nothing');
+  assert.deepEqual(JSON.parse(silent.element('host-evidence').textContent).locale, { host: null, chosen: 'en' });
+  // A Host that changes its locale re-labels the App and re-reads the graph once.
+  const before = silent.refreshes();
+  silent.app.onhostcontextchanged({ locale: 'ko-KR' }); await settle();
+  assert.equal(silent.element('layout').textContent, TABLES.ko['app.layout_vertical']);
+  assert.equal(silent.observations.at(-1).locale, 'ko');
+  assert.equal(silent.refreshes(), before + 1);
 });

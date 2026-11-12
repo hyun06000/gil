@@ -15,6 +15,8 @@
 //! [`StepRules::close_requires`]: crate::StepRules::close_requires
 
 use std::fmt::Write as _;
+use crate::locale::text;
+use crate::tr;
 
 use crate::cycle::{Cycle, CycleKind};
 use crate::cycles::Cycles;
@@ -44,21 +46,21 @@ fn write_cycle_banner(out: &mut String, cycles: &Cycles, cycle: &Cycle) {
         out.push('\n');
     }
     let state = match cycle.is_closed() {
-        true => "닫힘",
-        false => "걷는 중",
+        true => text("story.closed"),
+        false => text("story.walking"),
     };
     let _ = write!(out, "═══ {} · {} · {state}", cycle.id(), cycle.kind());
     // **갈래로 난 Cycle 은 그렇게 말한다.** 부모만 보이면 평범히 이어 난 것과 구별되지
     // 않는데, 이 Cycle 은 어느 실패에서 갈라져 나온 것이다.
     if let Some(from) = cycle.revisit_from() {
-        let _ = write!(out, " · {from} 에서 갈라짐");
+        out.push_str(&tr!("story.branched", from = from));
     }
     match cycle.parent() {
         Some(parent) => {
-            let _ = writeln!(out, " · {parent} 에서 이어받음 ═══");
+            out.push_str(&tr!("story.inherited_from", parent = parent));
         }
         None => {
-            let _ = writeln!(out, " · 뿌리 ═══");
+            out.push_str(text("story.root"));
         }
     }
     write_inherited(out, cycles, cycle);
@@ -75,14 +77,14 @@ fn write_inherited(out: &mut String, cycles: &Cycles, cycle: &Cycle) {
     let Some(report) = cycles.inherited_report(cycle.id()) else {
         return;
     };
-    let _ = writeln!(out, "\n[이어받은 것]");
-    let _ = writeln!(out, "  {parent} 의 판정");
+    out.push_str(text("story.inherited_head"));
+    out.push_str(&tr!("story.parent_verdict", parent = parent));
     if let Some(verdict) = report.get(VERDICT) {
         let _ = writeln!(out, "    {}", say(VERDICT, verdict));
     }
     if let Some(summary) = report.get(HANDOFF_SUMMARY) {
         out.push('\n');
-        let _ = writeln!(out, "  {parent} 이(가) 넘긴 것");
+        out.push_str(&tr!("story.parent_handed", parent = parent));
         for line in summary.lines() {
             let _ = writeln!(out, "    {line}");
         }
@@ -96,15 +98,15 @@ fn write_steps(out: &mut String, cycle: &Cycle) {
 
     for node in walk.nodes() {
         match node.kind {
-            NodeKind::Define => section(out, "문제", node, None),
+            NodeKind::Define => section(out, text("story.section.problem"), node, None),
             NodeKind::Hypothesis => {
                 attempt += 1;
                 let branched = node
                     .revisit_from
-                    .map(|from| format!("{from} 에서 되돌아와 낸 갈래"));
-                section(out, &format!("시도 {attempt}"), node, branched.as_deref());
+                    .map(|from| tr!("story.branch_from", from = from));
+                section(out, &tr!("story.section.attempt", n = attempt), node, branched.as_deref());
             }
-            NodeKind::Outcome => section(out, "판정", node, None),
+            NodeKind::Outcome => section(out, text("story.section.verdict"), node, None),
             // Verify·Analysis 는 앞의 시도에 이어 적는다 — 같은 한 번의 시도다.
             _ => {}
         }
@@ -112,7 +114,7 @@ fn write_steps(out: &mut String, cycle: &Cycle) {
         match &node.report {
             Some(report) => write_report(out, cycle.rules(), cycle.kind(), node.kind, report),
             None => {
-                let _ = writeln!(out, "  (아직 적지 않았다 — {} 은(는) 열려 있다)", node.id);
+                out.push_str(&tr!("story.not_written", id = node.id));
             }
         }
     }
@@ -151,51 +153,46 @@ fn write_cycle_report(out: &mut String, cycle: &Cycle) {
         out.push('\n');
     }
     let verdict = report.get(VERDICT);
-    let _ = writeln!(
-        out,
-        "이 Cycle 이 남긴 것  [{} · {}]",
-        title_case(cycle.kind().as_str()),
-        title_case(verdict.unwrap_or("?"))
-    );
+    out.push_str(&tr!("story.cycle_left", kind = title_case(cycle.kind().as_str()), verdict = title_case(verdict.unwrap_or("?"))));
 
     // ① 시작점 — 이 Cycle 의 유일한 Define 에서 읽는다.
     let mut experiment = Vec::new();
     if let Some(define) = cycle.define() {
         if let Some(problem) = define.get(PROBLEM) {
-            experiment.push(("질문", problem.to_string()));
+            experiment.push((text("story.field.question"), problem.to_string()));
         }
         if let Some(condition) = define.get(SUCCESS_CONDITION) {
-            experiment.push(("성공 기준", condition.to_string()));
+            experiment.push((text("story.field.success"), condition.to_string()));
         }
     }
-    write_block(out, "실험", &experiment);
+    write_block(out, text("story.block.experiment"), &experiment);
 
     // ② 판정과 그 근거 — 결과는 Cycle Node 자신의 것이고, 이유는 **가리킨 그 판정**의 것이다.
     let mut judged = Vec::new();
     if let Some(verdict) = verdict {
-        judged.push(("결과", say(VERDICT, verdict)));
+        judged.push((text("story.field.result"), say(VERDICT, verdict)));
     }
     if let Some(lesson) = cycle.judged_lesson() {
-        judged.push(("이유", lesson.to_string()));
+        judged.push((text("story.field.reason"), lesson.to_string()));
     }
-    write_block(out, "판정", &judged);
+    write_block(out, text("story.block.verdict"), &judged);
 
     // ③ 다음 Cycle 이 받을 것.
     let mut handoff = Vec::new();
     if let Some(summary) = report.get(HANDOFF_SUMMARY) {
-        handoff.push(("다음 Cycle 에 넘길 것", summary.to_string()));
+        handoff.push((text("story.field.handoff"), summary.to_string()));
     }
-    write_block(out, "인수인계", &handoff);
+    write_block(out, text("story.block.handoff"), &handoff);
 
     // ④ 어디로 가는가 — 동작과 까닭을 갈라 적는다.
     let mut next = Vec::new();
     if let Some(action) = direction_head(report) {
-        next.push(("동작", action));
+        next.push((text("story.field.action"), action));
     }
     if let Some(reason) = report.get(NEXT_REASON) {
-        next.push(("이유", reason.to_string()));
+        next.push((text("story.field.reason"), reason.to_string()));
     }
-    write_block(out, "다음 방향", &next);
+    write_block(out, text("story.block.direction"), &next);
 }
 
 /// 블록 하나 — 앞에 빈 줄, `[제목]`, 그리고 빈 줄로 나뉜 칸들.
@@ -269,7 +266,7 @@ fn write_report(
     }
 
     if let Some(sentence) = next_direction_sentence(report) {
-        write_field(out, "그래서", &sentence);
+        write_field(out, text("story.therefore"), &sentence);
     }
 }
 
@@ -291,10 +288,10 @@ fn direction_head(report: &Report) -> Option<String> {
     let action = report.get(NEXT_ACTION)?;
     Some(
         match (action, report.get(NEXT_TARGET)) {
-            ("revisit", Some(target)) => format!("{target} 로 되돌아간다"),
-            ("revisit", None) => "되돌아간다".to_string(),
-            ("close_cycle", _) => "여기서 이 Cycle 을 닫는다".to_string(),
-            ("open_child", _) => "이 Cycle 을 부모로 다음 Cycle 을 연다".to_string(),
+            ("revisit", Some(target)) => tr!("story.revisit_to", target = target),
+            ("revisit", None) => text("story.revisit").to_string(),
+            ("close_cycle", _) => text("story.close_cycle").to_string(),
+            ("open_child", _) => text("story.open_child").to_string(),
             (other, _) => other.to_string(),
         },
     )
@@ -319,37 +316,28 @@ fn write_where_we_stand(out: &mut String, cycles: &Cycles) {
     if !out.is_empty() {
         out.push('\n');
     }
-    let _ = write!(out, "지금 {}", cycle.id());
+    out.push_str(&tr!("story.now", cycle = cycle.id()));
     if let Some(parent) = cycle.parent() {
-        let _ = write!(out, "({parent} 에서 이어받음)");
+        out.push_str(&tr!("story.now_inherited", parent = parent));
     }
     // 되돌아온 자리라면 그 사실이 먼저다 — 다음 수가 평소와 다르기 때문이다.
     if let Some(from) = cycles.pending_revisit() {
-        let _ = writeln!(
-            out,
-            " 은(는) 닫혔고, {from} 에서 되돌아와 여기 서 있다.\n\
-             이 자리 아래에 새 Cycle 을 열면 그 Cycle 이 {from} 의 갈래가 된다."
-        );
+        out.push_str(&tr!("story.now_revisited", from = from));
         return;
     }
     match walk.current().and_then(|id| walk.node(id)) {
         _ if cycle.is_closed() => {
-            let _ = writeln!(out, " 은(는) 닫혔다.");
+            out.push_str(text("story.now_closed"));
         }
         None => {
-            let _ = writeln!(out, " 에 서 있고, 아직 아무것도 적지 않았다 — 문제부터 적는다.");
+            out.push_str(text("story.now_empty"));
         }
         Some(node) => {
             let standing = match node.status {
-                NodeStatus::Open => "아직 적는 중이다",
-                NodeStatus::Closed => "적기를 마쳤다",
+                NodeStatus::Open => text("story.still_writing"),
+                NodeStatus::Closed => text("story.done_writing"),
             };
-            let _ = writeln!(
-                out,
-                " 의 {}({})에 서 있고, {standing}.",
-                node.id,
-                korean(node.kind)
-            );
+            out.push_str(&tr!("story.now_at", id = node.id, kind = korean(node.kind), standing = standing));
         }
     }
 }
@@ -367,20 +355,20 @@ const NEXT_TARGET: &str = "next_direction.target_node_ref";
 /// 칸의 이름표. 없는 칸은 제 이름 그대로 — 조용히 사라지는 것보다 낫다.
 fn label(field: &str) -> &str {
     match field {
-        "problem" => "무엇을 풀려는가",
-        "success_condition" => "풀렸다고 하려면",
-        "hypothesis" => "세운 것",
-        "rationale" => "그렇게 본 까닭",
-        "guardrail" => "넘으면 멈추기로 한 선",
-        "execution" => "해 본 것",
-        "result" => "나온 것",
-        "hypothesis_fit" => "가설과 맞았나",
-        "problem_solved" => "문제가 풀렸나",
-        "success_condition_met" => "기준을 넘었나",
-        "guardrail_triggered" => "멈춤선이 울렸나",
-        "interpretation" => "그것을 어떻게 읽었나",
-        "verdict" => "결과",
-        "lesson" => "남은 것",
+        "problem" => text("story.label.problem"),
+        "success_condition" => text("story.label.success_condition"),
+        "hypothesis" => text("story.label.hypothesis"),
+        "rationale" => text("story.label.rationale"),
+        "guardrail" => text("story.label.guardrail"),
+        "execution" => text("story.label.execution"),
+        "result" => text("story.label.result"),
+        "hypothesis_fit" => text("story.label.hypothesis_fit"),
+        "problem_solved" => text("story.label.problem_solved"),
+        "success_condition_met" => text("story.label.success_condition_met"),
+        "guardrail_triggered" => text("story.label.guardrail_triggered"),
+        "interpretation" => text("story.label.interpretation"),
+        "verdict" => text("story.label.verdict"),
+        "lesson" => text("story.label.lesson"),
         other => other,
     }
 }
@@ -388,23 +376,24 @@ fn label(field: &str) -> &str {
 /// 명세가 정해 둔 낱말을 사람의 말로. 모르는 값은 그대로 둔다.
 fn say(field: &str, value: &str) -> String {
     match (field, value) {
-        ("verdict", "success") => "풀렸다".to_string(),
-        ("verdict", "failure") => "못 풀었다".to_string(),
+        ("verdict", "success") => text("story.verdict.success").to_string(),
+        ("verdict", "failure") => text("story.verdict.failure").to_string(),
         _ => value.to_string(),
     }
 }
 
+/// The Step kind in the reader's language (the function keeps its historical name).
 fn korean(kind: NodeKind) -> &'static str {
     match kind {
-        NodeKind::Question => "질문",
-        NodeKind::Interpretation => "해석",
-        NodeKind::Synthesis => "제안",
-        NodeKind::Define => "문제",
-        NodeKind::Hypothesis => "가설",
-        NodeKind::Verify => "검증",
-        NodeKind::Analysis => "해석",
-        NodeKind::Outcome => "판정",
-        NodeKind::CycleEntry => "시작 경계",
-        NodeKind::CycleExit => "끝 경계",
+        NodeKind::Question => text("story.kind.question"),
+        NodeKind::Interpretation => text("story.kind.interpretation"),
+        NodeKind::Synthesis => text("story.kind.synthesis"),
+        NodeKind::Define => text("story.kind.define"),
+        NodeKind::Hypothesis => text("story.kind.hypothesis"),
+        NodeKind::Verify => text("story.kind.verify"),
+        NodeKind::Analysis => text("story.kind.analysis"),
+        NodeKind::Outcome => text("story.kind.outcome"),
+        NodeKind::CycleEntry => text("story.kind.cycle_entry"),
+        NodeKind::CycleExit => text("story.kind.cycle_exit"),
     }
 }
