@@ -79,7 +79,7 @@ Developer ID/공증 또는 Authenticode 서명은 없다. Intel Mac, Windows ARM
 남아 있다. OS가 실행을 막으면 보안 설정을 끄거나 ACL을 강제로 바꾸지 말고 중단한다.
 [Mac 상세 안내](distribution/codex/INSTALL.md), [Windows 상세 안내](distribution/windows/INSTALL.md)와
 [Windows 배포 상태](distribution/windows/README.md)를 따른다.
-[시험판 조건](distribution/codex/RELEASE-macos.md)과 [보안 제보 안내](SECURITY.md)를 따른다.
+[시험판 조건](distribution/codex/RELEASE-macos.md), [보안 제보 안내](SECURITY.md), [개인정보 처리방침](PRIVACY.md)을 따른다.
 Claude Desktop의 **Claude Code**는 2026-10-30 소유자 보고로 MCP App fullscreen을 정상 지원한다.
 같은 날 폴더가 연결된 Claude Code 세션에서 설치된 Plugin 경로의 `show_gil_monitor`가 View를
 반환했지만 사용자 화면에는 서지 않았고(10/31 이 브랜치 빌드의 marketplace 설치본도 같음), 같은 세션의
