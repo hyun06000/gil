@@ -38,8 +38,10 @@ Host 등록: command = %LOCALAPPDATA%\Microsoft\WindowsApps\gil.exe, args = ["mc
    `gil-msix-store-upload-<버전>`으로 남긴다. 변수 없이 돌면 dev identity로 만들어져 업로드할 수 없다고 README에 적힌다.
 6. **제출** — Partner Center 제출에서 아티팩트의 `gil-store-upload.msix` 업로드. 서명하지 않는다(Store가 서명).
    - 가시성: 처음은 **Private audience**(테스터 이메일) 또는 **Hidden**(직접 링크)로 두고, 통과 뒤 공개로 바꾼다.
-   - 연령 등급 설문, 개인정보 처리방침 URL(저장소의 공개 문서 링크로 충분; GIL은 데이터를 보내지 않는다), 스크린샷 1장 이상
-     (Monitor 화면), 설명문.
+   - 연령 등급 설문, 스크린샷 1장 이상(Monitor 화면), 설명문.
+   - **개인정보 처리방침 URL(필수)**: `https://github.com/hyun06000/gil/blob/main/PRIVACY.md`. GIL이 데이터를 수집하지 않아도
+     Partner Center는 `runFullTrust`처럼 개인정보에 접근할 **수 있는** capability를 선언한 패키지에 방침 URL을 요구한다
+     (정책 10.5.1). 방침은 수집하지 않는다는 사실과 유일한 네트워크 접근(하루 1회 공개 JSON 읽기)을 적는다.
    - **인증 노트**(아래 원문 사용).
 7. **심사 결과 반영** — 통과하면 Store 링크를 `INSTALL.md`·README·`update-feed.json`에 추가하고 게시 장부를 쓴다.
    거절되면 사유를 장부에 적고 보고한다. 거절 사유가 "패키지 밖 쓰기"면 `unvirtualizedResources` 사유를 보강한다.
