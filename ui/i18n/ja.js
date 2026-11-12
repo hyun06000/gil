@@ -90,7 +90,7 @@ export default {
   "upd.notes": "変更: {notes}",
   "upd.common_note": "開いている会話は今の Core を最後まで使い、新しい会話から新バージョンが適用されます。Project と .gil 記録はそのままです。",
   "upd.windows_title": "Windows — ワンライナーで更新",
-  "upd.windows_step1": "1. PowerShell でワンライナーをもう一度実行します: irm https://raw.githubusercontent.com/hyun06000/gil/main/install.ps1 | iex — またはエージェントに https://raw.githubusercontent.com/hyun06000/gil/main/INSTALL.md を読んで更新するよう頼みます。",
+  "upd.windows_step1": "1. インストールガイドの PowerShell ワンライナー（install.ps1）をもう一度実行するか、エージェントにインストールガイドを読んで更新するよう頼みます。",
   "upd.windows_step2": "2. 新しい gil.exe は %LOCALAPPDATA%\\\\Programs\\\\gil に置かれ、実行中の版は名前を変えて保持されるので、先に閉じるものはなく登録もそのままです。",
   "upd.windows_step3": "3. Codex を再起動します。Claude Desktop はトレイアイコンから完全に終了して開き直します。",
   "upd.windows_step4": "4. 新しい会話で Monitor の接続情報にある GIL バージョンが変わったか確認するか、gil doctor を実行します。",

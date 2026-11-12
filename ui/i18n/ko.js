@@ -91,7 +91,7 @@ export default {
   "upd.notes": "변경: {notes}",
   "upd.common_note": "열린 대화는 지금 Core 를 끝까지 쓰고, 새 대화부터 새 버전이 적용됩니다. Project 와 .gil 기록은 그대로 둡니다.",
   "upd.windows_title": "Windows — 한 줄 설치로 업데이트",
-  "upd.windows_step1": "1. PowerShell에서 한 줄 설치를 다시 실행합니다: irm https://raw.githubusercontent.com/hyun06000/gil/main/install.ps1 | iex — 또는 에이전트에게 https://raw.githubusercontent.com/hyun06000/gil/main/INSTALL.md 를 읽고 업데이트해 달라고 합니다.",
+  "upd.windows_step1": "1. 설치 안내의 PowerShell 한 줄 설치(install.ps1)를 다시 실행하거나, 에이전트에게 설치 안내를 읽고 업데이트해 달라고 합니다.",
   "upd.windows_step2": "2. 새 gil.exe 가 %LOCALAPPDATA%\\\\Programs\\\\gil 에 놓이고 실행 중인 판은 이름만 바뀌어 보존되므로 미리 닫을 것이 없고 등록도 그대로입니다.",
   "upd.windows_step3": "3. Codex 를 다시 시작합니다. Claude Desktop 은 트레이 아이콘에서 완전히 종료한 뒤 다시 엽니다.",
   "upd.windows_step4": "4. 새 대화에서 Monitor 연결 정보의 GIL 버전이 바뀌었는지 확인하거나 gil doctor 를 실행합니다.",

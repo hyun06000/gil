@@ -90,7 +90,7 @@ export default {
   "upd.notes": "变更: {notes}",
   "upd.common_note": "已打开的对话会用当前 Core 直到结束，新对话起应用新版本。Project 和 .gil 记录保持不变。",
   "upd.windows_title": "Windows — 用一行命令更新",
-  "upd.windows_step1": "1. 在 PowerShell 中再次运行一行安装命令：irm https://raw.githubusercontent.com/hyun06000/gil/main/install.ps1 | iex —— 或让代理阅读 https://raw.githubusercontent.com/hyun06000/gil/main/INSTALL.md 并更新。",
+  "upd.windows_step1": "1. 再次运行安装指南中的 PowerShell 一行安装命令（install.ps1），或让代理阅读安装指南并更新。",
   "upd.windows_step2": "2. 新的 gil.exe 放在 %LOCALAPPDATA%\\\\Programs\\\\gil；正在运行的版本只是改名保留，因此无需先关闭任何程序，注册也保持不变。",
   "upd.windows_step3": "3. 重启 Codex。从托盘图标完全退出 Claude Desktop 后再重新打开。",
   "upd.windows_step4": "4. 在新对话中确认 Monitor 连接信息里的 GIL 版本已改变，或运行 gil doctor。",

@@ -90,7 +90,7 @@ export default {
   "upd.notes": "Changes: {notes}",
   "upd.common_note": "Open conversations keep using the current Core to the end; new conversations use the new version. Projects and .gil records stay as they are.",
   "upd.windows_title": "Windows — update with the one-line install",
-  "upd.windows_step1": "1. Run the one-line install again in PowerShell: irm https://raw.githubusercontent.com/hyun06000/gil/main/install.ps1 | iex — or ask your agent to read https://raw.githubusercontent.com/hyun06000/gil/main/INSTALL.md and update.",
+  "upd.windows_step1": "1. Run the one-line install from the install guide again in PowerShell (install.ps1), or ask your agent to read the install guide and update.",
   "upd.windows_step2": "2. The new gil.exe lands in %LOCALAPPDATA%\\\\Programs\\\\gil; the running copy is only renamed aside, so nothing has to be closed first and the registration stays the same.",
   "upd.windows_step3": "3. Restart Codex. Quit Claude Desktop completely from the tray icon and open it again.",
   "upd.windows_step4": "4. In a new conversation, check that the GIL version in the Monitor's connection info changed, or run gil doctor.",
