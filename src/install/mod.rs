@@ -27,7 +27,7 @@ mod file;
 mod paths;
 
 pub use doctor::Status;
-pub use paths::Env;
+pub use paths::{Env, packaged_now};
 
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
@@ -138,8 +138,17 @@ fn install(env: &Env, options: InstallOptions) -> Outcome {
         return wait_then_register_claude(env, &fixed, options);
     }
     let current = std::env::current_exe().map_err(|err| format!("cannot find my own path: {err}"))?;
-    let placed = place_binary(&current, &fixed)?;
-    let mut lines = vec![format!("binary: {placed} {} (v{})", fixed.display(), crate::CORE_VERSION)];
+    let mut lines = if env.packaged {
+        // Store channel: nothing to copy. The package folder is read-only and the alias is the
+        // registered path; a missing alias means the package registration itself is broken.
+        if !fixed.exists() {
+            return Err(format!("the app execution alias is missing at {}; reinstall the GIL app from the Microsoft Store", fixed.display()));
+        }
+        vec![format!("binary: OK {} (v{}) [store]", fixed.display(), crate::CORE_VERSION)]
+    } else {
+        let placed = place_binary(&current, &fixed)?;
+        vec![format!("binary: {placed} {} (v{})", fixed.display(), crate::CORE_VERSION)]
+    };
 
     lines.push(format!("codex: {}", codex_step(env, &fixed, options)?));
     let (claude_line, claude_waits) = claude_step(env, &fixed, &current, options)?;
@@ -179,7 +188,9 @@ fn uninstall(env: &Env, remove_binary: bool) -> Outcome {
             lines.push(format!("claude-desktop: {} ({})", claude::unregister(path)?, path.display()));
         }
     }
-    if remove_binary {
+    if remove_binary && env.packaged {
+        lines.push("binary: KEPT (Microsoft Store app; remove it from Settings → Apps)".into());
+    } else if remove_binary {
         let dir = fixed.parent().ok_or("fixed path has no parent")?;
         let current = std::env::current_exe().ok();
         if current.as_deref().is_some_and(|me| same_file(me, &fixed)) {

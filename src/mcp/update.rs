@@ -61,6 +61,11 @@ pub fn platform_key() -> Option<&'static str> {
 /// The version of the installed distribution this executable belongs to, or `None` for a
 /// development binary. Exact locations only; no search of the whole disk.
 pub fn installed_version() -> Option<String> {
+    // A Microsoft Store (MSIX) build carries its version in the stamped Core; the package
+    // folder is read-only, so there is no receipt beside the executable to read.
+    if crate::install::packaged_now() {
+        return parse_version(crate::CORE_VERSION).map(|_| crate::CORE_VERSION.to_owned());
+    }
     let exe = std::env::current_exe().ok()?;
     installed_version_of(&exe)
 }
@@ -360,7 +365,10 @@ pub(crate) fn status_with(platform: Option<&str>, installed: Option<&str>, dir: 
 
 pub fn status() -> Value {
     let dir = state_dir();
-    status_with(platform_key(), installed_version().as_deref(), dir.as_deref(), now_unix())
+    let mut out = status_with(platform_key(), installed_version().as_deref(), dir.as_deref(), now_unix());
+    // The Monitor picks the Windows guidance by channel: Store app vs. single executable.
+    out["packaged"] = json!(crate::install::packaged_now());
+    out
 }
 
 #[cfg(test)]

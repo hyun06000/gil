@@ -19,6 +19,8 @@ git push origin v0.3.0
 4. 자산 `gil-x86_64-pc-windows-msvc.exe`, `checksums.txt`(SHA-256)를 Release에 올린다. 파일명에 버전을 넣지 않으므로
    `releases/latest/download/<자산>` 주소가 계속 유효하다.
 5. 태그에 `-`가 있으면(`v0.3.0-rc.1`) prerelease로 표시한다. **prerelease는 `latest`가 되지 않는다.**
+6. 같은 exe를 MSIX로 싸서 자체서명 사이드로드로 검증(별칭 실행·`gil install`·`doctor [store]`)한 뒤 **무서명 Store 업로드
+   패키지**를 아티팩트 `gil-msix-store-upload-<버전>`으로 남긴다. Store 제출은 [STORE.md](STORE.md).
 
 `gil` 저장소의 다른 검수 자산(`runtime-verify-*`, `windows-dev-visual-*`, `windows-owner-update-*`)은 prerelease로 두어
 `latest`가 항상 이 워크플로의 정식 release를 가리키게 한다.

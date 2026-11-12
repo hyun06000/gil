@@ -14,6 +14,9 @@ pub struct Env {
     pub home: Option<PathBuf>,
     /// `CODEX_HOME`, when set.
     pub codex_home: Option<PathBuf>,
+    /// Running inside an MSIX package (Microsoft Store channel). The executable then lives in
+    /// the read-only package folder and Hosts register the App Execution Alias instead.
+    pub packaged: bool,
 }
 
 impl Env {
@@ -24,15 +27,41 @@ impl Env {
             app_data: var("APPDATA"),
             home: if cfg!(windows) { var("USERPROFILE") } else { var("HOME") },
             codex_home: var("CODEX_HOME"),
+            packaged: packaged_now(),
         }
     }
+}
+
+/// Whether this process carries MSIX package identity (installed from the Microsoft Store or
+/// sideloaded as a signed package). Asked of the OS, never inferred from the path.
+pub fn packaged_now() -> bool {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Foundation::APPMODEL_ERROR_NO_PACKAGE;
+        use windows_sys::Win32::Storage::Packaging::Appx::GetCurrentPackageFullName;
+        let mut length: u32 = 0;
+        // With a zero-length buffer the call only tells us whether there is a package at all.
+        let code = unsafe { GetCurrentPackageFullName(&mut length, std::ptr::null_mut()) };
+        code != APPMODEL_ERROR_NO_PACKAGE
+    }
+    #[cfg(not(windows))]
+    false
+}
+
+/// `%LOCALAPPDATA%\Microsoft\WindowsApps\gil.exe` — the App Execution Alias Windows creates for
+/// the packaged app. It is a stable path on every PC, so Hosts register it directly.
+pub fn alias_exe(env: &Env) -> Result<PathBuf, String> {
+    let local = env.local_app_data.as_ref().ok_or("LOCALAPPDATA is not set")?;
+    Ok(local.join("Microsoft").join("WindowsApps").join("gil.exe"))
 }
 
 /// `%LOCALAPPDATA%\Programs\gil\gil.exe` — the one path Hosts register. macOS gets the
 /// equivalent under Application Support so the same code can be exercised there; the macOS
 /// user channel itself is still the Plugin/archive described in the install guide.
 pub fn fixed_exe(env: &Env) -> Result<PathBuf, String> {
-    if cfg!(windows) {
+    if env.packaged {
+        alias_exe(env)
+    } else if cfg!(windows) {
         let local = env.local_app_data.as_ref().ok_or("LOCALAPPDATA is not set")?;
         Ok(local.join("Programs").join("gil").join("gil.exe"))
     } else if cfg!(target_os = "macos") {
@@ -103,7 +132,7 @@ mod tests {
         let root = super::super::tests::scratch("claude-paths");
         let local = root.join("Local");
         let roaming = root.join("Roaming");
-        let env = Env { local_app_data: Some(local.clone()), app_data: Some(roaming.clone()), home: None, codex_home: None };
+        let env = Env { local_app_data: Some(local.clone()), app_data: Some(roaming.clone()), home: None, codex_home: None, packaged: false };
         assert!(claude_configs(&env).is_empty(), "nothing installed yet");
 
         let cache = local.join("Packages").join("Claude_abc123def").join("LocalCache").join("Roaming").join("Claude");
@@ -120,7 +149,7 @@ mod tests {
         let root = super::super::tests::scratch("codex-paths");
         let home = root.join("home");
         std::fs::create_dir_all(&home).unwrap();
-        let env = Env { local_app_data: None, app_data: None, home: Some(home.clone()), codex_home: None };
+        let env = Env { local_app_data: None, app_data: None, home: Some(home.clone()), codex_home: None, packaged: false };
         assert_eq!(codex_config(&env), None, "no .codex folder → not installed");
         std::fs::create_dir_all(home.join(".codex")).unwrap();
         assert_eq!(codex_config(&env), Some(home.join(".codex").join("config.toml")));
@@ -129,5 +158,13 @@ mod tests {
         let env = Env { codex_home: Some(custom.clone()), ..env };
         assert_eq!(codex_config(&env), Some(custom.join("config.toml")));
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_packaged_process_registers_the_app_execution_alias() {
+        let env = Env { local_app_data: Some(PathBuf::from("/L")), app_data: None, home: Some(PathBuf::from("/H")), codex_home: None, packaged: true };
+        assert_eq!(fixed_exe(&env).unwrap(), PathBuf::from("/L").join("Microsoft").join("WindowsApps").join("gil.exe"));
+        let unpackaged = Env { packaged: false, ..env };
+        assert_ne!(fixed_exe(&unpackaged).unwrap(), fixed_exe(&Env { packaged: true, ..unpackaged.clone() }).unwrap());
     }
 }

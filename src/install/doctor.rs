@@ -40,6 +40,8 @@ impl Status {
 }
 
 pub struct Report {
+    /// Store channel: the binary line names the App Execution Alias.
+    pub packaged: bool,
     pub binary: Status,
     pub binary_path: Option<PathBuf>,
     pub version: String,
@@ -54,9 +56,10 @@ impl Report {
 
     pub fn render(&self) -> String {
         let path = self.binary_path.as_ref().map(|p| p.display().to_string()).unwrap_or_default();
+        let channel = if self.packaged { " [store]" } else { "" };
         format!(
-            "binary: {} {} (v{})\nclaude-desktop: {}\ncodex: {}\n",
-            self.binary.render(), path, self.version, self.claude.render(), self.codex.render()
+            "binary: {} {} (v{}){}\nclaude-desktop: {}\ncodex: {}\n",
+            self.binary.render(), path, self.version, channel, self.claude.render(), self.codex.render()
         )
     }
 }
@@ -66,7 +69,11 @@ pub fn report(env: &Env) -> Report {
     let (binary, binary_path) = match paths::fixed_exe(env) {
         Err(why) => (Status::Error(why), current.clone()),
         Ok(fixed) => {
-            if !fixed.is_file() {
+            if env.packaged {
+                // Store channel: the alias is the registered path; the executable itself lives in
+                // the read-only package folder, so "running from elsewhere" is the normal case.
+                if fixed.exists() { (Status::Ok, Some(fixed)) } else { (Status::Stale(format!("app execution alias missing at {}", fixed.display())), Some(fixed)) }
+            } else if !fixed.is_file() {
                 (Status::Stale(format!("not installed at {}", fixed.display())), current.clone())
             } else if current.as_deref().is_some_and(|me| same_path(&me.to_string_lossy(), &fixed.to_string_lossy())) {
                 (Status::Ok, Some(fixed))
@@ -77,6 +84,7 @@ pub fn report(env: &Env) -> Report {
     };
     let exe = paths::fixed_exe(env).unwrap_or_default();
     Report {
+        packaged: env.packaged,
         binary,
         binary_path,
         version: crate::CORE_VERSION.to_owned(),
@@ -134,7 +142,7 @@ mod tests {
     #[test]
     fn render_and_exit_follow_the_fixed_form() {
         let report = Report {
-            binary: Status::Ok, binary_path: Some(PathBuf::from("/p/gil")), version: "0.3.0".into(),
+            packaged: false, binary: Status::Ok, binary_path: Some(PathBuf::from("/p/gil")), version: "0.3.0".into(),
             claude: Status::NotInstalled, codex: Status::Ok,
         };
         assert_eq!(report.render(), "binary: OK /p/gil (v0.3.0)\nclaude-desktop: NOT_INSTALLED\ncodex: OK\n");
@@ -153,7 +161,7 @@ mod tests {
         let local = root.join("Local");
         std::fs::create_dir_all(home.join(".codex")).unwrap();
         std::fs::create_dir_all(local.join("Packages").join("Claude_x").join("LocalCache").join("Roaming").join("Claude")).unwrap();
-        let env = Env { local_app_data: Some(local.clone()), app_data: None, home: Some(home.clone()), codex_home: None };
+        let env = Env { local_app_data: Some(local.clone()), app_data: None, home: Some(home.clone()), codex_home: None, packaged: false };
         let exe = PathBuf::from("/fixed/gil");
         assert_eq!(codex_status(&env, &exe), Status::Missing, "folder exists, file does not");
         assert_eq!(claude_status(&env, &exe), Status::Missing);
@@ -165,6 +173,21 @@ mod tests {
         std::fs::write(&claude_path, "{ broken").unwrap();
         assert!(matches!(claude_status(&env, &exe), Status::Error(_)));
         assert_eq!(worse(Status::Missing, Status::Ok), Status::Missing);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn packaged_binary_is_ok_when_the_alias_exists() {
+        let root = super::super::tests::scratch("doctor-store");
+        let local = root.join("Local");
+        let env = Env { local_app_data: Some(local.clone()), app_data: None, home: None, codex_home: None, packaged: true };
+        assert!(matches!(report(&env).binary, Status::Stale(_)), "no alias yet");
+        let alias = local.join("Microsoft").join("WindowsApps");
+        std::fs::create_dir_all(&alias).unwrap();
+        std::fs::write(alias.join("gil.exe"), b"alias").unwrap();
+        let r = report(&env);
+        assert_eq!(r.binary, Status::Ok);
+        assert!(r.render().starts_with("binary: OK ") && r.render().contains("[store]"), "{}", r.render());
         let _ = std::fs::remove_dir_all(root);
     }
 }

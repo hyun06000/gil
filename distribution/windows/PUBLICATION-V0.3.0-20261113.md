@@ -46,3 +46,22 @@
 - Windows 10, ARM64(x64 에뮬레이션)는 미검증이며 지원 범위 표기만 한다.
 - 서명 없음. SHA-256은 바이트 무결성 확인이지 제작자 인증이 아니다. OS가 막으면 보안 설정을 바꾸지 않고 중단한다.
 - `.mcpb` 보조 배포물과 `gil update` 서브커맨드는 후순위로 남는다.
+
+## 실기기 결과 — 2026-11-13, 소유자 PC (Smart App Control 켜짐)
+
+에이전트 경로(Codex, 루트 INSTALL.md)로 시험했다. 기존에 구형 Companion `0.1.1-owner.4`가 설치된 PC다.
+
+| 단계 | 결과 |
+|---|---|
+| INSTALL.md 읽기·승인·폴더 생성 | 정상 |
+| `gil-x86_64-pc-windows-msvc.exe`·`checksums.txt` 다운로드 | 정상 |
+| SHA-256 대조 | `6120b153…5417bd` 일치 |
+| `gil-new.exe install` 실행 | **차단.** Windows: "애플리케이션 제어 정책에서 이 파일을 차단했습니다". `Get-AuthenticodeSignature` = `NotSigned` |
+| `doctor`·Host 등록 | 실행되지 못함. 설정 파일 변경 없음 |
+| 에이전트 동작 | 우회·보안 설정 변경 없이 중단, 임시 파일 정리, 원인 보고 — 지침대로 |
+
+판정: **Smart App Control이 켜진 PC에서는 미서명 `gil.exe`가 프로세스 생성 단계에서 차단된다.** 브라우저 다운로드나
+SmartScreen과 무관하며, Host가 자식 프로세스로 띄워도 같다(SAC는 실행 자체를 막는다). 이는 결정서 §3의 **서명 재검토
+조건**이 충족된 것이다. 미서명 단일 실행 파일 채널은 SAC가 꺼진(또는 평가 모드에서 꺼진) PC에서만 동작한다.
+SAC가 꺼진 PC의 한 줄 설치·Claude MSIX 설정 인식·Desktop 되돌림은 아직 미관측이다.
+

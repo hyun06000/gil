@@ -58,7 +58,8 @@ irm https://raw.githubusercontent.com/hyun06000/gil/main/install.ps1 | iex
 에이전트(Codex 또는 Claude Code 탭)에게는 한 문장만 말한다:
 `https://raw.githubusercontent.com/hyun06000/gil/main/INSTALL.md 를 읽고 설치해줘`.
 단일 실행 파일 `gil.exe`가 `%LOCALAPPDATA%\Programs\gil`에 놓이고 `gil install`이 Claude Desktop·Codex 설정에
-스스로 등록하며 `gil doctor`가 결과를 보고한다. 첫 릴리스 `v0.3.0`은 [Windows 릴리스 절차](distribution/windows/RELEASE.md)로 게시한다.
+스스로 등록하며 `gil doctor`가 결과를 보고한다. 첫 릴리스 `v0.3.0`은 [Windows 릴리스 절차](distribution/windows/RELEASE.md)로 게시했다.
+**Smart App Control이 켜진 PC**는 미서명 exe를 막으므로 같은 `gil.exe`의 Microsoft Store 패키지를 준비 중이다([STORE.md](distribution/windows/STORE.md)).
 
 [상세 통합 안내](distribution/INSTALL-GUIDE.md)에서 OS와 CPU에 맞는 검수본을 확인한 뒤 설치한다. macOS Apple
 Silicon은 Codex Plugin `0.2.1-preview.29`, Windows x64의 구형 채널은 Companion installer
