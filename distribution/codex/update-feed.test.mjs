@@ -35,7 +35,9 @@ test('update feed versions match the published install guide', async () => {
 });
 
 test('update feed names the active installer and archive pins, not a historical guide entry', async () => {
-  const windows = JSON.parse(await readFile(new URL('../windows/owner-update.json', import.meta.url), 'utf8'));
+  // Windows: the single-executable channel pin (2026-11-12); owner-update.json is the retired Companion channel.
+  const windows = JSON.parse(await readFile(new URL('../windows/current-release.json', import.meta.url), 'utf8'));
+  assert.equal(feed.platforms['windows-x64'].release_url, windows.release_url);
   const mac = await readFile(new URL('./prepare-gitless-macos.sh', import.meta.url), 'utf8');
   assert.equal(feed.platforms['windows-x64'].version, windows.version);
   assert.equal(feed.platforms['darwin-arm64'].version, mac.match(/^version=(\S+)$/m)?.[1]);

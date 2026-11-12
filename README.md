@@ -450,8 +450,8 @@ layer를 목표로 한다.
 
 ## Project status
 
-**현재 사용자 채널은 unsigned preview 둘이다.** macOS Apple Silicon은 Plugin/archive `0.2.1-preview.29`,
-Windows x64는 Companion installer `0.1.1-owner.15`이며, 두 채널 모두 Codex와 Claude Desktop(Claude Code 탭)을
+**현재 사용자 채널은 unsigned 둘이다.** macOS Apple Silicon은 Plugin/archive `0.2.1-preview.29`,
+Windows x64는 단일 실행 파일 `0.3.0`([v0.3.0](https://github.com/hyun06000/gil/releases/tag/v0.3.0))이며, 두 채널 모두 Codex와 Claude Desktop(Claude Code 탭)을
 같은 Core·Monitor·작업 규칙으로 지원한다. 네 조합의 확인 상태(실기기 확인 / 사용자 확인 / 자동 테스트만 통과 /
 사용자 확인 대기)는 [설치 안내](INSTALL.md)의 표를 따른다. 서명된 일반 공개판·Intel Mac·Windows ARM64는 없다.
 
