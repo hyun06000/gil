@@ -53,15 +53,16 @@ jobs:
           $exe = 'target\x86_64-pc-windows-msvc\release\gil.exe'
           $line = (& $exe --version).Trim()
           if ($line -ne "gil $env:EXPECTED") { throw "Unexpected version line: $line" }
-          # No Host on the runner: doctor must report NOT_INSTALLED and exit 0 after install.
+          # No Host on the runner: install places the exe at the fixed path, and doctor run from
+          # that installed copy must report NOT_INSTALLED for both Hosts and exit 0.
           & $exe install --no-wait
           if ($LASTEXITCODE -ne 0) { throw "gil install failed on a clean runner" }
-          $doctor = (& $exe doctor) -join "`n"
-          if ($LASTEXITCODE -ne 0 -or $doctor -notmatch 'claude-desktop: NOT_INSTALLED' -or $doctor -notmatch 'codex: NOT_INSTALLED') {
-            throw "Unexpected doctor output:`n$doctor"
-          }
           $installed = Join-Path $env:LOCALAPPDATA 'Programs\gil\gil.exe'
           if (-not (Test-Path $installed)) { throw 'install did not place gil.exe at the fixed path' }
+          $doctor = (& $installed doctor) -join "`n"
+          if ($LASTEXITCODE -ne 0 -or $doctor -notmatch 'binary: OK' -or $doctor -notmatch 'claude-desktop: NOT_INSTALLED' -or $doctor -notmatch 'codex: NOT_INSTALLED') {
+            throw "Unexpected doctor output:`n$doctor"
+          }
           # A static CRT build must not import the VC++ runtime DLLs.
           $dumpbin = Get-ChildItem 'C:\Program Files\Microsoft Visual Studio' -Recurse -Filter dumpbin.exe -ErrorAction SilentlyContinue | Where-Object FullName -match 'Hostx64\\x64' | Select-Object -First 1
           if ($dumpbin) {
