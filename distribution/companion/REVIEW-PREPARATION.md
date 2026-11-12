@@ -5,7 +5,7 @@ Windows PC was accessed. No commit, push or CI dispatch is part of this preparat
 
 ## Inputs and outputs
 
-- `companion-review.yml`: scoped PR/manual Windows x64/ARM64 build, separate Tauri review identifier,
+- `companion-review.yml` (removed 2026-11-12 with the Windows Companion; `package-review.mjs` still runs locally): scoped PR/manual Windows x64/ARM64 build, separate Tauri review identifier,
   actual Core with runtime-testbed feature, existing feature-gated testbed driver.
 - `package-review.mjs`: CPU/hash/build identity validation, adjacent receipt, portable cohort,
   license inventory, checksums. Never merges into an existing output directory.

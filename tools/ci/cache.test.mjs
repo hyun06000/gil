@@ -25,21 +25,27 @@ test('dependency caches are stable across source commits; only cache maintenance
   }
 });
 
-test('profile grouping retains both Windows CPUs and both profiles, and probes the product before testbed builds', () => {
+test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired runtime-update steps', () => {
   const text = workflowText('windows-spike');
   assert.equal((text.match(/          - arch: x64/g) || []).length, 2);
-  assert.equal((text.match(/          - arch: arm64/g) || []).length, 2);
+  assert.equal((text.match(/          - arch: arm64/g) || []).length, 0);
   const at = name => text.indexOf(`      - name: ${name}`);
-  assert.ok(at('Runtime isolated launch mechanism') < at('Companion sessions and Windows named pipes'));
-  assert.ok(at('Image-report storage boundaries') < at('Companion sessions and Windows named pipes'));
-  assert.ok(at('Native protocol, read-only Monitor') < at('Companion sessions and Windows named pipes'));
-  const detector = text.slice(at('Automatic installer target detection'), at('Install maintainer toolchain'));
-  assert.match(detector, /if: matrix.profile == 'default'/);
+  assert.ok(at('Build native Core and MCP') < at('Binding security and native MCP integration'));
+  assert.ok(at('Host registration (gil install') > at('Host guard scope'));
+  assert.ok(at('Image-report storage boundaries') < at('Native protocol, read-only Monitor'));
+  for (const retired of ['Runtime update state judge', 'Runtime App Server integration', 'Isolated verification bundle',
+    'Companion sessions and Windows named pipes', 'Prepare unsigned review candidate', 'Automatic installer target detection']) {
+    assert.equal(at(retired), -1, retired);
+  }
+  assert.doesNotMatch(text, /windows-11-arm|codex-cli|runtime-testbed/);
   const chain = workflowText('chain-core');
   assert.match(chain, /runner: macos-15/); assert.match(chain, /runner: windows-2025/);
   const features = [...chain.matchAll(/run: cargo (?:test|build).*?--features ([\w,-]+)/g)].map(m => m[1]);
   const groups = features.filter((f, i) => f !== features[i-1]);
   assert.deepEqual(groups, ['chain-core', 'chain-core,visual-authoring,product-safety', 'approved-plan,visual-authoring,product-safety']);
+  const companion = workflowText('companion-native');
+  assert.doesNotMatch(companion, /windows-2025|windows-11-arm/);
+  assert.match(companion, /paths:\n\s+- 'companion\/\*\*'/);
 });
 
 test('cache pruning removes implicit and explicit target workspace outputs but preserves dependencies', t => {

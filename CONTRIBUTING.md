@@ -96,7 +96,9 @@ GIL은 Host 훅을 설치하지 않는다. 선택한 GIL 프로젝트의 단계�
 `write_guard`의 explicit inspect/run은 개발자가 직접 실행하는 정책·macOS sandbox 회귀 도구이며
 설치된 Host 보호나 실제 화면 인수를 뜻하지 않는다. 기존 OS·프로필 검사 범위를 유지한다.
 
-PR CI는 기존 필수 check와 macOS·Windows x64/arm64·기능 프로필 검사를 유지한다. 같은 PR의
+PR CI는 기존 필수 check(`macos-arm64-preview`)와 macOS·Windows x64 기능 프로필 검사를 유지한다. 2026-11-12부터
+Windows ARM64 native job, Windows Companion 빌드·검토 묶음, 런처/runtime-update 통합 검사는 PR을 막지 않는다
+(단일 실행 파일 결정; `u2-capability-probe`는 수동 실행만 남는다). 같은 PR의
 이전 실행만 취소하며 수동 실행은 취소하지 않는다. 같은 기능 조합의 Cargo 검사를 연속 배치하여
 프로필 전환 재빌드를 줄인다. Rust 프로필과 무관한 Windows 설치 대상 감지는 CPU별 기본 프로필에서
 모든 케이스를 한 번 실행한다. 네이티브 프로토콜 검사는 runtime-testbed 빌드 전의 제품 프로필을 쓴다.

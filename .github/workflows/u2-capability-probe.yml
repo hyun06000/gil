@@ -1,9 +1,7 @@
 name: U2 capability probe (synthetic)
+# The runtime-update capability probes belong to the retired launcher/runtime-store track
+# (2026-11-12 single-executable decision). They no longer gate pull requests; run on demand.
 on:
-  pull_request:
-    paths:
-      - 'distribution/runtime-update/**'
-      - '.github/workflows/u2-capability-probe.yml'
   workflow_dispatch:
 permissions:
   contents: read
