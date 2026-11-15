@@ -69,8 +69,10 @@ cfg: `approved-plan` + `product-safety` + `visual-authoring` + macOS/Windows (�
 - CI 편입 커밋 820fbe0: chain (macos-15) 단계 로그에 `chain_recovery_preservation` **3개 실행·3 통과**.
   chain (windows-2025)도 **3개 실행**, 그중 `recovery_in_a_chain_…`가 `emptied folder must be pruned`로
   1 실패 (§5.4) → 그 뒤 Windows 단계는 실행되지 않음. Windows native Core (x64)·Codex preview run은 통과.
-- 수정 커밋 이후: Windows 폴더 잔존을 두 OS 공통 불변식(실패 시도 파일이 남지 않음)으로 바꾸고 Unix에서만
-  폴더 제거를 단언한다. 실제 결과는 PR 본문의 CI 표를 따른다.
+- 수정 커밋 872bf74: Windows 폴더 잔존을 두 OS 공통 불변식(실패 시도 파일이 남지 않음)으로 바꾸고 Unix에서만
+  폴더 제거를 단언한다. CI run 43748335587: chain (macos-15) `chain_recovery_preservation` **3 실행·3 통과**
+  (`approved_plan_wire_wave1` 11 통과), chain (windows-2025) **3 실행·3 통과** (`approved_plan_wire_wave1` 9 통과,
+  2개는 macOS 전용 cfg). Windows native Core (x64) 2 job·macos-arm64-preview도 통과. 5 check 전부 통과.
 
 ## 5. 관찰 (결함 아님, 후속 결정 대상)
 
