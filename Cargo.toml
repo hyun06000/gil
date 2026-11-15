@@ -18,6 +18,10 @@ visual-authoring = []
 # Product builds keep recording and read surfaces, but refuse destructive Artifact rollback until
 # the tracked-file boundary, path validation and crash recovery have shipped together.
 product-safety = []
+# M4-R foundation: Core reads a per-Project recovery approval setting and may approve a
+# closed-failure recovery without a Monitor click. Opt-in only; no product profile enables it
+# until the setting's human write path is decided. The default remains manual approval.
+recovery-auto-approval = ["product-safety"]
 # Test-only entry points for the runtime update layers (launcher driver + synthetic MCP Core).
 # Never enabled for product builds; the binary below exists only with this feature.
 runtime-testbed = []

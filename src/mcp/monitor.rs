@@ -196,6 +196,8 @@ impl Monitor {
             "revision": hint["revision"], "watching": hint["watching"] });
         if cfg!(feature = "approved-plan") && session.project().approved_plan().is_some() { value["plan_review_supported"] = json!(true); }
         if cfg!(feature = "product-safety") { value["revisit_review_supported"] = json!(true); }
+        #[cfg(feature = "product-safety")]
+        { value["recovery_approval"] = session.recovery_approval_view(); }
         Ok(value)
     }
 
