@@ -5,6 +5,11 @@
 > (루트 `.git/`·`.gil/` 항상 제외, `.gitignore` 존중)을 **읽기 전용 엔진**으로 어떻게 세우는지
 > 제안하고, 통합 단계에 남는 연결을 적는다.
 
+> **2026-11-15 후속 결정:** [Artifact Model §3.6](../GIL_Artifact_Model_v0.1.md#36-인터뷰에서-정하는-명시적-추적-제외)이
+> 인터뷰에서 제외 대상을 추천·승인하고 `.gilignore`로 관리하는 의미를 확정했다. 제외 파일은
+> GIL 버전 관리 밖에 있을 뿐 읽기·수정·삭제가 가능하다. 아래 엔진은 `.gilignore`의 승인·적용을
+> 아직 구현하지 않았으며, 기존 gitignore 입력만으로 새 계약을 충족한다고 주장하지 않는다.
+
 ## 1. 문제
 
 현행 `artifact::observe` 는 루트 `.gil/` 하나만 제외하고 모든 일반 파일을 세계로 본다.
@@ -124,16 +129,19 @@ policy_id = "gil-tracking-policy/1:sha256:<64 hex>"
 2. `policy_id` 가 없는 기존 Snapshot 은 「정책 미상(legacy)」이다. 임의의 ID 를 지어 붙이지 않는다.
 3. B 의 미리보기는 before/target 의 `policy_id` 를 따로 받고, 미상이거나 서로 다르면 apply-ready
    로 판정하지 않는다 (INTERFACES.md). 정보성 diff 는 제공할 수 있다.
-4. 정책이 바뀐 뒤의 첫 Verify 는 「정책 변경으로 세계가 달라졌다」를 보통의 dirty 로 다룬다.
-   정책 변경 자체를 자동으로 clean 으로 취급하지 않는다.
-5. 제품 기본 capture 에 어떤 정책을 기본으로 둘지(`.gitignore` 자동 수집 + `Prune` 이 유력하나
-   최상위 ignored 링크 마찰이 있다)는 통합 단계에서 실기 결과를 보고 정한다.
+4. 정책 변경은 Artifact Model §3.6의 승인·적용 경계 설계를 따른다. `.gilignore`나 `.gitignore`의
+   디스크 편집만으로 적용 중인 정책을 바꾸거나, 기존 파일 변경을 숨겨 자동 clean으로 만들지 않는다.
+   새 정책 적용과 다음 Verify의 확정 순서는 구현 전 연결 과제다.
+5. 제품 capture는 시스템 제외·`.gitignore`·승인된 `.gilignore`의 관계가 명시된 정책을 사용해야 한다.
+   우선순위·문법과 `Prune`/`Inspect` 선택, 최상위 ignored 링크 마찰은 통합 단계에 남는다.
 
 ## 4. 통합 단계에 남긴 연결
 
 - `capture` 의 정책 버전 — blob 저장과 함께 정책을 적용하는 `capture_with_policy` 는 만들지 않았다.
   `observe_with_policy` 는 아무것도 쓰지 않는다.
 - Session 기본 capture·Verify close·`gil start` 와의 연결, Snapshot 기록의 `policy_id` 저장.
+- `.gilignore`의 제안·승인·직접 편집 감지·정책 판 관리와 시작 인터뷰/최초 보관의 순서.
+  제외 목록만 저장해 파일의 불변성이나 접근 제어를 제공한다고 주장하지 않는다.
 - B 연결: 통합 담당자가 `|path| policy.includes_file(path)` 로 callback 을 만든다. B 는 A 타입을 import 하지 않는다.
 - 제품 기본 정책 결정과 최상위 ignored 링크 마찰의 처리.
 - Windows 경로 규칙(§3.6a 5·6 항)은 이 엔진의 범위가 아니다 — 경로 문자열의 정책 판정만 한다.
