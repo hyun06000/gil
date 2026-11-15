@@ -22,6 +22,12 @@
 //! `intent_pending_cleanup`. The report says which of the three records actually changed;
 //! a failure after publication is never reported as "selection unchanged".
 //!
+//! A refusal at `Reobserve` is not an interruption: all three renames are done and `progress`
+//! says so. It means the final observation could not confirm the predicted state — for example
+//! a concurrent preparation writing under `versions/` makes the observer block conservatively
+//! ("changed during observation"). The caller must not read it as "unchanged"; a fresh
+//! observation once the other writer is done shows the new generation. No retry is attempted.
+//!
 //! Not in this layer: candidate execution, launcher, MCP tools, damage recovery, rollback,
 //! garbage collection, completion of a lagging history left by an earlier interruption.
 use crate::runtime_observe::{self as observe, INTENT_SCHEMA, SELECTION_SCHEMA, VERSIONS_DIR, observe_and_judge, platform, version_dirname};
@@ -88,8 +94,10 @@ pub(crate) mod hooks {
         pub static FAIL_WRITE: Cell<bool> = const { Cell::new(false) };
         /// Runs right after the selection lock was taken, before the observation under it.
         pub static AFTER_LOCK: Cell<Option<fn(&std::path::Path)>> = const { Cell::new(None) };
+        /// Runs after the three renames, right before the final re-observation (still locked).
+        pub static BEFORE_REOBSERVE: Cell<Option<fn(&std::path::Path)>> = const { Cell::new(None) };
     }
-    pub fn reset() { FAIL_AFTER.with(|c| c.set(None)); FAIL_FLUSH.with(|c| c.set(false)); FAIL_WRITE.with(|c| c.set(false)); AFTER_LOCK.with(|c| c.set(None)); }
+    pub fn reset() { FAIL_AFTER.with(|c| c.set(None)); FAIL_FLUSH.with(|c| c.set(false)); FAIL_WRITE.with(|c| c.set(false)); AFTER_LOCK.with(|c| c.set(None)); BEFORE_REOBSERVE.with(|c| c.set(None)); }
 }
 fn checkpoint(point: SelectPoint) -> io::Result<()> {
     #[cfg(test)]
@@ -231,7 +239,10 @@ pub fn select(root: &Path, req: &SelectRequest) -> Result<SelectReport, SelectRe
     // 5. intent.json is kept (no conditional atomic delete available); the judge reports
     //    intent_pending_cleanup and the next selection replaces it by rename.
     ledger.progress.intent_kept = true;
-    // 6. Re-observe through the held root handle, still inside the lock lifetime.
+    #[cfg(test)]
+    if let Some(f) = hooks::BEFORE_REOBSERVE.with(|c| c.get()) { f(root); }
+    // 6. Re-observe through the held root handle, still inside the lock lifetime. A refusal
+    //    here reports the completed transition (see the module docs); nothing is undone.
     let (_, after) = observe::observe_and_judge_held(root, &root_dir);
     match &after.state {
         State::Selected { generation: g, version, history_lagging: false } if *g == generation && version == req.version => {}
