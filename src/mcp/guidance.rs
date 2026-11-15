@@ -127,6 +127,8 @@ fn opened(result: &CallToolResult) -> String {
             tr!("guide.opened.synthesis_basis", specific = specific, location = location, rules = text("cycle.basis_refs_rules"), example = example)
         },
         "verify" => format!("{specific}\n{}", crate::visual_report::image::limits_guidance()),
+        // Report-writing Steps: the short-report rule rides on the receipt that opens them.
+        "interpretation" | "analysis" | "outcome" => format!("{specific} {}", text("guide.report_brief")),
         _ => specific.to_string(),
     }
 }
@@ -152,6 +154,12 @@ fn closed(result: &CallToolResult) -> String {
         (_, Some(Next::CloseCycle)) => tr!("guide.closed.close_cycle"),
         (_, Some(Next::Blocked)) => tr!("guide.closed.blocked"),
         _ => tr!("guide.closed.generic"),
+    };
+    // A Cycle or Chain Report comes next: write it short. Execution finished: show the result first.
+    let specific = match (kind, next.as_ref()) {
+        (_, Some(Next::CloseCycle) | Some(Next::ChainReport)) => format!("{specific} {}", text("guide.report_brief")),
+        ("experiment", Some(Next::OpenCycle)) => format!("{specific} {}", text("guide.closing_results_first")),
+        _ => specific,
     };
     tr!("guide.closed.lead", specific = specific)
 }
@@ -223,7 +231,7 @@ fn plan(name: &str, result: &CallToolResult) -> Option<String> {
             (None, _) => match current {
                 Some(item) => tr!("guide.plan.bound", item = item),
                 None if !pending.is_empty() => tr!("guide.plan.pending", pending = pending.join(", ")),
-                None => tr!("guide.plan.none"),
+                None => format!("{} {}", tr!("guide.plan.none"), text("guide.closing_results_first")),
             },
         },
     })
@@ -352,6 +360,36 @@ mod tests {
                 assert!(hint.contains("gil_await_user(project_root, question)") && hint.contains("선택적 읽기 확인이며 턴 종료 조건이 아니다"), "{kind}: {hint}");
             }
         }
+    }
+
+    /// 2026-11-15 roadmap item 1: reports are written short, and the end of execution shows the
+    /// result before asking to close. Guidance contract only — not evidence of a model run.
+    #[test]
+    fn report_steps_are_told_to_write_short_and_the_closing_shows_the_result_first() {
+        for kind in ["interpretation", "analysis", "outcome"] {
+            let mut r = receipt(&format!("열었다: step:C2/S4 · {kind}\n\n지금 할 일\n  …\n"));
+            after("gil_open", &mut r);
+            assert!(text(&r).contains("Report는 짧게 쓴다") && text(&r).contains("하위 보고서를 반복하지 않으며"), "{kind}: {}", text(&r));
+        }
+        for kind in ["question", "define", "hypothesis", "verify", "synthesis"] {
+            let mut r = receipt(&format!("열었다: step:C2/S1 · {kind}\n\n지금 할 일\n  …\n"));
+            after("gil_open", &mut r);
+            assert!(!text(&r).contains("Report는 짧게 쓴다"), "{kind}: {}", text(&r));
+        }
+        let mut cycle = receipt("닫았다: step:C2/S5 · outcome\n기록됨: journey:J7\n\n다음\n  이 Cycle 의 Report 를 적어 닫는다. MCP에서는 gil_close(project_root, report)를 사용한다.\n\n실행\n  gil close\n");
+        after("gil_close", &mut cycle);
+        assert!(text(&cycle).contains("Report는 짧게 쓴다") && text(&cycle).contains("실패 원인·불확실성·미검증 범위는 줄이지 않는다"), "{}", text(&cycle));
+        let mut step = receipt("닫았다: step:C2/S2 · hypothesis\n기록됨: journey:J3\n\n다음\n  열 수 있는 것: verify\n\n실행\n  gil open\n");
+        after("gil_close", &mut step);
+        assert!(!text(&step).contains("Report는 짧게 쓴다"), "{}", text(&step));
+        let mut done = receipt("닫았다: cycle:C3 · experiment · success\n기록됨: journey:J9 (판은 늘지 않는다)\n\n다음\n  열 수 있는 것\n  interview   사용자에게 질문해 의도와 판단을 확인한다\n  experiment  명확한 가설을 실행하고 결과를 검증한다\n\n실행\n  gil open <종류>\n");
+        after("gil_close", &mut done);
+        let hint = text(&done);
+        assert!(hint.contains("결과물을 먼저 보여 준다") && hint.contains("종료 여부를 묻는다") && hint.contains("새 파일을 만들지 않는다"), "{hint}");
+        assert!(hint.contains("gil_open(kind: experiment)"), "the legal next calls stay: {hint}");
+        let mut none = CallToolResult::structured(json!({"supported": true, "proposal": null, "pending": [], "reinterview_requests": [], "current_item": null}));
+        after("gil_plan_read", &mut none);
+        assert!(text(&none).contains("Closing Interview") && text(&none).contains("결과물을 먼저 보여 준다"), "{}", text(&none));
     }
 
     #[test]

@@ -1267,6 +1267,11 @@ fn opened_step(session: &Session, opened: crate::Opened) -> String {
     }
     if cycle.kind() == CycleKind::Interview {
         out.push_str(text("cmd.opened_interview_note"));
+        // 실행된 Experiment 뒤의 Interview(Closing·재인터뷰)는 결과물을 먼저 보여 준다(Cycle Model §18).
+        // 첫 Question 에만 붙인다 — 그 질문이 사용자가 결과를 보고 종료를 판단하는 메시지다.
+        if opened.kind == NodeKind::Question && session.project().cycles().has_closed_experiment() {
+            out.push_str(text("cmd.opened_closing_note"));
+        }
         match opened.kind {
             NodeKind::Synthesis => out.push_str(text("cmd.opened_synthesis_note")),
             NodeKind::Outcome => out.push_str(text("cmd.opened_interview_outcome_note")),
