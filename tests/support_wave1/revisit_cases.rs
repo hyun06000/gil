@@ -400,3 +400,45 @@ fn conversation_and_files_at_recovery(r: &mut Rig, settings: &Path) {
     assert_eq!(before, record_bytes(&r.record));
     assert_eq!(artifacts, tree(&r.root));
 }
+
+/// M6-E preparation: an approved item that cannot be finished is closed truthfully as the contract
+/// stands today. Until the person approves the recovery in the Monitor, the partial result stays in
+/// the working folder, no Cycle of either kind opens under the failure, and the guidance names the
+/// preserved partial results before the button. The approved recovery then moves the files out of the
+/// folder into the preserved archive — nothing is deleted, and no keep-files shortcut is invented.
+#[test]
+fn an_interrupted_item_keeps_its_partial_files_until_the_approved_recovery_and_shows_them_first() {
+    let (mut r, _) = failed("recovery-partial-results", None);
+    let ko = |key: &str| gil::locale::text_in(gil::Locale::Ko, key);
+    let partial = fs::read_to_string(r.root.join("report.txt")).unwrap();
+    assert!(partial.starts_with("partial attempt"), "{partial}");
+    assert!(r.root.join("evidence.md").is_file());
+
+    let context = r.context_readonly();
+    assert!(context.contains(ko("guide.interrupt_partial_results")), "{context}");
+    assert!(context.contains("evidence.md"), "the failed Cycle's evidence is readable before the restore: {context}");
+    assert!(!context.contains("gil_open(kind: experiment)"), "{context}");
+
+    let before = record_bytes(&r.record);
+    refused(r.model("gil_revisit", json!({})), "revisit needs the Monitor button");
+    refused(r.model("gil_open", json!({"kind":"interview"})), "no Interview under a failed Experiment");
+    refused(r.model("gil_open", json!({"kind":"experiment"})), "no Experiment under a failed Experiment");
+    assert_eq!(before, record_bytes(&r.record), "refusals change no record");
+    assert_eq!(fs::read_to_string(r.root.join("report.txt")).unwrap(), partial, "refusals touch no file");
+
+    let (v, t) = review(&mut r);
+    let listed = v["changes"].to_string();
+    assert!(listed.contains("report.txt") && listed.contains("evidence.md"), "{v}");
+    let done = ok(apply(&mut r, &v, &t), "approved recovery");
+    assert_eq!(structured(&done)["state"], "completed");
+    assert_eq!(fs::read_to_string(r.root.join("report.txt")).unwrap(), "baseline report");
+    assert!(!r.root.join("evidence.md").exists());
+    let preserved = r.record.parent().unwrap().join("revisit-preserved");
+    let archives: Vec<_> = fs::read_dir(&preserved).unwrap().map(|e| e.unwrap().path()).collect();
+    assert_eq!(archives.len(), 1, "{archives:?}");
+    let files = fs::read_to_string(archives[0].join("files.json")).unwrap();
+    assert!(files.contains("report.txt") && files.contains("evidence.md"), "{files}");
+
+    let context = r.context_readonly();
+    assert!(context.contains("되돌아왔다") && !context.contains(ko("guide.interrupt_partial_results")), "{context}");
+}

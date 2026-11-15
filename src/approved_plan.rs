@@ -103,8 +103,10 @@ fn retained_items(previous: &[Item], proposed: &[Item]) -> Result<(), String> {
     if differences.is_empty() { return Ok(()); }
     let count = differences.len();
     differences.truncate(8);
-    Err(bad(&crate::tr!("plan.err.retained", differences = differences.join("\n"),
-        more = if count > 8 { crate::tr!("plan.err.more_differences", n = count - 8) } else { String::new() })))
+    // Cancel/replace/redefine stay an M6-E decision; the refusal says so instead of only "missing".
+    Err(bad(&format!("{}\n{}", crate::tr!("plan.err.retained", differences = differences.join("\n"),
+        more = if count > 8 { crate::tr!("plan.err.more_differences", n = count - 8) } else { String::new() }),
+        crate::locale::text("plan.err.no_cancel"))))
 }
 fn failed_execution(chain: &Chain, e: &Execution) -> bool {
     chain.cycles().nodes().iter().find(|c| c.id().to_ref().to_string() == e.cycle_ref)

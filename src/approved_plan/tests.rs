@@ -182,6 +182,7 @@ fn executed_a_then_reinterview_inserts_d_without_rewriting_a_or_old_approval() {
     removed.synthesis.insert("exploration_checklist".into(), "A\nD\nC".into());
     let error = p.propose_plan(removed).unwrap_err();
     assert!(error.contains("draft.items[id=\"B\"]: 누락"), "{error}");
+    assert!(error.contains(crate::locale::text("plan.err.no_cancel")), "dropping an item is named as the undecided cancel contract: {error}");
     assert_eq!(p.approved_plan().unwrap(), &before);
     let mut d = d;
     d.scope.in_scope = "New scope for inserted D".into();
@@ -388,4 +389,100 @@ fn retained_item_diagnostics_bound_and_escape_values_without_weakening_equality(
     assert!(error.contains("\\n\\\""), "newlines and quotes are escaped");
     assert!(error.len() < 10000);
     assert!(retained_items(&previous, &previous).is_ok());
+}
+
+/// M6-E preparation (2026-11-16): an approved item that cannot be finished stops **inside the
+/// existing contract** — no new field, verdict value or transition. The record keeps the honest
+/// interruption observation and the partial result; the direction stays `revisit`; no child of
+/// either kind opens under the failed Cycle; the item returns to pending; the request to
+/// re-interview survives; and the guidance names the preserved partial results before any restore.
+/// The "continue on the partial result in place" path is deliberately absent (proposal D1).
+#[test]
+fn an_item_that_cannot_finish_closes_truthfully_keeps_partial_files_and_gets_no_shortcut() {
+    let root = h::scratch("plan-interrupted");
+    let mut p = project();
+    let d = synthesis(&mut p, &["A", "B"]);
+    approve_close(&mut p, d);
+    p.open_child_cycle(CycleKind::Experiment).unwrap();
+    h::up_to_verify(&mut p);
+    let path = root.join(crate::STATE_PATH);
+    crate::save(&p, &path).unwrap();
+    let mut session = crate::ProjectSession::open(h::spec(), &path).unwrap();
+    let failed = session.project().current_cycle().id();
+
+    // The preserved request is the recorded signal; the next-call line now says how to stop honestly.
+    session.project_mut().request_plan_interview("toolchain missing; the success condition cannot be evaluated".into()).unwrap();
+    let context = crate::context(session.project());
+    assert!(context.contains(crate::locale::text("guide.interrupt_honest")), "{context}");
+    assert!(context.contains("evidence_files"), "the open Verify keeps its own close contract: {context}");
+
+    // Partial result + interruption observation are the Verify evidence; the plan document stays separate.
+    std::fs::write(root.join("plan.md"), session.project().plan_document().unwrap()).unwrap();
+    std::fs::write(root.join("partial.txt"), "half-done partial result").unwrap();
+    std::fs::write(root.join("interrupted.md"), "done: partial.txt drafted\nblocked: toolchain missing\nunverified: success condition not evaluated\n").unwrap();
+    let rules = session.project().current_cycle().rules().clone();
+    session.close_step(h::full_report(&rules, CycleKind::Experiment, NodeKind::Verify)
+        .with("execution", "drafted partial.txt; the build could not run")
+        .with("result", "partial file exists; success condition not evaluated; observation saved")
+        .with("plan_document", "plan.md")
+        .with("evidence_files", "interrupted.md\npartial.txt")).unwrap();
+    h::opened(session.project_mut(), NodeKind::Analysis);
+    session.project_mut().close_action_step(h::full_report(&rules, CycleKind::Experiment, NodeKind::Analysis)
+        .with("interpretation", "the hypothesis is neither confirmed nor refuted: no test ran")).unwrap();
+    let outcome = h::opened(session.project_mut(), NodeKind::Outcome);
+    // The verdict value follows the current grammar; the text keeps "not evaluated" apart from a refutation.
+    session.project_mut().close_action_step(h::full_report(&rules, CycleKind::Experiment, NodeKind::Outcome)
+        .with("verdict", "failure")
+        .with("lesson", "verification incomplete (toolchain missing), not a refutation of the hypothesis")
+        .with(h::ACTION, "close_cycle")).unwrap();
+    let last = h::step_id(session.project(), outcome);
+    let report = h::cycle_report(session.project().current_cycle(), "failure", last)
+        .with("handoff_summary", "A interrupted: partial.txt is half done and kept in the Verify Snapshot; success condition not evaluated");
+    assert_eq!(report.get(h::ACTION), Some("revisit"), "failure still records the existing direction only");
+    session.close_cycle(report).unwrap();
+    session.commit().unwrap();
+
+    // Nothing was restored or deleted: the partial result is still in the folder.
+    assert_eq!(std::fs::read_to_string(root.join("partial.txt")).unwrap(), "half-done partial result");
+    assert!(root.join("interrupted.md").is_file());
+    let cycle = session.project().cycles().node(failed).unwrap();
+    assert!(cycle.is_closed() && cycle.report().unwrap().get("verdict") == Some("failure"));
+    let verify = cycle.steps().nodes().iter().find(|n| n.kind == NodeKind::Verify).unwrap();
+    assert_eq!(verify.report.as_ref().unwrap().get("evidence_files"), Some("interrupted.md\npartial.txt"));
+
+    // No child of either kind under a failed Experiment; the recorded direction is revisit.
+    assert!(session.project_mut().open_child_cycle(CycleKind::Interview).is_err(), "D1 is not decided: no Interview under a failure");
+    assert!(session.project_mut().open_child_cycle(CycleKind::Experiment).is_err());
+    assert!(session.project().cycles().can_revisit());
+
+    // The item returns to pending; the request survives; no Experiment binds before an Interview.
+    let chain = session.project().current_chain().unwrap();
+    let state = session.project().approved_plan().unwrap();
+    assert_eq!(state.pending(chain).iter().map(|i| i.id.as_str()).collect::<Vec<_>>(), vec!["A", "B"]);
+    assert_eq!(state.awaiting_interview(chain).len(), 1);
+    assert!(session.project().next_plan_execution().is_err());
+
+    // The next-call line shows the partial results before the restore and promises no keep-files shortcut.
+    let context = crate::context(session.project());
+    assert!(context.contains(crate::locale::text("guide.interrupt_partial_results")), "{context}");
+    assert!(context.contains("partial.txt"), "the closed Cycle's evidence is readable in context: {context}");
+    assert!(!context.contains("gil_open(kind: experiment)"), "{context}");
+
+    // The record survives a reload byte for byte.
+    let bytes = std::fs::read(&path).unwrap();
+    let loaded = crate::load(h::spec(), &path).unwrap();
+    crate::save(&loaded, &path).unwrap();
+    assert_eq!(std::fs::read(&path).unwrap(), bytes);
+
+    // Development profile only: the approved revisit removes the partial file from the folder (it stays in
+    // the Snapshot), and the next plan may not drop the interrupted item — the refusal names the gap.
+    if !cfg!(feature = "product-safety") {
+        session.revisit_cycle().unwrap();
+        assert!(!root.join("partial.txt").exists(), "revisit restores the ancestor world");
+        session.open_branch_cycle(CycleKind::Interview).unwrap();
+        let dropped = synthesis(session.project_mut(), &["B"]);
+        let error = session.project_mut().propose_plan(dropped).unwrap_err();
+        assert!(error.contains("draft.items[id=\"A\"]") && error.contains(crate::locale::text("plan.err.no_cancel")), "{error}");
+    }
+    std::fs::remove_dir_all(root).ok();
 }
