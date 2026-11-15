@@ -5,6 +5,12 @@ Cycle Model §12, §16–17, §21의 미정 저장 계약을 이 문서로 한�
 
 ## 승인과 실행
 
+**2026-11-15 진행 방식 후속 요구:** [Cycle Model §20](GIL_Cycle_Model_v0.1.md#20-진행-방식과-사람의-확인-지점)에
+따라 주요 지점 확인을 기본으로 시작 Interview에서 방식을 선택하고 확인할 결과를 계획에 명시한다.
+작업 중 변경은 기존 승인 판·재인터뷰 경계와 정합해야 한다. 자율 진행은 승인된 범위 안에서의
+진행이며, 계획 변경·최종 종료·복구 자동 승인을 대신하지 않는다. 확인 지점과 방식 변경의 저장·
+승인 계약은 아직 미결이며 아래 개발 구현에 이미 포함된 것으로 해석하지 않는다.
+
 - 새 Chain의 `approved_plan`은 제안 이력과 실행 바인딩을 보존한다. 기존 format 4/5/6/7 프로젝트는 자동 변환하지 않는다. format 6/7의 선택적 확장 필드이며 이 확장을 모르는 기존 writer는 unknown-field 오류로 거절한다. 기능을 끈 새 writer도 거절한다.
 - 열린 Interview Synthesis에서만 제안한다. 제안은 Synthesis 주소, 순번, 기준 승인 판, 범위(goal/in_scope/out_of_scope/constraints/success_criteria), 순서 있는 항목(id/question/done_when), approved를 제외한 전체 Synthesis Report를 묶는다. SHA-256은 이 정규 JSON 전체를 묶는다.
 - 같은 내용 재전송은 같은 제안을 돌려준다. 열린 Synthesis의 편집은 새 제안이며 이전 판의 승인은 재사용하지 않는다. 이전 제안과 응답은 이력에 그대로 보존하고, 새 제안에 다시 응답하기 전에는 Synthesis를 닫을 수 없다. 수정 요청을 그대로 닫으면 다음 Question으로 간다.
@@ -16,6 +22,9 @@ Cycle Model §12, §16–17, §21의 미정 저장 계약을 이 문서로 한�
 - 읽기 응답(`gil_plan_read`/`gil_plan_review`)의 `supported:true`에는 read-only `current_cycle {ref, state}`가 있다. `ref`는 실제 현재 Cycle의 typed ref, `state`는 실제 닫힘 여부에 따른 `open`/`closed`다. `current_item`은 Cycle이 닫혀도 남는 바인딩이므로 열림의 증거가 아니다. 이 필드가 없는 응답(옛 Core, `supported:false`)에서 Monitor는 열림을 추정하지 않고 미확인으로 표시한다. 이 필드는 저장·승인·입력 의미를 바꾸지 않는다.
 - 열린 Experiment 중 `gil_plan_request_interview`로 범위 변경 이유를 보존한다. 열린 Step/Cycle은 그대로 두며, 현재 Cycle을 사실대로 닫고 다음 Interview에서 승인하기 전에는 추가 Experiment를 열지 않는다.
 - 일반 destructive restore와 승인 없는 제품 revisit는 차단한다. 닫힌 실패의 재시도는 [M4-R 승인 복구](GIL_Revisit_Recovery_v0.1.md)를 따른다. 이전 실행 바인딩은 보존하고 직전 실패의 revisit 계보에서만 같은 항목을 다시 바인딩한다. 최신 실패 항목은 pending으로 돌아오며 읽기 응답의 retry_pending에 표시한다. 취소·abort는 여전히 M6-E 별도 계약이다.
+- 2026-11-15 복구 계약에 수동/자동 승인 모드를 명세화했다(자동 모드 구현 대기). 사용자가 설정한
+  자동 모드는 닫힌 실패의 복구 승인에만 적용한다. 이 문서의 계획 제안·수정·종료 승인과
+  추적 범위 변경을 자동 승인하지 않으며, 자동 복구를 실제 사람의 버튼 클릭으로 기록하지 않는다.
 
 ## MCP 입력 오류 복구
 

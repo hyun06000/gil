@@ -68,8 +68,11 @@ chains:
 
 ## Closing Interview와 종료 — M6-B
 
-1. Agent는 기존 Cycle Report·실패·남은 질문을 토대로 추가 Interview를 연다. 성공 또는 실패로
-   끝내겠다는 제안을 사용자에게 제시하고 실제 답변을 기다린다. 종료 제안 Synthesis에는 기존
+1. Agent는 기존 Cycle Report·실패·남은 질문을 토대로 추가 Interview를 연다. 결과물이 있으면
+   [Cycle Model §18](GIL_Cycle_Model_v0.1.md#18-chain의-성공과-실패)에 따라 첫 종료 인터뷰 메시지에서
+   실제 결과물·확인 경로와 검증 결과·한계를 먼저 보여 준다. 이어 성공 또는 실패로
+   끝내겠다는 제안을 사용자에게 제시하고 실제 답변을 기다린다. 이 결과 우선 안내는 2026-11-15
+   명세 결정이며 공통 에이전트 지침·실사용 인수에 반영해야 한다. 종료 제안 Synthesis에는 기존
    statement/basis_refs/approved와 함께 `chain_verdict: success|failure`를 남긴다.
 2. 승인된 Synthesis를 참조하는 Outcome을 success로 닫는다. Interview Cycle Report는
    `verdict: success`, 마지막 `outcome_ref`, nonempty handoff_summary/reason,
