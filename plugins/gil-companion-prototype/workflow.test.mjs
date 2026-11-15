@@ -119,6 +119,32 @@ test('recovery rows connect each failure to the current fact and forbid loops an
   assert.match(workflow, /never promise that a\s+screen, button or save "always works"/);
 });
 
+// 2026-11-16 roadmap item 2: a refusal is the router. The shared text must send a repairable input
+// error back to the refusal's own skeleton, an approved-plan refusal to gil_plan_read, and keep
+// observation and interpretation in their own Reports. Guidance regression only, not a model run.
+test('an input refusal is fixed from its own skeleton and an approved-plan refusal is a state, not an input', () => {
+  const input = next['`gil_close` input/Report rejected'];
+  assert.match(input, /names the missing or invalid field and shows the current input skeleton/);
+  assert.match(input, /fix only those fields and resend once; no manual lookup is needed/);
+  assert.match(input, /`gil_help\(\{project_root, topic: "close"\}\)` only when the refusal shows no skeleton or the position may have changed/);
+  assert.match(input, /Preserve typed `expected_owner`\/`visuals`/);
+  const planKey = Object.keys(next).find(k => k.startsWith('`gil_close`/`gil_open` refused with an approved-plan reason'));
+  assert.ok(planKey, 'approved-plan refusal row exists');
+  assert.match(planKey, /승인 계획:/);
+  const plan = next[planKey];
+  assert.match(plan, /^Not an input error: do not fix and resend the same call/);
+  assert.match(plan, /Read `gil_plan_read` once and follow the next action its reply names/);
+  for (const state of ['no proposal → `gil_plan_propose`', 'waiting → end the turn and wait for the Monitor button', 'approved → `gil_close` with `close_report` verbatim', 'changes requested → `close_report` \\(`approved: no`\\), then a Question'])
+    assert.match(plan, new RegExp(state), state);
+  assert.match(plan, /Never write `approved` yourself/);
+  assert.match(next['Plan decision or save result uncertain'], /approval still needed \(wait\), approval recorded \(`receipt.decision`\), save result unknown \(read again; do not re-propose\)/);
+  const quick = workflow.slice(workflow.indexOf('**Quick rules'), workflow.indexOf('**Project file boundary'));
+  assert.match(quick, /fix the field the refusal names and resend\s+the same call once; the refusal already shows the current input skeleton/);
+  assert.match(quick, /An approved-plan refusal \(`Approved plan:` \/ `승인 계획:`\) is a\s+state, not an input error: read `gil_plan_read`/);
+  assert.match(workflow, /The Verify Report's `result` holds observations only\s+\(numbers, output, screens, file changes\); what they mean for the hypothesis is the Analysis\s+`interpretation`, and success or failure is the Outcome `verdict`/);
+  assert.match(workflow, /The interpretation does not repeat the\s+Verify observation/);
+});
+
 test('forbidden shortcuts never appear as instructions', () => {
   assert.doesNotMatch(workflow, /gil_cycle[^.]*action: close/);
   assert.doesNotMatch(workflow, /approved: yes` (when|if) (the )?(scope|answer) (is|seems) obvious/i);

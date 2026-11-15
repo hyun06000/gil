@@ -36,8 +36,8 @@ examples:
   구분한다. 계획 문서는 export 와 같은 bytes 로 저장하고, 실행 증거는 별도 파일이어야 한다.
   계획 문서만으로는 닫히지 않는다. 이 프로필이 아닌 프로젝트에는 plan_document 가 없다.
   보존된 재인터뷰 요청은 알림일 뿐 이 증거 규칙을 면제하지 않는다 — 다음 수는 이 Verify 의 close 다.
-  Verify 에는 verdict 가 없다. 관측한 것을 적을 뿐, 성공인지 실패인지는 여기서 말하지 않는다.
-  가설과 맞는지 읽는 것은 analysis 이고, 이 Cycle 을 판정하는 것은 outcome 이다.
+  Verify 에는 verdict 가 없다. result 에는 관측한 사실(수치 · 출력 · 화면 · 파일 변화)만 적는다.
+  그 뜻을 가설과 맞춰 읽는 것은 analysis 의 interpretation(관측을 되풀이하지 않는다)이고, 성패 판정은 outcome 의 verdict 다.
 
 [올바른 예]
       gil close <<'EOF'

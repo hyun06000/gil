@@ -23,6 +23,26 @@ mod revisit_cases;
 
 struct Rig { root: std::path::PathBuf, record: std::path::PathBuf, scope: String, c: Client }
 
+/// Every text block of a tool result in order: the Host guidance first, then the Core receipt.
+fn blocks(frame: &Value) -> String {
+    frame["result"]["content"].as_array().map(|c| c.iter().filter_map(|b| b["text"].as_str()).collect::<Vec<_>>().join("\n")).unwrap_or_default()
+}
+
+/// 2026-11-16 roadmap item 2: an approval-state refusal of gil_close/gil_open must point at
+/// gil_plan_read and must not read as a repairable input error (no "fix the input and resend",
+/// no Report skeleton to copy, no manual lookup). Guidance contract over the real stdio Core.
+#[track_caller]
+fn assert_plan_state_refusal(frame: &Value, tool: &str) {
+    let text = blocks(frame);
+    assert!(text.contains("승인 계획:"), "{tool}: the Core reason must carry the approved-plan marker: {text}");
+    assert!(text.contains("gil_plan_read"), "{tool}: {text}");
+    assert!(text.contains("입력을 고치는 문제가 아니라 승인 계획의 상태 문제다"), "{tool}: Core todo: {text}");
+    for forbidden in ["입력 오류를 고쳐", "한 번 다시 보낸다", "report 문자열을 아래 꼴", "gil_close 입력 (", "gil_help", "행동 계약(objective", "지금 어디인지 확인한다"] {
+        assert!(!text.contains(forbidden), "{tool}: `{forbidden}` must not appear: {text}");
+    }
+    assert!(!text.contains("이 닫기가 성공") && !text.contains("열었다:"), "{tool}: a refusal never reads as success: {text}");
+}
+
 // Explicit maintainer policy/sandbox diagnostics with read-only records; not installed Host hooks. This remains a
 // synthetic protocol acceptance test: the App decisions below are not human UI observations.
 #[cfg(all(target_os = "macos", feature = "visual-authoring"))]
@@ -422,6 +442,17 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     let rev1 = r.read()["proposal"].clone();
     assert!(r.context_readonly().contains("Monitor 버튼 응답을 기다린다"));
 
+    // While the proposal waits for the Monitor button, closing the Synthesis is refused as an
+    // approval state: the receipt sends the model to gil_plan_read, not back to its Report.
+    let before = state(&root);
+    let waiting = refused(r.model("gil_close", json!({"report":format!("statement: 합성 자료로 항목을 순서대로 확인하고 파일 증거를 남긴다\nbasis_refs: {}\nexploration_checklist: |\n  A\n  B\n", basis.join("\n"))})), "close while approval is pending");
+    assert_plan_state_refusal(&waiting, "gil_close while waiting");
+    assert!(blocks(&waiting).contains("Monitor에서 이 판을 승인하거나 수정 요청해야 한다"), "{waiting}");
+    assert_eq!(state(&root), before, "a state refusal changes nothing");
+    // gil_plan_read then names the wait itself, never a close.
+    let read = ok(r.model("gil_plan_read", json!({})), "read while waiting");
+    assert!(blocks(&read).contains("Monitor 버튼 응답을 기다린다") && !blocks(&read).contains("gil_close(Synthesis)"), "{read}");
+
     // capability only in _meta; state untouched; stable within a process
     let before = state(&root);
     let review = ok(r.app("gil_plan_review", json!({})), "review");
@@ -601,7 +632,11 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     let context = r.context_readonly();
     assert!(context.contains("gil_open(kind: interview)"), "{context}");
     assert!(!context.contains("현재 Cycle의 남은 Step을 실제 순서대로 마치고"), "closed Cycle still directs old steps: {context}");
-    refused(r.model("gil_open", json!({"kind":"experiment"})), "experiment while reinterview pending");
+    let before = state(&root);
+    let pending = refused(r.model("gil_open", json!({"kind":"experiment"})), "experiment while reinterview pending");
+    assert_plan_state_refusal(&pending, "gil_open while a re-interview request is preserved");
+    assert!(blocks(&pending).contains("보존된 재인터뷰 요청이 있다"), "{pending}");
+    assert_eq!(state(&root), before);
     let opened = ok(r.model("gil_open", json!({"kind":"interview"})), "open interview");
     let c4 = cycle_number(&opened);
 
@@ -649,6 +684,16 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     r.finish_experiment(c5, "D", &verify, &document4);
     let read = r.read();
     assert_eq!(read["executed_cycles"].as_array().unwrap().iter().map(|e| format!("{}@{}", e["item_id"].as_str().unwrap(), e["revision"])).collect::<Vec<_>>(), ["A@2", "B@2", "D@4"]);
+
+    // Every approved item has executed: another Experiment is refused as an approval state, and
+    // gil_plan_read (the one next call) names the Closing Interview instead.
+    let before = state(&root);
+    let exhausted = refused(r.model("gil_open", json!({"kind":"experiment"})), "experiment with no pending item");
+    assert_plan_state_refusal(&exhausted, "gil_open with no pending item");
+    assert!(blocks(&exhausted).contains("미실행 항목이 없다"), "{exhausted}");
+    assert_eq!(state(&root), before);
+    let read = ok(r.model("gil_plan_read", json!({})), "read with no pending item");
+    assert!(blocks(&read).contains("Closing Interview") && blocks(&read).contains("gil_open(kind: interview)"), "{read}");
 
     // Closing Interview needs its own approval; Chain closes; next Chain cannot reuse it
     ok(r.model("gil_open", json!({"kind":"interview"})), "open closing interview");
@@ -708,6 +753,14 @@ fn misplaced_report_and_plan_extension_recover_from_exact_readonly_mcp_data() {
     let message = said(&invalid);
     assert!(message.contains("gil_help") && message.contains("topic: \"close\""), "{message}");
     assert!(!message.contains("gil close --help") && !message.contains("<<'EOF'"), "{message}");
+    // 2026-11-16 roadmap item 2: the refusal itself names the missing fields and shows the current
+    // input skeleton, so the help lookup is offered only for a missing skeleton or a moved position.
+    assert!(message.contains("빠진 것: choices, response"), "{message}");
+    assert!(message.contains("gil_close 입력 (") && message.contains("\"report\"") && message.contains("choices") && message.contains("response"), "{message}");
+    assert!(message.contains("설명서 조회는 필요 없다") && message.contains("골격이 없거나"), "{message}");
+    let guidance = blocks(&invalid);
+    assert!(guidance.contains("입력 골격대로 고쳐") && guidance.contains("설명서를 다시 읽지 않아도 된다"), "{guidance}");
+    assert!(!guidance.contains("gil_plan_read"), "an ordinary input refusal is not an approval state: {guidance}");
     #[cfg(all(windows, feature = "visual-authoring"))]
     assert!(!root.join(gil::STATE_PATH).exists(), "help must resolve the external product record");
     let help = said(&ok(r.model("gil_help", json!({"topic":"close"})), "current close help"));
