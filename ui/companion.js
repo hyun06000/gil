@@ -646,46 +646,83 @@ function setOrientation(next) {
  *  「아직 질문이 정의되지 않았다」가 떴다 — 화면이 **있는 것을 없다고** 말했다.
  *
  *  Report 를 여기서 뒤지지 않는다. 무엇을 물었는지는 read model 이 이미 정해 보낸다. */
-function askedNow(here) {
+function askedNow(here, view) {
   const define = here && here.experiment_definition;
   if (define) {
-    return { title: define.problem, under: t('ui.success_criterion', { condition: define.success_condition }) };
+    return { title: define.problem, under: t('ui.success_criterion', { condition: define.success_condition }),
+      criterion: define.success_condition };
   }
   const asked = here && here.interview_question;
   if (asked && asked.state === "asked") {
     return { title: asked.question, under: asked.response ? t('ui.response', { response: asked.response }) : null };
   }
-  if (asked && asked.state === "asking") {
-    return { title: t('ui.asking'), under: null };
+  // 아직 질문이 기록되지 않았으면 제목은 열린 행동 계약의 목적, 그것도 없으면 Cycle 의 이름이다.
+  // 상태 문장은 제목이 아니라 그 아래 한 줄이다(§1.1 — 짧은 제목과 실제 상태).
+  const fallback = (view && view.current_will && view.current_will.objective) ||
+    cycleName(view.current.cycle_ref, here ? here.kind : "");
+  if (asked && asked.state === "asking") return { title: fallback, under: t('ui.asking') };
+  if (asked && asked.state === "not_asked") return { title: fallback, under: t('ui.not_asked') };
+  return { title: fallback, under: t('ui.undefined_question') };
+}
+
+/** 지금 하는 일의 **실제 상태** — View 가 말한 것만. 승인 대기는 Host 의 승인 패널이 따로 말한다.
+ *  판정 값은 낱말로 옮기되 `failure` 를 반증으로 읽지 않는다(§1.2). */
+function nowState(view) {
+  if (view.chain?.state === "closed") {
+    const verdict = word("ui.verdict", view.chain.report?.verdict);
+    return { state: "done", text: verdict ? `${t('ui.state.done')} · ${verdict}` : t('ui.state.done') };
   }
-  if (asked && asked.state === "not_asked") {
-    return { title: t('ui.not_asked'), under: null };
+  const here = cycleOf(view.current.cycle_ref);
+  const step = here && here.steps.find((s) => s.step_ref === view.current.step_ref);
+  if (step && step.state === "open") return { state: "in_progress", text: t('ui.in_progress') };
+  return { state: "boundary", text: t('ui.state.boundary') };
+}
+
+/** 파일이 기준과 다르거나 보지 못했을 때만 한 줄. 정상(clean)이면 아무 말도 없다 — 원문 낱말은 「기록 상세」에 남는다.
+ *  `verify_can_confirm` 은 「열린 Step 이 Verify 다」라는 사실이다(Monitor Model §3). 막힘을 지어내지 않는다. */
+function worldWarning(world) {
+  if (!world) return null;
+  if (world.state === "dirty") {
+    return world.verify_can_confirm === true ? t('ui.world_warning.dirty_verify') : t('ui.world_warning.dirty');
   }
-  return { title: t('ui.undefined_question'), under: null };
+  if (world.state === "unknown") {
+    return t('ui.world_warning.unknown', { reason: world.reason ? ` — ${world.reason}` : "" });
+  }
+  return null;
 }
 
 function renderIntro() {
   const view = current.view;
   const here = cycleOf(view.current.cycle_ref);
-  const asked = askedNow(here);
+  const asked = askedNow(here, view);
   intro.querySelector("h1").textContent = asked.title;
-  // 질문과 **지금 서 있는 자리**를 섞지 않는다. 자리는 아래 줄과 status 가 따로 말한다.
-  intro.querySelector("p").textContent =
-    asked.under ?? t('ui.standing_in', { cycle: cycleName(view.current.cycle_ref, here ? here.kind : "") });
+  intro.querySelector(".now-under").textContent = asked.under || "";
+  const state = nowState(view);
+  const chip = intro.querySelector(".now-state");
+  chip.textContent = state.text;
+  chip.dataset.state = state.state;
+  const warning = intro.querySelector(".world-warning");
+  const blocked = worldWarning(view.world);
+  warning.textContent = blocked || "";
+  warning.hidden = !blocked;
   intro.querySelector(".world").textContent = word(WORLD, view.world.state);
-  status.textContent =
-    `${view.current.chain_ref ? `${view.current.chain_ref} · ${view.chain?.state === "closed" ? t('ui.chain_closed') : t('ui.chain_open')} · ` : ""}${view.current.cycle_ref} · ${view.current.step_ref || t('ui.cycle_boundary')} · ${t('ui.read_only')}`;
+  // 식별자(chain·cycle·step)는 「기록 상세」의 한 줄이 지닌다. 바닥 줄은 읽기 전용이라는 사실만 말한다.
+  status.textContent = t('ui.read_only');
   const summary = progressSummary(view);
   for (const field of ['position', 'action', 'done']) {
     intro.querySelector(`.progress-${field}`).textContent = summary[field];
   }
+  // 완료 조건이 위의 성공 기준과 같은 문장이면 두 번 적지 않는다.
+  intro.querySelector('.gil-progress dl').dataset.done =
+    asked.criterion && summary.done === asked.criterion ? 'same' : 'own';
   intro.querySelector('.progress-records').textContent = `${summary.records} · ${summary.visuals}`;
   const observed = observeProgress(current.scopeId, view);
   const at = new Date(observed.observedAt).toLocaleTimeString();
   intro.querySelector('.progress-observed').textContent = observed.changed
     ? t('ui.observed_changed', { at })
     : t('ui.observed', { at });
-  intro.querySelector('.progress-connection').textContent = t('ui.connection_ok');
+  // 완전한 View 를 새로 읽었다 — 연결 문제의 글은 걷는다. 정상일 때 「조회 성공」을 따로 적지 않는다.
+  intro.querySelector('.progress-connection').textContent = "";
 }
 
 let disposeVisuals = () => {};
@@ -704,7 +741,7 @@ function renderDetail(node) {
   const isCycle = reportOwner.kind === 'cycle';
   head.textContent = isCycle
     ? t('ui.detail_cycle_head', { cycle: cycleName(node.cycle_ref,node.kind), state: node.state === 'open' ? t('ui.open') : t('ui.closed') })
-    : `${node.cycle_ref} · ${word(STEP_KIND, node.kind)} · ${node.state === "open" ? t('ui.open') : t('ui.closed')}`;
+    : `${cycleName(node.cycle_ref, (current && cycleOf(node.cycle_ref) || {}).kind)} · ${word(STEP_KIND, node.kind)} · ${node.state === "open" ? t('ui.open') : t('ui.closed')}`;
   const name = document.createElement("h2");
   name.textContent = reportOwner.ref;
   detail.append(head, name);
@@ -814,12 +851,18 @@ function expandCycle(cycleRef) {
  * 옆에 적는다.
  */
 function markStale(error) {
-  stale.textContent = t('ui.stale', { why: why(error) });
+  stale.replaceChildren(document.createTextNode(t('ui.stale')));
+  const more = document.createElement("details");
+  const head = document.createElement("summary");
+  head.textContent = t('ui.stale_why');
+  const said = document.createElement("p");
+  said.textContent = why(error); // Host 가 준 말 그대로 — 줄이지 않는다.
+  more.append(head, said);
+  stale.appendChild(more);
   stale.dataset.shown = "true";
-  intro.querySelector('.progress-connection').textContent = t('ui.connection_failed');
 }
 function markFresh() {
-  stale.textContent = "";
+  stale.replaceChildren();
   stale.dataset.shown = "false";
 }
 
