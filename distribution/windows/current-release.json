@@ -1,15 +1,15 @@
 {
   "schema": 1,
-  "version": "0.3.0",
-  "tag": "v0.3.0",
-  "release_url": "https://github.com/hyun06000/gil/releases/tag/v0.3.0",
+  "version": "0.3.2",
+  "tag": "v0.3.2",
+  "release_url": "https://github.com/hyun06000/gil/releases/tag/v0.3.2",
   "published": "2026-11-12",
-  "source_commit": "9f1e526",
-  "workflow_run": "https://github.com/hyun06000/gil/actions/runs/43240833076",
+  "source_commit": "46dee5c5ef4e77b78547b2d6b17f5071f696fa3a",
+  "workflow_run": "https://github.com/hyun06000/gil/actions/runs/43268869416",
   "assets": {
     "gil-x86_64-pc-windows-msvc.exe": {
-      "bytes": 11857920,
-      "sha256": "6120b15367f11d757e449de6a134f0cdbf08b19d41153f036363cc0afd5417bd"
+      "bytes": 11885056,
+      "sha256": "232a59435a13bc5c62616c7c6770db3fbcdafe502f57684c667b2c55ac316eb1"
     },
     "checksums.txt": {
       "bytes": 97

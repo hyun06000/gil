@@ -1,8 +1,24 @@
 # GIL 설치 지침 (AI 에이전트용)
 
-목표: 이 PC의 Claude Desktop(Claude Code 탭)과 Codex에 GIL MCP 서버 `gil`을 등록한다.
-대상: Windows 10/11 x64. 관리자 권한은 필요 없다. 보안 설정·실행 정책·registry는 바꾸지 않는다.
-실행 전: 아래 단계를 사용자에게 요약해 보여주고 승인을 받는다.
+먼저 운영체제와 프로세서를 확인하고 해당 절차 하나를 따른다. 설치·업데이트 요청이 이미 승인됐다면
+같은 승인을 다시 묻지 않는다. 파일 준비만 요청받았다면 앱 등록과 기존 설치 교체는 하지 않는다.
+
+| 환경 | 설치 경로 |
+|---|---|
+| macOS Apple Silicon (M 계열) | **[Mac 시험판 설치 안내](distribution/codex/INSTALL.md)** — `0.2.1-preview.30`, Codex 플러그인 또는 Claude Desktop 직접 등록 |
+| Windows 10/11 x64 | 아래 단일 실행 파일 절차 — 현재 `v0.3.2` |
+| Intel Mac / Windows ARM64 | 이 문서의 설치 파일을 사용하지 않는다 |
+
+Mac 사용자는 아래 PowerShell 절차를 실행하지 않는다. Mac 설치 안내에는 고정 다운로드 주소,
+파일 무결성 확인 값(SHA-256), 기존 설치 교체·이전 버전 복구·실패 대응을 함께 둔다.
+새 시험판은 보고서와 모니터를 간결하게 하고, 종료 인터뷰 전에 결과물을 보여 주도록 안내한다.
+[변경·검증 기록](distribution/codex/PREVIEW-30-PUBLICATION-20261116.md)을 참고한다.
+
+## Windows 설치
+
+목표: 이 PC의 Claude Desktop(Claude Code 탭)과 Codex에 GIL 도구 서버 `gil`을 등록한다.
+관리자 권한은 필요 없다. 보안 설정·실행 정책·registry는 바꾸지 않는다.
+실행 전 설치 대상을 짧게 알리고, 기존 설치의 교체가 요청 범위 밖이면 교체 승인을 받는다.
 
 사람이 직접 설치하려면 PowerShell에 한 줄을 붙여 넣는다. 아래 단계와 같은 일을 한다.
 
@@ -43,7 +59,7 @@ irm https://raw.githubusercontent.com/hyun06000/gil/main/install.ps1 | iex
 `doctor`의 종료 코드가 0이고, 이 PC에 설치된 Host마다 `OK`가 출력된다. 설치되지 않은 Host는 `NOT_INSTALLED`이며 오류가 아니다.
 
 ```text
-binary: OK C:\Users\name\AppData\Local\Programs\gil\gil.exe (v0.3.0)
+binary: OK C:\Users\name\AppData\Local\Programs\gil\gil.exe (v0.3.2)
 claude-desktop: OK
 codex: OK
 ```

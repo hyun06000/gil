@@ -2,9 +2,13 @@
 
 > 2026-11-12부터 저장소 루트의 [INSTALL.md](../INSTALL.md)가 짧은 설치 절차서다. 이 문서는 macOS 채널의 상세 절차,
 > Host별 확인 사항, 기존 훅 정리, 버전 확인 규칙을 담은 **상세 안내**이며 루트 절차서에서 링크한다.
-> 현행 Windows 릴리스는 `0.3.0` 단일 실행 파일([v0.3.0](https://github.com/hyun06000/gil/releases/tag/v0.3.0),
+> 현행 Windows 릴리스는 `0.3.2` 단일 실행 파일([v0.3.2](https://github.com/hyun06000/gil/releases/tag/v0.3.2),
 > [게시 장부](windows/PUBLICATION-V0.3.0-20261113.md))이며 설치는 루트 INSTALL.md를 따른다.
 > 아래 Windows 절의 NSIS Companion(`0.1.1-owner.15`)은 구형 채널이다.
+
+이번 Mac preview.30은 모니터의 기본 화면을 줄이고 보고서를 간결하게 작성하도록 안내한다.
+작업물이 있으면 종료 인터뷰 전에 보여 주며, 다섯 언어 지원을 포함한다.
+[이번 판의 검증 범위](codex/PREVIEW-30-PUBLICATION-20261116.md)를 확인한다.
 
 GIL 설치는 Host 훅을 등록하지 않는다. 선택한 GIL 프로젝트에만 공통 프롬프트와 단계별 MCP 응답으로 안내한다.
 macOS preview.29와 Windows owner.15는 계획 근거 입력 안내·오류 일괄 표시와 PNG 제한값 안내를 보완한다. 훅 없는 프로젝트별 새 세션 재개와 기존 기록 보존을 유지한다.
@@ -15,7 +19,7 @@ macOS preview.29와 Windows owner.15는 계획 근거 입력 안내·오류 일�
 실제 Host의 안내 활용과 필드테스트는 사용자 확인 대기다.
 
 전역·프로젝트 로컬·Plugin·Skill 훅은 등록하지 않는다. 구형 Core의 훅 installer를 실행하지 않는다.
-Windows는 기존 채널의 새 버전 owner.15로 최신 공통 기능을 제공한다. 기존 프로젝트 기록은 자동 변환하지 않는다.
+Windows의 신규 설치는 루트 안내의 단일 실행 파일 채널을 사용한다. 기존 프로젝트 기록은 자동 변환하지 않는다.
 
 이 문서가 친구·외부 시험 사용자를 위한 설치 정본이다. 사용자는 터미널 사용법을 알 필요가 없다.
 GIL은 **Codex**와 **Claude Desktop의 Claude Code 탭**을 같은 지원 대상으로 둔다. 두 Host는 같은 Core,
@@ -30,8 +34,8 @@ Agent가 앱에 포함된 CLI와 OS 기본 도구를 사용한다. 일반 ChatGP
 
 ## 언어
 
-아래 다국어 기능은 개발 소스의 변경이며, 기존 배포 macOS preview.29·Windows owner.15에는 아직 포함되지 않는다.
-새 배포본이 게시된 뒤 적용한다.
+아래 다국어 기능은 macOS preview.30에 포함된다. 이전 macOS preview.29와 구형 Windows owner.15에는 없다.
+Windows 현행 단일 실행 파일 채널도 다국어 Monitor를 제공하며, 이번 게시로 Windows 파일을 바꾸지는 않는다.
 
 GIL은 영어(기준·fallback)·한국어·중국어 간체(zh-Hans)·중국어 번체(zh-Hant)·일본어를 지원한다.
 Monitor 화면은 Host가 알려 준 언어(`hostContext.locale`)를 따르고, Host가 언어를 알려 주지 않으면 영어다.
@@ -57,7 +61,7 @@ macOS preview.29와 Windows owner.15는 프로젝트 내부 Codex/Claude 안내�
 
 macOS preview.25부터는 실제 MCP가 실행하는 Core의 `--version`, MCP initialize의
 `serverInfo.version`, agent probe의 `core_version`이 배포 버전과 일치해야 한다.
-이번 판의 정확한 CLI 출력은 `gil 0.2.1-preview.29`이며 MCP·probe 버전은 `0.2.1-preview.29`다.
+이번 판의 정확한 CLI 출력은 `gil 0.2.1-preview.30`이며 MCP·probe 버전은 `0.2.1-preview.30`다.
 preview.24와 그 이전 판은 수정 전이므로 `gil 0.1.0`을 출력할 수 있다.
 이는 Cargo 패키지 버전이며 **그 한 줄만으로 설치 실패나 구버전이라고 단정하지 않는다.**
 Windows owner.15의 CLI는 `gil 0.1.1-owner.15`, MCP·probe는 `0.1.1-owner.15`를 반환한다.
@@ -66,19 +70,20 @@ Windows owner.14 이하는 같은 구형 확인 절차를 따른다.
 설치 Agent는 PATH의 임의 `gil` 대신 공식 설치 응답·manifest 또는 직접 MCP 등록에서 확인한
 실행 파일을 검사한다. macOS는 공개 archive의 크기·SHA-256, `release.json`의 배포 버전과
 실제 Core 파일 해시, Codex·Claude manifest 버전을 대조한다. Core 해시가 receipt와 다르면
-정상 설치로 보고하지 않는다. Windows는 선택된 `current.json`과 실제 Core 해시를 대조한다.
+정상 설치로 보고하지 않는다. Windows 현행 채널은 루트 안내의 체크섬·`doctor`를 사용한다.
+구형 Companion 채널만 선택된 `current.json`과 실제 Core 해시를 대조한다.
 
 preview.25 이후에 `--version`만 구버전이면 실제 실행 경로를 다시 확인한다. 디스크의 버전은
 맞지만 MCP 서버 정보만 다르면 기존 연결이 살아 있는지 확인하고 앱 재시작·새 세션으로 연결한다.
 버전 문구는 무결성·제작자 인증을 대신하지 않으므로 해시 검증을 생략하지 않는다.
 이 확인을 위해 프로젝트를 초기화하거나 기록·설정·보안 정책을 임의로 바꾸지 않는다.
 
-## 네 조합의 지원 상태 (2026-11-10)
+## 네 조합의 지원 상태 (2026-11-16)
 
 | OS | Codex | Claude Desktop (Claude Code 탭) |
 |---|---|---|
-| Windows 11 x64 | **이전 판 실기기 확인 / 이번 판 사용자 확인 대기** — Companion installer `0.1.1-owner.15`, **Codex 연결** 버튼 | **사용자 확인 대기** — `0.1.1-owner.15`의 **Claude Desktop 연결** 버튼(자동 테스트 통과) |
-| macOS Apple Silicon | **이전 판 실기기 확인 / 이번 판 사용자 확인 대기** — Plugin `0.2.1-preview.29` 또는 Git 없는 archive | **이전 판 사용자 확인(11/01) / 이번 판 확인 대기** — 같은 archive의 Core를 Desktop 설정에 직접 등록. Plugin 경로는 화면 미표시 |
+| Windows 10/11 x64 | 단일 실행 파일 `0.3.2`의 `gil install`로 등록. 서명 없는 실행 파일의 보안 차단은 우회하지 않음 | 같은 `gil install`로 등록. 현재 판의 실제 화면 확인은 별도 |
+| macOS Apple Silicon | **이전 판 실기기 확인 / 이번 판 사용자 확인 대기** — Plugin `0.2.1-preview.30` 또는 Git 없는 archive | **이전 판 사용자 확인(11/01) / 이번 판 확인 대기** — 같은 archive의 Core를 Desktop 설정에 직접 등록. Plugin 경로는 화면 미표시 |
 
 상태의 뜻:
 
@@ -94,20 +99,20 @@ preview.25 이후에 `--version`만 구버전이면 실제 실행 경로를 다�
 
 | 환경 | 버전 | 상태 |
 |---|---|---|
-| Windows 10/11 x64 | `0.3.0` (단일 실행 파일, 루트 INSTALL.md) | 2026-11-12 게시. 다국어 Monitor·`gil install`/`doctor` 포함, 실기기 검수 대기 |
+| Windows 10/11 x64 | `0.3.2` (단일 실행 파일, 루트 INSTALL.md) | 2026-11-12 게시. 다국어 Monitor·`gil install`/`doctor` 포함, 실기기 검수 대기 |
 | Windows 11 x64 (구형) | `0.1.1-owner.15` | NSIS Companion 채널. 신규 설치에 쓰지 않음 |
-| macOS Apple Silicon | `0.2.1-preview.29` | 계획 근거·PNG 입력 안내 보완판, 실제 Host 검수 대기 |
+| macOS Apple Silicon | `0.2.1-preview.30` | 보고서·모니터 간결화, 결과물 우선 안내·다국어 포함. 실제 Host 검수 대기 |
 
 이번 판은 승인 저장과 최신 상태 조회를 구분한다. 승인 뒤 읽기가 잠시 실패하면 확인된 승인 판을 유지하고
 회색 **최신 상태 다시 확인 중** 안내를 보인다. 연속 실패 때는 조회 실패로 알리며 **다시 읽기**를 제공한다.
 저장 응답을 확인하지 못한 경우에는 **저장 결과 불확실**로 표시하고 승인을 자동 재전송하지 않는다.
 이전 판의 승인을 새 제안에 적용하지 않는다. 조회는 2/4/8/15초 간격으로 재시도한다.
 
-이번 두 배포본은 같은 `approved-plan` + `visual-authoring` 시험 프로필이다. **새 대화·새 빈 폴더**에서
+Mac 시험판과 구형 Windows owner.15는 같은 `approved-plan` + `visual-authoring` 시험 프로필이다. **새 대화·새 빈 폴더**에서
 Monitor 승인 버튼 → Interview 닫기 → 계획 항목별 Experiment → Verify 파일 증거를 시험한다.
 새 프로젝트는 저장 형식 7을 사용한다. 기존 기록의 형식은 자동 변환하지 않으며, 이전 설치본으로
 되돌려도 형식 7 기록은 이전 형식으로 바뀌지 않는다. 닫힌 실패 Cycle의 revisit만 Monitor에서 변경 목록 확인·보존 승인을 거쳐 진행한다. 일반 restore와 Step revisit는 계속 차단한다.
-macOS 검증 범위와 배포물은 [preview.29 장부](codex/PREVIEW-29-PUBLICATION-20261110.md), Windows owner.15는 [게시 장부](windows/PUBLICATION-OWNER-15-20261110.md)를 따른다.
+macOS 검증 범위와 배포물은 [preview.30 장부](codex/PREVIEW-30-PUBLICATION-20261116.md), Windows owner.15는 [게시 장부](windows/PUBLICATION-OWNER-15-20261110.md)를 따른다.
 
 > Windows **Claude Desktop 연결** 버튼은 `0.1.1-owner.10`부터, 공통 Monitor의 **업데이트 안내·확대·미니맵**은 owner.10/preview.11부터 포함된다.
 > 이전 owner.8/owner.9에는 Claude Desktop 연결 버튼이 없다. 업데이트 뒤 새 연결에서 확인한다.
@@ -124,7 +129,9 @@ Companion의 버튼(Windows) 또는 아래 절차의 사용자 승인 뒤 **Desk
 기존 GIL 훅은 아래 **훅 없는 설치와 기존 훅 제거** 절차로 정리한다.
 기존 비-GIL 설정·권한·sandbox를 보존하고 원본 백업과 정확한 변경 내용을 확인한다.
 
-## Windows 11 x64
+## Windows 11 x64 — 구형 Companion 채널 기록
+
+아래는 owner.15 당시 절차다. 신규 설치·업데이트는 [루트 안내](../INSTALL.md)의 단일 실행 파일을 사용한다.
 
 릴리스: [windows-owner-update-0.1.1-owner.15](https://github.com/hyun06000/gil/releases/tag/windows-owner-update-0.1.1-owner.15)
 
@@ -186,14 +193,14 @@ Core이고, 이미 열린 대화는 열 때의 Core를 끝까지 쓴다.
 
 ## macOS Apple Silicon
 
-릴리스: [v0.2.1-preview.29](https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.29)
+릴리스: [v0.2.1-preview.30](https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.30)
 
 - Plugin: `gil-companion-prototype@gil-preview-macos-arm64`
-- marketplace tag: `v0.2.1-preview.29`
-- marketplace commit: `c82bd228cf98f6bcf9dacf9a42f76ca8b2d3ff0f`
-- Git 없는 설치 archive: `gil-codex-macos-arm64-0.2.1-preview.29.tar.gz`
-- archive 크기: `3,495,614` bytes
-- archive SHA-256: `31dca9788ee3b4cf5d392600c877e56de73073a4628e4d0567ca1854717b80dc`
+- marketplace tag: `v0.2.1-preview.30`
+- marketplace commit: `bf9f08d43fd93f0ca1e478b12958a0dc872185c1`
+- Git 없는 설치 archive: `gil-codex-macos-arm64-0.2.1-preview.30.tar.gz`
+- archive 크기: `4,119,499` bytes
+- archive SHA-256: `a05275206833d315b2beaefd57236659b22edf4d2eefa6c9e6b7a33a11fc8cec`
 - 지원: Apple Silicon(`arm64`)만. Intel Mac에는 설치하지 않는다.
 
 archive 하나가 Codex용 `.agents/plugins/marketplace.json`과 Claude Code용 `.claude-plugin/marketplace.json`,
@@ -215,7 +222,7 @@ macOS에는 아직 고정 런처와 Companion 버튼이 없다. Codex는 Plugin 
 
 Agent는 실제 Plugin 설치 응답의 `installedPath`와 MCP manifest, 또는 Claude의 `mcpServers.gil.command`에서
 Core의 절대경로·버전을 확인한다. 캐시 경로나 PATH의 `gil`을 추측하지 않는다.
-macOS preview.29에서는 그 경로를 `GIL_CORE`로 사용한다. Windows owner.15는 `current.json`의 버전·해시로
+macOS preview.30에서는 그 경로를 `GIL_CORE`로 사용한다. Windows owner.15는 `current.json`의 버전·해시로
 검증한 Core를 사용하며 [Windows의 기존 훅 확인](windows/INSTALL.md#기존-gil-훅-확인)을 따른다.
 preview.23 이하나 Windows owner.14 이하의 Core에는 이 제거 명령을 실행하지 않는다.
 
@@ -251,7 +258,7 @@ GIL Core의 승인·전이·Report·증거·dirty 검사는 유지한다. 프롬
 ### Codex에 붙여넣을 요청
 
 ```text
-GIL unsigned preview 0.2.1-preview.29를 훅 없이 설치해 줘. 사용자가 터미널을 직접 조작하게 하지 마.
+GIL unsigned preview 0.2.1-preview.30을 훅 없이 설치해 줘. 사용자가 터미널을 직접 조작하게 하지 마.
 플러그인 관리 MCP 도구만 보고 설치 불가라고 결론내리지 말고, 이 로컬 Codex 작업의 셸에서
 앱에 포함된 codex CLI를 사용해. 프로젝트를 초기화·이관하거나 .gil 기록을 바꾸지 마.
 
@@ -267,21 +274,21 @@ GIL unsigned preview 0.2.1-preview.29를 훅 없이 설치해 줘. 사용자가 
 GIL 훅은 새로 만들거나 복구하지 마. 기존 GIL 훅만 위 제거 절차에 따라 백업·정리해.
 
 Git이 실제로 동작하면 다음 고정 tag 경로를 사용해:
-codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.29 --json
+codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.30 --json
 codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 
 Git 또는 Xcode Command Line Tools를 찾지 못하면 개발 도구 설치를 제안하지 말고 Git 없는 경로로 전환해.
 다음 archive를 임시 파일로 받은 뒤 압축 해제 전에 크기와 SHA-256을 모두 확인해:
-https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.29/gil-codex-macos-arm64-0.2.1-preview.29.tar.gz
-크기: 3495614 bytes
-SHA-256: 31dca9788ee3b4cf5d392600c877e56de73073a4628e4d0567ca1854717b80dc
+https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.30/gil-codex-macos-arm64-0.2.1-preview.30.tar.gz
+크기: 4119499 bytes
+SHA-256: a05275206833d315b2beaefd57236659b22edf4d2eefa6c9e6b7a33a11fc8cec
 
 값이 다르면 아무것도 풀지 말고 중단해. 일치하면 tar 목록에서 절대경로, .. 경로 이동,
 심볼릭 링크, 하드 링크와 특수 파일이 없는지 확인해. 문제가 없으면 기존 폴더를 덮어쓰지 말고
-$HOME/Library/Application Support/GIL/preview.29-local 이라는 새 사용자 전용 폴더에 풀어.
-그 폴더의 .agents/plugins/marketplace.json, release.json, Plugin version 0.2.1-preview.29,
+$HOME/Library/Application Support/GIL/preview.30-local 이라는 새 사용자 전용 폴더에 풀어.
+그 폴더의 .agents/plugins/marketplace.json, release.json, Plugin version 0.2.1-preview.30,
 core/darwin-arm64/gil 실행 권한을 확인한 뒤 다음 공식 CLI 명령을 사용해:
-codex plugin marketplace add "$HOME/Library/Application Support/GIL/preview.29-local" --json
+codex plugin marketplace add "$HOME/Library/Application Support/GIL/preview.30-local" --json
 codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 
 네트워크나 Codex 설정 저장 권한이 필요하면 정상 승인 창으로 요청하고, 승인 뒤에는
@@ -290,7 +297,7 @@ codex plugin list --json으로 상태를 다시 읽어 끝나지 않은 단계�
 
 Git·Git 없는 경로 모두 실제 설치 결과에서 Core 절대경로·버전을 확인해.
 위 훅 제거 절차를 적용하고 다른 Host는 바꾸지 마. 원본 백업·비-GIL 설정·권한·sandbox를 보존해.
-마지막으로 codex plugin list --json에서 설치 버전이 0.2.1-preview.29인지 확인해 알려줘.
+마지막으로 codex plugin list --json에서 설치 버전이 0.2.1-preview.30인지 확인해 알려줘.
 앱 재시작·새 세션에서 일반 프로젝트 비간섭과 선택한 GIL 프로젝트의 단계별 안내를 확인하도록 안내해.
 연결·설정, 실제 Host 필드테스트, Monitor 표시를 구분해 보고해. 파일 쓰기를 강제 차단한다고 말하지 마.
 화면이 실제로 보이기 전에는 Monitor가 열렸다고 말하지 마.
@@ -319,7 +326,7 @@ inline 카드가 주변 대화와 어울린다고 확인했다. 반면 **Plugin�
 보는 경로는 직접 등록이다. 자세한 근거는 [호출 경로별 진단](../mcp-app/CLAUDE-DESKTOP-ROUTES.md)을 본다.
 
 **1단계 — archive 준비(공통).** 위 Git 없는 경로 그대로 archive를 받아 크기·SHA-256·멤버 목록을 검증하고
-사용자 전용 새 폴더(`$HOME/Library/Application Support/GIL/<버전>-local`, 0700)에 푼다. preview.29 archive는 최상위에 Codex용 `.agents/plugins/marketplace.json`과 Claude Code용
+사용자 전용 새 폴더(`$HOME/Library/Application Support/GIL/<버전>-local`, 0700)에 푼다. preview.30 archive는 최상위에 Codex용 `.agents/plugins/marketplace.json`과 Claude Code용
 `.claude-plugin/marketplace.json`을 함께 담는다. 이전 `0.2.1-preview.7` archive에는 `.claude-plugin`이 없다.
 
 **2단계 — 직접 등록(현재 화면이 성립하는 경로).** 먼저 Claude Desktop을 **완전히 종료**한다(Dock에서
@@ -346,9 +353,9 @@ Desktop 종료 뒤 로컬 설치 Agent에서 이어간다. 실행 중 Desktop �
 Claude Code 탭에 붙여넣어 Agent에게 맡길 수 있는 요청문:
 
 ```text
-GIL unsigned preview 0.2.1-preview.29를 Claude Desktop에 훅 없이 직접 등록해 줘. 내가 터미널을 직접 조작하게 하지 마.
+GIL unsigned preview 0.2.1-preview.30을 Claude Desktop에 훅 없이 직접 등록해 줘. 내가 터미널을 직접 조작하게 하지 마.
 위 Git 없는 경로 그대로 archive를 받아 크기·SHA-256·tar 멤버를 검증하고
-$HOME/Library/Application Support/GIL/preview.29-local 에 풀어. 기존 폴더는 덮어쓰지 마.
+$HOME/Library/Application Support/GIL/preview.30-local 에 풀어. 기존 폴더는 덮어쓰지 마.
 그다음 ~/Library/Application Support/Claude/claude_desktop_config.json 을 읽어 지금 mcpServers 에 무엇이
 있는지 보여 주고, gil 항목이 이미 있으면 어떤 실행 파일을 가리키는지 알려 준 뒤 내 승인을 기다려.
 내가 승인하면: Claude Desktop 이 완전히 종료됐는지(주 프로세스 Claude 가 없는지) 확인하고, 설정 파일을
@@ -424,8 +431,8 @@ MCP의 현재 Report 도움말은 `gil_help({project_root, topic: "close"})`로 
 (OS 내장 `curl`, HTTPS만, 64KB 한도) 새 버전이 있으면 Monitor 맨 아래 표시 모드 줄에 **“새 버전 X 있음 · 업데이트
 안내”** 버튼을 띄운다. 버튼은 OS별 절차를 글로 보여 줄 뿐 다운로드·설치·등록 변경을 하지 않는다.
 
-- Windows: Companion → **업데이트 확인** → **업데이트** 절차와 **Companion 열기** 버튼. 두 Host가 같은 고정 런처를
-  쓰므로 재연결은 필요 없다.
+- Windows: 현행 단일 실행 파일은 [루트 설치 안내](../INSTALL.md)의 절차를 다시 실행한다.
+  구형 화면에 **Companion 열기**가 보이더라도 그 업데이터로 `0.3.x`를 받지 않는다. 앱을 재시작해 새 연결을 확인한다.
 - macOS: **업데이트할 앱**에서 Codex / Claude Desktop / 둘 다를 고르고 **요청문 복사**를 누른다.
   Mac의 파일을 다룰 수 있는 에이전트의 새 대화에 붙여넣으면 다운로드와 설정 변경을 맡길 수 있다.
   자동 복사가 안 되면 요청문 상자에서 `⌘C`로 복사한다.
@@ -435,8 +442,9 @@ MCP의 현재 Report 도움말은 `gil_help({project_root, topic: "close"})`로 
   요청문 복사만으로 설치가 시작되지는 않는다. 기존 프로젝트와 기록은 보존한다.
   이 화면은 본 개선이 포함된 배포본부터 제공되며, 이전 설치본에서는 위 “업데이트(macOS Claude)” 절차를 따른다.
 
-설치 버전은 Core가 놓인 자리(Windows `runtime\versions\<버전>\`, Mac Plugin의 `.codex-plugin/plugin.json`)에서
-읽는다. 개발용 빌드는 설치본이 아니므로 확인하지 않는다. 설치 버전을 못 읽으면 “최신 X · 업데이트 안내”로만 표시한다.
+설치 경로에 따른 버전 감지는 구형 Windows의 `runtime\versions\<버전>\`와 Mac Plugin의
+`.codex-plugin/plugin.json` 등을 사용한다. 실제 등록된 Core의 버전과 대조하고, 현행 Windows는
+`gil doctor`로 확인한다. 설치 버전을 못 읽으면 “최신 X · 업데이트 안내”로만 표시할 수 있다.
 확인을 끄려면 Host의 MCP 서버 환경에 `GIL_UPDATE_CHECK=off`를 두거나 Monitor 상태 폴더
 (macOS `~/Library/Application Support/GIL/monitor-bindings-v1`, Windows `%LOCALAPPDATA%\GIL\monitor-bindings-v1`)에
 `update-check.off` 파일을 둔다. 결과와 마지막 확인 시각은 Monitor **연결 정보**의 `update`에 적힌다.

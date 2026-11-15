@@ -1,7 +1,7 @@
 # Native MCP macOS release gates
 
-현재 macOS 검증판은 `0.2.1-preview.29`이다. [설치 안내](INSTALL.md)와
-[게시 장부](PREVIEW-29-PUBLICATION-20261110.md)에서 정확한 버전·소스·검증 범위를 확인한다.
+현재 macOS 검증판은 `0.2.1-preview.30`이다. [설치 안내](INSTALL.md)와
+[게시 장부](PREVIEW-30-PUBLICATION-20261116.md)에서 정확한 버전·소스·검증 범위를 확인한다.
 이 문서는 제작자의 배포 경계와 서명 채널 준비 절차다. 날짜가 붙은 과거 인수를 최신판에 승계하지 않는다.
 받는 사용자에게 Node·Cargo·clone·터미널 설치를 요구하지 않는다. Companion DMG는 별도 산출물이다.
 
@@ -45,9 +45,9 @@ source에서 Skill만 바꾸더라도 새 payload이므로 기존 후보를 덮�
 인증 도구가 아니다. 출처가 불명확한 binary는 입력하지 않는다.
 
 ```sh
-GIL_PREVIEW_VERSION=0.2.1-preview.29 node distribution/codex/build-preview.mjs target/codex-preview-29 --approved-plan
-node distribution/codex/unsigned-preview.mjs prepare target/codex-preview-29/marketplace 0.2.1-preview.29 target/codex-unsigned-candidate-29 --approved-plan
-node distribution/codex/unsigned-preview.mjs verify target/codex-unsigned-candidate-29/marketplace
+GIL_PREVIEW_VERSION=0.2.1-preview.30 node distribution/codex/build-preview.mjs target/codex-preview-30 --approved-plan
+node distribution/codex/unsigned-preview.mjs prepare target/codex-preview-30/marketplace 0.2.1-preview.30 target/codex-unsigned-candidate-30 --approved-plan
+node distribution/codex/unsigned-preview.mjs verify target/codex-unsigned-candidate-30/marketplace
 ```
 
 - 새 output만 사용한다. 입력·설치 cache를 덮거나 기존 `release.json`의 flag를 뒤집지 않는다.
@@ -58,12 +58,27 @@ node distribution/codex/unsigned-preview.mjs verify target/codex-unsigned-candid
   다르면 smoke가 거절하며, 기존 binary를 새 버전으로 재표기해서 통과시키지 않는다.
 - 정본 manifest는 건드리지 않고 출력 manifest의 version만 바꾼다. catalog·Core·Skill·고지는
   byte 그대로 유지한다. 바뀐 설치 metadata는 Host에서 별도 확인해야 한다.
-- 압축 왕복 뒤 Node 없는 PATH로 native challenge·MCP initialize·17 tools·내장 UI를 새로 확인한다.
+- 압축 왕복 뒤 Node 없는 PATH로 native challenge·MCP initialize·프로필별 도구 목록(현재 approved-plan은 33개)·내장 UI를 새로 확인한다.
   실패/timeout은 재시도로 숨기지 않는다. 실패한 output은 진단용으로 남기고 성공 checks를 쓰지 않는다.
 - `release.json`은 `channel: preview_unsigned`, `publishable: false`다. `checks.json`, `SHA256SUMS`,
   `update-record.json`도 생성한다. 이 단계에는 다운로드·설치·Apple credential·보안 설정 변경·게시가 없다.
 - `codex-preview.yml`의 선택 입력 `unsigned_preview_version`으로 같은 후보 제작을 CI에서 수행할 수
   있다. 수동·read-only workflow이며, 생성은 공개 release/marketplace 게시가 아니다.
+
+### 게시 순서 (현재 시험판 채널)
+
+1. 게시 대상 소스 커밋과 새 버전을 정하고 `codex-preview.yml`을 수동 실행한다.
+   `unsigned_preview_version=0.2.1-preview.30`, `runtime_profile=approved-plan`을 사용한 예시는
+   [게시 장부](PREVIEW-30-PUBLICATION-20261116.md)에 있다. 실제 실행의 커밋과 성공 결과를 확인한다.
+2. 자동 검사 산출물의 원본 archive·SHA256SUMS·checks.json·update-record.json을 받는다.
+   해시·압축 멤버·receipt를 확인하고, 이전 판과의 계약·재연결 범위를 기록한다. 로컬 재빌드로 바꾸지 않는다.
+3. 배포 저장소의 작업 브랜치에 검증한 파일·무결성 핀·안내를 반영한다. 이력 개인정보 검사와
+   필수 `pinned-payload` 검사를 통과한 같은 변경을 풀 리퀘스트로 정상 병합한다.
+4. 게시 승인이 있으면 병합 커밋에 새 고정 tag와 GitHub prerelease를 만들고 네 원본 파일을 첨부한다.
+   `--prerelease --latest=false`로 정식 최신판 지정을 피한다. 기존 버전·자산을 덮어쓰지 않는다.
+5. 공개 주소에서 네 파일을 다시 받아 원본과 비교한다. 그 뒤 설치 안내·Git 없는 준비 스크립트의
+   핀·업데이트 피드·로드맵·게시 장부를 소스 풀 리퀘스트로 갱신한다. 필수 자동 검사를 기다린 뒤 병합한다.
+6. 게시와 사용자 앱 적용은 별개다. 설치가 보류됐다면 플러그인·앱 설정·사용자 프로젝트를 바꾸지 않는다.
 
 ### 1.2 사용자 설치와 복구 안내
 

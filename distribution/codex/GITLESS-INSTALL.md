@@ -14,18 +14,17 @@ Claude 절차를 따른다. 아래 과거 VM 검수는 현재 버전의 인수�
    검증한 manifest·release.json·Core를 확인하며, 기존 폴더를 덮어쓰지 않는다.
 4. Codex는 공식 `plugin marketplace add <검증한 로컬 폴더>`와 `plugin add`로 설치한다. 로컬 출처에 Git
    ref를 사용하지 않는다. Claude는 Desktop 종료·백업 후 같은 Core를 직접 등록한다.
-5. **신규 설치·삭제된 훅 복구·업데이트 모두 보호 훅을 등록한다.** 실제 MCP의 검증된 Core로
-   `write-guard install --auto --host codex` 또는 `--host claude`를 실행한다. 요청받은 Host만 바꾸고,
-   두 Host 모두 같은 Core를 쓸 때만 `--host both`를 사용한다. installer가 비-GIL 설정과 백업을 보존한다.
-6. 같은 Core의 `write-guard status --auto`로 선택 Host의 `matches_current_core`와 네 event를 확인한다.
-   앱 재시작·새 세션의 정상 훅 검토(Codex `/hooks`) 뒤 사용자가 선택한 버려도 되는 테스트 폴더에서
-   자동 등록·Verify 밖 거절·Verify 안 허용을 실제 Host로 확인한다. Monitor 표시도 따로 확인한다.
-   실제 보호를 확인하지 못하면 “설정 준비 완료, 실제 보호 확인 대기”로 보고한다.
+5. 새 훅은 등록하지 않는다. 실제 연결할 검증된 Core의 절대경로로 기존 GIL 훅만 정리한다.
+   Codex는 `write-guard uninstall --auto --host codex`, Claude는 `--host claude`를 사용한다.
+   두 Host 모두 요청받았을 때만 `--host both`를 쓴다. 다른 설정·사용자 훅과 백업은 보존한다.
+6. 같은 Core의 `write-guard status --auto`로 정리 결과를 확인한다. `not_installed`는 검사한 설정에
+   훅이 없다는 뜻이며 실제 앱의 메모리 상태까지 확인한 것은 아니다. `custom_review_required`이면
+   사용자 정의 명령을 검토한다. 앱 재시작·새 대화에서 버전과 Monitor 표시를 각각 확인한다.
+   실제 화면을 보지 못했으면 “등록 완료, 화면 확인 대기”로 보고한다. 파일 쓰기 강제 차단은 제공하지 않는다.
 
 권한이 필요하면 Host의 정상 승인 절차를 사용하고, 승인 뒤에는 현재 상태를 재조회해 미완료 단계만
 이어간다. 전역 훅 삭제·자동 권한 허용·Gatekeeper/quarantine 변경·cache 손편집으로 우회하지 않는다.
-훅을 원하지 않는 사용자에게 강제하지 않고 “MCP만 연결, 보호 미설정”으로 보고한다.
-기존 보호 훅이 설치를 막으면 [좁은 설정 갱신 절차](../INSTALL-GUIDE.md#별도로-설치한-전역-write-guard-갱신)를 따른다.
+기존 훅이 설치를 막으면 [기존 GIL 훅 제거 절차](../INSTALL-GUIDE.md#훅-없는-설치와-기존-훅-제거)를 따른다.
 다운로드·준비 폴더는 실패했다고 자동 삭제하지 않는다. 이전 폴더와 사용자 프로젝트·기록을 보존한다.
 
 ## 유지관리자용 준비 스크립트
@@ -33,7 +32,7 @@ Claude 절차를 따른다. 아래 과거 VM 검수는 현재 버전의 인수�
 `prepare-gitless-macos.sh`는 현재 공개 archive의 고정 URL·크기·SHA-256·대상 CPU를 확인하고,
 동봉된 `check-archive-members.sh`로 멤버를 검사한 뒤 새 폴더에만 푼다. `--archive` 시험 입력에도 같은
 크기·해시 검증을 적용한다. 해시 검증 생략 옵션은 없다. 이 스크립트는 **준비만** 수행하며 Plugin/MCP·
-보호 훅을 등록하지 않는다. 성공 뒤에도 위 4~6단계가 남는다. 사용자는 직접 shell 명령을 입력하지 않는다.
+훅을 등록하지 않는다. 성공 뒤에도 위 4~6단계가 남는다. 사용자는 직접 shell 명령을 입력하지 않는다.
 검증한 로컬 marketplace 폴더는 설치 출처이므로 유지하고, 업데이트는 새 버전·새 폴더로 수행한다.
 정확한 실행 예시와 승인된 배포물은 [설치 정본](INSTALL.md)을 따른다.
 
