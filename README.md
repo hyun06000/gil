@@ -62,10 +62,10 @@ irm https://raw.githubusercontent.com/hyun06000/gil/main/install.ps1 | iex
 **Smart App Control이 켜진 PC**는 미서명 exe를 막으므로 같은 `gil.exe`의 Microsoft Store 패키지를 준비 중이다([STORE.md](distribution/windows/STORE.md)).
 
 [상세 통합 안내](distribution/INSTALL-GUIDE.md)에서 OS와 CPU에 맞는 검수본을 확인한 뒤 설치한다. macOS Apple
-Silicon은 Codex Plugin `0.2.1-preview.29`, Windows x64의 구형 채널은 Companion installer
-`0.1.1-owner.15`이다.
+Silicon은 Codex Plugin `0.2.1-preview.30`, Windows x64는 단일 실행 파일 `0.3.2`다.
+Mac preview.30은 보고서·모니터 간결화, 결과물 우선 종료 안내와 다섯 언어 지원을 포함한다.
 macOS preview.29와 Windows owner.15는 계획 근거의 입력 조건·줄별 일괄 오류와 PNG 제한값 안내를 보완한다.
-참조 자동 이동 없이 기존 승인·기록·Snapshot을 보존한다. [Mac 게시 장부](distribution/codex/PREVIEW-29-PUBLICATION-20261110.md)와
+참조 자동 이동 없이 기존 승인·기록·Snapshot을 보존한다. [Mac 현재 게시 장부](distribution/codex/PREVIEW-30-PUBLICATION-20261116.md)와
 [Windows 게시 장부](distribution/windows/PUBLICATION-OWNER-15-20261110.md)를 따른다.
 **사용자에게 Node·Cargo·Homebrew 설치를 요구하지 않는다.** Mac Plugin은 별도 Companion 없이
 [gil-marketplace](https://github.com/hyun06000/gil-marketplace)에서 설치하며, 범용 Plugins Directory
@@ -451,10 +451,10 @@ layer를 목표로 한다.
 
 ## Project status
 
-**현재 사용자 채널은 unsigned 둘이다.** macOS Apple Silicon은 Plugin/archive `0.2.1-preview.29`,
-Windows x64는 단일 실행 파일 `0.3.0`([v0.3.0](https://github.com/hyun06000/gil/releases/tag/v0.3.0))이며, 두 채널 모두 Codex와 Claude Desktop(Claude Code 탭)을
+**현재 사용자 채널은 unsigned 둘이다.** macOS Apple Silicon은 Plugin/archive `0.2.1-preview.30`,
+Windows x64는 단일 실행 파일 `0.3.2`([v0.3.2](https://github.com/hyun06000/gil/releases/tag/v0.3.2))이며, 두 채널 모두 Codex와 Claude Desktop(Claude Code 탭)을
 같은 Core·Monitor·작업 규칙으로 지원한다. 네 조합의 확인 상태(실기기 확인 / 사용자 확인 / 자동 테스트만 통과 /
-사용자 확인 대기)는 [설치 안내](INSTALL.md)의 표를 따른다. 서명된 일반 공개판·Intel Mac·Windows ARM64는 없다.
+사용자 확인 대기)는 [상세 설치 안내](distribution/INSTALL-GUIDE.md)의 표를 따른다. 서명된 일반 공개판·Intel Mac·Windows ARM64는 없다.
 
 앞선 Go 구현과 과거 개발 이력은 기존 개발 저장소에 남겨 두었으며, 이 `gil` 저장소에는
 그 branch·tag·commit history를 가져오지 않았다. 현재 구현은 Rust로 작성하며, Git wrapper가
