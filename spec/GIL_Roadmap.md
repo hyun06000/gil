@@ -26,7 +26,8 @@ dogfood로 통과**해야 `[x]`가 된다.
 
 ## 2. 현재 위치
 
-마지막 갱신: **2026-11-01** (main `3b5341f`: PR #55–63 통합; M6-D 작업 브랜치 구현·로컬 검증)
+마지막 갱신: **2026-11-15** (main `b1fa2f1`, 2026-11-13: PR #64–#118 통합 대조. 이번 갱신은 문서만 바꾸며
+기능·규범 명세·설치본은 바꾸지 않는다. 직전 갱신 2026-11-01은 main `3b5341f`, PR #55–63 기준이었다)
 
 현재 상태는 아래 요약과 §2.2 및 M6 세부 절을 따른다. 과거 날짜별 시험 장부의 체크박스는 당시
 범위의 기록이며 현재 구현 상태로 다시 해석하지 않는다. Core 구현, 제품 활성화, 실제 Host 인수는 별개다.
@@ -35,30 +36,79 @@ dogfood로 통과**해야 `[x]`가 된다.
 | --- | --- | --- |
 | M0/M1 Step·단일 Cycle, M3.5 Manual 기반 | 구현됨 | 후속 회귀 유지; Manual 예제 체계·일부 Topic은 별도 잔여 |
 | M2 Existence/Will·Context | 기반 구현 | Human Participant, Knowledge/Memory/Relations 독립 객체 및 실제 모델 인수 |
-| M3 Artifact | Core 구현·제품 안전성 재검토 | 추적 범위, 현재에만 있는 파일 보존, 읽기 전용 복원 계획, Windows 경계 |
+| M3 Artifact | Core 구현·제품 안전성 재검토. 추적 정책 엔진과 읽기 전용 restore preview는 main에 있음(PR #64) | 추적 범위, 현재에만 있는 파일 보존, 읽기 전용 복원 계획, Windows 경계를 닫은 뒤 일반 restore 재개 |
 | M4-H 누적 실패 전달 | 구현·main 병합 | 실제 모델이 과거 실패를 활용하는지 M7에서 검증 |
-| M4-R 반복 revisit | Core 구현·제품 차단 | M3 안전성 후 제품 재연결과 양 OS 인수 |
-| M5 Monitor | 표시 감지/복구·Host 테마 개선 병합 | 최신 설치본 반영, 경로별 실제 화면·초보 사용자 판독 검수 |
-| M6-A/B/C | `chain-core` 개발 구현·main 병합 | 설치본 활성화·실사용 인수; legacy 이전은 설계만 완료 |
-| M6-D | **개발 프로필 구현·로컬 검증; 미병합** | 승인 계획·revision·실험 연결·Monitor 버튼·Verify 문서·재인터뷰 요청 보존. 실제 Host/Luna 인수·배포는 남음 |
-| M6-E | 설계 미결 | 증거/Report를 완성할 수 없는 열린 단계의 보존·중단 계약 |
+| M4-R 반복 revisit | **닫힌 실패 Cycle의 Monitor 승인 복구만 제품 재개**(PR #67, Mac·Windows, preview.9/owner.8 이후). 일반 restore·Step revisit은 차단 유지 | 실제 Monitor 클릭·Luna 인수; M3 안전성 뒤 나머지 revisit 재개 |
+| M5 Monitor | 표시 감지/복구·Host 테마·줌/미니맵·업데이트 안내·다국어 병합. Claude Code 탭 인계·fullscreen 거절 분류(PR #78·#107). Host 훅은 전부 폐기(PR #98) | 최신 설치본 반영, Windows Claude 실화면, 초보 사용자 판독 검수 |
+| M6-A/B/C | `chain-core` main 병합. `approved-plan` 프로필에 포함돼 **시험 설치본에 활성**(Mac preview.9+, Windows v0.3.x) | 실사용 인수; legacy 이전은 설계만 완료 |
+| M6-D | **main 병합(PR #64, 2026-11-01)·양 OS CI·시험 설치본/피드 반영** | 실제 Codex/Claude Monitor 버튼·재연결·채팅 계속·Luna 실사용 인수 |
+| M6-E | 설계 미결(PR #64에 설계안·fixture만, 실행 구현 없음) | 증거/Report를 완성할 수 없는 열린 단계의 보존·중단 계약 |
 | M7 | 대기 | 네 유형의 실제 작업 및 가벼운 모델 반복 평가 |
 | M8 / Chain revisit / 중첩 프로젝트 / Managed Dataset | 후속·미결 | 실제 필요와 별도 계약 확정 |
+| Windows 배포 채널 (T3) | **단일 정적 `gil.exe` + 자기 등록 채택**(PR #113, v0.3.0–0.3.2). Companion/NSIS/ARM64 폐기(PR #114). 소유자 PC의 Smart App Control 차단 확인 → **Store MSIX 채널 병행**(PR #116–#118) | 소유자 Partner Center 제출·심사, SAC 켜진 PC 설치 인수, Runtime Update 트랙(U1–U5) 재편 |
+| Claude Desktop (T5) | Codex와 같은 지원 Host로 정리(PR #66·#78·#81·#107) | Windows Claude 실화면, Cowork Plugin 경로, 실제 fullscreen 클릭 성공률 |
+| 다국어 | Core 응답·안내와 Monitor 화면 en·ko·zh-Hans·zh-Hant·ja(PR #112). 기본 ko, 저장 형식 번호 불변 | 실제 Host의 locale 전달 관측, 번역 품질 검수 |
 
-바로 다음 순서: **M6-D → M3 안전성 → M4-R 제품 재개 → M7 실사용 검증**.
-M3의 독립 읽기 전용 모델·시험은 M6-D와 병렬로 진행할 수 있다. 공유 transaction/저장/Monitor 파일은
+바로 다음 순서: **M3 안전성(일반 restore 경계) → M4-R 나머지 재개 → M7 실사용 검증**.
+M6-D는 코드·CI·시험 설치본까지 끝나 사람 인수만 남았다. 병렬 과제: Windows Store 제출(소유자),
+M6-D/M4-R Monitor 버튼의 실화면 인수, T3 U1–U5의 재편. 공유 transaction/저장/Monitor 파일은
 소유자를 나눠 동시에 수정하지 않는다. M6-E와 자아 객체·Merge는 명세 합의가 필요한 별도 과제다.
 
-PR #62의 Host 테마와 #63의 Chain 인계는 병합되었지만 소스 병합을 설치본 업데이트로 세지 않는다.
-기존 친구용 Mac/Windows 설치 성공은 유지하며, 현재 사용자 설치 안내는 [INSTALL.md](../INSTALL.md)를 따른다.
-서명·공증·공식 Directory 등재와 비개발자 clean-machine 인수는 후속이다.
+PR #62–#118의 소스 병합을 설치본 업데이트로 세지 않는다. 현재 게시본은 macOS Apple Silicon
+`0.2.1-preview.29`(2026-11-10, unsigned Plugin/archive 채널,
+[장부](../distribution/codex/PREVIEW-29-PUBLICATION-20261110.md))와 Windows x64 `v0.3.2`(2026-11-12,
+단일 exe, [v0.3.0 장부](../distribution/windows/PUBLICATION-V0.3.0-20261113.md))다. 사용자 설치 안내는
+[INSTALL.md](../INSTALL.md)를 따른다. Mac 서명·공증·공식 Directory 등재와 비개발자 clean-machine 인수는 후속이다.
 
 M6-D에서는 사람이 **Monitor의 승인/수정 요청 버튼**으로 정확한 제안 버전에 응답한다.
 에이전트가 입력한 `approved: yes`만으로 인간 입력의 출처를 보장하지 않는다. 승인 채널의 실제 보장과
-한계, 제안 변경·재시작·중복 응답 처리를 신규 계약에 명시한다. 승인되지 않은 확장 계획을 실행하지 않는다.
+한계, 제안 변경·재시작·중복 응답 처리는 [승인 계획 계약](GIL_Approved_Plan_v0.1.md)에 명시했다.
+승인되지 않은 확장 계획을 실행하지 않는다.
 
-현재 Artifact restore의 `.gitignore` 미적용과 사용자 파일 삭제 위험 때문에 제품 복원/revisit 차단은
-유지한다. M6-D 구현이나 Monitor 버튼 도입은 이 차단을 해제하지 않는다.
+일반 Artifact restore의 `.gitignore` 미적용과 사용자 파일 삭제 위험 때문에 제품의 일반 복원과 Step revisit
+차단은 유지한다. 유일한 예외는 [M4-R 복구 계약](GIL_Revisit_Recovery_v0.1.md)의 **닫힌 실패 Cycle 복구**로,
+Monitor에서 전체 변경 목록을 확인하고 보존 후 되돌아가기를 승인했을 때만 실행하며 보호 경로 차이가 있으면
+전체 거절한다. M6-D 구현이나 Monitor 버튼 도입은 그 밖의 차단을 해제하지 않는다.
+
+#### 2026-11-01 이후 main 반영 사항 (2026-11-15 대조)
+
+11/01 갱신 뒤 54개 PR(#64–#118)이 main에 들어갔다. 아래는 코드·배포에는 있지만 이 문서에 없던 것이다.
+각 항목의 세부 상태는 해당 절(T1·T3·T5·M4-R·M5-D/F·M6-D)에 날짜별로 적었다. 소스 병합·CI 통과를
+실제 Host 화면 인수로 세지 않는다.
+
+- **11/01 M6-D 병합(PR #64):** `approved-plan` 프로필의 승인 제안/판/digest, App 전용 capability, Verify
+  계획 문서 bytes 검증, 추적 정책 엔진과 읽기 전용 restore preview, 경량 모델용 다음 행동 안내. M6-E는
+  설계안·fixture만 포함. 기본 Core 1,518 통과. 이후 Mac preview.9+와 Windows owner.8+·v0.3.x 시험 설치본에 포함.
+- **11/01–02 M4-R 한정 재개(PR #67·#69·#73):** 닫힌 실패 Cycle을 Monitor의 변경 목록 확인 → 보존 후
+  되돌아가기 승인으로 복구. App 전용 토큰, 보호 경로 차이 전체 거절, Windows 핸들 기반 transaction, 중단된
+  승인 복구 재개, 복구 뒤 채팅 계속, 일시적 조회 실패 중 확정 승인 표시 유지. 일반 restore·Step revisit은 차단.
+- **11/01–02 Claude Desktop 동등 지원(PR #66·#78·#81):** Claude Code 탭을 Codex와 같은 지원 대상으로 정리.
+  `gil_start` → `show_gil_monitor` 인계를 지침·receipt 본문·엄격 출력 schema로 고정(Host 분기 없음), 시작 응답
+  유실 시 `gil_context`가 같은 scope를 복구, Monitor 줌/미니맵, metadata 전용 업데이트 안내.
+- **11/02 시각 증거 계약(PR #72)과 한글 project_root 대조(PR #74·#76):** T1.2에 기록. Hangul 정규화 형태가 다른
+  project_root를 같은 Project로 대조하고, product-safety 빌드의 dirty 안내에서 restore를 권하지 않는다.
+- **11/02–11/06 Host 훅 도입 후 전부 폐기(PR #79·#84·#91 → #96·#98):** Verify 밖 파일 변경을 막는 Host 훅을
+  넣었으나 GIL을 선택하지 않은 세션의 일반 Bash까지 감싸거나 거절했다. 11/06 결정으로 전역·프로젝트 로컬 훅을
+  모두 폐기하고 선택된 GIL 프로젝트에만 prompt·MCP 응답으로 안내한다. 파일 보호는 안내이며 OS 쓰기 강제가 아니다.
+  `uninstall --auto`가 과거 생성 훅만 제거한다. 공용 지침은 "GIL은 훅을 설치하지 않는다"로 고정.
+- **11/07 기존 프로젝트 재개(PR #102)와 Core 버전 스탬프(PR #100):** 새 세션이 "GIL"을 말하지 않아도 선택 폴더의
+  프로젝트 연속성 지침과 `.gil` 표식을 읽어 기록 위치를 이어받는다(HOME·registry 스캔 없음). Core가 배포 버전을 보고.
+- **11/09 안내·복구 경로(PR #104·#105·#109)와 fullscreen 거절 분류(PR #107):** Mac 업데이트 안내를 앱 선택과
+  요청문 복사 흐름으로, Report 입력 오류·승인 항목 추가의 복구 경로, basis_refs 작성 규칙과 줄별 오류 집계, PNG 한도
+  수치 안내. Host가 명시적으로 거절한 fullscreen 요청만 `refused`로 분류하고 timeout·연결 오류와 구분해
+  `gil_monitor_status.automatic_fullscreen`으로 전달(`pending|applied|declined|refused|error|unavailable|manual`).
+- **11/12 다국어(PR #112):** Core 영수증·안내(911키)와 Monitor 화면(393키)이 en·ko·zh-Hans·zh-Hant·ja를 지원.
+  Host의 `hostContext.locale`과 `gil_start.locale`로 결정, 프로젝트별 `.gil/locale.json` 사이드카. 기본값 ko이고
+  저장 형식 번호는 올리지 않았다. Agent용 도구 설명·workflow는 영어 단일본.
+- **11/12–13 Windows 단일 실행 파일 채널(PR #113–#118):** 소유자 결정서에 따라 설치 프로그램·Companion·서명 없이
+  정적 `gil.exe` 하나를 PowerShell 한 줄 또는 에이전트가 읽는 루트 `INSTALL.md`로 설치하고 `gil install/doctor/uninstall`이
+  Claude Desktop·Codex 설정에 자기 등록. `v0.3.0`–`v0.3.2` 릴리스, Companion/NSIS/launcher/ARM64 CI 폐기. 11/13
+  소유자 PC(Smart App Control 켜짐)에서 미서명 exe 실행 차단(`NotSigned`) 확인 → **Microsoft Store MSIX 채널**을
+  병행(패키지 모드 `install`·App Execution Alias·릴리스 워크플로의 Store 업로드 아티팩트·개인정보 정책). 소유자 제출 대기.
+  배포 모델 §6.2c, [결정서 적용판](../distribution/windows/SIMPLE-INSTALL-20261112.md),
+  [신뢰 전략](../distribution/windows/TRUST-STRATEGY-20261112.md), [Store 절차](../distribution/windows/STORE.md).
+- **게시 이력:** macOS preview.8 → preview.29(11/10), Windows owner.7 → owner.15(11/10) → `v0.3.0`/`v0.3.1`/`v0.3.2`(11/12).
+  CI 최신(25e0820, 11/12): Codex preview·Companion·Windows Core·Chain 인수 4개 워크플로 성공. 기본 Core 1,618 통과(PR #116).
 
 ### 2.1 공개 시험판 이후 실행 계획 — 2026-09-30
 
@@ -104,6 +154,15 @@ M6-D에서는 사람이 **Monitor의 승인/수정 요청 버튼**으로 정확�
       (공개 preview.5, 본 설치본):** 새 프로젝트에서 시작·노드 진행·모니터 펼치기·채팅 병행·앱 완전 종료 후
       복원을 직접 확인했다. **미완:** 기존 프로젝트 재요청의 중복 방지 사용자 검수, 외부 새 Mac 검수.
       T1.1은 [~]를 유지한다.
+      **2026-11-02 (PR #78·#81):** Claude Code 탭에서 `gil_start` 뒤 Agent가 `show_gil_monitor`를 부르지 않던 원인을
+      지침·receipt 본문의 모호함으로 확정하고 Host 분기 없이 고쳤다. 시작 receipt 본문이 다음 호출을 직접 가리키고,
+      `gil_start`/`gil_context`에 엄격한 Monitor handoff 출력 schema를 선언했다. 시작 응답이 유실되면 `gil_context`가
+      프로젝트를 다시 만들지 않고 같은 scope의 필요한 Monitor 호출을 구조화해 돌려준다. 실제 MCP SDK의
+      `listTools`/`callTool` 검증을 패키지 빌드 필수 단계로 넣었다. **2026-11-07 (PR #102):** 새 세션이 "GIL"을 말하지
+      않아도 선택 폴더의 연속성 지침과 `.gil` 표식으로 기존 프로젝트를 이어받는다(HOME·registry 스캔 없음). 기존
+      프로젝트는 성공한 Verify open 뒤에만 지침을 채택한다. **2026-11-09 (PR #107):** Host가 명시적으로 거절한
+      자동 fullscreen만 `refused`로 분류해 클릭을 기다리고, timeout·연결 오류는 `error`로 제한 재시도한다.
+      이상은 합성·실제 stdio 시험이며 사용자 화면의 중복 방지 검수는 여전히 남는다.
       [preview.3 장부](../distribution/codex/PREVIEW-3-PUBLICATION-20260930.md)에서 원격 설치와 구분한다.
 - [~] **T1.2 노드 상세의 시각 보고서:** 스크린샷·이미지·차트·시각화 등을 Report가 참조하고
       Node Detail에서 보여 준다. Agent의 Report 작성 지침·예시에 시각 자료의 적극적 사용을
@@ -464,8 +523,11 @@ M6-D에서는 사람이 **Monitor의 승인/수정 요청 버튼**으로 정확�
       access denied가 보고됐다. 실행 중 옛 Core도 관측됐지만 모든 원인을 잠금으로 확정하지
       않는다. 사용자 PowerShell을 통한 개발 검수와 일반 비개발자 완료 경로를 구분한다.
       초기 설치/교체 해결은 아래 T3.2 U1/U4에 남긴다.
-- [ ] 사용자에게 개발 도구·셸 명령·별도 Companion 설치를 요구하지 않고 macOS/Codex와 같은
+- [~] 사용자에게 개발 도구·셸 명령·별도 Companion 설치를 요구하지 않고 macOS/Codex와 같은
       폴더 선택 → 프로젝트 시작 → fullscreen 가로 DAG·채팅 → 상세/시각 자료 → 실시간 갱신을 제공한다.
+      **2026-11-12:** Companion 없이 Codex·Claude Code 탭의 MCP fullscreen Monitor만 쓰는 단일 `gil.exe` 채널로
+      전환했다(T3.3). 설치는 PowerShell 한 줄 또는 에이전트가 `INSTALL.md`를 읽어 수행한다. 셸 명령이 완전히
+      없어진 것은 아니며 Store 채널이 그 자리를 맡는다. 실제 PC의 전체 흐름 인수는 남는다.
 - [~] **T3.1 Windows 이미지 Report 작성 경계(단계 1, 2026-10-18):** 새 format-5 생성·Verify 첨부·
       저장 이미지 인용·재시작 보존의 Windows 핸들 기반 구현(`src/windows_fs.rs`, 저장 계약 §25)과
       계약·인수표 `spec/GIL_Windows_Visual_Support_Contract_v0.1.md`. 이관은 Windows에서 계속 거절.
@@ -481,6 +543,10 @@ M6-D에서는 사람이 **Monitor의 승인/수정 요청 버튼**으로 정확�
 - [~] Windows 시험 사용자의 설치 및 작업 경험을 수집하고 차이·실패·해결을 기록한다.
       2026-10-23까지 설치/교체 실패, OneDrive 경로 재열기 거절과 외부 로컬 폴더 정상 대조,
       별도 App Server 재연결 관측을 사용자 보고로 수집했다. 전체 작업·외부 비개발자 인수는 미완이다.
+      **2026-11-12:** 친구 PC에서 미서명 NSIS 설치기가 SmartScreen과 Smart App Control에 막힌 보고가 단일 exe 채널
+      결정의 직접 원인이다. **2026-11-13:** 소유자 PC(SAC 켜짐)에서 에이전트 경로로 `gil.exe` 다운로드·SHA-256 대조는
+      정상, `install` 실행은 애플리케이션 제어 정책이 차단(`NotSigned`). 에이전트는 우회·보안 설정 변경 없이 중단하고
+      보고했다([v0.3.0 장부 실기기 결과](../distribution/windows/PUBLICATION-V0.3.0-20261113.md)).
 
 ##### T3.2 — 삭제 없는 Core 선택과 비개발자 업데이트 (2026-10-23)
 
@@ -520,6 +586,43 @@ M6-D에서는 사람이 **Monitor의 승인/수정 요청 버튼**으로 정확�
 이 트랙은 OneDrive 탐지·Agent 승인 대기(W12-5/6), 깨끗한 기계 설치, 서명·공증,
 기존 text preview ACL 대응 등 기존 잔여를 닫지 않는다.
 
+**2026-11-12 상태:** 소유자 결정서가 Companion·native 실행기·자체 업데이터를 쓰지 않는 단일 실행 파일 채널을
+채택해 U1–U5의 전제(실행기·Core 선택·Companion 업데이트 버튼)가 바뀌었다. U1 설계 결정안과 U2 probe 자료는
+기록으로 보존하되 **보류**한다. 단일 exe의 업데이트는 "같은 설치 단계를 다시 실행"(실행 중인 exe는 이름만 바꿔
+보존, 새 연결부터 새 판)이며 Store 채널은 Store의 업데이트를 따른다. 실제 PC 인수는 T3.3에서 이어간다.
+
+##### T3.3 — 단일 실행 파일 채널과 Microsoft Store (2026-11-12/13)
+
+명세: 배포 모델 §6.2c, [결정서 적용판](../distribution/windows/SIMPLE-INSTALL-20261112.md),
+[신뢰 전략](../distribution/windows/TRUST-STRATEGY-20261112.md), [Store 절차](../distribution/windows/STORE.md).
+
+- [x] **단일 정적 `gil.exe` 채택(PR #113, 2026-11-12):** `gil install`/`doctor`/`uninstall`(`src/install/`)이 실행 파일을
+      `%LOCALAPPDATA%\Programs\gil\gil.exe`로 옮기고(실행 중인 판은 이름만 바꿔 보존) Codex `config.toml`과
+      Claude Desktop 설정에 `gil` 항목을 쓴다. 다른 명령을 가리키는 기존 항목은 건드리지 않고 보고한다
+      (`--replace`만 교체). 루트 `INSTALL.md`는 에이전트용 절차, `install.ps1`은 사람용 한 줄. `windows-release.yml`이
+      `v*` 태그에서 static-CRT x64 exe를 빌드·runner 검증·`checksums.txt`와 함께 게시. 서명·설치 프로그램 없음.
+- [x] **Companion·NSIS·launcher·ARM64 CI 폐기(PR #114):** Windows에서는 Codex·Claude Code 탭의 MCP fullscreen
+      Monitor가 Companion 창을 대신한다. Companion 코드는 저장소에 남지만 Windows 배포물이 아니다.
+- [x] **릴리스 `v0.3.0`(11/12), `v0.3.1`, `v0.3.2`(11/12):** 게시 장부·업데이트 피드·Monitor 업데이트 안내 반영(PR #115).
+      Companion의 업데이트 버튼은 이 판을 받지 못하므로 피드 문구가 한 줄 설치를 안내한다.
+- [x] **실기기 차단 확인(2026-11-13):** 소유자 PC(Smart App Control 켜짐)에서 미서명 exe `install` 차단. 신뢰 전략의
+      서명 재검토 조건이 충족돼 소유자가 Store 경로를 승인했다.
+- [x] **Store MSIX 채널 구현(PR #116·#117, 2026-11-13):** 패키지 모드의 `install`은 복사 없이 App Execution Alias
+      `%LOCALAPPDATA%\Microsoft\WindowsApps\gil.exe`를 등록하고 `doctor`가 `[store]`를 표시. `AppxManifest.xml`
+      (runFullTrust, 파일/registry 가상화 해제로 실제 Host 설정 기록), 릴리스 워크플로의 자체서명 사이드로드 검증과
+      **무서명 Store 업로드 아티팩트** `gil-store-upload.msix`, 패키지 표시 이름은 예약된 Store 이름 `gil-companion`.
+      Monitor에 Store 채널 업데이트 안내(5개 언어). 기본 Core 1,618 통과.
+- [x] **개인정보 정책(PR #118):** GIL은 수집하지 않으며 하루 1회 공개 피드 metadata 읽기가 유일한 네트워크 접근.
+- [~] **소유자 Partner Center 제출:** 계정·앱 이름 예약(`gil-companion`)은 진행. Product identity 세 값 → GitHub
+      repository variables → 다음 `v*` 태그 → `gil-store-upload.msix` 업로드 → 제출(비공개 대상 먼저) → 심사 결과를
+      `INSTALL.md`·README·`update-feed.json`에 반영. STORE.md의 7단계를 따른다.
+- [ ] **SAC 켜진 실제 PC에서 Store 설치 → `doctor` OK → 두 Host 재시작 → Monitor 표시** 인수. 사이드로드 runner
+      검증을 실기기 통과로 세지 않는다. STORE.md "알려진 미확인 사항"을 첫 심사·실기기에서 확인한다.
+- [ ] 단일 exe 경로의 비개발자 인수: SmartScreen만 있는 PC에서 한 줄 설치 → 첫 프로젝트 → Monitor. SAC PC는 Store로 안내.
+
+**합격:** Store 또는 한 줄 설치로 보안 기능을 끄지 않고 설치한 실제 Windows PC에서 `doctor`가 두 Host `OK`를 보고하고,
+새 대화에서 폴더 선택 → 프로젝트 시작 → fullscreen Monitor까지 사용자가 확인한다.
+
 **합격:** 실제 Windows에서 macOS 기준 핵심 사용자 흐름을 통과하고 경험 수집 결과를 정리한다.
 빌드 성공만으로 닫지 않는다. 미완료 Apple 공증·새 Mac 검수·Tauri 검수가 이 트랙의 일괄 선행
 게이트는 아니며 각각 열린 상태로 유지한다. Companion은 보존하고 변경/재배포 때 별도로 검증한다.
@@ -557,6 +660,20 @@ M6-D에서는 사람이 **Monitor의 승인/수정 요청 버튼**으로 정확�
       사용자 확인 대기([11/02 진단](../mcp-app/CLAUDE-DESKTOP-ROUTES.md)). 같은 날 Monitor에 **업데이트 안내**
       버튼 추가: Core가 저장소 `update-feed.json`을 하루 1회 metadata만 읽고(끄기 가능) 두 OS·두 Host의 절차를 글로
       보여 준다. 실제 Host 화면 확인 대기([Companion 계약 §13](GIL_Companion_Install_Update_v0.1.md)).
+- [~] 2026-11-02 (PR #78·#81): Claude Code 탭에서 `gil_start` 뒤 Monitor 인계가 끊기던 두 원인을 확정했다.
+      (1) receipt 본문이 `실행 / gil open`으로 끝나 Agent가 `show_gil_monitor`를 건너뜀 → 본문이 다음 호출을 직접
+      가리키고 엄격 출력 schema로 고정. (2) 첫 자동 fullscreen 요청이 렌더 뒤에만 나가 Claude Code 탭이 적용하지
+      않음 → 연결 직후 요청으로 시점 보정. 둘 다 Codex·Claude 동일 코드·동일 지침이며 Host 이름 분기가 없다.
+      실제 화면의 클릭 없는 fullscreen 성공은 아래 11/09 분류와 함께 사용자 확인 대기.
+- [~] 2026-11-09 (PR #107): Desktop 4.23118.0 Claude Code 탭이 자동 fullscreen 요청에 "fresh press in this app's own
+      frame"을 요구하는 명시적 거절을 돌려주는 것을 실측. 그 문구가 있을 때만 `refused`로 분류해 타이머 재시도 없이
+      클릭을 기다리고(거절된 클릭 요청 최대 3회), timeout·연결 종료는 `error`로 1.5s·4s 제한 재시도. App presence →
+      Core → `gil_monitor_status.automatic_fullscreen`과 모델 안내에 전달. preview.28/owner.15 이후 설치본에 포함.
+      사용자 화면에서 "클릭해야 펼쳐진다"는 UX 자체는 Host 정책이므로 더 많은 재시도로 바꾸지 않는다.
+- [~] 2026-11-12 (PR #113·#114): Windows의 **Claude Desktop 연결은 `gil install`의 자기 등록**으로 바뀌었다. 11/02의
+      Windows Companion Claude adapter(`companion/src/claude.rs`)는 Companion 배포 폐기와 함께 Windows 배포물에서
+      빠졌다. Desktop이 실행 중이면 `claude-desktop: PENDING`으로 도우미가 종료를 기다려 등록한다. Windows Claude
+      실화면 인수는 여전히 사용자 확인 대기.
 - [ ] Desktop 일반 대화·Cowork·Code·터미널 CLI의 관측을 분리하고 한 경로의 성공을 다른
       경로의 성공으로 일반화하지 않는다. 직접 등록 probe와 Plugin 설치 경로도 구분한다.
 - [ ] 공용 Core·MCP·UI 계약 변경은 별도 branch/PR에서 영향과 Codex 회귀를 확인한 뒤 통합한다.
@@ -570,6 +687,8 @@ M6-D에서는 사람이 **Monitor의 승인/수정 요청 버튼**으로 정확�
 
 대조 기준: main `3b5341f` (2026-11-01). PR #55의 Monitor 표시 감지·복구와 M4-H,
 M6-A/B/C 및 Host 테마는 main에 반영되었다. 아래는 구현·제품 활성화·실사용 인수를 분리한 현재 판정이다.
+**2026-11-15 보정(main `b1fa2f1`):** M6-D 행의 "미병합"은 PR #64 병합으로, M4-R 행의 "제품 차단"은 PR #67의
+닫힌 실패 Cycle 한정 복구로 각각 바뀌었다. 표 안에 보정 문구를 덧붙였고 원래 판정 문구는 남겼다.
 이전 날짜별 장부와 상태가 다르면 이 표와 최신 세부 절을 따른다.
 
 판정은 **미구현**, **부분 구현**, **Core 구현·제품 차단**, **검수 대기**, **명세 미결**로 나눈다.
@@ -581,13 +700,13 @@ M6-A/B/C 및 Host 테마는 main에 반영되었다. 아래는 구현·제품 �
 | Chain 컨테이너·Current·Cycle 소유 / M6-A | [기본 명세](GIL%20Specification%20v0.1.md) §5, [Node Model](GIL_Node_Model_v0.1.md) §6–7 | **개발 구현.** `chain-core`에서 실제 `Project → Chain → Cycles`, format 6/7과 Current/소유 검증. 4/5는 그대로 보존한다. `src/chain.rs`는 도메인 객체이며 Windows 파일 경로 핸들과 별개다. | [M6-A 저장 계약](GIL_Chain_Storage_v0.1.md). 기본/설치본 활성화, 명시적 legacy 이전 실행과 실제 Host 인수 |
 | Closing Interview → Chain 판정·Report / M6-B | [Cycle Model](GIL_Cycle_Model_v0.1.md) §18–19 | **개발 구현·미배포.** `chain-core`의 `src/chain.rs`와 `tests/chain_closing.rs`가 승인된 Closing Interview→Chain close 및 재시작을 검증한다. 기본 프로필은 기존 차단을 유지한다. | M6-D의 실제 승인 입력과 제안 버전 결속; 설치본 활성화·실사용 인수 |
 | 닫힌 Chain 뒤 새 Chain과 상위 인수인계 / M6-C | 기본 명세 §5·19, Node Model §7, Cycle Model §19·21, [Context Model](GIL_Context_Model_v0.1.md) | **개발 구현·미배포.** M6-C 계약의 명시적 `gil open chain`으로 다음 Interview를 열고 이전 Chain Report를 Context로 전달한다. `tests/chain_handoff.rs`와 stdio MCP 시험이 전역 ID·세계·Journey·증거·재시작을 검증한다. | 기본/설치본 활성화와 실제 Host·Luna 인수는 별개. Chain revisit·병렬·다중 부모 미지원 |
-| Step에서 같은 지점으로 여러 번 revisit / M4-R | 기본 명세 §14·22, [Time Model](GIL_Time_Model_v0.2.md) §6–8, Cycle Model §9 | **Core 구현·제품 차단.** `src/walk.rs`의 pending→새 Hypothesis 전이와 `tests/walk.rs::each_branch_off_the_same_point_knows_its_own_origin`이 반복 분기와 출처를 검사한다. `product-safety` 빌드의 공개 revisit은 거절된다. | M3 안전 복원 후 제품 재연결, 실제 파일·Journey 보존 및 Host 재시작 인수. 미구현으로 다시 만들지 않음 |
-| Cycle에서 같은/더 먼 조상으로 반복 revisit / M4-R | Cycle Model §9, [Storage Model](GIL_Storage_Model_v0.1.md) §3.1 | **Core 구현·제품 차단.** `src/cycles.rs::{revisit,open_after_revisit}`, `tests/revisit.rs::{a_second_failure_may_target_the_same_ancestor_again,a_further_ancestor_branch_is_not_called_a_sibling}`. 새 실패마다 같은 조상을 다시 선택 가능. | 제품에서 실패 종료→복원→새 Cycle→재실패→복원까지 인수. 같은 실패의 중복 실행과 새 실패의 재시도를 구분 |
+| Step에서 같은 지점으로 여러 번 revisit / M4-R | 기본 명세 §14·22, [Time Model](GIL_Time_Model_v0.2.md) §6–8, Cycle Model §9 | **Core 구현·제품 차단.** `src/walk.rs`의 pending→새 Hypothesis 전이와 `tests/walk.rs::each_branch_off_the_same_point_knows_its_own_origin`이 반복 분기와 출처를 검사한다. `product-safety` 빌드의 공개 revisit은 거절된다. 11/15 보정: Step revisit은 PR #67 범위 밖이라 그대로 차단. | M3 안전 복원 후 제품 재연결, 실제 파일·Journey 보존 및 Host 재시작 인수. 미구현으로 다시 만들지 않음 |
+| Cycle에서 같은/더 먼 조상으로 반복 revisit / M4-R | Cycle Model §9, [Storage Model](GIL_Storage_Model_v0.1.md) §3.1 | **Core 구현·제품 한정 재개.** `src/cycles.rs::{revisit,open_after_revisit}`, `tests/revisit.rs::{a_second_failure_may_target_the_same_ancestor_again,a_further_ancestor_branch_is_not_called_a_sibling}`. 새 실패마다 같은 조상을 다시 선택 가능. 11/15 보정: PR #67로 닫힌 실패 Cycle의 Monitor 승인 복구(`gil_revisit_review/apply`, App 전용)가 product-safety 빌드에서 실행된다([복구 계약](GIL_Revisit_Recovery_v0.1.md)). | 실제 Monitor 클릭 인수. 제품에서 실패 종료→복원→새 Cycle→재실패→복원까지 인수. 같은 실패의 중복 실행과 새 실패의 재시도를 구분 |
 | 반복 실패 전체를 다음 시도에 전달 / M2·M4-H | Cycle Model §10 “부모 이후 현재 Journey에서 닫힌 실패 Cycle Report들” | **Core 구현·main 병합.** `write_failed_cycles`가 Current/pending에서 parent와 revisit provenance를 따라 누적 실패를 한 번씩 읽는다. M4-H의 재시작·원본 보존 회귀가 있다. | 실제 모델의 실패 활용과 설치본 인수; M4-R 제품 차단은 유지 |
 | 성공 후 추가 Interview / M2·M6-D | Cycle Model §6·13·16–17 | **기본 전이는 구현됨.** `src/cycles.rs::open_child`, `src/cycle.rs`의 승인/참조 검사와 `tests/cycles.rs`; 실패 뒤 새 Interview도 `tests/revisit.rs::an_interview_branch_is_allowed_too`에서 확인. | “재인터뷰 전부 미구현”으로 세지 않음. 승인 계획 변경·문서 revision과의 연결 및 실제 인간 승인 수집은 별도 잔여 |
-| 승인된 탐색 체크리스트·남은 계획 변경 / M2B·M6-D | Cycle Model §16 (`executed_cycles`, `pending_exploration`)·§21 | **개발 구현·미병합.** 승인 항목 ID·revision과 실행 Cycle을 연결하고 미실행 순서를 계산한다. 기존 승인·실행 기록은 보존한다. | A 실행 뒤 D를 승인해 `[D,B,C]`로 재개하는 합성 시험 통과. PR/양 OS CI·실제 Host/Luna·배포 남음 |
-| 승인된 계획 문서와 실험 범위 연결 / T2.2–4·M6-D | 기본 명세 §5, Cycle Model §5·16·21, T2의 제품 요구 | **개발 구현·미병합.** Experiment의 승인 판·항목을 고정하고 Verify에서 해당 문서 bytes와 별도 실행 증거를 검증한다. | 실제 문서 작성·버튼 승인·재인터뷰 흐름의 Host 인수, CI 및 배포. M6-E 취소/재시도 계약과 기존 기록 이전은 별도 |
-| 사람 승인 증거와 Agent가 쓴 승인 값 구분 / M6-D | Cycle Model §14·16·18, M6 인간 응답 통로 | **개발 구현·미병합.** Monitor 버튼 입력을 정확한 scope·제안 판·digest·임시 토큰과 결속한다. 기본 제품은 기존 yes/no 계약이며 개인 신원 인증이 아니다. | 실제 Host 버튼/재연결·Luna 인수, PR/CI 및 배포. 합성 입력 시험을 실제 인간 승인으로 세지 않음 |
+| 승인된 탐색 체크리스트·남은 계획 변경 / M2B·M6-D | Cycle Model §16 (`executed_cycles`, `pending_exploration`)·§21 | **개발 구현·main 병합(PR #64, 11/15 보정).** 승인 항목 ID·revision과 실행 Cycle을 연결하고 미실행 순서를 계산한다. 기존 승인·실행 기록은 보존한다. `approved-plan` 프로필로 시험 설치본에 포함. | A 실행 뒤 D를 승인해 `[D,B,C]`로 재개하는 합성 시험 통과. 양 OS CI 통과·시험 설치본 반영. 실제 Host/Luna 인수 남음 |
+| 승인된 계획 문서와 실험 범위 연결 / T2.2–4·M6-D | 기본 명세 §5, Cycle Model §5·16·21, T2의 제품 요구 | **개발 구현·main 병합(PR #64, 11/15 보정).** Experiment의 승인 판·항목을 고정하고 Verify에서 해당 문서 bytes와 별도 실행 증거를 검증한다. | 실제 문서 작성·버튼 승인·재인터뷰 흐름의 Host 인수. CI·시험 설치본 반영은 완료. M6-E 취소/재시도 계약과 기존 기록 이전은 별도 |
+| 사람 승인 증거와 Agent가 쓴 승인 값 구분 / M6-D | Cycle Model §14·16·18, M6 인간 응답 통로 | **개발 구현·main 병합(PR #64, 11/15 보정).** Monitor 버튼 입력을 정확한 scope·제안 판·digest·임시 토큰과 결속한다. 기본 제품은 기존 yes/no 계약이며 개인 신원 인증이 아니다. PR #73으로 일시적 조회 실패 중에도 확정 승인 표시를 유지. | 실제 Host 버튼/재연결·Luna 인수. 합성 입력 시험을 실제 인간 승인으로 세지 않음 |
 | 자아의 Knowledge·Memory·Relations 객체 / M2 후속 | [Existence Model](GIL_Existence_Model_v0.1.md) §4·11, Time Model §18 | **부분 구현·객체 schema 미결.** `src/existence.rs`에 Journey revision, Active/Done Will, 선택적 head 참조는 있다. ExistenceState는 빈 타입이며 독립 Knowledge/Memory/Relations 객체를 발행·조회하는 저장소는 없다. | 실제 객체 schema·생성/갱신·provenance·Context 투영. 현재 Verify→Analysis→Outcome의 증거/배움 연결을 완전한 지식·기억 저장소로 표현하지 않음. Human Participant/최초 Relation도 M2B 잔여 |
 | 닫지 못한 Open Node에서 중단/방향 전환 / M6-E | 기본 명세 §8·24, Time Model §7·18② | **명세 미결·미구현.** abort/cancel/abandon이나 열린 Node에서 강제 revisit을 허용하는 계약이 없다. | 증거/Report를 완성할 수 없는 경우의 명시적 종료·복구 계약을 먼저 결정. 가짜 success·자동 close·기록 삭제로 해결하지 않음 |
 | Chain 수준 revisit, 병렬 Cycle, 성공 가지 merge / M8·후속 | Cycle Model §21, Node Model §13, M8 | **명세 미결·미구현.** Step/Cycle의 반복 revisit 구현을 Chain으로 일반화할 수 없다. 다중 부모·합류 후 세계와 Journey 선택도 미정이다. | Chain 기본 수명 이후 별도 설계. 단일 열린 Cycle 제약 유지; 과거로 돌아가 다른 가지를 만드는 것과 여러 세계를 합치는 것을 구분 |
@@ -616,9 +735,12 @@ M6-A/B/C 및 Host 테마는 main에 반영되었다. 아래는 구현·제품 �
 
 1. **M4-H (구현·병합 완료):** 누적 실패 Context 전달. Chain이 없어도 기존 Cycle Graph에서 해결 가능하다.
 2. **M6-A → B → C (개발 구현·병합 완료):** 실제 계층·Closing·직렬 다음 Chain. 제품 활성화는 별도다.
-3. **M6-D:** 기존 Interview 전이를 활용해 승인된 계획·문서 revision·재인터뷰·실험 범위를 연결한다.
+3. **M6-D (개발 구현·병합 완료, 2026-11-01 PR #64):** 기존 Interview 전이를 활용해 승인된 계획·문서 revision·
+   재인터뷰·실험 범위를 연결했다. 실제 Host 버튼 인수는 별도다.
 4. **M3 안전성 → M4-R:** 추적 범위·보존·복원 실패 경계를 먼저 닫고 제품 revisit을 재개한다.
-   Chain 구현을 기다릴 필요는 없지만 차단 플래그만 끄는 것은 완료가 아니다.
+   Chain 구현을 기다릴 필요는 없지만 차단 플래그만 끄는 것은 완료가 아니다. 2026-11-02 PR #67은 이 순서를
+   건너뛴 것이 아니라 **닫힌 실패 Cycle 한 가지**를 보호 경로 차이 전체 거절·App 전용 승인으로 좁혀 먼저 열었다.
+   일반 restore와 Step revisit은 여전히 이 항목에 남는다.
 5. **M6-E·M2 자아 객체·Chain revisit·Merge:** 각각 명세 미결을 별도 합의한다. 이번 대조가 설계 확정이나
    즉시 구현 승인은 아니며, M7 시나리오에서 각 완성 기능의 실제 가치를 검수한다.
 
@@ -649,11 +771,11 @@ M3.5 AI Manual Foundation            완료   ← GIL Manual Model v0.1
   ├─ 중첩 GIL 프로젝트 지원          Later  §7.4 미결 기능
   ├─ Managed Dataset                 Later  §7.5 결정 로그만 남긴다
   ↓
-M4 Failure Revisit & Branching       Core·누적 Context main 반영 / 제품 차단
+M4 Failure Revisit & Branching       Core·누적 Context main 반영 / 닫힌 실패 Cycle 승인 복구만 제품 재개
   ↓
 M5 Human Monitor                     진행 중 ← GIL Monitor Model v0.1
   ↓
-M6 Advanced Interview & Chain Close  A/B/C 개발 구현 · D 착수 · E 설계 미결
+M6 Advanced Interview & Chain Close  A/B/C/D 개발 구현·병합·시험 설치본 · E 설계 미결
   ↓
 M7 Scenario Suite                    대기
   ↓
@@ -1512,7 +1634,7 @@ Verify Topic 이 verdict 를 요구하지 않는지, restore Topic 이 대상 �
 
 ## 9. M4 — Failure Revisit & Branching
 
-상태: `[!] Step/Cycle 반복 revisit·누적 Context Core 구현됨; 제품 실행 차단 유지`
+상태: `[~] Step/Cycle 반복 revisit·누적 Context Core 구현됨; 닫힌 실패 Cycle의 Monitor 승인 복구만 제품 재개(PR #67, 2026-11-02); 일반 restore·Step revisit 차단 유지`
 
 2026-10-31 대조는 §2.2를 따른다. 아래 기존 `[x]`는 기본 Core의 구현/시험을 의미하며,
 `product-safety` 빌드의 공개 `restore`/`revisit` 성공을 뜻하지 않는다. Chain-level revisit은 범위 밖이다.
@@ -1595,11 +1717,29 @@ Experiment Cycle failure Report의 `revisit`은 **기본 Core에서 기록·실�
 
 ### M4-R — 제품에서 반복 revisit 재개
 
+**2026-11-02 한정 재개(PR #67·#69·#73):** preview.8이 `failure → revisit`을 저장하고 다음 행동으로 안내했지만
+`product-safety`가 실행을 일괄 차단해 실패 뒤 진행할 수 없었다. 사용자 결정으로 **닫힌 실패 Cycle의 복구만**
+Monitor에서 변경 목록(create/replace/preserve)을 확인하고 **보존 후 되돌아가기** 버튼으로 승인해 실행한다.
+[복구 계약](GIL_Revisit_Recovery_v0.1.md)·[1차 검증](GIL_Revisit_Recovery_Validation_2026-11-02.md)·
+[preview.9 장부](../distribution/codex/PREVIEW-9-PUBLICATION-20261102.md). `gil_revisit_review/apply`는 App 전용이며
+scope·다음 논리 상태를 묶는 digest와 256-bit 임시 토큰을 `_meta`로만 검증한다. 모델·채팅 동의는 승인이 아니다.
+before/target 양쪽 `.gitignore`와 기본 보호 경로(`.git`, `.env*`, 키, `node_modules/` 등)에 차이가 있으면 **전체 거절**,
+현재 세계가 실패 Snapshot과 다르면 승인 전 거절, 승인 직전 재관측. 원본 파일은 `.gil/revisit-preserved/<sha256>/`에
+보존하고 중단된 승인 복구는 재개한다. Windows는 핸들 기반 transaction·확장 경로를 쓴다. 복구 뒤 채팅을 계속하며
+기록된 상태를 다시 읽는다(PR #69). 일시적 조회 실패 중 확정 승인 표시는 유지한다(PR #73). 양 OS CI 통과,
+Mac preview.9 / Windows owner.8 이후 설치본에 포함. 일반 `restore`, Step revisit, 전체 추적 정책 활성화,
+저장 형식 migration은 허용하지 않으며 Artifact Model §3.6a의 일반 제품 복원 게이트를 완료했다고 주장하지 않는다.
+
 - [ ] M3의 안전한 추적·복원 계약과 Windows 동등 경계를 통과한 뒤 공개 명령/MCP 연결을 재검토한다.
-- [ ] 같은/먼 조상으로 두 번 이상 재시도하며 실패 Graph·Snapshot·현재 Journey·Done Will 보존을 확인한다.
-- [ ] 복원 중단·응답 유실·재시작에서 이동 완료 여부와 다음 새 가지를 판독한다. 중복 실행으로 새 가지를 만들지 않는다.
+      (닫힌 실패 Cycle 복구는 위 한정 계약으로 먼저 열었다. 일반 restore·Step revisit은 이 항목에 남는다.)
+- [~] 같은/먼 조상으로 두 번 이상 재시도하며 실패 Graph·Snapshot·현재 Journey·Done Will 보존을 확인한다.
+      PR #67의 합성 시험이 재시도마다 실패 실행 이력·계보·현재 자아 보존을 검사한다. 실제 설치본 인수는 남는다.
+- [~] 복원 중단·응답 유실·재시작에서 이동 완료 여부와 다음 새 가지를 판독한다. 중복 실행으로 새 가지를 만들지 않는다.
+      중단된 승인 복구 재개와 journal 복구는 합성 시험 통과(PR #67). 실기기 전원 중단은 미검수.
 - [ ] 실제 Mac/Windows 설치본에서 실패 기록과 새 가지, 대상 세계와 현재 자아를 사용자가 구분하는지 검수한다.
-- [ ] 제품 거절 정책·Skill·Context·Monitor의 다음 행동 안내를 함께 맞춘다. 차단된 명령을 가능한 행동처럼 유도하지 않는다.
+- [~] 제품 거절 정책·Skill·Context·Monitor의 다음 행동 안내를 함께 맞춘다. 차단된 명령을 가능한 행동처럼 유도하지 않는다.
+      product-safety 빌드의 dirty 안내가 `gil restore`를 권하지 않고 실제로 할 수 있는 일만 적는다(PR #74·#76).
+      복구 뒤 채팅 계속·기록 재독(PR #69). 실제 모델이 안내대로 움직이는지는 M7에서 본다.
 
 종료 조건: 기존 Core 반복 분기를 유지하면서 제품에서도 안전하게 수행되고, **두 번째 이후 실패의
 경험까지 다음 시도에 전달**되어야 한다. 강제 이동·임의 checkout·Chain revisit을 묶어 도입하지 않는다.
@@ -1860,7 +2000,12 @@ Tauri shell + fixture          (닫힘)
       credential 이 없어 서명·공증·staple·`spctl` 은 수행하지 못했다.** 배포 계약과 비밀
       경계는 `companion/RELEASE-macos.md`
 - [ ] Windows 10/11 feasibility build — watcher·locking·tray·single-instance·autostart
-- [ ] Windows Store/MSIX 또는 signed installer 기본 채널 확정
+      **2026-11-12 대체:** Windows Companion 배포를 폐기(PR #114)했으므로 tray·autostart 창은 만들지 않는다.
+      Windows Monitor는 Codex·Claude Code 탭의 MCP fullscreen App이다(T3.3). 항목은 기록으로 남긴다.
+- [~] Windows Store/MSIX 또는 signed installer 기본 채널 확정
+      **2026-11-12:** 소유자 결정서로 서명·설치 프로그램 없는 단일 정적 `gil.exe`를 기본 채널로 채택(PR #113).
+      **2026-11-13:** Smart App Control 켜진 실기에서 차단 확인 → Microsoft Store MSIX 채널을 병행 구현(PR #116·#117).
+      Authenticode 서명은 계속 하지 않는다(Store가 서명). 소유자 제출·심사 통과 뒤 [x]로 올린다(T3.3).
 - [x] Agent 용 GIL Core 의 self-contained Plugin packaging — Rust Core 를 sidecar 로 싣고
       typed MCP 인자·고정 argv·stdin 본문·종료 코드 경계로 부른다. 저장소·Cargo·전역 `gil`
       없이 설치본만으로 동작함을 실측 (macOS arm64 development packaging)
@@ -2112,7 +2257,10 @@ PiP는 확인하지 못했다. Windows·작업 전환·재시작 수명 검수 �
       App에 한정 재요청(1.5s·4s)과 첫 클릭 요청 보정 추가 → 보정 Core 직접 등록에서 사용자 확인 "클릭해야
       펼쳐져": Host는 사용자 동작 안의 요청만 적용(타이밍 가설 기각). Claude Code 기본 UX = inline 뒤 첫 클릭
       fullscreen. 승인 창 노출은
-      [10/30–31 진단](../mcp-app/CLAUDE-DESKTOP-ROUTES.md) 기준으로 남김
+      [10/30–31 진단](../mcp-app/CLAUDE-DESKTOP-ROUTES.md) 기준으로 남김.
+      **11/02 (PR #78·#81):** 연결 직후 자동 요청으로 시점 보정, `gil_start` 인계 지침·엄격 출력 schema. **11/09 (PR #107):**
+      Desktop 4.23118.0의 명시적 거절 문구만 `refused`로 분류하고 timeout·연결 오류(`error`)와 구분해
+      `automatic_fullscreen` 상태를 Core·모델 안내에 전달. 더 많은 재시도로 Host 정책을 바꾸지 않는다. 상세는 T5.
 - [x] Claude Desktop 호출 경로 대조 기록 — 폴더 없는 대화의 Plugin 표시와 폴더 연결 뒤 공식
       예제까지 표시되지 않는 결과를 구분. [9/28 진단](../mcp-app/CLAUDE-DESKTOP-ROUTES.md)
 - [ ] Claude 작업 UX 재설계·인수 — 경로 입력 없는 Project 선택, 폴더 접근 권한 경계,
@@ -2233,7 +2381,7 @@ artifact·release pipeline → 새 기계 설치·업데이트 인수다. Claude
 
 ## 11. M6 — Advanced Interview & Chain Closing
 
-상태: `[~] M6-A/B/C 개발 프로필 구현·main 병합 · M6-D 개발 구현·미병합 · M6-E 설계 미결`
+상태: `[~] M6-A/B/C/D 개발 프로필 구현·main 병합·시험 설치본 포함 · 실제 Host 버튼 인수 대기 · M6-E 설계 미결`
 
 목표:
 
@@ -2296,18 +2444,23 @@ Chain-level revisit·다중 부모 merge는 이 직렬 연결의 자동 확장�
 
 ### M6-D — 승인 계획·문서와 재인터뷰
 
-2026-11-01 작업 브랜치 `feat/approved-plan-m6d-20261101`에서 `approved-plan` 개발 프로필로 구현했다.
-[승인 계획 계약](GIL_Approved_Plan_v0.1.md)이 명세 §21의 미정 저장 부분을 이 범위에서 정한다.
-기존 프로젝트·기본 설치본에 자동 적용하지 않는다. Core 계약과 제품 인수를 구분한다.
+2026-11-01 작업 브랜치 `feat/approved-plan-m6d-20261101`에서 `approved-plan` 개발 프로필로 구현했고 같은 날
+**PR #64로 main에 병합**했다. [승인 계획 계약](GIL_Approved_Plan_v0.1.md)이 명세 §21의 미정 저장 부분을 이 범위에서
+정한다. 기존 프로젝트 기록에 자동 적용하지 않는다(새 프로젝트만 format 7). Core 계약과 제품 인수를 구분한다.
+이후 보완: 일시적 Monitor 조회 실패 중 확정 승인 표시 유지(PR #73), `gil_plan_propose` 입력 모양을 지침·거절문에
+바로잡음(PR #86·#87), 승인 항목 추가·Report 입력 오류의 복구 경로(PR #105), basis_refs 작성 규칙과 줄별 오류
+집계(PR #109). 로컬 검증 기록은 [M6-D 검증](../coordination/M6D-VALIDATION-20261101.md).
 
 - [x] 승인 항목·revision·실행 Cycle 연결과 pending 순서. Experiment는 최신 승인 판의 첫 미실행 항목에 바인딩한다.
 - [x] 목표/범위/비범위/제약/성공 기준 문서는 Interview에서 export만 제공하고, Verify Snapshot에서 승인 판 bytes를 검증한다. 별도 실행 증거도 필요하다.
 - [x] Monitor의 승인/수정 요청 버튼, scope·revision·digest·App 전용 임시 토큰 검증. 채팅의 yes로 우회하지 못하며 개인 신원 인증이라고 주장하지 않는다.
 - [x] 추가 Interview로 항목 추가·재정렬. 과거 승인·실행 기록 보존. 열린 Experiment에서 재인터뷰 요청을 저장하되 자동 종료·동시 Cycle을 만들지 않는다.
 - [x] 미승인·변조·낡은 판·중복/알 수 없는 실행 연결 검증, 기존 기록 자동 이전 금지.
-- [ ] PR 검토·macOS/Windows CI·병합.
-- [ ] 실제 Codex MCP App 버튼/재연결/채팅 계속 요청과 Luna 실사용 인수.
-- [ ] 테스트 설치본과 업데이트 피드 반영. 현재 설치된 제품에 반영됐다고 간주하지 않는다.
+- [x] PR 검토·macOS/Windows CI·병합 — 2026-11-01 PR #64. Chain M6-A/B/C/D 인수 워크플로가 main에서 계속 돈다.
+- [ ] 실제 Codex/Claude Code MCP App 버튼/재연결/채팅 계속 요청과 Luna 실사용 인수. 합성 App 입력을 인간 승인으로 세지 않는다.
+- [x] 테스트 설치본과 업데이트 피드 반영 — Mac preview.9(2026-11-02) 이후와 Windows owner.8 이후·`v0.3.x` 빌드가
+      `approved-plan,visual-authoring,product-safety`로 빌드된다(`windows-release.yml`, preview 장부). 소유자 설치본에
+      실제로 들어갔는지는 그 PC의 `doctor`/Monitor 버전으로 확인한다.
 
 **합격:** A 완료 뒤 D를 다음으로 승인하면 완료 A는 그대로, 남은 계획은 `[D,B,C]`로 재개된다.
 열린 Cycle 중 재인터뷰 요청은 보존하되 다른 Cycle을 동시에 열거나 현재 Cycle을 자동 종료하지 않는다.
@@ -2472,6 +2625,28 @@ Chain 수준 revisit의 명령/상태 머신도 별도 설계 항목이며 M4 �
 ---
 
 ## 15. 결정 로그
+
+### 2026-11-15 — 11/01 이후 main 반영 대조
+
+- main `b1fa2f1`(2026-11-13) 기준으로 PR #64–#118을 대조했다. 코드·배포에 있지만 이 문서에 없던 결정을 §2에 모았고
+  T1·T3·T5·M4·M5-D/F·M6 절에 날짜별로 옮겼다. 기능·규범 명세·설치본은 바꾸지 않았다.
+- **2026-11-01 M6-D 병합:** 승인 계획을 `approved-plan` 개발 프로필로 main에 넣고 시험 설치본에 포함했다. 기존 기록
+  자동 이전은 하지 않는다. 사람 인수만 남는다.
+- **2026-11-02 M4-R 한정 재개:** 일반 restore 재검토 순서를 바꾸지 않은 채, 닫힌 실패 Cycle 복구 한 가지만 Monitor
+  승인·보호 경로 차이 전체 거절·App 전용 토큰으로 열었다. M3 안전성 게이트는 그대로다.
+- **2026-11-02 Claude Desktop 동등 지원:** Codex와 Claude Code 탭을 같은 지원 대상으로 두고 Host 이름 분기를 금지했다.
+  11/09에 Host의 명시적 fullscreen 거절을 분류해 전달하되 재시도로 Host 정책을 우회하지 않는다.
+- **2026-11-06 Host 훅 전부 폐기:** Verify 밖 파일 변경 보호를 Host 훅으로 강제하던 시도를 접었다. GIL은 전역·프로젝트
+  로컬 훅을 설치하지 않으며 선택된 프로젝트에만 prompt·MCP 응답으로 안내한다. 안내는 OS 쓰기 강제가 아니다.
+- **2026-11-07 기존 프로젝트 재개:** 새 세션은 선택 폴더의 연속성 지침과 `.gil` 표식만 읽는다. HOME·registry·다른
+  프로젝트 스캔으로 무관한 작업을 GIL 작업으로 만들지 않는다.
+- **2026-11-12 다국어:** 기본 ko를 유지하고 Host locale이 있으면 다섯 언어로 응답·화면을 바꾼다. 저장 형식 번호와
+  Agent용 영어 도구 설명은 바꾸지 않는다.
+- **2026-11-12 Windows 단일 실행 파일:** 소유자 결정서에 따라 설치 프로그램·Companion·서명·자체 업데이터 없이
+  정적 `gil.exe` 하나로 배포하고 자기 등록한다. Runtime Update 트랙(U1–U5)은 보류한다.
+- **2026-11-13 Microsoft Store 병행:** Smart App Control 켜진 실기에서 미서명 exe가 막혀 신뢰 전략의 재검토 조건이
+  충족됐다. Authenticode 서명 대신 Store MSIX 채널을 구현했고 소유자가 Partner Center 제출을 맡는다.
+- 이번 대조는 문서 갱신이며 새 구현·게시·외부 연락을 뜻하지 않는다. 다음 엔지니어링 순서는 M3 안전성이다.
 
 ### 2026-10-31 — 명세/구현/제품 상태 분리
 
