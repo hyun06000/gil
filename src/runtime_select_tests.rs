@@ -67,7 +67,7 @@ impl Fixture {
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
-        hooks::reset(); prep::hooks::reset();
+        hooks::reset(); prep::hooks::reset(); observe::hooks::set(None);
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -84,6 +84,18 @@ fn assert_progress_matches_disk(fx: &Fixture, progress: Progress, generation: u6
     assert_eq!(progress.intent_recorded, fx.generation_in("intent.json") == Some(generation), "intent_recorded vs disk");
     assert_eq!(progress.published, fx.generation_in("selection.json") == Some(generation), "published vs disk");
     assert_eq!(progress.history_updated, fx.generation_in("store.json") == Some(generation), "history_updated vs disk");
+}
+/// A refusal at `Reobserve` comes after the three renames: the transition is complete on disk
+/// and the refusal must say so (the opposite of a refusal before the first write), with no
+/// `*.new` leftovers — never half-done.
+fn assert_completed_transition(fx: &Fixture, e: &SelectRefusal, generation: u64) {
+    assert_eq!(e.stage, SelectStage::Reobserve, "{e:?}");
+    assert_eq!(e.progress, Progress { intent_recorded: true, published: true, history_updated: true, intent_kept: true }, "{e:?}");
+    assert_eq!(e.created, vec!["intent.json (replaced by this call)", "selection.json (replaced by this call)", "store.json (replaced by this call)"], "{e:?}");
+    for o in &e.objects { assert!(matches!(o.presence, Presence::SameObject), "{o:?}"); }
+    assert_eq!(fx.generation_in("intent.json"), Some(generation)); assert_eq!(fx.generation_in("selection.json"), Some(generation)); assert_eq!(fx.generation_in("store.json"), Some(generation));
+    assert_progress_matches_disk(fx, e.progress, generation);
+    assert!(!fx.has(INTENT_NEW) && !fx.has(SELECTION_NEW) && !fx.has(STORE_NEW));
 }
 
 #[test]
@@ -351,14 +363,19 @@ fn prepare_and_select_do_not_overwrite_each_others_records() {
             let p = sc.spawn(|| prep::prepare(&fx.root, &Request { version: V3, expected_sha256: &sha(&c), source: &src_c }));
             (s.join().unwrap(), p.join().unwrap())
         });
-        // the selection either completed, or was refused conservatively because its observation
-        // under the lock saw the preparation writing (nothing changed); never half-done
-        let s = match s {
-            Ok(s) => { assert_eq!(s.generation, 1); Some(s) }
-            Err(e) => { assert_eq!(e.stage, SelectStage::Observe, "round {round}: {e:?}"); assert_eq!(e.progress, Progress::default()); assert!(e.created.is_empty()); assert_eq!(fx.generation_in("store.json"), Some(0)); assert!(!fx.has("selection.json")); None }
+        // the selection either completed, or was refused because an observation saw the
+        // preparation writing: before any write (under the lock: nothing changed) or after the
+        // three renames (post-observation: everything changed, reported as such); never half-done
+        let completed = match s {
+            Ok(s) => { assert_eq!(s.generation, 1); true }
+            Err(e) => match e.stage {
+                SelectStage::Observe => { assert_eq!(e.progress, Progress::default(), "round {round}: {e:?}"); assert!(e.created.is_empty()); assert_eq!(fx.generation_in("store.json"), Some(0)); assert!(!fx.has("selection.json")); false }
+                SelectStage::Reobserve => { assert!(e.reason.contains("changed during observation"), "round {round}: {e:?}"); assert_completed_transition(&fx, &e, 1); true }
+                other => panic!("round {round}: unexpected refusal stage {other:?}: {e:?}"),
+            },
         };
         match &p { Ok(r) => assert!(matches!(r.outcome, Outcome::Prepared)), Err(e) => assert!(matches!(e.stage, prep::Stage::Observe | prep::Stage::Reobserve), "{e:?}") }
-        if s.is_none() {
+        if !completed {
             // once the preparation is over, the same request goes through and nothing was lost
             let s = select(&fx.root, &req(V1, &da, 0)).unwrap_or_else(|e| panic!("round {round}: {e:?}"));
             assert_eq!(s.generation, 1);
@@ -395,6 +412,39 @@ fn prepare_and_select_do_not_overwrite_each_others_records() {
     assert_eq!(r.after.state, selected(1, V1));
     assert_eq!(fx.generation_in("store.json"), Some(1), "history overwritten by the late record");
     assert!(!fx.has(STORE_NEW));
+}
+#[test]
+fn a_post_observation_blocked_by_concurrent_versions_churn_reports_the_completed_transition() {
+    // The CI race of 2026-11-15 made deterministic: a preparation of another version writes
+    // under versions/ between the reads and the re-check of the selection's final observation.
+    // The observer blocks conservatively ("changed during observation"), the selection is
+    // refused at Reobserve, and the three records are already replaced: the refusal must report
+    // the completed transition, and once the preparation is over the store is the predicted one.
+    thread_local! { static SRC_C: std::cell::RefCell<(PathBuf, String)> = const { std::cell::RefCell::new((PathBuf::new(), String::new())) }; }
+    fn prepare_c_between_reads(root: &Path) {
+        observe::hooks::set(None); // once; the preparation below observes the store too
+        let (src, digest) = SRC_C.with(|s| s.borrow().clone());
+        assert_eq!(prep::prepare(root, &Request { version: V3, expected_sha256: &digest, source: &src }).unwrap().outcome, Outcome::Prepared);
+    }
+    fn arm_observer(_: &Path) { observe::hooks::set(Some(prepare_c_between_reads)); }
+    let (fx, da, db) = Fixture::prepared("churn");
+    let c = bytes_c(); let src_c = fx.base.join("core-c"); fs::write(&src_c, &c).unwrap();
+    SRC_C.with(|s| *s.borrow_mut() = (src_c.clone(), sha(&c)));
+    hooks::BEFORE_REOBSERVE.with(|h| h.set(Some(arm_observer)));
+    let e = select(&fx.root, &req(V1, &da, 0)).unwrap_err();
+    hooks::reset(); observe::hooks::set(None);
+    assert!(e.reason.contains("changed during observation"), "{e:?}");
+    assert_completed_transition(&fx, &e, 1);
+    // the refusal's own re-observation ran after the preparation finished: the predicted state
+    assert_eq!(e.after.as_ref().map(|v| v.state.clone()), Some(selected(1, V1)), "{e:?}");
+    let (o, v) = observe_and_judge(&fx.root);
+    assert!(o.observation.blocked.is_empty(), "{o:?}"); assert_eq!(v.state, selected(1, V1));
+    assert!(fx.has(&format!("{VERSIONS_DIR}/{}/complete", version_dirname(V3, &sha(&c)))), "the concurrent preparation completed");
+    // the transition counted: the same request is now a generation conflict (nothing changed),
+    // and the next generation goes through
+    let again = select(&fx.root, &req(V1, &da, 0)).unwrap_err();
+    assert_eq!(again.stage, SelectStage::Observe); assert!(again.reason.contains("generation conflict"), "{again:?}"); assert_eq!(again.progress, Progress::default());
+    assert_eq!(select(&fx.root, &req(V2, &db, 1)).unwrap().generation, 2);
 }
 #[test]
 fn failure_injection_at_every_boundary_matches_the_judge_and_the_report_matches_the_disk() {
