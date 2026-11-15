@@ -85,10 +85,13 @@ try {
   }, { html, view, details, visualItem, pngBase64 });
   const frame = page.frameLocator('iframe');
   await frame.locator('[data-step="step:C3/S1"]').waitFor({ timeout: 20000 });
-  assert.match(await frame.locator('.gil-progress').innerText(), /구현·검증 · 열려 있음/);
+  assert.match(await frame.locator('.gil-progress').innerText(), /실험 C3 · 구현·검증 진행 중/);
   assert.ok((await frame.locator('.gil-progress').innerText()).includes(view.current_will.next_action));
-  assert.ok((await frame.locator('.gil-progress').innerText()).includes(view.current_will.done_when));
-  assert.match(await frame.locator('.gil-progress').innerText(), /닫힌 단계 11개/);
+  // The completion condition equals the success criterion above it, so it is not repeated (§1.1).
+  assert.ok((await frame.locator('.intro').innerText()).includes(view.current_will.done_when));
+  // Record identifiers sit behind the <details>: present in textContent, absent from the default innerText.
+  assert.match(await frame.locator('.gil-progress').textContent(), /닫힌 단계 11개/);
+  assert.doesNotMatch(await frame.locator('.gil-progress').innerText(), /step:C3\/S3/);
   await page.frames()[1].evaluate(()=>{window.visualURLs=new Set();const create=URL.createObjectURL.bind(URL),revoke=URL.revokeObjectURL.bind(URL);URL.createObjectURL=b=>{const u=create(b);window.visualURLs.add(u);return u;};URL.revokeObjectURL=u=>{window.visualURLs.delete(u);revoke(u);};});
   await frame.locator('[data-step="step:C3/S1"]').click();
   await frame.locator('.detail').getByText('<script>window.evil=1</script>', { exact: true }).waitFor();
@@ -145,7 +148,7 @@ try {
     await frame.locator('.map').screenshot({path:process.env.GIL_UI_LAYOUT_SCREENSHOT});
   console.log('Fullscreen Report clears a 160/220px external mock composer at 1280×900, 900×650, 600×480 PASS');
   await page.evaluate(() => { window.revision = '2'; window.view.world.state = 'dirty'; });
-  await frame.locator('.world').filter({ hasText: 'dirty' }).waitFor({ timeout: 12000 });
+  await frame.locator('.world').filter({ hasText: 'dirty' }).waitFor({ state: 'attached', timeout: 12000 });
   assert.match(await frame.locator('.detail').innerText(), /step:C3\/S1/);
   await frame.locator('#native').click();
   await frame.locator('#host-say').filter({ hasText: 'native fallback requested' }).waitFor();
@@ -222,13 +225,13 @@ try {
   assert.equal(await frame.locator('[data-step="step:C3/S1"]').count(), 1, 'last graph survives');
   await frame.locator('.notice').filter({ hasText: '상세를 읽지 못했다' }).waitFor();
   await page.frames()[1].evaluate(()=>window.GIL_COMPANION.refresh());
-  await frame.locator('.progress-connection').filter({hasText:'마지막'}).waitFor({timeout:12000});
+  await frame.locator('.stale').filter({hasText:'마지막으로 확인한 기록'}).waitFor({timeout:12000});
   assert.equal(await page.frames()[1].evaluate(()=>window.visualURLs.size),0);
   assert.equal(await frame.locator('.detail dl').innerText(), lastReport, 'last verified report survives a failed reread of the same step');
   await page.evaluate(() => { window.failResume = false; window.revision = 'new-server:3'; window.view.world.state = 'dirty'; });
-  await frame.locator('.world').filter({ hasText: 'dirty' }).waitFor({ timeout: 12000 });
+  await frame.locator('.world').filter({ hasText: 'dirty' }).waitFor({ state: 'attached', timeout: 12000 });
   await frame.locator('.notice[data-shown="false"]').waitFor({ state: 'attached' });
-  assert.match(await frame.locator('.gil-progress').innerText(), /Monitor 조회 성공/);
+  assert.equal(await frame.locator('.stale').getAttribute('data-shown'), 'false', 'the last-confirmed banner is gone after recovery');
   assert.equal(await frame.locator('.detail dl').innerText(), lastReport, 'same report is available after automatic recovery');
   const calls = await page.evaluate(() => window.requests.filter(p => p.method === 'tools/call'));
   assert.ok(calls.some(c => c.params.name === 'gil_monitor_read'));

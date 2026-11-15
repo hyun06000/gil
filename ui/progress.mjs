@@ -33,7 +33,11 @@ export function progressSummary(view) {
   const cycle = view.timeline.find(one => one.cycle_ref === view.current.cycle_ref);
   const step = cycle?.steps.find(one => one.step_ref === view.current.step_ref);
   const will = view.current_will;
-  const stepName = (kind) => { const key = `progress.step.${kind}`, found = t(key); return found === key ? kind : found; };
+  const said = (key, fallback) => { const found = t(key); return found === key ? fallback : found; };
+  const stepName = (kind) => said(`progress.step.${kind}`, kind);
+  // 사람의 낱말로 옮기되 모르는 값은 그대로 보인다. `failure` 는 반증이 아니라 「성공 미확인」이다(§1.2).
+  const verdictWord = (verdict) => verdict ? said(`ui.verdict.${verdict}`, verdict) : '';
+  const cycleLabel = cycle ? `${said(`ui.cycle.${cycle.kind}`, cycle.kind)} ${String(cycle.cycle_ref).split(':').pop()}` : '';
   const closed = view.timeline.reduce((n, one) => n + one.steps.filter(s => s.state === 'closed').length, 0);
   const visuals = visualCounts(view);
   return {
@@ -43,10 +47,11 @@ export function progressSummary(view) {
         declared: visuals.declaredNone ? t('progress.visuals_declared', { n: visuals.declaredNone }) : '',
         missing: visuals.missing ? t('progress.visuals_missing', { n: visuals.missing }) : '' }),
     position: view.chain?.state === 'closed' ? t('progress.chain_closed')
-      : step ? t('progress.position', { step: stepName(step.kind), state: step.state === 'open' ? t('progress.step_open') : t('progress.step_closed') })
+      : step ? t('progress.position', { cycle: cycleLabel, step: stepName(step.kind), state: step.state === 'open' ? t('progress.step_open') : t('progress.step_closed') })
       : t('progress.boundary'),
-    action: view.chain?.state === 'closed' ? t('progress.final_verdict', { verdict: view.chain.report?.verdict || '' }) : will?.next_action || t('progress.no_will'),
+    action: view.chain?.state === 'closed' ? t('progress.final_verdict', { verdict: verdictWord(view.chain.report?.verdict) }) : will?.next_action || t('progress.no_will'),
     done: view.chain?.state === 'closed' ? (view.chain.report?.handoff_summary || t('progress.chain_report_saved')) : will?.done_when || t('progress.done_when_next'),
+    // 기록 식별자와 원문 판정 값은 「기록 상세」의 한 줄이다. 기본 화면에는 올라오지 않는다.
     records: t('progress.records', {
       chain: view.current.chain_ref ? t('progress.records_chain', { chain: view.current.chain_ref,
         state: view.chain?.state === 'closed' ? t('progress.records_chain_closed', { verdict: view.chain.report?.verdict || '' }) : t('progress.records_chain_open') }) : '',
