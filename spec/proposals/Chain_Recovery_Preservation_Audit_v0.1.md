@@ -54,8 +54,10 @@ cfg: `approved-plan` + `product-safety` + `visual-authoring` + macOS/Windows (�
 | 기본 프로필·chain-core 프로필에서 새 파일 컴파일 (cfg로 0개 실행) | 통과 |
 | `--all-targets` 빌드 (기본·approved-plan), `git diff --check`, `node --test tools/ci/*.test.mjs` | 통과 |
 
-**현재 계약 안의 결함은 찾지 못했다.** 부분 결과·현재에만 있는 파일·제외 경로·보존본·멱등·재시작 경계가
-명세대로 동작했다.
+부분 결과·현재에만 있는 파일·제외 경로·보존본·멱등·재시작 경계는 두 OS에서 명세대로 동작했다.
+**한 가지 OS 차이를 CI가 드러냈다** (§5.4): Windows 복원기는 현재에만 있던 파일을 지운 뒤 비게 된 폴더를
+치우지 않는다. 파일 바이트와 보존본은 계약대로이며, 폴더 잔존은 Artifact Model §8.2 표("제거할 수 있다")로는
+허용되지만 §8.4("비게 된 폴더는 치운다")와 Roadmap M3-E 체크와는 어긋난다. 제품 수정은 별도 후속으로 남긴다.
 
 ## 4. 실행 기록
 
@@ -64,9 +66,11 @@ cfg: `approved-plan` + `product-safety` + `visual-authoring` + macOS/Windows (�
 
 - 첫 커밋 92822bf (시험·보고서만): macos-arm64-preview, chain (macos-15), Windows native x64 2종 통과;
   chain (windows-2025)는 보고 시점 대기. 이 run은 새 시험을 컴파일만 했다(아래 편입 전).
-- CI 편입 커밋 이후: chain-core.yml의 "Approval profile, M6-D contract over the real stdio process
-  (Wave 1 E wire)" 단계가 macOS·Windows 양쪽에서 `chain_recovery_preservation`의 **3개 실행**을
-  로그에 남겨야 한다. 실제 결과는 PR 본문의 CI 표를 따른다.
+- CI 편입 커밋 820fbe0: chain (macos-15) 단계 로그에 `chain_recovery_preservation` **3개 실행·3 통과**.
+  chain (windows-2025)도 **3개 실행**, 그중 `recovery_in_a_chain_…`가 `emptied folder must be pruned`로
+  1 실패 (§5.4) → 그 뒤 Windows 단계는 실행되지 않음. Windows native Core (x64)·Codex preview run은 통과.
+- 수정 커밋 이후: Windows 폴더 잔존을 두 OS 공통 불변식(실패 시도 파일이 남지 않음)으로 바꾸고 Unix에서만
+  폴더 제거를 단언한다. 실제 결과는 PR 본문의 CI 표를 따른다.
 
 ## 5. 관찰 (결함 아님, 후속 결정 대상)
 
@@ -84,6 +88,15 @@ cfg: `approved-plan` + `product-safety` + `visual-authoring` + macOS/Windows (�
    다시 부르면 "기록되지 않은 파일 변경이 있어 복원을 거절했다"가 나온다. 파일은 보존되고 `gil_open`은
    정상 진행되므로 안전하지만, 이미 완료된 복구임을 함께 말하면 Agent가 재시도를 반복하지 않는다.
    문구 조정은 i18n을 다루는 M6-E 세션과 겹치므로 그쪽 후속으로 넘긴다.
+
+4. **Windows 복원기는 비게 된 폴더를 남긴다 (CI가 발견, 제품 후속 대상).** `src/restore/mod.rs`의 Unix
+   경로는 Delete 적용 뒤 `prune_empty(root, &at)`(약 507행)로 비게 된 부모 폴더를 루트까지 거둔다.
+   `src/restore/windows.rs::run`의 `Operation::Delete` 분기(약 335행)는 파일만 지우고 같은 정리를 하지 않아,
+   `results/b/partial.csv`를 지운 뒤 빈 `results/b/`가 남는다. 재현: 이 파일의 첫 시험을 Windows에서 돌리면
+   `cfg(unix)` 단언을 풀었을 때 실패한다(CI run 43747378532, chain windows-2025). 파일 바이트·보존본·기록은
+   정상이므로 안전 경계 위반은 아니다. 최소 수정 제안: Windows Delete 적용 뒤 pin된 부모 핸들로 비어 있는
+   디렉터리를 루트 직전까지 제거하되, 링크·reparse·모르는 항목이 있으면 멈추는 기존 핸들 규율을 따른다.
+   `.gilignore`·M6-E 작업과 파일이 겹치지 않으므로 독립 후속 PR로 둔다.
 
 ## 6. 하지 않은 것
 
