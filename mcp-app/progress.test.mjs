@@ -24,12 +24,12 @@ test('open contract, completion criterion and closed count come from the View, n
   const view = fixture(), summary = progressSummary(view);
   assert.equal(summary.action, view.current_will.next_action);
   assert.equal(summary.done, view.current_will.done_when);
-  assert.match(summary.position, /질문.*열려 있음/);
+  assert.match(summary.position, /인터뷰 C1 · 질문 진행 중/);
   assert.match(summary.records, /닫힌 단계 0개/);
   view.current_will = null; view.current.step_ref = null;
   view.timeline[0].steps[0].state = 'closed';
   assert.match(progressSummary(view).records, /닫힌 단계 1개/);
-  assert.match(progressSummary(view).action, /열린 행동 계약이 없습니다/);
+  assert.match(progressSummary(view).action, /기록된 다음 행동이 없습니다/);
 });
 
 test('Chain closure is visible progress even when Cycle, Step and Journey do not change', () => {
@@ -44,7 +44,7 @@ test('Chain closure is visible progress even when Cycle, Step and Journey do not
   assert.equal(summary.position, 'Chain 종료');
   assert.equal(summary.done, '남은 질문을 보존했다');
   assert.match(summary.records, /닫힘 \(failure\)/);
-  assert.match(summary.action, /최종 판정: failure/);
+  assert.match(summary.action, /최종 판정 · 성공 미확인/, 'failure is not translated as refutation (§1.2)');
 });
 
 test('visual counts come only from recorded declarations; none-declared and missing are listed apart', () => {

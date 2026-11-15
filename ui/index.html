@@ -33,19 +33,30 @@
     <p data-i18n="html.empty_none">아직 연 Project 가 없다.</p>
     <p class="how" data-i18n="html.empty_how">위의 폴더 열기로 GIL Project 의 root 를 고른다.</p>
   </div>
+  <!-- 기본 화면은 셋만 바로 보인다: 지금 하는 일, 어디까지 왔는가, 지금 할 일(Monitor Model §1.1).
+       보조 정보(기록 개수·관측 시각·파일 상태 원문·안내)는 「기록 상세」 뒤에 선다. 지우지 않는다. -->
   <section class="intro" hidden>
-    <small data-i18n="html.now">지금</small>
+    <div class="now-head">
+      <small data-i18n="html.now">지금</small>
+      <span class="now-state" role="status"></span>
+    </div>
     <h1></h1>
-    <p></p>
-    <span class="world"></span>
+    <p class="now-under"></p>
+    <!-- 파일 상태가 검증 확정을 막을 때만 보인다. 정상일 때는 「기록 상세」 안의 한 줄이다. -->
+    <p class="world-warning" role="status" hidden></p>
     <section class="gil-progress" aria-label="GIL 기록 진행" data-i18n-aria="html.progress_aria">
       <strong class="progress-position"></strong>
       <dl><dt data-i18n="html.todo">지금 할 일</dt><dd class="progress-action"></dd>
-        <dt data-i18n="html.done_when">완료 조건</dt><dd class="progress-done"></dd></dl>
-      <p class="progress-records"></p>
-      <p class="progress-observed"></p>
+        <dt class="progress-done-label" data-i18n="html.done_when">완료 조건</dt><dd class="progress-done"></dd></dl>
+      <!-- 조회·연결에 문제가 있을 때만 글이 들어온다. 비어 있으면 자리도 차지하지 않는다. -->
       <p class="progress-connection" role="status"></p>
-      <small data-i18n="html.progress_note">GIL에 기록된 상태입니다. 에이전트의 생각이나 다른 도구 사용 여부는 여기서 확인할 수 없습니다.</small>
+      <details class="progress-more">
+        <summary data-i18n="html.more">기록 상세</summary>
+        <p class="progress-records"></p>
+        <p class="progress-observed"></p>
+        <p class="world"></p>
+        <small data-i18n="html.progress_note">GIL에 기록된 상태입니다. 에이전트의 생각이나 다른 도구 사용 여부는 여기서 확인할 수 없습니다.</small>
+      </details>
     </section>
   </section>
   <section class="map" aria-label="Step DAG" hidden>

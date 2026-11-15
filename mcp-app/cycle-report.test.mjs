@@ -9,6 +9,9 @@ test('cycle projection preserves identity, literal text and source without mutat
   const before=structuredClone(c),d=cycleReportDetail(c);
   assert.deepEqual(d.owner,{kind:'cycle',ref:'cycle:C3'});
   assert.equal(d.step_ref,undefined);
+  assert.equal(d.report.fields[0].value,'성공 (success)','verdict keeps the stored value beside the word');
+  assert.equal(cycleReportDetail({...c,report:{...c.report,verdict:'failure'}}).report.fields[0].value,'성공 미확인 (failure)');
+  assert.equal(cycleReportDetail({...c,report:{...c.report,verdict:'odd'}}).report.fields[0].value,'odd','unknown values are shown as stored');
   assert.equal(d.report.fields[1].value,c.report.handoff_summary);
   assert.equal(d.report.fields[2].name,'판정의 교훈 (Outcome)');
   assert.equal(d.report.fields.length,5);assert.deepEqual(c,before);
