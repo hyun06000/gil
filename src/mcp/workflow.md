@@ -175,7 +175,7 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    | Verify is closed | `gil_open` Analysis, `gil_close` with a nonblank `interpretation` of the saved evidence |
    | Analysis is closed | `gil_open` Outcome, `gil_close` with `verdict`, `lesson`, `next_direction` |
    | Outcome is closed but the Experiment Cycle is still open | `gil_close` with the Cycle Report |
-   | Cycle closed `success` | `gil_open` the next Experiment (next independent question) or Interview. When no work remains and the project has a Chain, the Closing Interview and Chain Report follow; a chat summary alone never completes the project |
+   | Cycle closed `success` | `gil_open` the next Experiment (next independent question) or Interview. When no work remains and the project has a Chain, the Closing Interview and Chain Report follow; a chat summary alone never completes the project, and that Interview's first message shows the result before asking to close |
    | Cycle closed `failure` · `revisit` | When the Core receipt requires Monitor approval, open Monitor and wait for the user's “Preserve and revisit” (보존 후 되돌아가기) button after reviewing file changes; do not call App-only tools or invent consent. After confirmed recovery, `gil_open` a new Cycle. Otherwise follow the connected Core receipt; never bypass a product refusal |
 
    A closed Hypothesis or a prepared Verify contract does not mean Verify is open. Do not change
@@ -244,6 +244,27 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    Outcome may cite them too. Finish Analysis, Outcome and the Cycle Report before the next
    independent problem or final delivery. Deliver links to the saved evidence/deliverable
    alongside the chat summary, and name the attached visuals.
+
+   **Write every Report short.** Lead with what this Step newly established (observation,
+   judgment or decision) and the few facts that support it; point at saved evidence files or
+   earlier records instead of pasting logs, tables or project background. Do not repeat the same
+   content across fields, and do not restate a Step Report inside the Cycle Report or a Cycle
+   Report inside the Chain Report: a Cycle Report carries the verdict, the lesson and the next
+   direction; a Chain Report carries the approved verdict and the handoff. Keep failure causes,
+   uncertainty, unverified scope and warnings for the next work — brevity never drops them. Do
+   not shorten with undefined abbreviations or internal code names, and do not fill a field with
+   "done", "pass" or a bare link. There is no length cap and closed Reports are never rewritten.
+
+   **Show the result before asking to close.** When the work is done and the project moves to
+   its Closing Interview (or any Interview that follows executed Experiments), the first message
+   presents the result itself, in this order: what was made and what it is for → the actual
+   deliverable and how to open it (a link to the saved file, the key numbers or table, the real
+   screen or saved capture, the changed code and its test result) → the verification result and
+   the remaining limits → the question whether to close. Do not open with the closing question
+   alone, do not substitute a file list or "done" for the result, and do not ask "shall I show
+   it?" or add a separate "did you see it?" step. Present partial results, no result and
+   anything that cannot be shown truthfully. Read and present the recorded evidence; creating
+   new files, captures or re-runs belongs to an earlier Verify, never to the Closing Interview.
 6. **Use the actual close contract.** Close both Steps and Cycles with `gil_close`; the legacy
    `gil_cycle` cannot accept a Report. Outcome Step's `close_cycle` means submit the Cycle Report
    next; do not copy it into that report. Cycle `open_child` records a direction, it neither opens
@@ -333,7 +354,7 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
      evidence to leave an unfinished Step.
    - When every approved item has executed, the project is not finished by a chat summary:
      `gil_open` Interview as the Closing Interview, propose the final `chain_verdict` for approval,
-     then `gil_close` the Chain Report.
+     then `gil_close` the Chain Report. Its first message shows the result before asking (rule 5).
 8. **Recover and keep the user informed.** A rejected Project action must be resolved before
    further Project work. Never treat a refused close as closed, backfill skipped steps or fabricate
    history. A confirmed input rejection means the call was not executed: check current state and

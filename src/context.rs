@@ -143,6 +143,8 @@ fn next_call_here(project: &Project) -> String {
             return said;
         }
         return match (cycle.kind(), node.kind) {
+            (CycleKind::Interview, NodeKind::Question) if cycles.has_closed_experiment() =>
+                format!("{} {}", text("ctx.next.question"), text("guide.closing_results_first")),
             (CycleKind::Interview, NodeKind::Question) => text("ctx.next.question").into(),
             (CycleKind::Interview, NodeKind::Interpretation) => text("ctx.next.interpretation").into(),
             (CycleKind::Interview, NodeKind::Synthesis) => text("ctx.next.synthesis").into(),
@@ -201,6 +203,9 @@ fn next_call_here(project: &Project) -> String {
     match cycles.why_not_open_child() {
         None => match cycle.kind() {
             CycleKind::Interview => text("ctx.next.interview_closed").into(),
+            // Chain 이 있으면 모든 일이 끝났을 때 Closing Interview 가 따른다 — 그 첫 메시지는 결과물부터다.
+            CycleKind::Experiment if project.current_chain().is_some() =>
+                format!("{} {}", text("ctx.next.experiment_closed"), text("guide.closing_results_first")),
             CycleKind::Experiment => text("ctx.next.experiment_closed").into(),
         },
         Some(why) => tr!("ctx.next.blocked", why = why),
@@ -257,7 +262,7 @@ fn plan_next_call_after_cycle(project: &Project) -> Option<String> {
             let pending = plan.pending(chain);
             match pending.first() {
                 Some(item) => Some(tr!("ctx.plan.next_item", revision = active.revision, item = item.id, question = item.question, done_when = item.done_when)),
-                None => Some(text("ctx.plan.all_done").into()),
+                None => Some(format!("{} {}", text("ctx.plan.all_done"), text("guide.closing_results_first"))),
             }
         }
     }
@@ -813,7 +818,11 @@ mod plan_guidance_tests {
         let last = p.current_cycle().steps().current().unwrap();
         p.close_cycle(h::cycle_report(p.current_cycle(), "success", last).with("next_direction.action", "open_child")).unwrap();
         assert!(p.approved_plan().unwrap().pending(p.current_chain().unwrap()).is_empty());
-        says(&p, &["모두 실행했다", "gil_open(kind: interview)", "Closing Interview", "Chain Report", "채팅 보고만으로"], &["gil_open(kind: experiment)", "완료 보고는 사용자에게 한다"]);
+        says(&p, &["모두 실행했다", "gil_open(kind: interview)", "Closing Interview", "Chain Report", "채팅 보고만으로", "결과물을 먼저 보여 준다", "종료 여부를 묻는다"], &["gil_open(kind: experiment)", "완료 보고는 사용자에게 한다"]);
+        // The Closing Interview's own Question keeps saying it, so a new session that opens it still shows the result first.
+        p.open_child_cycle(CycleKind::Interview).unwrap();
+        h::opened(&mut p, NodeKind::Question);
+        says(&p, &["열린 Question", "결과물을 먼저 보여 준다"], &["gil_open(kind: experiment)"]);
     }
 
     #[test]

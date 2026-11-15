@@ -87,6 +87,25 @@ test('approved plans are detected from the record and schema, never required on 
   assert.match(next['Cycle closed `success`'], /Closing Interview and Chain Report follow; a chat summary alone never completes the project/);
 });
 
+// 2026-11-15 roadmap item 1: the shared text asks for short Reports and for the Closing
+// Interview to show the result before asking. Guidance regression only, not a model run.
+test('reports are written short and the Closing Interview shows the result before asking', () => {
+  const reports = workflow.slice(workflow.indexOf('**Write every Report short.**'), workflow.indexOf('**Use the actual close contract.**'));
+  assert.match(reports, /Lead with what this Step newly established/);
+  assert.match(reports, /point at saved evidence files or\s+earlier records instead of pasting logs/);
+  assert.match(reports, /do not restate a Step Report inside the Cycle Report or a Cycle\s+Report inside the Chain Report/);
+  assert.match(reports, /Keep failure causes,\s+uncertainty, unverified scope and warnings for the next work/);
+  assert.match(reports, /There is no length cap and closed Reports are never rewritten/);
+  assert.match(reports, /\*\*Show the result before asking to close\.\*\*/);
+  assert.match(reports, /what was made and what it is for → the actual\s+deliverable and how to open it/);
+  assert.match(reports, /the verification result and\s+the remaining limits → the question whether to close/);
+  assert.match(reports, /do not ask "shall I show\s+it\?" or add a separate "did you see it\?" step/);
+  assert.match(reports, /creating\s+new files, captures or re-runs belongs to an earlier Verify, never to the Closing Interview/);
+  assert.match(next['Cycle closed `success`'], /first message shows the result before asking to close/);
+  const plans = workflow.slice(workflow.indexOf('**Approved plans'), workflow.indexOf('**Recover and keep'));
+  assert.match(plans, /Chain Report\. Its first message shows the result before asking \(rule 5\)/);
+});
+
 test('recovery rows connect each failure to the current fact and forbid loops and guarantees', () => {
   assert.match(next['`gil_start` refused because a project exists'], /gil_context. once.*never start again/);
   assert.match(next['Close response lost or uncertain'], /gil_status.*close again only if the step is still open/);

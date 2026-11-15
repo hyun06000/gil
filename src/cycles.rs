@@ -180,6 +180,13 @@ impl Cycles {
         self.nodes.iter().find(|cycle| cycle.id() == id)
     }
 
+    /// 이 프로젝트에 **닫힌 Experiment 가 하나라도 있는가** — 보여 줄 결과(부분 결과·실패 기록 포함)가
+    /// 이미 세계에 있다는 뜻이다. Closing·재인터뷰처럼 실행 뒤에 오는 Interview 를 가려내는 데만 쓴다.
+    /// 판정을 새로 만들지 않고 계보도 바꾸지 않는다(Cycle Model §18 — 종료 인터뷰는 결과물을 먼저 보여 준다).
+    pub fn has_closed_experiment(&self) -> bool {
+        self.nodes().iter().any(|cycle| cycle.kind() == CycleKind::Experiment && cycle.is_closed())
+    }
+
     /// 이 Cycle 까지의 **구조적 계보**를 뿌리부터 차례로 본다.
     ///
     /// `parent` 사슬만 따라간다 — 만든 순서도, 형제 가지도 아니다. 읽기만 하므로 아무것도

@@ -2056,3 +2056,32 @@ fn build_version_is_not_overridden_by_the_runtime_environment() {
     assert_eq!(probe["core"]["core_version"], gil::CORE_VERSION);
     assert!(!dir.join(".gil").exists());
 }
+
+/// 2026-11-15 로드맵 순서 1번 — 실행된 Experiment 뒤의 Interview(Closing·재인터뷰)는 질문보다
+/// **결과물을 먼저 보여 준다**(Cycle Model §18). 영수증과 context 의 안내 계약만 잰다 — 실제 모델이
+/// 결과를 보여 줬다는 증거가 아니다. 첫 Interview(실행 전)에는 보여 줄 결과가 없으므로 그 안내도 없다.
+#[test]
+fn a_question_after_an_executed_experiment_is_told_to_show_the_result_first() {
+    let dir = scratch("cli-closing-results-first");
+    ok(&dir, &["start"], None);
+    let first = open_action(&dir, "question");
+    assert!(!first.contains("결과물을 먼저 보여 준다"), "첫 Interview 에는 보여 줄 결과가 없다:\n{first}");
+    ok(&dir, &["close"], Some(QUESTION));
+    for (kind, report) in [("interpretation", INTERPRETATION), ("synthesis", SYNTHESIS), ("outcome", INTERVIEW_OUTCOME)] {
+        open_action(&dir, kind);
+        ok(&dir, &["close"], Some(report));
+    }
+    ok(&dir, &["close"], Some(INTERVIEW_CYCLE));
+    ok(&dir, &["open", "experiment"], None);
+    walk_to_the_exit_with(&dir, "success");
+    ok(&dir, &["close"], Some(&cycle_succeeded("C2")));
+
+    ok(&dir, &["open", "interview"], None);
+    let closing = open_action(&dir, "question");
+    for needle in ["실행된 Experiment가 있다", "결과물을 먼저 보여 준다", "검증 결과와 남은 한계", "이 Interview에서 파일을 만들지 않는다"] {
+        assert!(closing.contains(needle), "{needle:?} 가 없다:\n{closing}");
+    }
+    // 새 세션이 같은 자리를 읽어도 첫 수가 같은 말을 한다.
+    let context = ok(&dir, &["context"], None);
+    assert!(context.contains("결과물을 먼저 보여 준다"), "{context}");
+}
