@@ -1,0 +1,5 @@
+{ this is not json
+{"seq":9,"note":"no request"}
+[1,2,3]
+
+{"seq":1,"at":"2026-11-16T00:00:01.000Z","actor":"model","synthetic":false,"request":{"name":"gil_help","arguments":{"topic":"current"}},"result":{"content":[{"type":"text","text":"Bootstrap 안내"}],"structuredContent":{"ok":true,"exit_code":0,"said":"Bootstrap 안내","problem":""},"isError":false},"error":null,"ms":5}
