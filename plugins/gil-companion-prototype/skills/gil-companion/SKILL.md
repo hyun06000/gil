@@ -290,6 +290,11 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    next; do not copy it into that report. Cycle `open_child` records a direction, it neither opens
    nor executes another Experiment. Follow the actual Cycle receipt for the allowed next kind.
    Approved Closing Interview uses `close_chain`; ordinary execution uses its own Cycle contract.
+   After the Chain Report the Chain is closed: open nothing else inside it, and report the verdict,
+   the deliverables and the remaining questions to the user. Only a new topic starts the next Chain,
+   with one explicit `gil_open(kind: chain)`; there, read `gil_context` once, then open its Question.
+   The new Chain is approved in its own Opening Interview and reuses no earlier approval, plan or
+   re-interview request. Never `gil_start` again.
    Format-4 steps (including Verify) and format-5 non-Verify
    reports without stored images use `{project_root, report}`. Every format-5 Verify uses
    `{project_root, report, expected_owner, visuals}`, even without images. Supply both

@@ -124,8 +124,18 @@ fn first_line_kind<'a>(said: &'a str, lead: &str) -> Option<&'a str> {
     line.split(" · ").nth(1).map(str::trim)
 }
 
+/// A Chain receipt names the container, not a Step kind: `닫았다: chain:C1 · failure`,
+/// `열었다: chain:C2 · Opening Interview cycle:C4`. Typed refs are locale-independent.
+fn first_line_is_chain(said: &str, lead: &str) -> bool {
+    said.lines().next().and_then(|line| line.strip_prefix(lead))
+        .and_then(|line| line.split(" · ").next()).is_some_and(|r| r.trim().starts_with("chain:"))
+}
+
 fn opened(result: &CallToolResult) -> String {
     let said = said(result);
+    // The next Chain: its Opening Interview is open with no Step, and nothing of the previous
+    // Chain's approval carries over. The generic sentence would ask for a gil_close that does not exist.
+    if first_line_is_chain(said, text("receipt.opened_lead")) { return tr!("guide.opened.chain"); }
     let Some(kind) = first_line_kind(said, text("receipt.opened_lead")) else { return tr!("guide.opened.generic"); };
     let key = match kind {
         "question" => "guide.opened.question",
@@ -161,6 +171,11 @@ fn opened(result: &CallToolResult) -> String {
 fn closed(result: &CallToolResult) -> String {
     let said = said(result);
     let Some(kind) = first_line_kind(said, text("receipt.closed_lead")) else { return tr!("guide.closed.generic"); };
+    // A closed Chain: the second segment is its verdict, not a Step kind. The Core receipt
+    // preserves the Report and names no next move; only an explicit next Chain can follow.
+    if first_line_is_chain(said, text("receipt.closed_lead")) {
+        return tr!("guide.closed.lead", specific = tr!("guide.closed.chain", verdict = kind));
+    }
     let next = next_from_receipt(said);
     let specific = match (kind, next.as_ref()) {
         ("hypothesis", _) => tr!("guide.closed.hypothesis"),
@@ -178,7 +193,8 @@ fn closed(result: &CallToolResult) -> String {
         (_, Some(Next::OpenMany(kinds))) => tr!("guide.closed.open_many", kinds = kinds),
         (_, Some(Next::CloseCycle)) => tr!("guide.closed.close_cycle"),
         (_, Some(Next::Blocked)) => tr!("guide.closed.blocked"),
-        _ => tr!("guide.closed.generic"),
+        // The generic sentence already carries the lead; wrapping it again repeated the lead.
+        _ => return tr!("guide.closed.generic"),
     };
     // A Cycle or Chain Report comes next: write it short. Execution finished: show the result first.
     let specific = match (kind, next.as_ref()) {
@@ -567,4 +583,40 @@ mod tests {
         }
     }
 
+    /// Chain execution flow (2026-11-17): the Chain-close receipt and the next-Chain-open receipt
+    /// are container receipts, not Step receipts. Before this, both fell back to the generic
+    /// sentence (a doubled lead, "Hypothesis → Verify", "gil_close when the condition is met"),
+    /// so a light model had no next call at the one boundary the context line also marks.
+    #[test]
+    fn chain_close_and_next_chain_open_name_the_explicit_next_chain_and_its_own_approval() {
+        for verdict in ["success", "failure"] {
+            let mut closed = receipt(&format!("닫았다: chain:C1 · {verdict}\nChain Report와 Exit을 보존했다. Will·Journey 판은 늘지 않는다.\n"));
+            after("gil_close", &mut closed);
+            let hint = text(&closed);
+            assert!(hint.starts_with("GIL 진행: 이 닫기가 성공했다. 다음 행동: Chain이 닫혔다"), "{hint}");
+            assert_eq!(hint.matches("이 닫기가 성공했다").count(), 1, "{hint}");
+            assert!(hint.contains(verdict) && hint.contains("gil_open(kind: chain)") && hint.contains("새 주제가 있을 때만"), "{hint}");
+            assert!(hint.contains("재사용하지 않는다") && hint.contains("gil_start를 부르지 않는다"), "{hint}");
+            for forbidden in ["Hypothesis를 닫았다면", "gil_status를 한 번 읽는다", "gil_open(kind: experiment)", "gil_open(kind: interview)"] {
+                assert!(!hint.contains(forbidden), "{forbidden}: {hint}");
+            }
+        }
+        let mut opened = receipt("열었다: chain:C2 · Opening Interview cycle:C4\n이전 Chain Report를 gil context로 읽고 새 주제를 사용자와 확인한다.\n");
+        after("gil_open", &mut opened);
+        let hint = text(&opened);
+        assert!(hint.starts_with("GIL 진행: 다음 Chain을 열었다"), "{hint}");
+        assert!(hint.contains("gil_context") && hint.contains("gil_open(kind: question)") && hint.contains("gil_plan_propose"), "{hint}");
+        assert!(hint.contains("재사용되지 않는다") && hint.contains("gil_start를 부르지 않고"), "{hint}");
+        for forbidden in ["완료 조건을 충족하면", "gil_close한 뒤", "gil_open(kind: experiment)"] {
+            assert!(!hint.contains(forbidden), "{forbidden}: {hint}");
+        }
+        // A Step or Cycle receipt is untouched by the Chain branch.
+        let mut cycle = receipt("열었다: cycle:C2 · experiment · 부모 cycle:C1\n");
+        after("gil_open", &mut cycle);
+        assert!(text(&cycle).contains("gil_open(kind: define)"), "{}", text(&cycle));
+        // The generic fallback no longer repeats its lead.
+        let mut unknown = receipt("typed close receipt without the usual first line\n");
+        after("gil_close", &mut unknown);
+        assert_eq!(text(&unknown).matches("이 닫기가 성공했다").count(), 1, "{}", text(&unknown));
+    }
 }
