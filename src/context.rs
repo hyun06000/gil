@@ -114,14 +114,17 @@ pub fn next_call(project: &Project) -> String {
 
 /// 열린 Experiment에 보존된 재인터뷰 요청이 있으면 그 사실만 한 문장으로. 닫힌 Cycle 뒤의
 /// 안내는 [`plan_next_call_after_cycle`]이 이미 Interview를 가리키므로 여기서는 덧붙이지 않는다.
-fn reinterview_notice(project: &Project) -> Option<&'static str> {
+///
+/// 끝낼 수 없는 작업의 정직한 중단 규칙(Cycle Model §8 「완료할 수 없는 작업의 중단과 다음 방향」)을 함께
+/// 말한다. 새 전이·필드·판정 값을 만들지 않는다 — 기록할 자리와 구분(수행·막힘·미검증)만 안내한다.
+fn reinterview_notice(project: &Project) -> Option<String> {
     let plan = project.approved_plan()?;
     let chain = project.current_chain()?;
     let cycle = project.current_cycle();
     if cycle.kind() != CycleKind::Experiment || cycle.is_closed() || plan.awaiting_interview(chain).is_empty() {
         return None;
     }
-    Some(text("ctx.reinterview_notice"))
+    Some(format!("{} {}", text("ctx.reinterview_notice"), text("guide.interrupt_honest")))
 }
 
 fn next_call_here(project: &Project) -> String {
@@ -192,10 +195,13 @@ fn next_call_here(project: &Project) -> String {
         return tr!("ctx.next.revisited_dev", from = from.to_ref());
     }
     if cycles.can_revisit() {
+        // 되돌아가기는 폴더에서 부분 결과를 치운다(Snapshot·보존 위치에는 남는다). 그 전에 보여 준다 —
+        // Cycle Model §8. 부분 결과를 둔 채 이어가는 전이는 아직 없으므로 있는 것처럼 안내하지 않는다.
+        let partial = text("guide.interrupt_partial_results");
         if cfg!(feature = "product-safety") {
-            return tr!("ctx.next.can_revisit_product", cycle = cycle.id());
+            return format!("{} {partial}", tr!("ctx.next.can_revisit_product", cycle = cycle.id()));
         }
-        return tr!("ctx.next.can_revisit_dev", cycle = cycle.id());
+        return format!("{} {partial}", tr!("ctx.next.can_revisit_dev", cycle = cycle.id()));
     }
     if let Some(said) = plan_next_call_after_cycle(project) {
         return said;

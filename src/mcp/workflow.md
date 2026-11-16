@@ -188,6 +188,11 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
 4. **Leave evidence in the world.** Every Verify must save its actual observations/results as
    project files: documents, logs, datasets, code or visual artifacts. Chat alone cannot complete
    Verify. Even read-only investigation or a failed test needs a saved observation document.
+   If the contracted work cannot be finished, that document separates what was done, what blocked
+   it and what remains unverified; close Verify with it and carry the unverified scope into
+   Analysis, Outcome and the Cycle Report instead of dressing the interruption up as success or a
+   refutation. A lost connection or a pending human response is a wait, not an end: leave the
+   open Step as it is and continue later.
    Include `evidence_files` in its Report: 1–32 unique safe project-relative file paths. Every
    listed file must be nonempty in the Snapshot, and at least one must be new or changed from the
    baseline. One file: `evidence_files: evidence/result.md`. Multiple files use this Report syntax:
@@ -358,7 +363,12 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
      Analysis, Outcome, and the Cycle Report only when that receipt offers it), never an early Cycle
      close. The request stays preserved meanwhile; there is no cancel or interrupt call. Then
      `gil_open` Interview and approve a new revision before any further Experiment. Never fabricate
-     evidence to leave an unfinished Step.
+     evidence to leave an unfinished Step. If the item cannot be finished, close truthfully with an
+     interruption observation (rule 4). After a `failure` · `revisit` close, show the preserved
+     partial results before the Monitor recovery removes them from the folder (they stay in the
+     Snapshot and the preserved location). Keeping the partial results in place and continuing is
+     not a recorded transition yet, and cancelling or replacing an approved item is not either: the
+     next plan keeps the interrupted item verbatim and adds or reorders items.
    - When every approved item has executed, the project is not finished by a chat summary:
      `gil_open` Interview as the Closing Interview, propose the final `chain_verdict` for approval,
      then `gil_close` the Chain Report. Its first message shows the result before asking (rule 5).
