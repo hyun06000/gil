@@ -46,10 +46,20 @@
     <p class="world-warning" role="status" hidden></p>
     <section class="gil-progress" aria-label="GIL 기록 진행" data-i18n-aria="html.progress_aria">
       <strong class="progress-position"></strong>
+      <!-- 실제 Chain 이 있을 때만 보인다: 지금 어느 Chain 에서 일하는가, 그리고 사이클 결과·종료 가능성이
+           Chain 의 종료와 어떻게 다른가. legacy 기록(format 4/5)에는 Chain 이 없으므로 이 줄도 없다. -->
+      <p class="chain-now" role="status" hidden></p>
+      <p class="chain-contrast" role="status" hidden></p>
       <dl><dt data-i18n="html.todo">지금 할 일</dt><dd class="progress-action"></dd>
         <dt class="progress-done-label" data-i18n="html.done_when">완료 조건</dt><dd class="progress-done"></dd></dl>
       <!-- 조회·연결에 문제가 있을 때만 글이 들어온다. 비어 있으면 자리도 차지하지 않는다. -->
       <p class="progress-connection" role="status"></p>
+      <!-- Chain 목록 — 필요할 때 펼친다. 고르면 그 Chain 의 보고서·사이클 목록이 아래 상세에 선다.
+           읽기 전용 탐색이다: 현재 위치도, 저장된 기록도 바뀌지 않는다. -->
+      <details class="chain-list" hidden>
+        <summary></summary>
+        <ul class="chain-entries"></ul>
+      </details>
       <details class="progress-more">
         <summary data-i18n="html.more">기록 상세</summary>
         <p class="progress-records"></p>
