@@ -194,6 +194,8 @@ mod root;
 pub mod say;
 mod rules;
 mod session;
+#[cfg(feature = "product-safety")]
+mod recovery_mode;
 mod store;
 mod status;
 mod story;

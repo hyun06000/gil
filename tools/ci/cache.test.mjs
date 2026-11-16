@@ -42,7 +42,8 @@ test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired
   assert.match(chain, /runner: macos-15/); assert.match(chain, /runner: windows-2025/);
   const features = [...chain.matchAll(/run: cargo (?:test|build).*?--features ([\w,-]+)/g)].map(m => m[1]);
   const groups = features.filter((f, i) => f !== features[i-1]);
-  assert.deepEqual(groups, ['chain-core', 'chain-core,visual-authoring,product-safety', 'approved-plan,visual-authoring,product-safety']);
+  // The M4-R opt-in profile runs last as one group, never inside a product profile.
+  assert.deepEqual(groups, ['chain-core', 'chain-core,visual-authoring,product-safety', 'approved-plan,visual-authoring,product-safety', 'approved-plan,visual-authoring,recovery-auto-approval']);
   const companion = workflowText('companion-native');
   assert.doesNotMatch(companion, /windows-2025|windows-11-arm/);
   assert.match(companion, /paths:\n\s+- 'companion\/\*\*'/);

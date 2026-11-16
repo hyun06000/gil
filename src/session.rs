@@ -1613,6 +1613,9 @@ pub struct ReadOnlySession(ProjectSession);
 impl ReadOnlySession {
     #[cfg(feature = "product-safety")]
     pub(crate) fn revisit_review(&self) -> Result<serde_json::Value, String> { self.0.revisit_review() }
+    /// Current M4-R approval mode (manual unless a valid automatic setting is readable). Read-only.
+    #[cfg(feature = "product-safety")]
+    pub(crate) fn recovery_approval_view(&self) -> serde_json::Value { self.0.recovery_approval_view() }
     #[cfg(feature = "visual-authoring")]
     pub(crate) fn status_said(&self) -> String {
         crate::where_now(&self.0, false)

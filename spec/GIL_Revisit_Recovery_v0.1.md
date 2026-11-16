@@ -8,6 +8,13 @@
 자동 모드는 사용자가 해당 프로젝트에 미리 허용하면 복구마다 클릭을 요구하지 않는다.
 아래 자동 승인 계약은 아직 제품 코드·설치본·도구 계약에 반영되지 않았다.
 
+**2026-11-16 Core 기반(opt-in, 제품 프로필 미포함):** 승인 출처 기록(`source.json`: `monitor_button` /
+`automatic_setting`+설정 판), 프로젝트별 설정 읽기(없음·손상·링크는 수동), Monitor 조회의 현재 모드 표시,
+`gil_revisit`의 자동 승인 진입(pending 승인이 없을 때만; pending은 설정과 무관하게 저장된 승인으로 재개)을
+Cargo feature `recovery-auto-approval` 뒤에 구현하고 합성 stdio 시험으로 잠갔다. 사용자가 모드를 켜고 끄는
+입력 경로와 저장 형식의 확정은 미결이며 [제안서](proposals/M4R_Recovery_Approval_Mode_Foundation_v0.1.md)에
+대안과 권장안을 남겼다. 제품 빌드는 설정 파일을 읽지 않고 수동 승인만 실행한다.
+
 ## 문제와 제한된 범위
 
 preview.8은 `failure → revisit`을 정상 저장하고 다음 행동으로 안내하지만 `product-safety`가
@@ -94,8 +101,10 @@ Artifact Model §3.6a의 일반 제품 복원 게이트를 완료했다고 주�
 
 승인 후 실제 기록 저장소의 `.gil/revisit-preserved/<pending-state-sha256>/`에 before 세계의 원본 파일을
 `file-N`으로 저장하고 `files.json`에 경로·보관 이름·SHA-256을 적는다. `approval.json`은 승인한
-계획을 남기며 토큰은 담지 않는다. 자동 모드도 같은 원본 보존 보장을 지켜야 한다. 자동 승인
-출처와 설정 판을 담을 저장 표현은 아직 추가하지 않았다. 파일은 private mode, no-follow 디렉터리 핸들로 원자적으로
+계획을 남기며 토큰은 담지 않는다. 자동 모드도 같은 원본 보존 보장을 지켜야 한다. 승인을 만든 호출은
+같은 폴더에 `source.json`을 함께 남긴다(`approval_source`: `monitor_button` 또는 `automatic_setting`과 설정의
+`revision`·SHA-256, `human_click`, `pending_state_sha256`·`digest`). 재개는 이 기록을 다시 쓰지 않으며,
+기록이 없는 과거 승인은 `unrecorded`로 보고한다. 파일은 private mode, no-follow 디렉터리 핸들로 원자적으로
 게시하고 fsync한다. 보존본은 transient rollback backup과 달리 자동 삭제하지 않는다.
 미완의 임시 보존 파일은 실행 권한이나 완료 증거가 아니다.
 
