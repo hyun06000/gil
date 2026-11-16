@@ -358,9 +358,20 @@ fn recovery_in_a_chain_returns_to_the_successful_cycle_and_preserves_every_faile
     assert_eq!(approval["state"], "approved");
     assert_eq!(approval["digest"], view["digest"]);
     assert!(!approval_text.contains(&token), "token must not be persisted");
+    // Provenance accompanies the unchanged approval and preserved-file contracts.
+    let source_text = fs::read_to_string(archive.join("source.json")).unwrap();
+    let source: Value = serde_json::from_str(&source_text).unwrap();
+    assert_eq!(source["schema_version"], json!(1));
+    assert_eq!(source["approval_source"], "monitor_button");
+    assert_eq!(source["human_click"], json!(true));
+    for field in ["digest", "pending_state_sha256", "from", "target"] {
+        assert_eq!(source[field], view[field], "approval source must bind {field}");
+    }
+    assert!(source.get("setting").is_none(), "manual consent must not claim automatic settings");
+    assert!(!source_text.contains(&token), "token must not be persisted in approval source");
     let archive_names: Vec<String> = fs::read_dir(&archive).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
-    assert!(archive_names.iter().all(|n| n == "files.json" || n == "approval.json" || n.starts_with("file-")), "{archive_names:?}");
-    assert_eq!(archive_names.len(), world_at_c3.len() + 2);
+    assert!(archive_names.iter().all(|n| n == "files.json" || n == "approval.json" || n == "source.json" || n.starts_with("file-")), "{archive_names:?}");
+    assert_eq!(archive_names.len(), world_at_c3.len() + 3);
 
     // Records: objects, Will/Existence, approved plan and every closed Cycle (incl. C3 failure) stay.
     assert_eq!(files_under(&r.record.parent().unwrap().join("artifacts")), objects_before, "snapshot objects changed");
@@ -381,6 +392,7 @@ fn recovery_in_a_chain_returns_to_the_successful_cycle_and_preserves_every_faile
     // The same approval is idempotent, then the next branch starts from C2 with the failure lineage.
     let again = ok(apply(&mut r, &view, &token), "duplicate approval");
     assert_eq!(structured(&again)["state"], "completed");
+    assert_eq!(fs::read_to_string(archive.join("source.json")).unwrap(), source_text, "duplicate approval rewrote its source");
     assert_eq!(world(&r.root), world_at_c2);
     assert_eq!(fs::read_dir(preserved_dir(&r)).unwrap().count(), 1, "a second archive was minted");
     let read = r.read();
