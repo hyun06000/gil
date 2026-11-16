@@ -26,8 +26,12 @@ pub fn after(name: &str, result: &mut CallToolResult) {
     if result.is_error == Some(true) {
         if let Some(hint) = refused(name) {
             let problem = problem(result);
+            // An approved-plan refusal is an approval-state problem, not an input error: fixing
+            // and resending the same call cannot succeed, so the one next call is gil_plan_read.
+            let hint = if let Some(plan) = plan_refusal(name, problem) {
+                plan.to_string()
             // A dirty refusal of a close has one more real recovery than "fix the input".
-            let hint = if name == "gil_close" && (problem.contains(text("marker.dirty_world")) || problem.contains("dirty")) {
+            } else if name == "gil_close" && (problem.contains(text("marker.dirty_world")) || problem.contains("dirty")) {
                 format!("{hint} {}", dirty_close_recovery())
             } else { hint.to_string() };
             if name == "gil_plan_propose" {
@@ -76,6 +80,27 @@ fn refused(name: &str) -> Option<&'static str> {
         "gil_plan_request_interview" => text("guide.refused.plan_request_interview"),
         _ => return None,
     })
+}
+
+/// The approved-plan refusal marker (`plan.err.prefix` without its message), in the current
+/// locale: the Core prefixes every approval-state reason with it, so the receipt and its reader
+/// agree on the language.
+fn plan_marker() -> &'static str {
+    let prefix = text("plan.err.prefix");
+    let marker = prefix.split("{message}").next().unwrap_or(prefix).trim_end();
+    if marker.is_empty() { prefix } else { marker }
+}
+
+/// A `gil_close`/`gil_open` refused for an approval-state reason (no proposal, waiting for the
+/// Monitor button, approved text differs, before approval, preserved re-interview request, no
+/// pending item). Everything else keeps the ordinary "fix the input" recovery.
+fn plan_refusal(name: &str, problem: &str) -> Option<&'static str> {
+    if !problem.contains(plan_marker()) { return None; }
+    match name {
+        "gil_close" => Some(text("guide.refused.plan_close")),
+        "gil_open" => Some(text("guide.refused.plan_open")),
+        _ => None,
+    }
 }
 
 /// One line for a close refused by the dirty gate — only what this build can actually do.
@@ -275,6 +300,54 @@ mod tests {
         let mut plain = refusal_of("Report 에 verdict 가 없다\n");
         after("gil_close", &mut plain);
         assert!(!text(&plain).contains("dirty 거절이면"), "{}", text(&plain));
+    }
+
+    /// 2026-11-16 roadmap item 2: an approval-state refusal must not be answered with
+    /// "fix the input and resend". Guidance contract only — not evidence of a model run.
+    #[test]
+    fn an_approved_plan_refusal_is_a_state_problem_not_an_input_error() {
+        let waiting = format!("거절: step:C1/S3 · synthesis 를 닫을 수 없다.\n\n이유\n  {}\n", tr!("plan.err.prefix", message = crate::locale::text("plan.err.decide_in_monitor")));
+        let mut close = refusal_of(&waiting);
+        after("gil_close", &mut close);
+        let hint = text(&close);
+        assert!(hint.starts_with("GIL 거절: 닫힌 것은 없다."), "{hint}");
+        assert!(hint.contains("gil_plan_read"), "{hint}");
+        assert!(hint.contains("승인 대기") && hint.contains("턴을 끝내고"), "{hint}");
+        for forbidden in ["입력 오류를 고쳐", "같은 gil_close를 한 번 다시 보낸다", "dirty 거절이면", "gil_help"] {
+            assert!(!hint.contains(forbidden), "{forbidden}: {hint}");
+        }
+        assert!(hint.contains("approved") && hint.contains("직접 적거나"), "{hint}");
+
+        let before_approval = format!("거절: experiment Cycle 을 열 수 없다.\n\n이유\n  {}\n", tr!("plan.err.prefix", message = crate::locale::text("plan.err.before_approval")));
+        let mut open = refusal_of(&before_approval);
+        after("gil_open", &mut open);
+        let hint = text(&open);
+        assert!(hint.starts_with("GIL 거절: 열린 것은 없다."), "{hint}");
+        assert!(hint.contains("gil_plan_read"), "{hint}");
+        assert!(!hint.contains("행동 계약(objective") && !hint.contains("한 번 다시 보낸다"), "{hint}");
+
+        // An ordinary input refusal keeps the input recovery; a reason that merely mentions a
+        // plan in prose without the Core's marker is not an approval-state refusal.
+        let mut plain = refusal_of("거절: step:C2/S3 · verify 를 닫을 수 없다.\n\n이유\n  Report 에 다음 칸이 있어야 한다 (빠진 것: result)\n");
+        after("gil_close", &mut plain);
+        assert!(text(&plain).contains("입력 골격대로 고쳐") && !text(&plain).contains("gil_plan_read"), "{}", text(&plain));
+        // Other refused tools never get the plan hint.
+        let mut revisit = refusal_of(&waiting);
+        after("gil_revisit", &mut revisit);
+        assert!(!text(&revisit).contains("gil_plan_read"), "{}", text(&revisit));
+    }
+
+    /// 2026-11-16 roadmap item 2: Verify records observations, Analysis interprets them.
+    #[test]
+    fn verify_and_analysis_openings_keep_observation_apart_from_interpretation() {
+        let mut verify = receipt("열었다: step:C2/S3 · verify\n\n지금 할 일\n  …\n");
+        after("gil_open", &mut verify);
+        let hint = text(&verify);
+        assert!(hint.contains("result에는") && hint.contains("관측") && hint.contains("interpretation") && hint.contains("verdict"), "{hint}");
+        let mut analysis = receipt("열었다: step:C2/S4 · analysis\n\n지금 할 일\n  …\n");
+        after("gil_open", &mut analysis);
+        let hint = text(&analysis);
+        assert!(hint.contains("되풀이하지 않") && hint.contains("가설") && hint.contains("불확실"), "{hint}");
     }
 
     #[test]

@@ -66,8 +66,11 @@ No global/project/Plugin/Skill hooks or global instruction edits are part of thi
    save its results as project files named in `evidence_files`. File-free web research, reading
    existing evidence at any stage, and unrelated outside work remain allowed. Those activities
    and a chat summary do not complete the requested GIL workflow.
-5. A refusal closes nothing. For a repairable input error, fix it and resend the same call once;
-   otherwise follow the stated recovery or wait. Never repeat `gil_start`, skip a step, or invent approval.
+5. A refusal closes nothing. For a repairable input error, fix the field the refusal names and resend
+   the same call once; the refusal already shows the current input skeleton, so read a help topic only
+   when the rule itself is unfamiliar. An approved-plan refusal (`Approved plan:` / `승인 계획:`) is a
+   state, not an input error: read `gil_plan_read` and follow it (rule 8). Otherwise follow the stated
+   recovery or wait. Never repeat `gil_start`, skip a step, or invent approval.
 
 **Project file boundary — at every stage.** Creating, modifying, deleting, renaming or moving
 Artifact files inside the selected `project_root` requires a successfully opened Experiment
@@ -204,7 +207,9 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    ```
 
    Record sources, inputs/method, observed results and limitations; never invent results or save
-   meaningless markers to satisfy the gate. Image declarations `not_needed`/`missing` do not
+   meaningless markers to satisfy the gate. The Verify Report's `result` holds observations only
+   (numbers, output, screens, file changes); what they mean for the hypothesis is the Analysis
+   `interpretation`, and success or failure is the Outcome `verdict`. Image declarations `not_needed`/`missing` do not
    waive ordinary file evidence. If evidence is refused, save truthful evidence while Verify
    remains open, then submit the corrected close.
    Accepted: `evidence_files: evidence/load-test.md` where that file holds the measured numbers.
@@ -242,7 +247,9 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    After Verify is closed and before the Cycle Report, create no project files: integrated reports
    and deliverables are saved inside Verify, or in the next Experiment's Verify.
 5. **Learn from that evidence and close.** After Verify, write a nonblank `interpretation` in
-   Analysis and a nonblank `lesson` in Experiment Outcome. Core links `evidence.verify_ref` and
+   Analysis and a nonblank `lesson` in Experiment Outcome. The interpretation does not repeat the
+   Verify observation: it says what the observation means for the hypothesis and what remains
+   uncertain, so observation and interpretation stay in their own Reports. Core links `evidence.verify_ref` and
    `learning.analysis_ref` to the actual current lineage; do not supply different references.
    **Cite the pictures.** When the Verify attached visuals, the Analysis and the Experiment Cycle
    Report must cite at least one of them (Core refuses otherwise, listing the citable assets):
@@ -381,8 +388,9 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    | --- | --- |
    | `gil_start` refused because a project exists | Read `gil_context` once and continue there; never start again |
    | Close response lost or uncertain | Read `gil_status`/`gil_context`; close again only if the step is still open |
-   | `gil_close` input/Report rejected | Put the Report STRING in `report`, not `contract` (the latter is for `gil_open`). Read `gil_help({project_root, topic: "close"})` for the current Report contract from the connected Core; do not run a PATH `gil` binary that may be a different build. Preserve typed `expected_owner`/`visuals` when required. |
-   | Plan decision or save result uncertain | `gil_plan_read`; never assume approval or re-propose blindly |
+   | `gil_close` input/Report rejected | The refusal names the missing or invalid field and shows the current input skeleton: put the Report STRING in `report`, not `contract` (the latter is for `gil_open`), fix only those fields and resend once; no manual lookup is needed for a field the refusal already shows. Read `gil_help({project_root, topic: "close"})` only when the refusal shows no skeleton or the position may have changed; do not run a PATH `gil` binary that may be a different build. Preserve typed `expected_owner`/`visuals` when required. |
+   | `gil_close`/`gil_open` refused with an approved-plan reason (`Approved plan:` / `승인 계획:` in the reason) | Not an input error: do not fix and resend the same call. Read `gil_plan_read` once and follow the next action its reply names — no proposal → `gil_plan_propose`; waiting → end the turn and wait for the Monitor button; approved → `gil_close` with `close_report` verbatim; changes requested → `close_report` (`approved: no`), then a Question. Never write `approved` yourself |
+   | Plan decision or save result uncertain | `gil_plan_read`; never assume approval or re-propose blindly. Three states differ: approval still needed (wait), approval recorded (`receipt.decision`), save result unknown (read again; do not re-propose) |
    | Approved earlier, proposal edited since | The old approval is gone; wait for the new revision's button |
    | Asked to re-interview during an Experiment | The request is preserved and closes nothing; keep following each receipt's next call and close the Cycle only when its receipt offers the Cycle Report, then `gil_open` Interview |
    | `gil_revisit` refused | If Monitor approval is required, show Monitor and wait for its button. If protected files differ or the platform is unsupported, preserve files and report the limitation. Never edit records, fake success or loop restore. A durably approved interrupted recovery can be resumed by `gil_revisit` when the receipt explicitly says so |

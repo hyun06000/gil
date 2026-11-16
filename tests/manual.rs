@@ -374,6 +374,27 @@ fn the_verify_topic_never_asks_for_a_verdict() {
     assert!(section(&said, "흔한 실패").contains("verdict"), "{said}");
 }
 
+/// 2026-11-16 (Roadmap 순서 2): 관측은 Verify 의 result 에, 해석은 Analysis 의 interpretation 에.
+/// Topic 은 그 자리를 말하되 Verify 의 「지금 할 일」과 「올바른 예」에 해석 칸을 적으라고 하지 않는다.
+#[test]
+fn the_verify_topic_keeps_observation_apart_from_interpretation() {
+    let dir = nowhere("the_verify_topic_keeps_observation_apart_from_interpretation");
+    let said = ok(&dir, &["help", "step/verify/close"]);
+    let rules: RuleSet = spec();
+    let verify = rules.rules(CycleKind::Experiment, NodeKind::Verify).unwrap();
+    let analysis = rules.rules(CycleKind::Experiment, NodeKind::Analysis).unwrap();
+    assert!(verify.close_requires.iter().any(|f| f == "result"), "문법이 verify 의 result 를 잃었다 — Topic 을 다시 써야 한다");
+    assert!(analysis.close_requires.iter().any(|f| f == "interpretation"), "문법이 analysis 의 interpretation 을 잃었다");
+    assert!(!verify.close_requires.iter().any(|f| f == "interpretation"), "verify 가 interpretation 을 요구하게 됐다");
+
+    let rule = section(&said, "불변식");
+    assert!(rule.contains("result 에는 관측한 사실"), "{said}");
+    assert!(rule.contains("interpretation") && rule.contains("되풀이하지 않는다"), "{said}");
+    // 해석 칸은 Verify 의 입력이 아니다 — 적으라고 하는 자리에 나타나지 않는다.
+    assert!(!section(&said, "지금 할 일").contains("interpretation"), "{said}");
+    assert!(!section(&said, "올바른 예").contains("interpretation"), "{said}");
+}
+
 #[test]
 fn the_restore_topic_asks_for_no_argument_and_no_confirmation() {
     let dir = nowhere("the_restore_topic_asks_for_no_argument_and_no_confirmation");
