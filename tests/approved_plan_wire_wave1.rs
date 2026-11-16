@@ -707,9 +707,20 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     refused(r.model("gil_open", json!({"kind":"experiment"})), "experiment while Chain Report is due");
     let chain = ok(r.model("gil_close", json!({"report":format!("verdict: success\nclosing_synthesis_ref: {synthesis6}\nhandoff_summary: 합성 항목 A,B,D를 파일 증거와 함께 완료했다\n")})), "close chain");
     assert!(said(&chain).starts_with("닫았다: chain:"), "{chain}");
+    // The Chain-close receipt's Host guidance names the one explicit next Chain, not a Step move.
+    let guidance = blocks(&chain);
+    assert!(guidance.contains("Chain이 닫혔다 (success)") && guidance.contains("gil_open(kind: chain)") && guidance.contains("재사용하지 않는다"), "{guidance}");
+    for forbidden in ["Hypothesis를 닫았다면", "gil_status를 한 번 읽는다", "gil_open(kind: experiment)"] {
+        assert!(!guidance.contains(forbidden), "`{forbidden}` must not appear: {guidance}");
+    }
     refused(r.model("gil_open", json!({"kind":"experiment"})), "experiment after Chain closed");
     let next = ok(r.model("gil_open", json!({"kind":"chain"})), "open next chain");
     assert!(said(&next).contains("Opening Interview"), "{next}");
+    // The next-Chain receipt names gil_context, then the Question, and a fresh gil_plan_propose.
+    let guidance = blocks(&next);
+    assert!(guidance.contains("다음 Chain을 열었다") && guidance.contains("gil_context") && guidance.contains("gil_open(kind: question)") && guidance.contains("gil_plan_propose"), "{guidance}");
+    assert!(!guidance.contains("완료 조건을 충족하면") && !guidance.contains("gil_close한 뒤"), "{guidance}");
+    assert!(r.context_readonly().contains("gil_open(kind: question)"), "the new Chain's context starts at its own Interview");
     let read = r.read();
     assert_eq!(read["supported"], true);
     assert!(read["proposal"].is_null() && read["active_revision"].is_null() && read["pending"].as_array().unwrap().is_empty() && read["executed_cycles"].as_array().unwrap().is_empty(), "{read}");

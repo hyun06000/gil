@@ -2247,6 +2247,176 @@ check("70. 선택한 Step 이 없어지거나 Project 를 빼면 상세 오류 �
   return "선택 소멸·목록에서 빼기 모두 보고서와 해당 상세 오류 함께 정리";
 });
 
+// ── ⑭ Chain — 큰 작업 단위의 탐색 ───────────────────────────────────
+//
+// fixture 에는 Chain 이 없다(기본 빌드의 format 4/5). 그래서 Chain 사실은 **합성 View** 로 문을
+// 갈아 끼워 넣는다. 재는 것은 표현뿐이다: 줄이 서는가, 목록이 펼쳐지는가, 글자가 글자로
+// 남는가, 고른 이전 Chain 이 현재 위치를 바꾸지 않는가, 새 View·다른 Project 에서 걷히는가.
+
+const chainInjection = '<img src=x onerror="window.chainEvil=1"><script>window.chainEvil=2</script>';
+/** fixture 의 View 위에 세 Chain 을 얹는다. Cycle 은 fixture 가 실제로 지닌 것만 가리킨다. */
+const chainView = async (scope, { current = "open", missingCycle = false } = {}) => {
+  const view = await REAL_HOST.loadView(scope);
+  const refs = view.timeline.map((one) => one.cycle_ref);
+  const first = refs.slice(0, 1), rest = refs.slice(1);
+  const chain = (id, state, cycles, extra = {}) => ({ chain_ref: `chain:${id}`, existence_ref: view.current.existence_ref,
+    state, parent_chain_ref: null, entry_snapshot_ref: "snapshot:A1", exit_snapshot_ref: state === "closed" ? "snapshot:A9" : null,
+    current_cycle_ref: cycles.at(-1) || null, cycle_refs: cycles, ...extra });
+  view.chains = [
+    chain("C1", "closed", first, { journey_ref: "journey:X1@J1",
+      report: { verdict: "success", closing_synthesis_ref: "step:C1/S3", handoff_summary: chainInjection } }),
+    chain("C2", "closed", missingCycle ? ["cycle:C98"] : [], { parent_chain_ref: "chain:C1", journey_ref: "journey:X1@J2",
+      report: { verdict: "failure", closing_synthesis_ref: "step:C1/S4",
+        handoff_summary: Array.from({ length: 30 }, (_, i) => `인계 ${i + 1}행 — 긴 인계 요약도 자르지 않는다.`).join("\n") } }),
+    chain("C3", current, rest, { parent_chain_ref: "chain:C2", ...(current === "closed"
+      ? { journey_ref: "journey:X1@J3", report: { verdict: "success", closing_synthesis_ref: "step:C3/S3", handoff_summary: "마무리" } } : {}) }),
+  ];
+  view.chain = view.chains[2];
+  view.current = { ...view.current, chain_ref: "chain:C3" };
+  return view;
+};
+
+check("76. Chain 없는 기록에는 Chain 줄·목록이 서지 않고 화면은 그대로다", async () => {
+  for (const scope of ["fixture:reading-one", "fixture:first-interview", "fixture:dense"]) {
+    await show(scope);
+    if (!at(".chain-now").hidden || !at(".chain-list").hidden || !at(".chain-contrast").hidden)
+      throw new Error(`${scope} 에 Chain 줄이 섰다`);
+    if (at(".chain-entries").children.length) throw new Error(`${scope} 에 Chain 목록이 남았다`);
+    if (!C().plan().nodes.length) throw new Error(`${scope} 의 Graph 가 비었다`);
+  }
+  return "fixture 3개 모두 Chain 줄 없음 · Graph 정상";
+});
+
+check("77. 실제 Chain 이 있으면 현재 Chain 한 줄과 접힌 목록이 서고, 글자는 글자로 남는다", async () => {
+  await withHost(stubHost({ loadView: (scope) => chainView(scope) }), async () => {
+    await show("fixture:reading-one");
+    const line = at(".chain-now");
+    if (line.hidden || !/C3/.test(line.textContent)) throw new Error(`현재 Chain 줄이 없다: "${line.textContent}"`);
+    const list = at(".chain-list");
+    if (list.hidden || list.open) throw new Error("목록이 숨었거나 처음부터 펼쳐져 있다");
+    const buttons = Array.from(at(".chain-entries").querySelectorAll("button"));
+    if (buttons.length !== 3) throw new Error(`Chain 목록이 ${buttons.length}개다`);
+    if (buttons[2].dataset.current !== "true" || buttons[0].dataset.current !== "false") throw new Error("현재 표식이 어긋난다");
+    if (!/성공 \(success\)/.test(buttons[0].textContent) || !/성공 미확인 \(failure\)/.test(buttons[1].textContent))
+      throw new Error("닫힌 Chain 의 판정이 저장값과 함께 서지 않았다");
+    if (/성공/.test(buttons[2].textContent)) throw new Error("열린 Chain 에 판정이 지어졌다");
+    // 이전 Chain 을 고른다 — 상세에 보고서·사이클 목록, 주입 글자는 글자 그대로.
+    const before = JSON.stringify(C().plan().nodes.filter((n) => n.here).map((n) => n.ref));
+    buttons[0].click();
+    await wait(60);
+    const head = at(".detail small"), name = at(".detail h2");
+    if (!head || !/C1/.test(head.textContent) || !name || name.textContent !== "chain:C1") throw new Error("Chain 상세 머리가 없다");
+    const painted = at(".detail").innerHTML;
+    if (at(".detail img") || at(".detail script") || window.chainEvil) throw new Error("보고서 글자가 markup 으로 해석됐다");
+    if (!painted.includes("&lt;img") ) throw new Error("주입 글자가 보이지 않는다");
+    if (!at(".detail .chain-cycles button")) throw new Error("사이클 목록이 없다");
+    if (JSON.stringify(C().plan().nodes.filter((n) => n.here).map((n) => n.ref)) !== before) throw new Error("이전 Chain 을 보자 현재 위치가 바뀌었다");
+    if (at('.node[aria-selected="true"]')) throw new Error("Chain 을 골랐는데 Graph 선택이 남았다");
+    if (buttons[0].getAttribute("aria-selected") !== "true") throw new Error("고른 Chain 표식이 없다");
+    // 긴 인계 요약은 통째로.
+    buttons[1].click();
+    await wait(60);
+    const handoff = Array.from(at(".detail").querySelectorAll("dd")).find((dd) => /인계 30행/.test(dd.textContent));
+    if (!handoff || !/인계 1행/.test(handoff.textContent)) throw new Error("긴 인계 요약이 잘렸다");
+    if (!at(".detail .chain-cycles-head")) throw new Error("사이클 수 머리가 없다");
+    // 사이클을 누르면 기존 사이클 보고서로 간다. Chain 선택은 걷힌다.
+    buttons[0].click();
+    await wait(60);
+    at(".detail .chain-cycles button").click();
+    await wait(60);
+    if (!/사이클 보고서/.test(at(".detail small")?.textContent || "")) throw new Error("사이클 보고서로 가지 못했다");
+    if (buttons[0].getAttribute("aria-selected") === "true") throw new Error("사이클을 골랐는데 Chain 표식이 남았다");
+    if (!at('.cycle-report-hit[aria-selected="true"]')) throw new Error("Graph 의 사이클 선택이 서지 않았다");
+  });
+  return "Chain 3개 · 상세·사이클 이동·주입 글자 보존";
+});
+
+check("78. 닫힌 사이클·닫힌 Chain 의 대비 한 줄은 사실만 말한다", async () => {
+  await withHost(stubHost({ loadView: async (scope) => {
+    const view = await chainView(scope);
+    // reading-one 의 현재 사이클(C3)은 열려 있다. 닫힌 사이클 하나를 현재로 둔다.
+    view.current = { ...view.current, cycle_ref: "cycle:C2", step_ref: null };
+    view.next_actions = [{ kind: "close_chain", command: null, cycle_kind: null, step_kind: null, help_ref: null, reason: null }];
+    return view;
+  } }), async () => {
+    await show("fixture:reading-one");
+    const said = at(".chain-contrast");
+    if (said.hidden || !/아직 열려/.test(said.textContent) || !/아직 닫히지 않았습니다/.test(said.textContent))
+      throw new Error(`대비 줄이 어긋난다: "${said.textContent}"`);
+    if (/완료/.test(at(".now-state").textContent)) throw new Error("종료 가능성을 완료로 적었다");
+  });
+  await withHost(stubHost({ loadView: (scope) => chainView(scope, { current: "closed" }) }), async () => {
+    await show("fixture:reading-one");
+    if (!/C3 닫힘/.test(at(".chain-now").textContent)) throw new Error("닫힌 현재 Chain 줄이 없다");
+    if (!at(".chain-contrast").hidden) throw new Error("open_chain 이 없는데 다음 Chain 을 약속했다");
+  });
+  return "열린 Chain 의 닫힌 사이클·종료 가능 · 닫힌 Chain";
+});
+
+check("79. 새 View 에 고른 Chain 이 없으면 비우고, 조회 실패면 마지막 확인 기록을 유지하며, Project 를 바꾸면 걷힌다", async () => {
+  let fail = false, without = false;
+  await withHost(stubHost({ loadView: async (scope) => {
+    if (fail) throw new Error("조회 실패 시험");
+    const view = await chainView(scope, { missingCycle: true });
+    if (without) { view.chains = view.chains.slice(2); view.chains[0].parent_chain_ref = null; view.chain = view.chains[0]; }
+    return view;
+  } }), async () => {
+    await show("fixture:reading-one");
+    await C().selectChain("chain:C2");
+    await wait(60);
+    if (!/C2/.test(at(".detail small")?.textContent || "")) throw new Error("이전 Chain 상세가 없다");
+    if (!at(".detail .chain-cycle-missing")) throw new Error("timeline 에 없는 사이클을 조회 불가로 적지 않았다");
+    fail = true;
+    await C().refresh();
+    await wait(120);
+    if (at(".stale").dataset.shown !== "true") throw new Error("조회 실패가 낡음으로 서지 않았다");
+    if (!/C2/.test(at(".detail small")?.textContent || "")) throw new Error("실패 뒤 마지막 확인한 Chain 상세가 사라졌다");
+    fail = false; without = true;
+    await C().refresh();
+    await wait(120);
+    if (at(".stale").dataset.shown === "true") throw new Error("성공했는데 낡음이 남았다");
+    if (at(".detail h2")) throw new Error("새 View 에 없는 Chain 의 상세가 남았다");
+    if (at(".chain-entries").querySelectorAll("button").length !== 1) throw new Error("목록이 새 View 로 갈아 끼워지지 않았다");
+    // 다른 Project 로 갔다 돌아오면 그 Project 의 선택이 복원된다. 기준 문의 fixture 에는 Chain 이 없다.
+    without = false;
+    await C().refresh();
+    await wait(120);
+    await C().selectChain("chain:C1");
+    await wait(60);
+    await resume("fixture:dense");
+    if (at(".detail h2")) throw new Error("다른 Project 에 앞 Project 의 Chain 상세가 남았다");
+    await resume("fixture:reading-one");
+    if (!/C1/.test(at(".detail small")?.textContent || "")) throw new Error("돌아오자 고른 Chain 이 복원되지 않았다");
+  });
+  await show("fixture:dense");
+  if (!at(".chain-now").hidden || at(".detail h2")) throw new Error("기준 문으로 돌아왔는데 Chain 이 남았다");
+  return "새 View 로 비움 · 실패 시 유지 · Project 전환 분리";
+});
+
+check("80. 좁은 화면에서도 Chain 목록과 상세가 가로로 넘치지 않는다", async () => {
+  const rootBox = at("#gil-companion");
+  const was = rootBox.style.width;
+  rootBox.style.width = "360px";
+  try {
+    await withHost(stubHost({ loadView: (scope) => chainView(scope) }), async () => {
+      await show("fixture:reading-one");
+      at(".chain-list").open = true;
+      await C().selectChain("chain:C2");
+      await wait(80);
+      for (const selector of [".gil-progress", ".chain-entries", ".detail"]) {
+        const node = at(selector);
+        if (node.scrollWidth > node.clientWidth + 1) throw new Error(`${selector} 가 가로로 넘친다 (${node.scrollWidth} > ${node.clientWidth})`);
+      }
+      const bar = at(".chain-entries").getBoundingClientRect();
+      if (bar.right > rootBox.getBoundingClientRect().right + 1) throw new Error("Chain 목록이 화면 밖으로 나갔다");
+    });
+  } finally {
+    rootBox.style.width = was;
+    at(".chain-list").open = false;
+  }
+  return "360px 에서 넘침 없음";
+});
+
 // ── suite 를 돌리는 자리 ────────────────────────────────────────────
 
 const BUDGET = 20000;   // 검사 하나에 주는 시간
