@@ -1,6 +1,6 @@
 # M4-R 제안 — 실패 복구 승인 모드의 Core 기반과 미결 입력 경로 (v0.1)
 
-상태: **기반 구현·합성 시험 작성(2026-11-16), 로컬 회귀는 ENOSPC로 일부 미검증(§5), 사용자 설정 입력 경로는 미결. 병합 준비 상태가 아니다.** 이 문서는 제안이며
+상태: **제품에서 비활성인 실험용 기반(2026-11-16). 사용자 설정 입력 경로는 미결이며 제품 기능 완료가 아니다.** 초기 초안의 로컬 회귀는 ENOSPC로 일부 미검증(§5)이었으며, 통합 검토에서 원격 회귀와 opt-in 전체 대상 빌드를 확인한다. 이 문서는 제안이며
 사용자 결정이 아니다. 정본은 [실패 실험 복구 계약](../GIL_Revisit_Recovery_v0.1.md)의 「승인 모드」와
 [Roadmap §9 M4-R](../GIL_Roadmap.md)의 2026-11-15 결정이다. 여기서 결정된 계약을 넓히지 않는다.
 
@@ -22,9 +22,10 @@
 
 ## 2. 이번에 구현한 것 (코드 근거)
 
-모든 변경은 opt-in Cargo feature **`recovery-auto-approval`**(= `product-safety` 포함) 뒤에 있다.
+설정 파일 읽기와 자동 실행은 opt-in Cargo feature **`recovery-auto-approval`**(= `product-safety` 포함) 뒤에 있다.
 현재 제품 프로필(`chain-core,visual-authoring,product-safety` / `approved-plan,visual-authoring,product-safety`)은
-이 feature를 켜지 않으므로 **제품 동작은 바뀌지 않는다.** 설정 파일은 읽지도 않는다.
+이 feature를 켜지 않으므로 **자동 복구를 활성화하지 않으며 설정 파일도 읽지 않는다.**
+승인 모드·출처의 읽기 전용 응답과 수동 승인 시 `source.json` 기록은 제품 프로필에도 추가된다.
 
 | 요소 | 위치 | 동작 |
 | --- | --- | --- |
@@ -32,7 +33,7 @@
 | 상태 표시 | `src/mcp/monitor.rs` `gil_monitor_read.recovery_approval`, `gil_revisit_review.approval_mode` | `{"mode","basis","revision"?}`. digest·`approval.json`에는 넣지 않아 진행 중 승인의 재개를 깨지 않는다 |
 | 승인 출처 기록 | `src/session/revisit_recovery.rs` `source.json` | 승인을 **만든** 호출만 `revisit-preserved/<key>/source.json`을 쓴다. `monitor_button`(`human_click: true`) 또는 `automatic_setting`(`human_click: false`, `setting.{file,schema_version,revision,sha256}`), 공통으로 `pending_state_sha256`·`digest`·`from`·`target`. 결정적 bytes라 중복 승인은 같은 내용으로 수렴한다. 재개는 기록을 다시 쓰지 않으며 기록이 없는 과거 승인은 `unrecorded`로 보고한다 |
 | 자동 승인 진입점 | 같은 파일 `resume_revisit` → `automatic_revisit` | 에이전트의 `gil_revisit` 요청에서 **pending 승인이 없고** 유효한 자동 설정이 있을 때만 수동과 같은 `recovery_plan()`을 세우고, 승인 기록 직전에 설정을 다시 읽어 bytes가 같아야 `apply_recovery`로 간다. 토큰은 만들지도 받지도 않는다. pending이 있으면 설정과 무관하게 저장된 승인으로 재개한다 |
-| 제품 프로필 | 변화 없음 | `gil_revisit`은 여전히 저장된 승인만 재개한다. 수동 승인에 `source.json`이 추가되는 것이 유일한 관측 가능한 차이다 |
+| 제품 프로필 | 자동 실행 비활성 유지 | `gil_revisit`은 여전히 저장된 승인만 재개한다. 수동 승인에 `source.json` 기록과 읽기 전용 승인 모드·출처 응답이 추가된다 |
 
 ### 왜 `gil_revisit`을 진입점으로 썼는가
 

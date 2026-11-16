@@ -87,8 +87,15 @@ jobs:
             *) exit 2 ;;
           esac
           node --test ui/layout.test.mjs mcp-app/*.test.mjs plugins/gil-companion-prototype/*.test.mjs
+      - name: Compile all default Core targets
+        run: cargo build --locked -p gil --all-targets
       - name: Packaging regression tests
         run: node --test distribution/codex/*.test.mjs distribution/compliance/notices.test.mjs
+      - name: Offline context metrics and documentation link checks
+        run: |
+          node --test tools/context-metrics/*.test.mjs tools/docs-check/*.test.mjs
+          node tools/context-metrics/fixtures/generate.mjs --check
+          node tools/docs-check/check-links.mjs
       - name: Offline third-party license coverage (no automatic policy refresh)
         run: node distribution/compliance/notices.mjs check
       - name: Prepare fresh output parent
