@@ -486,3 +486,97 @@ fn an_item_that_cannot_finish_closes_truthfully_keeps_partial_files_and_gets_no_
     }
     std::fs::remove_dir_all(root).ok();
 }
+
+/// Chain execution flow (2026-11-17): a re-interview request, the Closing approval and the
+/// Chain Report stay apart from the actual close, a closed Chain binds nothing more, and the
+/// next Chain starts with an empty ledger — no request, binding or approval carries over.
+/// Every position survives a reload with the same next-call line. Synthetic consent only.
+#[test]
+fn closed_chain_binds_nothing_and_the_next_chain_starts_with_an_empty_ledger() {
+    let root = h::scratch("plan-chain-flow");
+    let path = root.join(crate::STATE_PATH);
+    let first_line = |p: &Project| crate::context(p).split_once("[지금 바로 할 호출]\n").unwrap().1.lines().next().unwrap().to_string();
+    let reloaded = |p: &Project| { crate::save(p, &path).unwrap(); crate::load(h::spec(), &path).unwrap() };
+    let mut p = project();
+    let d = synthesis(&mut p, &["A", "B"]);
+    let proposal = p.propose_plan(d.clone()).unwrap();
+    assert_eq!(first_line(&reloaded(&p)), first_line(&p), "waiting position survives reload");
+    assert!(p.open_child_cycle(CycleKind::Experiment).is_err(), "no execution before approval");
+    let _ = proposal;
+    approve_close(&mut p, d);
+    p.open_child_cycle(CycleKind::Experiment).unwrap();
+    for kind in [NodeKind::Define, NodeKind::Hypothesis] { h::walked(&mut p, kind); }
+    p.request_plan_interview("B must change".into()).unwrap();
+    h::opened(&mut p, NodeKind::Verify);
+    p.close_verify_step(h::full_report(p.current_cycle().rules(), CycleKind::Experiment, NodeKind::Verify), h::first_world()).unwrap();
+    for kind in [NodeKind::Analysis, NodeKind::Outcome] { h::walked(&mut p, kind); }
+    let last = p.current_cycle().steps().current().unwrap();
+    p.close_cycle(h::cycle_report(p.current_cycle(), "success", last).with(h::ACTION, "open_child")).unwrap();
+    assert!(p.open_child_cycle(CycleKind::Experiment).is_err(), "preserved request blocks execution");
+    assert_eq!(first_line(&reloaded(&p)), first_line(&p));
+
+    // Closing Interview: the approval of the closing proposal is not the close of the Chain.
+    p.open_child_cycle(CycleKind::Interview).unwrap();
+    let mut closing = synthesis(&mut p, &["A", "B"]);
+    closing.synthesis.insert("chain_verdict".into(), "failure".into());
+    let closing_proposal = p.propose_plan(closing.clone()).unwrap();
+    assert_eq!(closing_proposal.revision, 2);
+    approve_close_as(&mut p, closing, "close_chain");
+    let chain = p.current_chain().unwrap();
+    assert!(chain.awaiting_report() && !chain.is_closed());
+    assert!(p.approved_plan().unwrap().awaiting_interview(chain).is_empty(), "the new approval answers the request");
+    assert_eq!(p.approved_plan().unwrap().pending(chain).iter().map(|i| i.id.as_str()).collect::<Vec<_>>(), vec!["B"]);
+    assert!(p.open_child_cycle(CycleKind::Experiment).is_err(), "Chain Report is due; B stays pending");
+    assert!(p.open_child_cycle(CycleKind::Interview).is_err());
+    let line = first_line(&p);
+    assert!(line.contains("Chain Report") && !line.contains("gil_open"), "{line}");
+    assert_eq!(first_line(&reloaded(&p)), line);
+    assert!(p.close_chain(Report::new().with("verdict", "success").with("closing_synthesis_ref", &closing_proposal.synthesis_ref).with("handoff_summary", "x")).is_err());
+    p.close_chain(Report::new().with("verdict", "failure").with("closing_synthesis_ref", &closing_proposal.synthesis_ref).with("handoff_summary", "B remains; A done")).unwrap();
+
+    // Closed Chain: nothing opens, nothing binds, the ledger is byte-identical.
+    let ledger = serde_json::to_vec(p.approved_plan().unwrap()).unwrap();
+    assert!(p.open_child_cycle(CycleKind::Experiment).is_err());
+    assert!(p.open_child_cycle(CycleKind::Interview).is_err());
+    assert!(p.request_plan_interview("late".into()).is_err(), "no request on a closed Chain");
+    assert!(p.propose_plan(synthesis_draft_only(&["Z"])).is_err());
+    assert_eq!(serde_json::to_vec(p.approved_plan().unwrap()).unwrap(), ledger);
+    let line = first_line(&p);
+    assert!(line.contains("gil_open(kind: chain)") && !line.contains("experiment"), "{line}");
+    assert_eq!(first_line(&reloaded(&p)), line);
+
+    // Next Chain: empty ledger, no request, no pending; a fresh approval binds its own item.
+    p.open_child_chain().unwrap();
+    let chain = p.current_chain().unwrap();
+    let state = p.approved_plan().unwrap();
+    assert!(state.awaiting_interview(chain).is_empty() && state.pending(chain).is_empty() && state.reinterview_requests.is_empty());
+    assert!(p.open_child_cycle(CycleKind::Experiment).is_err(), "no approval in the new Chain");
+    let line = first_line(&p);
+    assert!(line.contains("gil_open(kind: question)"), "{line}");
+    assert_eq!(first_line(&reloaded(&p)), line);
+    let x = synthesis(&mut p, &["X"]);
+    let next = p.propose_plan(x.clone()).unwrap();
+    assert_eq!((next.revision, next.base_revision), (1, None));
+    approve_close(&mut p, x);
+    p.open_child_cycle(CycleKind::Experiment).unwrap();
+    assert_eq!(p.current_plan_item().unwrap().id, "X");
+    assert_eq!(p.approved_plan().unwrap().executed_cycles.len(), 1);
+    assert_eq!(serde_json::to_vec(p.chains()[0].approved_plan.as_ref().unwrap()).unwrap(), ledger, "the first Chain's ledger, request included, is untouched");
+    assert_eq!(p.chains()[0].approved_plan.as_ref().unwrap().reinterview_requests.len(), 1);
+    let bytes = { crate::save(&p, &path).unwrap(); std::fs::read(&path).unwrap() };
+    crate::save(&crate::load(h::spec(), &path).unwrap(), &path).unwrap();
+    assert_eq!(std::fs::read(&path).unwrap(), bytes);
+    std::fs::remove_dir_all(root).ok();
+}
+
+fn synthesis_draft_only(ids: &[&str]) -> Draft {
+    let mut report: BTreeMap<String, String> = BTreeMap::new();
+    report.insert("statement".into(), "s".into());
+    report.insert("basis_refs".into(), "step:C1/S1".into());
+    report.insert("exploration_checklist".into(), ids.join("\n"));
+    Draft {
+        scope: Scope { goal: "g".into(), in_scope: "i".into(), out_of_scope: "o".into(), constraints: "c".into(), success_criteria: "s".into() },
+        items: ids.iter().map(|id| Item { id: (*id).into(), question: "q".into(), done_when: "d".into() }).collect(),
+        synthesis: report,
+    }
+}
