@@ -1,0 +1,201 @@
+{
+  "schema": "gil.chain-interview.case/1",
+  "id": "CI-06",
+  "title": "짧지만 중요한 제약·비범위·불확실성을 누락한 제안",
+  "category": "proposal_omits_constraints",
+  "stages_under_test": [
+    "proposal"
+  ],
+  "language": "ko",
+  "input": {
+    "user_request": "3분기 매출 분석 보고서 하나 써 줘.",
+    "materials": [
+      {
+        "path": "data/sales_2026Q3.csv",
+        "kind": "csv",
+        "exists": true,
+        "summary": "합성 문구점 3분기 판매 기록. customer_name 열 있음. 2026-09 일부 행 unit_price 비어 있음."
+      }
+    ],
+    "prior_state": {
+      "project": "새 프로젝트(기록 없음). 이 사례는 Interview 질문이 이미 끝나 Synthesis를 제안하는 시점부터 평가한다",
+      "approved_plan": null,
+      "closed_experiments": null
+    },
+    "simulated_answers": [
+      {
+        "topic": "purpose",
+        "source": "synthetic",
+        "answer": "내부 회의용이에요. 외부로는 절대 안 나가요."
+      },
+      {
+        "topic": "september",
+        "source": "synthetic",
+        "answer": "9월은 집계 오류가 있어서 못 믿어요. 빼든지 표시하든지 해 주세요."
+      },
+      {
+        "topic": "scope_out",
+        "source": "synthetic",
+        "answer": "제안서는 이번엔 안 써도 돼요. 숫자 정리만요."
+      },
+      {
+        "topic": "deliverable",
+        "source": "synthetic",
+        "answer": "마크다운 한 파일로요."
+      }
+    ]
+  },
+  "clarifications": [
+    {
+      "id": "C1",
+      "topic": "purpose",
+      "necessity": "required",
+      "why": "이미 물어 답을 받았다. 제안이 이 답(내부용, 외부 공유 금지)을 보존하는지가 평가 대상이다."
+    },
+    {
+      "id": "C2",
+      "topic": "september",
+      "necessity": "required",
+      "why": "9월 자료 신뢰 불가는 결과 해석에 영향을 주는 불확실성이다."
+    },
+    {
+      "id": "C3",
+      "topic": "scope_out",
+      "necessity": "required",
+      "why": "제안서 비범위는 사용자가 명시했다."
+    },
+    {
+      "id": "C4",
+      "topic": "deliverable",
+      "necessity": "required",
+      "why": "결과 형태."
+    }
+  ],
+  "good_examples": [
+    {
+      "id": "good-proposal-concise-complete",
+      "kind": "proposal",
+      "meets": [
+        "S3",
+        "S4",
+        "S5",
+        "S6"
+      ],
+      "content": {
+        "scope": {
+          "goal": "내부 회의용 3분기 매출 숫자 정리 보고서를 마크다운 한 파일로 만든다",
+          "in_scope": "월별·제품별 매출액·수량 집계와 짧은 설명",
+          "out_of_scope": "제안서·권고안, 외부 공유용 편집, 고객별 분석",
+          "constraints": "외부 공유 금지(내부 회의용). 9월 자료는 집계 오류로 신뢰할 수 없으므로 집계에 '신뢰 불가' 표시를 붙이고 7–8월 합계를 따로 제시한다. 원본 CSV 수정 금지",
+          "success_criteria": "reports/q3-summary.md에 월별·제품별 표, 9월 신뢰 불가 표시, 7–8월 별도 합계가 저장된다"
+        },
+        "items": [
+          {
+            "id": "A",
+            "question": "월별·제품별 매출액·수량은 어떤가, 9월을 제외하면 어떻게 달라지는가",
+            "done_when": "reports/q3-summary.md에 표 두 개(전체, 9월 제외)와 설명이 저장된다"
+          }
+        ],
+        "synthesis": {
+          "statement": "내부용 마크다운 한 파일에 월별·제품별 집계를 정리하고, 9월은 신뢰 불가 표시와 함께 제외 버전을 같이 두며, 제안서는 쓰지 않는 것이 맞는가",
+          "basis_refs": "step:C1/S1\nstep:C1/S2\nstep:C1/S3\nstep:C1/S4",
+          "exploration_checklist": "A"
+        }
+      },
+      "note": "짧지만 네 답변이 모두 남아 있다: 내부용·외부 금지(constraints), 9월 신뢰 불가(constraints·success_criteria), 제안서 비범위(out_of_scope), 마크다운 한 파일(goal). 표현은 달라도 된다.",
+      "acceptable_variants": [
+        "9월을 아예 제외하고 그 사실만 적는 처리(사용자가 '빼든지 표시하든지'라고 했으므로)",
+        "제약을 success_criteria 쪽에 두는 배치"
+      ]
+    }
+  ],
+  "bad_examples": [
+    {
+      "id": "bad-proposal-concise-lossy",
+      "kind": "proposal",
+      "failure_modes": [
+        "constraint_dropped",
+        "out_of_scope_dropped",
+        "uncertainty_hidden"
+      ],
+      "declared_structural_violations": [],
+      "content": {
+        "scope": {
+          "goal": "3분기 매출 분석 보고서를 만든다",
+          "in_scope": "월별·제품별 집계",
+          "out_of_scope": "없음",
+          "constraints": "없음",
+          "success_criteria": "reports/q3-summary.md가 저장된다"
+        },
+        "items": [
+          {
+            "id": "A",
+            "question": "월별·제품별 매출은 어떤가",
+            "done_when": "reports/q3-summary.md가 저장된다"
+          }
+        ],
+        "synthesis": {
+          "statement": "월별·제품별 집계를 reports/q3-summary.md에 정리하는 것이 맞는가",
+          "basis_refs": "step:C1/S1\nstep:C1/S2\nstep:C1/S3\nstep:C1/S4",
+          "exploration_checklist": "A"
+        }
+      },
+      "note": "좋은 예시보다 짧고 구조는 완전하다. 그러나 외부 공유 금지, 9월 신뢰 불가, 제안서 비범위가 모두 사라졌다. 간결함이 제약을 지웠다. 자동 검사는 통과하므로 S5가 잡는다."
+    },
+    {
+      "id": "bad-proposal-verbose-but-lossy",
+      "kind": "proposal",
+      "failure_modes": [
+        "uncertainty_hidden",
+        "vague_statement"
+      ],
+      "declared_structural_violations": [],
+      "content": {
+        "scope": {
+          "goal": "합성 문구점의 2026년 3분기(7월, 8월, 9월) 매출 데이터를 다각도로 종합 분석하여 내부 회의에서 활용할 수 있는 상세한 분석 보고서를 작성한다",
+          "in_scope": "월별 매출액, 월별 수량, 제품별 매출액, 제품별 수량, 월별·제품별 교차 집계, 각 집계의 설명과 해석, 보고서 서론과 결론",
+          "out_of_scope": "제안서 작성",
+          "constraints": "내부 회의용이며 외부 공유를 하지 않는다. 보고서는 마크다운 한 파일로 작성한다",
+          "success_criteria": "reports/q3-summary.md가 저장되고 모든 집계와 설명이 포함된다"
+        },
+        "items": [
+          {
+            "id": "A",
+            "question": "3분기 매출을 다각도로 분석하면 어떤 결과인가",
+            "done_when": "reports/q3-summary.md가 저장된다"
+          }
+        ],
+        "synthesis": {
+          "statement": "3분기 매출을 다각도로 종합 분석해 내부용 상세 보고서를 만드는 것이 맞는가",
+          "basis_refs": "step:C1/S1\nstep:C1/S2\nstep:C1/S3\nstep:C1/S4",
+          "exploration_checklist": "A"
+        }
+      },
+      "note": "길고 자세하지만 9월 집계 오류라는 불확실성이 없다. 길이가 제약 보존을 보장하지 않는다는 대조 예시다. '다각도로 종합'은 yes/no로 답하기 어렵다."
+    }
+  ],
+  "judgement": {
+    "automatic": [
+      "proposal_shape",
+      "proposal_checklist_matches_items",
+      "basis_refs_canonical"
+    ],
+    "semantic": [
+      "S3",
+      "S4",
+      "S5"
+    ],
+    "basis": "합성 답변 네 개 각각이 제안 어딘가에 남아 있는지를 항목별로 대조한다. 글자 수·필드 길이는 근거가 아니다.",
+    "not_yet_judgeable": [
+      "9월을 제외하는 처리와 표시하는 처리 중 어느 쪽이 사용자에게 더 유용한지는 실행 뒤 사용자 판단이다.",
+      "실제 모델이 제약을 어느 필드에 두는 경향이 있는지는 여러 실행을 봐야 안다."
+    ]
+  },
+  "comparison_ref": null,
+  "spec_refs": [
+    "spec/GIL_Cycle_Model_v0.1.md#16-synthesis",
+    "spec/GIL%20Specification%20v0.1.md#짧고-간결한-report",
+    "spec/GIL_Approved_Plan_v0.1.md",
+    "spec/GIL_Cycle_Model_v0.1.md#간결하고-명징한-제안"
+  ]
+}
