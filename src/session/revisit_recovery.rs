@@ -1,6 +1,11 @@
 //! Explicitly approved, conservative recovery of legacy whole-tree snapshots.
 //! No policy is retroactively assigned to a snapshot. Protected paths must be byte-identical;
 //! all other changes are previewed and the original bytes are durably retained before movement.
+//!
+//! M4-R approval modes: every approval record names its source — the Monitor button (manual) or
+//! a valid per-Project automatic setting (`crate::recovery_mode`, opt-in build). The automatic
+//! path runs the same plan, refusals, preservation and resumption as the manual one; it only
+//! replaces the click. A released setting never cancels or re-approves a started recovery.
 use super::*;
 use serde_json::{Value, json};
 #[cfg(any(target_os = "macos", windows))]
@@ -28,8 +33,17 @@ impl ProjectSession {
         #[cfg(any(target_os = "macos", windows))]
         {
             let plan = self.recovery_plan()?;
-            Ok(plan.view)
+            // Shown beside the plan, never inside the digest or the stored approval.
+            let mut view = plan.view;
+            view["approval_mode"] = self.recovery_approval_view();
+            Ok(view)
         }
+    }
+
+    /// Current approval mode of this Project (spec "승인 모드"): manual unless a valid automatic
+    /// setting is readable in an opt-in build. Reading never writes or starts a recovery.
+    pub(crate) fn recovery_approval_view(&self) -> Value {
+        crate::recovery_mode::read(&self.state_path).view()
     }
 
     pub(crate) fn approve_revisit(&mut self, digest: &str) -> Result<Value, String> {
@@ -44,11 +58,14 @@ impl ProjectSession {
             if plan.view["digest"].as_str() != Some(digest) {
                 return Err("복원 계획이 바뀌었다. 변경 목록을 다시 확인하고 승인한다".into());
             }
-            self.apply_recovery(plan)
+            self.apply_recovery(plan, ApprovalSource::MonitorButton)
         }
     }
 
-    /// A model/CLI call may only resume a durable approval, never create one.
+    /// A model/CLI call may only resume a durable approval, never create one — unless this
+    /// Project carries a valid automatic setting (opt-in build): then the Core itself approves a
+    /// freshly checked plan and records that setting as the source. A pending recovery is always
+    /// resumed from its stored approval, whatever the setting says now.
     pub(crate) fn resume_revisit(&mut self) -> Result<Value, String> {
         #[cfg(not(any(target_os = "macos", windows)))]
         return Err(
@@ -57,12 +74,70 @@ impl ProjectSession {
         #[cfg(any(target_os = "macos", windows))]
         {
             if self.project.cycles().pending_revisit().is_none() {
+                #[cfg(feature = "recovery-auto-approval")]
+                if let Some(setting) = crate::recovery_mode::read(&self.state_path).automatic {
+                    return self.automatic_revisit(setting);
+                }
                 return Err("Monitor의 되돌아가기 변경 목록을 확인하고 ‘보존 후 되돌아가기’를 눌러야 한다. 파일과 기록은 바꾸지 않았다".into());
             }
             let plan = self.recovery_plan()?;
             let dir = archive(self, &plan.key, false).map_err(error)?;
             verify_approval(&dir, &plan)?;
-            self.apply_recovery(plan)
+            self.apply_recovery(plan, ApprovalSource::Resumed)
+        }
+    }
+
+    /// Automatic approval: the same plan and refusals as the Monitor path; the setting that
+    /// stood in for the click is re-read right before the approval record is written and must
+    /// be byte-identical. No token exists on this path and none is minted.
+    #[cfg(all(feature = "recovery-auto-approval", any(target_os = "macos", windows)))]
+    fn automatic_revisit(
+        &mut self,
+        setting: crate::recovery_mode::AutomaticSetting,
+    ) -> Result<Value, String> {
+        let plan = self.recovery_plan()?;
+        if crate::recovery_mode::read(&self.state_path).automatic.as_ref() != Some(&setting) {
+            return Err("자동 복구 설정이 바뀌어 승인하지 않았다. 파일과 기록은 바꾸지 않았다. 설정을 확인한 뒤 다시 요청한다".into());
+        }
+        self.apply_recovery(plan, ApprovalSource::AutomaticSetting(setting))
+    }
+}
+
+/// Who stood in for the approval of one recovery. Recorded once, beside the plan; a resumption
+/// follows the stored approval and never rewrites it.
+#[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
+pub(crate) enum ApprovalSource {
+    /// The user's Monitor button through the App-only `gil_revisit_apply`.
+    MonitorButton,
+    /// A valid per-Project automatic setting of this exact edition (opt-in build).
+    #[cfg(feature = "recovery-auto-approval")]
+    AutomaticSetting(crate::recovery_mode::AutomaticSetting),
+    /// `gil_revisit` continuing a durable approval; creates no approval and no source record.
+    Resumed,
+}
+
+#[cfg(any(target_os = "macos", windows))]
+impl ApprovalSource {
+    /// Deterministic bytes for `source.json`. No timestamp, token, person or path inside.
+    fn record(&self, plan: &Recovery) -> Option<Value> {
+        let base = |source: &str| {
+            json!({"schema_version":1,"approval_source":source,
+                "pending_state_sha256":plan.key,"digest":plan.view["digest"],
+                "from":plan.view["from"],"target":plan.view["target"],
+                "human_click":source == "monitor_button",
+                "notice":"승인 출처 기록이다. 복구 계획은 approval.json, 원본은 files.json이 가리킨다. 사람의 신원 인증을 뜻하지 않는다."})
+        };
+        match self {
+            ApprovalSource::MonitorButton => Some(base("monitor_button")),
+            #[cfg(feature = "recovery-auto-approval")]
+            ApprovalSource::AutomaticSetting(setting) => {
+                let mut v = base("automatic_setting");
+                v["setting"] = json!({"file":crate::recovery_mode::SETTING_FILE,
+                    "schema_version":crate::recovery_mode::SETTING_SCHEMA,
+                    "revision":setting.revision,"sha256":setting.sha256});
+                Some(v)
+            }
+            ApprovalSource::Resumed => None,
         }
     }
 }
@@ -236,7 +311,7 @@ impl ProjectSession {
         })
     }
 
-    fn apply_recovery(&mut self, plan: Recovery) -> Result<Value, String> {
+    fn apply_recovery(&mut self, plan: Recovery, source: ApprovalSource) -> Result<Value, String> {
         let store = self.store().map_err(error)?;
         let dir = archive(self, &plan.key, true).map_err(error)?;
         // Save every before-world file under opaque ordinals, with an explicit path mapping.
@@ -266,11 +341,28 @@ impl ProjectSession {
         )?;
         let mut approval = plan.view.clone();
         approval["state"] = json!("approved");
+        // Only the call that creates the approval records its source. A duplicate or resumed
+        // call finds the approval already stored and leaves both records as they are.
+        let fresh = match guarded::regular_at(&dir, c"approval.json") {
+            Ok(_) => false,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => true,
+            Err(e) => return Err(error(e)),
+        };
         write_once(
             &dir,
             c"approval.json",
             &serde_json::to_vec_pretty(&approval).map_err(error)?,
         )?;
+        if fresh {
+            match source.record(&plan) {
+                Some(record) => write_once(
+                    &dir,
+                    c"source.json",
+                    &serde_json::to_vec_pretty(&record).map_err(error)?,
+                )?,
+                None => return Err("저장된 승인이 없어 재개할 수 없다. 새 승인은 Monitor 또는 유효한 자동 설정에서만 만든다".into()),
+            }
+        }
         guarded::fsync(&dir).map_err(error)?;
         verify_approval(&dir, &plan)?;
         let root = self.root().map_err(error)?;
@@ -297,6 +389,7 @@ impl ProjectSession {
         })?;
         let mut result = plan.view;
         result["state"] = json!("completed");
+        result["approval_source"] = json!(read_source(&dir));
         result["next"] = json!(
             "gil_open으로 새 Experiment 또는 Interview를 연다. 실패 계보와 승인 항목은 유지된다."
         );
@@ -344,6 +437,16 @@ fn write_once(dir: &ArchiveDir, name: &std::ffi::CStr, bytes: &[u8]) -> Result<(
         }
         Err(e) => Err(error(e)),
     }
+}
+/// The stored approval source, or `unrecorded` for an approval saved before source records
+/// existed or interrupted before its source was written. Never invents a click.
+#[cfg(any(target_os = "macos", windows))]
+fn read_source(dir: &ArchiveDir) -> String {
+    guarded::regular_at(dir, c"source.json")
+        .ok()
+        .and_then(|f| serde_json::from_reader::<_, Value>(f.take(64 * 1024)).ok())
+        .and_then(|v| v["approval_source"].as_str().map(str::to_owned))
+        .unwrap_or_else(|| "unrecorded".into())
 }
 #[cfg(any(target_os = "macos", windows))]
 fn verify_approval(dir: &ArchiveDir, plan: &Recovery) -> Result<(), String> {
