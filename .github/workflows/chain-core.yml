@@ -93,7 +93,7 @@ jobs:
         if: runner.os == 'Windows'
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib restore::windows -- --test-threads=1
       - name: Approval profile, M6-D contract over the real stdio process (Wave 1 E wire)
-        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test approved_plan_wire_wave1
+        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test approved_plan_wire_wave1 --test chain_recovery_preservation
       - name: Approval profile, complete library contracts (plan domain, tool catalog, guidance, profile fixtures)
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib -- --test-threads=1
       - name: Historical context projection stays readable without automatic approval migration
