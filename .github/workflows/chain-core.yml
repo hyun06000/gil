@@ -108,6 +108,8 @@ jobs:
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,recovery-auto-approval --lib recovery_mode
       - name: M4-R opt-in recovery approval mode over the real stdio process (5 synthetic cases, no user project)
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,recovery-auto-approval --test recovery_approval_mode
+      - name: Compile all Core targets with opt-in recovery approval (not a product profile)
+        run: cargo build --locked -p gil --all-targets --features approved-plan,visual-authoring,recovery-auto-approval
       - name: Shared workflow text, Skill catalog and scenario evaluator contracts (pure Node, no Core process)
         run: node --test plugins/gil-companion-prototype/skill.test.mjs plugins/gil-companion-prototype/workflow.test.mjs tools/scenarios/proxy.test.mjs tools/scenarios/redact.test.mjs tools/scenarios/report.test.mjs tools/scenarios/rpc.test.mjs tools/scenarios/scorer-cli.test.mjs tools/scenarios/trace-score.test.mjs tools/scenarios/approval-link.test.mjs tools/scenarios/state-path.test.mjs
       - name: CI cache and ordering contracts
