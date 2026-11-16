@@ -5,14 +5,15 @@
 
 | 환경 | 설치 경로 |
 |---|---|
-| macOS Apple Silicon (M 계열) | **[Mac 시험판 설치 안내](distribution/codex/INSTALL.md)** — `0.2.1-preview.30`, Codex 플러그인 또는 Claude Desktop 직접 등록 |
+| macOS Apple Silicon (M 계열) | **[Mac 시험판 설치 안내](distribution/codex/INSTALL.md)** — `0.2.1-preview.31`, Codex 플러그인 또는 Claude Desktop 직접 등록 |
 | Windows 10/11 x64 | 아래 단일 실행 파일 절차 — 현재 `v0.3.2` |
 | Intel Mac / Windows ARM64 | 이 문서의 설치 파일을 사용하지 않는다 |
 
 Mac 사용자는 아래 PowerShell 절차를 실행하지 않는다. Mac 설치 안내에는 고정 다운로드 주소,
 파일 무결성 확인 값(SHA-256), 기존 설치 교체·이전 버전 복구·실패 대응을 함께 둔다.
-새 시험판은 보고서와 모니터를 간결하게 하고, 종료 인터뷰 전에 결과물을 보여 주도록 안내한다.
-[변경·검증 기록](distribution/codex/PREVIEW-30-PUBLICATION-20261116.md)을 참고한다.
+새 시험판은 입력 오류·승인 대기와 작업 중단 안내, 수동 복구 승인 출처 기록을 보완한다.
+자동 복구 승인은 제품에서 꺼져 있으며, 실제 필드 테스트는 사용자가 진행한다.
+[변경·검증 기록](distribution/codex/PREVIEW-31-PUBLICATION-20261117.md)을 참고한다.
 
 ## Windows 설치
 

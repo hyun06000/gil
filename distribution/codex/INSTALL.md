@@ -1,28 +1,29 @@
 # GIL macOS preview 설치
 
 GIL은 Host 훅을 설치하지 않는다. 선택한 GIL 프로젝트에는 공통 프롬프트와 단계별 MCP 응답으로 안내한다.
-preview.30은 모니터의 기본 화면을 간결하게 하고 보고서를 짧게 쓰도록 안내한다. 작업물이 있으면
-종료 인터뷰 전에 결과물을 먼저 보여 주도록 한다. 다섯 언어를 지원하며 기존 기록과 훅 없는 설치를 유지한다.
+preview.31은 입력 오류와 승인 대기의 안내를 구분하고, 관측·해석 및 검증 미완료를 정직하게 기록하도록 안내한다.
+중단 시 부분 결과 제시와 수동 복구 승인 출처 기록을 보완했다. 기존의 간결한 모니터·보고서와 다섯 언어 지원을 유지한다.
+자동 복구 승인은 제품에서 비활성이며 인터뷰 기반 추적 제외는 설계 단계다. 필드 테스트는 사용자가 진행한다.
 새 훅을 만들지 않으며 구형 훅 installer도 실행하지 않는다.
 Core 승인·전이·증거 검사는 유지하지만 다른 세션의 도구나 파일 쓰기를 가로막지 않는다.
 
 전체 OS 안내의 시작점은 [저장소 설치 절차서](../../INSTALL.md)와 [상세 통합 안내](../INSTALL-GUIDE.md)다. 이 문서는 macOS 전용 상세 절차다.
 
 대상은 **macOS Apple Silicon(`arm64`)의 로컬 Codex 작업**이다. 현재 배포판은
-`0.2.1-preview.30`이며 2026-11-16 게시한 unsigned prerelease다. Core, MCP server, Skill과
+`0.2.1-preview.31`이며 2026-11-17 게시한 unsigned prerelease다. Core, MCP server, Skill과
 fullscreen Monitor UI가 Plugin 하나에 들어 있으므로 Node·npm·Cargo·Homebrew·별도 Companion을
 설치하지 않는다. Intel Mac, Windows에는 이 파일을 사용하지 않는다. Claude Code(Claude Desktop)는
 같은 archive의 Core를 Desktop 설정에 직접 등록하는 경로를 사용한다. `.claude-plugin` catalog 설치는 가능하지만
 이전 시험에서는 Monitor가 표시되지 않았다. 직접 등록·업데이트 절차는 [상세 통합 안내](../INSTALL-GUIDE.md)를 따른다.
 
 - marketplace: `https://github.com/hyun06000/gil-marketplace.git`
-- 고정 tag: `v0.2.1-preview.30`
-- 고정 commit: `bf9f08d43fd93f0ca1e478b12958a0dc872185c1`
+- 고정 tag: `v0.2.1-preview.31`
+- 고정 commit: `288011c10020fb710b6eda04d8b204347fca38fc`
 - Plugin: `gil-companion-prototype@gil-preview-macos-arm64`
-- 공개 archive: `gil-codex-macos-arm64-0.2.1-preview.30.tar.gz`
-- archive 크기: `4,119,499` bytes
-- archive SHA-256: `a05275206833d315b2beaefd57236659b22edf4d2eefa6c9e6b7a33a11fc8cec`
-- 게시·검증 장부: [PREVIEW-30-PUBLICATION-20261116.md](PREVIEW-30-PUBLICATION-20261116.md)
+- 공개 archive: `gil-codex-macos-arm64-0.2.1-preview.31.tar.gz`
+- archive 크기: `3,901,888` bytes
+- archive SHA-256: `6fa9e8123da4525c99ee5fa4524503d198bba8f58846e68208ae0253b913f501`
+- 게시·검증 장부: [PREVIEW-31-PUBLICATION-20261117.md](PREVIEW-31-PUBLICATION-20261117.md)
 
 Apple Developer ID 서명과 공증은 없다. macOS가 정상적인 사용자 확인 뒤에도 실행을 차단하면 멈춘다.
 Gatekeeper를 끄거나 quarantine·권한·Plugin cache를 변경해 우회하지 않는다.
@@ -42,7 +43,7 @@ macOS preview.26부터 프로젝트 내부 Codex/Claude 안내를 최초 Snapsho
 
 macOS preview.25부터는 실제 MCP가 실행하는 Core의 `--version`, MCP initialize의
 `serverInfo.version`, agent probe의 `core_version`이 배포 버전과 일치해야 한다.
-이번 판의 정확한 CLI 출력은 `gil 0.2.1-preview.30`이며 MCP·probe 버전은 `0.2.1-preview.30`다.
+이번 판의 정확한 CLI 출력은 `gil 0.2.1-preview.31`이며 MCP·probe 버전은 `0.2.1-preview.31`다.
 preview.24와 그 이전 판은 수정 전이므로 `gil 0.1.0`을 출력할 수 있다.
 이는 Cargo 패키지 버전이며 **그 한 줄만으로 설치 실패나 구버전이라고 단정하지 않는다.**
 구형 Windows owner.14 이하는 같은 구형 확인 절차를 따른다. 현재 Windows 단일 실행 파일 채널은
@@ -92,7 +93,7 @@ git --version
 ## Codex에 붙여넣을 통합 요청
 
 ```text
-GIL unsigned preview 0.2.1-preview.30을 훅 없이 설치해 줘. 내가 터미널을 직접 조작하게 하지 마.
+GIL unsigned preview 0.2.1-preview.31을 훅 없이 설치해 줘. 내가 터미널을 직접 조작하게 하지 마.
 플러그인 관리 MCP 도구만 보고 설치 불가라고 결론내리지 말고, 이 로컬 Codex 작업의 셸에서
 앱에 포함된 codex CLI를 사용해. 프로젝트를 초기화·이관하거나 .gil 기록을 바꾸지 마.
 
@@ -102,23 +103,23 @@ xcode-select -p, git --version으로 OS·CPU·CLI·기존 설치·Git 상태를 
 Darwin/arm64가 아니면 중단해. 기존 GIL이 있으면 출처와 버전을 알려줘. 이미 승인한 교체는 다시 묻지 마.
 
 Git이 실제로 동작하면 다음 고정 tag를 사용해:
-codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.30 --json
+codex plugin marketplace add https://github.com/hyun06000/gil-marketplace.git --ref v0.2.1-preview.31 --json
 codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 
 Git 또는 Xcode Command Line Tools가 없거나 clone이 그 이유로 실패하면 개발 도구를 설치하지 말고
 Git 없는 경로로 전환해. 다음 파일을 임시 위치에 다운로드해:
-https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.30/gil-codex-macos-arm64-0.2.1-preview.30.tar.gz
+https://github.com/hyun06000/gil-marketplace/releases/download/v0.2.1-preview.31/gil-codex-macos-arm64-0.2.1-preview.31.tar.gz
 
-압축 해제 전에 크기가 정확히 4119499 bytes이고 SHA-256이
-a05275206833d315b2beaefd57236659b22edf4d2eefa6c9e6b7a33a11fc8cec인지 확인해.
+압축 해제 전에 크기가 정확히 3901888 bytes이고 SHA-256이
+6fa9e8123da4525c99ee5fa4524503d198bba8f58846e68208ae0253b913f501인지 확인해.
 다르면 아무것도 풀거나 등록하지 말고 중단해.
 
 일치하면 tar 목록에서 절대경로, .. 경로 이동, 심볼릭 링크, 하드 링크와 특수 파일이 없는지 확인해.
 문제가 없으면 기존 폴더를 덮어쓰지 말고
-$HOME/Library/Application Support/GIL/preview.30-local 이라는 새 사용자 전용 폴더에 풀어.
-.agents/plugins/marketplace.json, release.json, Plugin version 0.2.1-preview.30과
+$HOME/Library/Application Support/GIL/preview.31-local 이라는 새 사용자 전용 폴더에 풀어.
+.agents/plugins/marketplace.json, release.json, Plugin version 0.2.1-preview.31과
 core/darwin-arm64/gil 실행 권한을 확인한 뒤 다음 명령을 사용해:
-codex plugin marketplace add "$HOME/Library/Application Support/GIL/preview.30-local" --json
+codex plugin marketplace add "$HOME/Library/Application Support/GIL/preview.31-local" --json
 codex plugin add gil-companion-prototype@gil-preview-macos-arm64 --json
 
 네트워크나 Codex 설정 저장 권한이 필요하면 무엇이 필요한지 설명하고 정상 승인 창으로 요청해.
@@ -131,7 +132,7 @@ Git·Git 없는 경로 모두 Plugin 설치 뒤 실제 설치 응답의 installe
 확인하도록 안내해. 실제 Host를 시험하지 못하면 확인 대기라고 보고하고 파일 쓰기의 강제 차단을 주장하지 마.
 
 마지막으로 codex plugin list --json의 설치 버전과 실제 등록된 Core의 --version을 확인해.
-정확한 출력은 gil 0.2.1-preview.30이고, 새 MCP 연결의 serverInfo.version도 0.2.1-preview.30이어야 해.
+정확한 출력은 gil 0.2.1-preview.31이고, 새 MCP 연결의 serverInfo.version도 0.2.1-preview.31이어야 해.
 해시 검증을 생략하지 말고, 기존 연결이 남았다면 재시작 뒤 확인할 항목으로 분리해 알려줘.
 화면이 실제로 보이기 전에는 Monitor가 열렸다고 말하지 마.
 ```
@@ -159,7 +160,7 @@ Git 없는 경로의 archive member·목적지·권한 검사와 유지관리자
 
 이전 preview.6의 깨끗한 Mac VM에서 Git/Xcode Command Line Tools 부재 → Git 없는 archive 검증 → 로컬 marketplace 등록 →
 Plugin 설치 → GIL 동작을 사용자가 확인했다. 별도의 fullscreen 전환과 앱 완전 종료 후 복원을 그 VM에서
-확인하지 않았다면 그 항목까지 통과했다고 기록하지 않는다. 이번 preview.30은 별도 실사용 검수 대상이다.
+확인하지 않았다면 그 항목까지 통과했다고 기록하지 않는다. 이번 preview.31은 별도 실사용 검수 대상이다.
 
 ## 기존 설치·업데이트·제거
 
@@ -176,7 +177,7 @@ codex plugin remove gil-companion-prototype@gil-preview-macos-arm64 --json
 codex plugin marketplace remove gil-preview-macos-arm64 --json
 ```
 
-각 명령 뒤 조회하여 완료한 단계는 반복하지 않는다. 새 설치가 끝나면 `plugin list`에서 preview.30을
+각 명령 뒤 조회하여 완료한 단계는 반복하지 않는다. 새 설치가 끝나면 `plugin list`에서 preview.31을
 확인하고 아래 기존 GIL 훅 제거를 확인한 뒤 새 대화를 연다. Plugin 제거는 프로젝트 폴더나 `.gil` 기록 삭제를 포함하지 않는다.
 
 <a id="별도로-설치한-전역-write-guard-갱신"></a>
@@ -206,17 +207,17 @@ Host가 지원하는 파일 편집 도구로 승인된 GIL 항목만 제거한�
 
 ### 이전 버전으로 돌아가기
 
-직전 공개판은 `0.2.1-preview.29`, tag `v0.2.1-preview.29`, marketplace commit
-`c82bd228cf98f6bcf9dacf9a42f76ca8b2d3ff0f`다. [당시 장부](PREVIEW-29-PUBLICATION-20261110.md)에
+직전 공개판은 `0.2.1-preview.30`, tag `v0.2.1-preview.30`, marketplace commit
+`bf9f08d43fd93f0ca1e478b12958a0dc872185c1`이다. [당시 장부](PREVIEW-30-PUBLICATION-20261116.md)에
 원본 압축 파일의 크기·해시를 보존한다. 기존 출처와 버전을 먼저 남기고, 사용자가 복구를 요청하면
-위 공식 제거·등록 절차에서 이 고정 tag를 사용한다. Claude 직접 등록은 앱을 완전히 종료한 뒤
-보존한 preview.29 Core 경로로 GIL 항목만 되돌린다. 다른 설정은 유지한다.
+공식 제거·등록 절차에서 이 고정 tag를 사용한다. Claude 직접 등록은 앱을 완전히 종료한 뒤
+보존한 preview.30 Core 경로로 GIL 항목만 되돌린다. 다른 설정은 유지한다.
 
-두 판은 읽을 수 있는 기록 형식(4–7)이 같지만 `migration: requires_review`를 유지한다.
+두 판의 읽기 가능한 기록 형식(4–7)은 같지만 `migration: requires_review`를 유지한다.
+수동 복구 승인에는 출처를 남기는 `source.json`과 읽기 전용 상태 응답이 추가된다.
 자동 이관이나 실제 앱에서의 업데이트·복구 성공을 뜻하지 않는다. 기록을 지원하는 판만 사용하고,
 교체 실패 시 프로젝트와 이전 설치 폴더를 보존한다. `gil restore`나 `.gil` 삭제로 버전을 바꾸지 않는다.
-preview.29에도 계획 근거·PNG 안내와 훅 없는 설치가 있다. 보고서·모니터 간결화와 결과물 우선 안내는
-preview.30의 변경이다. preview.3 같은 더 오래된 판은 새 기록 형식을 읽지 못할 수 있다.
+새 판의 필드 테스트는 사용자 확인 대기다. 더 오래된 판은 새 기록 형식을 읽지 못할 수 있다.
 
 ## 실패별 대응
 
