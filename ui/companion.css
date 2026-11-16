@@ -138,6 +138,29 @@ button, select { font: inherit; color: inherit; }
 .gil-progress .progress-connection:empty { display: none; }
 /* 접기·펼치기는 원래의 <details> 다 — 키보드와 화면 읽기 도구가 그대로 다룬다. */
 .gil-progress details { margin-top: 8px; }
+/* Chain — one line under the position, a contrast line only when it matters, a list on demand. */
+.gil-progress .chain-now { margin-top: 4px; font-size: var(--gil-sm); color: var(--gil-fg); }
+.gil-progress .chain-contrast { margin-top: 4px; font-size: var(--gil-xs); color: var(--gil-fg-2); line-height: 1.45; }
+.gil-progress .chain-now[hidden], .gil-progress .chain-contrast[hidden], .gil-progress .chain-list[hidden] { display: none; }
+.chain-entries { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.chain-entries button { font: inherit; font-size: var(--gil-xs); padding: 4px 9px; cursor: pointer; max-width: 100%;
+  overflow-wrap: anywhere; text-align: left; border: var(--gil-hair) solid var(--gil-line); border-radius: var(--gil-r-md);
+  background: var(--gil-bg); color: var(--gil-fg-2); }
+.chain-entries button:hover { border-color: var(--gil-fg-3); color: var(--gil-fg); }
+.chain-entries button[data-current="true"] { border-style: double; border-width: 3px; padding: 2px 7px; }
+.chain-entries button[aria-selected="true"] { border-color: var(--gil-fg); color: var(--gil-fg); }
+.chain-entries button:focus-visible { outline: 2px solid var(--gil-ring); outline-offset: 2px; }
+/* Chain detail — the Cycle list under the Report. Buttons, because a Cycle leads to its own Report. */
+.detail .chain-cycles { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.detail .chain-cycles button { font: inherit; font-size: var(--gil-sm); padding: 5px 9px; cursor: pointer; text-align: left;
+  width: 100%; box-sizing: border-box; overflow-wrap: anywhere; border: var(--gil-hair) solid var(--gil-line-soft);
+  border-radius: var(--gil-r-md); background: transparent; color: var(--gil-fg-2); }
+.detail .chain-cycles button:hover { border-color: var(--gil-fg-3); color: var(--gil-fg); }
+.detail .chain-cycles button[data-here="true"] { border-color: var(--gil-fg); color: var(--gil-fg); }
+.detail .chain-cycles button:focus-visible { outline: 2px solid var(--gil-ring); outline-offset: 2px; }
+.detail .chain-cycles .chain-cycle-missing { font-size: var(--gil-sm); color: var(--gil-fg-3); padding: 5px 9px; }
+.detail .chain-cycles-head { margin: 12px 0 0; font-size: var(--gil-sm); font-weight: var(--gil-w-semibold); }
+.detail .chain-refs { margin-top: 10px; font-size: var(--gil-xs); color: var(--gil-fg-3); overflow-wrap: anywhere; }
 .gil-progress summary { cursor: pointer; width: max-content; font-size: var(--gil-xs); color: var(--gil-fg-2); }
 .gil-progress summary:focus-visible { outline: 2px solid var(--gil-ring); outline-offset: 2px; border-radius: var(--gil-r-sm); }
 .intro .gil-progress small { display: block; margin-top: 8px; }

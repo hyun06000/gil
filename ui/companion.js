@@ -23,6 +23,7 @@ import { cycleReportDetail } from './cycle-report.js';
 import { clampZoom, stepZoom, zoomAround, minimapFrame, minimapViewport, scrollToMinimapPoint, minimapNeeded }
   from './viewport.mjs';
 import { progressTracker, progressSummary } from './progress.mjs';
+import { chainLine, chainContrast, chainListEntries, chainDetail } from './chain.mjs';
 import { t, setLocale, localeChosen, applyStaticText } from './locale.js';
 
 const observeProgress = progressTracker();
@@ -64,6 +65,11 @@ const layer = el(".stage .layer");
 const cardLayer = el(".stage .cards");
 const detail = el(".detail");
 const status = el(".status span");
+// Chain — the larger unit of work. Empty and hidden for a record without Chains (format 4/5).
+const chainNow = el(".chain-now");
+const chainContrastLine = el(".chain-contrast");
+const chainList = el(".chain-list");
+const chainEntries = el(".chain-entries");
 
 // ── presentation state ──────────────────────────────────────────────
 //
@@ -72,7 +78,7 @@ const status = el(".status span");
 const seats = new Map();
 const seatOf = (scopeId) => {
   if (!seats.has(scopeId)) {
-    seats.set(scopeId, { selectedStep: null, selectedCycle: null, collapsed: new Set(), detail: null });
+    seats.set(scopeId, { selectedStep: null, selectedCycle: null, selectedChain: null, collapsed: new Set(), detail: null });
   }
   return seats.get(scopeId);
 };
@@ -723,6 +729,53 @@ function renderIntro() {
     : t('ui.observed', { at });
   // 완전한 View 를 새로 읽었다 — 연결 문제의 글은 걷는다. 정상일 때 「조회 성공」을 따로 적지 않는다.
   intro.querySelector('.progress-connection').textContent = "";
+  renderChain();
+}
+
+// ── Chain — 지금 어느 큰 작업 단위에 있는가 ──────────────────────────
+//
+// View 의 `current.chain_ref`·`chain`·`chains` 만 읽는다(Chain 저장 계약 「읽기와 UI」). 한 줄은
+// 늘 보이고, 사이클 결과와 Chain 종료가 다를 때만 대비 한 줄이 더 선다. 목록은 펼쳐야 보인다.
+// 이전 Chain 을 고르는 것은 **이 창의 표현 상태**다 — Current 도 `.gil` 도 바뀌지 않는다.
+function renderChain() {
+  const view = current.view;
+  const line = chainLine(view);
+  chainNow.textContent = line;
+  chainNow.hidden = !line;
+  const contrast = line ? chainContrast(view) : "";
+  chainContrastLine.textContent = contrast;
+  chainContrastLine.hidden = !contrast;
+  const entries = chainListEntries(view);
+  chainEntries.innerHTML = "";
+  chainList.hidden = entries.length === 0;
+  if (!entries.length) return;
+  chainList.querySelector("summary").textContent = t('chain.list_summary', { n: entries.length });
+  for (const one of entries) {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = one.label; // 글자다 — markup 으로 해석하지 않는다.
+    button.dataset.chain = one.ref;
+    button.dataset.current = String(one.isCurrent);
+    button.setAttribute("aria-label", one.aria);
+    button.setAttribute("aria-selected", String(current.seat.selectedChain === one.ref));
+    button.onclick = () => selectChain(one.ref);
+    item.appendChild(button);
+    chainEntries.appendChild(item);
+  }
+}
+/** 목록의 선택 표시만 맞춘다. 목록을 다시 세우지 않으므로 focus 가 떨어지지 않는다. */
+function syncChainSelection() {
+  if (!current) return;
+  for (const button of chainEntries.querySelectorAll("button[data-chain]")) {
+    button.setAttribute("aria-selected", String(current.seat.selectedChain === button.dataset.chain));
+  }
+}
+function hideChain() {
+  chainNow.hidden = true;
+  chainContrastLine.hidden = true;
+  chainList.hidden = true;
+  chainEntries.innerHTML = "";
 }
 
 let disposeVisuals = () => {};
@@ -738,6 +791,7 @@ function renderDetail(node) {
   }
   const head = document.createElement("small");
   const reportOwner = node.owner || {kind:'step',ref:node.step_ref};
+  if (reportOwner.kind === 'chain') { renderChainDetail(node, head); return; }
   const isCycle = reportOwner.kind === 'cycle';
   head.textContent = isCycle
     ? t('ui.detail_cycle_head', { cycle: cycleName(node.cycle_ref,node.kind), state: node.state === 'open' ? t('ui.open') : t('ui.closed') })
@@ -783,7 +837,79 @@ function renderDetail(node) {
   detail.appendChild(list);
 }
 
+/** Chain 상세 — 보고서 원문 칸, 이 Chain 이 가진 사이클 목록, 기록 식별자. 시각 자료 조회는 없다
+ *  (Chain 자체의 typed visual 은 계약에 없다). 사이클을 누르면 기존 사이클 보고서 선택으로 간다. */
+function renderChainDetail(node, head) {
+  head.textContent = node.head;
+  const name = document.createElement("h2");
+  name.textContent = node.chain_ref;
+  const note = document.createElement("p");
+  note.textContent = node.note;
+  detail.append(head, name, note);
+  if (node.report) {
+    const list = document.createElement("dl");
+    for (const field of node.report.fields) {
+      const label = document.createElement("dt");
+      label.textContent = field.name;
+      const value = document.createElement("dd");
+      value.textContent = field.value; // **글자다.** markup 으로 해석하지 않는다.
+      list.append(label, value);
+    }
+    detail.appendChild(list);
+  } else {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = node.noReport;
+    detail.appendChild(empty);
+  }
+  const cyclesHead = document.createElement("h3");
+  cyclesHead.className = "chain-cycles-head";
+  cyclesHead.textContent = node.cyclesHead;
+  const cycles = document.createElement("ul");
+  cycles.className = "chain-cycles";
+  for (const one of node.cycles) {
+    const item = document.createElement("li");
+    if (one.known) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = one.label;
+      button.dataset.cycle = one.ref;
+      button.dataset.here = String(one.isHere);
+      button.onclick = () => selectCycle(one.ref);
+      item.appendChild(button);
+    } else {
+      // 목록에는 있으나 timeline 에 없다 — 다른 사이클로 물러서지 않고 그 사실만 적는다.
+      const missing = document.createElement("span");
+      missing.className = "chain-cycle-missing";
+      missing.textContent = one.label;
+      item.appendChild(missing);
+    }
+    cycles.appendChild(item);
+  }
+  const refs = document.createElement("p");
+  refs.className = "chain-refs";
+  refs.textContent = node.refs;
+  detail.append(cyclesHead, cycles, refs);
+}
+
 // ── 사람이 누르는 것 ────────────────────────────────────────────────
+
+/** 이전 Chain 보기 — 읽기 전용. View 에 없는 Chain 이면 선택을 비우고 아무것도 추측하지 않는다. */
+function selectChain(chainRef) {
+  if (!current) return;
+  ++detailRequest; // Invalidate every in-flight Step detail request.
+  const seat = current.seat;
+  const node = chainDetail(current.view, chainRef);
+  seat.selectedStep = null;
+  seat.selectedCycle = null;
+  seat.selectedChain = node ? node.chain_ref : null;
+  seat.detail = node;
+  seat.detailStale = false;
+  if (noticeOwner === 'detail') clearNotice();
+  syncChainSelection();
+  renderGraph();
+  renderDetail(seat.detail);
+}
 
 async function selectStep(stepRef) {
   if (!current) return;
@@ -791,6 +917,8 @@ async function selectStep(stepRef) {
   const { seat, scopeId } = owner;
   const request = ++detailRequest;
   seat.selectedCycle = null;
+  seat.selectedChain = null;
+  syncChainSelection();
   // 같은 scope 로 돌아와도 이전 화면의 요청은 끝난 것이다. 같은 Step 의 중복 조회도
   // 최신 요청만 화면에 닿는다 — 성공뿐 아니라 거절 글에도 같은 경계를 적용한다.
   const isCurrent = () => current === owner && seat.selectedStep === stepRef && request === detailRequest;
@@ -821,8 +949,10 @@ function selectCycle(cycleRef) {
   const cycle = cycleOf(cycleRef);
   const seat = current.seat;
   seat.selectedStep = null;
+  seat.selectedChain = null;
   seat.selectedCycle = cycle ? cycleRef : null;
   seat.detail = cycle ? cycleReportDetail(cycle) : null;
+  syncChainSelection();
   seat.detailStale = false;
   if (noticeOwner === 'detail') clearNotice();
   renderGraph();
@@ -918,6 +1048,11 @@ async function readOnce() {
     renderIntro();
     renderGraph();
 
+    // 고른 Chain 의 상세는 **새 View 에서** 다시 만든다. 새 View 에 없으면 선택과 상세를 비운다.
+    if (current.seat.selectedChain) {
+      selectChain(current.seat.selectedChain);
+      return;
+    }
     if (current.seat.selectedCycle) {
       selectCycle(current.seat.selectedCycle);
       return;
@@ -978,6 +1113,7 @@ function chooseNothing() {
   layer.innerHTML = "";
   wires.innerHTML = "";
   cardLayer.innerHTML = "";
+  hideChain();
   renderDetail(null);
   markFresh();
 }
@@ -1017,6 +1153,7 @@ async function showScope(scopeId) {
   viewport.scrollLeft = 0;
   viewport.scrollTop = 0;
   hideMinimap();
+  hideChain();
   renderDetail(null);
 
   markFresh();
@@ -1041,7 +1178,8 @@ async function showScope(scopeId) {
   emptyState.hidden = true;
   renderIntro();
   renderGraph();
-  if (current.seat.selectedCycle) selectCycle(current.seat.selectedCycle);
+  if (current.seat.selectedChain) selectChain(current.seat.selectedChain);
+  else if (current.seat.selectedCycle) selectCycle(current.seat.selectedCycle);
   else renderDetail(current.seat.detail);
 }
 
@@ -1375,6 +1513,7 @@ window.GIL_COMPANION = {
   showScope,
   selectStep,
   selectCycle,
+  selectChain,
   collapseCycle,
   expandCycle,
   revealSelection,
