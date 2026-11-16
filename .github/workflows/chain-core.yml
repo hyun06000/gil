@@ -13,6 +13,7 @@ on:
       - 'mcp-app/**'
       - 'ui/**'
       - 'tools/scenarios/**'
+      - 'tools/chain-interview-eval/**'
       - 'tools/ci/**'
       - 'scenarios/**'
       - '.github/workflows/chain-core.yml'
@@ -99,7 +100,7 @@ jobs:
       - name: Historical context projection stays readable without automatic approval migration
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test context --test context_profiles
       - name: Approval profile, next-call guidance over in-memory state and the real receipt (Wave 1 C)
-        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test guidance_wave1 --test guidance_wave2
+        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test guidance_wave1 --test guidance_wave2 --test guidance_interview_chain
       - name: Host guard scope and file protection in approval profile
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test automatic_guard --test write_guard -- --test-threads=1
       - name: Compile the opt-in approval profile
@@ -114,6 +115,10 @@ jobs:
         run: node --test plugins/gil-companion-prototype/skill.test.mjs plugins/gil-companion-prototype/workflow.test.mjs tools/scenarios/proxy.test.mjs tools/scenarios/redact.test.mjs tools/scenarios/report.test.mjs tools/scenarios/rpc.test.mjs tools/scenarios/scorer-cli.test.mjs tools/scenarios/trace-score.test.mjs tools/scenarios/approval-link.test.mjs tools/scenarios/state-path.test.mjs
       - name: CI cache and ordering contracts
         run: node --test tools/ci/*.test.mjs
+      - name: Chain interview evaluator contracts (no model evaluation)
+        run: node --test tools/chain-interview-eval/*.test.mjs
+      - name: Chain interview synthetic fixture integrity
+        run: node tools/chain-interview-eval/check-fixtures.mjs
       - name: Keep dependency outputs in cache after verification and artifact upload
         if: steps.build_cache.outputs.cache-hit != 'true'
         run: node tools/ci/prune-workspace-cache.mjs

@@ -13,7 +13,7 @@ import { resolve, dirname, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadCaseSet } from './lib/cases.mjs';
 import { sha256 } from './lib/io.mjs';
-import { RESULT_SCHEMA } from './lib/vocab.mjs';
+import { RESULT_SCHEMA, STEP_REF } from './lib/vocab.mjs';
 import { DEFAULT_CASES } from './check-fixtures.mjs';
 
 export function parseArgs(argv) {
@@ -65,16 +65,25 @@ export function extractOutputs(text) {
     const ok = ev.result && !ev.error && ev.result.isError !== true && ev.result.structuredContent?.ok !== false;
     if (!ok) continue;
     if (name === 'gil_plan_propose' && args.draft) { outputs.proposal = args.draft; summary.proposals += 1; }
-    if (name === 'gil_plan_read') { const ci = ev.result.structuredContent?.current_item; if (ci) boundItem = typeof ci === 'string' ? ci : ci.id ?? null; }
+    if (name === 'gil_start') { openKind = null; boundItem = null; inExperiment = false; }
+    if (name === 'gil_plan_read') { const ci = ev.result.structuredContent?.current_item; boundItem = typeof ci === 'string' ? ci : ci?.id ?? null; }
     if (name === 'gil_open') {
       openKind = args.kind ?? null;
-      if (openKind === 'experiment') inExperiment = true;
+      if (['experiment', 'interview', 'chain'].includes(openKind)) {
+        inExperiment = openKind === 'experiment'; boundItem = null;
+      }
       if (openKind === 'question' && args.contract) outputs.questions.push({ opened_at_line: n + 1, contract: args.contract });
     }
     if (name === 'gil_close') {
       const rep = parseReport(args.report);
       if (openKind === 'define' && (rep.problem || rep.success_condition)) outputs.define = { bound_item: boundItem, problem: rep.problem ?? '', success_condition: rep.success_condition ?? '' };
-      if (inExperiment && rep.verdict && (rep.verdict === 'success' || rep.verdict === 'failure') && rep.lesson) { summary.closed_experiments.push({ item: boundItem, verdict: rep.verdict }); inExperiment = false; }
+      // Outcome has verdict + lesson too, but leaves its Experiment open. Only a successful
+      // Cycle Report after the Step closes provides completion evidence; missing bindings stay unknown.
+      if (inExperiment && openKind === null && ['success', 'failure'].includes(rep.verdict)
+          && STEP_REF.test(rep.outcome_ref ?? '') && rep.handoff_summary?.trim()) {
+        summary.closed_experiments.push({ item: boundItem, verdict: rep.verdict });
+        inExperiment = false; boundItem = null;
+      }
       openKind = null;
     }
   }

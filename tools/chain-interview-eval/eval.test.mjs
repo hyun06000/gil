@@ -300,7 +300,7 @@ test('extraction: pulls the proposal draft, the Define, the bound item and close
     ev(12, 'gil_close', { project_root: '/p', report: 'problem: 빈 행의 영향\nsuccess_condition: |\n  reports/A-data-check.md 저장\n' }),
     ev(13, 'gil_open', { project_root: '/p', kind: 'outcome', contract: 'c' }),
     ev(14, 'gil_close', { project_root: '/p', report: 'verdict: success\nlesson: l\nnext_direction: n\n' }),
-    ev(15, 'gil_close', { project_root: '/p', report: 'verdict: success\nlesson: cycle lesson\nnext_direction: open_child\n' }),
+    ev(15, 'gil_close', { project_root: '/p', report: 'verdict: success\noutcome_ref: step:C2/S5\nhandoff_summary: cycle result\nnext_direction.action: open_child\n' }),
   ].join('\n') + '\n';
   const { outputs, summary } = extractOutputs(lines);
   assert.equal(outputs.proposal.scope.goal, draft.scope.goal, 'the last successful proposal wins; the refused one is ignored');
@@ -324,4 +324,31 @@ test('extraction: pulls the proposal draft, the Define, the bound item and close
   assert.ok(v.cases.filter((c) => c.status === 'not_run').length === 7);
   assert.equal(cli('make-skeleton.mjs', ['--out', join(work, 'y.json'), '--events', join(work, 'events.jsonl'), '--case', 'CI-99']).status, 2);
   rmSync(work, { recursive: true, force: true });
+});
+
+test('extraction: an Outcome alone or a refused Cycle close is not a closed Experiment', () => {
+  const lines = [
+    ev(1, 'gil_open', { kind: 'experiment' }),
+    ev(2, 'gil_plan_read', {}, { current_item: { id: 'A' } }),
+    ev(3, 'gil_open', { kind: 'outcome' }),
+    ev(4, 'gil_close', { report: 'verdict: success\nlesson: observed result\n' }),
+  ];
+  assert.deepEqual(extractOutputs(lines.join('\n')).summary.closed_experiments, []);
+  const report = 'verdict: success\noutcome_ref: step:C2/S5\nhandoff_summary: result\nnext_direction.action: open_child\n';
+  lines.push(ev(5, 'gil_close', { report }, { ok: false }));
+  assert.deepEqual(extractOutputs(lines.join('\n')).summary.closed_experiments, []);
+  lines.push(ev(6, 'gil_close', { report }));
+  assert.deepEqual(extractOutputs(lines.join('\n')).summary.closed_experiments, [{ item: 'A', verdict: 'success' }]);
+});
+
+test('extraction: a new Experiment or absent current item cannot inherit an earlier binding', () => {
+  for (const reset of [ev(3, 'gil_open', { kind: 'experiment' }), ev(3, 'gil_plan_read', {}, { current_item: null })]) {
+    const lines = [
+      ev(1, 'gil_open', { kind: 'experiment' }),
+      ev(2, 'gil_plan_read', {}, { current_item: { id: 'A' } }), reset,
+      ev(4, 'gil_open', { kind: 'define' }),
+      ev(5, 'gil_close', { report: 'problem: next problem\nsuccess_condition: observed\n' }),
+    ];
+    assert.equal(extractOutputs(lines.join('\n')).outputs.define.bound_item, null);
+  }
 });
