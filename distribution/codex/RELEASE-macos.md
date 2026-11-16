@@ -1,7 +1,7 @@
 # Native MCP macOS release gates
 
-현재 macOS 검증판은 `0.2.1-preview.30`이다. [설치 안내](INSTALL.md)와
-[게시 장부](PREVIEW-30-PUBLICATION-20261116.md)에서 정확한 버전·소스·검증 범위를 확인한다.
+현재 macOS 검증판은 `0.2.1-preview.31`이다. [설치 안내](INSTALL.md)와
+[게시 장부](PREVIEW-31-PUBLICATION-20261117.md)에서 정확한 버전·소스·검증 범위를 확인한다.
 이 문서는 제작자의 배포 경계와 서명 채널 준비 절차다. 날짜가 붙은 과거 인수를 최신판에 승계하지 않는다.
 받는 사용자에게 Node·Cargo·clone·터미널 설치를 요구하지 않는다. Companion DMG는 별도 산출물이다.
 
@@ -45,9 +45,9 @@ source에서 Skill만 바꾸더라도 새 payload이므로 기존 후보를 덮�
 인증 도구가 아니다. 출처가 불명확한 binary는 입력하지 않는다.
 
 ```sh
-GIL_PREVIEW_VERSION=0.2.1-preview.30 node distribution/codex/build-preview.mjs target/codex-preview-30 --approved-plan
-node distribution/codex/unsigned-preview.mjs prepare target/codex-preview-30/marketplace 0.2.1-preview.30 target/codex-unsigned-candidate-30 --approved-plan
-node distribution/codex/unsigned-preview.mjs verify target/codex-unsigned-candidate-30/marketplace
+GIL_PREVIEW_VERSION=0.2.1-preview.31 node distribution/codex/build-preview.mjs target/codex-preview-31 --approved-plan
+node distribution/codex/unsigned-preview.mjs prepare target/codex-preview-31/marketplace 0.2.1-preview.31 target/codex-unsigned-candidate-31 --approved-plan
+node distribution/codex/unsigned-preview.mjs verify target/codex-unsigned-candidate-31/marketplace
 ```
 
 - 새 output만 사용한다. 입력·설치 cache를 덮거나 기존 `release.json`의 flag를 뒤집지 않는다.
@@ -68,8 +68,8 @@ node distribution/codex/unsigned-preview.mjs verify target/codex-unsigned-candid
 ### 게시 순서 (현재 시험판 채널)
 
 1. 게시 대상 소스 커밋과 새 버전을 정하고 `codex-preview.yml`을 수동 실행한다.
-   `unsigned_preview_version=0.2.1-preview.30`, `runtime_profile=approved-plan`을 사용한 예시는
-   [게시 장부](PREVIEW-30-PUBLICATION-20261116.md)에 있다. 실제 실행의 커밋과 성공 결과를 확인한다.
+   `unsigned_preview_version=0.2.1-preview.31`, `runtime_profile=approved-plan`을 사용한 예시는
+   [게시 장부](PREVIEW-31-PUBLICATION-20261117.md)에 있다. 실제 실행의 커밋과 성공 결과를 확인한다.
 2. 자동 검사 산출물의 원본 archive·SHA256SUMS·checks.json·update-record.json을 받는다.
    해시·압축 멤버·receipt를 확인하고, 이전 판과의 계약·재연결 범위를 기록한다. 로컬 재빌드로 바꾸지 않는다.
 3. 배포 저장소의 작업 브랜치에 검증한 파일·무결성 핀·안내를 반영한다. 이력 개인정보 검사와
