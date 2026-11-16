@@ -502,8 +502,8 @@ fn open_with(ctx: &Invocation<'_>, mut session: Session, name: Option<&String>) 
             "gil status",
         )),
         Place::Step(openable) => open_step(ctx, &mut session, name, &openable),
-        Place::Cycle(openable) => open_cycle(&mut session, name, &openable, false),
-        Place::Branch(openable) => open_cycle(&mut session, name, &openable, true),
+        Place::Cycle(openable) => open_cycle(ctx, &mut session, name, &openable, false),
+        Place::Branch(openable) => open_cycle(ctx, &mut session, name, &openable, true),
     }
 }
 
@@ -566,6 +566,7 @@ fn open_step(ctx: &Invocation<'_>,
 /// 두 자리는 고르는 방식도 거절하는 말도 같다. 다른 것은 **무엇이 기록되는가** 하나뿐이라,
 /// 그 차이를 문 하나 안에 두고 나머지를 나누지 않는다.
 fn open_cycle(
+    ctx: &Invocation<'_>,
     session: &mut Session,
     name: Option<&String>,
     openable: &[CycleKind],
@@ -574,7 +575,7 @@ fn open_cycle(
     let Some(name) = name else {
         // 고를 것이 하나뿐이면 묻지 않는다. 설명은 **고를 때만** 필요하다.
         if let [only] = openable {
-            return open_this_cycle(session, *only, branch);
+            return open_this_cycle(ctx, session, *only, branch);
         }
         return Err(refusal(
             text("cmd.choose_kind"),
@@ -603,10 +604,11 @@ fn open_cycle(
             text("cmd.run_open_kind"),
         )
     })?;
-    open_this_cycle(session, kind, branch)
+    open_this_cycle(ctx, session, kind, branch)
 }
 
 fn open_this_cycle(
+    ctx: &Invocation<'_>,
     session: &mut Session,
     kind: CycleKind,
     branch: bool,
@@ -618,10 +620,12 @@ fn open_this_cycle(
         false => session.open_child_cycle(kind).map(|_| ()),
     }
     .map_err(|err| {
+        // 승인 계획이 막은 것은 종류나 자리를 고쳐서 풀리지 않는다 — 승인 상태를 읽는 수뿐이다.
+        let todo = if plan_refused(&err) { plan_todo(ctx) } else { text("cmd.check_where") };
         let said = refusal(
             &tr!("cmd.cannot_open_cycle", kind = kind),
             &err.to_string(),
-            text("cmd.check_where"),
+            todo,
             "gil status",
         );
         with_help(&Refusal::Session(&err), said)
@@ -721,9 +725,18 @@ fn close_step(ctx: &Invocation<'_>, session: &mut Session) -> Result<String, Str
     let closed = session.close_step(report).map_err(|err| {
         // 세계 쪽 거절은 **이미 완결된 receipt** 다 — 무엇이·왜·다음에 무엇을 까지 스스로
         // 말한다. 그것을 다시 감싸면 이유 안에 또 이유가 들어간다.
-        let said = match err.is_receipt() {
-            true => err.to_string(),
-            false => refusal(
+        //
+        // 승인 계획이 막은 것은 Report 를 고쳐 다시 보내도 풀리지 않는다. 골격을 보여 주면
+        // 읽는 쪽은 그것을 고쳐 다시 보내므로, 여기서는 승인 상태를 읽는 길만 말한다.
+        let said = match (err.is_receipt(), plan_refused(&err)) {
+            (true, _) => err.to_string(),
+            (false, true) => refusal(
+                &tr!("cmd.cannot_close", here = here, kind = kind),
+                &err.to_string(),
+                plan_todo(ctx),
+                "gil close",
+            ),
+            (false, false) => refusal(
                 &tr!("cmd.cannot_close", here = here, kind = kind),
                 &err.to_string(),
                 &format!("{}\n\n{hint}", fix_it(ctx)),
@@ -1088,8 +1101,8 @@ fn cycle(ctx: &Invocation<'_>, sub: Option<&str>, argument: Option<&String>) -> 
         Some("open") => {
             let mut session = open_session(ctx)?;
             match place(&session) {
-                Place::Cycle(openable) => open_cycle(&mut session, argument, &openable, false),
-                Place::Branch(openable) => open_cycle(&mut session, argument, &openable, true),
+                Place::Cycle(openable) => open_cycle(ctx, &mut session, argument, &openable, false),
+                Place::Branch(openable) => open_cycle(ctx, &mut session, argument, &openable, true),
                 // 이미 잠근 것을 넘긴다 — `open()` 을 부르면 같은 프로세스가 잠금을
                 // 두 번 잡으려다 스스로를 거절한다.
                 _ => open_with(ctx, session, argument),
@@ -1538,6 +1551,23 @@ fn where_now(ctx: &Invocation<'_>, session: &Session) -> String {
 /// Open Receipt 가 같은 문법에서 읽어 말한다. 셋이 각자 설명을 지으면 반드시 갈린다.
 fn fix_it(ctx: &Invocation<'_>) -> &'static str {
     if matches!(ctx.input, Input::Body(_)) { text("cmd.fix_it_mcp") } else { text("cmd.fix_it_cli") }
+}
+
+/// 이 거절이 **승인 계획의 상태** 때문인가 — Report·계약·종류를 고쳐서는 풀리지 않는 것.
+///
+/// 제안이 없다·Monitor 응답을 기다린다·승인된 내용과 다르다·승인 전이다·재인터뷰 요청이
+/// 보존돼 있다·미실행 항목이 없다. 전부 typed 로 판정한다 — 메시지 글자를 뒤지지 않는다.
+fn plan_refused(err: &SessionError) -> bool {
+    matches!(
+        err,
+        SessionError::Action(crate::project::ActionError::Plan(_))
+            | SessionError::Cycles(crate::cycles::CyclesError::Plan(_))
+    )
+}
+
+/// 승인 계획 거절 뒤의 「지금 해야 할 일」 — 입력을 고치라고 하지 않는다.
+fn plan_todo(ctx: &Invocation<'_>) -> &'static str {
+    if matches!(ctx.input, Input::Body(_)) { text("cmd.plan_todo_mcp") } else { text("cmd.plan_todo_cli") }
 }
 
 
