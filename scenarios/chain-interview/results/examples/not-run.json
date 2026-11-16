@@ -1,0 +1,25 @@
+{
+  "schema": "gil.chain-interview.result/1",
+  "run": {
+    "id": "example-not-run-20261117",
+    "recorded_at": "2026-11-17",
+    "executed": false,
+    "example": true,
+    "model": null,
+    "guidance": { "workflow_md_sha256": "387649b529746372a57b6fe0588c3b51c0f1a4e607f56a2c8bc5f4b85563a99c", "repo_commit": "2b24746", "profile": "approved-plan,visual-authoring,product-safety" },
+    "case_set": { "name": "chain-interview", "sha256": "50de46c78a1a4e8d41a44e057005b6e91b3912bafedaf26468d52a7e6ba40303" },
+    "harness": null,
+    "notes": "모델을 실행하지 않은 결과 파일의 예시다. 모든 사례가 not_run이며, 이 파일은 어떤 사례도 통과했다고 말하지 않는다. guidance 해시와 commit은 작성 시점의 저장소 값이다."
+  },
+  "judges": [],
+  "cases": [
+    { "case_id": "CI-01", "status": "not_run", "reason": "not executed", "observation": null, "outputs": null, "approval": { "kind": "none", "evidence": "" }, "automatic": [], "semantic": [ { "criterion": "S1", "status": "not_run" }, { "criterion": "S2", "status": "not_run" }, { "criterion": "S3", "status": "not_run" }, { "criterion": "S4", "status": "not_run" }, { "criterion": "S5", "status": "not_run" }, { "criterion": "S6", "status": "not_run" } ] },
+    { "case_id": "CI-02", "status": "not_run", "reason": "not executed", "observation": null, "outputs": null, "approval": { "kind": "none", "evidence": "" }, "automatic": [], "semantic": [ { "criterion": "S1", "status": "not_run" }, { "criterion": "S2", "status": "not_run" }, { "criterion": "S3", "status": "not_run" }, { "criterion": "S5", "status": "not_run" }, { "criterion": "S6", "status": "not_run" } ] },
+    { "case_id": "CI-03", "status": "not_run", "reason": "not executed", "observation": null, "outputs": null, "approval": { "kind": "none", "evidence": "" }, "automatic": [], "semantic": [ { "criterion": "S1", "status": "not_run" }, { "criterion": "S2", "status": "not_run" }, { "criterion": "S3", "status": "not_run" }, { "criterion": "S5", "status": "not_run" }, { "criterion": "S9", "status": "not_run" } ] },
+    { "case_id": "CI-04", "status": "not_run", "reason": "not executed", "observation": null, "outputs": null, "approval": { "kind": "none", "evidence": "" }, "automatic": [], "semantic": [ { "criterion": "S1", "status": "not_run" }, { "criterion": "S2", "status": "not_run" }, { "criterion": "S3", "status": "not_run" }, { "criterion": "S5", "status": "not_run" }, { "criterion": "S6", "status": "not_run" }, { "criterion": "S10", "status": "not_run" } ] },
+    { "case_id": "CI-05", "status": "not_run", "reason": "not executed", "observation": null, "outputs": null, "approval": { "kind": "none", "evidence": "" }, "automatic": [], "semantic": [ { "criterion": "S1", "status": "not_run" }, { "criterion": "S3", "status": "not_run" }, { "criterion": "S4", "status": "not_run" }, { "criterion": "S5", "status": "not_run" } ] },
+    { "case_id": "CI-06", "status": "not_run", "reason": "not executed", "observation": null, "outputs": null, "approval": { "kind": "none", "evidence": "" }, "automatic": [], "semantic": [ { "criterion": "S3", "status": "not_run" }, { "criterion": "S4", "status": "not_run" }, { "criterion": "S5", "status": "not_run" } ] },
+    { "case_id": "CI-07", "status": "not_run", "reason": "not executed", "observation": null, "outputs": null, "approval": { "kind": "none", "evidence": "" }, "automatic": [], "semantic": [ { "criterion": "S4", "status": "not_run" }, { "criterion": "S6", "status": "not_run" } ] },
+    { "case_id": "CI-08", "status": "not_run", "reason": "not executed", "observation": null, "outputs": null, "approval": { "kind": "none", "evidence": "" }, "automatic": [], "semantic": [ { "criterion": "S7", "status": "not_run" }, { "criterion": "S8", "status": "not_run" } ] }
+  ]
+}

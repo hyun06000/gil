@@ -1,0 +1,185 @@
+{
+  "schema": "gil.chain-interview.case/1",
+  "id": "CI-07",
+  "title": "너무 잘게 나눠 독립적인 결과 가치가 없는 실행 항목",
+  "category": "over_fragmented_items",
+  "stages_under_test": [
+    "proposal"
+  ],
+  "language": "ko",
+  "input": {
+    "user_request": "data/sales_2026Q3.csv로 제품별 매출 상위 5개를 뽑고 짧은 설명을 reports/top5.md에 남겨 줘.",
+    "materials": [
+      {
+        "path": "data/sales_2026Q3.csv",
+        "kind": "csv",
+        "exists": true,
+        "summary": "합성 문구점 3분기 판매 기록."
+      }
+    ],
+    "prior_state": {
+      "project": "새 프로젝트(기록 없음). Interview 질문이 끝나 Synthesis를 제안하는 시점부터 평가한다",
+      "approved_plan": null,
+      "closed_experiments": null
+    },
+    "simulated_answers": [
+      {
+        "topic": "metric",
+        "source": "synthetic",
+        "answer": "매출액 기준이요."
+      },
+      {
+        "topic": "deliverable",
+        "source": "synthetic",
+        "answer": "표 하나랑 세 줄 설명이면 돼요."
+      }
+    ]
+  },
+  "clarifications": [
+    {
+      "id": "C1",
+      "topic": "metric",
+      "necessity": "required",
+      "why": "상위 기준(금액/수량)."
+    },
+    {
+      "id": "C2",
+      "topic": "deliverable",
+      "necessity": "required",
+      "why": "결과 형태."
+    }
+  ],
+  "good_examples": [
+    {
+      "id": "good-proposal-right-grain",
+      "kind": "proposal",
+      "meets": [
+        "S4",
+        "S6"
+      ],
+      "content": {
+        "scope": {
+          "goal": "3분기 제품별 매출액 상위 5개와 짧은 설명을 reports/top5.md에 남긴다",
+          "in_scope": "제품별 매출액 집계, 상위 5개 선정, 세 줄 설명",
+          "out_of_scope": "수량 기준 순위, 월별 추이, 차트",
+          "constraints": "원본 CSV 수정 금지. unit_price가 빈 행은 제외하고 수를 적는다",
+          "success_criteria": "reports/top5.md에 상위 5개 표와 세 줄 설명, 제외 행 수가 저장된다"
+        },
+        "items": [
+          {
+            "id": "A",
+            "question": "제품별 매출액 상위 5개는 무엇이며 얼마인가",
+            "done_when": "reports/top5.md에 표와 세 줄 설명, 제외 행 수가 저장된다"
+          }
+        ],
+        "synthesis": {
+          "statement": "제품별 매출액 상위 5개 표와 세 줄 설명을 reports/top5.md 한 파일로 남기는 한 항목으로 진행하는 것이 맞는가",
+          "basis_refs": "step:C1/S1\nstep:C1/S2",
+          "exploration_checklist": "A"
+        }
+      },
+      "note": "결과 가치가 있는 단위는 '표와 설명이 저장된 파일' 하나다. 집계와 설명을 두 항목으로 나눈 분할도 각각 파일이 남으면 같은 등급이다.",
+      "acceptable_variants": [
+        "A(집계 표)와 B(설명) 두 항목, 각각 파일을 남기는 분할"
+      ]
+    }
+  ],
+  "bad_examples": [
+    {
+      "id": "bad-proposal-fragmented",
+      "kind": "proposal",
+      "failure_modes": [
+        "over_fragmented",
+        "done_when_unobservable"
+      ],
+      "declared_structural_violations": [],
+      "content": {
+        "scope": {
+          "goal": "3분기 제품별 매출액 상위 5개와 설명을 reports/top5.md에 남긴다",
+          "in_scope": "집계, 선정, 설명",
+          "out_of_scope": "수량 기준 순위, 월별 추이, 차트",
+          "constraints": "원본 CSV 수정 금지",
+          "success_criteria": "reports/top5.md가 저장된다"
+        },
+        "items": [
+          {
+            "id": "A1",
+            "question": "CSV 파일을 열 수 있는가",
+            "done_when": "파일이 열린다"
+          },
+          {
+            "id": "A2",
+            "question": "열 이름은 무엇인가",
+            "done_when": "열 이름을 확인했다"
+          },
+          {
+            "id": "A3",
+            "question": "행 수는 몇 개인가",
+            "done_when": "행 수를 셌다"
+          },
+          {
+            "id": "A4",
+            "question": "qty×unit_price 열을 만들 수 있는가",
+            "done_when": "열을 만들었다"
+          },
+          {
+            "id": "A5",
+            "question": "제품별로 합계를 낼 수 있는가",
+            "done_when": "합계를 냈다"
+          },
+          {
+            "id": "A6",
+            "question": "내림차순 정렬이 되는가",
+            "done_when": "정렬했다"
+          },
+          {
+            "id": "A7",
+            "question": "상위 5개를 자를 수 있는가",
+            "done_when": "5개를 잘랐다"
+          },
+          {
+            "id": "A8",
+            "question": "표를 마크다운으로 만들 수 있는가",
+            "done_when": "표를 만들었다"
+          },
+          {
+            "id": "A9",
+            "question": "설명 세 줄을 쓸 수 있는가",
+            "done_when": "reports/top5.md가 저장된다"
+          }
+        ],
+        "synthesis": {
+          "statement": "파일 열기부터 저장까지 아홉 단계를 각각 실험으로 진행하는 것이 맞는가",
+          "basis_refs": "step:C1/S1\nstep:C1/S2",
+          "exploration_checklist": "A1\nA2\nA3\nA4\nA5\nA6\nA7\nA8\nA9"
+        }
+      },
+      "note": "구조는 완전하다. 그러나 A1–A8은 혼자서는 결과 가치가 없고 done_when이 파일로 관측되지 않는다('확인했다', '정렬했다'). 각 항목마다 Verify 증거 파일을 요구하면 쓸모없는 파일만 늘어난다. S6이 잡는다. 비교 파일의 separable 안과 달리, 쪼개짐 자체가 아니라 항목별 독립 결과 부재가 문제다."
+    }
+  ],
+  "judgement": {
+    "automatic": [
+      "proposal_shape",
+      "proposal_checklist_matches_items",
+      "basis_refs_canonical"
+    ],
+    "semantic": [
+      "S4",
+      "S6"
+    ],
+    "basis": "각 항목의 done_when이 혼자서 관측 가능한 결과(파일·수치)를 가리키는지, 항목이 실패했을 때 그 실패가 의미 있는 판정인지를 본다. 항목 수는 근거가 아니다.",
+    "not_yet_judgeable": [
+      "두 항목(집계·설명) 분할과 한 항목 분할 중 사용자가 어느 쪽을 선호하는지는 fixture가 정하지 않는다.",
+      "실제 모델이 공통 지침의 'one checkable question'을 과도하게 쪼개는 방향으로 읽는지는 실행 결과로 본다."
+    ]
+  },
+  "comparison_ref": "comparisons/sales-report-bundled-vs-separable.json",
+  "spec_refs": [
+    "spec/GIL_Cycle_Model_v0.1.md#16-synthesis",
+    "spec/GIL_Cycle_Model_v0.1.md#7-experiment-cycle의-define",
+    "spec/GIL_Approved_Plan_v0.1.md",
+    "spec/GIL_Cycle_Model_v0.1.md#71-지금-실행-가능한-가장-작은-문제",
+    "spec/GIL_Cycle_Model_v0.1.md#간결하고-명징한-제안",
+    "spec/GIL_Approved_Plan_v0.1.md#실행-항목의-크기와-define의-일치"
+  ]
+}
