@@ -13,6 +13,9 @@ class Element {
     this.dataset = {}; this.hidden = false; this.disabled = false; this.className = ''; this.tabIndex = 0;
     this.scrolled = 0;
   }
+  // Like a browser: disabling the focused control drops focus to the document.
+  get disabled() { return this._disabled ?? false; }
+  set disabled(v) { this._disabled = v; if (v && this.doc.activeElement === this) this.doc.activeElement = null; }
   append(...nodes) { this.children.push(...nodes); }
   replaceChildren(...nodes) { this.children = nodes; }
   addEventListener(name, fn) { this.listeners[name] = fn; }
@@ -303,8 +306,9 @@ test('a revised proposal says that the earlier approval does not carry over', as
   assert.match(r.panel.allText(), /이전 승인 판 v1/);
   const items = r.panel.querySelectorAll('li');
   assert.deepEqual(items.map(li => li.dataset.status), ['executed', 'pending']);
-  assert.match(items[0].textContent, /실행함 \(cycle:C2\) · A/);
-  assert.match(r.panel.allText(), /실행함 1개 · 지금 열린 Cycle 0개 · 남음 1개/);
+  assert.match(items[0].allText(), /A 실행함 기록 cycle:C2 Question A 완료 판단 File A/);
+  assert.match(r.panel.allText(), /실행함 1개 · 남음 1개/);
+  assert.doesNotMatch(r.panel.allText(), /묶임 0개/, 'a zero count is not written');
   assert.equal(r.decisions().length, 2);
 });
 
@@ -317,10 +321,11 @@ test('an approved plan without an open proposal lists executed, bound and remain
   await r.review.refresh();
   assert.equal(r.panel.dataset.state, 'executing');
   assert.equal(r.banner.hidden, true, 'nothing waits for the person');
-  assert.match(r.panel.allText(), /지금 열린 Cycle cycle:C4에 묶인 항목: D — Question D/);
-  assert.match(r.panel.allText(), /실행함 1개 · 지금 열린 Cycle 1개 · 남음 2개/);
+  assert.match(r.panel.allText(), /지금 열린 Cycle cycle:C4에 묶인 항목: D Question D 완료 판단 File D/);
+  assert.match(r.panel.allText(), /실행함 1개 · 지금 열린 Cycle에 묶임 1개 · 남음 2개/);
   const items = r.panel.querySelectorAll('li');
-  assert.deepEqual(items.map(li => [li.dataset.status, li.textContent.split(' · ')[1].split(':')[0]]), [['executed', 'A'], ['current', 'D'], ['pending', 'B'], ['pending', 'C']]);
+  assert.deepEqual(items.map(li => [li.dataset.status, li.dataset.item]), [['executed', 'A'], ['current', 'D'], ['pending', 'B'], ['pending', 'C']]);
+  assert.match(items[0].allText(), /^A 실행함 기록 cycle:C2\s*$/, 'a record-only executed item has no invented text');
   assert.match(r.panel.allText(), /재인터뷰 요청 기록 \(cycle:C4\): 범위가 바뀌었다/);
   assert.doesNotMatch(r.panel.allText(), /작업 중입니다|진행 중/);
   assert.match(r.panel.allText(), /에이전트가 지금 작업 중인지는 여기서 알 수 없습니다/);
@@ -408,9 +413,9 @@ test('a closed current Cycle is reported closed: its bound item is executed, not
   assert.equal(r.panel.dataset.state, 'executing');
   const items = r.panel.querySelectorAll('li');
   assert.deepEqual(items.map(li => li.dataset.status), ['executed', 'pending']);
-  assert.match(items[0].textContent, /실행함 \(cycle:C2\) · A/);
-  assert.match(r.panel.allText(), /현재 Cycle cycle:C2은 닫혔습니다\. 지금 열린 Cycle은 없습니다\. 마지막으로 연결된 항목: A — Question A/);
-  assert.match(r.panel.allText(), /실행함 1개 · 지금 열린 Cycle 0개 · 남음 1개/);
+  assert.match(items[0].allText(), /A 실행함 기록 cycle:C2/);
+  assert.match(r.panel.allText(), /현재 Cycle cycle:C2은 닫혔습니다\. 지금 열린 Cycle은 없습니다\. 마지막으로 연결된 항목: A Question A 완료 판단 File A 결과는 그 Cycle Report가 진실원이며 여기서 성공으로 보지 않습니다/);
+  assert.match(r.panel.allText(), /실행함 1개 · 남음 1개/);
   assert.doesNotMatch(r.panel.allText(), /지금 열린 Cycle(에| cycle:)/, 'no sentence claims an open Cycle');
   assert.doesNotMatch(r.panel.allText(), /성공(함|했|으로 마쳤)|완료했/, 'executed is not success');
   assert.doesNotMatch(r.panel.allText(), /작업 중입니다|진행 중/);
@@ -422,10 +427,10 @@ test('without current_cycle (older Core or unknown state) the screen marks the b
     const r = rig({ value }); await r.review.refresh();
     const items = r.panel.querySelectorAll('li');
     assert.deepEqual(items.map(li => li.dataset.status), ['bound', 'pending']);
-    assert.match(items[0].textContent, /현재 Cycle에 연결됨 \(열림 여부 미확인\) · A/);
-    assert.match(r.panel.allText(), /현재 Cycle에 연결된 항목: A — Question A/);
+    assert.match(items[0].allText(), /A 현재 Cycle에 연결됨 \(열림 여부 미확인\) 기록 cycle:C2/);
+    assert.match(r.panel.allText(), /현재 Cycle에 연결된 항목: A Question A 완료 판단 File A/);
     assert.match(r.panel.allText(), /Cycle 열림 여부가 없어 열려 있다고 보지 않습니다/);
-    assert.match(r.panel.allText(), /실행함 0개 · 연결됨\(열림 미확인\) 1개 · 남음 1개/);
+    assert.match(r.panel.allText(), /연결됨\(열림 미확인\) 1개 · 남음 1개/);
     assert.doesNotMatch(r.panel.allText(), /지금 열린 Cycle/);
   }
 });
@@ -435,9 +440,9 @@ test('the next Experiment opens: the new binding is the open Cycle and the earli
     executed_cycles: [...R3.executed_cycles, { cycle_ref: 'cycle:C3', item_id: 'B', revision: 1 }], current_cycle: { ref: 'cycle:C3', state: 'open' } };
   const r = rig({ value }); await r.review.refresh();
   const items = r.panel.querySelectorAll('li');
-  assert.deepEqual(items.map(li => [li.dataset.status, li.textContent.split(' · ')[1].split(':')[0]]), [['executed', 'A'], ['current', 'B']]);
-  assert.match(r.panel.allText(), /지금 열린 Cycle cycle:C3에 묶인 항목: B — Question B/);
-  assert.match(r.panel.allText(), /실행함 1개 · 지금 열린 Cycle 1개 · 남음 0개/);
+  assert.deepEqual(items.map(li => [li.dataset.status, li.dataset.item]), [['executed', 'A'], ['current', 'B']]);
+  assert.match(r.panel.allText(), /지금 열린 Cycle cycle:C3에 묶인 항목: B Question B/);
+  assert.match(r.panel.allText(), /실행함 1개 · 지금 열린 Cycle에 묶임 1개 · 남음 0개/);
   // The same screen after the Cycle closes, before any proposal: polling moves it to closed without a rebuild of meaning.
   r.state.value = { ...value, current_cycle: { ref: 'cycle:C3', state: 'closed' } };
   await r.review.refresh();
@@ -452,7 +457,7 @@ test('a re-interview proposal after a closed Experiment lists that item as execu
   const r = rig({ value }); await r.review.refresh();
   assert.equal(r.panel.dataset.state, 'reapproval');
   assert.deepEqual(r.panel.querySelectorAll('li').map(li => li.dataset.status), ['executed', 'pending']);
-  assert.match(r.panel.allText(), /실행함 1개 · 지금 열린 Cycle 0개 · 남음 1개/);
+  assert.match(r.panel.allText(), /실행함 1개 · 남음 1개/);
   assert.match(r.panel.allText(), /재인터뷰 요청 기록 \(cycle:C2\)/);
   assert.equal(r.decisions().length, 2, 'the decision buttons are unchanged');
   // The proposal view with no field still never assumes open.
@@ -469,4 +474,83 @@ test('no proposal and nothing executed: idle stays idle whatever the Cycle state
     assert.equal(r.banner.hidden, true);
     assert.doesNotMatch(r.panel.allText(), /지금 열린 Cycle/);
   }
+});
+
+// Reading a long proposal (Cycle Model §16, Monitor Model §1.1): each item is read as its own
+// problem and done-when condition, nothing is shortened, and a fresh proposal carries no tally.
+const byClass = (node, name) => node.children.find(n => n.className === name);
+const LONG = Array.from({ length: 4 }, (_, i) => `문단 ${i + 1}: 월별 집계에 쓸 날짜·금액 열의 형식을 확인하고 누락·중복 행을 센다.`).join('\n');
+
+test('a long proposal keeps every word apart: label, statement, scope, each item problem and done-when; no tally without records', async () => {
+  const items = Array.from({ length: 10 }, (_, i) => ({ id: `I${i + 1}`, question: `${LONG}\n질문 ${i + 1}`, done_when: `${LONG}\n완료 ${i + 1}` }));
+  const value = { supported: true, active_revision: null, pending: [], executed_cycles: [], reinterview_requests: [], current_item: null,
+    current_cycle: { ref: 'cycle:C1', state: 'open' }, proposal: proposal({ draft: { scope: proposal().draft.scope, items, synthesis: { statement: `${LONG}\n명제`, basis_refs: 'step:C1/S1' } } }) };
+  const r = rig({ value }); await r.review.refresh();
+  assert.equal(r.panel.dataset.state, 'requested');
+  const statement = byClass(r.panel, 'plan-statement');
+  assert.equal(statement.children[0].textContent, '확인할 내용');
+  assert.equal(statement.children[1].textContent, `${LONG}\n명제`, 'the statement is the agent\'s full sentence');
+  assert.equal(byClass(r.panel, 'plan-counts'), undefined, 'no executed/bound/retry record: the verdict sentence already counts the items');
+  assert.match(r.panel.allText(), /실행할 항목 10개를 담은 계획입니다/);
+  const lis = r.panel.querySelectorAll('li');
+  assert.equal(lis.length, 10);
+  for (const [i, li] of lis.entries()) {
+    assert.equal(li.dataset.item, `I${i + 1}`); assert.equal(li.dataset.status, 'pending');
+    const head = byClass(li, 'plan-item-head');
+    assert.deepEqual(head.children.map(n => n.textContent), [`I${i + 1}`, '남음'], 'id and recorded status, no Cycle record for a pending item');
+    assert.equal(byClass(li, 'plan-item-question').textContent, items[i].question, 'the problem text is complete');
+    const done = byClass(li, 'plan-item-done');
+    assert.deepEqual(done.children.map(n => n.textContent), ['완료 판단', items[i].done_when], 'the done-when text is complete under its label');
+  }
+  // The full original text and the exact revision/digest stay reachable below the controls.
+  assert.match(r.panel.allText(), new RegExp(`"statement": ${JSON.stringify(`${LONG}\n명제`).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+  assert.match(r.panel.allText(), /SHA-256: a{64}/);
+  assert.equal(r.decisions().length, 2);
+  for (const status of ['executed', 'current', 'bound', 'pending', 'retry']) {
+    assert.doesNotMatch(PLAN_ITEM_WORD(status), /완료|성공|실패함/, `${status} is a record word, not a verdict`);
+  }
+});
+import { t as word } from '../ui/locale.js';
+const PLAN_ITEM_WORD = (status) => word(`plan.item.${status}`);
+
+test('many items with mixed records: every card carries its own status and Cycle record; a retry shows its latest attempt', async () => {
+  const items = ['A', 'B', 'C', 'D', 'E', 'F'].map(id => ({ id, question: `Question ${id}`, done_when: `File ${id}` }));
+  const value = { supported: true, active_revision: 1, reinterview_requests: [], current_item: null, current_cycle: { ref: 'cycle:C5', state: 'open' },
+    pending: items.filter(i => i.id !== 'A'), retry_pending: ['B'],
+    executed_cycles: [{ cycle_ref: 'cycle:C2', item_id: 'A', revision: 1 }, { cycle_ref: 'cycle:C3', item_id: 'B', revision: 1 }, { cycle_ref: 'cycle:C4', item_id: 'B', revision: 1 }],
+    proposal: proposal({ revision: 2, base_revision: 1, digest: 'f'.repeat(64), synthesis_ref: 'step:C5/S3', draft: { scope: proposal().draft.scope, items, synthesis: { statement: 'B 를 다시 정의한다', basis_refs: 'step:C5/S1' } } }) };
+  const r = rig({ value }); await r.review.refresh();
+  const lis = r.panel.querySelectorAll('li');
+  assert.deepEqual(lis.map(li => [li.dataset.status, li.dataset.item]), [['executed', 'A'], ['retry', 'B'], ['pending', 'C'], ['pending', 'D'], ['pending', 'E'], ['pending', 'F']]);
+  assert.deepEqual(byClass(lis[0], 'plan-item-head').children.map(n => n.textContent), ['A', '실행함', '기록 cycle:C2']);
+  assert.deepEqual(byClass(lis[1], 'plan-item-head').children.map(n => n.textContent), ['B', '재시도 대기 (실패 기록 유지)', '기록 cycle:C4'], 'latest attempt, failure record kept');
+  assert.deepEqual(byClass(lis[2], 'plan-item-head').children.map(n => n.textContent), ['C', '남음']);
+  assert.equal(byClass(r.panel, 'plan-counts').textContent, '실행함 1개 · 남음 4개 · 재시도 대기 1개');
+  assert.doesNotMatch(r.panel.allText(), /묶임 0개/);
+  assert.equal(r.decisions().length, 2);
+});
+
+test('an empty item list renders no cards and no tally; the closing verdict still says what approval means', async () => {
+  const value = { supported: true, active_revision: 1, pending: [], executed_cycles: [{ cycle_ref: 'cycle:C2', item_id: 'A', revision: 1 }], reinterview_requests: [], current_item: null,
+    current_cycle: { ref: 'cycle:C3', state: 'open' }, proposal: proposal({ revision: 2, base_revision: 1, digest: 'd'.repeat(64), draft: { scope: proposal().draft.scope, items: [], synthesis: { statement: '끝내자', basis_refs: 'step:C3/S1', chain_verdict: 'success' } } }) };
+  const r = rig({ value }); await r.review.refresh();
+  assert.equal(r.panel.querySelectorAll('li').length, 0);
+  assert.equal(r.panel.querySelectorAll('ol').length, 1, 'the list element stays, empty');
+  assert.match(r.panel.allText(), /전체 결과\(Chain\)를 성공으로 마치자는 제안입니다/);
+  assert.equal(byClass(r.panel, 'plan-counts'), undefined, 'a proposal that lists no item has nothing to tally');
+  assert.equal(r.decisions().length, 2);
+});
+
+test('a decision made from the keyboard leaves focus on the panel heading, never on the document', async () => {
+  const r = rig(); await r.review.refresh();
+  const approve = r.decisions()[0]; approve.focus();
+  await approve.click(true);
+  assert.equal(r.panel.dataset.state, 'approved');
+  assert.equal(r.doc.activeElement?.tag, 'h2', 'the pressed button is gone; the heading takes focus');
+  assert.equal(r.panel.scrolled, 0);
+  // The same when the reply is lost: the uncertain view keeps the keyboard inside the panel.
+  const u = rig(); await u.review.refresh(); u.state.loseReply = true;
+  const b = u.decisions()[0]; b.focus(); await b.click(true);
+  assert.equal(u.panel.dataset.state, 'uncertain');
+  assert.equal(u.doc.activeElement?.tag, 'h2');
 });
