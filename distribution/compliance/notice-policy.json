@@ -6,7 +6,7 @@
     "Cargo.lock": "393d4111add424723c13a069a72e76f19076559a8ca945ca65acbecb9211c110",
     "mcp-app/package-lock.json": "e81c74f94d4882f4f9af795959f18bc0ccb598ae58d516c2e728df06db08d8d8",
     "mcp-app/build.mjs": "feb27bd426ea34bddb3a44e4ddae8a39fea31f657456c4031b75c97164dbc134",
-    "plugins/gil-companion-prototype/assets/monitor.html": "f0f99323e91dcca25da75de297316f42b6578f0bb398fe28f0f89b6c4307d699"
+    "plugins/gil-companion-prototype/assets/monitor.html": "3d285d87d5bd44dbcc258b6a97c06b221198ef79c1167605d2dc7fcff9a7b8d2"
   },
   "toolchain": {
     "release": "1.97.1",

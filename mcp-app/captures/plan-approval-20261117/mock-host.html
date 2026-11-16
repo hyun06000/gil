@@ -1,0 +1,82 @@
+<!doctype html>
+<!-- MOCK HOST for the plan-approval panel. Serves the built Monitor bundle inside an iframe and answers
+     the MCP Apps handshake with synthetic fixture.json scenarios. Regression/visual check only: nothing
+     here is evidence of Codex or Claude Desktop behaviour. Query: ?state=long|short|reapproval|executing|
+     closed|approved|changes|no_token|unreadable|empty|closing|hang  &locale=ko  &mode=inline|fullscreen -->
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Mock Host — plan approval</title>
+<style>html,body{margin:0;background:#dfe3ea;font:13px system-ui}#bar{padding:6px 10px;color:#334;background:#cfd5e0}iframe{display:block;width:100%;border:0;background:#fff}</style>
+</head><body>
+<div id="bar">Mock Host — regression only · <span id="which"></span></div>
+<script type="module">
+const q = new URLSearchParams(location.search);
+const state = q.get('state') || 'long', locale = q.get('locale') || 'ko', mode = q.get('mode') || 'inline';
+document.getElementById('which').textContent = `state=${state} locale=${locale} mode=${mode}`;
+const root = '../../..';
+const [html, view, fx] = await Promise.all([
+  fetch(q.get('bundle') || `${root}/plugins/gil-companion-prototype/assets/monitor.html`).then(r => r.text()),
+  fetch(`${root}/ui/fixtures/reading-one/view.json`).then(r => r.json()),
+  fetch('./fixture.json').then(r => r.json()),
+]);
+const scope = 'project:' + 'a'.repeat(64);
+const digest = (c) => c.repeat(64);
+const synthesis = (statement, extra = {}) => ({ statement, ...fx.synthesis_extra, ...extra });
+const proposal = (o) => ({ revision: 1, base_revision: null, synthesis_ref: 'step:C1/S6', digest: digest('a'), receipt: null,
+  draft: { scope: fx.scope_long, items: fx.items_long, synthesis: synthesis(fx.statement_long) }, ...o });
+const base = { supported: true, active_revision: null, active_plan: null, retry_pending: [], current_item: null,
+  current_cycle: { ref: 'cycle:C1', state: 'open' }, pending: [], reinterview_requests: [], executed_cycles: [], close_report: null, document: null, next: 'gil_plan_read' };
+const ex = (cycle, item, revision = 1) => ({ cycle_ref: cycle, item_id: item, revision });
+const item = (id) => fx.items_long.find(i => i.id === id);
+const scenarios = {
+  long: { ...base, proposal: proposal({}) },
+  short: { ...base, proposal: proposal({ draft: { scope: fx.scope_long, items: fx.items_short, synthesis: synthesis('표를 확인한 뒤 월별 집계와 원인 정리를 세 실험으로 나눈다.') } }) },
+  reapproval: { ...base, active_revision: 1, retry_pending: ['B'], current_cycle: { ref: 'cycle:C5', state: 'open' },
+    pending: fx.items_long.filter(i => i.id !== 'A'), executed_cycles: [ex('cycle:C2', 'A'), ex('cycle:C3', 'B'), ex('cycle:C4', 'B')],
+    reinterview_requests: [{ cycle_ref: 'cycle:C4', reason: '지점 이름 통합 규칙이 두 가지로 갈려 B 의 완료 판단을 다시 정해야 한다' }],
+    proposal: proposal({ revision: 2, base_revision: 1, digest: digest('b'), synthesis_ref: 'step:C5/S3',
+      draft: { scope: fx.scope_long, items: fx.items_long, synthesis: synthesis('B 의 완료 판단을 ‘영문 표기 포함 통합’으로 고치고 나머지 순서는 유지한다.') } }) },
+  executing: { ...base, active_revision: 1, current_item: item('D'), current_cycle: { ref: 'cycle:C5', state: 'open' },
+    pending: fx.items_long.filter(i => 'EFGHIJ'.includes(i.id)), executed_cycles: [ex('cycle:C2', 'A'), ex('cycle:C3', 'B'), ex('cycle:C4', 'C'), ex('cycle:C5', 'D')], proposal: null, document: 'synthetic' },
+  closed: null, approved: null, changes: null, no_token: null, unreadable: null, hang: null,
+  empty: { ...base, proposal: null },
+  closing: { ...base, active_revision: 1, executed_cycles: [ex('cycle:C2', 'A'), ex('cycle:C3', 'B'), ex('cycle:C4', 'C')], current_cycle: { ref: 'cycle:C5', state: 'open' },
+    proposal: proposal({ revision: 2, base_revision: 1, digest: digest('c'), synthesis_ref: 'step:C5/S3',
+      draft: { scope: fx.scope_long, items: [], synthesis: synthesis('세 실험의 결과로 목표를 달성했으므로 이 Chain 을 성공으로 닫는다. 개선안 실행은 다음 Chain 에서 다룬다.', { chain_verdict: 'success' }) } }) },
+};
+scenarios.closed = { ...scenarios.executing, current_cycle: { ref: 'cycle:C5', state: 'closed' } };
+scenarios.approved = { ...scenarios.long, proposal: { ...scenarios.long.proposal, receipt: { decision: 'approve', source: 'monitor_button' } } };
+scenarios.changes = { ...scenarios.long, proposal: { ...scenarios.long.proposal, receipt: { decision: 'request_changes', source: 'monitor_button' } } };
+scenarios.no_token = scenarios.long; scenarios.unreadable = scenarios.long; scenarios.hang = scenarios.long;
+let value = structuredClone(scenarios[state] || scenarios.long);
+window.mock = { calls: [], messages: [], value, scenarios, set(name) { value = structuredClone(scenarios[name]); window.mock.value = value; } };
+const frame = document.createElement('iframe'); frame.style.height = '900px';
+if (q.get('w')) { frame.style.width = q.get('w') + 'px'; frame.style.margin = '0 auto'; }
+const post = (m) => frame.contentWindow.postMessage({ jsonrpc: '2.0', ...m }, '*');
+const envelope = () => ({ content: [], structuredContent: { scope_id: scope, label: '승인 패널 합성 fixture', view, revision: '1', watching: true, plan_review_supported: true } });
+window.addEventListener('message', (event) => {
+  if (event.source !== frame.contentWindow) return;
+  const p = event.data; window.mock.calls.push(p);
+  if (p.method === 'ui/initialize') post({ id: p.id, result: { protocolVersion: p.params.protocolVersion, hostInfo: { name: 'Mock Host', version: '1' },
+    hostCapabilities: { serverTools: {} }, hostContext: { displayMode: mode, availableDisplayModes: ['inline', 'fullscreen'], locale } } });
+  else if (p.method === 'ui/notifications/initialized') post({ method: 'ui/notifications/tool-result', params: envelope() });
+  else if (p.method === 'ui/request-display-mode') { post({ id: p.id, result: { mode: p.params.mode } }); post({ method: 'ui/notifications/host-context-changed', params: { displayMode: p.params.mode } }); }
+  else if (p.method === 'ui/message') { window.mock.messages.push(p.params); post({ id: p.id, result: {} }); }
+  else if (p.method === 'tools/call') {
+    const name = p.params.name;
+    if (name === 'gil_plan_review') {
+      if (state === 'unreadable') { post({ id: p.id, result: { isError: true, content: [], structuredContent: { said: '합성 조회 실패: 기록 잠금' } } }); return; }
+      const token = value.proposal && !value.proposal.receipt && state !== 'no_token' ? fx.token : undefined;
+      post({ id: p.id, result: { content: [], structuredContent: structuredClone(value), _meta: { 'gil/planApprovalToken': token } } });
+    } else if (name === 'gil_plan_decide') {
+      if (state === 'hang') return; // reply never comes: the screen must stay "uncertain", never re-send
+      const a = p.params.arguments;
+      if (a.token !== fx.token || a.digest !== value.proposal?.digest) { post({ id: p.id, result: { isError: true, content: [], structuredContent: { said: 'token/digest mismatch' } } }); return; }
+      value.proposal.receipt = { decision: a.decision, source: 'monitor_button' };
+      post({ id: p.id, result: { content: [], structuredContent: structuredClone(value) } });
+    } else if (name === 'gil_monitor_detail') post({ id: p.id, result: { content: [], structuredContent: { scope_id: scope, detail: null } } });
+    else post({ id: p.id, result: envelope() });
+  } else if (p.id !== undefined) post({ id: p.id, result: {} });
+});
+frame.srcdoc = html; document.body.append(frame);
+// Let the outer page grow with the Monitor so a tall window screenshot shows everything.
+setInterval(() => { try { const h = frame.contentDocument?.documentElement?.scrollHeight; if (h && Math.abs(h - frame.offsetHeight) > 4) frame.style.height = `${h + 2}px`; } catch {} }, 300);
+</script></body></html>
