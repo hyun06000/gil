@@ -1,0 +1,39 @@
+{
+  "schema": "gil.chain-interview.result/1",
+  "run": {
+    "id": "example-invalid-overclaim",
+    "recorded_at": "2026-11-17",
+    "executed": false,
+    "example": true,
+    "model": null,
+    "guidance": { "workflow_md_sha256": "387649b529746372a57b6fe0588c3b51c0f1a4e607f56a2c8bc5f4b85563a99c", "repo_commit": "2b24746", "profile": null },
+    "case_set": { "name": "chain-interview", "sha256": "50de46c78a1a4e8d41a44e057005b6e91b3912bafedaf26468d52a7e6ba40303" },
+    "harness": null,
+    "notes": "검사기가 거절해야 하는 결과 파일의 예시다. 모델을 실행하지 않았는데 pass를 적고, 자동 판정자를 의미 판정자로 썼고, 합성 승인을 사람 승인으로 올렸고, 구조 검사 결과를 거짓으로 적었다."
+  },
+  "judges": [ { "id": "AUTO", "kind": "auto" } ],
+  "cases": [
+    {
+      "case_id": "CI-01",
+      "status": "evaluated",
+      "observation": { "visible_messages": [ { "role": "assistant", "text": "매출 자료를 종합 분석하겠습니다." } ], "tool_log_ref": null, "transcript_ref": null, "tool_log_summary": { "calls": 2, "proposals": 1, "closed_experiments": [] } },
+      "outputs": {
+        "questions": [],
+        "proposal": { "scope": { "goal": "매출 자료를 종합 분석한다", "in_scope": "전체", "out_of_scope": "", "constraints": "없음", "success_criteria": "보고서 완성" }, "items": [ { "id": "A", "question": "종합 분석하면?", "done_when": "reports/analysis.md" } ], "synthesis": { "statement": "종합 분석이 맞는가", "basis_refs": "", "exploration_checklist": "A" } },
+        "define": null,
+        "claimed_completed_items": []
+      },
+      "approval": { "kind": "synthetic", "evidence": "" },
+      "automatic": [
+        { "check": "proposal_shape", "status": "pass", "detail": "ok" },
+        { "check": "basis_refs_canonical", "status": "pass", "detail": "ok" }
+      ],
+      "semantic": [
+        { "criterion": "S1", "status": "pass", "judge": { "id": "AUTO" }, "basis": [], "rationale": "" },
+        { "criterion": "human_approval_real", "status": "pass", "judge": { "id": "AUTO" }, "basis": [ { "quote": "approve", "from": "receipt" } ], "rationale": "approve 영수증이 있다" }
+      ]
+    },
+    { "case_id": "CI-02", "status": "not_run", "reason": "not executed", "observation": null, "outputs": null, "approval": { "kind": "none", "evidence": "" }, "automatic": [], "semantic": [ { "criterion": "S6", "status": "pass", "detail": "항목이 네 개라서 통과" } ] },
+    { "case_id": "CI-04", "status": "unknown", "observation": null, "outputs": null, "approval": { "kind": "none", "evidence": "" }, "automatic": [], "semantic": [ { "criterion": "S10", "status": "unknown" } ] }
+  ]
+}

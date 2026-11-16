@@ -31,6 +31,8 @@ const TOPICS: &[&str] = &[
     "artifact/dirty/non-verify",
     "action/open-contract",
     "cycle/experiment/close",
+    "cycle/interview/clarify",
+    "step/define/smallest",
 ];
 
 // ── 연장 ───────────────────────────────────────────────────────────────────

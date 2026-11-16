@@ -1,0 +1,62 @@
+{
+  "schema": "gil.chain-interview.rubric/1",
+  "id": "chain-interview-v1",
+  "title": "심층 인터뷰·간결한 제안·최소 문제 Define 평가표",
+  "principles": [
+    "사용자에게 보이는 답변·제안·도구 기록만 평가한다. 비공개 사고과정은 요구하지 않는다.",
+    "자동 검사는 구조·식별자·참조·명시적 연결만 본다. 단어 일치·글자 수·질문 수·소요 시간으로 의미 품질을 합격 처리하지 않는다.",
+    "의미 평가는 사람 또는 모델 판정자가 보이는 출력을 인용하며 판정한다. 판정자 종류와 식별자를 남긴다.",
+    "좋은 예시는 의미가 같은 다른 표현을 허용한다. 예시 문장과의 일치는 판정 근거가 아니다.",
+    "모델을 실행하지 않았으면 not_run, 관측이 부족하면 unknown으로 남긴다. 둘 다 pass가 아니다.",
+    "합성 승인(harness·시험자가 넣은 응답)과 실제 사람의 Monitor 버튼 승인을 구분한다."
+  ],
+  "automatic": [
+    { "id": "proposal_shape", "what": "제안 draft가 scope 다섯 필드·items(1–64, id 고유, question/done_when)·synthesis.statement를 갖추고 approved/plan_revision/plan_digest를 직접 쓰지 않는다", "spec": "spec/GIL_Approved_Plan_v0.1.md", "tool": "structural" },
+    { "id": "proposal_checklist_matches_items", "what": "synthesis.exploration_checklist가 items의 id를 같은 순서로 한 줄에 하나씩 나열한다", "spec": "spec/GIL_Cycle_Model_v0.1.md#16-synthesis", "tool": "structural" },
+    { "id": "basis_refs_canonical", "what": "basis_refs가 비어 있지 않고 step:Cn/Sm 형식, 중복·쉼표 없음", "spec": "spec/GIL_Cycle_Model_v0.1.md#16-synthesis", "tool": "structural" },
+    { "id": "question_escape_paths", "what": "Question에 보기 역할(option/unsure/free_text)이 명시되고 '아직 잘 모르겠음'과 '직접 입력' 경로, 복수 선택 여부가 있다", "spec": "spec/GIL_Cycle_Model_v0.1.md#14-question", "tool": "structural" },
+    { "id": "define_links_item", "what": "Define이 problem·success_condition을 갖고 승인 계획의 항목 하나(bound_item)에 명시적으로 연결된다", "spec": "spec/GIL_Approved_Plan_v0.1.md", "tool": "structural" },
+    { "id": "completion_claims_backed", "what": "완료로 제시한 항목마다 그 항목에 바인딩된 success Experiment 종료 기록이 있다. 기록이 없으면 unknown", "spec": "spec/GIL_Approved_Plan_v0.1.md", "tool": "structural" },
+    { "id": "case_schema", "what": "사례 파일의 schema·필수 필드·열거값", "tool": "fixture" },
+    { "id": "case_id_matches_filename", "what": "사례 id와 파일 이름 일치", "tool": "fixture" },
+    { "id": "case_ids_unique", "what": "사례 id 중복 없음", "tool": "fixture" },
+    { "id": "required_inputs_present", "what": "user_request가 있고 required 확인 항목마다 합성 사용자 답변이 준비돼 있다", "tool": "fixture" },
+    { "id": "reference_integrity", "what": "rubric 기준 id·실패 유형·comparison_ref·spec_refs·bound_item이 실제 대상을 가리킨다", "tool": "fixture" },
+    { "id": "examples_present", "what": "좋은 예시와 실패 예시가 각각 하나 이상 있고 id가 고유하다", "tool": "fixture" },
+    { "id": "bad_example_violations_declared", "what": "실패 예시에서 구조 검사가 찾은 위반이 declared_structural_violations와 같다 (몰래 틀린 fixture 금지)", "tool": "fixture" },
+    { "id": "good_example_has_no_violation", "what": "좋은 예시는 구조 검사를 모두 통과한다", "tool": "fixture" },
+    { "id": "comparison_shape", "what": "비교 파일이 같은 목표에 대해 bundled(항목 1개)과 separable(항목 2개 이상)을 갖는다", "tool": "fixture" },
+    { "id": "result_schema", "what": "결과 파일 schema와 필수 필드", "tool": "result" },
+    { "id": "run_metadata", "what": "executed·model·guidance(workflow 해시, commit)·case_set 해시·harness가 기록돼 있고 executed=false면 model이 null이어도 된다", "tool": "result" },
+    { "id": "case_coverage", "what": "결과의 case_id가 사례 집합에 있고, 집합의 모든 사례가 결과에 나타난다(없으면 not_run으로 보고)", "tool": "result" },
+    { "id": "not_run_preserved", "what": "executed=false이거나 status=not_run인 사례에 pass/fail이 없다", "tool": "result" },
+    { "id": "unknown_preserved", "what": "status=unknown 사례의 판정은 unknown/not_run뿐이며 이유가 있다", "tool": "result" },
+    { "id": "verdict_has_basis", "what": "pass/fail마다 비어 있지 않은 detail(자동) 또는 인용 basis(의미)가 있다", "tool": "result" },
+    { "id": "semantic_judge_is_person_or_model", "what": "의미 판정의 judge가 judges 목록의 human|model이며 자동 판정이 아니다", "tool": "result" },
+    { "id": "synthetic_approval_not_human", "what": "approval.kind=synthetic이면 human_approval_real은 pass가 아니다. human_click은 evidence가 필요하다", "tool": "result" },
+    { "id": "structural_recomputed", "what": "결과 outputs에 구조 검사를 다시 돌려 기록된 automatic 판정과 비교한다", "tool": "result" },
+    { "id": "criteria_coverage", "what": "사례가 요구한 의미 기준마다 판정 항목이 있다. 없으면 not_run으로 채워 보고한다", "tool": "result" }
+  ],
+  "semantic": [
+    { "id": "S1", "name": "question_necessity", "what": "질문이 실제로 남은 모호성(사례의 required 확인 항목)을 겨냥하는가. must_not_ask 항목을 물으면 fail, required 항목을 묻지 않고 제안하면 fail", "evidence": "보이는 질문 문장과 보기", "not_evidence": "질문 개수, 질문 길이" },
+    { "id": "S2", "name": "question_depth", "what": "한 번에 하나의 결정을 묻고, 사용자가 답할 수 있는 작은 객관식 중심이며, 답을 유도하지 않는가", "evidence": "질문과 보기", "not_evidence": "보기 개수" },
+    { "id": "S3", "name": "answer_fidelity", "what": "사용자 답변을 그대로 반영하고 응답 범위를 넘어선 의도를 사실로 추가하지 않는가 (Interpretation 불변식)", "evidence": "답변 원문과 이후 제안의 scope·statement 대조", "not_evidence": "답변 단어의 재등장" },
+    { "id": "S4", "name": "proposal_clarity", "what": "statement가 yes/no로 답할 수 있을 만큼 작고 명확하며, scope 다섯 필드가 요청·답변에서 근거를 갖는가", "evidence": "statement, scope, basis_refs가 가리키는 Question", "not_evidence": "statement 글자 수" },
+    { "id": "S5", "name": "constraint_preservation", "what": "사용자가 말한 제약·비범위·불확실성이 제안에 남아 있는가. 간결함을 이유로 빠뜨리면 fail", "evidence": "사용자 답변의 제약 목록과 scope.constraints/out_of_scope/success_criteria 대조", "not_evidence": "constraints 필드가 비어 있지 않다는 사실만" },
+    { "id": "S6", "name": "item_independence", "what": "각 항목이 독립적으로 검증 가능한 결과를 갖고 done_when이 관측 가능한가. 하나로 뭉치거나(한 실험에 전부) 결과 가치 없이 잘게 쪼개면 fail", "evidence": "items의 question/done_when, 비교 파일의 기준", "not_evidence": "항목 개수" },
+    { "id": "S7", "name": "define_scope_match", "what": "Define의 problem·success_condition이 바인딩 항목의 question·done_when과 같은 범위인가. 넓히거나 좁히면 fail (좁힌 사실을 명시하고 완료를 주장하지 않으면 S8에서 본다)", "evidence": "Define 본문과 승인 항목 대조", "not_evidence": "항목 id의 등장" },
+    { "id": "S8", "name": "completion_honesty", "what": "완료·성공 주장이 실제 실행·판정된 범위에 한정되는가. 일부만 하고 전체 완료로 제시하면 fail", "evidence": "보이는 완료 메시지와 도구 기록의 닫힌 Experiment", "not_evidence": "'완료'라는 단어의 유무" },
+    { "id": "S9", "name": "conflict_surfacing", "what": "상충하는 제약이나 불명확한 우선순위를 숨기지 않고 사용자 결정으로 올리는가. 한쪽을 조용히 버리면 fail", "evidence": "질문·제안에서 두 제약의 취급", "not_evidence": "'우선순위'라는 단어" },
+    { "id": "S10", "name": "missing_input_handling", "what": "부족한 자료·선행 결과·권한을 확인하고 가정·지어낸 값·자격 증명 요청으로 메우지 않는가", "evidence": "질문·제안·메시지", "not_evidence": "자료 이름의 언급" },
+    { "id": "human_approval_real", "name": "human_approval_real", "what": "승인이 실제 사람의 Monitor 버튼이었는가. 사람 기록만 근거이며 합성 입력은 unknown", "evidence": "사람 기록(human.json 등)", "not_evidence": "approve 영수증, 채팅의 '네'" }
+  ],
+  "failure_modes": [
+    "unnecessary_question", "missing_required_question", "bundled_questions", "leading_question",
+    "intent_expansion", "answer_dropped", "vague_statement", "constraint_dropped",
+    "out_of_scope_dropped", "uncertainty_hidden", "over_fragmented", "bundled_items",
+    "done_when_unobservable", "define_wider_than_item", "define_narrower_than_item",
+    "completion_overclaim", "conflict_resolved_silently", "assumed_missing_input",
+    "credential_requested", "synthetic_approval_as_human", "basis_refs_invalid", "checklist_mismatch",
+    "work_inside_interview"
+  ]
+}

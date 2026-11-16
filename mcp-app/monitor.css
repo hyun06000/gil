@@ -122,13 +122,46 @@ body[data-display-mode="fullscreen"] .detail { scroll-margin-bottom: var(--gil-c
   background: var(--gil-bg-2); border-radius: var(--gil-r-sm); font-weight: var(--gil-w-medium); }
 .plan-review dt { font-weight:600; margin-top:10px; }
 .plan-review dd { margin:4px 0; white-space:pre-wrap; }
-.plan-review li, .plan-review pre, .plan-review .plan-statement, .plan-review .plan-current { white-space:pre-wrap; overflow-wrap:anywhere; }
-.plan-review .plan-items { padding-left: 22px; margin: 6px 0; }
-.plan-review .plan-items li { margin: 6px 0; padding-left: 4px; }
-.plan-review .plan-items li[data-status="executed"] { color: var(--gil-fg-3); }
-.plan-review .plan-items li[data-status="current"] { font-weight: var(--gil-w-semibold); border-left: 3px solid var(--gil-kind-verify); padding-left: 8px; }
-.plan-review .plan-items li[data-status="bound"] { border-left: 3px dashed var(--gil-line); padding-left: 8px; }
-.plan-review .plan-current[data-cycle="closed"], .plan-review .plan-current[data-cycle="unknown"] { color: var(--gil-fg-2); }
+.plan-review li, .plan-review pre, .plan-review .plan-statement p, .plan-review .plan-current { white-space:pre-wrap; overflow-wrap:anywhere; }
+/* The statement is the proposition to confirm: a small label, then the agent's own sentence. */
+.plan-review .plan-label { display:block; margin-bottom:2px; font-size: var(--gil-xs); font-weight: var(--gil-w-semibold); color: var(--gil-fg-3); }
+.plan-review .plan-statement { margin:10px 0; }
+.plan-review .plan-statement p { margin:0; font-size: var(--gil-md); }
+/* The five scope elements stay visible. Side by side when there is room, stacked when there is not. */
+.plan-review dl.plan-scope { margin:10px 0 0; }
+@media (min-width: 600px) {
+  .plan-review dl.plan-scope { display:grid; grid-template-columns: max-content minmax(0, 1fr); column-gap:14px; row-gap:6px; align-items:start; }
+  .plan-review dl.plan-scope dt, .plan-review dl.plan-scope dd { margin:0; }
+}
+/* Each item is one card: order number, id, recorded status and Cycle record on the first line, then
+   the problem, then the done-when condition under its own label. Executed items step back; the item
+   bound to the open Cycle stands forward; a retry keeps its warning; an unverified binding is dashed. */
+.plan-review .plan-items { list-style:none; counter-reset: plan-item; padding:0; margin:6px 0 0; }
+.plan-review .plan-items li { counter-increment: plan-item; margin:0 0 8px; padding:8px 10px 8px 12px;
+  border: var(--gil-hair) solid var(--gil-line-soft); border-left: 3px solid var(--gil-line); border-radius: var(--gil-r-sm); background: var(--gil-bg); }
+.plan-review .plan-item-head { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; font-size: var(--gil-xs); color: var(--gil-fg-2); }
+.plan-review .plan-items .plan-item-head::before { content: counter(plan-item) "."; color: var(--gil-fg-3); }
+.plan-review .plan-item-id { font: var(--gil-sm)/1.4 var(--gil-mono); font-weight: var(--gil-w-semibold); color: var(--gil-fg); }
+.plan-review .plan-item-status { padding:1px 7px; border-radius:999px; border: var(--gil-hair) solid var(--gil-line); }
+.plan-review .plan-item-status[data-status="current"] { border-color: var(--gil-kind-verify); color: var(--gil-kind-verify); }
+.plan-review .plan-item-status[data-status="retry"] { border-color: var(--gil-warn-line); color: var(--gil-warn-fg); background: var(--gil-warn-bg); }
+.plan-review .plan-item-status[data-status="bound"] { border-style: dashed; }
+.plan-review .plan-item-cycle { font-family: var(--gil-mono); }
+.plan-review .plan-item-question { margin:4px 0 0; white-space:pre-wrap; }
+.plan-review .plan-item-done { margin:4px 0 0; font-size: var(--gil-xs); color: var(--gil-fg-2); white-space:pre-wrap; }
+.plan-review .plan-item-done b { font-weight: var(--gil-w-semibold); margin-right:6px; }
+.plan-review .plan-items li[data-status="executed"] { color: var(--gil-fg-3); border-left-color: var(--gil-line-soft); background: transparent; }
+.plan-review .plan-items li[data-status="executed"] .plan-item-id { color: var(--gil-fg-2); }
+.plan-review .plan-items li[data-status="current"] { border-left-color: var(--gil-kind-verify); }
+.plan-review .plan-items li[data-status="current"] .plan-item-question { font-weight: var(--gil-w-semibold); }
+.plan-review .plan-items li[data-status="bound"] { border-left-style: dashed; }
+.plan-review .plan-items li[data-status="retry"] { border-left-color: var(--gil-warn-line); }
+/* The item bound to the current Cycle, above the ordered list, framed by the Cycle's real state. */
+.plan-review .plan-current { margin:8px 0; padding:10px 12px; border: var(--gil-hair) solid var(--gil-kind-verify); border-radius: var(--gil-r-md); }
+.plan-review .plan-current[data-cycle="closed"], .plan-review .plan-current[data-cycle="unknown"] { border-color: var(--gil-line); color: var(--gil-fg-2); }
+.plan-review .plan-current > p { margin:0 0 6px; }
+.plan-review .plan-current .plan-item-question { font-weight: var(--gil-w-semibold); }
+.plan-review .plan-current .plan-current-note { margin:6px 0 0; font-size: var(--gil-xs); }
 .plan-review .plan-counts, .plan-review .plan-last, .plan-review small { font-size: var(--gil-xs); color: var(--gil-fg-3); }
 .plan-review .plan-delivery, .plan-review .plan-uncertain, .plan-review .plan-replaced, .plan-review .plan-reinterview {
   padding:8px 10px; border-radius: var(--gil-r-sm); border: var(--gil-hair) solid var(--gil-warn-line);

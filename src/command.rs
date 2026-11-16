@@ -1286,6 +1286,10 @@ fn opened_step(session: &Session, opened: crate::Opened) -> String {
             out.push_str(text("cmd.opened_closing_note"));
         }
         match opened.kind {
+            // Cycle Model §5.1 / §16: the interview deepens a vague wish, the interpretation sorts
+            // confirmed facts from the agent's reading, and the proposal is short with small items.
+            NodeKind::Question => out.push_str(text("cmd.opened_question_note")),
+            NodeKind::Interpretation => out.push_str(text("cmd.opened_interpretation_note")),
             NodeKind::Synthesis => out.push_str(text("cmd.opened_synthesis_note")),
             NodeKind::Outcome => out.push_str(text("cmd.opened_interview_outcome_note")),
             _ => {},

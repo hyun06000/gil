@@ -159,11 +159,19 @@ fn opened(result: &CallToolResult) -> String {
             let location = here.map(|r| tr!("guide.opened.synthesis_location", here = r, cycle = r.cycle())).unwrap_or_default();
             let cycle = here.map(|r| r.cycle().id().to_string()).unwrap_or_else(|| "Cn".into());
             let example = serde_json::json!({"basis_refs": format!("step:{cycle}/S1\nstep:{cycle}/S2")});
+            // Cycle Model §16: the proposal is short, with small items, before the basis rules.
+            let specific = format!("{specific} {}", text("guide.propose_brief"));
             tr!("guide.opened.synthesis_basis", specific = specific, location = location, rules = text("cycle.basis_refs_rules"), example = example)
         },
         "verify" => format!("{specific}\n{}", crate::visual_report::image::limits_guidance()),
+        // Cycle Model §5.1: a Question deepens the interview; an Interpretation sorts what the
+        // answers confirmed from the agent's reading and what is still unknown.
+        "question" => format!("{specific} {}", text("guide.interview_deepen")),
+        "interpretation" => format!("{specific} {} {}", text("guide.report_brief"), text("guide.interpretation_sort")),
+        // Cycle Model §7.1: Define names the smallest problem performable now, aligned with the agreed item.
+        "define" => format!("{specific} {}", text("guide.define_smallest")),
         // Report-writing Steps: the short-report rule rides on the receipt that opens them.
-        "interpretation" | "analysis" | "outcome" => format!("{specific} {}", text("guide.report_brief")),
+        "analysis" | "outcome" => format!("{specific} {}", text("guide.report_brief")),
         _ => specific.to_string(),
     }
 }
@@ -482,6 +490,60 @@ mod tests {
         let mut none = CallToolResult::structured(json!({"supported": true, "proposal": null, "pending": [], "reinterview_requests": [], "current_item": null}));
         after("gil_plan_read", &mut none);
         assert!(text(&none).contains("Closing Interview") && text(&none).contains("결과물을 먼저 보여 준다"), "{}", text(&none));
+    }
+
+    /// 2026-11-17 Chain first (Cycle Model §5.1 · §16 · §7.1): the Question deepens the interview,
+    /// the Interpretation sorts confirmed facts from the agent's reading, the Synthesis proposes
+    /// short with small items, and the Define names the smallest problem performable now, aligned
+    /// with the agreed item. Guidance contract only — not evidence of a model run, and no size rule.
+    #[test]
+    fn interview_steps_deepen_the_synthesis_proposes_short_and_the_define_is_the_smallest_problem() {
+        let open = |kind: &str| {
+            let mut r = receipt(&format!("열었다: step:C1/S1 · {kind}\n\n지금 할 일\n  …\n"));
+            after("gil_open", &mut r);
+            text(&r)
+        };
+        let question = open("question");
+        for needle in ["심층 인터뷰", "예와 원하지 않는 반례", "완료 조건", "이미 받은 답은 재사용", "다음 결정에 영향을 주는", "질문을 더하지 않는다"] {
+            assert!(question.contains(needle), "{needle}: {question}");
+        }
+        assert!(question.contains("답을 기다린다") && question.contains("gil_close"), "the wait and the close stay: {question}");
+
+        let interpretation = open("interpretation");
+        for needle in ["확인된 사실", "에이전트의 해석", "아직 모르는 것", "Synthesis 전에 Question을 다시 연다", "Report는 짧게 쓴다"] {
+            assert!(interpretation.contains(needle), "{needle}: {interpretation}");
+        }
+
+        let synthesis = open("synthesis");
+        for needle in ["제안은 짧게", "목표·이번 범위·중요 제약", "수행·검증 가능한 문제 하나", "관측 가능한 완료 조건", "첫 항목이 된다", "basis_refs", "scope/items/synthesis 모양을 유지"] {
+            assert!(synthesis.contains(needle), "{needle}: {synthesis}");
+        }
+        // The short-proposal rule precedes the basis_refs input rules; neither replaces the other.
+        assert!(synthesis.find("제안은 짧게").unwrap() < synthesis.find("$.draft.synthesis.basis_refs").unwrap(), "{synthesis}");
+        assert!(synthesis.contains("gil_plan_propose") && synthesis.contains("명시적 동의"), "{synthesis}");
+
+        let define = open("define");
+        for needle in ["가장 작은 문제 하나", "current_item", "Chain 전체 목표가 아니라", "멈출 지점", "한 Experiment에 묶지 않고", "단순 준비 동작", "일부만 수행하면 완료가 아니", "미결 계약", "승인 범위를 바꾸지 않는다"] {
+            assert!(define.contains(needle), "{needle}: {define}");
+        }
+        // No size heuristic: nothing asks to count characters, conjunctions or questions.
+        for hint in [&question, &interpretation, &synthesis, &define] {
+            for forbidden in ["글자 수", "접속사", "질문 수", "단어 수"] {
+                assert!(!hint.contains(forbidden), "{forbidden}: {hint}");
+            }
+        }
+        // Other Steps keep their own hints.
+        for kind in ["hypothesis", "verify", "analysis", "outcome"] {
+            let other = open(kind);
+            for stray in ["심층 인터뷰", "제안은 짧게", "가장 작은 문제 하나"] {
+                assert!(!other.contains(stray), "{kind} carries {stray}: {other}");
+            }
+        }
+        // The bound-item hint ties the Define to that item without redefining it.
+        let bound = json!({"supported": true, "proposal": null, "pending": [{"id": "B"}], "reinterview_requests": [], "current_item": {"id": "A"}, "current_cycle": {"ref": "cycle:C2", "state": "open"}});
+        let mut b = CallToolResult::structured(bound);
+        after("gil_plan_read", &mut b);
+        assert!(text(&b).contains("Define은 항목 A과 같은 문제·완료 범위") && text(&b).contains("일부만 수행하면 항목은 완료가 아니다"), "{}", text(&b));
     }
 
     #[test]

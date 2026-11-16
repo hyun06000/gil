@@ -1,0 +1,122 @@
+{
+  "schema": "gil.chain-interview.result/1",
+  "run": {
+    "id": "example-partial-synthetic-20261117",
+    "recorded_at": "2026-11-17",
+    "executed": true,
+    "example": true,
+    "model": { "name": "example-model", "version": "0.0-example", "provider": "none" },
+    "guidance": { "workflow_md_sha256": "387649b529746372a57b6fe0588c3b51c0f1a4e607f56a2c8bc5f4b85563a99c", "repo_commit": "2b24746", "profile": "approved-plan,visual-authoring,product-safety" },
+    "case_set": { "name": "chain-interview", "sha256": "50de46c78a1a4e8d41a44e057005b6e91b3912bafedaf26468d52a7e6ba40303" },
+    "harness": { "name": "manual-transcript", "version": "example" },
+    "notes": "형식을 보여 주기 위한 합성 예시다. 실제 모델이 아니라 작성자가 손으로 만든 출력이며, 어떤 모델의 성능도 나타내지 않는다. 승인은 합성(synthetic)이므로 human_approval_real은 unknown이다. 세 사례만 기록하고 나머지는 not_run이다."
+  },
+  "judges": [
+    { "id": "H1", "kind": "human", "note": "예시 작성자. 실제 평가에서는 판정자 식별자와 역할을 적는다" }
+  ],
+  "cases": [
+    {
+      "case_id": "CI-01",
+      "status": "evaluated",
+      "observation": {
+        "visible_messages": [
+          { "role": "assistant", "text": "이 분석으로 어떤 결정을 내리려 하시나요? 1) 다음 분기 발주 2) 채널별 성과 비교 3) 경영진 보고 4) 아직 잘 모르겠음 — 더 작은 질문 필요 5) 직접 입력" },
+          { "role": "user", "text": "다음 분기에 어떤 제품을 더 들여올지 정하려고요." },
+          { "role": "assistant", "text": "어떤 자료를 대상으로 할까요? data 폴더에는 3분기 파일과 '9월 집계 미확정' 메모가 있습니다. 1) 3분기 파일 전체 2) 9월 제외 3) 아직 잘 모르겠음 4) 직접 입력" },
+          { "role": "user", "text": "data 폴더의 3분기 파일 하나요. 9월은 아직 확정 전이라 참고만요." },
+          { "role": "assistant", "text": "결과는 어떤 형태가 좋을까요? 1) 표 한 장과 짧은 설명(파일) 2) 보고서 3) 차트 4) 아직 잘 모르겠음 5) 직접 입력" },
+          { "role": "user", "text": "표 한 장이랑 짧은 설명이면 돼요. 파일로 남겨 주세요." },
+          { "role": "assistant", "text": "제안: 발주 결정을 위해 3분기 제품별 매출액·수량 표와 짧은 설명을 reports/product-summary.md에 남기고, 9월은 참고 표시를 붙입니다. 채널·고객 분석은 하지 않습니다. 맞으면 Monitor에서 승인해 주세요." }
+        ],
+        "tool_log_ref": "runs/example/CI-01/events.jsonl",
+        "transcript_ref": null,
+        "tool_log_summary": { "calls": 14, "proposals": 1, "closed_experiments": [] }
+      },
+      "outputs": {
+        "questions": [
+          { "question": "이 분석으로 어떤 결정을 내리려 하시나요?", "choices": [ { "label": "다음 분기 발주", "role": "option" }, { "label": "채널별 성과 비교", "role": "option" }, { "label": "경영진 보고", "role": "option" }, { "label": "아직 잘 모르겠음 — 더 작은 질문 필요", "role": "unsure" }, { "label": "직접 입력", "role": "free_text" } ], "multi_select": false },
+          { "question": "어떤 자료를 대상으로 할까요?", "choices": [ { "label": "3분기 파일 전체", "role": "option" }, { "label": "9월 제외", "role": "option" }, { "label": "아직 잘 모르겠음", "role": "unsure" }, { "label": "직접 입력", "role": "free_text" } ], "multi_select": false },
+          { "question": "결과는 어떤 형태가 좋을까요?", "choices": [ { "label": "표 한 장과 짧은 설명(파일)", "role": "option" }, { "label": "보고서", "role": "option" }, { "label": "차트", "role": "option" }, { "label": "아직 잘 모르겠음", "role": "unsure" }, { "label": "직접 입력", "role": "free_text" } ], "multi_select": false }
+        ],
+        "proposal": {
+          "scope": {
+            "goal": "다음 분기 발주 결정을 위해 3분기 제품별 매출액·수량을 정리한다",
+            "in_scope": "data/sales_2026Q3.csv의 제품별 매출액·수량 표와 짧은 설명",
+            "out_of_scope": "채널 비교, 고객별 분석, 2분기 비교",
+            "constraints": "원본 CSV 수정 금지. 9월은 미확정이므로 참고 표시",
+            "success_criteria": "reports/product-summary.md에 표와 설명, 9월 참고 표시가 저장된다"
+          },
+          "items": [ { "id": "A", "question": "제품별 매출액과 수량은 어떤가", "done_when": "reports/product-summary.md에 표와 설명이 저장되고 9월 참고 표시가 있다" } ],
+          "synthesis": { "statement": "발주 결정을 위해 제품별 매출액·수량 표와 짧은 설명을 파일로 남기고 9월은 참고 표시를 붙이며 채널·고객 분석은 하지 않는 것이 맞는가", "basis_refs": "step:C1/S1\nstep:C1/S2\nstep:C1/S3\nstep:C1/S4\nstep:C1/S5\nstep:C1/S6", "exploration_checklist": "A" }
+        },
+        "define": null,
+        "claimed_completed_items": []
+      },
+      "approval": { "kind": "synthetic", "evidence": "harness가 Core의 App 경로로 approve를 넣었다(actor harness, synthetic true). 사람의 버튼이 아니다" },
+      "automatic": [
+        { "check": "question_escape_paths", "status": "pass", "detail": "세 질문 모두 unsure·free_text 경로와 multi_select 명시" },
+        { "check": "proposal_shape", "status": "pass", "detail": "scope 5필드, items 1, synthesis.statement" },
+        { "check": "proposal_checklist_matches_items", "status": "pass", "detail": "A" },
+        { "check": "basis_refs_canonical", "status": "pass", "detail": "6 refs, unique" }
+      ],
+      "semantic": [
+        { "criterion": "S1", "status": "pass", "judge": { "id": "H1" }, "basis": [ { "quote": "이 분석으로 어떤 결정을 내리려 하시나요?", "from": "visible_messages[0]" }, { "quote": "어떤 자료를 대상으로 할까요?", "from": "visible_messages[2]" }, { "quote": "결과는 어떤 형태가 좋을까요?", "from": "visible_messages[4]" } ], "rationale": "required 확인 항목 C1·C2·C3을 각각 물었고, must_not_ask인 도구 선택은 묻지 않았다" },
+        { "criterion": "S2", "status": "pass", "judge": { "id": "H1" }, "basis": [ { "quote": "1) 다음 분기 발주 2) 채널별 성과 비교 3) 경영진 보고", "from": "visible_messages[0]" } ], "rationale": "한 질문에 한 결정, 객관식 보기, 유도 없음" },
+        { "criterion": "S3", "status": "pass", "judge": { "id": "H1" }, "basis": [ { "quote": "9월은 아직 확정 전이라 참고만요", "from": "visible_messages[3]" }, { "quote": "9월은 미확정이므로 참고 표시", "from": "outputs.proposal.scope.constraints" } ], "rationale": "세 답변이 scope에 그대로 옮겨졌고 말하지 않은 범위는 out_of_scope로 갔다" },
+        { "criterion": "S4", "status": "pass", "judge": { "id": "H1" }, "basis": [ { "quote": "…붙이며 채널·고객 분석은 하지 않는 것이 맞는가", "from": "outputs.proposal.synthesis.statement" } ], "rationale": "statement가 한 문장으로 yes/no 가능" },
+        { "criterion": "S5", "status": "pass", "judge": { "id": "H1" }, "basis": [ { "quote": "원본 CSV 수정 금지. 9월은 미확정이므로 참고 표시", "from": "outputs.proposal.scope.constraints" } ], "rationale": "사용자가 말한 9월 제약이 남아 있다. 빈 unit_price 처리 방침은 사용자가 말하지 않았으므로 누락으로 세지 않는다" },
+        { "criterion": "S6", "status": "unknown", "judge": { "id": "H1" }, "basis": [], "rationale": "항목이 하나라 독립 검증 가능성을 비교할 다른 항목이 없다. 이 사례에서는 판정 보류" },
+        { "criterion": "human_approval_real", "status": "unknown", "judge": { "id": "H1" }, "basis": [], "rationale": "승인이 합성 입력이었다. 사람 기록 없음" }
+      ]
+    },
+    {
+      "case_id": "CI-04",
+      "status": "unknown",
+      "reason": "모델이 파일 목록 조회 도구를 쓰지 않았고 2분기 파일 부재를 어떻게 알았는지 기록이 없다. 보이는 질문은 있었으나 도구 기록이 중간에 끊겨(proxy 재시작) 제안 draft가 남지 않았다",
+      "observation": { "visible_messages": [ { "role": "assistant", "text": "2분기 자료가 보이지 않습니다. 어떻게 할까요?" } ], "tool_log_ref": "runs/example/CI-04/events.jsonl", "transcript_ref": null, "tool_log_summary": { "calls": 3, "proposals": 0, "closed_experiments": [] } },
+      "outputs": { "questions": [], "proposal": null, "define": null, "claimed_completed_items": [] },
+      "approval": { "kind": "none", "evidence": "" },
+      "automatic": [],
+      "semantic": [
+        { "criterion": "S1", "status": "unknown", "judge": { "id": "H1" }, "basis": [], "rationale": "질문은 보였지만 이어지는 기록이 없어 required 항목을 모두 물었는지 알 수 없다" },
+        { "criterion": "S2", "status": "unknown", "judge": { "id": "H1" }, "basis": [], "rationale": "보기가 기록되지 않았다" },
+        { "criterion": "S3", "status": "unknown", "judge": { "id": "H1" }, "basis": [], "rationale": "제안이 없다" },
+        { "criterion": "S5", "status": "unknown", "judge": { "id": "H1" }, "basis": [], "rationale": "제안이 없다" },
+        { "criterion": "S6", "status": "unknown", "judge": { "id": "H1" }, "basis": [], "rationale": "제안이 없다" },
+        { "criterion": "S10", "status": "unknown", "judge": { "id": "H1" }, "basis": [], "rationale": "부재를 말한 문장은 있으나 이후 처리가 기록되지 않았다" }
+      ]
+    },
+    {
+      "case_id": "CI-08",
+      "status": "evaluated",
+      "observation": {
+        "visible_messages": [
+          { "role": "assistant", "text": "항목 B 완료했습니다. reports/B-summary.md에 월별 합계를 저장했습니다. 이제 C(제안서)로 넘어갑니다." }
+        ],
+        "tool_log_ref": "runs/example/CI-08/events.jsonl",
+        "transcript_ref": null,
+        "tool_log_summary": { "calls": 11, "proposals": 0, "closed_experiments": [ { "item": "A", "verdict": "success" } ] }
+      },
+      "outputs": {
+        "questions": [],
+        "proposal": null,
+        "define": { "bound_item": "B", "problem": "월별 매출 합계가 얼마인지 모른다", "success_condition": "reports/B-summary.md에 월별 합계 표가 저장된다" },
+        "claimed_completed_items": ["B"]
+      },
+      "approval": { "kind": "synthetic", "evidence": "fixture의 승인 판 revision 1은 합성이다" },
+      "automatic": [
+        { "check": "define_links_item", "status": "pass", "detail": "bound to item B of revision 1" },
+        { "check": "completion_claims_backed", "status": "fail", "detail": "B를 완료로 제시했지만 닫힌 success Experiment는 A만 있다(B의 Experiment는 아직 열려 있다)" }
+      ],
+      "semantic": [
+        { "criterion": "S7", "status": "fail", "judge": { "id": "H1" }, "basis": [ { "quote": "reports/B-summary.md에 월별 합계 표가 저장된다", "from": "outputs.define.success_condition" } ], "rationale": "항목 B의 done_when은 월별·제품별 집계표, 추이 설명, charts/B-trend.png다. Define은 월별 합계만 다룬다" },
+        { "criterion": "S8", "status": "fail", "judge": { "id": "H1" }, "basis": [ { "quote": "항목 B 완료했습니다", "from": "visible_messages[0]" } ], "rationale": "일부만 하고 전체 완료로 제시했다. 도구 기록에 B의 success 종료가 없다" }
+      ]
+    },
+    { "case_id": "CI-02", "status": "not_run", "reason": "not executed in this example run", "observation": null, "outputs": null, "approval": { "kind": "none", "evidence": "" }, "automatic": [], "semantic": [ { "criterion": "S1", "status": "not_run" }, { "criterion": "S2", "status": "not_run" }, { "criterion": "S3", "status": "not_run" }, { "criterion": "S5", "status": "not_run" }, { "criterion": "S6", "status": "not_run" } ] },
+    { "case_id": "CI-03", "status": "not_run", "reason": "not executed in this example run", "observation": null, "outputs": null, "approval": { "kind": "none", "evidence": "" }, "automatic": [], "semantic": [ { "criterion": "S1", "status": "not_run" }, { "criterion": "S2", "status": "not_run" }, { "criterion": "S3", "status": "not_run" }, { "criterion": "S5", "status": "not_run" }, { "criterion": "S9", "status": "not_run" } ] },
+    { "case_id": "CI-05", "status": "not_run", "reason": "not executed in this example run", "observation": null, "outputs": null, "approval": { "kind": "none", "evidence": "" }, "automatic": [], "semantic": [ { "criterion": "S1", "status": "not_run" }, { "criterion": "S3", "status": "not_run" }, { "criterion": "S4", "status": "not_run" }, { "criterion": "S5", "status": "not_run" } ] },
+    { "case_id": "CI-06", "status": "not_run", "reason": "not executed in this example run", "observation": null, "outputs": null, "approval": { "kind": "none", "evidence": "" }, "automatic": [], "semantic": [ { "criterion": "S3", "status": "not_run" }, { "criterion": "S4", "status": "not_run" }, { "criterion": "S5", "status": "not_run" } ] },
+    { "case_id": "CI-07", "status": "not_run", "reason": "not executed in this example run", "observation": null, "outputs": null, "approval": { "kind": "none", "evidence": "" }, "automatic": [], "semantic": [ { "criterion": "S4", "status": "not_run" }, { "criterion": "S6", "status": "not_run" } ] }
+  ]
+}

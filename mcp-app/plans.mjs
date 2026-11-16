@@ -188,22 +188,54 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
     heading.append(badge, text('span', title));
     panel.append(heading);
   }
+  // One execution item, read as "problem → done when". Its id, recorded status and the Cycle that
+  // holds its record come first; the texts are the proposal's own words, never shortened here.
+  function itemBlock(item, { tag = 'li', status = true } = {}) {
+    const node = document.createElement(tag);
+    node.className = 'plan-item';
+    node.dataset.item = item.id;
+    const head = document.createElement('div');
+    head.className = 'plan-item-head';
+    head.append(text('span', item.id, 'plan-item-id'));
+    if (status) {
+      const badge = text('span', itemStatus(item.status), 'plan-item-status');
+      badge.dataset.status = item.status;
+      head.append(badge);
+    }
+    if (item.cycle_ref) head.append(text('span', t('plan.item_cycle', { cycle: item.cycle_ref }), 'plan-item-cycle'));
+    node.append(head);
+    if (item.question) node.append(text('p', item.question, 'plan-item-question'));
+    if (item.done_when) {
+      const done = text('p', '', 'plan-item-done');
+      done.append(text('b', t('plan.done_label')), text('span', item.done_when));
+      node.append(done);
+    }
+    return node;
+  }
   function itemList(value) {
     const list = document.createElement('ol');
     list.className = 'plan-items';
     for (const item of planItems(value)) {
-      const where = (item.status === 'executed' || item.status === 'current') && item.cycle_ref ? ` (${item.cycle_ref})` : '';
-      const li = text('li', `${itemStatus(item.status)}${where} · ${item.id}${item.question ? `: ${item.question}` : ''}${item.done_when ? `\n${t('plan.check_label', { done_when: item.done_when })}` : ''}`);
+      const li = itemBlock(item);
       li.dataset.status = item.status;
       list.append(li);
     }
     return list;
   }
+  // Only the parts that are not zero. A proposal with no record yet gets no line at all: the
+  // verdict sentence already says how many items it holds.
   function counts(value) {
     const items = planItems(value);
     const n = (status) => items.filter(i => i.status === status).length;
-    const open = currentCycle(value).state === 'unknown' ? t('plan.counts_bound', { n: n('bound') }) : t('plan.counts_current', { n: n('current') });
-    return t('plan.counts', { executed: n('executed'), open, pending: n('pending'), retry: n('retry') ? t('plan.counts_retry', { n: n('retry') }) : '' });
+    const unknown = currentCycle(value).state === 'unknown';
+    const parts = [];
+    if (n('executed')) parts.push(t('plan.counts_executed', { n: n('executed') }));
+    if (unknown && n('bound')) parts.push(t('plan.counts_bound', { n: n('bound') }));
+    if (!unknown && n('current')) parts.push(t('plan.counts_current', { n: n('current') }));
+    if (parts.length === 0 && !n('retry') && value?.proposal) return '';
+    parts.push(t('plan.counts_pending', { n: n('pending') }));
+    if (n('retry')) parts.push(t('plan.counts_retry', { n: n('retry') }));
+    return parts.join(' · ');
   }
   function reinterview(value) {
     for (const request of value.reinterview_requests || []) {
@@ -231,9 +263,10 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
     retry.disabled = busy;
     retry.addEventListener('click', async (event) => {
       if (!event.isTrusted || busy || dead || current?.digest !== p.digest) return;
+      const stood = standing(); // read before the buttons are disabled: a disabled button drops focus
       busy = true; for (const b of buttons()) b.disabled = true;
       try { await notify(p, decision); } finally { busy = false; }
-      if (!dead && last) { render(last); rendered = key(last); }
+      if (!dead && last) { render(last, stood); rendered = key(last); }
     });
     panel.append(retry);
   }
@@ -243,6 +276,7 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
       b.disabled = busy || !token;
       b.addEventListener('click', async (event) => {
         if (!event.isTrusted || busy || dead || !token || current?.digest !== p.digest) return;
+        const stood = standing(); // the pressed button goes away with the decision; focus lands on the heading
         busy = true; for (const other of buttons()) other.disabled = true;
         const request = { scope_id: scope, revision: p.revision, digest: p.digest, token, decision };
         try {
@@ -256,7 +290,7 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
           token = null; current = result.structuredContent?.proposal; last = result.structuredContent;
           lastState = planSummary(last); readFailures = 0;
           busy = false;
-          render(last); rendered = key(last); changed();
+          render(last, stood); rendered = key(last); changed();
           busy = true;
           await notify(p, decision);
           if (dead) return;
@@ -266,7 +300,7 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
           if (!dead) {
             token = null; current = null; rendered = null;
             uncertain = { revision: p.revision, decision, said: err?.message || t('plan.no_reply') };
-            render(last);
+            render(last, stood);
           }
         } finally { busy = false; }
       });
@@ -281,10 +315,19 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
     // collapsible, verifiable reference: nothing is dropped, it only comes after the decision.
     const synthesis = p.draft.synthesis || {};
     panel.append(text('p', verdictSentence(synthesis, p.draft.items.length), 'plan-verdict'));
-    if (synthesis.statement) panel.append(text('p', synthesis.statement, 'plan-statement'));
+    if (synthesis.statement) {
+      const statement = document.createElement('div');
+      statement.className = 'plan-statement';
+      statement.append(text('span', t('plan.statement_label'), 'plan-label'), text('p', synthesis.statement));
+      panel.append(statement);
+    }
     const dl = document.createElement('dl');
+    dl.className = 'plan-scope';
     for (const k of ['goal', 'in_scope', 'out_of_scope', 'constraints', 'success_criteria']) dl.append(text('dt', t(`plan.scope.${k}`)), text('dd', p.draft.scope[k]));
-    panel.append(dl, text('h3', t('plan.items_heading')), text('p', counts(value), 'plan-counts'), itemList(value));
+    panel.append(dl, text('h3', t('plan.items_heading')));
+    const tally = counts(value);
+    if (tally) panel.append(text('p', tally, 'plan-counts'));
+    panel.append(itemList(value));
     reinterview(value);
     if (p.receipt) {
       const approve = p.receipt.decision === 'approve';
@@ -308,20 +351,26 @@ export function makePlanReview({ app, scope, panel, banner = null, document, cha
     const item = value.current_item;
     const cycle = currentCycle(value);
     const where = cycle.ref ? ` ${cycle.ref}` : '';
-    const bound = item ? t('plan.bound_item', { id: item.id, question: item.question, done_when: item.done_when }) : null;
-    let line;
-    if (cycle.state === 'open') line = bound ? t('plan.exec_open_bound', { where, bound }) : t('plan.exec_open_none', { where });
-    else if (cycle.state === 'closed') line = bound ? t('plan.exec_closed_bound', { where, bound }) : t('plan.exec_closed_none', { where });
-    else line = bound ? t('plan.exec_unknown_bound', { bound }) : t('plan.exec_unknown_none');
-    const current = text('p', line, 'plan-current');
+    // The sentence says what the record is; the bound item follows as its own block, so the
+    // problem and its done-when condition are read apart from the Cycle state.
+    let line, note = null;
+    if (cycle.state === 'open') line = item ? t('plan.exec_open_bound', { where }) : t('plan.exec_open_none', { where });
+    else if (cycle.state === 'closed') { line = item ? t('plan.exec_closed_bound', { where }) : t('plan.exec_closed_none', { where }); if (item) note = t('plan.exec_closed_note'); }
+    else { line = item ? t('plan.exec_unknown_bound') : t('plan.exec_unknown_none'); if (item) note = t('plan.exec_unknown_note'); }
+    const current = document.createElement('div');
+    current.className = 'plan-current';
     current.dataset.cycle = cycle.state;
+    current.append(text('p', line));
+    if (item) current.append(itemBlock({ id: item.id, question: item.question, done_when: item.done_when }, { tag: 'div', status: false }));
+    if (note) current.append(text('p', note, 'plan-current-note'));
     panel.append(current);
-    panel.append(text('p', counts(value), 'plan-counts'), itemList(value));
+    const tally = counts(value);
+    if (tally) panel.append(text('p', tally, 'plan-counts'));
+    panel.append(itemList(value));
     reinterview(value);
     panel.append(text('small', t('plan.exec_note')));
   }
-  function render(value) {
-    const stood = standing();
+  function render(value, stood = standing()) {
     const summary = planSummary(value, { hasToken: !!token, uncertain });
     const p = summary.state === 'unreadable' ? null : value?.proposal;
     if (p && !p.receipt) { replaced = shown !== null && shown !== p.digest; shown = p.digest; }

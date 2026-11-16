@@ -148,11 +148,16 @@ fn next_call_here(project: &Project) -> String {
         return match (cycle.kind(), node.kind) {
             (CycleKind::Interview, NodeKind::Question) if cycles.has_closed_experiment() =>
                 format!("{} {}", text("ctx.next.question"), text("guide.closing_results_first")),
-            (CycleKind::Interview, NodeKind::Question) => text("ctx.next.question").into(),
-            (CycleKind::Interview, NodeKind::Interpretation) => text("ctx.next.interpretation").into(),
-            (CycleKind::Interview, NodeKind::Synthesis) => text("ctx.next.synthesis").into(),
+            // Cycle Model §5.1 / §16 / §7.1: deepen, sort, propose short, define the smallest problem.
+            (CycleKind::Interview, NodeKind::Question) =>
+                format!("{} {}", text("ctx.next.question"), text("guide.interview_deepen")),
+            (CycleKind::Interview, NodeKind::Interpretation) =>
+                format!("{} {}", text("ctx.next.interpretation"), text("guide.interpretation_sort")),
+            (CycleKind::Interview, NodeKind::Synthesis) =>
+                format!("{} {}", text("ctx.next.synthesis"), text("guide.propose_brief")),
             (CycleKind::Interview, NodeKind::Outcome) => text("ctx.next.interview_outcome").into(),
-            (CycleKind::Experiment, NodeKind::Define) => text("ctx.next.define").into(),
+            (CycleKind::Experiment, NodeKind::Define) =>
+                format!("{} {}", text("ctx.next.define"), text("guide.define_smallest")),
             (CycleKind::Experiment, NodeKind::Hypothesis) => text("ctx.next.hypothesis").into(),
             (CycleKind::Experiment, NodeKind::Verify) => text("ctx.next.verify").into(),
             (CycleKind::Experiment, NodeKind::Analysis) => text("ctx.next.analysis").into(),
@@ -224,7 +229,7 @@ fn plan_next_call(project: &Project, kind: NodeKind) -> Option<String> {
     match kind {
         NodeKind::Synthesis => {
             let Some(proposal) = plan.current(project) else {
-                return Some(format!("{} {}", text("ctx.plan.synthesis_propose"), text("cycle.basis_refs_rules")));
+                return Some(format!("{} {} {}", text("ctx.plan.synthesis_propose"), text("guide.propose_brief"), text("cycle.basis_refs_rules")));
             };
             Some(match proposal.receipt.as_ref().map(|r| &r.decision) {
                 None => tr!("ctx.plan.waiting", revision = proposal.revision),
