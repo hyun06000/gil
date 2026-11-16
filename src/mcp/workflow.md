@@ -146,8 +146,35 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    project Artifact files. Synthesis waits for the user's reply to its proposed statement;
    silence, earlier requests and the agent's own judgment are not approval. Do not ask again for
    approval already given to that exact proposal. Outcome judges the approved scope; do not leave it
-   open until the whole project is finished. Choose the next call from the **current recorded state**,
-   not from the beginning of the sequence:
+   open until the whole project is finished.
+
+   **Deepen the interview before proposing.** A vague wish ("make it convenient", "analyse it
+   well", "automate everything") is not a completion criterion. In Question, turn it into the real
+   situation, the inputs, an example of the wanted result and a counter-example of the unwanted one,
+   what is in and out of scope, the constraints, the priority and a completion condition the user
+   can judge. Reuse answers already given; ask first the one open point that changes the next
+   decision, one at a time; a request that is already concrete gets no extra question, and a fixed
+   number of questions proves nothing. If the user does not know how, offer concrete options and
+   their differences instead of making them design the procedure. In Interpretation, separate what
+   the user's answers confirmed, your own interpretation or recommendation, and what is still
+   unknown; if an open point still matters for the next item or its approval, open another Question
+   (Interpretation → Question is legal) instead of hiding it in the proposal. Detail:
+   `gil_help(topic: "cycle/interview/clarify")`.
+
+   **Propose short, in small items.** The Synthesis statement (and, in the approved-plan profile,
+   `draft.scope`/`draft.items`/`draft.synthesis`) leads with the goal, this scope, the key
+   constraints and the decisions to confirm, as short statements the user can accept or correct at
+   a glance; the ordered items follow. Each `question` is one problem that can be performed and
+   checked, and each `done_when` is that problem's observable completion; say the needed inputs, the
+   prerequisite, the first action and the check beside it, briefly. The first item must be
+   startable now with the material, permissions and scope at hand; when a prerequisite is
+   unconfirmed, a small item that checks it comes first, and later items that need an earlier
+   result say so instead of assuming it. Do not list feature names or bundle several independent
+   goals in one item, and do not hide several separately-refusable decisions in one statement. Do
+   not repeat the interview transcript or the same background; link each statement to the actual
+   Question/Interpretation refs in `basis_refs`. Brevity drops no constraint, risk, uncertainty or
+   approval scope, and the existing scope/items/synthesis shape is unchanged. Choose the next call
+   from the **current recorded state**, not from the beginning of the sequence:
 
    | Current state | Next call |
    | --- | --- |
@@ -169,9 +196,24 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    writing, implementation, calculations and tests that change project files belong in Experiment
    Verify, never an open Interview. Web research without project file changes needs no Verify.
 
+   **Define the smallest problem performable now.** From the interview and the agreed item for
+   this Experiment (approved-plan profile: the bound `current_item`), Define infers the one smallest
+   problem that can be performed and judged now; its `problem` and `success_condition` point at the
+   same problem and completion scope as that item, never at the Chain goal or the whole proposal.
+   Name the inputs already at hand, the first action, the observable result and where this
+   Experiment stops; the next problem stays a separate candidate. "Smallest" is a meaningful
+   experiment that can be observed, judged and stopped on its own — not a short sentence or one
+   command: do not bundle independent goals (data check, cause analysis, chart and proposal) into
+   one Experiment, and do not split a mere preparation that yields no checkable result of its own
+   into a separate one. When the inputs or a prerequisite are not confirmed, confirming them is
+   this problem. Executing only part of a large approved item does not complete it; splitting or
+   replacing an already approved item is an undecided contract, so say that plainly (rule 7:
+   `gil_plan_request_interview` preserves the request), keep the record, and change no approved
+   scope. Detail: `gil_help(topic: "step/define/smallest")`.
+
    | Current state | Next call |
    | --- | --- |
-   | Experiment Cycle just opened | `gil_open` Define: one question and its success criterion; no project file changes yet |
+   | Experiment Cycle just opened | `gil_open` Define: one question and its success criterion — the smallest problem performable now, the same problem as the agreed item; no project file changes yet |
    | Define is closed | `gil_open` Hypothesis, then `gil_close` it with expectation, rationale and guardrail |
    | Hypothesis is closed | `gil_open` Verify. **Wait for its success** before changing project files |
    | Verify is open | Do the contracted work, save the observation as project files, `gil_close` with `evidence_files` |
@@ -319,7 +361,9 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
      is the ordered checklist (1–64) of `id`, `question`, `done_when`; `synthesis` holds the
      Synthesis Report fields as strings, where `exploration_checklist` lists the item IDs in the same
      order, one per line. Replace the example's basis refs with the actual closed Question and
-     Interpretation refs in the current Synthesis lineage. `basis_refs` is a nonempty newline-separated
+     Interpretation refs in the current Synthesis lineage. From the first proposal, each item is one
+     performable, checkable problem with an observable `done_when` (rule 2); Core does not judge
+     problem size, so write it right rather than expecting a refusal. `basis_refs` is a nonempty newline-separated
      string of unique canonical `step:Cn/Sm` references, one per line, in this same Interview only.
      Do not add commas, prose, Cycle references, other-Cycle steps, open steps or abandoned branches.
      Previous-Cycle/external background belongs in `statement` prose and cannot replace these current
@@ -350,7 +394,7 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
      `executed_cycles` records that binding, not success and not a semantic audit of every task.
      Doing I2–I4 while bound to I1 does not mark those items executed. Do not backfill bindings or
      repeat completed work just to change the ledger; disclose the mismatch and agree on the
-     remaining verification scope. A combined objective belongs in one item before approval.
+     remaining verification scope. Work that is one problem is one item before approval; independent goals are separate items.
    - `document` is available immediately after the Experiment opens and binds its revision, before
      Define/Verify. Before binding (including Interview) it is null; reading or a refused close
      never creates it. It stays tied to that Cycle's revision, not a newer proposal. If an open,
@@ -372,8 +416,10 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
      interruption observation (rule 4). After a `failure` · `revisit` close, show the preserved
      partial results before the Monitor recovery removes them from the folder (they stay in the
      Snapshot and the preserved location). Keeping the partial results in place and continuing is
-     not a recorded transition yet, and cancelling or replacing an approved item is not either: the
-     next plan keeps the interrupted item verbatim and adds or reorders items.
+     not a recorded transition yet, and cancelling, splitting or replacing an approved item is not
+     either: the next plan keeps the interrupted item verbatim and adds or reorders items. A large
+     approved item of which only a part was executed is not complete; disclose that gap instead of
+     redefining the item or counting the part as the whole.
    - When every approved item has executed, the project is not finished by a chat summary:
      `gil_open` Interview as the Closing Interview, propose the final `chain_verdict` for approval,
      then `gil_close` the Chain Report. Its first message shows the result before asking (rule 5).

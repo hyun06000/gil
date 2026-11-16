@@ -74,6 +74,8 @@ const SOURCES: &[&str] = &[
     include_str!("topics/cycle/revisit/target.md"),
     include_str!("topics/monitor/serve.md"),
     include_str!("topics/report/visuals.md"),
+    include_str!("topics/cycle/interview/clarify.md"),
+    include_str!("topics/step/define/smallest.md"),
 ];
 
 /// 본문이 Grammar 를 가리키는 표시 — **여는 괄호와 닫는 괄호.**
