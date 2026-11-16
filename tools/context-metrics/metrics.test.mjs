@@ -2,7 +2,7 @@
 // a Core, an App or the network. All inputs are synthetic.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, existsSync, statSync, symlinkSync, linkSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -224,6 +224,27 @@ test('cli: analyze/compare write JSON only to --json, reject bad usage, and run 
   const { result } = run(parseArgs(['analyze', '--events', fx('after.jsonl'), '--min-block-chars', '5']));
   assert.equal(result.repetition_candidates.min_block_code_points, 5);
   writeFileSync(join(work, 'stray.txt'), '');
+});
+
+test('JSON output never overwrites inputs, aliases or existing reports', () => {
+  const work = mkdtempSync(join(tmpdir(), 'gil-metrics-output-'));
+  try {
+    const before = join(work, 'before.jsonl'), after = join(work, 'after.jsonl');
+    const original = readFileSync(fx('before.jsonl'), 'utf8');
+    writeFileSync(before, original); writeFileSync(after, original);
+    const hard = join(work, 'hard.json'); linkSync(before, hard);
+    const report = join(work, 'report.json'); writeFileSync(report, 'existing report');
+    const outputs = [before, after, hard, report];
+    if (process.platform !== 'win32') {
+      const sym = join(work, 'symbolic.json'); symlinkSync(before, sym); outputs.push(sym);
+    }
+    for (const output of outputs) {
+      assert.throws(() => run(parseArgs(['compare', '--before', before, '--after', after, '--json', output])), { code: 'EEXIST' });
+      assert.equal(readFileSync(before, 'utf8'), original);
+      assert.equal(readFileSync(after, 'utf8'), original);
+      assert.equal(readFileSync(report, 'utf8'), 'existing report');
+    }
+  } finally { rmSync(work, { recursive: true, force: true }); }
 });
 
 test('fixtures: committed synthetic recordings match their generator', () => {

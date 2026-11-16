@@ -44,7 +44,9 @@ export function run(o) {
   let result; let summary;
   if (o.command === 'analyze') { result = analyzeFile(o.events, opts); summary = formatAnalysis(result); }
   else { result = compareAnalyses(analyzeFile(o.before, opts), analyzeFile(o.after, opts)); summary = formatComparison(result); }
-  if (o.json) { mkdirSync(dirname(o.json), { recursive: true }); writeFileSync(o.json, JSON.stringify(result, null, 2) + '\n'); }
+  // Never overwrite a recording through --json, including a symlink or hard-link alias.
+  // Exclusive creation also preserves previous reports and closes the check/write race.
+  if (o.json) { mkdirSync(dirname(o.json), { recursive: true }); writeFileSync(o.json, JSON.stringify(result, null, 2) + '\n', { flag: 'wx' }); }
   return { result, summary };
 }
 
