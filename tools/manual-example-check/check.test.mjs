@@ -170,6 +170,17 @@ test('registry validation refuses unreviewed shapes', () => {
   assert.throws(bad((x) => { x.examples[0].sha256 = 'abc'; }), RegistryError);
 });
 
+test('served examples cannot pass when the running Core text check is missing, skipped or fails', () => {
+  const sources = evalAt(repo);
+  const passing = CASES.filter((c) => c.id !== 'CX-00').map((c) => ({ id: c.id, status: 'pass' }));
+  for (const check of [null, { id: 'CX-00', status: 'not_run' }, { id: 'CX-00', status: 'fail', failed_check: 'served WF-PROPOSE-WRAPPER', detail: 'stale binary' }]) {
+    const rows = exampleStatuses(sources, check ? [check, ...passing] : passing);
+    for (const e of sources.examples.filter((e) => e.served)) {
+      assert.notEqual(rows.find((r) => r.id === e.id).status, 'pass', `${e.id} with ${check?.status ?? 'missing'} served-text check`);
+    }
+  }
+});
+
 test('isolation: output and projects stay outside the repository; out must be new or empty', async () => {
   await assert.rejects(prepareOut(join(repo, 'tools', 'manual-example-check', 'out'), repo), /outside the source repository/);
   const full = await mkdtemp(join(tmpdir(), 'gil-example-check-out-'));

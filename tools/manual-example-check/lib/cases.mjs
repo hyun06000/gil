@@ -46,7 +46,7 @@ export const CASES = [
       const instructions = rig.initialize?.instructions ?? '';
       for (const row of ctx.served) {
         if (row.via === 'instructions') {
-          rig.need(instructions.includes(row.excerpt), `served ${row.id}`, `initialize.instructions does not contain the excerpt (stale binary, or the MCP surface changed the text) — rebuild in the queue or re-review ${row.id}`);
+          rig.need(instructions.includes(row.excerpt), `served ${row.id}`, `initialize.instructions does not contain the excerpt (stale binary, or the MCP surface changed the text) — rebuild or re-review ${row.id}`);
         } else {
           const topic = row.via.slice('topic:'.length);
           const r = rig.expectOk(await rig.call('model', 'gil_help', { topic }), `gil_help ${topic}`);

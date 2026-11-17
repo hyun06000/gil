@@ -3,7 +3,7 @@
 // still run against the current Core/MCP contract?
 //
 //   node tools/manual-example-check/check.mjs sources [--json <new file>]
-//   python3 coordination/parallel-wave-2/cargo-queue.py -- node tools/manual-example-check/check.mjs run --build [--out <dir>]
+//   node tools/manual-example-check/check.mjs run --build [--out <dir>]
 //   node tools/manual-example-check/check.mjs run --gil <path to a gil built with approved-plan,visual-authoring,product-safety> [--out <dir>]
 //
 // `sources` reads documents only. `run` additionally drives one fresh temporary project per
@@ -61,7 +61,7 @@ export async function prepareOut(out, repoRoot) {
 }
 
 async function buildCore(unqueued) {
-  if (!process.env.GIL_PARALLEL_TARGET_DIR && !unqueued) throw new Usage('refusing to build outside cargo-queue.py (GIL_PARALLEL_TARGET_DIR is unset): python3 coordination/parallel-wave-2/cargo-queue.py -- node tools/manual-example-check/check.mjs run --build');
+  // Normal Cargo environment is sufficient. --unqueued remains a compatibility no-op.
   const args = ['build', '--locked', '-p', 'gil', '--features', FEATURES, '--message-format=json-render-diagnostics'];
   process.stderr.write(`[example-check] cargo ${args.join(' ')}\n`);
   const r = await runCommand('cargo', args, { cwd: repo, timeoutMs: 1800000, onStderr: (s) => process.stderr.write(s) });
@@ -174,9 +174,13 @@ async function main() {
   const redactor = makeRedactor({ roots: { work_root: workRoot, out, repo, docs_root: docsRoot } });
   const savedEvents = events.map((e) => redactor.redact(e));
   const eventsText = savedEvents.map((e) => JSON.stringify(e)).join('\n') + '\n';
-  const reportText = JSON.stringify(redactor.redact(report), null, 2) + '\n';
+  let reportText = JSON.stringify(redactor.redact(report), null, 2) + '\n';
   const leaked = leaks(eventsText + reportText, { roots: [workRoot] });
-  if (leaked.length) report.verdict.problems.push('redaction gap: an absolute temporary path survived redaction');
+  if (leaked.length) {
+    report.verdict.ok = false;
+    report.verdict.problems.push('redaction gap: an absolute temporary path survived redaction');
+    reportText = JSON.stringify(redactor.redact(report), null, 2) + '\n';
+  }
   await writeFile(join(out, 'report.json'), reportText, { flag: 'wx' });
   await writeFile(join(out, 'report.md'), markdown(redactor.redact(report)), { flag: 'wx' });
   if (!leaked.length) await writeFile(join(out, 'events.jsonl'), eventsText, { flag: 'wx' });

@@ -18,8 +18,8 @@
 # 문서만 읽는 검사: 매핑 지문·구간·미매핑 영역·문서 간 일치 (Core 불필요)
 node tools/manual-example-check/check.mjs sources
 
-# 실제 Core 실행: 빌드 큐 안에서 이 branch를 approved-plan,visual-authoring,product-safety로 빌드한 직후 실행
-python3 coordination/parallel-wave-2/cargo-queue.py -- node tools/manual-example-check/check.mjs run --build
+# 실제 Core 실행: 이 branch를 approved-plan,visual-authoring,product-safety로 빌드한 직후 실행
+node tools/manual-example-check/check.mjs run --build
 
 # 이미 빌드한 실행 파일로 (PATH·설치본은 읽지 않는다)
 node tools/manual-example-check/check.mjs run --gil <target>/debug/gil [--out <새 폴더>] [--case CX-01,CX-05] [--keep]
@@ -121,7 +121,7 @@ Verify는 typed close(`expected_owner`·`visuals`)로 닫으므로 `visual-autho
 ## 격리와 신뢰 경계
 
 - 사례마다 `mkdtemp` 아래 새 프로젝트·HOME·(Windows) LOCALAPPDATA를 만든다. 저장소 안의 임시 경로, 저장소의 `.gil` 생성, 실행 중 감시 원문 변경을 실패로 본다.
-- Core 자식 환경은 `isolatedEnv`가 만든다. 실행 파일은 `--gil` 또는 큐 안의 `--build` 결과뿐이다.
+- Core 자식 환경은 `isolatedEnv`가 만든다. 실행 파일은 `--gil` 또는 `--build` 결과뿐이다. 일반 Cargo 환경으로 빌드하며 필요하면 `CARGO_TARGET_DIR`로 빌드 위치를 지정한다. `--unqueued`는 기존 호출 호환용으로만 허용한다.
 - 호출은 허용 목록(모델 도구·App 도구·표시 요청)만 가능하다. 기록 파일은 읽기만 하고 Verify의 작업 파일만 임시 프로젝트 안에 쓴다.
 - **합성 승인**: `gil_plan_decide`는 harness가 App 전용 경로로 보낸 합성 입력이다. Core는 이를 `monitor_button` 영수증으로 기록하지만,
   보고서는 `human_approval: not_observed`로 적고 사건 기록에 `actor: harness, synthetic: true`를 남긴다. 사람의 승인·화면 표시의 증거가 아니다.
@@ -130,4 +130,4 @@ Verify는 typed close(`expected_owner`·`visuals`)로 닫으므로 `visual-autho
 ## 범위 밖
 
 abandoned branch basis 참조(revisit 계보 필요), 승인 항목 분할·대체(설계 미결), Closing Interview·`chain_verdict`, 다른 언어 locale의 표지,
-Windows 실제 실행(macOS에서만 확인), CI 편입. 의미 품질은 `semantic_only`로 남긴다.
+Windows의 실제 Core 사례 실행은 미확인이다. 자동 검사에는 Mac의 실제 사례·회귀 시험과 Mac·Windows의 원문·보고서 자체시험을 연결했다. 의미 품질은 `semantic_only`로 남긴다.

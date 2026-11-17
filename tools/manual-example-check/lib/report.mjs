@@ -21,7 +21,7 @@ export function exampleStatuses(sources, caseResults) {
     const linked = e.cases.filter((id) => id !== 'CX-00').map((id) => byCase.get(id) ?? { id, status: 'not_run' });
     if (servedFail) return { ...row, status: 'fail', detail: served.detail };
     if (linked.some((c) => c.status === 'fail')) return { ...row, status: 'fail', detail: linked.filter((c) => c.status === 'fail').map((c) => `${c.id}: ${c.detail}`).join(' | ') };
-    if (linked.length && linked.every((c) => c.status === 'pass') && (!served || served.status === 'pass' || !e.served)) return { ...row, status: 'pass' };
+    if (linked.length && linked.every((c) => c.status === 'pass') && (!e.served || served?.status === 'pass')) return { ...row, status: 'pass' };
     return { ...row, status: 'not_run', detail: linked.filter((c) => c.status !== 'pass').map((c) => `${c.id}:${c.status}`).join(', ') };
   });
 }

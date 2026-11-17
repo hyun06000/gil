@@ -61,7 +61,7 @@ export function evaluateSources(reg, { repo, readText = (p) => readSource(repo, 
   const text = (p) => { if (!texts.has(p)) texts.set(p, readText(p)); return texts.get(p); };
   const examples = [];
   for (const ex of reg.examples) {
-    const row = { id: ex.id, kind: ex.kind, path: ex.source.path, cases: ex.cases, claim: ex.claim };
+    const row = { id: ex.id, kind: ex.kind, path: ex.source.path, cases: ex.cases, claim: ex.claim, served: !!ex.served };
     try {
       const got = locate(text(ex.source.path), ex.source.locator);
       Object.assign(row, { lines: [got.startLine, got.endLine], sha256: got.sha256, excerpt: got.excerpt });
