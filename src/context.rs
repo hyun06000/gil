@@ -175,7 +175,12 @@ fn next_call_here(project: &Project) -> String {
             return text("ctx.next.chain_closed").into();
         }
         if chain.awaiting_report() {
-            return text("ctx.next.chain_report").into();
+            // The verdict is the one the user approved in the closing Synthesis, never the
+            // Closing Interview's own success. The handoff is written once, from the records.
+            return match chain.approved_closing() {
+                Some((target, verdict)) => format!("{} {}", tr!("ctx.next.chain_report_approved", verdict = verdict, target = target), text("guide.chain_handoff")),
+                None => text("ctx.next.chain_report").into(),
+            };
         }
     }
     let cycles = project.cycles();
@@ -195,9 +200,17 @@ fn next_call_here(project: &Project) -> String {
                 format!("{} {}", text("ctx.next.question"), text("guide.interview_deepen")),
             (CycleKind::Interview, NodeKind::Interpretation) =>
                 format!("{} {}", text("ctx.next.interpretation"), text("guide.interpretation_sort")),
+            // After executed Experiments the proposal may be the one that closes the Chain.
+            (CycleKind::Interview, NodeKind::Synthesis) if cycles.has_closed_experiment() =>
+                format!("{} {} {}", text("ctx.next.synthesis"), text("guide.propose_brief"), text("guide.closing_proposal")),
             (CycleKind::Interview, NodeKind::Synthesis) =>
                 format!("{} {}", text("ctx.next.synthesis"), text("guide.propose_brief")),
-            (CycleKind::Interview, NodeKind::Outcome) => text("ctx.next.interview_outcome").into(),
+            // A Closing Interview's Outcome is `success` because the proposal was approved; the
+            // approved Chain verdict belongs to the Chain Report.
+            (CycleKind::Interview, NodeKind::Outcome) => match cycle.approved_chain_verdict() {
+                Some((_, verdict)) => tr!("ctx.next.closing_outcome", verdict = verdict),
+                None => text("ctx.next.interview_outcome").into(),
+            },
             // 탐색 계약의 Define 은 승인 요구에 기여하는 작은 명제다. 항목 큐 계약의 안내
             // (항목과 같은 문제·완료 범위)는 그 계약의 Chain 에만 남긴다.
             (CycleKind::Experiment, NodeKind::Define) if project.exploration_contract() =>
@@ -218,9 +231,10 @@ fn next_call_here(project: &Project) -> String {
         }
         let openable = cycle.openable_here();
         if cycle.can_close() {
-            return match cycle.kind() {
-                CycleKind::Interview => text("ctx.next.cycle_close_interview").into(),
-                CycleKind::Experiment => text("ctx.next.cycle_close_experiment").into(),
+            return match (cycle.kind(), cycle.approved_chain_verdict()) {
+                (CycleKind::Interview, Some((_, verdict))) => tr!("ctx.next.cycle_close_closing", verdict = verdict),
+                (CycleKind::Interview, None) => text("ctx.next.cycle_close_interview").into(),
+                (CycleKind::Experiment, _) => text("ctx.next.cycle_close_experiment").into(),
             };
         }
         if openable.is_empty() {
@@ -228,7 +242,14 @@ fn next_call_here(project: &Project) -> String {
         }
         let names: Vec<&str> = openable.iter().map(|kind| kind.as_str()).collect();
         return match (cycle.kind(), openable.as_slice()) {
-            (CycleKind::Interview, [NodeKind::Outcome]) => text("ctx.next.synthesis_closed_outcome").into(),
+            (CycleKind::Interview, [NodeKind::Outcome]) => match cycle.approved_chain_verdict() {
+                Some((_, verdict)) => tr!("ctx.next.closing_synthesis_closed", verdict = verdict),
+                None => text("ctx.next.synthesis_closed_outcome").into(),
+            },
+            // The Opening Interview of a Chain that follows a closed one starts from that Chain's
+            // handoff, and needs its own approval.
+            (CycleKind::Interview, [NodeKind::Question]) if walk.nodes().is_empty() && project.chains().len() > 1 && cycles.nodes().len() == 1 =>
+                text("ctx.next.new_chain_interview").into(),
             (CycleKind::Interview, [NodeKind::Question]) if walk.nodes().is_empty() => text("ctx.next.new_interview").into(),
             (CycleKind::Experiment, [NodeKind::Define]) => text("ctx.next.new_experiment").into(),
             (CycleKind::Experiment, [NodeKind::Verify]) => text("ctx.next.hypothesis_closed").into(),
@@ -284,12 +305,20 @@ fn plan_next_call(project: &Project, kind: NodeKind) -> Option<String> {
             let Some(proposal) = plan.current(project) else {
                 // 탐색 계약의 제안은 실행 순서가 아니라 승인받을 요구다. 입력 모양은 같다.
                 let brief = if plan.exploration() { text("guide.propose_requirements") } else { text("guide.propose_brief") };
-                return Some(format!("{} {brief} {}", text("ctx.plan.synthesis_propose"), text("cycle.basis_refs_rules")));
+                // After executed Experiments this proposal may be the one that closes the Chain.
+                let closing = if project.cycles().has_closed_experiment() { format!(" {}", text("guide.closing_proposal")) } else { String::new() };
+                return Some(format!("{} {brief}{closing} {}", text("ctx.plan.synthesis_propose"), text("cycle.basis_refs_rules")));
             };
-            Some(match proposal.receipt.as_ref().map(|r| &r.decision) {
-                None => tr!("ctx.plan.waiting", revision = proposal.revision),
-                Some(crate::approved_plan::Decision::Approve) => tr!("ctx.plan.approved", revision = proposal.revision),
-                Some(crate::approved_plan::Decision::RequestChanges) => tr!("ctx.plan.changes", revision = proposal.revision),
+            // The exact proposal the receipt belongs to says whether it closes the Chain. An
+            // unknown verdict value is not interpreted: the plain sentence sends the reader to the record.
+            let chain_verdict = proposal.draft.synthesis.get("chain_verdict").map(String::as_str)
+                .filter(|verdict| matches!(*verdict, "success" | "failure"));
+            Some(match (proposal.receipt.as_ref().map(|r| &r.decision), chain_verdict) {
+                (None, _) => tr!("ctx.plan.waiting", revision = proposal.revision),
+                (Some(crate::approved_plan::Decision::Approve), Some(verdict)) => tr!("ctx.plan.approved_closing", revision = proposal.revision, verdict = verdict),
+                (Some(crate::approved_plan::Decision::Approve), None) => tr!("ctx.plan.approved", revision = proposal.revision),
+                (Some(crate::approved_plan::Decision::RequestChanges), Some(_)) => tr!("ctx.plan.changes_closing", revision = proposal.revision),
+                (Some(crate::approved_plan::Decision::RequestChanges), None) => tr!("ctx.plan.changes", revision = proposal.revision),
             })
         }
         NodeKind::Verify if project.plan_document().is_some() => Some(text("ctx.plan.verify_doc").into()),
@@ -307,7 +336,10 @@ fn plan_next_call_between_steps(project: &Project) -> Option<String> {
     if cycle.kind() == CycleKind::Interview && cycle.openable_here().as_slice() == [NodeKind::Outcome] {
         // Grammar only reaches this position through a closed `approved: yes` Synthesis, and in
         // this profile that close required the recorded Monitor receipt.
-        return Some(text("ctx.plan.synthesis_closed").into());
+        return Some(match cycle.approved_chain_verdict() {
+            Some((_, verdict)) => tr!("ctx.next.closing_synthesis_closed", verdict = verdict),
+            None => text("ctx.plan.synthesis_closed").into(),
+        });
     }
     // Experiment의 Step 사이에서는 실제 openable/can_close가 다음 호출을 정한다. 보존된
     // 재인터뷰 요청이 있어도 Cycle close를 앞당겨 권하지 않는다(R4).

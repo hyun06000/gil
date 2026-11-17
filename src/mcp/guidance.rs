@@ -219,6 +219,9 @@ fn closed(result: &CallToolResult) -> String {
         ("synthesis", Some(Next::Open(k))) if k == "outcome" => tr!("guide.closed.synthesis_outcome"),
         ("synthesis", Some(Next::Open(k))) if k == "question" => tr!("guide.closed.synthesis_question"),
         ("verify", _) => tr!("guide.closed.verify"),
+        // A Closing Interview's Cycle Report skeleton is pre-filled with `close_chain` by the Core
+        // (only when the approved Synthesis carries chain_verdict): the Chain Report follows, not an Experiment.
+        ("outcome", Some(Next::CloseCycle)) if said.contains("Interview") && said.contains("next_direction.action: close_chain") => tr!("guide.closed.closing_outcome_cycle"),
         ("outcome", Some(Next::CloseCycle)) if said.contains("Interview") => tr!("guide.closed.interview_outcome_cycle"),
         ("outcome", Some(Next::CloseCycle)) => tr!("guide.closed.outcome_cycle"),
         ("interview", Some(Next::OpenCycle)) if exploration => tr!("guide.closed.interview_open_cycle_exploration"),
@@ -237,7 +240,8 @@ fn closed(result: &CallToolResult) -> String {
     };
     // A Cycle or Chain Report comes next: write it short. Execution finished: show the result first.
     let specific = match (kind, next.as_ref()) {
-        (_, Some(Next::CloseCycle) | Some(Next::ChainReport)) => format!("{specific} {}", text("guide.report_brief")),
+        (_, Some(Next::ChainReport)) => format!("{specific} {} {}", text("guide.chain_handoff"), text("guide.report_brief")),
+        (_, Some(Next::CloseCycle)) => format!("{specific} {}", text("guide.report_brief")),
         ("experiment", Some(Next::OpenCycle)) => format!("{specific} {}", text("guide.closing_results_first")),
         _ => specific,
     };
@@ -516,6 +520,38 @@ mod tests {
         let mut no = receipt("닫았다: step:C1/S3 · synthesis\n기록됨: journey:J4\n\n다음\n  열 수 있는 것: question\n\n실행\n  gil open\n");
         after("gil_close", &mut no);
         assert!(text(&no).contains("gil_open(kind: question)") && text(&no).contains("재사용하지 않는다"), "{}", text(&no));
+    }
+
+    /// 2026-11-18: the Core pre-fills `close_chain` in the Cycle Report skeleton only when the
+    /// approved Synthesis carries a Chain verdict. That receipt leads to the Chain Report; the
+    /// sentence that sends an approved execution plan on to the Experiment must not follow it.
+    #[test]
+    fn a_closing_interview_outcome_leads_to_the_chain_report_never_to_an_experiment() {
+        let skeleton = |action: &str| format!("닫았다: step:C3/S4 · outcome\n기록됨: journey:J13\n\nInterview 마무리\n  Outcome Step만 닫혔다.\n\n다음\n  이 Cycle 의 Report 를 적어 닫는다. MCP에서는 gil_close(project_root, report)를 사용한다.\n\n  gil close <<'EOF'   # cycle:C3 · interview\n  verdict: …\n  outcome_ref: step:C3/S4\n  handoff_summary: …\n  next_direction.action: {action}\n  next_direction.reason: …\n  EOF\n\n실행\n  gil close\n");
+        let mut closing = receipt(&skeleton("close_chain"));
+        after("gil_close", &mut closing);
+        let hint = text(&closing);
+        assert!(hint.contains("Closing Interview의 Cycle Report") && hint.contains("next_direction.action: close_chain") && hint.contains("Experiment를 열지 않는다"), "{hint}");
+        assert!(hint.contains("승인된 chain_verdict는 뒤따르는 Chain Report에 적는다"), "{hint}");
+        assert!(!hint.contains("Experiment는 그 성공 뒤에 열고"), "{hint}");
+        // An execution-plan Interview keeps its own sentence.
+        let mut plan = receipt(&skeleton("…"));
+        after("gil_close", &mut plan);
+        assert!(text(&plan).contains("Experiment는 그 성공 뒤에 열고") && !text(&plan).contains("Closing Interview"), "{}", text(&plan));
+        // The Chain Report that follows says what the one handoff carries.
+        let mut due = receipt("닫았다: cycle:C3 · interview · success\n기록됨: journey:J13 (판은 늘지 않는다)\n\n다음\nChain Report를 gil close로 제출한다.\nverdict: failure\nclosing_synthesis_ref: step:C3/S3\nhandoff_summary: <탐색한 경로·실패·남은 질문 요약>\n");
+        after("gil_close", &mut due);
+        let hint = text(&due);
+        assert!(hint.contains("Chain Report를 gil_close로 제출한다") && hint.contains("handoff_summary는 원본 기록을 근거로 한 번 적는다") && hint.contains("승인된 계획처럼 쓰지 않는다"), "{hint}");
+        assert!(!hint.contains("gil_open"), "{hint}");
+        for language in crate::locale::Locale::ALL {
+            crate::locale::with(language, || {
+                for key in ["guide.closed.closing_outcome_cycle", "guide.chain_handoff", "guide.closing_proposal", "ctx.next.new_chain_interview"] {
+                    let said = crate::locale::text(key);
+                    assert!(!said.is_empty() && !said.contains('{'), "{language}:{key}: {said}");
+                }
+            });
+        }
     }
 
     #[test]

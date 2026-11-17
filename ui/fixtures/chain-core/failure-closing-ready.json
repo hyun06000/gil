@@ -390,7 +390,7 @@
         "revision": 1
       }
     ],
-    "next": "Chain Report를 gil_close로 제출한다 (verdict · closing_synthesis_ref · handoff_summary). 새 Cycle을 열지 않는다.\n새 Interview 제안은 active_plan.items 전체(실행된 항목 포함)를 원문 그대로 복사하고 새 ID를 추가한다. 순서와 scope는 새 승인으로 바꿀 수 있지만 기존 항목의 question/done_when은 바꿀 수 없다. active_plan은 실행 가능한 승인 판이며 아직 없으면 null이다. document는 Experiment를 열 때 바인딩된 승인 판의 UTF-8 원문이다. 바인딩 전에는 null이며 조회·실패한 close가 생성하지 않는다. 현재 Experiment에 바인딩이 있는데 null이면 요약을 만들어 쓰지 말고 현재 연결·상태를 확인한다. 파일 저장은 실제 열린 Verify에서만 한다. 한 Experiment는 current_item 하나에만 연결된다. executed_cycles는 열기 바인딩이며 성공 증명은 해당 Cycle Report다.",
+    "next": "Chain Report를 gil_close로 제출한다: verdict: failure — 사용자가 step:C3/S3에서 승인한 chain_verdict이며 Closing Interview 자신의 success가 아니다 — · closing_synthesis_ref: step:C3/S3 · handoff_summary. 새 Cycle이나 Chain을 열지 않는다. 닫은 뒤 사용자에게 판정·결과물·남은 질문을 알리고 멈춘다. handoff_summary는 원본 기록을 근거로 한 번 적는다: 승인된 질문마다 얻은 답과 근거 참조, 반대 근거와 한계 · 아직 답하지 못한 질문 · 이번 탐색을 여기서 마치는 이유 · 후속 실험이나 대체 자료 후보. 후보는 다음 Chain의 Interview에서 정할 후보로 적고 승인된 계획처럼 쓰지 않는다. 답하지 못한 질문은 답하지 못했다고 적으며, 그것이 승인된 판정을 바꾸지 않는다.\n새 Interview 제안은 active_plan.items 전체(실행된 항목 포함)를 원문 그대로 복사하고 새 ID를 추가한다. 순서와 scope는 새 승인으로 바꿀 수 있지만 기존 항목의 question/done_when은 바꿀 수 없다. active_plan은 실행 가능한 승인 판이며 아직 없으면 null이다. document는 Experiment를 열 때 바인딩된 승인 판의 UTF-8 원문이다. 바인딩 전에는 null이며 조회·실패한 close가 생성하지 않는다. 현재 Experiment에 바인딩이 있는데 null이면 요약을 만들어 쓰지 말고 현재 연결·상태를 확인한다. 파일 저장은 실제 열린 Verify에서만 한다. 한 Experiment는 current_item 하나에만 연결된다. executed_cycles는 열기 바인딩이며 성공 증명은 해당 Cycle Report다.",
     "pending": [],
     "proposal": null,
     "reinterview_requests": [],

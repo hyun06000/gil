@@ -453,8 +453,12 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
      under the exploration contract send the requirement link (rule 3). For Closing, use
      `next_direction.action: close_chain` in the Interview Cycle Report, then submit the Chain
      Report with the approved `chain_verdict` as its `verdict`; do not open another Experiment.
+     The Closing Interview's own Outcome and Cycle verdicts are `success` because the approval
+     was obtained; that is not the Chain verdict, so a Chain approved as `failure` is reported
+     as `failure`.
      `request_changes` → close with that
-     `close_report` (`approved: no`) and ask what to change in a new Question. Editing an open
+     `close_report` (`approved: no`) and ask what to change in a new Question. A change request
+     is never an approval: nothing of the plan executes and no Chain closes. Editing an open
      proposal makes a new revision; an earlier approval is never reused.
    - One Experiment binds exactly one `current_item`, the first pending item, when it opens.
      `executed_cycles` records that binding, not success and not a semantic audit of every task.
@@ -491,6 +495,13 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    - When every approved item has executed, the project is not finished by a chat summary:
      `gil_open` Interview as the Closing Interview, propose the final `chain_verdict` for approval,
      then `gil_close` the Chain Report. Its first message shows the result before asking (rule 5).
+     The closing proposal states, for each approved question, the answer reached with its
+     evidence references, the counter-evidence and the limits, read from the original Reports; it
+     separates what is still unanswered, why this exploration stops, and candidate follow-up
+     experiments or alternative material. The Chain Report's `handoff_summary` is written once
+     from those same records and names the candidates as candidates for the next Chain's
+     Interview, never as an approved plan. Unanswered questions stay stated as unanswered; they
+     are not turned into success.
    **Reflection and recovery.** Use Analysis evidence and Outcome's lesson to trace relevant
    earlier Steps/Cycles and distinguish observations, assumptions and interpretations. Explain
    where a faulty premise entered, how it propagated, and why the proposed recovery target is
@@ -518,6 +529,11 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    approval: if Core still requires approval, keep waiting; if recovery completed, follow Core's
    next call without repeating restore/revisit or reopening a Cycle already opened. Never require
    the user to repeat a special phrase such as “I pressed it”. Do not poll while waiting for user input.
+   When that message reports a plan decision, `gil_plan_read` is the record to read: its receipt,
+   the exact proposal and `next` outrank the message text. A recorded change request is not an
+   approval, and an approved closing proposal leads to the Chain Report, never to an Experiment.
+   If the record and the message disagree, or the decision is unclear, follow the record and do
+   not guess.
 
    **Brief new-session handoff:** use the saved-record resume summary and the current next-call
    line to state the position, last recorded result, response/decision target and one permitted

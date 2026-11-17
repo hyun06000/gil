@@ -215,14 +215,20 @@ fn saved_decisions_execution_and_chain_boundaries_survive_new_sessions() {
     p.open_child_cycle(CycleKind::Interview).unwrap();
     synthesis(&mut p);
     let proposal = p.propose_plan(draft(&p, true)).unwrap();
+    checkpoint(&p, "closing-waiting", &["Monitor 결정을 기다림", "턴을 끝내고"], &["gil_close", "종료 제안 판"]);
     let closing = decide(&mut p, &proposal, Decision::Approve);
+    checkpoint(&p, "closing-approved-open", &["승인 저장됨", "종료 제안 판", "Chain을 success로 닫는 데 동의했다", "verdict가 success인 Chain Report", "Experiment를 열지 않고"], &["Monitor 버튼 응답을 기다린다", "gil_plan_propose"]);
     let target = closing.synthesis_ref.clone();
     p.close_action_step(closing.report().unwrap()).unwrap();
+    checkpoint(&p, "closing-synthesis-closed", &["승인된 종료 Synthesis가 닫혔다 (chain_verdict: success)", "gil_open(kind: outcome)", "Chain 판정이 아니다"], &["gil_plan_propose로", "gil_close"]);
     opened(&mut p, NodeKind::Outcome);
+    // The approved closing proposal is read from the record: the Cycle Report takes close_chain and the
+    // Chain Report takes the approved chain_verdict, which is not this Interview's own success.
+    checkpoint(&p, "closing-outcome-open", &["열린 Closing Interview의 Outcome", "승인된 Chain 판정(success)은 여기가 아니라 Chain Report에 적는다"], &["gil_open", "Experiment"]);
     p.close_action_step(full_report(&spec(), CycleKind::Interview, NodeKind::Outcome).with("synthesis_ref", &target)).unwrap();
-    checkpoint(&p, "closing-cycle-open", &["gil_close로 Cycle Report", "Closing Interview 뒤에는 Chain Report"], &["Experiment는 그 뒤에"]);
+    checkpoint(&p, "closing-cycle-open", &["gil_close로 Cycle Report", "next_direction.action: close_chain", "승인된 chain_verdict(success)를 verdict로 적은 Chain Report", "Experiment를 열지 않는다"], &["Experiment는 그 뒤에", "gil_open"]);
     close_cycle(&mut p, "close_chain");
-    checkpoint(&p, "chain-report", &["Chain Report", "closing_synthesis_ref"], &["gil_open"]);
+    checkpoint(&p, "chain-report", &["Chain Report", "closing_synthesis_ref", "verdict: success — 사용자가", "Closing Interview 자신의 success가 아니다", "handoff_summary는 원본 기록을 근거로 한 번 적는다"], &["gil_open"]);
     p.close_chain(Report::new().with("verdict", "success").with("closing_synthesis_ref", target).with("handoff_summary", "Synthetic final handoff")).unwrap();
     checkpoint(&p, "chain-closed", &["마지막 닫힌 결과: chain:C1", "Synthetic final handoff", "gil_open(kind: chain)"], &["gil_close", "gil_open(kind: experiment)", "gil_open(kind: interview)"]);
     assert_eq!(p.approved_plan().unwrap().proposals[0], first_approval);

@@ -104,6 +104,8 @@ jobs:
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib restore::windows -- --test-threads=1
       - name: Approval profile, M6-D contract over the real stdio process (Wave 1 E wire)
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test approved_plan_wire_wave1 --test chain_recovery_preservation --test chain_monitor_fixtures
+      - name: After a Closing approval the receipts lead to the Chain Report with the approved verdict, never to an Experiment (real stdio process, restart, change request; synthetic)
+        run: node tools/ci/expect-tests.mjs 4 cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test closing_handoff
       - name: Approval profile, complete library contracts (plan domain, tool catalog, guidance, profile fixtures)
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib -- --test-threads=1
       - name: Historical context projection stays readable without automatic approval migration
@@ -139,6 +141,8 @@ jobs:
         run: node tools/ci/expect-tests.mjs 4 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_tools
       - name: Original-record reads from a requirement over the real stdio process (reports verbatim, paged and ranged reads of large Reports, stored evidence after revisit, restart, refusals, no writes; synthetic)
         run: node tools/ci/expect-tests.mjs 6 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_evidence
+      - name: Closing an exploration Chain with an unanswered requirement only as approved, then the explicit next Chain (real stdio process; synthetic)
+        run: node tools/ci/expect-tests.mjs 5 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test closing_handoff
       - name: Item-queue Chains keep their contract in an exploration build (unmarked records over the real stdio process)
         run: cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test approved_plan_wire_wave1 --test chain_recovery_preservation --test context --test context_profiles --test guidance_wave1 --test guidance_wave2 --test guidance_interview_chain --test resume_guidance
       - name: Manual help names only the contracts the exploration build provides (Mac)
