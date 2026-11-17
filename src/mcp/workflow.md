@@ -437,14 +437,33 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    next call without repeating restore/revisit or reopening a Cycle already opened. Never require
    the user to repeat a special phrase such as “I pressed it”. Do not poll while waiting for user input.
 
+   **Brief new-session handoff:** use the saved-record resume summary and the current next-call
+   line to state the position, last recorded result, response/decision target and one permitted
+   next action or wait. Link to the existing reports/`gil_story`, and to `gil_plan_read` only for
+   an approved-plan project. An open Question has no recorded answer; this does not prove the
+   question was delivered or that an actual answer already in the chat must be requested again.
+   A saved Monitor approval is distinct from an open Synthesis or Interview: continue their
+   remaining steps without asking for the same approval again. A binding means the Experiment
+   opened, not that its work finished. A re-interview request does not close the current Cycle.
+   After the Closing Interview, submit the Chain Report; after Chain closure, wait for a new
+   topic and an explicit next Chain start. Follow `gil_plan_read.next`, not a surviving binding
+   or an old `close_report`, to choose the current action.
+
+   Context alone does not observe current file changes. Use `gil_status` for that existing
+   observation path and retain an observation/read failure as unknown, never “unchanged”.
+   Stored decisions do not prove Host message delivery, a visible screen or external work
+   completion. Re-read an uncertain approval result; do not infer approval, failure or closure
+   from silence, elapsed time or disconnection. Plan changes follow the exact revision/digest
+   contract; never invalidate a saved approval just because a file changed.
+
    | Situation | Recovery |
    | --- | --- |
    | `gil_start` refused because a project exists | Read `gil_context` once and continue there; never start again |
    | Close response lost or uncertain | Read `gil_status`/`gil_context`; close again only if the step is still open |
    | `gil_close` input/Report rejected | The refusal names the missing or invalid field and shows the current input skeleton: put the Report STRING in `report`, not `contract` (the latter is for `gil_open`), fix only those fields and resend once; no manual lookup is needed for a field the refusal already shows. Read `gil_help({project_root, topic: "close"})` only when the refusal shows no skeleton or the position may have changed; do not run a PATH `gil` binary that may be a different build. Preserve typed `expected_owner`/`visuals` when required. |
-   | `gil_close`/`gil_open` refused with an approved-plan reason (`Approved plan:` / `승인 계획:` in the reason) | Not an input error: do not fix and resend the same call. Read `gil_plan_read` once and follow the next action its reply names — no proposal → `gil_plan_propose`; waiting → end the turn and wait for the Monitor button; approved → `gil_close` with `close_report` verbatim; changes requested → `close_report` (`approved: no`), then a Question. Never write `approved` yourself |
+   | `gil_close`/`gil_open` refused with an approved-plan reason (`Approved plan:` / `승인 계획:` in the reason) | Not an input error: do not fix and resend the same call. Read `gil_plan_read` once and follow the next action its reply names. For an actually open Synthesis: no proposal → `gil_plan_propose`; waiting → end the turn and wait for the Monitor button; approved → `gil_close` with `close_report` verbatim; changes requested → `close_report` (`approved: no`), then a Question. Never write `approved` yourself |
    | Plan decision or save result uncertain | `gil_plan_read`; never assume approval or re-propose blindly. Three states differ: approval still needed (wait), approval recorded (`receipt.decision`), save result unknown (read again; do not re-propose) |
-   | Approved earlier, proposal edited since | The old approval is gone; wait for the new revision's button |
+   | Approved earlier, proposal edited since | Read the current revision/digest and receipt with gil_plan_read. Do not infer that the old approval is gone from history: it remains bound to its original revision/digest and does not approve the edited revision. Wait only if the current revision has no decision |
    | Asked to re-interview during an Experiment | The request is preserved and closes nothing; keep following each receipt's next call and close the Cycle only when its receipt offers the Cycle Report, then `gil_open` Interview |
    | `gil_revisit` refused | If Monitor approval is required, show Monitor and wait for its button. If protected files differ or the platform is unsupported, preserve files and report the limitation. Never edit records, fake success or loop restore. A durably approved interrupted recovery can be resumed by `gil_revisit` when the receipt explicitly says so |
    | Refused `evidence_files` | Save truthful evidence while Verify is open, then resubmit the close |

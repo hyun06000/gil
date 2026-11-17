@@ -252,7 +252,10 @@ fn receipts_name_one_next_call_through_interview_and_into_an_experiment() {
         ok(mcp.call_raw("gil_plan_decide", serde_json::json!({"scope_id": scope, "revision": 1, "digest": digest, "token": token, "decision": "approve"})), "approve");
         let read = ok(mcp.call("gil_plan_read", &root, serde_json::json!({})), "read");
         let hint = hints(&read);
-        assert!(hint.contains("판 1이(가) 승인됐다") && hint.contains("close_report를 글자 그대로"), "{hint}");
+        assert!(hint.contains("판 1이(가) 승인됐다") && hint.contains("close_report를 그대로 gil_close"), "{hint}");
+        // The prepended hint and the saved-state next call now share one projection.
+        assert_eq!(read["content"][0]["text"].as_str().unwrap(),
+            read["structuredContent"]["next"].as_str().unwrap().lines().next().unwrap());
         read["structuredContent"]["close_report"].as_str().expect("close_report after approval").to_owned()
     } else {
         // legacy / Chain-without-plan: 사람의 답이 Report 에 적힌다.

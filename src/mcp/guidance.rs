@@ -255,6 +255,22 @@ fn plan(name: &str, result: &CallToolResult) -> Option<String> {
     if view.get("supported") == Some(&Value::Bool(false)) {
         return Some(tr!("guide.plan.unsupported"));
     }
+    // Modern Core already projects the exact Step/Chain next call on the first line of next.
+    // Its longer reference notes stay in the payload. Do not infer the action again from a
+    // pending item or a binding that survives closure. Older replies fall back below.
+    if let Some(next) = view.get("next").and_then(Value::as_str).and_then(|n| n.lines().next())
+        .filter(|n| !n.trim().is_empty()) {
+        let mut hint = next.to_string();
+        if name == "gil_plan_request_interview" {
+            hint.push_str(&format!("\n{}", text("guide.plan.request_saved")));
+        }
+        if view.pointer("/current_cycle/state").and_then(Value::as_str) == Some("open") {
+            if let Some(item) = view.pointer("/current_item/id").and_then(Value::as_str) {
+                hint.push_str(&format!("\n{}", tr!("guide.plan.bound", item = item)));
+            }
+        }
+        return Some(hint);
+    }
     let proposal = view.get("proposal").filter(|p| !p.is_null());
     let decision = proposal.and_then(|p| p.pointer("/receipt/decision")).and_then(Value::as_str);
     let revision = proposal.and_then(|p| p.get("revision")).and_then(Value::as_u64);
@@ -642,6 +658,32 @@ mod tests {
                 assert!(hint.contains("gil_context"), "{state:?}, request={requested}: {hint}");
                 assert!(!hint.contains("Verify에서") && !hint.contains("남은 Step"), "{hint}");
             }
+        }
+    }
+
+    #[test]
+    fn plan_hints_follow_the_existing_next_field_even_with_pending_items_or_old_bindings() {
+        for language in crate::locale::Locale::ALL {
+            crate::locale::with(language, || {
+                for key in ["ctx.plan.synthesis_closed", "ctx.next.chain_report", "ctx.next.chain_closed"] {
+                    let next = crate::locale::text(key);
+                    let mut result = CallToolResult::structured(json!({
+                        "supported": true, "proposal": null, "pending": [{"id":"B"}],
+                        "current_item": {"id":"A"}, "current_cycle": {"state":"closed"},
+                        "reinterview_requests": [{"reason":"preserved"}],
+                        "next": format!("{next}\nRead-only detail kept in the payload")
+                    }));
+                    after("gil_plan_read", &mut result);
+                    assert_eq!(result.content[0].as_text().unwrap().text, next);
+                }
+                let mut failure = refusal_of("synthetic read failure");
+                // Even a stale successful payload must not supply guidance after a failed read.
+                failure.structured_content.as_mut().unwrap()["next"] = json!("stale next action");
+                after("gil_plan_read", &mut failure);
+                let hint = &failure.content[0].as_text().unwrap().text;
+                assert_eq!(hint, crate::locale::text("guide.refused.plan_read"));
+                assert!(!hint.contains("stale next action"));
+            });
         }
     }
 
