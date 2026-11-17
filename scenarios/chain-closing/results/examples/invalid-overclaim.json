@@ -1,0 +1,980 @@
+{
+  "schema": "gil.chain-closing.result/1",
+  "run": {
+    "id": "synthetic-format-example",
+    "example": true,
+    "kind": "synthetic",
+    "model_executed": false,
+    "host_executed": false,
+    "recorded_at": null,
+    "model": null,
+    "host": null,
+    "baseline_commit": "bcefbc42ab6909c9e5c59587d79aa37f4e9fbb10",
+    "guidance_sha256": null,
+    "profile": "approved-plan,visual-authoring,product-safety",
+    "case_set_sha256": "e12fb9bddce73e5118f634db9c295294ead4b7bdb2e11a58dd98ce10857b8d0a"
+  },
+  "judges": [],
+  "cases": [
+    {
+      "case_id": "CC-01",
+      "status": "not_run",
+      "reason": "No model or Host evaluation performed.",
+      "bundle": null,
+      "automatic": [],
+      "semantic": [
+        {
+          "criterion": "result_understandable",
+          "status": "pass",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "limits_honest",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "closing_exact",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "handoff_faithful",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "host_display",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "user_opened_result",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "human_approval_real",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        }
+      ]
+    },
+    {
+      "case_id": "CC-02",
+      "status": "not_run",
+      "reason": "No model or Host evaluation performed.",
+      "bundle": null,
+      "automatic": [],
+      "semantic": [
+        {
+          "criterion": "result_understandable",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "limits_honest",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "closing_exact",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "handoff_faithful",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "host_display",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "user_opened_result",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "human_approval_real",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        }
+      ]
+    },
+    {
+      "case_id": "CC-03",
+      "status": "not_run",
+      "reason": "No model or Host evaluation performed.",
+      "bundle": null,
+      "automatic": [],
+      "semantic": [
+        {
+          "criterion": "result_understandable",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "limits_honest",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "closing_exact",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "handoff_faithful",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "host_display",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "user_opened_result",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "human_approval_real",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        }
+      ]
+    },
+    {
+      "case_id": "CC-04",
+      "status": "not_run",
+      "reason": "No model or Host evaluation performed.",
+      "bundle": null,
+      "automatic": [],
+      "semantic": [
+        {
+          "criterion": "result_understandable",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "limits_honest",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "closing_exact",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "handoff_faithful",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "host_display",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "user_opened_result",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "human_approval_real",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        }
+      ]
+    },
+    {
+      "case_id": "CC-05",
+      "status": "not_run",
+      "reason": "No model or Host evaluation performed.",
+      "bundle": null,
+      "automatic": [],
+      "semantic": [
+        {
+          "criterion": "result_understandable",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "limits_honest",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "closing_exact",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "handoff_faithful",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "host_display",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "user_opened_result",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "human_approval_real",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        }
+      ]
+    },
+    {
+      "case_id": "CC-06",
+      "status": "not_run",
+      "reason": "No model or Host evaluation performed.",
+      "bundle": null,
+      "automatic": [],
+      "semantic": [
+        {
+          "criterion": "result_understandable",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "limits_honest",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "closing_exact",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "handoff_faithful",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "host_display",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "user_opened_result",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "human_approval_real",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        }
+      ]
+    },
+    {
+      "case_id": "CC-07",
+      "status": "not_run",
+      "reason": "No model or Host evaluation performed.",
+      "bundle": null,
+      "automatic": [],
+      "semantic": [
+        {
+          "criterion": "result_understandable",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "limits_honest",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "closing_exact",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "handoff_faithful",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "host_display",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "user_opened_result",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "human_approval_real",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        }
+      ]
+    },
+    {
+      "case_id": "CC-08",
+      "status": "not_run",
+      "reason": "No model or Host evaluation performed.",
+      "bundle": null,
+      "automatic": [],
+      "semantic": [
+        {
+          "criterion": "result_understandable",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "limits_honest",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "closing_exact",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "handoff_faithful",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "host_display",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "user_opened_result",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "human_approval_real",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        }
+      ]
+    },
+    {
+      "case_id": "CC-09",
+      "status": "unknown",
+      "reason": "Synthetic pending receipt only; no real model or Host run.",
+      "bundle": {
+        "events": [
+          {
+            "seq": 1,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "read_project_file",
+              "arguments": {
+                "path": "reports/result.txt"
+              }
+            },
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "verified total = 310\n"
+                }
+              ],
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 2,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_close",
+              "arguments": {
+                "report": "execution: prepared result\nresult: observed bytes\nevidence_files: reports/result.txt\n",
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "said": "닫았다: step:C2/S3 · verify"
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 3,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_open",
+              "arguments": {
+                "kind": "interview",
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "said": "열었다: cycle:C3 · interview"
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 4,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "read_project_file",
+              "arguments": {
+                "path": "reports/result.txt"
+              }
+            },
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "verified total = 310\n"
+                }
+              ],
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 5,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_monitor_prepare",
+              "arguments": {
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "scope_id": "synthetic-project-scope"
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 6,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_plan_propose",
+              "arguments": {
+                "draft": {
+                  "scope": {
+                    "goal": "연결이 끊겼어. 어디서 이어가면 돼?",
+                    "in_scope": "종료 승인 전·저장 후 연결 끊김",
+                    "out_of_scope": "추가 실행",
+                    "constraints": "합성 자료만 사용",
+                    "success_criteria": "같은 종료 제안을 재조회한다. 변형 A는 응답 없음, 변형 B는 승인 저장 뒤 응답 유실이다."
+                  },
+                  "items": [
+                    {
+                      "id": "A",
+                      "question": "연결이 끊겼어. 어디서 이어가면 돼?",
+                      "done_when": "검증 범위와 결과가 기록된다"
+                    }
+                  ],
+                  "synthesis": {
+                    "statement": "이 결과와 한계로 현재 Chain을 success로 닫는다.",
+                    "chain_verdict": "success",
+                    "basis_refs": "step:C3/S1\nstep:C3/S2",
+                    "exploration_checklist": "A"
+                  }
+                },
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "supported": true,
+                "proposal": {
+                  "revision": 2,
+                  "base_revision": 1,
+                  "synthesis_ref": "step:C3/S3",
+                  "digest": "17daddc8a53d9c813a0e96817e5cabf0cb519eae5022e4cb143745aaf818d0ec",
+                  "receipt": null,
+                  "draft": {
+                    "scope": {
+                      "goal": "연결이 끊겼어. 어디서 이어가면 돼?",
+                      "in_scope": "종료 승인 전·저장 후 연결 끊김",
+                      "out_of_scope": "추가 실행",
+                      "constraints": "합성 자료만 사용",
+                      "success_criteria": "같은 종료 제안을 재조회한다. 변형 A는 응답 없음, 변형 B는 승인 저장 뒤 응답 유실이다."
+                    },
+                    "items": [
+                      {
+                        "id": "A",
+                        "question": "연결이 끊겼어. 어디서 이어가면 돼?",
+                        "done_when": "검증 범위와 결과가 기록된다"
+                      }
+                    ],
+                    "synthesis": {
+                      "statement": "이 결과와 한계로 현재 Chain을 success로 닫는다.",
+                      "chain_verdict": "success",
+                      "basis_refs": "step:C3/S1\nstep:C3/S2",
+                      "exploration_checklist": "A"
+                    }
+                  }
+                }
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 7,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "harness",
+            "synthetic": true,
+            "request": {
+              "name": "gil_plan_read",
+              "arguments": {
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "supported": true,
+                "proposal": {
+                  "revision": 2,
+                  "base_revision": 1,
+                  "synthesis_ref": "step:C3/S3",
+                  "digest": "17daddc8a53d9c813a0e96817e5cabf0cb519eae5022e4cb143745aaf818d0ec",
+                  "receipt": null,
+                  "draft": {
+                    "scope": {
+                      "goal": "연결이 끊겼어. 어디서 이어가면 돼?",
+                      "in_scope": "종료 승인 전·저장 후 연결 끊김",
+                      "out_of_scope": "추가 실행",
+                      "constraints": "합성 자료만 사용",
+                      "success_criteria": "같은 종료 제안을 재조회한다. 변형 A는 응답 없음, 변형 B는 승인 저장 뒤 응답 유실이다."
+                    },
+                    "items": [
+                      {
+                        "id": "A",
+                        "question": "연결이 끊겼어. 어디서 이어가면 돼?",
+                        "done_when": "검증 범위와 결과가 기록된다"
+                      }
+                    ],
+                    "synthesis": {
+                      "statement": "이 결과와 한계로 현재 Chain을 success로 닫는다.",
+                      "chain_verdict": "success",
+                      "basis_refs": "step:C3/S1\nstep:C3/S2",
+                      "exploration_checklist": "A"
+                    }
+                  }
+                }
+              },
+              "isError": false
+            },
+            "error": null
+          }
+        ],
+        "messages": [
+          {
+            "id": "m1",
+            "role": "assistant",
+            "text": "마지막 확인 결과는 합계 310입니다.\n\n[결과 열기](reports/result.txt): 합계 310을 얻었습니다.\n\n파일을 재조회했고 Verify 당시 bytes와 같습니다.\n\n승인 상태는 연결 성공 여부로 추측하지 않고 저장 기록을 다시 읽습니다.\n\n이 결과와 한계를 기준으로 현재 Chain을 success로 종료하는 제안입니다. 승인하시겠습니까? 수정 요청·아직 잘 모르겠음·직접 입력도 가능합니다.\n\n",
+            "synthetic": true
+          },
+          {
+            "id": "m2",
+            "role": "assistant",
+            "text": "재조회 결과 판 2의 종료 제안에는 아직 승인이 없습니다. 마지막 결과와 한계를 유지하고 종료 결정을 기다립니다.\n\n",
+            "synthetic": true
+          }
+        ],
+        "timeline": [
+          "e1",
+          "e2",
+          "e3",
+          "e4",
+          "e5",
+          "e6",
+          "m1",
+          "e7",
+          "m2"
+        ],
+        "capture_complete": true,
+        "interview_open_event": 3,
+        "files": [
+          {
+            "path": "reports/result.txt",
+            "item_id": "A",
+            "claim": "current_verified",
+            "span": {
+              "kind": "result",
+              "message": "m1",
+              "start": 23,
+              "quote": "[결과 열기](reports/result.txt): 합계 310을 얻었습니다."
+            },
+            "verified": {
+              "event": 1,
+              "pointer": "/result/content/0/text",
+              "state": "present",
+              "encoding": "utf8",
+              "sha256": "ebabfe82ea40c2cfc1e5d24cc63f3e79047289d0a9c8667cd7e77ced09e0b869"
+            },
+            "current": {
+              "event": 4,
+              "pointer": "/result/content/0/text",
+              "state": "present",
+              "encoding": "utf8",
+              "sha256": "ebabfe82ea40c2cfc1e5d24cc63f3e79047289d0a9c8667cd7e77ced09e0b869"
+            },
+            "verify_event": 2
+          }
+        ],
+        "presentation": [
+          {
+            "kind": "summary",
+            "message": "m1",
+            "start": 0,
+            "quote": "마지막 확인 결과는 합계 310입니다."
+          },
+          {
+            "kind": "result",
+            "message": "m1",
+            "start": 23,
+            "quote": "[결과 열기](reports/result.txt): 합계 310을 얻었습니다."
+          },
+          {
+            "kind": "verification",
+            "message": "m1",
+            "start": 68,
+            "quote": "파일을 재조회했고 Verify 당시 bytes와 같습니다."
+          },
+          {
+            "kind": "limitation",
+            "message": "m1",
+            "start": 102,
+            "quote": "승인 상태는 연결 성공 여부로 추측하지 않고 저장 기록을 다시 읽습니다."
+          },
+          {
+            "kind": "question",
+            "message": "m1",
+            "start": 144,
+            "quote": "이 결과와 한계를 기준으로 현재 Chain을 success로 종료하는 제안입니다. 승인하시겠습니까? 수정 요청·아직 잘 모르겠음·직접 입력도 가능합니다."
+          }
+        ],
+        "closing": {
+          "proposal_event": 6,
+          "receipt_event": null,
+          "report_event": null,
+          "shown": {
+            "revision": 2,
+            "digest": "17daddc8a53d9c813a0e96817e5cabf0cb519eae5022e4cb143745aaf818d0ec",
+            "synthesis_ref": "step:C3/S3",
+            "chain_verdict": "success"
+          },
+          "span": {
+            "kind": "question",
+            "message": "m1",
+            "start": 144,
+            "quote": "이 결과와 한계를 기준으로 현재 Chain을 success로 종료하는 제안입니다. 승인하시겠습니까? 수정 요청·아직 잘 모르겠음·직접 입력도 가능합니다."
+          },
+          "scope_event": 5
+        },
+        "resume": {
+          "read_event": 7,
+          "claim": "pending",
+          "span": {
+            "kind": "resume",
+            "message": "m2",
+            "start": 0,
+            "quote": "재조회 결과 판 2의 종료 제안에는 아직 승인이 없습니다. 마지막 결과와 한계를 유지하고 종료 결정을 기다립니다."
+          }
+        }
+      },
+      "automatic": [
+        {
+          "check": "references",
+          "status": "pass",
+          "detail": "Unique ids and exact public-message spans resolve."
+        },
+        {
+          "check": "presentation_order",
+          "status": "pass",
+          "detail": "Checks annotated order and results in the first closing message; meaning requires semantic review."
+        },
+        {
+          "check": "approval_binding",
+          "status": "unknown",
+          "detail": "No saved receipt observed; silence never supplies one."
+        },
+        {
+          "check": "report_binding",
+          "status": "unknown",
+          "detail": "No Chain Report close observed (pending is not closed)."
+        },
+        {
+          "check": "file_consistency",
+          "status": "pass",
+          "detail": "Recorded snapshot bytes/hashes and explicit freshness claims agree; no Host access claim."
+        },
+        {
+          "check": "interview_writes",
+          "status": "pass",
+          "detail": "Only captured external write/delete tools are checked; completeness must be declared."
+        },
+        {
+          "check": "resume_receipt",
+          "status": "pass",
+          "detail": "Re-read distinguishes pending from saved approval; response loss is not approval loss."
+        },
+        {
+          "check": "fresh_interview",
+          "status": "unknown",
+          "detail": "No next-Chain observations."
+        }
+      ],
+      "semantic": [
+        {
+          "criterion": "result_understandable",
+          "status": "unknown",
+          "rationale": "Synthetic trace; semantic and Host evaluation not performed.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "limits_honest",
+          "status": "unknown",
+          "rationale": "Synthetic trace; semantic and Host evaluation not performed.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "closing_exact",
+          "status": "unknown",
+          "rationale": "Synthetic trace; semantic and Host evaluation not performed.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "handoff_faithful",
+          "status": "unknown",
+          "rationale": "Synthetic trace; semantic and Host evaluation not performed.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "host_display",
+          "status": "unknown",
+          "rationale": "Synthetic trace; semantic and Host evaluation not performed.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "user_opened_result",
+          "status": "unknown",
+          "rationale": "Synthetic trace; semantic and Host evaluation not performed.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "human_approval_real",
+          "status": "unknown",
+          "rationale": "Synthetic trace; semantic and Host evaluation not performed.",
+          "basis": [],
+          "judge": null
+        }
+      ]
+    },
+    {
+      "case_id": "CC-10",
+      "status": "not_run",
+      "reason": "No model or Host evaluation performed.",
+      "bundle": null,
+      "automatic": [],
+      "semantic": [
+        {
+          "criterion": "result_understandable",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "limits_honest",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "closing_exact",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "handoff_faithful",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "host_display",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "user_opened_result",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "human_approval_real",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        }
+      ]
+    }
+  ]
+}
