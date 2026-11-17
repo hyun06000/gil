@@ -123,6 +123,11 @@ jobs:
         run: |
           node tools/manual-example-check/check.mjs run --gil target/debug/gil --out "${{ runner.temp }}/gil-manual-examples"
           node --test tools/manual-example-check/*.test.mjs
+      - name: Product context recovery measurement (Mac, synthetic approval)
+        if: runner.os == 'macOS'
+        env:
+          CHAIN_CONTEXT_BENCH_GIL_PRODUCT: target/debug/gil
+        run: node --test tools/chain-context-bench/*.test.mjs
       - name: M4-R opt-in recovery approval mode, setting parser and read-only contracts (not a product profile)
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,recovery-auto-approval --lib recovery_mode
       - name: M4-R opt-in recovery approval mode over the real stdio process (5 synthetic cases, no user project)
