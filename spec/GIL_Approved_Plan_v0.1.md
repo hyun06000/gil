@@ -342,6 +342,8 @@ gil_plan_read        requirements[].experiments[].cycle_ref   요구에 연결�
 gil_report_read      owner {kind: cycle, ref}   그 실험의 위치·Step 주소 목록·Cycle Report 원문
                      owner {kind: step,  ref}   Step Report 하나의 원문 (+ Verify 가 적은 파일의 저장 상태)
                      owner {kind: chain, ref}   그 Chain 의 Cycle 주소·연결·Chain Report 원문
+                     … + list, from             목록(cycles·steps·fields·files)의 한 쪽 — 이어 읽기
+                     … + field, part?, offset?  칸 하나의 값(또는 이름)의 바이트 범위 — 이어 읽기
 gil_evidence_read    owner {kind: step, ref}(Verify), path, offset?   그 Verify 의 Snapshot 에 저장된 바이트
 ```
 
@@ -350,11 +352,31 @@ gil_evidence_read    owner {kind: step, ref}(Verify), path, offset?   그 Verify
   열 때 기록된 연결이다: 탐색 Chain은 `{contract: "exploration", plan_revision, plan_digest,
   requirement_id}`, 표식 없는 Chain은 `{plan_revision, plan_digest, item_id}`, 연결이 없으면 `null`.
   `verdict`는 Cycle Report에 적힌 값 그대로이며 요구에 대한 해석이 아니다.
-- **원문.** `report`는 `{state: "written", sha256, fields[{name, value}]}` 또는 `{state: "not_written"}`
-  이다. `fields`는 저장된 Report의 모든 칸을 제 이름과 전체 값으로 싣는다(Monitor의 Step 상세와 같은
-  원칙). 고르거나 줄이거나 다른 말로 옮기지 않는다. `sha256`은 `gil_report_visuals.report_sha256`과
-  같은 칸 digest다. Cycle 조회의 `steps`는 `{ref, kind, state, report}`(Verify는 `snapshot` 포함)의
-  주소 목록이고 Report 본문을 싣지 않는다 — 어느 원본을 열지는 읽는 쪽이 고른다.
+- **원문.** `report`는 `{state: "written", sha256, field_count, fields[{index, name, bytes, value}]}`
+  또는 `{state: "not_written"}`이다. `fields`는 저장된 Report의 칸을 저장된 순서(이름순)로 싣고,
+  `index`는 그 순서의 자리다(닫힌 Report는 바뀌지 않으므로 안정된 주소다). 값은 저장된 글자 그대로이며
+  고르거나 다른 말로 옮기지 않는다. `sha256`은 `gil_report_visuals.report_sha256`과 같은 칸 digest다.
+  Cycle 조회의 `steps`는 `{ref, kind, state, report}`(Verify는 `snapshot` 포함)의 주소 목록이고 Report
+  본문을 싣지 않는다 — 어느 원본을 열지는 읽는 쪽이 고른다.
+- **끝까지 읽기 (2026-11-18 검토 보완).** 한 응답에는 크기 한도(1 MiB)가 있고 저장된 Report에는
+  한도가 없다. 따옴표·역슬래시가 많은 값은 JSON으로 적히며 두 배, 응답의 text 사본 안에서 다시 두 배가
+  된다(약 200 KB의 값이 한 응답으로는 한도를 넘는다). 그래서 어떤 응답도 「전부 아니면 거절」이 아니다.
+  응답은 실제 전송 크기로 센 분량(가변 부분 512 KiB) 안에서 조립하고, 싣지 않은 것은 **그것을 읽는
+  입력과 함께** 밝힌다. `truncated: false`는 물은 것을 모두 실었다는 뜻이고 `truncated: true`는 일부를
+  싣지 않았다는 뜻이다(응답에 대한 말이며 기록이나 요구의 완료를 뜻하지 않는다).
+  - 값이 16 KiB를 넘거나 한 응답이 싣는 값의 합(64 KiB)을 넘긴 칸은 `value_omitted: true`와
+    `read: {field: <index>}`로 나온다. 같은 호출에 `field`(와 이어 읽을 때 `offset`)를 더하면 그 값의
+    바이트 범위를 받는다: 한 번에 최대 16 KiB, 글자 경계에서 자르며, `sha256`·`total_bytes`는 값 전체의
+    것이고 `truncated`·`next_offset`·`remaining_bytes`가 나머지를 말한다.
+  - 256바이트를 넘는 칸 이름은 `name_omitted: true`·`name_bytes`와 `read_name: {field, part: "name"}`으로
+    나오고 같은 방식으로 범위를 읽는다.
+  - 한 응답에 다 들지 않은 목록은 `more: [{list, from, total}]`로 나온다. 같은 호출에 `list`와 `from`을
+    더하면 그 목록의 다음 쪽(`items`, `returned`, `next_from`)을 받는다. 목록은 Chain의 `cycles`,
+    Cycle의 `steps`, 모든 Report의 `fields`, Verify의 `files`다. 쪽은 항목 사이에서만 나뉘고, 위치로
+    물은 쪽은 언제나 한 항목 이상 나아간다.
+  - 이어 읽기 입력은 한 호출에 하나다(`list`·`from` 또는 `field`·`part`·`offset`). 조각을 순서대로
+    이으면 저장된 Report와 같고, `report.sha256`으로 확인할 수 있다. 생략은 기록이 없거나 읽을 수 없다는
+    뜻이 아니다. 출처 정보에 되풀이되는 긴 요구 id(256바이트 초과)는 길이와 digest만 싣는다.
 - **저장 증거.** 닫힌 Verify의 Step 조회는 `evidence {state: "indexed", snapshot, current_world,
   files[{path, declared_in, stored, sha256, in_current_world}]}`를 싣는다. 대상은 그 Verify Report가
   직접 적은 경로뿐이다: `evidence_files`의 각 줄과 `plan_document`(그 실험이 실행된 승인 판의 원문).
@@ -366,8 +388,9 @@ gil_evidence_read    owner {kind: step, ref}(Verify), path, offset?   그 Verify
 - **분량.** `gil_evidence_read`는 한 번에 최대 16 KiB를 싣는다. `sha256`·`total_bytes`는 저장 파일
   전체의 값이고, 잘린 응답은 `truncated: true`·`next_offset`·`remaining_bytes`와 안내문으로 나머지를
   읽는 호출을 말한다. 유효한 UTF-8 구간은 `encoding: "utf8"`의 `text`로(글자 중간에서 자르지 않는다),
-  아니면 `encoding: "base64"`의 `data_base64`로 싣는다. Report 원문은 자르지 않는다. 한 응답이 1 MiB를
-  넘으면 잘라 보내지 않고 `response_too_large`로 거절한다.
+  아니면 `encoding: "base64"`의 `data_base64`로 싣는다. Report의 값도 위 「끝까지 읽기」의 범위로 읽으며
+  값 안을 말없이 자르지 않는다. `response_too_large`는 분량 계산이 틀렸을 때 큰 응답을 보내지 않기 위한
+  마지막 방어일 뿐, 정상 경로에서 원본 조회를 막는 응답이 아니다.
 - **만들지 않는 것.** 종합 답, 타당성·신뢰도 판정, 완료율, 요구 충족 여부를 말하는 칸이 없다. 실패한
   실험과 되돌리기 이전의 기록도 성공한 실험과 같은 방식으로 읽힌다. 서로 어긋나는 기록은 각자 적힌
   대로 돌려주며 어느 쪽도 채택하지 않는다. 기록에 있다는 사실은 그 내용이 참이거나 지금도 유효하다는
@@ -377,7 +400,10 @@ gil_evidence_read    owner {kind: step, ref}(Verify), path, offset?   그 Verify
   `not_a_verify`(Verify가 아닌 Step), `report_not_written`(열린 Verify — Report도 Snapshot도 아직 없음),
   `not_declared`(그 Report가 적지 않은 경로; `declared`가 적힌 경로), `not_in_snapshot`(적었지만 그
   Snapshot에 없음), `evidence_unavailable`(저장 객체를 읽지 못함 — 접근 불가이지 증거 없음이 아님),
-  `invalid_path`, `invalid_offset`, `record_unavailable`(프로젝트 기록을 읽지 못함)을 구분한다.
+  `invalid_path`, `invalid_offset`, `record_unavailable`(프로젝트 기록을 읽지 못함)을 구분한다. 이어 읽기는
+  `invalid_list`(그 기록에 없는 목록; `lists`가 가능한 목록), `invalid_from`(목록의 끝을 넘음),
+  `invalid_field`(없는 칸 index), `invalid_offset`(끝을 넘었거나 글자의 중간), `report_not_written`(아직
+  Report가 없는 Step의 칸)을 구분하며 빈 응답으로 답하지 않는다.
   모양이 틀린 입력(canonical이 아닌 주소 등)은 실행 전에 -32602로 거절된다.
 - **읽기만.** 두 도구는 읽기 전용 세션으로 기록을 열며 commit·복원·복구·잔해 회수를 하지 않는다.
   조회 전후의 기록·저장 객체·작업 파일은 같다. 프로세스를 다시 시작해도 같은 주소로 같은 원본과
@@ -427,6 +453,9 @@ Monitor view·저장 이미지의 동일성, 실패한 Experiment의 시각 증�
 읽히는 실패 실험의 보고서와 저장 증거, 같은 경로의 내용이 달라진 작업 폴더와의 구분, 재시작 뒤 같은 응답,
 없는 주소·다른 범위의 주소·열린 Step·적지 않은 경로·읽을 수 없는 저장 객체의 구분, 긴 증거의 명시적 절단과
 이어 읽기, 조회 전후 기록·작업 파일 불변, 표식 없는 Chain의 기존 응답 유지와 다음 Chain에서의 조회.
+검토 보완으로 더한 2건: 따옴표·역슬래시 200 KB의 값을 가진 Report가 거절되지 않고 범위로 끝까지 읽히는지,
+칸 6천 개·한 응답을 넘는 값·긴 이름의 Report가 쪽과 범위로 읽혀 저장한 내용과 같고 digest가 일치하는지,
+모든 응답이 1 MiB 안인지, 잘못된 이어 읽기 입력의 구분, 조회 전후 불변과 재시작 뒤 같은 응답.
 
 합성 App 입력은 사람의 클릭이 아니다. 자연어 의미(Define의 명제 형식·요구 기여·요구 충족), 실제
 모델의 준수, Host 화면 표시는 이 검증으로 입증하지 않는다. 위 명령의 로컬 실행은 macOS뿐이다. Windows에서의

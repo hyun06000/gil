@@ -230,7 +230,7 @@
     {
       "id": "SPEC-EXPLORE-ORIGINALS",
       "source": { "path": "spec/GIL_Approved_Plan_v0.1.md", "locator": { "after": "### 원본 근거 조회 (2026-11-18)", "before": "- **출처.**", "fence": "text" } },
-      "sha256": "5c7913c30ef5f8b7dec836c1a814623b1c89e4bf57873ced5b62708e809a6b52",
+      "sha256": "6b3a42d1ea55d7fa4a3ba0a9d88652b7af31dec1c4d16ac9a3cb4220ec10e7e7",
       "kind": "not_executed",
       "cases": [],
       "reason": "Read path of the original-record tools (gil_report_read, gil_evidence_read) registered only in the opt-in exploration-flow profile. This checker drives an approved-plan build, where those tools do not exist; the path is exercised over the real stdio process by tests/exploration_evidence.rs.",

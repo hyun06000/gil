@@ -137,8 +137,8 @@ jobs:
         run: node tools/ci/expect-tests.mjs 4 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_flow
       - name: Exploration Chain tool and visual-report paths over the real stdio process (declaration, evidence, citation, restart, refusals; synthetic)
         run: node tools/ci/expect-tests.mjs 4 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_tools
-      - name: Original-record reads from a requirement over the real stdio process (reports verbatim, stored evidence after revisit, restart, refusals, no writes; synthetic)
-        run: node tools/ci/expect-tests.mjs 4 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_evidence
+      - name: Original-record reads from a requirement over the real stdio process (reports verbatim, paged and ranged reads of large Reports, stored evidence after revisit, restart, refusals, no writes; synthetic)
+        run: node tools/ci/expect-tests.mjs 6 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_evidence
       - name: Item-queue Chains keep their contract in an exploration build (unmarked records over the real stdio process)
         run: cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test approved_plan_wire_wave1 --test chain_recovery_preservation --test context --test context_profiles --test guidance_wave1 --test guidance_wave2 --test guidance_interview_chain --test resume_guidance
       - name: Manual help names only the contracts the exploration build provides (Mac)

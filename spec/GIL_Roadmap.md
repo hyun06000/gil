@@ -442,7 +442,8 @@ Chain workflow 실행으로 확인하며, 그 전까지 Windows 통과로 세지
 [승인 계획 계약의 「원본 근거 조회」](GIL_Approved_Plan_v0.1.md#원본-근거-조회-2026-11-18)가 정본이다.
 
 - `gil_report_read` — Cycle(위치·승인 판과 요구 연결·Step 주소 목록·Cycle Report), Step(Report 하나의
-  모든 칸을 제 이름과 전체 값으로 + Verify가 적은 파일의 저장 상태), Chain(Cycle 주소·연결·Chain Report).
+  칸을 저장된 순서와 글자 그대로 + Verify가 적은 파일의 저장 상태), Chain(Cycle 주소·연결·Chain Report).
+  한 응답에 들지 않는 값·이름·목록은 생략 사실과 이어 읽는 입력을 밝히고 범위·쪽으로 끝까지 읽는다(아래 검토 보완).
 - `gil_evidence_read` — 닫힌 Verify가 `evidence_files`·`plan_document`에 적은 파일 하나를 그 Verify의
   Snapshot에서 읽는다. 작업 폴더를 읽지 않고 복원하지 않는다. 16 KiB씩, 잘림과 이어 읽는 호출을 명시.
 - 기존 것은 다시 만들지 않았다: 요구–실험 연결(`gil_plan_read`), 시각 자료 메타데이터(`gil_report_visuals`),
@@ -462,8 +463,8 @@ Chain workflow 실행으로 확인하며, 그 전까지 Windows 통과로 세지
 - 재시작한 프로세스가 같은 주소로 같은 응답(원문·출처)을 준다.
 - 없는 주소·다른 범위의 주소·열린 Step과 Cycle·Verify가 아닌 Step·적지 않은 경로·잘못된 경로·끝을 넘은
   위치·읽을 수 없는 저장 객체·프로젝트 없는 폴더를 각각 구분하고, 가까운 기록으로 대신 답하지 않는다.
-- 16 KiB를 넘는 다국어 텍스트와 이진 증거가 명시적으로 잘리고 이어 읽어 바이트 단위로 복원된다. Report는
-  자르지 않는다.
+- 16 KiB를 넘는 다국어 텍스트와 이진 증거가 명시적으로 잘리고 이어 읽어 바이트 단위로 복원된다. 긴 Report
+  칸도 값 안에서 말없이 잘리지 않고 범위로 읽혀 저장한 글자와 같다.
 - 조회 전후 기록 폴더의 모든 파일(잠금 파일 제외)과 작업 폴더가 같다.
 - 표식 없는 Chain의 `gil_plan_read`·Context 응답이 그대로이고, 그 Chain의 기록이 닫힌 뒤 다음 탐색
   Chain에서도 같은 원문으로 읽힌다.
@@ -501,6 +502,43 @@ Chain workflow 실행으로 확인하며, 그 전까지 Windows 통과로 세지
 덧붙이도록 고쳤으며, 시험에 새 도구 둘의 조건을 더했다: `records.rs`의 정확한 이름, 기본 표 부재, `tools/list` 조건 문구).
 새 통합 시험 4건은 첫 실행부터 통과했다. `spec/GIL_Approved_Plan_v0.1.md`의 검증 명령 블록에 한 줄을 더해
 `SPEC-EXPLORE-SH` 지문을 재검토 뒤 갱신했고, 새 조회 경로 블록은 `SPEC-EXPLORE-ORIGINALS`(실행하지 않는 목록 항목)로 등록했다.
+
+**검토 보완 (2026-11-18, PR #161 검토 대상 `591434a`).** 검토에서 저장에 성공한 원본 보고서를 새 도구로
+읽지 못하는 경우가 재현됐다. 따옴표·역슬래시 약 200 KB의 값을 가진 Report는 정상적으로 저장되지만,
+`gil_report_read`의 응답은 그 값이 JSON으로 적히며 두 배, text 사본 안에서 다시 두 배가 되어 1 MiB 한도를
+넘었고, `response_too_large`로 거절된 뒤 나눠 읽을 방법이 없었다. 처음의 「Report 원문은 자르지 않는다 —
+넘으면 거절」은 원본을 끝까지 읽을 수 있어야 한다는 경계를 지키지 못했다(직렬화로 불어나는 크기를 계산에
+넣지 않았다). 한도는 그대로 두고 조회 방식을 고쳤다.
+
+- 응답은 실제 전송 크기로 센 분량 안에서 조립한다. 싣지 않은 것은 생략 사실(`truncated: true`,
+  `value_omitted`·`name_omitted`, `more`)과 **그것을 읽는 입력**(`read: {field}`, `more: [{list, from}]`,
+  `next_offset`)을 함께 밝힌다.
+- 칸 하나의 값·이름은 `field`·`part`·`offset`으로 16 KiB씩 글자 경계에서 잘라 읽고, 목록(`cycles`·`steps`·
+  `fields`·`files`)은 `list`·`from`으로 쪽 단위로 읽는다. 위치로 물은 쪽은 언제나 한 항목 이상 나아간다.
+- 조각을 순서대로 이으면 저장된 Report와 같다. 값 범위의 `sha256`과 Report의 `sha256`으로 확인할 수 있다.
+- 응답의 생략 표시는 `complete`가 아니라 `truncated`로 통일했다 — 요구나 기록의 ‘완료’로 읽힐 낱말을 피했다.
+- 추가한 검사: 단위 5건(전송 크기 계산이 실제 프레임 증가분과 같은지, 쪽 나눔과 전진, 칸 항목의 생략 표시,
+  글자 경계, 칸 1만 2천 개·4배/13배로 불어나는 값·긴 이름의 Report를 쪽과 범위로 끝까지 읽어 원본·digest와
+  대조하고 모든 응답이 한도 안인지)과 실제 프로세스 통합 시험 2건(검토의 재현 사례, 칸 6천 개·큰 값·긴 이름의
+  Analysis Report의 재조립·기록과 작업 파일 불변·재시작 뒤 같은 응답·잘못된 이어 읽기 입력의 구분).
+  `exploration_evidence`의 자동 검사 최소 실행 건수는 4에서 6으로 올렸다.
+- 남은 한계: 큰 값은 호출이 여러 번 든다(200 KB에 13회). 이 분량 기준이 실제 모델의 문맥에 적절한지는
+  측정하지 않았다. 증거 조회의 `declared` 목록과 출처 정보의 긴 요구 id는 길이만 싣는 방식으로 묶었다.
+
+**검토 보완의 검증 (2026-11-18, 로컬 macOS arm64).** `exploration-flow,visual-authoring,product-safety`: 단위 780
+통과·1 제외(앞의 774 + 6), `exploration_flow` 4, `exploration_tools` 4, `exploration_evidence` **6**(`expect-tests` 최소 6),
+항목 큐 통합 시험군 45, 설명서 35, 보호 21 통과, 전체 대상 build 통과. `approved-plan,visual-authoring,product-safety`:
+단위 761 통과·1 제외, stdio 승인·복구·Monitor 고정 자료 17, 문맥 17, 안내 13, 설명서 35, 보호 21 통과, 전체 대상 build
+통과, 설명서 예시 실행과 예시 검사 21 통과, 문맥 측정 26 통과·1 제외, 재개 측정 245,486바이트(변화 없음); 이 구성에서
+`exploration_evidence`는 0건이며 `expect-tests`가 통과로 세지 않는다. 기본 Core 1,637 통과·2 제외와 전체 대상 build,
+`chain-core` 159, `chain-core,visual-authoring,product-safety`의 `mcp` 37·`visual_start` 1·`chain_resume_benchmark` 1과
+build, `recovery-auto-approval` stdio 5와 build 통과. 화면/Plugin JS 233 통과·5 제외, 패키징/고지 105 통과·1 제외,
+CI 계약 7, 시나리오 도구 40, 문맥 지표·문서 연결 도구 26 통과, workflow–Skill 일치와 문서 연결 검사 문제 없음.
+수정 중의 실패: 새 통합 시험 1건(응답의 생략 표시 칸 `complete`가 시험의 판정 낱말 금지 목록에 걸림 → `truncated`로 통일),
+단위 시험 1건(쪽이 하나로 끝나 쪽 나눔을 보지 못함 → 칸 수를 늘림), Skill 계약 시험 1건(지침의 줄바꿈 위치 변화 → 문구
+검사를 줄바꿈에 무관하게 고침). 검토의 재현 패치는 한 응답이 값 전체를 싣기를 기대하므로 그대로는 통과할 수 없고,
+같은 저장 Report를 범위로 끝까지 읽어 원문과 대조하는 시험으로 옮겼다. 조회 경로 블록을 고쳐 `SPEC-EXPLORE-ORIGINALS`
+지문을 재검토 뒤 갱신했다. Windows 로컬, `visual-authoring` 단독 전체 구성, 실제 모델·Host 화면은 실행하지 않았다.
 
 ### 2026-11-17 현재 구현 순서 — Chain 최우선
 

@@ -113,7 +113,8 @@ test("Skill 이 부르는 도구 이름은 전부 실제 tool 표에 있다", ()
       assert.ok(recordReads().includes(name), `Skill 이 records catalog 에 없는 도구를 부른다 — ${name}`);
       assert.ok(!TOOLS.includes(name), `원본 기록 조회 도구가 기본 tools.json 에 들어왔다 — ${name}`);
       assert.match(SKILL, /When `tools\/list` offers\s+`gil_report_read` and `gil_evidence_read`/, "원본 기록 조회의 사용 조건(tools/list)이 Skill 에 없다");
-      assert.match(SKILL, /Without those\s+tools the same Reports are in `gil_story`/, "도구가 없을 때의 경로가 Skill 에 없다");
+      assert.match(SKILL, /Without\s+those\s+tools\s+the\s+same\s+Reports\s+are\s+in\s+`gil_story`/, "도구가 없을 때의 경로가 Skill 에 없다");
+      assert.match(SKILL, /`truncated: true`\s+left\s+part\s+out[\s\S]{0,200}left\s+out\s+never\s+means\s+absent/, "생략과 이어 읽기의 뜻이 Skill 에 없다");
       continue;
     }
     if (name === "gil_prepare_workspace") {

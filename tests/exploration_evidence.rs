@@ -20,6 +20,9 @@
 //! - an unknown reference, a reference of another scope, an open Step, an undeclared path and
 //!   an unreadable store are told apart, and none of them is answered with a nearby record;
 //! - long evidence is cut openly, with the way to read the rest, and reassembles byte for byte;
+//! - a Report too large for one answer (a value that quadruples on the wire, thousands of
+//!   fields, a name too long to list) is never refused: the answer says what it left out and
+//!   which input reads it, and the pages and ranges put back together are the stored Report;
 //! - reading changes neither the record nor the working folder;
 //! - a Chain without the contract marker keeps its own responses and is still readable, also
 //!   from the Chain that follows it.
@@ -62,6 +65,8 @@ struct Spec<'a> {
     result: &'a str,
     interpretation: &'a str,
     lesson: &'a str,
+    /// Further `name: value` lines of the Analysis Report, as written.
+    analysis_extra: &'a str,
     fails_back_to: Option<&'a str>,
 }
 /// The canonical references of one walked Experiment.
@@ -100,7 +105,7 @@ fn walk(r: &mut Rig, n: u32, spec: &Spec<'_>, document: &str) -> Walked {
     ok(r.c.call("gil_close", verify_args(&r.root, &verify, &verify_report(spec))), "close verify");
     let analysis = step_ref(&ok(r.model("gil_open", json!({"kind":"analysis","contract":CONTRACT})), "analysis"), "analysis");
     let fit = yes_no(failed);
-    ok(r.model("gil_close", json!({"report":format!("hypothesis_fit: {fit}\nproblem_solved: {fit}\nsuccess_condition_met: {fit}\nguardrail_triggered: no\ninterpretation: {}\n", spec.interpretation)})), "close analysis");
+    ok(r.model("gil_close", json!({"report":format!("hypothesis_fit: {fit}\nproblem_solved: {fit}\nsuccess_condition_met: {fit}\nguardrail_triggered: no\ninterpretation: {}\n{}", spec.interpretation, spec.analysis_extra)})), "close analysis");
     let outcome = step_ref(&ok(r.model("gil_open", json!({"kind":"outcome","contract":CONTRACT})), "outcome"), "outcome");
     let verdict = if failed { "failure" } else { "success" };
     ok(r.model("gil_close", json!({"report":format!("verdict: {verdict}\nlesson: {}\nnext_direction.action: close_cycle\nnext_direction.reason: 이 질문의 판정을 마쳤다\n", spec.lesson)})), "close outcome");
@@ -142,10 +147,116 @@ fn keys(value: &Value) -> BTreeSet<String> {
 fn names(list: &[&str]) -> BTreeSet<String> {
     list.iter().map(|name| name.to_string()).collect()
 }
+/// The fields of a Report that one answer carries whole: every value inline, nothing left out.
 fn fields(read: &Value) -> BTreeMap<String, String> {
     assert_eq!(read["report"]["state"], "written", "{read}");
-    read["report"]["fields"].as_array().unwrap().iter()
-        .map(|field| (field["name"].as_str().unwrap().to_owned(), field["value"].as_str().unwrap().to_owned())).collect()
+    assert_eq!(read["truncated"], json!(false), "{read}");
+    assert!(read.get("more").is_none(), "{read}");
+    let listed = read["report"]["fields"].as_array().unwrap();
+    assert_eq!(read["report"]["field_count"].as_u64(), Some(listed.len() as u64), "{read}");
+    listed.iter().enumerate().map(|(index, field)| {
+        let (name, value) = (field["name"].as_str().unwrap(), field["value"].as_str().unwrap());
+        assert_eq!((field["index"].as_u64(), field["bytes"].as_u64()), (Some(index as u64), Some(value.len() as u64)), "{field}");
+        (name.to_owned(), value.to_owned())
+    }).collect()
+}
+/// How a Report was read to its end.
+#[derive(Debug, Default)]
+struct Reading {
+    answers: usize,
+    list_pages: usize,
+    value_ranges: usize,
+    name_ranges: usize,
+    largest_answer: usize,
+}
+const ANSWER_LIMIT: usize = 1024 * 1024;
+/// One `gil_report_read` answer that succeeded, inside the size limit of one answer.
+fn read_within(r: &mut Rig, args: Value, reading: &mut Reading) -> Value {
+    let frame = ok(r.model("gil_report_read", args.clone()), "gil_report_read");
+    let size = serde_json::to_vec(&frame["result"]).unwrap().len();
+    assert!(size <= ANSWER_LIMIT, "{args}: an answer of {size} bytes");
+    reading.answers += 1;
+    reading.largest_answer = reading.largest_answer.max(size);
+    structured(&frame).clone()
+}
+/// One field's value or name, read by ranges exactly as each answer directs.
+fn whole_part(r: &mut Rig, reference: &str, read: &Value, reading: &mut Reading) -> String {
+    let (mut text, mut offset) = (String::new(), None::<u64>);
+    loop {
+        let mut args = json!({"owner":owner(reference)});
+        for (key, value) in read.as_object().unwrap() { args[key] = value.clone(); }
+        if let Some(offset) = offset { args["offset"] = json!(offset); }
+        let range = read_within(r, args, reading);
+        let carried = range["text"].as_str().unwrap();
+        assert_eq!((range["encoding"].as_str(), range["returned_bytes"].as_u64(), range["offset"].as_u64()), (Some("utf8"), Some(carried.len() as u64), Some(offset.unwrap_or(0))), "{range}");
+        assert!(carried.len() as u64 <= CHUNK, "{}", carried.len());
+        text.push_str(carried);
+        if read.get("part").is_some() { reading.name_ranges += 1 } else { reading.value_ranges += 1 }
+        let total = range["total_bytes"].as_u64().unwrap();
+        assert_eq!(range["remaining_bytes"].as_u64(), Some(total - text.len() as u64), "{range}");
+        if range["truncated"] == json!(true) {
+            // The cut is stated together with the input that reads the rest.
+            let next = range["next_offset"].as_u64().unwrap();
+            assert_eq!(next, text.len() as u64, "{range}");
+            assert!(range["note"].as_str().unwrap().contains(&format!("offset: {next}")), "{range}");
+            offset = Some(next);
+        } else {
+            assert_eq!((&range["next_offset"], total), (&Value::Null, text.len() as u64), "{range}");
+            assert_eq!(range["sha256"], json!(sha256(text.as_bytes())), "the range's digest is the digest of the whole part");
+            return text;
+        }
+    }
+}
+/// A whole stored Report, however large: the overview, then every page `more` names and every
+/// range a field's `read` names, in the order the answers give them.
+fn whole_report(r: &mut Rig, reference: &str) -> (BTreeMap<String, String>, Value, Reading) {
+    let mut reading = Reading::default();
+    let first = read_within(r, json!({"owner":owner(reference)}), &mut reading);
+    assert_eq!(first["report"]["state"], "written", "{first}");
+    let count = first["report"]["field_count"].as_u64().unwrap() as usize;
+    let mut entries: Vec<Value> = first["report"]["fields"].as_array().unwrap().clone();
+    let mut next = first["more"].as_array().and_then(|more| more.iter().find(|rest| rest["list"] == "fields").cloned());
+    if first["truncated"] == json!(true) {
+        assert!(first["note"].as_str().unwrap().contains("truncated: true"), "an answer that left something out says so: {first}");
+    }
+    while let Some(rest) = next {
+        assert_eq!((rest["from"].as_u64(), rest["total"].as_u64()), (Some(entries.len() as u64), Some(count as u64)), "{rest}");
+        let page = read_within(r, json!({"owner":owner(reference),"list":"fields","from":rest["from"]}), &mut reading);
+        reading.list_pages += 1;
+        let items = page["items"].as_array().unwrap();
+        assert!(!items.is_empty(), "a page that does not advance: {page}");
+        assert_eq!((page["list"].as_str(), page["from"].as_u64(), page["returned"].as_u64(), page["total"].as_u64()), (Some("fields"), rest["from"].as_u64(), Some(items.len() as u64), Some(count as u64)));
+        assert_eq!(page["report"], json!({"state":"written","sha256":first["report"]["sha256"],"field_count":count}));
+        entries.extend(items.iter().cloned());
+        next = page["more"].as_array().and_then(|more| more.first().cloned());
+        assert_eq!(page["next_from"], next.as_ref().map_or(Value::Null, |rest| rest["from"].clone()), "{page}");
+    }
+    assert_eq!(entries.len(), count, "every field is listed exactly once");
+    let mut report = BTreeMap::new();
+    for (index, entry) in entries.iter().enumerate() {
+        assert_eq!(entry["index"].as_u64(), Some(index as u64), "{entry}");
+        let name = match entry.get("name") {
+            Some(name) => name.as_str().unwrap().to_owned(),
+            None => {
+                assert_eq!((&entry["name_omitted"], &entry["read_name"]), (&json!(true), &json!({"field":index,"part":"name"})), "{entry}");
+                let name = whole_part(r, reference, &entry["read_name"], &mut reading);
+                assert_eq!(entry["name_bytes"].as_u64(), Some(name.len() as u64));
+                name
+            }
+        };
+        let value = match entry.get("value") {
+            Some(value) => value.as_str().unwrap().to_owned(),
+            None => {
+                assert_eq!((&entry["value_omitted"], &entry["read"]), (&json!(true), &json!({"field":index})), "{entry}");
+                whole_part(r, reference, &entry["read"], &mut reading)
+            }
+        };
+        assert_eq!(entry["bytes"].as_u64(), Some(value.len() as u64), "{name}");
+        assert!(report.insert(name, value).is_none(), "a field arrived twice");
+    }
+    // The reassembled fields hash to the digest every answer about this Report states.
+    assert_eq!(first["report"]["sha256"], json!(sha256(&serde_json::to_vec(&report).unwrap())), "the pieces put back together are the stored Report");
+    (report, first, reading)
 }
 /// Every object key anywhere in an answer.
 fn all_keys(value: &Value, into: &mut BTreeSet<String>) {
@@ -200,13 +311,13 @@ fn two_experiments_and_a_revisit(label: &str) -> (Rig, Walked, Walked, u32) {
         requirement: "R1", problem: "입력 파일의 열은 두 개인가?",
         files: &[(COLUMNS, COLUMNS_FIRST.as_bytes())], evidence: &[COLUMNS],
         result: "열 두 개를 관측했다", interpretation: "관측한 열 수가 명제와 일치한다",
-        lesson: "열 구조는 확인됐다고 기록한다", fails_back_to: None,
+        lesson: "열 구조는 확인됐다고 기록한다", analysis_extra: "", fails_back_to: None,
     });
     let second = experiment(&mut r, &Spec {
         requirement: "R1", problem: "입력 파일의 행은 열 개 이상인가?",
         files: &[(COLUMNS, COLUMNS_REWRITTEN.as_bytes()), (ROWS, ROWS_SEEN.as_bytes())], evidence: &[COLUMNS, ROWS],
         result: "행 한 개를 관측했고 열 수는 다시 읽지 못했다", interpretation: "관측한 행 수가 기준에 못 미친다",
-        lesson: "행이 충분하다는 가정이 관측과 어긋났다", fails_back_to: Some(&first.cycle),
+        lesson: "행이 충분하다는 가정이 관측과 어긋났다", analysis_extra: "", fails_back_to: Some(&first.cycle),
     });
     r.recover();
     let third = r.open_experiment("R1");
@@ -243,8 +354,8 @@ fn a_requirement_leads_to_each_linked_experiments_original_reports_and_stored_ev
 
     // ── requirement → the failed Experiment, found by the reference the link list gave ──
     let cycle = report(&mut r, &second.cycle);
-    assert_eq!(keys(&cycle), names(&["ok", "schema_version", "source", "owner", "chain", "cycle", "plan_link", "steps", "report", "note"]));
-    assert_eq!(cycle["source"], "stored_record");
+    assert_eq!(keys(&cycle), names(&["ok", "schema_version", "source", "owner", "chain", "cycle", "plan_link", "steps", "report", "truncated", "note"]));
+    assert_eq!((&cycle["source"], &cycle["truncated"]), (&json!("stored_record"), &json!(false)), "nothing was left out of a small record");
     assert_eq!(cycle["owner"], owner(&second.cycle));
     assert_eq!(cycle["chain"], json!({"ref":"chain:C1","state":"open"}));
     assert_eq!(cycle["plan_link"], json!({"contract":"exploration","plan_revision":1,"plan_digest":digest,"requirement_id":"R1"}));
@@ -273,7 +384,7 @@ fn a_requirement_leads_to_each_linked_experiments_original_reports_and_stored_ev
 
     // ── its Define: the question and the judgment condition, as fixed before the observation ──
     let define = report(&mut r, &second.define);
-    assert_eq!(keys(&define), names(&["ok", "schema_version", "source", "owner", "chain", "cycle", "plan_link", "step", "report", "note"]));
+    assert_eq!(keys(&define), names(&["ok", "schema_version", "source", "owner", "chain", "cycle", "plan_link", "step", "report", "truncated", "note"]));
     assert_eq!(define["step"], json!({"ref":second.define,"kind":"define","state":"closed"}));
     assert_eq!(fields(&define), BTreeMap::from([("problem".to_string(), "입력 파일의 행은 열 개 이상인가?".to_string()), ("success_condition".to_string(), SUCCESS_CONDITION.to_string())]));
     assert_eq!(define["plan_link"], cycle["plan_link"]);
@@ -281,7 +392,7 @@ fn a_requirement_leads_to_each_linked_experiments_original_reports_and_stored_ev
 
     // ── its Verify: the observation and what it declared as evidence ──
     let verify = report(&mut r, &second.verify);
-    assert_eq!(keys(&verify), names(&["ok", "schema_version", "source", "owner", "chain", "cycle", "plan_link", "step", "report", "evidence", "note"]));
+    assert_eq!(keys(&verify), names(&["ok", "schema_version", "source", "owner", "chain", "cycle", "plan_link", "step", "report", "evidence", "truncated", "note"]));
     assert_eq!(verify["step"], json!({"ref":second.verify,"kind":"verify","state":"closed","snapshot":stored_world}));
     let observed = fields(&verify);
     assert_eq!(observed["result"], "행 한 개를 관측했고 열 수는 다시 읽지 못했다");
@@ -290,7 +401,7 @@ fn a_requirement_leads_to_each_linked_experiments_original_reports_and_stored_ev
     assert_eq!(observed["evidence_files"].lines().map(str::trim).collect::<Vec<_>>(), vec![COLUMNS, ROWS]);
     let current_world = verify["evidence"]["current_world"].as_str().unwrap().to_owned();
     assert_ne!(current_world, stored_world, "the folder was restored to another world");
-    assert_eq!(verify["evidence"], json!({"state":"indexed","source":"stored_snapshot","snapshot":stored_world,"current_world":current_world,"read_with":"gil_evidence_read","files":[
+    assert_eq!(verify["evidence"], json!({"state":"indexed","source":"stored_snapshot","snapshot":stored_world,"current_world":current_world,"read_with":"gil_evidence_read","file_count":3,"files":[
         {"path":COLUMNS,"declared_in":"evidence_files","stored":"present","sha256":sha256(COLUMNS_REWRITTEN.as_bytes()),"in_current_world":"different"},
         {"path":ROWS,"declared_in":"evidence_files","stored":"present","sha256":sha256(ROWS_SEEN.as_bytes()),"in_current_world":"absent"},
         {"path":PLAN_DOCUMENT,"declared_in":"plan_document","stored":"present","sha256":sha256(document.as_bytes()),"in_current_world":"same"}]}));
@@ -336,7 +447,7 @@ fn a_requirement_leads_to_each_linked_experiments_original_reports_and_stored_ev
 
     // ── the Chain as addresses: the failed Experiment is listed beside the others ──
     let chain = report(&mut r, "chain:C1");
-    assert_eq!(keys(&chain), names(&["ok", "schema_version", "source", "owner", "chain", "cycles", "report", "note"]));
+    assert_eq!(keys(&chain), names(&["ok", "schema_version", "source", "owner", "chain", "cycles", "report", "truncated", "note"]));
     assert_eq!((chain["chain"]["ref"].as_str(), chain["chain"]["state"].as_str(), &chain["chain"]["parent"], &chain["chain"]["exit_snapshot"]), (Some("chain:C1"), Some("open"), &Value::Null, &Value::Null));
     assert_eq!(chain["report"], json!({"state":"not_written"}), "an open Chain has no Chain Report");
     let listed: Vec<(String, String, Value)> = chain["cycles"].as_array().unwrap().iter()
@@ -525,7 +636,7 @@ fn read_to_end(r: &mut Rig, verify: &str, path: &str, whole: &[u8]) -> (Vec<u8>,
 }
 
 #[test]
-fn long_evidence_is_cut_openly_and_reads_back_whole_while_a_report_is_never_cut() {
+fn long_evidence_and_a_long_report_field_are_cut_openly_and_read_back_whole() {
     let mut r = Rig::start("evidence-long", &[("data/input.csv", "a,b\n1,2\n")]);
     r.interview(&["R1"], 1, &[], "open_child");
     // Multi-byte text longer than two parts, binary bytes that are not text, and a long Report field.
@@ -536,7 +647,7 @@ fn long_evidence_is_cut_openly_and_reads_back_whole_while_a_report_is_never_cut(
     let run = experiment(&mut r, &Spec {
         requirement: "R1", problem: "긴 관측 기록을 끝까지 읽을 수 있는가?",
         files: &[("evidence/long.md", long.as_bytes()), ("evidence/raw.bin", &binary)], evidence: &["evidence/long.md", "evidence/raw.bin"],
-        result: long_result.trim_end(), interpretation: "기록의 길이와 내용이 보존됐다", lesson: "긴 기록도 원문으로 남는다", fails_back_to: None,
+        result: long_result.trim_end(), interpretation: "기록의 길이와 내용이 보존됐다", lesson: "긴 기록도 원문으로 남는다", analysis_extra: "", fails_back_to: None,
     });
     let (record_before, world_before) = (record_tree(&r.record), world(&r.root));
 
@@ -547,10 +658,13 @@ fn long_evidence_is_cut_openly_and_reads_back_whole_while_a_report_is_never_cut(
     assert_eq!(raw, binary);
     assert!(encodings.len() >= 2 && encodings.iter().all(|encoding| encoding == "base64"), "{encodings:?}");
 
-    // A Report is one original: its long field arrives whole, with no elision marker.
-    let verify = report(&mut r, &run.verify);
-    assert_eq!(fields(&verify)["result"], long_result.trim_end());
-    assert!(verify.get("truncated").is_none(), "{:?}", keys(&verify));
+    // A long Report field is not cut inside an answer either: the overview lists it without its
+    // value and names the read, and the ranges give back the stored text.
+    let (verify, overview, reading) = whole_report(&mut r, &run.verify);
+    assert_eq!(verify["result"], long_result.trim_end());
+    assert_eq!(overview["truncated"], json!(true));
+    assert!(reading.value_ranges >= 4 && reading.list_pages == 0, "{reading:?}");
+    assert_eq!(verify["execution"], "합성 자료를 관측했다", "the short fields beside it arrived inline");
     // The Cycle index stayed short however long the Reports are: addresses, not bodies.
     let index = report(&mut r, &run.cycle);
     assert!(serde_json::to_vec(&index).unwrap().len() < 4096, "the Cycle index carries {} bytes", serde_json::to_vec(&index).unwrap().len());
@@ -574,7 +688,7 @@ fn a_chain_without_the_marker_keeps_its_responses_and_is_read_from_the_chain_aft
     let run = walk(&mut r, n, &Spec {
         requirement: "A", problem: "항목 A을 합성 자료로 확인한다",
         files: &[("evidence/A.md", "항목 A 결과\n".as_bytes())], evidence: &["evidence/A.md"],
-        result: "항목 A를 저장했다", interpretation: "저장한 결과가 항목과 일치했다", lesson: "항목 A를 확인했다", fails_back_to: None,
+        result: "항목 A를 저장했다", interpretation: "저장한 결과가 항목과 일치했다", lesson: "항목 A를 확인했다", analysis_extra: "", fails_back_to: None,
     }, &document);
 
     // The item-queue responses are the ones that Chain always had: no contract, no requirement
@@ -634,4 +748,127 @@ fn a_chain_without_the_marker_keeps_its_responses_and_is_read_from_the_chain_aft
     assert_eq!((here["chain"]["parent"].as_str(), here["chain"]["state"].as_str(), &here["report"]), (Some("chain:C1"), Some("open"), &json!({"state":"not_written"})));
     assert_eq!(here["cycles"].as_array().unwrap().len(), 1, "{here}");
     assert_eq!(record_tree(&r.record), record_before, "reading across Chains changed the record");
+}
+
+/// The reviewer's case, as found: a stored Report whose value quadruples on the wire was refused
+/// with `response_too_large` and could not be read at all.
+#[test]
+fn a_valid_escape_heavy_report_remains_readable() {
+    let mut r = Rig::start("evidence-review-heavy", &[("data/input.csv", "a,b\n1,2\n")]);
+    r.interview(&["R1"], 1, &[], "open_child");
+    let result = "\\\"".repeat(100_000);
+    let run = experiment(&mut r, &Spec {
+        requirement: "R1", problem: "입력 파일에 머리글 줄이 있는가?",
+        files: &[("evidence/header.md", b"a,b\n")], evidence: &["evidence/header.md"],
+        result: &result, interpretation: "머리글을 관측했다", lesson: "원문을 보존한다", analysis_extra: "", fails_back_to: None,
+    });
+    let frame = r.model("gil_report_read", json!({"owner":owner(&run.verify)}));
+    assert!(is_ok(&frame), "a stored Report is never refused for its size: {}", &frame.to_string()[..frame.to_string().len().min(400)]);
+    let (read, overview, reading) = whole_report(&mut r, &run.verify);
+    assert_eq!(read["result"], result);
+    // What the first answer said about the part it left out.
+    let entry = overview["report"]["fields"].as_array().unwrap().iter().find(|field| field["name"] == "result").unwrap().clone();
+    assert_eq!(entry, json!({"index":entry["index"],"name":"result","bytes":200_000,"value_omitted":true,"read":{"field":entry["index"]}}));
+    assert_eq!((&overview["truncated"], overview.get("more")), (&json!(true), None), "the list is whole; one value is read by range");
+    assert_eq!(reading.value_ranges, 200_000usize.div_ceil(CHUNK as usize), "{reading:?}");
+    assert!(reading.largest_answer <= ANSWER_LIMIT, "{reading:?}");
+}
+
+#[test]
+fn a_report_larger_than_one_answer_is_listed_in_pages_read_in_ranges_and_reassembles() {
+    let mut r = Rig::start("evidence-large-report", &[("data/input.csv", "a,b\n1,2\n")]);
+    r.interview(&["R1"], 1, &[], "open_child");
+    // An Analysis with more fields than one answer lists, a value that quadruples on the wire,
+    // a multi-line multi-byte value, and a field name too long to write out in a list.
+    let many: String = (0..6000).map(|n| format!("obs{n:04}: 값 {n}\n")).collect();
+    let quoted = "\\\"".repeat(60_000);
+    let lines: Vec<String> = (0..1500).map(|n| format!("줄 {n:04}: \"관측\" \\ 그대로 적는다")).collect();
+    let long_name = format!("named_{}", "n".repeat(400));
+    let extra = format!("{many}quoted: {quoted}\n{long_name}: 긴 이름의 칸\nnarrative: |\n{}\n", lines.iter().map(|line| format!("  {line}")).collect::<Vec<_>>().join("\n"));
+    let run = experiment(&mut r, &Spec {
+        requirement: "R1", problem: "많은 관측을 한 보고서에 남길 수 있는가?",
+        files: &[("evidence/many.md", "관측 6000건\n".as_bytes())], evidence: &["evidence/many.md"],
+        result: "관측을 보고서에 남겼다", interpretation: "관측이 모두 기록됐다", lesson: "큰 보고서도 원문으로 남는다",
+        analysis_extra: &extra, fails_back_to: None,
+    });
+    let mut expected: BTreeMap<String, String> = (0..6000).map(|n| (format!("obs{n:04}"), format!("값 {n}"))).collect();
+    for (name, value) in [("hypothesis_fit", "yes"), ("problem_solved", "yes"), ("success_condition_met", "yes"), ("guardrail_triggered", "no"),
+        ("interpretation", "관측이 모두 기록됐다"), ("quoted", quoted.as_str()), (long_name.as_str(), "긴 이름의 칸"), ("evidence.verify_ref", run.verify.as_str())] {
+        expected.insert(name.to_owned(), value.to_owned());
+    }
+    expected.insert("narrative".into(), lines.join("\n"));
+    let (record_before, world_before) = (record_tree(&r.record), world(&r.root));
+
+    let (read, overview, reading) = whole_report(&mut r, &run.analysis);
+    assert_eq!(read.len(), expected.len());
+    assert!(read == expected, "the reassembled Report differs from what was stored");
+    assert!(reading.list_pages >= 1 && reading.value_ranges >= 2 && reading.name_ranges == 1 && reading.largest_answer <= ANSWER_LIMIT, "{reading:?}");
+    // The first answer named what it left out: the rest of the list, and each omitted value.
+    assert_eq!(overview["truncated"], json!(true));
+    let rest = &overview["more"][0];
+    assert_eq!((rest["list"].as_str(), rest["total"].as_u64()), (Some("fields"), Some(expected.len() as u64)), "{rest}");
+    assert_eq!(rest["from"].as_u64(), Some(overview["report"]["fields"].as_array().unwrap().len() as u64));
+    // The digest is the one the visual read reports for the same Report.
+    let visuals = ok(r.model("gil_report_visuals", json!({"owner":owner(&run.analysis)})), "visuals");
+    assert_eq!(structured(&visuals)["report_sha256"], overview["report"]["sha256"]);
+    // The Cycle index is still addresses only, and whole.
+    let cycle = report(&mut r, &run.cycle);
+    assert_eq!((&cycle["truncated"], cycle["steps"].as_array().unwrap().len()), (&json!(false), 5));
+
+    // Other lists are paged by the same inputs.
+    let mut unused = Reading::default();
+    let steps = read_within(&mut r, json!({"owner":owner(&run.cycle),"list":"steps","from":2}), &mut unused);
+    assert_eq!((steps["from"].as_u64(), steps["returned"].as_u64(), steps["total"].as_u64(), &steps["next_from"], &steps["truncated"]), (Some(2), Some(3), Some(5), &Value::Null, &json!(false)));
+    assert_eq!(steps["items"], json!(cycle["steps"].as_array().unwrap()[2..]));
+    assert!(steps.get("report").is_none() && steps.get("steps").is_none(), "a list page carries that list only: {:?}", keys(&steps));
+    let cycles = read_within(&mut r, json!({"owner":owner("chain:C1"),"list":"cycles","from":1}), &mut unused);
+    assert_eq!((cycles["returned"].as_u64(), cycles["items"][0]["ref"].as_str()), (Some(1), Some(run.cycle.as_str())));
+    let files = read_within(&mut r, json!({"owner":owner(&run.verify),"list":"files"}), &mut unused);
+    assert_eq!((files["evidence"]["file_count"].as_u64(), files["returned"].as_u64(), files["items"][0]["path"].as_str()), (Some(2), Some(2), Some("evidence/many.md")));
+    let none = read_within(&mut r, json!({"owner":owner("chain:C1"),"list":"fields"}), &mut unused);
+    assert_eq!((&none["report"], none["total"].as_u64(), &none["items"]), (&json!({"state":"not_written"}), Some(0), &json!([])), "an open Chain has no Report fields to list");
+
+    // A continuation that names nothing is refused under its own code; none is answered empty.
+    let fields = expected.len() as u64;
+    let narrative = read.keys().position(|name| name == "narrative").unwrap() as u64;
+    for (args, code, key, value) in [
+        (json!({"owner":owner(&run.analysis),"field":fields}), "invalid_field", "field_count", json!(fields)),
+        (json!({"owner":owner(&run.analysis),"field":narrative,"offset":1}), "invalid_offset", "total_bytes", json!(expected["narrative"].len())),
+        (json!({"owner":owner(&run.analysis),"field":narrative,"offset":expected["narrative"].len()}), "invalid_offset", "total_bytes", json!(expected["narrative"].len())),
+        (json!({"owner":owner(&run.analysis),"list":"fields","from":fields}), "invalid_from", "total", json!(fields)),
+        (json!({"owner":owner(&run.analysis),"list":"cycles"}), "invalid_list", "lists", json!(["fields", "files"])),
+        (json!({"owner":owner(&run.cycle),"list":"files"}), "invalid_list", "lists", json!(["steps", "fields"])),
+        (json!({"owner":owner(&run.analysis),"list":"files"}), "not_a_verify", "kind", json!("analysis")),
+    ] {
+        let (got, body) = code_of(r.model("gil_report_read", args.clone()), code);
+        assert_eq!((got.as_str(), &body[key]), (code, &value), "{args}: {body}");
+    }
+    for args in [json!({"owner":owner(&run.analysis),"list":"fields","field":0}), json!({"owner":owner(&run.analysis),"from":3}),
+        json!({"owner":owner(&run.analysis),"offset":3}), json!({"owner":owner(&run.analysis),"field":"quoted"})] {
+        let error = rpc_error(r.model("gil_report_read", args.clone()), "shape");
+        assert!(error["error"]["message"].as_str().unwrap().contains("ONE continuation"), "{args}: {error}");
+    }
+
+    // Reading by pages and ranges changed nothing, and a new process gives the same answers.
+    assert_eq!(record_tree(&r.record), record_before, "a paged read changed the record or its objects");
+    assert_eq!(world(&r.root), world_before, "a paged read changed the working folder");
+    let sample = [json!({"owner":owner(&run.analysis)}), json!({"owner":owner(&run.analysis),"list":"fields","from":rest["from"]}),
+        json!({"owner":owner(&run.analysis),"field":narrative,"offset":overview_next(&mut r, &run.analysis, narrative)})];
+    let before: Vec<Value> = sample.iter().map(|args| read_within(&mut r, args.clone(), &mut unused)).collect();
+    r.restart();
+    let after: Vec<Value> = sample.iter().map(|args| read_within(&mut r, args.clone(), &mut unused)).collect();
+    assert_eq!(after, before, "after a restart the same pages and ranges are found");
+    assert_eq!(whole_report(&mut r, &run.analysis).0, read);
+    assert_eq!(record_tree(&r.record), record_before);
+
+    // A Step still open has no field to range over; that is said, not answered as empty text.
+    r.open_experiment("R1");
+    let define = step_ref(&ok(r.model("gil_open", json!({"kind":"define","contract":CONTRACT})), "define"), "define");
+    let (code, _) = code_of(r.model("gil_report_read", json!({"owner":owner(&define),"field":0})), "field of an open Step");
+    assert_eq!(code, "report_not_written");
+}
+/// Where the second range of a field starts, as the first range says.
+fn overview_next(r: &mut Rig, reference: &str, field: u64) -> u64 {
+    let first = structured(&ok(r.model("gil_report_read", json!({"owner":owner(reference),"field":field})), "first range")).clone();
+    first["next_offset"].as_u64().expect("the value is longer than one range")
 }

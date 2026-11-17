@@ -49,7 +49,7 @@ mod revisit_recovery;
 #[cfg(feature = "exploration-flow")]
 mod stored_evidence;
 #[cfg(feature = "exploration-flow")]
-pub(crate) use stored_evidence::{EvidenceChunk, EvidenceIndex, StoredEvidenceError};
+pub(crate) use stored_evidence::{DeclaredEvidence, EvidenceChunk, EvidenceIndex, StoredEvidenceError};
 
 #[cfg(feature = "visual-authoring")]
 #[path = "visual_start.rs"]

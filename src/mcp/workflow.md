@@ -250,8 +250,10 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
      later Verify or a revisit may have changed the file of that name. `owner: {kind: "chain",
      ref}` lists an earlier Chain's Cycles. Failed and revisited Experiments read the same way.
      These reads return stored text: existing in the record is not being true or still valid,
-     disagreeing records are both shown, and nothing is summarized or judged. Without those
-     tools the same Reports are in `gil_story`.
+     disagreeing records are both shown, and nothing is summarized or judged. An answer with
+     `truncated: true` left part out to stay small and names the input that reads it (`more`,
+     a field's `read`, `next_offset`); left out never means absent. Without those tools the
+     same Reports are in `gil_story`.
    - Do not re-propose the plan merely to split, re-order or change the method of experiments.
      When the requirement, scope, permission or judgment criteria themselves must change, do not
      disguise that as a Define: agree on it in an Interview (`gil_plan_request_interview` preserves
