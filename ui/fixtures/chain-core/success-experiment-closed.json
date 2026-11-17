@@ -1,0 +1,507 @@
+{
+  "details": {
+    "step:C1/S1": {
+      "cycle_ref": "cycle:C1",
+      "kind": "question",
+      "report": {
+        "fields": [
+          {
+            "name": "choices",
+            "value": "보고서 / 비교"
+          },
+          {
+            "name": "question",
+            "value": "어떤 합성 작업인가"
+          },
+          {
+            "name": "response",
+            "value": "합성 자료로 항목별 보고서를 작성해줘"
+          }
+        ]
+      },
+      "schema_version": 1,
+      "state": "closed",
+      "step_ref": "step:C1/S1"
+    },
+    "step:C1/S2": {
+      "cycle_ref": "cycle:C1",
+      "kind": "interpretation",
+      "report": {
+        "fields": [
+          {
+            "name": "interpretation",
+            "value": "항목별 파일 증거를 남기며 보고서를 만든다"
+          },
+          {
+            "name": "unresolved",
+            "value": "없음"
+          }
+        ]
+      },
+      "schema_version": 1,
+      "state": "closed",
+      "step_ref": "step:C1/S2"
+    },
+    "step:C1/S3": {
+      "cycle_ref": "cycle:C1",
+      "kind": "synthesis",
+      "report": {
+        "fields": [
+          {
+            "name": "approved",
+            "value": "yes"
+          },
+          {
+            "name": "basis_refs",
+            "value": "step:C1/S1\nstep:C1/S2"
+          },
+          {
+            "name": "exploration_checklist",
+            "value": "A"
+          },
+          {
+            "name": "plan_digest",
+            "value": "23c69fda1426513997335467ffb9e9402379f48440d6d504316ac509528e54b7"
+          },
+          {
+            "name": "plan_revision",
+            "value": "1"
+          },
+          {
+            "name": "statement",
+            "value": "합성 자료로 항목을 순서대로 확인하고 파일 증거를 남긴다"
+          }
+        ]
+      },
+      "schema_version": 1,
+      "state": "closed",
+      "step_ref": "step:C1/S3"
+    },
+    "step:C1/S4": {
+      "cycle_ref": "cycle:C1",
+      "kind": "outcome",
+      "report": {
+        "fields": [
+          {
+            "name": "lesson",
+            "value": "Synthetic scope agreed"
+          },
+          {
+            "name": "next_direction.action",
+            "value": "close_cycle"
+          },
+          {
+            "name": "next_direction.reason",
+            "value": "Begin experiment"
+          },
+          {
+            "name": "synthesis_ref",
+            "value": "step:C1/S3"
+          },
+          {
+            "name": "verdict",
+            "value": "success"
+          }
+        ]
+      },
+      "schema_version": 1,
+      "state": "closed",
+      "step_ref": "step:C1/S4"
+    },
+    "step:C2/S1": {
+      "cycle_ref": "cycle:C2",
+      "kind": "define",
+      "report": {
+        "fields": [
+          {
+            "name": "problem",
+            "value": "항목 A을 합성 자료로 확인한다"
+          },
+          {
+            "name": "success_condition",
+            "value": "evidence 파일에 항목 A 결과가 저장된다"
+          }
+        ]
+      },
+      "schema_version": 1,
+      "state": "closed",
+      "step_ref": "step:C2/S1"
+    },
+    "step:C2/S2": {
+      "cycle_ref": "cycle:C2",
+      "kind": "hypothesis",
+      "report": {
+        "fields": [
+          {
+            "name": "guardrail",
+            "value": "No user files"
+          },
+          {
+            "name": "hypothesis",
+            "value": "A generated gray pixel can be preserved"
+          },
+          {
+            "name": "rationale",
+            "value": "Deterministic synthetic input"
+          }
+        ]
+      },
+      "schema_version": 1,
+      "state": "closed",
+      "step_ref": "step:C2/S2"
+    },
+    "step:C2/S3": {
+      "cycle_ref": "cycle:C2",
+      "kind": "verify",
+      "report": {
+        "fields": [
+          {
+            "name": "evidence_files",
+            "value": "evidence.png"
+          },
+          {
+            "name": "execution",
+            "value": "Generated one synthetic gray pixel"
+          },
+          {
+            "name": "plan_document",
+            "value": "plan.md"
+          },
+          {
+            "name": "result",
+            "value": "PNG bytes saved"
+          }
+        ]
+      },
+      "schema_version": 1,
+      "state": "closed",
+      "step_ref": "step:C2/S3"
+    },
+    "step:C2/S4": {
+      "cycle_ref": "cycle:C2",
+      "kind": "analysis",
+      "report": {
+        "fields": [
+          {
+            "name": "evidence.verify_ref",
+            "value": "step:C2/S3"
+          },
+          {
+            "name": "guardrail_triggered",
+            "value": "no"
+          },
+          {
+            "name": "hypothesis_fit",
+            "value": "yes"
+          },
+          {
+            "name": "interpretation",
+            "value": "Synthetic pixel was preserved"
+          },
+          {
+            "name": "problem_solved",
+            "value": "yes"
+          },
+          {
+            "name": "success_condition_met",
+            "value": "yes"
+          }
+        ]
+      },
+      "schema_version": 1,
+      "state": "closed",
+      "step_ref": "step:C2/S4"
+    },
+    "step:C2/S5": {
+      "cycle_ref": "cycle:C2",
+      "kind": "outcome",
+      "report": {
+        "fields": [
+          {
+            "name": "learning.analysis_ref",
+            "value": "step:C2/S4"
+          },
+          {
+            "name": "lesson",
+            "value": "Synthetic image saved"
+          },
+          {
+            "name": "next_direction.action",
+            "value": "close_cycle"
+          },
+          {
+            "name": "next_direction.reason",
+            "value": "Experiment complete"
+          },
+          {
+            "name": "verdict",
+            "value": "success"
+          }
+        ]
+      },
+      "schema_version": 1,
+      "state": "closed",
+      "step_ref": "step:C2/S5"
+    }
+  },
+  "plan": {
+    "active_plan": {
+      "digest": "23c69fda1426513997335467ffb9e9402379f48440d6d504316ac509528e54b7",
+      "items": [
+        {
+          "done_when": "evidence 파일에 항목 A 결과가 저장된다",
+          "id": "A",
+          "question": "항목 A을 합성 자료로 확인한다"
+        }
+      ],
+      "revision": 1,
+      "scope": {
+        "constraints": "외부 네트워크 없음",
+        "goal": "합성 자료 기반 항목별 보고서",
+        "in_scope": "제공된 합성 자료의 비교",
+        "out_of_scope": "실시간 데이터·실제 개인정보",
+        "success_criteria": "항목마다 파일 증거가 남는다"
+      }
+    },
+    "active_revision": 1,
+    "close_report": null,
+    "current_cycle": {
+      "ref": "cycle:C2",
+      "state": "closed"
+    },
+    "current_item": {
+      "done_when": "evidence 파일에 항목 A 결과가 저장된다",
+      "id": "A",
+      "question": "항목 A을 합성 자료로 확인한다"
+    },
+    "document": "# GIL approved plan\n\nRevision: 1\n\nSynthesis: step:C1/S3\n\nSHA-256: 23c69fda1426513997335467ffb9e9402379f48440d6d504316ac509528e54b7\n\n```json\n{\n  \"scope\": {\n    \"goal\": \"합성 자료 기반 항목별 보고서\",\n    \"in_scope\": \"제공된 합성 자료의 비교\",\n    \"out_of_scope\": \"실시간 데이터·실제 개인정보\",\n    \"constraints\": \"외부 네트워크 없음\",\n    \"success_criteria\": \"항목마다 파일 증거가 남는다\"\n  },\n  \"items\": [\n    {\n      \"id\": \"A\",\n      \"question\": \"항목 A을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 A 결과가 저장된다\"\n    }\n  ],\n  \"synthesis\": {\n    \"basis_refs\": \"step:C1/S1\\nstep:C1/S2\",\n    \"exploration_checklist\": \"A\",\n    \"statement\": \"합성 자료로 항목을 순서대로 확인하고 파일 증거를 남긴다\"\n  }\n}\n```\n",
+    "executed_cycles": [
+      {
+        "cycle_ref": "cycle:C2",
+        "item_id": "A",
+        "revision": 1
+      }
+    ],
+    "next": "승인된 항목을 모두 실행했다. gil_open(kind: interview)으로 Closing Interview를 열어 최종 판정(chain_verdict)을 제안하고 승인받은 뒤 Chain Report를 닫는다. 채팅 보고만으로 끝내지 않는다. 남은 작업이 있으면 같은 Interview에서 새 계획을 승인받는다. 결과물을 먼저 보여 준다: Closing Interview의 첫 메시지에서 만든 것과 용도, 실제 결과물과 확인 경로(파일 링크·주요 수치·실제 화면이나 저장된 캡처·바뀐 코드와 시험 결과), 검증 결과와 남은 한계를 제시한 뒤에 종료 여부를 묻는다. 파일 이름 나열이나 ‘완료’는 결과 제시가 아니다. 부분 결과·결과 없음은 사실대로 알리고, 기록된 증거를 읽어 보여 주며 새 파일을 만들지 않는다.\n새 Interview 제안은 active_plan.items 전체(실행된 항목 포함)를 원문 그대로 복사하고 새 ID를 추가한다. 순서와 scope는 새 승인으로 바꿀 수 있지만 기존 항목의 question/done_when은 바꿀 수 없다. active_plan은 실행 가능한 승인 판이며 아직 없으면 null이다. document는 Experiment를 열 때 바인딩된 승인 판의 UTF-8 원문이다. 바인딩 전에는 null이며 조회·실패한 close가 생성하지 않는다. 현재 Experiment에 바인딩이 있는데 null이면 요약을 만들어 쓰지 말고 현재 연결·상태를 확인한다. 파일 저장은 실제 열린 Verify에서만 한다. 한 Experiment는 current_item 하나에만 연결된다. executed_cycles는 열기 바인딩이며 성공 증명은 해당 Cycle Report다.",
+    "pending": [],
+    "proposal": null,
+    "reinterview_requests": [],
+    "retry_pending": [],
+    "supported": true
+  },
+  "view": {
+    "captured_at_unix_ms": 0,
+    "chain": {
+      "chain_ref": "chain:C1",
+      "current_cycle_ref": "cycle:C2",
+      "cycle_refs": [
+        "cycle:C1",
+        "cycle:C2"
+      ],
+      "entry_snapshot_ref": "snapshot:A1",
+      "existence_ref": "existence:X1",
+      "exit_snapshot_ref": null,
+      "parent_chain_ref": null,
+      "state": "open"
+    },
+    "chains": [
+      {
+        "chain_ref": "chain:C1",
+        "current_cycle_ref": "cycle:C2",
+        "cycle_refs": [
+          "cycle:C1",
+          "cycle:C2"
+        ],
+        "entry_snapshot_ref": "snapshot:A1",
+        "existence_ref": "existence:X1",
+        "exit_snapshot_ref": null,
+        "parent_chain_ref": null,
+        "state": "open"
+      }
+    ],
+    "current": {
+      "chain_ref": "chain:C1",
+      "cycle_ref": "cycle:C2",
+      "existence_ref": "existence:X1",
+      "journey_ref": "journey:X1@J9",
+      "step_ref": "step:C2/S5"
+    },
+    "current_will": null,
+    "next_actions": [
+      {
+        "command": "gil open interview",
+        "cycle_kind": "interview",
+        "help_ref": null,
+        "kind": "open_cycle",
+        "reason": "이 Cycle 을 부모로 다음 Cycle 을 연다",
+        "step_kind": null
+      },
+      {
+        "command": "gil open experiment",
+        "cycle_kind": "experiment",
+        "help_ref": null,
+        "kind": "open_cycle",
+        "reason": "이 Cycle 을 부모로 다음 Cycle 을 연다",
+        "step_kind": null
+      }
+    ],
+    "schema_version": 1,
+    "timeline": [
+      {
+        "cycle_ref": "cycle:C1",
+        "experiment_definition": null,
+        "interview_question": {
+          "question": "어떤 합성 작업인가",
+          "response": "합성 자료로 항목별 보고서를 작성해줘",
+          "state": "asked"
+        },
+        "kind": "interview",
+        "parent_cycle_ref": null,
+        "relation_to_current": "active_path",
+        "report": {
+          "handoff_summary": "Synthetic App approval, not human consent",
+          "next_direction": {
+            "action": "open_child",
+            "reason": "Begin experiment",
+            "target_cycle_ref": null
+          },
+          "outcome_lesson": "Synthetic scope agreed",
+          "verdict": "success",
+          "visuals": {
+            "count": 0,
+            "state": "references"
+          }
+        },
+        "revisit_from_cycle_ref": null,
+        "state": "closed",
+        "steps": [
+          {
+            "kind": "question",
+            "state": "closed",
+            "step_ref": "step:C1/S1",
+            "summary": "어떤 합성 작업인가",
+            "visuals": {
+              "count": 0,
+              "state": "references"
+            }
+          },
+          {
+            "kind": "interpretation",
+            "state": "closed",
+            "step_ref": "step:C1/S2",
+            "summary": "항목별 파일 증거를 남기며 보고서를 만든다",
+            "visuals": {
+              "count": 0,
+              "state": "references"
+            }
+          },
+          {
+            "kind": "synthesis",
+            "state": "closed",
+            "step_ref": "step:C1/S3",
+            "summary": "합성 자료로 항목을 순서대로 확인하고 파일 증거를 남긴다",
+            "visuals": {
+              "count": 0,
+              "state": "references"
+            }
+          },
+          {
+            "kind": "outcome",
+            "state": "closed",
+            "step_ref": "step:C1/S4",
+            "summary": "Synthetic scope agreed",
+            "visuals": {
+              "count": 0,
+              "state": "references"
+            }
+          }
+        ]
+      },
+      {
+        "cycle_ref": "cycle:C2",
+        "experiment_definition": {
+          "problem": "항목 A을 합성 자료로 확인한다",
+          "success_condition": "evidence 파일에 항목 A 결과가 저장된다"
+        },
+        "interview_question": null,
+        "kind": "experiment",
+        "parent_cycle_ref": "cycle:C1",
+        "relation_to_current": "active_path",
+        "report": {
+          "handoff_summary": "Synthetic pixel verified",
+          "next_direction": {
+            "action": "open_child",
+            "reason": "Ask about Chain closure",
+            "target_cycle_ref": null
+          },
+          "outcome_lesson": "Synthetic image saved",
+          "verdict": "success",
+          "visuals": {
+            "count": 1,
+            "state": "references"
+          }
+        },
+        "revisit_from_cycle_ref": null,
+        "state": "closed",
+        "steps": [
+          {
+            "kind": "define",
+            "state": "closed",
+            "step_ref": "step:C2/S1",
+            "summary": "항목 A을 합성 자료로 확인한다",
+            "visuals": {
+              "count": 0,
+              "state": "references"
+            }
+          },
+          {
+            "kind": "hypothesis",
+            "state": "closed",
+            "step_ref": "step:C2/S2",
+            "summary": "A generated gray pixel can be preserved",
+            "visuals": {
+              "count": 0,
+              "state": "references"
+            }
+          },
+          {
+            "kind": "verify",
+            "state": "closed",
+            "step_ref": "step:C2/S3",
+            "summary": "PNG bytes saved",
+            "visuals": {
+              "count": 1,
+              "state": "attached"
+            }
+          },
+          {
+            "kind": "analysis",
+            "state": "closed",
+            "step_ref": "step:C2/S4",
+            "summary": "Synthetic pixel was preserved",
+            "visuals": {
+              "count": 1,
+              "state": "references"
+            }
+          },
+          {
+            "kind": "outcome",
+            "state": "closed",
+            "step_ref": "step:C2/S5",
+            "summary": "Synthetic image saved",
+            "visuals": {
+              "count": 0,
+              "state": "references"
+            }
+          }
+        ]
+      }
+    ],
+    "world": {
+      "baseline_snapshot_ref": "snapshot:A2",
+      "reason": null,
+      "state": "clean",
+      "verify_can_confirm": false
+    }
+  }
+}

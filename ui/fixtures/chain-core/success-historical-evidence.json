@@ -1,0 +1,42 @@
+{
+  "image": {
+    "asset_id": "1",
+    "data_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGOpBwAAiQCEfJ3NXwAAAABJRU5ErkJggg==",
+    "mime_type": "image/png",
+    "next_offset": null,
+    "offset": 0,
+    "owner": {
+      "kind": "step",
+      "ref": "step:C2/S3"
+    },
+    "schema_version": 1,
+    "scope_id": "project:0000000000000000000000000000000000000000000000000000000000000000",
+    "sha256": "cced828b4ea3869d7fe4260781dc6facabcc43bb7c3535f818db786624373b98",
+    "total_bytes": 67
+  },
+  "visuals": {
+    "owner": {
+      "kind": "step",
+      "ref": "step:C2/S3"
+    },
+    "schema_version": 1,
+    "scope_id": "project:0000000000000000000000000000000000000000000000000000000000000000",
+    "state": "attached",
+    "uses": [
+      {
+        "alt": "One gray pixel",
+        "asset_id": "1",
+        "byte_length": 67,
+        "caption": "Synthetic evidence",
+        "height": 1,
+        "mime_type": "image/png",
+        "origin_step_ref": "step:C2/S3",
+        "purpose": "Check stored evidence retrieval",
+        "sha256": "cced828b4ea3869d7fe4260781dc6facabcc43bb7c3535f818db786624373b98",
+        "source_description": "Synthetic pixel, not a screenshot",
+        "source_kind": "generated",
+        "width": 1
+      }
+    ]
+  }
+}
