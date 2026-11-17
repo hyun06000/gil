@@ -160,6 +160,21 @@ test('CLI malformed input, rejected evidence and usage print no source data and 
 }));
 
 
+test('CLI rejects invalid UTF-8 without replacing source text or creating output', () => temp(dir => {
+  const input = inputFor();
+  input.run.notes = 'SYNTHETIC_UTF8_MARKER';
+  const bytes = Buffer.from(JSON.stringify(input));
+  bytes[bytes.indexOf('SYNTHETIC_UTF8_MARKER')] = 0xff;
+  const path = join(dir, 'invalid.json'), out = join(dir, 'out.json');
+  writeFileSync(path, bytes);
+  const p = cli('--input', path, '--out', out);
+  assert.equal(p.status, 2);
+  assert.equal(existsSync(out), false);
+  assert.deepEqual(readFileSync(path), bytes);
+  assert.ok(!`${p.stdout}${p.stderr}`.includes('SYNTHETIC_UTF8_MARKER'));
+  assert.ok(!`${p.stdout}${p.stderr}`.includes(dir));
+}));
+
 test('documented synthetic input imports and passes the existing result CLI', () => temp(dir => {
   const path = join(REPO, 'scenarios/chain-closing/imports/pending-synthetic.json');
   const out = join(dir, 'result.json');

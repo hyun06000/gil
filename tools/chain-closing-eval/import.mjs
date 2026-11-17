@@ -2,6 +2,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { TextDecoder } from 'node:util';
 import { loadCases } from './lib/package.mjs';
 import { importEvidence, ImportError } from './lib/import.mjs';
 import { sha256 } from '../chain-interview-eval/lib/io.mjs';
@@ -17,7 +18,9 @@ export function main(args) {
   if (!opts['--input'] || !opts['--out']) throw new Error('usage');
   // These two CLI paths are the only user-supplied paths opened by this command.
   const bytes = readFileSync(opts['--input']);
-  const result = importEvidence(JSON.parse(bytes.toString('utf8')), loadCases());
+  // Reject damaged source text instead of silently replacing bytes in evidence.
+  const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+  const result = importEvidence(JSON.parse(text), loadCases());
   result.import_evidence.input_sha256 = sha256(bytes);
   writeFileSync(opts['--out'], JSON.stringify(result, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
   const imported = result.import_evidence.cases.filter(c => c.state === 'imported').length;
