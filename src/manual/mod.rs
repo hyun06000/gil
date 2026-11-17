@@ -63,10 +63,16 @@ const DIRTY_NON_VERIFY: &str = if cfg!(feature = "product-safety") {
     include_str!("topics/artifact/dirty/non-verify.md")
 };
 
+const RESTORE: &str = if cfg!(feature = "product-safety") {
+    include_str!("topics/artifact/restore.product-safety.md")
+} else {
+    include_str!("topics/artifact/restore.md")
+};
+
 const SOURCES: &[&str] = &[
     include_str!("topics/current.md"),
     include_str!("topics/step/verify/close.md"),
-    include_str!("topics/artifact/restore.md"),
+    RESTORE,
     DIRTY_NON_VERIFY,
     include_str!("topics/action/open-contract.md"),
     include_str!("topics/cycle/experiment/close.md"),

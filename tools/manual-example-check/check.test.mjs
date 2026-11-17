@@ -58,7 +58,7 @@ test('every case example exists, and every runnable example has a reviewed case'
 });
 
 test('a changed excerpt is source_changed with the file, lines and the mapping entry to update', async () => {
-  const root = await docsCopy({ 'src/manual/topics/cycle/interview/clarify.md': (t) => t.replace('필요한 열·형식·누락 여부', '필요한 열·형식 여부') });
+  const root = await docsCopy({ 'src/manual/topics/cycle/interview/clarify.md': (t) => t.replace('합의한 형식·누락 허용 기준', '합의한 형식 기준') });
   const result = evalAt(root);
   const e = row(result, 'MAN-CLARIFY-GOOD');
   assert.equal(e.source_status, 'source_changed');
@@ -92,7 +92,7 @@ test('a new example-shaped block without a mapping is reported as unmapped', asy
 
 const CLARIFY = 'src/manual/topics/cycle/interview/clarify.md';
 const SMALLEST = 'src/manual/topics/step/define/smallest.md';
-const ITEM_A = '      항목 A  제공된 표의 날짜·금액 열이 월별 집계에 쓸 수 있는가 — done_when: 필요한 열·형식·누락 여부를 실제 자료로 확인한 기록과 사용 가능 여부·근거가 남는다\n';
+const ITEM_A = '      항목 A  제공된 표의 날짜·금액 열이 월별 집계에 쓸 수 있는가 — done_when: 필요한 날짜·금액 열이 존재하며 모든 대상 행이 합의한 형식·누락 허용 기준을 충족한다\n';
 /** An edit that must change the document; a silent no-op would make a test pass for nothing. */
 const swap = (from, to) => (t) => { assert.ok(t.includes(from), `document no longer contains ${JSON.stringify(from)}`); return t.replace(from, to); };
 /** The mapping as a reviewer who only refreshed every fingerprint to the edited documents would leave it. */
@@ -113,9 +113,9 @@ test('a reworded, narrowed or widened approved item fails even when every finger
   const edits = [
     // The mismatch this check used to tolerate: the Define example drops "날짜·금액 열".
     ['DOC-ITEM-A-WORDING', SMALLEST, swap('항목 A  제공된 표의 날짜·금액 열이 월별 집계에', '항목 A  제공된 표가 월별 집계에')],
-    ['DOC-ITEM-A-DONE-WHEN', SMALLEST, swap('확인한 기록과 사용 가능 여부·근거가 남는다\n  Define', '확인한 기록\n  Define')],
+    ['DOC-ITEM-A-DONE-WHEN', SMALLEST, swap('모든 대상 행이 합의한 형식·누락 허용 기준을 충족한다\n  Define', '일부 대상 행이 합의한 형식·누락 허용 기준을 충족한다\n  Define')],
     ['DOC-ITEM-A-WORDING', CLARIFY, swap('항목 A  제공된 표의 날짜·금액 열이', '항목 A  제공된 표의 날짜·금액·지역 열이')],
-    ['DOC-ITEM-A-DONE-WHEN', CLARIFY, swap('필요한 열·형식·누락 여부를 실제 자료로 확인한 기록과', '필요한 열·형식·누락·중복 여부를 실제 자료로 확인한 기록과')],
+    ['DOC-ITEM-A-DONE-WHEN', CLARIFY, swap('합의한 형식·누락 허용 기준을 충족한다', '합의한 형식·누락·중복 허용 기준을 충족한다')],
   ];
   for (const [id, path, edit] of edits) {
     const root = await docsCopy({ [path]: edit });

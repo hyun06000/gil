@@ -110,6 +110,9 @@ jobs:
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test context --test context_profiles
       - name: Approval profile, next-call guidance over in-memory state and the real receipt (Wave 1 C)
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test guidance_wave1 --test guidance_wave2 --test guidance_interview_chain --test resume_guidance
+      - name: Manual help matches approval and recovery policies (Mac)
+        if: runner.os == 'macOS'
+        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test manual
       - name: Approval profile resume capture and measurement (synthetic, no model evaluation)
         run: node tools/chain-resume-benchmark/run.mjs product "${{ runner.temp }}/gil-resume-product" target
       - name: Host guard scope and file protection in approval profile

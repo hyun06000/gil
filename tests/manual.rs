@@ -16,10 +16,15 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
-use gil::{CycleKind, NodeKind, ProjectSession, RuleSet};
+use gil::{CycleKind, NodeKind, RuleSet};
+#[cfg(not(feature = "approved-plan"))]
+use gil::ProjectSession;
 
 mod common;
 use common::spec;
+#[cfg(feature = "approved-plan")]
+#[path = "guidance_support/mod.rs"]
+mod guidance_support;
 
 const GIL: &str = env!("CARGO_BIN_EXE_gil");
 
@@ -94,6 +99,49 @@ fn section<'a>(said: &'a str, name: &str) -> &'a str {
     match rest.find("\n[") {
         Some(end) => &rest[..end],
         None => rest,
+    }
+}
+
+// New approval-profile fixtures must obtain a real synthetic App receipt, not inject bare yes.
+fn prepare_verify(dir: &Path) {
+    #[cfg(feature = "approved-plan")]
+    {
+        use guidance_support::{Mcp, contract, draft, ok as rpc_ok, report_text, scope_from_start, step_ref};
+        use serde_json::json;
+        let settings = guidance_support::scratch(&format!("manual-settings-{}", dir.file_name().unwrap().to_string_lossy()));
+        let mut mcp = Mcp::serve(&settings);
+        let rules = spec();
+        let started = rpc_ok(mcp.call("gil_start", dir, json!({})), "start");
+        let scope = scope_from_start(&started);
+        rpc_ok(mcp.call_raw("show_gil_monitor", json!({"scope_id": scope})), "monitor");
+        let mut basis = Vec::new();
+        for (name, kind) in [("question", NodeKind::Question), ("interpretation", NodeKind::Interpretation)] {
+            let opened = rpc_ok(mcp.call("gil_open", dir, contract(name)), name);
+            basis.push(step_ref(&opened, name));
+            rpc_ok(mcp.call("gil_close", dir, json!({"report":report_text(&common::full_report(&rules, CycleKind::Interview, kind))})), "close");
+        }
+        let synthesis = step_ref(&rpc_ok(mcp.call("gil_open", dir, contract("synthesis")), "synthesis"), "synthesis");
+        rpc_ok(mcp.call("gil_plan_propose", dir, json!({"draft":draft(&["A"], &basis)})), "propose");
+        let review = rpc_ok(mcp.call_raw("gil_plan_review", json!({"scope_id":scope})), "review");
+        rpc_ok(mcp.call_raw("gil_plan_decide", json!({"scope_id":scope,"revision":1,"digest":review["structuredContent"]["proposal"]["digest"],"token":review["_meta"]["gil/planApprovalToken"],"decision":"approve"})), "approve");
+        let read = rpc_ok(mcp.call("gil_plan_read", dir, json!({})), "read");
+        rpc_ok(mcp.call("gil_close", dir, json!({"report":read["structuredContent"]["close_report"]})), "close synthesis");
+        let outcome = step_ref(&rpc_ok(mcp.call("gil_open", dir, contract("outcome")), "outcome"), "outcome");
+        rpc_ok(mcp.call("gil_close", dir, json!({"report":report_text(&common::full_report(&rules, CycleKind::Interview, NodeKind::Outcome).with(common::SYNTHESIS_REF, synthesis))})), "close outcome");
+        rpc_ok(mcp.call("gil_close", dir, json!({"report":format!("verdict: success\noutcome_ref: {outcome}\nhandoff_summary: 합성 승인 후 도움말 검사\nnext_direction.action: open_child\nnext_direction.reason: 승인 항목 실행\n")})), "close interview");
+        rpc_ok(mcp.call("gil_open", dir, json!({"kind":"experiment"})), "experiment");
+        for (name, kind) in [("define", NodeKind::Define), ("hypothesis", NodeKind::Hypothesis)] {
+            rpc_ok(mcp.call("gil_open", dir, contract(name)), name);
+            rpc_ok(mcp.call("gil_close", dir, json!({"report":report_text(&common::full_report(&rules, CycleKind::Experiment, kind))})), "close");
+        }
+        rpc_ok(mcp.call("gil_open", dir, contract("verify")), "verify");
+    }
+    #[cfg(not(feature = "approved-plan"))]
+    {
+        let mut session = ProjectSession::start(spec(), dir.join(gil::STATE_PATH)).expect("시작한다");
+        *session.project_mut() = common::bootstrap_from(session.project().clone());
+        common::up_to_verify(session.project_mut());
+        session.commit().expect("눕힌다");
     }
 }
 
@@ -398,10 +446,24 @@ fn the_verify_topic_keeps_observation_apart_from_interpretation() {
 }
 
 #[test]
-fn the_restore_topic_asks_for_no_argument_and_no_confirmation() {
+fn the_restore_topic_matches_the_build_policy() {
     let dir = nowhere("the_restore_topic_asks_for_no_argument_and_no_confirmation");
     let said = ok(&dir, &["help", "artifact/restore"]);
 
+    if cfg!(feature = "product-safety") {
+        assert!(said.contains("직접 restore 를 거절") && said.contains("승인된 revisit"), "{said}");
+        assert!(!section(&said, "지금 할 일").lines().any(|l| l.trim() == "gil restore"));
+        let project = started("restore-refused-policy", &[("keep.txt", "original")]);
+        fs::write(project.join("keep.txt"), "changed").unwrap();
+        let before = fs::read(project.join(gil::STATE_PATH)).unwrap();
+        for args in [&["restore"][..], &["restore", "snapshot:A1"][..]] {
+            assert!(refused(&project, args).contains("사용할 수 없다"));
+            assert_eq!(fs::read_to_string(project.join("keep.txt")).unwrap(), "changed");
+            assert_eq!(fs::read(project.join(gil::STATE_PATH)).unwrap(), before);
+            assert!(!project.join(".gil/restore/active").exists());
+        }
+        return;
+    }
     let todo = section(&said, "지금 할 일");
     // 「지금 할 일」이 주는 명령은 인수 없는 `gil restore` 하나다.
     let commands: Vec<&str> = todo
@@ -661,11 +723,7 @@ fn a_clean_ordinary_place_gets_only_what_applies() {
 fn a_clean_verify_gets_the_verify_topic_and_current() {
     let dir = bare("clean-verify");
     fs::write(dir.join("work.txt"), "처음").unwrap();
-    let mut session = ProjectSession::start(spec(), dir.join(gil::STATE_PATH)).expect("시작한다");
-    *session.project_mut() = common::bootstrap_from(session.project().clone());
-    common::up_to_verify(session.project_mut());
-    session.commit().expect("눕힌다");
-    drop(session);
+    prepare_verify(&dir);
 
     // 세계는 그대로다 — clean 인데도 Verify Topic 은 나온다.
     let said = ok(&dir, &["help"]);
@@ -676,11 +734,7 @@ fn a_clean_verify_gets_the_verify_topic_and_current() {
 fn a_dirty_verify_puts_confirming_before_restoring() {
     let dir = bare("dirty-verify");
     fs::write(dir.join("work.txt"), "처음").unwrap();
-    let mut session = ProjectSession::start(spec(), dir.join(gil::STATE_PATH)).expect("시작한다");
-    *session.project_mut() = common::bootstrap_from(session.project().clone());
-    common::up_to_verify(session.project_mut());
-    session.commit().expect("눕힌다");
-    drop(session);
+    prepare_verify(&dir);
     fs::write(dir.join("work.txt"), "바꿨다").unwrap();
 
     let said = ok(&dir, &["help"]);
@@ -772,7 +826,8 @@ fn the_suggestion_shows_addresses_and_summaries_but_never_a_body() {
 
     let said = ok(&dir, &["help"]);
     // 요약은 있고 본문 절은 없다.
-    assert!(said.contains("기준 세계를 복원한 뒤"), "{said}");
+    let expected = if cfg!(feature = "product-safety") { "변경을 사람이 정리해" } else { "기준 세계를 복원한 뒤" };
+    assert!(said.contains(expected), "{said}");
     for body in ["[언제 읽는가]", "[지금 할 일]", "[불변식]", "[흔한 실패]"] {
         assert!(!said.contains(body), "본문을 펼쳤다: {said}");
     }
@@ -804,7 +859,7 @@ fn exact_lookup_ignores_the_lock_but_the_state_aware_one_respects_it() {
 }
 
 #[test]
-fn a_half_finished_restore_is_recovered_before_topics_are_chosen() {
+fn help_respects_restore_recovery_and_refusal_boundaries() {
     let dir = started("recover-first", &[("edit.txt", "처음"), ("gone.txt", "지워질 것")]);
     open_step(&dir, "question");
     fs::write(dir.join("edit.txt"), "바꿨다").unwrap();
@@ -821,7 +876,18 @@ fn a_half_finished_restore_is_recovered_before_topics_are_chosen() {
         .stderr(Stdio::piped())
         .output()
         .expect("띄운다");
-    assert!(!out.status.success(), "죽어야 하는데 곱게 끝났다");
+    assert!(!out.status.success(), "중단 주입 또는 제품 차단이 적용되어야 한다");
+    if cfg!(feature = "product-safety") {
+        assert!(String::from_utf8_lossy(&out.stderr).contains("사용할 수 없다"));
+        assert!(!dir.join(".gil/restore/active").exists(), "거절은 transaction 을 만들지 않는다");
+        let record = fs::read(dir.join(gil::STATE_PATH)).unwrap();
+        let said = ok(&dir, &["help"]);
+        assert_eq!(fs::read_to_string(dir.join("edit.txt")).unwrap(), before);
+        assert!(!dir.join("gone.txt").exists());
+        assert_eq!(fs::read(dir.join(gil::STATE_PATH)).unwrap(), record);
+        assert_eq!(suggested(&said), vec!["artifact/dirty/non-verify", "artifact/restore", "current"]);
+        return;
+    }
     assert!(dir.join(".gil/restore/active").exists(), "미완의 transaction 이 없다");
 
     // 상태 기반 도움말이 **먼저 복구한 뒤** 그 상태로 고른다.

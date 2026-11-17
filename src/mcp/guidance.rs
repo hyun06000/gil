@@ -624,7 +624,7 @@ mod tests {
         assert!(synthesis.contains("gil_plan_propose") && synthesis.contains("명시적 동의"), "{synthesis}");
 
         let define = open("define");
-        for needle in ["가장 작은 문제 하나", "current_item", "Chain 전체 목표가 아니라", "멈출 지점", "한 Experiment에 묶지 않고", "단순 준비 동작", "일부만 수행하면 완료가 아니", "미결 계약", "승인 범위를 바꾸지 않는다"] {
+        for needle in ["가장 작은 문제 하나", "current_item", "Chain 전체 목표가 아니라", "멈출 지점", "한 Experiment에 묶지 않고", "단순 준비 동작", "일부만 수행하면 완료가 아니", "현재 제품에서 지원하지 않는다", "승인 범위를 바꾸지 않는다", "예/아니오로 답할 단일 명제", "새 설계는 아직 활성화되지 않았다"] {
             assert!(define.contains(needle), "{needle}: {define}");
         }
         // No size heuristic: nothing asks to count characters, conjunctions or questions.
