@@ -1,0 +1,600 @@
+{
+  "schema": "gil.chain-closing.result/1",
+  "run": {
+    "id": "not-run-example",
+    "example": true,
+    "kind": "synthetic",
+    "model_executed": false,
+    "host_executed": false,
+    "recorded_at": null,
+    "model": null,
+    "host": null,
+    "baseline_commit": "bcefbc42ab6909c9e5c59587d79aa37f4e9fbb10",
+    "guidance_sha256": null,
+    "profile": "approved-plan,visual-authoring,product-safety",
+    "case_set_sha256": "e12fb9bddce73e5118f634db9c295294ead4b7bdb2e11a58dd98ce10857b8d0a"
+  },
+  "judges": [],
+  "cases": [
+    {
+      "case_id": "CC-01",
+      "status": "not_run",
+      "reason": "No model or Host evaluation performed.",
+      "bundle": null,
+      "automatic": [],
+      "semantic": [
+        {
+          "criterion": "result_understandable",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "limits_honest",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "closing_exact",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "handoff_faithful",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "host_display",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "user_opened_result",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "human_approval_real",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        }
+      ]
+    },
+    {
+      "case_id": "CC-02",
+      "status": "not_run",
+      "reason": "No model or Host evaluation performed.",
+      "bundle": null,
+      "automatic": [],
+      "semantic": [
+        {
+          "criterion": "result_understandable",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "limits_honest",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "closing_exact",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "handoff_faithful",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "host_display",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "user_opened_result",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "human_approval_real",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        }
+      ]
+    },
+    {
+      "case_id": "CC-03",
+      "status": "not_run",
+      "reason": "No model or Host evaluation performed.",
+      "bundle": null,
+      "automatic": [],
+      "semantic": [
+        {
+          "criterion": "result_understandable",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "limits_honest",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "closing_exact",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "handoff_faithful",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "host_display",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "user_opened_result",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "human_approval_real",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        }
+      ]
+    },
+    {
+      "case_id": "CC-04",
+      "status": "not_run",
+      "reason": "No model or Host evaluation performed.",
+      "bundle": null,
+      "automatic": [],
+      "semantic": [
+        {
+          "criterion": "result_understandable",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "limits_honest",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "closing_exact",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "handoff_faithful",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "host_display",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "user_opened_result",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "human_approval_real",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        }
+      ]
+    },
+    {
+      "case_id": "CC-05",
+      "status": "not_run",
+      "reason": "No model or Host evaluation performed.",
+      "bundle": null,
+      "automatic": [],
+      "semantic": [
+        {
+          "criterion": "result_understandable",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "limits_honest",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "closing_exact",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "handoff_faithful",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "host_display",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "user_opened_result",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "human_approval_real",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        }
+      ]
+    },
+    {
+      "case_id": "CC-06",
+      "status": "not_run",
+      "reason": "No model or Host evaluation performed.",
+      "bundle": null,
+      "automatic": [],
+      "semantic": [
+        {
+          "criterion": "result_understandable",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "limits_honest",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "closing_exact",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "handoff_faithful",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "host_display",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "user_opened_result",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "human_approval_real",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        }
+      ]
+    },
+    {
+      "case_id": "CC-07",
+      "status": "not_run",
+      "reason": "No model or Host evaluation performed.",
+      "bundle": null,
+      "automatic": [],
+      "semantic": [
+        {
+          "criterion": "result_understandable",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "limits_honest",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "closing_exact",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "handoff_faithful",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "host_display",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "user_opened_result",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "human_approval_real",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        }
+      ]
+    },
+    {
+      "case_id": "CC-08",
+      "status": "not_run",
+      "reason": "No model or Host evaluation performed.",
+      "bundle": null,
+      "automatic": [],
+      "semantic": [
+        {
+          "criterion": "result_understandable",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "limits_honest",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "closing_exact",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "handoff_faithful",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "host_display",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "user_opened_result",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "human_approval_real",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        }
+      ]
+    },
+    {
+      "case_id": "CC-09",
+      "status": "not_run",
+      "reason": "No model or Host evaluation performed.",
+      "bundle": null,
+      "automatic": [],
+      "semantic": [
+        {
+          "criterion": "result_understandable",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "limits_honest",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "closing_exact",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "handoff_faithful",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "host_display",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "user_opened_result",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "human_approval_real",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        }
+      ]
+    },
+    {
+      "case_id": "CC-10",
+      "status": "not_run",
+      "reason": "No model or Host evaluation performed.",
+      "bundle": null,
+      "automatic": [],
+      "semantic": [
+        {
+          "criterion": "result_understandable",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "limits_honest",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "closing_exact",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "handoff_faithful",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "host_display",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "user_opened_result",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        },
+        {
+          "criterion": "human_approval_real",
+          "status": "not_run",
+          "rationale": "Not evaluated.",
+          "basis": [],
+          "judge": null
+        }
+      ]
+    }
+  ]
+}

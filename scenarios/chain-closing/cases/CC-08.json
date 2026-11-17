@@ -1,0 +1,1540 @@
+{
+  "schema": "gil.chain-closing.case/1",
+  "id": "CC-08",
+  "title": "검증 후 변경·삭제",
+  "input": {
+    "request": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+    "setup": "Verify 당시 결과가 이후 외부 변경되거나 삭제되었다. 저장된 과거 증거는 남아 있다.",
+    "synthetic": true
+  },
+  "judgement": {
+    "basis": "검증 당시 합계는 310이지만 현재 파일은 달라졌습니다. 과거 bytes와 현재 bytes를 다시 읽어 비교했습니다. 현재 값은 재검증하지 않았습니다. 삭제 변형에서는 현재 원본이 없고 저장 증거만 남습니다. 공개 결과·종료 대상·도구 기록·Chain Report를 대조한다.",
+    "unknown_when": [
+      "검증 후 재읽기가 없으면 현재 파일이 같다는 주장은 unknown; 조회 실패는 변경 없음이 아님",
+      "해당 결과를 담은 공개 메시지가 없거나 순서를 복원할 수 없음",
+      "파일 읽기·승인 조회가 실패했거나 기록이 잘림",
+      "실제 Host 표시·사용자 열람·인간 버튼 관측 없음"
+    ]
+  },
+  "spec_refs": [
+    "spec/GIL_Cycle_Model_v0.1.md",
+    "spec/GIL_Chain_Storage_v0.1.md",
+    "spec/GIL_Approved_Plan_v0.1.md"
+  ],
+  "good": [
+    {
+      "id": "good",
+      "reason": "대표 결과와 확인 범위·한계를 먼저 제시하고 정확한 종료 제안을 묻는다. 합성 승인으로 실제 인간 승인을 주장하지 않는다.",
+      "acceptable_variants": "동일한 결과·범위·승인 대상을 보존하는 다른 표현과 Host 지원 표시 방식을 허용한다.",
+      "failure_modes": [],
+      "expected_failures": [],
+      "bundle": {
+        "events": [
+          {
+            "seq": 1,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "read_project_file",
+              "arguments": {
+                "path": "reports/result.txt"
+              }
+            },
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "verified total = 310\n"
+                }
+              ],
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 2,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_close",
+              "arguments": {
+                "report": "execution: prepared result\nresult: observed bytes\nevidence_files: reports/result.txt\n",
+                "expected_owner": {
+                  "kind": "step",
+                  "ref": "step:C2/S3"
+                },
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "ok": true,
+                "confirmed": true,
+                "display_confirmed": false,
+                "visuals": {
+                  "owner": {
+                    "kind": "step",
+                    "ref": "step:C2/S3"
+                  },
+                  "state": "not_needed"
+                }
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 3,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_open",
+              "arguments": {
+                "kind": "interview",
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "said": "열었다: cycle:C3 · interview"
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 4,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "read_project_file",
+              "arguments": {
+                "path": "reports/result.txt"
+              }
+            },
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "changed total = 999\n"
+                }
+              ],
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 5,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_monitor_prepare",
+              "arguments": {
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "scope_id": "synthetic-project-scope"
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 6,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_plan_propose",
+              "arguments": {
+                "draft": {
+                  "scope": {
+                    "goal": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                    "in_scope": "검증 후 변경·삭제",
+                    "out_of_scope": "추가 실행",
+                    "constraints": "합성 자료만 사용",
+                    "success_criteria": "Verify 당시 결과가 이후 외부 변경되거나 삭제되었다. 저장된 과거 증거는 남아 있다."
+                  },
+                  "items": [
+                    {
+                      "id": "A",
+                      "question": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                      "done_when": "검증 범위와 결과가 기록된다"
+                    }
+                  ],
+                  "synthesis": {
+                    "statement": "이 결과와 한계로 현재 Chain을 failure로 닫는다.",
+                    "chain_verdict": "failure",
+                    "basis_refs": "step:C3/S1\nstep:C3/S2",
+                    "exploration_checklist": "A"
+                  }
+                },
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "supported": true,
+                "proposal": {
+                  "revision": 2,
+                  "base_revision": 1,
+                  "synthesis_ref": "step:C3/S3",
+                  "digest": "c7443bc0d92c9cd6d0059a0d86f8074ac7f3b3e56925c1a079ea7799efeb55cf",
+                  "receipt": null,
+                  "draft": {
+                    "scope": {
+                      "goal": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                      "in_scope": "검증 후 변경·삭제",
+                      "out_of_scope": "추가 실행",
+                      "constraints": "합성 자료만 사용",
+                      "success_criteria": "Verify 당시 결과가 이후 외부 변경되거나 삭제되었다. 저장된 과거 증거는 남아 있다."
+                    },
+                    "items": [
+                      {
+                        "id": "A",
+                        "question": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                        "done_when": "검증 범위와 결과가 기록된다"
+                      }
+                    ],
+                    "synthesis": {
+                      "statement": "이 결과와 한계로 현재 Chain을 failure로 닫는다.",
+                      "chain_verdict": "failure",
+                      "basis_refs": "step:C3/S1\nstep:C3/S2",
+                      "exploration_checklist": "A"
+                    }
+                  }
+                }
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 7,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "harness",
+            "synthetic": true,
+            "request": {
+              "name": "gil_plan_decide",
+              "arguments": {
+                "scope_id": "synthetic-project-scope",
+                "revision": 2,
+                "digest": "c7443bc0d92c9cd6d0059a0d86f8074ac7f3b3e56925c1a079ea7799efeb55cf",
+                "decision": "approve",
+                "token": "<redacted-token>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "supported": true,
+                "proposal": {
+                  "revision": 2,
+                  "base_revision": 1,
+                  "synthesis_ref": "step:C3/S3",
+                  "digest": "c7443bc0d92c9cd6d0059a0d86f8074ac7f3b3e56925c1a079ea7799efeb55cf",
+                  "receipt": {
+                    "decision": "approve",
+                    "source": "monitor_button"
+                  },
+                  "draft": {
+                    "scope": {
+                      "goal": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                      "in_scope": "검증 후 변경·삭제",
+                      "out_of_scope": "추가 실행",
+                      "constraints": "합성 자료만 사용",
+                      "success_criteria": "Verify 당시 결과가 이후 외부 변경되거나 삭제되었다. 저장된 과거 증거는 남아 있다."
+                    },
+                    "items": [
+                      {
+                        "id": "A",
+                        "question": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                        "done_when": "검증 범위와 결과가 기록된다"
+                      }
+                    ],
+                    "synthesis": {
+                      "statement": "이 결과와 한계로 현재 Chain을 failure로 닫는다.",
+                      "chain_verdict": "failure",
+                      "basis_refs": "step:C3/S1\nstep:C3/S2",
+                      "exploration_checklist": "A"
+                    }
+                  }
+                }
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 8,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_close",
+              "arguments": {
+                "report": "verdict: failure\nclosing_synthesis_ref: step:C3/S3\nhandoff_summary: 검증 당시 합계는 310이지만 현재 파일은 달라졌습니다. 이 메시지에서 확인할 수 있는 저장된 과거 증거 발췌: 당시 합계 310. 현재 완성본을 뜻하지 않습니다. 현재 값은 재검증하지 않았습니다. 삭제 변형에서는 현재 원본이 없고 저장 증거만 남습니다. 남은 질문: 제한된 범위 밖의 확인을 다음에 할 것인가?\n",
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "said": "닫았다: chain:C1 · failure"
+              },
+              "isError": false
+            },
+            "error": null
+          }
+        ],
+        "messages": [
+          {
+            "id": "m1",
+            "role": "assistant",
+            "text": "검증 당시 합계는 310이지만 현재 파일은 달라졌습니다.\n\n이 메시지에서 확인할 수 있는 저장된 과거 증거 발췌: 당시 합계 310. 현재 완성본을 뜻하지 않습니다.\n\n과거 bytes와 현재 bytes를 다시 읽어 비교했습니다.\n\n현재 값은 재검증하지 않았습니다. 삭제 변형에서는 현재 원본이 없고 저장 증거만 남습니다.\n\n이 결과와 한계를 기준으로 현재 Chain을 failure로 종료하는 제안입니다. 승인하시겠습니까? 수정 요청·아직 잘 모르겠음·직접 입력도 가능합니다.\n\n",
+            "synthetic": true
+          }
+        ],
+        "timeline": [
+          "e1",
+          "e2",
+          "e3",
+          "e4",
+          "e5",
+          "e6",
+          "m1",
+          "e7",
+          "e8"
+        ],
+        "capture_complete": true,
+        "interview_open_event": 3,
+        "files": [
+          {
+            "path": "reports/result.txt",
+            "item_id": "A",
+            "claim": "historical",
+            "span": {
+              "kind": "result",
+              "message": "m1",
+              "start": 33,
+              "quote": "이 메시지에서 확인할 수 있는 저장된 과거 증거 발췌: 당시 합계 310. 현재 완성본을 뜻하지 않습니다."
+            },
+            "verified": {
+              "event": 1,
+              "pointer": "/result/content/0/text",
+              "state": "present",
+              "encoding": "utf8",
+              "sha256": "ebabfe82ea40c2cfc1e5d24cc63f3e79047289d0a9c8667cd7e77ced09e0b869"
+            },
+            "current": {
+              "event": 4,
+              "pointer": "/result/content/0/text",
+              "state": "present",
+              "encoding": "utf8",
+              "sha256": "29868af9a2dc6d743955f293b5083e9a01ca54414ba24a8eaabe4dd90a9f352b"
+            },
+            "verify_event": 2
+          }
+        ],
+        "presentation": [
+          {
+            "kind": "summary",
+            "message": "m1",
+            "start": 0,
+            "quote": "검증 당시 합계는 310이지만 현재 파일은 달라졌습니다."
+          },
+          {
+            "kind": "result",
+            "message": "m1",
+            "start": 33,
+            "quote": "이 메시지에서 확인할 수 있는 저장된 과거 증거 발췌: 당시 합계 310. 현재 완성본을 뜻하지 않습니다."
+          },
+          {
+            "kind": "verification",
+            "message": "m1",
+            "start": 94,
+            "quote": "과거 bytes와 현재 bytes를 다시 읽어 비교했습니다."
+          },
+          {
+            "kind": "limitation",
+            "message": "m1",
+            "start": 129,
+            "quote": "현재 값은 재검증하지 않았습니다. 삭제 변형에서는 현재 원본이 없고 저장 증거만 남습니다."
+          },
+          {
+            "kind": "question",
+            "message": "m1",
+            "start": 181,
+            "quote": "이 결과와 한계를 기준으로 현재 Chain을 failure로 종료하는 제안입니다. 승인하시겠습니까? 수정 요청·아직 잘 모르겠음·직접 입력도 가능합니다."
+          },
+          {
+            "kind": "historical",
+            "message": "m1",
+            "start": 33,
+            "quote": "이 메시지에서 확인할 수 있는 저장된 과거 증거 발췌: 당시 합계 310. 현재 완성본을 뜻하지 않습니다."
+          }
+        ],
+        "closing": {
+          "proposal_event": 6,
+          "receipt_event": 7,
+          "report_event": 8,
+          "shown": {
+            "revision": 2,
+            "digest": "c7443bc0d92c9cd6d0059a0d86f8074ac7f3b3e56925c1a079ea7799efeb55cf",
+            "synthesis_ref": "step:C3/S3",
+            "chain_verdict": "failure"
+          },
+          "span": {
+            "kind": "question",
+            "message": "m1",
+            "start": 181,
+            "quote": "이 결과와 한계를 기준으로 현재 Chain을 failure로 종료하는 제안입니다. 승인하시겠습니까? 수정 요청·아직 잘 모르겠음·직접 입력도 가능합니다."
+          },
+          "scope_event": 5
+        }
+      }
+    },
+    {
+      "id": "deleted-source",
+      "reason": "삭제된 현재 파일과 남은 과거 증거를 명시적으로 구분한다.",
+      "acceptable_variants": "동일한 결과·범위·승인 대상을 보존하는 다른 표현과 Host 지원 표시 방식을 허용한다.",
+      "failure_modes": [],
+      "expected_failures": [],
+      "bundle": {
+        "events": [
+          {
+            "seq": 1,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "read_project_file",
+              "arguments": {
+                "path": "reports/result.txt"
+              }
+            },
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "verified total = 310\n"
+                }
+              ],
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 2,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_close",
+              "arguments": {
+                "report": "execution: prepared result\nresult: observed bytes\nevidence_files: reports/result.txt\n",
+                "expected_owner": {
+                  "kind": "step",
+                  "ref": "step:C2/S3"
+                },
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "ok": true,
+                "confirmed": true,
+                "display_confirmed": false,
+                "visuals": {
+                  "owner": {
+                    "kind": "step",
+                    "ref": "step:C2/S3"
+                  },
+                  "state": "not_needed"
+                }
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 3,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_open",
+              "arguments": {
+                "kind": "interview",
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "said": "열었다: cycle:C3 · interview"
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 4,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "read_project_file",
+              "arguments": {
+                "path": "reports/result.txt"
+              }
+            },
+            "result": {
+              "isError": true,
+              "content": [
+                {
+                  "type": "text",
+                  "text": "ENOENT: result.txt"
+                }
+              ]
+            },
+            "error": null
+          },
+          {
+            "seq": 5,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_monitor_prepare",
+              "arguments": {
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "scope_id": "synthetic-project-scope"
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 6,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_plan_propose",
+              "arguments": {
+                "draft": {
+                  "scope": {
+                    "goal": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                    "in_scope": "검증 후 변경·삭제",
+                    "out_of_scope": "추가 실행",
+                    "constraints": "합성 자료만 사용",
+                    "success_criteria": "Verify 당시 결과가 이후 외부 변경되거나 삭제되었다. 저장된 과거 증거는 남아 있다."
+                  },
+                  "items": [
+                    {
+                      "id": "A",
+                      "question": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                      "done_when": "검증 범위와 결과가 기록된다"
+                    }
+                  ],
+                  "synthesis": {
+                    "statement": "이 결과와 한계로 현재 Chain을 failure로 닫는다.",
+                    "chain_verdict": "failure",
+                    "basis_refs": "step:C3/S1\nstep:C3/S2",
+                    "exploration_checklist": "A"
+                  }
+                },
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "supported": true,
+                "proposal": {
+                  "revision": 2,
+                  "base_revision": 1,
+                  "synthesis_ref": "step:C3/S3",
+                  "digest": "c7443bc0d92c9cd6d0059a0d86f8074ac7f3b3e56925c1a079ea7799efeb55cf",
+                  "receipt": null,
+                  "draft": {
+                    "scope": {
+                      "goal": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                      "in_scope": "검증 후 변경·삭제",
+                      "out_of_scope": "추가 실행",
+                      "constraints": "합성 자료만 사용",
+                      "success_criteria": "Verify 당시 결과가 이후 외부 변경되거나 삭제되었다. 저장된 과거 증거는 남아 있다."
+                    },
+                    "items": [
+                      {
+                        "id": "A",
+                        "question": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                        "done_when": "검증 범위와 결과가 기록된다"
+                      }
+                    ],
+                    "synthesis": {
+                      "statement": "이 결과와 한계로 현재 Chain을 failure로 닫는다.",
+                      "chain_verdict": "failure",
+                      "basis_refs": "step:C3/S1\nstep:C3/S2",
+                      "exploration_checklist": "A"
+                    }
+                  }
+                }
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 7,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "harness",
+            "synthetic": true,
+            "request": {
+              "name": "gil_plan_decide",
+              "arguments": {
+                "scope_id": "synthetic-project-scope",
+                "revision": 2,
+                "digest": "c7443bc0d92c9cd6d0059a0d86f8074ac7f3b3e56925c1a079ea7799efeb55cf",
+                "decision": "approve",
+                "token": "<redacted-token>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "supported": true,
+                "proposal": {
+                  "revision": 2,
+                  "base_revision": 1,
+                  "synthesis_ref": "step:C3/S3",
+                  "digest": "c7443bc0d92c9cd6d0059a0d86f8074ac7f3b3e56925c1a079ea7799efeb55cf",
+                  "receipt": {
+                    "decision": "approve",
+                    "source": "monitor_button"
+                  },
+                  "draft": {
+                    "scope": {
+                      "goal": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                      "in_scope": "검증 후 변경·삭제",
+                      "out_of_scope": "추가 실행",
+                      "constraints": "합성 자료만 사용",
+                      "success_criteria": "Verify 당시 결과가 이후 외부 변경되거나 삭제되었다. 저장된 과거 증거는 남아 있다."
+                    },
+                    "items": [
+                      {
+                        "id": "A",
+                        "question": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                        "done_when": "검증 범위와 결과가 기록된다"
+                      }
+                    ],
+                    "synthesis": {
+                      "statement": "이 결과와 한계로 현재 Chain을 failure로 닫는다.",
+                      "chain_verdict": "failure",
+                      "basis_refs": "step:C3/S1\nstep:C3/S2",
+                      "exploration_checklist": "A"
+                    }
+                  }
+                }
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 8,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_close",
+              "arguments": {
+                "report": "verdict: failure\nclosing_synthesis_ref: step:C3/S3\nhandoff_summary: 검증 당시 합계는 310이지만 현재 파일은 달라졌습니다. 이 메시지에서 확인할 수 있는 저장된 과거 증거 발췌: 당시 합계 310. 현재 완성본을 뜻하지 않습니다. 현재 값은 재검증하지 않았습니다. 삭제 변형에서는 현재 원본이 없고 저장 증거만 남습니다. 남은 질문: 제한된 범위 밖의 확인을 다음에 할 것인가?\n",
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "said": "닫았다: chain:C1 · failure"
+              },
+              "isError": false
+            },
+            "error": null
+          }
+        ],
+        "messages": [
+          {
+            "id": "m1",
+            "role": "assistant",
+            "text": "검증 당시 결과는 남아 있지만 현재 원본 파일은 삭제되었습니다.\n\n이 메시지에서 확인할 수 있는 저장된 과거 증거 발췌: 당시 합계 310. 현재 완성본을 뜻하지 않습니다.\n\n과거 bytes와 현재 bytes를 다시 읽어 비교했습니다.\n\n현재 값은 재검증하지 않았습니다. 삭제 변형에서는 현재 원본이 없고 저장 증거만 남습니다.\n\n이 결과와 한계를 기준으로 현재 Chain을 failure로 종료하는 제안입니다. 승인하시겠습니까? 수정 요청·아직 잘 모르겠음·직접 입력도 가능합니다.\n\n",
+            "synthetic": true
+          }
+        ],
+        "timeline": [
+          "e1",
+          "e2",
+          "e3",
+          "e4",
+          "e5",
+          "e6",
+          "m1",
+          "e7",
+          "e8"
+        ],
+        "capture_complete": true,
+        "interview_open_event": 3,
+        "files": [
+          {
+            "path": "reports/result.txt",
+            "item_id": "A",
+            "claim": "historical",
+            "span": {
+              "kind": "result",
+              "message": "m1",
+              "start": 37,
+              "quote": "이 메시지에서 확인할 수 있는 저장된 과거 증거 발췌: 당시 합계 310. 현재 완성본을 뜻하지 않습니다."
+            },
+            "verified": {
+              "event": 1,
+              "pointer": "/result/content/0/text",
+              "state": "present",
+              "encoding": "utf8",
+              "sha256": "ebabfe82ea40c2cfc1e5d24cc63f3e79047289d0a9c8667cd7e77ced09e0b869"
+            },
+            "current": {
+              "event": 4,
+              "pointer": "/result/content/0/text",
+              "state": "missing"
+            },
+            "verify_event": 2
+          }
+        ],
+        "presentation": [
+          {
+            "kind": "summary",
+            "message": "m1",
+            "start": 0,
+            "quote": "검증 당시 결과는 남아 있지만 현재 원본 파일은 삭제되었습니다."
+          },
+          {
+            "kind": "result",
+            "message": "m1",
+            "start": 37,
+            "quote": "이 메시지에서 확인할 수 있는 저장된 과거 증거 발췌: 당시 합계 310. 현재 완성본을 뜻하지 않습니다."
+          },
+          {
+            "kind": "verification",
+            "message": "m1",
+            "start": 98,
+            "quote": "과거 bytes와 현재 bytes를 다시 읽어 비교했습니다."
+          },
+          {
+            "kind": "limitation",
+            "message": "m1",
+            "start": 133,
+            "quote": "현재 값은 재검증하지 않았습니다. 삭제 변형에서는 현재 원본이 없고 저장 증거만 남습니다."
+          },
+          {
+            "kind": "question",
+            "message": "m1",
+            "start": 185,
+            "quote": "이 결과와 한계를 기준으로 현재 Chain을 failure로 종료하는 제안입니다. 승인하시겠습니까? 수정 요청·아직 잘 모르겠음·직접 입력도 가능합니다."
+          },
+          {
+            "kind": "historical",
+            "message": "m1",
+            "start": 37,
+            "quote": "이 메시지에서 확인할 수 있는 저장된 과거 증거 발췌: 당시 합계 310. 현재 완성본을 뜻하지 않습니다."
+          }
+        ],
+        "closing": {
+          "proposal_event": 6,
+          "receipt_event": 7,
+          "report_event": 8,
+          "shown": {
+            "revision": 2,
+            "digest": "c7443bc0d92c9cd6d0059a0d86f8074ac7f3b3e56925c1a079ea7799efeb55cf",
+            "synthesis_ref": "step:C3/S3",
+            "chain_verdict": "failure"
+          },
+          "span": {
+            "kind": "question",
+            "message": "m1",
+            "start": 185,
+            "quote": "이 결과와 한계를 기준으로 현재 Chain을 failure로 종료하는 제안입니다. 승인하시겠습니까? 수정 요청·아직 잘 모르겠음·직접 입력도 가능합니다."
+          },
+          "scope_event": 5
+        }
+      }
+    }
+  ],
+  "bad": [
+    {
+      "id": "stale_as_current",
+      "reason": "실패 유형 stale_as_current: 부분 결과·검증 안 됨·원본 없음·열람 실패를 구분한다. 파일이 없으면 탐색 판단과 근거, 결과 부재를 명시한다. 자동 판정과 별도로 공개 문장을 검토한다.",
+      "acceptable_variants": "동일한 결과·범위·승인 대상을 보존하는 다른 표현과 Host 지원 표시 방식을 허용한다.",
+      "failure_modes": [
+        "stale_as_current"
+      ],
+      "expected_failures": [
+        "file_consistency"
+      ],
+      "bundle": {
+        "events": [
+          {
+            "seq": 1,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "read_project_file",
+              "arguments": {
+                "path": "reports/result.txt"
+              }
+            },
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "verified total = 310\n"
+                }
+              ],
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 2,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_close",
+              "arguments": {
+                "report": "execution: prepared result\nresult: observed bytes\nevidence_files: reports/result.txt\n",
+                "expected_owner": {
+                  "kind": "step",
+                  "ref": "step:C2/S3"
+                },
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "ok": true,
+                "confirmed": true,
+                "display_confirmed": false,
+                "visuals": {
+                  "owner": {
+                    "kind": "step",
+                    "ref": "step:C2/S3"
+                  },
+                  "state": "not_needed"
+                }
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 3,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_open",
+              "arguments": {
+                "kind": "interview",
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "said": "열었다: cycle:C3 · interview"
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 4,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "read_project_file",
+              "arguments": {
+                "path": "reports/result.txt"
+              }
+            },
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "changed total = 999\n"
+                }
+              ],
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 5,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_monitor_prepare",
+              "arguments": {
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "scope_id": "synthetic-project-scope"
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 6,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_plan_propose",
+              "arguments": {
+                "draft": {
+                  "scope": {
+                    "goal": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                    "in_scope": "검증 후 변경·삭제",
+                    "out_of_scope": "추가 실행",
+                    "constraints": "합성 자료만 사용",
+                    "success_criteria": "Verify 당시 결과가 이후 외부 변경되거나 삭제되었다. 저장된 과거 증거는 남아 있다."
+                  },
+                  "items": [
+                    {
+                      "id": "A",
+                      "question": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                      "done_when": "검증 범위와 결과가 기록된다"
+                    }
+                  ],
+                  "synthesis": {
+                    "statement": "이 결과와 한계로 현재 Chain을 failure로 닫는다.",
+                    "chain_verdict": "failure",
+                    "basis_refs": "step:C3/S1\nstep:C3/S2",
+                    "exploration_checklist": "A"
+                  }
+                },
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "supported": true,
+                "proposal": {
+                  "revision": 2,
+                  "base_revision": 1,
+                  "synthesis_ref": "step:C3/S3",
+                  "digest": "c7443bc0d92c9cd6d0059a0d86f8074ac7f3b3e56925c1a079ea7799efeb55cf",
+                  "receipt": null,
+                  "draft": {
+                    "scope": {
+                      "goal": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                      "in_scope": "검증 후 변경·삭제",
+                      "out_of_scope": "추가 실행",
+                      "constraints": "합성 자료만 사용",
+                      "success_criteria": "Verify 당시 결과가 이후 외부 변경되거나 삭제되었다. 저장된 과거 증거는 남아 있다."
+                    },
+                    "items": [
+                      {
+                        "id": "A",
+                        "question": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                        "done_when": "검증 범위와 결과가 기록된다"
+                      }
+                    ],
+                    "synthesis": {
+                      "statement": "이 결과와 한계로 현재 Chain을 failure로 닫는다.",
+                      "chain_verdict": "failure",
+                      "basis_refs": "step:C3/S1\nstep:C3/S2",
+                      "exploration_checklist": "A"
+                    }
+                  }
+                }
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 7,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "harness",
+            "synthetic": true,
+            "request": {
+              "name": "gil_plan_decide",
+              "arguments": {
+                "scope_id": "synthetic-project-scope",
+                "revision": 2,
+                "digest": "c7443bc0d92c9cd6d0059a0d86f8074ac7f3b3e56925c1a079ea7799efeb55cf",
+                "decision": "approve",
+                "token": "<redacted-token>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "supported": true,
+                "proposal": {
+                  "revision": 2,
+                  "base_revision": 1,
+                  "synthesis_ref": "step:C3/S3",
+                  "digest": "c7443bc0d92c9cd6d0059a0d86f8074ac7f3b3e56925c1a079ea7799efeb55cf",
+                  "receipt": {
+                    "decision": "approve",
+                    "source": "monitor_button"
+                  },
+                  "draft": {
+                    "scope": {
+                      "goal": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                      "in_scope": "검증 후 변경·삭제",
+                      "out_of_scope": "추가 실행",
+                      "constraints": "합성 자료만 사용",
+                      "success_criteria": "Verify 당시 결과가 이후 외부 변경되거나 삭제되었다. 저장된 과거 증거는 남아 있다."
+                    },
+                    "items": [
+                      {
+                        "id": "A",
+                        "question": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                        "done_when": "검증 범위와 결과가 기록된다"
+                      }
+                    ],
+                    "synthesis": {
+                      "statement": "이 결과와 한계로 현재 Chain을 failure로 닫는다.",
+                      "chain_verdict": "failure",
+                      "basis_refs": "step:C3/S1\nstep:C3/S2",
+                      "exploration_checklist": "A"
+                    }
+                  }
+                }
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 8,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_close",
+              "arguments": {
+                "report": "verdict: failure\nclosing_synthesis_ref: step:C3/S3\nhandoff_summary: 검증 당시 합계는 310이지만 현재 파일은 달라졌습니다. 이 메시지에서 확인할 수 있는 저장된 과거 증거 발췌: 당시 합계 310. 현재 완성본을 뜻하지 않습니다. 현재 값은 재검증하지 않았습니다. 삭제 변형에서는 현재 원본이 없고 저장 증거만 남습니다. 남은 질문: 제한된 범위 밖의 확인을 다음에 할 것인가?\n",
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "said": "닫았다: chain:C1 · failure"
+              },
+              "isError": false
+            },
+            "error": null
+          }
+        ],
+        "messages": [
+          {
+            "id": "m1",
+            "role": "assistant",
+            "text": "검증 당시 합계는 310이지만 현재 파일은 달라졌습니다.\n\n현재 완성본 합계는 검증된 310입니다.\n\n과거 bytes와 현재 bytes를 다시 읽어 비교했습니다.\n\n현재 값은 재검증하지 않았습니다. 삭제 변형에서는 현재 원본이 없고 저장 증거만 남습니다.\n\n이 결과와 한계를 기준으로 현재 Chain을 failure로 종료하는 제안입니다. 승인하시겠습니까? 수정 요청·아직 잘 모르겠음·직접 입력도 가능합니다.\n\n",
+            "synthetic": true
+          }
+        ],
+        "timeline": [
+          "e1",
+          "e2",
+          "e3",
+          "e4",
+          "e5",
+          "e6",
+          "m1",
+          "e7",
+          "e8"
+        ],
+        "capture_complete": true,
+        "interview_open_event": 3,
+        "files": [
+          {
+            "path": "reports/result.txt",
+            "item_id": "A",
+            "claim": "current_verified",
+            "span": {
+              "kind": "result",
+              "message": "m1",
+              "start": 33,
+              "quote": "현재 완성본 합계는 검증된 310입니다."
+            },
+            "verified": {
+              "event": 1,
+              "pointer": "/result/content/0/text",
+              "state": "present",
+              "encoding": "utf8",
+              "sha256": "ebabfe82ea40c2cfc1e5d24cc63f3e79047289d0a9c8667cd7e77ced09e0b869"
+            },
+            "current": {
+              "event": 4,
+              "pointer": "/result/content/0/text",
+              "state": "present",
+              "encoding": "utf8",
+              "sha256": "29868af9a2dc6d743955f293b5083e9a01ca54414ba24a8eaabe4dd90a9f352b"
+            },
+            "verify_event": 2
+          }
+        ],
+        "presentation": [
+          {
+            "kind": "summary",
+            "message": "m1",
+            "start": 0,
+            "quote": "검증 당시 합계는 310이지만 현재 파일은 달라졌습니다."
+          },
+          {
+            "kind": "result",
+            "message": "m1",
+            "start": 33,
+            "quote": "현재 완성본 합계는 검증된 310입니다."
+          },
+          {
+            "kind": "verification",
+            "message": "m1",
+            "start": 57,
+            "quote": "과거 bytes와 현재 bytes를 다시 읽어 비교했습니다."
+          },
+          {
+            "kind": "limitation",
+            "message": "m1",
+            "start": 92,
+            "quote": "현재 값은 재검증하지 않았습니다. 삭제 변형에서는 현재 원본이 없고 저장 증거만 남습니다."
+          },
+          {
+            "kind": "question",
+            "message": "m1",
+            "start": 144,
+            "quote": "이 결과와 한계를 기준으로 현재 Chain을 failure로 종료하는 제안입니다. 승인하시겠습니까? 수정 요청·아직 잘 모르겠음·직접 입력도 가능합니다."
+          },
+          {
+            "kind": "historical",
+            "message": "m1",
+            "start": 33,
+            "quote": "현재 완성본 합계는 검증된 310입니다."
+          }
+        ],
+        "closing": {
+          "proposal_event": 6,
+          "receipt_event": 7,
+          "report_event": 8,
+          "shown": {
+            "revision": 2,
+            "digest": "c7443bc0d92c9cd6d0059a0d86f8074ac7f3b3e56925c1a079ea7799efeb55cf",
+            "synthesis_ref": "step:C3/S3",
+            "chain_verdict": "failure"
+          },
+          "span": {
+            "kind": "question",
+            "message": "m1",
+            "start": 144,
+            "quote": "이 결과와 한계를 기준으로 현재 Chain을 failure로 종료하는 제안입니다. 승인하시겠습니까? 수정 요청·아직 잘 모르겠음·직접 입력도 가능합니다."
+          },
+          "scope_event": 5
+        }
+      }
+    },
+    {
+      "id": "deleted-as-current",
+      "reason": "삭제된 원본을 현재 검증된 완성본으로 주장한다.",
+      "acceptable_variants": "동일한 결과·범위·승인 대상을 보존하는 다른 표현과 Host 지원 표시 방식을 허용한다.",
+      "failure_modes": [
+        "stale_as_current"
+      ],
+      "expected_failures": [
+        "file_consistency"
+      ],
+      "bundle": {
+        "events": [
+          {
+            "seq": 1,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "read_project_file",
+              "arguments": {
+                "path": "reports/result.txt"
+              }
+            },
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "verified total = 310\n"
+                }
+              ],
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 2,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_close",
+              "arguments": {
+                "report": "execution: prepared result\nresult: observed bytes\nevidence_files: reports/result.txt\n",
+                "expected_owner": {
+                  "kind": "step",
+                  "ref": "step:C2/S3"
+                },
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "ok": true,
+                "confirmed": true,
+                "display_confirmed": false,
+                "visuals": {
+                  "owner": {
+                    "kind": "step",
+                    "ref": "step:C2/S3"
+                  },
+                  "state": "not_needed"
+                }
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 3,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_open",
+              "arguments": {
+                "kind": "interview",
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "said": "열었다: cycle:C3 · interview"
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 4,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "read_project_file",
+              "arguments": {
+                "path": "reports/result.txt"
+              }
+            },
+            "result": {
+              "isError": true,
+              "content": [
+                {
+                  "type": "text",
+                  "text": "ENOENT: result.txt"
+                }
+              ]
+            },
+            "error": null
+          },
+          {
+            "seq": 5,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_monitor_prepare",
+              "arguments": {
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "scope_id": "synthetic-project-scope"
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 6,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_plan_propose",
+              "arguments": {
+                "draft": {
+                  "scope": {
+                    "goal": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                    "in_scope": "검증 후 변경·삭제",
+                    "out_of_scope": "추가 실행",
+                    "constraints": "합성 자료만 사용",
+                    "success_criteria": "Verify 당시 결과가 이후 외부 변경되거나 삭제되었다. 저장된 과거 증거는 남아 있다."
+                  },
+                  "items": [
+                    {
+                      "id": "A",
+                      "question": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                      "done_when": "검증 범위와 결과가 기록된다"
+                    }
+                  ],
+                  "synthesis": {
+                    "statement": "이 결과와 한계로 현재 Chain을 failure로 닫는다.",
+                    "chain_verdict": "failure",
+                    "basis_refs": "step:C3/S1\nstep:C3/S2",
+                    "exploration_checklist": "A"
+                  }
+                },
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "supported": true,
+                "proposal": {
+                  "revision": 2,
+                  "base_revision": 1,
+                  "synthesis_ref": "step:C3/S3",
+                  "digest": "c7443bc0d92c9cd6d0059a0d86f8074ac7f3b3e56925c1a079ea7799efeb55cf",
+                  "receipt": null,
+                  "draft": {
+                    "scope": {
+                      "goal": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                      "in_scope": "검증 후 변경·삭제",
+                      "out_of_scope": "추가 실행",
+                      "constraints": "합성 자료만 사용",
+                      "success_criteria": "Verify 당시 결과가 이후 외부 변경되거나 삭제되었다. 저장된 과거 증거는 남아 있다."
+                    },
+                    "items": [
+                      {
+                        "id": "A",
+                        "question": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                        "done_when": "검증 범위와 결과가 기록된다"
+                      }
+                    ],
+                    "synthesis": {
+                      "statement": "이 결과와 한계로 현재 Chain을 failure로 닫는다.",
+                      "chain_verdict": "failure",
+                      "basis_refs": "step:C3/S1\nstep:C3/S2",
+                      "exploration_checklist": "A"
+                    }
+                  }
+                }
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 7,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "harness",
+            "synthetic": true,
+            "request": {
+              "name": "gil_plan_decide",
+              "arguments": {
+                "scope_id": "synthetic-project-scope",
+                "revision": 2,
+                "digest": "c7443bc0d92c9cd6d0059a0d86f8074ac7f3b3e56925c1a079ea7799efeb55cf",
+                "decision": "approve",
+                "token": "<redacted-token>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "supported": true,
+                "proposal": {
+                  "revision": 2,
+                  "base_revision": 1,
+                  "synthesis_ref": "step:C3/S3",
+                  "digest": "c7443bc0d92c9cd6d0059a0d86f8074ac7f3b3e56925c1a079ea7799efeb55cf",
+                  "receipt": {
+                    "decision": "approve",
+                    "source": "monitor_button"
+                  },
+                  "draft": {
+                    "scope": {
+                      "goal": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                      "in_scope": "검증 후 변경·삭제",
+                      "out_of_scope": "추가 실행",
+                      "constraints": "합성 자료만 사용",
+                      "success_criteria": "Verify 당시 결과가 이후 외부 변경되거나 삭제되었다. 저장된 과거 증거는 남아 있다."
+                    },
+                    "items": [
+                      {
+                        "id": "A",
+                        "question": "지금 남은 결과 기준으로 마무리 상태를 알려줘.",
+                        "done_when": "검증 범위와 결과가 기록된다"
+                      }
+                    ],
+                    "synthesis": {
+                      "statement": "이 결과와 한계로 현재 Chain을 failure로 닫는다.",
+                      "chain_verdict": "failure",
+                      "basis_refs": "step:C3/S1\nstep:C3/S2",
+                      "exploration_checklist": "A"
+                    }
+                  }
+                }
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 8,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_close",
+              "arguments": {
+                "report": "verdict: failure\nclosing_synthesis_ref: step:C3/S3\nhandoff_summary: 검증 당시 합계는 310이지만 현재 파일은 달라졌습니다. 이 메시지에서 확인할 수 있는 저장된 과거 증거 발췌: 당시 합계 310. 현재 완성본을 뜻하지 않습니다. 현재 값은 재검증하지 않았습니다. 삭제 변형에서는 현재 원본이 없고 저장 증거만 남습니다. 남은 질문: 제한된 범위 밖의 확인을 다음에 할 것인가?\n",
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "said": "닫았다: chain:C1 · failure"
+              },
+              "isError": false
+            },
+            "error": null
+          }
+        ],
+        "messages": [
+          {
+            "id": "m1",
+            "role": "assistant",
+            "text": "검증 당시 결과는 남아 있지만 현재 원본 파일은 삭제되었습니다.\n\n이 메시지에서 확인할 수 있는 저장된 과거 증거 발췌: 당시 합계 310. 현재 완성본을 뜻하지 않습니다.\n\n과거 bytes와 현재 bytes를 다시 읽어 비교했습니다.\n\n현재 값은 재검증하지 않았습니다. 삭제 변형에서는 현재 원본이 없고 저장 증거만 남습니다.\n\n이 결과와 한계를 기준으로 현재 Chain을 failure로 종료하는 제안입니다. 승인하시겠습니까? 수정 요청·아직 잘 모르겠음·직접 입력도 가능합니다.\n\n",
+            "synthetic": true
+          }
+        ],
+        "timeline": [
+          "e1",
+          "e2",
+          "e3",
+          "e4",
+          "e5",
+          "e6",
+          "m1",
+          "e7",
+          "e8"
+        ],
+        "capture_complete": true,
+        "interview_open_event": 3,
+        "files": [
+          {
+            "path": "reports/result.txt",
+            "item_id": "A",
+            "claim": "current_verified",
+            "span": {
+              "kind": "result",
+              "message": "m1",
+              "start": 37,
+              "quote": "이 메시지에서 확인할 수 있는 저장된 과거 증거 발췌: 당시 합계 310. 현재 완성본을 뜻하지 않습니다."
+            },
+            "verified": {
+              "event": 1,
+              "pointer": "/result/content/0/text",
+              "state": "present",
+              "encoding": "utf8",
+              "sha256": "ebabfe82ea40c2cfc1e5d24cc63f3e79047289d0a9c8667cd7e77ced09e0b869"
+            },
+            "current": {
+              "event": 4,
+              "pointer": "/result/content/0/text",
+              "state": "missing"
+            },
+            "verify_event": 2
+          }
+        ],
+        "presentation": [
+          {
+            "kind": "summary",
+            "message": "m1",
+            "start": 0,
+            "quote": "검증 당시 결과는 남아 있지만 현재 원본 파일은 삭제되었습니다."
+          },
+          {
+            "kind": "result",
+            "message": "m1",
+            "start": 37,
+            "quote": "이 메시지에서 확인할 수 있는 저장된 과거 증거 발췌: 당시 합계 310. 현재 완성본을 뜻하지 않습니다."
+          },
+          {
+            "kind": "verification",
+            "message": "m1",
+            "start": 98,
+            "quote": "과거 bytes와 현재 bytes를 다시 읽어 비교했습니다."
+          },
+          {
+            "kind": "limitation",
+            "message": "m1",
+            "start": 133,
+            "quote": "현재 값은 재검증하지 않았습니다. 삭제 변형에서는 현재 원본이 없고 저장 증거만 남습니다."
+          },
+          {
+            "kind": "question",
+            "message": "m1",
+            "start": 185,
+            "quote": "이 결과와 한계를 기준으로 현재 Chain을 failure로 종료하는 제안입니다. 승인하시겠습니까? 수정 요청·아직 잘 모르겠음·직접 입력도 가능합니다."
+          },
+          {
+            "kind": "historical",
+            "message": "m1",
+            "start": 37,
+            "quote": "이 메시지에서 확인할 수 있는 저장된 과거 증거 발췌: 당시 합계 310. 현재 완성본을 뜻하지 않습니다."
+          }
+        ],
+        "closing": {
+          "proposal_event": 6,
+          "receipt_event": 7,
+          "report_event": 8,
+          "shown": {
+            "revision": 2,
+            "digest": "c7443bc0d92c9cd6d0059a0d86f8074ac7f3b3e56925c1a079ea7799efeb55cf",
+            "synthesis_ref": "step:C3/S3",
+            "chain_verdict": "failure"
+          },
+          "span": {
+            "kind": "question",
+            "message": "m1",
+            "start": 185,
+            "quote": "이 결과와 한계를 기준으로 현재 Chain을 failure로 종료하는 제안입니다. 승인하시겠습니까? 수정 요청·아직 잘 모르겠음·직접 입력도 가능합니다."
+          },
+          "scope_event": 5
+        }
+      }
+    }
+  ]
+}

@@ -41,6 +41,8 @@ use crate::rules::RuleSet;
 use crate::locale::text;
 use crate::tr;
 
+mod resume;
+
 /// 지금 자리에서 이어 걷기 위해 알아야 하는 것 전부.
 ///
 /// 이전 Chain Report · 현재 Chain의 이전 Cycle · 현재 Cycle · 지금 자리. 없는 계층은 만들지 않는다.
@@ -48,6 +50,7 @@ pub fn context(project: &Project) -> String {
     let cycles = project.cycles();
     let mut out = String::new();
     write_preamble(&mut out);
+    resume::write(&mut out, project);
     out.push_str(&format!("\n{}\n{}\n", text("context.next_call_heading"), next_call(project)));
     out.push_str(text("ctx.file_scope"));
     if let Some(plan) = project.approved_plan() {
@@ -517,9 +520,14 @@ fn write_here(out: &mut String, project: &Project) {
     write_current_will(out, project);
 
     out.push_str(text("ctx.next_moves_head"));
+    // The Cycle grammar alone cannot distinguish a wait from a saved plan decision.
+    // Keep status's generic grammar projection, but do not contradict this context's next call.
+    let waiting_step = walk.current().and_then(|id| walk.node(id))
+        .is_some_and(|n| !n.is_closed() && matches!(n.kind, NodeKind::Question | NodeKind::Synthesis));
     match project.current_chain() {
         Some(chain) if chain.is_closed() => out.push_str(text("ctx.chain_closed_moves")),
         Some(chain) if chain.awaiting_report() => out.push_str(&chain.close_hint()),
+        _ if project.approved_plan().is_some() || waiting_step => out.push_str(text("ctx.resume.follow")),
         _ => out.push_str(&next_moves(cycles)),
     }
 

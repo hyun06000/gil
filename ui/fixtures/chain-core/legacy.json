@@ -1,0 +1,72 @@
+{
+  "details": {
+    "step:C1/S1": {
+      "cycle_ref": "cycle:C1",
+      "kind": "question",
+      "report": null,
+      "schema_version": 1,
+      "state": "open",
+      "step_ref": "step:C1/S1"
+    }
+  },
+  "view": {
+    "captured_at_unix_ms": 0,
+    "current": {
+      "cycle_ref": "cycle:C1",
+      "existence_ref": "existence:X1",
+      "journey_ref": "journey:X1@J0",
+      "step_ref": "step:C1/S1"
+    },
+    "current_will": {
+      "done_when": "사용자의 답을 받았다",
+      "existence_ref": "existence:X1",
+      "journey_ref": "journey:X1@J0",
+      "next_action": "사용자에게 묻는다",
+      "objective": "합성 작업 범위를 합의한다",
+      "target_step_ref": "step:C1/S1",
+      "will_ref": "will:W1"
+    },
+    "next_actions": [
+      {
+        "command": "gil close",
+        "cycle_kind": null,
+        "help_ref": null,
+        "kind": "close_step",
+        "reason": "열려 있는 이 자리를 Report 로 닫는다",
+        "step_kind": "question"
+      }
+    ],
+    "schema_version": 1,
+    "timeline": [
+      {
+        "cycle_ref": "cycle:C1",
+        "experiment_definition": null,
+        "interview_question": {
+          "question": null,
+          "response": null,
+          "state": "asking"
+        },
+        "kind": "interview",
+        "parent_cycle_ref": null,
+        "relation_to_current": "active_path",
+        "report": null,
+        "revisit_from_cycle_ref": null,
+        "state": "open",
+        "steps": [
+          {
+            "kind": "question",
+            "state": "open",
+            "step_ref": "step:C1/S1",
+            "summary": null
+          }
+        ]
+      }
+    ],
+    "world": {
+      "baseline_snapshot_ref": "snapshot:A1",
+      "reason": null,
+      "state": "clean",
+      "verify_can_confirm": false
+    }
+  }
+}
