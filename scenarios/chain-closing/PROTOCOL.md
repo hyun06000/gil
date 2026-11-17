@@ -58,8 +58,11 @@ node tools/chain-closing-eval/check.mjs skeleton --out /tmp/closing-<run>.json
 
 ## 기록과 판정
 
-1. 결과 skeleton에 원 events, 공개 메시지, 정확한 timeline과 인용 spans를 옮긴다.
-   누락된 사건을 만들어 채우지 않는다. 자료가 없으면 `unknown`과 이유를 남긴다.
+1. 수집된 원 events, 공개 메시지, 명시적 timeline, 인용 주석과 파일 관측을
+   [가져오기 입력](../../tools/chain-closing-eval/README.md#원-실행-기록-가져오기)으로 제공하고
+   `node tools/chain-closing-eval/import.mjs --input <input.json> --out <new-result.json>`을 실행한다.
+   기존 skeleton 수동 작성도 가능하다. 원 입력은 보존하고 누락된 사건·교차 순서를 만들어 채우지 않는다.
+   timeline이 없으면 원자료는 준비 자료로 보존되며, 자동 검사 결과가 있어도 의미 판정은 unknown이다.
 2. 파일의 검증/현재 관측과 proposal·receipt·Report를 원 사건 번호에 연결한다.
    `closing.shown`과 메시지가 정말 같은 제안인지 평가자가 확인한다.
 3. 아래처럼 자동 검사를 계산한다(ES module에서 사용). 의미 점수는 이 함수가 만들지 않는다.

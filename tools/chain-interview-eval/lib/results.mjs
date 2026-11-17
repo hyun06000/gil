@@ -4,6 +4,7 @@
 // reported as a problem. It recomputes the structural checks on the recorded outputs and
 // compares them with what the file declares.
 import { checkContent } from './structural.mjs';
+import { validatePreparedEvidence } from './evidence.mjs';
 import {
   RESULT_SCHEMA, STATUSES, VERDICT_STATUSES, APPROVAL_KINDS, CASE_RESULT_STATUSES, JUDGE_KINDS,
   HUMAN_ONLY_CRITERIA, STRUCTURAL_CHECKS,
@@ -50,12 +51,25 @@ export function checkResult(result, caseSet) {
   const caseIndex = new Map(caseSet.cases.map((c) => [c.value?.id, c.value]));
   const rubric = caseSet.rubricIndex;
   const seen = new Set();
+  const evidenceSources = new Set();
   for (const [i, rc] of (arr(result.cases) || []).entries()) {
     const where = `cases[${i}]`;
     const cid = rc?.case_id;
     if (!caseIndex.has(cid)) { push('case_coverage', where, `case_id ${cid} is not in the case set`); continue; }
     if (seen.has(cid)) { push('case_coverage', where, `case_id ${cid} appears twice`); continue; }
     seen.add(cid);
+    if (Object.hasOwn(rc, 'prepared_evidence')) {
+      try {
+        validatePreparedEvidence(rc.prepared_evidence, run.id, cid, caseIndex.get(cid)?.input?.prior_state?.approved_plan);
+        for (const source of Object.values(rc.prepared_evidence.sources).filter(Boolean)) {
+          if (evidenceSources.has(source.id)) throw new Error('duplicate source');
+          evidenceSources.add(source.id);
+        }
+      } catch {
+        // Evidence is untrusted input. Never print its text, identifiers, tokens or paths.
+        push('prepared_evidence_integrity', `cases[${i}].prepared_evidence`, 'invalid preparation: scope, source, hash, reference or projection mismatch');
+      }
+    }
     out.cases.push(checkCase(rc, caseIndex.get(cid), { where: `${where} (${cid})`, run, judges, rubric, push, counts: out.counts }));
   }
   for (const [cid] of caseIndex) if (!seen.has(cid)) {
