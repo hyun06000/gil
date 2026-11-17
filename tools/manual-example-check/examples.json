@@ -221,7 +221,7 @@
     {
       "id": "SPEC-EXPLORE-SH",
       "source": { "path": "spec/GIL_Approved_Plan_v0.1.md", "locator": { "after": "### 검증과 한계", "fence": "sh" } },
-      "sha256": "8a586e6e3e2c0c48c06809d15968394ae82d2eb3dab38ab96f0413e17cbd019d",
+      "sha256": "2ef2894609c03cfe24c3ff209c8854ac7bd46f9e37241774fe4c9285d226422b",
       "kind": "not_executed",
       "cases": [],
       "reason": "Developer shell commands for the exploration-flow profile; this checker never runs document shell blocks.",

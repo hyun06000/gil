@@ -108,6 +108,8 @@ Windows ARM64 native job, Windows Companion 빌드·검토 묶음, 런처/runtim
 이전 키만 있으면 검증·산출물 업로드 뒤 workspace 출력만 제거하고 새 키를 저장한다. 명시적 `--target`
 빌드도 별도로 정리하여 의존성 출력만 남긴다. 의존성·CI 입력이 main에 병합될 때 기준 캐시를 갱신한다.
 `node --test tools/ci/*.test.mjs`는 키 안정성·프로필 순서·실제 Cargo 정리/의존성 보존을 검사한다.
+한 기능 프로필에서만 컴파일되는 통합 시험은 `node tools/ci/expect-tests.mjs <최소 건수> cargo test …`로
+실행한다. 조건부 컴파일로 `running 0 tests`가 된 실행은 통과로 세지 않는다.
 캐시 적중은 시험 성공이 아니다. 최초 캐시 생성과 GitHub runner 배정 대기는 여전히 시간이 든다.
 
 Companion을 변경하면 해당 package의 시험과 실제 플랫폼 검수를 추가한다. `gil` 시험 성공을

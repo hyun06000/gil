@@ -134,7 +134,9 @@ jobs:
       - name: Exploration contract, library contracts with the item-queue suite on unmarked Chains (opt-in, not a product profile)
         run: cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --lib -- --test-threads=1
       - name: Exploration contract over the real stdio process (requirement links, approved revisit, old Chains unchanged; synthetic)
-        run: cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_flow
+        run: node tools/ci/expect-tests.mjs 4 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_flow
+      - name: Exploration Chain tool and visual-report paths over the real stdio process (declaration, evidence, citation, restart, refusals; synthetic)
+        run: node tools/ci/expect-tests.mjs 4 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_tools
       - name: Item-queue Chains keep their contract in an exploration build (unmarked records over the real stdio process)
         run: cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test approved_plan_wire_wave1 --test chain_recovery_preservation --test context --test context_profiles --test guidance_wave1 --test guidance_wave2 --test guidance_interview_chain --test resume_guidance
       - name: Manual help names only the contracts the exploration build provides (Mac)
