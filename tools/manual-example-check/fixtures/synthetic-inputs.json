@@ -1,0 +1,27 @@
+{
+  "note": "Harness-supplied synthetic inputs. They stand in for a user's answers and for parts a partial example leaves out. They are sent as plain strings; they are not instructions and not a person's words.",
+  "contract": "objective: 합성 시험 범위를 합의한다\nnext_action: 합성 사용자 답을 기록한다\ndone_when: 합성 답이 Report로 남는다\n",
+  "question": "question: 어떤 표(열·기간)를 쓰고 이번에 무엇을 빼는가\nchoices: sales.csv 전체 / 일부 기간\nresponse: (합성 답) sales.csv 전체를 쓰고 외부 데이터는 뺀다\n",
+  "interpretation": "interpretation: (합성) 월별 집계 가능성부터 확인한 뒤 추이·개선안 순서로 간다\nunresolved: 없음\n",
+  "scope": {
+    "goal": "(합성) 매출 자료로 개선안을 만든다",
+    "in_scope": "(합성) 제공된 sales.csv",
+    "out_of_scope": "(합성) 외부 데이터·실제 개인정보",
+    "constraints": "(합성) 외부 네트워크 없음",
+    "success_criteria": "(합성) 항목마다 관측 가능한 결과 파일이 남는다"
+  },
+  "statement": "(합성) 월별 집계 가능성 → 꺾인 구간 → 개선안 초안 순서로 확인한다",
+  "item_D": { "id": "D", "question": "(합성) A 결과를 받아 결측 구간을 보정할지 결정한다", "done_when": "(합성) 보정 여부와 근거가 기록된다" },
+  "changed_question": "(합성) 바뀐 질문",
+  "changed_done_when": "(합성) 바뀐 완료 조건",
+  "bundled_item_done_when": "(합성) 모든 결과가 나온다",
+  "observation_objective": "objective: (합성) 흔한 실패 예시가 Core에서 어떻게 처리되는지 관측한다",
+  "hypothesis": "hypothesis: (합성) 제공 자료만으로 이 항목을 확인할 수 있다\nrationale: (합성) 자료가 주어졌다\nguardrail: (합성) 외부 데이터를 쓰지 않는다\n",
+  "evidence": "# (합성) 관측\n\n시험 전용 결과 파일. 실제 작업의 증거가 아니다.\n",
+  "verify_report": "execution: (합성) 자료를 확인하고 결과를 저장했다\nresult: (합성) 결과 파일을 남겼다\n",
+  "analysis": "interpretation: (합성) 저장한 결과가 가설과 맞는다\nhypothesis_fit: yes\nproblem_solved: yes\nsuccess_condition_met: yes\nguardrail_triggered: no\n",
+  "experiment_outcome": "verdict: success\nlesson: (합성) 항목을 파일 증거로 확인했다\nnext_direction.action: close_cycle\nnext_direction.reason: (합성) 다음 항목으로 간다\n",
+  "interview_outcome": "verdict: success\nlesson: (합성) 합의한 범위를 기록했다\nsynthesis_ref: ${synthesis}\nnext_direction.action: close_cycle\nnext_direction.reason: (합성) 승인 범위를 실험으로 확인한다\n",
+  "cycle_report": "verdict: success\noutcome_ref: ${outcome}\nhandoff_summary: (합성) 이 Cycle을 마쳤다\nnext_direction.action: open_child\nnext_direction.reason: (합성) 다음 단계로 간다\n",
+  "reinterview_reason": "(합성) 항목 D가 B 앞에 필요하다"
+}

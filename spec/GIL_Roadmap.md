@@ -1730,6 +1730,12 @@ Artifact와의 관계
 - [x] 필수 `id`·`title`·`summary` · 선택 `applies_when`·`related`·`examples`·`aliases`
 - [ ] **Example 실체 검증** — Topic 본문의 inline 예제만 있고 `manual/examples/` 객체 체계와
       registry 는 아직 없다. `examples` metadata 는 주소 검증만 지나고 실체는 확인되지 않는다.
+      **Chain 보조 검사(2026-11-17, #154):** [개발용 예시 검사기](../tools/manual-example-check/README.md)가
+      공통 지침·승인 계획 명세·관련 Topic의 29개 구간을 실제 Core 사례 8개에 연결한다.
+      원문 지문과 실행 파일이 제공하는 설명을 대조하고, 거절 시 기록 보존도 검사한다.
+      Mac 실제 사례와 Mac·Windows 자체시험을 자동 검사에 연결했다. 전체 Example 객체 체계,
+      Windows 실제 사례, 질문·제안·문제 크기의 의미 평가는 여전히 미완료다.
+      Define·Interview 설명서의 항목 A 질문 문구 차이는 알려진 불일치로 계속 보고한다.
 - [x] `[이름]` 절 경계 인식 — 범용 Markdown AST 없이
 - [x] help 조회의 완전한 읽기 전용성 — `.gil` 을 찾지도 잠그지도 않음
 - [x] 깨진 link·중복 ID·순환/분기/가로채기 alias·비canonical ID의 test 거절
