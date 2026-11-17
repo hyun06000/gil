@@ -29,6 +29,7 @@ fn interview_proposal_and_define_receipts_carry_the_deep_interview_and_smallest_
     let rules = spec();
 
     let started = ok(mcp.call("gil_start", &root, json!({})), "gil_start");
+    support::as_item_queue(&root, &settings);
     let scope = scope_from_start(&started);
     ok(mcp.call_raw("show_gil_monitor", json!({"scope_id": scope})), "show_gil_monitor");
     let plan_profile = mcp.tool_names().iter().any(|t| t == "gil_plan_propose");

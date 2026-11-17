@@ -114,6 +114,7 @@ fn guarded_project_completes_approved_closing_without_outside_write_regressions(
     let record = product_state_path(&root, &private_local_app_data(&settings));
     let mut r = Rig { root: root.clone(), record, scope: String::new(), c: Client::serve(&settings) };
     let started = ok(r.model("gil_start", json!({})), "start");
+    as_item_queue_record(&r.record);
     auto_guard(&settings, json!({"hook_event_name":"PostToolUse","tool_name":"mcp__gil__gil_start","tool_input":{"project_root":root},"tool_response":started["result"]}));
     assert_eq!(auto_guard(&settings,json!({"hook_event_name":"Stop","last_assistant_message":"done"})),json!({}));
     refused(r.model("gil_await_user",json!({"question":"What is the goal?"})),"wait before Question");
@@ -279,6 +280,8 @@ fn legacy_project_resumes_without_rewriting_guides_or_old_snapshot() {
     let original=gil::ProjectSession::start_visual(gil::RuleSet::builtin().unwrap(), &root).unwrap();
     drop(original);
     let record=root.join(gil::STATE_PATH);
+    // A project that predates project-local prompts also predates the exploration contract.
+    as_item_queue_record(&record);
     let initial=record_bytes(&record);
     let mut r=Rig {root:root.clone(),record,scope:String::new(),c:Client::serve(&settings)};
     let context=ok(r.model("gil_context",json!({})),"read legacy context");
@@ -315,6 +318,7 @@ fn documented_proposal_opens_and_closes_with_schema_rejections_leaving_no_trace(
     let record = product_state_path(&root, &private_local_app_data(&settings));
     let mut r = Rig { root: root.clone(), record, scope: String::new(), c: Client::serve(&settings) };
     let started = ok(r.model("gil_start", json!({})), "start");
+    as_item_queue_record(&r.record);
     let next = &structured(&started)["next_call"];
     r.scope = next["arguments"]["scope_id"].as_str().unwrap().to_owned();
     ok(r.c.call("show_gil_monitor", next["arguments"].clone()), "show");
@@ -397,6 +401,7 @@ fn approval_contract_holds_over_the_real_stdio_process() {
 
     // start once; follow the returned show_gil_monitor; display stays unconfirmed.
     let started = ok(r.model("gil_start", json!({})), "gil_start");
+    as_item_queue_record(&r.record);
     let text = started["result"]["content"].as_array().unwrap().iter().filter_map(|c| c["text"].as_str()).collect::<String>();
     let at = text.find("show_gil_monitor(").expect("start names show_gil_monitor") + "show_gil_monitor(".len();
     let end = text[at..].find(')').unwrap();
@@ -747,6 +752,7 @@ fn misplaced_report_and_plan_extension_recover_from_exact_readonly_mcp_data() {
     let record = product_state_path(&root, &private_local_app_data(&settings));
     let mut r = Rig { root: root.clone(), record, scope: String::new(), c: Client::serve(&settings) };
     let started = ok(r.model("gil_start", json!({})), "start");
+    as_item_queue_record(&r.record);
     let next = &structured(&started)["next_call"];
     r.scope = next["arguments"]["scope_id"].as_str().unwrap().to_owned();
     ok(r.c.call("show_gil_monitor", next["arguments"].clone()), "show");

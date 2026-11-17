@@ -23,7 +23,7 @@ impl Chain {
             None,
             cycles,
         );
-        if cfg!(feature = "approved-plan") { chain.approved_plan = Some(Default::default()); }
+        if cfg!(feature = "approved-plan") { chain.approved_plan = Some(crate::approved_plan::PlanState::for_new_chain()); }
         chain
     }
     pub(crate) fn restore(

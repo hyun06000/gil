@@ -882,6 +882,8 @@ pub struct CycleRevisit {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OpenAfterRevisitError {
     PlanBinding,
+    /// The exploration contract refused the requirement link of the new branch.
+    Plan(String),
     /// 되돌아온 적이 없다 — 소비할 결정이 없다.
     NothingPending,
     /// 적어 둔 갈 곳이 이 Graph 에서 성립하지 않는다.
@@ -905,6 +907,7 @@ impl fmt::Display for OpenAfterRevisitError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             OpenAfterRevisitError::PlanBinding => write!(f, "승인 계획의 재시도 바인딩 계약이 아직 없다. 기존 기록을 보존한다"),
+            OpenAfterRevisitError::Plan(reason) => write!(f, "{reason}"),
             OpenAfterRevisitError::NothingPending => {
                 write!(f, "되돌아온 적이 없다 — 소비할 결정이 없다")
             }
@@ -1121,6 +1124,9 @@ pub enum CycleTargetError {
     },
     /// 이 Cycle Graph 에 없는 이름이다.
     UnknownTarget(CycleRef),
+    /// 대상이 **다른 Chain 의 Cycle** 이다. 그 기록은 근거로 읽을 수 있지만, 다른 Chain 의
+    /// 세계로 실제 복원하는 전이는 없다 — 가까운 다른 지점으로 몰래 바꾸지 않고 거절한다.
+    TargetInOtherChain { target: CycleRef, chain: crate::ChainRef },
     /// 아직 열려 있는 Cycle 로는 되돌아갈 수 없다.
     TargetIsOpen(CycleRef),
     /// 지금 닫는 그 Cycle 을 가리켰다.
@@ -1159,6 +1165,7 @@ impl fmt::Display for CycleTargetError {
                 f,
                 "{NEXT_TARGET} 가 가리키는 {target} 은(는) 이 Cycle Graph 에 없다"
             ),
+            CycleTargetError::TargetInOtherChain { target, chain } => f.write_str(&crate::tr!("cycles.dir.other_chain", target = target, chain = chain)),
             CycleTargetError::TargetIsOpen(target) => write!(
                 f,
                 "{target} 은(는) 아직 열려 있다 — 확정된 Cycle 로만 되돌아갈 수 있다"

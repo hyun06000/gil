@@ -56,6 +56,21 @@ pub fn record_bytes(path: &Path) -> Vec<u8> {
     std::fs::read(path).unwrap_or_else(|e| panic!("project record missing at the product layout path {}: {e}", path.display()))
 }
 
+/// The record of a Project whose first Chain was opened **before** the exploration contract.
+///
+/// An `exploration-flow` build marks the Chains it opens (`contract: exploration`) and must keep
+/// running Chains without the marker under their original item-queue rules. The suites that fix
+/// those rules therefore take a fresh record as an `approved-plan` build writes it: the same
+/// bytes without the marker line. In every other build nothing is marked and this is a no-op.
+/// It is called once, right after `gil_start`, before any approval or Cycle exists.
+pub fn as_item_queue_record(record: &Path) {
+    if !cfg!(feature = "exploration-flow") { return; }
+    let text = std::fs::read_to_string(record).unwrap_or_else(|e| panic!("fresh record {}: {e}", record.display()));
+    let kept: Vec<&str> = text.lines().filter(|line| line.trim() != "contract: exploration").collect();
+    assert_eq!(kept.len() + 1, text.lines().count(), "a fresh exploration record differs from an item-queue record by exactly its marker line");
+    std::fs::write(record, kept.join("\n") + "\n").expect("rewrite the fresh record without the marker");
+}
+
 pub fn scratch(name: &str) -> PathBuf {
     let at = std::env::temp_dir().join(format!(
         "gil-wave1-{name}-{}-{:?}",

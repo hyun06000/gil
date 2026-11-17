@@ -66,6 +66,34 @@ chains:
   현재 Chain의 내부 Cycle 발급기가 프로젝트 전체 high-water mark다.
   다음 Chain으로의 발급기 인계와 검증은 아래 M6-C 계약을 따른다.
 
+## 실행 계약 표식 — 2026-11-17, 개발 프로필 `exploration-flow`
+
+format 6/7의 Chain 노드는 선택적 `approved_plan`을 갖고(M6-D), 그 원장은 선택적
+`contract: exploration`을 갖는다. 형식 번호와 다른 칸은 그대로다.
+
+```yaml
+chains:
+  nodes:
+  - id: C1                 # 표식 없음: 항목 큐 계약. 이전과 같은 바이트로 읽고 쓴다
+    approved_plan: {proposals: [...], executed_cycles: [...], reinterview_requests: [...]}
+  - id: C2                 # exploration-flow 빌드가 연 Chain
+    approved_plan:
+      contract: exploration
+      proposals: [...]
+      executed_cycles:
+      - {cycle_ref: cycle:C9, revision: 1, item_id: R1, selection: {relevance: …, readiness: …, uncertainty: …}}
+      reinterview_requests: []
+```
+
+- 표식은 Chain마다 따로이며 Chain을 열 때 정해진다. Project 전체의 전역 설정이 아니다.
+  표식 없는 Chain의 원장·실행 기록은 새 프로그램에서도 항목 큐 규칙으로만 검증한다.
+- 직렬 계보에서 표식은 한 방향이다: 항목 큐 → 탐색은 허용, 탐색 → 항목 큐는 거절.
+  승인 원장의 유무(plan profile)는 기존대로 Chain 사이에 바뀌지 않는다.
+- `selection`은 탐색 계약의 모든 연결에 있어야 하고 항목 큐 바인딩에는 없어야 한다. 어긋나면 거절한다.
+- 이 변경 전의 writer는 `approved_plan`의 알 수 없는 필드로, `exploration-flow` 없는 새 writer는
+  명시적 사유로 기록 전체를 거절한다. 형식 번호를 낮추거나 표식만 지우는 우회는 통하지 않는다.
+- 상세 계약과 검증은 [탐색 실행 계약](GIL_Approved_Plan_v0.1.md#탐색-실행-계약--개발-프로필-exploration-flow)을 따른다.
+
 ## Closing Interview와 종료 — M6-B
 
 1. Agent는 기존 Cycle Report·실패·남은 질문을 토대로 추가 Interview를 연다. 결과물이 있으면

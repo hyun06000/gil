@@ -202,11 +202,29 @@
     },
     {
       "id": "SPEC-DEV-SH",
-      "source": { "path": "spec/GIL_Approved_Plan_v0.1.md", "locator": { "fence": "sh" } },
+      "source": { "path": "spec/GIL_Approved_Plan_v0.1.md", "locator": { "after": "## 개발 검증 실행", "before": "일반 `chain-core` 회귀와 기본 format 4/5 시험도 따로 실행한다.", "fence": "sh" } },
       "sha256": "d71a14e12afa646166130771c2ad680ba1b108e7f12fdd183bbf0a386acf42f1",
       "kind": "not_executed",
       "cases": [],
       "reason": "Developer shell commands; this checker never runs document shell blocks.",
+      "claim": "Inventoried only."
+    },
+    {
+      "id": "SPEC-EXPLORE-LINK",
+      "source": { "path": "spec/GIL_Approved_Plan_v0.1.md", "locator": { "after": "### 승인 요구와 실험의 연결", "before": "- Core가 검사하는 것:", "fence": "text" } },
+      "sha256": "d6a7a81d05fee82a2d239101196d50c1a58493d4137bc5f5cb118cfafe84c801",
+      "kind": "not_executed",
+      "cases": [],
+      "reason": "Requirement-link body of the exploration contract (opt-in exploration-flow profile). This checker drives an approved-plan build, where that contract does not exist; the body is exercised over the real stdio process by tests/exploration_flow.rs.",
+      "claim": "Out of scope for this profile; inventoried so that a changed or new block is noticed."
+    },
+    {
+      "id": "SPEC-EXPLORE-SH",
+      "source": { "path": "spec/GIL_Approved_Plan_v0.1.md", "locator": { "after": "### 검증과 한계", "fence": "sh" } },
+      "sha256": "8a586e6e3e2c0c48c06809d15968394ae82d2eb3dab38ab96f0413e17cbd019d",
+      "kind": "not_executed",
+      "cases": [],
+      "reason": "Developer shell commands for the exploration-flow profile; this checker never runs document shell blocks.",
       "claim": "Inventoried only."
     },
     {

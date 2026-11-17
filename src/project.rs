@@ -156,7 +156,11 @@ impl Project {
             parent.exit_snapshot().unwrap(), first);
         let mut chain = crate::Chain::restore(id, self.current_existence_ref(), parent.exit_snapshot().unwrap(),
             Some(parent.id()), cycles);
-        if parent.approved_plan.is_some() { chain.approved_plan = Some(Default::default()); }
+        // The profile is inherited: a Chain without a ledger is followed by one without, and
+        // no approval is copied. The execution contract is not inherited — it is this build's
+        // contract for Chains it opens, so a closed item-queue Chain may be followed by an
+        // exploration Chain while its own record keeps the meaning it was written with.
+        if parent.approved_plan.is_some() { chain.approved_plan = Some(crate::approved_plan::PlanState::for_new_chain()); }
         let mut next = self.clone();
         let WorldGraph::Chains(chains) = &mut next.world else { unreachable!() };
         chains.push(chain);
@@ -194,6 +198,12 @@ impl Project {
             }
             if let Some(parent) = previous {
                 if parent.approved_plan.is_some() != chain.approved_plan.is_some() { return Err(Invalid("Chain plan profile cannot change")); }
+                // One direction only: a successor of an exploration Chain cannot fall back to
+                // the item queue, which would let queue rules consume requirements again.
+                if parent.approved_plan.as_ref().is_some_and(|plan| plan.exploration())
+                    && !chain.approved_plan.as_ref().is_some_and(|plan| plan.exploration()) {
+                    return Err(Invalid("Chain execution contract cannot return to the item queue"));
+                }
                 if !parent.is_closed() || parent.exit_snapshot() != Some(chain.entry_snapshot())
                     || chain.cycles().nodes()[0].id().raw() != parent.cycles().next_name() {
                     return Err(Invalid("successor must inherit a closed parent's Exit and global Cycle allocator"));
@@ -319,10 +329,20 @@ impl Project {
     /// Node 를 연 Existence 와 닫는 Existence 는 같아야 하므로(Node Model §13-6), 여는
     /// 순간의 Current 를 그 Cycle 에 새긴다.
     pub fn open_child_cycle(&mut self, kind: CycleKind) -> Result<CycleId, CyclesError> {
+        self.open_child_cycle_linked(kind, None)
+    }
+
+    /// The same door with the requirement link an exploration Chain requires of an Experiment.
+    /// An item-queue Chain takes none, and an Interview never carries one.
+    pub fn open_child_cycle_linked(
+        &mut self,
+        kind: CycleKind,
+        link: Option<&crate::approved_plan::ExperimentLink>,
+    ) -> Result<CycleId, CyclesError> {
         let existence = self.current_existence;
-        let binding = if kind == CycleKind::Experiment { self.next_plan_execution().map_err(CyclesError::Plan)? } else { None };
+        let binding = if kind == CycleKind::Experiment { self.next_plan_execution(link).map_err(CyclesError::Plan)? } else { None };
         let id = self.cycles_mut().open_child(kind, existence)?;
-        if let Some((revision, item)) = binding { self.bind_plan_execution(revision, item, id.to_ref().to_string()); }
+        if let Some(binding) = binding { self.bind_plan_execution(binding, id.to_ref().to_string()); }
         Ok(id)
     }
 
@@ -334,13 +354,20 @@ impl Project {
     pub(crate) fn open_branch_cycle(
         &mut self,
         kind: CycleKind,
+        link: Option<&crate::approved_plan::ExperimentLink>,
     ) -> Result<CycleId, OpenAfterRevisitError> {
         let existence = self.current_existence;
         let binding = if kind == CycleKind::Experiment {
-            self.next_plan_execution().map_err(|_| OpenAfterRevisitError::PlanBinding)?
+            // The item queue keeps its one fixed sentence. A requirement link is an input the
+            // Agent can correct, so the exploration contract says which part was refused.
+            let exploration = self.exploration_contract();
+            self.next_plan_execution(link).map_err(|why| match exploration || link.is_some() {
+                true => OpenAfterRevisitError::Plan(why),
+                false => OpenAfterRevisitError::PlanBinding,
+            })?
         } else { None };
         let id = self.cycles_mut().open_after_revisit(kind, existence)?;
-        if let Some((revision, item)) = binding { self.bind_plan_execution(revision, item, id.to_ref().to_string()); }
+        if let Some(binding) = binding { self.bind_plan_execution(binding, id.to_ref().to_string()); }
         Ok(id)
     }
 
@@ -1075,9 +1102,21 @@ impl Project {
         // **어느 종류의 Cycle 이 거절했는지 함께 말한다.** 성공하면 `ClosedCycle` 이 kind 를
         // 알려 주는데 거절할 때만 잃을 이유가 없다 — 그리고 Interview 와 Experiment 는
         // 사람이 할 일이 다르다.
+        // 다른 Chain 의 Cycle 을 되돌아갈 곳으로 적었다면 「이 Graph 에 없다」가 아니라 **그 사실**을
+        // 말한다. 판정은 그대로다 — 현재 Chain 의 Graph 에 없는 대상은 어느 쪽이든 거절된다.
+        let other_chain = |target: crate::CycleRef| self.chains().iter()
+            .find(|chain| Some(chain.id()) != self.current_chain().map(|current| current.id()) && chain.owns(target))
+            .map(|chain| chain.id());
         next.cycles_mut()
             .close_current(report, journey)
             .map_err(|err| match err {
+                CycleCloseError::NextDirection(CycleTargetError::UnknownTarget(target)) => {
+                    let source = match other_chain(target) {
+                        Some(chain) => CycleTargetError::TargetInOtherChain { target, chain },
+                        None => CycleTargetError::UnknownTarget(target),
+                    };
+                    ActionError::CycleDirection { kind, source }
+                }
                 CycleCloseError::NextDirection(source) => {
                     ActionError::CycleDirection { kind, source }
                 }

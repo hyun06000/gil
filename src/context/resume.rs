@@ -48,7 +48,12 @@ pub(super) fn write(out: &mut String, project: &Project) {
                 digest = proposal.digest, decision = decision, statement = preview(proposal.draft.synthesis.get("statement").map(String::as_str).unwrap_or(""))));
         }
         if let Some(binding) = plan.executed_cycles.iter().find(|e| e.cycle_ref == cycle.id().to_ref().to_string()) {
-            out.push_str(&tr!("ctx.resume.binding", item = binding.item_id, revision = binding.revision));
+            // 탐색 계약에서는 「항목 바인딩」이 아니라 승인 요구에 기여하는 실험의 연결이다.
+            if plan.exploration() {
+                out.push_str(&tr!("ctx.resume.link", item = binding.item_id, revision = binding.revision));
+            } else {
+                out.push_str(&tr!("ctx.resume.binding", item = binding.item_id, revision = binding.revision));
+            }
         }
         out.push_str(text("ctx.resume.plan_details"));
     }

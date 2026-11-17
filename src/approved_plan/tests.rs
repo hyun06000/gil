@@ -50,7 +50,7 @@ pub(crate) fn synthesis(p: &mut Project, ids: &[&str]) -> Draft {
             .collect(),
     }
 }
-fn approve_close(p: &mut Project, draft: Draft) {
+pub(crate) fn approve_close(p: &mut Project, draft: Draft) {
     approve_close_as(p, draft, "open_child");
 }
 fn approve_close_as(p: &mut Project, draft: Draft, action: &str) {
@@ -80,8 +80,13 @@ fn approve_close_as(p: &mut Project, draft: Draft, action: &str) {
     )
     .unwrap();
 }
-fn project() -> Project {
-    Project::start(h::spec(), h::first_world())
+/// A Project whose first Chain carries the original item-queue contract.
+///
+/// An `exploration-flow` build opens new Chains under the exploration contract, yet it must keep
+/// running Chains that were opened before it. Every test of the queue contract therefore starts
+/// from this fixture, so the same suite holds in both builds.
+pub(crate) fn project() -> Project {
+    Project::start(h::spec(), h::first_world()).as_item_queue_for_test()
 }
 
 #[test]
@@ -329,7 +334,9 @@ fn closing_interview_requires_its_own_receipt_and_successor_cannot_reuse_it() {
         serde_json::to_vec(p.chains()[0].approved_plan.as_ref().unwrap()).unwrap(),
         first
     );
-    assert_eq!(p.approved_plan().unwrap(), &PlanState::default());
+    // An empty ledger under the contract this build gives the Chains it opens: the item queue
+    // (no marker) in an `approved-plan` build, the exploration marker in an `exploration-flow` one.
+    assert_eq!(p.approved_plan().unwrap(), &PlanState::for_new_chain());
     let draft = synthesis(&mut p, &["A"]);
     let next = p.propose_plan(draft).unwrap();
     assert_eq!(next.revision, 1);
@@ -460,7 +467,7 @@ fn an_item_that_cannot_finish_closes_truthfully_keeps_partial_files_and_gets_no_
     let state = session.project().approved_plan().unwrap();
     assert_eq!(state.pending(chain).iter().map(|i| i.id.as_str()).collect::<Vec<_>>(), vec!["A", "B"]);
     assert_eq!(state.awaiting_interview(chain).len(), 1);
-    assert!(session.project().next_plan_execution().is_err());
+    assert!(session.project().next_plan_execution(None).is_err());
 
     // The next-call line shows the partial results before the restore and promises no keep-files shortcut.
     let context = crate::context(session.project());
@@ -558,7 +565,16 @@ fn closed_chain_binds_nothing_and_the_next_chain_starts_with_an_empty_ledger() {
     let next = p.propose_plan(x.clone()).unwrap();
     assert_eq!((next.revision, next.base_revision), (1, None));
     approve_close(&mut p, x);
-    p.open_child_cycle(CycleKind::Experiment).unwrap();
+    if p.exploration_contract() {
+        // The successor this build opens links its Experiment explicitly; nothing is auto-bound.
+        assert!(p.open_child_cycle(CycleKind::Experiment).is_err());
+        let active = p.approved_plan().unwrap().active(p.current_chain().unwrap()).unwrap();
+        let link = ExperimentLink { revision: active.revision, digest: active.digest.clone(), requirement_id: "X".into(),
+            selection: Selection { relevance: "X".into(), readiness: "ready".into(), uncertainty: "one".into() } };
+        p.open_child_cycle_linked(CycleKind::Experiment, Some(&link)).unwrap();
+    } else {
+        p.open_child_cycle(CycleKind::Experiment).unwrap();
+    }
     assert_eq!(p.current_plan_item().unwrap().id, "X");
     assert_eq!(p.approved_plan().unwrap().executed_cycles.len(), 1);
     assert_eq!(serde_json::to_vec(p.chains()[0].approved_plan.as_ref().unwrap()).unwrap(), ledger, "the first Chain's ledger, request included, is untouched");
@@ -579,4 +595,28 @@ fn synthesis_draft_only(ids: &[&str]) -> Draft {
         items: ids.iter().map(|id| Item { id: (*id).into(), question: "q".into(), done_when: "d".into() }).collect(),
         synthesis: report,
     }
+}
+
+/// A build that cannot honour requirement links must refuse a record that carries them — the
+/// way the approval ledger itself is refused by a build without `approved-plan` — and must not
+/// read the links as queue bindings. The marker here is written by hand because this build never
+/// writes one; `tests/exploration_flow.rs` produces real ones in an `exploration-flow` build.
+#[cfg(not(feature = "exploration-flow"))]
+#[test]
+fn a_record_under_the_exploration_contract_is_refused_and_left_as_it_is() {
+    let root = h::scratch("plan-exploration-record");
+    let path = root.join(crate::STATE_PATH);
+    let p = project();
+    assert_eq!(p.approved_plan().unwrap().contract, None, "this build opens item-queue Chains only");
+    crate::save(&p, &path).unwrap();
+    assert!(!std::fs::read_to_string(&path).unwrap().contains("contract"), "and writes no marker");
+    let mut file: serde_norway::Value = serde_norway::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    file["chains"]["nodes"][0]["approved_plan"].as_mapping_mut().unwrap().insert("contract".into(), "exploration".into());
+    let marked = serde_norway::to_string(&file).unwrap();
+    std::fs::write(&path, &marked).unwrap();
+    let refused = crate::load(h::spec(), &path).unwrap_err().to_string();
+    assert!(refused.contains(crate::locale::text("plan.err.exploration_core_required")), "{refused}");
+    assert!(crate::ProjectSession::open(h::spec(), &path).is_err(), "no session, so nothing can be opened, closed or rewritten");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), marked, "the refused record is untouched");
+    std::fs::remove_dir_all(root).ok();
 }

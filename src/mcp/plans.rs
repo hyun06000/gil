@@ -89,12 +89,48 @@ fn view(p: &Project) -> Value {
     // the Cycle's close, so only this field says whether that Cycle is still open.
     let cycle = p.current_cycle();
     let current_cycle = json!({"ref":cycle.id().to_ref().to_string(), "state":if cycle.is_closed() {"closed"} else {"open"}});
-    json!({"supported":true, "proposal":proposal, "active_revision":state.active(chain).map(|p| p.revision),
+    let mut value = json!({"supported":true, "proposal":proposal, "active_revision":state.active(chain).map(|p| p.revision),
         "active_plan":state.active(chain).map(|p| json!({"revision":p.revision,"digest":p.digest,"scope":p.draft.scope,"items":p.draft.items})),
         "retry_pending":state.pending(chain).iter().filter(|i| state.executed_cycles.iter().any(|e| e.item_id == i.id)).map(|i| &i.id).collect::<Vec<_>>(),
         "current_item":p.current_plan_item(), "current_cycle":current_cycle, "pending":state.pending(chain), "reinterview_requests":state.awaiting_interview(chain), "executed_cycles":state.executed_cycles,
         "close_report":proposal.and_then(|p| p.report().ok()).map(|r| crate::approved_plan::report_text(&r)), "document":p.plan_document(),
-        "next":crate::tr!("plan_tool.next", next = crate::context::next_call(p))})
+        "next":crate::tr!("plan_tool.next", next = crate::context::next_call(p))});
+    if state.exploration() { exploration_view(&mut value, p, state, chain); }
+    value
+}
+
+/// Exploration contract only: which approved requirement each Experiment serves, as recorded.
+///
+/// The item-queue view above is left byte-for-byte as it was; these fields are added beside it
+/// for Chains that carry the contract marker. Nothing here says a requirement is answered —
+/// `requirement_resolution` names where that is decided. `pending` in this contract lists the
+/// requirements no Experiment was linked to yet, and `retry_pending` is always empty because a
+/// failure is followed by a different small question, not by a re-binding of the same item.
+fn exploration_view(value: &mut Value, p: &Project, state: &crate::approved_plan::PlanState, chain: &crate::Chain) {
+    let active = state.active(chain);
+    let experiment = |e: &crate::approved_plan::Execution| {
+        let cycle = chain.cycles().nodes().iter().find(|c| c.id().to_ref().to_string() == e.cycle_ref);
+        json!({"cycle_ref":e.cycle_ref, "plan_revision":e.revision,
+            "state":if cycle.is_some_and(|c| c.is_closed()) {"closed"} else {"open"},
+            "verdict":cycle.filter(|c| c.is_closed()).and_then(|c| c.report()).and_then(|r| r.get("verdict")),
+            "revisit_from":cycle.and_then(|c| c.revisit_from()).map(|from| from.to_ref().to_string()),
+            "selection":e.selection})
+    };
+    let requirements: Vec<Value> = active.map(|a| a.draft.items.iter().map(|i| json!({
+        "id":i.id, "question":i.question, "done_when":i.done_when,
+        "experiments":state.linked(&i.id).map(experiment).collect::<Vec<_>>()})).collect()).unwrap_or_default();
+    let here = p.current_cycle().id().to_ref().to_string();
+    let fields = value.as_object_mut().expect("plan view is an object");
+    fields.insert("contract".into(), json!("exploration"));
+    fields.insert("requirements".into(), json!(requirements));
+    fields.insert("requirement_resolution".into(), json!("user_approved_closing_interview_only"));
+    fields.insert("current_experiment".into(), json!(state.executed_cycles.iter().find(|e| e.cycle_ref == here).map(|e| {
+        let mut v = experiment(e);
+        v["requirement_id"] = json!(e.item_id);
+        v
+    })));
+    fields.insert("experiment_link".into(), json!(active.map(|a| crate::approved_plan::ExperimentLink::skeleton(Some(a)))));
+    fields.insert("next".into(), json!(crate::tr!("plan_tool.next_exploration", next = crate::context::next_call(p))));
 }
 impl Grants {
     fn token(&self, scope: &str, revision: u32, digest: &str) -> Result<String, String> {
@@ -211,7 +247,7 @@ pub(super) fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
     for (name, description, schema, app, read) in [
         (
             "gil_plan_propose",
-            "Propose the complete scope and ordered experiment checklist in an OPEN Interview Synthesis. To extend an existing plan, read gil_plan_read.active_plan and copy ALL its items verbatim (including executed items), then add new IDs. Scope and item order may change subject to new approval; existing item definitions may not. Do not send only new items or reconstruct old text from memory. No file creation. Wait for the user's Monitor button; chat approval is insufficient. Then gil_plan_read and close Synthesis, Outcome and Interview before execution.",
+            "Propose the complete scope and ordered experiment checklist in an OPEN Interview Synthesis. To extend an existing plan, read gil_plan_read.active_plan and copy ALL its items verbatim (including executed items), then add new IDs. Scope and item order may change subject to new approval; existing item definitions may not. Do not send only new items or reconstruct old text from memory. No file creation. Wait for the user's Monitor button; chat approval is insufficient. Then gil_plan_read and close Synthesis, Outcome and Interview before execution. When gil_plan_read says contract: exploration, the items are the approved requirements (question to answer, judgment criteria) rather than an execution queue: do not list experiments in advance and do not re-propose merely to split, reorder or change the method of experiments.",
             input(
                 json!({"project_root":string,"draft":draft}),
                 vec!["project_root", "draft"],
@@ -231,7 +267,7 @@ pub(super) fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
         ),
         (
             "gil_plan_read",
-            "Read proposal/Monitor decision and current-state next guidance. active_plan is the complete executable approved revision {revision,digest,scope,items}, including executed items, even in an unbound Interview where document is null. Copy its items verbatim when extending a plan; null means no executable approved plan yet. close_report is the proposal's Synthesis report: use it unchanged only when that Synthesis is actually open. document is null before an Experiment binds; opening an Experiment immediately exposes the bound revision's exact UTF-8 document, even before Define/Verify. Reading or a failed close never creates it. Save it verbatim only during Verify; name plan_document and separate evidence_files. Each Experiment binds exactly one current_item; executed_cycles means opened/bound, not success or proof of all work. Other items stay pending even if a report mentions them. Never invent approval or summarize a missing document.",
+            "Read proposal/Monitor decision and current-state next guidance. active_plan is the complete executable approved revision {revision,digest,scope,items}, including executed items, even in an unbound Interview where document is null. Copy its items verbatim when extending a plan; null means no executable approved plan yet. close_report is the proposal's Synthesis report: use it unchanged only when that Synthesis is actually open. document is null before an Experiment binds; opening an Experiment immediately exposes the bound revision's exact UTF-8 document, even before Define/Verify. Reading or a failed close never creates it. Save it verbatim only during Verify; name plan_document and separate evidence_files. Each Experiment binds exactly one current_item; executed_cycles means opened/bound, not success or proof of all work. Other items stay pending even if a report mentions them. Never invent approval or summarize a missing document. Only when the response carries contract: exploration (Chains opened under that contract; absent everywhere else): requirements lists each approved requirement with the Experiments linked to it and their recorded verdicts, current_experiment is the link of the current Cycle, and experiment_link is the exact body for gil_open(kind: experiment, contract: ...). There pending means requirements with no linked Experiment yet, an Experiment's success never completes a requirement, and whether a requirement is answered is decided only in the user-approved Closing Interview.",
             input(json!({"project_root":string}), vec!["project_root"]),
             false,
             true,
@@ -285,7 +321,7 @@ mod tests {
     #[test]
     fn plan_propose_reports_all_basis_errors_and_preserves_saved_state() {
         let root = h::scratch("plan-basis-diagnostics");
-        let mut p = Project::start(h::spec(), h::first_world());
+        let mut p = crate::approved_plan::tests::project();
         let draft = crate::approved_plan::tests::synthesis(&mut p, &["A"]);
         crate::save(&p, root.join(crate::STATE_PATH)).unwrap();
         let before = std::fs::read(root.join(crate::STATE_PATH)).unwrap();
@@ -312,7 +348,7 @@ mod tests {
     #[test]
     fn approved_plan_private_token_stale_revision_restart_and_idempotent_receipt() {
         let root = h::scratch("plan-mcp-capability");
-        let mut p = Project::start(h::spec(), h::first_world());
+        let mut p = crate::approved_plan::tests::project();
         let draft = crate::approved_plan::tests::synthesis(&mut p, &["A", "B"]);
         crate::save(&p, root.join(crate::STATE_PATH)).unwrap();
         let monitor = Monitor::with_store(super::super::bindings::Store::at(
@@ -413,7 +449,7 @@ mod tests {
     #[test]
     fn approved_plan_view_projects_real_current_cycle_state_beside_the_binding() {
         use crate::{CycleKind, NodeKind};
-        let mut p = Project::start(h::spec(), h::first_world());
+        let mut p = crate::approved_plan::tests::project();
         assert!(view(&p)["current_cycle"].is_object(), "supported projects always carry current_cycle");
         assert_eq!(view(&p)["active_plan"], Value::Null);
         let draft = crate::approved_plan::tests::synthesis(&mut p, &["A", "B"]);

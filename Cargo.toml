@@ -13,6 +13,11 @@ members = ["companion"]
 chain-core = []
 # M6-D: new projects only; existing records are never auto-enabled.
 approved-plan = ["chain-core"]
+# First exploration flow (2026-11-17 agreement): Chains opened by this build link small
+# Experiments to an approved requirement instead of consuming an ordered item queue. Existing
+# Chains keep their recorded contract; a build without this feature refuses the new records.
+# Opt-in: no release profile enables it until that publication is decided separately.
+exploration-flow = ["approved-plan"]
 # Development-only authoring surface; no default format change or migration.
 visual-authoring = []
 # Product builds keep recording and read surfaces, but refuse destructive Artifact rollback until

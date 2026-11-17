@@ -185,6 +185,7 @@ fn receipts_name_one_next_call_through_interview_and_into_an_experiment() {
     let rules = spec();
 
     let started = ok(mcp.call("gil_start", &root, serde_json::json!({})), "gil_start");
+    support::as_item_queue(&root, &settings);
     assert!(hints(&started).contains("show_gil_monitor("), "{}", hints(&started));
     let scope = support::scope_from_start(&started);
     ok(mcp.call_raw("show_gil_monitor", serde_json::json!({"scope_id": scope})), "show_gil_monitor");

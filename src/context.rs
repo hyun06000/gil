@@ -56,7 +56,11 @@ pub fn context(project: &Project) -> String {
     if let Some(plan) = project.approved_plan() {
         let chain = project.current_chain().unwrap();
         out.push_str(text("ctx.plan_profile"));
-        out.push_str(&tr!("ctx.plan_state", revision = format!("{:?}", plan.active(chain).map(|p| p.revision)), pending = plan.pending(chain).iter().map(|i| i.id.as_str()).collect::<Vec<_>>().join(", "), executed = serde_json::to_string(&plan.executed_cycles).unwrap()));
+        if plan.exploration() {
+            write_requirements(&mut out, plan, chain);
+        } else {
+            out.push_str(&tr!("ctx.plan_state", revision = format!("{:?}", plan.active(chain).map(|p| p.revision)), pending = plan.pending(chain).iter().map(|i| i.id.as_str()).collect::<Vec<_>>().join(", "), executed = serde_json::to_string(&plan.executed_cycles).unwrap()));
+        }
         let cycle = project.current_cycle();
         if !plan.awaiting_interview(chain).is_empty() {
             out.push_str(&tr!("ctx.plan_reinterview_requests", requests = serde_json::to_string(&plan.awaiting_interview(chain)).unwrap()));
@@ -69,7 +73,12 @@ pub fn context(project: &Project) -> String {
         if let Some(p) = plan.current(project) { out.push_str(&tr!("ctx.plan_proposal", revision = p.revision, receipt = format!("{:?}", p.receipt))); }
         if let Some(item) = project.current_plan_item() {
             let label = if cycle.is_closed() { text("ctx.plan_label_closed") } else { text("ctx.plan_label_current") };
-            out.push_str(&tr!("ctx.plan_item", label = label, id = item.id, question = item.question, done_when = item.done_when));
+            match project.current_plan_selection().filter(|_| plan.exploration()) {
+                // 탐색 계약: 지금 실험이 기여하는 요구와, 열 때 적은 선택 근거를 그대로 보인다.
+                Some(why) => out.push_str(&tr!("ctx.explore.current", label = label, cycle = cycle.id().to_ref(), id = item.id, question = item.question, done_when = item.done_when,
+                    relevance = why.relevance, readiness = why.readiness, uncertainty = why.uncertainty)),
+                None => out.push_str(&tr!("ctx.plan_item", label = label, id = item.id, question = item.question, done_when = item.done_when)),
+            }
         }
         let verify_open = cycle.step_now_open().and_then(|id| cycle.steps().node(id))
             .is_some_and(|node| node.kind == NodeKind::Verify);
@@ -92,6 +101,31 @@ pub fn context(project: &Project) -> String {
     write_current_cycle(&mut out, cycles);
     write_here(&mut out, project);
     out
+}
+
+/// 탐색 계약의 승인 요구와 거기 연결된 실험을 **기록 그대로** 적는다.
+///
+/// 요구가 충족됐는지는 말하지 않는다 — 그 판정은 Closing Interview 에서 사용자가 승인한다.
+/// 실험의 성공·실패는 각 Cycle Report 의 값이며, 여기서 합산하거나 완료율로 바꾸지 않는다.
+fn write_requirements(out: &mut String, plan: &crate::approved_plan::PlanState, chain: &crate::Chain) {
+    let Some(active) = plan.active(chain) else {
+        out.push_str(text("ctx.explore.no_active"));
+        return;
+    };
+    out.push_str(&tr!("ctx.explore.head", revision = active.revision, digest = active.digest));
+    for item in &active.draft.items {
+        let experiments: Vec<String> = plan.linked(&item.id).map(|e| {
+            let state = chain.cycles().nodes().iter().find(|c| c.id().to_ref().to_string() == e.cycle_ref)
+                .map(|c| match c.report().and_then(|r| r.get("verdict")) {
+                    Some(verdict) if c.is_closed() => verdict.to_string(),
+                    _ => "open".to_string(),
+                }).unwrap_or_else(|| "?".into());
+            format!("{} {state}", e.cycle_ref)
+        }).collect();
+        let experiments = if experiments.is_empty() { text("ctx.explore.none").to_string() } else { experiments.join(", ") };
+        out.push_str(&tr!("ctx.explore.requirement", id = item.id, question = item.question, done_when = item.done_when, experiments = experiments));
+    }
+    out.push_str(text("ctx.explore.unresolved"));
 }
 
 /// **지금 바로 할 호출 하나** — 가벼운 모델이 긴 규칙을 추론하지 않아도 되도록.
@@ -159,6 +193,10 @@ fn next_call_here(project: &Project) -> String {
             (CycleKind::Interview, NodeKind::Synthesis) =>
                 format!("{} {}", text("ctx.next.synthesis"), text("guide.propose_brief")),
             (CycleKind::Interview, NodeKind::Outcome) => text("ctx.next.interview_outcome").into(),
+            // 탐색 계약의 Define 은 승인 요구에 기여하는 작은 명제다. 항목 큐 계약의 안내
+            // (항목과 같은 문제·완료 범위)는 그 계약의 Chain 에만 남긴다.
+            (CycleKind::Experiment, NodeKind::Define) if project.exploration_contract() =>
+                format!("{} {}", text("ctx.next.define"), text("guide.define_exploration")),
             (CycleKind::Experiment, NodeKind::Define) =>
                 format!("{} {}", text("ctx.next.define"), text("guide.define_smallest")),
             (CycleKind::Experiment, NodeKind::Hypothesis) => text("ctx.next.hypothesis").into(),
@@ -196,20 +234,27 @@ fn next_call_here(project: &Project) -> String {
     }
 
     // 닫힌 Cycle — 밟을 수 있는 수만 말한다(`next_moves`와 같은 판정).
+    // 탐색 계약: 복원 전후의 다음 수에 그 계약의 한 문장을 덧붙인다. 되돌아가기 자체의 안내와
+    // 승인·대상 검사는 두 계약이 같다.
+    let exploration = project.exploration_contract();
     if let Some(from) = cycles.pending_revisit() {
-        if cfg!(feature = "product-safety") {
-            return tr!("ctx.next.revisited_product", from = from.to_ref());
-        }
-        return tr!("ctx.next.revisited_dev", from = from.to_ref());
+        let said = if cfg!(feature = "product-safety") {
+            tr!("ctx.next.revisited_product", from = from.to_ref())
+        } else {
+            tr!("ctx.next.revisited_dev", from = from.to_ref())
+        };
+        return if exploration { format!("{said} {}", text("ctx.explore.after_revisit")) } else { said };
     }
     if cycles.can_revisit() {
         // 되돌아가기는 폴더에서 부분 결과를 치운다(Snapshot·보존 위치에는 남는다). 그 전에 보여 준다 —
         // Cycle Model §8. 부분 결과를 둔 채 이어가는 전이는 아직 없으므로 있는 것처럼 안내하지 않는다.
         let partial = text("guide.interrupt_partial_results");
-        if cfg!(feature = "product-safety") {
-            return format!("{} {partial}", tr!("ctx.next.can_revisit_product", cycle = cycle.id()));
-        }
-        return format!("{} {partial}", tr!("ctx.next.can_revisit_dev", cycle = cycle.id()));
+        let said = if cfg!(feature = "product-safety") {
+            format!("{} {partial}", tr!("ctx.next.can_revisit_product", cycle = cycle.id()))
+        } else {
+            format!("{} {partial}", tr!("ctx.next.can_revisit_dev", cycle = cycle.id()))
+        };
+        return if exploration { format!("{said} {}", text("ctx.explore.failure_revisit")) } else { said };
     }
     if let Some(said) = plan_next_call_after_cycle(project) {
         return said;
@@ -232,7 +277,9 @@ fn plan_next_call(project: &Project, kind: NodeKind) -> Option<String> {
     match kind {
         NodeKind::Synthesis => {
             let Some(proposal) = plan.current(project) else {
-                return Some(format!("{} {} {}", text("ctx.plan.synthesis_propose"), text("guide.propose_brief"), text("cycle.basis_refs_rules")));
+                // 탐색 계약의 제안은 실행 순서가 아니라 승인받을 요구다. 입력 모양은 같다.
+                let brief = if plan.exploration() { text("guide.propose_requirements") } else { text("guide.propose_brief") };
+                return Some(format!("{} {brief} {}", text("ctx.plan.synthesis_propose"), text("cycle.basis_refs_rules")));
             };
             Some(match proposal.receipt.as_ref().map(|r| &r.decision) {
                 None => tr!("ctx.plan.waiting", revision = proposal.revision),
@@ -269,6 +316,17 @@ fn plan_next_call_after_cycle(project: &Project) -> Option<String> {
     let chain = project.current_chain()?;
     if !plan.awaiting_interview(chain).is_empty() {
         return Some(text("ctx.plan.reinterview_pending").into());
+    }
+    if plan.exploration() {
+        // 탐색 계약: 목록 순서도 소비도 없다. 닫힌 자리가 Interview 인지 Experiment 인지에 따라
+        // 다음 수가 다르고, 실험 하나의 성공을 요구의 완료로 말하지 않는다.
+        let Some(active) = plan.active(chain) else { return Some(text("ctx.plan.no_active").into()); };
+        let ids = active.draft.items.iter().map(|i| i.id.as_str()).collect::<Vec<_>>().join(", ");
+        let skeleton = crate::approved_plan::ExperimentLink::skeleton(Some(active)).replace('\n', " · ");
+        return Some(match project.current_cycle().kind() {
+            CycleKind::Interview => tr!("ctx.explore.after_interview", revision = active.revision, ids = ids, skeleton = skeleton),
+            CycleKind::Experiment => format!("{} {}", tr!("ctx.explore.after_success", revision = active.revision, ids = ids, skeleton = skeleton), text("guide.closing_results_first")),
+        });
     }
     match plan.active(chain) {
         None => Some(text("ctx.plan.no_active").into()),
@@ -751,7 +809,7 @@ mod plan_guidance_tests {
 
     #[test]
     fn synthesis_waits_for_the_monitor_button_and_follows_the_recorded_decision() {
-        let mut p = Project::start(h::spec(), h::first_world());
+        let mut p = crate::approved_plan::tests::project();
         let draft = synthesis(&mut p, &["A", "B"]);
         says(&p, &["gil_plan_propose({project_root, draft:{scope, items, synthesis}})", "scope 5칸", "draft.synthesis.exploration_checklist", "draft.synthesis.chain_verdict", "approved · plan_revision · plan_digest는 적지 않는다"], &["approved: yes", "gil_close"]);
         let first = p.propose_plan(draft.clone()).unwrap();
@@ -769,7 +827,7 @@ mod plan_guidance_tests {
 
     #[test]
     fn approved_interview_binds_the_first_pending_item_and_verify_separates_plan_from_evidence() {
-        let mut p = Project::start(h::spec(), h::first_world());
+        let mut p = crate::approved_plan::tests::project();
         let draft = synthesis(&mut p, &["A", "B"]);
         let proposal = p.propose_plan(draft).unwrap();
         let approved = p.decide_plan(proposal.revision, &proposal.digest, Decision::Approve).unwrap();
@@ -787,7 +845,7 @@ mod plan_guidance_tests {
     /// call Core will actually accept at each position (Hypothesis, Verify, …, Cycle Report).
     #[test]
     fn a_reinterview_request_is_preserved_without_hiding_the_legal_next_call() {
-        let mut p = Project::start(h::spec(), h::first_world());
+        let mut p = crate::approved_plan::tests::project();
         let draft = synthesis(&mut p, &["A", "B"]);
         let proposal = p.propose_plan(draft).unwrap();
         let approved = p.decide_plan(proposal.revision, &proposal.digest, Decision::Approve).unwrap();
@@ -824,7 +882,7 @@ mod plan_guidance_tests {
     /// chat alone is never the completion.
     #[test]
     fn all_items_executed_leads_to_a_closing_interview_not_a_chat_report() {
-        let mut p = Project::start(h::spec(), h::first_world());
+        let mut p = crate::approved_plan::tests::project();
         let draft = synthesis(&mut p, &["A"]);
         let proposal = p.propose_plan(draft).unwrap();
         let approved = p.decide_plan(proposal.revision, &proposal.digest, Decision::Approve).unwrap();
@@ -846,7 +904,7 @@ mod plan_guidance_tests {
 
     #[test]
     fn a_plan_project_without_an_active_plan_is_sent_to_interview_not_experiment() {
-        let mut p = Project::start(h::spec(), h::first_world());
+        let mut p = crate::approved_plan::tests::project();
         // Synthesis 를 승인 없이 닫을 수 없으므로 Interview 는 열린 채 Question 으로 돌아간다.
         let draft = synthesis(&mut p, &["A"]);
         let proposal = p.propose_plan(draft).unwrap();

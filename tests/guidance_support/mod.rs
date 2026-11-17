@@ -48,6 +48,36 @@ pub fn legacy_experiment(label: &str) -> Project {
     common::bootstrap_from(legacy(label))
 }
 
+/// See `tests/support_wave1/mod.rs::as_item_queue_record`: the fresh record as a build without
+/// the exploration contract writes it. A no-op in every build that marks nothing.
+pub fn as_item_queue(root: &Path, settings: &Path) {
+    if !cfg!(feature = "exploration-flow") { return; }
+    fn find(at: &Path, out: &mut Vec<PathBuf>) {
+        for entry in std::fs::read_dir(at).into_iter().flatten().flatten() {
+            let path = entry.path();
+            if path.is_dir() { find(&path, out) } else if path.file_name().is_some_and(|n| n == "state.yaml") { out.push(path) }
+        }
+    }
+    let mut records = Vec::new();
+    find(&root.join(".gil"), &mut records);
+    if records.is_empty() { find(settings, &mut records); }
+    let [record] = records.as_slice() else { panic!("expected exactly one fresh record, found {records:?}") };
+    let text = std::fs::read_to_string(record).expect("fresh record");
+    let kept: Vec<&str> = text.lines().filter(|line| line.trim() != "contract: exploration").collect();
+    assert_eq!(kept.len() + 1, text.lines().count(), "a fresh exploration record differs from an item-queue record by exactly its marker line");
+    std::fs::write(record, kept.join("\n") + "\n").expect("rewrite the fresh record without the marker");
+}
+
+/// The same fixture for a domain `Project` that never met a file: saved, unmarked, loaded.
+pub fn item_queue(project: Project) -> Project {
+    if !cfg!(feature = "exploration-flow") { return project; }
+    let root = common::scratch("item-queue-fixture");
+    let path = root.join(gil::STATE_PATH);
+    gil::save(&project, &path).expect("save the fresh Project");
+    as_item_queue(&root, &root);
+    gil::load(spec(), &path).expect("load the unmarked record")
+}
+
 /// The binary Cargo built for this very test run; never PATH or an installed Core.
 pub fn gil() -> PathBuf { PathBuf::from(env!("CARGO_BIN_EXE_gil")) }
 

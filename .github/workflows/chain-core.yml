@@ -131,6 +131,17 @@ jobs:
         env:
           CHAIN_CONTEXT_BENCH_GIL_PRODUCT: target/debug/gil
         run: node --test tools/chain-context-bench/*.test.mjs
+      - name: Exploration contract, library contracts with the item-queue suite on unmarked Chains (opt-in, not a product profile)
+        run: cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --lib -- --test-threads=1
+      - name: Exploration contract over the real stdio process (requirement links, approved revisit, old Chains unchanged; synthetic)
+        run: cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_flow
+      - name: Item-queue Chains keep their contract in an exploration build (unmarked records over the real stdio process)
+        run: cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test approved_plan_wire_wave1 --test chain_recovery_preservation --test context --test context_profiles --test guidance_wave1 --test guidance_wave2 --test guidance_interview_chain --test resume_guidance
+      - name: Manual help names only the contracts the exploration build provides (Mac)
+        if: runner.os == 'macOS'
+        run: cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test manual
+      - name: Compile all Core targets with the opt-in exploration contract (not a product profile)
+        run: cargo build --locked -p gil --all-targets --features exploration-flow,visual-authoring,product-safety
       - name: M4-R opt-in recovery approval mode, setting parser and read-only contracts (not a product profile)
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,recovery-auto-approval --lib recovery_mode
       - name: M4-R opt-in recovery approval mode over the real stdio process (5 synthetic cases, no user project)

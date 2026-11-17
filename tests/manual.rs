@@ -112,6 +112,8 @@ fn prepare_verify(dir: &Path) {
         let mut mcp = Mcp::serve(&settings);
         let rules = spec();
         let started = rpc_ok(mcp.call("gil_start", dir, json!({})), "start");
+        // This fixture walks the item-queue contract (automatic first item) up to an open Verify.
+        guidance_support::as_item_queue(dir, &settings);
         let scope = scope_from_start(&started);
         rpc_ok(mcp.call_raw("show_gil_monitor", json!({"scope_id": scope})), "monitor");
         let mut basis = Vec::new();
@@ -647,6 +649,32 @@ fn a_topic_shows_no_internal_address_and_no_whole_specification() {
         }
         // 한 화면 안에 읽힌다 — Topic 하나가 명세 장 전체가 되지 않는다.
         assert!(said.lines().count() <= 60, "{topic} 이 너무 길다");
+    }
+}
+
+/// 실행 계약을 말하는 두 Topic 은 **이 빌드가 제공하는 계약만** 안내한다.
+///
+/// `exploration-flow` 빌드는 새 Chain 을 탐색 계약으로 열고 그 전의 Chain 을 항목 큐 계약으로
+/// 이어가므로 두 계약과 구분법(`gil_plan_read` 의 contract)을 함께 적는다. 그 밖의 빌드는 항목 큐
+/// 계약만 제공하므로, 제공하지 않는 탐색 계약을 쓸 수 있는 것처럼 적지 않는다.
+#[test]
+fn the_contract_topics_describe_only_the_contracts_this_build_provides() {
+    let dir = nowhere("the_contract_topics_describe_only_the_contracts_this_build_provides");
+    for topic in ["step/define/smallest", "cycle/interview/clarify"] {
+        let said = ok(&dir, &["help", topic]);
+        if cfg!(feature = "exploration-flow") {
+            for needle in ["[어느 계약인가]", "contract: exploration", "탐색 계약", "항목 큐 계약", "그 전에 열린 Chain 은 항목 큐 계약 그대로"] {
+                assert!(said.contains(needle), "{topic}: {needle}\n{said}");
+            }
+            for stale in ["아직 활성화되지 않았다", "구현 전이므로"] {
+                assert!(!said.contains(stale), "{topic} 이 제공 중인 계약을 미구현이라고 말한다: {stale}");
+            }
+        } else {
+            for absent in ["contract: exploration", "탐색 계약"] {
+                assert!(!said.contains(absent), "{topic} 이 이 빌드에 없는 계약을 안내한다: {absent}");
+            }
+            assert!(said.contains("아직 활성화되지 않았다") || said.contains("구현 전이므로"), "{topic}\n{said}");
+        }
     }
 }
 
