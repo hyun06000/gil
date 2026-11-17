@@ -10,11 +10,11 @@
 // Exit: 0 complete · 1 finished with generation failures / missing measurements · 2 usage or
 // input error · 130 interrupted. No exit code depends on a measured size.
 import { mkdirSync, writeFileSync, existsSync, readFileSync, statSync } from 'node:fs';
-import { readOnlyUnchanged } from './lib/measure.mjs';
+import { readOnlyUnchanged, lineageHolds } from './lib/measure.mjs';
 import { resolve, dirname, join } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { buildPlan, parseLevelList, AXIS_NAMES, DEFAULT_READS, DEFAULT_FEATURES, REPEAT, CALL_BUDGET } from './lib/plan.mjs';
+import { buildPlan, parseLevelList, recoveryForFeatures, AXIS_NAMES, DEFAULT_READS, DEFAULT_FEATURES, REPEAT, CALL_BUDGET } from './lib/plan.mjs';
 import { newResult, runBench, finalize } from './lib/bench.mjs';
 import { formatMarkdown } from './lib/report.mjs';
 import { buildCore, sourceInfo, binaryLabel, fileSha256, live, cleanupSync } from './lib/run.mjs';
@@ -22,7 +22,7 @@ import { sectionMarkers } from './lib/measure.mjs';
 import { leaks } from '../scenarios/lib/redact.mjs';
 import { TOOL_VERSION as METRICS_VERSION } from '../context-metrics/lib/analyze.mjs';
 
-export const TOOL_VERSION = '0.1.0';
+export const TOOL_VERSION = '0.2.0';
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, '..', '..');
 const KNOWN_FEATURES = ['chain-core', 'approved-plan', 'visual-authoring', 'product-safety', 'recovery-auto-approval'];
@@ -73,7 +73,7 @@ export function parseArgs(argv) {
   for (const f of features) if (!KNOWN_FEATURES.includes(f)) throw new UsageError(`--features: ${f} is not a bench-supported Core feature (${KNOWN_FEATURES.join(', ')})`);
   if (!features.includes('approved-plan')) throw new UsageError('--features must include approved-plan: the bench measures Chains and approved plan items');
   o.features = [...new Set(features)].sort().join(',');
-  try { o.plan = buildPlan({ axes: o.axes, levels: o.levels, repeat: o.repeat, reads: o.reads, maxCalls: o.maxCalls }); } catch (err) { throw new UsageError(err.message); }
+  try { o.plan = buildPlan({ axes: o.axes, levels: o.levels, repeat: o.repeat, reads: o.reads, maxCalls: o.maxCalls, recovery: recoveryForFeatures(features) }); } catch (err) { throw new UsageError(err.message); }
   if (o.command === 'run') {
     if (o.build === !!o.gil) throw new UsageError('run needs exactly one of --build or --gil <path>');
     if (!o.out) throw new UsageError('run needs --out <new directory>');
@@ -99,11 +99,18 @@ export function sanitize(text, roots) {
   return s;
 }
 
+/** A private approval capability the Core handed to the harness must never be written anywhere. */
+export function refuseSecrets(text, secrets) {
+  if (leaks(text, { secrets: [...secrets] }).length) throw new Error('result contains a private approval capability; nothing written');
+  return text;
+}
+
 function writeResults(o, result) {
   const roots = [['<worktree>', repo], ['<work-root>', o.workRoot ?? tmpdir()], ['<tmp>', tmpdir()], ['<home>', homedir()]];
-  const json = sanitize(JSON.stringify(result, null, 2) + '\n', roots);
-  const md = sanitize(formatMarkdown(result).trimEnd() + '\n', roots);
-  const summary = sanitize(JSON.stringify(compactResult(result), null, 2) + '\n', roots);
+  const clean = (text) => refuseSecrets(sanitize(text, roots), live.secrets);
+  const json = clean(JSON.stringify(result, null, 2) + '\n');
+  const md = clean(formatMarkdown(result).trimEnd() + '\n');
+  const summary = clean(JSON.stringify(compactResult(result), null, 2) + '\n');
   writeFileSync(join(o.out, 'bench.json'), json, { flag: 'wx' });
   writeFileSync(join(o.out, 'summary.json'), summary, { flag: 'wx' });
   writeFileSync(join(o.out, 'bench.md'), md, { flag: 'wx' });
@@ -118,9 +125,11 @@ export function compactResult(result) {
       id: c.id, scale: c.scale, axes: c.axes, status: c.status, estimated_calls: c.estimated_calls,
       repeat: c.repeat ? { compared: c.repeat.compared, identical: c.repeat.identical } : null,
       runs: c.runs.map((r) => ({
-        run: r.run, status: r.status, error: r.error, generation: r.generation ? { calls: r.generation.calls, refused_calls: r.generation.refused_calls } : null, storage: r.storage,
+        run: r.run, status: r.status, error: r.error, generation: r.generation ? { calls: r.generation.calls, refused_calls: r.generation.refused_calls, recovery: r.generation.recovery ? { path: r.generation.recovery.path, recoveries: r.generation.recovery.recoveries, synthetic_approvals: r.generation.recovery.synthetic_approvals } : null } : null, storage: r.storage,
         readonly_unchanged: readOnlyUnchanged(r.readonly),
         violations: r.resolution?.violations ?? null,
+        // Per-case check rows are in summary.preservation; a run keeps the outcome only.
+        lineage: r.lineage ? { failed_attempts: r.lineage.failed_attempts, failed_cycles: r.lineage.failed_cycles, current: r.lineage.current, holds: lineageHolds(r.lineage), violations: r.lineage.violations, not_measured: r.lineage.not_measured } : null,
         line_repeats: r.line_repeats ? { repeated_lines: r.line_repeats.repeated_lines, extra_utf8_bytes: r.line_repeats.extra_utf8_bytes, across_tools_extra_utf8_bytes: r.line_repeats.across_tools_extra_utf8_bytes } : null,
         reads: r.reads.map((x) => ({ tool: x.tool, status: x.status, text_response: x.text_response, structured_response: x.structured_response, said_in_text: x.said_in_text, raw_text_utf8_bytes: x.raw_text_utf8_bytes, text_sha: x.text_sha, structured_sha: x.structured_sha })),
       })),
@@ -147,8 +156,8 @@ export async function run(o) {
     environment: { platform: process.platform, arch: process.arch, node: process.version },
     source: sourceInfo(repo),
     core: { binary: binaryLabel(repo, binary), sha256: fileSha256(binary), provenance: o.build ? 'built by this run with cargo --features' : 'given with --gil; build features and commit are declared by the caller, not verified', features_declared: o.features, observed: null },
-    conditions: { locale: o.locale, reads: o.plan.reads, timeout_ms: o.timeoutMs, measurement: 'generation in one Core process, reads in a second fresh Core process (new session); isolated HOME/LOCALAPPDATA/settings per run', section_markers: { locale_file: localeFile, missing_keys: missing }, recordings: !!recordingsDir },
-    plan: { base: o.plan.base, axes: o.plan.axes, cases: o.plan.cases.map(({ id, scale, axes, estimated_calls }) => ({ id, scale, axes, estimated_calls })), repeat: o.plan.repeat, estimated_calls: o.plan.estimated_calls, max_calls: o.plan.max_calls },
+    conditions: { locale: o.locale, reads: o.plan.reads, timeout_ms: o.timeoutMs, measurement: 'generation in one Core process, reads in a second fresh Core process (new session); isolated HOME/LOCALAPPDATA/settings per run', section_markers: { locale_file: localeFile, missing_keys: missing }, recordings: !!recordingsDir, recovery: null },
+    plan: { base: o.plan.base, axes: o.plan.axes, cases: o.plan.cases.map(({ id, scale, axes, estimated_calls }) => ({ id, scale, axes, estimated_calls })), repeat: o.plan.repeat, estimated_calls: o.plan.estimated_calls, max_calls: o.plan.max_calls, recovery_assumed: o.plan.recovery_assumed },
   });
   let interrupted = false;
   const onSignal = (sig) => {
@@ -164,15 +173,50 @@ export async function run(o) {
   };
   for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => onSignal(sig));
 
-  const typedVerify = o.features.split(',').includes('visual-authoring');
+  const declared = o.features.split(',');
+  const typedVerify = declared.includes('visual-authoring');
   await runBench(result, o.plan, {
     binary, locale: o.locale, timeoutMs: o.timeoutMs, workRoot, keep: o.keep, markers, typedVerify, recordingsDir,
+    // `product-safety` refuses a model's bare gil_revisit by design; without the App approval tools that is an unsupported condition.
+    modelRevisitBlockedByProfile: declared.includes('product-safety'),
     onProgress: (s) => { if (!o.quiet) process.stderr.write(`[bench] ${s}\n`); },
   });
   result.core.observed = result.cases.flatMap((c) => c.runs).find((r) => r.observed?.tools)?.observed ?? null;
+  result.conditions.recovery = recoveryConditions(result, o.plan.recovery_assumed);
   result.finished_at = new Date().toISOString();
   writeResults(o, result);
   return { code: result.status === 'complete' ? 0 : 1, output: `${result.status}: ${result.cases.length} cases, ${result.incomplete.length} incomplete runs\nresults: ${o.out}` };
+}
+
+/**
+ * How failed Cycles were left in this run: the path the tool list offered, how many recoveries ran
+ * and — for the App path — that every approval was harness input. `matches_declared_features` is
+ * false when the declared features promise one path and the binary offers the other.
+ */
+export function recoveryConditions(result, assumed) {
+  const runs = result.cases.flatMap((c) => c.runs);
+  const observed = result.core?.observed?.recovery_path ?? null;
+  const done = runs.map((r) => r.generation?.recovery).filter((x) => x?.recoveries);
+  const approvals = done.reduce((n, x) => n + (x.synthetic_approvals ?? 0), 0);
+  const sources = {};
+  let claimed = 0;
+  for (const r of runs) {
+    for (const [k, v] of Object.entries(r.storage?.preserved?.core_source_records ?? {})) sources[k] = (sources[k] ?? 0) + v;
+    claimed += r.storage?.preserved?.core_records_claim_human_click ?? 0;
+  }
+  return {
+    path_offered_by_core: observed,
+    path_assumed_from_declared_features: assumed,
+    matches_declared_features: observed === null ? null : observed === assumed,
+    paths_used: [...new Set(done.map((x) => x.path))],
+    recoveries: done.reduce((n, x) => n + x.recoveries, 0),
+    synthetic_approvals: approvals,
+    human_approvals: 0,
+    approval_input: approvals ? 'every recovery approval was synthetic harness input sent through the App-only tools gil_revisit_review → gil_revisit_apply, using the digest and the private capability the Core returned; no person pressed a Monitor button and no capability is stored in this result' : null,
+    core_source_records: Object.keys(sources).length ? sources : null,
+    core_records_claim_human_click: claimed,
+    core_source_note: claimed ? 'the Core writes approval_source "monitor_button" with human_click true for any approval that arrives through its App-only tool; in this bench that input came from the harness, so those records (in temporary projects that were deleted) are not evidence of a person\'s click' : null,
+  };
 }
 
 /** Same-condition rerun comparison of two bench.json files. */

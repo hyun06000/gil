@@ -7,15 +7,25 @@ import { join, dirname, relative, isAbsolute } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { CoreClient, isolatedEnv, killGroup, runCommand } from '../../scenarios/lib/rpc.mjs';
 import { projectStatePath } from '../../scenarios/lib/state-path.mjs';
-import { makeRedactor } from '../../scenarios/lib/redact.mjs';
+import { makeRedactor, leaks } from '../../scenarios/lib/redact.mjs';
 import { parseRecording, textOf } from '../../context-metrics/lib/events.mjs';
 import { analyzeRecording } from '../../context-metrics/lib/analyze.mjs';
 import { stableStringify } from '../../context-metrics/lib/size.mjs';
-import { generate, GenerationError, UnsupportedError } from './scenario.mjs';
-import { treeDigest, snapshotReadRoots, compareReadRoots, readOnlyUnchanged, segmentContext, evaluateResolution, blockProfile, lineRepeats, normalizedSha, measure, sha256 } from './measure.mjs';
+import { generate, UnsupportedError, RECOVERY, recoveryPathFor } from './scenario.mjs';
+import { treeDigest, snapshotReadRoots, compareReadRoots, readOnlyUnchanged, segmentContext, evaluateResolution, evaluateLineage, inspectPreserved, blockProfile, lineRepeats, normalizedSha, measure, sha256 } from './measure.mjs';
 
-/** Live resources, so an interrupt can clean up synchronously. */
-export const live = { clients: new Set(), workDirs: new Set(), keep: false };
+/**
+ * Live resources, so an interrupt can clean up synchronously. `secrets` holds every private
+ * capability the Core handed to the harness in this process (plan and recovery approvals); it is
+ * only ever used to refuse writing a result that still contains one.
+ */
+export const live = { clients: new Set(), workDirs: new Set(), keep: false, secrets: new Set() };
+
+/** How a generation error is classified in a result (see scenario.mjs GenerationError). */
+export function errorKind(err) {
+  if (err?.kind) return err.kind;
+  return /timeout after|Core exited|stdin is closed/.test(String(err?.message ?? '')) ? 'transport' : 'harness';
+}
 
 export function cleanupSync() {
   for (const c of live.clients) { try { killGroup(c.child, 'SIGKILL'); } catch {} }
@@ -64,10 +74,11 @@ export function fileSha256(path) { return createHash('sha256').update(readFileSy
 /**
  * Generate one record and measure its reads. Never throws for Core behavior: failures become
  * the run's status. `opts`: binary, features, scale, reads, locale, timeoutMs, workRoot, keep,
- * localeTable markers, recordingPath (or null).
+ * localeTable markers, recordingPath (or null), modelRevisitBlockedByProfile (the declared profile
+ * refuses a model's gil_revisit by design).
  */
 export async function runOnce(opts) {
-  const { binary, scale, reads, locale, timeoutMs, workRoot, markers, typedVerify } = opts;
+  const { binary, scale, reads, locale, timeoutMs, workRoot, markers, typedVerify, modelRevisitBlockedByProfile = false } = opts;
   const started = Date.now();
   const work = await mkdtemp(join(workRoot, 'ccb-'));
   live.workDirs.add(work);
@@ -75,7 +86,8 @@ export async function runOnce(opts) {
   for (const d of [root, home, settings, localAppData]) await mkdir(d);
   const childEnv = isolatedEnv({ home, localAppData });
   const redactor = makeRedactor({ roots: { project_root: root, settings_dir: settings, home_dir: home, localappdata_dir: localAppData, work_dir: work, binary_dir: dirname(binary) }, maxString: Infinity });
-  const out = { status: 'complete', error: null, generation: null, storage: null, reads: [], context_sections: null, resolution: null, readonly: null, metrics: null, observed: {}, recording_lines: null, wall_ms: null };
+  const out = { status: 'complete', error: null, generation: null, storage: null, reads: [], context_sections: null, resolution: null, lineage: null, readonly: null, metrics: null, observed: {}, recording_lines: null, wall_ms: null };
+  const secrets = [];
   let client = null;
   const connect = async (label) => {
     client = new CoreClient({ binary, settingsDir: join(settings, 'bindings'), isolated: childEnv, requestTimeoutMs: timeoutMs, label }).start();
@@ -91,12 +103,13 @@ export async function runOnce(opts) {
     await connect('generate');
     const listed = await client.request('tools/list', {});
     const names = (listed.result?.tools ?? []).map((t) => t.name).sort();
-    out.observed = { tools: names.length, tools_sha256: sha256(JSON.stringify(names)), approved_plan_tools: names.includes('gil_plan_propose'), revisit_tool: names.includes('gil_revisit') };
+    const recovery = recoveryPathFor(names);
+    out.observed = { tools: names.length, tools_sha256: sha256(JSON.stringify(names)), approved_plan_tools: names.includes('gil_plan_propose'), revisit_tool: names.includes('gil_revisit'), revisit_approval_tools: recovery === RECOVERY.app_approval, recovery_path: recovery };
     const wrap = async (name, args) => { calls += 1; const r = await client.call(name, args); if (!r.ok) refusedCalls += 1; return r; };
     const g = {
-      root, locale, typedVerify,
+      root, locale, typedVerify, recovery, modelRevisitBlockedByProfile,
       model: wrap, app: wrap,
-      onSecret: (s) => redactor.addSecret(s),
+      onSecret: (s) => { redactor.addSecret(s); if (typeof s === 'string' && s.length >= 8) { secrets.push(s); live.secrets.add(s); } },
       writeProjectFile: async (rel, text) => { const p = join(root, rel); await mkdir(dirname(p), { recursive: true }); await writeFile(p, text); },
     };
     let generated = null;
@@ -104,9 +117,18 @@ export async function runOnce(opts) {
       generated = await generate(g, scale);
     } catch (err) {
       out.status = err instanceof UnsupportedError ? 'unsupported' : 'generation_failed';
-      out.error = { step: err.step ?? 'harness', detail: redactor.text(String(err.detail ?? err.message)).slice(0, 600) };
+      out.error = { step: err.step ?? 'harness', kind: errorKind(err), detail: redactor.text(String(err.detail ?? err.message)).slice(0, 600) };
     }
-    out.generation = { calls, refused_calls: refusedCalls, wall_ms: Date.now() - genStarted, counts: generated?.counts ?? null, current: generated?.current ?? null };
+    out.generation = {
+      calls, refused_calls: refusedCalls, wall_ms: Date.now() - genStarted, counts: generated?.counts ?? null, current: generated?.current ?? null,
+      // How failed Cycles were left. The App path's approvals are harness input, never a person's click.
+      recovery: generated ? {
+        path: generated.recoveries.length ? generated.recoveries[0].path : null, available_path: recovery, recoveries: generated.recoveries.length,
+        synthetic_approvals: generated.counts.recovery_approvals, approval_input: generated.counts.recovery_approvals ? 'synthetic harness input through the App-only tools; not a person\'s Monitor click' : null,
+        branch_point: `cycle:C${generated.branch_point}`,
+        steps: generated.recoveries.map((r) => ({ path: r.path, from: r.from, target: r.target, changes: r.changes, policy: r.policy, core_approval_source: r.core_approval_source })),
+      } : null,
+    };
     await disconnect();
     if (!generated) return out;
 
@@ -114,6 +136,8 @@ export async function runOnce(opts) {
     const record = projectStatePath(root, { env: childEnv });
     const gilTree = existsSync(gilDir) ? treeDigest(gilDir) : null;
     out.storage = { record_layout: record.layout, state_utf8_bytes: existsSync(record.path) ? statSync(record.path).size : null, gil_files: gilTree?.files ?? null, gil_bytes: gilTree?.bytes ?? null };
+    // Originals an approved recovery preserved, read before the measured reads start.
+    out.storage.preserved = generated.recoveries.some((r) => r.path === RECOVERY.app_approval) ? inspectPreserved(dirname(record.path), generated.recoveries, secrets) : null;
 
     // ── measured reads in a fresh Core process (a new session) ─────────────────────────────
     // Windows stores the record outside the project. Observe the resolved record tree too.
@@ -138,14 +162,16 @@ export async function runOnce(opts) {
     out.readonly = compareReadRoots(before, snapshotReadRoots(readRoots));
 
     // ── measurement through tools/context-metrics ─────────────────────────────────────────
-    const measured = measureReadPhase({ events, rawReads, tags: generated.tags, markers, expectedReads: reads, recordingName: opts.recordingName ?? null });
+    const measured = measureReadPhase({ events, rawReads, tags: generated.tags, markers, expectedReads: reads, recordingName: opts.recordingName ?? null, walk: { failed: generated.failed, current: generated.current } });
+    // A capability must never reach a recording: refuse the whole read phase rather than write it.
+    if (leaks(measured.recording, { secrets }).length) throw new Error('a private approval capability reached a read response; the recording was not kept');
     Object.assign(out, measured.fields);
     if (measured.missing) out.status = 'measurement_missing';
     if (readOnlyUnchanged(out.readonly) !== true) out.status = out.status === 'complete' ? 'record_changed_by_read' : out.status;
     return out;
   } catch (err) {
     out.status = out.status === 'complete' ? 'generation_failed' : out.status;
-    out.error = out.error ?? { step: 'harness', detail: redactor.text(String(err.message)).slice(0, 600) };
+    out.error = out.error ?? { step: 'harness', kind: errorKind(err), detail: redactor.text(String(err.message)).slice(0, 600) };
     return out;
   } finally {
     if (client) { try { await client.kill(); } catch {} live.clients.delete(client); }
@@ -159,7 +185,7 @@ export async function runOnce(opts) {
  * `rawReads[i]` holds the unredacted text and timing of event i. Pure: no I/O.
  * A read without a usable result, or fewer recorded reads than requested, sets `missing`.
  */
-export function measureReadPhase({ events, rawReads, tags, markers, expectedReads, recordingName = null }) {
+export function measureReadPhase({ events, rawReads, tags, markers, expectedReads, recordingName = null, walk = null }) {
   const recording = events.map((e) => JSON.stringify(e)).join('\n') + '\n';
   const analysis = analyzeRecording(parseRecording(recording), { source: { file_name: recordingName, sha256: sha256(recording) } });
   const metrics = { status_totals: analysis.status_totals, markers: analysis.markers, totals: { text_response: analysis.totals.text_response, structured_response: analysis.totals.structured_response, record_line: analysis.totals.record_line }, by_tool: analysis.by_tool.map((t) => ({ tool: t.tool, calls: t.calls, by_status: t.by_status, text_response: t.text_response, structured_response: t.structured_response })), cross_call_repeated_blocks: analysis.repetition_candidates.blocks.length, cross_call_repeated_total: analysis.repetition_candidates.repeated_total, cross_call_repeated_tools: analysis.repetition_candidates.blocks.map((b) => ({ id: b.id, tools: b.tools, utf8_bytes: b.size.utf8_bytes, occurrences: b.occurrences })), identical_text_responses: analysis.repetition_candidates.identical_text_responses.length, limits: analysis.limits, _analysis: analysis };
@@ -189,6 +215,7 @@ export function measureReadPhase({ events, rawReads, tags, markers, expectedRead
   }
   const ctx = readsForTags.find((r) => r.tool === 'gil_context' && r.status === 'ok');
   const missingTools = expectedReads.filter((t) => !readsForTags.some((r) => r.tool === t && r.status === 'ok'));
+  const sections = ctx?.text && markers?.length ? segmentContext(ctx.parts, markers) : null;
   return {
     recording,
     missing: missingTools.length > 0 || parsed.length !== expectedReads.length,
@@ -197,8 +224,9 @@ export function measureReadPhase({ events, rawReads, tags, markers, expectedRead
       metrics,
       reads,
       missing_reads: missingTools,
-      context_sections: ctx?.text && markers?.length ? segmentContext(ctx.parts, markers) : null,
+      context_sections: sections,
       resolution: evaluateResolution(tags, readsForTags),
+      lineage: walk ? evaluateLineage(walk, tags, readsForTags, sections) : null,
       line_repeats: lineRepeats(readsForTags.filter((r) => r.status === 'ok')),
     },
   };

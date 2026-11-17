@@ -28,19 +28,28 @@ export const CALLS = {
   start: 1,
   opening_interview: 13, // Q(2) I(2) open synthesis, propose, review, decide, read, close synthesis, outcome(2), cycle close
   experiment_success: 13, // open, plan_read, define(2) hypothesis(2) verify(2) analysis(2) outcome(2), cycle close
-  experiment_failure: 14, // the same walk + gil_revisit
+  experiment_failure: 14, // the same walk + gil_revisit (the model_revisit recovery path)
+  experiment_failure_walk: 13, // the failed Experiment itself, before its recovery
+  recovery: { model_revisit: 1, app_approval: 2 }, // gil_revisit · gil_revisit_review + gil_revisit_apply
   closing_interview: 14, // open interview + the opening walk
   chain_handoff: 2, // close chain, open next chain
   current_experiment_open: 3, // open experiment, plan_read, open the next Step
   per_closed_step: 2,
 };
 
-export function estimateCalls(scale, reads) {
+/** Which recovery path a declared feature set is expected to take (the run decides from the tool list). */
+export function recoveryForFeatures(features) {
+  const list = Array.isArray(features) ? features : String(features ?? '').split(',').map((f) => f.trim());
+  return list.includes('product-safety') ? 'app_approval' : 'model_revisit';
+}
+
+export function estimateCalls(scale, reads, recovery = 'model_revisit') {
+  if (!(recovery in CALLS.recovery)) throw new Error(`unknown recovery path "${recovery}"`);
   return CALLS.start
     + scale.chains * (CALLS.opening_interview + CALLS.experiment_success + CALLS.closing_interview + CALLS.chain_handoff)
     + CALLS.opening_interview
     + scale.cycles * CALLS.experiment_success
-    + scale.failures * CALLS.experiment_failure
+    + scale.failures * (CALLS.experiment_failure_walk + CALLS.recovery[recovery])
     + CALLS.current_experiment_open + scale.steps * CALLS.per_closed_step
     + reads.length;
 }
@@ -68,7 +77,8 @@ function parseLevelList(axis, text) {
  * Expand the chosen axes into cases. Each case changes one axis from BASE; identical scales
  * (the base point appears on every axis) are generated once and shared.
  */
-export function buildPlan({ axes = AXIS_NAMES, levels = {}, repeat = REPEAT.default, reads = DEFAULT_READS, maxCalls = CALL_BUDGET.default } = {}) {
+export function buildPlan({ axes = AXIS_NAMES, levels = {}, repeat = REPEAT.default, reads = DEFAULT_READS, maxCalls = CALL_BUDGET.default, recovery = 'model_revisit' } = {}) {
+  if (!(recovery in CALLS.recovery)) throw new Error(`unknown recovery path "${recovery}"`);
   for (const a of axes) if (!AXES[a]) throw new Error(`unknown axis "${a}" (axes: ${AXIS_NAMES.join(', ')})`);
   for (const a of Object.keys(levels)) if (!axes.includes(a)) throw new Error(`--levels ${a}: axis is not selected by --axes`);
   if (!Number.isInteger(repeat) || repeat < 1 || repeat > REPEAT.cap) throw new Error(`--repeat takes 1..${REPEAT.cap}`);
@@ -84,7 +94,7 @@ export function buildPlan({ axes = AXIS_NAMES, levels = {}, repeat = REPEAT.defa
     for (const level of chosen) {
       const scale = { ...BASE, [axis]: level };
       const key = scaleKey(scale);
-      if (!cases.has(key)) cases.set(key, { id: `case-${String(cases.size + 1).padStart(2, '0')}`, scale, key, axes: [], estimated_calls: estimateCalls(scale, reads) });
+      if (!cases.has(key)) cases.set(key, { id: `case-${String(cases.size + 1).padStart(2, '0')}`, scale, key, axes: [], estimated_calls: estimateCalls(scale, reads, recovery) });
       cases.get(key).axes.push({ axis, level });
       rows.push({ level, case_id: cases.get(key).id });
     }
@@ -95,7 +105,7 @@ export function buildPlan({ axes = AXIS_NAMES, levels = {}, repeat = REPEAT.defa
   if (estimated > maxCalls) {
     throw new Error(`plan needs about ${estimated} Core calls (${list.length} cases × ${repeat} repeats), above --max-calls ${maxCalls}; lower the levels or repeats`);
   }
-  return { base: { ...BASE }, axes: axisRows, cases: list, repeat, reads: [...reads], max_calls: maxCalls, estimated_calls: estimated };
+  return { base: { ...BASE }, axes: axisRows, cases: list, repeat, reads: [...reads], max_calls: maxCalls, estimated_calls: estimated, recovery_assumed: recovery };
 }
 
 export { parseLevelList };

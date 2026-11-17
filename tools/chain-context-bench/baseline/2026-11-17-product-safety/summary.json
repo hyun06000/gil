@@ -1,0 +1,6135 @@
+{
+  "schema": "gil-chain-context-bench/0.1",
+  "status": "complete",
+  "tool": "tools/chain-context-bench",
+  "tool_version": "0.2.0",
+  "context_metrics_version": "0.1.0",
+  "started_at": "2026-11-17T02:45:11.889Z",
+  "finished_at": "2026-11-17T02:45:44.038Z",
+  "environment": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v26.5.0"
+  },
+  "source": {
+    "commit": "dceaac8eab9c115ed57b0c3f31de66fbb07771e5",
+    "dirty": false,
+    "dirty_entries": [],
+    "dirty_entry_count": 0
+  },
+  "core": {
+    "binary": "<worktree>/target/ccb-product/debug/gil",
+    "sha256": "452499255f5f451bdbd2fb27b3686f7dc5dda9ac4b169b77c99f71af12bf545f",
+    "provenance": "built by this run with cargo --features",
+    "features_declared": "approved-plan,product-safety,visual-authoring",
+    "observed": {
+      "tools": 33,
+      "tools_sha256": "cdab793adb25ac3c4e6cc54d9a59c90c64c31f85d01b1fa720b18c072c2255d1",
+      "approved_plan_tools": true,
+      "revisit_tool": true,
+      "revisit_approval_tools": true,
+      "recovery_path": "app_approval"
+    }
+  },
+  "conditions": {
+    "locale": "ko-KR",
+    "reads": [
+      "gil_context",
+      "gil_status",
+      "gil_plan_read"
+    ],
+    "timeout_ms": 20000,
+    "measurement": "generation in one Core process, reads in a second fresh Core process (new session); isolated HOME/LOCALAPPDATA/settings per run",
+    "section_markers": {
+      "locale_file": "src/i18n/ko.json",
+      "missing_keys": []
+    },
+    "recordings": true,
+    "recovery": {
+      "path_offered_by_core": "app_approval",
+      "path_assumed_from_declared_features": "app_approval",
+      "matches_declared_features": true,
+      "paths_used": [
+        "app_approval"
+      ],
+      "recoveries": 6,
+      "synthetic_approvals": 6,
+      "human_approvals": 0,
+      "approval_input": "every recovery approval was synthetic harness input sent through the App-only tools gil_revisit_review → gil_revisit_apply, using the digest and the private capability the Core returned; no person pressed a Monitor button and no capability is stored in this result",
+      "core_source_records": {
+        "monitor_button": 6
+      },
+      "core_records_claim_human_click": 6,
+      "core_source_note": "the Core writes approval_source \"monitor_button\" with human_click true for any approval that arrives through its App-only tool; in this bench that input came from the harness, so those records (in temporary projects that were deleted) are not evidence of a person's click"
+    }
+  },
+  "plan": {
+    "base": {
+      "chains": 0,
+      "cycles": 0,
+      "failures": 0,
+      "steps": 2,
+      "report_lines": 1,
+      "plan_items": 1
+    },
+    "axes": [
+      {
+        "axis": "chains",
+        "label": "이전 Chain 수",
+        "base": 0,
+        "levels": [
+          {
+            "level": 0,
+            "case_id": "case-01"
+          },
+          {
+            "level": 1,
+            "case_id": "case-02"
+          },
+          {
+            "level": 2,
+            "case_id": "case-03"
+          }
+        ]
+      },
+      {
+        "axis": "cycles",
+        "label": "현재 Chain의 닫힌 Experiment Cycle 수",
+        "base": 0,
+        "levels": [
+          {
+            "level": 0,
+            "case_id": "case-01"
+          },
+          {
+            "level": 1,
+            "case_id": "case-04"
+          },
+          {
+            "level": 2,
+            "case_id": "case-05"
+          }
+        ]
+      },
+      {
+        "axis": "failures",
+        "label": "같은 계보의 누적 실패 Cycle 수",
+        "base": 0,
+        "levels": [
+          {
+            "level": 0,
+            "case_id": "case-01"
+          },
+          {
+            "level": 1,
+            "case_id": "case-06"
+          },
+          {
+            "level": 2,
+            "case_id": "case-07"
+          }
+        ]
+      },
+      {
+        "axis": "steps",
+        "label": "현재 Cycle의 닫힌 Step 수",
+        "base": 2,
+        "levels": [
+          {
+            "level": 0,
+            "case_id": "case-08"
+          },
+          {
+            "level": 2,
+            "case_id": "case-01"
+          },
+          {
+            "level": 4,
+            "case_id": "case-09"
+          }
+        ]
+      },
+      {
+        "axis": "report_lines",
+        "label": "현재 Cycle Report 칸당 줄 수",
+        "base": 1,
+        "levels": [
+          {
+            "level": 1,
+            "case_id": "case-01"
+          },
+          {
+            "level": 4,
+            "case_id": "case-10"
+          },
+          {
+            "level": 16,
+            "case_id": "case-11"
+          }
+        ]
+      },
+      {
+        "axis": "plan_items",
+        "label": "승인 계획의 미실행 항목 수(현재 항목 포함)",
+        "base": 1,
+        "levels": [
+          {
+            "level": 1,
+            "case_id": "case-01"
+          },
+          {
+            "level": 2,
+            "case_id": "case-12"
+          },
+          {
+            "level": 4,
+            "case_id": "case-13"
+          }
+        ]
+      }
+    ],
+    "cases": [
+      {
+        "id": "case-01",
+        "scale": {
+          "chains": 0,
+          "cycles": 0,
+          "failures": 0,
+          "steps": 2,
+          "report_lines": 1,
+          "plan_items": 1
+        },
+        "axes": [
+          {
+            "axis": "chains",
+            "level": 0
+          },
+          {
+            "axis": "cycles",
+            "level": 0
+          },
+          {
+            "axis": "failures",
+            "level": 0
+          },
+          {
+            "axis": "steps",
+            "level": 2
+          },
+          {
+            "axis": "report_lines",
+            "level": 1
+          },
+          {
+            "axis": "plan_items",
+            "level": 1
+          }
+        ],
+        "estimated_calls": 24
+      },
+      {
+        "id": "case-02",
+        "scale": {
+          "chains": 1,
+          "cycles": 0,
+          "failures": 0,
+          "steps": 2,
+          "report_lines": 1,
+          "plan_items": 1
+        },
+        "axes": [
+          {
+            "axis": "chains",
+            "level": 1
+          }
+        ],
+        "estimated_calls": 66
+      },
+      {
+        "id": "case-03",
+        "scale": {
+          "chains": 2,
+          "cycles": 0,
+          "failures": 0,
+          "steps": 2,
+          "report_lines": 1,
+          "plan_items": 1
+        },
+        "axes": [
+          {
+            "axis": "chains",
+            "level": 2
+          }
+        ],
+        "estimated_calls": 108
+      },
+      {
+        "id": "case-04",
+        "scale": {
+          "chains": 0,
+          "cycles": 1,
+          "failures": 0,
+          "steps": 2,
+          "report_lines": 1,
+          "plan_items": 1
+        },
+        "axes": [
+          {
+            "axis": "cycles",
+            "level": 1
+          }
+        ],
+        "estimated_calls": 37
+      },
+      {
+        "id": "case-05",
+        "scale": {
+          "chains": 0,
+          "cycles": 2,
+          "failures": 0,
+          "steps": 2,
+          "report_lines": 1,
+          "plan_items": 1
+        },
+        "axes": [
+          {
+            "axis": "cycles",
+            "level": 2
+          }
+        ],
+        "estimated_calls": 50
+      },
+      {
+        "id": "case-06",
+        "scale": {
+          "chains": 0,
+          "cycles": 0,
+          "failures": 1,
+          "steps": 2,
+          "report_lines": 1,
+          "plan_items": 1
+        },
+        "axes": [
+          {
+            "axis": "failures",
+            "level": 1
+          }
+        ],
+        "estimated_calls": 39
+      },
+      {
+        "id": "case-07",
+        "scale": {
+          "chains": 0,
+          "cycles": 0,
+          "failures": 2,
+          "steps": 2,
+          "report_lines": 1,
+          "plan_items": 1
+        },
+        "axes": [
+          {
+            "axis": "failures",
+            "level": 2
+          }
+        ],
+        "estimated_calls": 54
+      },
+      {
+        "id": "case-08",
+        "scale": {
+          "chains": 0,
+          "cycles": 0,
+          "failures": 0,
+          "steps": 0,
+          "report_lines": 1,
+          "plan_items": 1
+        },
+        "axes": [
+          {
+            "axis": "steps",
+            "level": 0
+          }
+        ],
+        "estimated_calls": 20
+      },
+      {
+        "id": "case-09",
+        "scale": {
+          "chains": 0,
+          "cycles": 0,
+          "failures": 0,
+          "steps": 4,
+          "report_lines": 1,
+          "plan_items": 1
+        },
+        "axes": [
+          {
+            "axis": "steps",
+            "level": 4
+          }
+        ],
+        "estimated_calls": 28
+      },
+      {
+        "id": "case-10",
+        "scale": {
+          "chains": 0,
+          "cycles": 0,
+          "failures": 0,
+          "steps": 2,
+          "report_lines": 4,
+          "plan_items": 1
+        },
+        "axes": [
+          {
+            "axis": "report_lines",
+            "level": 4
+          }
+        ],
+        "estimated_calls": 24
+      },
+      {
+        "id": "case-11",
+        "scale": {
+          "chains": 0,
+          "cycles": 0,
+          "failures": 0,
+          "steps": 2,
+          "report_lines": 16,
+          "plan_items": 1
+        },
+        "axes": [
+          {
+            "axis": "report_lines",
+            "level": 16
+          }
+        ],
+        "estimated_calls": 24
+      },
+      {
+        "id": "case-12",
+        "scale": {
+          "chains": 0,
+          "cycles": 0,
+          "failures": 0,
+          "steps": 2,
+          "report_lines": 1,
+          "plan_items": 2
+        },
+        "axes": [
+          {
+            "axis": "plan_items",
+            "level": 2
+          }
+        ],
+        "estimated_calls": 24
+      },
+      {
+        "id": "case-13",
+        "scale": {
+          "chains": 0,
+          "cycles": 0,
+          "failures": 0,
+          "steps": 2,
+          "report_lines": 1,
+          "plan_items": 4
+        },
+        "axes": [
+          {
+            "axis": "plan_items",
+            "level": 4
+          }
+        ],
+        "estimated_calls": 24
+      }
+    ],
+    "repeat": 2,
+    "estimated_calls": 1044,
+    "max_calls": 3000,
+    "recovery_assumed": "app_approval"
+  },
+  "summary": {
+    "axes": [
+      {
+        "axis": "chains",
+        "label": "이전 Chain 수",
+        "base": 0,
+        "levels": [
+          {
+            "level": 0,
+            "case_id": "case-01",
+            "status": "complete",
+            "generation_calls": 21,
+            "gil_bytes": 11362,
+            "context_text": {
+              "utf8_bytes": 6830,
+              "code_points": 3866,
+              "utf16_units": 3866
+            },
+            "context_structured_utf8_bytes": 5930,
+            "context_said_in_text": true,
+            "reads_text_utf8_bytes": {
+              "gil_context": 6830,
+              "gil_status": 1476,
+              "gil_plan_read": 3652
+            },
+            "reads_structured_utf8_bytes": {
+              "gil_context": 5930,
+              "gil_status": 568,
+              "gil_plan_read": 3003
+            },
+            "reads_text_total_utf8_bytes": 11958,
+            "read_calls": 3,
+            "context_sections_utf8_bytes": {
+              "text_part_1": 329,
+              "text_part_2": 857,
+              "preamble": 1062,
+              "next_call": 329,
+              "file_scope": 720,
+              "plan": 627,
+              "chain_current": 376,
+              "previous_cycles": 701,
+              "current_cycle": 618,
+              "here": 156,
+              "will": 235,
+              "next_moves": 147,
+              "rules": 69,
+              "report_principles": 477,
+              "resume": 113
+            },
+            "context_blocks": {
+              "blocks": 24,
+              "exact_repeats": {
+                "distinct": 0,
+                "extra_occurrences": 0,
+                "extra_utf8_bytes": 0
+              },
+              "template_repeats": {
+                "distinct": 0,
+                "occurrences": 0,
+                "utf8_bytes": 0
+              }
+            },
+            "cross_call_repeated_utf8_bytes": 329,
+            "line_repeat_extra_utf8_bytes": 1172,
+            "line_repeat_across_tools_utf8_bytes": 1172,
+            "resolution": {
+              "prev_cycle_projection": "ok",
+              "prev_cycle_inner": "ok",
+              "current_step": "ok",
+              "plan_current_item": "ok",
+              "plan_constraint": "ok"
+            },
+            "violations": [],
+            "readonly_unchanged": true,
+            "repeat_identical": true,
+            "recovery_path": null,
+            "recoveries": 0,
+            "synthetic_recovery_approvals": 0,
+            "lineage_holds": true,
+            "lineage_violations": []
+          },
+          {
+            "level": 1,
+            "case_id": "case-02",
+            "status": "complete",
+            "generation_calls": 63,
+            "gil_bytes": 30461,
+            "context_text": {
+              "utf8_bytes": 7003,
+              "code_points": 3980,
+              "utf16_units": 3980
+            },
+            "context_structured_utf8_bytes": 6107,
+            "context_said_in_text": true,
+            "reads_text_utf8_bytes": {
+              "gil_context": 7003,
+              "gil_status": 1478,
+              "gil_plan_read": 3652
+            },
+            "reads_structured_utf8_bytes": {
+              "gil_context": 6107,
+              "gil_status": 570,
+              "gil_plan_read": 3003
+            },
+            "reads_text_total_utf8_bytes": 12133,
+            "read_calls": 3,
+            "context_sections_utf8_bytes": {
+              "text_part_1": 329,
+              "text_part_2": 857,
+              "preamble": 1062,
+              "next_call": 329,
+              "file_scope": 720,
+              "plan": 627,
+              "chain_current": 376,
+              "chain_previous": 170,
+              "previous_cycles": 701,
+              "current_cycle": 618,
+              "here": 156,
+              "will": 237,
+              "next_moves": 147,
+              "rules": 69,
+              "report_principles": 477,
+              "resume": 113
+            },
+            "context_blocks": {
+              "blocks": 25,
+              "exact_repeats": {
+                "distinct": 0,
+                "extra_occurrences": 0,
+                "extra_utf8_bytes": 0
+              },
+              "template_repeats": {
+                "distinct": 0,
+                "occurrences": 0,
+                "utf8_bytes": 0
+              }
+            },
+            "cross_call_repeated_utf8_bytes": 329,
+            "line_repeat_extra_utf8_bytes": 1172,
+            "line_repeat_across_tools_utf8_bytes": 1172,
+            "resolution": {
+              "prev_chain_report": "ok",
+              "prev_chain_inner": "ok",
+              "prev_cycle_projection": "ok",
+              "prev_cycle_inner": "ok",
+              "current_step": "ok",
+              "plan_current_item": "ok",
+              "plan_constraint": "ok"
+            },
+            "violations": [],
+            "readonly_unchanged": true,
+            "repeat_identical": true,
+            "recovery_path": null,
+            "recoveries": 0,
+            "synthetic_recovery_approvals": 0,
+            "lineage_holds": true,
+            "lineage_violations": []
+          },
+          {
+            "level": 2,
+            "case_id": "case-03",
+            "status": "complete",
+            "generation_calls": 105,
+            "gil_bytes": 49623,
+            "context_text": {
+              "utf8_bytes": 7174,
+              "code_points": 4092,
+              "utf16_units": 4092
+            },
+            "context_structured_utf8_bytes": 6282,
+            "context_said_in_text": true,
+            "reads_text_utf8_bytes": {
+              "gil_context": 7174,
+              "gil_status": 1478,
+              "gil_plan_read": 3652
+            },
+            "reads_structured_utf8_bytes": {
+              "gil_context": 6282,
+              "gil_status": 570,
+              "gil_plan_read": 3003
+            },
+            "reads_text_total_utf8_bytes": 12304,
+            "read_calls": 3,
+            "context_sections_utf8_bytes": {
+              "text_part_1": 329,
+              "text_part_2": 857,
+              "preamble": 1062,
+              "next_call": 329,
+              "file_scope": 720,
+              "plan": 627,
+              "chain_current": 376,
+              "chain_previous": 340,
+              "previous_cycles": 701,
+              "current_cycle": 618,
+              "here": 156,
+              "will": 237,
+              "next_moves": 147,
+              "rules": 69,
+              "report_principles": 477,
+              "resume": 113
+            },
+            "context_blocks": {
+              "blocks": 26,
+              "exact_repeats": {
+                "distinct": 0,
+                "extra_occurrences": 0,
+                "extra_utf8_bytes": 0
+              },
+              "template_repeats": {
+                "distinct": 1,
+                "occurrences": 2,
+                "utf8_bytes": 338
+              }
+            },
+            "cross_call_repeated_utf8_bytes": 329,
+            "line_repeat_extra_utf8_bytes": 1172,
+            "line_repeat_across_tools_utf8_bytes": 1172,
+            "resolution": {
+              "prev_chain_report": "ok",
+              "prev_chain_inner": "ok",
+              "prev_cycle_projection": "ok",
+              "prev_cycle_inner": "ok",
+              "current_step": "ok",
+              "plan_current_item": "ok",
+              "plan_constraint": "ok"
+            },
+            "violations": [],
+            "readonly_unchanged": true,
+            "repeat_identical": true,
+            "recovery_path": null,
+            "recoveries": 0,
+            "synthetic_recovery_approvals": 0,
+            "lineage_holds": true,
+            "lineage_violations": []
+          }
+        ],
+        "growth": [
+          {
+            "from": 0,
+            "to": 1,
+            "measured": true,
+            "context_text_delta_utf8_bytes": 173,
+            "context_text_delta_per_unit": 173,
+            "context_structured_delta_utf8_bytes": 177,
+            "reads_text_total_delta_utf8_bytes": 175,
+            "context_sections_delta_utf8_bytes": {
+              "will": 2,
+              "chain_previous": 170
+            }
+          },
+          {
+            "from": 1,
+            "to": 2,
+            "measured": true,
+            "context_text_delta_utf8_bytes": 171,
+            "context_text_delta_per_unit": 171,
+            "context_structured_delta_utf8_bytes": 175,
+            "reads_text_total_delta_utf8_bytes": 171,
+            "context_sections_delta_utf8_bytes": {
+              "chain_previous": 170
+            }
+          }
+        ],
+        "context_invariant_blocks": {
+          "levels": 3,
+          "shared_blocks": 15,
+          "shared_utf8_bytes_at_first_level": 4063,
+          "per_level": [
+            {
+              "blocks": 24,
+              "distinct_block_utf8_bytes": 6739,
+              "shared_utf8_bytes": 4063,
+              "varying_utf8_bytes": 2676
+            },
+            {
+              "blocks": 25,
+              "distinct_block_utf8_bytes": 6910,
+              "shared_utf8_bytes": 4063,
+              "varying_utf8_bytes": 2847
+            },
+            {
+              "blocks": 26,
+              "distinct_block_utf8_bytes": 7079,
+              "shared_utf8_bytes": 4063,
+              "varying_utf8_bytes": 3016
+            }
+          ]
+        }
+      },
+      {
+        "axis": "cycles",
+        "label": "현재 Chain의 닫힌 Experiment Cycle 수",
+        "base": 0,
+        "levels": [
+          {
+            "level": 0,
+            "case_id": "case-01",
+            "status": "complete",
+            "generation_calls": 21,
+            "gil_bytes": 11362,
+            "context_text": {
+              "utf8_bytes": 6830,
+              "code_points": 3866,
+              "utf16_units": 3866
+            },
+            "context_structured_utf8_bytes": 5930,
+            "context_said_in_text": true,
+            "reads_text_utf8_bytes": {
+              "gil_context": 6830,
+              "gil_status": 1476,
+              "gil_plan_read": 3652
+            },
+            "reads_structured_utf8_bytes": {
+              "gil_context": 5930,
+              "gil_status": 568,
+              "gil_plan_read": 3003
+            },
+            "reads_text_total_utf8_bytes": 11958,
+            "read_calls": 3,
+            "context_sections_utf8_bytes": {
+              "text_part_1": 329,
+              "text_part_2": 857,
+              "preamble": 1062,
+              "next_call": 329,
+              "file_scope": 720,
+              "plan": 627,
+              "chain_current": 376,
+              "previous_cycles": 701,
+              "current_cycle": 618,
+              "here": 156,
+              "will": 235,
+              "next_moves": 147,
+              "rules": 69,
+              "report_principles": 477,
+              "resume": 113
+            },
+            "context_blocks": {
+              "blocks": 24,
+              "exact_repeats": {
+                "distinct": 0,
+                "extra_occurrences": 0,
+                "extra_utf8_bytes": 0
+              },
+              "template_repeats": {
+                "distinct": 0,
+                "occurrences": 0,
+                "utf8_bytes": 0
+              }
+            },
+            "cross_call_repeated_utf8_bytes": 329,
+            "line_repeat_extra_utf8_bytes": 1172,
+            "line_repeat_across_tools_utf8_bytes": 1172,
+            "resolution": {
+              "prev_cycle_projection": "ok",
+              "prev_cycle_inner": "ok",
+              "current_step": "ok",
+              "plan_current_item": "ok",
+              "plan_constraint": "ok"
+            },
+            "violations": [],
+            "readonly_unchanged": true,
+            "repeat_identical": true,
+            "recovery_path": null,
+            "recoveries": 0,
+            "synthetic_recovery_approvals": 0,
+            "lineage_holds": true,
+            "lineage_violations": []
+          },
+          {
+            "level": 1,
+            "case_id": "case-04",
+            "status": "complete",
+            "generation_calls": 34,
+            "gil_bytes": 18812,
+            "context_text": {
+              "utf8_bytes": 7287,
+              "code_points": 4177,
+              "utf16_units": 4177
+            },
+            "context_structured_utf8_bytes": 6415,
+            "context_said_in_text": true,
+            "reads_text_utf8_bytes": {
+              "gil_context": 7287,
+              "gil_status": 1478,
+              "gil_plan_read": 4035
+            },
+            "reads_structured_utf8_bytes": {
+              "gil_context": 6415,
+              "gil_status": 570,
+              "gil_plan_read": 3386
+            },
+            "reads_text_total_utf8_bytes": 12800,
+            "read_calls": 3,
+            "context_sections_utf8_bytes": {
+              "text_part_1": 329,
+              "text_part_2": 857,
+              "preamble": 1062,
+              "next_call": 329,
+              "file_scope": 720,
+              "plan": 680,
+              "chain_current": 376,
+              "previous_cycles": 1103,
+              "current_cycle": 618,
+              "here": 156,
+              "will": 237,
+              "next_moves": 147,
+              "rules": 69,
+              "report_principles": 477,
+              "resume": 113
+            },
+            "context_blocks": {
+              "blocks": 30,
+              "exact_repeats": {
+                "distinct": 0,
+                "extra_occurrences": 0,
+                "extra_utf8_bytes": 0
+              },
+              "template_repeats": {
+                "distinct": 0,
+                "occurrences": 0,
+                "utf8_bytes": 0
+              }
+            },
+            "cross_call_repeated_utf8_bytes": 329,
+            "line_repeat_extra_utf8_bytes": 1172,
+            "line_repeat_across_tools_utf8_bytes": 1172,
+            "resolution": {
+              "prev_cycle_projection": "ok",
+              "prev_cycle_inner": "ok",
+              "current_step": "ok",
+              "plan_current_item": "ok",
+              "plan_constraint": "ok"
+            },
+            "violations": [],
+            "readonly_unchanged": true,
+            "repeat_identical": true,
+            "recovery_path": null,
+            "recoveries": 0,
+            "synthetic_recovery_approvals": 0,
+            "lineage_holds": true,
+            "lineage_violations": []
+          },
+          {
+            "level": 2,
+            "case_id": "case-05",
+            "status": "complete",
+            "generation_calls": 47,
+            "gil_bytes": 25447,
+            "context_text": {
+              "utf8_bytes": 7742,
+              "code_points": 4486,
+              "utf16_units": 4486
+            },
+            "context_structured_utf8_bytes": 6898,
+            "context_said_in_text": true,
+            "reads_text_utf8_bytes": {
+              "gil_context": 7742,
+              "gil_status": 1478,
+              "gil_plan_read": 4418
+            },
+            "reads_structured_utf8_bytes": {
+              "gil_context": 6898,
+              "gil_status": 570,
+              "gil_plan_read": 3769
+            },
+            "reads_text_total_utf8_bytes": 13638,
+            "read_calls": 3,
+            "context_sections_utf8_bytes": {
+              "text_part_1": 329,
+              "text_part_2": 857,
+              "preamble": 1062,
+              "next_call": 329,
+              "file_scope": 720,
+              "plan": 733,
+              "chain_current": 376,
+              "previous_cycles": 1505,
+              "current_cycle": 618,
+              "here": 156,
+              "will": 237,
+              "next_moves": 147,
+              "rules": 69,
+              "report_principles": 477,
+              "resume": 113
+            },
+            "context_blocks": {
+              "blocks": 36,
+              "exact_repeats": {
+                "distinct": 1,
+                "extra_occurrences": 1,
+                "extra_utf8_bytes": 54
+              },
+              "template_repeats": {
+                "distinct": 6,
+                "occurrences": 12,
+                "utf8_bytes": 712
+              }
+            },
+            "cross_call_repeated_utf8_bytes": 329,
+            "line_repeat_extra_utf8_bytes": 1172,
+            "line_repeat_across_tools_utf8_bytes": 1172,
+            "resolution": {
+              "prev_cycle_projection": "ok",
+              "prev_cycle_inner": "ok",
+              "current_step": "ok",
+              "plan_current_item": "ok",
+              "plan_constraint": "ok"
+            },
+            "violations": [],
+            "readonly_unchanged": true,
+            "repeat_identical": true,
+            "recovery_path": null,
+            "recoveries": 0,
+            "synthetic_recovery_approvals": 0,
+            "lineage_holds": true,
+            "lineage_violations": []
+          }
+        ],
+        "growth": [
+          {
+            "from": 0,
+            "to": 1,
+            "measured": true,
+            "context_text_delta_utf8_bytes": 457,
+            "context_text_delta_per_unit": 457,
+            "context_structured_delta_utf8_bytes": 485,
+            "reads_text_total_delta_utf8_bytes": 842,
+            "context_sections_delta_utf8_bytes": {
+              "plan": 53,
+              "previous_cycles": 402,
+              "will": 2
+            }
+          },
+          {
+            "from": 1,
+            "to": 2,
+            "measured": true,
+            "context_text_delta_utf8_bytes": 455,
+            "context_text_delta_per_unit": 455,
+            "context_structured_delta_utf8_bytes": 483,
+            "reads_text_total_delta_utf8_bytes": 838,
+            "context_sections_delta_utf8_bytes": {
+              "plan": 53,
+              "previous_cycles": 402
+            }
+          }
+        ],
+        "context_invariant_blocks": {
+          "levels": 3,
+          "shared_blocks": 13,
+          "shared_utf8_bytes_at_first_level": 3296,
+          "per_level": [
+            {
+              "blocks": 24,
+              "distinct_block_utf8_bytes": 6739,
+              "shared_utf8_bytes": 3296,
+              "varying_utf8_bytes": 3443
+            },
+            {
+              "blocks": 30,
+              "distinct_block_utf8_bytes": 7150,
+              "shared_utf8_bytes": 3296,
+              "varying_utf8_bytes": 3854
+            },
+            {
+              "blocks": 36,
+              "distinct_block_utf8_bytes": 7505,
+              "shared_utf8_bytes": 3296,
+              "varying_utf8_bytes": 4209
+            }
+          ]
+        }
+      },
+      {
+        "axis": "failures",
+        "label": "같은 계보의 누적 실패 Cycle 수",
+        "base": 0,
+        "levels": [
+          {
+            "level": 0,
+            "case_id": "case-01",
+            "status": "complete",
+            "generation_calls": 21,
+            "gil_bytes": 11362,
+            "context_text": {
+              "utf8_bytes": 6830,
+              "code_points": 3866,
+              "utf16_units": 3866
+            },
+            "context_structured_utf8_bytes": 5930,
+            "context_said_in_text": true,
+            "reads_text_utf8_bytes": {
+              "gil_context": 6830,
+              "gil_status": 1476,
+              "gil_plan_read": 3652
+            },
+            "reads_structured_utf8_bytes": {
+              "gil_context": 5930,
+              "gil_status": 568,
+              "gil_plan_read": 3003
+            },
+            "reads_text_total_utf8_bytes": 11958,
+            "read_calls": 3,
+            "context_sections_utf8_bytes": {
+              "text_part_1": 329,
+              "text_part_2": 857,
+              "preamble": 1062,
+              "next_call": 329,
+              "file_scope": 720,
+              "plan": 627,
+              "chain_current": 376,
+              "previous_cycles": 701,
+              "current_cycle": 618,
+              "here": 156,
+              "will": 235,
+              "next_moves": 147,
+              "rules": 69,
+              "report_principles": 477,
+              "resume": 113
+            },
+            "context_blocks": {
+              "blocks": 24,
+              "exact_repeats": {
+                "distinct": 0,
+                "extra_occurrences": 0,
+                "extra_utf8_bytes": 0
+              },
+              "template_repeats": {
+                "distinct": 0,
+                "occurrences": 0,
+                "utf8_bytes": 0
+              }
+            },
+            "cross_call_repeated_utf8_bytes": 329,
+            "line_repeat_extra_utf8_bytes": 1172,
+            "line_repeat_across_tools_utf8_bytes": 1172,
+            "resolution": {
+              "prev_cycle_projection": "ok",
+              "prev_cycle_inner": "ok",
+              "current_step": "ok",
+              "plan_current_item": "ok",
+              "plan_constraint": "ok"
+            },
+            "violations": [],
+            "readonly_unchanged": true,
+            "repeat_identical": true,
+            "recovery_path": null,
+            "recoveries": 0,
+            "synthetic_recovery_approvals": 0,
+            "lineage_holds": true,
+            "lineage_violations": []
+          },
+          {
+            "level": 1,
+            "case_id": "case-06",
+            "status": "complete",
+            "generation_calls": 36,
+            "gil_bytes": 24876,
+            "context_text": {
+              "utf8_bytes": 7755,
+              "code_points": 4416,
+              "utf16_units": 4416
+            },
+            "context_structured_utf8_bytes": 6889,
+            "context_said_in_text": true,
+            "reads_text_utf8_bytes": {
+              "gil_context": 7755,
+              "gil_status": 1531,
+              "gil_plan_read": 3705
+            },
+            "reads_structured_utf8_bytes": {
+              "gil_context": 6889,
+              "gil_status": 624,
+              "gil_plan_read": 3056
+            },
+            "reads_text_total_utf8_bytes": 12991,
+            "read_calls": 3,
+            "context_sections_utf8_bytes": {
+              "text_part_1": 329,
+              "text_part_2": 857,
+              "preamble": 1062,
+              "next_call": 329,
+              "file_scope": 720,
+              "plan": 680,
+              "chain_current": 376,
+              "previous_cycles": 701,
+              "failed_cycles": 869,
+              "current_cycle": 618,
+              "here": 156,
+              "will": 237,
+              "next_moves": 147,
+              "rules": 69,
+              "report_principles": 477,
+              "resume": 113
+            },
+            "context_blocks": {
+              "blocks": 31,
+              "exact_repeats": {
+                "distinct": 0,
+                "extra_occurrences": 0,
+                "extra_utf8_bytes": 0
+              },
+              "template_repeats": {
+                "distinct": 0,
+                "occurrences": 0,
+                "utf8_bytes": 0
+              }
+            },
+            "cross_call_repeated_utf8_bytes": 329,
+            "line_repeat_extra_utf8_bytes": 1172,
+            "line_repeat_across_tools_utf8_bytes": 1172,
+            "resolution": {
+              "prev_cycle_projection": "ok",
+              "prev_cycle_inner": "ok",
+              "failure_projection": "ok",
+              "failure_inner": "ok",
+              "current_step": "ok",
+              "plan_current_item": "ok",
+              "plan_constraint": "ok"
+            },
+            "violations": [],
+            "readonly_unchanged": true,
+            "repeat_identical": true,
+            "recovery_path": "app_approval",
+            "recoveries": 1,
+            "synthetic_recovery_approvals": 1,
+            "lineage_holds": true,
+            "lineage_violations": []
+          },
+          {
+            "level": 2,
+            "case_id": "case-07",
+            "status": "complete",
+            "generation_calls": 51,
+            "gil_bytes": 37558,
+            "context_text": {
+              "utf8_bytes": 8302,
+              "code_points": 4781,
+              "utf16_units": 4781
+            },
+            "context_structured_utf8_bytes": 7465,
+            "context_said_in_text": true,
+            "reads_text_utf8_bytes": {
+              "gil_context": 8302,
+              "gil_status": 1531,
+              "gil_plan_read": 3758
+            },
+            "reads_structured_utf8_bytes": {
+              "gil_context": 7465,
+              "gil_status": 624,
+              "gil_plan_read": 3109
+            },
+            "reads_text_total_utf8_bytes": 13591,
+            "read_calls": 3,
+            "context_sections_utf8_bytes": {
+              "text_part_1": 329,
+              "text_part_2": 857,
+              "preamble": 1062,
+              "next_call": 329,
+              "file_scope": 720,
+              "plan": 733,
+              "chain_current": 376,
+              "previous_cycles": 701,
+              "failed_cycles": 1363,
+              "current_cycle": 618,
+              "here": 156,
+              "will": 237,
+              "next_moves": 147,
+              "rules": 69,
+              "report_principles": 477,
+              "resume": 113
+            },
+            "context_blocks": {
+              "blocks": 37,
+              "exact_repeats": {
+                "distinct": 1,
+                "extra_occurrences": 1,
+                "extra_utf8_bytes": 65
+              },
+              "template_repeats": {
+                "distinct": 6,
+                "occurrences": 12,
+                "utf8_bytes": 892
+              }
+            },
+            "cross_call_repeated_utf8_bytes": 329,
+            "line_repeat_extra_utf8_bytes": 1172,
+            "line_repeat_across_tools_utf8_bytes": 1172,
+            "resolution": {
+              "prev_cycle_projection": "ok",
+              "prev_cycle_inner": "ok",
+              "failure_projection": "ok",
+              "failure_inner": "ok",
+              "current_step": "ok",
+              "plan_current_item": "ok",
+              "plan_constraint": "ok"
+            },
+            "violations": [],
+            "readonly_unchanged": true,
+            "repeat_identical": true,
+            "recovery_path": "app_approval",
+            "recoveries": 2,
+            "synthetic_recovery_approvals": 2,
+            "lineage_holds": true,
+            "lineage_violations": []
+          }
+        ],
+        "growth": [
+          {
+            "from": 0,
+            "to": 1,
+            "measured": true,
+            "context_text_delta_utf8_bytes": 925,
+            "context_text_delta_per_unit": 925,
+            "context_structured_delta_utf8_bytes": 959,
+            "reads_text_total_delta_utf8_bytes": 1033,
+            "context_sections_delta_utf8_bytes": {
+              "plan": 53,
+              "will": 2,
+              "failed_cycles": 869
+            }
+          },
+          {
+            "from": 1,
+            "to": 2,
+            "measured": true,
+            "context_text_delta_utf8_bytes": 547,
+            "context_text_delta_per_unit": 547,
+            "context_structured_delta_utf8_bytes": 576,
+            "reads_text_total_delta_utf8_bytes": 600,
+            "context_sections_delta_utf8_bytes": {
+              "plan": 53,
+              "failed_cycles": 494
+            }
+          }
+        ],
+        "context_invariant_blocks": {
+          "levels": 3,
+          "shared_blocks": 16,
+          "shared_utf8_bytes_at_first_level": 4094,
+          "per_level": [
+            {
+              "blocks": 24,
+              "distinct_block_utf8_bytes": 6739,
+              "shared_utf8_bytes": 4094,
+              "varying_utf8_bytes": 2645
+            },
+            {
+              "blocks": 31,
+              "distinct_block_utf8_bytes": 7614,
+              "shared_utf8_bytes": 4094,
+              "varying_utf8_bytes": 3520
+            },
+            {
+              "blocks": 37,
+              "distinct_block_utf8_bytes": 8048,
+              "shared_utf8_bytes": 4094,
+              "varying_utf8_bytes": 3954
+            }
+          ]
+        }
+      },
+      {
+        "axis": "steps",
+        "label": "현재 Cycle의 닫힌 Step 수",
+        "base": 2,
+        "levels": [
+          {
+            "level": 0,
+            "case_id": "case-08",
+            "status": "complete",
+            "generation_calls": 17,
+            "gil_bytes": 9466,
+            "context_text": {
+              "utf8_bytes": 6726,
+              "code_points": 3686,
+              "utf16_units": 3686
+            },
+            "context_structured_utf8_bytes": 5816,
+            "context_said_in_text": true,
+            "reads_text_utf8_bytes": {
+              "gil_context": 6726,
+              "gil_status": 1476,
+              "gil_plan_read": 4674
+            },
+            "reads_structured_utf8_bytes": {
+              "gil_context": 5816,
+              "gil_status": 568,
+              "gil_plan_read": 3514
+            },
+            "reads_text_total_utf8_bytes": 12876,
+            "read_calls": 3,
+            "context_sections_utf8_bytes": {
+              "text_part_1": 329,
+              "text_part_2": 857,
+              "preamble": 1000,
+              "next_call": 840,
+              "file_scope": 720,
+              "plan": 457,
+              "chain_current": 376,
+              "previous_cycles": 701,
+              "current_cycle": 226,
+              "here": 156,
+              "will": 235,
+              "next_moves": 147,
+              "rules": 78,
+              "report_principles": 477,
+              "resume": 113
+            },
+            "context_blocks": {
+              "blocks": 22,
+              "exact_repeats": {
+                "distinct": 0,
+                "extra_occurrences": 0,
+                "extra_utf8_bytes": 0
+              },
+              "template_repeats": {
+                "distinct": 0,
+                "occurrences": 0,
+                "utf8_bytes": 0
+              }
+            },
+            "cross_call_repeated_utf8_bytes": 329,
+            "line_repeat_extra_utf8_bytes": 1683,
+            "line_repeat_across_tools_utf8_bytes": 1683,
+            "resolution": {
+              "prev_cycle_projection": "ok",
+              "prev_cycle_inner": "ok",
+              "plan_current_item": "ok",
+              "plan_constraint": "ok"
+            },
+            "violations": [],
+            "readonly_unchanged": true,
+            "repeat_identical": true,
+            "recovery_path": null,
+            "recoveries": 0,
+            "synthetic_recovery_approvals": 0,
+            "lineage_holds": true,
+            "lineage_violations": []
+          },
+          {
+            "level": 2,
+            "case_id": "case-01",
+            "status": "complete",
+            "generation_calls": 21,
+            "gil_bytes": 11362,
+            "context_text": {
+              "utf8_bytes": 6830,
+              "code_points": 3866,
+              "utf16_units": 3866
+            },
+            "context_structured_utf8_bytes": 5930,
+            "context_said_in_text": true,
+            "reads_text_utf8_bytes": {
+              "gil_context": 6830,
+              "gil_status": 1476,
+              "gil_plan_read": 3652
+            },
+            "reads_structured_utf8_bytes": {
+              "gil_context": 5930,
+              "gil_status": 568,
+              "gil_plan_read": 3003
+            },
+            "reads_text_total_utf8_bytes": 11958,
+            "read_calls": 3,
+            "context_sections_utf8_bytes": {
+              "text_part_1": 329,
+              "text_part_2": 857,
+              "preamble": 1062,
+              "next_call": 329,
+              "file_scope": 720,
+              "plan": 627,
+              "chain_current": 376,
+              "previous_cycles": 701,
+              "current_cycle": 618,
+              "here": 156,
+              "will": 235,
+              "next_moves": 147,
+              "rules": 69,
+              "report_principles": 477,
+              "resume": 113
+            },
+            "context_blocks": {
+              "blocks": 24,
+              "exact_repeats": {
+                "distinct": 0,
+                "extra_occurrences": 0,
+                "extra_utf8_bytes": 0
+              },
+              "template_repeats": {
+                "distinct": 0,
+                "occurrences": 0,
+                "utf8_bytes": 0
+              }
+            },
+            "cross_call_repeated_utf8_bytes": 329,
+            "line_repeat_extra_utf8_bytes": 1172,
+            "line_repeat_across_tools_utf8_bytes": 1172,
+            "resolution": {
+              "prev_cycle_projection": "ok",
+              "prev_cycle_inner": "ok",
+              "current_step": "ok",
+              "plan_current_item": "ok",
+              "plan_constraint": "ok"
+            },
+            "violations": [],
+            "readonly_unchanged": true,
+            "repeat_identical": true,
+            "recovery_path": null,
+            "recoveries": 0,
+            "synthetic_recovery_approvals": 0,
+            "lineage_holds": true,
+            "lineage_violations": []
+          },
+          {
+            "level": 4,
+            "case_id": "case-09",
+            "status": "complete",
+            "generation_calls": 25,
+            "gil_bytes": 14729,
+            "context_text": {
+              "utf8_bytes": 7573,
+              "code_points": 4477,
+              "utf16_units": 4477
+            },
+            "context_structured_utf8_bytes": 6698,
+            "context_said_in_text": true,
+            "reads_text_utf8_bytes": {
+              "gil_context": 7573,
+              "gil_status": 1477,
+              "gil_plan_read": 3316
+            },
+            "reads_structured_utf8_bytes": {
+              "gil_context": 6698,
+              "gil_status": 569,
+              "gil_plan_read": 2835
+            },
+            "reads_text_total_utf8_bytes": 12366,
+            "read_calls": 3,
+            "context_sections_utf8_bytes": {
+              "text_part_1": 329,
+              "text_part_2": 857,
+              "preamble": 1044,
+              "next_call": 161,
+              "file_scope": 720,
+              "plan": 457,
+              "chain_current": 376,
+              "previous_cycles": 701,
+              "current_cycle": 1076,
+              "here": 157,
+              "will": 235,
+              "next_moves": 147,
+              "rules": 709,
+              "report_principles": 477,
+              "resume": 113
+            },
+            "context_blocks": {
+              "blocks": 29,
+              "exact_repeats": {
+                "distinct": 0,
+                "extra_occurrences": 0,
+                "extra_utf8_bytes": 0
+              },
+              "template_repeats": {
+                "distinct": 0,
+                "occurrences": 0,
+                "utf8_bytes": 0
+              }
+            },
+            "cross_call_repeated_utf8_bytes": 329,
+            "line_repeat_extra_utf8_bytes": 1004,
+            "line_repeat_across_tools_utf8_bytes": 1004,
+            "resolution": {
+              "prev_cycle_projection": "ok",
+              "prev_cycle_inner": "ok",
+              "current_step": "ok",
+              "plan_current_item": "ok",
+              "plan_constraint": "ok"
+            },
+            "violations": [],
+            "readonly_unchanged": true,
+            "repeat_identical": true,
+            "recovery_path": null,
+            "recoveries": 0,
+            "synthetic_recovery_approvals": 0,
+            "lineage_holds": true,
+            "lineage_violations": []
+          }
+        ],
+        "growth": [
+          {
+            "from": 0,
+            "to": 2,
+            "measured": true,
+            "context_text_delta_utf8_bytes": 104,
+            "context_text_delta_per_unit": 52,
+            "context_structured_delta_utf8_bytes": 114,
+            "reads_text_total_delta_utf8_bytes": -918,
+            "context_sections_delta_utf8_bytes": {
+              "preamble": 62,
+              "next_call": -511,
+              "plan": 170,
+              "current_cycle": 392,
+              "rules": -9
+            }
+          },
+          {
+            "from": 2,
+            "to": 4,
+            "measured": true,
+            "context_text_delta_utf8_bytes": 743,
+            "context_text_delta_per_unit": 371.5,
+            "context_structured_delta_utf8_bytes": 768,
+            "reads_text_total_delta_utf8_bytes": 408,
+            "context_sections_delta_utf8_bytes": {
+              "preamble": -18,
+              "next_call": -168,
+              "plan": -170,
+              "current_cycle": 458,
+              "here": 1,
+              "rules": 640
+            }
+          }
+        ],
+        "context_invariant_blocks": {
+          "levels": 3,
+          "shared_blocks": 14,
+          "shared_utf8_bytes_at_first_level": 3876,
+          "per_level": [
+            {
+              "blocks": 22,
+              "distinct_block_utf8_bytes": 6649,
+              "shared_utf8_bytes": 3876,
+              "varying_utf8_bytes": 2773
+            },
+            {
+              "blocks": 24,
+              "distinct_block_utf8_bytes": 6739,
+              "shared_utf8_bytes": 3876,
+              "varying_utf8_bytes": 2863
+            },
+            {
+              "blocks": 29,
+              "distinct_block_utf8_bytes": 7413,
+              "shared_utf8_bytes": 3876,
+              "varying_utf8_bytes": 3537
+            }
+          ]
+        }
+      },
+      {
+        "axis": "report_lines",
+        "label": "현재 Cycle Report 칸당 줄 수",
+        "base": 1,
+        "levels": [
+          {
+            "level": 1,
+            "case_id": "case-01",
+            "status": "complete",
+            "generation_calls": 21,
+            "gil_bytes": 11362,
+            "context_text": {
+              "utf8_bytes": 6830,
+              "code_points": 3866,
+              "utf16_units": 3866
+            },
+            "context_structured_utf8_bytes": 5930,
+            "context_said_in_text": true,
+            "reads_text_utf8_bytes": {
+              "gil_context": 6830,
+              "gil_status": 1476,
+              "gil_plan_read": 3652
+            },
+            "reads_structured_utf8_bytes": {
+              "gil_context": 5930,
+              "gil_status": 568,
+              "gil_plan_read": 3003
+            },
+            "reads_text_total_utf8_bytes": 11958,
+            "read_calls": 3,
+            "context_sections_utf8_bytes": {
+              "text_part_1": 329,
+              "text_part_2": 857,
+              "preamble": 1062,
+              "next_call": 329,
+              "file_scope": 720,
+              "plan": 627,
+              "chain_current": 376,
+              "previous_cycles": 701,
+              "current_cycle": 618,
+              "here": 156,
+              "will": 235,
+              "next_moves": 147,
+              "rules": 69,
+              "report_principles": 477,
+              "resume": 113
+            },
+            "context_blocks": {
+              "blocks": 24,
+              "exact_repeats": {
+                "distinct": 0,
+                "extra_occurrences": 0,
+                "extra_utf8_bytes": 0
+              },
+              "template_repeats": {
+                "distinct": 0,
+                "occurrences": 0,
+                "utf8_bytes": 0
+              }
+            },
+            "cross_call_repeated_utf8_bytes": 329,
+            "line_repeat_extra_utf8_bytes": 1172,
+            "line_repeat_across_tools_utf8_bytes": 1172,
+            "resolution": {
+              "prev_cycle_projection": "ok",
+              "prev_cycle_inner": "ok",
+              "current_step": "ok",
+              "plan_current_item": "ok",
+              "plan_constraint": "ok"
+            },
+            "violations": [],
+            "readonly_unchanged": true,
+            "repeat_identical": true,
+            "recovery_path": null,
+            "recoveries": 0,
+            "synthetic_recovery_approvals": 0,
+            "lineage_holds": true,
+            "lineage_violations": []
+          },
+          {
+            "level": 4,
+            "case_id": "case-10",
+            "status": "complete",
+            "generation_calls": 21,
+            "gil_bytes": 12018,
+            "context_text": {
+              "utf8_bytes": 7633,
+              "code_points": 4261,
+              "utf16_units": 4261
+            },
+            "context_structured_utf8_bytes": 6741,
+            "context_said_in_text": true,
+            "reads_text_utf8_bytes": {
+              "gil_context": 7633,
+              "gil_status": 1476,
+              "gil_plan_read": 3652
+            },
+            "reads_structured_utf8_bytes": {
+              "gil_context": 6741,
+              "gil_status": 568,
+              "gil_plan_read": 3003
+            },
+            "reads_text_total_utf8_bytes": 12761,
+            "read_calls": 3,
+            "context_sections_utf8_bytes": {
+              "text_part_1": 329,
+              "text_part_2": 857,
+              "preamble": 1311,
+              "next_call": 329,
+              "file_scope": 720,
+              "plan": 627,
+              "chain_current": 376,
+              "previous_cycles": 701,
+              "current_cycle": 1172,
+              "here": 156,
+              "will": 235,
+              "next_moves": 147,
+              "rules": 69,
+              "report_principles": 477,
+              "resume": 113
+            },
+            "context_blocks": {
+              "blocks": 24,
+              "exact_repeats": {
+                "distinct": 0,
+                "extra_occurrences": 0,
+                "extra_utf8_bytes": 0
+              },
+              "template_repeats": {
+                "distinct": 0,
+                "occurrences": 0,
+                "utf8_bytes": 0
+              }
+            },
+            "cross_call_repeated_utf8_bytes": 329,
+            "line_repeat_extra_utf8_bytes": 1172,
+            "line_repeat_across_tools_utf8_bytes": 1172,
+            "resolution": {
+              "prev_cycle_projection": "ok",
+              "prev_cycle_inner": "ok",
+              "current_step": "ok",
+              "plan_current_item": "ok",
+              "plan_constraint": "ok"
+            },
+            "violations": [],
+            "readonly_unchanged": true,
+            "repeat_identical": true,
+            "recovery_path": null,
+            "recoveries": 0,
+            "synthetic_recovery_approvals": 0,
+            "lineage_holds": true,
+            "lineage_violations": []
+          },
+          {
+            "level": 16,
+            "case_id": "case-11",
+            "status": "complete",
+            "generation_calls": 21,
+            "gil_bytes": 14548,
+            "context_text": {
+              "utf8_bytes": 9869,
+              "code_points": 5399,
+              "utf16_units": 5399
+            },
+            "context_structured_utf8_bytes": 9001,
+            "context_said_in_text": true,
+            "reads_text_utf8_bytes": {
+              "gil_context": 9869,
+              "gil_status": 1476,
+              "gil_plan_read": 3652
+            },
+            "reads_structured_utf8_bytes": {
+              "gil_context": 9001,
+              "gil_status": 568,
+              "gil_plan_read": 3003
+            },
+            "reads_text_total_utf8_bytes": 14997,
+            "read_calls": 3,
+            "context_sections_utf8_bytes": {
+              "text_part_1": 329,
+              "text_part_2": 857,
+              "preamble": 1305,
+              "next_call": 329,
+              "file_scope": 720,
+              "plan": 627,
+              "chain_current": 376,
+              "previous_cycles": 701,
+              "current_cycle": 3414,
+              "here": 156,
+              "will": 235,
+              "next_moves": 147,
+              "rules": 69,
+              "report_principles": 477,
+              "resume": 113
+            },
+            "context_blocks": {
+              "blocks": 24,
+              "exact_repeats": {
+                "distinct": 0,
+                "extra_occurrences": 0,
+                "extra_utf8_bytes": 0
+              },
+              "template_repeats": {
+                "distinct": 0,
+                "occurrences": 0,
+                "utf8_bytes": 0
+              }
+            },
+            "cross_call_repeated_utf8_bytes": 329,
+            "line_repeat_extra_utf8_bytes": 1172,
+            "line_repeat_across_tools_utf8_bytes": 1172,
+            "resolution": {
+              "prev_cycle_projection": "ok",
+              "prev_cycle_inner": "ok",
+              "current_step": "ok",
+              "plan_current_item": "ok",
+              "plan_constraint": "ok"
+            },
+            "violations": [],
+            "readonly_unchanged": true,
+            "repeat_identical": true,
+            "recovery_path": null,
+            "recoveries": 0,
+            "synthetic_recovery_approvals": 0,
+            "lineage_holds": true,
+            "lineage_violations": []
+          }
+        ],
+        "growth": [
+          {
+            "from": 1,
+            "to": 4,
+            "measured": true,
+            "context_text_delta_utf8_bytes": 803,
+            "context_text_delta_per_unit": 267.7,
+            "context_structured_delta_utf8_bytes": 811,
+            "reads_text_total_delta_utf8_bytes": 803,
+            "context_sections_delta_utf8_bytes": {
+              "preamble": 249,
+              "current_cycle": 554
+            }
+          },
+          {
+            "from": 4,
+            "to": 16,
+            "measured": true,
+            "context_text_delta_utf8_bytes": 2236,
+            "context_text_delta_per_unit": 186.3,
+            "context_structured_delta_utf8_bytes": 2260,
+            "reads_text_total_delta_utf8_bytes": 2236,
+            "context_sections_delta_utf8_bytes": {
+              "preamble": -6,
+              "current_cycle": 2242
+            }
+          }
+        ],
+        "context_invariant_blocks": {
+          "levels": 3,
+          "shared_blocks": 20,
+          "shared_utf8_bytes_at_first_level": 5330,
+          "per_level": [
+            {
+              "blocks": 24,
+              "distinct_block_utf8_bytes": 6739,
+              "shared_utf8_bytes": 5330,
+              "varying_utf8_bytes": 1409
+            },
+            {
+              "blocks": 24,
+              "distinct_block_utf8_bytes": 7510,
+              "shared_utf8_bytes": 5330,
+              "varying_utf8_bytes": 2180
+            },
+            {
+              "blocks": 24,
+              "distinct_block_utf8_bytes": 9650,
+              "shared_utf8_bytes": 5330,
+              "varying_utf8_bytes": 4320
+            }
+          ]
+        }
+      },
+      {
+        "axis": "plan_items",
+        "label": "승인 계획의 미실행 항목 수(현재 항목 포함)",
+        "base": 1,
+        "levels": [
+          {
+            "level": 1,
+            "case_id": "case-01",
+            "status": "complete",
+            "generation_calls": 21,
+            "gil_bytes": 11362,
+            "context_text": {
+              "utf8_bytes": 6830,
+              "code_points": 3866,
+              "utf16_units": 3866
+            },
+            "context_structured_utf8_bytes": 5930,
+            "context_said_in_text": true,
+            "reads_text_utf8_bytes": {
+              "gil_context": 6830,
+              "gil_status": 1476,
+              "gil_plan_read": 3652
+            },
+            "reads_structured_utf8_bytes": {
+              "gil_context": 5930,
+              "gil_status": 568,
+              "gil_plan_read": 3003
+            },
+            "reads_text_total_utf8_bytes": 11958,
+            "read_calls": 3,
+            "context_sections_utf8_bytes": {
+              "text_part_1": 329,
+              "text_part_2": 857,
+              "preamble": 1062,
+              "next_call": 329,
+              "file_scope": 720,
+              "plan": 627,
+              "chain_current": 376,
+              "previous_cycles": 701,
+              "current_cycle": 618,
+              "here": 156,
+              "will": 235,
+              "next_moves": 147,
+              "rules": 69,
+              "report_principles": 477,
+              "resume": 113
+            },
+            "context_blocks": {
+              "blocks": 24,
+              "exact_repeats": {
+                "distinct": 0,
+                "extra_occurrences": 0,
+                "extra_utf8_bytes": 0
+              },
+              "template_repeats": {
+                "distinct": 0,
+                "occurrences": 0,
+                "utf8_bytes": 0
+              }
+            },
+            "cross_call_repeated_utf8_bytes": 329,
+            "line_repeat_extra_utf8_bytes": 1172,
+            "line_repeat_across_tools_utf8_bytes": 1172,
+            "resolution": {
+              "prev_cycle_projection": "ok",
+              "prev_cycle_inner": "ok",
+              "current_step": "ok",
+              "plan_current_item": "ok",
+              "plan_constraint": "ok"
+            },
+            "violations": [],
+            "readonly_unchanged": true,
+            "repeat_identical": true,
+            "recovery_path": null,
+            "recoveries": 0,
+            "synthetic_recovery_approvals": 0,
+            "lineage_holds": true,
+            "lineage_violations": []
+          },
+          {
+            "level": 2,
+            "case_id": "case-12",
+            "status": "complete",
+            "generation_calls": 21,
+            "gil_bytes": 11596,
+            "context_text": {
+              "utf8_bytes": 6832,
+              "code_points": 3868,
+              "utf16_units": 3868
+            },
+            "context_structured_utf8_bytes": 5932,
+            "context_said_in_text": true,
+            "reads_text_utf8_bytes": {
+              "gil_context": 6832,
+              "gil_status": 1476,
+              "gil_plan_read": 4118
+            },
+            "reads_structured_utf8_bytes": {
+              "gil_context": 5932,
+              "gil_status": 568,
+              "gil_plan_read": 3469
+            },
+            "reads_text_total_utf8_bytes": 12426,
+            "read_calls": 3,
+            "context_sections_utf8_bytes": {
+              "text_part_1": 329,
+              "text_part_2": 857,
+              "preamble": 1062,
+              "next_call": 329,
+              "file_scope": 720,
+              "plan": 629,
+              "chain_current": 376,
+              "previous_cycles": 701,
+              "current_cycle": 618,
+              "here": 156,
+              "will": 235,
+              "next_moves": 147,
+              "rules": 69,
+              "report_principles": 477,
+              "resume": 113
+            },
+            "context_blocks": {
+              "blocks": 24,
+              "exact_repeats": {
+                "distinct": 0,
+                "extra_occurrences": 0,
+                "extra_utf8_bytes": 0
+              },
+              "template_repeats": {
+                "distinct": 0,
+                "occurrences": 0,
+                "utf8_bytes": 0
+              }
+            },
+            "cross_call_repeated_utf8_bytes": 329,
+            "line_repeat_extra_utf8_bytes": 1172,
+            "line_repeat_across_tools_utf8_bytes": 1172,
+            "resolution": {
+              "prev_cycle_projection": "ok",
+              "prev_cycle_inner": "ok",
+              "current_step": "ok",
+              "plan_current_item": "ok",
+              "plan_pending_item": "ok",
+              "plan_constraint": "ok"
+            },
+            "violations": [],
+            "readonly_unchanged": true,
+            "repeat_identical": true,
+            "recovery_path": null,
+            "recoveries": 0,
+            "synthetic_recovery_approvals": 0,
+            "lineage_holds": true,
+            "lineage_violations": []
+          },
+          {
+            "level": 4,
+            "case_id": "case-13",
+            "status": "complete",
+            "generation_calls": 21,
+            "gil_bytes": 11992,
+            "context_text": {
+              "utf8_bytes": 6840,
+              "code_points": 3876,
+              "utf16_units": 3876
+            },
+            "context_structured_utf8_bytes": 5940,
+            "context_said_in_text": true,
+            "reads_text_utf8_bytes": {
+              "gil_context": 6840,
+              "gil_status": 1476,
+              "gil_plan_read": 5052
+            },
+            "reads_structured_utf8_bytes": {
+              "gil_context": 5940,
+              "gil_status": 568,
+              "gil_plan_read": 4403
+            },
+            "reads_text_total_utf8_bytes": 13368,
+            "read_calls": 3,
+            "context_sections_utf8_bytes": {
+              "text_part_1": 329,
+              "text_part_2": 857,
+              "preamble": 1062,
+              "next_call": 329,
+              "file_scope": 720,
+              "plan": 637,
+              "chain_current": 376,
+              "previous_cycles": 701,
+              "current_cycle": 618,
+              "here": 156,
+              "will": 235,
+              "next_moves": 147,
+              "rules": 69,
+              "report_principles": 477,
+              "resume": 113
+            },
+            "context_blocks": {
+              "blocks": 24,
+              "exact_repeats": {
+                "distinct": 0,
+                "extra_occurrences": 0,
+                "extra_utf8_bytes": 0
+              },
+              "template_repeats": {
+                "distinct": 0,
+                "occurrences": 0,
+                "utf8_bytes": 0
+              }
+            },
+            "cross_call_repeated_utf8_bytes": 329,
+            "line_repeat_extra_utf8_bytes": 1172,
+            "line_repeat_across_tools_utf8_bytes": 1172,
+            "resolution": {
+              "prev_cycle_projection": "ok",
+              "prev_cycle_inner": "ok",
+              "current_step": "ok",
+              "plan_current_item": "ok",
+              "plan_pending_item": "ok",
+              "plan_constraint": "ok"
+            },
+            "violations": [],
+            "readonly_unchanged": true,
+            "repeat_identical": true,
+            "recovery_path": null,
+            "recoveries": 0,
+            "synthetic_recovery_approvals": 0,
+            "lineage_holds": true,
+            "lineage_violations": []
+          }
+        ],
+        "growth": [
+          {
+            "from": 1,
+            "to": 2,
+            "measured": true,
+            "context_text_delta_utf8_bytes": 2,
+            "context_text_delta_per_unit": 2,
+            "context_structured_delta_utf8_bytes": 2,
+            "reads_text_total_delta_utf8_bytes": 468,
+            "context_sections_delta_utf8_bytes": {
+              "plan": 2
+            }
+          },
+          {
+            "from": 2,
+            "to": 4,
+            "measured": true,
+            "context_text_delta_utf8_bytes": 8,
+            "context_text_delta_per_unit": 4,
+            "context_structured_delta_utf8_bytes": 8,
+            "reads_text_total_delta_utf8_bytes": 942,
+            "context_sections_delta_utf8_bytes": {
+              "plan": 8
+            }
+          }
+        ],
+        "context_invariant_blocks": {
+          "levels": 3,
+          "shared_blocks": 22,
+          "shared_utf8_bytes_at_first_level": 5785,
+          "per_level": [
+            {
+              "blocks": 24,
+              "distinct_block_utf8_bytes": 6739,
+              "shared_utf8_bytes": 5785,
+              "varying_utf8_bytes": 954
+            },
+            {
+              "blocks": 24,
+              "distinct_block_utf8_bytes": 6742,
+              "shared_utf8_bytes": 5785,
+              "varying_utf8_bytes": 957
+            },
+            {
+              "blocks": 24,
+              "distinct_block_utf8_bytes": 6750,
+              "shared_utf8_bytes": 5785,
+              "varying_utf8_bytes": 965
+            }
+          ]
+        }
+      }
+    ],
+    "context_invariant_blocks_all_cases": {
+      "levels": 13,
+      "shared_blocks": 10,
+      "shared_utf8_bytes_at_first_level": 2883,
+      "per_level": [
+        {
+          "blocks": 24,
+          "distinct_block_utf8_bytes": 6739,
+          "shared_utf8_bytes": 2883,
+          "varying_utf8_bytes": 3856
+        },
+        {
+          "blocks": 25,
+          "distinct_block_utf8_bytes": 6910,
+          "shared_utf8_bytes": 2883,
+          "varying_utf8_bytes": 4027
+        },
+        {
+          "blocks": 26,
+          "distinct_block_utf8_bytes": 7079,
+          "shared_utf8_bytes": 2883,
+          "varying_utf8_bytes": 4196
+        },
+        {
+          "blocks": 30,
+          "distinct_block_utf8_bytes": 7150,
+          "shared_utf8_bytes": 2883,
+          "varying_utf8_bytes": 4267
+        },
+        {
+          "blocks": 36,
+          "distinct_block_utf8_bytes": 7505,
+          "shared_utf8_bytes": 2883,
+          "varying_utf8_bytes": 4622
+        },
+        {
+          "blocks": 31,
+          "distinct_block_utf8_bytes": 7614,
+          "shared_utf8_bytes": 2883,
+          "varying_utf8_bytes": 4731
+        },
+        {
+          "blocks": 37,
+          "distinct_block_utf8_bytes": 8048,
+          "shared_utf8_bytes": 2883,
+          "varying_utf8_bytes": 5165
+        },
+        {
+          "blocks": 22,
+          "distinct_block_utf8_bytes": 6649,
+          "shared_utf8_bytes": 2883,
+          "varying_utf8_bytes": 3766
+        },
+        {
+          "blocks": 29,
+          "distinct_block_utf8_bytes": 7413,
+          "shared_utf8_bytes": 2883,
+          "varying_utf8_bytes": 4530
+        },
+        {
+          "blocks": 24,
+          "distinct_block_utf8_bytes": 7510,
+          "shared_utf8_bytes": 2883,
+          "varying_utf8_bytes": 4627
+        },
+        {
+          "blocks": 24,
+          "distinct_block_utf8_bytes": 9650,
+          "shared_utf8_bytes": 2883,
+          "varying_utf8_bytes": 6767
+        },
+        {
+          "blocks": 24,
+          "distinct_block_utf8_bytes": 6742,
+          "shared_utf8_bytes": 2883,
+          "varying_utf8_bytes": 3859
+        },
+        {
+          "blocks": 24,
+          "distinct_block_utf8_bytes": 6750,
+          "shared_utf8_bytes": 2883,
+          "varying_utf8_bytes": 3867
+        }
+      ]
+    },
+    "context_section_variability": [
+      {
+        "name": "text_part_1",
+        "cases": 13,
+        "min": 329,
+        "max": 329,
+        "in_every_case": true,
+        "constant": true
+      },
+      {
+        "name": "text_part_2",
+        "cases": 13,
+        "min": 857,
+        "max": 857,
+        "in_every_case": true,
+        "constant": true
+      },
+      {
+        "name": "preamble",
+        "cases": 13,
+        "min": 1000,
+        "max": 1311,
+        "in_every_case": true,
+        "constant": false
+      },
+      {
+        "name": "next_call",
+        "cases": 13,
+        "min": 161,
+        "max": 840,
+        "in_every_case": true,
+        "constant": false
+      },
+      {
+        "name": "file_scope",
+        "cases": 13,
+        "min": 720,
+        "max": 720,
+        "in_every_case": true,
+        "constant": true
+      },
+      {
+        "name": "plan",
+        "cases": 13,
+        "min": 457,
+        "max": 733,
+        "in_every_case": true,
+        "constant": false
+      },
+      {
+        "name": "chain_current",
+        "cases": 13,
+        "min": 376,
+        "max": 376,
+        "in_every_case": true,
+        "constant": true
+      },
+      {
+        "name": "previous_cycles",
+        "cases": 13,
+        "min": 701,
+        "max": 1505,
+        "in_every_case": true,
+        "constant": false
+      },
+      {
+        "name": "current_cycle",
+        "cases": 13,
+        "min": 226,
+        "max": 3414,
+        "in_every_case": true,
+        "constant": false
+      },
+      {
+        "name": "here",
+        "cases": 13,
+        "min": 156,
+        "max": 157,
+        "in_every_case": true,
+        "constant": false
+      },
+      {
+        "name": "will",
+        "cases": 13,
+        "min": 235,
+        "max": 237,
+        "in_every_case": true,
+        "constant": false
+      },
+      {
+        "name": "next_moves",
+        "cases": 13,
+        "min": 147,
+        "max": 147,
+        "in_every_case": true,
+        "constant": true
+      },
+      {
+        "name": "rules",
+        "cases": 13,
+        "min": 69,
+        "max": 709,
+        "in_every_case": true,
+        "constant": false
+      },
+      {
+        "name": "report_principles",
+        "cases": 13,
+        "min": 477,
+        "max": 477,
+        "in_every_case": true,
+        "constant": true
+      },
+      {
+        "name": "resume",
+        "cases": 13,
+        "min": 113,
+        "max": 113,
+        "in_every_case": true,
+        "constant": true
+      },
+      {
+        "name": "chain_previous",
+        "cases": 2,
+        "min": 170,
+        "max": 340,
+        "in_every_case": false,
+        "constant": false
+      },
+      {
+        "name": "failed_cycles",
+        "cases": 2,
+        "min": 869,
+        "max": 1363,
+        "in_every_case": false,
+        "constant": false
+      }
+    ],
+    "layer_coverage": [
+      {
+        "layer": "prev_cycle_projection",
+        "expectation": "present",
+        "cases": 13,
+        "tags": 35,
+        "in_context_text": 35,
+        "per_tool_text": {
+          "gil_context": 35,
+          "gil_status": 0,
+          "gil_plan_read": 0
+        },
+        "verdicts": {
+          "ok": 13
+        }
+      },
+      {
+        "layer": "prev_cycle_inner",
+        "expectation": "absent",
+        "cases": 13,
+        "tags": 54,
+        "in_context_text": 0,
+        "per_tool_text": {
+          "gil_context": 0,
+          "gil_status": 0,
+          "gil_plan_read": 16
+        },
+        "verdicts": {
+          "ok": 13
+        }
+      },
+      {
+        "layer": "current_step",
+        "expectation": "present",
+        "cases": 12,
+        "tags": 38,
+        "in_context_text": 38,
+        "per_tool_text": {
+          "gil_context": 38,
+          "gil_status": 0,
+          "gil_plan_read": 0
+        },
+        "verdicts": {
+          "ok": 12
+        }
+      },
+      {
+        "layer": "plan_current_item",
+        "expectation": "present",
+        "cases": 13,
+        "tags": 13,
+        "in_context_text": 13,
+        "per_tool_text": {
+          "gil_context": 13,
+          "gil_status": 0,
+          "gil_plan_read": 13
+        },
+        "verdicts": {
+          "ok": 13
+        }
+      },
+      {
+        "layer": "plan_constraint",
+        "expectation": "observe",
+        "cases": 13,
+        "tags": 13,
+        "in_context_text": 0,
+        "per_tool_text": {
+          "gil_context": 0,
+          "gil_status": 0,
+          "gil_plan_read": 13
+        },
+        "verdicts": {
+          "ok": 13
+        }
+      },
+      {
+        "layer": "prev_chain_report",
+        "expectation": "present",
+        "cases": 2,
+        "tags": 3,
+        "in_context_text": 3,
+        "per_tool_text": {
+          "gil_context": 3,
+          "gil_status": 0,
+          "gil_plan_read": 0
+        },
+        "verdicts": {
+          "ok": 2
+        }
+      },
+      {
+        "layer": "prev_chain_inner",
+        "expectation": "absent",
+        "cases": 2,
+        "tags": 57,
+        "in_context_text": 0,
+        "per_tool_text": {
+          "gil_context": 0,
+          "gil_status": 0,
+          "gil_plan_read": 0
+        },
+        "verdicts": {
+          "ok": 2
+        }
+      },
+      {
+        "layer": "failure_projection",
+        "expectation": "present",
+        "cases": 2,
+        "tags": 12,
+        "in_context_text": 12,
+        "per_tool_text": {
+          "gil_context": 12,
+          "gil_status": 0,
+          "gil_plan_read": 0
+        },
+        "verdicts": {
+          "ok": 2
+        }
+      },
+      {
+        "layer": "failure_inner",
+        "expectation": "absent",
+        "cases": 2,
+        "tags": 12,
+        "in_context_text": 0,
+        "per_tool_text": {
+          "gil_context": 0,
+          "gil_status": 0,
+          "gil_plan_read": 0
+        },
+        "verdicts": {
+          "ok": 2
+        }
+      },
+      {
+        "layer": "plan_pending_item",
+        "expectation": "observe",
+        "cases": 2,
+        "tags": 4,
+        "in_context_text": 0,
+        "per_tool_text": {
+          "gil_context": 0,
+          "gil_status": 0,
+          "gil_plan_read": 4
+        },
+        "verdicts": {
+          "ok": 2
+        }
+      }
+    ],
+    "steepest_context_growth": [
+      {
+        "axis": "failures",
+        "from": 0,
+        "to": 1,
+        "per_unit": 925,
+        "delta": 925
+      },
+      {
+        "axis": "failures",
+        "from": 1,
+        "to": 2,
+        "per_unit": 547,
+        "delta": 547
+      },
+      {
+        "axis": "cycles",
+        "from": 0,
+        "to": 1,
+        "per_unit": 457,
+        "delta": 457
+      },
+      {
+        "axis": "cycles",
+        "from": 1,
+        "to": 2,
+        "per_unit": 455,
+        "delta": 455
+      },
+      {
+        "axis": "steps",
+        "from": 2,
+        "to": 4,
+        "per_unit": 371.5,
+        "delta": 743
+      },
+      {
+        "axis": "report_lines",
+        "from": 1,
+        "to": 4,
+        "per_unit": 267.7,
+        "delta": 803
+      },
+      {
+        "axis": "report_lines",
+        "from": 4,
+        "to": 16,
+        "per_unit": 186.3,
+        "delta": 2236
+      },
+      {
+        "axis": "chains",
+        "from": 0,
+        "to": 1,
+        "per_unit": 173,
+        "delta": 173
+      },
+      {
+        "axis": "chains",
+        "from": 1,
+        "to": 2,
+        "per_unit": 171,
+        "delta": 171
+      },
+      {
+        "axis": "steps",
+        "from": 0,
+        "to": 2,
+        "per_unit": 52,
+        "delta": 104
+      },
+      {
+        "axis": "plan_items",
+        "from": 2,
+        "to": 4,
+        "per_unit": 4,
+        "delta": 8
+      },
+      {
+        "axis": "plan_items",
+        "from": 1,
+        "to": 2,
+        "per_unit": 2,
+        "delta": 2
+      }
+    ],
+    "preservation": {
+      "cases": 13,
+      "cases_with_failures": 2,
+      "violations": 0,
+      "rows": [
+        {
+          "case_id": "case-01",
+          "failed_attempts": 0,
+          "runs": 2,
+          "recovery_path": null,
+          "recoveries": 0,
+          "synthetic_approvals": 0,
+          "checks": {
+            "failure_refs": {
+              "expected": 0,
+              "observed": 0,
+              "verdict": "ok"
+            },
+            "failure_tags": {
+              "expected": 0,
+              "observed": 0,
+              "verdict": "ok"
+            },
+            "failure_section": {
+              "expected": false,
+              "observed": false,
+              "verdict": "ok"
+            },
+            "current_item": {
+              "expected": "I1@cycle:C2",
+              "observed": "I1@cycle:C2",
+              "verdict": "ok"
+            },
+            "retry_links": {
+              "expected": 1,
+              "observed": 1,
+              "verdict": "ok"
+            },
+            "retry_links_in_context": {
+              "expected": 1,
+              "observed": 1,
+              "verdict": "ok"
+            }
+          },
+          "holds_in_every_run": true,
+          "violations": 0,
+          "status_names_revisit_source": null,
+          "preserved": null,
+          "preserved_ok_in_every_run": null,
+          "readonly_unchanged_in_every_run": true
+        },
+        {
+          "case_id": "case-02",
+          "failed_attempts": 0,
+          "runs": 2,
+          "recovery_path": null,
+          "recoveries": 0,
+          "synthetic_approvals": 0,
+          "checks": {
+            "failure_refs": {
+              "expected": 0,
+              "observed": 0,
+              "verdict": "ok"
+            },
+            "failure_tags": {
+              "expected": 0,
+              "observed": 0,
+              "verdict": "ok"
+            },
+            "failure_section": {
+              "expected": false,
+              "observed": false,
+              "verdict": "ok"
+            },
+            "current_item": {
+              "expected": "I1@cycle:C5",
+              "observed": "I1@cycle:C5",
+              "verdict": "ok"
+            },
+            "retry_links": {
+              "expected": 1,
+              "observed": 1,
+              "verdict": "ok"
+            },
+            "retry_links_in_context": {
+              "expected": 1,
+              "observed": 1,
+              "verdict": "ok"
+            }
+          },
+          "holds_in_every_run": true,
+          "violations": 0,
+          "status_names_revisit_source": null,
+          "preserved": null,
+          "preserved_ok_in_every_run": null,
+          "readonly_unchanged_in_every_run": true
+        },
+        {
+          "case_id": "case-03",
+          "failed_attempts": 0,
+          "runs": 2,
+          "recovery_path": null,
+          "recoveries": 0,
+          "synthetic_approvals": 0,
+          "checks": {
+            "failure_refs": {
+              "expected": 0,
+              "observed": 0,
+              "verdict": "ok"
+            },
+            "failure_tags": {
+              "expected": 0,
+              "observed": 0,
+              "verdict": "ok"
+            },
+            "failure_section": {
+              "expected": false,
+              "observed": false,
+              "verdict": "ok"
+            },
+            "current_item": {
+              "expected": "I1@cycle:C8",
+              "observed": "I1@cycle:C8",
+              "verdict": "ok"
+            },
+            "retry_links": {
+              "expected": 1,
+              "observed": 1,
+              "verdict": "ok"
+            },
+            "retry_links_in_context": {
+              "expected": 1,
+              "observed": 1,
+              "verdict": "ok"
+            }
+          },
+          "holds_in_every_run": true,
+          "violations": 0,
+          "status_names_revisit_source": null,
+          "preserved": null,
+          "preserved_ok_in_every_run": null,
+          "readonly_unchanged_in_every_run": true
+        },
+        {
+          "case_id": "case-04",
+          "failed_attempts": 0,
+          "runs": 2,
+          "recovery_path": null,
+          "recoveries": 0,
+          "synthetic_approvals": 0,
+          "checks": {
+            "failure_refs": {
+              "expected": 0,
+              "observed": 0,
+              "verdict": "ok"
+            },
+            "failure_tags": {
+              "expected": 0,
+              "observed": 0,
+              "verdict": "ok"
+            },
+            "failure_section": {
+              "expected": false,
+              "observed": false,
+              "verdict": "ok"
+            },
+            "current_item": {
+              "expected": "I2@cycle:C3",
+              "observed": "I2@cycle:C3",
+              "verdict": "ok"
+            },
+            "retry_links": {
+              "expected": 1,
+              "observed": 1,
+              "verdict": "ok"
+            },
+            "retry_links_in_context": {
+              "expected": 1,
+              "observed": 1,
+              "verdict": "ok"
+            }
+          },
+          "holds_in_every_run": true,
+          "violations": 0,
+          "status_names_revisit_source": null,
+          "preserved": null,
+          "preserved_ok_in_every_run": null,
+          "readonly_unchanged_in_every_run": true
+        },
+        {
+          "case_id": "case-05",
+          "failed_attempts": 0,
+          "runs": 2,
+          "recovery_path": null,
+          "recoveries": 0,
+          "synthetic_approvals": 0,
+          "checks": {
+            "failure_refs": {
+              "expected": 0,
+              "observed": 0,
+              "verdict": "ok"
+            },
+            "failure_tags": {
+              "expected": 0,
+              "observed": 0,
+              "verdict": "ok"
+            },
+            "failure_section": {
+              "expected": false,
+              "observed": false,
+              "verdict": "ok"
+            },
+            "current_item": {
+              "expected": "I3@cycle:C4",
+              "observed": "I3@cycle:C4",
+              "verdict": "ok"
+            },
+            "retry_links": {
+              "expected": 1,
+              "observed": 1,
+              "verdict": "ok"
+            },
+            "retry_links_in_context": {
+              "expected": 1,
+              "observed": 1,
+              "verdict": "ok"
+            }
+          },
+          "holds_in_every_run": true,
+          "violations": 0,
+          "status_names_revisit_source": null,
+          "preserved": null,
+          "preserved_ok_in_every_run": null,
+          "readonly_unchanged_in_every_run": true
+        },
+        {
+          "case_id": "case-06",
+          "failed_attempts": 1,
+          "runs": 2,
+          "recovery_path": "app_approval",
+          "recoveries": 1,
+          "synthetic_approvals": 1,
+          "checks": {
+            "failure_refs": {
+              "expected": 1,
+              "observed": 1,
+              "verdict": "ok"
+            },
+            "failure_tags": {
+              "expected": 4,
+              "observed": 4,
+              "verdict": "ok"
+            },
+            "failure_section": {
+              "expected": true,
+              "observed": true,
+              "verdict": "ok"
+            },
+            "current_item": {
+              "expected": "I1@cycle:C3",
+              "observed": "I1@cycle:C3",
+              "verdict": "ok"
+            },
+            "retry_links": {
+              "expected": 2,
+              "observed": 2,
+              "verdict": "ok"
+            },
+            "retry_links_in_context": {
+              "expected": 2,
+              "observed": 2,
+              "verdict": "ok"
+            }
+          },
+          "holds_in_every_run": true,
+          "violations": 0,
+          "status_names_revisit_source": true,
+          "preserved": {
+            "archives": "1/1",
+            "originals": "4/4",
+            "capability_in_storage": false,
+            "problems": 0
+          },
+          "preserved_ok_in_every_run": true,
+          "readonly_unchanged_in_every_run": true
+        },
+        {
+          "case_id": "case-07",
+          "failed_attempts": 2,
+          "runs": 2,
+          "recovery_path": "app_approval",
+          "recoveries": 2,
+          "synthetic_approvals": 2,
+          "checks": {
+            "failure_refs": {
+              "expected": 2,
+              "observed": 2,
+              "verdict": "ok"
+            },
+            "failure_tags": {
+              "expected": 8,
+              "observed": 8,
+              "verdict": "ok"
+            },
+            "failure_section": {
+              "expected": true,
+              "observed": true,
+              "verdict": "ok"
+            },
+            "current_item": {
+              "expected": "I1@cycle:C4",
+              "observed": "I1@cycle:C4",
+              "verdict": "ok"
+            },
+            "retry_links": {
+              "expected": 3,
+              "observed": 3,
+              "verdict": "ok"
+            },
+            "retry_links_in_context": {
+              "expected": 3,
+              "observed": 3,
+              "verdict": "ok"
+            }
+          },
+          "holds_in_every_run": true,
+          "violations": 0,
+          "status_names_revisit_source": true,
+          "preserved": {
+            "archives": "2/2",
+            "originals": "8/8",
+            "capability_in_storage": false,
+            "problems": 0
+          },
+          "preserved_ok_in_every_run": true,
+          "readonly_unchanged_in_every_run": true
+        },
+        {
+          "case_id": "case-08",
+          "failed_attempts": 0,
+          "runs": 2,
+          "recovery_path": null,
+          "recoveries": 0,
+          "synthetic_approvals": 0,
+          "checks": {
+            "failure_refs": {
+              "expected": 0,
+              "observed": 0,
+              "verdict": "ok"
+            },
+            "failure_tags": {
+              "expected": 0,
+              "observed": 0,
+              "verdict": "ok"
+            },
+            "failure_section": {
+              "expected": false,
+              "observed": false,
+              "verdict": "ok"
+            },
+            "current_item": {
+              "expected": "I1@cycle:C2",
+              "observed": "I1@cycle:C2",
+              "verdict": "ok"
+            },
+            "retry_links": {
+              "expected": 1,
+              "observed": 1,
+              "verdict": "ok"
+            },
+            "retry_links_in_context": {
+              "expected": 1,
+              "observed": 1,
+              "verdict": "ok"
+            }
+          },
+          "holds_in_every_run": true,
+          "violations": 0,
+          "status_names_revisit_source": null,
+          "preserved": null,
+          "preserved_ok_in_every_run": null,
+          "readonly_unchanged_in_every_run": true
+        },
+        {
+          "case_id": "case-09",
+          "failed_attempts": 0,
+          "runs": 2,
+          "recovery_path": null,
+          "recoveries": 0,
+          "synthetic_approvals": 0,
+          "checks": {
+            "failure_refs": {
+              "expected": 0,
+              "observed": 0,
+              "verdict": "ok"
+            },
+            "failure_tags": {
+              "expected": 0,
+              "observed": 0,
+              "verdict": "ok"
+            },
+            "failure_section": {
+              "expected": false,
+              "observed": false,
+              "verdict": "ok"
+            },
+            "current_item": {
+              "expected": "I1@cycle:C2",
+              "observed": "I1@cycle:C2",
+              "verdict": "ok"
+            },
+            "retry_links": {
+              "expected": 1,
+              "observed": 1,
+              "verdict": "ok"
+            },
+            "retry_links_in_context": {
+              "expected": 1,
+              "observed": 1,
+              "verdict": "ok"
+            }
+          },
+          "holds_in_every_run": true,
+          "violations": 0,
+          "status_names_revisit_source": null,
+          "preserved": null,
+          "preserved_ok_in_every_run": null,
+          "readonly_unchanged_in_every_run": true
+        },
+        {
+          "case_id": "case-10",
+          "failed_attempts": 0,
+          "runs": 2,
+          "recovery_path": null,
+          "recoveries": 0,
+          "synthetic_approvals": 0,
+          "checks": {
+            "failure_refs": {
+              "expected": 0,
+              "observed": 0,
+              "verdict": "ok"
+            },
+            "failure_tags": {
+              "expected": 0,
+              "observed": 0,
+              "verdict": "ok"
+            },
+            "failure_section": {
+              "expected": false,
+              "observed": false,
+              "verdict": "ok"
+            },
+            "current_item": {
+              "expected": "I1@cycle:C2",
+              "observed": "I1@cycle:C2",
+              "verdict": "ok"
+            },
+            "retry_links": {
+              "expected": 1,
+              "observed": 1,
+              "verdict": "ok"
+            },
+            "retry_links_in_context": {
+              "expected": 1,
+              "observed": 1,
+              "verdict": "ok"
+            }
+          },
+          "holds_in_every_run": true,
+          "violations": 0,
+          "status_names_revisit_source": null,
+          "preserved": null,
+          "preserved_ok_in_every_run": null,
+          "readonly_unchanged_in_every_run": true
+        },
+        {
+          "case_id": "case-11",
+          "failed_attempts": 0,
+          "runs": 2,
+          "recovery_path": null,
+          "recoveries": 0,
+          "synthetic_approvals": 0,
+          "checks": {
+            "failure_refs": {
+              "expected": 0,
+              "observed": 0,
+              "verdict": "ok"
+            },
+            "failure_tags": {
+              "expected": 0,
+              "observed": 0,
+              "verdict": "ok"
+            },
+            "failure_section": {
+              "expected": false,
+              "observed": false,
+              "verdict": "ok"
+            },
+            "current_item": {
+              "expected": "I1@cycle:C2",
+              "observed": "I1@cycle:C2",
+              "verdict": "ok"
+            },
+            "retry_links": {
+              "expected": 1,
+              "observed": 1,
+              "verdict": "ok"
+            },
+            "retry_links_in_context": {
+              "expected": 1,
+              "observed": 1,
+              "verdict": "ok"
+            }
+          },
+          "holds_in_every_run": true,
+          "violations": 0,
+          "status_names_revisit_source": null,
+          "preserved": null,
+          "preserved_ok_in_every_run": null,
+          "readonly_unchanged_in_every_run": true
+        },
+        {
+          "case_id": "case-12",
+          "failed_attempts": 0,
+          "runs": 2,
+          "recovery_path": null,
+          "recoveries": 0,
+          "synthetic_approvals": 0,
+          "checks": {
+            "failure_refs": {
+              "expected": 0,
+              "observed": 0,
+              "verdict": "ok"
+            },
+            "failure_tags": {
+              "expected": 0,
+              "observed": 0,
+              "verdict": "ok"
+            },
+            "failure_section": {
+              "expected": false,
+              "observed": false,
+              "verdict": "ok"
+            },
+            "current_item": {
+              "expected": "I1@cycle:C2",
+              "observed": "I1@cycle:C2",
+              "verdict": "ok"
+            },
+            "retry_links": {
+              "expected": 1,
+              "observed": 1,
+              "verdict": "ok"
+            },
+            "retry_links_in_context": {
+              "expected": 1,
+              "observed": 1,
+              "verdict": "ok"
+            }
+          },
+          "holds_in_every_run": true,
+          "violations": 0,
+          "status_names_revisit_source": null,
+          "preserved": null,
+          "preserved_ok_in_every_run": null,
+          "readonly_unchanged_in_every_run": true
+        },
+        {
+          "case_id": "case-13",
+          "failed_attempts": 0,
+          "runs": 2,
+          "recovery_path": null,
+          "recoveries": 0,
+          "synthetic_approvals": 0,
+          "checks": {
+            "failure_refs": {
+              "expected": 0,
+              "observed": 0,
+              "verdict": "ok"
+            },
+            "failure_tags": {
+              "expected": 0,
+              "observed": 0,
+              "verdict": "ok"
+            },
+            "failure_section": {
+              "expected": false,
+              "observed": false,
+              "verdict": "ok"
+            },
+            "current_item": {
+              "expected": "I1@cycle:C2",
+              "observed": "I1@cycle:C2",
+              "verdict": "ok"
+            },
+            "retry_links": {
+              "expected": 1,
+              "observed": 1,
+              "verdict": "ok"
+            },
+            "retry_links_in_context": {
+              "expected": 1,
+              "observed": 1,
+              "verdict": "ok"
+            }
+          },
+          "holds_in_every_run": true,
+          "violations": 0,
+          "status_names_revisit_source": null,
+          "preserved": null,
+          "preserved_ok_in_every_run": null,
+          "readonly_unchanged_in_every_run": true
+        }
+      ]
+    }
+  },
+  "incomplete": [],
+  "limits": [
+    "크기는 UTF-8 바이트·유니코드 코드 포인트(\"문자\")·UTF-16 단위다(tools/context-metrics). 토큰 수가 아니며 토큰 계산기를 쓰지 않았다.",
+    "text 응답과 structuredContent는 서로 다른 표현이며 더하지 않는다. Host가 어느 표현을 모델 입력에 넣는지는 이 도구가 관측하지 않는다.",
+    "\"읽기 호출 text 합\"은 이 벤치가 고른 읽기 호출의 text 크기 합일 뿐 모델 입력량·전체 실행 비용이 아니다. 모델 호출이 없으므로 재조회·재시도·작업 정확성은 측정하지 않았다.",
+    "경로는 <project_root> 등 표식으로 가린 기록을 측정한다. 가리기 전 text 크기는 raw_text_utf8_bytes에 따로 적었다(임시 경로 길이에 따라 실행마다 다를 수 있다).",
+    "합성 기록이다. 문장 길이·항목 수가 실제 사용자 작업과 다르므로 절대값보다 축별 증가 모양을 본다. 한 번의 측정으로 임계값이나 CI 실패 기준을 만들지 않는다.",
+    "승인 계획 결정은 시험 harness가 App 경로로 보낸 합성 입력이다. 사람의 승인·화면 표시의 증거가 아니다.",
+    "실패 뒤 복구는 Core가 도구 목록에 내놓은 경로로 밟는다. 제품 구성(product-safety)에서는 App 전용 gil_revisit_review → gil_revisit_apply에 Core가 돌려준 digest와 비공개 승인 정보를 넣는 harness의 합성 승인이며, 사람이 Monitor 버튼을 누른 것이 아니다. Core가 그 입력을 monitor_button으로 적은 기록은 사람 클릭의 증거가 아니다. 승인 정보는 결과에 남기지 않는다.",
+    "보존 점검은 새 세션의 읽기 응답에 실패 Cycle 참조·표식·현재 항목·실행 연결이 문자열·구조로 남아 있는지, 승인 복구가 남긴 보존본의 bytes가 기록과 같은지만 본다. 복원된 파일 내용의 의미나 실제 Monitor 화면은 판정하지 않는다.",
+    "이 결과는 environment에 적힌 OS·CPU에서 한 번 실행한 기록이다. 다른 OS·CPU에서의 실행 성공을 뜻하지 않는다."
+  ],
+  "view": "summary",
+  "cases": [
+    {
+      "id": "case-01",
+      "scale": {
+        "chains": 0,
+        "cycles": 0,
+        "failures": 0,
+        "steps": 2,
+        "report_lines": 1,
+        "plan_items": 1
+      },
+      "axes": [
+        {
+          "axis": "chains",
+          "level": 0
+        },
+        {
+          "axis": "cycles",
+          "level": 0
+        },
+        {
+          "axis": "failures",
+          "level": 0
+        },
+        {
+          "axis": "steps",
+          "level": 2
+        },
+        {
+          "axis": "report_lines",
+          "level": 1
+        },
+        {
+          "axis": "plan_items",
+          "level": 1
+        }
+      ],
+      "status": "complete",
+      "estimated_calls": 24,
+      "repeat": {
+        "compared": 2,
+        "identical": true
+      },
+      "runs": [
+        {
+          "run": 1,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 21,
+            "refused_calls": 0,
+            "recovery": {
+              "path": null,
+              "recoveries": 0,
+              "synthetic_approvals": 0
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 9537,
+            "gil_files": 5,
+            "gil_bytes": 11362,
+            "preserved": null
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 0,
+            "failed_cycles": [],
+            "current": {
+              "cycle": "cycle:C2",
+              "item": "I1"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1172,
+            "across_tools_extra_utf8_bytes": 1172
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 6830,
+                "code_points": 3866,
+                "utf16_units": 3866
+              },
+              "structured_response": {
+                "utf8_bytes": 5930,
+                "code_points": 3541,
+                "utf16_units": 3541
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 6830,
+              "text_sha": "3b3f539517266425f892f06067eb60e4ad445d81b22c31d65654fbb589b2655b",
+              "structured_sha": "4aabb7d6d02fc6e92cf074f3aea8beb70025cfc84cc90441529048c5dfdaa799"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1476,
+                "code_points": 883,
+                "utf16_units": 883
+              },
+              "structured_response": {
+                "utf8_bytes": 568,
+                "code_points": 432,
+                "utf16_units": 432
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1476,
+              "text_sha": "c258f3f483014e7be5cca82e609351c0fbc3bd147bfcbc5b8e4d90c585b2ed3e",
+              "structured_sha": "3f8b2025dbd6ed73d3e232112590e3e333dce9c827af413bcc833195c5a49393"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 3652,
+                "code_points": 2495,
+                "utf16_units": 2495
+              },
+              "structured_response": {
+                "utf8_bytes": 3003,
+                "code_points": 2139,
+                "utf16_units": 2139
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 3652,
+              "text_sha": "1ce31ab7991e4877f51982648d1d73dfe4fea7bd97387b36bffa23c7b07892b3",
+              "structured_sha": "4d80d8231b0bc2e14bc18167c1059a3d809d27498108eeb2a54ac66b82c93353"
+            }
+          ]
+        },
+        {
+          "run": 2,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 21,
+            "refused_calls": 0,
+            "recovery": {
+              "path": null,
+              "recoveries": 0,
+              "synthetic_approvals": 0
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 9537,
+            "gil_files": 5,
+            "gil_bytes": 11362,
+            "preserved": null
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 0,
+            "failed_cycles": [],
+            "current": {
+              "cycle": "cycle:C2",
+              "item": "I1"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1172,
+            "across_tools_extra_utf8_bytes": 1172
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 6830,
+                "code_points": 3866,
+                "utf16_units": 3866
+              },
+              "structured_response": {
+                "utf8_bytes": 5930,
+                "code_points": 3541,
+                "utf16_units": 3541
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 6830,
+              "text_sha": "3b3f539517266425f892f06067eb60e4ad445d81b22c31d65654fbb589b2655b",
+              "structured_sha": "4aabb7d6d02fc6e92cf074f3aea8beb70025cfc84cc90441529048c5dfdaa799"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1476,
+                "code_points": 883,
+                "utf16_units": 883
+              },
+              "structured_response": {
+                "utf8_bytes": 568,
+                "code_points": 432,
+                "utf16_units": 432
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1476,
+              "text_sha": "c258f3f483014e7be5cca82e609351c0fbc3bd147bfcbc5b8e4d90c585b2ed3e",
+              "structured_sha": "3f8b2025dbd6ed73d3e232112590e3e333dce9c827af413bcc833195c5a49393"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 3652,
+                "code_points": 2495,
+                "utf16_units": 2495
+              },
+              "structured_response": {
+                "utf8_bytes": 3003,
+                "code_points": 2139,
+                "utf16_units": 2139
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 3652,
+              "text_sha": "1ce31ab7991e4877f51982648d1d73dfe4fea7bd97387b36bffa23c7b07892b3",
+              "structured_sha": "4d80d8231b0bc2e14bc18167c1059a3d809d27498108eeb2a54ac66b82c93353"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "case-02",
+      "scale": {
+        "chains": 1,
+        "cycles": 0,
+        "failures": 0,
+        "steps": 2,
+        "report_lines": 1,
+        "plan_items": 1
+      },
+      "axes": [
+        {
+          "axis": "chains",
+          "level": 1
+        }
+      ],
+      "status": "complete",
+      "estimated_calls": 66,
+      "repeat": {
+        "compared": 2,
+        "identical": true
+      },
+      "runs": [
+        {
+          "run": 1,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 63,
+            "refused_calls": 0,
+            "recovery": {
+              "path": null,
+              "recoveries": 0,
+              "synthetic_approvals": 0
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 27499,
+            "gil_files": 8,
+            "gil_bytes": 30461,
+            "preserved": null
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 0,
+            "failed_cycles": [],
+            "current": {
+              "cycle": "cycle:C5",
+              "item": "I1"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1172,
+            "across_tools_extra_utf8_bytes": 1172
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 7003,
+                "code_points": 3980,
+                "utf16_units": 3980
+              },
+              "structured_response": {
+                "utf8_bytes": 6107,
+                "code_points": 3659,
+                "utf16_units": 3659
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 7003,
+              "text_sha": "9d9645432d04f921567eeded495c473d4119c905fc1174cb96195a9d4741eb89",
+              "structured_sha": "00d2eb0bf7ceccbe0e283fab1ccf1d3dcae256b3b34b934727561109727eae23"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1478,
+                "code_points": 885,
+                "utf16_units": 885
+              },
+              "structured_response": {
+                "utf8_bytes": 570,
+                "code_points": 434,
+                "utf16_units": 434
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1478,
+              "text_sha": "3f02ae1d161ebf875acdcf350a19802355bf43f41638062a2f2b42b5ed597d6a",
+              "structured_sha": "704d7421bd152ce7ae5b652f224563ea95a8b353406500bde7b0f17b2910ec88"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 3652,
+                "code_points": 2495,
+                "utf16_units": 2495
+              },
+              "structured_response": {
+                "utf8_bytes": 3003,
+                "code_points": 2139,
+                "utf16_units": 2139
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 3652,
+              "text_sha": "12dc7fa0b7ca20ed46533adcd2b99b055a5852cb75bf94f8700a874d3adfa45d",
+              "structured_sha": "103b2889c09e444833b9cf4c1cf2df62ce187dbbb2ff1fa379f8bb9b3065eec5"
+            }
+          ]
+        },
+        {
+          "run": 2,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 63,
+            "refused_calls": 0,
+            "recovery": {
+              "path": null,
+              "recoveries": 0,
+              "synthetic_approvals": 0
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 27499,
+            "gil_files": 8,
+            "gil_bytes": 30461,
+            "preserved": null
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 0,
+            "failed_cycles": [],
+            "current": {
+              "cycle": "cycle:C5",
+              "item": "I1"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1172,
+            "across_tools_extra_utf8_bytes": 1172
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 7003,
+                "code_points": 3980,
+                "utf16_units": 3980
+              },
+              "structured_response": {
+                "utf8_bytes": 6107,
+                "code_points": 3659,
+                "utf16_units": 3659
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 7003,
+              "text_sha": "9d9645432d04f921567eeded495c473d4119c905fc1174cb96195a9d4741eb89",
+              "structured_sha": "00d2eb0bf7ceccbe0e283fab1ccf1d3dcae256b3b34b934727561109727eae23"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1478,
+                "code_points": 885,
+                "utf16_units": 885
+              },
+              "structured_response": {
+                "utf8_bytes": 570,
+                "code_points": 434,
+                "utf16_units": 434
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1478,
+              "text_sha": "3f02ae1d161ebf875acdcf350a19802355bf43f41638062a2f2b42b5ed597d6a",
+              "structured_sha": "704d7421bd152ce7ae5b652f224563ea95a8b353406500bde7b0f17b2910ec88"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 3652,
+                "code_points": 2495,
+                "utf16_units": 2495
+              },
+              "structured_response": {
+                "utf8_bytes": 3003,
+                "code_points": 2139,
+                "utf16_units": 2139
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 3652,
+              "text_sha": "12dc7fa0b7ca20ed46533adcd2b99b055a5852cb75bf94f8700a874d3adfa45d",
+              "structured_sha": "103b2889c09e444833b9cf4c1cf2df62ce187dbbb2ff1fa379f8bb9b3065eec5"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "case-03",
+      "scale": {
+        "chains": 2,
+        "cycles": 0,
+        "failures": 0,
+        "steps": 2,
+        "report_lines": 1,
+        "plan_items": 1
+      },
+      "axes": [
+        {
+          "axis": "chains",
+          "level": 2
+        }
+      ],
+      "status": "complete",
+      "estimated_calls": 108,
+      "repeat": {
+        "compared": 2,
+        "identical": true
+      },
+      "runs": [
+        {
+          "run": 1,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 105,
+            "refused_calls": 0,
+            "recovery": {
+              "path": null,
+              "recoveries": 0,
+              "synthetic_approvals": 0
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 45471,
+            "gil_files": 11,
+            "gil_bytes": 49623,
+            "preserved": null
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 0,
+            "failed_cycles": [],
+            "current": {
+              "cycle": "cycle:C8",
+              "item": "I1"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1172,
+            "across_tools_extra_utf8_bytes": 1172
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 7174,
+                "code_points": 4092,
+                "utf16_units": 4092
+              },
+              "structured_response": {
+                "utf8_bytes": 6282,
+                "code_points": 3775,
+                "utf16_units": 3775
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 7174,
+              "text_sha": "3c1fe122d9f102007482fc6c4b1f47796a041cc44955b7577db962f36f47a5d6",
+              "structured_sha": "269e28ff4e4afbd837b832c25e0a1420b3722b23fdc96fdece495a7d6ed7fe13"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1478,
+                "code_points": 885,
+                "utf16_units": 885
+              },
+              "structured_response": {
+                "utf8_bytes": 570,
+                "code_points": 434,
+                "utf16_units": 434
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1478,
+              "text_sha": "5489ab8d52f16824b3ae10cd0dcb7d3de4da67c10f4e865c15e49294a51754f9",
+              "structured_sha": "ab5f5eb2351be2ee5349fe2b3f31164c354d075aeeb505d9cfd93dd98598ae98"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 3652,
+                "code_points": 2495,
+                "utf16_units": 2495
+              },
+              "structured_response": {
+                "utf8_bytes": 3003,
+                "code_points": 2139,
+                "utf16_units": 2139
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 3652,
+              "text_sha": "2c7eda3e899656b8d709be035d71d429beb1b2c8c4011368cd32718bd66e1d50",
+              "structured_sha": "68c22f7687b8fd35441a937fb13a5b11f9c1f86cf02cf7b764041f32cdde972e"
+            }
+          ]
+        },
+        {
+          "run": 2,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 105,
+            "refused_calls": 0,
+            "recovery": {
+              "path": null,
+              "recoveries": 0,
+              "synthetic_approvals": 0
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 45471,
+            "gil_files": 11,
+            "gil_bytes": 49623,
+            "preserved": null
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 0,
+            "failed_cycles": [],
+            "current": {
+              "cycle": "cycle:C8",
+              "item": "I1"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1172,
+            "across_tools_extra_utf8_bytes": 1172
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 7174,
+                "code_points": 4092,
+                "utf16_units": 4092
+              },
+              "structured_response": {
+                "utf8_bytes": 6282,
+                "code_points": 3775,
+                "utf16_units": 3775
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 7174,
+              "text_sha": "3c1fe122d9f102007482fc6c4b1f47796a041cc44955b7577db962f36f47a5d6",
+              "structured_sha": "269e28ff4e4afbd837b832c25e0a1420b3722b23fdc96fdece495a7d6ed7fe13"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1478,
+                "code_points": 885,
+                "utf16_units": 885
+              },
+              "structured_response": {
+                "utf8_bytes": 570,
+                "code_points": 434,
+                "utf16_units": 434
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1478,
+              "text_sha": "5489ab8d52f16824b3ae10cd0dcb7d3de4da67c10f4e865c15e49294a51754f9",
+              "structured_sha": "ab5f5eb2351be2ee5349fe2b3f31164c354d075aeeb505d9cfd93dd98598ae98"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 3652,
+                "code_points": 2495,
+                "utf16_units": 2495
+              },
+              "structured_response": {
+                "utf8_bytes": 3003,
+                "code_points": 2139,
+                "utf16_units": 2139
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 3652,
+              "text_sha": "2c7eda3e899656b8d709be035d71d429beb1b2c8c4011368cd32718bd66e1d50",
+              "structured_sha": "68c22f7687b8fd35441a937fb13a5b11f9c1f86cf02cf7b764041f32cdde972e"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "case-04",
+      "scale": {
+        "chains": 0,
+        "cycles": 1,
+        "failures": 0,
+        "steps": 2,
+        "report_lines": 1,
+        "plan_items": 1
+      },
+      "axes": [
+        {
+          "axis": "cycles",
+          "level": 1
+        }
+      ],
+      "status": "complete",
+      "estimated_calls": 37,
+      "repeat": {
+        "compared": 2,
+        "identical": true
+      },
+      "runs": [
+        {
+          "run": 1,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 34,
+            "refused_calls": 0,
+            "recovery": {
+              "path": null,
+              "recoveries": 0,
+              "synthetic_approvals": 0
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 15681,
+            "gil_files": 8,
+            "gil_bytes": 18812,
+            "preserved": null
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 0,
+            "failed_cycles": [],
+            "current": {
+              "cycle": "cycle:C3",
+              "item": "I2"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1172,
+            "across_tools_extra_utf8_bytes": 1172
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 7287,
+                "code_points": 4177,
+                "utf16_units": 4177
+              },
+              "structured_response": {
+                "utf8_bytes": 6415,
+                "code_points": 3880,
+                "utf16_units": 3880
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 7287,
+              "text_sha": "7e09f82931cb8c3a83e50e7dcddf7a7e47a0c00403ee61b0fe8bdff826c1bae2",
+              "structured_sha": "a3ccd7b00c03d4551f73051fc1bffd0f8c7e9f7d1fa2221d21df50253920ea00"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1478,
+                "code_points": 885,
+                "utf16_units": 885
+              },
+              "structured_response": {
+                "utf8_bytes": 570,
+                "code_points": 434,
+                "utf16_units": 434
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1478,
+              "text_sha": "e8a81b4ac71a7b8d84e8b475d12a95264e14a6bca15fb8d76cd4691fe0f86cd1",
+              "structured_sha": "7896f11b738820e744acc670e0e3525fa4f680d1568cda7c76419e9e6d5c2a4a"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 4035,
+                "code_points": 2794,
+                "utf16_units": 2794
+              },
+              "structured_response": {
+                "utf8_bytes": 3386,
+                "code_points": 2438,
+                "utf16_units": 2438
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 4035,
+              "text_sha": "154732bfc7824e31f67da89f83a375459a055762af09c58ee0f918d335e16705",
+              "structured_sha": "7b19ff281a1c4a4aa1e0dcdf07ee1d6a824d68c886e674a17f5899a62a447994"
+            }
+          ]
+        },
+        {
+          "run": 2,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 34,
+            "refused_calls": 0,
+            "recovery": {
+              "path": null,
+              "recoveries": 0,
+              "synthetic_approvals": 0
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 15681,
+            "gil_files": 8,
+            "gil_bytes": 18812,
+            "preserved": null
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 0,
+            "failed_cycles": [],
+            "current": {
+              "cycle": "cycle:C3",
+              "item": "I2"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1172,
+            "across_tools_extra_utf8_bytes": 1172
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 7287,
+                "code_points": 4177,
+                "utf16_units": 4177
+              },
+              "structured_response": {
+                "utf8_bytes": 6415,
+                "code_points": 3880,
+                "utf16_units": 3880
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 7287,
+              "text_sha": "7e09f82931cb8c3a83e50e7dcddf7a7e47a0c00403ee61b0fe8bdff826c1bae2",
+              "structured_sha": "a3ccd7b00c03d4551f73051fc1bffd0f8c7e9f7d1fa2221d21df50253920ea00"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1478,
+                "code_points": 885,
+                "utf16_units": 885
+              },
+              "structured_response": {
+                "utf8_bytes": 570,
+                "code_points": 434,
+                "utf16_units": 434
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1478,
+              "text_sha": "e8a81b4ac71a7b8d84e8b475d12a95264e14a6bca15fb8d76cd4691fe0f86cd1",
+              "structured_sha": "7896f11b738820e744acc670e0e3525fa4f680d1568cda7c76419e9e6d5c2a4a"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 4035,
+                "code_points": 2794,
+                "utf16_units": 2794
+              },
+              "structured_response": {
+                "utf8_bytes": 3386,
+                "code_points": 2438,
+                "utf16_units": 2438
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 4035,
+              "text_sha": "154732bfc7824e31f67da89f83a375459a055762af09c58ee0f918d335e16705",
+              "structured_sha": "7b19ff281a1c4a4aa1e0dcdf07ee1d6a824d68c886e674a17f5899a62a447994"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "case-05",
+      "scale": {
+        "chains": 0,
+        "cycles": 2,
+        "failures": 0,
+        "steps": 2,
+        "report_lines": 1,
+        "plan_items": 1
+      },
+      "axes": [
+        {
+          "axis": "cycles",
+          "level": 2
+        }
+      ],
+      "status": "complete",
+      "estimated_calls": 50,
+      "repeat": {
+        "compared": 2,
+        "identical": true
+      },
+      "runs": [
+        {
+          "run": 1,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 47,
+            "refused_calls": 0,
+            "recovery": {
+              "path": null,
+              "recoveries": 0,
+              "synthetic_approvals": 0
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 21799,
+            "gil_files": 10,
+            "gil_bytes": 25447,
+            "preserved": null
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 0,
+            "failed_cycles": [],
+            "current": {
+              "cycle": "cycle:C4",
+              "item": "I3"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1172,
+            "across_tools_extra_utf8_bytes": 1172
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 7742,
+                "code_points": 4486,
+                "utf16_units": 4486
+              },
+              "structured_response": {
+                "utf8_bytes": 6898,
+                "code_points": 4217,
+                "utf16_units": 4217
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 7742,
+              "text_sha": "7a0d88ec0bb935463fbf677baa622ea7ffc02a6389d79672c7c40eace8e85f71",
+              "structured_sha": "71ba0eeb25a190230f765605e98e1e1884abaf3c5dbaf0c135d872e6b696ae56"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1478,
+                "code_points": 885,
+                "utf16_units": 885
+              },
+              "structured_response": {
+                "utf8_bytes": 570,
+                "code_points": 434,
+                "utf16_units": 434
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1478,
+              "text_sha": "02165d3600f0bd843c8689688c72f28d1f387cc8b169def662ac4258952847be",
+              "structured_sha": "3ddbe201e5979283e0d67cac092da3c8da46b4ba6c8b93ebc4bfe9ff98dc486b"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 4418,
+                "code_points": 3093,
+                "utf16_units": 3093
+              },
+              "structured_response": {
+                "utf8_bytes": 3769,
+                "code_points": 2737,
+                "utf16_units": 2737
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 4418,
+              "text_sha": "f77e049f4453715796a3b8d65a3efef196b02e57198fff5e49d64e20396b05b5",
+              "structured_sha": "ab8515179cfed8c4cf5ad823a018e36cd169a4484ca85dfedb48796997300ad5"
+            }
+          ]
+        },
+        {
+          "run": 2,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 47,
+            "refused_calls": 0,
+            "recovery": {
+              "path": null,
+              "recoveries": 0,
+              "synthetic_approvals": 0
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 21799,
+            "gil_files": 10,
+            "gil_bytes": 25447,
+            "preserved": null
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 0,
+            "failed_cycles": [],
+            "current": {
+              "cycle": "cycle:C4",
+              "item": "I3"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1172,
+            "across_tools_extra_utf8_bytes": 1172
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 7742,
+                "code_points": 4486,
+                "utf16_units": 4486
+              },
+              "structured_response": {
+                "utf8_bytes": 6898,
+                "code_points": 4217,
+                "utf16_units": 4217
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 7742,
+              "text_sha": "7a0d88ec0bb935463fbf677baa622ea7ffc02a6389d79672c7c40eace8e85f71",
+              "structured_sha": "71ba0eeb25a190230f765605e98e1e1884abaf3c5dbaf0c135d872e6b696ae56"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1478,
+                "code_points": 885,
+                "utf16_units": 885
+              },
+              "structured_response": {
+                "utf8_bytes": 570,
+                "code_points": 434,
+                "utf16_units": 434
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1478,
+              "text_sha": "02165d3600f0bd843c8689688c72f28d1f387cc8b169def662ac4258952847be",
+              "structured_sha": "3ddbe201e5979283e0d67cac092da3c8da46b4ba6c8b93ebc4bfe9ff98dc486b"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 4418,
+                "code_points": 3093,
+                "utf16_units": 3093
+              },
+              "structured_response": {
+                "utf8_bytes": 3769,
+                "code_points": 2737,
+                "utf16_units": 2737
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 4418,
+              "text_sha": "f77e049f4453715796a3b8d65a3efef196b02e57198fff5e49d64e20396b05b5",
+              "structured_sha": "ab8515179cfed8c4cf5ad823a018e36cd169a4484ca85dfedb48796997300ad5"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "case-06",
+      "scale": {
+        "chains": 0,
+        "cycles": 0,
+        "failures": 1,
+        "steps": 2,
+        "report_lines": 1,
+        "plan_items": 1
+      },
+      "axes": [
+        {
+          "axis": "failures",
+          "level": 1
+        }
+      ],
+      "status": "complete",
+      "estimated_calls": 39,
+      "repeat": {
+        "compared": 2,
+        "identical": true
+      },
+      "runs": [
+        {
+          "run": 1,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 36,
+            "refused_calls": 0,
+            "recovery": {
+              "path": "app_approval",
+              "recoveries": 1,
+              "synthetic_approvals": 1
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 15571,
+            "gil_files": 15,
+            "gil_bytes": 24876,
+            "preserved": {
+              "expected": 1,
+              "archives": 1,
+              "complete": 1,
+              "original_files": 4,
+              "originals_verified": 4,
+              "core_source_records": {
+                "monitor_button": 1
+              },
+              "core_records_claim_human_click": 1,
+              "approvals_stored_as_approved": 1,
+              "capability_in_storage": false,
+              "problems": []
+            }
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 1,
+            "failed_cycles": [
+              "cycle:C2"
+            ],
+            "current": {
+              "cycle": "cycle:C3",
+              "item": "I1"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1172,
+            "across_tools_extra_utf8_bytes": 1172
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 7755,
+                "code_points": 4416,
+                "utf16_units": 4416
+              },
+              "structured_response": {
+                "utf8_bytes": 6889,
+                "code_points": 4125,
+                "utf16_units": 4125
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 7755,
+              "text_sha": "cfc7456f74fd07633477cf0c8e640295b6e66294ff8e4947f77270d82d10bea6",
+              "structured_sha": "bb58cdaf094354626596ca2268ef4c2fbefd700f18fbda523447aa6ea49e9ce4"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1531,
+                "code_points": 914,
+                "utf16_units": 914
+              },
+              "structured_response": {
+                "utf8_bytes": 624,
+                "code_points": 464,
+                "utf16_units": 464
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1531,
+              "text_sha": "56bf8ebcda07167a9a0efe730341dc1a0102549b28aadec784a3c61b88d7f476",
+              "structured_sha": "d31cf8d01910e1aaf9b661086f3b6dfe173ddba50c5b91e5eacdd0908fab556a"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 3705,
+                "code_points": 2548,
+                "utf16_units": 2548
+              },
+              "structured_response": {
+                "utf8_bytes": 3056,
+                "code_points": 2192,
+                "utf16_units": 2192
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 3705,
+              "text_sha": "781d006bb618e862ab98d7c31554c459e0488586dc8c64a264f282aa87666cdc",
+              "structured_sha": "8586730881ce9c61cd7e139ec8a0e5cf853edde9ab8286d2a3223ee3111931fb"
+            }
+          ]
+        },
+        {
+          "run": 2,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 36,
+            "refused_calls": 0,
+            "recovery": {
+              "path": "app_approval",
+              "recoveries": 1,
+              "synthetic_approvals": 1
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 15571,
+            "gil_files": 15,
+            "gil_bytes": 24876,
+            "preserved": {
+              "expected": 1,
+              "archives": 1,
+              "complete": 1,
+              "original_files": 4,
+              "originals_verified": 4,
+              "core_source_records": {
+                "monitor_button": 1
+              },
+              "core_records_claim_human_click": 1,
+              "approvals_stored_as_approved": 1,
+              "capability_in_storage": false,
+              "problems": []
+            }
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 1,
+            "failed_cycles": [
+              "cycle:C2"
+            ],
+            "current": {
+              "cycle": "cycle:C3",
+              "item": "I1"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1172,
+            "across_tools_extra_utf8_bytes": 1172
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 7755,
+                "code_points": 4416,
+                "utf16_units": 4416
+              },
+              "structured_response": {
+                "utf8_bytes": 6889,
+                "code_points": 4125,
+                "utf16_units": 4125
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 7755,
+              "text_sha": "cfc7456f74fd07633477cf0c8e640295b6e66294ff8e4947f77270d82d10bea6",
+              "structured_sha": "bb58cdaf094354626596ca2268ef4c2fbefd700f18fbda523447aa6ea49e9ce4"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1531,
+                "code_points": 914,
+                "utf16_units": 914
+              },
+              "structured_response": {
+                "utf8_bytes": 624,
+                "code_points": 464,
+                "utf16_units": 464
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1531,
+              "text_sha": "56bf8ebcda07167a9a0efe730341dc1a0102549b28aadec784a3c61b88d7f476",
+              "structured_sha": "d31cf8d01910e1aaf9b661086f3b6dfe173ddba50c5b91e5eacdd0908fab556a"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 3705,
+                "code_points": 2548,
+                "utf16_units": 2548
+              },
+              "structured_response": {
+                "utf8_bytes": 3056,
+                "code_points": 2192,
+                "utf16_units": 2192
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 3705,
+              "text_sha": "781d006bb618e862ab98d7c31554c459e0488586dc8c64a264f282aa87666cdc",
+              "structured_sha": "8586730881ce9c61cd7e139ec8a0e5cf853edde9ab8286d2a3223ee3111931fb"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "case-07",
+      "scale": {
+        "chains": 0,
+        "cycles": 0,
+        "failures": 2,
+        "steps": 2,
+        "report_lines": 1,
+        "plan_items": 1
+      },
+      "axes": [
+        {
+          "axis": "failures",
+          "level": 2
+        }
+      ],
+      "status": "complete",
+      "estimated_calls": 54,
+      "repeat": {
+        "compared": 2,
+        "identical": true
+      },
+      "runs": [
+        {
+          "run": 1,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 51,
+            "refused_calls": 0,
+            "recovery": {
+              "path": "app_approval",
+              "recoveries": 2,
+              "synthetic_approvals": 2
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 21615,
+            "gil_files": 24,
+            "gil_bytes": 37558,
+            "preserved": {
+              "expected": 2,
+              "archives": 2,
+              "complete": 2,
+              "original_files": 8,
+              "originals_verified": 8,
+              "core_source_records": {
+                "monitor_button": 2
+              },
+              "core_records_claim_human_click": 2,
+              "approvals_stored_as_approved": 2,
+              "capability_in_storage": false,
+              "problems": []
+            }
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 2,
+            "failed_cycles": [
+              "cycle:C2",
+              "cycle:C3"
+            ],
+            "current": {
+              "cycle": "cycle:C4",
+              "item": "I1"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1172,
+            "across_tools_extra_utf8_bytes": 1172
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 8302,
+                "code_points": 4781,
+                "utf16_units": 4781
+              },
+              "structured_response": {
+                "utf8_bytes": 7465,
+                "code_points": 4519,
+                "utf16_units": 4519
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 8302,
+              "text_sha": "112f0a3d01cf7c45d26a5d47a4ab221f41df6c2a84630b717a890f852e38ddcb",
+              "structured_sha": "dd13ba2a0e06d2946dcc75a6d055e702bce1491f13c41ed7f39a1fe7f4ba83a9"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1531,
+                "code_points": 914,
+                "utf16_units": 914
+              },
+              "structured_response": {
+                "utf8_bytes": 624,
+                "code_points": 464,
+                "utf16_units": 464
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1531,
+              "text_sha": "5f9b7cfe142872af82940344d635e38cf5df513056324a09b7124ae46d184e49",
+              "structured_sha": "df9ca9087bfc4194192e79bb7cf7f90020fcb59c008bd0e1ef125212e5d8e727"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 3758,
+                "code_points": 2601,
+                "utf16_units": 2601
+              },
+              "structured_response": {
+                "utf8_bytes": 3109,
+                "code_points": 2245,
+                "utf16_units": 2245
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 3758,
+              "text_sha": "146a4cd557bbd549aa82b0726077efe2697361bfb672e7d5c4395dae5ad581f3",
+              "structured_sha": "76e0e16dc1940a5c18e8cfe74a24dda3d9ca7aea52c552bac280a1abf52cfd09"
+            }
+          ]
+        },
+        {
+          "run": 2,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 51,
+            "refused_calls": 0,
+            "recovery": {
+              "path": "app_approval",
+              "recoveries": 2,
+              "synthetic_approvals": 2
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 21615,
+            "gil_files": 24,
+            "gil_bytes": 37558,
+            "preserved": {
+              "expected": 2,
+              "archives": 2,
+              "complete": 2,
+              "original_files": 8,
+              "originals_verified": 8,
+              "core_source_records": {
+                "monitor_button": 2
+              },
+              "core_records_claim_human_click": 2,
+              "approvals_stored_as_approved": 2,
+              "capability_in_storage": false,
+              "problems": []
+            }
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 2,
+            "failed_cycles": [
+              "cycle:C2",
+              "cycle:C3"
+            ],
+            "current": {
+              "cycle": "cycle:C4",
+              "item": "I1"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1172,
+            "across_tools_extra_utf8_bytes": 1172
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 8302,
+                "code_points": 4781,
+                "utf16_units": 4781
+              },
+              "structured_response": {
+                "utf8_bytes": 7465,
+                "code_points": 4519,
+                "utf16_units": 4519
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 8302,
+              "text_sha": "112f0a3d01cf7c45d26a5d47a4ab221f41df6c2a84630b717a890f852e38ddcb",
+              "structured_sha": "dd13ba2a0e06d2946dcc75a6d055e702bce1491f13c41ed7f39a1fe7f4ba83a9"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1531,
+                "code_points": 914,
+                "utf16_units": 914
+              },
+              "structured_response": {
+                "utf8_bytes": 624,
+                "code_points": 464,
+                "utf16_units": 464
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1531,
+              "text_sha": "5f9b7cfe142872af82940344d635e38cf5df513056324a09b7124ae46d184e49",
+              "structured_sha": "df9ca9087bfc4194192e79bb7cf7f90020fcb59c008bd0e1ef125212e5d8e727"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 3758,
+                "code_points": 2601,
+                "utf16_units": 2601
+              },
+              "structured_response": {
+                "utf8_bytes": 3109,
+                "code_points": 2245,
+                "utf16_units": 2245
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 3758,
+              "text_sha": "146a4cd557bbd549aa82b0726077efe2697361bfb672e7d5c4395dae5ad581f3",
+              "structured_sha": "76e0e16dc1940a5c18e8cfe74a24dda3d9ca7aea52c552bac280a1abf52cfd09"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "case-08",
+      "scale": {
+        "chains": 0,
+        "cycles": 0,
+        "failures": 0,
+        "steps": 0,
+        "report_lines": 1,
+        "plan_items": 1
+      },
+      "axes": [
+        {
+          "axis": "steps",
+          "level": 0
+        }
+      ],
+      "status": "complete",
+      "estimated_calls": 20,
+      "repeat": {
+        "compared": 2,
+        "identical": true
+      },
+      "runs": [
+        {
+          "run": 1,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 17,
+            "refused_calls": 0,
+            "recovery": {
+              "path": null,
+              "recoveries": 0,
+              "synthetic_approvals": 0
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 7641,
+            "gil_files": 5,
+            "gil_bytes": 9466,
+            "preserved": null
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 0,
+            "failed_cycles": [],
+            "current": {
+              "cycle": "cycle:C2",
+              "item": "I1"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1683,
+            "across_tools_extra_utf8_bytes": 1683
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 6726,
+                "code_points": 3686,
+                "utf16_units": 3686
+              },
+              "structured_response": {
+                "utf8_bytes": 5816,
+                "code_points": 3351,
+                "utf16_units": 3351
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 6726,
+              "text_sha": "aa0f2eea76f9238a6cd63aa2900562c00817d935d5717f0e2ebf126d8ee8b061",
+              "structured_sha": "e593fe35576e574cde5f5855b09294f1a3f7e0707e5b82aaacebc3c3958e7d64"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1476,
+                "code_points": 883,
+                "utf16_units": 883
+              },
+              "structured_response": {
+                "utf8_bytes": 568,
+                "code_points": 432,
+                "utf16_units": 432
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1476,
+              "text_sha": "cd13a93a81e1aa996e80291fc0f5ddaf3f4830b1646550bcaf596b67de0f214c",
+              "structured_sha": "9492d1b622a508b56b89fa9892bdf9c6e95e08c0ff3b994eedc5318041542048"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 4674,
+                "code_points": 2925,
+                "utf16_units": 2925
+              },
+              "structured_response": {
+                "utf8_bytes": 3514,
+                "code_points": 2354,
+                "utf16_units": 2354
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 4674,
+              "text_sha": "d0b297c7434c52ba48615a8c5d48a589230e39e2586fe3d6d611166b2c9c6ee2",
+              "structured_sha": "7603513584ca353f6b90c2a6c736d5ea213bfa82e75f688340541ca1fe23c10d"
+            }
+          ]
+        },
+        {
+          "run": 2,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 17,
+            "refused_calls": 0,
+            "recovery": {
+              "path": null,
+              "recoveries": 0,
+              "synthetic_approvals": 0
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 7641,
+            "gil_files": 5,
+            "gil_bytes": 9466,
+            "preserved": null
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 0,
+            "failed_cycles": [],
+            "current": {
+              "cycle": "cycle:C2",
+              "item": "I1"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1683,
+            "across_tools_extra_utf8_bytes": 1683
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 6726,
+                "code_points": 3686,
+                "utf16_units": 3686
+              },
+              "structured_response": {
+                "utf8_bytes": 5816,
+                "code_points": 3351,
+                "utf16_units": 3351
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 6726,
+              "text_sha": "aa0f2eea76f9238a6cd63aa2900562c00817d935d5717f0e2ebf126d8ee8b061",
+              "structured_sha": "e593fe35576e574cde5f5855b09294f1a3f7e0707e5b82aaacebc3c3958e7d64"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1476,
+                "code_points": 883,
+                "utf16_units": 883
+              },
+              "structured_response": {
+                "utf8_bytes": 568,
+                "code_points": 432,
+                "utf16_units": 432
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1476,
+              "text_sha": "cd13a93a81e1aa996e80291fc0f5ddaf3f4830b1646550bcaf596b67de0f214c",
+              "structured_sha": "9492d1b622a508b56b89fa9892bdf9c6e95e08c0ff3b994eedc5318041542048"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 4674,
+                "code_points": 2925,
+                "utf16_units": 2925
+              },
+              "structured_response": {
+                "utf8_bytes": 3514,
+                "code_points": 2354,
+                "utf16_units": 2354
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 4674,
+              "text_sha": "d0b297c7434c52ba48615a8c5d48a589230e39e2586fe3d6d611166b2c9c6ee2",
+              "structured_sha": "7603513584ca353f6b90c2a6c736d5ea213bfa82e75f688340541ca1fe23c10d"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "case-09",
+      "scale": {
+        "chains": 0,
+        "cycles": 0,
+        "failures": 0,
+        "steps": 4,
+        "report_lines": 1,
+        "plan_items": 1
+      },
+      "axes": [
+        {
+          "axis": "steps",
+          "level": 4
+        }
+      ],
+      "status": "complete",
+      "estimated_calls": 28,
+      "repeat": {
+        "compared": 2,
+        "identical": true
+      },
+      "runs": [
+        {
+          "run": 1,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 25,
+            "refused_calls": 0,
+            "recovery": {
+              "path": null,
+              "recoveries": 0,
+              "synthetic_approvals": 0
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 11773,
+            "gil_files": 8,
+            "gil_bytes": 14729,
+            "preserved": null
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 0,
+            "failed_cycles": [],
+            "current": {
+              "cycle": "cycle:C2",
+              "item": "I1"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1004,
+            "across_tools_extra_utf8_bytes": 1004
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 7573,
+                "code_points": 4477,
+                "utf16_units": 4477
+              },
+              "structured_response": {
+                "utf8_bytes": 6698,
+                "code_points": 4177,
+                "utf16_units": 4177
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 7573,
+              "text_sha": "050751ed3bb25703c41001e0f24d951cdbf5ca89fe47320421e7ad87c9752373",
+              "structured_sha": "66b8bc0c0b4e4b2e777fb235391aa3ee40e19ad64d3a1759e03718bfe4ab4e0c"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1477,
+                "code_points": 884,
+                "utf16_units": 884
+              },
+              "structured_response": {
+                "utf8_bytes": 569,
+                "code_points": 433,
+                "utf16_units": 433
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1477,
+              "text_sha": "f6e329c40d8fcac02e1dbd1591cea72658b790ea01631e63652b7c14b1d6858c",
+              "structured_sha": "4c12217a1814a9cdc3e13fa01556ab641d3c497fbcbfb7f6014004e816fedb65"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 3316,
+                "code_points": 2355,
+                "utf16_units": 2355
+              },
+              "structured_response": {
+                "utf8_bytes": 2835,
+                "code_points": 2069,
+                "utf16_units": 2069
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 3316,
+              "text_sha": "35fc78dce94093bdb30d252f5e6aeeb8ce6b6bc16e3627a840707eb52d8fb44b",
+              "structured_sha": "22a5cf3d30a938c5b928779917b808f6095b6d7bdb55861cb8485041e53435a7"
+            }
+          ]
+        },
+        {
+          "run": 2,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 25,
+            "refused_calls": 0,
+            "recovery": {
+              "path": null,
+              "recoveries": 0,
+              "synthetic_approvals": 0
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 11773,
+            "gil_files": 8,
+            "gil_bytes": 14729,
+            "preserved": null
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 0,
+            "failed_cycles": [],
+            "current": {
+              "cycle": "cycle:C2",
+              "item": "I1"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1004,
+            "across_tools_extra_utf8_bytes": 1004
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 7573,
+                "code_points": 4477,
+                "utf16_units": 4477
+              },
+              "structured_response": {
+                "utf8_bytes": 6698,
+                "code_points": 4177,
+                "utf16_units": 4177
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 7573,
+              "text_sha": "050751ed3bb25703c41001e0f24d951cdbf5ca89fe47320421e7ad87c9752373",
+              "structured_sha": "66b8bc0c0b4e4b2e777fb235391aa3ee40e19ad64d3a1759e03718bfe4ab4e0c"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1477,
+                "code_points": 884,
+                "utf16_units": 884
+              },
+              "structured_response": {
+                "utf8_bytes": 569,
+                "code_points": 433,
+                "utf16_units": 433
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1477,
+              "text_sha": "f6e329c40d8fcac02e1dbd1591cea72658b790ea01631e63652b7c14b1d6858c",
+              "structured_sha": "4c12217a1814a9cdc3e13fa01556ab641d3c497fbcbfb7f6014004e816fedb65"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 3316,
+                "code_points": 2355,
+                "utf16_units": 2355
+              },
+              "structured_response": {
+                "utf8_bytes": 2835,
+                "code_points": 2069,
+                "utf16_units": 2069
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 3316,
+              "text_sha": "35fc78dce94093bdb30d252f5e6aeeb8ce6b6bc16e3627a840707eb52d8fb44b",
+              "structured_sha": "22a5cf3d30a938c5b928779917b808f6095b6d7bdb55861cb8485041e53435a7"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "case-10",
+      "scale": {
+        "chains": 0,
+        "cycles": 0,
+        "failures": 0,
+        "steps": 2,
+        "report_lines": 4,
+        "plan_items": 1
+      },
+      "axes": [
+        {
+          "axis": "report_lines",
+          "level": 4
+        }
+      ],
+      "status": "complete",
+      "estimated_calls": 24,
+      "repeat": {
+        "compared": 2,
+        "identical": true
+      },
+      "runs": [
+        {
+          "run": 1,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 21,
+            "refused_calls": 0,
+            "recovery": {
+              "path": null,
+              "recoveries": 0,
+              "synthetic_approvals": 0
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 10193,
+            "gil_files": 5,
+            "gil_bytes": 12018,
+            "preserved": null
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 0,
+            "failed_cycles": [],
+            "current": {
+              "cycle": "cycle:C2",
+              "item": "I1"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1172,
+            "across_tools_extra_utf8_bytes": 1172
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 7633,
+                "code_points": 4261,
+                "utf16_units": 4261
+              },
+              "structured_response": {
+                "utf8_bytes": 6741,
+                "code_points": 3944,
+                "utf16_units": 3944
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 7633,
+              "text_sha": "1f47be9dc264d3757addcaaecd36193928ea043f63fb2ea4e1d4497adcbd43e8",
+              "structured_sha": "bdc74ad8250cf4c581c24a7ec506b40e136beac7a72d57f8182663bb536dfbb9"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1476,
+                "code_points": 883,
+                "utf16_units": 883
+              },
+              "structured_response": {
+                "utf8_bytes": 568,
+                "code_points": 432,
+                "utf16_units": 432
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1476,
+              "text_sha": "c258f3f483014e7be5cca82e609351c0fbc3bd147bfcbc5b8e4d90c585b2ed3e",
+              "structured_sha": "3f8b2025dbd6ed73d3e232112590e3e333dce9c827af413bcc833195c5a49393"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 3652,
+                "code_points": 2495,
+                "utf16_units": 2495
+              },
+              "structured_response": {
+                "utf8_bytes": 3003,
+                "code_points": 2139,
+                "utf16_units": 2139
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 3652,
+              "text_sha": "1ce31ab7991e4877f51982648d1d73dfe4fea7bd97387b36bffa23c7b07892b3",
+              "structured_sha": "4d80d8231b0bc2e14bc18167c1059a3d809d27498108eeb2a54ac66b82c93353"
+            }
+          ]
+        },
+        {
+          "run": 2,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 21,
+            "refused_calls": 0,
+            "recovery": {
+              "path": null,
+              "recoveries": 0,
+              "synthetic_approvals": 0
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 10193,
+            "gil_files": 5,
+            "gil_bytes": 12018,
+            "preserved": null
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 0,
+            "failed_cycles": [],
+            "current": {
+              "cycle": "cycle:C2",
+              "item": "I1"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1172,
+            "across_tools_extra_utf8_bytes": 1172
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 7633,
+                "code_points": 4261,
+                "utf16_units": 4261
+              },
+              "structured_response": {
+                "utf8_bytes": 6741,
+                "code_points": 3944,
+                "utf16_units": 3944
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 7633,
+              "text_sha": "1f47be9dc264d3757addcaaecd36193928ea043f63fb2ea4e1d4497adcbd43e8",
+              "structured_sha": "bdc74ad8250cf4c581c24a7ec506b40e136beac7a72d57f8182663bb536dfbb9"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1476,
+                "code_points": 883,
+                "utf16_units": 883
+              },
+              "structured_response": {
+                "utf8_bytes": 568,
+                "code_points": 432,
+                "utf16_units": 432
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1476,
+              "text_sha": "c258f3f483014e7be5cca82e609351c0fbc3bd147bfcbc5b8e4d90c585b2ed3e",
+              "structured_sha": "3f8b2025dbd6ed73d3e232112590e3e333dce9c827af413bcc833195c5a49393"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 3652,
+                "code_points": 2495,
+                "utf16_units": 2495
+              },
+              "structured_response": {
+                "utf8_bytes": 3003,
+                "code_points": 2139,
+                "utf16_units": 2139
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 3652,
+              "text_sha": "1ce31ab7991e4877f51982648d1d73dfe4fea7bd97387b36bffa23c7b07892b3",
+              "structured_sha": "4d80d8231b0bc2e14bc18167c1059a3d809d27498108eeb2a54ac66b82c93353"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "case-11",
+      "scale": {
+        "chains": 0,
+        "cycles": 0,
+        "failures": 0,
+        "steps": 2,
+        "report_lines": 16,
+        "plan_items": 1
+      },
+      "axes": [
+        {
+          "axis": "report_lines",
+          "level": 16
+        }
+      ],
+      "status": "complete",
+      "estimated_calls": 24,
+      "repeat": {
+        "compared": 2,
+        "identical": true
+      },
+      "runs": [
+        {
+          "run": 1,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 21,
+            "refused_calls": 0,
+            "recovery": {
+              "path": null,
+              "recoveries": 0,
+              "synthetic_approvals": 0
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 12723,
+            "gil_files": 5,
+            "gil_bytes": 14548,
+            "preserved": null
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 0,
+            "failed_cycles": [],
+            "current": {
+              "cycle": "cycle:C2",
+              "item": "I1"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1172,
+            "across_tools_extra_utf8_bytes": 1172
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 9869,
+                "code_points": 5399,
+                "utf16_units": 5399
+              },
+              "structured_response": {
+                "utf8_bytes": 9001,
+                "code_points": 5106,
+                "utf16_units": 5106
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 9869,
+              "text_sha": "539514ac354e543b40e36fe8df91f77b219ae4af01b67d5cc75dcca8753e3227",
+              "structured_sha": "3258d77c8a0b6254aedc12ecb29348373685e1e9181870871d5df7e61e81818d"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1476,
+                "code_points": 883,
+                "utf16_units": 883
+              },
+              "structured_response": {
+                "utf8_bytes": 568,
+                "code_points": 432,
+                "utf16_units": 432
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1476,
+              "text_sha": "c258f3f483014e7be5cca82e609351c0fbc3bd147bfcbc5b8e4d90c585b2ed3e",
+              "structured_sha": "3f8b2025dbd6ed73d3e232112590e3e333dce9c827af413bcc833195c5a49393"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 3652,
+                "code_points": 2495,
+                "utf16_units": 2495
+              },
+              "structured_response": {
+                "utf8_bytes": 3003,
+                "code_points": 2139,
+                "utf16_units": 2139
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 3652,
+              "text_sha": "1ce31ab7991e4877f51982648d1d73dfe4fea7bd97387b36bffa23c7b07892b3",
+              "structured_sha": "4d80d8231b0bc2e14bc18167c1059a3d809d27498108eeb2a54ac66b82c93353"
+            }
+          ]
+        },
+        {
+          "run": 2,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 21,
+            "refused_calls": 0,
+            "recovery": {
+              "path": null,
+              "recoveries": 0,
+              "synthetic_approvals": 0
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 12723,
+            "gil_files": 5,
+            "gil_bytes": 14548,
+            "preserved": null
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 0,
+            "failed_cycles": [],
+            "current": {
+              "cycle": "cycle:C2",
+              "item": "I1"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1172,
+            "across_tools_extra_utf8_bytes": 1172
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 9869,
+                "code_points": 5399,
+                "utf16_units": 5399
+              },
+              "structured_response": {
+                "utf8_bytes": 9001,
+                "code_points": 5106,
+                "utf16_units": 5106
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 9869,
+              "text_sha": "539514ac354e543b40e36fe8df91f77b219ae4af01b67d5cc75dcca8753e3227",
+              "structured_sha": "3258d77c8a0b6254aedc12ecb29348373685e1e9181870871d5df7e61e81818d"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1476,
+                "code_points": 883,
+                "utf16_units": 883
+              },
+              "structured_response": {
+                "utf8_bytes": 568,
+                "code_points": 432,
+                "utf16_units": 432
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1476,
+              "text_sha": "c258f3f483014e7be5cca82e609351c0fbc3bd147bfcbc5b8e4d90c585b2ed3e",
+              "structured_sha": "3f8b2025dbd6ed73d3e232112590e3e333dce9c827af413bcc833195c5a49393"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 3652,
+                "code_points": 2495,
+                "utf16_units": 2495
+              },
+              "structured_response": {
+                "utf8_bytes": 3003,
+                "code_points": 2139,
+                "utf16_units": 2139
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 3652,
+              "text_sha": "1ce31ab7991e4877f51982648d1d73dfe4fea7bd97387b36bffa23c7b07892b3",
+              "structured_sha": "4d80d8231b0bc2e14bc18167c1059a3d809d27498108eeb2a54ac66b82c93353"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "case-12",
+      "scale": {
+        "chains": 0,
+        "cycles": 0,
+        "failures": 0,
+        "steps": 2,
+        "report_lines": 1,
+        "plan_items": 2
+      },
+      "axes": [
+        {
+          "axis": "plan_items",
+          "level": 2
+        }
+      ],
+      "status": "complete",
+      "estimated_calls": 24,
+      "repeat": {
+        "compared": 2,
+        "identical": true
+      },
+      "runs": [
+        {
+          "run": 1,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 21,
+            "refused_calls": 0,
+            "recovery": {
+              "path": null,
+              "recoveries": 0,
+              "synthetic_approvals": 0
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 9771,
+            "gil_files": 5,
+            "gil_bytes": 11596,
+            "preserved": null
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 0,
+            "failed_cycles": [],
+            "current": {
+              "cycle": "cycle:C2",
+              "item": "I1"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1172,
+            "across_tools_extra_utf8_bytes": 1172
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 6832,
+                "code_points": 3868,
+                "utf16_units": 3868
+              },
+              "structured_response": {
+                "utf8_bytes": 5932,
+                "code_points": 3543,
+                "utf16_units": 3543
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 6832,
+              "text_sha": "3ba0c8a94f8f25ae8312bd53598111bb5545e621d48a0544f163f52ed3de6651",
+              "structured_sha": "9069e700be5db4eb4f356385867d543f4fc2b321fc1f8f9fce85bb47964c246f"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1476,
+                "code_points": 883,
+                "utf16_units": 883
+              },
+              "structured_response": {
+                "utf8_bytes": 568,
+                "code_points": 432,
+                "utf16_units": 432
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1476,
+              "text_sha": "c258f3f483014e7be5cca82e609351c0fbc3bd147bfcbc5b8e4d90c585b2ed3e",
+              "structured_sha": "3f8b2025dbd6ed73d3e232112590e3e333dce9c827af413bcc833195c5a49393"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 4118,
+                "code_points": 2835,
+                "utf16_units": 2835
+              },
+              "structured_response": {
+                "utf8_bytes": 3469,
+                "code_points": 2479,
+                "utf16_units": 2479
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 4118,
+              "text_sha": "9b1ec83dce487a1aad6894de55a64a8fb8625285b101f55e396b962f33f000cb",
+              "structured_sha": "30843cd0c1b0d07f6bb830fad76570b60541a083e003f6d1e2625a37dd82d110"
+            }
+          ]
+        },
+        {
+          "run": 2,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 21,
+            "refused_calls": 0,
+            "recovery": {
+              "path": null,
+              "recoveries": 0,
+              "synthetic_approvals": 0
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 9771,
+            "gil_files": 5,
+            "gil_bytes": 11596,
+            "preserved": null
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 0,
+            "failed_cycles": [],
+            "current": {
+              "cycle": "cycle:C2",
+              "item": "I1"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1172,
+            "across_tools_extra_utf8_bytes": 1172
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 6832,
+                "code_points": 3868,
+                "utf16_units": 3868
+              },
+              "structured_response": {
+                "utf8_bytes": 5932,
+                "code_points": 3543,
+                "utf16_units": 3543
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 6832,
+              "text_sha": "3ba0c8a94f8f25ae8312bd53598111bb5545e621d48a0544f163f52ed3de6651",
+              "structured_sha": "9069e700be5db4eb4f356385867d543f4fc2b321fc1f8f9fce85bb47964c246f"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1476,
+                "code_points": 883,
+                "utf16_units": 883
+              },
+              "structured_response": {
+                "utf8_bytes": 568,
+                "code_points": 432,
+                "utf16_units": 432
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1476,
+              "text_sha": "c258f3f483014e7be5cca82e609351c0fbc3bd147bfcbc5b8e4d90c585b2ed3e",
+              "structured_sha": "3f8b2025dbd6ed73d3e232112590e3e333dce9c827af413bcc833195c5a49393"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 4118,
+                "code_points": 2835,
+                "utf16_units": 2835
+              },
+              "structured_response": {
+                "utf8_bytes": 3469,
+                "code_points": 2479,
+                "utf16_units": 2479
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 4118,
+              "text_sha": "9b1ec83dce487a1aad6894de55a64a8fb8625285b101f55e396b962f33f000cb",
+              "structured_sha": "30843cd0c1b0d07f6bb830fad76570b60541a083e003f6d1e2625a37dd82d110"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "case-13",
+      "scale": {
+        "chains": 0,
+        "cycles": 0,
+        "failures": 0,
+        "steps": 2,
+        "report_lines": 1,
+        "plan_items": 4
+      },
+      "axes": [
+        {
+          "axis": "plan_items",
+          "level": 4
+        }
+      ],
+      "status": "complete",
+      "estimated_calls": 24,
+      "repeat": {
+        "compared": 2,
+        "identical": true
+      },
+      "runs": [
+        {
+          "run": 1,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 21,
+            "refused_calls": 0,
+            "recovery": {
+              "path": null,
+              "recoveries": 0,
+              "synthetic_approvals": 0
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 10167,
+            "gil_files": 5,
+            "gil_bytes": 11992,
+            "preserved": null
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 0,
+            "failed_cycles": [],
+            "current": {
+              "cycle": "cycle:C2",
+              "item": "I1"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1172,
+            "across_tools_extra_utf8_bytes": 1172
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 6840,
+                "code_points": 3876,
+                "utf16_units": 3876
+              },
+              "structured_response": {
+                "utf8_bytes": 5940,
+                "code_points": 3551,
+                "utf16_units": 3551
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 6840,
+              "text_sha": "f9836e6757817742014012405469381173984b400abbfb429d94128e84c170d8",
+              "structured_sha": "fa25b8c9696cae3813c0a897d275a79aeb6a6064d83dfe589cda42f870f75afe"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1476,
+                "code_points": 883,
+                "utf16_units": 883
+              },
+              "structured_response": {
+                "utf8_bytes": 568,
+                "code_points": 432,
+                "utf16_units": 432
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1476,
+              "text_sha": "c258f3f483014e7be5cca82e609351c0fbc3bd147bfcbc5b8e4d90c585b2ed3e",
+              "structured_sha": "3f8b2025dbd6ed73d3e232112590e3e333dce9c827af413bcc833195c5a49393"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 5052,
+                "code_points": 3517,
+                "utf16_units": 3517
+              },
+              "structured_response": {
+                "utf8_bytes": 4403,
+                "code_points": 3161,
+                "utf16_units": 3161
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 5052,
+              "text_sha": "fafb4cd796a524f31c77a30c1e27d9d2a1f9c3f295b97ab38c5821a5db6556ad",
+              "structured_sha": "21f473a3a41aed299cf57e4a1f7620c2503d3c8e5321d27d15a3ed42e257bac4"
+            }
+          ]
+        },
+        {
+          "run": 2,
+          "status": "complete",
+          "error": null,
+          "generation": {
+            "calls": 21,
+            "refused_calls": 0,
+            "recovery": {
+              "path": null,
+              "recoveries": 0,
+              "synthetic_approvals": 0
+            }
+          },
+          "storage": {
+            "record_layout": "inline",
+            "state_utf8_bytes": 10167,
+            "gil_files": 5,
+            "gil_bytes": 11992,
+            "preserved": null
+          },
+          "readonly_unchanged": true,
+          "violations": [],
+          "lineage": {
+            "failed_attempts": 0,
+            "failed_cycles": [],
+            "current": {
+              "cycle": "cycle:C2",
+              "item": "I1"
+            },
+            "holds": true,
+            "violations": [],
+            "not_measured": []
+          },
+          "line_repeats": {
+            "repeated_lines": 4,
+            "extra_utf8_bytes": 1172,
+            "across_tools_extra_utf8_bytes": 1172
+          },
+          "reads": [
+            {
+              "tool": "gil_context",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 6840,
+                "code_points": 3876,
+                "utf16_units": 3876
+              },
+              "structured_response": {
+                "utf8_bytes": 5940,
+                "code_points": 3551,
+                "utf16_units": 3551
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 6840,
+              "text_sha": "f9836e6757817742014012405469381173984b400abbfb429d94128e84c170d8",
+              "structured_sha": "fa25b8c9696cae3813c0a897d275a79aeb6a6064d83dfe589cda42f870f75afe"
+            },
+            {
+              "tool": "gil_status",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 1476,
+                "code_points": 883,
+                "utf16_units": 883
+              },
+              "structured_response": {
+                "utf8_bytes": 568,
+                "code_points": 432,
+                "utf16_units": 432
+              },
+              "said_in_text": true,
+              "raw_text_utf8_bytes": 1476,
+              "text_sha": "c258f3f483014e7be5cca82e609351c0fbc3bd147bfcbc5b8e4d90c585b2ed3e",
+              "structured_sha": "3f8b2025dbd6ed73d3e232112590e3e333dce9c827af413bcc833195c5a49393"
+            },
+            {
+              "tool": "gil_plan_read",
+              "status": "ok",
+              "text_response": {
+                "utf8_bytes": 5052,
+                "code_points": 3517,
+                "utf16_units": 3517
+              },
+              "structured_response": {
+                "utf8_bytes": 4403,
+                "code_points": 3161,
+                "utf16_units": 3161
+              },
+              "said_in_text": null,
+              "raw_text_utf8_bytes": 5052,
+              "text_sha": "fafb4cd796a524f31c77a30c1e27d9d2a1f9c3f295b97ab38c5821a5db6556ad",
+              "structured_sha": "21f473a3a41aed299cf57e4a1f7620c2503d3c8e5321d27d15a3ed42e257bac4"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

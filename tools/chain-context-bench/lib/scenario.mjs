@@ -3,15 +3,47 @@
 // App-only plan decisions (`gil_plan_review` / `gil_plan_decide`) are synthetic harness input
 // recorded as such — they prove a Core path, not a person's approval.
 //
+// After a failed Experiment the walk goes back to the branch point through whichever recovery
+// path the Core under test offers (see RECOVERY). A product build (`product-safety`) refuses a
+// model's bare `gil_revisit`; there the harness takes the existing App-only approval path
+// `gil_revisit_review` → `gil_revisit_apply` with the digest and the private capability the Core
+// itself returned. That is synthetic harness input too: no protection is switched off, no refusal
+// is relaxed, and nothing here is a person's Monitor click.
+//
 // Every free-text Report field carries a short tag `ccbT-…`. After generation the measurement
 // layer looks the tags up in each read response to see at which resolution a layer arrived
 // (Context Model §2): e.g. a previous Cycle's Define problem must appear, its Verify result must not.
 
+/**
+ * A generation step that did not happen. `kind` says why, so a result never mixes them up:
+ *   core_refusal — the Core answered and refused the call (a tool execution failure for this walk)
+ *   harness      — the Core answered, but not with what the walk needs (no ref, no capability, …)
+ */
 export class GenerationError extends Error {
-  constructor(step, detail) { super(`${step}: ${detail}`); this.step = step; this.detail = detail; }
+  constructor(step, detail, kind = 'core_refusal') { super(`${step}: ${detail}`); this.step = step; this.detail = detail; this.kind = kind; }
 }
-/** A transition the selected Core profile refuses by design (e.g. revisit under product-safety). */
-export class UnsupportedError extends GenerationError {}
+/**
+ * A real condition under which this Core cannot make the transition at all — it reports the
+ * recovery as unsupported on this platform, or offers no recovery path. Not a failed call.
+ */
+export class UnsupportedError extends GenerationError {
+  constructor(step, detail) { super(step, detail, 'unsupported_condition'); }
+}
+
+/** How a failed Cycle is left for its branch point. Chosen from the tools the Core lists. */
+export const RECOVERY = {
+  /** `gil_revisit` called as a model would (builds without `product-safety`). */
+  model_revisit: 'model_revisit',
+  /** App-only `gil_revisit_review` → `gil_revisit_apply` with a synthetic harness approval. */
+  app_approval: 'app_approval',
+  /** The Core lists no recovery tool. */
+  none: 'none',
+};
+export function recoveryPathFor(toolNames) {
+  const has = (n) => toolNames.includes(n);
+  if (has('gil_revisit_review') && has('gil_revisit_apply')) return RECOVERY.app_approval;
+  return has('gil_revisit') ? RECOVERY.model_revisit : RECOVERY.none;
+}
 
 /** What each tagged layer should look like in gil_context; `bundle` = in at least one read call. */
 export const LAYER_EXPECTATIONS = {
@@ -62,11 +94,13 @@ const cycleNo = (r, step) => { const m = said(r).match(/cycle:C(\d+)/); if (!m) 
 
 /**
  * Walk the Core to `scale`. `g` supplies: root, model(name,args), app(name,args),
- * writeProjectFile(rel, text), typedVerify, locale. Returns counters and the tag book.
+ * writeProjectFile(rel, text), typedVerify, locale, recovery (a RECOVERY value),
+ * modelRevisitBlockedByProfile, onSecret. Returns counters, the tag book, the failed attempts
+ * and how each one was recovered. No capability token is ever part of the returned value.
  */
 export async function generate(g, scale) {
   const tags = new TagBook();
-  const counts = { chains_closed: 0, cycles_closed: 0, failures: 0, revisits: 0, plan_approvals: 0 };
+  const counts = { chains_closed: 0, cycles_closed: 0, failures: 0, revisits: 0, plan_approvals: 0, recovery_reviews: 0, recovery_approvals: 0 };
   const ok = (r, step) => { if (!r?.ok) throw new GenerationError(step, problemOf(r)); return r; };
   const call = async (step, name, args) => ok(await g.model(name, { project_root: g.root, ...args }), step);
   let scope = null;
@@ -163,6 +197,54 @@ export async function generate(g, scale) {
     return { cycle: n, item };
   }
 
+  /**
+   * Leave the failed Cycle `from` for the branch point `target`. The App path uses only what the
+   * Core's own review returned: its digest and its private capability. The capability is handed to
+   * `onSecret` before anything else can fail, and is never stored or returned.
+   */
+  async function recover(label, from, target) {
+    const path = g.recovery ?? RECOVERY.model_revisit;
+    const expected = { from: `cycle:C${from}`, target: `cycle:C${target}` };
+    if (path === RECOVERY.app_approval) {
+      const at = `${label}: revisit review`;
+      const review = ok(await g.app('gil_revisit_review', { scope_id: scope }), at);
+      const token = review.meta?.['gil/revisitApprovalToken'];
+      if (typeof token === 'string') g.onSecret?.(token);
+      const view = review.structured ?? {};
+      if (view.supported === false) throw new UnsupportedError(at, String(view.reason ?? 'the Core reports approved recovery as unsupported here'));
+      if (view.state !== 'awaiting_approval' || typeof view.digest !== 'string' || typeof token !== 'string') {
+        throw new GenerationError(at, `review is not an approvable plan (state ${JSON.stringify(view.state ?? null)}, digest ${typeof view.digest}, capability ${typeof token === 'string' ? 'present' : 'absent'})`, 'harness');
+      }
+      if (view.from !== expected.from || view.target !== expected.target) {
+        throw new GenerationError(at, `review plans ${view.from} → ${view.target}, the walk expected ${expected.from} → ${expected.target}`, 'harness');
+      }
+      counts.recovery_reviews += 1;
+      const applied = ok(await g.app('gil_revisit_apply', { scope_id: scope, digest: view.digest, token }), `${label}: revisit apply`);
+      if (applied.structured?.state !== 'completed') throw new GenerationError(`${label}: revisit apply`, `recovery state is ${JSON.stringify(applied.structured?.state ?? null)}, not completed`, 'harness');
+      counts.recovery_approvals += 1;
+      const changes = { create: 0, replace: 0, preserve: 0 };
+      for (const c of Array.isArray(view.changes) ? view.changes : []) if (c?.action in changes) changes[c.action] += 1;
+      return {
+        path, ...expected, changes, policy: view.policy ?? null, preserved_key: typeof view.pending_state_sha256 === 'string' ? view.pending_state_sha256 : null,
+        // What the Core wrote down as the source of this approval. In this bench the App input came
+        // from the harness, so `monitor_button` here is not evidence of a person's click.
+        core_approval_source: applied.structured.approval_source ?? null,
+      };
+    }
+    if (path === RECOVERY.model_revisit) {
+      const at = `${label}: gil_revisit`;
+      const r = await g.model('gil_revisit', { project_root: g.root });
+      if (!r?.ok) {
+        // Only a profile that blocks a model's revisit by design, on a Core without the approval
+        // tools, is an unsupported condition. Anywhere else the refusal is a failed call.
+        if (g.modelRevisitBlockedByProfile) throw new UnsupportedError(at, problemOf(r));
+        throw new GenerationError(at, problemOf(r));
+      }
+      return { path, ...expected, changes: null, policy: null, preserved_key: null, core_approval_source: null };
+    }
+    throw new UnsupportedError(`${label}: recovery`, 'this Core lists neither gil_revisit nor gil_revisit_review/gil_revisit_apply');
+  }
+
   // ── 1. Project start: the first Chain's Opening Interview is open. ─────────────────────────
   const started = await call('start', 'gil_start', g.locale ? { locale: g.locale } : {});
   scope = (said(started).match(/project:[0-9a-f]{64}/) ?? JSON.stringify(started.structured ?? {}).match(/project:[0-9a-f]{64}/))?.[0] ?? null;
@@ -204,14 +286,16 @@ export async function generate(g, scale) {
   if (branchPoint === null) branchPoint = opening.cycle;
 
   // ── 5. Accumulated failures on the same lineage: fail → revisit the branch point → retry. ──
+  const failed = [];
+  const recoveries = [];
   for (let f = 1; f <= scale.failures; f += 1) {
-    await experiment(`failed experiment ${f}`, { prefix: `f${f}`, projLayer: 'failure_projection', innerLayer: 'failure_inner', verdict: 'failure', target: `cycle:C${branchPoint}` });
-    const r = await g.model('gil_revisit', { project_root: g.root });
-    if (!r?.ok) throw new UnsupportedError(`failed experiment ${f}: gil_revisit`, problemOf(r));
+    const done = await experiment(`failed experiment ${f}`, { prefix: `f${f}`, projLayer: 'failure_projection', innerLayer: 'failure_inner', verdict: 'failure', target: `cycle:C${branchPoint}` });
+    failed.push({ attempt: f, cycle: done.cycle, item: done.item, prefix: `f${f}` });
+    recoveries.push(await recover(`failed experiment ${f}`, done.cycle, branchPoint));
     counts.revisits += 1;
   }
 
   // ── 6. The current Experiment: `steps` closed Steps, the next one open. ─────────────────────
   const current = await experiment('current experiment', { prefix: 'cur', projLayer: 'current_step', innerLayer: 'current_step', closeSteps: scale.steps, lines: scale.report_lines });
-  return { scope, counts, tags: tags.rows, current };
+  return { scope, counts, tags: tags.rows, current, branch_point: branchPoint, failed, recoveries };
 }
