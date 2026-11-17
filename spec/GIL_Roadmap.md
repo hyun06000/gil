@@ -392,6 +392,9 @@ typed close의 schema 수준 모양 오류와 큰 이미지의 분할 전송(`te
 문제 없음. `spec/GIL_Approved_Plan_v0.1.md`의 검증 명령 블록은 설명서 예시 검사가 지문으로 지키는 구간이라
 `tools/manual-example-check/examples.json`의 `SPEC-EXPLORE-SH` 지문을 재검토 뒤 갱신했다(실행하지 않는 목록 항목).
 
+검토 보완: 잘못된 입력 복구 시험의 Define을 ‘입력 파일이 비어 있는가?’로 맞췄다. 한 줄 입력이라는
+관측이 부정 답과 failure를 뒷받침하도록 한 시험 문구 수정이며, 실행 로직·제품 계약 변경은 없다.
+
 Windows에서는 로컬 실행을 하지 않았다. 이 보강의 Windows·macOS 자동 검사 결과는 이 변경의 PR에서
 Chain workflow 실행으로 확인하며, 그 전까지 Windows 통과로 세지 않는다.
 

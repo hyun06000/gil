@@ -420,7 +420,7 @@ fn invalid_input_changes_nothing_and_names_a_recovery_this_build_can_take() {
     ok(r.model("gil_open", json!({"kind":"define","contract":CONTRACT})), "define");
     r.write("stray.txt", "Verify 밖에서 쓴 파일\n");
     let (before, files) = (record_bytes(&r.record), world(&r.root));
-    let define_report = "problem: 입력 파일이 비어 있지 않은가?\nsuccess_condition: 입력 파일의 관측 증거가 위 명제의 긍정 답을 뒷받침한다\n";
+    let define_report = "problem: 입력 파일이 비어 있는가?\nsuccess_condition: 입력 파일의 관측 증거가 위 명제의 긍정 답을 뒷받침한다\n";
     let dirty = refused(r.model("gil_close", json!({"report":define_report})), "a Define close over a changed world");
     let told = everything(&dirty);
     for needle in ["Artifact 변경을 확정할 수 없다", "stray.txt", "이 빌드는 Artifact 되돌리기(restore)를 거부한다", "프로젝트 밖의 새 보존 위치로 옮긴다", "그대로 열려 있다"] {
