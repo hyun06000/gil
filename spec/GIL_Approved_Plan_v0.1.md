@@ -17,6 +17,17 @@ Cycle Model §12, §16–17, §21의 미정 저장 계약을 이 문서로 한�
 - Monitor는 전체 제안과 판·digest를 표시하고 실제 버튼 클릭으로 승인/수정 요청을 전송한다. 승인 데이터는 정확한 scope·판·digest에 묶인다. 수정 요청은 approved:no로만 닫을 수 있다. 에이전트가 approved:yes만 제출해서 닫을 수 없다.
 - App 전용 도구의 visibility는 인증이 아니다. 앱에만 전달되는 `_meta`의 256-bit 임시 capability를 추가로 검증한다. 토큰은 모델 응답/Context/저장소에 넣지 않는다. 서버 재시작 시 재발급한다. 이것은 정상 MCP Host에서의 입력 경로 구분이지 물리적 개인 신원 인증이나 악성 로컬 프로세스 방어가 아니다.
 - 승인은 Step을 자동으로 닫지 않는다. 버튼 처리 성공 후 앱은 사용자 동작에 따른 계속 요청을 Host 채팅에 보내며, 전달 실패 시 저장된 승인과 별개로 수동 계속 안내를 보여 준다. 자동 재조회는 메시지를 보내지 않는다. 에이전트는 승인 결과와 동일한 Report로 Synthesis, Outcome, Interview Cycle을 닫는다. 성공적으로 닫힌 Interview의 마지막 승인 Synthesis만 실행 가능한 계획이 된다.
+  - **2026-11-18 보완 — 계속 요청의 뜻을 응답과 제안에 맞춘다.** 계속 요청은 기록이 아니라 기록을 가리키는
+    안내다. 어느 경우에나 `gil_plan_read`로 저장된 응답·정확한 제안·`next`를 먼저 읽게 하고, 기록과 메시지가
+    다르면 기록을 따르게 한다. 저장된 응답과 그 제안의 `chain_verdict`에 따라 넷으로 나눈다.
+    수정 요청은 승인이 아니다(`approved: no`로 닫고 다음 Question에서 묻는다. Experiment를 열거나 Chain Report를
+    내지 않는다). 종료 제안(`chain_verdict`가 `success` 또는 `failure`)의 승인은 종료 절차로 이어진다(Synthesis →
+    Outcome → `close_chain` Cycle Report → 승인된 판정을 `verdict`로 적은 Chain Report. Experiment나 새 Chain을
+    열지 않고, Closing Interview 자신의 `success`를 Chain 판정으로 쓰지 않으며, Chain Report 뒤에는 사용자에게
+    알리고 멈춘다). `chain_verdict`가 없는 제안의 승인은 실행 계획이다(Synthesis·Outcome·Interview Cycle을 닫고
+    각 영수증의 다음 호출을 따라 Experiment로 간다). 화면이 가르지 못한 경우(알 수 없는 `chain_verdict` 값,
+    읽을 수 없는 제안)는 다음 행동을 추측하지 않고 `next`를 따르게 한다. 첫 클릭·명시적 재전송·App을 다시 연
+    뒤의 재전송은 같은 제안과 저장된 응답에서 같은 문장을 만든다. 저장 필드·승인 단계·도구 계약은 그대로다.
 - Experiment를 열 때 현재 승인 판의 첫 미실행 항목을 자동 바인딩한다. 과거 항목 정의와 실행 Cycle을 고치지 않는다. 새 Interview는 항목 추가·순서 변경을 허용하지만 기존 항목의 누락·정의 변경은 거절한다(취소/대체 의미는 별도 계약).
 - `[A,B,C]` 승인 후 A 실행, 다음 Interview에서 `[A,D,B,C]` 승인 시 pending은 `[D,B,C]`다. executed는 열렸다는 뜻이며 성공/실패는 연결된 Cycle Report가 진실원이다.
 - 읽기 응답(`gil_plan_read`/`gil_plan_review`)의 `supported:true`에는 read-only `current_cycle {ref, state}`가 있다. `ref`는 실제 현재 Cycle의 typed ref, `state`는 실제 닫힘 여부에 따른 `open`/`closed`다. `current_item`은 Cycle이 닫혀도 남는 바인딩이므로 열림의 증거가 아니다. 이 필드가 없는 응답(옛 Core, `supported:false`)에서 Monitor는 열림을 추정하지 않고 미확인으로 표시한다. 이 필드는 저장·승인·입력 의미를 바꾸지 않는다.
@@ -221,6 +232,16 @@ Chain Report 인계 형식)과 Monitor의 요구별 화면, 실제 모델·Host 
 답의 투영은 위 사용자 결정으로 철회했다. 같은 자리를 **연결된 실험의 원본 기록 조회**가 대신하며
 `exploration-flow` 프로필에 구현했다(아래 「원본 근거 조회」). 4번의 종료 인터뷰 검토는 그대로 남은
 일이고, 그 검토의 재료도 따로 쌓은 요약이 아니라 이 원본 기록이다.
+
+**2026-11-18 갱신 — 종료 승인 뒤의 안내와 인계 연결(4번의 안내 부분).** 종료 제안이 승인된 뒤에도 영수증이
+실행 계획이 승인된 것처럼 「실행 작업으로 넘어간다」「Experiment는 그 뒤에 연다」고 말하던 결손을 고쳤다. Core의
+검사(Closing Interview는 `close_chain`으로만 닫히고 Chain Report의 판정은 승인된 `chain_verdict`와 같아야 한다)는
+이미 있었고 바뀌지 않았다. 바뀐 것은 안내뿐이다: 승인된 종료 Synthesis의 `chain_verdict`를 기록에서 읽어 그 뒤의
+영수증·Context·`gil_plan_read`의 `next`가 Outcome → `close_chain` Cycle Report → 승인된 판정의 Chain Report를
+가리키고, 실행된 실험 뒤의 Synthesis는 종료 제안에 담을 것(질문별 답·근거 참조·반대 근거와 한계, 미해결, 마치는
+이유, 후속 후보)을, Chain Report 자리는 `handoff_summary`에 담을 것을 말한다. 닫힌 Chain 다음의 Opening Interview는
+이전 인계에서 출발하되 새 승인이 필요함을 첫 줄에서 말한다. 종료 인터뷰에서 요구별 답을 구조적으로 보여 주는
+화면·형식, Chain Report의 구조화된 인계 형식, 실제 모델·Host 평가는 그대로 남은 일이다.
 
 | 순서 | 구현 범위 | 검증할 경계 |
 | --- | --- | --- |
