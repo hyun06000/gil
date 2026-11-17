@@ -61,7 +61,7 @@ dogfood로 통과**해야 `[x]`가 된다.
 루트 README의 Mac preview.30 표기는 게시 장부보다 오래됐다. 배포 문서 정합 보완으로 남기되
 Chain 후속 개발보다 먼저 새 설치·배포를 시작하는 근거로 삼지 않는다.
 
-마지막 갱신: **2026-11-18** (아래 「2026-11-18 사용자 결정과 구현」; 그 밖의 서술은 11/17 기준).
+마지막 갱신: **2026-11-18** (아래 「2026-11-18 사용자 결정과 구현」과 「2026-11-18 구현 — 종료 승인 뒤의 안내와 다음 Chain 인계 연결」; 그 밖의 서술은 11/17 기준).
 PR #64–#118 통합 대조는 main `b1fa2f1`(2026-11-13) 기준이며 당시에는
 규범 명세를 바꾸지 않았다. 이후 `2ed66e3` 기준 검토에서 인터뷰 기반 `.gilignore`의 의미를 규범에
 반영하고 §7에 구현 잔여를 추가했다. 닫힌 실패 실험 복구의 자동 승인 모드도 명세에 추가했다(구현 대기).
@@ -547,6 +547,128 @@ CI 계약 7, 시나리오 도구 40, 문맥 지표·문서 연결 도구 26 통�
 모두 통과했다. 독립 로컬 검사도 기본 Core 1,637 통과·2 제외, 탐색 단위 780 통과·1 제외와 전체 대상
 build, JavaScript 묶음 364 통과·8 제외, 설명서 예시 21 통과·0 제외였다. 병합을 막는 검토 사항은
 해소됐다. 실제 모델의 추론·토큰 절감·Host 화면 인수와 설치·배포를 입증하는 결과는 아니다.
+
+### 2026-11-18 구현 — 종료 승인 뒤의 안내와 다음 Chain 인계 연결
+
+**상태: 안내 수정 + 회귀 시험, 자동 검증은 로컬 macOS. 저장 형식·필드·상태·전이·판정값·승인 단계·도구 계약·
+기록 이전 없음. 배포 구성·설치본 미반영. 실제 모델의 행동과 Host 화면은 미검증.** 아래 「현재 구현 순서」
+1번의 Chain 안 작업 4항(결과물 제시 → 정확한 종료 제안의 승인 → Chain 보고서 → 다음 Chain의 새 인터뷰) 가운데
+**안내 연결**이다. 다른 과제 순서는 그대로다.
+
+**재현한 결손 (기준 `8de75e9`, 실제 `gil mcp --serve` 프로세스와 Monitor App 모듈, 합성 프로젝트·합성 App 입력).**
+Core의 검사는 이미 올바랐다(Closing Interview는 `close_chain`으로만 닫히고 Chain Report의 판정은 승인된
+`chain_verdict`와 같아야 한다). 어긋난 것은 그 사이의 안내였다.
+
+| 자리 | 변경 전 | 문제 |
+| --- | --- | --- |
+| Monitor 승인·수정 요청 버튼 뒤의 채팅 계속 요청 (`mcp-app/plans.mjs` `continuation`) | 응답·제안과 무관한 한 문장: “…If approved, also close the Outcome and the Interview Cycle, then proceed to the Experiment. If changes were requested, …” | 종료 제안 승인에도 Experiment로 가라고 했다. 수정 요청에도 승인 경로를 함께 적었다. 명시적 재전송도 같은 문장 |
+| 승인된 종료 Synthesis를 닫은 영수증 | 「Cycle Report도 별도로 닫아야 실행 작업으로 넘어갈 수 있다」 | 종료 승인 뒤 실행 작업을 예고 |
+| Closing Interview의 Outcome을 닫은 영수증과 Host 안내 | 「Experiment는 그 성공 뒤에 열고…」「새 Experiment는 그 닫기가 성공한 뒤에 시작한다」 | 같은 문제. 골격은 `close_chain`을 채워 주는데 문장은 반대쪽을 가리킴 |
+| 승인 직후의 다음 호출 (`gil_plan_read.next`·Context) | 「제안 판 N이 승인됐다. close_report를 그대로…」 | 승인된 판정과 그 뒤의 종료 절차를 말하지 않음 |
+| Chain Report 자리의 다음 호출 (재시작 뒤 Context) | 「Chain Report를 제출한다 (verdict · …)」 | 어느 판정인지, Closing Interview의 `success`와 다르다는 점이 닫기 영수증의 골격에만 있음 |
+| `handoff_summary`에 담을 것 | 골격의 「탐색한 경로·실패·남은 질문 요약」뿐 | [Cycle Model §19](GIL_Cycle_Model_v0.1.md#19-chain-report)의 질문별 답·근거 참조·한계, 마치는 이유, 후속 후보(승인 아님)가 지침·영수증 어디에도 없음 |
+| 닫힌 Chain 다음 Chain의 첫 다음 호출 (재시작 뒤 Context) | 일반 문장 「새 Interview: gil_open(kind: question)…」 | 이전 인계에서 출발하고 새 승인이 필요하다는 안내가 Chain을 여는 영수증에만 있음 |
+
+**고친 것.**
+
+- **Monitor 계속 요청.** 저장된 응답과 그 정확한 제안의 `chain_verdict`로 넷을 가른다: 수정 요청 / 종료 제안
+  승인(`success`·`failure`) / 실행 계획 승인 / 화면이 가르지 못한 경우. 모두 `gil_plan_read`를 먼저 읽게 하고
+  기록과 다르면 기록을 따르게 한다. 종료 승인은 승인된 판정의 Chain Report까지 이끌고 Experiment·새 Chain을
+  열지 않게 하며, Closing Interview의 `success`가 Chain 판정이 아님을 말한다. 수정 요청은 승인이 아니라고
+  적는다. 알 수 없는 `chain_verdict` 값은 채팅으로 옮기지 않는다. 첫 클릭·명시적 재전송·App을 다시 연 뒤의
+  재전송이 같은 함수로 같은 문장을 만든다. 정본은
+  [승인 계획 계약의 「승인과 실행」](GIL_Approved_Plan_v0.1.md#승인과-실행). 화면에 보이는 문구와 버튼은 그대로다.
+- **Core 안내.** 읽기 전용 `Cycle::approved_chain_verdict`(현재 경로에서 가장 가까운 닫힌 Synthesis가
+  `approved: yes`이고 `chain_verdict`가 `success`·`failure`일 때만 값)를 더해, 종료 인터뷰의 영수증·Context·
+  `gil_plan_read.next`가 Outcome → `close_chain` Cycle Report → 승인된 판정의 Chain Report를 가리킨다. 수정 요청을
+  받은 종료 제안은 「승인이 아니며 Chain은 열린 채」라고 안내한다. 실행된 실험 뒤의 열린 Synthesis는 종료 제안에
+  담을 것을, Chain Report 자리는 `handoff_summary`에 담을 것을 말한다. 닫힌 Chain 다음 Chain의 첫 줄은 이전
+  인계에서 출발하되 인계의 후보가 승인이 아님을 말한다. 다섯 언어 문구 12개를 **더했고** 기존 문구는 고치지
+  않았다. 실행 계획 승인 경로의 문장은 글자 그대로이며 그 사실을 시험으로 고정했다.
+- **공통 지침.** `src/mcp/workflow.md` 세 곳(7번의 승인 응답, 7번의 종료 제안·인계 내용, 8번의 Monitor 결정 뒤
+  재개)과 `sync-workflow`로 생성한 Skill.
+- **명세.** 승인 계획 계약(계속 요청의 구분, 이행 4번의 안내 부분), Cycle Model §19, Context Model의 체인 간 인계에
+  날짜를 단 문단을 더했다. 과거 문장은 지우지 않았다.
+
+**다시 만들지 않은 것 — 이미 구현돼 있던 동작과 그 근거.**
+
+| 요구 | 이미 있던 구현·시험 |
+| --- | --- |
+| 종료 제안 전에 결과물을 먼저 제시 | 공통 지침 5번, `guide.closing_results_first`, `cmd.opened_closing_note` (11/15, §11 M6-B) |
+| Closing Interview는 `close_chain`으로만 닫히고 Chain Report 판정은 승인된 `chain_verdict`와 같아야 함 | `src/cycle.rs`·`src/chain.rs`의 닫기 검사, `tests/chain_closing.rs`, `src/approved_plan/tests.rs` |
+| 수정 요청은 `approved: no`로만 닫히고 맨 `approved: yes`·변조된 `close_report`는 거절 | `tests/approved_plan_wire_wave1.rs` |
+| Chain 종료 뒤 아무것도 열리지 않고 다음 Chain은 명시적 `gil_open(kind: chain)`뿐 | Core 거절과 `guide.closed.chain`, 같은 wire 시험 |
+| 다음 Chain이 이전 승인·계획·재인터뷰 요청을 재사용하지 않음(지난 capability·digest 거절, 이전 Chain의 digest로 연 실험 거절) | `tests/approved_plan_wire_wave1.rs`, `tests/exploration_flow.rs` |
+| 다음 Chain이 이전 Chain의 판정·인계 요약과 원본 기록을 읽음 | Context의 이전 Chain 투영(`tests/chain_handoff.rs`), `gil_report_read`(`tests/exploration_evidence.rs`) |
+| 요구별 답의 근거를 원본 기록에서 읽음, 별도의 잠정 정리 없음 | 위 「원본 근거 조회」(#161), 공통 지침 3번 |
+| 전달 실패 때 저장된 승인과 별개의 수동 안내, 명시적 클릭으로만 재전송, polling은 보내지 않음 | `mcp-app/plans.mjs`와 그 시험(#64·#73) |
+| 내장 설명서: 다음 Chain의 인터뷰는 이전 답·근거·남은 질문에서 시작 | `cycle/interview/clarify`(두 구성) — 바꾸지 않았다 |
+
+**추가한 회귀 시험.** 문자열 대조만이 아니라 실제 경로를 지난다.
+
+- `mcp-app/plans.test.mjs` 6건 — 실제 패널 모듈에서 신뢰된 버튼 클릭 → `gil_plan_decide` → 저장된 응답 →
+  `sendMessage`까지. 실행 계획 승인, 종료 승인(success·failure), 수정 요청(계획·종료 제안 모두), 판별 불가,
+  전달 실패 뒤 명시적 재전송(같은 문장, 승인 재기록 없음, polling·합성 클릭은 보내지 않음), 다시 연 화면이
+  저장된 응답만으로 만드는 재전송. 변경 전 모듈에 같은 시험을 돌리면 6건이 모두 실패한다(종료 승인 v2에
+  “then proceed to the Experiment”).
+- `tests/closing_handoff.rs` 4건(승인 프로필) + 1건(탐색 구성) — 실제 stdio 프로세스와 App 전용 승인 도구.
+  실행 계획 승인의 안내가 그대로인지, 종료 승인(success·failure 각각)이 단계마다 승인된 판정의 Chain Report로
+  이어지고 실행 쪽 문장이 없는지, 프로세스를 다시 띄워도 승인 직후·Chain Report 자리·종료 뒤가 기록만으로 같은
+  안내를 내는지, 승인과 다른 판정의 Chain Report·`open_child` Cycle Report·승인 전 Chain Report·종료 뒤의
+  Experiment/Interview 열기가 거절되고 기록이 바뀌지 않는지, 명시적 다음 Chain이 이전 인계를 싣고 이전 Chain의
+  승인된 `close_report`로는 새 Synthesis를 닫지 못하는지, 종료 제안의 수정 요청 뒤 Chain이 열린 채이고 고친
+  제안이 응답 없는 새 판인지. 탐색 구성 1건은 답하지 못한 요구가 있는 Chain이 승인된 `failure`로만 닫히고
+  (성공으로 바꾼 Chain Report 거절) 읽기 응답에 충족 여부 칸이 생기지 않으며, 다음 Chain에서 이전 Chain Report와
+  승인된 종료 Synthesis를 `gil_report_read`로 그대로 읽는지를 본다.
+- `tests/resume_guidance.rs`에 종료 경로 자리 다섯 곳의 재개 문맥, `src/mcp/guidance.rs`에 단위 시험 1건.
+- `.github/workflows/chain-core.yml`에 두 단계(승인 프로필 최소 4건, 탐색 구성 최소 5건 — `tools/ci/expect-tests.mjs`로
+  0건 실행을 통과로 세지 않는다).
+
+**검증 (2026-11-18, 로컬 macOS arm64).**
+
+- `approved-plan,visual-authoring,product-safety`: 단위 762 통과·1 제외(앞의 761 + 1), `closing_handoff` **4**
+  (`expect-tests` 최소 4), stdio 승인·복구·Monitor 고정 자료 17, 문맥·안내·설명서 65(문맥 17 + 안내 13 + 설명서 35),
+  보호 21 통과, 전체 대상 build 통과. 설명서 예시 실행 CX-00–07 통과(CX-07은 관측만), 예시 검사 21 통과, 문맥 측정
+  26 통과·1 제외.
+- `exploration-flow,visual-authoring,product-safety`: 단위 781 통과·1 제외, `exploration_flow` 4, `exploration_tools` 4,
+  `exploration_evidence` 6, `closing_handoff` **5**(각각 `expect-tests` 최소 4·4·6·5), 항목 큐 통합 시험군 45, 설명서 35
+  통과, 전체 대상 build 통과. 승인 프로필에서 탐색 전용 1건은 컴파일되지 않아 4건만 돈다.
+- 기본 Core `cargo test --locked -p gil --no-fail-fast` 1,638 통과·2 제외와 전체 대상 build. `chain-core` 159,
+  `chain-core,visual-authoring,product-safety`의 `visual_start` 단위 9 통과·1 제외·`mcp` 37·`visual_start` 1·
+  `chain_resume_benchmark` 1과 build, `recovery-auto-approval` 설정 4·stdio 5와 build 통과.
+- 화면/Plugin JS 239 통과·5 제외(앞의 233 + 6), 패키징/고지 105 통과·1 제외, CI 계약 7, 종료·인터뷰 평가·시나리오·
+  문맥 지표·문서 연결·재개 측정 도구 230 통과, workflow–Skill 일치 검사와 문서 연결 검사 문제 없음.
+- 첫 실행에서의 실패와 처리: Monitor 고정 자료 대조 1건(`chain_monitor_fixtures` — 계획 응답의 `next` 첫 줄이
+  종료 준비·다음 Chain 자리 네 파일에서 바뀜. 전용 도구로 두 번 생성해 바이트가 같음을 확인하고 갱신했다.
+  바뀐 것은 그 한 줄씩뿐이다). 새 통합 시험은 작성 중 두 번 고쳤다(재시작 뒤 첫 글 블록이 Monitor 표시 안내가
+  되는 것을 Host처럼 다시 표시 요청해 맞춤, 실행 계획 골격에도 있는 `Closing Interview` 낱말을 금지어에서 뺌).
+  Monitor 화면 묶음을 다시 만들어 고지 정책 세 파일의 `monitor.html` 해시를 갱신했다.
+- 재개 측정(한국어 제품 구성, 14개 상태·56회 조회): text 245,486 → **247,726바이트**(+2,240). 종료 경로 자리의
+  안내가 길어진 만큼이며 줄지 않았다. 실제 토큰·비용·정확성에 미치는 영향은 측정하지 않았다. 기존 기준선
+  파일은 당시 기록으로 두고 고치지 않았다.
+
+**남은 일과 한계.**
+
+- 자동 시험은 도구 경로의 합성 검증이다. App 승인은 합성 입력이고 `sendMessage`는 시험용 대역이다. 실제 Host가
+  메시지를 채팅에 전달·표시하는지, 실제 모델이 이 문장을 따라 종료 절차를 밟고 멈추는지, 종료 제안과 인계를
+  원본 기록에 근거해 쓰는지는 검증하지 않았다(M6-B·M6-D의 실제 모델·Host 인수 항목 그대로).
+- 종료 인터뷰에서 요구별 답·근거·한계를 구조적으로 보여 주는 화면·형식과 Chain Report의 구조화된 인계 형식은
+  여전히 남은 일이다. 이번 변경은 자유 서술 칸에 무엇을 담을지 안내할 뿐이며 Core는 그 내용을 검사하지 않는다.
+  구체적 표현·저장·조회 방식은 별도 결정 대상이다. 자유 서술 유지, 기존 기록의 읽기 투영, 저장 필드 추가 가운데
+  어느 방식도 이번 안내 수정으로 확정하지 않는다. 이 후속 결정은 기존 종료 계약을 따르는 안내 수정의 병합 조건이 아니다.
+- 바꾸지 않고 둔 것: 열린 Closing Outcome을 **여는** 영수증의 Host 안내는 일반 Interview Outcome 문장 그대로다
+  (종료 전용 문장은 그 자리의 Context·`gil_plan_read.next`와 앞뒤 영수증에 있다). 전달 실패 때 화면이 권하는 수동
+  문장(“GIL 승인 결과를 확인하고 계속해 줘”)은 수정 요청에도 같은 문장이다 — 에이전트가 기록을 읽으면 구분되므로
+  화면 문구는 고치지 않았다. Monitor 화면 표시·버튼은 그대로다.
+- 다섯 언어 가운데 통합 시험은 한국어 응답만 본다. 나머지는 자리 표시자 일치와 비어 있지 않음만 검사한다.
+- 로컬 실행은 macOS뿐이다. Windows는 이 변경의 PR 자동 검사 결과를 확인하기 전까지 통과로 세지 않는다.
+- 소스 변경이며 설치본·배포 구성에 반영하지 않았다. `exploration-flow`는 개발 구성 그대로다.
+
+**독립 검토 (2026-11-18, PR #162, 구현 `27c28f6`).** 승인된 종료 판정과 인터뷰 자체의 성공을
+구분하고, 저장된 승인 기록을 먼저 읽는 경로를 확인했다. 로컬에서 종료·인계 통합 5건(탐색 구성),
+화면·Plugin·패키징 묶음 344건 통과·6 제외를 재검증했다. 별도 잠정 판단 저장, 새 종료 상태,
+자동 다음 Chain 개설은 추가되지 않았다. 최종 커밋의 원격 검사 결과와 병합 기록은 PR에서 확인한다.
+이는 실제 모델 행동·Host 표시 인수나 구조화된 종료 보고서 설계의 확정을 뜻하지 않는다.
 
 ### 2026-11-17 현재 구현 순서 — Chain 최우선
 
@@ -3184,8 +3306,12 @@ Chain 인계는 합성 사례 10건과 오프라인 검사 도구로 평가할 �
       다섯 언어로 구현했다. 안내 계약 회귀 시험만 통과했고 실제 Host 검수는 아래 항목이다.
 - [x] 문서·분석·화면·코드·결과 없음·부분 결과·접근 실패·검증 뒤 변경·연결 유실·새 Chain의 합성 사례 10건과 오프라인 검사기를 준비한다 (#146).
 - [x] 명시적으로 제공된 원 사건·공개 메시지·파일 관측을 평가 입력으로 연결한다 (§2 작업 B, #149). 순서·승인 판·근거의 무결성과 의미적 품질을 구분한다.
+- [x] 종료 승인 뒤의 안내를 종료 절차로 연결한다. 2026-11-18: 승인 화면의 채팅 계속 요청과 Core 영수증·Context가
+      종료 제안 승인 뒤에도 Experiment로 안내하던 결손을 고쳤다(§2 「종료 승인 뒤의 안내와 다음 Chain 인계 연결」).
+      안내와 회귀 시험뿐이며 종료 검사·저장은 그대로다.
 - [ ] 실제 모델의 결과 유형별 제시, 결과 없음·부분 결과·접근 실패 대응을 평가한다.
 - [ ] 실제 Host에서 별도 요청 없이 결과를 확인하고 같은 흐름에서 종료 판단을 할 수 있는지 인수한다.
+- [ ] 종료 승인 뒤 실제 모델이 승인된 판정으로 Chain 보고서를 쓰고 멈추는지, 실제 Host가 계속 요청을 전달하는지 인수한다.
 
 아래 기존 Core 종료 검사 완료는 이 결과 제시 안내·실사용 검수까지 완료했다는 뜻이 아니다.
 
@@ -3211,6 +3337,8 @@ Chain 인계는 합성 사례 10건과 오프라인 검사 도구로 평가할 �
 - [x] Closed Chain 뒤 새 Chain의 Opening Interview를 연결하며 이전 Chain 전체 Step 대신 Chain Report를 전달한다.
 - [x] Chain-level parent/containment, Current, 보고서 조회와 그래프 탐색을 별도로 검증한다.
 - [x] 이전 Chain의 핵심 결과·실패·남은 의문을 다음 Chain Context로 전달하는 Core 합성 시나리오를 검사한다. 실제 모델의 활용 여부는 별도 인수다.
+- [x] 다음 Chain의 첫 다음 호출이 이전 인계에서 출발하되 새 승인이 필요함을 말하고, Chain Report 자리가
+      `handoff_summary`에 담을 것을 안내한다(2026-11-18, 안내만). 질문별 답을 구조화한 인계 형식은 미결이다.
 
 Chain-level revisit·다중 부모 merge는 이 직렬 연결의 자동 확장이 아니며 별도 미결이다.
 

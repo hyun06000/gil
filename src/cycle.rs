@@ -769,6 +769,29 @@ impl Cycle {
         Ok((target, synthesis))
     }
 
+    /// The Chain verdict this Interview's approved Synthesis carries, read from the record.
+    ///
+    /// `Some` only in a Closing Interview: the nearest closed Synthesis on the current path is
+    /// `approved: yes` and names `chain_verdict: success | failure`. An opening or re-planning
+    /// Interview, a declined proposal and a Synthesis that is still open all answer `None`.
+    /// This is the same Report the Cycle close and the Chain close already check; it stores and
+    /// judges nothing, and it is not this Interview's own verdict (which is always `success`).
+    pub fn approved_chain_verdict(&self) -> Option<(StepRef, &str)> {
+        if self.kind != CycleKind::Interview || !self.rules().supports_chain_closing() {
+            return None;
+        }
+        let path = self.steps.lineage(self.steps.current()?).ok()?;
+        let synthesis = path.iter().rev().find(|node| node.kind == NodeKind::Synthesis && node.is_closed())?;
+        let report = synthesis.report.as_ref()?;
+        if report.get(APPROVED) != Some(YES) {
+            return None;
+        }
+        match report.get("chain_verdict") {
+            Some(verdict @ ("success" | "failure")) => Some((self.step_ref(synthesis.id), verdict)),
+            _ => None,
+        }
+    }
+
     /// 이 Cycle 안의 Step 을 가리키는 **typed reference** — `step:C1/S4`.
     ///
     /// Step 이름은 소속 Cycle 안에서만 유일하다. 그래서 주소를 만드는 자리는 Cycle 이다 —

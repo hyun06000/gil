@@ -72,13 +72,17 @@ impl Chain {
             && self.cycles.current().is_closed()
             && self.cycles.current().declared_action() == Some("close_chain")
     }
-    pub fn close_hint(&self) -> String {
+    /// The closing Synthesis the user approved and the Chain verdict it carries, once the
+    /// Closing Interview is closed toward `close_chain`. Read from the record; nothing is judged.
+    pub fn approved_closing(&self) -> Option<(String, &str)> {
         let cycle = self.cycles.current();
-        let approved = cycle
+        cycle
             .report()
-            .and_then(|report| cycle.closing_synthesis(report).ok());
-        let (target, verdict) = approved
+            .and_then(|report| cycle.closing_synthesis(report).ok())
             .map(|(id, report)| (id.to_string(), report.get("chain_verdict").unwrap_or("")))
+    }
+    pub fn close_hint(&self) -> String {
+        let (target, verdict) = self.approved_closing()
             .unwrap_or((
                 crate::locale::text("chain.close_hint_target").into(),
                 "<success|failure>",

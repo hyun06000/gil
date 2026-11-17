@@ -1425,10 +1425,14 @@ fn next_block(cycle: &crate::Cycle) -> String {
     let openable = cycle.openable_here();
     let mut out = String::new();
     if cycle.kind() == CycleKind::Interview {
-        if cycle.can_close() {
-            out.push_str(text("cmd.next_interview_wrap_cycle"));
-        } else if openable.as_slice() == [NodeKind::Outcome] {
-            out.push_str(text("cmd.next_interview_wrap_outcome"));
+        // A Closing Interview leads to the Chain Report, never to execution work. Which one this
+        // is comes from the approved Synthesis on record, not from a guess.
+        match (cycle.approved_chain_verdict(), cycle.can_close(), openable.as_slice() == [NodeKind::Outcome]) {
+            (Some((_, verdict)), true, _) => out.push_str(&tr!("cmd.next_interview_wrap_cycle_closing", verdict = verdict)),
+            (Some((target, verdict)), false, true) => out.push_str(&tr!("cmd.next_interview_wrap_outcome_closing", target = target, verdict = verdict)),
+            (None, true, _) => out.push_str(text("cmd.next_interview_wrap_cycle")),
+            (None, false, true) => out.push_str(text("cmd.next_interview_wrap_outcome")),
+            _ => {}
         }
     }
     out.push_str(&match openable.as_slice() {

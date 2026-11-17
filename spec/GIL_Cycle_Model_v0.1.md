@@ -1453,6 +1453,13 @@ Chain으로 넘겨야 할 내용만 선별한다.
 
 전체 Cycle Report를 자동 투영하지 않는다. 세부 기록은 Graph에 남아 있으며 필요할 때 조회한다.
 
+**2026-11-18 안내 연결(계약 변경 없음).** 승인된 종료 Synthesis를 닫은 뒤의 영수증과 다음 호출 안내는 그
+Synthesis의 `chain_verdict`를 기록에서 읽어 Outcome → `close_chain` Cycle Report → 승인된 판정의 Chain Report
+순서를 가리킨다. Closing Interview 자신의 `success`가 Chain 판정이 아니라는 점과 Experiment를 열지 않는다는
+점을 같은 자리에서 말하고, Chain Report 자리의 안내는 위 `handoff_summary`에 담을 것을 적는다. 수정 요청을
+받은 종료 제안은 승인이 아니며 Chain은 열린 채로 남는다고 안내한다. 새 필드·상태·전이·검사는 없고 위의
+판정 일치 검사가 그대로 진실원이다. 종료 뒤 다음 Chain을 자동으로 열지 않는다.
+
 ---
 
 ## 20. 진행 방식과 사람의 확인 지점

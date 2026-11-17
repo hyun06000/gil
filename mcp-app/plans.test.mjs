@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makePlanReview, planSummary, planItems, currentCycle, verdictSentence, bannerLine, PLAN_STATE } from './plans.mjs';
+import { makePlanReview, planSummary, planItems, currentCycle, verdictSentence, bannerLine, PLAN_STATE, continuation, decisionKind } from './plans.mjs';
 import { makePlanPolling } from './plan-poll.mjs';
 // These assertions read the Korean table; the language-specific cases live in locale.test.mjs.
 import { setLocale } from '../ui/locale.js';
@@ -352,6 +352,138 @@ test('an undelivered continuation stays visible across polls and can be re-sent 
   assert.equal(r.actions('notify').length, 0);
   assert.match(r.panel.allText(), /채팅에 계속 요청을 전달했습니다/);
   assert.doesNotMatch(r.banner.allText(), /전달하지 못했습니다/);
+});
+
+// What the Agent is told after a decision (Cycle Model §18–19). The text travels the same path a
+// person's click takes: trusted button → gil_plan_decide → saved receipt → sendMessage. These
+// cases check the message this App sends; they do not show what a model does with it.
+const sent = (r, n = 0) => r.messages[n].content[0].text;
+const closingValue = (verdict, extra = {}) => {
+  const value = { supported: true, active_revision: 1, pending: [], executed_cycles: [{ cycle_ref: 'cycle:C2', revision: 1, item_id: 'A' }],
+    reinterview_requests: [], current_item: null, current_cycle: { ref: 'cycle:C3', state: 'open' },
+    proposal: proposal({ revision: 2, base_revision: 1, digest: 'd'.repeat(64), synthesis_ref: 'step:C3/S3', ...extra }) };
+  if (verdict !== undefined) value.proposal.draft.synthesis.chain_verdict = verdict;
+  return value;
+};
+const READS_RECORD_FIRST = /First read the actual record with gil_plan_read: .* If the record differs from this message, follow the record\./;
+
+test('an approved execution plan is continued toward the Experiment, after reading the record', async () => {
+  const r = rig(); await r.review.refresh();
+  await r.decisions()[0].click(true);
+  assert.equal(r.messages.length, 1);
+  const text = sent(r);
+  assert.match(text, /recorded an approval for plan v1 \(step:C1\/S3\)\./);
+  assert.match(text, READS_RECORD_FIRST);
+  assert.ok(text.indexOf('gil_plan_read') < text.indexOf('close the Synthesis'), 'the record is read before anything is closed');
+  assert.match(text, /close the Synthesis with its close_report unchanged, then the Outcome and the Interview Cycle Report, and follow each receipt's next call to the Experiment/);
+  assert.doesNotMatch(text, /Chain Report|close_chain|chain_verdict|change request/);
+});
+
+test('an approved closing proposal is continued to the Chain Report with the approved verdict, never to an Experiment', async () => {
+  for (const verdict of ['success', 'failure']) {
+    const r = rig({ value: closingValue(verdict) }); await r.review.refresh();
+    assert.match(r.panel.allText(), verdict === 'success' ? /성공으로 마치자는 제안/ : /실패로 마치자는 제안/);
+    await r.decisions()[0].click(true);
+    assert.equal(r.decides(), 1);
+    assert.deepEqual(r.calls.at(-1).arguments, { scope_id: 'project:one', revision: 2, digest: 'd'.repeat(64), token: 'private-token', decision: 'approve' });
+    assert.equal(r.messages.length, 1);
+    const text = sent(r);
+    assert.match(text, new RegExp(`recorded an approval for plan v2 \\(step:C3/S3\\): a proposal to close the Chain with chain_verdict "${verdict}"\\.`));
+    assert.match(text, READS_RECORD_FIRST);
+    assert.ok(text.indexOf('gil_plan_read') < text.indexOf('follow the closing procedure'), 'the record is read before the closing procedure');
+    assert.match(text, /next_direction\.action: close_chain/);
+    assert.match(text, new RegExp(`submit the Chain Report whose verdict is the approved chain_verdict \\(${verdict}\\), with closing_synthesis_ref step:C3/S3 and a handoff_summary`));
+    // The Interview's success is not the Chain's: said outright, for a failure approval as much as a success one.
+    assert.match(text, /The Closing Interview's own success only means this approval was obtained; it is not the Chain verdict\./);
+    assert.match(text, /Do not open an Experiment or a new Chain\. After the Chain Report, tell the user the verdict, the deliverables and the remaining questions, and stop\./);
+    assert.doesNotMatch(text, /proceed to the Experiment|next call to the Experiment|change request/);
+    assert.ok(!text.includes('private-token'));
+    // The other verdict is never named: the message carries the approved one only.
+    assert.ok(!text.includes(verdict === 'success' ? '"failure"' : '"success"'), text);
+  }
+});
+
+test('a change request is never worded as approval and closes nothing, for a plan and for a closing proposal alike', async () => {
+  for (const value of [undefined, closingValue('success'), closingValue('failure')]) {
+    const r = rig({ value }); await r.review.refresh();
+    await r.decisions()[1].click(true);
+    assert.equal(r.calls.at(-1).arguments.decision, 'request_changes');
+    assert.equal(r.panel.dataset.state, 'changes_requested');
+    assert.equal(r.messages.length, 1);
+    const text = sent(r);
+    assert.match(text, /recorded a change request, not an approval, for plan v\d \(step:C\d\/S3\)\./);
+    assert.match(text, READS_RECORD_FIRST);
+    assert.match(text, /close the Synthesis with its close_report \(approved: no\) and ask the user what to change in a new Question/);
+    assert.match(text, /Do not treat this as approval: open no Experiment, submit no Chain Report and reuse no earlier approval\./);
+    assert.doesNotMatch(text, /recorded an approval|closing procedure|close_chain|close_report unchanged|"success"|"failure"/);
+  }
+});
+
+test('a proposal this screen cannot classify sends the Agent to the record instead of guessing', async () => {
+  // An unknown chain_verdict value is quoted on screen and never read as success, failure or a plan.
+  const r = rig({ value: closingValue('maybe <b>x</b>') }); await r.review.refresh();
+  assert.match(r.panel.allText(), /성공이나 실패로 해석하지 않습니다/);
+  await r.decisions()[0].click(true);
+  const text = sent(r);
+  assert.match(text, /recorded a decision for plan v2 \(step:C3\/S3\), and this screen could not tell what follows it\./);
+  assert.match(text, READS_RECORD_FIRST);
+  assert.match(text, /Do not guess the next action or assume an approval: do what gil_plan_read's next says\./);
+  assert.doesNotMatch(text, /maybe|Experiment|Chain Report|close_chain|recorded an approval/, 'the unknown value is not carried into the chat');
+  // The classification itself: only the two recorded decisions and the two verdicts are named.
+  const p = proposal();
+  assert.deepEqual(decisionKind(p, 'approve'), { kind: 'plan' });
+  assert.deepEqual(decisionKind(p, 'request_changes'), { kind: 'changes' });
+  assert.deepEqual(decisionKind(closingValue('failure').proposal, 'approve'), { kind: 'closing', verdict: 'failure' });
+  assert.deepEqual(decisionKind(closingValue('failure').proposal, 'request_changes'), { kind: 'changes' });
+  for (const [broken, decision] of [[{ ...p, draft: null }, 'approve'], [{ ...p, draft: { synthesis: 'text' } }, 'approve'], [null, 'approve'],
+    [p, 'approved'], [p, undefined], [closingValue('Success').proposal, 'approve'], [closingValue(true).proposal, 'approve']]) {
+    assert.deepEqual(decisionKind(broken, decision), { kind: 'unknown' });
+    assert.match(continuation(broken ?? {}, decision), /Do not guess the next action or assume an approval/);
+  }
+  for (const empty of [undefined, null, '']) assert.deepEqual(decisionKind(closingValue(empty).proposal, 'approve'), { kind: 'plan' });
+});
+
+test('an undelivered closing approval is re-sent with the same meaning, only by an explicit click, and never re-approved', async () => {
+  const r = rig({ value: closingValue('failure') }); await r.review.refresh(); r.state.refuseMessage = true;
+  await r.decisions()[0].click(true);
+  assert.equal(r.panel.dataset.state, 'approved');
+  assert.match(r.banner.allText(), /채팅에 전달하지 못했습니다/);
+  assert.equal(r.messages.length, 0);
+  await r.review.refresh(); await r.review.refresh();
+  assert.equal(r.messages.length, 0, 'polling never sends the continuation');
+  const retry = r.actions('notify')[0];
+  await retry.click(false); assert.equal(r.messages.length, 0, 'a synthetic click sends nothing');
+  r.state.refuseMessage = false;
+  await retry.click(true);
+  assert.equal(r.messages.length, 1);
+  assert.equal(sent(r), continuation(closingValue('failure').proposal, 'approve'), 'the re-send is the closing continuation, word for word');
+  assert.match(sent(r), /chain_verdict "failure"/);
+  assert.equal(r.decides(), 1, 're-sending the message never repeats the approval');
+  assert.equal(r.actions('notify').length, 0);
+});
+
+test('after a restart the saved receipt alone decides what a re-sent continuation says', async () => {
+  // A fresh screen (new App instance) reads a proposal whose decision is already saved: it has
+  // no approval capability, sends nothing by itself, and an explicit re-send says what the
+  // first click would have said for that exact proposal and decision.
+  for (const [verdict, decision, expected] of [['failure', 'approve', /close the Chain with chain_verdict "failure"/], ['success', 'approve', /close the Chain with chain_verdict "success"/],
+    ['success', 'request_changes', /a change request, not an approval/], [undefined, 'approve', /next call to the Experiment/]]) {
+    const value = closingValue(verdict);
+    value.proposal.receipt = { decision, source: 'monitor_button' };
+    const r = rig({ value }); await r.review.refresh();
+    assert.equal(r.panel.dataset.state, decision === 'approve' ? 'approved' : 'changes_requested');
+    assert.equal(r.decisions().length, 0, 'a decided proposal offers no decision button');
+    assert.equal(r.messages.length, 0, 'reading a saved receipt is not a click');
+    assert.match(r.panel.allText(), /채팅 전달 여부를 확인하지 못했습니다/);
+    await r.review.refresh();
+    assert.equal(r.messages.length, 0);
+    await r.actions('notify')[0].click(true);
+    assert.equal(r.messages.length, 1);
+    assert.equal(sent(r), continuation(value.proposal, decision));
+    assert.match(sent(r), expected);
+    assert.equal(r.decides(), 0, 'the restart path never writes a decision');
+    if (decision === 'request_changes') assert.doesNotMatch(sent(r), /recorded an approval|closing procedure/);
+  }
 });
 
 test('closing proposals say which Chain verdict the approval agrees to, keeping the full text', async () => {

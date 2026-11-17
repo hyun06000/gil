@@ -110,8 +110,44 @@ export function bannerLine(summary, delivery = null) {
 }
 
 // Addressed to the Agent, so it stays English whatever language the Monitor shows.
-export const continuation = (p, decision) =>
-  `The GIL Monitor recorded ${decision === 'approve' ? 'an approval' : 'a change request'} for plan v${p.revision} (${p.synthesis_ref}). Read the actual record with gil_plan_read and close the Synthesis with its close_report to proceed. If approved, also close the Outcome and the Interview Cycle, then proceed to the Experiment. If changes were requested, ask about them in the next Question. Answer the user in their language.`;
+//
+// The message points at the record; it is not the record. Every variant sends the Agent to
+// gil_plan_read first, and which variant applies is read from the exact proposal the decision
+// was recorded for (Cycle Model §18–19, Approved Plan "승인과 실행"):
+//   request_changes                         → not an approval; nothing closes, no Experiment
+//   approve + chain_verdict success|failure → the closing procedure; no Experiment, no new Chain
+//   approve without chain_verdict           → the execution plan
+//   anything this screen cannot classify    → read the record and guess nothing
+// The first click, an explicit re-send and a re-send after the App restarted all build the text
+// here from the proposal as read, so they say the same thing.
+const READ_FIRST = 'First read the actual record with gil_plan_read: the saved receipt, the exact proposal and its `next` are the authority, not this message. If the record differs from this message, follow the record.';
+const ANSWER = 'Answer the user in their language.';
+
+/** What the recorded decision on this exact proposal means for the next step. Never inferred from a pending item. */
+export function decisionKind(p, decision) {
+  if (decision === 'request_changes') return { kind: 'changes' };
+  const synthesis = p?.draft?.synthesis;
+  if (decision !== 'approve' || !synthesis || typeof synthesis !== 'object') return { kind: 'unknown' };
+  const verdict = synthesis.chain_verdict;
+  if (verdict === undefined || verdict === null || verdict === '') return { kind: 'plan' };
+  if (verdict === 'success' || verdict === 'failure') return { kind: 'closing', verdict };
+  return { kind: 'unknown' };
+}
+
+export function continuation(p, decision) {
+  const plan = `plan v${p?.revision} (${p?.synthesis_ref})`;
+  const meaning = decisionKind(p, decision);
+  switch (meaning.kind) {
+    case 'changes':
+      return `The GIL Monitor recorded a change request, not an approval, for ${plan}. ${READ_FIRST} If the record confirms the change request, close the Synthesis with its close_report (approved: no) and ask the user what to change in a new Question. Do not treat this as approval: open no Experiment, submit no Chain Report and reuse no earlier approval. ${ANSWER}`;
+    case 'closing':
+      return `The GIL Monitor recorded an approval for ${plan}: a proposal to close the Chain with chain_verdict "${meaning.verdict}". ${READ_FIRST} If the record confirms it, follow the closing procedure: close the Synthesis with its close_report unchanged, then the Outcome, then the Interview Cycle Report with next_direction.action: close_chain, then submit the Chain Report whose verdict is the approved chain_verdict (${meaning.verdict}), with closing_synthesis_ref ${p.synthesis_ref} and a handoff_summary. The Closing Interview's own success only means this approval was obtained; it is not the Chain verdict. Do not open an Experiment or a new Chain. After the Chain Report, tell the user the verdict, the deliverables and the remaining questions, and stop. ${ANSWER}`;
+    case 'plan':
+      return `The GIL Monitor recorded an approval for ${plan}. ${READ_FIRST} If the record confirms the approval, close the Synthesis with its close_report unchanged, then the Outcome and the Interview Cycle Report, and follow each receipt's next call to the Experiment. ${ANSWER}`;
+    default:
+      return `The GIL Monitor recorded a decision for ${plan}, and this screen could not tell what follows it. ${READ_FIRST} Do not guess the next action or assume an approval: do what gil_plan_read's next says. ${ANSWER}`;
+  }
+}
 const manualContinue = () => t('plan.manual_continue');
 
 export function makePlanReview({ app, scope, panel, banner = null, document, changed = () => {} }) {
