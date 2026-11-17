@@ -1,0 +1,303 @@
+{
+  "format": 1,
+  "note": "Reviewed mapping from document excerpts to reviewed cases. Excerpt text is data; nothing here is executed except the explicit tool calls of the cases in lib/cases.mjs. A fingerprint is updated only after re-reviewing the excerpt and its case(s).",
+  "sources": [
+    { "path": "src/mcp/workflow.md", "served": "instructions", "inventory": { "sections": [] } },
+    { "path": "spec/GIL_Approved_Plan_v0.1.md", "inventory": { "sections": [] } },
+    { "path": "src/manual/topics/cycle/interview/clarify.md", "served": "topic:cycle/interview/clarify", "inventory": { "sections": ["[올바른 예]", "[흔한 실패]"] } },
+    { "path": "src/manual/topics/step/define/smallest.md", "served": "topic:step/define/smallest", "inventory": { "sections": ["[올바른 예]", "[흔한 실패]"] } },
+    { "path": "src/manual/topics/action/open-contract.md", "served": "topic:action/open-contract", "inventory": { "sections": ["[올바른 예]", "[흔한 실패]"] } }
+  ],
+  "examples": [
+    {
+      "id": "WF-PROPOSE-WRAPPER",
+      "source": { "path": "src/mcp/workflow.md", "locator": { "after": "7. **Approved plans (only where recorded).**", "before": "8. **Recover and keep the user informed.**", "fence": "json" } },
+      "sha256": "b529f446f17c6d97aac0fa6444b9d3f821596bc599619cfaef90986ac6725a9b",
+      "kind": "executable_template",
+      "payload": {
+        "parse": "json",
+        "placeholders": [
+          { "path": ["project_root"], "literal": "<absolute path>", "with": "project_root" },
+          { "path": ["draft", "synthesis", "basis_refs"], "literal": "step:C1/S1\nstep:C1/S2", "with": "issued_basis_refs" }
+        ],
+        "verbatim_content": ["…", "A"]
+      },
+      "served": true,
+      "cases": ["CX-00", "CX-01", "CX-02", "CX-03", "CX-05"],
+      "claim": "gil_plan_propose takes exactly {project_root, draft{scope, items, synthesis}}; with the project root and the issued Question/Interpretation refs substituted, the documented wrapper is accepted as written (its \"…\" values are sent verbatim)."
+    },
+    {
+      "id": "WF-PROPOSE-SHAPE",
+      "source": { "path": "src/mcp/workflow.md", "locator": { "from": "call `gil_plan_propose` with exactly two top-level fields,", "to": "including `chain_verdict` when proposing Chain closure:" } },
+      "sha256": "b6aa7e6f0b7d150db2c9c9a5903c92c1dbcac8529308160b8a4250980a4b16ff",
+      "kind": "rule_statement",
+      "served": true,
+      "cases": ["CX-02"],
+      "claim": "Extra fields at the top level, in draft, in scope or in an item are refused; draft fields outside draft are refused; synthesis values are strings."
+    },
+    {
+      "id": "WF-PROPOSE-FIELDS",
+      "source": { "path": "src/mcp/workflow.md", "locator": { "from": "`scope` has those five string fields", "to": "order, one per line." } },
+      "sha256": "9b87f9b4ce1e5384a9c157966243c63d99d13c914804afd74dbe369a829641b4",
+      "kind": "rule_statement",
+      "served": true,
+      "cases": ["CX-02"],
+      "claim": "scope has five non-empty string fields (write none instead of empty); items is an ordered list of 1–64; exploration_checklist lists the item IDs in the same order."
+    },
+    {
+      "id": "WF-BASIS-REPLACE",
+      "source": { "path": "src/mcp/workflow.md", "locator": { "from": "Replace the example's basis refs with the actual closed Question and", "to": "Interpretation refs in the current Synthesis lineage." } },
+      "sha256": "74045a5e1cafca29171f53fcf43339701c3147388df1bb736e71f2238d56f951",
+      "kind": "rule_statement",
+      "served": true,
+      "cases": ["CX-01", "CX-05"],
+      "claim": "The example's basis refs are placeholders: the issued refs of the current Interview are accepted, the literal example refs are refused once they point at another Cycle."
+    },
+    {
+      "id": "WF-BASIS-RULE",
+      "source": { "path": "src/mcp/workflow.md", "locator": { "from": "`basis_refs` is a nonempty newline-separated", "to": "open steps or abandoned branches." } },
+      "sha256": "aff482ff4eb6c7f8f19d5becf7831712e1f9ceff5fd6691c6eb53196fddb0640",
+      "kind": "rule_statement",
+      "served": true,
+      "cases": ["CX-01", "CX-02", "CX-05"],
+      "not_covered": ["abandoned branches (needs a revisit lineage; not constructed here)"],
+      "claim": "basis_refs is a nonempty newline-separated string of unique closed step refs of this Interview; commas, prose, Cycle refs, other-Cycle steps and open steps are refused line by line."
+    },
+    {
+      "id": "WF-TABLE-SYNTH-WAIT",
+      "source": { "path": "src/mcp/workflow.md", "locator": { "line": "| Synthesis is open and the user has not answered |" } },
+      "sha256": "19b3ba21bbf38b7d5f6adb2d6ef41b8797fff93da106e92a422ab3d84f5e959d",
+      "kind": "rule_statement",
+      "served": true,
+      "cases": ["CX-03"],
+      "claim": "Before the Monitor decision the Synthesis cannot be closed; the proposal waits."
+    },
+    {
+      "id": "WF-TABLE-SYNTH-APPROVED",
+      "source": { "path": "src/mcp/workflow.md", "locator": { "line": "| Synthesis is open and the user approved its statement |" } },
+      "sha256": "b4b79812473389fe4dd0ed79a3ac103c4e2844e4e2d15e372a2e50b6f39757aa",
+      "kind": "rule_statement",
+      "served": true,
+      "cases": ["CX-03"],
+      "claim": "After approval the Synthesis closes with the exact close_report, not a bare approved: yes."
+    },
+    {
+      "id": "WF-APPROVE-CLOSE",
+      "source": { "path": "src/mcp/workflow.md", "locator": { "from": "`receipt.decision: approve` → `gil_close` Synthesis with `close_report` **unchanged**", "to": "then `gil_close` the Interview Cycle Report." } },
+      "sha256": "93d341523d3b2bd0dc06aa220ce155a3fca680e1e1ab85eb20a557be8380fcb9",
+      "kind": "rule_statement",
+      "served": true,
+      "cases": ["CX-03", "CX-04"],
+      "claim": "An approved receipt is followed by close_report unchanged, Outcome open/close and the Interview Cycle Report; a tampered close_report is refused."
+    },
+    {
+      "id": "WF-CLOSE-REPORT-OWNER",
+      "source": { "path": "src/mcp/workflow.md", "locator": { "from": "`close_report` belongs to its Synthesis and is not the current Step's", "to": "follow the current-state `next` instead." } },
+      "sha256": "0fa6ae181de3afd5fdd16199091152117dbb6d995aa0a02c0df9a942cebdba22",
+      "kind": "rule_statement",
+      "served": true,
+      "cases": ["CX-03"],
+      "claim": "close_report is not reusable as the next Step's Report after the Synthesis closed."
+    },
+    {
+      "id": "WF-RECOVER-PLAN-STATE",
+      "source": { "path": "src/mcp/workflow.md", "locator": { "line": "| `gil_close`/`gil_open` refused with an approved-plan reason" } },
+      "sha256": "53dd18e32e2182a8a836e40bef6ab3f858e8f9c36fc9c32f3a2b65cd5d86fe12",
+      "kind": "rule_statement",
+      "served": true,
+      "cases": ["CX-03", "CX-06"],
+      "claim": "An approval-state refusal carries the approved-plan marker (승인 계획:), points at gil_plan_read and changes nothing (CX-03: open Synthesis branch; CX-06: Experiment refused while a re-interview request is preserved). Re-reviewed 2026-11-17 after main 80500f4 scoped the branch list to an actually open Synthesis."
+    },
+    {
+      "id": "WF-ONE-ITEM-BINDING",
+      "source": { "path": "src/mcp/workflow.md", "locator": { "from": "One Experiment binds exactly one `current_item`, the first pending item, when it opens.", "to": "not success and not a semantic audit of every task." } },
+      "sha256": "346424283f0b9acafa050e9c103c82379d085f884f10a76e1ea04ad1671e6f69",
+      "kind": "rule_statement",
+      "served": true,
+      "cases": ["CX-04", "CX-05"],
+      "claim": "Opening an Experiment binds the first pending item as current_item; executed_cycles records the binding."
+    },
+    {
+      "id": "WF-DEFINE-SMALLEST",
+      "source": { "path": "src/mcp/workflow.md", "locator": { "from": "**Define the smallest problem performable now.**", "to": "never at the Chain goal or the whole proposal." } },
+      "sha256": "6762b8b8bd53551a14cd9c356a2bb19962971a19f9e3b81094137c89e8c11601",
+      "kind": "rule_statement",
+      "served": true,
+      "cases": ["CX-04"],
+      "not_covered": ["whether problem/success_condition point at the same problem as the item (semantic; Core does not judge it)"],
+      "claim": "Define is written while bound to the approved current_item; structurally the binding stays on that item through Define."
+    },
+    {
+      "id": "WF-DOCUMENT-VERIFY",
+      "source": { "path": "src/mcp/workflow.md", "locator": { "from": "In that Experiment's Verify, save `gil_plan_read.document` **byte for byte**", "to": "or a plan file whose bytes differ from the export." } },
+      "sha256": "e28074fe6764f3567896b7eeab1f80cf3a4c22a4006fafa000ff4b9f624862f6",
+      "kind": "executable_fragment",
+      "payload": { "parse": "code_spans", "take": { "plan_document": "plan_document: ", "evidence_files": "evidence_files: " } },
+      "served": true,
+      "cases": ["CX-04"],
+      "claim": "Accepted: plan_document: plan/A.md + evidence_files: evidence/A-result.md with the exported bytes; refused: the plan file alone, or plan bytes that differ."
+    },
+    {
+      "id": "WF-EXTEND",
+      "source": { "path": "src/mcp/workflow.md", "locator": { "from": "To extend an existing plan, first read `gil_plan_read.active_plan`.", "to": "existing `question`/`done_when` may not." } },
+      "sha256": "864ac8f47d7edd9283794c1b8bcbf2e0920effe2e418120706ba96fd1ae308b8",
+      "kind": "rule_statement",
+      "served": true,
+      "cases": ["CX-05"],
+      "claim": "Copying active_plan.items verbatim and inserting a new ID is accepted; sending only new items, dropping an item, or changing question/done_when is refused."
+    },
+    {
+      "id": "WF-REINTERVIEW",
+      "source": { "path": "src/mcp/workflow.md", "locator": { "from": "A scope change during an Experiment: `gil_plan_request_interview(reason)` preserves the", "to": "approve a new revision before any further Experiment." } },
+      "sha256": "f35f169f5c455220af44ab52d783f1f844069c652aa98ac0d2128a8abef82feb",
+      "kind": "rule_statement",
+      "served": true,
+      "cases": ["CX-06"],
+      "claim": "A re-interview request during an open Experiment is preserved and closes nothing; no Interview opens while the Step is open, and no further Experiment opens until a new Interview."
+    },
+    {
+      "id": "WF-TABLE-REINTERVIEW",
+      "source": { "path": "src/mcp/workflow.md", "locator": { "line": "| Asked to re-interview during an Experiment |" } },
+      "sha256": "6e6bc660d4ec32c14947a2d05822d3a02f01033846ef9370329a22d8060d9fe2",
+      "kind": "rule_statement",
+      "served": true,
+      "cases": ["CX-06"],
+      "claim": "After the Cycle Report the next legal move is gil_open Interview."
+    },
+    {
+      "id": "WF-VISUALS-TEXT",
+      "source": { "path": "src/mcp/workflow.md", "locator": { "fence": "text" } },
+      "sha256": "8e9ca69f0de0b1b4ee6b164cd464ba673d318b40f43bf760850c0bbb9006b03f",
+      "kind": "not_executed",
+      "served": true,
+      "cases": [],
+      "reason": "Visual-evidence Report example (rule 4), outside the Chain/approved-plan scope of this checker.",
+      "claim": "Out of scope; inventoried so that a changed or new block is noticed."
+    },
+    {
+      "id": "SPEC-REORDER",
+      "source": { "path": "spec/GIL_Approved_Plan_v0.1.md", "locator": { "line": "`[A,B,C]` 승인 후 A 실행" } },
+      "sha256": "026492e143feffc96727cb1f1e0bf1633219631b6a02b6ef7f533e384586f87c",
+      "kind": "illustrative_partial",
+      "payload": { "parse": "id_lists", "names": ["first_approved", "second_approved", "expected_pending"] },
+      "cases": ["CX-05"],
+      "claim": "[A,B,C] approved, A executed, [A,D,B,C] approved in the next Interview → pending is [D,B,C]. Item texts are harness-supplied; only the IDs come from the document."
+    },
+    {
+      "id": "SPEC-EXTEND-REFUSALS",
+      "source": { "path": "spec/GIL_Approved_Plan_v0.1.md", "locator": { "from": "항목 추가 시 `active_plan.items` 전체를 복사해 새 ID를 넣는다.", "to": "각각 id·필드 경로로 거절한다." } },
+      "sha256": "a8c72ced413d660c965a573f735e2f6b478d7dafa1aa5bf107da9eba9985f98b",
+      "kind": "rule_statement",
+      "cases": ["CX-05"],
+      "claim": "Omission and question/done_when changes are refused by id and field path."
+    },
+    {
+      "id": "SPEC-BASIS-JSON",
+      "source": { "path": "spec/GIL_Approved_Plan_v0.1.md", "locator": { "line": "JSON에서는 `\"step:C5/S1" } },
+      "sha256": "f6908527fc057046d9be138b24920f4ac6f6b3205b081fb53a36e28aee5ffa53",
+      "kind": "executable_fragment",
+      "payload": { "parse": "json_string", "pattern": "`(\"step:[^`]+\")`" },
+      "cases": ["CX-05"],
+      "claim": "basis_refs in JSON is one newline-separated string; the example numbers are placeholders and are refused outside their own Interview."
+    },
+    {
+      "id": "SPEC-DEV-SH",
+      "source": { "path": "spec/GIL_Approved_Plan_v0.1.md", "locator": { "fence": "sh" } },
+      "sha256": "d71a14e12afa646166130771c2ad680ba1b108e7f12fdd183bbf0a386acf42f1",
+      "kind": "not_executed",
+      "cases": [],
+      "reason": "Developer shell commands; this checker never runs document shell blocks.",
+      "claim": "Inventoried only."
+    },
+    {
+      "id": "MAN-CLARIFY-SHAPE",
+      "source": { "path": "src/manual/topics/cycle/interview/clarify.md", "locator": { "from": "승인 계획 프로필이면 같은 내용이", "to": "새 필드를 만들지 않는다." } },
+      "sha256": "2c1191988247fe9bbe61b1e0f2cb80949db4f32835d0c7ade24d92601c1d86e3",
+      "kind": "rule_statement",
+      "served": true,
+      "cases": ["CX-04"],
+      "claim": "The short proposal fills draft.scope, draft.items(question/done_when) and draft.synthesis with no new field."
+    },
+    {
+      "id": "MAN-CLARIFY-GOOD",
+      "source": { "path": "src/manual/topics/cycle/interview/clarify.md", "locator": { "section": "[올바른 예]" } },
+      "sha256": "5cc217c0fc6bd56bab5a7e9b700f97d0329d028e0f8507f4cd0ca0dfa1098e06",
+      "kind": "illustrative_partial",
+      "payload": { "parse": "item_lines", "count": 3 },
+      "served": true,
+      "cases": ["CX-04", "CX-05", "CX-06"],
+      "claim": "Items A/B/C (question and done_when verbatim) are valid draft.items; scope, statement and the Question/Interpretation answers are harness-supplied and labelled."
+    },
+    {
+      "id": "MAN-CLARIFY-FAIL",
+      "source": { "path": "src/manual/topics/cycle/interview/clarify.md", "locator": { "section": "[흔한 실패]" } },
+      "sha256": "2aeba7c34e50453865f167cfc69293895d0ca0a76fb85d7e1b909a9beb15419a",
+      "kind": "semantic_only",
+      "payload": { "parse": "bracket_label" },
+      "served": true,
+      "cases": ["CX-07"],
+      "reason": "Bundled items, vague success criteria and long background are quality failures Core intentionally does not refuse; only the last line's empty/invalid basis_refs part is structural (see WF-BASIS-RULE / CX-02).",
+      "claim": "Observation only: Core accepts the bundled item; this is never reported as a pass."
+    },
+    {
+      "id": "MAN-DEFINE-GOOD",
+      "source": { "path": "src/manual/topics/step/define/smallest.md", "locator": { "section": "[올바른 예]" } },
+      "sha256": "7428536bbc92374d1e56de558f5b7de9681183cf9d85a64148dc30786ab7ff80",
+      "kind": "executable_fragment",
+      "payload": { "parse": "field_lines", "fields": ["problem", "success_condition"], "label": { "pattern": "승인 항목 A 「(.+?)」" } },
+      "served": true,
+      "cases": ["CX-04", "CX-06"],
+      "claim": "The Define problem/success_condition lines close Define verbatim while the Experiment is bound to item A."
+    },
+    {
+      "id": "MAN-DEFINE-FAIL",
+      "source": { "path": "src/manual/topics/step/define/smallest.md", "locator": { "section": "[흔한 실패]" } },
+      "sha256": "a6b31e4d66282a8a309009ecc13a1589686f7acb90d3a4707aca473a6c9312ad",
+      "kind": "semantic_only",
+      "served": true,
+      "cases": [],
+      "reason": "Copying the Chain goal, partial completion and unjudgeable success conditions are semantic failures; Core does not judge them and the checker does not claim it does.",
+      "claim": "Not executed."
+    },
+    {
+      "id": "MAN-OPEN-GOOD",
+      "source": { "path": "src/manual/topics/action/open-contract.md", "locator": { "section": "[올바른 예]" } },
+      "sha256": "50f3d0dd0318fca140ec50397955adf8c9f2032aadf8e08952e5c99918eb6c07",
+      "kind": "executable_fragment",
+      "payload": { "parse": "field_lines", "fields": ["objective", "next_action", "done_when"] },
+      "served": true,
+      "cases": ["CX-04"],
+      "claim": "The three contract lines open a Step through gil_open {kind, contract} as written."
+    },
+    {
+      "id": "MAN-OPEN-FAIL",
+      "source": { "path": "src/manual/topics/action/open-contract.md", "locator": { "section": "[흔한 실패]" } },
+      "sha256": "5438bb9ce99ba8897217eaf0a64a1ad5516e5d6a96e3cdfbe6fa3d68de892b9d",
+      "kind": "semantic_only",
+      "payload": { "parse": "field_lines", "fields": ["next_action", "done_when"] },
+      "served": true,
+      "cases": ["CX-07"],
+      "reason": "A GIL command as next_action and a self-referential done_when are quality failures; Core only refuses missing/blank fields.",
+      "claim": "Observation only: Core opens the Step with these lines; never reported as a pass."
+    },
+    {
+      "id": "MAN-OPEN-CLI",
+      "source": { "path": "src/manual/topics/action/open-contract.md", "locator": { "from": "gil open <종류> <<'EOF'", "to": "done_when: …\n      EOF" } },
+      "sha256": "ddbdb92660ec6756b6cc419a7e05eba60c7abbfaae8fb1a084f77b38e0d4970b",
+      "kind": "not_executed",
+      "served": true,
+      "cases": [],
+      "reason": "CLI stdin heredoc with placeholders; the checker never runs shell. Over MCP the same three lines go in gil_open's contract string (exercised by MAN-OPEN-GOOD / CX-04).",
+      "claim": "Not executed."
+    }
+  ],
+  "consistency": [
+    {
+      "id": "DOC-ITEM-A-WORDING",
+      "left": { "example": "MAN-DEFINE-GOOD", "path": ["label"] },
+      "right": { "example": "MAN-CLARIFY-GOOD", "path": ["items", 0, "question"] },
+      "note": "smallest.md quotes approved item A of the same sales example with wording that differs from clarify.md's item A question. Approved item text is immutable, so the two related topics show two different 'item A' texts.",
+      "acknowledged": { "left": "제공된 표가 월별 집계에 쓸 수 있는가", "right": "제공된 표의 날짜·금액 열이 월별 집계에 쓸 수 있는가", "on": "2026-11-17", "owner": "Manual text owner (read-only here); reported in every run until the topics agree" }
+    }
+  ]
+}
