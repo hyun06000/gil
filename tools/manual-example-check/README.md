@@ -50,8 +50,8 @@ Verify는 typed close(`expected_owner`·`visuals`)로 닫으므로 `visual-autho
 | `examples.json` | 검토된 매핑: 원문 경로·구간 locator·SHA-256 지문·예시 종류·payload 파서·연결 사례·주장 |
 | `fixtures/synthetic-inputs.json` | 사용자 답과 부분 예시의 빈 칸을 대신하는 합성 입력. 문자열 데이터로만 보낸다 |
 | `lib/sources.mjs` | 정확한 문자열 locator(정규식 아님)로 구간을 찾고 지문·줄 범위를 계산, 예시 모양 영역 목록 |
-| `lib/extract.mjs` | 구간 → payload(JSON 템플릿, 항목 줄, 필드 줄, 코드 span, ID 목록). 선언된 placeholder만 치환 |
-| `lib/registry.mjs` | 매핑 검증과 원문 대조: `source_changed`/`missing`/`ambiguous`/`payload_invalid`/미매핑/문서 간 불일치 |
+| `lib/extract.mjs` | 구간 → payload(JSON 템플릿, 항목 줄, 필드 줄과 인용한 승인 항목 줄, 코드 span, ID 목록). 선언된 placeholder만 치환 |
+| `lib/registry.mjs` | 매핑 검증과 원문 대조: `source_changed`/`missing`/`ambiguous`/`payload_invalid`/미매핑/문서 간 불일치(예외 기록 불가) |
 | `lib/rig.mjs` | 사례마다 새 임시 프로젝트 하나와 `gil mcp --serve` 하나. 호출 허용 목록, 기록·현재 위치 불변 확인 |
 | `lib/cases.mjs` | 검토된 사례 CX-00–07. 명시된 도구 호출만 수행한다 |
 | `lib/report.mjs` | 예시별 상태·판정·Markdown 보고서 |
@@ -70,6 +70,13 @@ Verify는 typed close(`expected_owner`·`visuals`)로 닫으므로 `visual-autho
 
 남은 `<…>` 꼴 placeholder가 있으면 실행하지 않고 실패한다. 부분 예시를 완전한 명령처럼 실행해 잘못된 실패를 만들지 않는다.
 
+## 승인 항목과 Define 예시의 일치
+
+승인된 항목의 글은 바뀌지 않는다. 그래서 Define 예시는 승인 항목을 다시 요약하지 않고 인터뷰 예시의 항목 줄을 그대로 인용한다.
+검사하는 것은 세 가지다: 두 Topic의 항목 A 문제·완료 조건이 글자 그대로 같은가(문서 검사), 그 인용이 실제 Core가 Experiment에
+바인딩한 `current_item`과 같은가(CX-04), Define 두 줄이 그 바인딩 아래에서 그대로 닫히는가(CX-04·06).
+Define의 `problem`·`success_condition`이 항목과 **뜻으로** 같은 문제·완료 범위인지는 판정하지 않는다. 그 대조는 사람이 원문을 검토할 때 한다.
+
 ## 원문 ↔ 사례 대응
 
 | 예시 ID | 원문 | 종류 | 사례 |
@@ -87,7 +94,7 @@ Verify는 typed close(`expected_owner`·`visuals`)로 닫으므로 `visual-autho
 | SPEC-REORDER | Approved Plan 명세 `[A,B,C]`→`[A,D,B,C]` | illustrative_partial | CX-05 |
 | SPEC-EXTEND-REFUSALS · SPEC-BASIS-JSON | Approved Plan 명세 | rule_statement · executable_fragment | CX-05 |
 | MAN-CLARIFY-SHAPE · MAN-CLARIFY-GOOD | `cycle/interview/clarify` | rule_statement · illustrative_partial | CX-04·05·06 |
-| MAN-DEFINE-GOOD | `step/define/smallest` [올바른 예] | executable_fragment | CX-04·06 |
+| MAN-DEFINE-GOOD | `step/define/smallest` [올바른 예] (Define 두 줄 + 인용한 승인 항목 A 줄) | executable_fragment | CX-04·06 |
 | MAN-OPEN-GOOD | `action/open-contract` [올바른 예] | executable_fragment | CX-04 |
 | MAN-CLARIFY-FAIL · MAN-OPEN-FAIL | 각 Topic [흔한 실패] | semantic_only | CX-07 (관측) |
 | MAN-DEFINE-FAIL | `step/define/smallest` [흔한 실패] | semantic_only | — |
@@ -99,7 +106,7 @@ Verify는 typed close(`expected_owner`·`visuals`)로 닫으므로 `visual-autho
 | CX-01 | Question·Interpretation 뒤 발급된 참조로 문서 wrapper가 그대로 받아들여진다 |
 | CX-02 | schema(-32602)·Core 거절(빈 scope 칸, 0/65 항목, checklist 순서, basis 쉼표·설명·Cycle·열린 Step·중복·다른 Cycle·빈 값, approved 직접 기입). 거절마다 기록 불변, 끝에 Context·계획 조회 불변 |
 | CX-03 | 승인 전 Synthesis close·맨 `approved: yes` 거절(승인 상태 표지와 `gil_plan_read`), 합성 승인 뒤 변조 close_report 거절·정확한 close_report 성공, Outcome에서 close_report 재사용 거절 |
-| CX-04 | 설명서 항목 A/B/C → Experiment가 A에 바인딩 → 설명서 계약으로 Define 열기·설명서 Define 닫기 → 문서의 `plan/A.md`·`evidence/A-result.md` 경로로 Verify(계획 파일만·다른 bytes는 거절) |
+| CX-04 | 설명서 항목 A/B/C → Experiment가 A에 바인딩 → Define 예시가 인용한 항목 A(id·question·done_when)가 Core가 바인딩한 항목과 같음 → 설명서 계약으로 Define 열기·설명서 Define 닫기 → 문서의 `plan/A.md`·`evidence/A-result.md` 경로로 Verify(계획 파일만·다른 bytes는 거절) |
 | CX-05 | `[A,B,C]` 승인·A 실행 → 다음 Interview에서 문서 literal 참조 거절, B 누락·새 항목만·B.question/done_when 변경 거절 → 복사+D 삽입 승인 → pending `[D,B,C]` |
 | CX-06 | 열린 Define에서 재인터뷰 요청 보존·아무것도 닫지 않음, Interview·Experiment 열기 거절, 취소 도구 없음, Cycle을 사실대로 닫은 뒤 추가 Experiment는 승인 상태로 거절, Interview는 열림 |
 | CX-07 | 관측 전용: `[흔한 실패]`의 계약(`next_action: gil close`)과 묶음 항목을 Core가 받아들이는지 기록 |
@@ -114,7 +121,9 @@ Verify는 typed close(`expected_owner`·`visuals`)로 닫으므로 `visual-autho
 - `missing`/`ambiguous`: locator 기준 문자열이 없거나 둘 이상이다. `<ID>.source.locator`를 고친다.
 - `payload_invalid`: 구간은 검토됐지만 파서가 선언된 필드를 읽지 못한다. `<ID>.payload`를 고친다.
 - 미매핑 영역: 매핑된 구간 밖에 새 코드 블록이나 Manual 예시 절이 생겼다. 실행 사례를 더하거나 `semantic_only`/`not_executed`로 이유와 함께 등록한다.
-- 문서 간 불일치: `consistency` 항목. 이미 확인한 불일치는 `acknowledged`에 현재 값을 적어 보고만 하고, 값이 바뀌면 다시 실패한다.
+- 문서 간 불일치: `consistency` 항목. `step/define/smallest`가 인용한 승인 항목 A의 문제(`DOC-ITEM-A-WORDING`)와 완료 조건
+  (`DOC-ITEM-A-DONE-WHEN`)은 `cycle/interview/clarify`의 항목 A와 글자 그대로 같아야 한다. 다르면 `mismatch`로 실패하며
+  지문을 새로 적어도 통과하지 않는다. 불일치를 허용 예외(`acknowledged`)로 기록하는 길은 없다 — 매핑이 그 키를 거절한다. 두 문서를 고친다.
 
 원문이 최신 매핑과 다르면 `run`은 어떤 사례도 실행하지 않는다(모든 사례 `not_run`, 종료 코드 1).
 

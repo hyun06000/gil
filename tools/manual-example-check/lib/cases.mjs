@@ -190,6 +190,9 @@ export const CASES = [
       rig.need(bound.current_item?.id === 'A' && bound.current_item.question === items[0].question, 'binds first pending item', `current_item ${JSON.stringify(bound.current_item)}`);
       rig.need(typeof bound.document === 'string', 'document after binding', 'no document after the Experiment opened');
       rig.pass('Experiment binds item A', 'current_item.question is the Manual text verbatim; document available');
+      const quoted = ctx.ex['MAN-DEFINE-GOOD'].payload.item;
+      rig.need(bound.current_item.id === quoted.id && bound.current_item.question === quoted.question && bound.current_item.done_when === quoted.done_when, 'Define example quotes the bound item', `Define example quotes ${JSON.stringify(quoted)}, Core bound ${JSON.stringify(bound.current_item)}`);
+      rig.pass('Define example quotes the bound item', 'id, question and done_when equal the approved item Core bound; no narrowed or reworded item');
       const contract = ctx.ex['MAN-OPEN-GOOD'].payload.text;
       await rig.openStep('define', contract);
       rig.pass('Manual contract opens Define', 'objective/next_action/done_when verbatim as gil_open.contract');

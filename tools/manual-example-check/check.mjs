@@ -80,7 +80,7 @@ const git = async (args) => (await runCommand('git', args, { cwd: repo, timeoutM
 function printSources(result) {
   for (const e of result.examples) process.stdout.write(`${e.source_status === 'ok' ? 'ok     ' : 'PROBLEM'} ${e.id.padEnd(24)} ${e.kind.padEnd(20)} ${e.path}${e.lines ? `:${e.lines[0]}-${e.lines[1]}` : ''}${e.source_status === 'ok' ? '' : `\n        ${e.source_status}: ${e.detail}`}\n`);
   for (const u of result.unmapped) process.stdout.write(`PROBLEM unmapped ${u.detail}\n`);
-  for (const c of result.consistency) process.stdout.write(`${c.status === 'consistent' ? 'ok     ' : c.status === 'known_mismatch' ? 'known  ' : 'PROBLEM'} consistency ${c.id}: ${c.status}${c.detail ? ` — ${c.detail}` : ''}\n`);
+  for (const c of result.consistency) process.stdout.write(`${c.status === 'consistent' ? 'ok     ' : 'PROBLEM'} consistency ${c.id}: ${c.status}${c.detail ? ` — ${c.detail}` : ''}\n`);
 }
 
 async function runCases({ binary, registry, sources, inputs, opts, workRoot, events }) {

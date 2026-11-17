@@ -24,6 +24,16 @@ function setPath(value, path, next) {
   parent[path.at(-1)] = next;
 }
 
+/** Every `항목 X  <question> — done_when: <done_when>` line, in document order. */
+function itemLines(excerpt) {
+  const items = [];
+  for (const line of excerpt.split('\n')) {
+    const m = /^\s*항목 ([A-Z][A-Za-z0-9_-]*)\s{2,}(.+?) — done_when: (.+?)\s*$/.exec(line);
+    if (m) items.push({ id: m[1], question: m[2], done_when: m[3] });
+  }
+  return items;
+}
+
 const PARSERS = {
   /** A complete JSON tool input. Placeholders are declared in the mapping, nothing else is replaced. */
   json(excerpt, spec) {
@@ -36,15 +46,14 @@ const PARSERS = {
   },
   /** `항목 X  <question> — done_when: <done_when>` lines of an illustrative proposal. */
   item_lines(excerpt, spec) {
-    const items = [];
-    for (const line of excerpt.split('\n')) {
-      const m = /^\s*항목 ([A-Z][A-Za-z0-9_-]*)\s{2,}(.+?) — done_when: (.+?)\s*$/.exec(line);
-      if (m) items.push({ id: m[1], question: m[2], done_when: m[3] });
-    }
+    const items = itemLines(excerpt);
     need(items.length === spec.count, `found ${items.length} item lines, mapping expects ${spec.count}`);
     return { items };
   },
-  /** `name: value` lines (Define fields, action contract fields). Values are taken verbatim. */
+  /**
+   * `name: value` lines (Define fields, action contract fields). Values are taken verbatim.
+   * `quoted_item: {id}` also reads the one approved item line the example quotes.
+   */
   field_lines(excerpt, spec) {
     const fields = {};
     for (const line of excerpt.split('\n')) {
@@ -56,10 +65,12 @@ const PARSERS = {
     }
     for (const f of spec.fields) need(fields[f] !== undefined, `field ${f} not found`);
     const out = { fields, text: spec.fields.map((f) => `${f}: ${fields[f]}`).join('\n') + '\n' };
-    if (spec.label) {
-      const m = new RegExp(spec.label.pattern).exec(excerpt);
-      need(m, `label pattern ${spec.label.pattern} not found`);
-      out.label = m[1];
+    if (spec.quoted_item) {
+      // The approved item the example says it works on, quoted in the proposal's own line form.
+      const items = itemLines(excerpt);
+      need(items.length === 1, `found ${items.length} quoted item lines, mapping expects 1`);
+      need(items[0].id === spec.quoted_item.id, `quoted item is ${items[0].id}, mapping expects ${spec.quoted_item.id}`);
+      out.item = items[0];
     }
     return out;
   },

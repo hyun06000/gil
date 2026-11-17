@@ -30,7 +30,7 @@ export function verdict({ examples, unmapped, consistency, cases, isolation }) {
   const problems = [];
   for (const e of examples) if (!['pass', 'semantic_only', 'not_executed'].includes(e.status)) problems.push(`${e.id}: ${e.status}`);
   for (const u of unmapped) problems.push(`unmapped ${u.path}:${u.startLine}-${u.endLine}`);
-  for (const c of consistency) if (!['consistent', 'known_mismatch'].includes(c.status)) problems.push(`consistency ${c.id}: ${c.status}`);
+  for (const c of consistency) if (c.status !== 'consistent') problems.push(`consistency ${c.id}: ${c.status}`);
   for (const c of cases) if (c.status !== 'pass') problems.push(`${c.id}: ${c.status}`);
   for (const i of isolation ?? []) if (!i.ok) problems.push(`isolation: ${i.check}`);
   return { ok: problems.length === 0, problems };
