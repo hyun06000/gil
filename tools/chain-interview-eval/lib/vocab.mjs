@@ -66,6 +66,7 @@ export const RESULT_CHECKS = [
   'synthetic_approval_not_human',
   'structural_recomputed',
   'criteria_coverage',
+  'prepared_evidence_integrity',
 ];
 
 // Judgements only a human record can settle. A synthetic App decision never earns pass here.

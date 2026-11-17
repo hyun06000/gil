@@ -16,6 +16,8 @@ on:
       - 'tools/chain-interview-eval/**'
       - 'tools/chain-closing-eval/**'
       - 'tools/chain-monitor-fixtures/**'
+      - 'tools/chain-resume-benchmark/**'
+      - 'tools/chain-context-bench/**'
       - 'design-tests/approved-item-split/**'
       - 'tools/ci/**'
       - 'scenarios/**'
@@ -81,6 +83,8 @@ jobs:
           key: ${{ runner.os }}-${{ runner.arch }}-chain-core-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-deps-v2-${{ hashFiles('.github/workflows/chain-core.yml', 'tools/ci/prune-workspace-cache.mjs') }}
           restore-keys: |
             ${{ runner.os }}-${{ runner.arch }}-chain-core-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-
+      - name: Default Core resume capture and measurement (synthetic, no model evaluation)
+        run: node tools/chain-resume-benchmark/run.mjs default "${{ runner.temp }}/gil-resume-default" target
       - name: Actual Chain, legacy preservation and domain regressions
         run: cargo test --locked -p gil --features chain-core --test chains --test chain_closing --test chain_handoff --test cycles --test context --test context_profiles --test will --test walk --test resume_guidance
       - name: Repeated failure and branch context inside a Chain
@@ -88,7 +92,7 @@ jobs:
       - name: Private visual creation unit contracts
         run: cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --lib visual_start
       - name: Private visual creation integration
-        run: cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --test visual_start
+        run: cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --test visual_start --test chain_resume_benchmark
       - name: Complete native MCP roundtrip
         run: cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --test mcp
       - name: Compile all Core targets in the development product profile
@@ -104,6 +108,8 @@ jobs:
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test context --test context_profiles
       - name: Approval profile, next-call guidance over in-memory state and the real receipt (Wave 1 C)
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test guidance_wave1 --test guidance_wave2 --test guidance_interview_chain --test resume_guidance
+      - name: Approval profile resume capture and measurement (synthetic, no model evaluation)
+        run: node tools/chain-resume-benchmark/run.mjs product "${{ runner.temp }}/gil-resume-product" target
       - name: Host guard scope and file protection in approval profile
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test automatic_guard --test write_guard -- --test-threads=1
       - name: Compile the opt-in approval profile
@@ -126,6 +132,11 @@ jobs:
         run: node --test tools/chain-closing-eval/*.test.mjs design-tests/approved-item-split/*.test.mjs
       - name: Chain closing synthetic fixture integrity (no model evaluation)
         run: node tools/chain-closing-eval/check.mjs fixtures
+      - name: Resume measurement contracts
+        run: node --test tools/chain-resume-benchmark/*.test.mjs
+      - name: Context growth measurement contracts (Unix process fixtures)
+        if: runner.os == 'macOS'
+        run: node --test tools/chain-context-bench/*.test.mjs
       - name: Keep dependency outputs in cache after verification and artifact upload
         if: steps.build_cache.outputs.cache-hit != 'true'
         run: node tools/ci/prune-workspace-cache.mjs
