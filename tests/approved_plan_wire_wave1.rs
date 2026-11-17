@@ -600,7 +600,7 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     for (sequence, tag, language) in [(1, "en", gil::Locale::En), (2, "ja", gil::Locale::Ja), (3, "ko", gil::Locale::Ko)] {
         ok(r.app("gil_monitor_poll", json!({"instance_id":"locale-preservation","sequence":sequence.to_string(),"presentation":"inline","locale":tag})), "locale poll");
         let context = ok(r.model("gil_context", json!({})), "localized context");
-        assert!(context.to_string().contains(gil::locale::text_in(language, "guide.file_boundary")));
+        assert!(context.to_string().contains(gil::locale::text_in(language, "guide.file_boundary.applicability")));
         r.read();
         assert_eq!(preserved_files(r.record.parent().unwrap()), before_records);
         assert_eq!(preserved_files(&root), before_work);

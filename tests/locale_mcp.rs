@@ -28,9 +28,10 @@ fn remembered(root: &Path) -> Value {
 }
 
 /// The guidance block that every receipt of that tool carries, in the expected language.
+/// `gil_context` carries the applicability part of the file-work note; `gil_start` its own hint.
 fn speaks(result: &Value, locale: Locale) -> bool {
     let all = format!("{}\n{}", hints(result), said(result));
-    all.contains(text_in(locale, "guide.file_boundary")) || all.contains(text_in(locale, "guide.start"))
+    all.contains(text_in(locale, "guide.file_boundary.applicability")) || all.contains(text_in(locale, "guide.start"))
 }
 
 #[test]
@@ -129,4 +130,44 @@ fn locale_tags_are_validated_by_the_schema_and_unknown_languages_fall_back_to_en
     let frame = mcp.request("tools/call", json!({"name": "gil_monitor_poll", "arguments": {"scope_id": scope, "instance_id": "app-locale", "sequence": "1", "presentation": "inline", "locale": "ko KR"}}));
     assert!(frame.get("error").is_some(), "{frame}");
     mcp.done();
+}
+
+/// 2026-11-17 Chain first, context size: the head of `gil_context` no longer repeats the
+/// file-work rules that its body ([Project file work scope]) states in full. It keeps what that
+/// guidance applies to. `gil_status` and `gil_open` keep rules and applicability. Wire contract
+/// over the real process only: no model ran, and a Host that reads only structuredContent sees
+/// no difference.
+#[test]
+fn in_five_languages_the_context_head_keeps_the_applicability_and_the_body_keeps_the_full_rules() {
+    let settings = scratch("locale-boundary-settings");
+    let mut mcp = Mcp::serve(&settings);
+    for language in Locale::ALL {
+        let root = scratch(&format!("locale-boundary-{}", language.tag()));
+        ok(mcp.call("gil_start", &root, json!({"locale": language.tag()})), "gil_start");
+        let rules = text_in(language, "guide.file_boundary.rules");
+        let applicability = text_in(language, "guide.file_boundary.applicability");
+        let full = gil::locale::fill(text_in(language, "guide.file_boundary"), &[("rules", &rules), ("applicability", &applicability)]);
+        assert!(full.starts_with(rules) && full.ends_with(applicability) && !full.contains('{'), "{language}: {full}");
+        let blocks = |result: &Value| -> Vec<String> {
+            result["content"].as_array().unwrap().iter().filter_map(|c| c["text"].as_str().map(str::to_owned)).collect()
+        };
+
+        let context = ok(mcp.call("gil_context", &root, json!({})), "gil_context");
+        let head = format!("{}\n{applicability}",
+            gil::locale::fill(text_in(language, "guide.context"), &[("heading", &text_in(language, "context.next_call_heading"))]));
+        assert!(blocks(&context).contains(&head), "{language}: {}", hints(&context));
+        assert!(!hints(&context).contains(rules), "{language} head repeats the rules: {}", hints(&context));
+        // The body keeps the full rules verbatim, in both the text block and structuredContent.
+        let body = said(&context);
+        assert!(body.contains(text_in(language, "ctx.file_scope")), "{language}: {body}");
+        assert!(blocks(&context).contains(&body), "{language}: the said text block is the structured said");
+
+        let status = ok(mcp.call("gil_status", &root, json!({})), "gil_status");
+        assert!(blocks(&status).iter().any(|b| b.ends_with(&format!("\n{full}"))), "{language}: {}", hints(&status));
+        let opened = ok(mcp.call("gil_open", &root, json!({"kind": "question", "contract": "objective: ask the goal\nnext_action: ask the user\ndone_when: an answer arrives\n"})), "gil_open");
+        assert!(blocks(&opened).iter().any(|b| b.ends_with(&format!("\n{full}"))), "{language}: {}", hints(&opened));
+        std::fs::remove_dir_all(&root).ok();
+    }
+    mcp.done();
+    std::fs::remove_dir_all(settings).ok();
 }
