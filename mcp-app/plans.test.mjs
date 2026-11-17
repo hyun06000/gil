@@ -712,3 +712,175 @@ test('an exploration-contract view lists requirements by recorded links only and
   assert.deepEqual(open.map(i => `${i.id}:${i.status}:${i.cycle_ref}`), ['R1:current:cycle:C4', 'R2:pending:null']);
   assert.deepEqual(planSummary({ ...base, current_cycle: { ref: 'cycle:C4', state: 'open' } }), { state: 'executing', revision: 1 });
 });
+
+// Approved requirement text in an exploration Chain. The responses are what the real
+// exploration-flow Core returned from gil_plan_review at each position of one Chain
+// (tests/exploration_plan_panel.rs writes and re-checks the file); nothing in them is edited
+// here. They are synthetic harness input: no person approved anything, and a rendered browser
+// screen or a reader's understanding is not what these cases show.
+import { readFileSync } from 'node:fs';
+const CORE_TEXT = readFileSync(new URL('./fixtures/exploration-plan-review.json', import.meta.url), 'utf8');
+const CORE = JSON.parse(CORE_TEXT);
+const core = (name) => structuredClone(CORE.checkpoints.find(c => c.name === name).review);
+// What the panel must show for one id: the proposal under review when there is one, else the approved requirements.
+const serverText = (value) => new Map((value.proposal ? value.proposal.draft.items : value.requirements).map(i => [i.id, i]));
+const rowText = (li) => ({ question: byClass(li, 'plan-item-question')?.textContent ?? null,
+  done: byClass(li, 'plan-item-done')?.children.map(n => n.textContent) ?? null });
+const rows = (panel) => panel.querySelectorAll('li').map(li => `${li.dataset.item}:${li.dataset.status}:${byClass(li, 'plan-item-head').children.find(n => n.className === 'plan-item-cycle')?.textContent ?? ''}`);
+const CORE_ROWS = {
+  'approved-nothing-linked': ['R1:pending:', 'R2:pending:'],
+  'r1-open': ['R1:current:기록 cycle:C2', 'R2:pending:'],
+  'r1-closed': ['R1:executed:기록 cycle:C2', 'R2:pending:'],
+  'r1-failed': ['R1:executed:기록 cycle:C3', 'R2:pending:'],
+  'moved-to-r2-open': ['R1:executed:기록 cycle:C3', 'R2:current:기록 cycle:C4'],
+  'r2-closed': ['R1:executed:기록 cycle:C3', 'R2:executed:기록 cycle:C4'],
+  'interview-open': ['R1:executed:기록 cycle:C3', 'R2:executed:기록 cycle:C4'],
+  'proposal-waiting': ['R1:executed:기록 cycle:C3', 'R2:executed:기록 cycle:C4', 'R3:pending:'],
+  'proposal-approved': ['R1:executed:기록 cycle:C3', 'R2:executed:기록 cycle:C4', 'R3:pending:'],
+  'reapproved-r3-open': ['R1:executed:기록 cycle:C3', 'R2:executed:기록 cycle:C4', 'R3:current:기록 cycle:C6'],
+};
+
+test('real Core responses: the kept file is the App-path view only, with no capability and no local path', () => {
+  assert.deepEqual(CORE.checkpoints.map(c => c.name), Object.keys(CORE_ROWS));
+  assert.doesNotMatch(CORE_TEXT, /gil\/planApprovalToken|approval_token|\/Users\/|\/private\/|[A-Z]:\\\\Users\\\\/);
+  for (const { name, review } of CORE.checkpoints) {
+    assert.equal(review.supported, true, name);
+    assert.equal(review.contract, 'exploration', name);
+    assert.deepEqual(review.retry_pending, [], name);
+  }
+});
+
+test('real Core, current Experiment moved from R1 to R2: both requirements keep their question and judgment criteria', async () => {
+  const value = core('moved-to-r2-open');
+  // The position as the server reports it: R1 is no longer current_item; its text is in requirements only.
+  assert.equal(value.proposal, null);
+  assert.equal(value.current_item.id, 'R2');
+  assert.deepEqual(value.executed_cycles.map(e => `${e.cycle_ref}>${e.item_id}`), ['cycle:C2>R1', 'cycle:C3>R1', 'cycle:C4>R2']);
+  const r = rig({ value }); await r.review.refresh();
+  assert.equal(r.panel.dataset.state, 'executing');
+  const lis = r.panel.querySelectorAll('li');
+  assert.deepEqual(rows(r.panel), CORE_ROWS['moved-to-r2-open'], 'one row per requirement, the earlier one first, each with its latest linked Cycle');
+  const [r1, r2] = value.requirements;
+  assert.deepEqual(rowText(lis[0]), { question: r1.question, done: ['완료 판단', r1.done_when] }, 'R1 keeps the approved words, unchanged');
+  assert.deepEqual(rowText(lis[1]), { question: r2.question, done: ['완료 판단', r2.done_when] });
+  assert.notEqual(r1.question, r2.question);
+  assert.deepEqual(byClass(lis[0], 'plan-item-head').children.map(n => n.textContent), ['R1', '실행함', '기록 cycle:C3'], 'status and Cycle record mean what they meant');
+  assert.equal(byClass(r.panel, 'plan-counts').textContent, '실행함 1개 · 지금 열린 Cycle에 묶임 1개 · 남음 0개');
+  // A failed and closed Experiment is the latest link of R1; that is not a reason to drop or relabel its text.
+  assert.equal(value.requirements[0].experiments.at(-1).verdict, 'failure');
+  assert.doesNotMatch(r.panel.allText(), /재시도|충족|완료했|성공(함|했)/, 'no retry row, no completion claim');
+  assert.equal(r.panel.querySelectorAll('button').length, 0);
+});
+
+test('real Core, every position: each requirement is one row carrying the exact text the server gave for that id', async () => {
+  for (const { name } of CORE.checkpoints) {
+    const value = core(name), frozen = JSON.stringify(value);
+    const r = rig({ value }); await r.review.refresh();
+    assert.deepEqual(rows(r.panel), CORE_ROWS[name], name);
+    const expected = serverText(value), lis = r.panel.querySelectorAll('li');
+    assert.equal(new Set(lis.map(li => li.dataset.item)).size, lis.length, `${name}: several Experiments on one requirement are still one row`);
+    assert.deepEqual(lis.map(li => li.dataset.item), [...expected.keys()], name);
+    for (const li of lis) {
+      const source = expected.get(li.dataset.item);
+      assert.deepEqual(rowText(li), { question: source.question, done: ['완료 판단', source.done_when] }, `${name} ${li.dataset.item}`);
+    }
+    assert.deepEqual(planItems(value).map(i => [i.id, i.question, i.done_when]), [...expected.values()].map(i => [i.id, i.question, i.done_when]), name);
+    assert.equal(JSON.stringify(value), frozen, `${name}: reading changes nothing`);
+  }
+});
+
+test('real Core, the current Cycle is an Interview: no bound item is shown, and the approved text is still listed', async () => {
+  const value = core('interview-open');
+  assert.equal(value.current_item, null);
+  assert.deepEqual(value.current_cycle, { ref: 'cycle:C5', state: 'open' });
+  const r = rig({ value }); await r.review.refresh();
+  assert.equal(r.panel.dataset.state, 'executing');
+  const current = byClass(r.panel, 'plan-current');
+  assert.equal(current.children.length, 1, 'only the sentence about the Cycle: no requirement is presented as bound to it');
+  assert.equal(current.querySelectorAll('div').length, 0);
+  const lis = r.panel.querySelectorAll('li');
+  assert.deepEqual(lis.map(li => rowText(li).question), value.requirements.map(q => q.question));
+  assert.deepEqual(lis.map(li => rowText(li).done?.[1]), value.requirements.map(q => q.done_when));
+  assert.deepEqual(lis.map(li => li.dataset.status), ['executed', 'executed'], 'still the record that a Cycle was linked, nothing more');
+});
+
+test('real Core, a new proposal: the rows are the exact proposal under review, never the approved list', async () => {
+  const value = core('proposal-waiting');
+  assert.deepEqual(value.proposal.draft.items.map(i => i.id), ['R1', 'R2', 'R3']);
+  assert.deepEqual(value.requirements.map(i => i.id), ['R1', 'R2'], 'the approved revision does not hold R3');
+  const r = rig({ value }); await r.review.refresh();
+  assert.equal(r.panel.dataset.state, 'reapproval');
+  assert.deepEqual(r.panel.querySelectorAll('li').map(li => rowText(li).question), value.proposal.draft.items.map(i => i.question));
+  assert.equal(r.decisions().length, 2);
+  // The approval is sent for the displayed revision and digest of that proposal.
+  await r.decisions()[0].click(true);
+  assert.deepEqual(r.calls.at(-1).arguments, { scope_id: 'project:one', revision: 2, digest: value.proposal.digest, token: 'private-token', decision: 'approve' });
+  assert.equal(r.panel.dataset.state, 'approved');
+  assert.equal(sent(r), continuation(value.proposal, 'approve'));
+
+  // If the approved list ever said something else for the same id, the proposal's words stay:
+  // the two sources are not blended. (Core refuses such a redefinition; this response is altered.)
+  const altered = core('proposal-waiting');
+  for (const q of altered.requirements) { q.question = `APPROVED-ONLY ${q.id}`; q.done_when = `APPROVED-ONLY criteria ${q.id}`; }
+  altered.requirements.push({ id: 'R9', question: 'APPROVED-ONLY R9', done_when: 'APPROVED-ONLY criteria R9', experiments: [] });
+  const a = rig({ value: altered }); await a.review.refresh();
+  assert.doesNotMatch(a.panel.allText(), /APPROVED-ONLY/);
+  assert.deepEqual(a.panel.querySelectorAll('li').map(li => li.dataset.item), ['R1', 'R2', 'R3'], 'no row is added from the approved list');
+  assert.deepEqual(a.panel.querySelectorAll('li').map(li => rowText(li).done[1]), value.proposal.draft.items.map(i => i.done_when));
+  // And the other way round: a draft is never the text of an approved requirement once it is not under review.
+  const gone = core('moved-to-r2-open');
+  gone.requirements = gone.requirements.filter(q => q.id !== 'R1');
+  gone.proposal = null;
+  assert.deepEqual(planItems(gone)[0], { id: 'R1', question: null, done_when: null, status: 'executed', cycle_ref: 'cycle:C3' });
+});
+
+test('an incomplete exploration response gets no invented, borrowed or remembered requirement text', async () => {
+  const blank = { id: 'R1', question: null, done_when: null, status: 'executed', cycle_ref: 'cycle:C3' };
+  const r2 = core('moved-to-r2-open').current_item;
+  const cases = {
+    'no requirements field': v => { delete v.requirements; },
+    'requirements is not a list': v => { v.requirements = { R1: v.requirements[0] }; },
+    'R1 is not listed': v => { v.requirements = v.requirements.filter(q => q.id !== 'R1'); },
+    'R1 is listed twice with different words': v => { v.requirements.push({ ...v.requirements[0], question: 'another wording' }); },
+    'the entry has no id': v => { delete v.requirements[0].id; },
+    'the texts are not text': v => { v.requirements[0].question = { text: 'x' }; v.requirements[0].done_when = 7; },
+    'the texts are empty': v => { v.requirements[0].question = ''; v.requirements[0].done_when = ''; },
+    'no contract marker (an item-queue response is read as before)': v => { delete v.contract; },
+    'an unknown contract value': v => { v.contract = 'exploration-v2'; },
+  };
+  for (const [name, change] of Object.entries(cases)) {
+    const value = core('moved-to-r2-open'); change(value);
+    const items = planItems(value);
+    assert.deepEqual(items[0], blank, name);
+    assert.deepEqual(items[1], { ...r2, status: 'current', cycle_ref: 'cycle:C4' }, `${name}: the current requirement is untouched`);
+    const r = rig({ value }); await r.review.refresh();
+    const li = r.panel.querySelectorAll('li')[0];
+    assert.match(li.allText(), /^R1 실행함 기록 cycle:C3\s*$/, `${name}: id, recorded status and Cycle only`);
+    assert.equal(r.panel.querySelectorAll('li').length, 2, name);
+  }
+  // One of the two texts is missing: the other is shown, and nothing stands in for the missing one.
+  const half = core('moved-to-r2-open'); delete half.requirements[0].done_when;
+  assert.deepEqual(planItems(half)[0], { ...blank, question: half.requirements[0].question });
+  const h = rig({ value: half }); await h.review.refresh();
+  assert.deepEqual(rowText(h.panel.querySelectorAll('li')[0]), { question: half.requirements[0].question, done: null });
+  // A later read that no longer carries the list: the text shown a moment ago is not kept as approved fact.
+  const full = core('moved-to-r2-open');
+  const s = rig({ value: full }); await s.review.refresh();
+  assert.equal(rowText(s.panel.querySelectorAll('li')[0]).question, full.requirements[0].question);
+  s.state.value = core('moved-to-r2-open'); delete s.state.value.requirements;
+  await s.review.refresh();
+  assert.deepEqual(rowText(s.panel.querySelectorAll('li')[0]), { question: null, done: null });
+  assert.doesNotMatch(s.panel.querySelectorAll('li')[0].allText(), /합성 자료|evidence/);
+});
+
+test('an item-queue response is read exactly as before, even if it carries fields this panel does not use for it', () => {
+  // No marker: active_plan.items and a requirements-shaped list are not consulted (the queue's rows are unchanged).
+  const queue = { supported: true, proposal: null, active_revision: 1, reinterview_requests: [], retry_pending: [],
+    active_plan: { revision: 1, digest: DIGEST, items: [{ id: 'A', question: 'Question A', done_when: 'File A' }, { id: 'B', question: 'Question B', done_when: 'File B' }] },
+    requirements: [{ id: 'A', question: 'Question A', done_when: 'File A', experiments: [] }],
+    executed_cycles: [{ cycle_ref: 'cycle:C2', item_id: 'A', revision: 1 }, { cycle_ref: 'cycle:C3', item_id: 'B', revision: 1 }],
+    current_item: { id: 'B', question: 'Question B', done_when: 'File B' }, current_cycle: { ref: 'cycle:C3', state: 'open' }, pending: [] };
+  assert.deepEqual(planItems(queue), [
+    { id: 'A', question: null, done_when: null, status: 'executed', cycle_ref: 'cycle:C2' },
+    { id: 'B', question: 'Question B', done_when: 'File B', status: 'current', cycle_ref: 'cycle:C3' }]);
+});
