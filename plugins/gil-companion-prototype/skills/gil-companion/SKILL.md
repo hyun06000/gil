@@ -204,6 +204,19 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    writing, implementation, calculations and tests that change project files belong in Experiment
    Verify, never an open Interview. Web research without project file changes needs no Verify.
 
+   **Define is a yes/no proposition, not an activity.** State one bounded question that can be
+   answered yes or no from evidence. “Inspect dates” and “check whether dates work” are tasks,
+   not the problem. Ask “Can every date in the specified files be converted without information
+   loss under the agreed rules?” Fix the criterion before observing the result. Completing an
+   inspection or writing a report does not make the proposition true. Insufficient evidence is
+   not a supported no. Exploratory analysis does not assume a desired answer in advance.
+
+   **Current runtime boundary.** The following item-binding rules describe the connected product,
+   not the future exploratory Chain contract. The agreed design separates stable requirements
+   from multiple small Defines, starting with new Chains after implementation. It is not enabled
+   merely by opening a new Chain today. Do not bypass current bindings or repeatedly revise a
+   plan just to simulate that future behavior; report the limitation and follow the legal receipt.
+
    **Define the smallest problem performable now.** From the interview and the agreed item for
    this Experiment (approved-plan profile: the bound `current_item`), Define infers the one smallest
    problem that can be performed and judged now; its `problem` and `success_condition` point at the
@@ -215,7 +228,7 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    one Experiment, and do not split a mere preparation that yields no checkable result of its own
    into a separate one. When the inputs or a prerequisite are not confirmed, confirming them is
    this problem. Executing only part of a large approved item does not complete it; splitting or
-   replacing an already approved item is an undecided contract, so say that plainly (rule 7:
+   replacing an already approved item is not supported by this runtime, so say that plainly (rule 7:
    `gil_plan_request_interview` preserves the request), keep the record, and change no approved
    scope. Detail: `gil_help(topic: "step/define/smallest")`.
 
@@ -431,6 +444,20 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    - When every approved item has executed, the project is not finished by a chat summary:
      `gil_open` Interview as the Closing Interview, propose the final `chain_verdict` for approval,
      then `gil_close` the Chain Report. Its first message shows the result before asking (rule 5).
+   **Reflection and recovery.** Use Analysis evidence and Outcome's lesson to trace relevant
+   earlier Steps/Cycles and distinguish observations, assumptions and interpretations. Explain
+   where a faulty premise entered, how it propagated, and why the proposed recovery target is
+   suitable; the error location is not automatically the recovery target. Cite relevant records
+   instead of copying the entire history. Use the existing report fields, not a new Reflection kind.
+   Every failed Experiment requires explicit revisit, even when its world has no file changes.
+   Restore the whole tracked world (working code and generated outputs); do not retain selected
+   failed files because “most worked”. Preserve evidence and learning in the records. Honor the
+   current target and approval gates; cross-Chain investigation is not cross-Chain restore support.
+   For successful continuation, explain the next question and prerequisites. Before proposing
+   Chain closure, explain why to stop, show results and remaining questions, and obtain the user's
+   exact closing approval. Waiting is not failure or consent. The next Chain's Interview uses prior
+   answers, evidence, uncertainty and alternative data/experiments, but needs its own approval.
+
 8. **Recover and keep the user informed.** A rejected Project action must be resolved before
    further Project work. Never treat a refused close as closed, backfill skipped steps or fabricate
    history. A confirmed input rejection means the call was not executed: check current state and
