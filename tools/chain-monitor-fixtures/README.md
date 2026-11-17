@@ -72,29 +72,30 @@ base64 내용은 변경하지 않는다. 두 번의 독립 생성에서 JSON 파
 
 ## 재현 명령
 
-전용 worktree 루트에서 실행한다. Cargo는 기존 공유 큐 한 슬롯 안에서 순서대로 실행한다.
-빌드 산출물은 큐의 worktree별 target에 놓이고, 임시 프로젝트는 시험 종료 때 제거된다.
+저장소 루트에서 실행한다. 도구는 두 Cargo 프로필을 순서대로 실행하며 일반 Cargo 환경 변수를 따른다.
+동일 target을 다른 작업과 공유한다면 별도 target 또는 로컬 빌드 큐로 감쌀 수 있다.
+추적되지 않은 로컬 큐 스크립트는 필수 의존성이 아니다. 임시 프로젝트는 시험 종료 때 제거된다.
 
 ```sh
 npm ci --prefix mcp-app
 
 # 생성: default → 제품 프로필을 두 번 실행, 파일별 byte equality 확인, JS 검사
-python3 coordination/parallel-wave-2/cargo-queue.py -- node tools/chain-monitor-fixtures/run.mjs --write
+node tools/chain-monitor-fixtures/run.mjs --write
 
 # 검사: 새 임시 프로젝트에서 생성한 응답과 커밋 대상 JSON을 비교 (fixture 쓰기 없음)
-python3 coordination/parallel-wave-2/cargo-queue.py -- node tools/chain-monitor-fixtures/run.mjs --check
+node tools/chain-monitor-fixtures/run.mjs --check
 
 # JS만 빠르게 재검사
 node --test mcp-app/chain-core-fixtures.test.mjs mcp-app/chain.test.mjs
 
 # 요청된 제품 프로필의 새 시험 및 관련 기존 시험 (아래 알려진 실패 포함)
-python3 coordination/parallel-wave-2/cargo-queue.py -- cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test chain_monitor_fixtures --test companion --test chain_handoff --test chains --test chain_closing --test approved_plan_wire_wave1 --no-fail-fast -- --test-threads=1
+cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test chain_monitor_fixtures --test companion --test chain_handoff --test chains --test chain_closing --test approved_plan_wire_wave1 --no-fail-fast -- --test-threads=1
 
 # 기존 bare-approval Chain 시험의 지원 프로필을 별도로 확인
-python3 coordination/parallel-wave-2/cargo-queue.py -- cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --test chain_handoff --test chains --test chain_closing -- --test-threads=1
+cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --test chain_handoff --test chains --test chain_closing -- --test-threads=1
 
-# 기본 프로필 Companion 호환 (fixture 목록 검사 충돌 포함)
-python3 coordination/parallel-wave-2/cargo-queue.py -- cargo test --locked -p gil --test companion -- --test-threads=1
+# 기본 프로필 Companion 호환 (통합에서 fixture 목록 검사 충돌 수정)
+cargo test --locked -p gil --test companion -- --test-threads=1
 git diff --check
 ```
 
@@ -114,7 +115,7 @@ python3 -m http.server 8767 --bind 127.0.0.1
 자동 연결/갱신, 재설치, Tauri, Windows 인수가 아니다. PNG는 실제 Core 읽기와 JS
 바이트 검사를 했으며 이 브라우저 harness에서 이미지 렌더링은 검사하지 않는다.
 
-## 검증 기록과 알려진 충돌
+## 원본 브랜치의 검증 기록과 초기 충돌
 
 2026-11-17, macOS arm64, 기준 `bcefbc4`에서 수행했다.
 
@@ -129,7 +130,7 @@ python3 -m http.server 8767 --bind 127.0.0.1
 - `git diff --check` 통과. 요청된 전용 새 파일 19개만 추가했다.
 - **전체 기존 Rust 시험 통과를 주장하지 않는다.** 아래 충돌은 기존 파일을 바꾸지 않고 남긴다.
 
-### 필수 디렉터리와 기존 fixture 목록 검사의 충돌
+### 필수 디렉터리와 기존 fixture 목록 검사의 충돌 (초기 관측)
 
 `tests/companion.rs::the_switcher_lists_exactly_the_fixtures_that_exist`는 `ui/fixtures` 바로
 아래 모든 디렉터리를 기존 `projects.json`의 3개 항목과 같다고 가정한다.
@@ -140,7 +141,7 @@ python3 -m http.server 8767 --bind 127.0.0.1
 최소 재현:
 
 ```sh
-python3 coordination/parallel-wave-2/cargo-queue.py -- cargo test --locked -p gil --test companion the_switcher_lists_exactly_the_fixtures_that_exist -- --exact
+cargo test --locked -p gil --test companion the_switcher_lists_exactly_the_fixtures_that_exist -- --exact
 ```
 
 기대: 기존 브라우저 fixture 3개와 별도 Core fixture corpus가 공존할 수 있음.
@@ -148,6 +149,11 @@ python3 coordination/parallel-wave-2/cargo-queue.py -- cargo test --locked -p gi
 `[chain-core, dense, first-interview, reading-one]` 불일치.
 후속 통합에서는 유지관리자가 디렉터리 검사 범위를 실제 switcher fixture로 제한하는
 별도 변경 등을 검토해야 한다. 이 작업은 기존 시험/registry를 변경하거나 green CI를 보장하지 않는다.
+
+통합 검토에서 `chain-core`만 별도 응답 자료로 구분하여 목록 검사 충돌을 수정했다.
+다른 디렉터리는 계속 기존 registry와 정확히 대조하며, 별도 자료는 실제 Core 생성·decoder·JS 시험으로 검사한다.
+두 프로필 생성 도구의 로컬 큐 필수 조건도 제거해 일반 checkout에서 재현할 수 있다.
+아래는 원본 브랜치의 최초 검증 이력이며 통합 후 결과는 병합 요청에 별도로 기록한다.
 
 ### 기존 시험의 승인 프로필 제한
 

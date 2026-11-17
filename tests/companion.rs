@@ -530,6 +530,10 @@ fn the_switcher_lists_exactly_the_fixtures_that_exist() {
                 .is_dir()
                 .then(|| entry.file_name().to_string_lossy().into_owned())
         })
+        // Dedicated Core response corpus, checked by chain_monitor_fixtures and the JS
+        // projection tests. It is not a switcher project; every other directory still
+        // has to match projects.json exactly, including accidentally added directories.
+        .filter(|name| name != "chain-core")
         .collect();
     on_disk.sort();
 

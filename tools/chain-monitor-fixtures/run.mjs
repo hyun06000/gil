@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Run the entire two-profile sequence in ONE existing Cargo queue slot.
+// Run both profiles sequentially. A local build queue may wrap this command, but is optional.
 import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -7,7 +7,6 @@ import { resolve } from 'node:path';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const args = process.argv.slice(2);
 if (args.length !== 1 || !['--check', '--write'].includes(args[0])) throw new Error('usage: node tools/chain-monitor-fixtures/run.mjs --check|--write');
-if (!process.env.GIL_PARALLEL_TARGET_DIR) throw new Error('Run inside: python3 coordination/parallel-wave-2/cargo-queue.py -- node tools/chain-monitor-fixtures/run.mjs --check|--write');
 const run = (exe, argv, env = process.env) => {
   const result = spawnSync(exe, argv, { cwd: root, env, stdio: 'inherit' });
   if (result.error) throw result.error;
