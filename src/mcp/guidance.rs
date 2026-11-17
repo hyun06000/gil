@@ -57,7 +57,7 @@ pub fn after(name: &str, result: &mut CallToolResult) {
         _ => return,
     };
     if matches!(name, "gil_open" | "gil_close" | "gil_context" | "gil_status") {
-        prepend(result, format!("{hint}\n{}", text("guide.file_boundary")));
+        prepend(result, format!("{hint}\n{}", file_boundary(name)));
     } else if name == "gil_start" {
         // The display handoff (exact show_gil_monitor call) stays the first block; this
         // imperative summary follows it so display recovery still precedes workflow guidance.
@@ -66,6 +66,21 @@ pub fn after(name: &str, result: &mut CallToolResult) {
     } else {
         prepend(result, hint);
     }
+}
+
+/// The file-work note under the hint, in two parts. `guide.file_boundary.rules` says where
+/// project files may change; `guide.file_boundary.applicability` says what that guidance is and
+/// is not: Agent guidance for the selected GIL project, no OS write block, no hooks, nothing for
+/// ordinary shells or other projects.
+///
+/// `gil_context` already carries the full rules in its body (`ctx.file_scope`, always written by
+/// `context()`), so its head keeps only the applicability, which the body does not fully state.
+/// `gil_status`, `gil_open` and `gil_close` have no such body and keep both parts, joined by the
+/// locale's own `guide.file_boundary` template.
+fn file_boundary(name: &str) -> String {
+    let applicability = text("guide.file_boundary.applicability");
+    if name == "gil_context" { return applicability.to_string(); }
+    tr!("guide.file_boundary", rules = text("guide.file_boundary.rules"), applicability = applicability)
 }
 
 /// A refused action moved nothing. Say so once and point at the one recovery call.
@@ -389,6 +404,76 @@ mod tests {
         after("gil_open", &mut analysis);
         let hint = text(&analysis);
         assert!(hint.contains("되풀이하지 않") && hint.contains("가설") && hint.contains("불확실"), "{hint}");
+    }
+
+    /// 2026-11-17 Chain first, context size: `gil_context` repeated the file-work rules twice,
+    /// once in the head and once in its body (`ctx.file_scope`). The head now keeps only what the
+    /// guidance applies to; the body and the other receipts are untouched. Guidance contract
+    /// only — not a token, cost or accuracy claim, and a Host that reads only structuredContent
+    /// sees no difference.
+    #[test]
+    fn the_context_head_keeps_only_the_applicability_and_other_receipts_keep_the_full_boundary() {
+        use crate::locale::{Locale, text as t};
+        // (language, what the applicability must still say, what the context body must still say)
+        let preserved: [(Locale, [&str; 4], [&str; 4]); 5] = [
+            (Locale::Ko,
+                ["선택한 GIL 프로젝트의 Agent 지침", "OS 쓰기 차단은 아니다", "GIL 훅은 설치하지 않으며", "일반 셸·다른 프로젝트에는 적용하지 않는다"],
+                ["실제로 열린 Experiment Verify에서만", "DOCX·PNG·PDF", "프로젝트 파일을 남기지 않는 웹 조사", "OS 쓰기 차단을 뜻하지 않는다"]),
+            (Locale::En,
+                ["Agent guidance for the selected GIL project", "not an OS write block", "GIL installs no hooks", "does not apply to ordinary shells or other projects"],
+                ["only in an Experiment Verify that is actually open", "DOCX, PNG and PDF", "web research that leaves no project file", "not an OS write block"]),
+            (Locale::Ja,
+                ["選んだ GIL プロジェクトへの Agent 指針", "OS の書き込み遮断ではない", "GIL はフックを入れず", "一般のシェルや他のプロジェクトには適用しない"],
+                ["実際に開いている Experiment Verify でのみ", "DOCX・PNG・PDF", "プロジェクトファイルを残さないウェブ調査", "OS の書き込み遮断ではない"]),
+            (Locale::ZhHans,
+                ["所选 GIL 项目的 Agent 指引", "不是操作系统的写入阻止", "GIL 不安装钩子", "不适用于普通 shell 或其他项目"],
+                ["只在实际打开的 Experiment Verify 中", "DOCX、PNG、PDF", "不留下项目文件的网络调研", "不是操作系统的写入阻止"]),
+            (Locale::ZhHant,
+                ["所選 GIL 專案的 Agent 指引", "不是作業系統的寫入封鎖", "GIL 不安裝 hook", "不適用於一般 shell 或其他專案"],
+                ["只在實際開啟的 Experiment Verify 中", "DOCX、PNG、PDF", "不留下專案檔案的網路調查", "不是作業系統的寫入封鎖"]),
+        ];
+        assert_eq!(preserved.len(), Locale::ALL.len());
+        for (language, applies, body_rules) in preserved {
+            crate::locale::with(language, || {
+                let rules = t("guide.file_boundary.rules");
+                let applicability = t("guide.file_boundary.applicability");
+                let full = tr!("guide.file_boundary", rules = rules, applicability = applicability);
+                // The full note is the two parts and the language's own separator, nothing else.
+                assert!(full.starts_with(rules) && full.ends_with(applicability), "{language}: {full}");
+                assert!(full[rules.len()..full.len() - applicability.len()].trim().is_empty(), "{language}: {full}");
+                assert!(!full.contains('{') && !rules.contains(applicability) && !applicability.contains(rules), "{language}: {full}");
+                for needle in applies { assert!(applicability.contains(needle), "{language} applicability lost {needle}: {applicability}"); }
+                let body = t("ctx.file_scope");
+                for needle in body_rules { assert!(body.contains(needle), "{language} body lost {needle}: {body}"); }
+
+                // gil_status / gil_open / gil_close: rules and applicability, as before.
+                for name in ["gil_status", "gil_open", "gil_close"] {
+                    let mut r = receipt("receipt\n");
+                    after(name, &mut r);
+                    let head = &r.content[0].as_text().unwrap().text;
+                    assert!(head.ends_with(&format!("\n{full}")), "{language} {name}: {head}");
+                }
+
+                // gil_context: the head is the resume hint and the applicability only. The body
+                // (`said`) with the full rules, and structuredContent, pass through untouched.
+                let said = format!("preamble\n{body}\nreport\n");
+                let mut context = receipt(&said);
+                let structured = context.structured_content.clone();
+                after("gil_context", &mut context);
+                let head = &context.content[0].as_text().unwrap().text;
+                assert_eq!(*head, format!("{}\n{applicability}", tr!("guide.context", heading = t("context.next_call_heading"))), "{language}");
+                assert!(!head.contains(rules), "{language}: {head}");
+                assert_eq!(context.content.len(), 2, "{language}");
+                assert_eq!(context.content[1].as_text().unwrap().text, said, "{language}");
+                assert_eq!(context.structured_content, structured, "{language}");
+                assert!(said.contains(body), "{language}");
+
+                // A refused read gets no file note at all, exactly as before.
+                let mut refused = refusal_of("x");
+                after("gil_context", &mut refused);
+                assert_eq!(text(&refused), "x", "{language}");
+            });
+        }
     }
 
     #[test]

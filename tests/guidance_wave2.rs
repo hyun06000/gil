@@ -147,7 +147,7 @@ use serde_json::{Value, json};
 
 fn speaks(result: &Value, locale: Locale) -> bool {
     let all = format!("{}\n{}", hints(result), said(result));
-    all.contains(text_in(locale, "guide.file_boundary")) || all.contains(text_in(locale, "guide.start"))
+    all.contains(text_in(locale, "guide.file_boundary.applicability")) || all.contains(text_in(locale, "guide.start"))
 }
 
 fn files(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
