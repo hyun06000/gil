@@ -33,6 +33,7 @@
 | `approval` | `kind`: `none` · `synthetic`(harness/시험자 입력) · `human_click`(evidence 필수) · `unknown` |
 | `automatic[]` | `{check, status, detail}`. 구조 검사는 outputs에서 다시 계산해 비교한다 |
 | `semantic[]` | `{criterion, status, judge{id}, basis[{quote, from}], rationale}`. pass/fail은 인용 basis·rationale·등록된 judge가 필수 |
+| `prepared_evidence` (선택) | 오프라인 입력 원문·해시·참조와 재계산 가능한 준비 자료. 기존 observation/outputs/판정과 별도이며 평가 횟수에 포함하지 않는다 |
 
 ## 상태 규칙 (검사기가 강제한다)
 
@@ -42,6 +43,9 @@
 - `approval.kind`가 synthetic/none/unknown이면 `human_approval_real`은 pass가 될 수 없다.
 - 사례가 요구한 의미 기준(`judgement.semantic`)에 항목이 없으면 not_run으로 세어 보고한다.
 - `case_set.sha256`이 현재 집합과 다르면 **주의**로 표시한다(문제는 아니다). 전후 비교에는 같은 해시가 필요하다.
+- `prepared_evidence`는 not_run/unknown/evaluated 어느 상태에나 보관할 수 있지만 상태·실행·승인·판정을 변경하지 않는다.
+  기존 not_run의 outputs 금지 규칙도 유지한다. 원문 해시·범위·인용·추출 투영의 불일치는 거절한다.
+  입력 계약과 합성 사용 예는 [가져오기 README](../../../tools/chain-interview-eval/README.md#공개-대화와-도구-기록-가져오기)를 따른다.
 
 ## 예시 파일
 

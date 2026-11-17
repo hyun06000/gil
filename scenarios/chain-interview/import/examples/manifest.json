@@ -1,0 +1,104 @@
+{
+  "schema": "gil.chain-interview.import/1",
+  "id": "source-manifest",
+  "ref": "synthetic:interview/annotations",
+  "run_id": "example-not-run-20261117",
+  "case_id": "CI-01",
+  "events": {
+    "id": "source-events",
+    "ref": "synthetic:interview/events",
+    "sha256": "0f22a549a88c6b35afff97cff77f0a08b9b1540bb9d61b14f0e048dc3d4de96c"
+  },
+  "conversation": {
+    "id": "source-conversation",
+    "ref": "synthetic:interview/conversation",
+    "sha256": "0dd0f06abd326753f25e145fcea0a090cd97e616e2202bc7589b42f1e88eeb60"
+  },
+  "questions": [
+    {
+      "id": "annotation-question",
+      "cite": {
+        "message_id": "message-question",
+        "start": 0,
+        "end": 15,
+        "quote": "어느 열을 먼저 확인할까요?"
+      },
+      "choices": [
+        {
+          "cite": {
+            "message_id": "message-question",
+            "start": 16,
+            "end": 20,
+            "quote": "날짜 열"
+          },
+          "role": "option"
+        },
+        {
+          "cite": {
+            "message_id": "message-question",
+            "start": 21,
+            "end": 30,
+            "quote": "아직 잘 모르겠음"
+          },
+          "role": "unsure"
+        },
+        {
+          "cite": {
+            "message_id": "message-question",
+            "start": 31,
+            "end": 36,
+            "quote": "직접 입력"
+          },
+          "role": "free_text"
+        }
+      ],
+      "multi_select": {
+        "value": false,
+        "cite": {
+          "message_id": "message-question",
+          "start": 37,
+          "end": 49,
+          "quote": "하나만 선택해 주세요."
+        }
+      },
+      "response": {
+        "message_id": "message-answer",
+        "start": 0,
+        "end": 15,
+        "quote": "날짜 열부터 확인해 주세요."
+      }
+    }
+  ],
+  "claims": [
+    {
+      "id": "annotation-claim",
+      "cite": {
+        "message_id": "message-claim",
+        "start": 0,
+        "end": 13,
+        "quote": "항목 A를 완료했습니다."
+      },
+      "items": [
+        "A"
+      ]
+    }
+  ],
+  "links": [
+    {
+      "id": "link-answer-report",
+      "message": {
+        "message_id": "message-answer",
+        "start": 0,
+        "end": 15,
+        "quote": "날짜 열부터 확인해 주세요."
+      },
+      "event": {
+        "seq": 2,
+        "pointer": "/request/arguments/report",
+        "start": 36,
+        "end": 51,
+        "quote": "날짜 열부터 확인해 주세요."
+      }
+    }
+  ]
+}
