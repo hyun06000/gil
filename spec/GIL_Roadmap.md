@@ -185,7 +185,7 @@ Chain 진행에 필요한 안내·계획 합의·응답 대기·재개·중단 �
 각자 자체시험과 합성 입력만 다루고, 통합 시 자동 검사 연결·문서 링크·실행 결과를 한 번에 반영한다.
 독립적인 소스 수정과 별개로 Cargo 빌드는 자원을 공유하므로 순차 실행하거나 별도 출력 폴더를 쓴다.
 
-[각 세션 전달용 프롬프트](work-items/Chain_Next_Parallel_Tasks_20261117.md)를 따른다.
+각 세션에는 위 소유 범위와 완료 조건을 포함한 독립 프롬프트를 채팅으로 전달한다.
 이 세 작업이 끝나도 실제 모델/앱 평가가 자동으로 끝나지 않는다. 다음 제품 전이 구현의 선행 결정은
 [항목 분할·대체 Q1–Q3](proposals/Approved_Item_Split_Replacement_Decision_v0.1.md)와
 [중단·보존·재계획 결정안](proposals/Chain_Interruption_Decision_Pack_v0.1.md)이다.
