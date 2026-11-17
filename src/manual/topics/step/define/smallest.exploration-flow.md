@@ -48,7 +48,7 @@ related:
 [올바른 예]
   탐색 계약 — 요구 R1 「제공된 매출 표로 월별 추이를 믿고 읽을 수 있는가」에 연결된 첫 Experiment.
       problem: sales.csv 의 날짜 열에 허용 형식(YYYY-MM-DD)을 벗어나는 값이 존재하는가?
-      success_condition: 모든 대상 행을 검사해 벗어나는 값의 유무를 행 번호와 함께 판정한다
+      success_condition: sales.csv 의 날짜 열에서 YYYY-MM-DD 형식을 벗어난 값이 하나 이상 존재하고, 해당 값과 행 번호가 증거에 기록된다
   성공해도 R1 은 완료가 아니다. 관측(형식 이탈 3건)에 따라 다음 Experiment 를 같은 R1 에 연결한다.
       problem: 형식을 벗어난 3건을 정보 손실 없이 YYYY-MM-DD 로 변환할 수 있는가?
   항목 큐 계약 — 항목 A 「제공된 표의 날짜·금액 열이 월별 집계에 쓸 수 있는가」에 묶인 Experiment.

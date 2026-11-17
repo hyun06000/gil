@@ -138,7 +138,7 @@ impl Rig {
         let document = read["document"].as_str().expect("document after linking").to_owned();
         let define = ok(self.model("gil_open", json!({"kind":"define","contract":CONTRACT})), "define");
         assert!(define["result"]["content"].to_string().contains("탐색 계약의 Define"), "exploration Define guidance: {define}");
-        ok(self.model("gil_close", json!({"report":format!("problem: {}\nsuccess_condition: 지정한 파일에서 관측한 값으로 예/아니오를 판정한다\n", run.problem)})), "close define");
+        ok(self.model("gil_close", json!({"report":format!("problem: {}\nsuccess_condition: 지정한 파일의 관측 증거가 위 명제의 긍정 답을 뒷받침한다. 근거 있는 부정 답이나 판정 미도달은 성공이 아니다\n", run.problem)})), "close define");
         ok(self.model("gil_open", json!({"kind":"hypothesis","contract":CONTRACT})), "hypothesis");
         ok(self.model("gil_close", json!({"report":"hypothesis: 합성 자료만으로 판정할 수 있다\nrationale: 자료가 제공됐다\nguardrail: 외부 데이터를 쓰지 않는다\n"})), "close hypothesis");
         let v = ok(self.model("gil_open", json!({"kind":"verify","contract":CONTRACT})), "verify");
@@ -309,7 +309,7 @@ fn one_requirement_takes_two_small_defines_without_reapproval_and_reads_the_same
     // approval state, not as a missing link.
     let c4 = r.open_experiment("R2");
     ok(r.model("gil_plan_request_interview", json!({"reason":"R3(금액 열)도 답해야 한다"})), "preserve the scope change");
-    r.run(c4, &Run { requirement: "R2", problem: "금액 열에 숫자가 아닌 값이 존재하는가?", files: &[("evidence/C4.md", "숫자가 아닌 값 없음\n")], evidence: "evidence/C4.md", fails_back_to: None });
+    r.run(c4, &Run { requirement: "R2", problem: "금액 열에 숫자가 아닌 값이 존재하는가?", files: &[("evidence/C4.md", "금액 열 1행에 숫자가 아닌 값 X가 존재한다\n")], evidence: "evidence/C4.md", fails_back_to: None });
     let before = record_bytes(&r.record);
     for contract in [None, Some(link_body(&json!(1), &digest, "R1"))] {
         let args = match contract { Some(body) => json!({"kind":"experiment","contract":body}), None => json!({"kind":"experiment"}) };
