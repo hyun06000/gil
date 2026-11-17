@@ -349,8 +349,23 @@ success/failure 외의 새 verdict를 만들지 않는다. 실패 복원 후에�
   요구가 충족됐는지를 말하는 필드는 없다. 실험 성공 수를 합산하거나 완료율로 바꾸지 않는다.
 - Context는 승인 요구와 연결된 실험의 기록된 판정, 현재 실험의 요구와 선택 근거, 모든 요구가
   미해결이라는 사실, 다음 호출을 적는다. 영수증과 Host 안내는 탐색 Chain의 자리에만 그 계약의
-  문장을 덧붙인다. Monitor 화면 코드는 바꾸지 않았다: 기존 패널은 연결된 요구를 「실행함」(Cycle이
-  열렸다는 기록)으로, 연결 없는 요구를 「남음」으로 보여 준다. 요구별 전용 화면은 후속이다.
+  문장을 덧붙인다. Monitor의 기존 승인 패널은 연결된 요구를 「실행함」(Cycle이 열렸다는 기록)으로,
+  연결 없는 요구를 「남음」으로 보여 준다. 요구별 전용 화면은 후속이다.
+- **기존 패널의 요구 원문 (2026-11-18 보정).** 열린 제안이 없을 때 패널은 요구의 질문·판단 기준을
+  `current_item`에서만 읽었다. `current_item`은 현재 Cycle이 연결된 요구 하나이므로, 현재 실험이 다른
+  요구로 옮기거나 현재 Cycle이 Interview이면 앞서 연결된 요구는 id·상태·Cycle 주소만 남고 원문이
+  빠졌다. 이제 탐색 Chain(`contract: "exploration"`)의 응답에서는 그런 요구의 원문을 `requirements`의
+  **같은 id**에서 글자 그대로 읽는다. 고치거나 줄이거나 다른 말로 옮기지 않는다.
+  - 상태(「실행함」·「지금 열린 Cycle에 묶임」·「남음」), 개수, 행의 순서, 행에 적는 Cycle 주소(그 요구에
+    마지막으로 연결된 Cycle)의 뜻은 그대로다. 한 요구에 실험이 여럿이어도 행은 하나다. 실패했거나 닫힌
+    실험은 원문을 빼는 이유가 아니며, 원문이 보인다는 것은 그 요구가 충족됐다는 뜻이 아니다.
+  - 제안이 열려 있으면 행은 그 제안(`proposal.draft.items`)의 원문만 쓴다. 승인된 `requirements`와
+    섞지 않으며, 승인 버튼이 보내는 판·digest도 그 제안의 것이다.
+  - 응답이 말하지 않은 것은 채우지 않는다. 표식이 없거나 다른 값이면(항목 큐 Chain 포함) 이 목록을
+    읽지 않는다. 목록이 없거나, 그 id가 없거나 두 번 있거나, 값이 글이 아니면 그 칸을 비운다. 다른
+    요구의 문구, 제안의 초안, 앞서 그린 화면의 내용으로 대신하지 않는다.
+  - 서버 응답·저장 필드·상태·전이·승인 단계·도구 계약은 바뀌지 않았다. 화면 모듈
+    `mcp-app/plans.mjs`의 읽기만 바뀌었다.
 
 ### 원본 근거 조회 (2026-11-18)
 
@@ -448,6 +463,7 @@ cargo test --locked -p gil --features exploration-flow,visual-authoring,product-
 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_flow
 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_tools
 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_evidence
+cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_plan_panel
 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test approved_plan_wire_wave1 --test chain_recovery_preservation --test context --test context_profiles --test guidance_wave1 --test guidance_wave2 --test guidance_interview_chain --test resume_guidance --test manual
 cargo build --locked -p gil --all-targets --features exploration-flow,visual-authoring,product-safety
 ```
@@ -477,6 +493,16 @@ Monitor view·저장 이미지의 동일성, 실패한 Experiment의 시각 증�
 검토 보완으로 더한 2건: 따옴표·역슬래시 200 KB의 값을 가진 Report가 거절되지 않고 범위로 끝까지 읽히는지,
 칸 6천 개·한 응답을 넘는 값·긴 이름의 Report가 쪽과 범위로 읽혀 저장한 내용과 같고 digest가 일치하는지,
 모든 응답이 1 MiB 안인지, 잘못된 이어 읽기 입력의 구분, 조회 전후 불변과 재시작 뒤 같은 응답.
+
+`tests/exploration_plan_panel.rs`(2026-11-18)는 위 「기존 패널의 요구 원문」을 실제 프로세스에 잇는다.
+탐색 Chain 하나를 걸으며 App 경로 `gil_plan_review`의 응답을 자리마다 고치지 않고
+`mcp-app/fixtures/exploration-plan-review.json`에 둔다: 승인 직후(연결 없음), R1 실험 열림·닫힘, 같은 요구의
+두 번째 실험 실패, 승인된 되돌아가기 뒤 **R2 실험 열림**, 그 실험 닫힘, 이후 Interview(연결된 요구 없음),
+새 제안 대기, 그 제안의 승인 기록, 새 판 승인 뒤 R3 실험 열림. 기본 실행은 새로 받은 응답을 그 파일과
+JSON 값으로 대조하고 쓰지 않는다(`GIL_EXPLORATION_PLAN_WRITE=1`일 때만 다시 쓴다). 일회성 승인 capability와
+개인 경로는 파일에 없다. `mcp-app/plans.test.mjs`가 그 응답을 실제 패널 모듈에 넣어 요구마다 한 행과 서버가
+준 원문을 확인하고, 불완전한 응답·제안과 승인 요구의 분리·항목 큐 응답은 그 응답을 고친 합성 사례로 본다.
+이 검사는 패널 모듈의 DOM 대역까지이며 실제 브라우저 표시와 읽는 사람의 이해를 보지 않는다.
 
 합성 App 입력은 사람의 클릭이 아니다. 자연어 의미(Define의 명제 형식·요구 기여·요구 충족), 실제
 모델의 준수, Host 화면 표시는 이 검증으로 입증하지 않는다. 위 명령의 로컬 실행은 macOS뿐이다. Windows에서의

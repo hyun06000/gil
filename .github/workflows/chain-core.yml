@@ -141,6 +141,8 @@ jobs:
         run: node tools/ci/expect-tests.mjs 4 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_tools
       - name: Original-record reads from a requirement over the real stdio process (reports verbatim, paged and ranged reads of large Reports, stored evidence after revisit, restart, refusals, no writes; synthetic)
         run: node tools/ci/expect-tests.mjs 6 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_evidence
+      - name: Approval-panel responses of an exploration Chain from the real stdio process match the kept file the panel test renders (synthetic; no screen)
+        run: node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_plan_panel
       - name: Closing an exploration Chain with an unanswered requirement only as approved, then the explicit next Chain (real stdio process; synthetic)
         run: node tools/ci/expect-tests.mjs 5 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test closing_handoff
       - name: Item-queue Chains keep their contract in an exploration build (unmarked records over the real stdio process)

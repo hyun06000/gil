@@ -43,7 +43,7 @@ test('a failing command keeps its failure and no summary is not a pass', () => {
 
 test('the profile-only exploration suites run behind the guard on both runners', () => {
   const chain = readFileSync(join(root, '.github/workflows/chain-core.yml'), 'utf8').replace(/\r\n/g, '\n');
-  for (const [suite, minimum] of [['exploration_flow', 4], ['exploration_tools', 4]]) {
+  for (const [suite, minimum] of [['exploration_flow', 4], ['exploration_tools', 4], ['exploration_plan_panel', 1]]) {
     const step = chain.split('      - name: ').find(s => s.includes(`--test ${suite}`) && s.includes('exploration-flow,visual-authoring,product-safety'));
     assert.ok(step, `${suite} is wired into the Chain workflow`);
     assert.match(step, new RegExp(`run: node tools/ci/expect-tests\\.mjs ${minimum} cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test ${suite}\\n`), suite);

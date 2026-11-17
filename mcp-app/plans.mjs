@@ -44,6 +44,30 @@ export function planSummary(value, { hasToken = false, uncertain = null } = {}) 
   return { ...base, state: p.base_revision != null || value.active_revision != null ? 'reapproval' : 'requested' };
 }
 
+/**
+ * Exploration contract only: the approved text of each requirement, exactly as the server lists
+ * it in `requirements`. `current_item` names the requirement of the current Cycle alone, so once
+ * the current Experiment is linked to another requirement, or the current Cycle is an Interview,
+ * the earlier requirements have their question and judgment criteria only in that list.
+ *
+ * Nothing is filled in when the response does not say it: no marker, no list, an id listed
+ * twice or a field that is not text all give no text. A proposal's draft, another requirement
+ * and an earlier screen are never used in its place.
+ */
+function approvedRequirements(value) {
+  const found = new Map();
+  if (value?.contract !== 'exploration' || !Array.isArray(value.requirements)) return found;
+  const twice = new Set();
+  for (const r of value.requirements) {
+    if (!r || typeof r.id !== 'string') continue;
+    if (found.has(r.id)) twice.add(r.id);
+    else found.set(r.id, r);
+  }
+  for (const id of twice) found.delete(id);
+  return found;
+}
+const words = (text) => typeof text === 'string' && text ? text : null;
+
 /** Items with their recorded status. The agent's intent is not a status. */
 export function planItems(value) {
   const executed = value?.executed_cycles || [];
@@ -58,13 +82,21 @@ export function planItems(value) {
     ?? (id === current && cycleState.state === 'closed' ? cycleState.ref : null);
   const p = value?.proposal;
   if (p) return p.draft.items.map(i => ({ ...i, status: status(i.id), cycle_ref: cycle(i.id) }));
+  const approved = approvedRequirements(value);
   const seen = new Set();
   const out = [];
   for (const e of executed) {
     if (seen.has(e.item_id)) continue;
     seen.add(e.item_id);
-    const item = e.item_id === current ? value.current_item : null;
-    out.push({ id: e.item_id, question: item?.question ?? null, done_when: item?.done_when ?? null,
+    if (e.item_id === current) {
+      const item = value.current_item;
+      out.push({ id: e.item_id, question: item?.question ?? null, done_when: item?.done_when ?? null,
+        status: status(e.item_id), cycle_ref: cycle(e.item_id) });
+      continue;
+    }
+    // Not the current Cycle's requirement: its own approved text if the server lists it, else none.
+    const item = approved.get(e.item_id);
+    out.push({ id: e.item_id, question: words(item?.question), done_when: words(item?.done_when),
       status: status(e.item_id), cycle_ref: cycle(e.item_id) });
   }
   if (current && !seen.has(current)) {
