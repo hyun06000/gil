@@ -92,7 +92,7 @@ jobs:
       - name: Private visual creation unit contracts
         run: cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --lib visual_start
       - name: Private visual creation integration
-        run: cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --test visual_start
+        run: cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --test visual_start --test chain_resume_benchmark
       - name: Complete native MCP roundtrip
         run: cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --test mcp
       - name: Compile all Core targets in the development product profile

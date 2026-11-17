@@ -74,7 +74,7 @@ impl Rig {
         args["project_root"] = json!(self.root);
         self.call(name, args)
     }
-    #[cfg(feature = "approved-plan")]
+    #[cfg(any(feature = "approved-plan", feature = "product-safety"))]
     fn app(&mut self, name: &str, mut args: Value) -> Value {
         args["scope_id"] = json!(self.scope);
         self.call(name, args)
