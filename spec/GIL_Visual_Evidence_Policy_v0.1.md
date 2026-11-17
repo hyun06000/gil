@@ -43,6 +43,11 @@ Agent 가 시각 자료를 만들지 않았다.** 지침은 "도움이 되면 �
 일반 텍스트 close `{project_root, report}` 와 typed close 가 같은 검사를 지난다. `prepare_visual_close` 가 두
 경로의 합류점이다. 거절은 논리 상태·열린 노드·Will·Journey 를 바꾸지 않는다.
 
+2026-11-17: 이 표의 거절 규칙은 실행 계약과 무관하다. 표식 있는 탐색 Chain(`exploration-flow` 개발 프로필)의
+Verify·Analysis·Experiment Cycle Report에서도 같은 코드로 거절되고 기록이 바뀌지 않음을 실제 stdio 프로세스로
+검사한다(`tests/exploration_tools.rs`, 합성 입력). 실패한 Experiment의 시각 자료는 승인 복구 뒤에도 읽히고
+인용된다. 이 검사는 이미지가 관측 결과를 실제로 보여 주는지나 Host 화면 표시를 입증하지 않는다.
+
 ## 4. 호환성
 
 - 저장 형식(4·5·6·7)과 객체 저장소는 바뀌지 않는다. 자동 이관은 없다.

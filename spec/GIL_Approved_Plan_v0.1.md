@@ -313,6 +313,7 @@ success/failure 외의 새 verdict를 만들지 않는다. 실패 복원 후에�
 ```sh
 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --lib -- --test-threads=1
 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_flow
+cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_tools
 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test approved_plan_wire_wave1 --test chain_recovery_preservation --test context --test context_profiles --test guidance_wave1 --test guidance_wave2 --test guidance_interview_chain --test resume_guidance --test manual
 cargo build --locked -p gil --all-targets --features exploration-flow,visual-authoring,product-safety
 ```
@@ -325,5 +326,16 @@ revisit → 새 Define(파일 변경 있음/없음), 작업물·산출물 복원
 기록**(이전 빌드가 쓰는 바이트)으로 그대로 실행한다. `chain_monitor_fixtures`는 `approved-plan`
 빌드의 Monitor 고정 자료라 이 프로필에서 실행하지 않는다(후속 Chain의 계약이 빌드에 따라 다르다).
 
+`tests/exploration_tools.rs`(2026-11-17 보강)는 같은 방식으로 연 표식 있는 Chain에서 기존 도구·시각 자료
+계약이 유지되는지를 본다: Verify의 시각 자료 선언과 증거 규칙([시각 증거 정책](GIL_Visual_Evidence_Policy_v0.1.md) §3,
+승인 문서·`evidence_files`), Analysis·Experiment Cycle Report의 인용 의무와 다음 Define의 인용, 재시작 뒤 보고서·
+Monitor view·저장 이미지의 동일성, 실패한 Experiment의 시각 증거가 승인 복구 뒤에도 읽히고 인용되는지, 잘못된 입력이
+기록을 바꾸지 않고 이 구성에서 가능한 복구(직접 restore가 아닌 사람의 정리, Monitor 승인)와 실제로 열리는 설명서
+주제를 가리키는지. 두 파일은 `tests/support_wave1/exploration.rs`의 시작·인터뷰·승인·연결 절차를 공유하며 승인
+원장을 직접 고치거나 표식을 지우지 않는다. 이 탐색 구성 전용 시험들은 다른 구성에서는 컴파일되지 않으므로 자동
+검사는 `tools/ci/expect-tests.mjs`로 최소 실행 건수를 요구한다.
+
 합성 App 입력은 사람의 클릭이 아니다. 자연어 의미(Define의 명제 형식·요구 기여·요구 충족), 실제
-모델의 준수, Host 화면 표시, Windows에서의 이 프로필 실행은 이 로컬 검증으로 입증하지 않는다.
+모델의 준수, Host 화면 표시는 이 검증으로 입증하지 않는다. 위 명령의 로컬 실행은 macOS뿐이다. Windows에서의
+이 프로필 실행은 `windows-2025` runner의 자동 검사 결과가 근거이며(#159 최종 검사부터 통과, 결과는
+[로드맵](GIL_Roadmap.md)의 「2026-11-17 보강」), Windows PC 실기와 실제 Host 화면 인수는 수행하지 않았다.

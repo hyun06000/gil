@@ -231,7 +231,9 @@ Windows 제품 구성의 전체 설명서 시험은 이 로컬 macOS 결과만�
 
 ### 2026-11-17 구현 — 첫 탐색 실행 흐름 (개발 프로필 `exploration-flow`)
 
-**상태: 구현·로컬 자동 검증, 배포 구성 미반영, 실제 모델·Host·Windows 실행 미검증.** 정본은
+**상태: 구현·자동 검증(로컬 macOS, 자동 검사 macOS·Windows), 배포 구성 미반영, 실제 모델·Host 화면 미검증.**
+이 절을 처음 적은 시점의 검증은 로컬 macOS뿐이었다. Windows 실행은 #159 최종 자동 검사에서 통과했으며
+아래 「2026-11-17 보강」에 로컬 결과와 구분해 적는다. 정본은
 [탐색 실행 계약](GIL_Approved_Plan_v0.1.md#탐색-실행-계약--개발-프로필-exploration-flow)이다.
 [구현 이행](GIL_Approved_Plan_v0.1.md#후속-구현-이행--검토용-제품-동작-변경-전) 표의 1번과 2·3·5번의 첫 흐름을 다룬다.
 
@@ -255,8 +257,12 @@ Windows 제품 구성의 전체 설명서 시험은 이 로컬 macOS 결과만�
 - [ ] 종료 인터뷰에서 요구별 답·근거·한계를 구조적으로 제시하고 Chain Report·다음 Opening Interview로 인계(이행 4번).
 - [ ] Monitor의 요구–실험 화면과 그 고정 자료(`chain_monitor_fixtures`는 지금 `approved-plan` 자료다).
 - [ ] 실제 모델에서 예/아니오 Define·요구 기여·요구 변경을 Define으로 위장하지 않는지 평가(자동 시험은 의미를 증명하지 않는다).
-- [ ] Windows에서 이 프로필의 실행(CI에 단계는 추가했으나 로컬 검증은 macOS뿐이다), 실제 Host 화면 인수.
-- [ ] 제품 프로필의 다른 통합 시험군(시각 자료 작성·MCP 왕복 등 `chain-core` 프로필 시험)을 이 프로필의 새 Chain으로도 실행.
+- [x] Windows에서 이 프로필의 자동 검사 실행: #159 최종 커밋의 `windows-2025` runner에서 단위·통합 검사가 통과했다
+  (아래 「2026-11-17 보강」). 로컬 Windows PC 실행은 하지 않았다.
+- [ ] 실제 Host 화면 인수(macOS·Windows 모두 미수행). runner의 도구 응답은 화면 표시의 증거가 아니다.
+- [ ] 제품 프로필의 다른 통합 시험군(시각 자료 작성·MCP 왕복 등 `chain-core` 프로필 시험)을 이 프로필의 새 Chain으로도 실행
+  — **일부 해소**(아래 「2026-11-17 보강」: 시각 자료 선언·증거·인용·재시작, 실패 증거 보존, 잘못된 입력의 무변경과
+  복구 안내). 남은 범위는 그 절의 「남은 공백」.
 - [ ] 릴리스·Plugin 빌드 구성에 `exploration-flow`를 넣을지와 그 시점의 결정(이 PR은 넣지 않는다).
 
 **검증(2026-11-17, macOS arm64 로컬):** 기본 Core `cargo test --locked -p gil` 1,636 통과·2 제외,
@@ -284,7 +290,8 @@ context·story·open·revisit·close와 MCP `gil_plan_read`·`gil_open`을 실�
 갱신했다(의존성·`Cargo.lock`·법적 문서 변화 없음).
 
 이 검증은 합성 입력의 도구 경로 검증이다. Define의 명제 형식·요구 기여·요구 충족 같은 자연어 의미,
-실제 모델의 준수, Host 화면 표시, Windows 실행은 입증하지 않는다.
+실제 모델의 준수, Host 화면 표시는 입증하지 않는다. 위 수치는 로컬 macOS 결과이며 Windows 실행의
+근거가 아니다. Windows의 근거는 아래 「2026-11-17 보강」의 자동 검사 결과뿐이다.
 
 **#159 검토 보완:** 탐색 Define 설명서의 성공 조건을 ‘유무 조사 완료’에서 ‘명제의 긍정 답을
 입증하는 관측’으로 수정하고, 합성 시험의 부정 관측을 성공으로 기록하던 예시도 정합하게 고쳤다.
@@ -293,6 +300,103 @@ context·story·open·revisit·close와 MCP `gil_plan_read`·`gil_open`을 실�
 Windows Chain은 기존 `monitor::serve::tests::an_artifact_change_reaches_the_screen`의 복원 후
 화면 갱신 대기에서 실패했다. 그 실행은 탐색 구성 검사에 도달하지 못했으므로 Windows 탐색
 통과로 세지 않는다. 최종 커밋의 전체 검사 결과를 확인한 뒤 병합한다.
+
+### 2026-11-17 보강 — 탐색 Chain의 도구·시각 자료 통합 검사
+
+**상태: 시험과 자동 검사 연결만 추가. 제품 동작·저장 형식·도구 계약·안내 문구·배포 구성 변경 없음.**
+위 「남은 일」의 통합 시험군 항목 가운데, 표식 있는 탐색 Chain에서 비어 있던 경계를 메운다.
+
+**#159 최종 자동 검사 (병합 전 커밋 `7adb06e`, Chain workflow run 44044132938).** `macos-15`: 탐색 구성 단위
+768 통과·1 제외, `tests/exploration_flow.rs` 4 통과, 항목 큐 통합 시험군·설명서·전체 대상 build 통과.
+`windows-2025`: 탐색 구성 단위 765 통과·1 제외, `tests/exploration_flow.rs` 4 통과, 항목 큐 통합 시험군·전체 대상
+build 통과(설명서 시험은 기존대로 macOS 단계에서만 실행). 같은 커밋의 preview·Companion·Windows 기본/시각 구성
+workflow도 통과했다. 앞 절의 “Windows 실행 미검증”은 그 시점의 **로컬** 상태였고, 초기 자동 검사에서 탐색 단계에
+도달하지 못했던 Windows Chain 실패는 최종 실행에서 일어나지 않았다. 이것은 runner의 자동 검사다. Windows PC
+실기, 실제 모델, Host 화면 인수는 여전히 수행하지 않았다.
+
+**대조 — 제외 사유는 하나가 아니다.** 앞 절은 `tests/mcp.rs`·`help_ref.rs`·`visual_start.rs`를 “맨 `approved: yes`
+fixture라 `chain-core` 구성 전용”이라고 묶어 적었다. 세 파일을 `exploration-flow,visual-authoring,product-safety`로
+그대로 실행해 대조한 결과(로컬 macOS)는 다음과 같다.
+
+| 파일 | 탐색 구성 결과 | 통과하지 못한 까닭 |
+| --- | --- | --- |
+| `tests/mcp.rs` (37) | 26 통과 · 11 실패 | 10건은 맨 승인 fixture(`common::bootstrap_from`의 의도된 중단): 시각 자료 작성 5, Chain 종료·인계 2, 이관 1, 이미지 전송 1, Verify 증거 1. 1건은 실제 프로세스가 승인 없는 Synthesis 닫기를 거절(계약대로). 통과한 26건은 초기화·도구 목록·Monitor scope·경로 정규화·stdout 프레임처럼 Chain 계약과 무관한 검사다 |
+| `tests/help_ref.rs` (20) | 7 통과 · 13 실패 | 8건은 맨 승인 fixture. 4건은 승인과 무관한 `product-safety` 정책 차이(직접 restore 차단 3, dirty 안내 문구 1). 1건은 실제 승인 상태 거절. 이 파일은 기본 구성의 CLI 시험이며 `chain-core` 제품 구성 자동 검사에서도 실행된 적이 없다 |
+| `tests/visual_start.rs` (1) | 0 통과 · 1 실패 | 맨 승인 fixture(공개 Core 진입점 시험, 도구 경로 아님) |
+
+이 fixture들을 탐색 구성에서 돌도록 바꾸지 않았다. 맨 승인 주입은 승인 계획 계열 빌드에서 Core가 거절하는 것이
+계약이고, 표식을 지운 기록으로 걷는 것은 탐색 계약의 검사가 아니기 때문이다.
+
+**이미 검증돼 있던 것(복제하지 않음).** 요구 연결과 잘못된 연결의 거절, 성공이 요구를 끝내지 않음, 파일 차이 유무별
+실패 → 승인 복구 → 새 Define, 작업물·산출물 복원과 보존본, 재시작 뒤 `gil_plan_read`·`gil_context`·기록 불변
+(`tests/exploration_flow.rs`). 설명서 Topic 본문의 구성별 정책(`tests/manual.rs`, 탐색 빌드의 표식 없는 Chain).
+typed close의 schema 수준 모양 오류와 큰 이미지의 분할 전송(`tests/mcp.rs`, Chain 계약과 무관).
+
+**이번에 메운 공백 — `tests/exploration_tools.rs` 4건.** 모든 Project는 이 빌드의 `gil_start`가 연 표식 있는 Chain이며
+시작 인터뷰의 제안 → 합성 App 검토·결정 → 승인 Synthesis → 요구를 명시한 Experiment 열기를 실제 stdio 프로세스로
+거친다(`tests/support_wave1/exploration.rs`를 `exploration_flow.rs`와 공유). 승인 원장 편집·표식 제거·맨 승인 주입이 없다.
+
+- Verify의 시각 자료 선언과 증거 규칙: 일반 텍스트 close, 한 단어 이유, 증거에 이미지를 적고 불필요 선언, 프로젝트 밖
+  첨부, PNG가 아닌 첨부, 없는 증거 파일, 이전 세계에서 바뀌지 않은 파일만 적은 증거, 승인 문서 누락·요약본 대체, Report
+  칸 누락, 다른 owner를 각각 거절하고 기록과 열린 Verify가 그대로다. 고친 close는 확정되고 같은 close의 반복은 거절된다.
+- 인용과 재조회: Verify가 첨부한 자료를 인용하지 않은 Analysis·Experiment Cycle Report 거절(거절문이 인용 값을 준다),
+  저장된 적 없는 바이트의 인용 거절, Outcome은 인용 없이 닫힘, 같은 요구의 다음 Define이 앞 Cycle의 자료를 인용.
+  재시작한 프로세스에서 보고서별 시각 자료, status·story·context·plan 읽기, Monitor view, 저장 이미지 바이트가 같다.
+- 실패 증거의 보존: 실패한 Experiment가 같은 경로의 이미지를 바꿔 첨부한 뒤 승인 복구를 거치면 작업 폴더의 이미지는
+  대상 세계의 것으로 돌아가고, 실패 Cycle의 시각 보고서와 저장 바이트, 보존본은 남는다. 복원·재시작 뒤 같은 요구의 다음
+  Define이 실패한 관측을 인용할 수 있고, 인용은 파일을 작업 폴더로 되돌리지 않는다.
+- 잘못된 입력: 두 번째 start, 행동 계약 없는 열기, 모르는 종류, 순서를 건너뛴 열기, Verify 밖 파일 변경 뒤의 닫기, 직접
+  restore, Cycle Report의 판정 누락·모순·되돌아갈 곳 누락·없는 Cycle이 기록과 파일을 바꾸지 않는다. dirty 거절은 이
+  구성이 거절하는 restore를 권하지 않고 사람이 정리하도록 안내하며, 그 안내대로 파일을 프로젝트 밖으로 옮기면 같은
+  close가 받아들여진다. 거절이 가리킨 설명서 주제(`action/open-contract`, `artifact/dirty/non-verify`,
+  `cycle/experiment/close`, `cycle/revisit/target`, `report/visuals`)는 같은 프로세스의 `gil_help`로 열린다.
+
+**자동 검사 연결.** `.github/workflows/chain-core.yml`의 탐색 구성 묶음에 `exploration_tools` 단계를 더했다(macOS·Windows
+공통). 이 두 탐색 통합 시험은 기능 gate 밖에서는 통째로 컴파일되지 않아 `cargo test`가 `running 0 tests`로 성공한다.
+`tools/ci/expect-tests.mjs`가 최소 실행 건수(각 4)를 요구하여 그런 0건 실행을 통과로 세지 않는다. 기존 단계의 순서와
+제품 구성 검사는 그대로다.
+
+**검사 중 관찰(수정하지 않음, 탐색 계약 고유의 문제 아님).**
+
+- 제품 구성에서 실패·revisit으로 닫힌 뒤 `gil_open`의 거절문은 도메인 문구 그대로 `gil revisit`을 가리킨다. 이 구성에서
+  모델 쪽 `gil_revisit`은 저장된 승인이 없으면 거절되고 그 거절문과 context가 Monitor의 「보존 후 되돌아가기」 승인을
+  안내하므로, 실행 가능한 행동까지 두 번의 거절을 거친다. 기록과 파일은 바뀌지 않는다. 한 번에 승인 대기를 안내할지는
+  거절 문구(도메인 문자열·다섯 언어) 결정이라 이번 범위에서 정하지 않았다.
+- typed close로 보낸 Verify Report에 칸이 빠지면 `close_not_confirmed`와 빠진 칸 이름을 받는다. 일반 close의 입력
+  골격·`step/verify/close` 주제 연결은 붙지 않는다(구성과 무관한 typed close 공통 경로다).
+
+**남은 공백.**
+
+- `tests/mcp.rs`의 Chain 계약과 무관한 26건은 탐색 빌드에서 로컬 통과를 확인했을 뿐 자동 검사에는 연결하지 않았다.
+  같은 실행 파일의 맨 승인 fixture 11건을 조건 없이 건너뛰게 만들지 않기 위해서다.
+- 탐색 Chain에서 실제 프로세스로 걷지 않은 `chain-core` 경로: Chain 종료 보고의 응답 유실·Monitor 재시작, 다음 Chain
+  인계의 재시작, 경합하는 두 close, 이미지 분할 전송, format 5 → 7 이관 도구(이관은 기존 기록 전환이라 범위 밖).
+- `tests/help_ref.rs`의 CLI 거절 문구·주제 연결은 기본 구성에서만 검사한다. 탐색 Chain의 주제 연결은 MCP 경로로 검사했다.
+- `chain_monitor_fixtures`(Monitor 고정 자료)와 요구별 Monitor 화면, 종료 인터뷰의 요구별 답·한계는 후속 설계 대상이다.
+- 다섯 언어 중 한국어 응답만 검사한다. 설명서 시험은 자동 검사에서 macOS 단계뿐이다.
+- 자연어 의미(Define의 명제 형식, 요구 기여, 이미지가 관측 결과를 실제로 보여 주는지)는 형식 검사로 입증하지 않는다.
+  합성 App 입력은 사람의 클릭이 아니며, 저장·조회 성공은 Host 화면 표시가 아니다.
+
+**검증 (2026-11-17, 로컬 macOS arm64).** `exploration-flow,visual-authoring,product-safety`: 단위 768 통과·1 제외,
+`tests/exploration_flow.rs` 4 통과(보조 코드 공유 뒤에도 같은 4건), `tests/exploration_tools.rs` 4 통과 — 두 통합 시험은
+`tools/ci/expect-tests.mjs 4`로 실행했다. 항목 큐 통합 시험군 45, 설명서 35, 보호 21 통과, 전체 대상 build 통과.
+`approved-plan,visual-authoring,product-safety`: 실제 stdio 승인·복구·Monitor 고정 자료 17 통과, 전체 대상 build 통과,
+설명서 예시 실행 CX-00–07 통과, 예시 검사 21 통과, 문맥 측정 26 통과·1 제외. 이 구성에서 `exploration_tools`는
+컴파일되지 않아 0건이며 `expect-tests`가 그 실행을 실패(exit 1)로 처리함을 확인했다. 이 구성의 단위 시험 전체는
+이번에 실행하지 않았다(소스 변경 없음). `chain-core,visual-authoring,product-safety`: `mcp` 37, `visual_start` 1,
+`chain_resume_benchmark` 1 통과, 전체 대상 build 통과. 기본 Core `cargo test --locked -p gil`: 첫 실행에서 단위 시험
+`runtime_launch::tests::a_steadily_progressing_input_is_bounded_by_the_deadline_too` 1건이 선택 잠금 경합으로 실패해
+통합 시험에 도달하지 못했다. 이 변경은 `src/`를 고치지 않았고, 그 모듈만 3회 다시 실행해 매번 12건 통과,
+`--no-fail-fast` 전체 재실행은 1,636 통과·2 제외였다(병렬 실행의 간헐 실패로 보이며 원인은 조사하지 않았다).
+전체 대상 build 통과. 화면/Plugin JS 233 통과·5 제외, 패키징/고지 105 통과·1 제외, CI 계약 7 통과, 문서 연결 검사
+문제 없음. `spec/GIL_Approved_Plan_v0.1.md`의 검증 명령 블록은 설명서 예시 검사가 지문으로 지키는 구간이라
+`tools/manual-example-check/examples.json`의 `SPEC-EXPLORE-SH` 지문을 재검토 뒤 갱신했다(실행하지 않는 목록 항목).
+
+검토 보완: 잘못된 입력 복구 시험의 Define을 ‘입력 파일이 비어 있는가?’로 맞췄다. 한 줄 입력이라는
+관측이 부정 답과 failure를 뒷받침하도록 한 시험 문구 수정이며, 실행 로직·제품 계약 변경은 없다.
+
+Windows에서는 로컬 실행을 하지 않았다. 이 보강의 Windows·macOS 자동 검사 결과는 이 변경의 PR에서
+Chain workflow 실행으로 확인하며, 그 전까지 Windows 통과로 세지 않는다.
 
 ### 2026-11-17 현재 구현 순서 — Chain 최우선
 
