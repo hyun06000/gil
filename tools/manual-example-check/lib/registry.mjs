@@ -47,7 +47,13 @@ export function validateRegistry(reg) {
     if (typeof ex.claim !== 'string' || !ex.claim) fail(`${ex.id}: claim required`);
   }
   for (const c of reg.consistency ?? []) {
-    for (const side of ['left', 'right']) if (!ids.has(c[side]?.example)) fail(`consistency ${c.id}: unknown example ${c[side]?.example}`);
+    for (const side of ['left', 'right']) {
+      if (!ids.has(c[side]?.example)) fail(`consistency ${c.id}: unknown example ${c[side]?.example}`);
+      if (!Array.isArray(c[side].path) || c[side].path.length === 0) fail(`consistency ${c.id}: ${side}.path must name the compared value`);
+    }
+    // Two documents that quote the same approved item must agree. A recorded exception would let
+    // an example redefine an approved item, so the mapping cannot carry one.
+    if ('acknowledged' in c) fail(`consistency ${c.id}: an acknowledged mismatch is not accepted; make the documents agree`);
   }
   return reg;
 }
@@ -101,9 +107,8 @@ export function evaluateSources(reg, { repo, readText = (p) => readSource(repo, 
     const left = getPath(l.payload, c.left.path);
     const right = getPath(r.payload, c.right.path);
     const row = { id: c.id, left, right, note: c.note, examples: [c.left.example, c.right.example] };
-    if (left === right) row.status = 'consistent';
-    else if (c.acknowledged && c.acknowledged.left === left && c.acknowledged.right === right) row.status = 'known_mismatch';
-    else { row.status = 'mismatch'; row.detail = `${c.left.example}${fmt(c.left.path)} ≠ ${c.right.example}${fmt(c.right.path)}; review both documents (acknowledging a mismatch requires updating examples.json → consistency ${c.id}.acknowledged)`; }
+    if (typeof left === 'string' && left !== '' && left === right) row.status = 'consistent';
+    else { row.status = 'mismatch'; row.detail = `${c.left.example}${fmt(c.left.path)} ≠ ${c.right.example}${fmt(c.right.path)}; make both documents quote the same text (a mismatch cannot be acknowledged in examples.json)`; }
     consistency.push(row);
   }
   return { examples, unmapped, consistency };
@@ -113,7 +118,7 @@ const fmt = (path) => path.map((k) => (typeof k === 'number' ? `[${k}]` : `.${k}
 
 /** True when nothing in the source evaluation blocks execution. */
 export function sourcesClean(result) {
-  return result.examples.every((e) => e.source_status === 'ok') && result.unmapped.length === 0 && result.consistency.every((c) => c.status === 'consistent' || c.status === 'known_mismatch');
+  return result.examples.every((e) => e.source_status === 'ok') && result.unmapped.length === 0 && result.consistency.every((c) => c.status === 'consistent');
 }
 
 export function registryPath(here) { return join(here, 'examples.json'); }
