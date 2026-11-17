@@ -194,6 +194,11 @@ Context의 read-only 성질, 종료 상태 안내, 서버 재시작 뒤 같은 �
 새 Chain부터 적용하되 현재 바이너리의 새 Chain이 이미 새 의미를 지원한다고 안내하지 않는다.
 기존 Chain의 자동 전환·과거 승인 재해석·일괄 기록 이전은 하지 않는다.
 
+**2026-11-17 구현 상태.** 1번과 2·3·5번의 첫 실행 흐름을 개발 프로필 `exploration-flow`로
+구현했다. 계약은 아래 「탐색 실행 계약」이 정본이다. 이 프로필은 어떤 배포 구성에도 켜지 않았고
+기존 설치본·`approved-plan` 빌드의 동작은 그대로다. 4번(종료 인터뷰에서의 요구별 답·한계 투영과
+Chain Report 인계 형식)과 Monitor의 요구별 화면, 실제 모델·Host 평가는 남아 있다.
+
 | 순서 | 구현 범위 | 검증할 경계 |
 | --- | --- | --- |
 | 1 | 새 Chain 계약의 식별·저장 호환, 안정된 승인 요구와 여러 실험의 연결 | 기존 기록은 기존 의미로 읽고, 구형 writer가 새 의미를 훼손하지 않음. 요구 연결이 실행 승인 확대가 아님 |
@@ -228,3 +233,97 @@ success/failure 외의 새 verdict를 만들지 않는다. 실패 복원 후에�
 - 잘못된 정보의 원인 위치와 복원점은 구분한다. 원인이 미확정이면 그렇게 기록한다.
 - 종료 시 질문별 답·근거·한계를 제시하고 인간 승인 없이 닫지 않는다. 다음 인터뷰는 이전 기록을 활용하되 승인을 재사용하지 않는다.
 - 기본/제품 구성의 저장·재시작·도구·UI 회귀와 실제 모델/Host 인수를 구분한다. 자동 시험이 자연어 의미 충족을 증명한다고 주장하지 않는다.
+
+## 탐색 실행 계약 — 개발 프로필 `exploration-flow`
+
+상태: 2026-11-17 구현. `exploration-flow`(`approved-plan` 포함)는 opt-in 개발 프로필이며 기본·제품
+배포 구성에 켜지 않았다. 이 절은 그 프로필이 여는 **새 Chain** 에만 적용된다. 이 문서의 앞 절이
+말하는 항목 바인딩·순서·재시도 규칙은 표식 없는 Chain(항목 큐 계약)에 그대로 유효하다.
+
+### 계약의 식별과 저장
+
+- Chain의 `approved_plan`에 `contract: exploration`이 있으면 탐색 계약, 없으면 항목 큐 계약이다.
+  값은 `exploration` 하나뿐이며 항목 큐를 뜻하는 명시적 값은 없다. 표식 없는 원장은 이전과 같은
+  바이트로 읽고 쓴다. 저장 형식 번호(6/7)는 바뀌지 않는다.
+- 표식은 Chain을 열 때 정해지고 바뀌지 않는다. `exploration-flow` 빌드가 여는 Chain(새 프로젝트의
+  첫 Chain과 닫힌 Chain 다음의 Chain)은 탐색 계약이다. 그 밖의 빌드는 표식을 쓰지 않는다.
+- 닫힌 항목 큐 Chain 다음에 탐색 Chain이 올 수 있다. 앞 Chain의 원장·승인·실행 기록은 다시 쓰지
+  않는다. 반대 방향(탐색 Chain 다음의 항목 큐 Chain)과 Chain 사이의 표식 이동은 load에서 거절한다.
+  승인 원장이 없는 Chain(`chain-core`만의 기록) 다음에는 원장 없는 Chain이 오며 표식도 없다.
+- 구형 writer와 `approved-plan`만의 빌드는 표식이 있는 기록을 읽지 못한다. 이 변경 전의 프로그램은
+  `approved_plan`의 알 수 없는 필드로, 이후의 `approved-plan` 빌드는 명시적 사유로 거절하며 기록을
+  바꾸지 않는다. 표식을 지워 항목 큐 규칙으로 읽히게 한 기록도 연결의 선택 근거 칸 때문에 거절된다.
+- 기존 Chain의 중간 전환, 과거 기록의 일괄 이전, 과거 승인의 재해석은 없다.
+
+### 승인 요구와 실험의 연결
+
+- 제안의 입력 모양(`scope`/`items`/`synthesis`)과 판·digest 결속, Monitor 버튼 승인은 그대로다.
+  탐색 계약에서 `items`는 실행 순서가 아니라 **승인된 요구**(답할 질문 `question`, 판단 기준 `done_when`)다.
+- Experiment는 열 때 요구 하나에 명시적으로 연결된다. `gil open experiment`(MCP `gil_open`의
+  `contract`)의 본문에 여섯 칸을 적는다. 첫 미실행 항목을 자동으로 고르지 않는다.
+
+  ```text
+  plan_revision: 1
+  plan_digest: <gil_plan_read.active_plan.digest>
+  requirement_id: <승인된 요구 id 하나>
+  relevance: 이 질문이 그 요구의 답에 왜 필요한가
+  readiness: 필요한 입력·선행 결과가 실제로 확보돼 있는가
+  uncertainty: 이 실험이 줄이는 불확실성은 무엇인가
+  ```
+
+- Core가 검사하는 것: 실행 가능한 승인 판이 있는가(승인 전 거절), 보존된 재인터뷰 요청이 없는가,
+  판과 digest가 **이 Chain의 현재 승인 판**과 정확히 같은가, 요구 id가 그 판에 있는가, 세 설명이
+  비어 있지 않은가(각 4096바이트 이하), 모르는 칸이 없는가. 다른 Chain의 승인 digest, 같은 Chain의
+  지난 판, 승인되지 않은 요구는 각각 사유를 밝혀 거절하고 기록을 바꾸지 않는다.
+- Core가 검사하지 **않는** 것: Define이 그 요구에 실제로 기여하는지, 세 설명이 사실인지, Define이
+  예/아니오 명제인지. 자연어 의미의 판정은 모델·실사용 평가의 몫이며 자동 시험으로 증명하지 않는다.
+- 연결은 `executed_cycles`에 `{cycle_ref, revision, item_id, selection}`으로 남는다. 한 요구에 여러
+  실험이 순차 연결될 수 있고 목록 순서의 제약이 없다. 성공은 요구를 소비하지 않으며 실패는 같은
+  항목의 재바인딩을 만들지 않는다. 한 Experiment는 정확히 한 요구에 연결되고, 한 번에 열린 Cycle은 하나다.
+- 세분화·방법·순서 변경은 새 제안을 요구하지 않는다. 요구·범위·권한·판단 기준 자체의 변경은
+  기존대로 Interview의 새 승인 판이며(`gil_plan_request_interview`가 요청을 보존한다) 기존 요구의
+  누락·정의 변경 거절도 그대로다. 요구 변경을 Define으로 위장했는지는 Core가 판정하지 못한다.
+
+### 실패 뒤의 복원과 다음 실험
+
+- 실패한 Experiment는 `revisit`만 선언할 수 있고(기존 문법), 제품 구성에서는 승인 복구를 거쳐야
+  다음 Cycle을 열 수 있다. 복구의 대상 검증·승인·보존본·세계 전체 복원은 바꾸지 않았다.
+  파일 차이가 없는 실패도 같은 경로를 지나며 변경 목록이 빈 승인 기록이 남는다.
+- 복원 뒤의 Experiment도 연결을 들고 열린다. 같은 요구에 다른 작은 Define을 연결할 수 있고 실패한
+  Define을 되풀이할 필요가 없다. 「직전 실패의 revisit 계보에서 같은 항목만 다시 바인딩」 규칙과
+  `retry_pending`은 항목 큐 계약에만 남는다. 탐색 계약의 `retry_pending`은 언제나 비어 있다.
+- 되돌아갈 곳이 다른 Chain의 Cycle이면 그 사실을 밝혀 거절한다. 다른 Chain의 기록을 근거로 읽는
+  것과 그 세계로 복원하는 것은 다르며 후자는 구현하지 않았다.
+
+### 읽기 투영
+
+- `gil_plan_read`/`gil_plan_review`는 탐색 Chain에서만 다음을 더한다. 항목 큐 Chain의 응답은 그대로다.
+  `contract: "exploration"`, `requirements[{id, question, done_when, experiments[{cycle_ref, state,
+  verdict, revisit_from, plan_revision, selection}]}]`, `current_experiment`, `experiment_link`(위 본문의
+  골격), `requirement_resolution: "user_approved_closing_interview_only"`.
+- `pending`은 아직 실험이 연결되지 않은 요구, `current_item`은 현재 Cycle이 연결된 요구다.
+  요구가 충족됐는지를 말하는 필드는 없다. 실험 성공 수를 합산하거나 완료율로 바꾸지 않는다.
+- Context는 승인 요구와 연결된 실험의 기록된 판정, 현재 실험의 요구와 선택 근거, 모든 요구가
+  미해결이라는 사실, 다음 호출을 적는다. 영수증과 Host 안내는 탐색 Chain의 자리에만 그 계약의
+  문장을 덧붙인다. Monitor 화면 코드는 바꾸지 않았다: 기존 패널은 연결된 요구를 「실행함」(Cycle이
+  열렸다는 기록)으로, 연결 없는 요구를 「남음」으로 보여 준다. 요구별 전용 화면은 후속이다.
+
+### 검증과 한계
+
+```sh
+cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --lib -- --test-threads=1
+cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_flow
+cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test approved_plan_wire_wave1 --test chain_recovery_preservation --test context --test context_profiles --test guidance_wave1 --test guidance_wave2 --test guidance_interview_chain --test resume_guidance --test manual
+cargo build --locked -p gil --all-targets --features exploration-flow,visual-authoring,product-safety
+```
+
+`tests/exploration_flow.rs`는 실제 stdio MCP 프로세스·파일·승인 복구를 거치는 합성 검증이다:
+한 요구 아래 서로 다른 Define 두 개(재승인 없음), 첫 성공이 요구를 끝내지 않음, 실패 → 승인된
+revisit → 새 Define(파일 변경 있음/없음), 작업물·산출물 복원과 실패 증거 보존, 잘못된 연결·승인 전
+실행·복원 우회·동시 Cycle 거절, 표식 없는 Chain의 항목 큐 의미 유지, 닫힌 항목 큐 Chain 다음의
+탐색 Chain, 저장·재시작·읽기 불변. 항목 큐 계약의 기존 통합 시험은 이 빌드에서 **표식 없는 새
+기록**(이전 빌드가 쓰는 바이트)으로 그대로 실행한다. `chain_monitor_fixtures`는 `approved-plan`
+빌드의 Monitor 고정 자료라 이 프로필에서 실행하지 않는다(후속 Chain의 계약이 빌드에 따라 다르다).
+
+합성 App 입력은 사람의 클릭이 아니다. 자연어 의미(Define의 명제 형식·요구 기여·요구 충족), 실제
+모델의 준수, Host 화면 표시, Windows에서의 이 프로필 실행은 이 로컬 검증으로 입증하지 않는다.

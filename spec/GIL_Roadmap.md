@@ -53,7 +53,7 @@ dogfood로 통과**해야 `[x]`가 된다.
 | 새 세션 재개 | 저장된 현재 위치·마지막 결과·응답 대상·승인 판·실행 연결 요약 (#145), 실제 응답 전달량 기준선 (#151) | 실제 모델의 추가 조회·토큰 사용·작업 정확성 평가. 파일 현재 상태는 별도 관측 |
 | Monitor와 Core 연결 | 실제 엔진 응답 13건, 재시작·과거 보고서·저장 시각 증거 검사 (#144) | 실제 앱에서의 화면·버튼 인수; 합성 화면을 실사용으로 세지 않음 |
 | 인터뷰·종료·인계 평가 | 인터뷰 8건·종료 10건의 합성 사례·검사기 (#140·#146), 원자료 가져오기 도구 (#149·#150) | 별도 요청으로 실제 평가. 자료 가져오기와 실제 실행·의미 판정을 구분 |
-| 승인 요구와 탐색 실험·중단 후 재계획 | 요구–실험 분리 방향 합의. 기존 후보 모델 시험 (#134·#143)은 새 방향의 검증이 아님 | 연결·순서·충족 판단 및 중단 전이 결정 → 저장 호환 확정 → 구현 |
+| 승인 요구와 탐색 실험·중단 후 재계획 | 요구–실험 분리 방향 합의. 첫 실행 흐름(요구–실험 연결, 실패 뒤 복원 후 다른 Define)을 opt-in 개발 프로필 `exploration-flow`에 구현(2026-11-17, 배포 구성 미반영). 기존 후보 모델 시험 (#134·#143)은 새 방향의 검증이 아님 | 요구별 답·한계의 종료 투영과 Chain 인계, Monitor 요구 화면, 실제 모델·Host 평가 → 배포 구성 반영 결정 |
 
 소스와 설치본은 구분한다. 게시된 Mac 시험판은 `0.2.1-preview.31`(소스 `393eb8f`), Windows는
 `v0.3.2`이며 #137·#142·#147 후속 변경이 설치본에 들어갔다고 표시하지 않는다.
@@ -226,6 +226,63 @@ restore 2건은 제품판의 직접 복원 차단보다 기본 실행·중단 �
 분리해 차단된 명령을 권하지 않도록 했다. 제품판 설명서 34건은 macOS 자동 검사에 추가했다.
 복구 실행·승인 로직 자체는 바꾸지 않았다. 설명서 예시의 검토 지문·문구 변형 시험도 동기화했다.
 Windows 제품 구성의 전체 설명서 시험은 이 로컬 macOS 결과만으로 검증됐다고 주장하지 않는다.
+
+### 2026-11-17 구현 — 첫 탐색 실행 흐름 (개발 프로필 `exploration-flow`)
+
+**상태: 구현·로컬 자동 검증, 배포 구성 미반영, 실제 모델·Host·Windows 실행 미검증.** 정본은
+[탐색 실행 계약](GIL_Approved_Plan_v0.1.md#탐색-실행-계약--개발-프로필-exploration-flow)이다.
+[구현 이행](GIL_Approved_Plan_v0.1.md#후속-구현-이행--검토용-제품-동작-변경-전) 표의 1번과 2·3·5번의 첫 흐름을 다룬다.
+
+- **계약 식별:** Chain의 승인 원장에 `contract: exploration` 표식. 없으면 항목 큐 계약 그대로(같은
+  바이트). `exploration-flow` 빌드가 여는 Chain만 표식을 갖고, 닫힌 항목 큐 Chain 다음에 탐색 Chain이
+  올 수 있다. 이 변경 전의 프로그램과 `approved-plan`만의 빌드는 표식 있는 기록을 거절한다.
+- **요구–실험 연결:** Experiment를 열 때 승인 판(revision·digest)·요구 id·관련성·준비 상태·줄일
+  불확실성을 명시 입력으로 받는다. 자동 선택·성공 소비·동일 항목 재시도 계보 규칙은 항목 큐에만 남는다.
+  승인되지 않은 요구·다른 Chain의 승인·지난 판·승인 전 실행을 거절한다.
+- **실패 뒤:** 기존 명시적 revisit과 승인 복구(대상 검증·보존·세계 전체 복원)를 그대로 거친 뒤 같은
+  요구에 다른 작은 Define을 연결한다. 파일 차이가 없는 실패도 같은 경로다. 다른 Chain으로의 복원은
+  사유를 밝혀 거절한다(미구현 유지).
+- **도구·문맥·안내:** `gil_open`의 `contract`, `gil_plan_read`의 `contract`·`requirements`·
+  `current_experiment`·`experiment_link`, Context의 요구·현재 실험·미해결 표시, 영수증·Host 안내,
+  workflow·생성 Skill·내장 설명서(빌드별 본문)·다섯 언어. 항목 큐 Chain의 문구와 응답은 바꾸지 않았다.
+- **하지 않은 것:** 요구 충족의 자동 판정·완료율, 새 판정값, 병렬 실험, Chain 간 복원, 기존 기록 이전,
+  `.gilignore`, 릴리스 구성 변경. Monitor 화면 코드는 그대로이며 기존 패널이 연결 사실만 보여 준다.
+
+**남은 일(이 프로필을 배포 구성에 넣기 전):**
+
+- [ ] 종료 인터뷰에서 요구별 답·근거·한계를 구조적으로 제시하고 Chain Report·다음 Opening Interview로 인계(이행 4번).
+- [ ] Monitor의 요구–실험 화면과 그 고정 자료(`chain_monitor_fixtures`는 지금 `approved-plan` 자료다).
+- [ ] 실제 모델에서 예/아니오 Define·요구 기여·요구 변경을 Define으로 위장하지 않는지 평가(자동 시험은 의미를 증명하지 않는다).
+- [ ] Windows에서 이 프로필의 실행(CI에 단계는 추가했으나 로컬 검증은 macOS뿐이다), 실제 Host 화면 인수.
+- [ ] 제품 프로필의 다른 통합 시험군(시각 자료 작성·MCP 왕복 등 `chain-core` 프로필 시험)을 이 프로필의 새 Chain으로도 실행.
+- [ ] 릴리스·Plugin 빌드 구성에 `exploration-flow`를 넣을지와 그 시점의 결정(이 PR은 넣지 않는다).
+
+**검증(2026-11-17, macOS arm64 로컬):** 기본 Core `cargo test --locked -p gil` 1,636 통과·2 제외,
+전체 대상 build 통과. `chain-core` 159 통과, `chain-core,visual-authoring,product-safety` 48 통과·1 제외와
+전체 대상 build 통과. `approved-plan,visual-authoring,product-safety`(항목 큐 계약, 기존 제품 구성): 단위 760
+통과·1 제외, 실제 stdio 승인·복구·Monitor 고정 자료 17, 문맥 17, 안내 13, 설명서 35, 보호 21 통과, 전체 대상
+build 통과, 설명서 예시 실행 CX-00–07 통과(CX-07은 관측만), 문맥 측정 시험 26 통과·1 제외.
+`approved-plan,visual-authoring,recovery-auto-approval` 9 통과와 build 통과. `visual-authoring` 전체 1,657
+통과·3 제외. **`exploration-flow,visual-authoring,product-safety`**: 단위 768 통과·1 제외(항목 큐 단위 시험
+전체를 표식 없는 Chain으로 포함), `tests/exploration_flow.rs` 4 통과(실제 stdio·파일·승인 복구), 항목 큐
+통합 시험군 45 통과(표식 없는 새 기록으로 실행), 설명서 35·보호 21 통과, 전체 대상 build 통과.
+화면/Plugin JS 233 통과·5 제외, 패키징/고지 105 통과·1 제외, 문서 연결 검사 문제 없음.
+
+이전 프로그램 확인: `d8c30cd`를 제품 구성으로 따로 빌드해 탐색 계약 기록(연결 3건 포함)에 status·
+context·story·open·revisit·close와 MCP `gil_plan_read`·`gil_open`을 실행했다. 모두 `approved_plan`의
+알 수 없는 필드 `contract`로 거절했고 기록과 작업 파일의 바이트는 바뀌지 않았다(수동 1회 확인, CI 아님).
+
+구성별 차이와 원인: `exploration-flow` 빌드에서 새 프로젝트로 항목 큐 흐름을 걷는 기존 통합 시험은
+요구 연결이 없어 거절된다(계약대로). 그 시험들은 이 빌드에서 **이전 빌드가 쓰는 표식 없는 기록**으로
+시작하도록 했고 `approved-plan` 빌드에서는 아무것도 바꾸지 않는다. 후속 Chain을 여는 단위 시험 2건은
+빌드가 여는 계약에 맞춰 분기했다. `chain_monitor_fixtures`는 `approved-plan` 빌드의 Monitor 고정 자료
+비교라 `exploration-flow`에서는 실행하지 않는다(후속 Chain의 응답이 빌드에 따라 다르다). `tests/mcp.rs`·
+`help_ref.rs`·`visual_start.rs` 등 맨 `approved: yes` fixture 시험은 이전부터 `chain-core` 구성 전용이라
+승인 계획 계열 구성에서 실행하지 않았다. 고지 정책의 `Cargo.toml` 입력 해시 3곳은 기능 줄 추가에 맞춰
+갱신했다(의존성·`Cargo.lock`·법적 문서 변화 없음).
+
+이 검증은 합성 입력의 도구 경로 검증이다. Define의 명제 형식·요구 기여·요구 충족 같은 자연어 의미,
+실제 모델의 준수, Host 화면 표시, Windows 실행은 입증하지 않는다.
 
 ### 2026-11-17 현재 구현 순서 — Chain 최우선
 

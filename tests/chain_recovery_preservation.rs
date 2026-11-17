@@ -221,6 +221,7 @@ fn chain(label: &str, failure: Failure) -> Chain {
     let record = product_state_path(&root, &private_local_app_data(&settings));
     let mut r = Rig { root, record, scope: String::new(), c };
     ok(r.model("gil_start", json!({})), "start");
+    as_item_queue_record(&r.record);
     let prepared = ok(r.model("gil_monitor_prepare", json!({})), "prepare");
     r.scope = structured(&prepared)["scope_id"].as_str().unwrap().into();
     let (basis, synthesis) = r.ask_and_interpret();

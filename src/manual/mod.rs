@@ -69,6 +69,22 @@ const RESTORE: &str = if cfg!(feature = "product-safety") {
     include_str!("topics/artifact/restore.md")
 };
 
+/// `step/define/smallest` 와 `cycle/interview/clarify` 는 실행 계약을 말한다. `exploration-flow`
+/// 빌드는 새 Chain 을 탐색 계약으로 열고 그 전의 Chain 은 항목 큐 계약으로 이어가므로, 그 빌드의
+/// 본문은 **두 계약을 함께** 적고 어느 쪽인지 기록에서 읽게 한다. 그 밖의 빌드는 항목 큐 계약만
+/// 제공하므로 원래 본문 그대로다 — 제공하지 않는 계약을 있는 것처럼 안내하지 않는다. 주소는 하나다.
+const DEFINE_SMALLEST: &str = if cfg!(feature = "exploration-flow") {
+    include_str!("topics/step/define/smallest.exploration-flow.md")
+} else {
+    include_str!("topics/step/define/smallest.md")
+};
+
+const INTERVIEW_CLARIFY: &str = if cfg!(feature = "exploration-flow") {
+    include_str!("topics/cycle/interview/clarify.exploration-flow.md")
+} else {
+    include_str!("topics/cycle/interview/clarify.md")
+};
+
 const SOURCES: &[&str] = &[
     include_str!("topics/current.md"),
     include_str!("topics/step/verify/close.md"),
@@ -80,8 +96,8 @@ const SOURCES: &[&str] = &[
     include_str!("topics/cycle/revisit/target.md"),
     include_str!("topics/monitor/serve.md"),
     include_str!("topics/report/visuals.md"),
-    include_str!("topics/cycle/interview/clarify.md"),
-    include_str!("topics/step/define/smallest.md"),
+    INTERVIEW_CLARIFY,
+    DEFINE_SMALLEST,
 ];
 
 /// 본문이 Grammar 를 가리키는 표시 — **여는 괄호와 닫는 괄호.**
@@ -820,10 +836,13 @@ mod tests {
         collect(&root, &mut found);
         found.sort();
 
-        // 빌드별 변형(`<topic>.product-safety.md`)은 같은 주소의 다른 본문이다 — 한 Topic 으로 센다.
-        let variants = found.iter().filter(|path| path.ends_with(".product-safety.md")).count();
-        for variant in found.iter().filter(|path| path.ends_with(".product-safety.md")) {
-            let base = variant.replace(".product-safety.md", ".md");
+        // 빌드별 변형(`<topic>.product-safety.md` · `<topic>.exploration-flow.md`)은 같은 주소의
+        // 다른 본문이다 — 한 Topic 으로 센다.
+        const VARIANTS: [&str; 2] = [".product-safety.md", ".exploration-flow.md"];
+        let suffix = |path: &String| VARIANTS.iter().copied().find(|suffix| path.ends_with(suffix));
+        let variants = found.iter().filter(|path| suffix(path).is_some()).count();
+        for variant in found.iter().filter(|path| suffix(path).is_some()) {
+            let base = variant.replace(suffix(variant).unwrap(), ".md");
             assert!(found.contains(&base), "변형만 있고 기본 본문이 없다: {variant}");
         }
 

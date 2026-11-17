@@ -4,6 +4,12 @@
 아닌 자료의 요건 충족으로 맞췄다. 두 설명서의 원문·일관성 변형 시험·검토 지문을 함께 갱신한다.
 이 도구는 현재 제품의 항목 바인딩을 검사하며 미래의 요구–다중 실험 계약을 검증하는 도구가 아니다.
 
+2026-11-17 추가: 탐색 실행 계약(opt-in `exploration-flow` 프로필)이 구현되면서 승인 계획 명세에 그
+계약의 연결 본문과 검증 명령 블록이 생겼다. 이 도구는 `approved-plan` 빌드(항목 큐 계약)만 실행하므로
+두 블록을 `not_executed`(SPEC-EXPLORE-LINK · SPEC-EXPLORE-SH)로 목록에만 두고 지문으로 변경을 감지한다.
+그 계약의 실제 실행 검증은 `tests/exploration_flow.rs`가 맡는다. workflow의 항목 바인딩 문장
+(WF-ONE-ITEM-BINDING · WF-DEFINE-SMALLEST)은 원문 그대로 두고 탐색 계약의 차이는 그 옆에 따로 적었다.
+
 
 공통 workflow(`src/mcp/workflow.md`), 내장 설명서 Topic, 승인 계획 명세에 실린 **Chain·승인 계획 예시**가
 현재 Core/MCP 계약으로 실제 실행 가능한지 검사하는 **개발용** 도구다. Node 표준 라이브러리만 쓰고,

@@ -613,15 +613,27 @@ fn open_this_cycle(
     kind: CycleKind,
     branch: bool,
 ) -> Result<String, String> {
+    // **탐색 계약의 Experiment 는 승인 요구 연결을 들고 열린다.** 항목 큐 계약과 Interview 는
+    // 예전처럼 stdin 을 읽지 않는다 — 구계약의 열기는 한 글자도 달라지지 않는다.
+    // 승인 상태가 먼저다: 승인 전이거나 재인터뷰 요청이 보존돼 있으면 연결을 읽지 않고, 아래 열기가
+    // 그 승인 상태의 거절을 그대로 말하게 한다 — 그것을 「연결이 없다」로 바꿔 말하지 않는다.
+    let linked = kind == CycleKind::Experiment && session.project().exploration_contract()
+        && session.project().plan_ready().is_ok();
+    let link = match linked {
+        true => Some(read_link(ctx, session)?),
+        false => None,
+    };
     match branch {
         // **되돌아온 자리에서 여는 것은 갈래다.** 여기서 평범한 자식을 열면 어느 실패가
         // 이 갈래를 낳았는지가 사라지고, pending 도 소비되지 않은 채 남는다.
-        true => session.open_branch_cycle(kind).map(|_| ()),
-        false => session.open_child_cycle(kind).map(|_| ()),
+        true => session.open_branch_cycle_linked(kind, link.as_ref()).map(|_| ()),
+        false => session.open_child_cycle_linked(kind, link.as_ref()).map(|_| ()),
     }
     .map_err(|err| {
         // 승인 계획이 막은 것은 종류나 자리를 고쳐서 풀리지 않는다 — 승인 상태를 읽는 수뿐이다.
-        let todo = if plan_refused(&err) { plan_todo(ctx) } else { text("cmd.check_where") };
+        // 요구 연결이 막힌 것은 다르다: 승인 판을 읽고 연결을 고쳐 다시 보낼 수 있다.
+        let todo = if link_refused(&err) { text("cmd.link_todo") }
+            else if plan_refused(&err) { plan_todo(ctx) } else { text("cmd.check_where") };
         let said = refusal(
             &tr!("cmd.cannot_open_cycle", kind = kind),
             &err.to_string(),
@@ -1278,6 +1290,16 @@ fn opened_step(session: &Session, opened: crate::Opened) -> String {
     } else {
         out.push_str(text("cmd.opened_no_artifacts"));
     }
+    #[cfg(feature = "approved-plan")]
+    if opened.kind == crate::NodeKind::Synthesis && session.project().exploration_contract() {
+        out.push_str(&tr!("cmd.opened_synthesis_requirements", marker = text("receipt.marker.exploration")));
+    }
+    #[cfg(feature = "approved-plan")]
+    if opened.kind == crate::NodeKind::Define && session.project().exploration_contract() {
+        if let Some(item) = session.project().current_plan_item() {
+            out.push_str(&tr!("cmd.opened_define_requirement", marker = text("receipt.marker.exploration"), item = item.id));
+        }
+    }
     if cycle.kind() == CycleKind::Interview {
         out.push_str(text("cmd.opened_interview_note"));
         // 실행된 Experiment 뒤의 Interview(Closing·재인터뷰)는 결과물을 먼저 보여 준다(Cycle Model §18).
@@ -1331,7 +1353,12 @@ fn opened_cycle(session: &Session) -> String {
     }
     #[cfg(feature = "approved-plan")]
     if let Some(item) = session.project().current_plan_item() {
-        out.push_str(&tr!("cmd.opened_plan_item", item = item.id));
+        match session.project().exploration_contract() {
+            // 탐색 계약: 이 Experiment 는 승인 요구에 **기여하는** 작은 질문이다. 항목 큐 계약의
+            // 「항목과 같은 문제·완료 범위」 안내는 여기에 쓰지 않는다.
+            true => out.push_str(&tr!("cmd.opened_requirement", marker = text("receipt.marker.exploration"), item = item.id)),
+            false => out.push_str(&tr!("cmd.opened_plan_item", item = item.id)),
+        }
     }
     out.push_str(&tr!("cmd.entry_world", snapshot = cycle.entry_snapshot()));
     out.push_str(&next_block(cycle));
@@ -1359,13 +1386,18 @@ fn closed_cycle(session: &Session, closed: &crate::ClosedCycle) -> String {
         out.push_str(&chain.close_hint());
         return out;
     }
+    // 탐색 계약의 Chain 이면 닫힌 자리마다 그 계약의 다음 수를 한 줄로 덧붙인다. 항목 큐
+    // 계약과 승인 원장 없는 Chain 의 receipt 는 그대로다.
+    let exploration = session.project().exploration_contract();
+    let note = |key: &str| crate::locale::fill(text(key), &[("marker", &text("receipt.marker.exploration") as &dyn std::fmt::Display)]);
     // **적어 둔 방향이 곧 다음 수다.** 되돌아감도 자식을 여는 것과 같은 자격으로 밟는다.
     if cycles.can_revisit() {
         if cfg!(feature = "product-safety") {
             out.push_str(&tr!("cmd.closed_cycle_revisit_product", marker = text("receipt.marker.revisit")));
-            return out;
+        } else {
+            out.push_str(&tr!("cmd.closed_cycle_revisit_dev", marker = text("receipt.marker.revisit")));
         }
-        out.push_str(&tr!("cmd.closed_cycle_revisit_dev", marker = text("receipt.marker.revisit")));
+        if exploration { out.push_str(&note("cmd.exploration_after_failure")); }
         return out;
     }
     match cycles.why_not_open_child() {
@@ -1374,6 +1406,12 @@ fn closed_cycle(session: &Session, closed: &crate::ClosedCycle) -> String {
                 out.push_str(text("cmd.closed_interview_note"));
             }
             out.push_str(&tr!("cmd.closed_openable", heading = text("receipt.openable_heading"), choices = cycle_choices(session, &CycleKind::ALL)));
+            if exploration {
+                out.push_str(&note(match kind {
+                    CycleKind::Interview => "cmd.exploration_after_interview",
+                    CycleKind::Experiment => "cmd.exploration_after_success",
+                }));
+            }
         }
         Some(why) => {
             out.push_str(&tr!("cmd.closed_blocked", why = why));
@@ -1566,7 +1604,41 @@ fn plan_refused(err: &SessionError) -> bool {
         err,
         SessionError::Action(crate::project::ActionError::Plan(_))
             | SessionError::Cycles(crate::cycles::CyclesError::Plan(_))
+            | SessionError::Branch(crate::cycles::OpenAfterRevisitError::Plan(_))
     )
+}
+
+/// 승인 요구 연결이 거절됐는가 — 승인 상태가 아니라 **고칠 수 있는 입력**이다.
+fn link_refused(err: &SessionError) -> bool {
+    plan_refused(err) && crate::approved_plan::is_link_refusal(&err.to_string())
+}
+
+/// 탐색 계약의 Experiment 가 들고 여는 승인 요구 연결을 stdin 에서 읽는다.
+///
+/// 행동 계약과 같은 통로·같은 field 문법이다. 비어 있으면 **이 프로젝트의 실제 승인 판과
+/// 요구 id 로 채운 골격**을 보여 준다 — 상관없는 예시를 베끼게 하지 않는다. 상태는 바뀌지 않는다.
+fn read_link(ctx: &Invocation<'_>, session: &Session) -> Result<crate::approved_plan::ExperimentLink, String> {
+    let project = session.project();
+    let active = project.approved_plan().zip(project.current_chain()).and_then(|(plan, chain)| plan.active(chain));
+    let skeleton = crate::approved_plan::ExperimentLink::skeleton(active);
+    let refuse = |why: String| refusal(
+        text("cmd.no_link"),
+        &why,
+        &tr!("cmd.link_skeleton", skeleton = indent(&skeleton)),
+        "gil open experiment",
+    );
+    // 연결 자체가 없거나 읽히지 않는 것도 **요구 연결의 거절**이다 — 같은 표식을 달아, 안내가
+    // 행동 계약을 고치라고 잘못 말하지 않게 한다.
+    let marked = |why: &str| refuse(crate::approved_plan::link_refusal(why));
+    if ctx.input.is_terminal() {
+        return Err(marked(text("cmd.link_stdin_terminal")));
+    }
+    let body = ctx.input.text()?;
+    if body.trim().is_empty() {
+        return Err(marked(text("cmd.link_empty")));
+    }
+    let report = Report::parse(&body).map_err(|err| marked(&err.to_string()))?;
+    crate::approved_plan::ExperimentLink::from_report(&report).map_err(refuse)
 }
 
 /// 승인 계획 거절 뒤의 「지금 해야 할 일」 — 입력을 고치라고 하지 않는다.

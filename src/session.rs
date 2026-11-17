@@ -316,12 +316,32 @@ impl ProjectSession {
         self.project.open_child_cycle(kind).map_err(SessionError::Cycles)
     }
 
+    /// Opens the declared next Cycle with the requirement link an exploration Chain requires of
+    /// an Experiment. Item-queue Chains and Interviews take `None`, as before.
+    pub fn open_child_cycle_linked(
+        &mut self,
+        kind: CycleKind,
+        link: Option<&crate::approved_plan::ExperimentLink>,
+    ) -> Result<CycleId, SessionError> {
+        self.project.open_child_cycle_linked(kind, link).map_err(SessionError::Cycles)
+    }
+
     /// **되돌아온 자리에서 새 갈래를 연다.**
     ///
     /// Cycle container 를 여는 것이라 Artifact 를 관측하지 않고 Snapshot 도 확정하지 않는다.
     /// 새 Cycle 의 Entry 는 **저장된 대상의 Exit** 을 읽는다 — 지금 폴더를 다시 재지 않는다.
     pub fn open_branch_cycle(&mut self, kind: CycleKind) -> Result<CycleId, SessionError> {
-        self.project.open_branch_cycle(kind).map_err(SessionError::Branch)
+        self.open_branch_cycle_linked(kind, None)
+    }
+
+    /// The branch after a revisit, with the requirement link of an exploration Chain. The new
+    /// small question may serve the same requirement as the failure it left, or another one.
+    pub fn open_branch_cycle_linked(
+        &mut self,
+        kind: CycleKind,
+        link: Option<&crate::approved_plan::ExperimentLink>,
+    ) -> Result<CycleId, SessionError> {
+        self.project.open_branch_cycle(kind, link).map_err(SessionError::Branch)
     }
 
     /// **Cycle 계층의 되돌아감을 밟는다 — 논리 상태를 먼저 확정하고 세계를 뒤따르게 한다.**

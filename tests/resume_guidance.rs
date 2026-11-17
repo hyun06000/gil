@@ -171,7 +171,7 @@ fn decide(p: &mut Project, proposal: &gil::approved_plan::Proposal, decision: gi
 #[test]
 fn saved_decisions_execution_and_chain_boundaries_survive_new_sessions() {
     use gil::approved_plan::Decision;
-    let mut p = Project::start(spec(), common::first_world());
+    let mut p = support::item_queue(Project::start(spec(), common::first_world()));
     synthesis(&mut p);
     let proposal = p.propose_plan(draft(&p, false)).unwrap();
     checkpoint(&p, "waiting", &["Monitor 결정을 기다림", "제안 판 1", "턴을 끝내고"], &["gil_close", "gil_plan_propose"]);

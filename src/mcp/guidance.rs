@@ -110,6 +110,11 @@ fn plan_marker() -> &'static str {
 /// Monitor button, approved text differs, before approval, preserved re-interview request, no
 /// pending item). Everything else keeps the ordinary "fix the input" recovery.
 fn plan_refusal(name: &str, problem: &str) -> Option<&'static str> {
+    // A refused requirement link (exploration contract) is an input to correct from the active
+    // approved revision, not an approval state to wait on.
+    if name == "gil_open" && crate::approved_plan::is_link_refusal(problem) {
+        return Some(text("guide.refused.plan_link"));
+    }
     if !problem.contains(plan_marker()) { return None; }
     match name {
         "gil_close" => Some(text("guide.refused.plan_close")),
@@ -175,7 +180,9 @@ fn opened(result: &CallToolResult) -> String {
             let cycle = here.map(|r| r.cycle().id().to_string()).unwrap_or_else(|| "Cn".into());
             let example = serde_json::json!({"basis_refs": format!("step:{cycle}/S1\nstep:{cycle}/S2")});
             // Cycle Model §16: the proposal is short, with small items, before the basis rules.
-            let specific = format!("{specific} {}", text("guide.propose_brief"));
+            // An exploration Chain proposes requirements, not an execution queue; its receipt says so.
+            let brief = if said.contains(text("receipt.marker.exploration")) { text("guide.propose_requirements") } else { text("guide.propose_brief") };
+            let specific = format!("{specific} {brief}");
             tr!("guide.opened.synthesis_basis", specific = specific, location = location, rules = text("cycle.basis_refs_rules"), example = example)
         },
         "verify" => format!("{specific}\n{}", crate::visual_report::image::limits_guidance()),
@@ -184,6 +191,9 @@ fn opened(result: &CallToolResult) -> String {
         "question" => format!("{specific} {}", text("guide.interview_deepen")),
         "interpretation" => format!("{specific} {} {}", text("guide.report_brief"), text("guide.interpretation_sort")),
         // Cycle Model §7.1: Define names the smallest problem performable now, aligned with the agreed item.
+        // The receipt of a Define opened in an exploration Chain carries that contract's marker;
+        // every other Define keeps the item-queue wording.
+        "define" if said.contains(text("receipt.marker.exploration")) => format!("{specific} {}", text("guide.define_exploration")),
         "define" => format!("{specific} {}", text("guide.define_smallest")),
         // Report-writing Steps: the short-report rule rides on the receipt that opens them.
         "analysis" | "outcome" => format!("{specific} {}", text("guide.report_brief")),
@@ -200,6 +210,10 @@ fn closed(result: &CallToolResult) -> String {
         return tr!("guide.closed.lead", specific = tr!("guide.closed.chain", verdict = kind));
     }
     let next = next_from_receipt(said);
+    // A Cycle closed in an exploration Chain carries that contract's marker in its receipt.
+    // Receipts of item-queue Chains and of Chains without a ledger never do.
+    let exploration = said.contains(text("receipt.marker.exploration"));
+    let after_failure = if exploration { format!(" {}", text("guide.explore.after_failure")) } else { String::new() };
     let specific = match (kind, next.as_ref()) {
         ("hypothesis", _) => tr!("guide.closed.hypothesis"),
         ("synthesis", Some(Next::Open(k))) if k == "outcome" => tr!("guide.closed.synthesis_outcome"),
@@ -207,10 +221,12 @@ fn closed(result: &CallToolResult) -> String {
         ("verify", _) => tr!("guide.closed.verify"),
         ("outcome", Some(Next::CloseCycle)) if said.contains("Interview") => tr!("guide.closed.interview_outcome_cycle"),
         ("outcome", Some(Next::CloseCycle)) => tr!("guide.closed.outcome_cycle"),
+        ("interview", Some(Next::OpenCycle)) if exploration => tr!("guide.closed.interview_open_cycle_exploration"),
         ("interview", Some(Next::OpenCycle)) => tr!("guide.closed.interview_open_cycle"),
         ("interview", Some(Next::ChainReport)) | ("experiment", Some(Next::ChainReport)) => tr!("guide.closed.chain_report"),
-        ("experiment", Some(Next::Revisit)) if cfg!(feature = "product-safety") => format!("{} {}", tr!("guide.closed.experiment_revisit_product"), text("guide.interrupt_partial_results")),
-        ("experiment", Some(Next::Revisit)) => format!("{} {}", tr!("guide.closed.experiment_revisit_dev"), text("guide.interrupt_partial_results")),
+        ("experiment", Some(Next::Revisit)) if cfg!(feature = "product-safety") => format!("{} {}{}", tr!("guide.closed.experiment_revisit_product"), text("guide.interrupt_partial_results"), after_failure),
+        ("experiment", Some(Next::Revisit)) => format!("{} {}{}", tr!("guide.closed.experiment_revisit_dev"), text("guide.interrupt_partial_results"), after_failure),
+        ("experiment", Some(Next::OpenCycle)) if exploration => tr!("guide.closed.experiment_open_cycle_exploration"),
         ("experiment", Some(Next::OpenCycle)) => tr!("guide.closed.experiment_open_cycle"),
         (_, Some(Next::Open(k))) => tr!("guide.closed.open_kind", k = k),
         (_, Some(Next::OpenMany(kinds))) => tr!("guide.closed.open_many", kinds = kinds),
@@ -281,7 +297,13 @@ fn plan(name: &str, result: &CallToolResult) -> Option<String> {
         }
         if view.pointer("/current_cycle/state").and_then(Value::as_str) == Some("open") {
             if let Some(item) = view.pointer("/current_item/id").and_then(Value::as_str) {
-                hint.push_str(&format!("\n{}", tr!("guide.plan.bound", item = item)));
+                // The exploration contract links an Experiment to a requirement it serves; the
+                // item-queue sentence (same problem and completion scope) belongs to the queue.
+                if view.get("contract").and_then(Value::as_str) == Some("exploration") {
+                    hint.push_str(&format!("\n{}", tr!("guide.plan.linked", item = item)));
+                } else {
+                    hint.push_str(&format!("\n{}", tr!("guide.plan.bound", item = item)));
+                }
             }
         }
         return Some(hint);

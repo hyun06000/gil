@@ -708,7 +708,7 @@
   {
     "name": "gil_open",
     "title": "Open the next GIL step",
-    "description": "Open the next step with its action contract STRING in contract (objective, next_action, done_when; not report), or open a Cycle of the given kind. GIL decides which applies. Runs the GIL core bundled with this plugin; never a global or repository build.",
+    "description": "Open the next step with its action contract STRING in contract (objective, next_action, done_when; not report), or open a Cycle of the given kind. GIL decides which applies. Only in a Chain whose gil_plan_read says contract: exploration, kind: experiment also takes contract: the requirement link STRING (plan_revision, plan_digest, requirement_id, relevance, readiness, uncertainty; copy gil_plan_read.experiment_link and fill it in). Every other Cycle open takes no contract. Runs the GIL core bundled with this plugin; never a global or repository build.",
     "inputSchema": {
       "type": "object",
       "properties": {

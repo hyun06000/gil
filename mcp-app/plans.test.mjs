@@ -554,3 +554,29 @@ test('a decision made from the keyboard leaves focus on the panel heading, never
   assert.equal(u.panel.dataset.state, 'uncertain');
   assert.equal(u.doc.activeElement?.tag, 'h2');
 });
+
+// Exploration contract (Approved Plan "후속 구현 이행"): the Core adds `contract`, `requirements`
+// and `current_experiment` beside the fields this panel already reads. The panel is unchanged,
+// so this pins what the existing statuses mean for that wire shape: "executed" is the recorded
+// fact that an Experiment was linked to the requirement, never that the requirement is done,
+// and a failed Experiment produces no "retry" row because nothing is re-bound.
+test('an exploration-contract view lists requirements by recorded links only and never as retries or completion', () => {
+  const requirement = (id) => ({ id, question: `Q ${id}`, done_when: `criteria ${id}` });
+  const base = {
+    supported: true, contract: 'exploration', proposal: null, active_revision: 1,
+    requirement_resolution: 'user_approved_closing_interview_only',
+    executed_cycles: [
+      { cycle_ref: 'cycle:C2', revision: 1, item_id: 'R1', selection: { relevance: 'a', readiness: 'b', uncertainty: 'c' } },
+      { cycle_ref: 'cycle:C3', revision: 1, item_id: 'R1', selection: { relevance: 'a', readiness: 'b', uncertainty: 'c' } },
+    ],
+    retry_pending: [], pending: [requirement('R2')], current_item: requirement('R1'),
+  };
+  // Two Experiments linked to R1 (the second failed and is closed), none to R2.
+  const closed = planItems({ ...base, current_cycle: { ref: 'cycle:C3', state: 'closed' } });
+  assert.deepEqual(closed.map(i => `${i.id}:${i.status}:${i.cycle_ref}`), ['R1:executed:cycle:C3', 'R2:pending:null']);
+  assert.equal(closed.filter(i => i.status === 'retry').length, 0, 'a failure is followed by a different Define, not a retry row');
+  // A third Experiment on the same requirement is the open Cycle; R1 is one row, not three.
+  const open = planItems({ ...base, executed_cycles: [...base.executed_cycles, { cycle_ref: 'cycle:C4', revision: 1, item_id: 'R1' }], current_cycle: { ref: 'cycle:C4', state: 'open' } });
+  assert.deepEqual(open.map(i => `${i.id}:${i.status}:${i.cycle_ref}`), ['R1:current:cycle:C4', 'R2:pending:null']);
+  assert.deepEqual(planSummary({ ...base, current_cycle: { ref: 'cycle:C4', state: 'open' } }), { state: 'executing', revision: 1 });
+});
