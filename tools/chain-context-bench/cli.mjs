@@ -3,13 +3,14 @@
 // calls hand to a new session. Development tool; not part of the shipped runtime.
 //
 //   node tools/chain-context-bench/cli.mjs plan [--axes a,b] [--levels axis=0,1,2]... [--repeat N] [--reads t1,t2] [--max-calls N]
-//   python3 coordination/parallel-wave-2/cargo-queue.py -- node tools/chain-context-bench/cli.mjs run --build --out <new dir> [plan options]
+//   node tools/chain-context-bench/cli.mjs run --build --out <new dir> [plan options]
 //   node tools/chain-context-bench/cli.mjs run --gil <path to gil> --features <as built> --out <new dir> [plan options]
 //   node tools/chain-context-bench/cli.mjs compare --before <bench.json> --after <bench.json> [--json <new file>]
 //
 // Exit: 0 complete · 1 finished with generation failures / missing measurements · 2 usage or
 // input error · 130 interrupted. No exit code depends on a measured size.
 import { mkdirSync, writeFileSync, existsSync, readFileSync, statSync } from 'node:fs';
+import { readOnlyUnchanged } from './lib/measure.mjs';
 import { resolve, dirname, join } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -118,7 +119,7 @@ export function compactResult(result) {
       repeat: c.repeat ? { compared: c.repeat.compared, identical: c.repeat.identical } : null,
       runs: c.runs.map((r) => ({
         run: r.run, status: r.status, error: r.error, generation: r.generation ? { calls: r.generation.calls, refused_calls: r.generation.refused_calls } : null, storage: r.storage,
-        readonly_unchanged: r.readonly ? r.readonly.project.unchanged && r.readonly.settings.unchanged : null,
+        readonly_unchanged: readOnlyUnchanged(r.readonly),
         violations: r.resolution?.violations ?? null,
         line_repeats: r.line_repeats ? { repeated_lines: r.line_repeats.repeated_lines, extra_utf8_bytes: r.line_repeats.extra_utf8_bytes, across_tools_extra_utf8_bytes: r.line_repeats.across_tools_extra_utf8_bytes } : null,
         reads: r.reads.map((x) => ({ tool: x.tool, status: x.status, text_response: x.text_response, structured_response: x.structured_response, said_in_text: x.said_in_text, raw_text_utf8_bytes: x.raw_text_utf8_bytes, text_sha: x.text_sha, structured_sha: x.structured_sha })),
@@ -145,7 +146,7 @@ export async function run(o) {
     started_at: new Date().toISOString(), finished_at: null,
     environment: { platform: process.platform, arch: process.arch, node: process.version },
     source: sourceInfo(repo),
-    core: { binary: binaryLabel(repo, binary), sha256: fileSha256(binary), provenance: o.build ? 'built by this run with cargo --features (build queue target)' : 'given with --gil; build features and commit are declared by the caller, not verified', features_declared: o.features, observed: null },
+    core: { binary: binaryLabel(repo, binary), sha256: fileSha256(binary), provenance: o.build ? 'built by this run with cargo --features' : 'given with --gil; build features and commit are declared by the caller, not verified', features_declared: o.features, observed: null },
     conditions: { locale: o.locale, reads: o.plan.reads, timeout_ms: o.timeoutMs, measurement: 'generation in one Core process, reads in a second fresh Core process (new session); isolated HOME/LOCALAPPDATA/settings per run', section_markers: { locale_file: localeFile, missing_keys: missing }, recordings: !!recordingsDir },
     plan: { base: o.plan.base, axes: o.plan.axes, cases: o.plan.cases.map(({ id, scale, axes, estimated_calls }) => ({ id, scale, axes, estimated_calls })), repeat: o.plan.repeat, estimated_calls: o.plan.estimated_calls, max_calls: o.plan.max_calls },
   });

@@ -17,6 +17,7 @@ on:
       - 'tools/chain-closing-eval/**'
       - 'tools/chain-monitor-fixtures/**'
       - 'tools/chain-resume-benchmark/**'
+      - 'tools/chain-context-bench/**'
       - 'design-tests/approved-item-split/**'
       - 'tools/ci/**'
       - 'scenarios/**'
@@ -133,6 +134,9 @@ jobs:
         run: node tools/chain-closing-eval/check.mjs fixtures
       - name: Resume measurement contracts
         run: node --test tools/chain-resume-benchmark/*.test.mjs
+      - name: Context growth measurement contracts (Unix process fixtures)
+        if: runner.os == 'macOS'
+        run: node --test tools/chain-context-bench/*.test.mjs
       - name: Keep dependency outputs in cache after verification and artifact upload
         if: steps.build_cache.outputs.cache-hit != 'true'
         run: node tools/ci/prune-workspace-cache.mjs

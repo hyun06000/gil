@@ -15,8 +15,8 @@ GIL 기록이 길어질 때 **새 세션의 읽기 호출이 받는 문맥이 �
 # 계획만 보기 (Core 실행 없음): 사례·예상 호출 수
 node tools/chain-context-bench/cli.mjs plan [--axes chains,failures] [--levels failures=0,1,2] [--repeat 2]
 
-# 기준선: 저장소 빌드 큐 안에서 현재 소스를 빌드하고 그 실행 파일로 측정한다
-python3 coordination/parallel-wave-2/cargo-queue.py -- node tools/chain-context-bench/cli.mjs run --build --out <새 폴더>
+# 기준선: 현재 소스를 빌드하고 그 실행 파일로 측정한다
+node tools/chain-context-bench/cli.mjs run --build --out <새 폴더>
 
 # 이미 빌드한 실행 파일로 (기능 조합은 호출자가 선언한다)
 node tools/chain-context-bench/cli.mjs run --gil <gil 경로> --features approved-plan,visual-authoring --out <새 폴더>
@@ -40,8 +40,15 @@ node --test tools/chain-context-bench/*.test.mjs
 | `--max-calls` | 3000 | 최대 10000. 예상 호출이 넘으면 Core를 띄우기 전에 거절 |
 | `--keep` / `--no-recordings` / `--work-root` | 끔 / 기록 저장 / OS 임시 폴더 | 임시 프로젝트 보존, 응답 기록 생략, 임시 폴더 위치 |
 
-`--build`는 큐가 설정하는 `GIL_PARALLEL_TARGET_DIR`가 없으면 거절한다(큐가 없는 환경에서만 `--unqueued`).
+`--build`는 일반 Cargo 환경 변수를 따른다. 빌드를 공유할 때는 별도 출력 폴더나 선택적 로컬 큐를 사용한다.
+추적되지 않은 큐 스크립트는 필수 의존성이 아니다. 기존 `--unqueued` 옵션은 호환을 위해 허용한다.
 `--gil`로 받은 실행 파일은 sha256만 확인하며, 빌드 commit·기능은 검증하지 않았다고 결과에 적는다.
+
+통합 검토에서 실제 저장 레코드 폴더도 읽기 전후 비교하도록 보완했다. 프로젝트 밖 레코드나
+설정이 바뀌어도 성공으로 표시하지 않는다. 과거 결과에 레코드 관측이 없으면 전체 불변 여부는
+미확인으로 표시한다. 기존 Mac 기준선 파일은 당시 관측 이력으로 보존한다.
+자체시험의 가짜 실행 파일·신호 시험은 Unix 전용이므로 자동 검사는 Mac에서 실행한다.
+Windows 실제 실행과 제품 안전 구성 검증은 여전히 별도 범위다.
 
 ## 비교하는 축
 
@@ -77,7 +84,7 @@ Outcome·Cycle close → Experiment(Verify는 승인 문서 bytes와 별도 증�
 | `resolution` | Report마다 넣은 `ccbT-…` 표식이 어느 응답에 도착했는지로 본 해상도 점검(아래) |
 | `blocks` | context-metrics의 단락 단위로 본 한 응답 안의 동일 단락 반복과 같은 틀(번호·표식만 다른) 단락 |
 | `metrics` | context-metrics `analyzeRecording` 결과 요약: 상태별 수, 호출 사이 동일 단락 반복 후보 |
-| `readonly` | 읽기 전후 프로젝트 폴더(`.gil` 포함)와 설정 폴더의 전체 내용 digest 비교 |
+| `readonly` | 읽기 전후 프로젝트·설정·실제 저장 레코드 폴더의 전체 내용 digest 비교(외부 저장 위치 포함) |
 | `repeat` | 같은 조건 재실행의 tool별 크기·내용(Monitor scope id만 정규화) 일치 여부, context-metrics `compareAnalyses` 합계 |
 | `generation` / `storage` | 생성 호출 수·거절 수·소요 시간, `.gil` 파일 수·바이트 |
 

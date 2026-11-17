@@ -41,6 +41,22 @@ export function diffTrees(before, after) {
 
 // ── gil_context sections ───────────────────────────────────────────────────────────────────
 
+export function snapshotReadRoots(paths) {
+  return Object.fromEntries(Object.entries(paths).map(([key, path]) => [key, treeDigest(path)]));
+}
+
+export function compareReadRoots(before, after) {
+  return Object.fromEntries(Object.keys(before).map(key => {
+    const changes = diffTrees(before[key], after[key]);
+    return [key, { unchanged: changes.length === 0, changes }];
+  }));
+}
+
+export function readOnlyUnchanged(readonly) {
+  const states = ['project', 'settings', 'record'].map(key => readonly?.[key]?.unchanged);
+  return states.includes(false) ? false : states.every(x => x === true) ? true : null;
+}
+
 /** Locale keys that open a gil_context section, and how much of their first line is static. */
 export const SECTION_KEYS = [
   ['preamble', 'ctx.preamble', 'line'],

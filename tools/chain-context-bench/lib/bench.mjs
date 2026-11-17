@@ -4,7 +4,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { compareAnalyses } from '../../context-metrics/lib/compare.mjs';
 import { runOnce } from './run.mjs';
-import { compareRepeats, invariantAcross, sectionVariability } from './measure.mjs';
+import { compareRepeats, invariantAcross, sectionVariability, readOnlyUnchanged } from './measure.mjs';
 
 export const SCHEMA = 'gil-chain-context-bench/0.1';
 const STATUS_ORDER = ['complete', 'record_changed_by_read', 'measurement_missing', 'unsupported', 'generation_failed', 'interrupted', 'not_run'];
@@ -90,7 +90,7 @@ export function finalize(result, plan, status = null) {
         line_repeat_across_tools_utf8_bytes: run?.line_repeats?.across_tools_extra_utf8_bytes ?? null,
         resolution: run?.resolution ? Object.fromEntries(run.resolution.rows.map((r) => [r.layer, r.verdict])) : null,
         violations: run?.resolution?.violations ?? null,
-        readonly_unchanged: run ? run.readonly.project.unchanged && run.readonly.settings.unchanged : null,
+        readonly_unchanged: readOnlyUnchanged(run?.readonly),
         repeat_identical: c?.repeat?.identical ?? null,
       };
     });

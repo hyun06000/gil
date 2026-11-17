@@ -12,7 +12,7 @@ import { parseRecording, textOf } from '../../context-metrics/lib/events.mjs';
 import { analyzeRecording } from '../../context-metrics/lib/analyze.mjs';
 import { stableStringify } from '../../context-metrics/lib/size.mjs';
 import { generate, GenerationError, UnsupportedError } from './scenario.mjs';
-import { treeDigest, diffTrees, segmentContext, evaluateResolution, blockProfile, lineRepeats, normalizedSha, measure, sha256 } from './measure.mjs';
+import { treeDigest, snapshotReadRoots, compareReadRoots, readOnlyUnchanged, segmentContext, evaluateResolution, blockProfile, lineRepeats, normalizedSha, measure, sha256 } from './measure.mjs';
 
 /** Live resources, so an interrupt can clean up synchronously. */
 export const live = { clients: new Set(), workDirs: new Set(), keep: false };
@@ -24,10 +24,7 @@ export function cleanupSync() {
   live.workDirs.clear();
 }
 
-export async function buildCore({ repo, features, unqueued }) {
-  if (!process.env.GIL_PARALLEL_TARGET_DIR && !unqueued) {
-    throw new Error('refusing to build outside the repository build queue (GIL_PARALLEL_TARGET_DIR is unset). Run: python3 coordination/parallel-wave-2/cargo-queue.py -- node tools/chain-context-bench/cli.mjs run --build ...');
-  }
+export async function buildCore({ repo, features }) {
   const args = ['build', '--locked', '-p', 'gil', '--features', features, '--message-format=json-render-diagnostics'];
   process.stderr.write(`[bench] cargo ${args.join(' ')}\n`);
   const r = await runCommand('cargo', args, { cwd: repo, timeoutMs: 1800000, onStderr: (s) => process.stderr.write(s) });
@@ -119,8 +116,9 @@ export async function runOnce(opts) {
     out.storage = { record_layout: record.layout, state_utf8_bytes: existsSync(record.path) ? statSync(record.path).size : null, gil_files: gilTree?.files ?? null, gil_bytes: gilTree?.bytes ?? null };
 
     // ── measured reads in a fresh Core process (a new session) ─────────────────────────────
-    const beforeProject = treeDigest(root);
-    const beforeSettings = treeDigest(settings);
+    // Windows stores the record outside the project. Observe the resolved record tree too.
+    const readRoots = { project: root, settings, record: dirname(record.path) };
+    const before = snapshotReadRoots(readRoots);
     await connect('read');
     const events = [];
     const rawReads = [];
@@ -137,17 +135,13 @@ export async function runOnce(opts) {
       if (note && client.exit) { await disconnect(); await connect('read-retry'); }
     }
     await disconnect();
-    const afterProject = treeDigest(root);
-    const afterSettings = treeDigest(settings);
-    const projectChanges = diffTrees(beforeProject, afterProject);
-    const settingsChanges = diffTrees(beforeSettings, afterSettings);
-    out.readonly = { project: { unchanged: projectChanges.length === 0, changes: projectChanges }, settings: { unchanged: settingsChanges.length === 0, changes: settingsChanges } };
+    out.readonly = compareReadRoots(before, snapshotReadRoots(readRoots));
 
     // ── measurement through tools/context-metrics ─────────────────────────────────────────
     const measured = measureReadPhase({ events, rawReads, tags: generated.tags, markers, expectedReads: reads, recordingName: opts.recordingName ?? null });
     Object.assign(out, measured.fields);
     if (measured.missing) out.status = 'measurement_missing';
-    if (!out.readonly.project.unchanged) out.status = out.status === 'complete' ? 'record_changed_by_read' : out.status;
+    if (readOnlyUnchanged(out.readonly) !== true) out.status = out.status === 'complete' ? 'record_changed_by_read' : out.status;
     return out;
   } catch (err) {
     out.status = out.status === 'complete' ? 'generation_failed' : out.status;

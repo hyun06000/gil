@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs, sanitize, compare, compactResult, UsageError } from './cli.mjs';
 import { buildPlan, estimateCalls, BASE, AXES, CALL_BUDGET } from './lib/plan.mjs';
 import { measureReadPhase } from './lib/run.mjs';
+import { snapshotReadRoots, compareReadRoots, readOnlyUnchanged } from './lib/measure.mjs';
 import { treeDigest, diffTrees, segmentContext, sectionMarkers, evaluateResolution, compareRepeats, blockProfile, invariantAcross, templateOf, normalizedSha, lineRepeats } from './lib/measure.mjs';
 import { field, detailLines, TagBook } from './lib/scenario.mjs';
 
@@ -205,6 +206,25 @@ test('read-only check sees content, added and removed entries', () => {
   assert.deepEqual(diffTrees(a, treeDigest(root)), [{ path: '.gil/state.yaml', change: 'modified' }, { path: 'new.txt', change: 'added' }]);
 });
 
+test('read-only checks include external records and settings, not just project files', () => {
+  const root = scratch('external-record');
+  const paths = Object.fromEntries(['project', 'settings', 'record'].map(key => {
+    const path = join(root, key); mkdirSync(path); return [key, path];
+  }));
+  writeFileSync(join(paths.record, 'state.yaml'), 'before');
+  const before = snapshotReadRoots(paths);
+  assert.equal(readOnlyUnchanged(compareReadRoots(before, snapshotReadRoots(paths))), true);
+  writeFileSync(join(paths.record, 'state.yaml'), 'after');
+  const changed = compareReadRoots(before, snapshotReadRoots(paths));
+  assert.equal(changed.project.unchanged, true);
+  assert.equal(changed.record.unchanged, false);
+  assert.equal(readOnlyUnchanged(changed), false);
+  writeFileSync(join(paths.record, 'state.yaml'), 'before');
+  writeFileSync(join(paths.settings, 'changed'), 'after');
+  assert.equal(readOnlyUnchanged(compareReadRoots(before, snapshotReadRoots(paths))), false);
+  assert.equal(readOnlyUnchanged({ project: { unchanged: true }, settings: { unchanged: true } }), null);
+});
+
 test('sections come from the locale headings; text parts before the body are kept apart', () => {
   const table = { 'ctx.preamble': 'GIL context — head.\n', 'ctx.previous_head': '\n═══ 이전 Cycle ═══\n({n}개)\n', 'ctx.chain_previous': '\n이전 Chain: {id} · {verdict}\n', 'ctx.plan_profile': '\n승인 계획 프로필: 설명 {x}\n' };
   const { markers, missing } = sectionMarkers(table);
@@ -303,6 +323,7 @@ test('real Core smoke run (set CHAIN_CONTEXT_BENCH_GIL to a gil built with appro
     assert.equal(c.repeat.identical, true, `${c.id} repeats differ`);
     for (const run of c.runs) {
       assert.equal(run.readonly.project.unchanged, true);
+      assert.equal(readOnlyUnchanged(run.readonly), true);
       assert.deepEqual(run.resolution.violations, []);
     }
   }
