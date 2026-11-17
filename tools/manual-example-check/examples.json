@@ -221,11 +221,20 @@
     {
       "id": "SPEC-EXPLORE-SH",
       "source": { "path": "spec/GIL_Approved_Plan_v0.1.md", "locator": { "after": "### 검증과 한계", "fence": "sh" } },
-      "sha256": "2ef2894609c03cfe24c3ff209c8854ac7bd46f9e37241774fe4c9285d226422b",
+      "sha256": "d462329478a238436028cc338a701bd3d2ce8c8084a0457a85a5df39e8e8c721",
       "kind": "not_executed",
       "cases": [],
       "reason": "Developer shell commands for the exploration-flow profile; this checker never runs document shell blocks.",
       "claim": "Inventoried only."
+    },
+    {
+      "id": "SPEC-EXPLORE-ORIGINALS",
+      "source": { "path": "spec/GIL_Approved_Plan_v0.1.md", "locator": { "after": "### 원본 근거 조회 (2026-11-18)", "before": "- **출처.**", "fence": "text" } },
+      "sha256": "6b3a42d1ea55d7fa4a3ba0a9d88652b7af31dec1c4d16ac9a3cb4220ec10e7e7",
+      "kind": "not_executed",
+      "cases": [],
+      "reason": "Read path of the original-record tools (gil_report_read, gil_evidence_read) registered only in the opt-in exploration-flow profile. This checker drives an approved-plan build, where those tools do not exist; the path is exercised over the real stdio process by tests/exploration_evidence.rs.",
+      "claim": "Out of scope for this profile; inventoried so that a changed or new block is noticed."
     },
     {
       "id": "MAN-CLARIFY-SHAPE",

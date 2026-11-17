@@ -245,6 +245,23 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    - A failed Experiment still requires the explicit revisit, even with no file change. After the
      restore, open a different small Define linked to the same (or another approved) requirement;
      the failed Define need not be repeated.
+   - Ground the next Experiment, and the answer, evidence and limits reviewed per requirement in
+     the Closing Interview, in the original records — each linked Experiment's Define, Hypothesis,
+     Verify observation, Analysis and Outcome lesson. Do not keep a separate running “current
+     answer” or provisional summary per requirement as a premise for later Experiments: a guess
+     that is not re-checked against its evidence hardens into one. When `tools/list` offers
+     `gil_report_read` and `gil_evidence_read`, read only what the next decision needs:
+     `gil_plan_read.requirements[].experiments[].cycle_ref` → `gil_report_read(owner: {kind:
+     "cycle", ref})` for Step references and the Cycle Report → `gil_report_read(owner: {kind:
+     "step", ref})` for one stored Report → `gil_evidence_read(owner: <that Verify>, path)` for a
+     file it declared, read from that Verify's Snapshot, never from the working folder, where a
+     later Verify or a revisit may have changed the file of that name. `owner: {kind: "chain",
+     ref}` lists an earlier Chain's Cycles. Failed and revisited Experiments read the same way.
+     These reads return stored text: existing in the record is not being true or still valid,
+     disagreeing records are both shown, and nothing is summarized or judged. An answer with
+     `truncated: true` left part out to stay small and names the input that reads it (`more`,
+     a field's `read`, `next_offset`); left out never means absent. Without those tools the
+     same Reports are in `gil_story`.
    - Do not re-propose the plan merely to split, re-order or change the method of experiments.
      When the requirement, scope, permission or judgment criteria themselves must change, do not
      disguise that as a Define: agree on it in an Interview (`gil_plan_request_interview` preserves

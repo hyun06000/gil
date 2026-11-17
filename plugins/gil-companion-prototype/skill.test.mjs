@@ -68,6 +68,18 @@ const planCatalog = () => {
   return rows;
 };
 
+/**
+ * 원본 기록 조회 둘 — `src/mcp/records.rs` 가 `exploration-flow` feature 에서만 등록한다.
+ * 이름은 그 파일의 상수에서 읽는다. 기본 `tools.json` 에도 승인 계획 catalog 에도 없다.
+ */
+const recordReads = () => {
+  const rust = readFileSync(join(REPO, "src", "mcp", "records.rs"), "utf8");
+  const names = [...rust.matchAll(/^pub\(super\) const (?:REPORT|EVIDENCE): &str = "(gil_[a-z_]+)";$/gm)].map((m) => m[1]);
+  assert.deepEqual(names, ["gil_report_read", "gil_evidence_read"], "records.rs 의 도구 이름을 읽지 못했다");
+  assert.ok(rust.includes('"_meta":{"ui":{"visibility":["model"]}}') && rust.includes('"readOnlyHint":true'), "원본 기록 조회는 모델용 읽기 전용 도구다");
+  return names;
+};
+
 test("Skill 이 부르는 도구 이름은 전부 실제 tool 표에 있다", () => {
   assert.equal(TOOLS.length, 20);
   const named = new Set([...SKILL.matchAll(/`((?:gil|show_gil)_[a-z_]+)(?:\(|`)/g)].map((m) => m[1]));
@@ -93,6 +105,16 @@ test("Skill 이 부르는 도구 이름은 전부 실제 tool 표에 있다", ()
       assert.ok(row, `Skill 이 plan catalog 에 없는 도구를 부른다 — ${name}`);
       assert.equal(row.app, false, `App 전용 결정 도구를 모델에게 시켰다 — ${name}`);
       assert.ok(!TOOLS.includes(name), `승인 계획 도구가 기본 tools.json 에 들어왔다 — ${name}`);
+      continue;
+    }
+    if (name === "gil_report_read" || name === "gil_evidence_read") {
+      // exploration-flow feature only (src/mcp/records.rs). Exact names, never the default catalog,
+      // and only under the condition that the connected tools/list actually offers them.
+      assert.ok(recordReads().includes(name), `Skill 이 records catalog 에 없는 도구를 부른다 — ${name}`);
+      assert.ok(!TOOLS.includes(name), `원본 기록 조회 도구가 기본 tools.json 에 들어왔다 — ${name}`);
+      assert.match(SKILL, /When `tools\/list` offers\s+`gil_report_read` and `gil_evidence_read`/, "원본 기록 조회의 사용 조건(tools/list)이 Skill 에 없다");
+      assert.match(SKILL, /Without\s+those\s+tools\s+the\s+same\s+Reports\s+are\s+in\s+`gil_story`/, "도구가 없을 때의 경로가 Skill 에 없다");
+      assert.match(SKILL, /`truncated: true`\s+left\s+part\s+out[\s\S]{0,200}left\s+out\s+never\s+means\s+absent/, "생략과 이어 읽기의 뜻이 Skill 에 없다");
       continue;
     }
     if (name === "gil_prepare_workspace") {

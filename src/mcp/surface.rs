@@ -30,6 +30,8 @@ pub fn tools() -> &'static [Tool] {
         };
         #[cfg(feature = "approved-plan")]
         let tools = super::plans::catalog(tools);
+        #[cfg(feature = "exploration-flow")]
+        let tools = super::records::catalog(tools);
         #[cfg(feature = "product-safety")]
         let tools = super::recovery::catalog(tools);
         let mut tools = tools;
@@ -78,6 +80,8 @@ pub fn valid_input(tool: &Tool, input: &Value) -> bool {
     if tool.name.starts_with("gil_revisit_") { return super::recovery::valid(tool.name.as_ref(), input); }
     #[cfg(feature = "approved-plan")]
     if tool.name.starts_with("gil_plan_") { return super::plans::valid(tool.name.as_ref(), input); }
+    #[cfg(feature = "exploration-flow")]
+    if super::records::NAMES.contains(&tool.name.as_ref()) { return super::records::valid(tool.name.as_ref(), input); }
     #[cfg(feature = "visual-authoring")]
     if tool.name.starts_with("gil_migration_") {
         return super::migration::valid(tool.name.as_ref(), input);
@@ -144,6 +148,10 @@ fn rejection_hint(tool: &Tool, input: &Value) -> &'static str {
         } else {
             "gil_plan_propose: invalid arguments with 'draft' present. The call takes exactly {project_root, draft}; project_root must be an absolute string. draft takes exactly {scope, items, synthesis}. scope has five string fields: goal, in_scope, out_of_scope, constraints, success_criteria. items is an array (1–64) of {id, question, done_when}, all strings. No extra fields at the top level, in draft, scope or an item. synthesis is a map of string-valued Report fields: statement, basis_refs, exploration_checklist, plus chain_verdict (success or failure) for Closing; omit approved, plan_revision and plan_digest. The call must fit within 72 KiB. Nothing was recorded; correct the call instead of repeating it."
         };
+    }
+    #[cfg(feature = "exploration-flow")]
+    if let Some(hint) = super::records::rejection(tool.name.as_ref()) {
+        return hint;
     }
     if tool.name != "gil_close" {
         return "Invalid GIL tool arguments";
