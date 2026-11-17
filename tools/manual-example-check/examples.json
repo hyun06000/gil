@@ -221,7 +221,7 @@
     {
       "id": "MAN-CLARIFY-GOOD",
       "source": { "path": "src/manual/topics/cycle/interview/clarify.md", "locator": { "section": "[올바른 예]" } },
-      "sha256": "5cc217c0fc6bd56bab5a7e9b700f97d0329d028e0f8507f4cd0ca0dfa1098e06",
+      "sha256": "26e01e9b365aba90653e7288b85112ab9db55e8a3ded602c1f662165ea31eade",
       "kind": "illustrative_partial",
       "payload": { "parse": "item_lines", "count": 3 },
       "served": true,
@@ -242,12 +242,12 @@
     {
       "id": "MAN-DEFINE-GOOD",
       "source": { "path": "src/manual/topics/step/define/smallest.md", "locator": { "section": "[올바른 예]" } },
-      "sha256": "7428536bbc92374d1e56de558f5b7de9681183cf9d85a64148dc30786ab7ff80",
+      "sha256": "b2e84846f22d39b7abfe5b9aae88ecd1138ad204da469119e8d95267dbcdcfec",
       "kind": "executable_fragment",
-      "payload": { "parse": "field_lines", "fields": ["problem", "success_condition"], "label": { "pattern": "승인 항목 A 「(.+?)」" } },
+      "payload": { "parse": "field_lines", "fields": ["problem", "success_condition"], "quoted_item": { "id": "A" } },
       "served": true,
       "cases": ["CX-04", "CX-06"],
-      "claim": "The Define problem/success_condition lines close Define verbatim while the Experiment is bound to item A."
+      "claim": "The Define problem/success_condition lines close Define verbatim while the Experiment is bound to item A, and the item line the example quotes is the approved item Core bound (id, question, done_when). Whether the Define text means the same problem as the item is not judged."
     },
     {
       "id": "MAN-DEFINE-FAIL",
@@ -294,10 +294,15 @@
   "consistency": [
     {
       "id": "DOC-ITEM-A-WORDING",
-      "left": { "example": "MAN-DEFINE-GOOD", "path": ["label"] },
+      "left": { "example": "MAN-DEFINE-GOOD", "path": ["item", "question"] },
       "right": { "example": "MAN-CLARIFY-GOOD", "path": ["items", 0, "question"] },
-      "note": "smallest.md quotes approved item A of the same sales example with wording that differs from clarify.md's item A question. Approved item text is immutable, so the two related topics show two different 'item A' texts.",
-      "acknowledged": { "left": "제공된 표가 월별 집계에 쓸 수 있는가", "right": "제공된 표의 날짜·금액 열이 월별 집계에 쓸 수 있는가", "on": "2026-11-17", "owner": "Manual text owner (read-only here); reported in every run until the topics agree" }
+      "note": "smallest.md quotes approved item A of clarify.md's sales example. Approved item text is immutable, so the question must be the same text in both topics; a difference fails and cannot be acknowledged."
+    },
+    {
+      "id": "DOC-ITEM-A-DONE-WHEN",
+      "left": { "example": "MAN-DEFINE-GOOD", "path": ["item", "done_when"] },
+      "right": { "example": "MAN-CLARIFY-GOOD", "path": ["items", 0, "done_when"] },
+      "note": "Same item, completion condition: the Define example must quote the done_when that was approved, not a narrower or wider one."
     }
   ]
 }
