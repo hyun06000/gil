@@ -21,6 +21,8 @@ mod guidance;
 mod recovery;
 #[cfg(feature = "approved-plan")]
 mod plans;
+#[cfg(feature = "exploration-flow")]
+mod records;
 #[cfg(feature = "visual-authoring")]
 mod authoring;
 #[cfg(feature = "visual-authoring")]
@@ -59,9 +61,15 @@ impl GilServer {
             && matches!(name.as_str(), "gil_start" | "gil_status" | "gil_context" | "gil_story"
                 | "gil_open" | "gil_close" | "gil_restore" | "gil_revisit" | "gil_cycle"
                 | "gil_monitor_prepare" | "gil_report_visuals");
+        // The record reads resolve the root the same way; they prepare nothing and are not a
+        // Project "use" for the Monitor or Companion.
+        #[cfg(feature = "exploration-flow")]
+        let record_read = records::NAMES.contains(&name.as_str());
+        #[cfg(not(feature = "exploration-flow"))]
+        let record_read = false;
         // Use the same resolved root for the action, typed authoring and Monitor preparation.
         // Workspace creation/migration targets are intentionally outside this fallback.
-        let normalized_note = if project_use || actions::NAMES.contains(&name.as_str()) || name == "gil_monitor_status" {
+        let normalized_note = if project_use || record_read || actions::NAMES.contains(&name.as_str()) || name == "gil_monitor_status" {
             input.get("project_root").and_then(Value::as_str)
                 .filter(|root| std::path::Path::new(root).is_absolute())
                 .and_then(|root| actions::resolve_root(root).ok())
@@ -210,6 +218,11 @@ impl GilServer {
             let grants = self.plan_grants.clone();
             return tokio::task::spawn_blocking(move || locale::with(locale, || plans::call(&monitor, &grants, &name, input))).await
                 .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "mcp.plan_uncertain")));
+        }
+        #[cfg(feature = "exploration-flow")]
+        if records::NAMES.contains(&name.as_str()) {
+            return tokio::task::spawn_blocking(move || locale::with(locale, || records::call(&name, input))).await
+                .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "record_tool.failed")));
         }
         #[cfg(feature = "visual-authoring")]
         if name.starts_with("gil_migration_") {
@@ -361,6 +374,8 @@ mod tests {
     /// M6-D 승인 계획 도구 — 모델이 부르는 셋과 App 전용 결정 둘(src/mcp/plans.rs).
     const PLAN_MODEL_SURFACE: [&str; 3] = ["gil_plan_propose", "gil_plan_read", "gil_plan_request_interview"];
     const PLAN_APP_SURFACE: [&str; 2] = ["gil_plan_review", "gil_plan_decide"];
+    /// 원본 기록 조회 둘 — exploration-flow 빌드에서만 등록된다(src/mcp/records.rs).
+    const RECORD_READ_SURFACE: [&str; 2] = ["gil_report_read", "gil_evidence_read"];
 
     fn registered_names() -> Vec<String> {
         let mut names: Vec<String> = surface::tools().iter().map(|one| one.name.to_string()).collect();
@@ -388,6 +403,9 @@ mod tests {
         if cfg!(feature = "approved-plan") {
             expected.extend(PLAN_MODEL_SURFACE.iter().chain(PLAN_APP_SURFACE.iter()).map(|s| s.to_string()));
         }
+        if cfg!(feature = "exploration-flow") {
+            expected.extend(RECORD_READ_SURFACE.iter().map(|s| s.to_string()));
+        }
         if cfg!(feature = "product-safety") { expected.extend(["gil_revisit_apply".into(), "gil_revisit_review".into()]); }
         expected.push("gil_await_user".to_string());
         expected.sort();
@@ -401,8 +419,23 @@ mod tests {
         let mut names: Vec<&str> = catalog.iter().map(|t| t["name"].as_str().expect("name")).collect();
         names.sort();
         assert_eq!(names, DEFAULT_SURFACE);
-        for name in PLAN_MODEL_SURFACE.iter().chain(PLAN_APP_SURFACE.iter()).chain(VISUAL_SURFACE.iter()) {
+        for name in PLAN_MODEL_SURFACE.iter().chain(PLAN_APP_SURFACE.iter()).chain(VISUAL_SURFACE.iter()).chain(RECORD_READ_SURFACE.iter()) {
             assert!(!names.contains(name), "{name} 이 기본 표에 들어왔다");
+        }
+    }
+
+    /// 원본 기록 조회는 exploration-flow 에서만 등록되고, 모델이 부르는 읽기 전용 도구다.
+    /// 승인 계획만의 빌드와 기본 빌드의 도구 표는 그대로다.
+    #[test]
+    fn record_reads_are_registered_only_in_the_exploration_profile() {
+        let names = registered_names();
+        for name in RECORD_READ_SURFACE {
+            assert_eq!(names.iter().any(|n| n == name), cfg!(feature = "exploration-flow"), "{name}");
+            if cfg!(feature = "exploration-flow") {
+                assert_eq!(visibility(name), ["model"], "{name} 는 모델이 부른다");
+                let tool = surface::tools().iter().find(|t| t.name == name).unwrap();
+                assert_eq!(serde_json::to_value(tool).unwrap()["annotations"]["readOnlyHint"], true, "{name}");
+            }
         }
     }
 

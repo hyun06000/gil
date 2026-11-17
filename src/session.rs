@@ -45,6 +45,11 @@ use crate::will::ActionContract;
 mod evidence;
 #[cfg(feature = "product-safety")]
 mod revisit_recovery;
+// Read-only: a closed Verify's declared evidence from its own Snapshot (exploration profile).
+#[cfg(feature = "exploration-flow")]
+mod stored_evidence;
+#[cfg(feature = "exploration-flow")]
+pub(crate) use stored_evidence::{EvidenceChunk, EvidenceIndex, StoredEvidenceError};
 
 #[cfg(feature = "visual-authoring")]
 #[path = "visual_start.rs"]

@@ -130,7 +130,10 @@ fn exploration_view(value: &mut Value, p: &Project, state: &crate::approved_plan
         v
     })));
     fields.insert("experiment_link".into(), json!(active.map(|a| crate::approved_plan::ExperimentLink::skeleton(Some(a)))));
-    fields.insert("next".into(), json!(crate::tr!("plan_tool.next_exploration", next = crate::context::next_call(p))));
+    // Where the linked Experiments' original Reports and stored evidence are read. Named only
+    // once there is something linked to open; the two tools add no judgment of their own.
+    let originals = if state.executed_cycles.is_empty() { String::new() } else { format!("\n{}", crate::locale::text("plan_tool.originals")) };
+    fields.insert("next".into(), json!(format!("{}{originals}", crate::tr!("plan_tool.next_exploration", next = crate::context::next_call(p)))));
 }
 impl Grants {
     fn token(&self, scope: &str, revision: u32, digest: &str) -> Result<String, String> {
@@ -298,6 +301,14 @@ pub(super) fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
             )
             .expect("plan catalog"),
         );
+    }
+    // The record reads exist only in an exploration-flow build, so only there does the link
+    // list say where the linked originals are opened. Every other build keeps the description
+    // above byte for byte.
+    if cfg!(feature = "exploration-flow") {
+        let read = tools.iter_mut().find(|tool| tool.name == "gil_plan_read").expect("plan read");
+        read.description.get_or_insert_with(Default::default).to_mut().push_str(
+            " To read what a linked Experiment actually recorded, pass its cycle_ref to gil_report_read (Step references and Cycle Report, then one Step Report at a time) and read the files a Verify declared with gil_evidence_read; this tool lists links and verdicts, it does not carry Report bodies or synthesize an answer.");
     }
     tools
 }

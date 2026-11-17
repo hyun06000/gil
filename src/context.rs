@@ -126,6 +126,11 @@ fn write_requirements(out: &mut String, plan: &crate::approved_plan::PlanState, 
         out.push_str(&tr!("ctx.explore.requirement", id = item.id, question = item.question, done_when = item.done_when, experiments = experiments));
     }
     out.push_str(text("ctx.explore.unresolved"));
+    // 연결된 실험의 원문과 저장 증거를 여는 길. 요약을 따로 쌓지 않는다 — 다음 실험의 근거와
+    // 종료 인터뷰의 요구별 검토는 원본 관측·분석·반성에서 나온다.
+    if plan.executed_cycles.iter().any(|link| active.draft.items.iter().any(|item| item.id == link.item_id)) {
+        out.push_str(text("ctx.explore.originals"));
+    }
 }
 
 /// **지금 바로 할 호출 하나** — 가벼운 모델이 긴 규칙을 추론하지 않아도 되도록.
