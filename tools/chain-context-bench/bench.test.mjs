@@ -8,12 +8,15 @@ import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { parseArgs, sanitize, compare, compactResult, UsageError } from './cli.mjs';
-import { buildPlan, estimateCalls, BASE, AXES, CALL_BUDGET } from './lib/plan.mjs';
-import { measureReadPhase } from './lib/run.mjs';
+import { createHash } from 'node:crypto';
+import { parseArgs, sanitize, refuseSecrets, recoveryConditions, compare, compactResult, UsageError } from './cli.mjs';
+import { buildPlan, estimateCalls, recoveryForFeatures, BASE, AXES, CALL_BUDGET } from './lib/plan.mjs';
+import { measureReadPhase, errorKind } from './lib/run.mjs';
+import { preservation } from './lib/bench.mjs';
+import { formatMarkdown } from './lib/report.mjs';
 import { snapshotReadRoots, compareReadRoots, readOnlyUnchanged } from './lib/measure.mjs';
-import { treeDigest, diffTrees, segmentContext, sectionMarkers, evaluateResolution, compareRepeats, blockProfile, invariantAcross, templateOf, normalizedSha, lineRepeats } from './lib/measure.mjs';
-import { field, detailLines, TagBook } from './lib/scenario.mjs';
+import { treeDigest, diffTrees, segmentContext, sectionMarkers, evaluateResolution, evaluateLineage, lineageHolds, inspectPreserved, compareRepeats, blockProfile, invariantAcross, templateOf, normalizedSha, lineRepeats } from './lib/measure.mjs';
+import { field, detailLines, TagBook, generate, GenerationError, UnsupportedError, RECOVERY, recoveryPathFor } from './lib/scenario.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const cli = join(here, 'cli.mjs');
@@ -310,23 +313,266 @@ test('results are sanitized of machine paths or not written at all', () => {
   assert.equal(sanitize(`{"p":"${home}/x"}`, [['<home>', home]]), '{"p":"<home>/x"}');
 });
 
+// ── recovery after a failed Experiment ─────────────────────────────────────────────────────
+
+const PLAN_TOKEN = 'plan-capability-0123456789abcdef';
+const RECOVERY_TOKEN = (cycle) => `recovery-capability-for-C${cycle}-0123456789abcdef`;
+
+/**
+ * In-process stand-in for the Core's answers along the generator's walk (not a Core: it only
+ * hands out refs). `revisit(name, args, state)` answers the recovery tools.
+ */
+function stubWalk({ recovery, revisit, blocked = false }) {
+  const calls = []; const secrets = [];
+  let cycle = 1; let step = 0;
+  const reply = (structured, meta = null, ok = true) => ({ ok, structured, meta, result: { content: [{ type: 'text', text: structured.said ?? '' }] }, error: null });
+  const answer = async (name, args) => {
+    calls.push({ name, args });
+    if (name === 'gil_start') return reply({ said: `started project:${'a'.repeat(64)}` });
+    if (name === 'gil_open') {
+      if (['experiment', 'interview', 'chain'].includes(args.kind)) { cycle += 1; step = 0; return reply({ said: `opened cycle:C${cycle}` }); }
+      step += 1; return reply({ said: `opened step:C${cycle}/S${step}` });
+    }
+    if (name === 'gil_plan_review') return reply({ proposal: { revision: 1, digest: 'plan-digest' } }, { 'gil/planApprovalToken': PLAN_TOKEN });
+    if (name === 'gil_plan_read') return reply({ close_report: 'approved: yes', current_item: { id: 'I1' }, document: '# plan' });
+    if (name.startsWith('gil_revisit')) return revisit(name, args, { cycle, reply });
+    return reply({ said: 'ok' });
+  };
+  const g = { root: '/stub/project', locale: 'ko-KR', typedVerify: false, recovery, modelRevisitBlockedByProfile: blocked, model: answer, app: answer, writeProjectFile: async () => {}, onSecret: (s) => secrets.push(s) };
+  return { g, calls, secrets, names: () => calls.map((c) => c.name) };
+}
+const approvalCore = (name, args, { cycle, reply }) => {
+  if (name === 'gil_revisit_review') return reply({ supported: true, state: 'awaiting_approval', digest: `digest-C${cycle}`, from: `cycle:C${cycle}`, target: 'cycle:C1', changes: [{ path: 'plan/approved-plan.md', action: 'preserve' }, { path: 'evidence/x.md', action: 'preserve' }], pending_state_sha256: `key-C${cycle}`, policy: 'legacy-whole-tree-protected-difference-v1' }, { 'gil/revisitApprovalToken': RECOVERY_TOKEN(cycle) });
+  if (name === 'gil_revisit_apply') return args.digest === `digest-C${cycle}` && args.token === RECOVERY_TOKEN(cycle) ? reply({ state: 'completed', approval_source: 'monitor_button' }) : reply({ ok: false, said: '', problem: 'approve in Monitor' }, null, false);
+  return reply({ ok: false, said: '', problem: 'approve in Monitor' }, null, false);
+};
+const twoFailures = { ...BASE, failures: 2 };
+
+test('the recovery path follows the tools the Core lists', () => {
+  assert.equal(recoveryPathFor(['gil_revisit', 'gil_revisit_review', 'gil_revisit_apply']), RECOVERY.app_approval);
+  assert.equal(recoveryPathFor(['gil_revisit']), RECOVERY.model_revisit);
+  assert.equal(recoveryPathFor(['gil_revisit', 'gil_revisit_review']), RECOVERY.model_revisit, 'half of the approval path is not a path');
+  assert.equal(recoveryPathFor(['gil_context']), RECOVERY.none);
+  assert.equal(recoveryForFeatures('approved-plan,visual-authoring,product-safety'), 'app_approval');
+  assert.equal(recoveryForFeatures('approved-plan,visual-authoring'), 'model_revisit');
+  // review + apply instead of one gil_revisit: one more call per failure, known before any Core runs.
+  assert.equal(estimateCalls(twoFailures, [], 'app_approval') - estimateCalls(BASE, [], 'app_approval'), 30);
+  assert.equal(estimateCalls(BASE, [], 'app_approval'), estimateCalls(BASE, []));
+  assert.equal(parseArgs(['plan', '--axes', 'failures', '--features', 'approved-plan,product-safety']).plan.recovery_assumed, 'app_approval');
+  assert.equal(parseArgs(['plan', '--axes', 'failures']).plan.recovery_assumed, 'model_revisit');
+});
+
+test('a product Core is recovered through review → apply with the Core\'s own digest and capability', async () => {
+  const w = stubWalk({ recovery: RECOVERY.app_approval, revisit: approvalCore });
+  const got = await generate(w.g, twoFailures);
+  assert.ok(!w.names().includes('gil_revisit'), 'a model revisit is never attempted on the approval path');
+  const applies = w.calls.filter((c) => c.name === 'gil_revisit_apply');
+  assert.deepEqual(applies.map((c) => c.args.digest), ['digest-C2', 'digest-C3']);
+  assert.deepEqual(applies.map((c) => c.args.token), [RECOVERY_TOKEN(2), RECOVERY_TOKEN(3)], 'each approval uses the capability of its own review');
+  for (const c of w.calls.filter((x) => x.name.startsWith('gil_revisit_'))) assert.equal(c.args.scope_id, `project:${'a'.repeat(64)}`);
+  assert.equal(w.names().filter((n) => n === 'gil_revisit_review').length, 2);
+  assert.deepEqual([got.counts.failures, got.counts.revisits, got.counts.recovery_reviews, got.counts.recovery_approvals], [2, 2, 2, 2]);
+  assert.deepEqual(got.failed.map((f) => [f.cycle, f.item]), [[2, 'I1'], [3, 'I1']]);
+  assert.deepEqual(got.recoveries.map((r) => [r.path, r.from, r.target, r.changes.preserve, r.preserved_key]), [['app_approval', 'cycle:C2', 'cycle:C1', 2, 'key-C2'], ['app_approval', 'cycle:C3', 'cycle:C1', 2, 'key-C3']]);
+  assert.equal(got.current.cycle, 4, 'the retry opens after both recoveries');
+  // The capability is reported to the redactor and is not part of what generation returns.
+  assert.deepEqual(w.secrets.filter((s) => s.startsWith('recovery-')), [RECOVERY_TOKEN(2), RECOVERY_TOKEN(3)]);
+  const serialized = JSON.stringify(got);
+  for (const s of w.secrets) assert.ok(!serialized.includes(s), 'no capability in the generation result');
+});
+
+test('an unsupported condition and a failed recovery call are different results', async () => {
+  const run = (opts) => generate(stubWalk(opts).g, { ...BASE, failures: 1 });
+  const refused = (_n, _a, { reply }) => reply({ ok: false, said: '', problem: 'refused' }, null, false);
+  // The Core answers the review but reports that approved recovery does not exist here.
+  const unsupported = await run({ recovery: RECOVERY.app_approval, revisit: (name, _a, { reply }) => reply({ supported: false, reason: 'no approved recovery on this platform' }) }).catch((e) => e);
+  assert.ok(unsupported instanceof UnsupportedError);
+  assert.equal(unsupported.kind, 'unsupported_condition');
+  assert.match(unsupported.step, /revisit review/);
+  // The Core refuses the review (for example unrecorded file changes): a failed call, not "unsupported".
+  const reviewRefused = await run({ recovery: RECOVERY.app_approval, revisit: refused }).catch((e) => e);
+  assert.ok(reviewRefused instanceof GenerationError && !(reviewRefused instanceof UnsupportedError));
+  assert.equal(reviewRefused.kind, 'core_refusal');
+  // The approval itself is refused.
+  const applyRefused = await run({ recovery: RECOVERY.app_approval, revisit: (name, args, st) => (name === 'gil_revisit_review' ? approvalCore(name, args, st) : refused(name, args, st)) }).catch((e) => e);
+  assert.equal(applyRefused.kind, 'core_refusal');
+  assert.match(applyRefused.step, /revisit apply/);
+  // A review without a capability, or for another Cycle, is never turned into an approval.
+  for (const broken of [
+    (name, _a, { cycle, reply }) => reply({ supported: true, state: 'awaiting_approval', digest: 'd', from: `cycle:C${cycle}`, target: 'cycle:C1' }),
+    (name, _a, { reply }) => reply({ supported: true, state: 'not_needed' }, { 'gil/revisitApprovalToken': RECOVERY_TOKEN(0) }),
+    (name, _a, { reply }) => reply({ supported: true, state: 'awaiting_approval', digest: 'd', from: 'cycle:C9', target: 'cycle:C1' }, { 'gil/revisitApprovalToken': RECOVERY_TOKEN(0) }),
+  ]) {
+    const w = stubWalk({ recovery: RECOVERY.app_approval, revisit: broken });
+    const err = await generate(w.g, { ...BASE, failures: 1 }).catch((e) => e);
+    assert.equal(err.kind, 'harness', err.message);
+    assert.ok(!w.names().includes('gil_revisit_apply'), 'no approval is sent for an unusable review');
+    assert.ok(!err.message.includes('recovery-capability'), 'the capability is not quoted in the error');
+  }
+  // Without product protection the model path is used; its refusal is a failed call …
+  const direct = stubWalk({ recovery: RECOVERY.model_revisit, revisit: (_n, _a, { reply }) => reply({ said: 'revisited' }) });
+  const got = await generate(direct.g, twoFailures);
+  assert.equal(direct.names().filter((n) => n === 'gil_revisit').length, 2);
+  assert.ok(!direct.names().some((n) => n.startsWith('gil_revisit_')));
+  assert.deepEqual([got.counts.revisits, got.counts.recovery_approvals], [2, 0]);
+  assert.equal((await run({ recovery: RECOVERY.model_revisit, revisit: refused }).catch((e) => e)).kind, 'core_refusal');
+  // … unless the declared profile blocks it by design and the Core offers no approval tools.
+  assert.ok((await run({ recovery: RECOVERY.model_revisit, revisit: refused, blocked: true }).catch((e) => e)) instanceof UnsupportedError);
+  assert.ok((await run({ recovery: RECOVERY.none, revisit: refused }).catch((e) => e)) instanceof UnsupportedError);
+  assert.equal(errorKind(new Error('read: timeout after 1000 ms waiting for tools/call gil_open')), 'transport');
+  assert.equal(errorKind(new Error('receipt names no step ref')), 'harness');
+});
+
+test('lineage check: failure evidence, the current item and the retry link must survive', () => {
+  const tags = new TagBook();
+  const walk = { failed: [], current: { cycle: 4, item: 'I1' } };
+  for (const f of [1, 2]) { walk.failed.push({ attempt: f, cycle: f + 1, item: 'I1', prefix: `f${f}` }); for (const what of ['define', 'lesson', 'handoff', 'reason']) tags.add('failure_projection', `f${f}`, what); }
+  const ctxText = `${tags.rows.map((t) => t.tag).join(' ')} 원본 Cycle: cycle:C2 … cycle:C3 … cycle:C4`;
+  const plan = (executed, item = 'I1', cycle = 'cycle:C4') => JSON.stringify({ current_item: { id: item }, current_cycle: { ref: cycle }, executed_cycles: executed.map(([c, i]) => ({ cycle_ref: c, item_id: i, revision: 1 })) });
+  const all = [['cycle:C2', 'I1'], ['cycle:C3', 'I1'], ['cycle:C4', 'I1']];
+  const reads = (text, structured) => [{ tool: 'gil_context', status: 'ok', text, structured: null }, { tool: 'gil_status', status: 'ok', text: '갈래 출처: cycle:C3', structured: null }, { tool: 'gil_plan_read', status: 'ok', text: '', structured }];
+  const sections = [{ name: 'failed_cycles' }, { name: 'current_cycle' }];
+  const good = evaluateLineage(walk, tags.rows, reads(ctxText, plan(all)), sections);
+  assert.deepEqual(good.violations, []);
+  assert.equal(lineageHolds(good), true);
+  assert.equal(good.status_names_revisit_source, true);
+  assert.deepEqual(good.checks.map((c) => [c.name, c.observed, c.expected]), [['failure_refs', 2, 2], ['failure_tags', 8, 8], ['failure_section', true, true], ['current_item', 'I1@cycle:C4', 'I1@cycle:C4'], ['retry_links', 3, 3], ['retry_links_in_context', 3, 3]]);
+  // A dropped failed attempt, a lost tag, another item or a missing section are each reported.
+  const lost = evaluateLineage(walk, tags.rows, reads(ctxText.replace('ccbT-f1-lesson', '').replace('cycle:C2', 'cycle:C21'), plan([['cycle:C3', 'I1'], ['cycle:C4', 'I2']], 'I2')), [{ name: 'current_cycle' }]);
+  assert.deepEqual(lost.violations.map((v) => v.check), ['failure_refs', 'failure_tags', 'failure_section', 'current_item', 'retry_links', 'retry_links_in_context']);
+  assert.deepEqual(lost.violations[0].missing, ['cycle:C2'], 'cycle:C21 does not count as cycle:C2');
+  assert.equal(lineageHolds(lost), false);
+  // No failures: nothing to preserve, and a failed-Cycle section would be a phantom.
+  const none = { failed: [], current: { cycle: 2, item: 'I1' } };
+  assert.equal(lineageHolds(evaluateLineage(none, [], reads('cycle:C2', plan([['cycle:C2', 'I1']], 'I1', 'cycle:C2')), [{ name: 'current_cycle' }])), true);
+  assert.deepEqual(evaluateLineage(none, [], reads('cycle:C2', plan([['cycle:C2', 'I1']], 'I1', 'cycle:C2')), sections).violations.map((v) => v.check), ['failure_section']);
+  // Reads that were not requested or have no result are "not measured", never "ok".
+  const partial = evaluateLineage(walk, tags.rows, [{ tool: 'gil_context', status: 'ok', text: ctxText, structured: null }], null);
+  assert.deepEqual(partial.not_measured, ['failure_section', 'current_item', 'retry_links']);
+  assert.equal(lineageHolds(partial), null);
+  assert.equal(partial.status_names_revisit_source, null);
+});
+
+test('preserved originals are checked by bytes and a stored capability is reported', () => {
+  const record = join(scratch('preserved'), '.gil');
+  const sha = (text) => createHash('sha256').update(text).digest('hex');
+  const recoveries = [{ path: 'app_approval', from: 'cycle:C2', target: 'cycle:C1', preserved_key: 'k1' }, { path: 'app_approval', from: 'cycle:C3', target: 'cycle:C1', preserved_key: 'k2' }];
+  const make = (key, from, files, source = { approval_source: 'monitor_button', human_click: true }) => {
+    const dir = join(record, 'revisit-preserved', key); mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'approval.json'), JSON.stringify({ state: 'approved', from, target: 'cycle:C1' }));
+    writeFileSync(join(dir, 'files.json'), JSON.stringify(files.map((text, i) => ({ path: `p${i}`, saved_as: `file-${i}`, sha256: sha(text) }))));
+    writeFileSync(join(dir, 'source.json'), JSON.stringify(source));
+    files.forEach((text, i) => writeFileSync(join(dir, `file-${i}`), text));
+    return dir;
+  };
+  make('k1', 'cycle:C2', ['plan', 'evidence']);
+  const second = make('k2', 'cycle:C3', ['plan', 'evidence 2']);
+  const ok = inspectPreserved(record, recoveries, ['capability-0123456789']);
+  assert.deepEqual([ok.expected, ok.archives, ok.complete, ok.original_files, ok.originals_verified, ok.approvals_stored_as_approved], [2, 2, 2, 4, 4, 2]);
+  assert.deepEqual(ok.core_source_records, { monitor_button: 2 });
+  assert.equal(ok.core_records_claim_human_click, 2, 'what the Core wrote is reported as the Core\'s record, not as a person\'s click');
+  assert.equal(ok.capability_in_storage, false);
+  assert.deepEqual(ok.problems, []);
+  // A changed original, a missing folder and a capability on disk are all visible.
+  writeFileSync(join(second, 'file-1'), 'tampered');
+  writeFileSync(join(second, 'approval.json'), JSON.stringify({ state: 'approved', from: 'cycle:C3', target: 'cycle:C1', token: 'capability-0123456789' }));
+  const bad = inspectPreserved(record, [...recoveries, { path: 'app_approval', from: 'cycle:C4', target: 'cycle:C1', preserved_key: 'k3' }], ['capability-0123456789']);
+  assert.equal(bad.originals_verified, 3);
+  assert.equal(bad.archives, 2);
+  assert.equal(bad.capability_in_storage, true);
+  assert.equal(bad.problems.length, 2);
+  // The model path preserves nothing through this contract and is not inspected.
+  assert.equal(inspectPreserved(record, [{ path: 'model_revisit', preserved_key: null }]).expected, 0);
+});
+
+test('a result with an approval capability is not written; recovery conditions never claim a person', () => {
+  assert.equal(refuseSecrets('{"a":1}', new Set(['capability-0123456789'])), '{"a":1}');
+  assert.throws(() => refuseSecrets('{"token":"capability-0123456789"}', new Set(['capability-0123456789'])), /nothing written/);
+  const lineage = { failed_attempts: 1, failed_cycles: ['cycle:C2'], current: { cycle: 'cycle:C3', item: 'I1' }, checks: [{ name: 'failure_refs', expected: 1, observed: 1, verdict: 'ok' }], violations: [], not_measured: [], status_names_revisit_source: true };
+  const preserved = { expected: 1, archives: 1, complete: 1, original_files: 4, originals_verified: 4, core_source_records: { monitor_button: 1 }, core_records_claim_human_click: 1, approvals_stored_as_approved: 1, capability_in_storage: false, problems: [] };
+  const run = { run: 1, status: 'complete', error: null, reads: [], lineage, readonly: { project: { unchanged: true }, settings: { unchanged: true }, record: { unchanged: true } }, storage: { preserved }, generation: { calls: 36, refused_calls: 0, recovery: { path: 'app_approval', recoveries: 1, synthetic_approvals: 1 } } };
+  const result = { schema: 'gil-chain-context-bench/0.1', status: 'complete', core: { observed: { recovery_path: 'app_approval', tools: 33, revisit_approval_tools: true } }, conditions: {}, plan: { base: BASE }, cases: [{ id: 'case-02', scale: { ...BASE, failures: 1 }, axes: [], status: 'complete', runs: [run] }], incomplete: [], limits: [] };
+  const c = recoveryConditions(result, 'app_approval');
+  assert.deepEqual([c.path_offered_by_core, c.matches_declared_features, c.recoveries, c.synthetic_approvals, c.human_approvals], ['app_approval', true, 1, 1, 0]);
+  assert.match(c.approval_input, /synthetic harness input/);
+  assert.match(c.core_source_note, /not evidence of a person/);
+  assert.equal(recoveryConditions(result, 'model_revisit').matches_declared_features, false, 'declared features that promise the other path are flagged');
+  const rows = preservation(result);
+  assert.deepEqual([rows.cases, rows.cases_with_failures, rows.violations], [1, 1, 0]);
+  assert.equal(rows.rows[0].preserved_ok_in_every_run, true);
+  result.conditions.recovery = c; result.summary = { axes: [], steepest_context_growth: [], preservation: rows };
+  const md = formatMarkdown(result);
+  assert.match(md, /harness 합성 승인 1회 · 사람의 승인 0회/);
+  assert.match(md, /사람 클릭의 증거가 아니다/);
+  const compact = compactResult(result).cases[0].runs[0];
+  assert.deepEqual([compact.lineage.failed_attempts, compact.lineage.holds, compact.generation.recovery.synthetic_approvals], [1, true, 1]);
+  // An incomplete run says which kind of failure it was.
+  result.incomplete = [{ case_id: 'case-03', run: 1, status: 'unsupported', error: { step: 'x', kind: 'unsupported_condition', detail: 'd' } }, { case_id: 'case-04', run: 1, status: 'generation_failed', error: { step: 'y', kind: 'core_refusal', detail: 'd' } }];
+  const md2 = formatMarkdown(result);
+  assert.match(md2, /unsupported \| 지원되지 않는 조건/);
+  assert.match(md2, /generation_failed \| Core가 호출을 거절/);
+});
+
 // ── optional real Core ─────────────────────────────────────────────────────────────────────
+
+/** What every finished real-Core run must show, whichever recovery path the build offers. */
+function assertPreserved(result, path) {
+  assert.equal(result.status, 'complete');
+  assert.equal(result.core.observed.recovery_path, path);
+  assert.equal(result.conditions.recovery.matches_declared_features, true);
+  assert.equal(result.conditions.recovery.human_approvals, 0);
+  for (const c of result.cases) {
+    assert.equal(c.repeat.identical, true, `${c.id} repeats differ`);
+    for (const run of c.runs) {
+      assert.equal(readOnlyUnchanged(run.readonly), true);
+      assert.deepEqual(run.resolution.violations, []);
+      assert.deepEqual(run.lineage.violations, [], `${c.id} lost failure evidence, the current item or a retry link`);
+      assert.deepEqual(run.lineage.not_measured, []);
+      assert.equal(run.lineage.failed_attempts, c.scale.failures);
+      assert.equal(run.generation.recovery.recoveries, c.scale.failures);
+      assert.equal(run.generation.refused_calls, 0, 'no refused call on the way');
+      if (c.scale.failures) assert.equal(run.generation.recovery.path, path);
+    }
+  }
+  assert.equal(result.summary.preservation.violations, 0);
+}
 
 test('real Core smoke run (set CHAIN_CONTEXT_BENCH_GIL to a gil built with approved-plan,visual-authoring)', { skip: !process.env.CHAIN_CONTEXT_BENCH_GIL }, () => {
   const root = scratch('real');
   const out = join(root, 'out');
-  const r = runCli(['run', '--gil', process.env.CHAIN_CONTEXT_BENCH_GIL, '--out', out, '--work-root', root, '--quiet', '--axes', 'failures', '--levels', 'failures=0,2', '--repeat', '2'], { timeout: 300000 });
+  const r = runCli(['run', '--gil', process.env.CHAIN_CONTEXT_BENCH_GIL, '--out', out, '--work-root', root, '--quiet', '--axes', 'failures', '--levels', 'failures=0,1,2', '--repeat', '2'], { timeout: 300000 });
   assert.equal(r.status, 0, r.stderr);
   const result = JSON.parse(readFileSync(join(out, 'bench.json'), 'utf8'));
-  assert.equal(result.status, 'complete');
-  for (const c of result.cases) {
-    assert.equal(c.repeat.identical, true, `${c.id} repeats differ`);
-    for (const run of c.runs) {
-      assert.equal(run.readonly.project.unchanged, true);
-      assert.equal(readOnlyUnchanged(run.readonly), true);
-      assert.deepEqual(run.resolution.violations, []);
-    }
-  }
+  assertPreserved(result, 'model_revisit');
+  assert.equal(result.conditions.recovery.synthetic_approvals, 0);
+  for (const run of result.cases.flatMap((c) => c.runs)) assert.equal(run.storage.preserved, null);
   const two = result.summary.axes[0].levels.find((l) => l.level === 2);
   assert.ok(two.context_sections_utf8_bytes.failed_cycles > 0);
+});
+
+test('real product Core: accumulated failures through the approved recovery path (set CHAIN_CONTEXT_BENCH_GIL_PRODUCT to a gil built with approved-plan,visual-authoring,product-safety)', { skip: !process.env.CHAIN_CONTEXT_BENCH_GIL_PRODUCT }, () => {
+  const root = scratch('real-product');
+  const out = join(root, 'out');
+  const r = runCli(['run', '--gil', process.env.CHAIN_CONTEXT_BENCH_GIL_PRODUCT, '--features', 'approved-plan,visual-authoring,product-safety', '--out', out, '--work-root', root, '--quiet', '--axes', 'failures', '--levels', 'failures=0,1,2', '--repeat', '2'], { timeout: 300000 });
+  assert.equal(r.status, 0, r.stderr);
+  const result = JSON.parse(readFileSync(join(out, 'bench.json'), 'utf8'));
+  assertPreserved(result, 'app_approval');
+  assert.equal(result.core.observed.revisit_approval_tools, true);
+  // 0 + 1 + 2 failures, twice: every recovery is one synthetic harness approval, none a person's.
+  assert.equal(result.conditions.recovery.recoveries, 6);
+  assert.equal(result.conditions.recovery.synthetic_approvals, 6);
+  assert.deepEqual(result.conditions.recovery.paths_used, ['app_approval']);
+  for (const c of result.cases) for (const run of c.runs) {
+    const kept = run.storage.preserved;
+    if (!c.scale.failures) { assert.equal(kept, null); continue; }
+    assert.deepEqual([kept.archives, kept.complete, kept.approvals_stored_as_approved], [c.scale.failures, c.scale.failures, c.scale.failures]);
+    assert.equal(kept.originals_verified, kept.original_files);
+    assert.ok(kept.original_files > 0);
+    assert.equal(kept.capability_in_storage, false);
+    assert.deepEqual(kept.problems, []);
+    assert.equal(run.generation.calls, 21 + 15 * c.scale.failures, 'the estimate matches the walk');
+  }
+  // Nothing that looks like a 256-bit capability reached any written file.
+  for (const name of ['bench.json', 'summary.json', 'bench.md']) assert.ok(!/revisitApprovalToken|planApprovalToken/.test(readFileSync(join(out, name), 'utf8')), name);
+  assert.match(readFileSync(join(out, 'bench.md'), 'utf8'), /사람의 승인 0회/);
 });

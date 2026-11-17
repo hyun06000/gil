@@ -4,6 +4,19 @@ import { table } from '../../scenarios/lib/markdown.mjs';
 const n = (v) => (v === null || v === undefined ? '—' : String(v));
 const yes = (v) => (v === null || v === undefined ? '—' : v ? '예' : '아니오');
 const VERDICT = { ok: '맞음', missing: '누락', expanded: '펼쳐짐', missing_in_bundle: '읽기 호출 전체에서 누락', not_measured: '측정 안 됨' };
+const PATH = { app_approval: 'App 승인 복구 (gil_revisit_review → gil_revisit_apply)', model_revisit: 'gil_revisit 직접 호출', none: '복구 도구 없음' };
+const KIND = { unsupported_condition: '지원되지 않는 조건', core_refusal: 'Core가 호출을 거절', transport: '응답 없음·프로세스 종료', harness: '예상과 다른 응답' };
+
+function recoveryLine(c) {
+  if (!c) return '—';
+  const offered = PATH[c.path_offered_by_core] ?? n(c.path_offered_by_core);
+  const parts = [`Core가 내놓은 경로: ${offered}`, `실행한 복구 ${n(c.recoveries)}회`];
+  if (c.synthetic_approvals) parts.push(`harness 합성 승인 ${c.synthetic_approvals}회 · 사람의 승인 0회`);
+  if (c.matches_declared_features === false) parts.push('**선언한 기능 조합이 가리키는 경로와 다르다**');
+  return parts.join(' · ');
+}
+
+const check = (row, name) => { const k = row.checks?.[name]; return k ? `${n(k.observed)}/${n(k.expected)} ${VERDICT[k.verdict] ?? k.verdict}` : '—'; };
 
 export function formatMarkdown(r) {
   const out = [];
@@ -16,7 +29,8 @@ export function formatMarkdown(r) {
     ['Core binary', `${n(r.core?.binary)} · sha256 ${n(r.core?.sha256)}`],
     ['binary 출처', n(r.core?.provenance)],
     ['features (선언)', n(r.core?.features_declared)],
-    ['관측', r.core?.observed ? `tools ${r.core.observed.tools} · plan 도구 ${yes(r.core.observed.approved_plan_tools)} · revisit 도구 ${yes(r.core.observed.revisit_tool)}` : '—'],
+    ['관측', r.core?.observed ? `tools ${r.core.observed.tools} · plan 도구 ${yes(r.core.observed.approved_plan_tools)} · revisit 도구 ${yes(r.core.observed.revisit_tool)} · 승인 복구 도구(gil_revisit_review·gil_revisit_apply) ${yes(r.core.observed.revisit_approval_tools)}` : '—'],
+    ['실패 뒤 복구 경로', recoveryLine(r.conditions?.recovery)],
     ['locale', n(r.conditions?.locale)],
     ['읽기 호출', (r.conditions?.reads ?? []).join(', ')],
     ['측정 방식', n(r.conditions?.measurement)],
@@ -64,11 +78,26 @@ export function formatMarkdown(r) {
     out.push('## gil_context text 증가가 큰 구간 (단위당 바이트)', '');
     out.push(table(['축', '구간', 'Δ/단위 B', 'Δ B'], r.summary.steepest_context_growth.slice(0, 8).map((s) => [s.axis, `${s.from}→${s.to}`, s.per_unit, s.delta])), '');
   }
+  const kept = r.summary.preservation;
+  if (kept?.rows?.length) {
+    out.push('## 실패 뒤 복구와 보존 점검', '');
+    out.push('새 Core 프로세스의 읽기 응답에서 본 것이다. 복구 승인은 harness의 합성 입력이며 사람이 누른 승인이 아니다. 관측/기대 순으로 적는다.', '');
+    out.push(table(['case', '실패', '복구 경로', '합성 승인', '실패 Cycle 참조', '실패 표식', '실패 절', '현재 항목', '실행 연결(재시도)', '연결이 context에', '보존 폴더', '보존 원본', '모든 실행에서 유지', '읽기 전후 동일'],
+      kept.rows.map((x) => [x.case_id, x.failed_attempts, x.recovery_path ? (x.recovery_path === 'app_approval' ? 'App 승인' : x.recovery_path === 'model_revisit' ? 'gil_revisit' : x.recovery_path) : '해당 없음', x.synthetic_approvals, check(x, 'failure_refs'), check(x, 'failure_tags'), VERDICT[x.checks?.failure_section?.verdict] ?? '—', VERDICT[x.checks?.current_item?.verdict] ?? '—', check(x, 'retry_links'), check(x, 'retry_links_in_context'), x.preserved?.archives ?? '—', x.preserved?.originals ?? '—', yes(x.holds_in_every_run), yes(x.readonly_unchanged_in_every_run)])), '');
+    const withKept = kept.rows.filter((x) => x.preserved);
+    if (withKept.length) out.push(`승인 복구의 보존본: 모든 실행에서 승인 기록·원본 목록·출처 기록이 있고 원본 bytes가 목록의 SHA-256과 같은 사례 ${withKept.filter((x) => x.preserved_ok_in_every_run).length}/${withKept.length}. 저장된 파일에서 승인 정보가 발견된 사례 ${withKept.filter((x) => x.preserved.capability_in_storage !== false).length}.`, '');
+    const rc = r.conditions?.recovery;
+    if (rc?.core_source_note) out.push(`Core의 출처 기록: ${Object.entries(rc.core_source_records ?? {}).map(([k, v]) => `${k} ${v}`).join(', ')}. Core는 App 전용 도구로 들어온 승인을 monitor_button으로 적는다. 이 벤치에서는 그 입력이 harness에서 왔으므로 사람 클릭의 증거가 아니다(임시 프로젝트는 삭제됨).`, '');
+    out.push(`보존 점검 위반: ${kept.violations}건.`, '');
+  }
   out.push('## 재현성', '');
   out.push(table(['case', '비교 실행', '모두 동일', 'tool별 text B'], r.cases.map((c) => [c.id, n(c.repeat?.compared), yes(c.repeat?.identical), (c.repeat?.rows ?? []).map((x) => `${x.tool} ${x.text_utf8_bytes.join('/')}${x.text_content_identical ? '' : ' (내용 다름)'}`).join(' · ') || '—'])), '');
   out.push('## 중단·생성 실패·측정 누락', '');
   if (!r.incomplete.length) out.push('없음.', '');
-  else out.push(table(['case', 'run', '상태', '자리', '내용'], r.incomplete.map((x) => [x.case_id, n(x.run), x.status, n(x.error?.step), n(x.error?.detail?.split('\n')[0]?.slice(0, 160))])), '');
+  else {
+    out.push('`unsupported`는 이 Core·OS가 그 전이를 제공하지 않는 실제 조건이고, `generation_failed`는 도구 호출이 실패한 것이다(구분 열 참고).', '');
+    out.push(table(['case', 'run', '상태', '구분', '자리', '내용'], r.incomplete.map((x) => [x.case_id, n(x.run), x.status, x.error?.kind ? KIND[x.error.kind] ?? x.error.kind : '—', n(x.error?.step), n(x.error?.detail?.split('\n')[0]?.slice(0, 160))])), '');
+  }
   out.push('## 측정 한계', '', ...r.limits.map((l) => `- ${l}`), '');
   return out.join('\n');
 }

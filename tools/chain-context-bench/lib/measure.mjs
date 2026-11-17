@@ -1,7 +1,7 @@
 // Measurement helpers on top of tools/context-metrics. Sizes come from context-metrics'
 // `measure` (UTF-8 bytes, code points, UTF-16 units); none of them is a token count.
 import { createHash } from 'node:crypto';
-import { readdirSync, readFileSync, lstatSync, readlinkSync } from 'node:fs';
+import { readdirSync, readFileSync, lstatSync, readlinkSync, existsSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { measure, add, zero, sha256 } from '../../context-metrics/lib/size.mjs';
 import { splitBlocks, normalizeBlock } from '../../context-metrics/lib/analyze.mjs';
@@ -179,6 +179,137 @@ export function evaluateResolution(tags, reads) {
     rows.push(row);
   }
   return { rows, violations };
+}
+
+// ── What survives a failure: evidence, current item, retry link ───────────────────────────
+
+/**
+ * After n failed attempts and their recoveries, does a fresh session still get (a) every failed
+ * Cycle's evidence, (b) the item the current Experiment is bound to, (c) the link that says the
+ * current Experiment is a retry of the same item? Checked on the read responses only:
+ *   failure_refs      each failed Cycle ref is named in the gil_context text
+ *   failure_tags      each failed attempt's projection tags (Define, lesson, handoff, revisit reason)
+ *   failure_section   the failed-Cycle section exists exactly when there are failed attempts
+ *   current_item      gil_plan_read names the bound item and the open Cycle of the generated walk
+ *   retry_links       gil_plan_read.executed_cycles keeps every failed attempt and the current
+ *                     Cycle bound to that same item (the retry binding; nothing is dropped)
+ *   retry_links_in_context   the same refs are named in the gil_context text
+ * `status_names_revisit_source` is observed, not judged: wording of gil_status is not a contract here.
+ * A check whose read was not requested or has no usable result is `not_measured`, never `ok`.
+ * `walk` = { failed:[{attempt,cycle,item,prefix}], current:{cycle,item} }, `reads` as in evaluateResolution,
+ * `sections` = segmentContext output or null.
+ */
+export function evaluateLineage(walk, tags, reads, sections) {
+  const failed = walk?.failed ?? [];
+  const current = walk?.current ?? null;
+  const usable = (tool) => reads.find((r) => r.tool === tool && r.status === 'ok') ?? null;
+  const ctx = usable('gil_context');
+  const plan = usable('gil_plan_read');
+  const status = usable('gil_status');
+  const ref = (n) => `cycle:C${n}`;
+  // A ref is "named" only as a whole token: cycle:C2 must not match inside cycle:C21.
+  const names = (text, r) => typeof text === 'string' && new RegExp(`${r}(?![0-9])`).test(text);
+  const checks = [];
+  const add = (name, expected, observed, ok, missing = []) => checks.push({ name, expected, observed, verdict: ok === null ? 'not_measured' : ok ? 'ok' : 'missing', ...(missing.length ? { missing } : {}) });
+
+  const failedRefs = failed.map((f) => ref(f.cycle));
+  const gotRefs = ctx ? failedRefs.filter((r) => names(ctx.text, r)) : null;
+  add('failure_refs', failedRefs.length, gotRefs?.length ?? null, gotRefs ? gotRefs.length === failedRefs.length : null, gotRefs ? failedRefs.filter((r) => !gotRefs.includes(r)) : []);
+
+  const failureTags = tags.filter((t) => t.layer === 'failure_projection');
+  const perAttempt = failed.map((f) => {
+    const mine = failureTags.filter((t) => t.tag.startsWith(`ccbT-${f.prefix}-`));
+    return { attempt: f.attempt, cycle: ref(f.cycle), tags: mine.length, in_context: ctx ? tagsIn(ctx.text, mine).length : null };
+  });
+  const tagTotal = perAttempt.reduce((n, a) => n + a.tags, 0);
+  const tagGot = ctx ? perAttempt.reduce((n, a) => n + a.in_context, 0) : null;
+  add('failure_tags', tagTotal, tagGot, ctx ? tagGot === tagTotal && perAttempt.every((a) => a.tags > 0) : null, perAttempt.filter((a) => a.in_context !== a.tags).map((a) => a.cycle));
+
+  const section = Array.isArray(sections) ? sections.some((x) => x.name === 'failed_cycles') : null;
+  add('failure_section', failed.length > 0, section, section === null ? null : section === (failed.length > 0));
+
+  let planView = null;
+  if (plan?.structured) { try { planView = JSON.parse(plan.structured); } catch { planView = null; } }
+  const itemOk = planView && current ? planView.current_item?.id === current.item && planView.current_cycle?.ref === ref(current.cycle) : null;
+  add('current_item', current ? `${current.item}@${ref(current.cycle)}` : null, planView ? `${planView.current_item?.id ?? null}@${planView.current_cycle?.ref ?? null}` : null, itemOk);
+
+  const chain = current ? [...failed.map((f) => ({ cycle: ref(f.cycle), item: f.item })), { cycle: ref(current.cycle), item: current.item }] : [];
+  const executed = Array.isArray(planView?.executed_cycles) ? planView.executed_cycles : null;
+  const linked = executed ? chain.filter((c) => executed.some((e) => e.cycle_ref === c.cycle && e.item_id === c.item)) : null;
+  const sameItem = chain.every((c) => c.item === current?.item);
+  add('retry_links', chain.length, linked?.length ?? null, linked ? linked.length === chain.length && sameItem : null, linked ? chain.filter((c) => !linked.includes(c)).map((c) => c.cycle) : []);
+
+  const inCtx = ctx ? chain.filter((c) => names(ctx.text, c.cycle)) : null;
+  add('retry_links_in_context', chain.length, inCtx?.length ?? null, inCtx ? inCtx.length === chain.length : null, inCtx ? chain.filter((c) => !inCtx.includes(c)).map((c) => c.cycle) : []);
+
+  const last = failedRefs[failedRefs.length - 1] ?? null;
+  return {
+    failed_attempts: failed.length,
+    failed_cycles: failedRefs,
+    current: current ? { cycle: ref(current.cycle), item: current.item } : null,
+    per_attempt: perAttempt,
+    checks,
+    violations: checks.filter((c) => c.verdict === 'missing').map((c) => ({ check: c.name, missing: c.missing ?? [] })),
+    not_measured: checks.filter((c) => c.verdict === 'not_measured').map((c) => c.name),
+    status_names_revisit_source: last && status ? names(status.text, last) : null,
+  };
+}
+
+/** True when every lineage check was measured and held; null when some were not measured. */
+export function lineageHolds(lineage) {
+  if (!lineage) return null;
+  if (lineage.violations.length) return false;
+  return lineage.not_measured.length ? null : true;
+}
+
+// ── Preserved originals of approved recoveries ────────────────────────────────────────────
+
+const sha256File = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
+
+/**
+ * Look (read-only) at what an approved recovery left in the record: per recovery the folder
+ * `revisit-preserved/<pending-state-sha256>` with `approval.json`, `files.json`, `source.json` and
+ * the saved originals. Nothing is written or repaired. `secrets` are the capabilities the harness
+ * received; none of them may be in any stored file. Returns counts and booleans — no paths, no
+ * file names from the project, no capability.
+ */
+export function inspectPreserved(recordDir, recoveries, secrets = []) {
+  const approved = recoveries.filter((r) => r.path === 'app_approval');
+  const out = { expected: approved.length, archives: 0, complete: 0, original_files: 0, originals_verified: 0, core_source_records: {}, core_records_claim_human_click: 0, approvals_stored_as_approved: 0, capability_in_storage: null, problems: [] };
+  for (const [i, r] of approved.entries()) {
+    const dir = r.preserved_key ? join(recordDir, 'revisit-preserved', r.preserved_key) : null;
+    if (!dir || !existsSync(dir)) { out.problems.push({ recovery: i + 1, problem: 'no preserved folder' }); continue; }
+    out.archives += 1;
+    const read = (name) => { try { return JSON.parse(readFileSync(join(dir, name), 'utf8')); } catch { return null; } };
+    const approval = read('approval.json'); const files = read('files.json'); const source = read('source.json');
+    if (!approval || !Array.isArray(files) || !source) { out.problems.push({ recovery: i + 1, problem: 'approval.json, files.json or source.json missing or unreadable' }); continue; }
+    out.complete += 1;
+    if (approval.state === 'approved' && approval.from === r.from && approval.target === r.target) out.approvals_stored_as_approved += 1;
+    else out.problems.push({ recovery: i + 1, problem: 'stored approval does not describe this recovery' });
+    const kind = typeof source.approval_source === 'string' ? source.approval_source : 'unrecorded';
+    out.core_source_records[kind] = (out.core_source_records[kind] ?? 0) + 1;
+    if (source.human_click === true) out.core_records_claim_human_click += 1;
+    for (const f of files) {
+      out.original_files += 1;
+      const p = typeof f?.saved_as === 'string' && /^file-\d+$/.test(f.saved_as) ? join(dir, f.saved_as) : null;
+      if (p && existsSync(p) && lstatSync(p).isFile() && sha256File(p) === f.sha256) out.originals_verified += 1;
+      else out.problems.push({ recovery: i + 1, problem: 'a preserved original is missing or its bytes differ from files.json' });
+    }
+  }
+  const usable = secrets.filter((s) => typeof s === 'string' && s.length >= 8);
+  if (existsSync(recordDir)) {
+    let hit = false;
+    const walk = (abs) => {
+      for (const name of readdirSync(abs)) {
+        const p = join(abs, name); const st = lstatSync(p);
+        if (st.isDirectory()) walk(p);
+        else if (st.isFile() && usable.length) { const body = readFileSync(p); if (usable.some((s) => body.includes(s))) hit = true; }
+      }
+    };
+    walk(recordDir);
+    out.capability_in_storage = hit;
+  }
+  return out;
 }
 
 // ── Repetition evidence ───────────────────────────────────────────────────────────────────
