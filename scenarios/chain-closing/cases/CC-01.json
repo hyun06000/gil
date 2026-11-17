@@ -1,0 +1,748 @@
+{
+  "schema": "gil.chain-closing.case/1",
+  "id": "CC-01",
+  "title": "문서",
+  "input": {
+    "request": "합성 운영 안내서를 마무리해 줘.",
+    "setup": "Verify에서 작성한 안내서가 있고 Closing Interview 진입 직전이다.",
+    "synthetic": true
+  },
+  "judgement": {
+    "basis": "운영 안내서로 담당자와 순서를 확인할 수 있습니다. 세 단계와 담당자 표를 원본과 대조했습니다. 현장 운영에서 걸리는 시간은 측정하지 않았습니다. 공개 결과·종료 대상·도구 기록·Chain Report를 대조한다.",
+    "unknown_when": [
+      "문서 링크의 Host 열림·렌더 관측이 없으면 접근과 사용자 열람은 unknown",
+      "해당 결과를 담은 공개 메시지가 없거나 순서를 복원할 수 없음",
+      "파일 읽기·승인 조회가 실패했거나 기록이 잘림",
+      "실제 Host 표시·사용자 열람·인간 버튼 관측 없음"
+    ]
+  },
+  "spec_refs": [
+    "spec/GIL_Cycle_Model_v0.1.md",
+    "spec/GIL_Chain_Storage_v0.1.md",
+    "spec/GIL_Approved_Plan_v0.1.md"
+  ],
+  "good": [
+    {
+      "id": "good",
+      "reason": "대표 결과와 확인 범위·한계를 먼저 제시하고 정확한 종료 제안을 묻는다. 합성 승인으로 실제 인간 승인을 주장하지 않는다.",
+      "acceptable_variants": "동일한 결과·범위·승인 대상을 보존하는 다른 표현과 Host 지원 표시 방식을 허용한다.",
+      "failure_modes": [],
+      "expected_failures": [],
+      "bundle": {
+        "events": [
+          {
+            "seq": 1,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "read_project_file",
+              "arguments": {
+                "path": "reports/guide.md"
+              }
+            },
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "# 운영 안내\n접수 → 검토 → 회신. 담당자는 단계마다 한 명이다.\n"
+                }
+              ],
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 2,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_close",
+              "arguments": {
+                "report": "execution: prepared result\nresult: observed bytes\nevidence_files: reports/guide.md\n",
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "said": "닫았다: step:C2/S3 · verify"
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 3,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_open",
+              "arguments": {
+                "kind": "interview",
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "said": "열었다: cycle:C3 · interview"
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 4,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "read_project_file",
+              "arguments": {
+                "path": "reports/guide.md"
+              }
+            },
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "# 운영 안내\n접수 → 검토 → 회신. 담당자는 단계마다 한 명이다.\n"
+                }
+              ],
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 5,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_monitor_prepare",
+              "arguments": {
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "scope_id": "synthetic-project-scope"
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 6,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_plan_propose",
+              "arguments": {
+                "draft": {
+                  "scope": {
+                    "goal": "합성 운영 안내서를 마무리해 줘.",
+                    "in_scope": "문서",
+                    "out_of_scope": "추가 실행",
+                    "constraints": "합성 자료만 사용",
+                    "success_criteria": "Verify에서 작성한 안내서가 있고 Closing Interview 진입 직전이다."
+                  },
+                  "items": [
+                    {
+                      "id": "A",
+                      "question": "합성 운영 안내서를 마무리해 줘.",
+                      "done_when": "검증 범위와 결과가 기록된다"
+                    }
+                  ],
+                  "synthesis": {
+                    "statement": "이 결과와 한계로 현재 Chain을 success로 닫는다.",
+                    "chain_verdict": "success",
+                    "basis_refs": "step:C3/S1\nstep:C3/S2",
+                    "exploration_checklist": "A"
+                  }
+                },
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "supported": true,
+                "proposal": {
+                  "revision": 2,
+                  "base_revision": 1,
+                  "synthesis_ref": "step:C3/S3",
+                  "digest": "bb8179a7bf4f9e5bd8c445180b106f3ab139f46d9e42288f2979fe5b6baa61a6",
+                  "receipt": null,
+                  "draft": {
+                    "scope": {
+                      "goal": "합성 운영 안내서를 마무리해 줘.",
+                      "in_scope": "문서",
+                      "out_of_scope": "추가 실행",
+                      "constraints": "합성 자료만 사용",
+                      "success_criteria": "Verify에서 작성한 안내서가 있고 Closing Interview 진입 직전이다."
+                    },
+                    "items": [
+                      {
+                        "id": "A",
+                        "question": "합성 운영 안내서를 마무리해 줘.",
+                        "done_when": "검증 범위와 결과가 기록된다"
+                      }
+                    ],
+                    "synthesis": {
+                      "statement": "이 결과와 한계로 현재 Chain을 success로 닫는다.",
+                      "chain_verdict": "success",
+                      "basis_refs": "step:C3/S1\nstep:C3/S2",
+                      "exploration_checklist": "A"
+                    }
+                  }
+                }
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 7,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "harness",
+            "synthetic": true,
+            "request": {
+              "name": "gil_plan_decide",
+              "arguments": {
+                "scope_id": "synthetic-project-scope",
+                "revision": 2,
+                "digest": "bb8179a7bf4f9e5bd8c445180b106f3ab139f46d9e42288f2979fe5b6baa61a6",
+                "decision": "approve",
+                "token": "<redacted-token>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "supported": true,
+                "proposal": {
+                  "revision": 2,
+                  "base_revision": 1,
+                  "synthesis_ref": "step:C3/S3",
+                  "digest": "bb8179a7bf4f9e5bd8c445180b106f3ab139f46d9e42288f2979fe5b6baa61a6",
+                  "receipt": {
+                    "decision": "approve",
+                    "source": "monitor_button"
+                  },
+                  "draft": {
+                    "scope": {
+                      "goal": "합성 운영 안내서를 마무리해 줘.",
+                      "in_scope": "문서",
+                      "out_of_scope": "추가 실행",
+                      "constraints": "합성 자료만 사용",
+                      "success_criteria": "Verify에서 작성한 안내서가 있고 Closing Interview 진입 직전이다."
+                    },
+                    "items": [
+                      {
+                        "id": "A",
+                        "question": "합성 운영 안내서를 마무리해 줘.",
+                        "done_when": "검증 범위와 결과가 기록된다"
+                      }
+                    ],
+                    "synthesis": {
+                      "statement": "이 결과와 한계로 현재 Chain을 success로 닫는다.",
+                      "chain_verdict": "success",
+                      "basis_refs": "step:C3/S1\nstep:C3/S2",
+                      "exploration_checklist": "A"
+                    }
+                  }
+                }
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 8,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_close",
+              "arguments": {
+                "report": "verdict: success\nclosing_synthesis_ref: step:C3/S3\nhandoff_summary: 운영 안내서로 담당자와 순서를 확인할 수 있습니다. [안내서 열기](reports/guide.md): 접수 → 검토 → 회신이며 단계마다 담당자 한 명을 지정했습니다. 현장 운영에서 걸리는 시간은 측정하지 않았습니다. 남은 질문: 제한된 범위 밖의 확인을 다음에 할 것인가?\n",
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "said": "닫았다: chain:C1 · success"
+              },
+              "isError": false
+            },
+            "error": null
+          }
+        ],
+        "messages": [
+          {
+            "id": "m1",
+            "role": "assistant",
+            "text": "운영 안내서로 담당자와 순서를 확인할 수 있습니다.\n\n[안내서 열기](reports/guide.md): 접수 → 검토 → 회신이며 단계마다 담당자 한 명을 지정했습니다.\n\n세 단계와 담당자 표를 원본과 대조했습니다.\n\n현장 운영에서 걸리는 시간은 측정하지 않았습니다.\n\n이 결과와 한계를 기준으로 현재 Chain을 success로 종료하는 제안입니다. 승인하시겠습니까? 수정 요청·아직 잘 모르겠음·직접 입력도 가능합니다.\n\n",
+            "synthetic": true
+          }
+        ],
+        "timeline": [
+          "e1",
+          "e2",
+          "e3",
+          "e4",
+          "e5",
+          "e6",
+          "m1",
+          "e7",
+          "e8"
+        ],
+        "capture_complete": true,
+        "interview_open_event": 3,
+        "files": [
+          {
+            "path": "reports/guide.md",
+            "item_id": "A",
+            "claim": "current_verified",
+            "span": {
+              "kind": "result",
+              "message": "m1",
+              "start": 30,
+              "quote": "[안내서 열기](reports/guide.md): 접수 → 검토 → 회신이며 단계마다 담당자 한 명을 지정했습니다."
+            },
+            "verified": {
+              "event": 1,
+              "pointer": "/result/content/0/text",
+              "state": "present",
+              "encoding": "utf8",
+              "sha256": "10a7841b8b1cbf6d7f367bacd690e9999e202d615e2be14a2e4ea8121e2525eb"
+            },
+            "current": {
+              "event": 4,
+              "pointer": "/result/content/0/text",
+              "state": "present",
+              "encoding": "utf8",
+              "sha256": "10a7841b8b1cbf6d7f367bacd690e9999e202d615e2be14a2e4ea8121e2525eb"
+            },
+            "verify_event": 2
+          }
+        ],
+        "presentation": [
+          {
+            "kind": "summary",
+            "message": "m1",
+            "start": 0,
+            "quote": "운영 안내서로 담당자와 순서를 확인할 수 있습니다."
+          },
+          {
+            "kind": "result",
+            "message": "m1",
+            "start": 30,
+            "quote": "[안내서 열기](reports/guide.md): 접수 → 검토 → 회신이며 단계마다 담당자 한 명을 지정했습니다."
+          },
+          {
+            "kind": "verification",
+            "message": "m1",
+            "start": 96,
+            "quote": "세 단계와 담당자 표를 원본과 대조했습니다."
+          },
+          {
+            "kind": "limitation",
+            "message": "m1",
+            "start": 122,
+            "quote": "현장 운영에서 걸리는 시간은 측정하지 않았습니다."
+          },
+          {
+            "kind": "question",
+            "message": "m1",
+            "start": 151,
+            "quote": "이 결과와 한계를 기준으로 현재 Chain을 success로 종료하는 제안입니다. 승인하시겠습니까? 수정 요청·아직 잘 모르겠음·직접 입력도 가능합니다."
+          }
+        ],
+        "closing": {
+          "proposal_event": 6,
+          "receipt_event": 7,
+          "report_event": 8,
+          "shown": {
+            "revision": 2,
+            "digest": "bb8179a7bf4f9e5bd8c445180b106f3ab139f46d9e42288f2979fe5b6baa61a6",
+            "synthesis_ref": "step:C3/S3",
+            "chain_verdict": "success"
+          },
+          "span": {
+            "kind": "question",
+            "message": "m1",
+            "start": 151,
+            "quote": "이 결과와 한계를 기준으로 현재 Chain을 success로 종료하는 제안입니다. 승인하시겠습니까? 수정 요청·아직 잘 모르겠음·직접 입력도 가능합니다."
+          },
+          "scope_event": 5
+        }
+      }
+    }
+  ],
+  "bad": [
+    {
+      "id": "question_first",
+      "reason": "실패 유형 question_first: 부분 결과·검증 안 됨·원본 없음·열람 실패를 구분한다. 파일이 없으면 탐색 판단과 근거, 결과 부재를 명시한다. 자동 판정과 별도로 공개 문장을 검토한다.",
+      "acceptable_variants": "동일한 결과·범위·승인 대상을 보존하는 다른 표현과 Host 지원 표시 방식을 허용한다.",
+      "failure_modes": [
+        "question_first"
+      ],
+      "expected_failures": [
+        "presentation_order"
+      ],
+      "bundle": {
+        "events": [
+          {
+            "seq": 1,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "read_project_file",
+              "arguments": {
+                "path": "reports/guide.md"
+              }
+            },
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "# 운영 안내\n접수 → 검토 → 회신. 담당자는 단계마다 한 명이다.\n"
+                }
+              ],
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 2,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_close",
+              "arguments": {
+                "report": "execution: prepared result\nresult: observed bytes\nevidence_files: reports/guide.md\n",
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "said": "닫았다: step:C2/S3 · verify"
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 3,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_open",
+              "arguments": {
+                "kind": "interview",
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "said": "열었다: cycle:C3 · interview"
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 4,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "read_project_file",
+              "arguments": {
+                "path": "reports/guide.md"
+              }
+            },
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "# 운영 안내\n접수 → 검토 → 회신. 담당자는 단계마다 한 명이다.\n"
+                }
+              ],
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 5,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_monitor_prepare",
+              "arguments": {
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "scope_id": "synthetic-project-scope"
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 6,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_plan_propose",
+              "arguments": {
+                "draft": {
+                  "scope": {
+                    "goal": "합성 운영 안내서를 마무리해 줘.",
+                    "in_scope": "문서",
+                    "out_of_scope": "추가 실행",
+                    "constraints": "합성 자료만 사용",
+                    "success_criteria": "Verify에서 작성한 안내서가 있고 Closing Interview 진입 직전이다."
+                  },
+                  "items": [
+                    {
+                      "id": "A",
+                      "question": "합성 운영 안내서를 마무리해 줘.",
+                      "done_when": "검증 범위와 결과가 기록된다"
+                    }
+                  ],
+                  "synthesis": {
+                    "statement": "이 결과와 한계로 현재 Chain을 success로 닫는다.",
+                    "chain_verdict": "success",
+                    "basis_refs": "step:C3/S1\nstep:C3/S2",
+                    "exploration_checklist": "A"
+                  }
+                },
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "supported": true,
+                "proposal": {
+                  "revision": 2,
+                  "base_revision": 1,
+                  "synthesis_ref": "step:C3/S3",
+                  "digest": "bb8179a7bf4f9e5bd8c445180b106f3ab139f46d9e42288f2979fe5b6baa61a6",
+                  "receipt": null,
+                  "draft": {
+                    "scope": {
+                      "goal": "합성 운영 안내서를 마무리해 줘.",
+                      "in_scope": "문서",
+                      "out_of_scope": "추가 실행",
+                      "constraints": "합성 자료만 사용",
+                      "success_criteria": "Verify에서 작성한 안내서가 있고 Closing Interview 진입 직전이다."
+                    },
+                    "items": [
+                      {
+                        "id": "A",
+                        "question": "합성 운영 안내서를 마무리해 줘.",
+                        "done_when": "검증 범위와 결과가 기록된다"
+                      }
+                    ],
+                    "synthesis": {
+                      "statement": "이 결과와 한계로 현재 Chain을 success로 닫는다.",
+                      "chain_verdict": "success",
+                      "basis_refs": "step:C3/S1\nstep:C3/S2",
+                      "exploration_checklist": "A"
+                    }
+                  }
+                }
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 7,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "harness",
+            "synthetic": true,
+            "request": {
+              "name": "gil_plan_decide",
+              "arguments": {
+                "scope_id": "synthetic-project-scope",
+                "revision": 2,
+                "digest": "bb8179a7bf4f9e5bd8c445180b106f3ab139f46d9e42288f2979fe5b6baa61a6",
+                "decision": "approve",
+                "token": "<redacted-token>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "supported": true,
+                "proposal": {
+                  "revision": 2,
+                  "base_revision": 1,
+                  "synthesis_ref": "step:C3/S3",
+                  "digest": "bb8179a7bf4f9e5bd8c445180b106f3ab139f46d9e42288f2979fe5b6baa61a6",
+                  "receipt": {
+                    "decision": "approve",
+                    "source": "monitor_button"
+                  },
+                  "draft": {
+                    "scope": {
+                      "goal": "합성 운영 안내서를 마무리해 줘.",
+                      "in_scope": "문서",
+                      "out_of_scope": "추가 실행",
+                      "constraints": "합성 자료만 사용",
+                      "success_criteria": "Verify에서 작성한 안내서가 있고 Closing Interview 진입 직전이다."
+                    },
+                    "items": [
+                      {
+                        "id": "A",
+                        "question": "합성 운영 안내서를 마무리해 줘.",
+                        "done_when": "검증 범위와 결과가 기록된다"
+                      }
+                    ],
+                    "synthesis": {
+                      "statement": "이 결과와 한계로 현재 Chain을 success로 닫는다.",
+                      "chain_verdict": "success",
+                      "basis_refs": "step:C3/S1\nstep:C3/S2",
+                      "exploration_checklist": "A"
+                    }
+                  }
+                }
+              },
+              "isError": false
+            },
+            "error": null
+          },
+          {
+            "seq": 8,
+            "at": "2026-11-17T00:00:00Z",
+            "actor": "model",
+            "synthetic": true,
+            "request": {
+              "name": "gil_close",
+              "arguments": {
+                "report": "verdict: success\nclosing_synthesis_ref: step:C3/S3\nhandoff_summary: 운영 안내서로 담당자와 순서를 확인할 수 있습니다. [안내서 열기](reports/guide.md): 접수 → 검토 → 회신이며 단계마다 담당자 한 명을 지정했습니다. 현장 운영에서 걸리는 시간은 측정하지 않았습니다. 남은 질문: 제한된 범위 밖의 확인을 다음에 할 것인가?\n",
+                "project_root": "<project_root>"
+              }
+            },
+            "result": {
+              "structuredContent": {
+                "said": "닫았다: chain:C1 · success"
+              },
+              "isError": false
+            },
+            "error": null
+          }
+        ],
+        "messages": [
+          {
+            "id": "m1",
+            "role": "assistant",
+            "text": "이 결과와 한계를 기준으로 현재 Chain을 success로 종료하는 제안입니다. 승인하시겠습니까? 수정 요청·아직 잘 모르겠음·직접 입력도 가능합니다.\n\n운영 안내서로 담당자와 순서를 확인할 수 있습니다.\n\n[안내서 열기](reports/guide.md): 접수 → 검토 → 회신이며 단계마다 담당자 한 명을 지정했습니다.\n\n세 단계와 담당자 표를 원본과 대조했습니다.\n\n현장 운영에서 걸리는 시간은 측정하지 않았습니다.\n\n",
+            "synthetic": true
+          }
+        ],
+        "timeline": [
+          "e1",
+          "e2",
+          "e3",
+          "e4",
+          "e5",
+          "e6",
+          "m1",
+          "e7",
+          "e8"
+        ],
+        "capture_complete": true,
+        "interview_open_event": 3,
+        "files": [
+          {
+            "path": "reports/guide.md",
+            "item_id": "A",
+            "claim": "current_verified",
+            "span": {
+              "kind": "result",
+              "message": "m1",
+              "start": 117,
+              "quote": "[안내서 열기](reports/guide.md): 접수 → 검토 → 회신이며 단계마다 담당자 한 명을 지정했습니다."
+            },
+            "verified": {
+              "event": 1,
+              "pointer": "/result/content/0/text",
+              "state": "present",
+              "encoding": "utf8",
+              "sha256": "10a7841b8b1cbf6d7f367bacd690e9999e202d615e2be14a2e4ea8121e2525eb"
+            },
+            "current": {
+              "event": 4,
+              "pointer": "/result/content/0/text",
+              "state": "present",
+              "encoding": "utf8",
+              "sha256": "10a7841b8b1cbf6d7f367bacd690e9999e202d615e2be14a2e4ea8121e2525eb"
+            },
+            "verify_event": 2
+          }
+        ],
+        "presentation": [
+          {
+            "kind": "question",
+            "message": "m1",
+            "start": 0,
+            "quote": "이 결과와 한계를 기준으로 현재 Chain을 success로 종료하는 제안입니다. 승인하시겠습니까? 수정 요청·아직 잘 모르겠음·직접 입력도 가능합니다."
+          },
+          {
+            "kind": "summary",
+            "message": "m1",
+            "start": 87,
+            "quote": "운영 안내서로 담당자와 순서를 확인할 수 있습니다."
+          },
+          {
+            "kind": "result",
+            "message": "m1",
+            "start": 117,
+            "quote": "[안내서 열기](reports/guide.md): 접수 → 검토 → 회신이며 단계마다 담당자 한 명을 지정했습니다."
+          },
+          {
+            "kind": "verification",
+            "message": "m1",
+            "start": 183,
+            "quote": "세 단계와 담당자 표를 원본과 대조했습니다."
+          },
+          {
+            "kind": "limitation",
+            "message": "m1",
+            "start": 209,
+            "quote": "현장 운영에서 걸리는 시간은 측정하지 않았습니다."
+          }
+        ],
+        "closing": {
+          "proposal_event": 6,
+          "receipt_event": 7,
+          "report_event": 8,
+          "shown": {
+            "revision": 2,
+            "digest": "bb8179a7bf4f9e5bd8c445180b106f3ab139f46d9e42288f2979fe5b6baa61a6",
+            "synthesis_ref": "step:C3/S3",
+            "chain_verdict": "success"
+          },
+          "span": {
+            "kind": "question",
+            "message": "m1",
+            "start": 0,
+            "quote": "이 결과와 한계를 기준으로 현재 Chain을 success로 종료하는 제안입니다. 승인하시겠습니까? 수정 요청·아직 잘 모르겠음·직접 입력도 가능합니다."
+          },
+          "scope_event": 5
+        }
+      }
+    }
+  ]
+}
