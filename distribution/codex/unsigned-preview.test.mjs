@@ -245,3 +245,20 @@ test('approved-plan candidate requires explicit matching profile and preserves t
   await rewriteReceipt(f.output,r=>r.runtime_profile='visual-authoring');
   await assert.rejects(verifyUnsignedTree(f.output));
 });
+
+test('exploration candidate is explicit, preserves bytes and warns against record downgrade', async t => {
+  const f = await fixture(t, false, 'exploration-flow');
+  const before = await verifyTree(f.input);
+  assert.deepEqual(before.development_features, ['approved-plan','visual-authoring','exploration-flow']);
+  await assert.rejects(stageUnsigned({...f,version:'0.2.1-preview.32',profile:'approved-plan'}), /explicitly match/);
+  const result = await stageUnsigned({...f,version:'0.2.1-preview.32',profile:'exploration-flow'});
+  assert.equal(result.runtime_profile, 'exploration-flow');
+  assert.equal(result.migration, 'requires_review');
+  assert.deepEqual(result.files.find(f=>f.path===CORE),before.files.find(f=>f.path===CORE));
+  const notice = await readFile(join(f.output,'PREVIEW.md'),'utf8');
+  assert.match(notice, /NEW EMPTY TEST PROJECT/);
+  assert.match(notice, /REFUSE exploration-marked records/);
+  await verifyUnsignedTree(f.output);
+  await rewriteReceipt(f.output,r=>r.runtime_profile='approved-plan');
+  await assert.rejects(verifyUnsignedTree(f.output));
+});

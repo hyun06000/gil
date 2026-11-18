@@ -154,7 +154,7 @@ export async function sourceSnapshot(root) {
 }
 
 export async function createTree({root = repository, binary, output, profile = 'default'}) {
-  assert.ok(['default', 'visual-authoring', 'approved-plan'].includes(profile));
+  assert.ok(['default', 'visual-authoring', 'approved-plan', 'exploration-flow'].includes(profile));
   const destination = resolve(output);
   // Existing paths, including dangling symlinks, are never replaced. Failure leaves no receipt.
   await mkdir(destination, {recursive: false, mode: 0o755});
