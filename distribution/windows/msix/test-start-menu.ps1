@@ -41,6 +41,8 @@ public static class StartGuideCheck {
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     static extern IntPtr CreateFileW(string name, uint access, uint share, IntPtr security, uint mode, uint flags, IntPtr template);
     [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetExitCodeProcess(IntPtr process, out uint code);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetConsoleScreenBufferInfo(IntPtr handle, out BufferInfo info);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     static extern bool ReadConsoleOutputCharacterW(IntPtr handle, StringBuilder text, uint count, Coord origin, out uint read);
@@ -79,11 +81,16 @@ public static class StartGuideCheck {
         var manager = (IApplicationActivationManager)Activator.CreateInstance(
             Type.GetTypeFromCLSID(new Guid("45BA127D-10A8-46EA-8AB7-56EA9078943C")));
         Process app = null;
+        IntPtr processHandle = IntPtr.Zero;
         IntPtr input = new IntPtr(-1), output = new IntPtr(-1);
         try {
             uint pid;
             Marshal.ThrowExceptionForHR(manager.ActivateApplication(appId, "", 0, out pid));
             app = Process.GetProcessById((int)pid);
+            // Windows, not this .NET Process object, started the app. Hold a query handle
+            // while it is alive: Process.ExitCode is unavailable for this activation path.
+            processHandle = OpenProcess(0x1000, false, pid); // PROCESS_QUERY_LIMITED_INFORMATION
+            Check(processHandle != IntPtr.Zero, "open activated process");
             if (!String.Equals(app.MainModule.FileName, expectedExe, StringComparison.OrdinalIgnoreCase))
                 throw new Exception("Start activation targeted an unexpected executable");
             FreeConsole();
@@ -104,12 +111,15 @@ public static class StartGuideCheck {
             Send(input, 'x'); Expect(output, app, "Choose 1, 2 or 0.");
             Send(input, '0');
             if (!app.WaitForExit(10000)) throw new Exception("Guide did not exit after 0");
-            if (app.ExitCode != 0) throw new Exception("Guide exit code: " + app.ExitCode);
+            uint exitCode;
+            Check(GetExitCodeProcess(processHandle, out exitCode), "guide exit code");
+            if (exitCode != 0) throw new Exception("Guide exit code: " + exitCode);
         } finally {
             if (input != new IntPtr(-1)) CloseHandle(input);
             if (output != new IntPtr(-1)) CloseHandle(output);
             FreeConsole();
             if (app != null) { if (!app.HasExited) { app.Kill(); app.WaitForExit(); } app.Dispose(); }
+            if (processHandle != IntPtr.Zero) CloseHandle(processHandle);
             Marshal.ReleaseComObject(manager);
         }
     }
