@@ -10,6 +10,8 @@ test('manual MSIX build cannot publish a release or use a development Store iden
   assert.match(workflow, /permissions:\n  contents: read\n/);
   assert.doesNotMatch(workflow, /contents: write|gh release|git push|secrets\.|GH_TOKEN|GITHUB_TOKEN/);
   assert.match(workflow, /persist-credentials: false/);
+  assert.match(workflow, /GIT_CONFIG_KEY_0: core\.autocrlf\n\s+GIT_CONFIG_VALUE_0: 'false'/,
+    'Windows checkout must preserve LF for the embedded UI build anchors');
   assert.match(workflow, /throw 'Real Partner Center identity repository variables are required/);
   assert.doesNotMatch(workflow, /else \{ 'GIL.Dev' \}/);
 });
