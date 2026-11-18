@@ -124,7 +124,8 @@ jobs:
       - name: Start-menu guide tests
         shell: pwsh
         run: |
-          cargo +1.97.1 test --locked -p gil --bin gil-start --test start_menu --target $env:GIL_NATIVE_TARGET
+          $features = if ($env:GIL_RUNTIME_PROFILE -eq 'visual-authoring') { @('--features', 'visual-authoring') } else { @() }
+          cargo +1.97.1 test --locked -p gil --bin gil-start --test start_menu --target $env:GIL_NATIVE_TARGET @features
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Binding security and native MCP integration
         shell: pwsh
