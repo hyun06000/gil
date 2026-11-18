@@ -18,6 +18,11 @@ test('the manifest template declares exactly the capabilities the single exe nee
   assert.match(xml, /<uap5:ExecutionAlias Alias="gil\.exe" \/>/);
   assert.match(xml, /Executable="gil\.exe"\s+EntryPoint="Windows\.FullTrustApplication"\s+desktop4:Subsystem="console"/);
   assert.match(xml, /ProcessorArchitecture="x64"/);
+  assert.match(xml, /<uap:VisualElements\b[^>]*AppListEntry="none"/);
+  assert.match(xml, /MinVersion="10\.0\.18362\.0"/, 'AppData opt-out requires Windows 10 1903');
+  assert.doesNotMatch(xml, /<desktop6:RegistryWriteVirtualization>/, 'no registry write exception');
+  assert.deepEqual([...xml.matchAll(/<rescap:Capability Name="([^"]+)"/g)].map(m => m[1]).sort(),
+    ['runFullTrust', 'unvirtualizedResources']);
   // Store validation requires the package display name to be a reserved name of the app.
   assert.match(xml, /<DisplayName>gil-companion<\/DisplayName>/);
   assert.match(xml, /VisualElements\s+DisplayName="gil-companion"/);

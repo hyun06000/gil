@@ -52,7 +52,7 @@ jobs:
             runner: windows-2025
             machine: AMD64
             target: x86_64-pc-windows-msvc
-          # Image-report authoring profile (Windows contract v0.1 §6). Never packaged here.
+          # Image-report profile; dev-only MSIX smoke below is not a release artifact.
           - arch: x64
             profile: visual-authoring
             label: x64, visual-authoring
@@ -156,6 +156,15 @@ jobs:
         shell: pwsh
         run: |
           node distribution/windows/spike.mjs "target/$env:GIL_NATIVE_TARGET/debug/gil.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: MSIX packaging, installed CLI and MCP (development identity only)
+        if: matrix.profile == 'visual-authoring'
+        shell: pwsh
+        run: |
+          $exe = "target/$env:GIL_NATIVE_TARGET/debug/gil.exe"
+          $version = ((& $exe --version) -replace '^gil ', '').Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'version query failed' }
+          ./distribution/windows/msix/test-msix-ci.ps1 -Exe $exe -Version ($version -replace '-.*$', '') -ExpectedBinaryVersion $version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Windows distribution contracts (notice inventories, release workflow, legacy packaging)
         if: matrix.profile == 'default'
