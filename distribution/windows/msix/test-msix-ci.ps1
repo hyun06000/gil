@@ -51,8 +51,15 @@ try {
     if ($application.Executable -ne 'gil-start.exe') { throw 'Start must launch the guide' }
     $start = Join-Path $package.InstallLocation 'gil-start.exe'
     # Activate the installed app by AUMID, then read and interact with its actual console.
-    & pwsh -NoProfile -STA -File "$Here/test-start-menu.ps1" -AppId "$($package.PackageFamilyName)!GIL" -ExpectedExe $start
-    if ($LASTEXITCODE -ne 0) { throw 'Installed Start-menu activation/guide check failed' }
+    $activationResult = Join-Path $work 'start-result.txt'
+    $activationLog = Join-Path $work 'start-output.txt'
+    & pwsh -NoProfile -STA -File "$Here/test-start-menu.ps1" -AppId "$($package.PackageFamilyName)!GIL" -ExpectedExe $start -ResultPath $activationResult *> $activationLog
+    $activationExit = $LASTEXITCODE
+    if (Test-Path -LiteralPath $activationResult) { Get-Content -LiteralPath $activationResult | Write-Host }
+    if ($activationExit -ne 0 -or -not (Test-Path -LiteralPath $activationResult)) {
+        Get-Content -LiteralPath $activationLog | Write-Host
+        throw 'Installed Start-menu activation/guide check failed'
+    }
     $alias = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\gil.exe'
     if (-not (Test-Path -LiteralPath $alias)) { throw 'App execution alias missing' }
     # Invoke the registered alias, never the unpacked exe or a PATH-selected native installation.

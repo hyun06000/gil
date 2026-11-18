@@ -3,7 +3,8 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string] $AppId,
-    [Parameter(Mandatory)] [string] $ExpectedExe
+    [Parameter(Mandatory)] [string] $ExpectedExe,
+    [Parameter(Mandatory)] [string] $ResultPath
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -117,8 +118,9 @@ public static class StartGuideCheck {
 try {
     [StartGuideCheck]::Run($AppId, $ExpectedExe)
     # This verifies activation, console text and input, not the desktop's visual appearance.
-    Write-Output 'PASS: registered Start activation, English/Korean console, invalid input, clean exit'
+    [IO.File]::WriteAllText($ResultPath, 'PASS: registered Start activation, English/Korean console, invalid input, clean exit')
 } catch {
-    [Console]::Error.WriteLine($_.Exception.ToString())
+    # FreeConsole closes console handles. Preserve the failure independently of stdout/stderr.
+    [IO.File]::WriteAllText($ResultPath, $_.Exception.ToString())
     exit 1
 }
