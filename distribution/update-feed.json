@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "updated": "2026-11-17",
+  "updated": "2026-11-19",
   "note": "Metadata only. The installed GIL Core reads this file at most once a day to show update guidance in the Monitor; it never downloads or installs from it. Update this file in the same pull request that records a publication ledger.",
   "platforms": {
     "darwin-arm64": {
-      "version": "0.2.1-preview.31",
-      "release_url": "https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.31",
+      "version": "0.2.1-preview.32",
+      "release_url": "https://github.com/hyun06000/gil-marketplace/releases/tag/v0.2.1-preview.32",
       "install_doc": "https://github.com/hyun06000/gil/blob/main/INSTALL.md",
-      "notes": "입력 오류·승인 대기와 중단 안내를 구분하고 관측·해석·미검증 범위를 정직하게 기록하도록 보완합니다. 수동 복구 승인 출처를 기록하며 자동 복구 실행은 제품에서 비활성입니다. 기존 모니터·보고서 간결화와 다섯 언어 지원을 유지합니다. 필드 테스트는 사용자 확인 대기입니다."
+      "notes": "승인 요구 아래 여러 작은 예·아니요 실험을 수행하고 원본 보고서·저장 근거를 조회하는 탐색형 체인을 포함합니다. 새 빈 테스트 폴더를 사용하세요. 기존 체인은 자동 전환하지 않으며 preview.31은 탐색형 기록을 열 수 없습니다. 종료는 근거·한계 제시와 사용자 승인을 따릅니다. 실제 앱 필드 테스트는 사용자 확인 대기입니다."
     },
     "windows-x64": {
       "version": "0.3.2",
