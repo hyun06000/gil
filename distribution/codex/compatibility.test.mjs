@@ -46,3 +46,11 @@ test('approved-plan test profile requires action 2 and formats 4..7 without impl
  assert.throws(() => validateRecord({...r,migration:'none'}));
  assert.equal(checkTransition(record('default','0.2.1-preview.7'),r).status,'blocked');
 });
+
+test('exploration profile is separately identified even though the storage range remains 4..7', async () => {
+  const {developmentFeatures, profileFromFeatures} = await import('./compatibility.mjs');
+  assert.deepEqual(compatibility('exploration-flow').storage_format, {min:4,max:7});
+  assert.equal(profileFromFeatures(developmentFeatures('exploration-flow')), 'exploration-flow');
+  assert.notDeepEqual(developmentFeatures('exploration-flow'), developmentFeatures('approved-plan'));
+  checkCore(core('exploration-flow'),'exploration-flow');
+});

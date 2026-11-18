@@ -100,3 +100,37 @@ export function checkApprovedPlanTools(tools, platform = process.platform) {
   const decide = tools.find(t => t.name === 'gil_plan_decide');
   assert.deepEqual([...decide.inputSchema.required].sort(), ['scope_id', 'revision', 'digest', 'token', 'decision'].sort());
 }
+
+// Explicit exploration surface: retain all approval/recovery boundaries and add only original reads.
+export function checkExplorationTools(tools, platform = process.platform) {
+  const names = ['gil_report_read', 'gil_evidence_read'];
+  checkApprovedPlanTools(tools.filter(t => !names.includes(t.name)), platform);
+  for (const name of names) {
+    const matches = tools.filter(t => t.name === name);
+    assert.equal(matches.length, 1, `missing/duplicate ${name}`);
+    const t = matches[0], s = t.inputSchema;
+    assert.deepEqual(t._meta?.ui?.visibility, ['model']);
+    assert.deepEqual(t.annotations, {readOnlyHint:true, destructiveHint:false, openWorldHint:false});
+    assert.equal(s.additionalProperties, false);
+    const evidence = name === 'gil_evidence_read';
+    assert.deepEqual([...s.required].sort(), (evidence ? ['project_root','owner','path'] : ['project_root','owner']).sort());
+    assert.deepEqual(Object.keys(s.properties).sort(), (evidence ? ['project_root','owner','path','offset'] : ['project_root','owner','list','from','field','part','offset']).sort());
+    assert.equal(s.properties.project_root.type, 'string');
+    const owner = s.properties.owner;
+    assert.equal(owner.additionalProperties, false);
+    assert.deepEqual([...owner.required].sort(), ['kind','ref']);
+    assert.deepEqual([...owner.properties.kind.enum].sort(), evidence ? ['step'] : ['chain','cycle','step']);
+    assert.equal(owner.properties.ref.type, 'string');
+    assert.equal(s.properties.offset.type, 'integer');
+    assert.equal(s.properties.offset.minimum, 0);
+    if (evidence) assert.equal(s.properties.path.type, 'string');
+    else {
+      assert.deepEqual(s.properties.list.enum, ['cycles','steps','fields','files']);
+      assert.deepEqual(s.properties.part.enum, ['value','name']);
+      for (const key of ['field','from']) {
+        assert.equal(s.properties[key].type, 'integer');
+        assert.equal(s.properties[key].minimum, 0);
+      }
+    }
+  }
+}

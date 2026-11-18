@@ -59,3 +59,29 @@ test('product recovery requires both strict App-only tools and never model conse
   assert.throws(()=>withoutRecoveryTools(catalog));
   assert.throws(()=>withoutRecoveryTools([...tools, recovery(true)]));
 });
+
+import {checkExplorationTools} from './tool-contract.mjs';
+test('exploration keeps approval boundaries and requires exactly two read-only original-record tools', () => {
+  const schemas=JSON.parse(readFileSync(new URL('../../src/mcp/authoring-schema.json', import.meta.url)));
+  const tools=structuredClone(catalog);
+  tools.find(t=>t.name==='gil_close').inputSchema=schemas.close;
+  delete tools.find(t=>t.name==='gil_close').outputSchema;
+  tools.push({name:'gil_report_visuals',inputSchema:schemas.read,annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false},_meta:{ui:{visibility:['model']}}});
+  tools.push(...JSON.parse(readFileSync(new URL('../../src/mcp/migration-tools.json', import.meta.url))));
+  for(const name of ['gil_plan_propose','gil_plan_request_interview','gil_plan_read','gil_plan_review','gil_plan_decide']) {
+    const app=['gil_plan_review','gil_plan_decide'].includes(name);
+    tools.push({name,_meta:{ui:{visibility:[app?'app':'model']}},annotations:{readOnlyHint:['gil_plan_read','gil_plan_review'].includes(name),destructiveHint:false},inputSchema:{additionalProperties:false,required:name==='gil_plan_decide'?['scope_id','revision','digest','token','decision']:[app?'scope_id':'project_root']}});
+  }
+  for(const name of ['gil_report_read','gil_evidence_read']) {
+    const evidence=name==='gil_evidence_read';
+    const properties={project_root:{type:'string'},owner:{additionalProperties:false,required:['kind','ref'],properties:{kind:{enum:evidence?['step']:['step','cycle','chain']},ref:{type:'string'}}},offset:{type:'integer',minimum:0},...(evidence?{path:{type:'string'}}:{list:{enum:['cycles','steps','fields','files']},from:{type:'integer',minimum:0},field:{type:'integer',minimum:0},part:{enum:['value','name']}})};
+    tools.push({name,_meta:{ui:{visibility:['model']}},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false},inputSchema:{additionalProperties:false,required:evidence?['project_root','owner','path']:['project_root','owner'],properties}});
+  }
+  checkExplorationTools(tools);
+  assert.throws(()=>checkExplorationTools(tools.slice(0,-1)));
+  assert.throws(()=>checkExplorationTools([...tools,tools.at(-1)]));
+  for(const mutate of [t=>t.annotations.readOnlyHint=false,t=>t._meta.ui.visibility=['app'],t=>t.inputSchema.properties.offset.minimum=-1,t=>t.inputSchema.properties.extra={type:'string'}]) {
+    const bad=structuredClone(tools); mutate(bad.at(-1)); assert.throws(()=>checkExplorationTools(bad));
+  }
+  const bad=structuredClone(tools);bad.find(t=>t.name==='gil_plan_decide')._meta.ui.visibility=['model'];assert.throws(()=>checkExplorationTools(bad));
+});

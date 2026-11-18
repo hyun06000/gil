@@ -30,6 +30,7 @@ on:
           - default
           - visual-authoring
           - approved-plan
+          - exploration-flow
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
@@ -84,6 +85,8 @@ jobs:
             default) cargo test --locked -p gil -- --test-threads=1 ;;
             visual-authoring) cargo test --locked -p gil --features visual-authoring -- --test-threads=1 ;;
             approved-plan) cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib --test context --test context_profiles --test guidance_wave1 --test guidance_wave2 --test approved_plan_wire_wave1 -- --test-threads=1 ;;
+            exploration-flow) cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --lib -- --test-threads=1
+              node tools/ci/expect-tests.mjs 20 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_flow --test exploration_tools --test exploration_evidence --test exploration_plan_panel --test closing_handoff ;;
             *) exit 2 ;;
           esac
           node --test ui/layout.test.mjs mcp-app/*.test.mjs plugins/gil-companion-prototype/*.test.mjs
@@ -110,6 +113,7 @@ jobs:
             default) node distribution/codex/build-preview.mjs target/codex-preview ;;
             visual-authoring) node distribution/codex/build-preview.mjs target/codex-preview --visual-authoring ;;
             approved-plan) node distribution/codex/build-preview.mjs target/codex-preview --approved-plan ;;
+            exploration-flow) node distribution/codex/build-preview.mjs target/codex-preview --exploration-flow ;;
             *) exit 2 ;;
           esac
       - name: Prepare opt-in unsigned candidate (never publishes)
@@ -124,6 +128,7 @@ jobs:
             default) node distribution/codex/unsigned-preview.mjs prepare target/codex-preview/marketplace "$GIL_PREVIEW_VERSION" target/codex-unsigned-candidate ;;
             visual-authoring) node distribution/codex/unsigned-preview.mjs prepare target/codex-preview/marketplace "$GIL_PREVIEW_VERSION" target/codex-unsigned-candidate --visual-authoring ;;
             approved-plan) node distribution/codex/unsigned-preview.mjs prepare target/codex-preview/marketplace "$GIL_PREVIEW_VERSION" target/codex-unsigned-candidate --approved-plan ;;
+            exploration-flow) node distribution/codex/unsigned-preview.mjs prepare target/codex-preview/marketplace "$GIL_PREVIEW_VERSION" target/codex-unsigned-candidate --exploration-flow ;;
             *) exit 2 ;;
           esac
       - name: Retain unsigned candidate for review only

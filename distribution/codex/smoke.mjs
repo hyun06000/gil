@@ -2,17 +2,17 @@
 import assert from 'node:assert/strict';
 import {spawn, spawnSync} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
-import {mkdtemp, readFile, realpath, rm} from 'node:fs/promises';
+import {mkdir, mkdtemp, readFile, realpath, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {CORE, MANIFEST, PREFIX, checkLibraries, hash, verifyTree} from './artifact.mjs';
-import {checkDefaultTools, checkAuthoringTools, checkApprovedPlanTools, withoutRecoveryTools} from './tool-contract.mjs';
+import {checkDefaultTools, checkAuthoringTools, checkApprovedPlanTools, checkExplorationTools, withoutRecoveryTools} from './tool-contract.mjs';
 import {checkCore, compatibility, developmentFeatures} from './compatibility.mjs';
 import {checkVersionAgreement} from './build-version.mjs';
 
 export async function smoke(root, expectedHtml, verify = verifyTree, profile = 'default', expectedVersion) {
-  assert.ok(['default', 'visual-authoring', 'approved-plan'].includes(profile));
+  assert.ok(['default', 'visual-authoring', 'approved-plan', 'exploration-flow'].includes(profile));
   assert.equal(process.platform, 'darwin');
   assert.equal(process.arch, 'arm64');
   const receipt = await verify(root); // Integrity before executing any artifact.
@@ -97,7 +97,20 @@ export async function smoke(root, expectedHtml, verify = verifyTree, profile = '
     child.stdin.write(JSON.stringify({jsonrpc: '2.0', method: 'notifications/initialized'}) + '\n');
     const initMs = Math.round(performance.now() - at);
     const {tools} = await request('tools/list', {});
-    (profile === 'default' ? checkDefaultTools : profile === 'approved-plan' ? checkApprovedPlanTools : checkAuthoringTools)(withoutRecoveryTools(tools));
+    (profile === 'default' ? checkDefaultTools : profile === 'exploration-flow' ? checkExplorationTools : profile === 'approved-plan' ? checkApprovedPlanTools : checkAuthoringTools)(withoutRecoveryTools(tools));
+    let exploration;
+    if (profile === 'exploration-flow') {
+      const project = join(state, 'project');
+      await mkdir(project);
+      const start = spawnSync(binary, ['start'], {cwd: project, env, encoding: 'utf8', timeout: 30000});
+      assert.equal(start.status, 0, 'isolated exploration project starts');
+      const read = await request('tools/call', {name: 'gil_plan_read', arguments: {project_root: project}});
+      assert.notEqual(read.isError, true);
+      assert.equal(read.structuredContent.contract, 'exploration', 'packaged binary must create exploration Chains');
+      assert.deepEqual(read.structuredContent.requirements, []);
+      exploration = {new_chain_contract: 'exploration', automatic_migration: false,
+        downgrade: 'older approved-plan runtimes refuse exploration records'};
+    }
     const show = tools.find(t => t.name === 'show_gil_monitor');
     const uri = show?._meta?.ui?.resourceUri;
     assert.match(uri, /^ui:\/\/gil-monitor\/[a-f0-9]{20}\.html$/);
@@ -113,7 +126,7 @@ export async function smoke(root, expectedHtml, verify = verifyTree, profile = '
     assert.ok(html.text.includes('GIL Monitor'));
     if (fault) throw fault;
     return {passed: true, first_process_ms: firstMs, initialize_ms: initMs, deadline_ms: 30000,
-      tools: tools.length, ui_sha256: uiHash, core, system_libraries: libraries, child_path: env.PATH,
+      ...(exploration ? {exploration} : {}), tools: tools.length, ui_sha256: uiHash, core, system_libraries: libraries, child_path: env.PATH,
       scope: 'protocol only; not marketplace installation, fresh-machine launch or visible fullscreen'};
   } finally {
     if (child?.pid && child.exitCode === null && child.signalCode === null) {

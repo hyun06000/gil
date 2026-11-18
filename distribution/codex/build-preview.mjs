@@ -13,7 +13,7 @@ import {check as checkNotices} from '../compliance/notices.mjs';
 assert.equal(process.platform, 'darwin');
 assert.equal(process.arch, 'arm64', 'only tested architecture may be packaged');
 const [destination, ...extra] = process.argv.slice(2);
-assert.ok(destination && (extra.length === 0 || (extra.length === 1 && ['--visual-authoring', '--approved-plan'].includes(extra[0]))), 'Usage: build-preview.mjs <new-output-directory> [--visual-authoring|--approved-plan]');
+assert.ok(destination && (extra.length === 0 || (extra.length === 1 && ['--visual-authoring', '--approved-plan', '--exploration-flow'].includes(extra[0]))), 'Usage: build-preview.mjs <new-output-directory> [--visual-authoring|--approved-plan|--exploration-flow]');
 const profile = extra.length ? extra[0].slice(2) : 'default';
 const coreVersion = buildVersion(await selectedPreview(process.env, readFile), JSON.parse(await readFile(join(repository, 'plugins/gil-companion-prototype/.codex-plugin/plugin.json'))).version);
 const output = resolve(destination);
@@ -32,7 +32,7 @@ const target = join(repository, 'target/plugin-core-build');
 const cargoHome = process.env.CARGO_HOME || join(homedir(), '.cargo');
 const rustflags = `--remap-path-prefix=${cargoHome}=/cargo --remap-path-prefix=${repository}=/gil`;
 assert.ok(!/\s/.test(repository + cargoHome), 'build roots containing whitespace need encoded rustflags support');
-const productFeatures = profile === 'approved-plan' ? 'approved-plan,visual-authoring,product-safety' : profile === 'visual-authoring'
+const productFeatures = profile === 'exploration-flow' ? 'exploration-flow,visual-authoring,product-safety' : profile === 'approved-plan' ? 'approved-plan,visual-authoring,product-safety' : profile === 'visual-authoring'
   ? 'visual-authoring,product-safety'
   : 'product-safety';
 await run('cargo', ['build', '--locked', '--release', '-p', 'gil', '--target', 'aarch64-apple-darwin', '--features', productFeatures], {
