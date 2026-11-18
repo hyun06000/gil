@@ -7,7 +7,7 @@ import {readFile, readdir} from 'node:fs/promises';
 const here = new URL('./msix/', import.meta.url);
 const read = async name => readFile(new URL(name, here), 'utf8');
 
-test('the manifest template declares exactly the capabilities the single exe needs', async () => {
+test('the manifest template declares exactly the capabilities the CLI and Start guide need', async () => {
   const xml = await read('AppxManifest.xml');
   for (const placeholder of ['{{IDENTITY_NAME}}', '{{PUBLISHER}}', '{{PUBLISHER_DISPLAY_NAME}}', '{{VERSION}}']) {
     assert.equal(xml.split(placeholder).length, 2, `${placeholder} appears once`);
@@ -16,9 +16,12 @@ test('the manifest template declares exactly the capabilities the single exe nee
   assert.match(xml, /<rescap:Capability Name="unvirtualizedResources" \/>/);
   assert.match(xml, /<desktop6:FileSystemWriteVirtualization>disabled<\/desktop6:FileSystemWriteVirtualization>/);
   assert.match(xml, /<uap5:ExecutionAlias Alias="gil\.exe" \/>/);
-  assert.match(xml, /Executable="gil\.exe"\s+EntryPoint="Windows\.FullTrustApplication"\s+desktop4:Subsystem="console"/);
+  assert.match(xml, /Executable="gil-start\.exe"\s+EntryPoint="Windows\.FullTrustApplication"\s+desktop4:Subsystem="console"/);
+  assert.match(xml, /<uap5:Extension Category="windows\.appExecutionAlias" Executable="gil\.exe" EntryPoint="Windows\.FullTrustApplication"/);
+  assert.equal([...xml.matchAll(/<Application /g)].length, 1, 'one visible app, no hidden helper app');
+  assert.doesNotMatch(xml, /uap(?:10|11):Parameters=/, 'no injected argv on either activation path');
   assert.match(xml, /ProcessorArchitecture="x64"/);
-  assert.match(xml, /<uap:VisualElements\b[^>]*AppListEntry="none"/);
+  assert.match(xml, /<uap:VisualElements\b[^>]*AppListEntry="default"/);
   assert.match(xml, /MinVersion="10\.0\.18362\.0"/, 'AppData opt-out requires Windows 10 1903');
   assert.doesNotMatch(xml, /<desktop6:RegistryWriteVirtualization>/, 'no registry write exception');
   assert.deepEqual([...xml.matchAll(/<rescap:Capability Name="([^"]+)"/g)].map(m => m[1]).sort(),
@@ -55,5 +58,6 @@ test('the packaging script fills every placeholder, packs with makeappx and sign
   assert.match(script, /makeappx pack \/o \/d \$Layout \/p \$Out/);
   assert.match(script, /if \(\$SignWithPfx\) \{[\s\S]*signtool sign \/fd SHA256/);
   assert.match(script, /"\$Version\.0"/, 'Store packages use a four-part version ending in .0');
+  assert.match(script, /Copy-Item -LiteralPath \$StartExe -Destination \(Join-Path \$Layout 'gil-start\.exe'\)/);
   assert.doesNotMatch(script, /Add-AppxPackage|Install-|Invoke-WebRequest|irm /);
 });

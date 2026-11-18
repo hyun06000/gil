@@ -58,32 +58,34 @@ jobs:
         run: |
           node --test distribution/windows/msix.test.mjs distribution/windows/msix-smoke.test.mjs distribution/windows/msix-workflow.test.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Build static x64 product executable
+      - name: Build static x64 product and Start-menu guide
         shell: pwsh
         env:
           GIL_BUILD_VERSION: ${{ inputs.version }}
           RUSTFLAGS: -C target-feature=+crt-static
         run: |
-          cargo build --locked --release --target x86_64-pc-windows-msvc -p gil --bin gil --features approved-plan,visual-authoring,product-safety
+          cargo build --locked --release --target x86_64-pc-windows-msvc -p gil --bin gil --bin gil-start --features approved-plan,visual-authoring,product-safety
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $exe = 'target\x86_64-pc-windows-msvc\release\gil.exe'
           $dumpbin = Get-ChildItem 'C:\Program Files\Microsoft Visual Studio' -Recurse -Filter dumpbin.exe -ErrorAction SilentlyContinue |
             Where-Object FullName -match 'Hostx64\\x64' | Select-Object -First 1
           if (-not $dumpbin) { throw 'dumpbin missing: cannot verify static CRT' }
-          $imports = & $dumpbin.FullName /nologo /dependents $exe
-          if ($LASTEXITCODE -ne 0) { throw 'dumpbin failed' }
-          if ($imports -match 'VCRUNTIME|MSVCP') { throw 'Unexpected VC++ runtime DLL dependency' }
+          foreach ($binary in @($exe, 'target\x86_64-pc-windows-msvc\release\gil-start.exe')) {
+            $imports = & $dumpbin.FullName /nologo /dependents $binary
+            if ($LASTEXITCODE -ne 0) { throw 'dumpbin failed' }
+            if ($imports -match 'VCRUNTIME|MSVCP') { throw 'Unexpected VC++ runtime DLL dependency' }
+          }
       - name: Verify installed development MSIX through its execution alias
         shell: pwsh
         run: |
-          ./distribution/windows/msix/test-msix-ci.ps1 -Exe 'target\x86_64-pc-windows-msvc\release\gil.exe' -Version $env:VERSION
+          ./distribution/windows/msix/test-msix-ci.ps1 -Exe 'target\x86_64-pc-windows-msvc\release\gil.exe' -StartExe 'target\x86_64-pc-windows-msvc\release\gil-start.exe' -Version $env:VERSION
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Package unsigned Store submission and provenance
         shell: pwsh
         run: |
           $exe = 'target\x86_64-pc-windows-msvc\release\gil.exe'
           $out = 'target\msix-submission\gil-store-upload.msix'
-          ./distribution/windows/msix/build-msix.ps1 -Exe $exe -Version $env:VERSION `
+          ./distribution/windows/msix/build-msix.ps1 -Exe $exe -StartExe 'target\x86_64-pc-windows-msvc\release\gil-start.exe' -Version $env:VERSION `
             -IdentityName $env:IDENTITY_NAME -Publisher $env:PUBLISHER -PublisherDisplayName $env:PUBLISHER_DISPLAY_NAME -Out $out
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $hash = (Get-FileHash -LiteralPath $out -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -97,10 +99,11 @@ jobs:
             run_attempt = $env:GITHUB_RUN_ATTEMPT
             profile = 'approved-plan,visual-authoring,product-safety'
             executable_sha256 = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+            start_executable_sha256 = (Get-FileHash -LiteralPath 'target\x86_64-pc-windows-msvc\release\gil-start.exe' -Algorithm SHA256).Hash.ToLowerInvariant()
             msix_sha256 = $hash
             signing = 'unsigned; Microsoft Store signs after certification'
-            verified = @('static CRT imports', 'dev MSIX installed manifest', 'alias CLI/MCP/Monitor resource/EOF', 'packaged install and doctor without Hosts')
-            not_verified = @('WACK', 'actual Host UI', 'minimum OS device', 'Store signature/SAC')
+            verified = @('static CRT imports', 'dev MSIX installed manifest', 'Start activation and bilingual console input/output', 'alias CLI/MCP/Monitor resource/EOF', 'packaged install and doctor without Hosts')
+            not_verified = @('WACK', 'visual desktop appearance', 'actual Host UI', 'minimum OS device', 'Store signature/SAC')
           }
           $receipt | ConvertTo-Json -Depth 4 | Set-Content 'target\msix-submission\build-info.json' -Encoding utf8
           "$hash  gil-store-upload.msix" | Set-Content 'target\msix-submission\checksums.txt' -Encoding utf8

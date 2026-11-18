@@ -43,7 +43,7 @@ jobs:
           GIL_BUILD_VERSION: ${{ steps.version.outputs.version }}
           RUSTFLAGS: -C target-feature=+crt-static
         run: |
-          cargo build --locked --release --target x86_64-pc-windows-msvc -p gil --bin gil --features approved-plan,visual-authoring,product-safety
+          cargo build --locked --release --target x86_64-pc-windows-msvc -p gil --bin gil --bin gil-start --features approved-plan,visual-authoring,product-safety
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify the executable before publishing
         shell: pwsh
@@ -84,7 +84,7 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          ./distribution/windows/msix/test-msix-ci.ps1 -Exe 'dist\gil-x86_64-pc-windows-msvc.exe' -Version $env:VERSION
+          ./distribution/windows/msix/test-msix-ci.ps1 -Exe 'dist\gil-x86_64-pc-windows-msvc.exe' -StartExe 'target\x86_64-pc-windows-msvc\release\gil-start.exe' -Version $env:VERSION
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Package the unsigned Store upload (identity from repository variables)
         shell: pwsh
@@ -100,7 +100,7 @@ jobs:
           $name = if ($real) { $env:IDENTITY_NAME } else { 'GIL.Dev' }
           $publisher = if ($real) { $env:PUBLISHER } else { 'CN=GIL Dev' }
           $display = if ($real) { $env:PUBLISHER_DISPLAY_NAME } else { 'GIL Dev' }
-          ./distribution/windows/msix/build-msix.ps1 -Exe 'dist\gil-x86_64-pc-windows-msvc.exe' -Version $env:VERSION `
+          ./distribution/windows/msix/build-msix.ps1 -Exe 'dist\gil-x86_64-pc-windows-msvc.exe' -StartExe 'target\x86_64-pc-windows-msvc\release\gil-start.exe' -Version $env:VERSION `
             -IdentityName $name -Publisher $publisher -PublisherDisplayName $display -Out 'target\msix\gil-store-upload.msix'
           $note = if ($real) { "Store upload for $env:VERSION with identity $name ($publisher). Unsigned: Partner Center signs it. Upload as the package of a new submission." }
                   else { "Built with the DEV identity (GIL.Dev / CN=GIL Dev) because the repository variables GIL_MSIX_IDENTITY_NAME, GIL_MSIX_PUBLISHER and GIL_MSIX_PUBLISHER_DISPLAY_NAME are not set. Not uploadable to the Store; see distribution/windows/STORE.md." }

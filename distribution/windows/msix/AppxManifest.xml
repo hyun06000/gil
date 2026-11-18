@@ -9,7 +9,8 @@
 
   Why each capability is declared (also the text for the Store certification notes):
   - runFullTrust: gil.exe is a Win32 console program (the GIL Core and its MCP stdio server),
-    packaged as MSIX. It has no standalone GUI; agent Hosts start its MCP server as a child process.
+    packaged as MSIX. gil-start.exe provides bilingual console guidance from Start;
+    agent Hosts invoke gil.exe directly as an MCP child process.
   - unvirtualizedResources + FileSystemWriteVirtualization disabled:
     `gil install` must write the user's real Claude Desktop and Codex settings
     (%APPDATA%\Claude\claude_desktop_config.json, %USERPROFILE%\.codex\config.toml) so those
@@ -59,7 +60,7 @@
 
   <Applications>
     <Application Id="GIL"
-      Executable="gil.exe"
+      Executable="gil-start.exe"
       EntryPoint="Windows.FullTrustApplication"
       desktop4:Subsystem="console"
       desktop4:SupportsMultipleInstances="true"
@@ -71,7 +72,7 @@
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png"
         BackgroundColor="transparent"
-        AppListEntry="none">
+        AppListEntry="default">
         <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" Square71x71Logo="Assets\Square71x71Logo.png" Square310x310Logo="Assets\Square310x310Logo.png" />
       </uap:VisualElements>
       <Extensions>
