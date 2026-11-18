@@ -1,0 +1,112 @@
+name: Windows MSIX (manual, no release)
+run-name: Store MSIX ${{ inputs.version }} from ${{ github.ref_name }}
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'New Store version X.Y.Z (packaged as X.Y.Z.0)'
+        required: true
+        type: string
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Build and verify Store MSIX (x64)
+    runs-on: windows-2025
+    timeout-minutes: 45
+    env:
+      RUSTUP_TOOLCHAIN: 1.97.1
+      VERSION: ${{ inputs.version }}
+      IDENTITY_NAME: ${{ vars.GIL_MSIX_IDENTITY_NAME }}
+      PUBLISHER: ${{ vars.GIL_MSIX_PUBLISHER }}
+      PUBLISHER_DISPLAY_NAME: ${{ vars.GIL_MSIX_PUBLISHER_DISPLAY_NAME }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Validate version and real Store identity
+        shell: pwsh
+        run: |
+          if ($env:VERSION -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
+            throw 'version must be numeric X.Y.Z without a prerelease suffix'
+          }
+          foreach ($part in $env:VERSION.Split('.')) {
+            if ([long]$part -gt 65535) { throw 'Each MSIX version component must be <= 65535' }
+          }
+          if (-not $env:IDENTITY_NAME -or -not $env:PUBLISHER_DISPLAY_NAME -or
+              $env:PUBLISHER -notmatch '^CN=' -or $env:IDENTITY_NAME -eq 'GIL.Dev' -or $env:PUBLISHER -eq 'CN=GIL Dev') {
+            throw 'Real Partner Center identity repository variables are required; no dev fallback'
+          }
+      - name: Locked toolchain and dependencies
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo fetch --locked --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm ci --prefix mcp-app
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node mcp-app/build.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Packaging contracts
+        shell: pwsh
+        run: |
+          node --test distribution/windows/msix.test.mjs distribution/windows/msix-smoke.test.mjs distribution/windows/msix-workflow.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build static x64 product executable
+        shell: pwsh
+        env:
+          GIL_BUILD_VERSION: ${{ inputs.version }}
+          RUSTFLAGS: -C target-feature=+crt-static
+        run: |
+          cargo build --locked --release --target x86_64-pc-windows-msvc -p gil --bin gil --features approved-plan,visual-authoring,product-safety
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $exe = 'target\x86_64-pc-windows-msvc\release\gil.exe'
+          $dumpbin = Get-ChildItem 'C:\Program Files\Microsoft Visual Studio' -Recurse -Filter dumpbin.exe -ErrorAction SilentlyContinue |
+            Where-Object FullName -match 'Hostx64\\x64' | Select-Object -First 1
+          if (-not $dumpbin) { throw 'dumpbin missing: cannot verify static CRT' }
+          $imports = & $dumpbin.FullName /nologo /dependents $exe
+          if ($LASTEXITCODE -ne 0) { throw 'dumpbin failed' }
+          if ($imports -match 'VCRUNTIME|MSVCP') { throw 'Unexpected VC++ runtime DLL dependency' }
+      - name: Verify installed development MSIX through its execution alias
+        shell: pwsh
+        run: |
+          ./distribution/windows/msix/test-msix-ci.ps1 -Exe 'target\x86_64-pc-windows-msvc\release\gil.exe' -Version $env:VERSION
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Package unsigned Store submission and provenance
+        shell: pwsh
+        run: |
+          $exe = 'target\x86_64-pc-windows-msvc\release\gil.exe'
+          $out = 'target\msix-submission\gil-store-upload.msix'
+          ./distribution/windows/msix/build-msix.ps1 -Exe $exe -Version $env:VERSION `
+            -IdentityName $env:IDENTITY_NAME -Publisher $env:PUBLISHER -PublisherDisplayName $env:PUBLISHER_DISPLAY_NAME -Out $out
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $hash = (Get-FileHash -LiteralPath $out -Algorithm SHA256).Hash.ToLowerInvariant()
+          $receipt = [ordered]@{
+            version = $env:VERSION
+            package_version = "$env:VERSION.0"
+            identity_name = $env:IDENTITY_NAME
+            publisher = $env:PUBLISHER
+            source_commit = $env:GITHUB_SHA
+            workflow_run = "https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+            run_attempt = $env:GITHUB_RUN_ATTEMPT
+            profile = 'approved-plan,visual-authoring,product-safety'
+            executable_sha256 = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+            msix_sha256 = $hash
+            signing = 'unsigned; Microsoft Store signs after certification'
+            verified = @('static CRT imports', 'dev MSIX installed manifest', 'alias CLI/MCP/Monitor resource/EOF', 'packaged install and doctor without Hosts')
+            not_verified = @('WACK', 'actual Host UI', 'minimum OS device', 'Store signature/SAC')
+          }
+          $receipt | ConvertTo-Json -Depth 4 | Set-Content 'target\msix-submission\build-info.json' -Encoding utf8
+          "$hash  gil-store-upload.msix" | Set-Content 'target\msix-submission\checksums.txt' -Encoding utf8
+      - name: Upload submission files only
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: gil-msix-store-upload-${{ inputs.version }}
+          path: |
+            target/msix-submission/gil-store-upload.msix
+            target/msix-submission/build-info.json
+            target/msix-submission/checksums.txt
+          if-no-files-found: error
+          retention-days: 30

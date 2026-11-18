@@ -235,7 +235,7 @@ test('Host registration is explicit, uses the official Codex CLI shape, and does
 });
 
 test('the signed/NSIS product workflow is retired; the single-executable release workflow replaces it', async () => {
-  // 2026-11-12 deployment decision: no installer, no signing, no Store. The legacy acceptance
+  // The native EXE channel and Store MSIX share one binary. The legacy acceptance
   // script stays for the retired Companion channel; the release path is windows-release.yml.
   await assert.rejects(read('.github/workflows/windows-product.yml'), { code: 'ENOENT' });
   const release = await read('.github/workflows/windows-release.yml');
@@ -248,10 +248,15 @@ test('the signed/NSIS product workflow is retired; the single-executable release
   // The only signing in the pipeline is a per-job self-signed certificate for the MSIX sideload
   // check; the Store upload is packaged unsigned and no secret holds a certificate.
   assert.doesNotMatch(release, /secrets\.GIL_WINDOWS_CERTIFICATE|secrets\.TAURI/);
-  assert.match(release, /New-SelfSignedCertificate -Type Custom -Subject 'CN=GIL Dev'/);
+  const msixCheck = await read('distribution/windows/msix/test-msix-ci.ps1');
+  assert.match(msixCheck, /New-SelfSignedCertificate -Type Custom -Subject 'CN=GIL Dev'/);
+  assert.match(msixCheck, /finally[\s\S]*Remove-AppxPackage/);
+  assert.match(msixCheck, /node "\$Here\/smoke\.mjs" \$alias \$ExpectedBinaryVersion/);
+  const pr = await read('.github/workflows/windows-spike.yml');
+  assert.match(pr, /test-msix-ci\.ps1/);
   assert.match(release, /build-msix\.ps1[\s\S]{0,400}-Out 'target\\msix\\gil-store-upload\.msix'/);
-  assert.ok(release.indexOf('Remove-AppxPackage') < release.indexOf('gh release create'), 'the sideload is removed before publishing');
-  assert.ok(release.indexOf('& $exe doctor') < release.indexOf('gh release create'), 'verified before publishing');
+  assert.ok(release.indexOf('test-msix-ci.ps1') >= 0 && release.indexOf('test-msix-ci.ps1') < release.indexOf('gh release create'), 'the sideload is removed before publishing');
+  assert.ok(release.indexOf('& $installed doctor') >= 0 && release.indexOf('& $installed doctor') < release.indexOf('gh release create'), 'verified before publishing');
 
   const acceptance = await read('distribution/windows/product-e2e.ps1');
   assert.match(acceptance, /\[switch\]\$SeedLegacyRuntime/);
