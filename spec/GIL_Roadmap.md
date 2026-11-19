@@ -54,8 +54,8 @@ opt-in Cargo 기능 `will-end-history`(= `chain-core` 포함)를 켠 빌드가 *
 | 기준선 비교 | main `ac777ce`의 `chain-core` 전체 시험(`--no-fail-fast`)은 86건 실패한다(형식 4를 고정으로 가정한 `store`·`revisit`·`project`·`artifact` 등, CI 목록 밖). 최종 커밋의 `chain-core`와 `will-end-history` 전체 시험의 실패 목록은 그와 같은 86건이다(새 실패 0). `visual_store`·`visual_project`의 형식 4/5 고정 시험 2건도 main에서 같은 자리에서 실패한다. 시험 이름·실패 위치 표는 PR #172 본문에 있다 |
 | 시험 격리 | 원격 첫 실행에서 Monitor 시험 두 곳(`monitor/serve.rs`·`monitor/refresh.rs`의 `a_snapshot`)이 고정 임시 경로의 기록을 다시 열어, 앞 단계의 승인 계획 구성이 만든 Chain을 뒤의 `will-end-history` 단독 구성이 (제품이 옳게) 거절했다(macOS 56건, Windows 같은 커밋 재실행 51건). 위 86건 기준선과 다른 이번 PR 실행 순서의 시험 격리 문제였다. 로컬 임시 폴더에는 예전 기본 빌드가 만든 형식 4 기록이 남아 있어 드러나지 않았다. 시험 자리를 실행(프로세스)별 이름으로 바꿨다 |
 | Windows 파일 감시 시험 | `monitor::serve::tests::an_artifact_change_reaches_the_screen`이 3fbaedb의 첫 Windows 실행에서 한 번 실패했다. 같은 커밋의 Windows 작업 재실행 1회와 다음 커밋 실행 1회에서는 같은 작업 안의 세 실행 모두 통과했다. 재현되지 않아 원인은 확정하지 않았다(시험 코드·파일 감시·복원 코드는 이 PR에서 바꾸지 않았다) |
-| 기본 검사 간헐 실패 | 로컬에서 `cargo test --locked -p gil`을 병렬로 실행했을 때 라이브러리 시험 1건이 두 번 실패했다(한 번은 `runtime_launch::tests::errors_after_the_start_are_reported_with_the_pid_and_the_exit_confirmation`의 선택 잠금 경합, 한 번은 이름을 기록하지 못함). 같은 소스의 재실행 3회는 모두 통과했다. 원격 필수 검사는 이 시험을 한 스레드로 실행하며 통과했다. 이 PR은 런처 코드를 바꾸지 않았다 |
-| 원격 작업 시간 | `6eb51ca`의 Windows Chain 작업은 종료 이력 단계 45개까지 통과한 뒤 작업 제한 30분에 걸려 마지막 빌드 단계에서 취소됐다(이 PR 이전 19–22분, 새 단계가 약 10분 추가). 제한을 45분으로 늘렸다. 시험의 대기 시간은 바꾸지 않았다 |
+| 기본 검사 간헐 실패 | 로컬에서 `cargo test --locked -p gil`을 병렬로 실행했을 때 라이브러리 시험 1건이 두 번 실패했다(한 번은 `runtime_launch::tests::errors_after_the_start_are_reported_with_the_pid_and_the_exit_confirmation`의 선택 잠금 경합, 한 번은 이름을 기록하지 못해 원인 미확인). 같은 소스의 재실행 3회는 모두 통과했다. 원격 필수 검사는 이 시험을 한 스레드로 실행하며 통과했다. 이 PR은 런처 코드를 바꾸지 않았다 |
+| 원격 작업 시간 | `6eb51ca`의 Windows Chain 작업은 전체 작업의 45번째 단계까지 통과한 뒤 작업 제한 30분에 걸려 46번째 단계(종료 이력 시각 구성의 전체 대상 빌드)에서 취소됐다. 기록된 시험 실패는 없다(이 PR 이전 19–22분, 새 단계가 약 10분 추가). 제한을 45분으로 늘렸다. 시험의 대기 시간은 바꾸지 않았다 |
 | 실제 화면 인수 | **하지 않았다.** Codex·Claude Desktop의 Monitor에서 미달성 표시가 보이는지, 실제 모델이 안내대로 닫는지는 확인하지 않았다 |
 | 필드 테스트 | **하지 않았다** |
 
