@@ -1,13 +1,15 @@
 # GIL 개인정보 처리방침 / Privacy Policy
 
-최종 갱신 / Last updated: 2026-11-13 · 적용 대상 / Applies to: GIL (`gil.exe`, Microsoft Store 앱 `gil-companion`, GitHub 릴리스의 단일 실행 파일, macOS Plugin)
+최종 갱신 / Last updated: 2026-11-19 · 적용 대상 / Applies to: GIL (`gil.exe`, Microsoft Store 앱 `gil-companion`, GitHub 릴리스의 단일 실행 파일, macOS Plugin)
 
 ## 한국어
 
 **GIL은 개인정보를 수집·저장·전송하지 않습니다.**
 
 - GIL은 사용자의 PC에서만 실행되는 로컬 프로그램입니다. 사용자가 고른 프로젝트 폴더 안의 `.gil` 폴더에 작업 기록을
-  저장하며, 그 기록은 사용자의 PC를 떠나지 않습니다. 원격 서버, 계정, 로그인은 없습니다.
+  저장합니다. Windows 제품 빌드는 프로젝트 기록을 `%LOCALAPPDATA%\GIL\project-state-v1`에 별도로 저장할 수도 있으며,
+  Monitor 연결 상태는 `%LOCALAPPDATA%\GIL\monitor-bindings-v1`에 저장합니다. 이 기록은 앱 제거 시 자동 삭제하지 않습니다.
+  그 기록은 GIL에 의해 외부로 전송되지 않습니다. 원격 서버, 계정, 로그인은 없습니다.
 - GIL은 Claude Desktop·Codex 같은 에이전트 앱이 로컬 자식 프로세스로 실행하는 MCP 서버입니다. 사용자가 에이전트 앱에
   입력한 내용과 그 앱이 외부로 보내는 데이터는 **해당 앱의 개인정보 처리방침**이 적용되며, GIL은 그 내용을 별도로 수집하거나
   어디에도 보내지 않습니다.
@@ -29,7 +31,9 @@
 **GIL does not collect, store or transmit personal information.**
 
 - GIL is a local program that runs only on the user's own PC. It keeps its working records in a `.gil` folder inside the
-  project folder the user chose; those records never leave the PC. There is no remote server, account or sign-in.
+  project folder the user chose. Windows product builds can instead keep project records under
+  `%LOCALAPPDATA%\GIL\project-state-v1`; Monitor bindings are stored under `%LOCALAPPDATA%\GIL\monitor-bindings-v1`.
+  These records are not automatically deleted on app uninstall or transmitted externally by GIL. There is no remote server, account or sign-in.
 - GIL is an MCP server that agent apps such as Claude Desktop and Codex start as a local child process. What the user types
   into those apps, and what those apps send elsewhere, is governed by **those apps' privacy policies**; GIL neither collects
   nor transmits any of it.

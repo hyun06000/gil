@@ -1,6 +1,6 @@
 name: Windows release (GitHub Releases, no signing)
-# One static `gil.exe` per tag. No installer, no code signing, no Store: the 2026-11-12
-# deployment decision record. Asset names carry no version so that
+# One static unsigned `gil.exe` per tag, plus a separate unsigned MSIX for Store submission.
+# Development signing is used only in the isolated sideload check. Asset names carry no version so that
 # `releases/latest/download/<asset>` stays valid across releases.
 on:
   push:
@@ -43,7 +43,7 @@ jobs:
           GIL_BUILD_VERSION: ${{ steps.version.outputs.version }}
           RUSTFLAGS: -C target-feature=+crt-static
         run: |
-          cargo build --locked --release --target x86_64-pc-windows-msvc -p gil --bin gil --features approved-plan,visual-authoring,product-safety
+          cargo build --locked --release --target x86_64-pc-windows-msvc -p gil --bin gil --bin gil-start --features approved-plan,visual-authoring,product-safety
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify the executable before publishing
         shell: pwsh
@@ -84,34 +84,8 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          # Self-signed certificate for this job only: the sideload check needs a signature whose
-          # subject equals the package Publisher. The Store upload below stays unsigned.
-          $cert = New-SelfSignedCertificate -Type Custom -Subject 'CN=GIL Dev' -KeyUsage DigitalSignature `
-            -FriendlyName 'GIL sideload check' -CertStoreLocation Cert:\CurrentUser\My `
-            -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3', '2.5.29.19={text}')
-          $pfx = Join-Path $env:RUNNER_TEMP 'gil-dev.pfx'
-          $password = [guid]::NewGuid().ToString('N')
-          Export-PfxCertificate -Cert $cert -FilePath $pfx -Password (ConvertTo-SecureString $password -AsPlainText -Force) | Out-Null
-          Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\LocalMachine\TrustedPeople -Password (ConvertTo-SecureString $password -AsPlainText -Force) | Out-Null
-          ./distribution/windows/msix/build-msix.ps1 -Exe 'dist\gil-x86_64-pc-windows-msvc.exe' -Version $env:VERSION `
-            -IdentityName 'GIL.Dev' -Publisher 'CN=GIL Dev' -PublisherDisplayName 'GIL Dev' `
-            -Out 'target\msix\gil-dev-signed.msix' -SignWithPfx $pfx -PfxPassword $password
-          Add-AppxPackage -Path 'target\msix\gil-dev-signed.msix'
-          $alias = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\gil.exe'
-          if (-not (Test-Path $alias)) { throw "app execution alias missing: $alias" }
-          $line = (& $alias --version).Trim()
-          if ($line -ne "gil $env:VERSION") { throw "alias runs an unexpected version: $line" }
-          & $alias install --no-wait
-          if ($LASTEXITCODE -ne 0) { throw 'gil install failed inside the package' }
-          $doctor = (& $alias doctor) -join "`n"
-          if ($LASTEXITCODE -ne 0 -or $doctor -notmatch 'binary: OK .*\[store\]' -or $doctor -notmatch 'claude-desktop: NOT_INSTALLED' -or $doctor -notmatch 'codex: NOT_INSTALLED') {
-            throw "Unexpected doctor output from the packaged app:`n$doctor"
-          }
-          if (Test-Path (Join-Path $env:LOCALAPPDATA 'Programs\gil\gil.exe.old-*')) { throw 'packaged install must not copy the binary' }
-          Get-AppxPackage -Name 'GIL.Dev' | Remove-AppxPackage
-          Remove-Item -LiteralPath $pfx -Force
-          Remove-Item -LiteralPath "Cert:\CurrentUser\My\$($cert.Thumbprint)" -Force -ErrorAction SilentlyContinue
-          Remove-Item -LiteralPath "Cert:\LocalMachine\TrustedPeople\$($cert.Thumbprint)" -Force -ErrorAction SilentlyContinue
+          ./distribution/windows/msix/test-msix-ci.ps1 -Exe 'dist\gil-x86_64-pc-windows-msvc.exe' -StartExe 'target\x86_64-pc-windows-msvc\release\gil-start.exe' -Version $env:VERSION
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Package the unsigned Store upload (identity from repository variables)
         shell: pwsh
         env:
@@ -126,7 +100,7 @@ jobs:
           $name = if ($real) { $env:IDENTITY_NAME } else { 'GIL.Dev' }
           $publisher = if ($real) { $env:PUBLISHER } else { 'CN=GIL Dev' }
           $display = if ($real) { $env:PUBLISHER_DISPLAY_NAME } else { 'GIL Dev' }
-          ./distribution/windows/msix/build-msix.ps1 -Exe 'dist\gil-x86_64-pc-windows-msvc.exe' -Version $env:VERSION `
+          ./distribution/windows/msix/build-msix.ps1 -Exe 'dist\gil-x86_64-pc-windows-msvc.exe' -StartExe 'target\x86_64-pc-windows-msvc\release\gil-start.exe' -Version $env:VERSION `
             -IdentityName $name -Publisher $publisher -PublisherDisplayName $display -Out 'target\msix\gil-store-upload.msix'
           $note = if ($real) { "Store upload for $env:VERSION with identity $name ($publisher). Unsigned: Partner Center signs it. Upload as the package of a new submission." }
                   else { "Built with the DEV identity (GIL.Dev / CN=GIL Dev) because the repository variables GIL_MSIX_IDENTITY_NAME, GIL_MSIX_PUBLISHER and GIL_MSIX_PUBLISHER_DISPLAY_NAME are not set. Not uploadable to the Store; see distribution/windows/STORE.md." }
