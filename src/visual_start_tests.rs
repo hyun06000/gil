@@ -1,5 +1,5 @@
 // New visual creation is format 5 normally and format 7 with real Chain containment.
-const VISUAL_HEAD: &[u8] = if cfg!(feature = "chain-core") { b"format: 7\n" } else { b"format: 5\n" };
+const VISUAL_HEAD: &[u8] = if cfg!(feature = "will-end-history") { b"format: 9\n" } else if cfg!(feature = "chain-core") { b"format: 7\n" } else { b"format: 5\n" };
 
 use super::*;
 use std::collections::BTreeMap;

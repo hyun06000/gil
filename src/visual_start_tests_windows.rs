@@ -1,6 +1,9 @@
 //! Windows mirror of `visual_start_tests.rs` (Windows contract §6, W1-*). Runs only on a
 //! Windows host; a Mac cross-compile of this file is not evidence.
-const VISUAL_HEAD: &[u8] = if cfg!(feature = "chain-core") { b"format: 7\n" } else { b"format: 5\n" };
+const VISUAL_HEAD: &[u8] = if cfg!(feature = "will-end-history") { b"format: 9\n" } else if cfg!(feature = "chain-core") { b"format: 7\n" } else { b"format: 5\n" };
+/// The declared visual format of a project this build starts, and the text format one below it.
+const VISUAL_DECLARED: &str = if cfg!(feature = "will-end-history") { "format: 9" } else if cfg!(feature = "chain-core") { "format: 7" } else { "format: 5" };
+const TEXT_DECLARED: &str = if cfg!(feature = "will-end-history") { "format: 8" } else if cfg!(feature = "chain-core") { "format: 6" } else { "format: 4" };
 
 use super::*;
 use std::collections::BTreeMap;
@@ -1041,7 +1044,7 @@ fn unclear_format_is_refused_before_recovery_and_reaping_with_everything_preserv
 fn format_change_between_classification_and_lock_is_refused_untouched() {
     // 5 → 4 (textual): the declared format differs under the lock.
     fn downgrade(state: &Path) {
-        let text = fs::read_to_string(state).unwrap().replacen(if cfg!(feature = "chain-core") { "format: 7" } else { "format: 5" }, if cfg!(feature = "chain-core") { "format: 6" } else { "format: 4" }, 1);
+        let text = fs::read_to_string(state).unwrap().replacen(VISUAL_DECLARED, TEXT_DECLARED, 1);
         fs::write(state, text).unwrap();
     }
     let root = scratch();
@@ -1058,7 +1061,7 @@ fn format_change_between_classification_and_lock_is_refused_untouched() {
     // 4 → 5: a text Project rewritten as format 5 between classification and lock must get
     // the ACL verification under the lock (its .gil inherits, so it is refused) and no reaping.
     fn upgrade(state: &Path) {
-        let text = fs::read_to_string(state).unwrap().replacen(if cfg!(feature = "chain-core") { "format: 6" } else { "format: 4" }, if cfg!(feature = "chain-core") { "format: 7" } else { "format: 5" }, 1);
+        let text = fs::read_to_string(state).unwrap().replacen(TEXT_DECLARED, VISUAL_DECLARED, 1);
         fs::write(state, text).unwrap();
     }
     let root4 = scratch();

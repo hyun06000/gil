@@ -34,6 +34,10 @@ pub fn record(dir: &Path, layout: Layout) -> PathBuf {
         }
     };
     file["format"] = format.into();
+    // A build that starts format 8/9 writes `ended_wills`. Formats 4–7 never had it: the
+    // historical shape is `done_wills` at the same position. The fixture is fresh, so the list
+    // is empty and no end result is dropped.
+    super::historical_done_list(&mut file);
     std::fs::write(&path, serde_norway::to_string(&file).unwrap()).unwrap();
     let before = std::fs::read(&path).unwrap();
     let loaded = gil::load(super::spec(), &path).expect("historical fixture must load through real storage");

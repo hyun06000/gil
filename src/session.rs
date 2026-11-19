@@ -35,7 +35,7 @@ use crate::cycles::{CycleId, CycleRevisit, CycleRevisitError, CyclesError, OpenA
 use crate::lock::{LOCK_FILE, LockError, ProjectLock};
 use crate::node::NodeKind;
 use crate::project::{ActionError, Closed, ClosedCycle, Opened, Project};
-use crate::refs::SnapshotRef;
+use crate::refs::{SnapshotRef, WillRef};
 use crate::report::Report;
 use crate::restore::{self, RestoreFailure, Restored};
 use crate::rules::RuleSet;
@@ -441,6 +441,31 @@ impl ProjectSession {
     /// 그 밖       세계가 기준과 같은지 먼저 묻고, 같을 때만 닫는다
     /// ```
     pub fn close_step(&mut self, report: Report) -> Result<Closed, SessionError> {
+        self.close_step_ending(report, None)
+    }
+
+    /// 열려 있는 자리를 닫으며 **지목한 약속을 미달성으로 끝낸다.**
+    ///
+    /// 닫기의 조건은 [`close_step`](Self::close_step) 과 같다 — Verify 면 관측·객체 확정·증거
+    /// 검사를 그대로 거치고, 그 밖이면 세계가 기준과 같아야 한다. 미달성이라는 이유로
+    /// 면제되는 검사는 없다. 시도 기록 자체가 증거이고, 증거를 남길 수 없으면 닫지 않는다.
+    ///
+    /// 지목한 약속이 지금 걸린 약속이 아니면 아무것도 바꾸지 않고 거절한다. 이미 끝난
+    /// 약속이면 끝난 자리와 결과를 알려 준다 — 응답을 잃고 다시 보낸 요청이 그사이 열린 다른
+    /// 자리를 닫지 않게 하는 것이 이 확인의 전부다.
+    pub fn close_step_unachieved(&mut self, report: Report, will: WillRef) -> Result<Closed, SessionError> {
+        self.close_step_ending(report, Some(will))
+    }
+
+    /// 미달성 표시가 지금 받아들여질 수 있는가 — **Report 를 읽기도 전에** 묻는 문.
+    pub fn check_unachieved_request(&self, will: WillRef) -> Result<(), SessionError> {
+        self.project.check_unachieved_request(will).map_err(SessionError::Action)
+    }
+
+    fn close_step_ending(&mut self, report: Report, unachieved: Option<WillRef>) -> Result<Closed, SessionError> {
+        if let Some(will) = unachieved {
+            self.check_unachieved_request(will)?;
+        }
         // **pending 을 먼저 묻는다.** 되돌아온 자리에는 열린 Step 이 없으므로 그냥 두면
         // 「닫을 자리가 없다」로 거절되는데, 그 말은 사실이지만 무엇을 해야 하는지
         // 알려 주지 않는다. 판정은 `Project` 의 그 함수 하나가 한다.
@@ -457,11 +482,12 @@ impl ProjectSession {
             .kind;
 
         match self.can_confirm_artifact() {
-            true => self.close_verify(report),
+            true => self.close_verify(report, unachieved),
             false => {
                 self.require_clean(Gate::Step(cycle.step_ref(opened), kind))?;
+                // `Project` 가 복제본 위에서 닫고 성공했을 때만 갈아 끼운다 — 거절되면 그대로다.
                 self.project
-                    .close_action_step(report)
+                    .close_step_ending(report, None, unachieved)
                     .map_err(SessionError::Action)
             }
         }
@@ -472,10 +498,10 @@ impl ProjectSession {
     /// 객체를 먼저 눕히고 그 다음에 도메인을 움직인다. 객체 확정 뒤에 도메인이나 저장이
     /// 실패하면 **객체는 미참조로 남을 수 있지만** 논리 상태의 부분 변경은 남지 않는다
     /// (Artifact Model §3.5·§10).
-    fn close_verify(&mut self, report: Report) -> Result<Closed, SessionError> {
+    fn close_verify(&mut self, report: Report, unachieved: Option<WillRef>) -> Result<Closed, SessionError> {
         let world = capture(&self.root()?, &self.store()?)?;
         let mut next = self.project.clone();
-        let closed = next.close_verify_step(report.clone(), world.clone())
+        let closed = next.close_step_ending(report.clone(), Some(world.clone()), unachieved)
             .map_err(SessionError::Action)?;
         self.require_verify_evidence(&report, &world)?;
         self.project = next;
@@ -492,9 +518,24 @@ impl ProjectSession {
         attachments: Vec<crate::visual_report::image::VisualAttachment>,
         declaration: impl FnOnce(&[crate::visual_report::VisualAssetId]) -> crate::visual_report::VisualDeclaration,
     ) -> Result<Closed, SessionError> {
+        self.close_verify_with_images_ending_and_commit(report, attachments, declaration, None)
+    }
+
+    /// The same typed Verify close, ending the named Will as unachieved when one is given.
+    /// Every visual, evidence and world check is the same; the designation is checked first.
+    pub fn close_verify_with_images_ending_and_commit(
+        &mut self,
+        report: Report,
+        attachments: Vec<crate::visual_report::image::VisualAttachment>,
+        declaration: impl FnOnce(&[crate::visual_report::VisualAssetId]) -> crate::visual_report::VisualDeclaration,
+        unachieved: Option<WillRef>,
+    ) -> Result<Closed, SessionError> {
         use crate::visual_report::{file::AttachmentFile, project::ProjectVisualGraph};
         use crate::visual_report::registry::{ReportOwner, ReportVisuals};
         let error = |reason: String| SessionError::Action(ActionError::Visual(reason));
+        if let Some(will) = unachieved {
+            self.check_unachieved_request(will)?;
+        }
         self.project.no_pending_revisit().map_err(SessionError::Action)?;
         if !self.can_confirm_artifact() {
             return Err(error(crate::locale::text("session.visual.only_verify").into()));
@@ -544,7 +585,7 @@ impl ProjectSession {
             }
         }
         let mut next = self.project.clone();
-        let receipt = next.close_verify_with_registry(report.clone(), world.clone(), registry).map_err(SessionError::Action)?;
+        let receipt = next.close_verify_with_registry(report.clone(), world.clone(), registry, unachieved).map_err(SessionError::Action)?;
         self.require_verify_evidence(&report, &world)?;
         for file in &files { objects.put_visual(&file.image).map_err(|e| error(e.to_string()))?; }
         for file in &mut files { file.revalidate().map_err(error)?; }
@@ -558,8 +599,12 @@ impl ProjectSession {
     #[cfg(feature = "visual-authoring")]
     pub(crate) fn close_references_and_commit(
         &mut self, report: Report, uses: Vec<crate::visual_report::VisualUse>,
+        unachieved: Option<WillRef>,
     ) -> Result<(), SessionError> {
         use crate::visual_report::registry::ReportVisuals;
+        if let Some(will) = unachieved {
+            self.check_unachieved_request(will)?;
+        }
         self.project.no_pending_revisit().map_err(SessionError::Action)?;
         let report = self.link_learning(report)?;
         let cycle = self.project.current_cycle();
@@ -570,9 +615,13 @@ impl ProjectSession {
                 return Err(SessionError::Action(ActionError::Visual(crate::locale::text("session.visual.verify_needs_declaration").into())));
             }
             self.require_clean(Gate::Step(cycle.step_ref(opened), kind))?;
-            next.close_step_with_visuals(report, None, ReportVisuals::References(uses))
+            next.close_step_with_visuals_ending(report, None, ReportVisuals::References(uses), unachieved)
                 .map_err(SessionError::Action)?;
         } else {
+            // The marker names a Step's Will. A Cycle Report never ends one.
+            if let Some(asked) = unachieved {
+                return Err(SessionError::Action(ActionError::UnachievedWillMismatch { asked, active: None }));
+            }
             self.require_clean(Gate::Cycle(cycle.id().to_ref()))?;
             next.close_cycle_with_visuals(report, uses).map_err(SessionError::Action)?;
         }
@@ -904,7 +953,7 @@ fn private_storage_before_lock(gil: &Path, state_path: &Path) -> Result<u32, Ses
     #[cfg(windows)]
     {
         let format = declared_format_now(state_path)?;
-        if matches!(format, crate::VISUAL_FORMAT | crate::CHAIN_VISUAL_FORMAT) {
+        if crate::is_visual_format(format) {
             crate::windows_fs::verify_storage_tree(gil).map_err(|source| SessionError::Store(StoreError::Read {
                 path: store::said_path(gil), source,
             }))?;
@@ -938,7 +987,7 @@ fn private_storage_after_lock(gil: &Path, state_path: &Path, before: u32) -> Res
                 )),
             }));
         }
-        if matches!(after, crate::VISUAL_FORMAT | crate::CHAIN_VISUAL_FORMAT) {
+        if crate::is_visual_format(after) {
             crate::windows_fs::verify_storage_tree(gil).map_err(|source| SessionError::Store(StoreError::Read {
                 path: store::said_path(gil), source,
             }))?;

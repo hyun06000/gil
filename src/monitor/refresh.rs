@@ -548,8 +548,10 @@ mod tests {
         seen
     }
 
+    /// 이 시험 실행만의 자리 — 실행(프로세스)마다 다른 이름. `a_snapshot` 이 있는 기록을 다시 여는
+    /// 까닭에, 다른 기능 구성으로 지은 앞선 실행의 기록을 읽지 않고 다른 세션의 자리도 지우지 않는다.
     fn project(label: &str) -> std::path::PathBuf {
-        std::env::temp_dir().join(format!("gil-refresh-{label}"))
+        std::env::temp_dir().join(format!("gil-refresh-{}-{label}", std::process::id()))
     }
 
     /// 시험이 쓰는 박자 — 읽기 쉬운 눈금으로.

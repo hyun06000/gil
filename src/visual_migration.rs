@@ -801,7 +801,8 @@ mod chain_profile_tests {
         let head: serde_norway::Value =
             serde_norway::from_slice(&fs::read(root.join(STATE_PATH)).unwrap()).unwrap();
         let format = head.get("format").and_then(|v| v.as_u64()).expect("declared format");
-        assert!(format == crate::CHAIN_FORMAT as u64 || format == crate::CHAIN_VISUAL_FORMAT as u64, "{format}");
+        let chain_formats = [crate::CHAIN_FORMAT, crate::CHAIN_VISUAL_FORMAT, crate::END_HISTORY_FORMAT, crate::END_HISTORY_VISUAL_FORMAT];
+        assert!(chain_formats.iter().any(|known| *known as u64 == format), "{format}");
         assert_ne!(format, crate::FORMAT as u64);
         assert!(audited(&root).unwrap().project().current_chain().is_some());
     }

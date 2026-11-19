@@ -37,7 +37,7 @@ use crate::cycles::{
     CycleCloseError, CycleId, CycleRevisit, CycleRevisitError, CycleTargetError, Cycles,
     CyclesError, OpenAfterRevisitError,
 };
-use crate::existence::{Existence, ExistenceState};
+use crate::existence::{EndResult, EndedWill, Existence, ExistenceState};
 use crate::node::NodeKind;
 use crate::refs::{CycleRef, ExistenceRef, JourneyRef, SnapshotRef, StateRef, StepRef, WillRef};
 use crate::report::Report;
@@ -70,6 +70,12 @@ pub struct Project {
     /// 여기 사는 것은 **이름과 manifest 주소**뿐이다. 파일 목록도 blob 도 들어오지 않는다 —
     /// 그것들은 `.gil/artifacts/` 의 content-addressed 창고가 진다(Artifact Model §10.5).
     artifacts: SnapshotRegistry,
+    /// **이 프로젝트의 Journey 가 단일 종료 이력(`ended_wills`)으로 눕는가** — 형식 8/9.
+    ///
+    /// 설정이 아니라 프로젝트의 꼴이다. 시작할 때 정해지고, 읽을 때는 파일이 선언한 형식에서
+    /// 온다. 조회나 실행으로 바뀌지 않는다 — 형식 4–7 의 프로젝트는 끝까지 `done_wills` 로
+    /// 눕고, 미달성 종료를 받지 않는다(Storage Transition Contract §3.2).
+    end_history: bool,
 }
 
 /// Legacy worlds remain unwrapped when read; only new chain-profile projects create a Chain.
@@ -121,7 +127,52 @@ impl Project {
             current_existence: existence,
             next_will_id: FIRST_WILL,
             artifacts,
+            // `will-end-history` 는 `chain-core` 를 포함한다 — 종료 이력은 Chain 형식에만 있다.
+            end_history: cfg!(feature = "will-end-history"),
         }
+    }
+
+    /// 이 프로젝트가 **종료 결과를 기록하는 형식**(8/9)인가.
+    ///
+    /// 형식 4–7 에서는 `false` 다. 그 프로젝트에서 닫힌 약속은 전부 달성이며, 그 사실은
+    /// 형식이 말하므로 기록마다 적혀 있지 않다.
+    pub fn records_end_results(&self) -> bool {
+        self.end_history
+    }
+
+    /// 그 이름의 약속이 **이미 끝났다면** 그 기록. 진행 중이거나 없는 이름이면 `None`.
+    pub fn ended_will(&self, will: WillRef) -> Option<&EndedWill> {
+        self.existences
+            .values()
+            .flat_map(|existence| existence.journey().ended_wills())
+            .find(|ended| ended.will().id() == will)
+    }
+
+    /// 그 자리를 대상으로 한 약속이 **기록된 종료 결과.**
+    ///
+    /// 형식 4–7 에서는 언제나 `None` 이다 — 그 형식은 결과를 기록하지 않는다(전부 달성이다).
+    /// 읽기 화면이 「달성」 표시를 옛 기록에 소급해 붙이지 않게 하려는 것이다.
+    pub fn recorded_end_result(&self, step: StepRef) -> Option<EndResult> {
+        if !self.end_history {
+            return None;
+        }
+        self.existences
+            .values()
+            .flat_map(|existence| existence.journey().ended_wills())
+            .find(|ended| ended.will().target() == step)
+            .map(EndedWill::result)
+    }
+
+    /// 그 Cycle 안에서 **가장 먼저 기록된 미달성 종료.** 없으면 `None`.
+    ///
+    /// 이것이 있는 Experiment 는 실패로만 닫힌다(계약 E8). Step 이름은 Cycle 안에서 발급
+    /// 순서이므로 가장 작은 대상이 가장 먼저 열린 자리다.
+    pub fn unachieved_in(&self, cycle: CycleRef) -> Option<&EndedWill> {
+        self.existences
+            .values()
+            .flat_map(|existence| existence.journey().ended_wills())
+            .filter(|ended| ended.result() == EndResult::Unachieved && ended.will().target().cycle() == cycle)
+            .min_by_key(|ended| ended.will().target().step())
     }
 
     /// Real current container, absent in format 4/5. Serial Current is the last Chain.
@@ -409,6 +460,7 @@ impl Project {
         current_existence: ExistenceRef,
         next_will_id: u32,
         artifacts: SnapshotRegistry,
+        end_history: bool,
     ) -> Result<Project, ProjectError> {
         let project = Project {
             visual_state: None,
@@ -418,6 +470,7 @@ impl Project {
             current_existence,
             next_will_id,
             artifacts,
+            end_history,
         };
         project.check_restored()?;
         Ok(project)
@@ -477,6 +530,85 @@ impl Project {
         self.check_restored_wills()?;
         self.check_restored_provenance()?;
         self.check_restored_worlds()?;
+        self.check_restored_end_history()?;
+        Ok(())
+    }
+
+    /// **종료 이력이 걸어서 만들 수 있는 꼴인가** — 계약의 E3·E4·E7·E8.
+    ///
+    /// 이름의 유일·순서(E2), 판의 머리(E6), 닫힌 자리 → 종료 기록(E5)은 위의 세 검사가 이미
+    /// 쟀다. 여기서 더 재는 것은 **종료 기록 → 닫힌 자리** 방향과, 미달성 기록이 실험을
+    /// 어떻게 묶는가다.
+    ///
+    /// 형식 4–7 에는 적용하지 않는다. 그 형식에는 미달성 기록이 없고, 기존 기록이 읽히던
+    /// 조건을 이 작업으로 좁히지 않는다.
+    fn check_restored_end_history(&self) -> Result<(), ProjectError> {
+        if !self.end_history {
+            // E3 의 형식 쪽 절반: 결과를 적지 않는 형식에 미달성이 있을 수 없다.
+            for ended in self.existences.values().flat_map(|e| e.journey().ended_wills()) {
+                if ended.result() == EndResult::Unachieved {
+                    return Err(ProjectError::UnachievedWithoutEndHistory(ended.will().id()));
+                }
+            }
+            return Ok(());
+        }
+        if self.chains().is_empty() {
+            return Err(ProjectError::EndHistoryWithoutChain);
+        }
+
+        // E4: 모든 종료 기록의 대상 자리는 실재하고 닫혀 있으며, 한 자리에 기록은 하나다.
+        let mut targets: Vec<(StepRef, WillRef)> = Vec::new();
+        for ended in self.existences.values().flat_map(|e| e.journey().ended_wills()) {
+            let (will, target) = (ended.will().id(), ended.will().target());
+            let cycle = self.all_cycles().find(|cycle| cycle.id().to_ref() == target.cycle());
+            let node = cycle.and_then(|cycle| cycle.steps().node(crate::walk::NodeId::from_raw(target.step())));
+            let (Some(cycle), Some(node)) = (cycle, node) else {
+                return Err(ProjectError::EndedWillWithoutStep { will, target });
+            };
+            if !node.is_closed() {
+                return Err(ProjectError::EndedWillOnOpenStep { will, target });
+            }
+            if let Some((_, first)) = targets.iter().find(|(seen, _)| *seen == target) {
+                return Err(ProjectError::TwoEndedWillsForOneStep { step: target, first: *first, second: will });
+            }
+            targets.push((target, will));
+
+            // E7: 미달성 종료는 Experiment 의 자리에만 있다. Interview 에는 실패 경로가 없다.
+            if ended.result() == EndResult::Unachieved && cycle.kind() != CycleKind::Experiment {
+                return Err(ProjectError::UnachievedOutsideExperiment { will, target, kind: cycle.kind() });
+            }
+        }
+
+        // E8: 미달성 종료가 있는 Experiment 는 실패로만 닫히고, 그 안에서 다시 시도하지 않는다.
+        for cycle in self.all_cycles().filter(|cycle| cycle.kind() == CycleKind::Experiment) {
+            let id = cycle.id().to_ref();
+            let Some(first) = self.unachieved_in(id) else { continue };
+            let (will, since) = (first.will().id(), first.will().target().step());
+            for node in cycle.steps().nodes() {
+                let step = cycle.step_ref(node.id);
+                if node.id.raw() > since {
+                    // 그 뒤에 난 실험 안 되돌아가기 갈래, 그리고 Analysis 뒤의 새 가설.
+                    let after_analysis = node.kind == NodeKind::Hypothesis
+                        && node.parent.and_then(|parent| cycle.steps().node(parent))
+                            .is_some_and(|parent| parent.kind == NodeKind::Analysis);
+                    if node.revisit_from.is_some() || after_analysis {
+                        return Err(ProjectError::UnachievedExperimentRetried { cycle: id, will, step });
+                    }
+                }
+                if node.id.raw() >= since && node.kind == NodeKind::Outcome {
+                    if let Some(report) = node.report.as_ref() {
+                        if !fails_and_closes(report) {
+                            return Err(ProjectError::UnachievedExperimentNotFailed { cycle: id, will, at: step.to_string() });
+                        }
+                    }
+                }
+            }
+            if let Some(report) = cycle.report() {
+                if report.get(VERDICT) != Some(FAILURE) {
+                    return Err(ProjectError::UnachievedExperimentNotFailed { cycle: id, will, at: id.to_string() });
+                }
+            }
+        }
         Ok(())
     }
 
@@ -587,7 +719,7 @@ impl Project {
             // ① 이름은 프로젝트 전체에서 유일하고, 발급기보다 앞서 있어야 한다.
             //    ② 그리고 같은 이름이 register 와 Done 목록에 동시에 있을 수 없다.
             let mut last_done: Option<WillRef> = None;
-            for will in journey.done_wills().iter().chain(journey.active_will()) {
+            for will in journey.ended_wills().iter().map(EndedWill::will).chain(journey.active_will()) {
                 let id = will.id();
                 if seen.contains(&id) {
                     return Err(ProjectError::DuplicateWill(id));
@@ -611,7 +743,7 @@ impl Project {
 
             // ④ Done 목록은 append-only 다. 한 존재는 한 번에 하나씩만 걸고 끝내므로
             //    끝낸 순서는 곧 발급 순서다 — 이름이 오름차순이 아니면 순서가 위조됐다.
-            for will in journey.done_wills() {
+            for will in journey.ended_wills().iter().map(EndedWill::will) {
                 if let Some(previous) = last_done
                     && previous.number() >= will.id().number()
                 {
@@ -679,9 +811,9 @@ impl Project {
         let journey = existence.journey();
         let index_of = |head: WillRef| {
             journey
-                .done_wills()
+                .ended_wills()
                 .iter()
-                .position(|will| will.id() == head)
+                .position(|ended| ended.will().id() == head)
         };
 
         // 판 번호가 오르면 Will 머리도 뒤로 가지 않는다. 앞선 판이 나중의 Done 을
@@ -712,7 +844,7 @@ impl Project {
         let current = existence
             .current_revision()
             .expect("서 있는 판이 실재하는지는 앞에서 이미 쟀다");
-        let last = journey.last_done_will().map(|will| will.id());
+        let last = journey.last_ended_will().map(|ended| ended.will().id());
         if current.will_head() != last {
             return Err(ProjectError::CurrentWillHeadIsNotTheLast {
                 existence: owner,
@@ -752,12 +884,13 @@ impl Project {
                     .journey()
                     .revision(journey.revision())
                     .and_then(|revision| revision.will_head());
+                // 결과 값과 무관하다(E5) — 미달성으로 끝난 행동도 그 자리를 닫은 판의 머리다.
                 let done = existence
                     .journey()
-                    .done_wills()
+                    .ended_wills()
                     .iter()
-                    .find(|will| will.target() == step)
-                    .map(|will| will.id());
+                    .find(|ended| ended.will().target() == step)
+                    .map(|ended| ended.will().id());
                 if head.is_none() || head != done {
                     return Err(ProjectError::JourneyDoesNotHoldItsWill {
                         step,
@@ -840,6 +973,8 @@ pub struct Closed {
     pub kind: NodeKind,
     pub will: WillRef,
     pub journey: JourneyRef,
+    /// 그 행동이 어떻게 끝났는가. 표시 없이 닫으면 언제나 달성이다.
+    pub result: EndResult,
 }
 
 /// 방금 닫은 Cycle — **판은 늘지 않는다.**
@@ -879,6 +1014,11 @@ impl Project {
             });
         }
 
+        // 미달성 종료가 기록된 실험 안에서는 다시 시도하지 않는다(계약 E8).
+        if let Some(refused) = self.retry_refused(kind) {
+            return Err(refused);
+        }
+
         // ③④ 문법 판정이 먼저다 — 거절되면 이름도 Will 도 나지 않는다.
         let cycle = next.cycles_mut().current_mut();
         cycle.open_step(kind)?;
@@ -908,7 +1048,29 @@ impl Project {
     /// Will 의 `done` 은 행동을 수행했다는 뜻이지 가설이 성공했다는 뜻이 아니다
     /// (Will Model §6) — 실패를 관측하고 닫는 Verify 도 제 행동은 끝낸 것이다.
     pub fn close_action_step(&mut self, report: Report) -> Result<Closed, ActionError> {
-        self.close_step_with(report, None, None, None)
+        self.close_step_with(report, None, None, None, None)
+    }
+
+    /// 실행형 Step 을 닫으며 **지목한 약속을 미달성으로 끝낸다.**
+    ///
+    /// 닫기의 조건은 달성 닫기와 하나도 다르지 않다 — Report 문법·승인 계획·소유가 그대로
+    /// 적용되고, 한 번의 교체로 Step·Report·종료 이력·Journey 판이 함께 바뀐다. 더해지는
+    /// 것은 셋이다: 형식이 종료 결과를 기록하는가, 지목한 약속이 지금 걸린 그 약속인가,
+    /// 그 자리가 Experiment 의 자리인가(Storage Transition Contract §4.4).
+    ///
+    /// Verify 는 이 문으로 닫히지 않는다 — [`Project::close_step_ending`] 이 세계와 함께 받는다.
+    pub fn close_action_step_unachieved(&mut self, report: Report, will: WillRef) -> Result<Closed, ActionError> {
+        self.close_step_with(report, None, None, None, Some(will))
+    }
+
+    /// 달성·미달성과 Verify 여부를 한 문으로 받는 닫기. `world` 는 열린 Verify 에서만 준다.
+    pub fn close_step_ending(
+        &mut self,
+        report: Report,
+        world: Option<ManifestAddress>,
+        unachieved: Option<WillRef>,
+    ) -> Result<Closed, ActionError> {
+        self.close_step_with(report, world, None, None, unachieved)
     }
 
     /// **Verify 를 닫으며 관측한 세계를 확정한다.**
@@ -930,7 +1092,7 @@ impl Project {
         report: Report,
         world: ManifestAddress,
     ) -> Result<Closed, ActionError> {
-        self.close_step_with(report, Some(world), None, None)
+        self.close_step_with(report, Some(world), None, None, None)
     }
 
     /// typed 시각 선언/기존 참조를 같은 도메인 close에 포함한다. 이미지 생성 등록은 아직 미노출.
@@ -940,14 +1102,96 @@ impl Project {
         world: Option<ManifestAddress>,
         visuals: crate::visual_report::registry::ReportVisuals,
     ) -> Result<Closed, ActionError> {
-        self.close_step_with(report, world, Some(visuals), None)
+        self.close_step_with(report, world, Some(visuals), None, None)
+    }
+
+    /// The same typed close, ending the named Will as unachieved when one is given.
+    #[cfg_attr(not(feature = "visual-authoring"), allow(dead_code))]
+    pub(crate) fn close_step_with_visuals_ending(
+        &mut self,
+        report: Report,
+        world: Option<ManifestAddress>,
+        visuals: crate::visual_report::registry::ReportVisuals,
+        unachieved: Option<WillRef>,
+    ) -> Result<Closed, ActionError> {
+        self.close_step_with(report, world, Some(visuals), None, unachieved)
     }
 
     pub(crate) fn close_verify_with_registry(
         &mut self, report: Report, world: ManifestAddress,
         registry: crate::visual_report::registry::VisualRegistry,
+        unachieved: Option<WillRef>,
     ) -> Result<Closed, ActionError> {
-        self.close_step_with(report, Some(world), None, Some(registry))
+        self.close_step_with(report, Some(world), None, Some(registry), unachieved)
+    }
+
+    /// **미달성 표시가 지금 이 프로젝트에서 받아들여질 수 있는가** — 닫기 전에 묻는다.
+    ///
+    /// 세 가지를 차례로 본다. 어느 것이든 거절하면 아무것도 바뀌지 않는다.
+    ///
+    /// ```text
+    /// ① 형식이 종료 결과를 기록하는가     4–7 이면 명시적 전환이 필요하다고 말하고 거절
+    /// ② 지목한 약속이 이미 끝났는가       끝난 자리와 결과를 알려 주며 거절 (재전송)
+    /// ③ 지목한 약속이 지금 걸린 약속인가   아니면 거절 — 그사이 열린 다른 자리를 닫지 않는다
+    /// ```
+    ///
+    /// ②를 「닫을 자리가 없다」보다 먼저 묻는 까닭은, 응답을 잃고 같은 요청을 다시 보낸 쪽이
+    /// 알아야 하는 것이 **그 종료가 이미 확정됐다**는 사실이기 때문이다.
+    pub fn check_unachieved_request(&self, asked: WillRef) -> Result<(), ActionError> {
+        if !self.end_history {
+            return Err(ActionError::EndHistoryUnsupported { format: crate::store::format_of(self) });
+        }
+        if let Some(ended) = self.ended_will(asked) {
+            return Err(ActionError::WillAlreadyEnded {
+                will: asked,
+                target: ended.will().target(),
+                result: ended.result(),
+            });
+        }
+        match self.active_will() {
+            Some(active) if active.id() == asked => Ok(()),
+            active => Err(ActionError::UnachievedWillMismatch {
+                asked,
+                active: active.map(|will| (will.id(), will.target())),
+            }),
+        }
+    }
+
+    /// 미달성 종료가 기록된 Experiment 에서 **같은 실험 안의 새 가설**을 여는가(계약 E8).
+    ///
+    /// 막는 것은 `analysis → hypothesis` 하나다. 문법이 요구하는 다음 자리(예: 미달성으로
+    /// 닫힌 Hypothesis 뒤의 Verify)는 그대로 열린다 — 단계를 건너뛰지 않는다.
+    fn retry_refused(&self, kind: NodeKind) -> Option<ActionError> {
+        if kind != NodeKind::Hypothesis {
+            return None;
+        }
+        let cycle = self.current_cycle();
+        if cycle.kind() != CycleKind::Experiment || cycle.is_closed() {
+            return None;
+        }
+        let here = cycle.steps().current().and_then(|id| cycle.steps().node(id))?;
+        if here.kind != NodeKind::Analysis || !here.is_closed() {
+            return None;
+        }
+        let ended = self.unachieved_in(cycle.id().to_ref())?;
+        Some(ActionError::UnachievedExperimentNoRetry {
+            cycle: cycle.id().to_ref(),
+            will: ended.will().id(),
+            step: ended.will().target(),
+        })
+    }
+
+    /// 지금 실제로 열 수 있는 Step 의 종류들 — **Cycle 의 문법에 종료 이력의 규칙을 더해서.**
+    ///
+    /// [`Cycle::openable_here`] 는 약속의 이력을 모른다. 안내가 그것만 읽으면 미달성 실험에서
+    /// 「hypothesis 를 열 수 있다」고 말하고, 그 말을 믿은 호출은 거절된다. 안내와 실행이 같은
+    /// 판정을 쓰도록 실행하는 그 함수([`Project::retry_refused`])에게 묻는다.
+    pub fn openable_here(&self) -> Vec<NodeKind> {
+        self.current_cycle()
+            .openable_here()
+            .into_iter()
+            .filter(|kind| self.retry_refused(*kind).is_none())
+            .collect()
     }
 
     fn close_step_with(
@@ -956,7 +1200,13 @@ impl Project {
         world: Option<ManifestAddress>,
         visuals: Option<crate::visual_report::registry::ReportVisuals>,
         prepared: Option<crate::visual_report::registry::VisualRegistry>,
+        unachieved: Option<WillRef>,
     ) -> Result<Closed, ActionError> {
+        // 지목 확인이 가장 먼저다 — 이미 끝난 약속의 재전송은 「닫을 자리가 없다」가 아니라
+        // 그 종료 사실로 답한다.
+        if let Some(asked) = unachieved {
+            self.check_unachieved_request(asked)?;
+        }
         self.no_pending_revisit()?;
         let mut next = self.clone();
         let owner = next.current_existence;
@@ -967,7 +1217,12 @@ impl Project {
         };
         let node = cycle.steps().node(at).expect("방금 자리를 받아 왔다");
         let (kind, target) = (node.kind, cycle.step_ref(at));
+        let (cycle_kind, cycle_ref) = (cycle.kind(), cycle.id().to_ref());
         self.check_plan_close(kind, &report).map_err(ActionError::Plan)?;
+        let result = match unachieved {
+            Some(_) => EndResult::Unachieved,
+            None => EndResult::Achieved,
+        };
 
         // ① 연 존재와 닫는 존재는 같아야 한다(Node Model §2).
         if node.existence != owner {
@@ -997,6 +1252,26 @@ impl Project {
                 here: target,
             });
         }
+        // E7: 미달성 종료는 Experiment 의 실행 약속에만 있다. Interview 의 응답 대기는 실패가
+        // 아니므로 미달성으로 끝낼 경로가 없다 — 열린 채 남는다.
+        if result == EndResult::Unachieved && cycle_kind != CycleKind::Experiment {
+            return Err(ActionError::UnachievedOutsideExperiment {
+                will: active.id(),
+                target,
+                kind: cycle_kind,
+            });
+        }
+        // E8 의 닫는 쪽: 미달성 종료가 있는(또는 지금 생기는) Experiment 의 Outcome 은
+        // `failure` · `close_cycle` 로만 닫힌다. Report 문법 판정 뒤에 본다 — 칸이 빠진
+        // Report 는 문법의 말로 먼저 거절된다.
+        let must_fail = match (kind, cycle_kind) {
+            (NodeKind::Outcome, CycleKind::Experiment) => match result {
+                EndResult::Unachieved => Some(active.id()),
+                EndResult::Achieved => self.unachieved_in(cycle_ref).map(|ended| ended.will().id()),
+            },
+            _ => None,
+        };
+        let fails = fails_and_closes(&report);
 
         // ⑧ 판의 번호를 먼저 정한다 — Node 에 적을 값이라 Report 검증보다 앞선다.
         //    아직 아무것도 바꾸지 않았다.
@@ -1021,8 +1296,11 @@ impl Project {
         next.cycles_mut()
             .current_mut()
             .close_step_into(report, journey, confirmed)?;
+        if let Some(will) = must_fail.filter(|_| !fails) {
+            return Err(ActionError::UnachievedExperimentMustFail { cycle: cycle_ref, will, step: target });
+        }
 
-        // ⑥⑦ 같은 객체를 Done 목록 끝으로 **옮긴다** — 베끼지 않는다.
+        // ⑥⑦ 같은 객체를 종료 이력 끝으로 **옮긴다** — 베끼지 않고, 약속은 고치지 않는다.
         let existence = next.existence_mut(owner).expect("방금 읽은 존재다");
         let base = existence
             .current_revision()
@@ -1030,7 +1308,7 @@ impl Project {
             .clone();
         let will = existence
             .journey_mut()
-            .complete_active_will()
+            .end_active_will(result)
             .expect("방금 걸려 있는 것을 봤다");
 
         // ⑨ 이전 머리들을 그대로 물려받고 Will 머리만 옮긴다.
@@ -1046,6 +1324,7 @@ impl Project {
             kind,
             will,
             journey,
+            result,
         })
     }
 
@@ -1195,7 +1474,50 @@ pub enum ActionError {
         kind: CycleKind,
         source: CycleTargetError,
     },
+
+    // ── 미달성 종료 (Storage Transition Contract §4) ──────────────────────
+    /// 이 프로젝트의 저장 형식은 종료 결과를 기록하지 않는다 — 명시적 전환이 필요하다.
+    EndHistoryUnsupported { format: u32 },
+    /// 지목한 약속이 지금 걸린 약속이 아니다. `active` 는 지금 걸린 약속과 그 자리다.
+    UnachievedWillMismatch {
+        asked: WillRef,
+        active: Option<(WillRef, StepRef)>,
+    },
+    /// 지목한 약속은 이미 끝났다 — 결과는 바뀌지 않는다.
+    WillAlreadyEnded {
+        will: WillRef,
+        target: StepRef,
+        result: EndResult,
+    },
+    /// 미달성 종료는 Experiment 의 자리에만 쓴다.
+    UnachievedOutsideExperiment {
+        will: WillRef,
+        target: StepRef,
+        kind: CycleKind,
+    },
+    /// 미달성 종료가 있는 Experiment 의 Outcome 이 `failure` · `close_cycle` 이 아니다.
+    UnachievedExperimentMustFail {
+        cycle: CycleRef,
+        will: WillRef,
+        step: StepRef,
+    },
+    /// 미달성 종료가 있는 Experiment 안에서 새 가설을 열려 했다.
+    UnachievedExperimentNoRetry {
+        cycle: CycleRef,
+        will: WillRef,
+        step: StepRef,
+    },
 }
+
+/// Outcome Report 가 `failure` · `close_cycle` 인가 — E8 이 닫을 때와 읽을 때 함께 쓰는 판정.
+fn fails_and_closes(report: &Report) -> bool {
+    report.get(VERDICT) == Some(FAILURE) && report.get(NEXT_ACTION) == Some(CLOSE_CYCLE)
+}
+
+const VERDICT: &str = "verdict";
+const FAILURE: &str = "failure";
+const NEXT_ACTION: &str = "next_direction.action";
+const CLOSE_CYCLE: &str = "close_cycle";
 
 impl From<CycleError> for ActionError {
     fn from(err: CycleError) -> Self {
@@ -1235,6 +1557,13 @@ impl std::fmt::Display for ActionError {
             ActionError::CycleReport { source, .. } => write!(f, "{source}"),
             ActionError::CycleDirection { source, .. } => write!(f, "{source}"),
             ActionError::RevisitPending { from, target } => f.write_str(&crate::tr!("action.revisit_pending", from = from, target = target)),
+            ActionError::EndHistoryUnsupported { format } => f.write_str(&crate::tr!("action.unachieved_needs_conversion", format = format)),
+            ActionError::UnachievedWillMismatch { asked, active: Some((will, target)) } => f.write_str(&crate::tr!("action.unachieved_mismatch", asked = asked, will = will, target = target)),
+            ActionError::UnachievedWillMismatch { asked, active: None } => f.write_str(&crate::tr!("action.unachieved_no_active", asked = asked)),
+            ActionError::WillAlreadyEnded { will, target, result } => f.write_str(&crate::tr!("action.will_already_ended", will = will, target = target, result = result)),
+            ActionError::UnachievedOutsideExperiment { will, target, kind } => f.write_str(&crate::tr!("action.unachieved_not_experiment", will = will, target = target, kind = kind)),
+            ActionError::UnachievedExperimentMustFail { cycle, will, step } => f.write_str(&crate::tr!("action.unachieved_must_fail", cycle = cycle, will = will, step = step)),
+            ActionError::UnachievedExperimentNoRetry { cycle, will, step } => f.write_str(&crate::tr!("action.unachieved_no_retry", cycle = cycle, will = will, step = step)),
         }
     }
 }
@@ -1347,6 +1676,40 @@ pub enum ProjectError {
         journey: JourneyRef,
         head: Option<WillRef>,
         expected: Option<WillRef>,
+    },
+
+    // ── 종료 이력 (형식 8 이상) ───────────────────────────────────────────
+    /// 종료 결과를 기록하지 않는 형식에 미달성 기록이 있다.
+    UnachievedWithoutEndHistory(WillRef),
+    /// 종료 이력 형식인데 Chain 이 없다.
+    EndHistoryWithoutChain,
+    /// 종료 기록의 대상 자리가 없다.
+    EndedWillWithoutStep { will: WillRef, target: StepRef },
+    /// 종료 기록의 대상 자리가 아직 열려 있다.
+    EndedWillOnOpenStep { will: WillRef, target: StepRef },
+    /// 한 자리를 대상으로 한 종료 기록이 둘이다.
+    TwoEndedWillsForOneStep {
+        step: StepRef,
+        first: WillRef,
+        second: WillRef,
+    },
+    /// 미달성 종료가 Experiment 가 아닌 Cycle 의 자리를 향한다.
+    UnachievedOutsideExperiment {
+        will: WillRef,
+        target: StepRef,
+        kind: CycleKind,
+    },
+    /// 미달성 종료 뒤에 같은 실험 안에서 다시 시도한 자리가 있다.
+    UnachievedExperimentRetried {
+        cycle: CycleRef,
+        will: WillRef,
+        step: StepRef,
+    },
+    /// 미달성 종료가 있는 실험의 Outcome 또는 Cycle 판정이 실패가 아니다.
+    UnachievedExperimentNotFailed {
+        cycle: CycleRef,
+        will: WillRef,
+        at: String,
     },
 
     // ── Artifact 세계 ─────────────────────────────────────────────────────
@@ -1544,6 +1907,42 @@ impl std::fmt::Display for ProjectError {
                  행동은 {} 다 — 실행형 Close 는 방금 끝낸 행동을 그 판의 머리로 둔다",
                 or_none(*head),
                 or_none(*expected)
+            ),
+
+            ProjectError::UnachievedWithoutEndHistory(will) => write!(
+                f,
+                "{will} 이(가) 미달성으로 적혀 있는데 이 저장 형식은 종료 결과를 기록하지 않는다"
+            ),
+            ProjectError::EndHistoryWithoutChain => write!(
+                f,
+                "종료 이력 형식인데 Chain 이 없다 — 종료 이력은 Chain 형식에만 있다"
+            ),
+            ProjectError::EndedWillWithoutStep { will, target } => write!(
+                f,
+                "종료 기록 {will} 의 대상 {target} 이(가) 없다 — 종료 기록은 닫힌 자리 하나를 가리킨다"
+            ),
+            ProjectError::EndedWillOnOpenStep { will, target } => write!(
+                f,
+                "종료 기록 {will} 의 대상 {target} 이(가) 아직 열려 있다 — 약속은 그 자리가 닫히면서 끝난다"
+            ),
+            ProjectError::TwoEndedWillsForOneStep { step, first, second } => write!(
+                f,
+                "{step} 을(를) 대상으로 한 종료 기록이 둘이다 ({first}, {second}) — 한 자리의 약속은 한 번 끝난다"
+            ),
+            ProjectError::UnachievedOutsideExperiment { will, target, kind } => write!(
+                f,
+                "{will} 이(가) {target} 에서 미달성으로 끝났다는데 그 Cycle 은 {kind} 다 — \
+                 미달성 종료는 Experiment 의 자리에만 있다"
+            ),
+            ProjectError::UnachievedExperimentRetried { cycle, will, step } => write!(
+                f,
+                "{cycle} 에는 미달성 종료({will})가 있는데 그 뒤에 {step} 이(가) 같은 실험 안의 \
+                 새 시도로 열렸다 — 미달성 종료가 있는 실험은 그 안에서 다시 시도하지 않는다"
+            ),
+            ProjectError::UnachievedExperimentNotFailed { cycle, will, at } => write!(
+                f,
+                "{cycle} 에는 미달성 종료({will})가 있는데 {at} 의 판정이 failure · close_cycle 이 \
+                 아니다 — 미달성 종료가 있는 실험은 실패로만 닫힌다"
             ),
 
             ProjectError::UnknownSnapshot { at, world } => write!(

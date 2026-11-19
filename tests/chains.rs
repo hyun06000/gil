@@ -53,7 +53,7 @@ mod enabled {
         ));
         save(&project, &path).unwrap();
         let first = yaml(&path);
-        assert_eq!(first["format"], Value::from(6));
+        assert_eq!(first["format"], Value::from(common::started_format()));
         assert!(first.get("cycles").is_none(), "no orphan root Cycle graph");
         project = common::bootstrap_from(load(spec(), &path).unwrap());
         let open = project
@@ -188,11 +188,11 @@ mod enabled {
         let p = common::bootstrap().prepare_visual_upgrade().unwrap();
         save(&p, &path).unwrap();
         let valid = yaml(&path);
-        assert_eq!(valid["format"], Value::from(7));
+        assert_eq!(valid["format"], Value::from(common::started_format() + 1), "the odd format carries the visual registry");
         assert!(load(spec(), &path).unwrap().visual_state().is_some());
         for variant in 0..2 {
             let mut forged = valid.clone();
-            if variant == 0 { forged["format"] = Value::from(6); }
+            if variant == 0 { forged["format"] = Value::from(common::started_format()); }
             else { forged.as_mapping_mut().unwrap().remove(Value::from("visuals")); }
             write(&path, &forged);
             let before = std::fs::read(&path).unwrap();
@@ -223,6 +223,7 @@ mod enabled {
             v["cycles"] = v["chains"]["nodes"][0]["cycles"].clone();
             v.as_mapping_mut().unwrap().remove(Value::from("chains"));
             v["format"] = Value::from(if visual { 5 } else { 4 });
+            common::historical_done_list(&mut v);
             write(&path, &v);
             let mut old = load(spec(), &path).unwrap();
             assert!(old.current_chain().is_none());

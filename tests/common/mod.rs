@@ -587,6 +587,44 @@ pub fn private_storage(root: &Path) {
     let _ = root;
 }
 
+/// The stored name of the Journey's end list in projects this build STARTS: `ended_wills` when
+/// the build records end results (format 8/9), `done_wills` otherwise (formats 4–7).
+pub fn will_history_key() -> &'static str {
+    if cfg!(feature = "will-end-history") { "ended_wills" } else { "done_wills" }
+}
+
+/// Rewrites a stored file's Journeys into the **historical** list shape of formats 4–7:
+/// `ended_wills` becomes `done_wills` at the same position and each record loses `end_result`.
+///
+/// For tests that author a synthetic format 4–7 record from what this build starts. Never a
+/// migration: it refuses a record that is not `achieved`, because that meaning has no place in
+/// the historical shape. A build that already writes `done_wills` is left as it is.
+pub fn historical_done_list(file: &mut serde_norway::Value) {
+    use serde_norway::{Mapping, Value};
+    for (_, existence) in file["existences"].as_mapping_mut().expect("existences") {
+        let journey = existence["journey"].as_mapping_mut().expect("journey");
+        let renamed: Mapping = journey.iter().map(|(key, value)| {
+            if key.as_str() != Some("ended_wills") { return (key.clone(), value.clone()); }
+            let done = value.as_sequence().expect("end history").iter().map(|record| {
+                let mut record = record.as_mapping().expect("end record").clone();
+                let result = record.remove(Value::from("end_result"));
+                assert_eq!(result.as_ref().and_then(Value::as_str), Some("achieved"),
+                    "only achieved ends exist in a format 4–7 record");
+                Value::Mapping(record)
+            }).collect();
+            (Value::from("done_wills"), Value::Sequence(done))
+        }).collect();
+        *journey = renamed;
+    }
+}
+
+/// The format a project STARTED by this build declares, without the visual registry.
+pub fn started_format() -> u32 {
+    if cfg!(feature = "will-end-history") { gil::END_HISTORY_FORMAT }
+    else if cfg!(feature = "chain-core") { gil::CHAIN_FORMAT }
+    else { gil::FORMAT }
+}
+
 /// Address the actual containment shape when testing stored Cycle invariants in either profile.
 pub fn stored_cycles(file: &mut serde_norway::Value) -> &mut serde_norway::Value {
     if file.get("chains").is_some() {

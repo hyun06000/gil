@@ -53,7 +53,9 @@ jobs:
           - runner: windows-2025
             shell: pwsh
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    # The opt-in end-history steps add about 10 minutes on Windows (measured on PR #172: the job
+    # took 19-22 minutes before them and was cut at 30 while compiling their last profile).
+    timeout-minutes: 45
     env:
       RUSTUP_TOOLCHAIN: 1.97.1
     defaults:
@@ -89,6 +91,8 @@ jobs:
         run: node tools/chain-resume-benchmark/run.mjs default "${{ runner.temp }}/gil-resume-default" target
       - name: Actual Chain, legacy preservation and domain regressions
         run: cargo test --locked -p gil --features chain-core --test chains --test chain_closing --test chain_handoff --test cycles --test context --test context_profiles --test will --test walk --test resume_guidance
+      - name: A build without the end history refuses formats 8 and 9 untouched and never reads an unachieved request as a close (synthetic)
+        run: node tools/ci/expect-tests.mjs 3 cargo test --locked -p gil --features chain-core --test will_end_unsupported
       - name: Repeated failure and branch context inside a Chain
         run: cargo test --locked -p gil --features chain-core --test revisit cumulative_context_survives_pending_new_branch_success_and_process_restart -- --exact
       - name: Private visual creation unit contracts
@@ -158,6 +162,28 @@ jobs:
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,recovery-auto-approval --test recovery_approval_mode
       - name: Compile all Core targets with opt-in recovery approval (not a product profile)
         run: cargo build --locked -p gil --all-targets --features approved-plan,visual-authoring,recovery-auto-approval
+      - name: Single end history, domain and store contracts of new format-8 projects (opt-in, not a product profile; E1–E9, forged records incl. null list keys, formats 4 and 6 preserved; synthetic)
+        run: node tools/ci/expect-tests.mjs 17 cargo test --locked -p gil --features will-end-history --test will_end
+      - name: Unachieved end over real files, the CLI and the stdio process (evidence and dirty gates kept, save failure, resend, restart, read surfaces; synthetic, no model evaluation)
+        run: node tools/ci/expect-tests.mjs 7 cargo test --locked -p gil --features will-end-history --test will_end_session
+      - name: Existing Chain, Will, context and stdio suites on format 8
+        run: cargo test --locked -p gil --features will-end-history --test chains --test chain_closing --test chain_handoff --test cycles --test context --test context_profiles --test will --test walk --test resume_guidance --test mcp
+      - name: End history library contracts (tool surface offers the marker only here)
+        run: cargo test --locked -p gil --features will-end-history --lib -- --test-threads=1
+      - name: Compile all Core targets with the opt-in end history (not a product profile)
+        run: cargo build --locked -p gil --all-targets --features will-end-history
+      - name: End history with the visual registry (format 9) and product safety, library contracts including the typed close
+        run: cargo test --locked -p gil --features will-end-history,visual-authoring,product-safety --lib -- --test-threads=1
+      - name: Format 9 unachieved end through the typed visual close over the real stdio process (null marker refused in both shapes, resend, restart; synthetic)
+        run: node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil --features will-end-history,visual-authoring,product-safety --test will_end_visual
+      - name: Unachieved end with product safety, the failure does not approve recovery (synthetic)
+        run: node tools/ci/expect-tests.mjs 7 cargo test --locked -p gil --features will-end-history,visual-authoring,product-safety --test will_end_session
+      - name: Private visual creation, Chain handoff, attachments and the native MCP roundtrip on format 9 (synthetic)
+        run: cargo test --locked -p gil --features will-end-history,visual-authoring,product-safety --test visual_start --test chain_resume_benchmark --test mcp --test chain_handoff --test visual_attachment
+      - name: Compile all Core targets with the end history in the development product profile (not a release profile)
+        run: cargo build --locked -p gil --all-targets --features will-end-history,visual-authoring,product-safety
+      - name: Monitor fixtures with the end history in the approval profile (the additive will_end field is checked, the committed product fixtures stay unchanged)
+        run: node tools/ci/expect-tests.mjs 2 cargo test --locked -p gil --features will-end-history,approved-plan,visual-authoring,product-safety --test chain_monitor_fixtures
       - name: Shared workflow text, Skill catalog and scenario evaluator contracts (pure Node, no Core process)
         run: node --test plugins/gil-companion-prototype/skill.test.mjs plugins/gil-companion-prototype/workflow.test.mjs tools/scenarios/proxy.test.mjs tools/scenarios/redact.test.mjs tools/scenarios/report.test.mjs tools/scenarios/rpc.test.mjs tools/scenarios/scorer-cli.test.mjs tools/scenarios/trace-score.test.mjs tools/scenarios/approval-link.test.mjs tools/scenarios/state-path.test.mjs
       - name: CI cache and ordering contracts

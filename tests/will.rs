@@ -310,8 +310,9 @@ fn will_names_come_from_the_project_root_and_are_never_reused() {
         walked(&mut project, kind);
         names.push(
             journey(&project)
-                .last_done_will()
+                .last_ended_will()
                 .expect("방금 끝냈다")
+                .will()
                 .id()
                 .to_string(),
         );
@@ -324,7 +325,7 @@ fn will_names_come_from_the_project_root_and_are_never_reused() {
     let before = project.next_will_id();
     walked(&mut project, NodeKind::Define);
     assert_eq!(
-        journey(&project).last_done_will().unwrap().id().number(),
+        journey(&project).last_ended_will().unwrap().will().id().number(),
         before,
         "다음 Cycle 이 이름을 되감았다"
     );
@@ -522,7 +523,9 @@ fn a_done_will_that_is_also_in_the_register_is_refused() {
     opened(&mut project, NodeKind::Interpretation);
 
     let err = tampered(&project, "will-in-both", |file| {
-        let done = x1(file)["done_wills"][0].clone();
+        let mut done = x1(file)[common::will_history_key()][0].clone();
+        // The register holds a plain Will: an end record's result does not travel back with it.
+        done.as_mapping_mut().unwrap().remove(Value::from("end_result"));
         x1(file)["active_will"] = done;
     });
     assert!(matches!(err, ProjectError::DuplicateWill(_)), "{err}");
@@ -537,8 +540,8 @@ fn done_wills_in_a_forged_order_are_refused() {
     walked(&mut project, NodeKind::Interpretation);
 
     let err = tampered(&project, "will-reordered", |file| {
-        let list = x1(file)["done_wills"].as_sequence().unwrap().clone();
-        x1(file)["done_wills"] =
+        let list = x1(file)[common::will_history_key()].as_sequence().unwrap().clone();
+        x1(file)[common::will_history_key()] =
             Value::Sequence(list.into_iter().rev().collect());
     });
     assert!(

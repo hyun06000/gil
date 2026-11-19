@@ -18,6 +18,12 @@ approved-plan = ["chain-core"]
 # Chains keep their recorded contract; a build without this feature refuses the new records.
 # Opt-in: no release profile enables it until that publication is decided separately.
 exploration-flow = ["approved-plan"]
+# Implementation order 1a (Storage Transition Contract §3–§4): projects STARTED by this build use
+# format 8 (9 with the visual registry). Their Journey keeps one end history (`ended_wills`) whose
+# records carry `end_result: achieved | unachieved`, and `gil close` accepts the unachieved marker.
+# Formats 4–7 keep their own shape and are never converted by reading or running them; a build
+# without this feature refuses 8/9 as an unknown format. Opt-in: no release profile enables it.
+will-end-history = ["chain-core"]
 # Development-only authoring surface; no default format change or migration.
 visual-authoring = []
 # Product builds keep recording and read surfaces, but refuse destructive Artifact rollback until

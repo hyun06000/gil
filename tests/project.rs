@@ -151,7 +151,7 @@ fn there_is_no_will_yet() {
 
     assert_eq!(journey["active_will"], Value::Null, "Active Will 은 없다");
     assert_eq!(
-        journey["done_wills"],
+        journey[common::will_history_key()],
         Value::Sequence(Vec::new()),
         "Done Will 은 비어 있다"
     );

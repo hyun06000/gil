@@ -95,7 +95,7 @@ related:
   만들려 했지만 못 만들었으면 missing 에 이유와 follow_up 을 적는다. 없는 것을 불필요로 바꾸지 않는다.
 
 [불변식]
-  format 5 이상의 Verify 는 선언 없이 닫히지 않는다.
+  시각 보고서 형식(시각 등록부가 있는 홀수 번호 형식)의 Verify 는 선언 없이 닫히지 않는다.
   evidence_files 에 이미지 파일이 있으면 not_needed 로 닫히지 않는다 — 첨부하거나 missing 으로 적는다.
   Verify 가 자료를 첨부했으면 그 Cycle 의 Analysis 와 Cycle Report 는 그중 하나 이상을 인용해야 닫힌다.
   인용은 receipt 또는 gil_report_visuals 가 돌려준 owner · asset_id · sha256 을 stored source 로 적고

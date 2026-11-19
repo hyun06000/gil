@@ -304,10 +304,14 @@ function drawNodes() {
       button.dataset.here = String(node.here);
       const visuals = visualBadge(node.visuals);
       if (visuals) { button.dataset.visuals = node.visuals.state; button.dataset.visualCount = visuals.count; }
+      // The recorded end result of the Step's Will. The mark is a label of the record, not a
+      // verdict: the reason is the Step's Report. Nothing is drawn when the record has none.
+      const ended = willEndLabel(node.willEnd);
+      if (ended) button.dataset.willEnd = node.willEnd;
       button.setAttribute(
         "aria-label",
         `${word(STEP_KIND, node.stepKind)} · ${node.ref}` +
-          `${node.here ? t('ui.here') : ""}${node.summary ? ` · ${node.summary}` : ""}${visuals ? ` · ${visuals.label}` : ""}`,
+          `${node.here ? t('ui.here') : ""}${node.summary ? ` · ${node.summary}` : ""}${visuals ? ` · ${visuals.label}` : ""}${ended ? ` · ${ended}` : ""}`,
       );
       button.onclick = () => selectStep(node.ref);
     }
@@ -320,6 +324,13 @@ function drawNodes() {
 }
 
 /** 기록된 선언만 말한다. 선언이 없는 Report 는 배지도 없다 — 「없음」을 지어내지 않는다. */
+/** Words for a Step whose Will has a recorded end result; null when the record carries none. */
+export function willEndLabel(willEnd) {
+  if (willEnd === 'unachieved') return t('ui.will_unachieved');
+  if (willEnd === 'achieved') return t('ui.will_achieved');
+  return null;
+}
+
 export function visualBadge(visuals) {
   if (!visuals || typeof visuals !== 'object') return null;
   if (visuals.state === 'attached' || visuals.state === 'references') {
@@ -386,6 +397,13 @@ function drawCard() {
     badge = one.report ? visualBadge(one.report.visuals) : null;
   }
   card.append(head, name, said);
+  // Only the unachieved end is called out on the card; an achieved one needs no extra line.
+  if (step && !seat.selectedCycle && step.will_end === 'unachieved') {
+    const ended = document.createElement("p");
+    ended.className = "card-will-end";
+    ended.textContent = t('ui.card_will_unachieved');
+    card.append(ended);
+  }
   if (badge) {
     const visuals = document.createElement("p");
     visuals.className = "card-visuals";

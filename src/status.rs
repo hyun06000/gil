@@ -69,6 +69,17 @@ pub fn where_now(session: &ProjectSession, state_is_elsewhere: bool) -> String {
         Some(will) => out.push_str(&tr!("status.will", will = will.id(), target = will.target(), action = first_line(will.next_action()))),
         None => out.push_str(text("status.will_none")),
     }
+    // 종료 결과를 기록하는 형식(8/9)에서만: 마지막으로 끝난 약속과 그 결과, 그리고 이 실험에
+    // 미달성 종료가 있는지. 형식 4–7 의 화면은 이전과 같은 글자다 — 그 형식은 결과를 적지 않는다.
+    if session.project().records_end_results() {
+        if let Some(ended) = existence.journey().last_ended_will() {
+            out.push_str(&tr!("status.last_ended", will = ended.will().id(), target = ended.will().target(),
+                result = crate::context::end_result_label(ended.result())));
+        }
+        if let Some(ended) = session.project().unachieved_in(cycle.id().to_ref()) {
+            out.push_str(&tr!("status.unachieved_experiment", cycle = cycle.id().to_ref(), will = ended.will().id(), target = ended.will().target()));
+        }
+    }
 
     // ⑤ 지금 세계는 기준과 같은가 — **짧은 nudge 하나.**
     out.push_str(&world_nudge(session));
@@ -77,7 +88,7 @@ pub fn where_now(session: &ProjectSession, state_is_elsewhere: bool) -> String {
     match session.project().current_chain() {
         Some(chain) if chain.is_closed() => out.push_str(&tr!("status.chain_verdict", verdict = chain.report().unwrap().get("verdict").unwrap(), exit = chain.exit_snapshot().unwrap())),
         Some(chain) if chain.awaiting_report() => out.push_str(&chain.close_hint()),
-        _ => out.push_str(&crate::next_moves(cycles)),
+        _ => out.push_str(&crate::context::next_moves_of(session.project())),
     }
     out
 }

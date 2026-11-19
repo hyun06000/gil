@@ -154,6 +154,9 @@ export function place(view, collapsed, orientation = "vertical") {
         state: step.state,
         summary: step.summary,
         visuals: step.visuals || null, // {state, count} as recorded; never inferred
+        // How this Step's Will ended ("achieved" | "unachieved"), only when the record carries it
+        // (storage formats 8/9). Absent never means unachieved.
+        willEnd: step.will_end === 'achieved' || step.will_end === 'unachieved' ? step.will_end : null,
         here: step.step_ref === view.current.step_ref,
         row,
         col,

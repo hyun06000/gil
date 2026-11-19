@@ -1013,9 +1013,19 @@ mod tests {
         }
     }
 
+    /// 이 시험 실행만의 자리. **실행(프로세스)마다 다른 이름**을 쓴다.
+    ///
+    /// `a_snapshot` 은 상태 파일이 이미 있으면 새로 만들지 않고 연다. 이름이 실행 사이에 같으면
+    /// 다른 기능 구성으로 지은 앞선 실행의 기록(예: 승인 계획 Chain)을 이 빌드가 읽게 되고, 이
+    /// 빌드가 그 기록을 거절하는 것은 제품이 맞게 동작한 것이지 이 시험이 재려던 것이 아니다.
+    /// 같은 실행 안의 시험들은 같은 이름을 함께 쓴다. 다른 실행·다른 세션의 자리는 건드리지 않는다.
+    fn serve_root(label: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("gil-serve-{}-{label}", std::process::id()))
+    }
+
     /// 진짜 Snapshot 하나 — 시험마다 제 자리에서.
     fn a_snapshot(label: &str) -> super::super::MonitorSnapshot {
-        let root = std::env::temp_dir().join(format!("gil-serve-{label}"));
+        let root = serve_root(label);
         if !root.join(crate::STATE_PATH).exists() {
             let _ = std::fs::remove_dir_all(&root);
             std::fs::create_dir_all(&root).expect("시험이 쓸 자리를 만든다");
@@ -1530,7 +1540,7 @@ mod tests {
 
     #[test]
     fn the_real_observer_releases_the_project_between_looks() {
-        let root = std::env::temp_dir().join("gil-serve-real-observer");
+        let root = serve_root("real-observer");
         let _ = a_snapshot("real-observer");
         let mut observer = ProjectObserver::new(
             crate::rules::RuleSet::builtin().expect("함께 실린 명세"),
@@ -1861,7 +1871,7 @@ mod tests {
     #[test]
     fn closing_ends_the_worker_and_leaves_nothing_behind() {
         let label = "closing-leaves-nothing";
-        let root = std::env::temp_dir().join(format!("gil-serve-{label}"));
+        let root = serve_root(label);
         let (mut window, _watch, _hand) = open(label);
         let address = window.address();
         let before = std::fs::read(root.join("a.txt")).expect("세계를 읽는다");
@@ -1906,7 +1916,7 @@ mod tests {
     #[test]
     fn nothing_about_the_window_reaches_the_disk() {
         let label = "nothing-on-disk";
-        let root = std::env::temp_dir().join(format!("gil-serve-{label}"));
+        let root = serve_root(label);
         let (mut window, _watch, _hand) = open(label);
         let token = window.path().trim_start_matches('/').to_string();
         let port = window.address().port().to_string();
@@ -2657,7 +2667,7 @@ mod tests {
     fn after_waiting_the_project_is_free_and_unchanged() {
         let _line = ONE_AT_A_TIME.lock().unwrap_or_else(|held| held.into_inner());
         let label = "signal-project-intact";
-        let root = std::env::temp_dir().join(format!("gil-serve-{label}"));
+        let root = serve_root(label);
         let _ = a_snapshot(label); // 자리를 세운다
         let world = std::fs::read(root.join("a.txt")).expect("세계를 읽는다");
         let state = std::fs::read(root.join(crate::STATE_PATH)).expect("상태를 읽는다");

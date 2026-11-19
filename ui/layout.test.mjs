@@ -200,3 +200,18 @@ test('plan nodes carry the recorded visual summary and never invent one', () => 
   const second = plan.nodes.find(n => n.ref === cycle.steps[1]?.step_ref) || plan.nodes.find(n => n.kind === 'step' && n.ref !== first.ref);
   assert.equal(second.visuals, null);
 });
+
+// Storage formats 8/9 record how a Step's Will ended. The node carries that label only when the
+// record does; a missing or unknown value never becomes "unachieved".
+test('plan nodes carry the recorded Will end result and never invent one', () => {
+  const view = structuredClone(fixtures[0]);
+  const cycle = view.timeline.find(c => c.steps.length >= 2);
+  cycle.steps[0].will_end = 'unachieved';
+  cycle.steps[1].will_end = 'abandoned';
+  const plan = place(view, new Set(), 'vertical');
+  const node = ref => plan.nodes.find(n => n.ref === ref);
+  assert.equal(node(cycle.steps[0].step_ref).willEnd, 'unachieved');
+  assert.equal(node(cycle.steps[1].step_ref).willEnd, null, 'an unknown value is not drawn');
+  const untouched = place(structuredClone(fixtures[0]), new Set(), 'vertical');
+  assert.ok(untouched.nodes.filter(n => n.kind === 'step').every(n => n.willEnd === null), 'formats 4–7 carry no end result');
+});

@@ -300,6 +300,12 @@ pub struct StepV1 {
     /// Absent when no declaration was recorded (open Report, legacy record, non-visual format).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visuals: Option<ReportVisualsSummaryV1>,
+    /// Additive v1 extension: how this Step's Will ended — `achieved` or `unachieved`.
+    /// Present only for closed Steps of a project whose storage format records end results
+    /// (8/9). Absent for formats 4–7 and for open Steps; absence never means "unachieved". The
+    /// reason is not here: it is the Step's Report, read through the detail view.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub will_end: Option<String>,
 }
 
 /// Count and state only; image metadata and bytes stay in the App-only visual reads.
@@ -525,6 +531,7 @@ fn step(facts: &StepFacts) -> Result<StepV1, ViewError> {
         // **원문 그대로.** 자르는 것은 그리는 쪽의 일이다.
         summary: facts.summary.clone(),
         visuals: facts.visuals.as_ref().map(visuals_summary),
+        will_end: facts.will_end.map(|result| result.as_str().to_string()),
     })
 }
 
@@ -1352,7 +1359,7 @@ mod tests {
             "revisit_from_cycle_ref", "schema_version", "state", "step_kind", "step_ref",
             "steps", "success_condition", "summary", "target_cycle_ref", "target_step_ref",
             "timeline", "verdict", "verify_can_confirm", "will_ref", "world",
-            "visuals", "count",
+            "visuals", "count", "will_end",
         ];
         for name in &seen {
             assert!(allowed.contains(name), "View 에 모르는 칸 {name:?} 이 생겼다");

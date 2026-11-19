@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use crate::{
     ActionContract, CloseContract, CycleKind, NodeKind, ProjectSession, Refusal, Report, RuleSet,
     SessionError, StoreError, context, render_monitor_html,
-    render_monitor_text, story, with_help,
+    render_monitor_text, story_of, with_help,
 };
 #[cfg(not(feature = "product-safety"))]
 use crate::Usage;
@@ -98,7 +98,7 @@ fn run(ctx: &Invocation<'_>, args: &[String]) -> Result<String, String> {
         "open" if asks_for_help(args.get(1)) => open_help(ctx),
         "close" if asks_for_help(args.get(1)) => close_help(ctx),
         "open" => open(ctx, args.get(1)),
-        "close" => close(ctx),
+        "close" => close(ctx, &args[1..]),
         "restore" => restore(ctx, args.get(1)),
         "revisit" => revisit(ctx, args.get(1)),
         "status" => status(ctx),
@@ -108,10 +108,10 @@ fn run(ctx: &Invocation<'_>, args: &[String]) -> Result<String, String> {
             let session = open_session(ctx)?;
             let project = session.project();
             if project.chains().is_empty() {
-                Ok(story(project.cycles()))
+                Ok(story_of(project, project.cycles()))
             } else {
                 Ok(project.chains().iter().map(|chain|
-                    format!("{} · {}\n{}", chain.id(), if chain.is_closed() { "closed" } else { "open" }, story(chain.cycles()))
+                    format!("{} · {}\n{}", chain.id(), if chain.is_closed() { "closed" } else { "open" }, story_of(project, chain.cycles()))
                 ).collect::<Vec<_>>().join("\n"))
             }
         }
@@ -451,7 +451,7 @@ fn place(session: &Session) -> Place {
         return Place::CloseThisStep;
     }
 
-    let openable = cycle.openable_here();
+    let openable = session.project().openable_here();
     if !openable.is_empty() {
         return Place::Step(openable);
     }
@@ -670,11 +670,50 @@ fn cycle_choices(session: &Session, kinds: &[CycleKind]) -> String {
         .join("\n  ")
 }
 
+/// `gil close --unachieved will:W9` 의 표시. 그 밖의 인수는 받지 않는다.
+const UNACHIEVED_FLAG: &str = "--unachieved";
+
+/// `gil close` 뒤의 인수를 읽는다 — **없거나, 미달성 표시 하나다.**
+///
+/// 값은 끝내려는 약속의 typed reference(`will:W9`)다. 표시만 있고 값이 없거나, 값이 Will
+/// 이름으로 읽히지 않거나, 모르는 인수가 오면 닫지 않고 거절한다 — 조용히 달성 닫기로
+/// 읽으면 하지 못한 일이 한 일로 기록된다.
+fn unachieved_argument(extra: &[String]) -> Result<Option<crate::WillRef>, String> {
+    match extra {
+        [] => Ok(None),
+        [flag, value] if flag == UNACHIEVED_FLAG => match value.parse::<crate::WillRef>() {
+            Ok(will) if will.to_string() == *value => Ok(Some(will)),
+            _ => Err(refusal(
+                text("cmd.unachieved.what"),
+                &tr!("cmd.unachieved.bad_ref", value = format!("{value:?}")),
+                text("cmd.unachieved.todo"),
+                "gil status",
+            )),
+        },
+        _ => Err(refusal(
+            text("cmd.unachieved.what"),
+            text("cmd.unachieved.usage"),
+            text("cmd.unachieved.todo"),
+            "gil status",
+        )),
+    }
+}
+
 /// `gil close` — **무엇을 닫는지는 GIL 이 판정한다.**
-fn close(ctx: &Invocation<'_>) -> Result<String, String> {
+fn close(ctx: &Invocation<'_>, extra: &[String]) -> Result<String, String> {
+    let unachieved = unachieved_argument(extra)?;
     let mut session = open_session(ctx)?;
+    // **지목 확인이 자리 판정보다 먼저다.** 응답을 잃고 다시 보낸 미달성 요청은 그사이
+    // 바뀐 자리(다음 Step, Cycle Report, Chain Report)의 닫기로 읽히면 안 된다 — 이미 끝난
+    // 약속이면 그 사실로, 다른 약속이 걸려 있으면 그 사실로 답하고 아무것도 닫지 않는다.
+    if let Some(will) = unachieved {
+        session.check_unachieved_request(will).map_err(|err| {
+            let said = refusal(text("cmd.unachieved.what"), &err.to_string(), text("cmd.unachieved.read_state"), "gil status");
+            with_help(&Refusal::Session(&err), said)
+        })?;
+    }
     match place(&session) {
-        Place::CloseThisStep => close_step(ctx, &mut session),
+        Place::CloseThisStep => close_step(ctx, &mut session, unachieved),
         Place::CloseThisCycle => close_cycle(ctx, &mut session),
         Place::CloseThisChain => {
             let hint = session.project().current_chain().unwrap().close_hint();
@@ -710,11 +749,12 @@ fn close(ctx: &Invocation<'_>) -> Result<String, String> {
     }
 }
 
-fn typed_verify_hint(here: crate::StepRef) -> String {
-    tr!("cmd.typed_verify_hint", here = here)
+/// Printed only for a visual-format project. The number is that project's own format.
+fn typed_verify_hint(project: &crate::Project, here: crate::StepRef) -> String {
+    tr!("cmd.typed_verify_hint", here = here, format = crate::store::format_of(project))
 }
 
-fn close_step(ctx: &Invocation<'_>, session: &mut Session) -> Result<String, String> {
+fn close_step(ctx: &Invocation<'_>, session: &mut Session, unachieved: Option<crate::WillRef>) -> Result<String, String> {
     let cycle = session.project().cycles().current();
     let node = cycle
         .steps()
@@ -728,13 +768,17 @@ fn close_step(ctx: &Invocation<'_>, session: &mut Session) -> Result<String, Str
         .expect("열린 자리의 종류는 문법이 선언한 것이다");
     let mut hint = skeleton_for(&contract, cycle, Some(ctx));
     if kind == crate::NodeKind::Verify && session.project().visual_state.is_some() {
-        hint.push_str(&typed_verify_hint(here));
+        hint.push_str(&typed_verify_hint(session.project(), here));
     }
 
     let report = read_report(ctx, &hint)?;
     // **한 번에 확정된다** — Report·Closed·Will Done·Journey 판이 함께 눕거나, 아무것도
     // 눕지 않는다. 거절되면 열린 자리도 걸린 행동도 그대로다.
-    let closed = session.close_step(report).map_err(|err| {
+    let closing = match unachieved {
+        Some(will) => session.close_step_unachieved(report, will),
+        None => session.close_step(report),
+    };
+    let closed = closing.map_err(|err| {
         // 세계 쪽 거절은 **이미 완결된 receipt** 다 — 무엇이·왜·다음에 무엇을 까지 스스로
         // 말한다. 그것을 다시 감싸면 이유 안에 또 이유가 들어간다.
         //
@@ -742,6 +786,14 @@ fn close_step(ctx: &Invocation<'_>, session: &mut Session) -> Result<String, Str
         // 읽는 쪽은 그것을 고쳐 다시 보내므로, 여기서는 승인 상태를 읽는 길만 말한다.
         let said = match (err.is_receipt(), plan_refused(&err)) {
             (true, _) => err.to_string(),
+            // 미달성 실험의 Outcome 은 Report 의 다른 칸이 아니라 **판정과 방향**을 고쳐야 한다.
+            (false, _) if matches!(&err, SessionError::Action(crate::ActionError::UnachievedExperimentMustFail { .. }
+                | crate::ActionError::UnachievedOutsideExperiment { .. })) => refusal(
+                &tr!("cmd.cannot_close", here = here, kind = kind),
+                &err.to_string(),
+                text("cmd.unachieved.read_state"),
+                "gil status",
+            ),
             (false, true) => refusal(
                 &tr!("cmd.cannot_close", here = here, kind = kind),
                 &err.to_string(),
@@ -1109,7 +1161,7 @@ fn status(ctx: &Invocation<'_>) -> Result<String, String> {
 /// 기본 경로가 아니지만, 이미 이 이름을 쓰던 손을 끊지 않으려고 남겨 둔다.
 fn cycle(ctx: &Invocation<'_>, sub: Option<&str>, argument: Option<&String>) -> Result<String, String> {
     match sub {
-        Some("close") => close(ctx),
+        Some("close") => close(ctx, &[]),
         Some("open") => {
             let mut session = open_session(ctx)?;
             match place(&session) {
@@ -1180,15 +1232,27 @@ fn close_help(ctx: &Invocation<'_>) -> Result<String, String> {
     let mut skeleton = skeleton_for(&contract, cycle, Some(ctx));
     if session.project().visual_state.is_some() {
         if let Some(id) = cycle.step_now_open().filter(|id| cycle.steps().node(*id).is_some_and(|n| n.kind == NodeKind::Verify)) {
-            skeleton.push_str(&typed_verify_hint(cycle.step_ref(id)));
+            skeleton.push_str(&typed_verify_hint(session.project(), cycle.step_ref(id)));
         }
     }
-    Ok(tr!("cmd.help_close",
+    let mut out = tr!("cmd.help_close",
         subject = contract.subject(),
         constraints = contract.constraints("  "),
         skeleton = skeleton,
         extra = if session.can_confirm_artifact() { text("cmd.help_close_evidence") } else { "" }
-    ))
+    );
+    // 종료 결과를 기록하는 형식(8/9)의 Experiment 자리에서만: 약속을 수행하지 못했을 때 닫는 법.
+    // 형식 4–7 과 Interview 의 화면은 이전과 같다 — 쓸 수 없는 입력을 안내하지 않는다.
+    if session.project().records_end_results() && cycle.kind() == CycleKind::Experiment {
+        if let (Place::CloseThisStep, Some(will)) = (place(&session), session.project().active_will()) {
+            out.push_str(&tr!("cmd.help_close_unachieved", will = will.id()));
+        }
+        // 이미 미달성 종료가 있는 실험이면 Outcome 과 Cycle Report 가 어떻게 닫히는지도 말한다.
+        if let Some(ended) = session.project().unachieved_in(cycle.id().to_ref()) {
+            out.push_str(&format!("\n{}\n", tr!("guide.unachieved_experiment", will = ended.will().id(), target = ended.will().target())));
+        }
+    }
+    Ok(out)
 }
 
 /// `gil open --help` — **지금 자리에서 열 수 있는 것과 그 계약만.**
@@ -1283,7 +1347,7 @@ fn opened_step(session: &Session, opened: crate::Opened) -> String {
     out.push_str(text("cmd.opened_boundary"));
     if opened.kind == crate::NodeKind::Verify {
         if session.project().visual_state.is_some() {
-            out.push_str(&typed_verify_hint(opened.step));
+            out.push_str(&typed_verify_hint(session.project(), opened.step));
         }
         out.push_str(text("cmd.opened_verify_evidence"));
         out.push_str(text("cmd.opened_verify_do"));
@@ -1361,14 +1425,21 @@ fn opened_cycle(session: &Session) -> String {
         }
     }
     out.push_str(&tr!("cmd.entry_world", snapshot = cycle.entry_snapshot()));
-    out.push_str(&next_block(cycle));
+    out.push_str(&next_block(session.project()));
     out
 }
 
 fn closed_step(session: &Session, closed: &crate::Closed) -> String {
-    let cycle = session.project().cycles().current();
+    let project = session.project();
     // 방금 낸 판을 한 줄로 적는다 — 방금 제출한 Report 도 Will 전체도 되풀이하지 않는다.
-    tr!("cmd.closed_step", lead = text("receipt.closed_lead"), step = closed.step, kind = closed.kind, journey = closed.journey, next = next_block(cycle))
+    let next = next_block(project);
+    match closed.result {
+        // 형식 4–7 과 달성 닫기의 receipt 는 이전과 같은 글자다.
+        crate::EndResult::Achieved => tr!("cmd.closed_step", lead = text("receipt.closed_lead"), step = closed.step, kind = closed.kind, journey = closed.journey, next = next),
+        // 미달성은 **무엇이 어떻게 끝났는지**와, 이 실험이 이제 어떻게 닫히는지를 함께 말한다.
+        crate::EndResult::Unachieved => tr!("cmd.closed_step_unachieved", lead = text("receipt.closed_lead"), step = closed.step, kind = closed.kind,
+            will = closed.will, journey = closed.journey, cycle = closed.step.cycle(), next = next),
+    }
 }
 
 fn closed_cycle(session: &Session, closed: &crate::ClosedCycle) -> String {
@@ -1421,8 +1492,12 @@ fn closed_cycle(session: &Session, closed: &crate::ClosedCycle) -> String {
 }
 
 /// 다음에 열 수 있는 것 — 하나면 `gil open`, 여럿이면 고르라고 한다.
-fn next_block(cycle: &crate::Cycle) -> String {
-    let openable = cycle.openable_here();
+///
+/// 열 수 있는 종류는 [`Project::openable_here`](crate::Project::openable_here) 에게 묻는다 —
+/// 미달성 종료가 있는 실험에서 Analysis 뒤에 `hypothesis` 를 권하지 않는다.
+fn next_block(project: &crate::Project) -> String {
+    let cycle = project.cycles().current();
+    let openable = project.openable_here();
     let mut out = String::new();
     if cycle.kind() == CycleKind::Interview {
         // A Closing Interview leads to the Chain Report, never to execution work. Which one this

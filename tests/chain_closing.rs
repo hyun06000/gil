@@ -246,6 +246,7 @@ fn legacy_graph_does_not_gain_closing_grammar_or_synthetic_chain_approval() {
         .unwrap()
         .remove(serde_norway::Value::from("chains"));
     legacy["format"] = 4.into();
+    common::historical_done_list(&mut legacy);
     std::fs::write(&path, serde_norway::to_string(&legacy).unwrap()).unwrap();
     let mut p = load(spec(), &path).unwrap();
     save(&p, &path).unwrap();

@@ -205,13 +205,13 @@ mod will;
 
 pub use artifact::{ManifestAddress, RegistryError};
 pub use cycle::{BasisRefError, Cycle, CycleError, CycleKind, OutcomeRefError, SynthesisRefError};
-pub use context::{context, next_moves};
+pub use context::{context, interrupt_honest_key, next_moves, next_moves_of};
 pub use contract::{Branch, CloseContract, FieldContract, ValueChoice};
 pub use cycles::{
     CycleId, CycleRevisit, CycleRevisitError, CycleTargetError, Cycles, CyclesError,
     OpenAfterRevisitError, OpenChildError,
 };
-pub use existence::{Existence, ExistenceState, Journey, Revision};
+pub use existence::{EndResult, EndedWill, Existence, ExistenceState, Journey, Revision};
 pub use manual::{HelpError, Refusal, Usage, help_here, help_outside, help_topic, more_about, with_help};
 pub use manual::TopicId;
 pub use monitor::{
@@ -253,8 +253,8 @@ pub use session::{
 };
 pub use root::{RootError, open_project_root, open_project_root_read_only};
 pub use status::where_now;
-pub use story::story;
-pub use store::{FORMAT, VISUAL_FORMAT, CHAIN_FORMAT, CHAIN_VISUAL_FORMAT, LEGACY_WALK_PATH, STATE_PATH, StoreError, load, said_path, save};
+pub use story::{story, story_of};
+pub use store::{FORMAT, VISUAL_FORMAT, CHAIN_FORMAT, CHAIN_VISUAL_FORMAT, END_HISTORY_FORMAT, END_HISTORY_VISUAL_FORMAT, newest_known_format, is_visual_format, LEGACY_WALK_PATH, STATE_PATH, StoreError, load, said_path, save};
 pub use validate::{GrammarError, Subject};
 pub use walk::{NextDirectionError, NodeId, RestoreError, StepNode, Walk, WalkError};
 pub use will::{ActionContract, ContractError, DONE_WHEN, NEXT_ACTION, OBJECTIVE, Will};

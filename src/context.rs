@@ -98,7 +98,7 @@ pub fn context(project: &Project) -> String {
     }
     write_previous_cycles(&mut out, cycles);
     write_failed_cycles(&mut out, cycles);
-    write_current_cycle(&mut out, cycles);
+    write_current_cycle(&mut out, project);
     write_here(&mut out, project);
     out
 }
@@ -148,10 +148,44 @@ fn write_requirements(out: &mut String, plan: &crate::approved_plan::PlanState, 
 /// 현재 일을 건너뛰는 호출은 없고, 없는 중단 기능을 있는 것처럼 안내하지 않는다.
 pub fn next_call(project: &Project) -> String {
     let line = next_call_here(project);
-    match reinterview_notice(project) {
+    let line = match reinterview_notice(project) {
+        Some(notice) => format!("{line} {notice}"),
+        None => line,
+    };
+    match unachieved_notice(project) {
         Some(notice) => format!("{line} {notice}"),
         None => line,
     }
+}
+
+/// 끝낼 수 없는 작업의 정직한 닫기 — **이 빌드가 미달성 종료를 기록할 수 있는가에 맞춘 문장.**
+///
+/// 기록할 수 없는 빌드(제품 구성 포함)의 문장은 이전과 같다. 기록할 수 있는 빌드의 문장은
+/// 미달성 표시를 말하되 「연결된 도구가 그 입력을 제공하고 프로젝트가 종료 결과를 기록하는
+/// 형식일 때」로 조건을 단다 — 형식 4–7 프로젝트에서 쓸 수 있는 것처럼 말하지 않는다.
+pub fn interrupt_honest_key() -> &'static str {
+    if cfg!(feature = "will-end-history") { "guide.interrupt_honest.end_history" } else { "guide.interrupt_honest" }
+}
+
+/// 종료 결과를 사람이 읽는 낱말로 — 상태·문맥·이야기가 같은 낱말을 쓴다.
+pub(crate) fn end_result_label(result: crate::EndResult) -> &'static str {
+    match result {
+        crate::EndResult::Achieved => text("end.achieved"),
+        crate::EndResult::Unachieved => text("end.unachieved"),
+    }
+}
+
+/// 열린 Experiment 에 **미달성 종료가 기록돼 있으면** 그 실험이 이제 어떻게 닫히는지를 한 문장으로.
+///
+/// 미달성 종료가 없는 실험과 형식 4–7 프로젝트에는 아무것도 덧붙이지 않는다. 남은 단계를
+/// 건너뛰는 호출은 없다 — 이 문장은 방금 위에서 말한 합법적인 다음 호출을 대신하지 않는다.
+fn unachieved_notice(project: &Project) -> Option<String> {
+    let cycle = project.current_cycle();
+    if cycle.kind() != CycleKind::Experiment || cycle.is_closed() {
+        return None;
+    }
+    let ended = project.unachieved_in(cycle.id().to_ref())?;
+    Some(tr!("guide.unachieved_experiment", will = ended.will().id(), target = ended.will().target()))
 }
 
 /// 열린 Experiment에 보존된 재인터뷰 요청이 있으면 그 사실만 한 문장으로. 닫힌 Cycle 뒤의
@@ -166,7 +200,7 @@ fn reinterview_notice(project: &Project) -> Option<String> {
     if cycle.kind() != CycleKind::Experiment || cycle.is_closed() || plan.awaiting_interview(chain).is_empty() {
         return None;
     }
-    Some(format!("{} {}", text("ctx.reinterview_notice"), text("guide.interrupt_honest")))
+    Some(format!("{} {}", text("ctx.reinterview_notice"), text(interrupt_honest_key())))
 }
 
 fn next_call_here(project: &Project) -> String {
@@ -229,7 +263,8 @@ fn next_call_here(project: &Project) -> String {
         if let Some(said) = plan_next_call_between_steps(project) {
             return said;
         }
-        let openable = cycle.openable_here();
+        // 종료 이력의 규칙까지 반영한 목록이다 — 미달성 실험에서 Analysis 뒤의 새 가설을 권하지 않는다.
+        let openable = project.openable_here();
         if cycle.can_close() {
             return match (cycle.kind(), cycle.approved_chain_verdict()) {
                 (CycleKind::Interview, Some((_, verdict))) => tr!("ctx.next.cycle_close_closing", verdict = verdict),
@@ -545,7 +580,8 @@ fn write_block(out: &mut String, fields: &[(&str, String)]) {
 // ── ② 현재 Cycle — Step Report 해상도 ──────────────────────────────────────
 
 /// 지금 Cycle 안에서 지금까지 난 Step 들. **닫힌 것은 Report 째로, 열린 것은 상태로.**
-fn write_current_cycle(out: &mut String, cycles: &Cycles) {
+fn write_current_cycle(out: &mut String, project: &Project) {
+    let cycles = project.cycles();
     let cycle = cycles.current();
     out.push_str(&tr!("ctx.current_head", id = cycle.id(), kind = cycle.kind(),
         state = if cycle.is_closed() { text("ctx.closed") } else { text("ctx.open") }));
@@ -573,6 +609,10 @@ fn write_current_cycle(out: &mut String, cycles: &Cycles) {
         let _ = write!(out, "\n{} {} · {}", node.id, node.kind, node.status);
         if let Some(from) = node.revisit_from {
             out.push_str(&tr!("ctx.branched_from", from = from));
+        }
+        // 형식 8/9 에서만: 이 자리의 약속이 어떻게 끝났는가. 이유는 아래 Report 원문에 있다.
+        if let Some(result) = project.recorded_end_result(cycle.step_ref(node.id)) {
+            out.push_str(&tr!("ctx.will_end", result = end_result_label(result)));
         }
         let _ = writeln!(out);
         match &node.report {
@@ -623,10 +663,10 @@ fn write_here(out: &mut String, project: &Project) {
         Some(chain) if chain.is_closed() => out.push_str(text("ctx.chain_closed_moves")),
         Some(chain) if chain.awaiting_report() => out.push_str(&chain.close_hint()),
         _ if project.approved_plan().is_some() || waiting_step => out.push_str(text("ctx.resume.follow")),
-        _ => out.push_str(&next_moves(cycles)),
+        _ => out.push_str(&next_moves_of(project)),
     }
 
-    write_rules_here(out, cycles);
+    write_rules_here(out, project);
     write_report_principles(out);
 }
 
@@ -642,10 +682,31 @@ fn write_current_will(out: &mut String, project: &Project) {
     out.push_str(&tr!("ctx.will_head", existence = existence.id(), journey = existence.current_journey()));
     let Some(will) = project.active_will() else {
         out.push_str(text("ctx.will_none"));
+        write_last_ended(out, project);
         return;
     };
     out.push_str(&tr!("ctx.will", will = will.id(), target = will.target(),
         objective = indent_more(will.objective()), action = indent_more(will.next_action()), done = indent_more(will.done_when())));
+    // 형식 8/9 의 Experiment 에서만: 이 약속을 수행할 수 없을 때 미달성으로 끝내는 법.
+    // Interview 의 응답 대기는 종료가 아니므로 거기서는 말하지 않는다.
+    if project.records_end_results() && project.current_cycle().kind() == CycleKind::Experiment {
+        out.push_str(&tr!("ctx.will_unachieved_how", will = will.id()));
+    }
+    write_last_ended(out, project);
+}
+
+/// 마지막으로 끝난 약속과 그 결과 — 종료 결과를 기록하는 형식에서만 적는다.
+///
+/// 응답을 잃은 닫기 요청을 다시 보내기 전에 **저장된 이력으로** 확정 여부를 판단하는 자리다.
+/// 지나온 약속을 전부 펼치지 않는다 — 마지막 하나면 방금 요청이 확정됐는지 알 수 있다.
+fn write_last_ended(out: &mut String, project: &Project) {
+    if !project.records_end_results() {
+        return;
+    }
+    if let Some(ended) = project.current_existence().journey().last_ended_will() {
+        out.push_str(&tr!("ctx.last_ended", will = ended.will().id(), target = ended.will().target(),
+            result = end_result_label(ended.result())));
+    }
 }
 
 /// 여러 줄로 적힌 값이 다음 항목처럼 보이지 않게.
@@ -661,6 +722,18 @@ fn indent_more(value: &str) -> String {
 ///
 /// `gil status` 와 `gil context` 가 **같은 이 함수**를 읽는다. 두 자리에 적으면 한쪽이 낡는다.
 pub fn next_moves(cycles: &Cycles) -> String {
+    moves(cycles, cycles.current().openable_here())
+}
+
+/// [`next_moves`] 와 같은 안내를 **종료 이력의 규칙까지 반영해서** 적는다.
+///
+/// Cycle 의 문법만으로는 미달성 실험의 「새 가설 금지」를 알 수 없다. 프로젝트를 쥔 자리
+/// (`gil status`·`gil context`)는 이 문을 쓴다.
+pub fn next_moves_of(project: &Project) -> String {
+    moves(project.cycles(), project.openable_here())
+}
+
+fn moves(cycles: &Cycles, openable: Vec<NodeKind>) -> String {
     let cycle = cycles.current();
 
     if !cycle.is_closed() {
@@ -670,7 +743,6 @@ pub fn next_moves(cycles: &Cycles) -> String {
         }
 
         let mut out = String::new();
-        let openable = cycle.openable_here();
         let names: Vec<&str> = openable.iter().map(|kind| kind.as_str()).collect();
         if !names.is_empty() {
             out.push_str(&tr!("moves.openable", names = names.join(", ")));
@@ -712,7 +784,8 @@ pub fn next_moves(cycles: &Cycles) -> String {
 ///
 /// 칸의 목록도, 값의 제약도 여기 옮겨 적지 않는다. `gil-spec.yaml` 이 자라면 이 절도 함께
 /// 자란다 — 옮겨 적으면 명세가 바뀐 날부터 새 세션이 낡은 규칙을 받는다.
-fn write_rules_here(out: &mut String, cycles: &Cycles) {
+fn write_rules_here(out: &mut String, project: &Project) {
+    let cycles = project.cycles();
     let cycle = cycles.current();
     if cycle.is_closed() {
         // 닫힌 Cycle 에서는 아무 Report 도 쓰지 않는다. 다음 수는 Cycle 을 여는 것이고,
@@ -729,7 +802,7 @@ fn write_rules_here(out: &mut String, cycles: &Cycles) {
         // 열려 있는 자리가 있으면 지금 필요한 규칙은 그 자리를 닫는 규칙 하나뿐이다.
         Some(node) => blocks.extend(cycle.step_contract(node.id, node.kind)),
         None => {
-            for kind in cycle.openable_here() {
+            for kind in project.openable_here() {
                 blocks.extend(cycle.contract_of_kind(kind));
             }
             if cycle.can_close() {
