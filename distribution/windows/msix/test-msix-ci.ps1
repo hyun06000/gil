@@ -16,6 +16,8 @@ if (Get-AppxPackage -Name 'GIL.Dev') { throw 'Existing GIL.Dev package: use a cl
 if (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\gil.exe')) {
     throw 'An existing gil.exe execution alias would conflict; use a clean disposable account'
 }
+$helperLog = Join-Path $env:LOCALAPPDATA 'GIL\logs\install-log.txt'
+if (Test-Path -LiteralPath $helperLog) { throw 'Existing GIL install log: use a clean disposable account' }
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'MSIX check requires a numeric X.Y.Z version' }
 if (-not $ExpectedBinaryVersion) { $ExpectedBinaryVersion = $Version }
 $Here = $PSScriptRoot
@@ -72,9 +74,28 @@ try {
         $doctor -notmatch 'claude-desktop: NOT_INSTALLED' -or $doctor -notmatch 'codex: NOT_INSTALLED') {
         throw 'Packaged doctor failed, or this is not a clean account without Hosts'
     }
+    $detailsPath = Join-Path $work 'doctor-details.txt'
+    $verboseDoctor = (& $alias doctor --verbose 2> $detailsPath) -join "`n"
+    if ($LASTEXITCODE -ne 0 -or $verboseDoctor -ne $doctor) { throw 'Verbose doctor changed stdout or failed its alias probe' }
+    $details = Get-Content -LiteralPath $detailsPath -Raw
+    if (-not $details.Contains($helperLog) -or -not $details.Contains('does not verify MCP connection or Monitor display')) {
+        throw 'Verbose doctor omitted log path or diagnostic scope'
+    }
+    # Exercise the helper through the installed alias; an unpackaged reader must see its log.
+    $helper = (& $alias install --after-desktop-exit) -join "`n"
+    if ($LASTEXITCODE -ne 0 -or $helper -notmatch 'claude-desktop: NOT_INSTALLED') { throw 'Packaged helper did not report missing Hosts' }
+    $logged = Get-Content -LiteralPath $helperLog -Raw
+    if ($logged -notmatch 'helper started' -or $logged -notmatch 'claude-desktop: NOT_INSTALLED') { throw 'Packaged helper log missing in GIL user data' }
+    if (Test-Path -LiteralPath (Join-Path (Split-Path $alias -Parent) 'install-log.txt')) { throw 'Helper wrote into WindowsApps' }
+    # A blocked log must fail, even for a helper with no Host registrations to perform.
+    Remove-Item -LiteralPath $helperLog
+    New-Item -ItemType Directory -Path $helperLog | Out-Null
+    $failedHelper = (& $alias install --after-desktop-exit 2>&1) -join "`n"
+    if ($LASTEXITCODE -eq 0 -or $failedHelper -notmatch 'cannot open install log') { throw 'Helper hid an install-log failure' }
+    Remove-Item -LiteralPath $helperLog
     $nativeAfter = if (Test-Path -LiteralPath $native) { (Get-FileHash -LiteralPath $native).Hash } else { $null }
     if ($nativeAfter -ne $nativeBefore) { throw 'Packaged install created or replaced a native gil.exe' }
-    Write-Host 'PASS: installed manifest, Start activation and bilingual console, CLI/MCP alias, install and doctor; actual Host UI and WACK not tested'
+    Write-Host 'PASS: installed manifest, Start activation and bilingual console, CLI/MCP alias, install, doctor alias probe/verbose and helper log/error; actual Host UI and WACK not tested'
 } finally {
     # The preflight rejected an existing GIL.Dev. Remove only this check's package/certificates.
     try { Get-AppxPackage -Name 'GIL.Dev' | Remove-AppxPackage } finally {
@@ -82,6 +103,8 @@ try {
             Remove-Item -LiteralPath "Cert:\CurrentUser\My\$($cert.Thumbprint)" -Force -ErrorAction SilentlyContinue
             Remove-Item -LiteralPath "Cert:\LocalMachine\TrustedPeople\$($cert.Thumbprint)" -Force -ErrorAction SilentlyContinue
         }
+        # The preflight rejected an existing log; this path is only this check's file/empty fixture directory.
+        if (Test-Path -LiteralPath $helperLog) { Remove-Item -LiteralPath $helperLog -Force }
         Remove-Item -LiteralPath $work -Recurse -Force
     }
 }

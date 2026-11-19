@@ -13,7 +13,7 @@ const ENGLISH: &str = "\nEnglish - Connect and use GIL\n\n\
 1. Install and open a supported app: Claude Desktop or Codex.\n\
 2. Quit Claude Desktop completely, including its tray icon, before connecting.\n\
 3. Open PowerShell or Command Prompt and run: gil install --no-wait\n\
-4. Check the registration: gil doctor\n\
+4. Check the registration: gil doctor (details and helper log path: gil doctor --verbose)\n\
    NOT_INSTALLED means the app was not detected; it does not mean connected.\n\
 5. Restart the connected app, then ask its agent to use GIL in your project.\n\
    Check that GIL tools and the Monitor actually appear in the app.\n\n\
@@ -27,7 +27,7 @@ const KOREAN: &str = "\n한국어 - GIL 연결과 사용\n\n\
 1. 지원 앱인 Claude Desktop 또는 Codex를 설치하고 한 번 실행하세요.\n\
 2. 연결하기 전에 Claude Desktop을 트레이 아이콘에서도 완전히 종료하세요.\n\
 3. PowerShell 또는 명령 프롬프트를 열고 실행하세요: gil install --no-wait\n\
-4. 등록 상태를 확인하세요: gil doctor\n\
+4. 등록 상태를 확인하세요: gil doctor (진단 내용과 도우미 로그 위치: gil doctor --verbose)\n\
    NOT_INSTALLED는 앱을 찾지 못했다는 뜻이며 연결 완료가 아닙니다.\n\
 5. 연결한 앱을 다시 시작하고 에이전트에게 프로젝트에서 GIL을 사용해 달라고 하세요.\n\
    앱 안에 GIL 도구와 Monitor가 실제로 나타나는지 확인하세요.\n\n\

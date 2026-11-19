@@ -147,6 +147,8 @@ jobs:
           $features = if ($env:GIL_RUNTIME_PROFILE -eq 'visual-authoring') { @('--features', 'visual-authoring') } else { @() }
           cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET @features --lib -- install::
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo +1.97.1 test --locked -p gil --target $env:GIL_NATIVE_TARGET @features --test install_diagnostics
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Image-report storage boundaries (Windows contract v0.1 §6)
         if: matrix.profile == 'visual-authoring'
         shell: pwsh

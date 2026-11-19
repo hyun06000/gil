@@ -6,8 +6,8 @@
 //! codex: OK
 //! ```
 //!
-//! `OK` the entry exists and points at this executable · `NOT_INSTALLED` the Host is not on
-//! this PC · `MISSING` the Host is here but has no entry · `STALE` the entry points somewhere
+//! `OK` the entry exists and points at this executable · `NOT_INSTALLED` no Host settings
+//! directory was found · `MISSING` the settings directory is here but has no entry · `STALE` the entry points somewhere
 //! else or at a file that does not exist · `ERROR` the file could not be read or parsed.
 //! The exit code is non-zero when any `MISSING`, `STALE` or `ERROR` appears.
 
@@ -65,6 +65,10 @@ impl Report {
 }
 
 pub fn report(env: &Env) -> Report {
+    report_with_probe(env, super::probe::check_alias)
+}
+
+fn report_with_probe(env: &Env, probe: impl FnOnce(&Path) -> Result<(), String>) -> Report {
     let current = std::env::current_exe().ok();
     let (binary, binary_path) = match paths::fixed_exe(env) {
         Err(why) => (Status::Error(why), current.clone()),
@@ -72,7 +76,11 @@ pub fn report(env: &Env) -> Report {
             if env.packaged {
                 // Store channel: the alias is the registered path; the executable itself lives in
                 // the read-only package folder, so "running from elsewhere" is the normal case.
-                if fixed.exists() { (Status::Ok, Some(fixed)) } else { (Status::Stale(format!("app execution alias missing at {}", fixed.display())), Some(fixed)) }
+                let status = match probe(&fixed) {
+                    Ok(()) => Status::Ok,
+                    Err(why) => Status::Error(why),
+                };
+                (status, Some(fixed))
             } else if !fixed.is_file() {
                 (Status::Stale(format!("not installed at {}", fixed.display())), current.clone())
             } else if current.as_deref().is_some_and(|me| same_path(&me.to_string_lossy(), &fixed.to_string_lossy())) {
@@ -91,6 +99,24 @@ pub fn report(env: &Env) -> Report {
         claude: claude_status(env, &exe),
         codex: codex_status(env, &exe),
     }
+}
+
+/// Optional human-readable diagnostics; stdout remains the original three-line contract.
+pub fn details(env: &Env) -> String {
+    let mut lines = vec![
+        "Scope: Host OK checks configuration files only; it does not verify MCP connection or Monitor display.".to_owned(),
+        "NOT_INSTALLED: no settings folder found; open the Host once, quit it, then run `gil install`.".to_owned(),
+        "범위: Host OK는 설정 파일 등록만 확인합니다. MCP 연결과 Monitor 표시는 Host에서 별도로 확인하세요.".to_owned(),
+        "NOT_INSTALLED: 설정 폴더를 찾지 못했습니다. Host를 한 번 실행하고 완전히 종료한 뒤 `gil install`을 실행하세요.".to_owned(),
+    ];
+    if env.packaged { lines.push("Store binary: checks alias execution and the current Core probe (5 second limit).".into()); }
+    match paths::install_log(env) {
+        Ok(log) => lines.push(format!("Helper log: {} ({}; historical results, not current connection status)", log.display(), if log.is_file() { "present" } else { "not created" })),
+        Err(why) => lines.push(format!("Helper log: unavailable ({why})")),
+    }
+    for path in paths::claude_configs(env) { lines.push(format!("Claude settings: {}", path.display())); }
+    if let Some(path) = paths::codex_config(env) { lines.push(format!("Codex settings: {}", path.display())); }
+    lines.join("\n") + "\n"
 }
 
 fn claude_status(env: &Env, exe: &Path) -> Status {
@@ -177,15 +203,19 @@ mod tests {
     }
 
     #[test]
-    fn packaged_binary_is_ok_when_the_alias_exists() {
+    fn packaged_binary_requires_successful_alias_execution() {
         let root = super::super::tests::scratch("doctor-store");
         let local = root.join("Local");
         let env = Env { local_app_data: Some(local.clone()), app_data: None, home: None, codex_home: None, packaged: true };
-        assert!(matches!(report(&env).binary, Status::Stale(_)), "no alias yet");
+        assert!(matches!(report(&env).binary, Status::Error(_)), "no alias yet");
         let alias = local.join("Microsoft").join("WindowsApps");
         std::fs::create_dir_all(&alias).unwrap();
         std::fs::write(alias.join("gil.exe"), b"alias").unwrap();
-        let r = report(&env);
+        assert!(matches!(report(&env).binary, Status::Error(_)), "a file alone is not a working alias");
+        let r = report_with_probe(&env, |path| {
+            assert_eq!(path, alias.join("gil.exe"));
+            Ok(())
+        });
         assert_eq!(r.binary, Status::Ok);
         assert!(r.render().starts_with("binary: OK ") && r.render().contains("[store]"), "{}", r.render());
         let _ = std::fs::remove_dir_all(root);

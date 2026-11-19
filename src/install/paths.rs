@@ -72,6 +72,18 @@ pub fn fixed_exe(env: &Env) -> Result<PathBuf, String> {
     }
 }
 
+/// Store logs belong to GIL's user data, never the OS-managed execution-alias folder.
+/// Keep the existing standalone installation's log location for compatibility.
+pub fn install_log(env: &Env) -> Result<PathBuf, String> {
+    if env.packaged {
+        let local = env.local_app_data.as_ref().ok_or("LOCALAPPDATA is not set")?;
+        Ok(local.join("GIL").join("logs").join("install-log.txt"))
+    } else {
+        let fixed = fixed_exe(env)?;
+        Ok(fixed.parent().ok_or("fixed path has no parent")?.join("install-log.txt"))
+    }
+}
+
 /// Every `claude_desktop_config.json` the Claude Desktop on this PC may read, as existing
 /// folders. On Windows the MSIX build reads its package cache
 /// (`%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude`) while its *Edit Config*
