@@ -269,10 +269,12 @@ mod tests {
         }
         // Anything but the canonical reference of one Will is refused at the wire in every build,
         // in the ordinary shape and in the typed visual shape alike. `null` is not an omission.
-        let typed = json!({"project_root":"/synthetic","report":"private body text",
+        // The typed input requires an absolute root on this platform; the plain shape checks it later.
+        let root = if cfg!(windows) { "C:/synthetic" } else { "/synthetic" };
+        let typed = json!({"project_root":root,"report":"private body text",
             "expected_owner":{"kind":"step","ref":"step:C2/S3"},
             "visuals":{"attachments":[],"uses":[],"declaration":{"state":"not_needed","reason":"byte comparison only"}}});
-        for shape in [json!({"project_root":"/synthetic","report":"private body text"}), typed.clone()] {
+        for shape in [json!({"project_root":root,"report":"private body text"}), typed.clone()] {
             for malformed in [json!("W9"), json!("will:W09"), json!("will:w9"), json!(" will:W9"), json!(9), json!(null), json!(true), json!({}), json!(["will:W9"])] {
                 let mut input = shape.clone();
                 input["unachieved_will"] = malformed.clone();
