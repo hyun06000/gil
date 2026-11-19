@@ -13,6 +13,14 @@
 //!                                   └─ includes_file(path) → Result<bool, String>   (A → B 연결)
 //! ```
 //!
+//! # 지금의 자리 — 옛 `.gitignore` 의미 (2026-11-20)
+//!
+//! 이 모듈의 [`PolicyVersion::V1`](`gil-tracking-policy/1`)은 **과거 제안의 `.gitignore` 입력
+//! 의미**이며 최신 독립 정책 계약이 아니다. M4-R 승인 복구(`session/revisit_recovery.rs`)가 보호
+//! 경로 판정에 그대로 쓰므로 의미·식별자·시험 기대값을 바꾸지 않는다. 승인된 `.gilignore` 하나로
+//! 판정하는 새 엔진은 [`gilignore`](super::gilignore)(`gil-gilignore/1`)이고, 이 모듈의 문법
+//! 해석기(`compile_line`·`match_components`·`match_glob`)만 재사용한다.
+//!
 //! # 입력은 전부 명시적이다
 //!
 //! 정책은 **주어진** ignore 원문·상대 위치·정책 버전만으로 만든다. 사용자 global gitignore,
@@ -340,24 +348,24 @@ impl CompiledSource {
 }
 
 #[derive(Debug, Clone)]
-struct Rule {
-    line: usize,
+pub(super) struct Rule {
+    pub(super) line: usize,
     /// 줄의 원문 (CR 제거). 진단용.
-    shown: String,
-    negated: bool,
-    dir_only: bool,
-    components: Vec<Component>,
+    pub(super) shown: String,
+    pub(super) negated: bool,
+    pub(super) dir_only: bool,
+    pub(super) components: Vec<Component>,
 }
 
 #[derive(Debug, Clone)]
-enum Component {
+pub(super) enum Component {
     /// `**` 하나로 된 구성 요소 — 0개 이상의 디렉터리.
     Any,
     Glob(Vec<Token>),
 }
 
 #[derive(Debug, Clone)]
-enum Token {
+pub(super) enum Token {
     Literal(char),
     /// `?`
     AnyChar,
@@ -367,14 +375,14 @@ enum Token {
 }
 
 #[derive(Debug, Clone)]
-enum ClassItem {
+pub(super) enum ClassItem {
     Char(char),
     Range(char, char),
     Named(NamedClass),
 }
 
 #[derive(Debug, Clone, Copy)]
-enum NamedClass {
+pub(super) enum NamedClass {
     Alnum,
     Alpha,
     Blank,
@@ -475,7 +483,7 @@ fn compile_source(source: &IgnoreSource) -> Result<CompiledSource, PolicyError> 
 }
 
 /// 한 줄을 규칙으로. 빈 줄·주석은 `None`.
-fn compile_line(line: &str, number: usize) -> Result<Option<Rule>, &'static str> {
+pub(super) fn compile_line(line: &str, number: usize) -> Result<Option<Rule>, &'static str> {
     if line.is_empty() || line.starts_with('#') {
         return Ok(None);
     }
@@ -532,7 +540,7 @@ fn compile_line(line: &str, number: usize) -> Result<Option<Rule>, &'static str>
 }
 
 /// 뒤따르는 공백을 지운다 — `\ ` 로 escape 한 것은 남긴다.
-fn trim_trailing_spaces(line: &str) -> &str {
+pub(super) fn trim_trailing_spaces(line: &str) -> &str {
     let bytes = line.as_bytes();
     let mut end = bytes.len();
     while end > 0 && bytes[end - 1] == b' ' {
@@ -698,7 +706,7 @@ fn verdict(sources: &[CompiledSource], parts: &[&str], is_dir: bool) -> Verdict 
     Verdict::Unmatched
 }
 
-fn match_components(pattern: &[Component], path: &[&str]) -> bool {
+pub(super) fn match_components(pattern: &[Component], path: &[&str]) -> bool {
     match pattern.split_first() {
         None => path.is_empty(),
         Some((Component::Any, rest)) => {
@@ -727,7 +735,7 @@ fn match_components(pattern: &[Component], path: &[&str]) -> bool {
     }
 }
 
-fn match_glob(tokens: &[Token], text: &[char]) -> bool {
+pub(super) fn match_glob(tokens: &[Token], text: &[char]) -> bool {
     match tokens.split_first() {
         None => text.is_empty(),
         Some((Token::AnyRun, rest)) => {
