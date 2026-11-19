@@ -92,6 +92,8 @@ try {
     New-Item -ItemType Directory -Path $helperLog | Out-Null
     $failedHelper = (& $alias install --after-desktop-exit 2>&1) -join "`n"
     if ($LASTEXITCODE -eq 0 -or $failedHelper -notmatch 'cannot open install log') { throw 'Helper hid an install-log failure' }
+    # pwsh steps propagate the last native exit code. This failure was expected and verified.
+    $global:LASTEXITCODE = 0
     Remove-Item -LiteralPath $helperLog
     $nativeAfter = if (Test-Path -LiteralPath $native) { (Get-FileHash -LiteralPath $native).Hash } else { $null }
     if ($nativeAfter -ne $nativeBefore) { throw 'Packaged install created or replaced a native gil.exe' }
