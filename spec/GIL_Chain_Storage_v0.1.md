@@ -53,6 +53,10 @@ chains:
 - 루트의 별도 `cycles`는 없다. 모든 Cycle은 정확히 한 Chain 안에 저장된다. 중복 graph,
   Chain 없는 Cycle, 거짓 Current, 직렬 계보 밖 Chain/부모, 알 수 없는 소속 필드는 거절한다.
 - 첫 Chain C1과 첫 Interview Cycle C1, X1/ES0/J0/A1은 한 번의 시작 저장으로 생성한다.
+  2026-11-19 후속 합의: 이 정식 시작 앞에 추적 범위 제안·승인의 시작 준비 단계를 둔다.
+  승인된 정책으로 최초 보관본을 준비한 뒤 위 시작 상태와 그 참조를 일관되게 확정한다.
+  시작 준비 기록은 Chain/Interview Step이 아니며, 보관본 없는 열린 체인을 만들지 않는다.
+  현재 코드에 준비 단계가 구현됐다는 뜻은 아니다. [추적 제외 시작 계약](GIL_Artifact_Model_v0.1.md#시작-대화의-범위-승인과-최초-보관--2026-11-19-확정)을 따른다.
   Step·Will·Chain Open Report·인간 승인은 생성하지 않는다.
 - 첫 Chain의 Entry는 최초 관측 세계이고, 후속 Chain은 부모 Exit이다. 각 Chain Entry는
   자신의 첫 Interview Entry와 같아야 하며 Artifact registry에 실재한다.
