@@ -93,7 +93,7 @@ fn a_preserved_reinterview_request_never_hides_the_legal_next_call() {
         let requested = ok(mcp.call("gil_plan_request_interview", &root, json!({"reason": "범위가 바뀌었다"})), "request interview");
         let hint = hints(&requested);
         assert!(hint.contains("재인터뷰 요청을 보존했다") && hint.contains("아무것도 닫히거나 열리지 않았다"), "{hint}");
-        assert!(hint.contains(gil::locale::text_in(gil::Locale::Ko, "guide.interrupt_honest")), "the request hint says how to stop truthfully: {hint}");
+        assert!(hint.contains(gil::locale::text_in(gil::Locale::Ko, gil::interrupt_honest_key())), "the request hint says how to stop truthfully: {hint}");
         assert!(!hint.contains("gil_open(kind: experiment)"), "{hint}");
         let line = first_call(&said(&ok(mcp.call("gil_context", &root, json!({})), "context")));
         assert!(line.contains("열린 Define") && line.contains("gil_close"), "the open Define lost its next call: {line}");

@@ -420,7 +420,7 @@ fn an_item_that_cannot_finish_closes_truthfully_keeps_partial_files_and_gets_no_
     // The preserved request is the recorded signal; the next-call line now says how to stop honestly.
     session.project_mut().request_plan_interview("toolchain missing; the success condition cannot be evaluated".into()).unwrap();
     let context = crate::context(session.project());
-    assert!(context.contains(crate::locale::text("guide.interrupt_honest")), "{context}");
+    assert!(context.contains(crate::locale::text(crate::context::interrupt_honest_key())), "{context}");
     assert!(context.contains("evidence_files"), "the open Verify keeps its own close contract: {context}");
 
     // Partial result + interruption observation are the Verify evidence; the plan document stays separate.

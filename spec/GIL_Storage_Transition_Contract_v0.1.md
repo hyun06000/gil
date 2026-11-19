@@ -3,9 +3,17 @@
 2026-11-19. [구현 순서](GIL_Implementation_Order_2026-11-19.md)의 **0번** 산출물이다.
 기준 소스는 main `78b619d`이다.
 
-**이 문서는 설계 계약이다. 실행 코드·저장 레코드·도구 계약·설치본을 바꾸지 않았다.**
-아래의 새 형식·필드·전이는 모두 **구현 대기**이며, 현재 프로그램이 이미 지원한다는 뜻이 아니다.
+**이 문서는 설계 계약이다.** 작성 당시에는 실행 코드·저장 레코드·도구 계약·설치본을 바꾸지 않았다.
+아래의 새 형식·필드·전이는 따로 적지 않은 한 **구현 대기**이며, 현재 프로그램이 이미 지원한다는 뜻이 아니다.
 사례는 코드로 실행해 본 결과가 아니라 **설계 검증 항목**이다(§13).
+
+> **구현 상태 — 1a(§9)만 구현됐다.** 개발용 기능 `will-end-history`(= `chain-core` 포함)를 켠 빌드가
+> 새로 시작한 프로젝트에서 형식 8/9와 미달성 종료(§3의 8/9, §4 전체)가 동작한다. 확정한 표기는
+> 계약의 권장안 그대로다: 기능 이름 `will-end-history`, MCP 입력 `gil_close.unachieved_will`,
+> CLI `gil close --unachieved will:W<n>`, 저장 칸 `ended_wills`·`end_result`. 검증은 합성 프로젝트의
+> 자동 검사이며, 실제 Host 화면 인수·모델 평가·필드 테스트·이전 배포본 호환 확인(§13)은 하지 않았다.
+> 1b(§7의 전환), 형식 10/11(§5–§6), 제품 프로필 활성화는 구현 대기다. §12의 미결 세 항목은 그대로다.
+> 아래 §2의 「현재 구현」 표와 줄 번호는 작성 시점(`78b619d`)의 기록이며 1a 이후의 코드와 다르다.
 
 제품 의미의 정본은 [Will Model](GIL_Will_Model_v0.1.md), [Cycle Model](GIL_Cycle_Model_v0.1.md),
 [Artifact Model](GIL_Artifact_Model_v0.1.md), [Storage Model](GIL_Storage_Model_v0.1.md),
@@ -119,8 +127,8 @@
 | 5 | Project → Cycles | 있음 | `done_wills` | 없음 | 기존 |
 | 6 | Chain → Cycles | 없음 | `done_wills` | 없음 | 기존 (`chain-core`) |
 | 7 | Chain → Cycles | 있음 | `done_wills` | 없음 | 기존 (`chain-core`) |
-| **8** | Chain → Cycles | 없음 | `ended_wills` | 없음 | **구현 대기 — 1번** |
-| **9** | Chain → Cycles | 있음 | `ended_wills` | 없음 | **구현 대기 — 1번** |
+| **8** | Chain → Cycles | 없음 | `ended_wills` | 없음 | **1a 구현 (`will-end-history`, 새 프로젝트만)** |
+| **9** | Chain → Cycles | 있음 | `ended_wills` | 없음 | **1a 구현 (`will-end-history`, 새 프로젝트만)** |
 | **10** | Chain → Cycles | 없음 | `ended_wills` | `tracking` | **구현 대기 — 3번** |
 | **11** | Chain → Cycles | 있음 | `ended_wills` | `tracking` | **구현 대기 — 3번** |
 

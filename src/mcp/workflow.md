@@ -284,6 +284,7 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    | Verify is open | Do the contracted work, save the observation as project files, `gil_close` with `evidence_files` |
    | Verify is closed | `gil_open` Analysis, `gil_close` with a nonblank `interpretation` of the saved evidence |
    | Analysis is closed | `gil_open` Outcome, `gil_close` with `verdict`, `lesson`, `next_direction` |
+   | The open Experiment Step's contracted action cannot be carried out (schema offers `unachieved_will`, format 8/9 only) | Write what was done, what blocked it and what stays unverified in the Report (Verify: save it and list it in `evidence_files`), then `gil_close` with `unachieved_will: <active Will>`. Continue with the remaining Steps; Outcome is `failure` · `close_cycle` |
    | Outcome is closed but the Experiment Cycle is still open | `gil_close` with the Cycle Report |
    | Cycle closed `success` | `gil_open` the next Experiment (next independent question; exploration contract: linked to the same or another approved requirement — the success completed no requirement) or Interview. When no work remains and the project has a Chain, the Closing Interview and Chain Report follow; a chat summary alone never completes the project, and that Interview's first message shows the result before asking to close |
    | Cycle closed `failure` · `revisit` | When the Core receipt requires Monitor approval, open Monitor and wait for the user's “Preserve and revisit” (보존 후 되돌아가기) button after reviewing file changes; do not call App-only tools or invent consent. After confirmed recovery, `gil_open` a new Cycle. Otherwise follow the connected Core receipt; never bypass a product refusal |
@@ -300,6 +301,37 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    Analysis, Outcome and the Cycle Report instead of dressing the interruption up as success or a
    refutation. A lost connection or a pending human response is a wait, not an end: leave the
    open Step as it is and continue later.
+
+   **Ending a Will as unachieved — only where the record supports it.** This applies only when
+   both hold: the connected `gil_close` schema offers `unachieved_will`, and the project's storage
+   format records end results (format 8/9 — `gil_status`/`gil_context` then show the last ended
+   Will with its result). In any other project there is no unachieved end: use the interruption
+   observation above, or keep the Step open. A format 4–7 project refuses the input and says an
+   explicit conversion is needed; no conversion command exists yet, so never edit records,
+   convert files or restart the project to obtain it.
+   - Use it when the contracted action of an **Experiment** Step itself could not be carried out.
+     Close that Step with its Report plus `unachieved_will` naming the active Will exactly as
+     status/context show it (`will:W9`; CLI `gil close --unachieved will:W9`). The reason goes in
+     the Report body — and, for Verify, in the saved observation. There is no reason field, no
+     partial-result list and no provisional answer.
+   - Nothing is waived. Report fields, the approved plan, the unchanged world outside Verify,
+     `evidence_files` and the visual declaration apply exactly as for an ordinary close; the
+     record of the attempt is the evidence. If no evidence can be saved, do not close.
+   - The close is refused, changing nothing, when the named Will is not the active one (a stale
+     request can never close a Step opened since), when that Will already ended (the refusal
+     names its Step and `end_result`: read status/context, do not resend), or in an Interview —
+     waiting for an answer or an approval is not an end.
+   - Do not skip what the grammar still requires: an unachieved Hypothesis still needs its Verify,
+     and every case goes through Analysis and Outcome. Keep "not performed" apart from "refuted":
+     an unachieved end is not an answer to the question, and an achieved Will can still end in a
+     refuted question.
+   - That Experiment now closes only as a failure: Outcome `verdict: failure` with
+     `next_direction.action: close_cycle`, then the Cycle Report `failure` · `revisit`. A new
+     Hypothesis in the same Experiment, an in-Experiment revisit and `success` are refused. Try
+     again in the next Experiment after the recovery. An Experiment without an unachieved end
+     keeps its ordinary repetition (next Hypothesis, sibling revisit).
+   - The failure verdict is not a recovery approval and closes no Chain: the existing Monitor
+     approval, target checks and product recovery limits apply unchanged.
    Include `evidence_files` in its Report: 1–32 unique safe project-relative file paths. Every
    listed file must be nonempty in the Snapshot, and at least one must be new or changed from the
    baseline. One file: `evidence_files: evidence/result.md`. Multiple files use this Report syntax:
@@ -485,7 +517,8 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
      close. The request stays preserved meanwhile; there is no cancel or interrupt call. Then
      `gil_open` Interview and approve a new revision before any further Experiment. Never fabricate
      evidence to leave an unfinished Step. If the item cannot be finished, close truthfully with an
-     interruption observation (rule 4). After a `failure` · `revisit` close, show the preserved
+     interruption observation or, where the record supports it, an unachieved end (rule 4). After
+     a `failure` · `revisit` close, show the preserved
      partial results before the Monitor recovery removes them from the folder (they stay in the
      Snapshot and the preserved location). Keeping the partial results in place and continuing is
      not a recorded transition yet, and cancelling, splitting or replacing an approved item is not
@@ -557,7 +590,8 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    | Situation | Recovery |
    | --- | --- |
    | `gil_start` refused because a project exists | Read `gil_context` once and continue there; never start again |
-   | Close response lost or uncertain | Read `gil_status`/`gil_context`; close again only if the step is still open |
+   | Close response lost or uncertain | Read `gil_status`/`gil_context`; close again only if the step is still open. For an `unachieved_will` close, format 8/9 status and context show the last ended Will and its result; a resend whose Will already ended is refused with that Step and result and changes nothing |
+   | `unachieved_will` refused | Nothing was closed. Not the active Will: read `gil_status` for the active one. Already ended: the end is on record, do not resend. Interview: keep waiting. Format 4–7: the project cannot record it and no conversion command exists yet — keep the Step open or use the interruption observation |
    | `gil_close` input/Report rejected | The refusal names the missing or invalid field and shows the current input skeleton: put the Report STRING in `report`, not `contract` (the latter is for `gil_open`), fix only those fields and resend once; no manual lookup is needed for a field the refusal already shows. Read `gil_help({project_root, topic: "close"})` only when the refusal shows no skeleton or the position may have changed; do not run a PATH `gil` binary that may be a different build. Preserve typed `expected_owner`/`visuals` when required. |
    | `gil_close`/`gil_open` refused with an approved-plan reason (`Approved plan:` / `승인 계획:` in the reason) | Not an input error: do not fix and resend the same call. Read `gil_plan_read` once and follow the next action its reply names. For an actually open Synthesis: no proposal → `gil_plan_propose`; waiting → end the turn and wait for the Monitor button; approved → `gil_close` with `close_report` verbatim; changes requested → `close_report` (`approved: no`), then a Question. Never write `approved` yourself |
    | Plan decision or save result uncertain | `gil_plan_read`; never assume approval or re-propose blindly. Three states differ: approval still needed (wait), approval recorded (`receipt.decision`), save result unknown (read again; do not re-propose) |

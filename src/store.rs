@@ -32,7 +32,7 @@ use crate::artifact::{ManifestAddress, ObjectStore, RegistryError, SnapshotRegis
 use crate::cycle::{CycleKind, CycleState};
 use crate::lock::ProjectLock;
 use crate::cycles::{CycleId, Cycles, CyclesState};
-use crate::existence::{Existence, ExistenceState, Journey, Revision};
+use crate::existence::{EndResult, EndedWill, Existence, ExistenceState, Journey, Revision};
 use crate::project::{Project, ProjectError};
 use crate::refs::{
     ExistenceRef, JourneyRef, KnowledgeRef, MemoryRef, RefSyntaxError, RelationRef, SnapshotRef,
@@ -59,6 +59,48 @@ pub const VISUAL_FORMAT: u32 = 5;
 pub const CHAIN_FORMAT: u32 = 6;
 /// Chain plus visual registry; retains format-5 private-storage requirements.
 pub const CHAIN_VISUAL_FORMAT: u32 = 7;
+/// Chain plus the single end history (`ended_wills` with `end_result`). Read and written only by
+/// a `will-end-history` build; created only by starting a new project there, never by reading or
+/// running a format 4–7 project (Storage Transition Contract §3).
+pub const END_HISTORY_FORMAT: u32 = 8;
+/// Format 8 plus the visual registry; keeps the odd-format private-storage requirements.
+pub const END_HISTORY_VISUAL_FORMAT: u32 = 9;
+
+/// The largest format this build reads. Anything above is `UnknownFormat`, before any structure
+/// is interpreted, so a build that does not know a shape can never rewrite it.
+pub const fn newest_known_format() -> u32 {
+    if cfg!(feature = "will-end-history") {
+        END_HISTORY_VISUAL_FORMAT
+    } else if cfg!(feature = "chain-core") {
+        CHAIN_VISUAL_FORMAT
+    } else {
+        VISUAL_FORMAT
+    }
+}
+
+/// Formats that carry the visual registry and therefore the private-storage contract.
+pub const fn is_visual_format(format: u32) -> bool {
+    matches!(format, VISUAL_FORMAT | CHAIN_VISUAL_FORMAT | END_HISTORY_VISUAL_FORMAT)
+}
+
+/// The format this Project is written in — **the Project's shape decides, not a setting.**
+///
+/// ```text
+/// Cycles            4   + visual registry 5
+/// Chain             6   + visual registry 7
+/// Chain + history   8   + visual registry 9
+/// ```
+pub(crate) fn format_of(project: &Project) -> u32 {
+    let visual = project.visual_state().is_some();
+    match (project.current_chain().is_some(), project.records_end_results(), visual) {
+        (true, true, false) => END_HISTORY_FORMAT,
+        (true, true, true) => END_HISTORY_VISUAL_FORMAT,
+        (true, false, false) => CHAIN_FORMAT,
+        (true, false, true) => CHAIN_VISUAL_FORMAT,
+        (false, _, false) => FORMAT,
+        (false, _, true) => VISUAL_FORMAT,
+    }
+}
 
 /// **사람에게 보일 때의 자리.** 절대 경로를 적지 않는다.
 ///
@@ -164,13 +206,17 @@ pub(crate) fn load_within(
 /// Encode without filesystem mutation, shared by save and explicit migration.
 pub(crate) fn encode(project: &Project) -> Result<Vec<u8>, StoreError> {
     project.check_chains().map_err(|err| StoreError::ChainState(err.to_string()))?;
+    // The end history exists only on Chain formats; never write a shape no format number names.
+    if project.records_end_results() && project.current_chain().is_none() {
+        return Err(StoreError::EndHistory(crate::locale::text("store.end_history.needs_chain").into()));
+    }
     let mut stored = StoredState::from(project);
     if let Some(state) = project.visual_state() {
         let graph = crate::visual_report::project::ProjectVisualGraph::new(project, &state.boundary)
             .map_err(|err| StoreError::VisualState(format!("{err:?}")))?;
         let registry = crate::visual_report::registry::codec::to_stored(&state.registry, &graph)
             .map_err(|err| StoreError::VisualState(format!("{err:?}")))?;
-        stored.format = if project.current_chain().is_some() { CHAIN_VISUAL_FORMAT } else { VISUAL_FORMAT };
+        stored.format = format_of(project);
         stored.visuals = Some(StoredVisualState {
             boundary: state.boundary.heads.iter()
                 .map(|(owner, revision)| StoredVisualBoundary {
@@ -268,6 +314,7 @@ pub(crate) fn declared_format(text: &str, path: &Path) -> Result<u32, StoreError
     match head.format {
         FORMAT | VISUAL_FORMAT => Ok(head.format),
         CHAIN_FORMAT | CHAIN_VISUAL_FORMAT if cfg!(feature = "chain-core") => Ok(head.format),
+        END_HISTORY_FORMAT | END_HISTORY_VISUAL_FORMAT if cfg!(feature = "will-end-history") => Ok(head.format),
         found if found < FORMAT => Err(StoreError::PreviousFormat {
             found,
             current: FORMAT,
@@ -275,7 +322,7 @@ pub(crate) fn declared_format(text: &str, path: &Path) -> Result<u32, StoreError
         }),
         found => Err(StoreError::UnknownFormat {
             found,
-            known: if cfg!(feature = "chain-core") { CHAIN_VISUAL_FORMAT } else { VISUAL_FORMAT },
+            known: newest_known_format(),
         }),
     }
 }
@@ -371,11 +418,23 @@ impl StoredState {
     ///
     /// 두 축을 각자 세운 뒤 [`Project::restore`] 가 **서로 맞물리는지**를 잰다.
     fn into_project(self, rules: RuleSet) -> Result<Project, StoreError> {
-        if matches!(self.format, VISUAL_FORMAT | CHAIN_VISUAL_FORMAT) != self.visuals.is_some() {
+        if is_visual_format(self.format) != self.visuals.is_some() {
             return Err(StoreError::VisualState(crate::locale::text("store.visual_registry_mismatch").into()));
         }
+        // **One format number is one shape.** Formats 8/9 carry `ended_wills` and never
+        // `done_wills`; formats 4–7 the reverse. A mixed or missing list is refused here, before
+        // any record is interpreted, so neither shape can be read as the other.
+        let end_history = matches!(self.format, END_HISTORY_FORMAT | END_HISTORY_VISUAL_FORMAT);
+        for (name, existence) in &self.existences {
+            let journey = &existence.journey;
+            if journey.ended_wills.is_some() != end_history || journey.done_wills.is_some() == end_history {
+                let expected = if end_history { "ended_wills" } else { "done_wills" };
+                return Err(StoreError::EndHistory(crate::tr!("store.end_history.shape",
+                    existence = name, format = self.format, expected = expected)));
+            }
+        }
         let world = match (self.format, self.cycles, self.chains) {
-            (CHAIN_FORMAT | CHAIN_VISUAL_FORMAT, None, Some(stored)) => {
+            (CHAIN_FORMAT | CHAIN_VISUAL_FORMAT | END_HISTORY_FORMAT | END_HISTORY_VISUAL_FORMAT, None, Some(stored)) => {
                 if stored.nodes.is_empty() || stored.next_id as usize != stored.nodes.len() + 1
                     || stored.current != format!("chain:C{}", stored.nodes.len()) {
                     return Err(StoreError::ChainState("serial Chain Current and allocator disagree".into()));
@@ -434,6 +493,7 @@ impl StoredState {
             current,
             self.next_will_id,
             artifacts,
+            end_history,
         )
         .map_err(StoreError::NotWhole)?;
         if let Some(visuals) = visuals {
@@ -511,9 +571,16 @@ impl StoredExistence {
             Some(will) => Some(will.into_will()?),
             None => None,
         };
-        let mut done = Vec::with_capacity(self.journey.done_wills.len());
-        for will in self.journey.done_wills {
-            done.push(will.into_will()?);
+        // The shape was matched against the format before this point: exactly one list is here.
+        let mut ended = Vec::new();
+        for will in self.journey.done_wills.into_iter().flatten() {
+            // Formats 4–7: a closed promise was always an achieved one. That is the format's
+            // meaning, carried here unchanged — nothing is reclassified from Report text.
+            ended.push(EndedWill::restore(will.into_will()?, EndResult::Achieved));
+        }
+        for record in self.journey.ended_wills.into_iter().flatten() {
+            let result = record.end_result.into();
+            ended.push(EndedWill::restore(record.into_will()?, result));
         }
 
         let mut revisions = BTreeMap::new();
@@ -525,7 +592,7 @@ impl StoredExistence {
         Ok(Existence::restore(
             id,
             current,
-            Journey::restore(active, done, revisions),
+            Journey::restore(active, ended, revisions),
         ))
     }
 }
@@ -541,6 +608,53 @@ impl StoredWill {
             self.next_action,
             self.done_when,
         ))
+    }
+}
+
+impl StoredEndedWill {
+    fn into_will(self) -> Result<Will, StoreError> {
+        StoredWill {
+            id: self.id,
+            existence_ref: self.existence_ref,
+            target_node_ref: self.target_node_ref,
+            objective: self.objective,
+            next_action: self.next_action,
+            done_when: self.done_when,
+        }
+        .into_will()
+    }
+}
+
+impl From<&EndedWill> for StoredEndedWill {
+    fn from(ended: &EndedWill) -> Self {
+        let will = StoredWill::from(ended.will());
+        StoredEndedWill {
+            id: will.id,
+            existence_ref: will.existence_ref,
+            target_node_ref: will.target_node_ref,
+            objective: will.objective,
+            next_action: will.next_action,
+            done_when: will.done_when,
+            end_result: ended.result().into(),
+        }
+    }
+}
+
+impl From<StoredEndResult> for EndResult {
+    fn from(result: StoredEndResult) -> Self {
+        match result {
+            StoredEndResult::Achieved => EndResult::Achieved,
+            StoredEndResult::Unachieved => EndResult::Unachieved,
+        }
+    }
+}
+
+impl From<EndResult> for StoredEndResult {
+    fn from(result: EndResult) -> Self {
+        match result {
+            EndResult::Achieved => StoredEndResult::Achieved,
+            EndResult::Unachieved => StoredEndResult::Unachieved,
+        }
     }
 }
 
@@ -691,8 +805,42 @@ struct StoredJourney {
     /// 만들지 않는다(Will Model §4).
     active_will: Option<StoredWill>,
     /// 끝낸 행동들, 끝낸 순서대로. **ref 목록이 아니라 객체 목록이다.**
-    done_wills: Vec<StoredWill>,
+    ///
+    /// **형식 4–7 의 꼴이다.** 그 형식에서는 반드시 있고(비어 있어도 `[]` 로 적힌다),
+    /// 형식 8 이상에서는 있으면 거절한다. `Option` 인 것은 「없어도 된다」가 아니라 두 꼴을
+    /// 한 타입으로 읽고 **형식과 어긋난 쪽을 GIL 의 말로 거절하기** 위해서다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    done_wills: Option<Vec<StoredWill>>,
+    /// 끝난 행동들의 단일 종료 이력 — **형식 8 이상의 꼴이다.** `done_wills` 를 대체하며
+    /// 두 목록이 함께 있는 꼴은 없다(Storage Transition Contract §4.1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ended_wills: Option<Vec<StoredEndedWill>>,
     revisions: BTreeMap<String, StoredRevision>,
+}
+
+/// 끝난 행동 하나 — 원래 약속 그대로, 그리고 `end_result`.
+///
+/// 칸의 이름과 순서는 [`StoredWill`] 과 같고 끝에 결과 하나가 더 온다. **사유 칸이 없다** —
+/// 왜 하지 못했는지는 대상 자리의 Report 원문에 있다. `report_ref`·`journey_ref` 도 없다:
+/// 대상 자리의 `journey_ref` 판이 이 기록을 머리로 가리키고, 그 둘을 load 가 양쪽에서 잰다.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StoredEndedWill {
+    id: String,
+    existence_ref: String,
+    target_node_ref: String,
+    objective: String,
+    next_action: String,
+    done_when: String,
+    /// 필수다. `achieved`·`unachieved` 밖의 값과 빠진 칸은 읽기에서 거절된다.
+    end_result: StoredEndResult,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum StoredEndResult {
+    Achieved,
+    Unachieved,
 }
 
 /// 행동 한 단위.
@@ -839,7 +987,8 @@ impl From<&Project> for StoredState {
     fn from(project: &Project) -> Self {
         let (cycles, existences, states, current) = project.parts();
         StoredState {
-            format: if project.current_chain().is_some() { CHAIN_FORMAT } else { FORMAT },
+            // The visual registry, when present, is attached by `encode`; the number is the same.
+            format: format_of(project),
             chains: project.current_chain().map(|chain| StoredChains {
                 current: chain.id().to_string(), next_id: chain.id().number() + 1,
                 nodes: project.chains().iter().map(|chain| StoredChain {
@@ -856,7 +1005,7 @@ impl From<&Project> for StoredState {
             current_existence_ref: current.to_string(),
             existences: existences
                 .values()
-                .map(|existence| (existence.id().id(), StoredExistence::from(existence)))
+                .map(|existence| (existence.id().id(), StoredExistence::of(existence, project.records_end_results())))
                 .collect(),
             artifacts: StoredArtifacts {
                 next_snapshot_id: project.artifacts().next_id(),
@@ -893,18 +1042,22 @@ impl From<&Cycles> for StoredCycles {
     }
 }
 
-impl From<&Existence> for StoredExistence {
-    fn from(existence: &Existence) -> Self {
+impl StoredExistence {
+    /// `end_history` 가 꼴을 고른다 — 형식 8 이상은 `ended_wills`, 그 밖은 `done_wills`.
+    ///
+    /// 형식 4–7 의 이력은 전부 달성이다(미달성 닫기는 그 형식에서 거절되고, 읽을 때도
+    /// 거절된다). 그래서 결과를 떼고 약속만 적어도 잃는 것이 없고, **이전과 같은 바이트**가
+    /// 나온다.
+    fn of(existence: &Existence, end_history: bool) -> Self {
+        let ended = existence.journey().ended_wills();
         StoredExistence {
             current_journey_ref: existence.current_journey().to_string(),
             journey: StoredJourney {
                 active_will: existence.journey().active_will().map(StoredWill::from),
-                done_wills: existence
-                    .journey()
-                    .done_wills()
-                    .iter()
-                    .map(StoredWill::from)
-                    .collect(),
+                done_wills: (!end_history)
+                    .then(|| ended.iter().map(|ended| StoredWill::from(ended.will())).collect()),
+                ended_wills: end_history
+                    .then(|| ended.iter().map(StoredEndedWill::from).collect()),
                 revisions: existence
                     .journey()
                     .revisions()
@@ -1048,6 +1201,8 @@ impl From<StoredStatus> for NodeStatus {
 pub enum StoreError {
     VisualState(String),
     ChainState(String),
+    /// 종료 이력의 꼴이 선언한 형식과 맞지 않는다 — `done_wills`·`ended_wills` 의 혼용·누락.
+    EndHistory(String),
     /// 저장된 것이 아직 없다. 잘못이 아니라 **아직 시작하지 않았다**는 사실이다.
     NotFound { path: String },
     /// 앞 형식의 파일을 만났다. 읽지 않고, 있다는 사실을 말한다.
@@ -1094,6 +1249,7 @@ impl fmt::Display for StoreError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             StoreError::ChainState(why) => f.write_str(&crate::tr!("store.chain_state", why = why)),
+            StoreError::EndHistory(why) => f.write_str(&crate::tr!("store.end_history", why = why)),
             StoreError::VisualState(reason) => f.write_str(&crate::tr!("store.visual_state", reason = reason)),
             StoreError::NotFound { path } => f.write_str(&crate::tr!("store.not_found", path = path)),
             StoreError::LegacyFormat { path } => f.write_str(&crate::tr!("store.legacy_format", path = path)),
@@ -1142,7 +1298,7 @@ impl std::error::Error for StoreError {
             | StoreError::DigestNotCanonical { .. }
             | StoreError::Manifest { .. }
             | StoreError::JourneyWithoutState
-            | StoreError::VisualState(_) | StoreError::ChainState(_) => None,
+            | StoreError::VisualState(_) | StoreError::ChainState(_) | StoreError::EndHistory(_) => None,
         }
     }
 }

@@ -14,11 +14,14 @@ use std::process::{Child, Command, Stdio};
 mod common;
 
 fn expected_start_format() -> u64 {
-    match (cfg!(feature = "chain-core"), cfg!(feature = "visual-authoring")) {
-        (false, false) => 4,
-        (false, true) => 5,
-        (true, false) => 6,
-        (true, true) => 7,
+    // `will-end-history` implies `chain-core`: its new projects carry the single end history.
+    match (cfg!(feature = "chain-core"), cfg!(feature = "will-end-history"), cfg!(feature = "visual-authoring")) {
+        (false, _, false) => 4,
+        (false, _, true) => 5,
+        (true, false, false) => 6,
+        (true, false, true) => 7,
+        (true, true, false) => 8,
+        (true, true, true) => 9,
     }
 }
 
@@ -105,6 +108,7 @@ fn migration_stdio_two_approvals_backup_apply_restart_and_preservation() {
             value["cycles"] = value["chains"]["nodes"][0]["cycles"].clone();
             value.as_mapping_mut().unwrap().remove(serde_norway::Value::from("chains"));
             value["format"] = serde_norway::Value::from(4);
+            common::historical_done_list(&mut value);
             fs::write(&path, serde_norway::to_string(&value).unwrap()).unwrap();
             assert!(gil::load(common::spec(), &path).unwrap().current_chain().is_none());
         }
@@ -2160,7 +2164,7 @@ fn chain_profile_stdio_start_monitor_and_restart_preserve_containment() {
     assert_eq!(started["structuredContent"]["ok"], true, "{started}");
     assert!(started["structuredContent"]["said"].as_str().unwrap().contains("chain:C1"));
     #[cfg(feature = "visual-authoring")]
-    assert_eq!(started["structuredContent"]["storage_format"], 7);
+    assert_eq!(started["structuredContent"]["storage_format"], expected_start_format());
     let state = product_state_path(&root);
     let before = std::fs::read(&state).unwrap();
     let project = gil::load(common::spec(), &state).unwrap();

@@ -234,6 +234,10 @@ button, select { font: inherit; color: inherit; }
 .node.step[data-visuals="not_needed"]::after { content: "–"; background: var(--gil-fg-3); }
 .card-visuals { margin: 4px 0 0; font-size: var(--gil-xs); font-weight: var(--gil-w-semibold); color: var(--gil-fg); }
 
+/* 약속의 종료 결과 — 기록된 것만 그린다. 미달성은 점선 테로 구분하고, 뜻은 aria-label 과 카드가 진다. */
+.node.step[data-will-end="unachieved"] { outline: 2px dashed var(--gil-kind-synthesis); outline-offset: 2px; }
+.card-will-end { margin: 4px 0 0; font-size: var(--gil-xs); font-weight: var(--gil-w-semibold); color: var(--gil-fg); }
+
 /* 접힌 Cycle — 조금 더 큰 원 하나에 식별자(§6.1-8). */
 .node.cycle {
   width: 26px; height: 26px; border: 2px dashed var(--gil-line); color: var(--gil-fg-2);

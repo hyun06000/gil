@@ -624,6 +624,7 @@ pub(super) mod tests {
             state,
             summary: summary.map(str::to_string),
             visuals: None,
+            will_end: None,
         }
     }
 

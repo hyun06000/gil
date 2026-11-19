@@ -43,9 +43,10 @@ test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired
   // A guarded step (`node tools/ci/expect-tests.mjs <minimum> cargo test …`) is the same Cargo check.
   const features = [...chain.matchAll(/run: (?:node tools\/ci\/expect-tests\.mjs \d+ )?cargo (?:test|build).*?--features ([\w,-]+)/g)].map(m => m[1]);
   const groups = features.filter((f, i) => f !== features[i-1]);
-  // The opt-in profiles (exploration contract, then M4-R) run after the product profiles, each
-  // as one contiguous group and never inside a product profile.
-  assert.deepEqual(groups, ['chain-core', 'chain-core,visual-authoring,product-safety', 'approved-plan,visual-authoring,product-safety', 'exploration-flow,visual-authoring,product-safety', 'approved-plan,visual-authoring,recovery-auto-approval']);
+  // The opt-in profiles (exploration contract, M4-R, then the single end history alone and with
+  // the visual registry) run after the product profiles, each as one contiguous group and never
+  // inside a product profile.
+  assert.deepEqual(groups, ['chain-core', 'chain-core,visual-authoring,product-safety', 'approved-plan,visual-authoring,product-safety', 'exploration-flow,visual-authoring,product-safety', 'approved-plan,visual-authoring,recovery-auto-approval', 'will-end-history', 'will-end-history,visual-authoring,product-safety']);
   const companion = workflowText('companion-native');
   assert.doesNotMatch(companion, /windows-2025|windows-11-arm/);
   assert.match(companion, /paths:\n\s+- 'companion\/\*\*'/);

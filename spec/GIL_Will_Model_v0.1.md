@@ -1,11 +1,15 @@
 # GIL Will Model v0.1
 
 > **2026-11-19 후속 합의:** 실행 약속의 ‘진행 중’, ‘달성 완료’, ‘미달성 종료’를 구분한다.
-> 미달성 종료는 실패의 한 종류이며, 달성 완료와 함께 하나의 종료 이력에 저장한다. 구현은 대기다.
-> 아래 `active_will`·`done_wills`의 두 자리 설명과 저장 예시는 현재 구현이다.
-> 미달성 종료를 기존 Done으로 간주하지 않는다. 상세 필드·형식 번호·원자적 종료·전환은
-> [공유 저장·전이 계약 §4](GIL_Storage_Transition_Contract_v0.1.md#4-실행-약속의-단일-종료-이력-형식-8-이상)가
-> 정한다(설계 계약, 구현 대기).
+> 미달성 종료는 실패의 한 종류이며, 달성 완료와 함께 하나의 종료 이력에 저장한다.
+> 상세 필드·형식 번호·원자적 종료·전환은
+> [공유 저장·전이 계약 §4](GIL_Storage_Transition_Contract_v0.1.md#4-실행-약속의-단일-종료-이력-형식-8-이상)가 정한다.
+>
+> **구현 상태(구현 순서 1a):** 개발용 기능 `will-end-history`를 켠 빌드가 **새로 시작한 프로젝트**(저장
+> 형식 8/9)에서 단일 종료 이력과 미달성 닫기가 동작한다. 자동 검사만 통과했으며 실제 Host 화면 인수와
+> 필드 테스트는 하지 않았다. 형식 4–7 프로젝트는 아래 `active_will`·`done_wills`의 두 자리 그대로이고
+> 미달성 요청을 거절한다. 기존 프로젝트의 명시적 전환(1b)은 구현하지 않았고, 어떤 제품 프로필도 이
+> 기능을 켜지 않는다. 미달성 종료를 기존 Done으로 간주하지 않는다.
 
 ## 1. 목적
 
@@ -109,9 +113,15 @@ Will을 완료했다고 확정할 관측 가능한 조건을 기술한다.
 `existence:X1`과 `step:C2/S3`이다. 현재 화면에서 보이는 `#3` 같은 축약값은
 `target_node_ref`로 저장하지 않는다. Will ID도 같은 규칙에 따라 `will:W4`로 참조한다.
 
-현재 구현은 Will의 status를 필드로 중복 저장하지 않는다. `active_will` register에 있으면 Active,
-`done_wills` append-only 목록에 있으면 Done이다. 후속 합의의 미달성 종료를 어디에 표현할지는
-아래 확정한 단일 종료 이력에 표현하며, 현재의 두 자리 제약을 새 계약에 그대로 강제하지 않는다.
+Will의 status를 필드로 중복 저장하지 않는다. `active_will` register에 있으면 Active이고,
+종료 이력에 있으면 끝난 것이다. 종료 이력의 꼴은 저장 형식이 정한다.
+
+| 형식 | 종료 이력 | 뜻 |
+| --- | --- | --- |
+| 4–7 | `done_wills` | 그 목록에 있으면 Done이다. 전부 달성 완료이며 기록마다 결과를 적지 않는다 |
+| 8·9 | `ended_wills` | 기록마다 `end_result: achieved \| unachieved`가 있다. `done_wills`는 없다 |
+
+두 목록이 함께 있는 꼴은 없다. 형식 8·9에서도 진행 중 약속은 `active_will` 한 자리다.
 
 ### 저장 위치와 ID 발급
 
@@ -317,11 +327,28 @@ domain상 같은 register의 덮어쓰기지만, v0의 기본 traversal CLI에 �
 끝난 약속의 원문·완료 조건·대상 단계 연결은 두 종료 경우 모두 보존하며 사후에 고치지 않는다.
 미달성 종료 기록은 달성 완료로 표시하지 않고, 실패 실험의 분석·반성·복원으로 연결한다.
 
-현재 통합 Close는 Active Will을 무조건 Done 목록에 넣으므로 위 계약은 **구현 대기**다.
+형식 4–7의 통합 Close는 Active Will을 언제나 Done 목록에 넣는다. 그 형식에서는 미달성 종료를
+기록할 수 없고 요청을 거절한다. 형식 8·9(`will-end-history` 빌드가 새로 시작한 프로젝트)의 통합
+Close는 닫기 요청의 미달성 표시를 받아 같은 한 번의 확정으로 종료 결과를 기록한다.
 보조 약속 수정 명령으로 이 결정을 대신하지 않는다. 저장 필드·종료 결과 값·형식 번호·명시적 전환은
-[공유 저장·전이 계약](GIL_Storage_Transition_Contract_v0.1.md)의 설계를 따른다. 그 설계는 아직
-구현되지 않았다. 구현 시 원래 약속·보고서 연결, 원자적 종료, 재시작 후 조회,
-중복 종료·저장 실패 시 상태 보존을 검증한다.
+[공유 저장·전이 계약](GIL_Storage_Transition_Contract_v0.1.md)을 따른다.
+
+**미달성 닫기의 입력.** 닫기 요청에 끝내려는 약속을 지목한다 — MCP `gil_close`의
+`unachieved_will: "will:W9"`, CLI `gil close --unachieved will:W9`. 보고서의 필드가 아니며
+보고서 문법은 그대로다. 표시가 없으면 달성 닫기다.
+
+| 요청 | 결과 |
+| --- | --- |
+| 지목한 약속 = 진행 중 약속, Experiment의 단계, 닫기의 기존 조건 전부 충족 | `unachieved`로 종료. 단계 닫힘·보고서·자리 비움·이력 추가·Journey 판이 함께 저장된다 |
+| 지목한 약속이 진행 중 약속과 다름 | 거절, 변화 없음. 오래된 요청이 그사이 열린 다른 단계를 닫지 못한다 |
+| 지목한 약속이 이미 종료됨 | 거절, 변화 없음. 종료된 단계와 결과를 알려 준다. 결과는 바뀌지 않는다 |
+| Interview의 단계 | 거절, 변화 없음. 응답·승인 대기는 종료가 아니다 |
+| 형식 4–7의 프로젝트 | 거절, 변화 없음. 명시적 전환이 필요함을 알린다(전환 도구는 1b, 미구현) |
+
+미달성 종료가 기록된 Experiment는 실패로만 닫힌다: Outcome은 `failure`·`close_cycle`, Cycle
+보고서는 `failure`·`revisit`이다. 같은 실험 안의 새 가설·실험 안 되돌아가기·`success`는 거절된다.
+남은 단계(Verify·Analysis·Outcome)와 닫기의 기존 조건(보고서 필수 항목, 승인 계획, 변경 검사,
+Verify 증거, 시각 선언)은 하나도 면제되지 않는다. 미달성이 없는 실험의 반복 문법은 그대로다.
 
 #### 확정 저장 방향 — 하나의 종료 이력
 
@@ -350,7 +377,8 @@ domain상 같은 register의 덮어쓰기지만, v0의 기본 traversal CLI에 �
 
 ### 통합 Close transaction
 
-다음은 현재 구현의 일반 완료 경로다. 위 미달성 종료를 이미 지원한다는 뜻이 아니다.
+다음은 달성 닫기의 경로다. 미달성 닫기(형식 8·9)는 같은 순서에 「지목한 약속 확인」이 맨 앞에
+서고, 5의 append가 종료 이력에 `end_result`와 함께 들어간다는 점만 다르다.
 실행형 Node의 `gil close`는 Report 입력을 받으며 내부적으로 다음을 한 번에 수행한다.
 
 ```text
@@ -391,7 +419,23 @@ existences:
           will_head_ref: will:W1
 ```
 
+형식 8·9에서는 같은 자리가 `ended_wills`이고 각 기록 끝에 `end_result`가 온다.
+
+```yaml
+      active_will: null
+      ended_wills:
+        - id: W1
+          existence_ref: existence:X1
+          target_node_ref: step:C1/S1
+          objective: 사용자의 프로젝트 목표를 확인한다
+          next_action: 목표의 종류를 선택지와 함께 질문한다
+          done_when: 사용자의 원문 응답을 얻는다
+          end_result: achieved
+```
+
 Will Done은 `done_when`의 행동을 수행했다는 선언이며 가설의 success/failure 판정이 아니다.
+`unachieved`도 가설의 판정이 아니다 — 약속한 행동을 수행하지 못했다는 기록이며, 질문의 답을
+얻었다는 뜻이 아니다.
 
 ---
 
@@ -487,6 +531,19 @@ container_node_close_does_not_require_own_will
 context_does_not_invent_missing_will
 ```
 
+형식 8·9에 더해지는 것(공유 저장·전이 계약 E3·E4·E7·E8):
+
+```text
+every_ended_will_has_end_result_achieved_or_unachieved
+ended_will_targets_exactly_one_closed_step
+one_format_has_one_history_shape_never_both_lists
+unachieved_end_names_the_active_will
+unachieved_end_only_in_experiment_cycle
+experiment_with_unachieved_end_closes_only_as_failure
+experiment_with_unachieved_end_is_not_retried_inside
+ended_will_keeps_original_contract_and_target
+```
+
 ---
 
 ## 13. 아직 결정하지 않는 것
@@ -494,8 +551,9 @@ context_does_not_invent_missing_will
 - Active Will 덮어쓰기의 crash-safe transaction
 - 시간 값의 clock과 정렬 규칙
 - `done_when` 미달성 시 원래 약속 보존·미수행 이유 기록·실패 종료 방향은 2026-11-19 확정했다.
-  저장 표현·원자적 종료·재시작 처리의 설계는 공유 저장·전이 계약에 있고 구현이 남았다.
-  일반 취소 기능은 별도 미결이다.
+  저장 표현·원자적 종료·재시작 처리는 새 프로젝트(형식 8·9, `will-end-history` 빌드)에 구현했다.
+  기존 프로젝트의 명시적 전환(1b)과 그 동의 채널, 제품 프로필 활성화는 남았다.
+  일반 취소 기능·열린 단계 강제 종료·약속 수정 명령은 별도 미결이다.
 - 여러 Agent가 동시에 Will을 갱신하는 방식
 - Node Kind별 Will template
 - Will과 Report provenance의 참조 단위

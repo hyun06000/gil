@@ -20,9 +20,10 @@
 //!
 //! # status 를 저장하지 않는다
 //!
-//! Active 인지 Done 인지는 필드가 아니라 **저장된 자리**가 말한다(Will Model §4).
-//! Journey 의 `active_will` register 에 있으면 Active, `done_wills` 목록에 있으면 Done 이다.
-//! 같은 사실을 두 자리에 적으면 한쪽이 낡는다.
+//! Active 인지 끝났는지는 필드가 아니라 **저장된 자리**가 말한다(Will Model §4).
+//! Journey 의 `active_will` register 에 있으면 Active, 종료 이력에 있으면 끝난 것이다.
+//! 형식 4–7 의 이력은 `done_wills`(전부 달성)이고, 형식 8 이상의 이력은 `ended_wills` 이며
+//! 기록마다 `end_result`(달성·미달성)를 지닌다. 같은 사실을 두 자리에 적으면 한쪽이 낡는다.
 
 use std::fmt;
 

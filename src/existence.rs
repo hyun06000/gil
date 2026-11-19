@@ -114,6 +114,61 @@ impl Revision {
     }
 }
 
+/// **행동이 어떻게 끝났는가** — 종료 이력의 기록마다 하나.
+///
+/// 실험의 판정(`success`·`failure`)도 Step 의 상태(`open`·`closed`)도 아니다. 그 둘과 섞이지
+/// 않도록 이름을 `end_result` 로 둔다(Storage Transition Contract §4.1).
+///
+/// 이유는 여기 없다. 왜 하지 못했는지는 **그 자리를 닫은 Report 원문**이 지닌다 — 분류 코드도,
+/// 잠정 답도, 부분 결과 목록도 이 타입에 더하지 않는다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EndResult {
+    /// 적어 둔 행동을 수행했다. 형식 4–7 의 Done 은 전부 이것이다.
+    Achieved,
+    /// 적어 둔 행동을 수행하지 못한 채 끝냈다. 형식 8 이상에서만 기록된다.
+    Unachieved,
+}
+
+impl EndResult {
+    /// 저장과 화면이 함께 쓰는 낱말.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            EndResult::Achieved => "achieved",
+            EndResult::Unachieved => "unachieved",
+        }
+    }
+}
+
+impl std::fmt::Display for EndResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// 끝난 행동 하나 — **원래 약속 그대로**, 그리고 어떻게 끝났는가.
+///
+/// 약속(`objective`·`next_action`·`done_when`)과 대상 자리는 걸려 있던 때의 값이다. 끝내면서
+/// 고치는 문이 없다 — [`Will`] 에도 여기에도.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EndedWill {
+    will: Will,
+    result: EndResult,
+}
+
+impl EndedWill {
+    pub fn will(&self) -> &Will {
+        &self.will
+    }
+
+    pub fn result(&self) -> EndResult {
+        self.result
+    }
+
+    pub(crate) fn restore(will: Will, result: EndResult) -> EndedWill {
+        EndedWill { will, result }
+    }
+}
+
 /// 한 Existence 가 살아온 판들.
 ///
 /// revision 은 **확정된 내용이 바뀔 때만** 늘어난다(Existence Model §4). 지금 그것을 늘리는
@@ -124,11 +179,15 @@ pub struct Journey {
     ///
     /// mutable register 다. 프로세스 경계는 넘지만 아직 immutable Timeline 에는 없다.
     active_will: Option<Will>,
-    /// **끝낸 행동들, 끝낸 순서대로.** 여기 있으면 Done 이다.
+    /// **끝난 행동들, 끝난 순서대로 — 단일 종료 이력.** 여기 있으면 끝난 것이다.
     ///
     /// ref 목록이 아니라 **객체 목록**이다(Will Model §4). append 만 한다 — 지우지도,
-    /// 사이에 끼워 넣지도, 고치지도 않는다.
-    done_wills: Vec<Will>,
+    /// 사이에 끼워 넣지도, 고치지도 않는다. 결과도 고치지 않는다.
+    ///
+    /// 디스크에서는 형식이 꼴을 정한다: 4–7 은 `done_wills`(전부 달성), 8 이상은
+    /// `ended_wills`(기록마다 `end_result`). 어느 꼴로 눕는지는 [`Project`](crate::Project) 가
+    /// 알고, 이 목록은 두 꼴의 공통 모양이다.
+    ended_wills: Vec<EndedWill>,
     revisions: BTreeMap<u32, Revision>,
 }
 
@@ -137,7 +196,7 @@ impl Journey {
     pub(crate) fn start(state: StateRef) -> Journey {
         Journey {
             active_will: None,
-            done_wills: Vec::new(),
+            ended_wills: Vec::new(),
             revisions: BTreeMap::from([(0, Revision::empty(state))]),
         }
     }
@@ -147,14 +206,26 @@ impl Journey {
         self.active_will.as_ref()
     }
 
-    /// 끝낸 행동들 — 끝낸 순서대로.
-    pub fn done_wills(&self) -> &[Will] {
-        &self.done_wills
+    /// 끝난 행동들 — 끝난 순서대로, 결과와 함께.
+    pub fn ended_wills(&self) -> &[EndedWill] {
+        &self.ended_wills
     }
 
-    /// 마지막으로 끝낸 행동. `will_head_ref` 가 가리키는 자리다.
-    pub fn last_done_will(&self) -> Option<&Will> {
-        self.done_wills.last()
+    /// **달성으로 끝난** 행동들만 — 끝난 순서대로.
+    ///
+    /// 형식 4–7 에서는 종료 이력 전체와 같다. 미달성 기록을 Done 으로 세지 않아야 하는
+    /// 조회가 이 문을 쓴다.
+    pub fn done_wills(&self) -> Vec<&Will> {
+        self.ended_wills
+            .iter()
+            .filter(|ended| ended.result == EndResult::Achieved)
+            .map(|ended| &ended.will)
+            .collect()
+    }
+
+    /// 마지막으로 끝난 행동. `will_head_ref` 가 가리키는 자리다 — **결과와 무관하게.**
+    pub fn last_ended_will(&self) -> Option<&EndedWill> {
+        self.ended_wills.last()
     }
 
     /// 아직 쓰지 않은 다음 판 번호.
@@ -170,14 +241,15 @@ impl Journey {
         self.active_will = Some(will);
     }
 
-    /// 걸려 있던 행동을 끝낸 것으로 옮긴다 — register 를 비우고 목록 끝에 붙인다.
+    /// 걸려 있던 행동을 끝난 것으로 옮긴다 — register 를 비우고 이력 끝에 붙인다.
     ///
     /// 옮기는 것이지 **베끼는 것이 아니다.** 같은 객체가 두 자리에 동시에 있으면
-    /// 어느 쪽이 진짜인지 파일이 말하지 못한다.
-    pub(crate) fn complete_active_will(&mut self) -> Option<WillRef> {
+    /// 어느 쪽이 진짜인지 파일이 말하지 못한다. 약속의 내용은 한 글자도 바꾸지 않는다 —
+    /// 더해지는 것은 결과 하나다.
+    pub(crate) fn end_active_will(&mut self, result: EndResult) -> Option<WillRef> {
         let will = self.active_will.take()?;
         let id = will.id();
-        self.done_wills.push(will);
+        self.ended_wills.push(EndedWill { will, result });
         Some(id)
     }
 
@@ -200,12 +272,12 @@ impl Journey {
 
     pub(crate) fn restore(
         active_will: Option<Will>,
-        done_wills: Vec<Will>,
+        ended_wills: Vec<EndedWill>,
         revisions: BTreeMap<u32, Revision>,
     ) -> Journey {
         Journey {
             active_will,
-            done_wills,
+            ended_wills,
             revisions,
         }
     }

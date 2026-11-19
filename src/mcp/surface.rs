@@ -34,6 +34,8 @@ pub fn tools() -> &'static [Tool] {
         let tools = super::records::catalog(tools);
         #[cfg(feature = "product-safety")]
         let tools = super::recovery::catalog(tools);
+        #[cfg(feature = "will-end-history")]
+        let tools = unachieved_close(tools);
         let mut tools = tools;
         tools.push(serde_json::from_str(include_str!("handoff-tool.json")).expect("handoff tool"));
         for tool in &mut tools {
@@ -54,6 +56,26 @@ pub fn tools() -> &'static [Tool] {
         }
         tools
     })
+}
+
+/// Adds the unachieved marker to `gil_close` — only in a build that can record the result.
+///
+/// The base catalog (`tools.json`) and every build without `will-end-history` stay as they were:
+/// a tool surface never offers an input its Core would have to refuse for every project. The
+/// input is still refused, with an explicit-conversion notice, on a format 4–7 project.
+#[cfg(feature = "will-end-history")]
+fn unachieved_close(mut tools: Vec<Tool>) -> Vec<Tool> {
+    let close = tools.iter_mut().find(|tool| tool.name == "gil_close").expect("close");
+    let mut raw = serde_json::to_value(&*close).expect("tool");
+    raw["inputSchema"]["properties"][super::actions::UNACHIEVED_WILL] = json!({
+        "type": "string",
+        "pattern": "^will:W[1-9][0-9]*$",
+        "description": "Optional. Ends the open step's Will as UNACHIEVED instead of achieved: the canonical reference of the Will to end, exactly as gil_status/gil_context show it (for example will:W9). Use only when the contracted action of an Experiment step could not be carried out; the reason goes in the Report body, never here. Every ordinary close condition still applies (Report fields, approved plan, clean world, Verify evidence_files, visual declaration). Refused, closing nothing, when the reference is not the currently active Will (a stale resend cannot close a newer step), when that Will already ended (the answer names its step and result), in an Interview, or on a project whose storage format (4–7) does not record end results. After an unachieved end the Experiment closes only as failure: Outcome verdict failure with next_direction.action close_cycle, no new hypothesis and no in-Experiment revisit. A lost connection or a pending answer is not an end: leave the step open."
+    });
+    let description = raw["description"].as_str().unwrap_or_default().to_owned();
+    raw["description"] = json!(format!("{description} Optional unachieved_will (a Will reference such as will:W9) ends the open Experiment step's Will as unachieved; omit it for the ordinary achieved close."));
+    *close = serde_json::from_value(raw).expect("tool");
+    tools
 }
 
 pub fn resource() -> Resource {
@@ -93,6 +115,13 @@ pub fn valid_input(tool: &Tool, input: &Value) -> bool {
     #[cfg(all(feature = "visual-authoring", windows))]
     if tool.name == super::workspace::NAME {
         return super::workspace::valid(input);
+    }
+    // The marker names one Will. Anything but a canonical reference is a wire error, not a close.
+    if tool.name == "gil_close" {
+        if let Some(value) = input.get(super::actions::UNACHIEVED_WILL) {
+            let canonical = value.as_str().is_some_and(|text| text.parse::<crate::WillRef>().is_ok_and(|will| will.to_string() == text));
+            if !canonical { return false; }
+        }
     }
     // Older/default builds must never silently discard a visual close request.
     if tool.name == "gil_close" && (input.get("visuals").is_some() || input.get("expected_owner").is_some()) {
@@ -134,11 +163,25 @@ pub fn rejection(tool: &Tool, input: &Value) -> String {
     if tool.name == "gil_open" && input.get("report").is_some() {
         return "gil_open: unknown field 'report'. Use 'contract' for the action contract string (objective, next_action, done_when); 'report' belongs to gil_close. Nothing was opened.".into();
     }
+    if tool.name == "gil_close" {
+        if let Some(hint) = unachieved_rejection(input) { return hint.into(); }
+    }
     #[cfg(feature = "visual-authoring")]
     if tool.name == "gil_close" && input.get("expected_owner").is_some() && input.get("visuals").is_some() {
         return super::authoring::rejection(input);
     }
     rejection_hint(tool, input).to_string()
+}
+
+/// Why an `unachieved_will` input was refused at the wire: unsupported here, or not a reference.
+/// A well-formed marker in a supporting build is not the reason and yields `None`.
+fn unachieved_rejection(input: &Value) -> Option<&'static str> {
+    let value = input.get(super::actions::UNACHIEVED_WILL)?;
+    if !cfg!(feature = "will-end-history") {
+        return Some("gil_close: 'unachieved_will' is not supported by this GIL; it was not silently dropped and nothing was closed. This build records every closed step's Will as achieved and cannot record an unachieved end. Leave the step open, or close it without the field only if the contracted action was actually carried out. Never convert or edit records to work around this.");
+    }
+    let canonical = value.as_str().is_some_and(|text| text.parse::<crate::WillRef>().is_ok_and(|will| will.to_string() == text));
+    (!canonical).then_some("gil_close: 'unachieved_will' must be the canonical reference of the Will to end, for example will:W9, exactly as gil_status or gil_context show it. Nothing was closed. Read gil_status for the active Will and send one corrected call.")
 }
 
 fn rejection_hint(tool: &Tool, input: &Value) -> &'static str {
@@ -195,6 +238,29 @@ mod tests {
             "visuals":{"attachments":[],"uses":[],"declaration":{"state":"not_needed","reason":"byte comparison"}}});
         assert!(!valid_input(close, &typed));
         assert!(rejection(close, &typed).contains("unknown field 'contract'"));
+    }
+    /// The unachieved marker is offered only by a build that can record the result. Everywhere
+    /// else it is a wire error that says so — never silently dropped into an achieved close.
+    #[test]
+    fn the_unachieved_marker_is_offered_only_where_the_result_can_be_recorded() {
+        let close = tools().iter().find(|t| t.name == "gil_close").unwrap();
+        let offered = close.input_schema.get("properties").and_then(Value::as_object)
+            .is_some_and(|properties| properties.contains_key(crate::mcp::actions::UNACHIEVED_WILL));
+        assert_eq!(offered, cfg!(feature = "will-end-history"));
+        let named = json!({"project_root":"/synthetic","report":"private body text","unachieved_will":"will:W9"});
+        assert_eq!(valid_input(close, &named), cfg!(feature = "will-end-history"));
+        if !cfg!(feature = "will-end-history") {
+            let said = rejection(close, &named);
+            assert!(said.contains("not supported by this GIL") && said.contains("nothing was closed"), "{said}");
+            assert!(!said.contains("private body text") && !said.contains("will:W9"), "{said}");
+        }
+        // Anything but the canonical reference of one Will is refused at the wire in every build.
+        for malformed in [json!("W9"), json!("will:W09"), json!("will:w9"), json!(" will:W9"), json!(9), json!(null), json!(true)] {
+            let mut input = named.clone();
+            input["unachieved_will"] = malformed.clone();
+            assert!(!valid_input(close, &input), "{malformed}");
+            assert!(rejection(close, &input).contains("unachieved_will"), "{malformed}");
+        }
     }
     #[test]
     fn rejections_name_the_missing_field_without_echoing_input() {

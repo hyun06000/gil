@@ -25,15 +25,29 @@ Chain 취소·Chain revisit의 우회 API는 없다.
 | 5 | Project → Cycles | 있음 | 기존 소유자 전용 계약 |
 | 6 | Project → Chain → Cycles | 없음 | format 4와 동일 |
 | 7 | Project → Chain → Cycles | 있음 | format 5와 동일 |
+| 8 | Project → Chain → Cycles, 종료 이력 `ended_wills` | 없음 | format 4와 동일 |
+| 9 | Project → Chain → Cycles, 종료 이력 `ended_wills` | 있음 | format 5와 동일 |
 
 6/7은 `chain-core`만 읽고 쓴다. 구형 writer와 해당 기능이 없는 기본 빌드는 format gate에서
 거절한다. 형식 번호만 낮추면 Chain 구조가 남으므로 역시 거절한다. 6에 visual registry를 넣거나
 7에서 빼도 거절한다. 4/5는 읽을 때 Chain을 만들지 않고, 일반 commit도 원래 형식을 유지한다.
 
-**후속 형식(2026-11-19 설계, 구현 대기):** 실행 약속의 단일 종료 이력은 형식 8/9, 승인 정책·관리 사건은
-형식 10/11로 도입한다. 6/7의 읽기·쓰기와 의미는 그대로이며 자동으로 올리지 않는다. 번호 배정·지원 관계·
-명시적 전환은 [공유 저장·전이 계약](GIL_Storage_Transition_Contract_v0.1.md#3-저장-형식-버전)을 따른다.
-현재 프로그램은 8 이상을 읽지 않는다.
+**형식 8/9 — 실행 약속의 단일 종료 이력(구현 순서 1a).** 개발용 기능 `will-end-history`(= `chain-core`
+포함)를 켠 빌드만 읽고 쓰며, 그 빌드가 **새로 시작하는 프로젝트**가 8(시각 등록부가 있으면 9)이다.
+World 부분은 6/7과 같은 꼴이고, 달라지는 것은 Journey 하나다: `done_wills`가 없고 `ended_wills`가 있으며
+기록마다 `end_result: achieved | unachieved`가 필수다. 두 목록이 함께 있거나 둘 다 없는 파일, 모르는
+결과값, 번호만 낮춘 파일은 읽지 않는다. 기능을 켜지 않은 빌드(기본·`chain-core`·승인 계획·제품 보호
+구성 모두)는 8 이상을 모르는 형식으로 거절하고 파일을 바꾸지 않는다.
+
+- 6/7의 읽기·쓰기와 의미는 그대로다. 6/7에서 닫힌 약속은 모두 달성 완료이며, 조회·실행·재저장으로
+  번호가 오르지 않는다. 6/7 프로젝트의 미달성 요청은 「명시적 전환이 필요하다」는 안내와 함께 거절된다.
+- 6/7 → 8/9의 **명시적 전환 도구(1b)는 아직 없다.** 4/5를 이 형식으로 옮기는 지원도 없다.
+- 빌드: `cargo build --locked -p gil --features will-end-history --bin gil`. 어떤 배포 구성도 이 기능을
+  켜지 않는다.
+
+**후속 형식(2026-11-19 설계, 구현 대기):** 승인 정책·관리 사건은 형식 10/11로 도입한다. 번호 배정·지원
+관계·명시적 전환은 [공유 저장·전이 계약](GIL_Storage_Transition_Contract_v0.1.md#3-저장-형식-버전)을 따른다.
+현재 프로그램은 10 이상을 읽지 않는다.
 
 format 6/7의 World 부분은 다음과 같다. Existence/Will/Journey/Artifact registry는 기존 뿌리에
 그대로 있고 한 `state.yaml`에 원자적으로 저장한다.

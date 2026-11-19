@@ -30,10 +30,23 @@ use crate::walk::StepNode;
 /// **부모의 Step 을 자식 아래에 다시 펼치지 않는다.** Cycle 은 제 Step 만 갖고, 이어받은 것은
 /// `parent` 를 따라 읽은 Cycle Report 한 줄기다.
 pub fn story(cycles: &Cycles) -> String {
+    story_with(cycles, &|_| false)
+}
+
+/// 같은 이야기에 **약속이 미달성으로 끝난 자리**를 표시한다.
+///
+/// Cycle Graph 는 약속의 이력을 모른다. 그것을 아는 [`Project`](crate::Project) 가 자리마다
+/// 답해 준다 — 형식 4–7 에서는 어느 자리도 미달성이 아니므로 [`story`] 와 같은 글자가 나온다.
+/// 이유를 여기서 다시 적지 않는다. 그것은 바로 위에 펼친 Report 원문에 있다.
+pub fn story_of(project: &crate::Project, cycles: &Cycles) -> String {
+    story_with(cycles, &|step| project.recorded_end_result(step) == Some(crate::EndResult::Unachieved))
+}
+
+fn story_with(cycles: &Cycles, unachieved: &dyn Fn(crate::StepRef) -> bool) -> String {
     let mut out = String::new();
     for cycle in cycles.nodes() {
         write_cycle_banner(&mut out, cycles, cycle);
-        write_steps(&mut out, cycle);
+        write_steps(&mut out, cycle, unachieved);
         write_cycle_report(&mut out, cycle);
     }
     write_where_we_stand(&mut out, cycles);
@@ -92,7 +105,7 @@ fn write_inherited(out: &mut String, cycles: &Cycles, cycle: &Cycle) {
 }
 
 /// 이 Cycle 안의 Step 절들.
-fn write_steps(out: &mut String, cycle: &Cycle) {
+fn write_steps(out: &mut String, cycle: &Cycle, unachieved: &dyn Fn(crate::StepRef) -> bool) {
     let walk = cycle.steps();
     let mut attempt = 0;
 
@@ -116,6 +129,9 @@ fn write_steps(out: &mut String, cycle: &Cycle) {
             None => {
                 out.push_str(&tr!("story.not_written", id = node.id));
             }
+        }
+        if unachieved(cycle.step_ref(node.id)) {
+            out.push_str(&tr!("story.unachieved", id = node.id, kind = node.kind));
         }
     }
 

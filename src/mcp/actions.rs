@@ -9,6 +9,9 @@ use crate::tr;
 pub const NAMES: &[&str] = &["gil_status", "gil_context", "gil_story", "gil_help", "gil_start",
     "gil_open", "gil_close", "gil_restore", "gil_revisit", "gil_cycle"];
 
+/// `gil_close` input that ends the named Will as unachieved (Storage Transition Contract §4.4).
+pub const UNACHIEVED_WILL: &str = "unachieved_will";
+
 fn result(ok: bool, exit: Option<i32>, said: String, problem: String) -> CallToolResult {
     let mut out = CallToolResult::success(vec![ContentBlock::text(format!("{said}{problem}"))]);
     out.structured_content = Some(json!({"ok": ok, "exit_code": exit, "said": said, "problem": problem}));
@@ -98,7 +101,7 @@ pub fn call(name: &str, input: &Value) -> CallToolResult {
             Ok(said) => {
                 let mut out = result(true, Some(0), said, String::new());
                 if let Some(fields) = out.structured_content.as_mut().and_then(Value::as_object_mut) {
-                    fields.insert("storage_format".into(), json!(if cfg!(feature = "chain-core") { crate::CHAIN_VISUAL_FORMAT } else { crate::VISUAL_FORMAT }));
+                    fields.insert("storage_format".into(), json!(if cfg!(feature = "will-end-history") { crate::END_HISTORY_VISUAL_FORMAT } else if cfg!(feature = "chain-core") { crate::CHAIN_VISUAL_FORMAT } else { crate::VISUAL_FORMAT }));
                     fields.insert("display_confirmed".into(), json!(false));
                     #[cfg(windows)]
                     fields.insert("record_storage".into(), json!("private_app_data"));
@@ -123,6 +126,15 @@ pub fn call(name: &str, input: &Value) -> CallToolResult {
                 return refusal(text("action.cycle_action_enum"));
             }
             args.push(value);
+        }
+    }
+    // The unachieved marker travels as the same two arguments the CLI takes, so one parser and
+    // one designation check serve both entries. The schema offers the field only in a build that
+    // can record the result; a value that is not a canonical Will reference is refused by Core.
+    if name == "gil_close" {
+        if let Some(will) = input.get(UNACHIEVED_WILL).and_then(Value::as_str) {
+            args.push("--unachieved".to_owned());
+            args.push(will.to_owned());
         }
     }
     let body = match name { "gil_open" => input.get("contract"), "gil_close" => input.get("report"), _ => None }

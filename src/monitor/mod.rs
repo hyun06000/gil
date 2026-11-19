@@ -259,6 +259,12 @@ pub struct StepFacts {
     /// 이 Report 가 남긴 시각 자료의 **요약** — 상태와 개수뿐이다. 그림·설명·bytes 는 App 전용
     /// 조회가 따로 나른다. 선언이 기록되지 않은 구형 Report 는 `None` 이다.
     pub visuals: Option<VisualSummary>,
+    /// 이 자리의 약속이 **기록된 종료 결과** — `achieved` · `unachieved`.
+    ///
+    /// 종료 결과를 기록하는 형식(8/9)의 닫힌 자리에만 있다. 형식 4–7 과 열린 자리는 `None`
+    /// 이다 — 옛 기록에 「달성」을 소급해 붙이지 않는다. 판정이 아니라 기록의 표지이며,
+    /// 이유는 그 자리의 Report 원문에 있다.
+    pub will_end: Option<crate::EndResult>,
 }
 
 /// 보고서 하나의 시각 자료 요약. registry 의 상태를 **그대로** 옮긴 표지이지 판정이 아니다.
@@ -337,6 +343,7 @@ fn step_facts(project: &Project, cycle: &Cycle, node: &crate::walk::StepNode) ->
             .and_then(|field| node.report.as_ref()?.get(field))
             .map(str::to_string),
         visuals: visual_summary(project, ReportOwner::Step(cycle.step_ref(node.id))),
+        will_end: project.recorded_end_result(cycle.step_ref(node.id)),
     }
 }
 
@@ -943,7 +950,8 @@ fn possible_here(project: &Project) -> Vec<NextAction> {
         return out;
     }
 
-    for kind in here.openable_here() {
+    // 종료 이력의 규칙까지 반영한 목록이다 — 미달성 실험에서 Analysis 뒤의 새 가설을 내놓지 않는다.
+    for kind in project.openable_here() {
         out.push(action(
             ActionKind::OpenStep(kind),
             format!("gil open {}", kind.as_str()),

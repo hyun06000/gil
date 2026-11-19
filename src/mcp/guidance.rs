@@ -329,7 +329,7 @@ fn plan(name: &str, result: &CallToolResult) -> Option<String> {
     }
     Some(match name {
         // The request is the one recorded signal that the item may not finish: say how to stop truthfully.
-        "gil_plan_request_interview" => format!("{} {}", tr!("guide.plan.request_interview"), text("guide.interrupt_honest")),
+        "gil_plan_request_interview" => format!("{} {}", tr!("guide.plan.request_interview"), text(crate::context::interrupt_honest_key())),
         _ => match (proposal, decision) {
             (Some(_), None) => tr!("guide.plan.waiting", revision = revision.unwrap_or(0)),
             (Some(_), Some("approve")) => tr!("guide.plan.approved", revision = revision.unwrap_or(0)),
@@ -781,7 +781,7 @@ mod tests {
         let mut r = CallToolResult::structured(blocked);
         after("gil_plan_request_interview", &mut r);
         assert!(text(&r).contains("아무것도 닫히거나 열리지 않았다") && text(&r).contains("gil_open(kind: interview)"), "{}", text(&r));
-        assert!(text(&r).contains(crate::locale::text("guide.interrupt_honest")), "the request hint says how to stop truthfully: {}", text(&r));
+        assert!(text(&r).contains(crate::locale::text(crate::context::interrupt_honest_key())), "the request hint says how to stop truthfully: {}", text(&r));
         let mut r2 = CallToolResult::structured(json!({"supported": true, "proposal": null, "pending": [], "reinterview_requests": [{"cycle_ref": "cycle:C2", "reason": "scope"}], "current_item": null}));
         after("gil_plan_read", &mut r2);
         assert!(text(&r2).contains("재인터뷰 요청이 보존") && !text(&r2).contains("gil_open(kind: experiment)"), "{}", text(&r2));
