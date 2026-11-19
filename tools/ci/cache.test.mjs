@@ -25,6 +25,30 @@ test('dependency caches are stable across source commits; only cache maintenance
   }
 });
 
+/// The job-level `env:` of the Chain workflow as {NAME: value}.
+const chainJobEnv = () => {
+  const block = workflowText('chain-core').match(/\n    env:\n((?: {6}.*\n)+)/)?.[1] ?? '';
+  return Object.fromEntries([...block.matchAll(/^ {6}([A-Z0-9_]+): '?([^'\n]*)'?$/gm)].map(m => [m[1], m[2]]));
+};
+
+test('Chain CI build-cost settings stay CI-only, never reach release or test semantics, and key the cache', () => {
+  const env = chainJobEnv();
+  assert.deepEqual(Object.keys(env).sort(), ['CARGO_INCREMENTAL', 'CARGO_PROFILE_DEV_DEBUG', 'RUSTUP_TOOLCHAIN']);
+  assert.equal(env.CARGO_PROFILE_DEV_DEBUG, 'line-tables-only');
+  assert.equal(env.CARGO_INCREMENTAL, '0');
+  const text = workflowText('chain-core');
+  // Optimisation, assertions, overflow checks, panic strategy, codegen flags and the release
+  // profile are never changed by CI, for the job or for a single step.
+  assert.doesNotMatch(text, /CARGO_PROFILE_RELEASE|CARGO_PROFILE_\w+_(?:OPT_LEVEL|DEBUG_ASSERTIONS|OVERFLOW_CHECKS|PANIC|CODEGEN_UNITS|LTO|STRIP)|RUSTFLAGS|CARGO_BUILD|cargo [^\n]*(?:--release|--profile)/);
+  assert.doesNotMatch(readFileSync(join(root, 'Cargo.toml'), 'utf8'), /^\[profile/m, 'a committed profile would override the measured CI setting');
+  // The debuginfo level changes every cached dependency output, so a cache built with another
+  // level is never restored, not even by prefix; incremental state is never cached.
+  const key = text.match(/^          key: (.+)$/m)[1];
+  const prefix = text.match(/^          restore-keys: \|\n {12}(.+)$/m)[1];
+  for (const k of [key, prefix]) assert.match(k, /-rust-1\.97\.1-dev-debug-\$\{\{ env\.CARGO_PROFILE_DEV_DEBUG \}\}-\$\{\{ hashFiles\('Cargo\.lock'/);
+  assert.ok(key.startsWith(prefix));
+});
+
 test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired runtime-update steps', () => {
   const text = workflowText('windows-spike');
   assert.equal((text.match(/          - arch: x64/g) || []).length, 2);
@@ -62,8 +86,11 @@ test('cache pruning removes implicit and explicit target workspace outputs but p
       (name === 'cache-dep' ? '' : '[dependencies]\ncache-dep={path="../cache-dep"}\n'));
     writeFileSync(join(folder, name, 'src/lib.rs'), 'pub fn value() -> u8 { 1 }\n');
   }
+  // Build the synthetic workspace with the Chain job's own build settings, so the prune contract
+  // is checked against the outputs CI actually caches.
+  const {RUSTUP_TOOLCHAIN: _toolchain, ...ciBuild} = chainJobEnv();
   const run = (args, extra = {}) => {
-    const result = spawnSync('cargo', args, {cwd:folder, encoding:'utf8', env:{...process.env, CARGO_TARGET_DIR:join(folder,'target'), ...extra}});
+    const result = spawnSync('cargo', args, {cwd:folder, encoding:'utf8', env:{...process.env, ...ciBuild, CARGO_TARGET_DIR:join(folder,'target'), ...extra}});
     assert.equal(result.status, 0, result.stderr); return result;
   };
   const version = spawnSync('rustc', ['-vV'], {encoding:'utf8'});
