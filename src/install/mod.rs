@@ -1,7 +1,7 @@
 //! `gil install` · `gil doctor` · `gil uninstall` — the executable registers itself with the
 //! Hosts on this PC (Claude Desktop, Codex) and reports the result in a fixed, machine-readable
-//! form. This is the whole Windows installation story: one static `gil.exe`, one fixed path,
-//! no installer, no launcher, no Companion.
+//! form. Standalone installs copy the Core to a fixed path; Store installs register the OS
+//! execution alias without copying an executable out of the package.
 //!
 //! Decisions (2026-11-12 deployment decision record):
 //! - the fixed path is `%LOCALAPPDATA%\Programs\gil\gil.exe`; Hosts register that path with
@@ -18,13 +18,14 @@
 //! A running Claude Desktop rewrites its own settings file and can revert an outside edit
 //! (observed on macOS, 2026-10-31). `install` therefore refuses to write that file while the
 //! app runs; by default it leaves a detached helper (`--after-desktop-exit`) that waits for the
-//! app to quit, writes, and logs the result next to the executable.
+//! app to quit, writes, and logs the result in the installation's writable log location.
 
 mod claude;
 mod codex;
 mod doctor;
 mod file;
 mod paths;
+mod probe;
 
 pub use doctor::Status;
 pub use paths::{Env, packaged_now};
@@ -36,7 +37,6 @@ use std::process::ExitCode;
 pub const SERVER_NAME: &str = "gil";
 pub const SERVE_ARGS: [&str; 2] = ["mcp", "--serve"];
 const INSTALL_RECEIPT: &str = "install.json";
-const LOG_FILE: &str = "install-log.txt";
 const WAIT_FOR_DESKTOP: std::time::Duration = std::time::Duration::from_secs(10 * 60);
 
 /// How a `gil` entry in a Host file relates to this installation.
@@ -99,8 +99,12 @@ pub fn cli(args: &[String]) -> ExitCode {
             install(&env, options)
         }
         "doctor" => {
-            if !rest.is_empty() { return refuse("doctor takes no arguments"); }
-            doctor(&env)
+            let verbose = match rest {
+                [] => false,
+                [flag] if flag == "--verbose" => true,
+                _ => return refuse("usage: gil doctor [--verbose]"),
+            };
+            doctor(&env, verbose)
         }
         "uninstall" => {
             let mut remove_binary = false;
@@ -121,7 +125,7 @@ pub fn cli(args: &[String]) -> ExitCode {
 }
 
 fn usage() -> ExitCode {
-    print!("usage: gil install [--replace] [--no-wait]\n       gil doctor\n       gil uninstall [--remove-binary]\n");
+    print!("usage: gil install [--replace] [--no-wait]\n       gil doctor [--verbose]\n       gil uninstall [--remove-binary]\n");
     ExitCode::FAILURE
 }
 
@@ -141,9 +145,7 @@ fn install(env: &Env, options: InstallOptions) -> Outcome {
     let mut lines = if env.packaged {
         // Store channel: nothing to copy. The package folder is read-only and the alias is the
         // registered path; a missing alias means the package registration itself is broken.
-        if !fixed.exists() {
-            return Err(format!("the app execution alias is missing at {}; reinstall the GIL app from the Microsoft Store", fixed.display()));
-        }
+        probe::check_alias(&fixed)?;
         vec![format!("binary: OK {} (v{}) [store]", fixed.display(), crate::CORE_VERSION)]
     } else {
         let placed = place_binary(&current, &fixed)?;
@@ -156,19 +158,25 @@ fn install(env: &Env, options: InstallOptions) -> Outcome {
 
     lines.push(String::new());
     if claude_waits {
-        lines.push("Quit Claude Desktop completely (tray icon → Quit). A helper is waiting; it writes the Claude Desktop entry as soon as the app has quit and records the result in install-log.txt next to gil.exe. Then open Claude Desktop again.".into());
-        lines.push("Claude Desktop을 트레이에서 완전히 종료하세요. 도우미가 종료를 기다렸다가 등록을 마치고 gil.exe 옆 install-log.txt에 결과를 남깁니다. 그 뒤 Claude Desktop을 다시 여세요.".into());
+        let log = paths::install_log(env)?;
+        lines.push(format!("Quit Claude Desktop completely (tray icon → Quit). A helper is waiting. Check {} for the registration result, then run `gil doctor` before reopening Claude Desktop.", log.display()));
+        lines.push(format!("Claude Desktop을 트레이에서 완전히 종료하세요. 도우미가 등록한 결과는 {}에서 확인하고, `gil doctor`로 확인한 뒤 Claude Desktop을 다시 여세요.", log.display()));
     } else {
         lines.push("Restart the Hosts that were registered (Claude Desktop: quit from the tray icon, then reopen; Codex: restart). Tools appear only after a restart.".into());
         lines.push("등록된 Host를 다시 시작하세요(Claude Desktop은 트레이에서 완전 종료 후 다시 열기, Codex는 재시작). 재시작 전에는 도구가 보이지 않습니다.".into());
     }
     lines.push("Check: gil doctor".into());
+    lines.push("NOT_INSTALLED means no Host settings folder was found; PENDING is not completed registration. / NOT_INSTALLED는 Host 설정 폴더를 찾지 못했다는 뜻이며 PENDING은 등록 완료가 아닙니다.".into());
     Ok((lines.join("\n") + "\n", ExitCode::SUCCESS))
 }
 
-fn doctor(env: &Env) -> Outcome {
+fn doctor(env: &Env, verbose: bool) -> Outcome {
     let report = doctor::report(env);
     let code = if report.healthy() { ExitCode::SUCCESS } else { ExitCode::FAILURE };
+    if verbose {
+        // Preserve the three machine-readable stdout lines, including for verbose callers.
+        eprint!("{}", doctor::details(env));
+    }
     Ok((report.render(), code))
 }
 
@@ -313,7 +321,7 @@ fn claude_step(env: &Env, fixed: &Path, current: &Path, options: InstallOptions)
         }
         Some(true) if options.no_wait => Ok((format!("PENDING Claude Desktop is running; quit it completely, then run `gil install` again ({})", join_paths(&paths)), false)),
         Some(true) => {
-            spawn_waiting_helper(fixed, current, options)?;
+            spawn_waiting_helper(env, fixed, current, options)?;
             Ok((format!("PENDING helper waits for Claude Desktop to quit ({})", join_paths(&paths)), true))
         }
         None => Err("could not tell whether Claude Desktop is running; quit it, then run `gil install` again".into()),
@@ -324,13 +332,18 @@ fn join_paths(paths: &[PathBuf]) -> String {
     paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("; ")
 }
 
-fn spawn_waiting_helper(fixed: &Path, current: &Path, options: InstallOptions) -> Result<(), String> {
+fn spawn_waiting_helper(env: &Env, fixed: &Path, current: &Path, options: InstallOptions) -> Result<(), String> {
+    let log = paths::install_log(env)?;
+    let mut log_file = open_log(&log)?;
+    write_log(&mut log_file, &log, "helper requested; claude-desktop: PENDING\n")?;
     // Run the helper from the fixed path so the downloaded copy may be deleted right away.
     let exe = if fixed.is_file() { fixed } else { current };
     let mut command = std::process::Command::new(exe);
     command.arg("install").arg("--after-desktop-exit");
     if options.replace { command.arg("--replace"); }
-    command.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    // Early helper errors must remain visible even though it has no console.
+    let error_log = log_file.try_clone().map_err(|err| format!("cannot attach helper error log {}: {err}", log.display()))?;
+    command.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(error_log);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -339,41 +352,71 @@ fn spawn_waiting_helper(fixed: &Path, current: &Path, options: InstallOptions) -
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW);
     }
-    command.spawn().map(|_| ()).map_err(|err| format!("cannot start the waiting helper: {err}"))
+    command.spawn().map(|_| ()).map_err(|err| {
+        let message = format!("cannot start the waiting helper: {err}");
+        match write_log(&mut log_file, &log, &format!("claude-desktop: ERROR {message}\n")) {
+            Ok(()) => message,
+            Err(log_error) => format!("{message}; {log_error}"),
+        }
+    })
 }
 
 fn wait_then_register_claude(env: &Env, fixed: &Path, options: InstallOptions) -> Outcome {
-    let dir = fixed.parent().ok_or("fixed path has no parent")?;
-    let log = dir.join(LOG_FILE);
+    let log = paths::install_log(env)?;
+    let mut log_file = open_log(&log)?;
+    write_log(&mut log_file, &log, "helper started; claude-desktop: PENDING\n")?;
     let started = std::time::Instant::now();
     let mut running = claude::desktop_running();
     while running == Some(true) && started.elapsed() < WAIT_FOR_DESKTOP {
         std::thread::sleep(std::time::Duration::from_secs(2));
         running = claude::desktop_running();
     }
-    let mut lines = vec![format!("[{}] helper", now_unix())];
+    let (text, code) = finish_claude_registration(env, fixed, options, running);
+    write_log(&mut log_file, &log, &text).map_err(|why| format!("{text}{why}"))?;
+    Ok((text, code))
+}
+
+fn finish_claude_registration(env: &Env, fixed: &Path, options: InstallOptions, running: Option<bool>) -> (String, ExitCode) {
+    let mut lines = Vec::new();
+    let mut code = ExitCode::SUCCESS;
     match running {
         Some(false) => {
-            for path in paths::claude_configs(env) {
+            let configs = paths::claude_configs(env);
+            if configs.is_empty() { lines.push("claude-desktop: NOT_INSTALLED".into()); }
+            for path in configs {
                 match claude::register(&path, fixed, options.replace) {
                     Ok(outcome) => lines.push(format!("claude-desktop: {outcome} ({})", path.display())),
-                    Err(err) => lines.push(format!("claude-desktop: ERROR {err} ({})", path.display())),
+                    Err(err) => {
+                        code = ExitCode::FAILURE;
+                        lines.push(format!("claude-desktop: ERROR {err} ({})", path.display()));
+                    }
                 }
             }
         }
-        Some(true) => lines.push("claude-desktop: PENDING Claude Desktop did not quit within 10 minutes; run `gil install` again after quitting it".into()),
-        None => lines.push("claude-desktop: ERROR could not tell whether Claude Desktop is running".into()),
+        Some(true) => {
+            code = ExitCode::FAILURE;
+            lines.push("claude-desktop: PENDING Claude Desktop did not quit within 10 minutes; run `gil install` again after quitting it".into());
+        }
+        None => {
+            code = ExitCode::FAILURE;
+            lines.push("claude-desktop: ERROR could not tell whether Claude Desktop is running".into());
+        }
     }
-    let text = lines.join("\n") + "\n";
-    append_log(&log, &text);
-    Ok((text, ExitCode::SUCCESS))
+    (lines.join("\n") + "\n", code)
 }
 
-fn append_log(path: &Path, text: &str) {
+fn open_log(path: &Path) -> Result<std::fs::File, String> {
+    let dir = path.parent().ok_or("log path has no parent")?;
+    std::fs::create_dir_all(dir).map_err(|err| format!("cannot create install log directory {}: {err}", dir.display()))?;
+    std::fs::OpenOptions::new().create(true).append(true).open(path)
+        .map_err(|err| format!("cannot open install log {}: {err}", path.display()))
+}
+
+fn write_log(file: &mut std::fs::File, path: &Path, text: &str) -> Result<(), String> {
     use std::io::Write;
-    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
-        let _ = file.write_all(text.as_bytes());
-    }
+    let entry = format!("[{} pid={}] {text}", now_unix(), std::process::id());
+    file.write_all(entry.as_bytes()).and_then(|_| file.flush())
+        .map_err(|err| format!("cannot write install log {}: {err}", path.display()))
 }
 
 #[cfg(test)]
@@ -387,6 +430,133 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    fn store_env(root: &Path) -> Env {
+        Env { local_app_data: Some(root.join("Local")), app_data: Some(root.join("Roaming")), packaged: true, ..Env::default() }
+    }
+
+    #[test]
+    fn store_helper_log_is_writable_user_data_and_preserves_previous_entries() {
+        let root = scratch("store-log");
+        let env = store_env(&root);
+        let log = paths::install_log(&env).unwrap();
+        assert_eq!(log, root.join("Local/GIL/logs/install-log.txt"));
+        let mut file = open_log(&log).unwrap();
+        write_log(&mut file, &log, "first\n").unwrap();
+        drop(file);
+        write_log(&mut open_log(&log).unwrap(), &log, "second\n").unwrap();
+        let text = std::fs::read_to_string(&log).unwrap();
+        assert!(text.contains("first\n") && text.contains("second\n"));
+        assert!(!root.join("Local/Microsoft/WindowsApps").exists());
+        let details = doctor::details(&env);
+        assert!(details.contains(&log.display().to_string()));
+        assert!(details.contains("present; historical results"));
+        assert!(details.contains("does not verify MCP connection or Monitor display"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn standalone_install_keeps_its_existing_log_location() {
+        let root = scratch("standalone-log");
+        let env = Env { local_app_data: Some(root.join("Local")), home: Some(root.join("home")), ..Env::default() };
+        if let Ok(fixed) = paths::fixed_exe(&env) {
+            assert_eq!(paths::install_log(&env).unwrap(), fixed.parent().unwrap().join("install-log.txt"));
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn broken_store_alias_fails_before_any_host_registration() {
+        let root = scratch("install-alias");
+        let mut env = store_env(&root);
+        env.codex_home = Some(root.join("codex"));
+        std::fs::create_dir_all(root.join("codex")).unwrap();
+        let error = install(&env, InstallOptions { no_wait: true, ..InstallOptions::default() }).unwrap_err();
+        assert!(error.contains("app execution alias"));
+        assert!(!root.join("codex/config.toml").exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn unwritable_log_is_an_error_before_helper_changes_any_settings() {
+        let root = scratch("blocked-log");
+        let env = store_env(&root);
+        std::fs::create_dir_all(root.join("Local")).unwrap();
+        std::fs::write(root.join("Local/GIL"), b"not a directory").unwrap();
+        let config = root.join("Roaming/Claude/claude_desktop_config.json");
+        std::fs::create_dir_all(config.parent().unwrap()).unwrap();
+        std::fs::write(&config, b"{}").unwrap();
+        let err = wait_then_register_claude(&env, &paths::fixed_exe(&env).unwrap(), InstallOptions::default()).unwrap_err();
+        assert!(err.contains("cannot create install log directory"));
+        assert_eq!(std::fs::read(config).unwrap(), b"{}");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn log_write_failure_is_not_swallowed() {
+        let root = scratch("log-write");
+        let path = root.join("log.txt");
+        std::fs::write(&path, b"existing").unwrap();
+        let mut read_only = std::fs::File::open(&path).unwrap();
+        assert!(write_log(&mut read_only, &path, "new\n").unwrap_err().contains("cannot write install log"));
+        drop(read_only);
+        assert_eq!(std::fs::read(&path).unwrap(), b"existing");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn helper_errors_and_timeouts_fail_without_touching_settings() {
+        let root = scratch("helper-status");
+        let env = store_env(&root);
+        let fixed = paths::fixed_exe(&env).unwrap();
+        let config = root.join("Roaming/Claude/claude_desktop_config.json");
+        std::fs::create_dir_all(config.parent().unwrap()).unwrap();
+        std::fs::write(&config, b"{ broken").unwrap();
+        for running in [Some(true), None, Some(false)] {
+            let (text, code) = finish_claude_registration(&env, &fixed, InstallOptions::default(), running);
+            assert_eq!(code, ExitCode::FAILURE, "{text}");
+            assert!(text.contains(if running == Some(true) { "PENDING" } else { "ERROR" }));
+            assert_eq!(std::fs::read(&config).unwrap(), b"{ broken");
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn helper_reports_partial_failure_and_successful_idempotent_registration() {
+        let root = scratch("helper-register");
+        let env = store_env(&root);
+        let fixed = paths::fixed_exe(&env).unwrap();
+        let config = root.join("Roaming/Claude/claude_desktop_config.json");
+        std::fs::create_dir_all(config.parent().unwrap()).unwrap();
+        std::fs::write(&config, br#"{"theme":"dark"}"#).unwrap();
+        let bad = root.join("Local/Packages/Claude_test/LocalCache/Roaming/Claude/claude_desktop_config.json");
+        std::fs::create_dir_all(bad.parent().unwrap()).unwrap();
+        std::fs::write(&bad, b"{ broken").unwrap();
+        let (text, code) = finish_claude_registration(&env, &fixed, InstallOptions::default(), Some(false));
+        assert_eq!(code, ExitCode::FAILURE);
+        assert!(text.contains("ERROR") && text.contains("ADDED"), "{text}");
+        assert_eq!(claude::load(&config).unwrap().root["theme"], "dark");
+        std::fs::write(&bad, b"{}").unwrap();
+        let (_, code) = finish_claude_registration(&env, &fixed, InstallOptions::default(), Some(false));
+        assert_eq!(code, ExitCode::SUCCESS);
+        let before = std::fs::read(&config).unwrap();
+        let (text, code) = finish_claude_registration(&env, &fixed, InstallOptions::default(), Some(false));
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(text.contains("claude-desktop: OK"));
+        assert_eq!(std::fs::read(&config).unwrap(), before);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn helper_does_not_report_registration_when_no_host_was_found() {
+        let root = scratch("helper-no-host");
+        let env = store_env(&root);
+        let (text, code) = finish_claude_registration(&env, &paths::fixed_exe(&env).unwrap(), InstallOptions::default(), Some(false));
+        assert_eq!(text, "claude-desktop: NOT_INSTALLED\n");
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(doctor::details(&env).contains("not created"));
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
