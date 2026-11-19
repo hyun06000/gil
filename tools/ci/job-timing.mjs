@@ -7,17 +7,22 @@
 // Every step runs from its own `##[group]Run …` (or `Post job cleanup.`) line to the next one, so
 // adjacent steps never share a second. Inside a Cargo step the compile/link part ends at the last
 // `Finished \`test|dev\` profile` line and the rest is test execution (process start-up included);
-// a `cargo build` step is compile time only, and a step without Cargo output is a Node check.
+// a `cargo build` step is compile time only. A Cargo step that never printed `Finished` (cancelled
+// or failed while compiling) is `cargo_unfinished`; a step without Cargo is a Node check.
 // The Cargo- and libtest-reported durations are summed separately: they are what the tools printed,
 // not wall time, and are never added to the categories. Runner queue time is not in the log; read
 // it from the run's created_at and the job's started_at in the API.
 import {readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 
-const seconds = text => {
-  const m = text.match(/in (?:(\d+)m )?([\d.]+)s/);
-  return m ? Number(m[1] || 0) * 60 + Number(m[2]) : 0;
+/// Seconds in a Cargo/libtest duration: `250ms`, `0.27s`, `1m 04s`.
+export const seconds = text => {
+  const m = text.match(/\bin (?:(\d+)m )?(\d+(?:\.\d+)?)(ms|s)\b/);
+  if (!m) return 0;
+  return Number(m[1] || 0) * 60 + Number(m[2]) / (m[3] === 'ms' ? 1000 : 1);
 };
+/// A step that runs Cargo directly, through `expect-tests`, or through a script that prints its output.
+const runsCargo = (name, seg) => /\bcargo (test|build)\b/.test(name) || seg.some(r => /^\s+Compiling \S+ v/.test(r.text));
 
 export function timing(log) {
   const rows = [];
@@ -27,7 +32,7 @@ export function timing(log) {
   }
   if (rows.length === 0) throw new Error('no timestamped lines: is this a job log?');
   const marks = rows.flatMap((r, i) => r.text.startsWith('##[group]Run ') || r.text === 'Post job cleanup.' ? [i] : []);
-  const cat = {setup: 0, cache_restore: 0, cargo_compile: 0, test_run: 0, node_checks: 0, cache_prune: 0, cache_archive: 0, cache_upload: 0, post_other: 0};
+  const cat = {setup: 0, cache_restore: 0, cargo_compile: 0, cargo_unfinished: 0, test_run: 0, node_checks: 0, cache_prune: 0, cache_archive: 0, cache_upload: 0, post_other: 0};
   const reported = {cargo_build: 0, libtest: 0};
   const steps = [];
   const first = rows[0].t, last = rows[rows.length - 1].t;
@@ -38,7 +43,7 @@ export function timing(log) {
     const name = rows[from].text.replace(/^##\[group\]Run /, '');
     const finished = seg.filter(r => /Finished `(test|dev)` profile/.test(r.text));
     for (const r of finished) reported.cargo_build += seconds(r.text);
-    const libtest = seg.flatMap(r => { const m = r.text.match(/^test result: .*finished in ([\d.]+)s/); return m ? [Number(m[1])] : []; });
+    const libtest = seg.flatMap(r => /^test result: .* finished in /.test(r.text) ? [seconds(r.text)] : []);
     for (const s of libtest) reported.libtest += s;
     let kind;
     if (/^actions\/checkout|^rustup /.test(name)) { kind = 'setup'; cat.setup += wall; }
@@ -55,6 +60,10 @@ export function timing(log) {
     } else if (finished.length) {
       const compile = /^cargo build/.test(name) ? wall : finished[finished.length - 1].t - start;
       kind = 'cargo'; cat.cargo_compile += compile; cat.test_run += wall - compile;
+    } else if (runsCargo(name, seg)) {
+      // Cargo never reported a finished build: the job was cancelled (time limit) or the build
+      // failed while compiling. Kept apart from finished compiles and from Node checks.
+      kind = 'cargo_unfinished'; cat.cargo_unfinished += wall;
     } else { kind = 'node_checks'; cat.node_checks += wall; }
     steps.push({kind, wall: +wall.toFixed(1), cargo_finished: finished.map(r => r.text.replace(/^.* in /, '')), libtest: +libtest.reduce((a, b) => a + b, 0).toFixed(2), name: name.slice(0, 160)});
   }

@@ -19,7 +19,8 @@ overflow·panic·codegen·LTO·strip)과 `--release`/`--profile` 사용을 거�
 
 ## 1. 기준 실행 분해
 
-`node tools/ci/job-timing.mjs <job.log>`로 job 로그를 단계 경계에서 겹치지 않게 나눈다. 대기 시간은
+`node tools/ci/job-timing.mjs <job.log>`로 job 로그를 단계 경계에서 겹치지 않게 나눈다. Cargo가
+`Finished`를 출력하지 못한 Cargo 단계(취소·컴파일 실패)는 "컴파일 중단"으로 따로 센다. 대기 시간은
 로그에 없으므로 run `created_at`→job `started_at`이다. "Cargo/시험 보고 합계"는 도구가 출력한 시간의
 합이며 경과 시간 범주와 더하지 않는다. 단위는 초.
 
@@ -32,7 +33,8 @@ overflow·panic·codegen·LTO·strip)과 `--release`/`--profile` 사용을 거�
 | 캐시 복원 | 15.8 | 7.2 | 16.6 | 13.1 |
 | Cargo 컴파일·연결(경과) | 1230.5 | 657.0 | 869.0 | 1070.9 |
 | Cargo 시험 실행(경과) | 679.1 | 389.8 | 506.4 | 625.7 |
-| Node 검사 | 19.2 | 54.0 | 14.0 | 67.6 |
+| Cargo 컴파일 중단(완료 문구 없음) | 0 | 0 | 0 | 67.6 |
+| Node 검사 | 19.2 | 54.0 | 14.0 | 0 |
 | 캐시 정리(`prune-workspace-cache`) | 13.1 | 13.8 | 7.0 | — |
 | 캐시 묶음 생성·압축 | 119.4 | 4.4 | 129.7 | — |
 | 캐시 전송 | 2.1 | 3.7 | 2.1 | — |
@@ -50,12 +52,17 @@ overflow·panic·codegen·LTO·strip)과 `--release`/`--profile` 사용을 거�
   묶음 생성·압축이다. 정리 단계는 workspace 출력 42.3GiB(macOS 16.7GiB)를 지웠다. 정확한 키가 있는 실행
   (일반 소스 변경 PR)은 정리·재저장을 건너뛴다. 이 비용은 workflow·정리 스크립트·lockfile이 바뀌어 키가
   달라진 실행과 그 병합 후 main 실행에서 한 번씩 든다.
-- 같은 PR의 Windows 두 실행이 35분과 26분으로 달랐다. 같은 단계의 Cargo 보고 시간이 1175초와 828초로
-  달라 서버 간 차이가 크다. 한 번의 원격 비교로 개선율을 단정하지 않는다.
+- PR #172 최종 실행(Windows 35분)과 병합 후 main 실행(Windows 26분)은 같은 단계·같은 이전 키 복원인데
+  Cargo 보고 시간이 1175초와 828초로 달랐다. 서버 간 차이가 크므로 한 번의 원격 비교로 개선율을
+  단정하지 않는다.
+- 시간 초과 실행은 46번째 단계(`cargo build --all-targets`, end history + 제품 프로필)를 컴파일하던 중
+  30분 제한으로 취소됐다. 완료 문구가 없는 이 67.6초는 완료된 컴파일과 따로 센다.
 
 ## 2. 후보 측정
 
-측정 그룹은 `will-end-history,visual-authoring,product-safety` 단계 42–46의 Cargo 명령이다.
+측정 그룹은 `will-end-history,visual-authoring,product-safety` 단계 42–46의 Cargo 명령 **하나**다.
+아래 수치는 이 한 기능 조합의 빌드 비교이며 전체 Chain job의 개선율이 아니다. 전체 job 비교는 PR 본문의
+원격 실행(같은 PR의 캐시 재사용 실행)으로 따로 한다.
 각 디버그 정보 값마다 의존성을 먼저 빌드한 뒤 `cargo clean -p gil -p gil-companion`으로 CI 캐시 상태를
 재현하고, 증분 켬/끔을 같은 target에서 차례로 쟀다. 원격 실험은 병합하지 않는 별도 브랜치
 `claude/ci-build-settings-experiment`의 임시 workflow다(캐시 저장 없음).
@@ -116,10 +123,13 @@ overflow·panic·codegen·LTO·strip)과 `--release`/`--profile` 사용을 거�
   들어가지 않으므로 키에 넣지 않는다.
 - Rust 버전·OS·CPU·lockfile은 기존처럼 키에 있고 소스 커밋은 넣지 않는다. 정확한 키가 있으면 검사는 모두
   다시 수행하고 정리·재저장은 건너뛴다. 정리 스크립트, 저장 경로, 의존성 보존 검사는 바꾸지 않았다.
-  `cache.test.mjs`의 정리 시험은 이제 chain-core job과 같은 빌드 설정으로 합성 workspace를 빌드한다.
-- 새 접두사의 첫 실행은 복원할 캐시가 없어 의존성을 처음부터 빌드한다(Windows 의존성 빌드 약 1.5분).
-  PR 범위의 캐시는 main에서 쓸 수 없으므로 병합 직후 main push 실행도 한 번 처음부터 빌드해 기준 캐시를
-  만든다. 이후 일반 PR은 정확한 키를 복원한다.
+  `cache.test.mjs`의 정리 시험은 기본 빌드 설정(다른 workflow)과 chain-core job의 빌드 설정을 각각
+  검사하며, 두 경우 모두 workspace의 증분 상태가 제거되는지도 확인한다.
+- 새 접두사의 첫 실행은 복원할 캐시가 없어 의존성을 처음부터 빌드한다(실험에서 Windows 의존성 빌드
+  86초). PR 범위의 캐시는 main에서 쓸 수 없으므로 병합 직후 main push 실행도 한 번 처음부터 빌드해 기준
+  캐시를 만든다. 이후 일반 PR은 main의 정확한 키를 복원한다. 비교는 세 경우를 섞지 않는다: (가) 같은 PR
+  안에서 정확한 키를 복원한 실행, (나) 새 접두사의 최초 실행(PR), (다) 병합 후 main의 최초 생성 실행.
+  (다)는 병합 뒤에만 잴 수 있어 이 PR에서는 측정하지 않는다.
 - workflow 문구 변경도 키를 바꾸는 기존 규칙(`hashFiles(chain-core.yml, prune-workspace-cache.mjs)`)은
   유지했다. 단계 추가만으로 Windows 약 2분의 저장 비용이 PR과 병합 후 main에서 한 번씩 들지만, 키 규칙은
   네 workflow 공통 계약이라 이번 변경에서 바꾸지 않았다.
@@ -186,8 +196,8 @@ overflow·panic·codegen·LTO·strip)과 `--release`/`--profile` 사용을 거�
 | 56 | — | chain-context-bench (macOS) | — | Node 25/2/0 |
 | 57 | — | 캐시 정리(정확한 키가 없을 때) | 실행 | 실행 |
 
-Node 표기는 통과/건너뜀/실패. 단계 49는 이 변경이 더한 시험(빌드 설정 계약 1건, `job-timing` 3건)만큼
-늘어난다.
+Node 표기는 통과/건너뜀/실패. 단계 49는 이 변경이 더한 시험만큼 7건에서 14건으로 늘어난다(빌드 설정
+계약 1건, 정리 계약을 기본/Chain 설정 두 건으로 나눔 +1, `job-timing` 5건).
 
 ## 5. 채택하지 않았거나 측정하지 않은 후보
 
