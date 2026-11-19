@@ -58,6 +58,14 @@ jobs:
     timeout-minutes: 45
     env:
       RUSTUP_TOOLCHAIN: 1.97.1
+      # CI-only build cost settings for the dev/test profiles (release is untouched; optimisation,
+      # debug assertions, overflow checks and panic strategy keep their defaults). Line tables keep
+      # file:line in panic backtraces but drop variable/type debuginfo; nothing here reuses the
+      # incremental state, so it is not written. The debuginfo value changes the cached dependency
+      # outputs and is part of the cache restore prefix; incremental state is never cached.
+      # Measured in tools/ci/CHAIN-CORE-TIMING.md.
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_INCREMENTAL: '0'
     defaults:
       run:
         shell: ${{ matrix.shell }}
@@ -84,9 +92,9 @@ jobs:
             target/x86_64-pc-windows-msvc
             target/aarch64-pc-windows-msvc
             target/plugin-core-build
-          key: ${{ runner.os }}-${{ runner.arch }}-chain-core-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-deps-v2-${{ hashFiles('.github/workflows/chain-core.yml', 'tools/ci/prune-workspace-cache.mjs') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-chain-core-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-dev-debug-${{ env.CARGO_PROFILE_DEV_DEBUG }}-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-deps-v2-${{ hashFiles('.github/workflows/chain-core.yml', 'tools/ci/prune-workspace-cache.mjs') }}
           restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-chain-core-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-
+            ${{ runner.os }}-${{ runner.arch }}-chain-core-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-dev-debug-${{ env.CARGO_PROFILE_DEV_DEBUG }}-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-
       - name: Default Core resume capture and measurement (synthetic, no model evaluation)
         run: node tools/chain-resume-benchmark/run.mjs default "${{ runner.temp }}/gil-resume-default" target
       - name: Actual Chain, legacy preservation and domain regressions

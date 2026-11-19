@@ -112,6 +112,13 @@ Windows ARM64 native job, Windows Companion 빌드·검토 묶음, 런처/runtim
 실행한다. 조건부 컴파일로 `running 0 tests`가 된 실행은 통과로 세지 않는다.
 캐시 적중은 시험 성공이 아니다. 최초 캐시 생성과 GitHub runner 배정 대기는 여전히 시간이 든다.
 
+Chain workflow job은 CI에서만 `CARGO_PROFILE_DEV_DEBUG=line-tables-only`, `CARGO_INCREMENTAL=0`으로
+dev·test 빌드의 디버그 정보와 증분 상태를 줄인다. 최적화·assertion·overflow·panic 설정, release 프로필,
+시험 목록·필터·실패 판정은 같다. 역추적의 파일·줄은 남고 디버거용 변수 정보만 빠진다. 디버그 정보 값은
+캐시 복원 접두사에 들어가 다른 값의 의존성 캐시를 섞지 않는다. 측정·검증 범위 대응은
+[tools/ci/CHAIN-CORE-TIMING.md](tools/ci/CHAIN-CORE-TIMING.md)에 있고, job 로그는
+`node tools/ci/job-timing.mjs <job.log>`로 대기 외의 시간을 겹치지 않는 범주로 나눈다.
+
 Companion을 변경하면 해당 package의 시험과 실제 플랫폼 검수를 추가한다. `gil` 시험 성공을
 Tauri 포함 workspace 전체 성공이라고 부르지 않는다. 시험마다 실행한 명령, 통과/실패/미실행,
 첫 실패와 재실행을 구분한다. protocol 성공은 화면 표시의 증거가 아니다.

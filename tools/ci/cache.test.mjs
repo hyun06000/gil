@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync, mkdirSync, readFileSync, existsSync, rmSync, writeFileSync, unlinkSync, symlinkSync, realpathSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, readFileSync, readdirSync, existsSync, rmSync, writeFileSync, unlinkSync, symlinkSync, realpathSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -23,6 +23,30 @@ test('dependency caches are stable across source commits; only cache maintenance
     assert.equal(conditional.length, 1);
     assert.match(conditional[0], /if: steps.build_cache.outputs.cache-hit != 'true'\n        run: node tools\/ci\/prune-workspace-cache.mjs/);
   }
+});
+
+/// The job-level `env:` of the Chain workflow as {NAME: value}.
+const chainJobEnv = () => {
+  const block = workflowText('chain-core').match(/\n    env:\n((?: {6}.*\n)+)/)?.[1] ?? '';
+  return Object.fromEntries([...block.matchAll(/^ {6}([A-Z0-9_]+): '?([^'\n]*)'?$/gm)].map(m => [m[1], m[2]]));
+};
+
+test('Chain CI build-cost settings stay CI-only, never reach release or test semantics, and key the cache', () => {
+  const env = chainJobEnv();
+  assert.deepEqual(Object.keys(env).sort(), ['CARGO_INCREMENTAL', 'CARGO_PROFILE_DEV_DEBUG', 'RUSTUP_TOOLCHAIN']);
+  assert.equal(env.CARGO_PROFILE_DEV_DEBUG, 'line-tables-only');
+  assert.equal(env.CARGO_INCREMENTAL, '0');
+  const text = workflowText('chain-core');
+  // Optimisation, assertions, overflow checks, panic strategy, codegen flags and the release
+  // profile are never changed by CI, for the job or for a single step.
+  assert.doesNotMatch(text, /CARGO_PROFILE_RELEASE|CARGO_PROFILE_\w+_(?:OPT_LEVEL|DEBUG_ASSERTIONS|OVERFLOW_CHECKS|PANIC|CODEGEN_UNITS|LTO|STRIP)|RUSTFLAGS|CARGO_BUILD|cargo [^\n]*(?:--release|--profile)/);
+  assert.doesNotMatch(readFileSync(join(root, 'Cargo.toml'), 'utf8'), /^\[profile/m, 'a committed profile would override the measured CI setting');
+  // The debuginfo level changes every cached dependency output, so a cache built with another
+  // level is never restored, not even by prefix; incremental state is never cached.
+  const key = text.match(/^          key: (.+)$/m)[1];
+  const prefix = text.match(/^          restore-keys: \|\n {12}(.+)$/m)[1];
+  for (const k of [key, prefix]) assert.match(k, /-rust-1\.97\.1-dev-debug-\$\{\{ env\.CARGO_PROFILE_DEV_DEBUG \}\}-\$\{\{ hashFiles\('Cargo\.lock'/);
+  assert.ok(key.startsWith(prefix));
 });
 
 test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired runtime-update steps', () => {
@@ -52,7 +76,14 @@ test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired
   assert.match(companion, /paths:\n\s+- 'companion\/\*\*'/);
 });
 
-test('cache pruning removes implicit and explicit target workspace outputs but preserves dependencies', t => {
+// Dev/test build settings a job may set; the default-settings case removes inherited ones (the Chain
+// job itself runs this file with its own settings in the environment).
+const BUILD_SETTINGS = /^(CARGO_PROFILE_\w+|CARGO_INCREMENTAL)$/;
+const defaultBuild = () => Object.fromEntries(Object.entries(process.env).filter(([k]) => !BUILD_SETTINGS.test(k)));
+
+/// The prune contract for one set of build settings: workspace outputs (including incremental
+/// state) of the implicit and explicit targets go, dependency outputs stay, unsafe roots are refused.
+function pruneContract(t, buildEnv) {
   const folder = realpathSync(mkdtempSync(join(tmpdir(), 'gil-cache-test-')));
   t.after(() => rmSync(folder, {recursive:true, force:true}));
   writeFileSync(join(folder, 'Cargo.toml'), '[workspace]\nmembers=["gil","gil-companion","cache-dep"]\nresolver="2"\n');
@@ -63,7 +94,7 @@ test('cache pruning removes implicit and explicit target workspace outputs but p
     writeFileSync(join(folder, name, 'src/lib.rs'), 'pub fn value() -> u8 { 1 }\n');
   }
   const run = (args, extra = {}) => {
-    const result = spawnSync('cargo', args, {cwd:folder, encoding:'utf8', env:{...process.env, CARGO_TARGET_DIR:join(folder,'target'), ...extra}});
+    const result = spawnSync('cargo', args, {cwd:folder, encoding:'utf8', env:{...buildEnv, CARGO_TARGET_DIR:join(folder,'target'), ...extra}});
     assert.equal(result.status, 0, result.stderr); return result;
   };
   const version = spawnSync('rustc', ['-vV'], {encoding:'utf8'});
@@ -77,13 +108,15 @@ test('cache pruning removes implicit and explicit target workspace outputs but p
     dirs.push(join(folder, 'target', triple, 'debug'));
   }
   unlinkSync(join(folder, 'target/CACHEDIR.TAG')); // A restored partial cache may omit the root tag.
-  const env = {...process.env, GITHUB_ACTIONS:'true', GITHUB_WORKSPACE:folder};
+  const env = {...buildEnv, GITHUB_ACTIONS:'true', GITHUB_WORKSPACE:folder};
   const clean = spawnSync(process.execPath, [cleaner], {cwd:folder, env, encoding:'utf8'});
   assert.equal(clean.status, 0, clean.stderr);
   for (const dir of dirs) {
     assert.ok(!existsSync(join(dir, 'libgil.rlib')), dir);
     assert.ok(!existsSync(join(dir, 'libgil_companion.rlib')), dir);
     assert.ok(existsSync(join(dir, 'libcache_dep.rlib')), 'dependency must survive: ' + dir);
+    const incremental = join(dir, 'incremental');
+    if (existsSync(incremental)) assert.deepEqual(readdirSync(incremental).filter(e => /^gil(_companion)?-/.test(e)), [], incremental);
   }
   const wrong = spawnSync(process.execPath, [cleaner], {cwd:folder, env:{...env,GITHUB_WORKSPACE:tmpdir()}, encoding:'utf8'});
   assert.notEqual(wrong.status, 0, 'wrong workspace must be refused');
@@ -92,4 +125,13 @@ test('cache pruning removes implicit and explicit target workspace outputs but p
   symlinkSync(resolve(folder, 'outside'), link, 'junction');
   const linked = spawnSync(process.execPath, [cleaner], {cwd:folder, env, encoding:'utf8'});
   assert.notEqual(linked.status, 0, 'symlink build root must be refused');
+}
+
+test('cache pruning keeps dependencies and removes workspace outputs with default build settings (other workflows)', t => {
+  pruneContract(t, defaultBuild());
+});
+
+test('cache pruning keeps dependencies and removes workspace outputs with the Chain job build settings', t => {
+  const {RUSTUP_TOOLCHAIN: _toolchain, ...chainBuild} = chainJobEnv();
+  pruneContract(t, {...defaultBuild(), ...chainBuild});
 });
