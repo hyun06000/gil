@@ -6,6 +6,10 @@
 import {spawnSync} from 'node:child_process';
 import {readdirSync, lstatSync, rmSync, statSync, mkdirSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {homedir} from 'node:os';
+// Same archiver as actions/cache on each runner (Git's GNU tar on Windows).
+const TAR = process.platform === 'win32' ? 'C:\\Program Files\\Git\\usr\\bin\\tar.exe' : 'tar';
+const archiveOf = (name, base, paths) => { const file = join(out, name + '.tzst'); const t = process.hrtime.bigint(); const r = spawnSync(TAR, ['--posix', '-cf', file, '-P', '-C', base, ...(process.platform === 'win32' ? ['--force-local'] : []), '--use-compress-program', 'zstd -T0 --long=30', ...paths], {encoding: 'utf8'}); const a = {name, wall: Number(process.hrtime.bigint() - t) / 1e9, status: r.status, err: (r.stderr || r.error?.message || '').slice(0, 300)}; try { a.bytes = statSync(file).size; rmSync(file); } catch {} return a; };
 const F = 'will-end-history,visual-authoring,product-safety';
 const group = [
   ['test', '--lib', '--no-run'],
@@ -22,7 +26,9 @@ const size = p => { let n = 0, files = 0; const walk = q => { let s; try { s = l
 const run = (args, env) => { const t = process.hrtime.bigint(); const r = spawnSync('cargo', args, {env, encoding: 'utf8', maxBuffer: 1 << 28}); const wall = Number(process.hrtime.bigint() - t) / 1e9; return {r, wall}; };
 const finished = text => [...text.matchAll(/Finished `(\w+)` profile \[([^\]]+)\] target\(s\) in (?:(\d+)m )?([\d.]+)s/g)].map(m => ({profile: m[1], label: m[2], s: Number(m[3] || 0) * 60 + Number(m[4])}));
 const libtest = text => [...text.matchAll(/^test result: \w+\. (\d+) passed; (\d+) failed; (\d+) ignored; \d+ measured; (\d+) filtered out; finished in ([\d.]+)s/gm)].map(m => m.slice(1).map(Number));
-for (const debug of debugs) {
+for (const part of ['registry/src', 'registry/cache', 'registry/index']) console.log(JSON.stringify({registry: part, files: size(join(homedir(), '.cargo', part)), archive: archiveOf('reg-' + part.replace('/', '-'), join(homedir(), '.cargo'), [part])}));
+// Alternate the incremental order per debuginfo value so run position does not favour one value.
+for (const [di, debug] of debugs.entries()) {
   const target = join(process.cwd(), `target-exp-${debug}`);
   const env = {...process.env, CARGO_TARGET_DIR: target, CARGO_PROFILE_DEV_DEBUG: debug};
   delete env.CARGO_INCREMENTAL;
@@ -31,12 +37,9 @@ for (const debug of debugs) {
   const clean = () => { const c = spawnSync('cargo', ['clean', '--locked', '-p', 'gil', '-p', 'gil-companion', '--target-dir', target], {env, encoding: 'utf8'}); if (c.status) { console.error(c.stderr); process.exit(1); } return c.stderr.trim().split('\n').pop(); };
   clean();
   const depSize = size(join(target, 'debug'));
-  const t = process.hrtime.bigint();
-  const tarRes = spawnSync('tar', ['--posix', '-cf', join(out, `deps-${debug}.tzst`), '-P', '-C', process.cwd(), '--use-compress-program', 'zstd -T0', `target-exp-${debug}/debug`], {encoding: 'utf8', shell: false});
-  const archive = {wall: Number(process.hrtime.bigint() - t) / 1e9, status: tarRes.status, err: (tarRes.stderr || '').slice(0, 300)};
-  try { archive.bytes = statSync(join(out, `deps-${debug}.tzst`)).size; rmSync(join(out, `deps-${debug}.tzst`)); } catch {}
+  const archive = archiveOf(`deps-${debug}`, process.cwd(), [`target-exp-${debug}/debug`]);
   console.log(JSON.stringify({debug, deps_build_wall: deps.wall, deps_finished: finished(deps.r.stderr), deps_only: depSize, archive}));
-  for (const inc of incs) {
+  for (const inc of di % 2 ? [...incs].reverse() : incs) {
     const e = {...env, CARGO_INCREMENTAL: inc};
     const steps = [];
     for (const g of group) {

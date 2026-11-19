@@ -9,14 +9,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [macos-15, windows-2025]
+        runner: [windows-2025]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 75
     env:
       RUSTUP_TOOLCHAIN: 1.97.1
     defaults:
       run:
-        shell: bash
+        # The Chain job's own Windows shell: under Git Bash the ACL-deny test in tests/mcp.rs
+        # did not see permission_denied (first experiment run).
+        shell: pwsh
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         env:
