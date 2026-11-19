@@ -59,12 +59,16 @@ chains:
   준비 취소는 기록을 보존한 채 별도로 표시하고 자동 시작하지 않는다. 앱 종료·연결 끊김은
   취소와 구분한다. 이미 정식 시작이 확정됐다면 준비 취소로 소급하거나 체인을 삭제하지 않는다.
   현재 코드에 준비 단계가 구현됐다는 뜻은 아니다. [추적 제외 시작 계약](GIL_Artifact_Model_v0.1.md#시작-대화의-범위-승인과-최초-보관--2026-11-19-확정)을 따른다.
-  Step·Will·Chain Open Report·인간 승인은 생성하지 않는다.
+  현행 최초 체인 생성 자체는 Step·Will·Chain Open Report·인간 승인을 생성하지 않는다.
+  후속 시작 준비의 범위 승인은 위 별도 승인 기록으로 보존한다.
 - 첫 Chain의 Entry는 최초 관측 세계이고, 후속 Chain은 부모 Exit이다. 각 Chain Entry는
   자신의 첫 Interview Entry와 같아야 하며 Artifact registry에 실재한다.
   Open Chain의 Exit은 없다. Cycle이 닫혀도 Chain은 열린 상태다.
 - Chain을 연 Existence는 내부 모든 Cycle의 실행 주체와 같고, Open Chain 중에 바뀌지 않는다.
-- World Current 경로는 `chains.current → cycles.current → 현재 Step`이다. 세계 Snapshot은
+- 현행 World Current 경로는 `chains.current → cycles.current → 현재 Step`이다. 새 형식에서는
+  사이클 사이 관리 사건의 성공한 기준점을 포함하도록 보완한다. 과거 Chain/Cycle Exit를
+  덮어쓰지 않으며, 다음 실험 Entry의 새 기준점 연결은 Artifact Model §3.6을 따른다.
+  아래는 관리 사건 도입 전 현재 구현의 경로다. 세계 Snapshot은
   기존 가장 깊은 Cycle의 Entry/Verify/Exit 규칙에서 유도한다. Chain Entry로 매번 되돌리지 않는다.
 - Cycle 생성·종료·revisit은 소유 Chain의 graph를 바꾼다. 기존 원자적 저장과 단일 활성 Cycle/
   Step 제약을 그대로 적용한다. 컨테이너 전이 자체로 Will이나 Journey revision을 만들지 않는다.

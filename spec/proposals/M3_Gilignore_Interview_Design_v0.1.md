@@ -24,7 +24,7 @@
 
 > **2026-11-19 제외 연결 파일 처리 채택:** 승인 정책상 제외된 연결 파일은 대상에 접근하지 않고 건너뛰며 복원에서도 변경하지 않는다. 재포함한 연결 파일은 기존대로 거절한다. 경로 종류 확인과 대상 탐색을 구분하며 시스템 보호 검사는 우선한다. 정본은 [Artifact Model](../GIL_Artifact_Model_v0.1.md#제외된-연결-파일--2026-11-19-확정)이다. D5 방향은 확정, 구현은 대기다.
 
-> **2026-11-19 정책 파일 저장 방향 채택:** `.gilignore`는 일반 보관·복원에서 제외하고 규칙 원문·적용 판은 정책 승인 기록에 보관한다. 파일 직접 편집은 제안이며 실제 적용 기준은 승인 기록이다. D7 방향은 승인됐지만 아래 상세 필드·파일 쓰기 실패 정책·D10의 과거 정책 자동 재적용은 미승인이다. 정본은 [Artifact Model](../GIL_Artifact_Model_v0.1.md#정책-파일과-승인-기록--2026-11-19-확정)이다.
+> **2026-11-19 정책 파일 저장 방향 채택:** `.gilignore`는 일반 보관·복원에서 제외하고 규칙 원문·적용 판은 정책 승인 기록에 보관한다. 파일 직접 편집은 제안이며 실제 적용 기준은 승인 기록이다. 정책 원문 보존과 파일 쓰기 실패 처리는 후속 합의까지 확정됐다. 상세 필드는 후속 설계이며 과거 정책 자동 재적용은 폐기했다. 정본은 [Artifact Model](../GIL_Artifact_Model_v0.1.md#정책-파일과-승인-기록--2026-11-19-확정)이다.
 
 > **2026-11-19 승인 채널 채택:** 추적 범위의 최종 승인은 모든 구성에서 모니터로 받는다. 대화는 설명·수정에 사용하며 에이전트 전달 승인으로 대체하지 않는다. 정식 체인 이전의 준비용 승인 화면이 필요하고 화면 부재 시 대기한다. D3의 과거 프로필별 대안은 채택하지 않았다. 정본은 [Artifact Model](../GIL_Artifact_Model_v0.1.md#추적-범위의-최종-승인-경로--2026-11-19-확정)이다.
 
@@ -62,7 +62,7 @@ dirty gate = Verify가 아닌 자리를 닫을 때 추적 파일이 기준 Snaps
 ### 1.2 이 문서가 하지 않는 것
 
 - 기능 구현, 실제 프로젝트 시험, 설치본 변경, 설명서·에이전트 안내 본문 수정, 번역.
-- 일반 `gil restore`의 차단 해제, 복구 자동 승인, 중첩 프로젝트 지원, Managed Dataset.
+- 일반 `gil restore`의 차단 해제, 복구 자동 승인 구현, 중첩 프로젝트 지원, Managed Dataset.
 - `.gilignore`로 파일의 불변성·읽기 전용·접근 금지·영구 보존을 제공하는 것(§2).
 - 모든 과거 기록의 호환성 선언. 과거 Snapshot은 그대로 보존하며 새 의미를 소급하지 않는다.
 
@@ -108,7 +108,7 @@ dirty gate = Verify가 아닌 자리를 닫을 때 추적 파일이 기준 Snaps
 | fingerprint | `fingerprint_of` — 버전·원본 수·(디렉터리, 원문) 정렬 순서로 SHA-256 | **재사용.** 원문 한 글자가 달라도 다른 ID. 층(layer)을 넣으면 **버전 2**가 필요(§5.1) |
 | 복원 미리보기 | `src/restore/preview.rs` — `Request { before_policy, target_policy }`, `check_policy` → `Matched/Mismatch/Unknown`, `Disposition::Excluded{by: Policy}`, `Readiness::Refused(PolicyUnknown|PolicyMismatch)` | **부분 재사용.** 기존 정책 ID 거절 규칙은 코드 현황이며 새 최신 정책 계약과 다르다. §6.5에 맞춰 계획·검증을 보완해야 한다 |
 | 승인·보존 선례 | `src/session/revisit_recovery.rs` — `approval.json`·`files.json`을 `.gil/revisit-preserved/<key>/`에 durable 기록 → 상태 저장 → 복원. `policy(store, manifest)`가 Snapshot 안의 `.gitignore` blob을 읽어 정책을 세움 | **선례로 재사용.** 「승인 기록이 먼저, 실행이 나중」·「에이전트 입력은 저장된 승인을 재개만」의 틀. Snapshot 안의 원문 blob으로 과거 정책을 재구성하는 수법은 `.gilignore`가 내장 제외가 되면 쓸 수 없으므로(§6.1) 정책 원문을 **별도 참조**로 보존해야 한다 |
-| 승인 원장 선례 | `src/approved_plan.rs` — 제안 판·digest·Monitor 응답·`request_plan_interview(reason)`(Experiment 중에만, 재인터뷰 이유 보존) | **선례로 재사용.** 범위 변경 요청의 입구가 이미 있다(approved-plan 프로필) |
+| 승인 원장 선례 | `src/approved_plan.rs` — 제안 판·digest·Monitor 응답·`request_plan_interview(reason)`(Experiment 중에만, 재인터뷰 이유 보존) | **요청 보존의 선례.** 정책 승인·관리 사건 자체가 구현된 것은 아니다 |
 
 ### 3.2 아직 연결되지 않은 것 (이번 설계가 다루는 공백)
 
@@ -164,14 +164,14 @@ dirty gate = Verify가 아닌 자리를 닫을 때 추적 파일이 기준 Snaps
   A5의 1단계 보류 원장은 그 틀을 **시작 전**에 적용한 것이다.
 - 「시작 인터뷰에서 범위를 승인한다」는 §3.6 1항의 사용자 흐름은 유지된다. 사용자가 보는 것은
   같은 대화 안의 범위 제안·승인·시작 완료다. 다만 Core 기록상 그 승인은 Interview Cycle의
-  Synthesis가 아니라 **시작 승인 원장**에 남는다. 이 점은 사용자 결정 사항(§10 Q1)으로 남긴다.
+  Synthesis가 아니라 **시작 승인 원장**에 남는다. 이 방향은 2026-11-19 확정됐다(§10).
 
 ### 4.2 권장 시작 흐름 (A5)
 
 ```text
-[1단계] gil start  (기존 명령, 기록 없음 → 「범위 제안」으로 끝난다)              (제안)
+[1단계] gil start  (정식 체인 없음 → 준비 기록과 「범위 제안」)              (제안)
   잠금·.gil/ 생성 ─ restore::recover ─ reap_tmp ─ initializable(§4.4 완화) ─ check_object_store
-  읽기 전용 목록 관측: 경로·종류만, 바이트·지문 없음                                (제안: inventory)
+  읽기 전용 목록 관측: 경로·종류만, 일반 작업물 바이트·지문 없음                                (제안: inventory)
     적용 정책 초안 = 시스템 보호 + 승인 후보 .gilignore; .gitignore는 추천 참고만
     출력 = 폴더 단위 효과 요약(추적 n / 제외 m / 이유), 일반 추천 후보와 기본 선택(§5.2)
   보류 원장 .gil/start/pending.json 기록(§4.4)                                     (제안)
@@ -188,7 +188,7 @@ dirty gate = Verify가 아닌 자리를 닫을 때 추적 파일이 기준 Snaps
   .gilignore 쓰기 (디스크 원문 == 제안 원문이면 쓰지 않음, 다르면 §6.3 규칙)
   capture_with_policy(root, store, P1) → A1                                        (제안)
   한 번의 저장: X1 · J0 · current_existence · 뿌리 Interview Cycle(entry=A1) · A1(policy=P1) · 정책 원장 P1
-  보류 원장 제거 (상태 저장 뒤, 다음 명령이 잔해로 정리할 수 있음)
+  준비·승인 이력 보존, 확정된 정식 시작과 연결 (이력을 잔해로 삭제하지 않음)
   receipt: 기존 start receipt + 「적용 정책 P1, 추적 n, 제외 m」 + show_gil_monitor 인계(기존)
 ```
 
@@ -196,17 +196,17 @@ dirty gate = Verify가 아닌 자리를 닫을 때 추적 파일이 기준 Snaps
 Interview의 선행 조건이지 Interview Step이 아니다.
 
 **승인 전에 무엇을 읽는가.** 1단계는 디렉터리 이름·항목 종류·`.gitignore`/`.gilignore`
-원문만 읽는다. 파일 바이트를 읽거나 지문을 계산하지 않는다(용량 표시가 필요하면 metadata
+원문만 읽는다. 일반 작업물의 내용 바이트를 읽거나 지문을 계산하지 않는다(용량 표시가 필요하면 metadata
 길이만). 제외 규칙에 맞는 디렉터리 안은 들어가지 않는다(`Prune`). 에이전트는 추천을 위해
 파일을 읽을 수 있다 — 읽기는 어느 단계에서나 허용된 행위다. 쓰기는 `.gil/`뿐이다.
 
 **승인 전 보존해야 할 최소 상태(보류 원장).** 제안 digest, 정책 원문(원본별 디렉터리·종류·
 텍스트 digest; 텍스트는 객체 창고 blob으로), 추천 목록과 선택 상태와 이유, 에이전트 추천과
-이유, 효과 요약의 경로 집합 digest(추적 집합·제외 집합), 승인 상태(`proposed|approved`), 승인
+이유, 효과 요약과 실제 추적 집합 digest(제외 내부 집합은 요구하지 않음), 준비·승인·취소·정식 시작 상태(구체적 필드 미정), 승인
 채널. **X1·J0·Cycle·Snapshot은 만들지 않는다.** 보류 원장만 있는 `.gil/`은 프로젝트가 아니다.
 
 **최초 보관본 참조와 인터뷰의 연결.** A1 기록이 `policy: P1`을 갖고(§6.1), 정책 원장 P1이
-`applied_from: snapshot:A1`, `approval.channel: start`를 갖는다. 뿌리 Cycle `entry_snapshot_ref`는
+`applied_from: snapshot:A1`, `approval.channel: monitor`를 갖는다. 뿌리 Cycle `entry_snapshot_ref`는
 현행대로 A1이다. `baseline_snapshot_ref`를 뿌리에 두지 않는 결정(§4.1 규범)은 유지한다.
 
 ### 4.3 취소·중단·재시작
@@ -346,84 +346,48 @@ macOS·Windows의 대소문자 접기 볼륨에서 `Build/` 규칙은 `build/`�
 
 ### 5.4 상태 전이 표
 
-정책에는 세 가지 상태가 있다. 셋을 섞지 않는다.
+아래는 제품 의미이며 실제 필드·열거형 선언이 아니다.
 
-| 상태 | 뜻 | 저장 자리 |
+| 현재 | 사건 | 결과 |
 |---|---|---|
-| **초안(draft)** | 디스크의 `.gilignore`와 에이전트 추천으로 작성한 후보. `.gitignore` 참고 규칙은 개별 채택이 필요하며 아직 효력 없음 | 디스크 + 보류 제안(digest) |
-| **변경안 검토 중** | 현재 사이클에서는 미승인 제안만 준비 | 승인 정책은 유지 |
-| **적용 중(applied)** | 정상 저장된 최신 승인 정책. 최초 보관 완료와 별개 | 정책 승인 기록 |
+| 새 프로젝트 준비 | 추천·수정 | 준비 기록 보존, 정식 체인 없음 |
+| 미승인 변경안 | 모니터 최종 승인 및 승인 기록 저장 성공 | 승인 정책 적용, 보관 완료와 구분 |
+| 시작 준비 | 명시적 취소 | 기록 보존·취소 표시, 자동 시작 없음 |
+| 준비·적용 중 | 앱 종료·연결 끊김 | 확정 상태 재조회, 취소로 간주하지 않음 |
+| 승인 정책 적용 | 정책 파일 갱신 실패 | 정책 유지, 파일 동기화 필요 별도 표시 |
+| 승인 정책 적용 | 규칙·추적 목록이 최초 적용 승인 범위와 다름 | 변경점 표시·모니터 재승인, 승인 이력 보존 |
+| 새 범위 적용 | 기준점 보관 실패 | 정책 유지, 다음 실험 보류 |
+| 새 범위 적용 | 기준점 보관 성공 | 사건·보관본 관계 확정, 다음 실험은 새 기준점 |
+| 적용 정책 있음 | 규칙 파일 직접 편집·삭제 | 적용 정책 유지, 미승인 변경 표시 |
+| 실험 진행 중 | 일반 범위 변경 요청 | 변경안 준비, 사이클 종료·필요한 복원 후 승인 |
+| 진행·보관 중 | 즉시 보관 중단 요청 | 중단·정리 방법 확인, 자동 재개 없음 |
+| 최신 승인 정책 있음 | 과거 보관본으로 복원 | 최신 정책 유지, 과거 근거 부족 시 거절 |
 
-| 현재 | 사건 | 다음 | 비고 |
-|---|---|---|---|
-| (프로젝트 없음) | 1단계 `gil start` | 초안 제안(보류 원장) | 기록 없음 |
-| 초안 제안 | `gil_scope_propose`(에이전트 추천 추가·수정) | 새 초안 제안 | 이전 제안은 승인이 아니므로 교체 |
-| 초안 제안 | 파일 변경으로 경로 집합 변경 | 새 초안 제안 | 재표시 |
-| 초안 제안 | 승인 | 승인됨(시작용) | 보류 원장 `approved` |
-| 승인됨(시작용) | 2단계 성공 | 적용 중 P1 (A1) | 원장 `applied_from: snapshot:A1`, `channel: start` |
-| 승인됨(시작용) | 바인딩 실패 | 초안 제안 | 승인 무효, 사유 표시 |
-| 적용 중 P_k | 디스크 `.gilignore` 편집·삭제·교체 | 적용 중 P_k + **드리프트 표시** | 효력 변화 없음. `.gitignore` 변경은 정책 드리프트가 아니며 추적 대상일 때 일반 작업물 변경 |
-| 적용 중 P_k | 사이클 종료·필요한 복원 후 모니터 승인 | 적용 중 P_{k+1} | 승인 기록 정상 저장 시 적용 |
-
-
-
-| 적용 중 P_k (현 세계 S) | `gil restore` | 적용 중 P_k | 목표 S의 정책 = P_k. 제외 경로 무변경 |
-| 적용 중 최신 승인 P_k | revisit → 과거 Exit S'(출처 정책 P_j) | 적용 정책은 **P_k 유지** | §6.5 최신 정책 원칙. 결과 세계 참조 상세는 후속 |
-| 적용 중 P_k | 정책 없는 과거 세계로 복원 요청 | 적용 중 P_k 유지 | §6.5 기록 근거 검사, 과거 정책 자동 채택 없음 |
-
----
 
 ## 6. 저장·승인·실패 복구·호환성 설계
 
-### 6.1 정책 원장과 Snapshot 연결 (방향 채택, 상세 저장 구조는 제안)
+### 6.1 정책 원장과 Snapshot 연결
 
-```yaml
-artifacts:
-  next_snapshot_id: 3
-  snapshots:
-    - id: A1
-      manifest: {algorithm: sha256, digest: …}
-      policy: P1                      # (제안) 없으면 「정책 미상 = legacy whole-tree」
-    - id: A2
-      manifest: {…}
-      policy: P1
-  tracking:                           # 새 형식의 후보 구조. 같은 버전의 선택적 확장 아님
-    next_policy_id: 2
-    approved_pending: null            # 또는 P2
-    policies:
-      - id: P1
-        version: 2                    # 후보 값, 실제 버전은 후속 설계
-        policy_id: gil-tracking-policy/2:sha256:…
-        sources:                      # 승인 시점에 동결된 원문. 디스크를 다시 읽지 않는다
-          - directory: ""
-            kind: gilignore
-            text: {algorithm: sha256, digest: …}   # 객체 창고의 blob
-        approval:
-          proposal_digest: …
-          channel: start | monitor | agent      # 사람 클릭 / 에이전트 전달을 구분, 신원 인증 아님
-          in_cycle: null | cycle:C3
-          recommendations:                      # 보여 준 선택과 이유의 요약(표시 재현용)
-            - {rule: "node_modules/", selected: true, source: gil|agent|gitignore, reason_key: …}
-        applied_from: snapshot:A1 | null
-        superseded_by: null | P3
-```
+**방향 확정·구체적 저장 형식 구현 대기.** 이전 YAML 후보의 `approved_pending`,
+`channel: agent`, 보관본만으로 적용 정책을 결정하는 구조는 폐기한다. 저장 형식 버전을 올린다.
+아래 관계를 구현 설계에서 표현하되 필드 이름·버전 번호를 이 문서에서 확정하지 않는다.
 
-- **원문은 blob.** 승인된 `.gilignore` 원문을 승인 기록에 보관한다. `.gitignore`는 정책
-  평가 원문으로 동결하지 않는다. 추천 출처 기록과 실제 정책 입력을 구분한다. `.gitignore` 자체는
-  승인 범위에 따라 일반 Artifact로 보관·복원되며 그 내용은 적용 정책을 바꾸지 않는다.
-- **`policy_id`는 유도값이자 검증값.** load 시 `sources`로 다시 계산해 `policy_id`와 같은지 검사한다.
-  다르면 손상으로 거절(고치지 않는다).
-- **Snapshot의 `policy`가 없으면 legacy.** 기존 format 4·5·6·7 기록은 필드가 없다. 그 Snapshot의
-  관측 의미는 현행 `artifact::observe`(루트 `.gil/`만 제외)로 **알려져** 있으나 이름표가 없다.
-  이것을 「정책 미상(legacy whole-tree)」이라 부르고 임의의 ID를 붙이지 않는다(Tracking Policy 제안 §3 2항).
-- **형식 번호 — 2026-11-19 확정.** 저장 형식 버전을 올린다. 같은 버전의 선택적 확장 후보는
-  폐기하며 구체적인 번호·기존 형식 대응은 후속 설계다. 기존 프로젝트는 보존하고 사용자가
-  새 기능을 채택할 때 전환 필요성과 영향을 안내해 명시적으로 전환한다. 자동 변환하지 않는다.
-  새 형식을 모르는 프로그램의 수정 거절을 검증하며, 과거 보관본·실험 의미를 바꾸지 않는다.
-- **시작 보류 원장**(`.gil/start/pending.json`, 제안)은 `state.yaml`이 아니다. 2단계가 끝나면 그 내용이
-  `tracking.policies[P1]`로 들어가고 보류 원장은 사라진다. 형식: JSON, `schema_version: 1`, 위의
-  `policies[]` 항목 하나와 `inventory_digest`(추적 집합·제외 집합의 경로 digest), `state: proposed|approved`.
-  모르는 필드·링크·크기 초과는 거절한다(`locale.json`과 같은 보수적 읽기).
+| 기록 | 필요한 관계 |
+|---|---|
+| 준비·변경안 | 제안 판, 규칙, 표시한 추적 목록·추천 이유·선택, 취소/중단 구분 |
+| 승인 정책 | 승인된 `.gilignore` 원문, 모니터 승인 대상 판, 변경 전 정책과 적용 상태 |
+| 정책 파일 동기화 | 적용 정책과 별개인 쓰기 결과, 사용자 편집을 덮어쓰지 않는 재시도 근거 |
+| 관리 사건 | 검토 인터뷰, 전후 정책, 승인, 보관 시도·결과와 기준점 |
+| 보관 근거 | 실제 보관본, 실제 사용 정책, 관측된 범위 및 파일 부재와 미추적의 구분 |
+| 현재 세계·다음 실험 | 성공한 관리 사건 기준점과 다음 Entry, 과거 Exit 불변 |
+
+원문·보관 객체는 기존 객체 저장 원칙을 활용한다. 정책 원문은 `.gilignore`이며 Git 규칙은
+추천 출처일 뿐 정책 입력이 아니다. 같은 세계의 보관본을 재사용할 수 있으므로 정책 적용 사건과
+보관본 정체성을 혼동하지 않는다. 기존 보관본에 정책을 소급 부착하지 않는다.
+
+새 형식 채택은 안내 후 명시적으로 전환한다. 자동 이전하지 않고 구형 프로그램의 수정 거절을
+검증한다. 준비 기록은 정식 시작 이후에도 승인·취소 이력으로 보존하며 잔해로 일괄 삭제하지 않는다.
+
 
 ### 6.2 승인 바인딩 — 승인 대상과 적용 대상이 같은가
 
@@ -455,7 +419,7 @@ proposal_digest = sha256(canonical JSON {
 
 ```text
 1. 원문 blob 확정 (객체 창고)
-2. 원장 기록 저장  (시작: pending.json approved / 재인터뷰: state.yaml tracking.approved_pending)
+2. 원장 기록 저장  (시작: pending.json approved / 변경: 새 형식의 승인 정책·관리 사건 기록)
 3. .gilignore 동기화 — 쓰기 전 확인된 기준에서 사용자 편집·삭제가 없음을 검사한다.
    이미 이번 승인 원문과 같으면 쓰지 않는다. 사용자 변경 또는 불확실이 있으면 덮어쓰지 않고 차이를 표시한다.
    파일 부재만으로 신규 생성이 안전하다고 단정하지 않는다(사용자 삭제와 구별 필요).
@@ -465,8 +429,8 @@ proposal_digest = sha256(canonical JSON {
 - 2 뒤 3 전 중단: 승인 기록은 유효하며 구판 파일·동기화 미완료를 표시한다. 재시도 직전 사용자 변경을 검사하며 그 변경을 덮어쓰지 않는다.
 - 3만 실패(권한 등): 승인 유효, 표시 유지. 적용(활성화)은 원장 원문으로 하므로 막히지 않는다.
 - 원장 저장 실패: 새 승인을 완료로 처리하지 않는다. 기존 확인된 승인 상태를 보존한다. 결과가 불확실하면 기록을 조회해 확인하며 중복 승인을 추측하지 않는다. blob은 미참조로 남을 수 있다.
-- **에이전트는 `.gilignore`를 직접 쓰지 않는다.** Interview 중 Core의 이 쓰기는 내장 제외 파일에 대한
-  것이라 「Interview는 Artifact를 바꾸지 않는다」와 충돌하지 않는다. 그 밖의 파일 쓰기는 Interview에서
+- **승인 정책 파일의 자동 동기화는 Core가 담당한다.** Core의 정책 파일 쓰기는 승인 후 시작 준비 또는 사이클 경계에서 수행한다.
+  일반 작업물 변경 권한은 주지 않는다. 그 밖의 파일 쓰기는 Interview에서
   여전히 금지다. 에이전트가 직접 편집한 `.gilignore`는 드리프트(초안)일 뿐이다.
 - 삭제·교체·손상: 디스크 `.gilignore`가 없어져도 적용·승인 정책은 그대로다. 「파일이 없으니 전부
   추적」으로 넓히지 않는다(§3.6 5항). 해석 불가로 손상되면 초안으로서 거절되고 드리프트 표시.
@@ -537,7 +501,7 @@ Verify 증거를 대신하지 않으며 증거와 승인 범위가 충돌하면 
 
 ---
 
-## 7. 핵심 미결 사항의 대안과 권장안
+## 7. 확정 방향과 남은 구현 설계
 
 | # | 쟁점 | 대안 | 권장 | 비용 / 기존 계약 영향 |
 |---|---|---|---|---|
@@ -547,7 +511,7 @@ Verify 증거를 대신하지 않으며 증거와 승인 범위가 충돌하면 
 | D4 | 독립 추적 정책 | 시스템 보호 + 승인된 `.gilignore` | **2026-11-19 후속 합의**. `.gitignore`는 추천에만 참고, 기존 층 우선순위 폐기 | 상세 문법·탐색·버전은 미결 |
 | D5 | 제외 항목 탐색 | 완전 제외 내부 생략, 재포함 경로 검사, 제외 연결 파일 건너뛰기 | **2026-11-19 방향 채택** | 대상 비접근·복원 비간섭, 추적 연결 파일 거절. 구현 대기 |
 | D6 | 정책 저장 | 새 저장 형식 버전 | **2026-11-19 확정**. 기존 프로젝트 보존, 새 기능 채택 시 명시적 전환 | 구체적 번호·전환/복구 구현·구형 프로그램 거절 검증은 후속 |
-| D7 | `.gilignore` 자체 | 일반 보관·복원 제외 + 정책 승인 기록에 원문·적용 판 보존 | **2026-11-19 방향 채택** | 실제 blob·필드·쓰기 실패 계약은 후속. 과거 정책 자동 재적용은 미승인 |
+| D7 | `.gilignore` 자체 | 일반 보관·복원 제외 + 정책 승인 기록에 원문·적용 판 보존 | **2026-11-19 방향 채택** | 쓰기 실패 의미는 확정, 실제 저장·동기화 구현은 후속. 과거 정책 자동 재적용 금지 |
 | D8 | 적용 시점 | 사이클 종료·필요한 복원 후 승인·적용 | **2026-11-19 확정**. 즉시 보관 중단은 진행을 멈추고 정리 확인 | 새 범위 현재 세계 보관 성공 후 다음 실험, 실패 시 보류. 세계 참조 정합은 후속 설계 |
 | D9 | 최초 적용 전 재확인 | 규칙 + 실제 추적 대상 목록 | **2026-11-19 채택** | 차이 표시 후 모니터 재승인, 제외 내부·기존 파일 내용만의 변화는 제외 |
 | D10 | 복원 적용 정책 | 모든 복원에 최신 승인 정책 적용 | **2026-11-19 확정** | R1/R2 후보 철회. 결과 세계 참조·과거 기록 부재 처리는 후속 |
@@ -559,113 +523,37 @@ Verify 증거를 대신하지 않으며 증거와 승인 범위가 충돌하면 
 
 ## 8. 구현 순서와 단계별 완료 조건
 
-앞 단계가 뒤 단계의 저장 형식·승인·전이를 임의로 도입하지 않는다. 각 단계는 PR 하나 이상이며
-공유 파일(`session.rs`·`store.rs`·Monitor)은 소유자를 나눠 동시에 수정하지 않는다.
-
-| 단계 | 범위 | 완료 조건 |
-|---|---|---|
-| S0 설계 승인 | 이 문서의 §10 결정, 규범 명세 보정(§3.4·§4·Storage §2·§3·M4-R·Tracking Policy §2.4) | 사용자 결정 기록, 통합 담당의 명세 PR 병합 |
-| S1 엔진 확장 | `tracking_policy.rs`: 독립 `.gilignore` 평가와 정책 버전(미정), 루트 `.gilignore` 내장 제외·수집, 제외 항목 종류 검사 완화(D5 승인 시), 목록 관측(`inventory`, 바이트 없음), 효과 요약(폴더 묶음·효과 없는 규칙·경고), 추천 카탈로그와 금지 집합(§5.2) | 단위 시험 §9 E-군 통과. V1 ID와 V2 ID가 다름을 시험으로 고정. 기본 `observe`/`capture` 무변경 |
-| S2 저장 | `tracking` 블록·Snapshot `policy`·blob 원문·load 검증(`policy_id` 재계산)·구형 writer 거절·`start/` 잔해 분류·보류 원장 읽기/쓰기 | 왕복 시험, 손상 거절 시험, 기존 format 4–7 fixture가 변경 없이 읽힘(§9 S-군) |
-| S3 두 단계 시작 | `start_at_internal` 분리, 보류 원장, 제안 도구·모니터 전용 승인 경로(이름 미정, 모든 구성), 바인딩 재검증, `capture_with_policy`, `project_resume` 순서, 취소·재시작·kill point | §9 T-군 통과. 기존 `tests/artifact.rs` 시작 시험이 「2단계 승인 fixture」로 갱신되되 의미 보존 |
-| S4 관측·dirty·Verify | `world_state`/`require_clean`/`close_verify`의 정책 인식, 활성화, status 3상태, 드리프트 감지, 증거 거절 Topic 연결 | §9 W-군 통과. legacy 프로젝트 동작 비트 동일(기존 시험 전부 녹색) |
-| S5 재인터뷰 범위 변경 | Interview 안의 제안·승인·`.gilignore` 쓰기 순서·대체(superseded)·단일 열린 Cycle 유지 | §9 C-군 통과 |
-| S6 복원·revisit 경계 | `restore::run*`의 정책 관측, 최신 승인 정책의 복원 계획·재관측·결과 세계 참조 연결 | §9 R-군 통과. `product-safety`의 일반 restore 차단 **유지** 확인 |
-| S7 기존 프로젝트 채택 | 채택 흐름, legacy 표시, Windows 외부 기록 배치 | §9 L-군 통과. 자동 이관 없음 확인 |
-| S8 안내·화면 | workflow.md·Manual Topic(`artifact/scope/*`)·Monitor 카드(승인 버튼·효과 요약) — 안내·Monitor 세션 결과와 정합 | 안내 계약 시험, Monitor JS 시험. 실제 Host 화면 인수는 별도 보류 항목으로 기록 |
-
-S1·S2는 서로 독립이라 병행 가능하다. S3는 S1·S2 뒤, S4는 S3 뒤, S5·S6·S7은 S4 뒤에 병행 가능하다.
-
----
+[합의 정합성 점검과 구현 순서](../GIL_Implementation_Order_2026-11-19.md)를 따른다.
+과거 S1–S8 순서와 병행 안내는 대체됐다. Chain 미달성 종료가 우선이며, 공유 저장 계약을
+먼저 고정한 뒤 독립 정책 엔진·기록·모니터를 연결한다. 정책 적용과 기준점 보관·복원은 서로
+연결되므로 작업 파일이 다르다는 이유만으로 독립 구현 완료를 주장하지 않는다.
 
 ## 9. 자동 검사에 사용할 사례 목록
 
-이름은 기존 관례(검사 가능한 불변식 문장)를 따른다. 실제 프로젝트·설치본 시험이 아니다.
+아래는 작성할 검사의 의미이며 실행 결과가 아니다. 과거의 반대 정책을 기대하던 검사명은 폐기했다.
 
-**E — 엔진**
-- `a_gilignore_rule_is_evaluated_after_every_gitignore_rule`
-- `a_gilignore_negation_reincludes_what_gitignore_excluded_but_not_builtin_or_excluded_parents`
-- `a_root_gilignore_is_never_part_of_the_world`
-- `a_non_root_gilignore_is_an_ordinary_artifact_and_a_warning`
-- `a_symlinked_or_directory_gilignore_is_refused_as_policy_text`
-- `an_unparseable_gilignore_line_refuses_the_whole_policy_with_line_and_reason`
-- `v2_policy_ids_differ_from_v1_ids_for_the_same_text`
-- `the_recommendation_catalog_never_matches_lockfiles_or_manifests` (package.json·Cargo.lock·requirements.txt·go.sum…)
-- `an_ignored_top_level_symlink_is_skipped_and_listed_not_followed` (D5 승인 시) / `…_still_refuses_under_inspect` (미승인 시)
-- `a_nested_gil_inside_a_pruned_directory_is_unseen_and_the_excluded_list_says_so`
-- `a_directly_matched_nested_gil_is_still_refused`
-- `inventory_reads_names_and_kinds_but_no_bytes_and_stores_nothing`
-- `korean_and_case_sensitive_patterns_match_as_written_on_every_os`
+| 영역 | 필수 검증 |
+|---|---|
+| 독립 정책 | Git 규칙 변경·복원이 적용 정책을 바꾸지 않음, 시스템 보호 재포함 불가 |
+| 추천 | 일반·비밀값 추천 미리 선택, 프로젝트별 미선택, 사용자 선택 유지, 비밀값 미출력 |
+| 탐색 | 완전 제외 내부 미탐색, 재포함 필요 경로 검사, 제외 링크 비접근·복원 비간섭, 추적 링크 거절 |
+| 하위 정책 | 발견 시 시작 보류·설명, 자동 무시·삭제 없음, 제외 내부를 검사했다고 주장하지 않음 |
+| 준비 | 승인 전 보관·가짜 체인 없음, 취소 기록 보존·자동 시작 없음, 연결 끊김과 취소 구분 |
+| 승인 | 모든 구성의 모니터 최종 승인, 제안 판 검증, 규칙·추적 목록 변화 재승인, 내용만 변화는 범위 재승인 불필요 |
+| 기록·동기화 | 승인 성공/파일 쓰기 실패 분리, 사용자 편집 비덮어쓰기, 저장 결과 불확실 시 완료 추정 없음 |
+| 관리 사건 | 사이클 종료·필요한 복원 후 승인, 인터뷰 근거 연결, 과거 기록 불변, 외부 변경 검사·모니터 안내 |
+| 기준점 | 새 범위 전체 보관 성공 후 다음 실험, 실패 시 정책 유지·실험 보류, 재시작·중복 요청 결과 확인 |
+| 중단 | 즉시 보관 중단 시 추가 진행·보관 중지, 자동 실패/복원/삭제 없음, 정리 방법 확인 |
+| 복원 | 최신 승인 정책, 제외 경로 무변경, 과거 정책 자동 채택 없음, 기록 부재 추측 없음, 실제 관측된 부재와 구분 |
+| 호환 | 새 형식 버전, 구형 프로그램 수정 거절, 기존 기록 보존, 사용자 요청 없는 전환 없음 |
+| 제품 경계 | 일반 복원 차단 자동 해제 없음, 실제 화면 확인과 합성 검사 구분 |
 
-**S — 저장**
-- `a_snapshot_record_without_policy_is_legacy_and_never_relabelled`
-- `tracking_sources_are_blobs_and_policy_id_is_recomputed_on_load`
-- `a_tracking_block_with_a_wrong_policy_id_is_refused_not_repaired`
-- `an_old_writer_refuses_a_state_with_tracking_or_policy_fields`
-- `format_4_5_6_7_fixtures_load_unchanged_without_tracking`
-- `a_start_pending_ledger_is_initializable_and_anything_else_in_gil_is_not`
-- `a_start_pending_ledger_beside_a_state_file_is_cleaned_as_a_remnant`
 
-**T — 두 단계 시작**
-- `start_phase_one_writes_only_under_gil_and_no_guide_block`
-- `a_new_project_proposes_builtin_gitignore_and_general_recommendations_with_reasons`
-- `a_project_with_an_existing_gilignore_proposes_its_text_and_refuses_invalid_lines`
-- `an_agent_recommendation_changes_the_proposal_digest`
-- `approval_binds_to_text_and_shown_path_sets` / `a_content_only_change_keeps_the_approval`
-- `a_gilignore_edit_after_approval_drops_the_start_back_to_proposed`
-- `a_new_folder_after_approval_requires_reapproval` (D9)
-- `cancel_before_approval_leaves_the_working_tree_untouched`
-- `phase_two_writes_guides_then_gilignore_then_captures_with_policy_then_saves_once`
-- `a1_excludes_approved_paths_and_carries_policy_p1_with_channel_start`
-- `dying_after_approval_resumes_the_same_approval_on_the_next_start`
-- `dying_after_capture_shares_objects_and_does_not_duplicate_guides`
-- `dying_after_state_save_cleans_the_pending_ledger_on_the_next_command`
-- `a_bare_approved_yes_cannot_approve_scope_in_the_approved_plan_profile`
-
-**W — 관측·dirty·Verify**
-- `a_change_inside_an_excluded_path_is_not_dirty`
-- `a_legacy_project_judges_dirty_exactly_as_before`
-- `an_approved_pending_policy_does_not_change_the_dirty_judgement_until_verify_closes`
-- `verify_close_activates_the_pending_policy_and_records_applied_from`
-- `an_unexcluded_file_is_first_kept_by_the_activating_verify_and_has_no_backfilled_history`
-- `an_excluded_evidence_path_is_refused_as_not_in_snapshot`
-- `editing_or_deleting_gilignore_on_disk_changes_nothing_but_shows_drift`
-- `restoring_an_old_gitignore_shows_drift_and_does_not_change_the_applied_policy`
-- `status_distinguishes_applied_pending_and_drift`
-
-**C — 재인터뷰 범위 변경**
-- `scope_cannot_be_proposed_while_an_experiment_is_open`
-- `a_dirty_tracked_file_must_be_confirmed_by_verify_before_the_interview_that_excludes_it`
-- `a_second_approval_before_activation_supersedes_the_first_and_keeps_it_in_the_ledger`
-- `core_writes_gilignore_in_interview_but_the_agent_may_write_nothing_else`
-- `a_user_edited_gilignore_is_not_overwritten_by_approval_and_is_shown_as_drift`
-- `ledger_first_then_file_a_failed_file_write_keeps_the_approval`
-
-**R — 복원·revisit 경계**
-- `restore_plans_nothing_for_excluded_paths_and_touches_none`
-- `restore_uses_the_target_snapshots_policy_not_the_disk_files`
-- `revisit_across_policies_is_refused_before_the_logical_move_when_a_differing_path_is_excluded_by_either`
-- `revisit_across_policies_proceeds_when_every_differing_path_is_included_by_both`
-- `after_a_cross_policy_revisit_the_applied_policy_is_the_targets_and_the_pending_approval_survives`
-- `revisit_to_a_legacy_ancestor_treats_legacy_as_whole_tree`
-- `a_currently_excluded_file_present_in_the_target_is_never_overwritten`
-- `product_safety_still_refuses_general_restore_after_policy_integration`
-- `preview_marks_mismatch_with_all_differences_included_as_a_separate_readiness` (제안 값)
-
-**L — 기존 프로젝트·플랫폼**
-- `an_existing_project_adopts_a_policy_only_through_an_interview_approval`
-- `adoption_leaves_every_old_snapshot_legacy_and_activates_at_the_next_verify`
-- `a_windows_external_record_project_keeps_gilignore_in_the_working_root_and_the_ledger_beside_state`
-- `gilignore_write_refuses_links_and_reparse_points_on_windows`
-- `no_installer_or_update_path_touches_user_project_policies`
-
----
-
-## 10. 사용자 결정이 필요한 질문
+## 10. 결정 완료 항목과 남은 상세 설계
 
 1. **시작 방식(D1·D2): 2026-11-19 방향 채택.** 범위 승인 뒤 최초 보관과 정식 체인을 생성하며, 승인은 체인 밖의 시작 준비 기록에 남긴다. 명시적 취소는 기록 보존·취소 표시·자동 시작 방지로 확정했고 앱 종료·연결 끊김과 구분한다. 구체적인 명령·저장 형식은 후속이다. `.gil/` 삭제를 승인된 취소 절차로 간주하지 않는다.
 2. **저장 형식(D6): 2026-11-19 확정.** 버전을 올리고 기존 프로젝트는 보존한다. 새 기능 채택 시 안내 후 명시적으로 전환하며 자동 이전하지 않는다. 실제 번호와 안전한 전환 구현은 후속 설계다.
-3. **일반 추천 기본 선택(D12): 2026-11-19 채택.** 일반 추천은 미리 선택해 보여 주고 사용자 수정·승인 뒤 적용한다. 시스템 보호는 해제 불가다. 비밀값 파일도 미리 선택한 추천에 포함하도록 후속 승인됐다. 프로젝트별 제외 추천은 기본 미선택이며 이유와 보관·복원 영향을 보고 사용자가 선택하도록 후속 확정됐다. **남은 질문:** 예시 파일을 일괄 제외하지 않을 세부 패턴은 어떻게 둘 것인가?
+3. **일반 추천 기본 선택(D12): 2026-11-19 채택.** 일반 추천은 미리 선택해 보여 주고 사용자 수정·승인 뒤 적용한다. 시스템 보호는 해제 불가다. 비밀값 파일도 미리 선택한 추천에 포함하도록 후속 승인됐다. 프로젝트별 제외 추천은 기본 미선택이며 이유와 보관·복원 영향을 보고 사용자가 선택하도록 후속 확정됐다. 세부 패턴은 예시 파일 일괄 제외 금지 원칙 안에서 구현 설계한다.
 4. **§3.4 변경(D5): 2026-11-19 방향 채택.** 완전 제외 폴더 내부 탐색 생략, 재포함 경로 검사, 제외 연결 파일의 대상 비접근·복원 비간섭을 따른다. 추적 대상 연결 파일은 거절한다. 구현·시험은 대기다.
 5. **승인 바인딩(D9): 2026-11-19 채택.** 최초 적용 전 규칙·실제 추적 대상 목록 변화는 모니터 재승인, 완전 제외 내부·기존 파일 내용만의 변화는 범위 재승인 불필요. 보관 일관성·안전 검사 유지.
 6. **`.gilignore` 자체(D7): 2026-11-19 방향 채택.** 일반 보관·복원에서 제외하고 원문·적용 판은 정책 승인 기록에 보관한다. 파일 쓰기 실패 처리는 후속 합의로 확정됐으며 상세 저장·재시도 구현은 후속이다.
@@ -688,8 +576,8 @@ S1·S2는 서로 독립이라 병행 가능하다. S3는 S1·S2 뒤, S4는 S3 �
 | Existence Model §4 | 서술 보정 | 시작 save의 선행 조건으로 범위 승인 |
 | Cycle Model §6 「Interview Cycle의 Artifact」 | 한 문장 추가 | Core의 `.gilignore` 쓰기는 내장 제외 파일이므로 Artifact 변경이 아니다 |
 | M4-R 복구 계약 | 규칙 일반화 | 최신 승인 정책 기준 범위·사전검사·화면 표시 |
-| M3 Tracking Policy 제안 §2.4·§3 | 버전 상승 | `PolicyVersion::V2`(층), Snapshot `policy` 값 형식 |
-| M3 Restore Preview 제안 §5 | 값 추가(제안) | `CandidateAcrossPolicies` |
+| M3 Tracking Policy 제안 §2.4·§3 | 버전 상승 | 독립 정책 평가 버전·보관 근거 연결, 구체적 번호는 후속 |
+| M3 Restore Preview 제안 §5 | 값 추가(제안) | 최신 정책 기준 결과·기록 부족·안전 실패 표시(과거 교집합 후보 폐기) |
 | 로드맵 §7 M3-F 「`.gilignore` 공개 계약은 지금 만들지 않는다」 | 결정 로그 갱신 | §3.6으로 대체됨을 명시(통합 담당) |
 | `src/session.rs` `initializable`·`start_at_internal`·`close_verify`·`world_state`·`restore` | 코드 | §3.2의 공백 전부 |
 | `src/mcp/tools.json`·`workflow.md`·Manual Topic | 도구·안내(제안) | `gil_scope_propose`/`gil_scope_decide`, `artifact/scope/*` Topic |
@@ -703,20 +591,5 @@ S1·S2는 서로 독립이라 병행 가능하다. S3는 S1·S2 뒤, S4는 S3 �
 
 ## 부록 C. 시나리오 점검표
 
-| 시나리오 | 처리 | 절 | 검사 이름 |
-|---|---|---|---|
-| 새 프로젝트 | 1단계 제안(시스템 보호+독립 `.gilignore` 후보·추천) → 승인 → 2단계 정책 적용 capture → A1(policy P1) | §4.2 | T `a_new_project_proposes_…`, `a1_excludes_approved_paths_…` |
-| 기존 `.gilignore`가 있는 프로젝트 | 디스크 원문을 초안으로 읽어 효과를 보여 준다. 해석 불가 줄은 줄 번호와 함께 거절. 승인 원문과 같으면 다시 쓰지 않는다 | §4.2·§5.1·§6.3 | T `a_project_with_an_existing_gilignore_…` |
-| 시작 준비 취소·중단·재시작 | 명시적 취소는 기록 보존·취소 표시·자동 시작 방지. 앱 종료·연결 끊김은 재개 가능한 중단. 새 시작 의사는 현재 범위 재확인, 정식 시작 경합은 확정 상태 확인 | §4.3 | 후속 검사: 취소 보존, 자동 시작 방지, 중단 재개, 범위 재확인, 취소/시작 경합, 저장 실패 |
-| 승인 직후 규칙 변경 | 승인 정책 규칙·실제 추적 목록 변경은 모니터 재승인. `.gitignore` 내용만 변경은 정책 변경 아님 | §4.3·§6.2 | 후속 검사: Git 규칙 독립성, 최초 범위 재확인 |
-| 승인 직후 파일 변경 | 추적 경로 집합 변경 → 재승인(권장, Q5). 내용만 변경 → 허용. 제외 경로 변경 → 무관 | §4.3 | T `approval_binds_to_text_and_shown_path_sets`, `a_new_folder_after_approval_requires_reapproval` |
-| 기존 프로젝트의 명시적 채택 | Interview에서 base=legacy로 제안·승인 → 다음 Verify close에서 활성화. 과거 Snapshot은 legacy 유지, 자동 이관 없음 | §6.6 | L `an_existing_project_adopts_…`, `adoption_leaves_every_old_snapshot_legacy_…` |
-| 변경된 추적 파일을 새로 제외 | 열린 Experiment를 규칙대로 닫아야 Interview를 열 수 있고, 그 Verify가 변경을 먼저 확정한다. 정책 변경이 미확정 변경을 숨길 수 없다 | §4.5·§6.4 | C `a_dirty_tracked_file_must_be_confirmed_by_verify_before_the_interview_that_excludes_it` |
-| 제외 해제와 과거 이력 보존 | 해제는 다음 Verify close부터 현재 바이트를 보관. 제외 기간 이력은 만들지 않는다. 과거 Snapshot·Report는 그대로 | §4.5·§6.4 | W `an_unexcluded_file_is_first_kept_by_the_activating_verify_and_has_no_backfilled_history` |
-| 정책 파일 삭제·손상·외부 편집 | 적용·승인 정책 불변, 드리프트 표시. 「없으니 전부 추적」으로 넓히지 않음. 손상은 초안으로서 거절 | §6.3 | W `editing_or_deleting_gilignore_on_disk_changes_nothing_but_shows_drift`; C `a_user_edited_gilignore_is_not_overwritten_…` |
-| 저장 도중 실패 | 원장 먼저, 파일 나중. 원장 실패 = 미승인(blob 미참조). 파일 실패 = 승인 유효·표시. 2단계 kill point별 재개 | §4.3·§6.3 | T `dying_after_*`; C `ledger_first_then_file_a_failed_file_write_keeps_the_approval` |
-| 현재 제외 파일과 과거 복원 대상의 충돌 | 최신 승인 정책에서 제외된 경로는 복원에서 변경하지 않는다. 정책 판 차이 자체로 거절하지 않으며 실제 경로 충돌은 사전 검사한다 | §6.5 | R `revisit_across_policies_is_refused_before_the_logical_move_…`, `a_currently_excluded_file_present_in_the_target_is_never_overwritten` |
-| 필수 증거가 제외 대상인 경우 | `evidence.not_in_snapshot` 거절 유지, 복구 Topic만 추가. 우회 없음 | §6.4 규칙 3 | W `an_excluded_evidence_path_is_refused_as_not_in_snapshot` |
-| 중첩 `.gil` | 규칙에 직접 맞아도 거절. `Prune`된 디렉터리 안은 보지 않고 `excluded`에 부모를 남김 | §5.3 | E `a_directly_matched_nested_gil_is_still_refused`, `a_nested_gil_inside_a_pruned_directory_…` |
-| 링크·특수 파일 | 제외되지 않은 링크는 거절 유지. 승인 정책상 제외 링크는 대상을 따라가지 않고 건너뛰며 복원에서도 변경하지 않음(D5 채택) | §5.3 | E `an_ignored_top_level_symlink_…` |
-| Mac·Windows 경로 차이 | 정책은 `/` 경로 문자열만, 대소문자 구분. Windows 외부 기록 배치에서도 `.gilignore`는 작업 루트, 원장은 기록 저장소. 링크·reparse 쓰기 거절 | §5.3·§6.6 | E `korean_and_case_sensitive_patterns_…`; L `a_windows_external_record_project_…`, `gilignore_write_refuses_links_and_reparse_points_on_windows` |
+§9의 검증 표와 [구현 순서](../GIL_Implementation_Order_2026-11-19.md)를 단일 점검 목록으로 쓴다.
+기존 부록의 다음 Verify 적용·정책 교집합 복원·하위 정책 경고 후 진행 시나리오는 폐기했다.

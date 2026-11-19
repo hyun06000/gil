@@ -525,7 +525,7 @@ Timeline 위에 선다. 그 계약의 규범 단일 진실 공급원은 `GIL Art
 | Cycle을 연 전이 | Entry Snapshot |
 |---|---|
 | 뿌리 (`gil start`) | 최초 기준 Snapshot |
-| `open_child` | 부모 Cycle의 Exit |
+| `open_child` | 현행은 부모 Cycle의 Exit. 후속 관리 사건 성공 뒤 다음 실험은 새 기준점(§12 후속 합의) |
 | `revisit` | **revisit 대상 Cycle의 Exit** |
 | merge (미래) | 별도 merge 규칙 — 아직 없다 |
 
@@ -737,7 +737,8 @@ v0.1` §11의 1번 상태).
 
 ## 10. 새 Cycle이 받는 것
 
-새 Cycle은 부모의 세계에서 시작하지만 현재 Journey가 이미 배운 것을 가지고 시작한다.
+현행 새 Cycle은 부모의 세계에서 시작하지만 현재 Journey가 이미 배운 것을 가지고 시작한다.
+후속 관리 사건 뒤 다음 실험은 성공한 새 기준점에서 시작하며, 부모 기록과 현재 Journey는 보존한다.
 
 최소 입력은 다음과 같다.
 
@@ -745,7 +746,8 @@ v0.1` §11의 1번 상태).
 2. 구조적 부모 Cycle의 Cycle Report
 3. 부모 이후 현재 Journey에서 닫힌 실패 Cycle Report들
 4. 그 Cycle을 연 전이가 출발한 Artifact 세계 — 새 Cycle의 `entry_snapshot_ref`가 된다.
-   `open_child`면 구조적 부모의 Exit이고, `revisit`이면 revisit 대상의 Exit이다
+   현행 `open_child`면 구조적 부모의 Exit이고, `revisit`이면 revisit 대상의 Exit이다.
+   후속 관리 사건 뒤 다음 실험은 §12의 새 기준점을 사용하며 부모 Exit를 수정하지 않는다
    (`GIL Artifact Model v0.1` §7.1)
 
 실패 Cycle Report는 항상 전달한다. 같은 실패를 반복할 수 있기 때문이다.

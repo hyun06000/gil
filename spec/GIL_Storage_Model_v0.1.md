@@ -153,7 +153,8 @@ artifacts:
 - 같은 세계를 다시 확정하면 기존 참조를 다시 가리키고 `next_snapshot_id`를 늘리지 않는다.
 - 열린 Cycle은 실재하는 Entry만, 닫힌 Cycle은 실재하는 Entry와 Exit를 가진다.
 - 닫힌 Verify만 실재하는 `snapshot_ref`를 가진다.
-- World Current Snapshot은 저장하지 않고 Graph에서 유도한다.
+- 현행 World Current Snapshot은 별도 저장하지 않고 Graph에서 유도한다. 새 형식은 성공한
+  관리 사건과 다음 실험 Entry를 포함한 단일 출처 규칙으로 확장한다(상단 후속 계약).
 
 format 3에는 관측된 Artifact 세계가 없으므로 자동 변환하지 않는다. 파일을 수정하거나
 삭제하지 않고 앞 형식임을 알려 거절한다.
