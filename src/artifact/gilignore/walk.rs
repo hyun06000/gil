@@ -38,6 +38,7 @@ pub(crate) struct TreeEvaluation {
     tracked: Vec<TrackedFile>,
     excluded: Vec<ExcludedEntry>,
     blockers: Vec<Blocker>,
+    notices: Vec<Notice>,
 }
 
 impl TreeEvaluation {
@@ -62,6 +63,11 @@ impl TreeEvaluation {
 
     pub(crate) fn is_blocked(&self) -> bool {
         !self.blockers.is_empty()
+    }
+
+    /// 시작을 막지는 않지만 승인 전에 보여 줘야 하는 진단 — canonical 경로 순서.
+    pub(crate) fn notices(&self) -> &[Notice] {
+        &self.notices
     }
 
     /// 들어가지 않은 디렉터리 — **안의 항목은 확인하지 않았다.**
@@ -152,6 +158,59 @@ impl fmt::Display for Blocker {
                  규칙으로 옮기거나 파일을 정리해야 시작할 수 있다. GIL 은 이 파일을 읽거나 자동으로 \
                  삭제·이동·병합하지 않는다.",
                 kind.code()
+            ),
+        }
+    }
+}
+
+/// 시작을 막지 않는 진단. 판정은 이미 보호 쪽으로 내려졌고, 그 사실을 감추지 않으려는 것이다.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Notice {
+    /// 다른 경로에도 맞을 수 있어 받아들인 포함 예외가 시스템 보호 자리에 닿았다 — 보호가 이겼다.
+    ReinclusionOverriddenByProtection {
+        path: EntryPath,
+        protection: Protection,
+        rules: Vec<RuleRef>,
+    },
+    /// 시스템 이름의 대소문자 변형(`.GIL`, `.Git` 등)을 시스템 보호로 다뤘다.
+    ProtectedNameVariant { path: EntryPath, protection: Protection },
+}
+
+impl Notice {
+    pub(crate) fn code(&self) -> &'static str {
+        match self {
+            Notice::ReinclusionOverriddenByProtection { .. } => {
+                "reinclusion_overridden_by_protection"
+            }
+            Notice::ProtectedNameVariant { .. } => "protected_name_variant",
+        }
+    }
+
+    pub(crate) fn path(&self) -> &EntryPath {
+        match self {
+            Notice::ReinclusionOverriddenByProtection { path, .. }
+            | Notice::ProtectedNameVariant { path, .. } => path,
+        }
+    }
+}
+
+impl fmt::Display for Notice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Notice::ReinclusionOverriddenByProtection {
+                path,
+                protection,
+                rules,
+            } => write!(
+                f,
+                "{path} 은(는) {protection} 이라 {} 이(가) 맞아도 추적하지 않는다. 포함 예외로 시스템 보호를 \
+                 되살릴 수 없다 — 그 줄이 다른 경로를 위한 것인지 확인한다.",
+                rules.iter().map(|rule| rule.to_string()).collect::<Vec<_>>().join(", ")
+            ),
+            Notice::ProtectedNameVariant { path, protection } => write!(
+                f,
+                "{path} 은(는) {protection} 의 대소문자 변형이라 시스템 보호로 다뤘다. 대소문자를 무시하는 \
+                 파일 시스템에서는 같은 항목이고, 구분하는 파일 시스템에서도 추적하지 않는다."
             ),
         }
     }
@@ -282,6 +341,7 @@ struct Collect {
     tracked: Vec<TrackedFile>,
     excluded: Vec<ExcludedEntry>,
     blockers: Vec<Blocker>,
+    notices: Vec<Notice>,
 }
 
 fn scan(root: &std::path::Path, policy: &ApprovedPolicy) -> Result<TreeEvaluation, EvaluationError> {
@@ -293,11 +353,13 @@ fn scan(root: &std::path::Path, policy: &ApprovedPolicy) -> Result<TreeEvaluatio
     out.tracked.sort_by(|a, b| a.path.key().cmp(b.path.key()));
     out.excluded.sort_by(|a, b| a.path.key().cmp(b.path.key()));
     out.blockers.sort_by(|a, b| a.path().key().cmp(b.path().key()));
+    out.notices.sort_by(|a, b| a.path().key().cmp(b.path().key()).then(a.code().cmp(b.code())));
     Ok(TreeEvaluation {
         policy: policy.identity().clone(),
         tracked: out.tracked,
         excluded: out.excluded,
         blockers: out.blockers,
+        notices: out.notices,
     })
 }
 
@@ -393,7 +455,8 @@ fn directory(
 ) -> Result<bool, EvaluationError> {
     match policy.decide_parts(parts, PathKind::Directory) {
         Decision::NestedGilBoundary { at } => Err(EvaluationError::NestedGilBoundary { path: at }),
-        Decision::Protected { protection, .. } => {
+        Decision::Protected { protection, at } => {
+            protected(policy, parts, PathKind::Directory, &path, protection, &at, out);
             out.excluded.push(ExcludedEntry {
                 path,
                 kind: EntryKind::Directory,
@@ -438,12 +501,15 @@ fn file(
             reason: ExclusionReason::Rule(rule),
             interior: None,
         }),
-        Decision::Protected { protection, .. } => out.excluded.push(ExcludedEntry {
-            path,
-            kind: EntryKind::File,
-            reason: ExclusionReason::System(protection),
-            interior: None,
-        }),
+        Decision::Protected { protection, at } => {
+            protected(policy, parts, PathKind::File, &path, protection, &at, out);
+            out.excluded.push(ExcludedEntry {
+                path,
+                kind: EntryKind::File,
+                reason: ExclusionReason::System(protection),
+                interior: None,
+            });
+        }
         Decision::NestedPolicyFile { .. } => out.blockers.push(Blocker::NestedPolicyFile {
             path,
             kind: EntryKind::File,
@@ -456,6 +522,37 @@ fn file(
     Ok(())
 }
 
+/// 시스템 보호로 내린 판정의 진단 — 변형 이름과, 그 자리에 닿은 넓은 포함 예외.
+fn protected(
+    policy: &ApprovedPolicy,
+    parts: &[&str],
+    kind: PathKind,
+    path: &EntryPath,
+    protection: Protection,
+    at: &EntryPath,
+    out: &mut Collect,
+) {
+    let canonical = match protection {
+        Protection::GitMetadata => ".git",
+        Protection::InternalStore => GIL_DIR,
+        Protection::PolicyFile => super::GILIGNORE,
+    };
+    if at.as_str().rsplit('/').next() != Some(canonical) {
+        out.notices.push(Notice::ProtectedNameVariant {
+            path: path.clone(),
+            protection,
+        });
+    }
+    let rules = policy.reinclusions_into(parts, kind);
+    if !rules.is_empty() {
+        out.notices.push(Notice::ReinclusionOverriddenByProtection {
+            path: path.clone(),
+            protection,
+            rules,
+        });
+    }
+}
+
 /// 연결 파일 하나. **대상을 보지 않으므로 종류를 모른다** — 디렉터리로 읽은 판정과 파일로 읽은
 /// 판정 가운데 원문의 더 아래 줄이 정한 쪽을 따른다(마지막 규칙이 이긴다). 그래서 `.venv/` 같은
 /// 디렉터리 전용 제외 규칙도 연결 파일 `.venv` 에 맞는다.
@@ -465,7 +562,7 @@ fn link(
     path: EntryPath,
     out: &mut Collect,
 ) -> Result<(), EvaluationError> {
-    if parts.len() == 1 && parts[0] == GIL_DIR {
+    if parts.len() == 1 && super::same_system_name(parts[0], GIL_DIR) {
         return Err(EvaluationError::InternalStoreLink { path });
     }
     let as_dir = policy.decide_parts(parts, PathKind::Directory);
@@ -483,7 +580,8 @@ fn link(
         return Ok(());
     }
     for reading in readings {
-        if let Decision::Protected { protection, .. } = reading {
+        if let Decision::Protected { protection, at } = reading {
+            protected(policy, parts, PathKind::Directory, &path, *protection, at, out);
             out.excluded.push(ExcludedEntry {
                 path,
                 kind: EntryKind::Link,

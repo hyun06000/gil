@@ -431,7 +431,7 @@ pub(crate) fn review_gitignore(text: &str) -> GitignoreReview {
             continue;
         }
         let bare = rule.trim_start_matches('/').trim_end_matches('/');
-        if [".git", ".gil", ".gilignore"].contains(&bare) {
+        if [".git", ".gil", ".gilignore"].iter().any(|name| super::same_system_name(bare, name)) {
             skipped.push(skip("시스템 보호 대상이라 선택할 필요가 없다"));
             continue;
         }

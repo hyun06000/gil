@@ -37,7 +37,7 @@
 use std::fmt;
 use std::path::Path;
 
-use super::tracking_policy::{self as grammar, Component, Rule, Token};
+use super::tracking_policy::{self as grammar, ClassItem, Component, Rule, Token};
 use super::{ContentDigest, EntryPath, GIL_DIR};
 
 mod recommend;
@@ -219,6 +219,23 @@ impl ApprovedPolicy {
             false => Interior::Explore { because },
         }
     }
+
+    /// 시스템 보호 자리에 닿는 포함 예외 — 그 자리 자체에 맞거나(디렉터리면) 그 아래에 맞을 수 있는 `!` 줄.
+    ///
+    /// 보호 전용 줄은 해석 단계에서 이미 거절했다. 여기 남는 것은 다른 경로에도 맞을 수 있어 받아들인
+    /// 넓은 줄이다. 판정은 보호가 이기며, 평가 결과가 이 사실을 알림으로 돌려준다.
+    fn reinclusions_into(&self, parts: &[&str], kind: PathKind) -> Vec<RuleRef> {
+        self.rules
+            .iter()
+            .filter(|rule| rule.negated)
+            .filter(|rule| {
+                let here = (!rule.dir_only || kind == PathKind::Directory)
+                    && grammar::match_components(&rule.components, parts);
+                here || (kind == PathKind::Directory && may_match_below(&rule.components, parts))
+            })
+            .map(RuleRef::of)
+            .collect()
+    }
 }
 
 /// 규칙이 판정하기 전에 **이름과 위치만으로** 정해지는 자리.
@@ -226,17 +243,23 @@ impl ApprovedPolicy {
 /// 순서는 왼쪽 구성 요소부터다: `.git` → 시스템 보호, 루트 `.gil` 디렉터리 → 내부 저장소,
 /// 더 깊은 `.gil` 디렉터리 → 중첩 경계, 루트 `.gilignore` → 정책 파일, 더 깊은 `.gilignore` →
 /// 하위 정책 파일 자리. 마지막 구성 요소가 `.gil` 인 **일반 파일**은 보통 경로다(§3.4).
+///
+/// **이름 비교는 사용자 패턴과 다르다.** 사용자 규칙은 대소문자를 구분하지만, 시스템 이름은
+/// [`same_system_name`] 으로 대소문자 변형까지 같은 이름으로 본다 — macOS·Windows 의 기본 파일
+/// 시스템에서 `.GIL/state.yaml` 은 실제 `.gil/state.yaml` 이다. 대소문자를 구분하는 파일 시스템의
+/// 별개 항목(`.GIL/`)도 같은 규칙으로 다룬다: 그 기록이 다른 기계에서는 보호 대상과 겹치고, 같은
+/// 트리의 평가가 운영체제마다 달라지지 않게 하기 위해서다. 그런 변형은 결과의 알림에 따로 남는다.
 fn name_boundary(parts: &[&str], kind: PathKind) -> Option<Decision> {
     let last = parts.len() - 1;
     for (index, part) in parts.iter().enumerate() {
         let prefix = || prefix_path(parts, index);
-        if *part == GIT_DIR {
+        if same_system_name(part, GIT_DIR) {
             return Some(Decision::Protected {
                 protection: Protection::GitMetadata,
                 at: prefix(),
             });
         }
-        if *part == GIL_DIR && (index < last || kind == PathKind::Directory) {
+        if same_system_name(part, GIL_DIR) && (index < last || kind == PathKind::Directory) {
             return Some(match index {
                 0 => Decision::Protected {
                     protection: Protection::InternalStore,
@@ -245,7 +268,7 @@ fn name_boundary(parts: &[&str], kind: PathKind) -> Option<Decision> {
                 _ => Decision::NestedGilBoundary { at: prefix() },
             });
         }
-        if *part == GILIGNORE {
+        if same_system_name(part, GILIGNORE) {
             return Some(match index {
                 0 => Decision::Protected {
                     protection: Protection::PolicyFile,
@@ -256,6 +279,33 @@ fn name_boundary(parts: &[&str], kind: PathKind) -> Option<Decision> {
         }
     }
     None
+}
+
+/// `name` 이 시스템 이름 `canonical`(ASCII 소문자)과 **파일 시스템에서 같은 이름일 수 있는가.**
+///
+/// 글자마다 같거나, 소문자 변환 또는 대문자 변환 한 글자가 같으면 같다고 본다. ASCII 대소문자
+/// (`.GIL`, `.Git`)와 대문자가 ASCII 로 가는 글자(`ı` → `I`, NTFS 대문자 표)가 여기 걸린다. 정규형
+/// 차이는 이 이름들에 없다(분해되는 글자가 없다).
+pub(super) fn same_system_name(name: &str, canonical: &str) -> bool {
+    let mut got = name.chars();
+    let mut want = canonical.chars();
+    loop {
+        match (got.next(), want.next()) {
+            (None, None) => return true,
+            (Some(c), Some(w)) if char_aliases(c, w) => {}
+            _ => return false,
+        }
+    }
+}
+
+fn char_aliases(c: char, want: char) -> bool {
+    fn single(mut chars: impl Iterator<Item = char>) -> Option<char> {
+        let first = chars.next()?;
+        chars.next().is_none().then_some(first)
+    }
+    c == want
+        || single(c.to_lowercase()) == Some(want)
+        || single(c.to_uppercase()) == Some(want.to_ascii_uppercase())
 }
 
 fn prefix_path(parts: &[&str], index: usize) -> EntryPath {
@@ -415,19 +465,44 @@ fn is_dot_component(component: &Component) -> bool {
 /// 포함 예외가 **시스템 보호나 중첩 경계만** 가리키는가.
 ///
 /// 그런 `!` 줄은 어떤 경로도 추적 대상으로 만들 수 없다. 「포함한다고 보여 준 파일이 실제로는
-/// 제외되는 모순」(§3.6)을 승인 전에 드러내려고 거절한다. 판정은 글자 그대로의 구성 요소로만
-/// 한다 — `!*/config` 처럼 보호 영역 밖에도 맞을 수 있는 줄은 받아들이고, 보호 대상 경로는
-/// 판정에서 여전히 보호된다.
+/// 제외되는 모순」(§3.6)을 승인 전에 드러내려고 거절한다. 판정은 **구성 요소가 맞을 수 있는 이름의
+/// 집합**으로 한다: 글자·한 글자 클래스(`[t]`, `[tT]`)·좁은 범위만으로 된 구성 요소가 보호 이름(과 그
+/// 대소문자 변형)에만 맞으면 보호 전용이다. `?`·`*`·부정 클래스·이름 클래스가 섞이면 다른 이름에도
+/// 맞을 수 있으므로 받아들이고, 트리 평가가 그 줄이 보호 대상에 닿았음을 알림으로 남긴다.
 fn reincludes_only_protected(rule: &Rule) -> bool {
     let last = rule.components.len() - 1;
     rule.components.iter().enumerate().any(|(index, component)| {
-        match literal(component).as_deref() {
-            Some(GIT_DIR) => true,
-            Some(GIL_DIR) => index < last || rule.dir_only,
-            Some(GILIGNORE) => true,
-            _ => false,
-        }
+        only_names(component, GIT_DIR)
+            || (only_names(component, GIL_DIR) && (index < last || rule.dir_only))
+            || only_names(component, GILIGNORE)
     })
+}
+
+/// 구성 요소가 `canonical` 과 같은 이름(대소문자 변형 포함)**에만** 맞는가.
+fn only_names(component: &Component, canonical: &str) -> bool {
+    let Component::Glob(tokens) = component else {
+        return false;
+    };
+    let want: Vec<char> = canonical.chars().collect();
+    tokens.len() == want.len()
+        && tokens.iter().zip(&want).all(|(token, w)| match token {
+            Token::Literal(c) => char_aliases(*c, *w),
+            Token::Class {
+                negated: false,
+                items,
+            } => {
+                !items.is_empty()
+                    && items.iter().all(|item| match item {
+                        ClassItem::Char(c) => char_aliases(*c, *w),
+                        ClassItem::Range(lo, hi) => {
+                            (*hi as u32) - (*lo as u32) < 64
+                                && (*lo..=*hi).all(|c| char_aliases(c, *w))
+                        }
+                        ClassItem::Named(_) => false,
+                    })
+            }
+            _ => false,
+        })
 }
 
 // ── 판정 ───────────────────────────────────────────────────────────────────
@@ -584,7 +659,7 @@ pub(crate) enum ProblemReason {
     BackslashNotEscape { found: char },
     /// `.` 이나 `..` 구성 요소.
     DotComponent,
-    /// 시스템 보호(`.git`, 루트 `.gil`, `.gilignore`)나 중첩 경계만 가리키는 포함 예외.
+    /// 시스템 보호(`.git`, 루트 `.gil`, `.gilignore` 와 그 대소문자 변형)나 중첩 경계만 가리키는 포함 예외.
     ReincludesProtectedOnly,
 }
 
@@ -633,7 +708,7 @@ impl fmt::Display for ProblemReason {
 
 #[allow(unused_imports)]
 pub(crate) use walk::{
-    Blocker, EntryKind, EvaluationError, ExcludedEntry, ExclusionReason, TrackedFile,
+    Blocker, EntryKind, EvaluationError, ExcludedEntry, ExclusionReason, Notice, TrackedFile,
     TreeEvaluation,
 };
 

@@ -243,6 +243,147 @@ fn the_root_policy_file_is_never_archived_and_never_read_as_policy() {
     assert!(!result.is_blocked());
 }
 
+// ── 시스템 이름의 대소문자 변형 (PR #174 검토 1) ──────────────────────────
+
+#[test]
+fn system_names_compare_apart_from_user_pattern_case() {
+    for name in [".gil", ".GIL", ".Gil", ".gIL", ".g\u{131}l"] {
+        assert!(same_system_name(name, ".gil"), "{name}");
+    }
+    for name in [".Git", ".GIT", ".g\u{131}t"] {
+        assert!(same_system_name(name, ".git"), "{name}");
+    }
+    assert!(same_system_name(".GILIGNORE", ".gilignore"));
+    assert!(same_system_name(".GilIgnore", ".gilignore"));
+    for name in ["gil", ".gill", ".gi", ".g\u{130}l", "\u{ff0e}gil", ".gilignore.bak"] {
+        assert!(!same_system_name(name, ".gil") && !same_system_name(name, ".gilignore"), "{name}");
+    }
+    // 사용자 패턴은 여전히 대소문자를 구분한다.
+    let rules = policy("Data/\n");
+    assert!(is_excluded(&rules, "Data/x"));
+    assert!(!is_excluded(&rules, "data/x"));
+}
+
+/// 검토 재현: 임시 루트의 `.GIL/state.yaml` 이 빈 정책의 추적 목록에 들어갔다.
+#[test]
+fn a_case_variant_of_the_internal_store_is_protected_and_not_entered() {
+    let root = scratch("case-gil");
+    write(&root, ".GIL/state.yaml", b"format: 4\n");
+    write(&root, ".Git/HEAD", b"ref");
+    write(&root, ".GILIGNORE", b"*\n");
+    write(&root, "src/main.rs", b"x");
+    listed::take();
+    let result = evaluate(&root, &policy(""));
+    assert_eq!(tracked(&result), strings(&["src/main.rs"]));
+    for (path, protection) in [
+        (".GIL", Protection::InternalStore),
+        (".GILIGNORE", Protection::PolicyFile),
+        (".Git", Protection::GitMetadata),
+    ] {
+        assert_eq!(entry(&result, path).reason, ExclusionReason::System(protection), "{path}");
+        assert!(
+            result.notices().contains(&Notice::ProtectedNameVariant {
+                path: EntryPath::parse(path).unwrap(),
+                protection,
+            }),
+            "{path}: {:?}",
+            result.notices()
+        );
+    }
+    assert_eq!(entry(&result, ".GIL").interior, Some(Interior::Skip));
+    assert_eq!(listed_dirs(), strings(&["", "src"]), ".GIL·.Git 안을 열지 않았다");
+    // 정확한 이름은 변형 알림이 없다.
+    let root = scratch("case-gil-exact");
+    write(&root, ".gil/state.yaml", b"format: 4\n");
+    assert!(evaluate(&root, &policy("")).notices().is_empty());
+}
+
+/// 재현의 전제 — 이 파일 시스템에서 `.GIL` 과 `.gil` 이 정말 같은 항목인가. 대소문자를 구분하는
+/// 볼륨에서 돌면 **실패한다**(전제를 확인하지 못한 재현 시험을 통과로 세지 않는다).
+#[cfg(any(target_os = "macos", windows))]
+#[test]
+fn the_default_macos_and_windows_volume_aliases_case_variants() {
+    let root = scratch("case-alias-precondition");
+    write(&root, ".GIL/state.yaml", b"format: 4\n");
+    assert!(
+        root.join(".gil/state.yaml").is_file(),
+        "이 볼륨은 대소문자를 구분한다 — .GIL 재현의 전제가 성립하지 않는다"
+    );
+    let result = evaluate(&root, &policy(""));
+    assert!(tracked(&result).is_empty(), "{:?}", tracked(&result));
+}
+
+#[test]
+fn case_variants_of_nested_boundaries_are_refused_or_block() {
+    let root = scratch("case-nested-gil");
+    write(&root, "sub/.GIL/state.yaml", b"format: 4\n");
+    assert_eq!(refused(&root, &policy("")).code(), "nested_gil_boundary");
+
+    let root = scratch("case-nested-policy");
+    write(&root, "sub/.GILIGNORE", b"*\n");
+    write(&root, "other/.Gilignore", b"*\n");
+    write(&root, "sub/a.txt", b"a");
+    let result = evaluate(&root, &policy(""));
+    let blocked: Vec<String> = result.blockers().iter().map(|b| b.path().to_string()).collect();
+    assert_eq!(blocked, strings(&["other/.Gilignore", "sub/.GILIGNORE"]));
+    assert_eq!(tracked(&result), strings(&["sub/a.txt"]));
+}
+
+// ── 보호 대상만 가리키는 포함 예외의 표현 (PR #174 검토 2) ────────────────
+
+#[test]
+fn reinclusions_that_can_only_reach_protected_names_are_rejected_whatever_the_spelling() {
+    for text in [
+        "!.gi[t]/config\n",
+        "!.[g]it/config\n",
+        "![.]git/x\n",
+        "!.gi[tT]/config\n",
+        "!.gi[t-t]/config\n",
+        "!.GIT/config\n",
+        "!**/.Git/hooks\n",
+        "!.g[iI]l/state.yaml\n",
+        "!.GIL/\n",
+        "!.gilignor[e]\n",
+        "!sub/.GILIGNORE\n",
+    ] {
+        let err = rejected(text.as_bytes());
+        assert_eq!(
+            err.problems.iter().map(|p| p.reason.code()).collect::<Vec<_>>(),
+            vec!["reincludes_protected_only"],
+            "{text:?}"
+        );
+    }
+    // 다른 이름에도 맞을 수 있는 넓은 줄은 받아들인다 — 일괄 거절하지 않는다.
+    for text in ["!.gi?/config\n", "!.gi[!x]/config\n", "!.gi[a-z]/config\n", "!.gi[[:alpha:]]/c\n", "!.gi*/c\n", "!.GIL\n"] {
+        assert!(ApprovedPolicy::compile(EngineVersion::V1, text.as_bytes()).is_ok(), "{text:?}");
+    }
+}
+
+#[test]
+fn a_broad_reinclusion_that_reaches_a_protected_entry_is_reported() {
+    let root = scratch("broad-protected");
+    write(&root, ".git/config", b"[core]");
+    write(&root, ".gib/config", b"x");
+    write(&root, ".gil/state.yaml", b"format: 4\n");
+    let result = evaluate(&root, &policy("*\n!.gi?/config\n"));
+    assert_eq!(tracked(&result), strings(&[".gib/config"]), "넓은 줄은 일반 경로를 다시 포함한다");
+    let overridden: Vec<(String, Vec<usize>)> = result
+        .notices()
+        .iter()
+        .filter_map(|notice| match notice {
+            Notice::ReinclusionOverriddenByProtection { path, rules, .. } => {
+                Some((path.to_string(), rules.iter().map(|r| r.line).collect()))
+            }
+            _ => None,
+        })
+        .collect();
+    // `.gil/config` 도 맞을 수 있다 — 두 보호 자리 모두 알린다. 판정은 보호가 이긴다.
+    assert_eq!(overridden, vec![(".gil".to_string(), vec![2]), (".git".to_string(), vec![2])]);
+    assert!(!result.is_blocked(), "알림은 차단 사유가 아니다");
+    let text = result.notices()[0].to_string();
+    assert!(text.contains("2행"), "{text}");
+}
+
 // ── 탐색 생략과 재포함 ─────────────────────────────────────────────────────
 
 #[test]
