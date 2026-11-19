@@ -24,6 +24,8 @@
 
 > **2026-11-19 정책 파일 저장 방향 채택:** `.gilignore`는 일반 보관·복원에서 제외하고 규칙 원문·적용 판은 정책 승인 기록에 보관한다. 파일 직접 편집은 제안이며 실제 적용 기준은 승인 기록이다. D7 방향은 승인됐지만 아래 상세 필드·파일 쓰기 실패 정책·D10의 과거 정책 자동 재적용은 미승인이다. 정본은 [Artifact Model](../GIL_Artifact_Model_v0.1.md#정책-파일과-승인-기록--2026-11-19-확정)이다.
 
+> **2026-11-19 승인 채널 채택:** 추적 범위의 최종 승인은 모든 구성에서 모니터로 받는다. 대화는 설명·수정에 사용하며 에이전트 전달 승인으로 대체하지 않는다. 정식 체인 이전의 준비용 승인 화면이 필요하고 화면 부재 시 대기한다. D3의 과거 프로필별 대안은 채택하지 않았다. 정본은 [Artifact Model](../GIL_Artifact_Model_v0.1.md#추적-범위의-최종-승인-경로--2026-11-19-확정)이다.
+
 용어: Snapshot(보관본) = 한 시점의 추적 파일 전체를 이름 하나(`snapshot:A1`)로 확정한 불변 세계.
 Verify = Experiment Cycle 안에서 파일 변경을 수행하고 닫을 때 세계를 확정하는 유일한 Step.
 dirty gate = Verify가 아닌 자리를 닫을 때 추적 파일이 기준 Snapshot과 다르면 거절하는 검사.
@@ -167,8 +169,8 @@ dirty gate = Verify가 아닌 자리를 닫을 때 추적 파일이 기준 Snaps
 
 [대화] 에이전트가 프로젝트를 읽고(읽기는 허용) 프로젝트별 추천을 gil_scope_propose로 더한다   (제안)
   Core가 효과를 다시 계산해 새 제안 digest를 돌려준다. 사람은 효과를 보고 승인·수정한다.
-  승인 채널: approved-plan 프로필 = Monitor 버튼 + App 전용 capability (M6-D와 동일)
-             기본 프로필 = 에이전트가 사용자 응답을 gil_scope_decide(digest, yes/no)로 전달     (제안)
+  승인 채널: 모든 구성에서 Monitor 버튼. 정확한 제안 판·화면 입력을 검증한다.
+             에이전트의 대화 응답 전달은 최종 승인이 아니다 (2026-11-19 확정)
 
 [2단계] gil start  (승인된 보류 원장이 있으면 완료 단계로 들어간다)
   바인딩 재검증(§6.2): 승인 digest = 현재 정책 원문 + 현재 추적/제외 경로 집합
@@ -241,7 +243,7 @@ Interview의 선행 조건이지 Interview Step이 아니다.
   ↓
 Interview Cycle open (기존 전이)
   gil_scope_propose: 현재 적용 정책 P_k + 변경(추가/해제) + 이유 → 효과 요약(추가로 빠지는 n, 새로 들어오는 m) + digest   (제안)
-  승인 채널은 §4.2와 같다 (approved-plan: Monitor 버튼 / 기본: gil_scope_decide)                                   (제안)
+  승인 채널은 §4.2와 같다 (모든 구성: Monitor 버튼, 에이전트 승인 우회 불가)                         (2026-11-19 확정)
   승인 → 정책 원장에 P_{k+1} = approved, pending activation 기록 → .gilignore 갱신(§6.3)
   Interview의 나머지(Synthesis·Outcome)는 현행과 같다. Interview는 세계를 확정하지 않는다.
   ↓
@@ -451,8 +453,8 @@ proposal_digest = sha256(canonical JSON {
    진행하고 드리프트 표시(위와 같은 이유).
 3. 시작에 한해 경로 집합 digest 비교(§4.3; §10 Q5).
 
-승인 채널은 저장하되 **신원 인증으로 해석하지 않는다**(M6-D와 같은 한계 문구). `channel: agent`는
-기본 프로필에서 에이전트가 사용자 응답을 전달했다는 뜻이다.
+승인 채널은 저장하되 **신원 인증으로 해석하지 않는다**(M6-D와 같은 한계 문구). 2026-11-19 결정으로
+모든 구성에서 모니터 최종 승인이 필요하며 과거 `channel: agent` 승인 후보는 채택하지 않는다.
 
 ### 6.3 정책 파일 쓰기와 승인 기록의 순서·실패
 
@@ -554,8 +556,8 @@ revisit 뒤 현재 세계는 S'이므로 **적용 중 정책은 P_j가 된다**(
 | # | 쟁점 | 대안 | 권장 | 비용 / 기존 계약 영향 |
 |---|---|---|---|---|
 | D1 | 최초 시작 순서 | A0–A5 (§4.1) | **A5 두 단계 시작** | `gil start` 의미 분리, 보류 원장(제안), 승인 도구(제안). Artifact Model §4 서술·Existence Model §4 흐름의 **앞 단계 추가**(한 번 저장 규칙은 유지) |
-| D2 | 범위 승인의 기록 자리 | Interview Synthesis 안 / **별도 승인 원장** | 별도 원장 (시작은 Cycle이 없어 불가피, 재인터뷰도 같은 도구로 통일) | Cycle Model §16 Synthesis 필드는 변경 없음. 새 도구 `gil_scope_propose`/`gil_scope_decide`(제안) |
-| D3 | 승인 채널 | 항상 Monitor 버튼 / 프로필별 | **프로필별** — approved-plan: Monitor 버튼+capability, 기본: 에이전트 전달 | M6-D와 같은 분리. 기본 프로필의 한계 문구 필요 |
+| D2 | 범위 승인의 기록 자리 | Interview Synthesis 안 / **별도 승인 원장** | 별도 원장 (시작은 Cycle이 없어 불가피, 재인터뷰도 같은 도구로 통일) | Cycle Model §16 Synthesis 필드는 변경 없음. 새 제안 도구와 모니터 전용 승인 경로(이름 미정) |
+| D3 | 승인 채널 | 모든 구성에서 Monitor 최종 승인 | **2026-11-19 채택** | 대화는 설명·수정. 시작 준비 화면·제안 판 검증 필요, 실제 개인 신원 인증은 아님 |
 | D4 | 층 우선순위 | 시스템 보호 우선, 승인된 L2가 L1보다 우선 | **2026-11-19 방향 채택**. `.gilignore`로 일반 경로 재포함 가능, 시스템 보호 재포함 불가 | 상세 문법·탐색·버전은 미결. `PolicyVersion::V2`는 제안 |
 | D5 | 제외 항목 탐색 | 완전 제외 내부 생략, 재포함 경로 검사, 제외 연결 파일 건너뛰기 | **2026-11-19 방향 채택** | 대상 비접근·복원 비간섭, 추적 연결 파일 거절. 구현 대기 |
 | D6 | 정책 저장 | 선택적 확장 블록 / 새 형식 번호 | 선택적 확장(`approved_plan` 선례) | Storage Model §3 Snapshot record 필드 추가, §2 배치에 `start/` 추가. 구형 writer 거절 |
@@ -579,7 +581,7 @@ revisit 뒤 현재 세계는 S'이므로 **적용 중 정책은 P_j가 된다**(
 | S0 설계 승인 | 이 문서의 §10 결정, 규범 명세 보정(§3.4·§4·Storage §2·§3·M4-R·Tracking Policy §2.4) | 사용자 결정 기록, 통합 담당의 명세 PR 병합 |
 | S1 엔진 확장 | `tracking_policy.rs`: 층(L1/L2)과 `PolicyVersion::V2`, 루트 `.gilignore` 내장 제외·수집, 제외 항목 종류 검사 완화(D5 승인 시), 목록 관측(`inventory`, 바이트 없음), 효과 요약(폴더 묶음·효과 없는 규칙·경고), 추천 카탈로그와 금지 집합(§5.2) | 단위 시험 §9 E-군 통과. V1 ID와 V2 ID가 다름을 시험으로 고정. 기본 `observe`/`capture` 무변경 |
 | S2 저장 | `tracking` 블록·Snapshot `policy`·blob 원문·load 검증(`policy_id` 재계산)·구형 writer 거절·`start/` 잔해 분류·보류 원장 읽기/쓰기 | 왕복 시험, 손상 거절 시험, 기존 format 4–7 fixture가 변경 없이 읽힘(§9 S-군) |
-| S3 두 단계 시작 | `start_at_internal` 분리, 보류 원장, `gil_scope_propose`/`gil_scope_decide`(제안 도구, 기본·approved-plan 양 프로필), 바인딩 재검증, `capture_with_policy`, `project_resume` 순서, 취소·재시작·kill point | §9 T-군 통과. 기존 `tests/artifact.rs` 시작 시험이 「2단계 승인 fixture」로 갱신되되 의미 보존 |
+| S3 두 단계 시작 | `start_at_internal` 분리, 보류 원장, 제안 도구·모니터 전용 승인 경로(이름 미정, 모든 구성), 바인딩 재검증, `capture_with_policy`, `project_resume` 순서, 취소·재시작·kill point | §9 T-군 통과. 기존 `tests/artifact.rs` 시작 시험이 「2단계 승인 fixture」로 갱신되되 의미 보존 |
 | S4 관측·dirty·Verify | `world_state`/`require_clean`/`close_verify`의 정책 인식, 활성화, status 3상태, 드리프트 감지, 증거 거절 Topic 연결 | §9 W-군 통과. legacy 프로젝트 동작 비트 동일(기존 시험 전부 녹색) |
 | S5 재인터뷰 범위 변경 | Interview 안의 제안·승인·`.gilignore` 쓰기 순서·대체(superseded)·단일 열린 Cycle 유지 | §9 C-군 통과 |
 | S6 복원·revisit 경계 | `restore::run*`의 정책 관측, R2 preflight, preview 연결, M4-R 화면의 정책 경계 표시 | §9 R-군 통과. `product-safety`의 일반 restore 차단 **유지** 확인 |
@@ -688,8 +690,7 @@ S1·S2는 서로 독립이라 병행 가능하다. S3는 S1·S2 뒤, S4는 S3 �
 9. **루트 외 `.gilignore`(D13):** 경고 + 일반 파일인가, 거절인가?
 10. **기존 프로젝트 채택:** Interview 안에서만 제안·승인하는 것으로 충분한가, `gil status`/`context`가
     「추적 제외 미설정」을 상시 안내해야 하는가(안내 세션과 조율)?
-11. **승인 채널(D3):** 기본 프로필에서 에이전트가 전달하는 `gil_scope_decide`를 승인으로 받아들이는가,
-    범위 승인은 항상 Monitor 버튼(approved-plan 프로필)만 허용하는가?
+11. **승인 채널(D3): 2026-11-19 채택.** 모든 구성에서 모니터 최종 승인을 받는다. 대화는 설명·수정만이며 화면 부재 시 승인 대기로 남긴다. 도구명·입력 검증·준비용 화면은 후속 구현이다.
 
 ---
 
