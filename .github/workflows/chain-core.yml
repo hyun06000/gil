@@ -176,6 +176,8 @@ jobs:
         run: node tools/ci/expect-tests.mjs 7 cargo test --locked -p gil --features will-end-history --test will_end_session
       - name: Existing Chain, Will, context and stdio suites on format 8
         run: cargo test --locked -p gil --features will-end-history --test chains --test chain_closing --test chain_handoff --test cycles --test context --test context_profiles --test will --test walk --test resume_guidance --test mcp
+      - name: Policy-record types stay unwired on format 8 (formats 10/11 still unknown, a tracking block is refused; order 3a, synthetic)
+        run: node tools/ci/expect-tests.mjs 3 cargo test --locked -p gil --features will-end-history --test tracking_record_boundary
       - name: End history library contracts (tool surface offers the marker only here)
         run: cargo test --locked -p gil --features will-end-history --lib -- --test-threads=1
       - name: Compile all Core targets with the opt-in end history (not a product profile)

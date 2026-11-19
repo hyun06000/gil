@@ -38,6 +38,8 @@ mod gilignore;
 mod registry;
 mod store;
 mod tracking_policy;
+// 구현 순서 3a — 정책 기록 자료형과 부분 검증. **어떤 제품 경로도 부르지 않는다**(재수출 없음).
+mod tracking_record;
 
 // M3 추적 정책 — **정책이 선택된 새 읽기 경로.** 기본 `observe`/`capture` 의 의미와
 // `EntryPath` 규칙은 그대로다. 아직 crate 안의 아무도 이 경로를 부르지 않는다: 제품 기본
@@ -381,6 +383,21 @@ pub(crate) fn digest_bytes(digest: &ContentDigest) -> &[u8; 32] {
 /// 읽어 온 32 바이트를 지문으로 되세운다 — 알고리즘 태그는 부르는 쪽이 이미 확인했다.
 pub(crate) fn digest_from_raw(bytes: [u8; 32]) -> ContentDigest {
     ContentDigest::from_raw(DigestAlgorithm::Sha256, bytes)
+}
+
+/// 저장 글자의 sha256 지문 — **소문자 canonical 16진수 64자만** 받는다.
+///
+/// 대문자·빈칸·길이가 다른 글은 `None` 이다. 같은 지문이 두 글자꼴을 가지면 기록을 글자로 견주는
+/// 일이 문자열 규칙에 기대게 된다(`state.yaml` 의 manifest 주소와 같은 규칙).
+pub(crate) fn sha256_from_hex(text: &str) -> Option<ContentDigest> {
+    if text.len() != 64 || !text.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)) {
+        return None;
+    }
+    let mut bytes = [0u8; 32];
+    for (at, byte) in bytes.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&text[at * 2..at * 2 + 2], 16).ok()?;
+    }
+    Some(ContentDigest::from_raw(DigestAlgorithm::Sha256, bytes))
 }
 
 pub(crate) fn observe(root: &Path) -> Result<Manifest, ObserveError> {
