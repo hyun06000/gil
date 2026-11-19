@@ -148,7 +148,11 @@ fn body_of<'a>(text: &'a str, expected: &'static str) -> Result<&'a str, RefSynt
 ///
 /// 수의 규칙은 명세가 정한다(§2.1): ASCII 십진수의 canonical 표기만, 선행 0 없음,
 /// 0 은 `J0`·`ES0` 에만.
-fn id_of(text: &str, letter: &'static str, zero_allowed: bool) -> Result<u32, RefSyntaxError> {
+///
+/// crate 안에 열어 둔 것은 아직 [`KINDS`] 에 없는 이름(정책 판 `P1`, 구현 순서 3a의 독립
+/// 자료형)이 **같은 수 규칙**을 다시 적지 않고 쓰게 하려는 것이다. 종류 목록과 그 거절 문구는
+/// 그 이름이 제품 저장에 연결될 때 함께 바꾼다.
+pub(crate) fn id_of(text: &str, letter: &'static str, zero_allowed: bool) -> Result<u32, RefSyntaxError> {
     let Some(digits) = text.strip_prefix(letter) else {
         return Err(RefSyntaxError::WrongLetter {
             expected: letter,
