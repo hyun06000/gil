@@ -53,7 +53,9 @@ jobs:
           - runner: windows-2025
             shell: pwsh
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    # The opt-in end-history steps add about 10 minutes on Windows (measured on PR #172: the job
+    # took 19-22 minutes before them and was cut at 30 while compiling their last profile).
+    timeout-minutes: 45
     env:
       RUSTUP_TOOLCHAIN: 1.97.1
     defaults:
