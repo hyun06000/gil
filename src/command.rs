@@ -749,8 +749,9 @@ fn close(ctx: &Invocation<'_>, extra: &[String]) -> Result<String, String> {
     }
 }
 
-fn typed_verify_hint(here: crate::StepRef) -> String {
-    tr!("cmd.typed_verify_hint", here = here)
+/// Printed only for a visual-format project. The number is that project's own format.
+fn typed_verify_hint(project: &crate::Project, here: crate::StepRef) -> String {
+    tr!("cmd.typed_verify_hint", here = here, format = crate::store::format_of(project))
 }
 
 fn close_step(ctx: &Invocation<'_>, session: &mut Session, unachieved: Option<crate::WillRef>) -> Result<String, String> {
@@ -767,7 +768,7 @@ fn close_step(ctx: &Invocation<'_>, session: &mut Session, unachieved: Option<cr
         .expect("열린 자리의 종류는 문법이 선언한 것이다");
     let mut hint = skeleton_for(&contract, cycle, Some(ctx));
     if kind == crate::NodeKind::Verify && session.project().visual_state.is_some() {
-        hint.push_str(&typed_verify_hint(here));
+        hint.push_str(&typed_verify_hint(session.project(), here));
     }
 
     let report = read_report(ctx, &hint)?;
@@ -1231,7 +1232,7 @@ fn close_help(ctx: &Invocation<'_>) -> Result<String, String> {
     let mut skeleton = skeleton_for(&contract, cycle, Some(ctx));
     if session.project().visual_state.is_some() {
         if let Some(id) = cycle.step_now_open().filter(|id| cycle.steps().node(*id).is_some_and(|n| n.kind == NodeKind::Verify)) {
-            skeleton.push_str(&typed_verify_hint(cycle.step_ref(id)));
+            skeleton.push_str(&typed_verify_hint(session.project(), cycle.step_ref(id)));
         }
     }
     let mut out = tr!("cmd.help_close",
@@ -1346,7 +1347,7 @@ fn opened_step(session: &Session, opened: crate::Opened) -> String {
     out.push_str(text("cmd.opened_boundary"));
     if opened.kind == crate::NodeKind::Verify {
         if session.project().visual_state.is_some() {
-            out.push_str(&typed_verify_hint(opened.step));
+            out.push_str(&typed_verify_hint(session.project(), opened.step));
         }
         out.push_str(text("cmd.opened_verify_evidence"));
         out.push_str(text("cmd.opened_verify_do"));

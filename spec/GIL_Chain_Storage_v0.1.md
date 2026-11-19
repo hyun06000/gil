@@ -137,7 +137,7 @@ chains:
    `next_direction.action: close_chain`을 가진다. 승인된 종료 제안을 `open_child`로 바꿔
    새 실험으로 이어가는 요청은 거절한다. 이 단계만으로 Chain은 닫히지 않는다.
 3. 다음 일반 `gil close` / `gil_close({project_root, report})`는 Chain Report를 받는다.
-   format 7에서도 이 텍스트 계약을 쓴다. Chain 자체의 typed visual attachments는 지원하지 않으며,
+   시각 등록부가 있는 Chain 형식(7, `will-end-history` 빌드의 9)에서도 이 텍스트 계약을 쓴다. Chain 자체의 typed visual attachments는 지원하지 않으며,
    실제 증거는 내부 Verify의 기존 파일·시각 증거 계약을 그대로 따른다.
 
 ```text

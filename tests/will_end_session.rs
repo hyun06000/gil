@@ -10,7 +10,7 @@
 //! - 상태·문맥·이야기·Monitor 읽기 모델이 달성과 미달성을 구분한다.
 //!
 //! 합성 프로젝트만 쓴다. 실제 모델 호출과 Host 화면은 이 시험의 범위가 아니다.
-#![cfg(all(feature = "will-end-history", not(feature = "approved-plan"), not(feature = "visual-authoring")))]
+#![cfg(all(feature = "will-end-history", not(feature = "approved-plan")))]
 
 mod common;
 use gil::{ActionError, CycleKind, EndResult, NodeKind, ProjectSession, Report, SessionError, WillRef};

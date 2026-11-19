@@ -50,8 +50,8 @@ examples:
   닫히면 그 자리와 확정된 세계를 알려 준다. Analysis는 실제 Verify에 연결되고 Outcome의
   lesson은 실제 Analysis에 연결된다. 해석과 배움은 비어 있을 수 없다.
 
-[format 5의 MCP 입력]
-  format 5의 Verify는 일반 텍스트 close 예제만으로 닫히지 않는다.
+[시각 보고서 형식의 MCP 입력]
+  시각 등록부가 있는 형식(홀수 번호)의 Verify는 일반 텍스트 close 예제만으로 닫히지 않는다.
   연결된 gil_close에서 project_root, report와 expected_owner, visuals를 함께 보낸다.
   expected_owner는 {"kind":"step","ref":"현재 열린 Step 참조"}다.
   이미지가 필요 없는 문서 증거라면 visuals는

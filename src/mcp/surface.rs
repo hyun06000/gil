@@ -12,6 +12,17 @@ pub fn uri() -> &'static str {
     URI.get_or_init(|| format!("ui://gil-monitor/{}.html", &format!("{:x}", Sha256::digest(HTML.as_bytes()))[..20]))
 }
 
+/// What a visual-format project started by this build holds. The number comes from the build;
+/// no format this build cannot read is named.
+#[cfg(feature = "visual-authoring")]
+const START_SHAPE: &str = if cfg!(feature = "will-end-history") {
+    "a Chain with the visual registry and the single Will end history"
+} else if cfg!(feature = "chain-core") {
+    "a Chain with the visual registry"
+} else {
+    "Cycles with the visual registry"
+};
+
 pub fn tools() -> &'static [Tool] {
     static TOOLS: OnceLock<Vec<Tool>> = OnceLock::new();
     TOOLS.get_or_init(|| {
@@ -24,7 +35,7 @@ pub fn tools() -> &'static [Tool] {
             let tools = super::workspace::catalog(tools);
             let mut tools = tools;
             if let Some(start) = tools.iter_mut().find(|t| t.name == "gil_start") {
-                start.description = Some("Development image-report creation: creates format 5 (format 7 with Chain in chain-core builds) on verified private storage (macOS Apple Silicon; Windows private app data). Requires the user's explicitly selected absolute project_root. On Windows the working folder may remain in OneDrive: GIL records are kept separately under the current user's local app data, while file observation still targets project_root. An existing inline Windows record is copied byte-for-byte to that private store and verified before publication; the inline source is never changed or deleted. Success commits one Interview, zero Steps; does not open or confirm the Monitor. Unsupported platforms refuse, never fall back to format 4. Migrating existing format-4 records stays macOS-only.".into());
+                start.description = Some(format!("Development image-report creation: creates format {} ({}) {}", crate::store::newest_known_format(), START_SHAPE, "on verified private storage (macOS Apple Silicon; Windows private app data). Requires the user's explicitly selected absolute project_root. On Windows the working folder may remain in OneDrive: GIL records are kept separately under the current user's local app data, while file observation still targets project_root. An existing inline Windows record is copied byte-for-byte to that private store and verified before publication; the inline source is never changed or deleted. Success commits one Interview, zero Steps; does not open or confirm the Monitor. Unsupported platforms refuse, never fall back to format 4. Migrating existing format-4 records stays macOS-only.").into());
             }
             tools
         };
@@ -98,6 +109,15 @@ pub fn valid_input(tool: &Tool, input: &Value) -> bool {
         let Some(properties) = tool.input_schema.get("properties").and_then(Value::as_object) else { return false; };
         if object.keys().any(|key| !properties.contains_key(key)) { return false; }
     }
+    // The marker names one Will. Anything but a canonical reference — `null` included, which is
+    // not an omission — is a wire error, never a close. This runs before every specialized input
+    // (the typed visual close among them) so both close shapes refuse the same values.
+    if tool.name == "gil_close" {
+        if let Some(value) = input.get(super::actions::UNACHIEVED_WILL) {
+            let canonical = value.as_str().is_some_and(|text| text.parse::<crate::WillRef>().is_ok_and(|will| will.to_string() == text));
+            if !canonical { return false; }
+        }
+    }
     #[cfg(feature = "product-safety")]
     if tool.name.starts_with("gil_revisit_") { return super::recovery::valid(tool.name.as_ref(), input); }
     #[cfg(feature = "approved-plan")]
@@ -115,13 +135,6 @@ pub fn valid_input(tool: &Tool, input: &Value) -> bool {
     #[cfg(all(feature = "visual-authoring", windows))]
     if tool.name == super::workspace::NAME {
         return super::workspace::valid(input);
-    }
-    // The marker names one Will. Anything but a canonical reference is a wire error, not a close.
-    if tool.name == "gil_close" {
-        if let Some(value) = input.get(super::actions::UNACHIEVED_WILL) {
-            let canonical = value.as_str().is_some_and(|text| text.parse::<crate::WillRef>().is_ok_and(|will| will.to_string() == text));
-            if !canonical { return false; }
-        }
     }
     // Older/default builds must never silently discard a visual close request.
     if tool.name == "gil_close" && (input.get("visuals").is_some() || input.get("expected_owner").is_some()) {
@@ -181,7 +194,7 @@ fn unachieved_rejection(input: &Value) -> Option<&'static str> {
         return Some("gil_close: 'unachieved_will' is not supported by this GIL; it was not silently dropped and nothing was closed. This build records every closed step's Will as achieved and cannot record an unachieved end. Leave the step open, or close it without the field only if the contracted action was actually carried out. Never convert or edit records to work around this.");
     }
     let canonical = value.as_str().is_some_and(|text| text.parse::<crate::WillRef>().is_ok_and(|will| will.to_string() == text));
-    (!canonical).then_some("gil_close: 'unachieved_will' must be the canonical reference of the Will to end, for example will:W9, exactly as gil_status or gil_context show it. Nothing was closed. Read gil_status for the active Will and send one corrected call.")
+    (!canonical).then_some("gil_close: 'unachieved_will' must be the canonical reference of the Will to end, for example will:W9, exactly as gil_status or gil_context show it; null is not an omission and is refused too. Nothing was closed. For an ordinary achieved close leave the field out; otherwise read gil_status for the active Will and send one corrected call.")
 }
 
 fn rejection_hint(tool: &Tool, input: &Value) -> &'static str {
@@ -205,8 +218,8 @@ fn rejection_hint(tool: &Tool, input: &Value) -> &'static str {
         return "gil_close: this GIL accepts only the text contract {project_root, report}; 'visuals' and 'expected_owner' are not supported here and were not silently dropped. Nothing was closed. Send the ordinary close, or use an image-capable GIL; never migrate or convert records to work around this.";
     }
     match (owner, visuals) {
-        (true, false) => "gil_close: 'expected_owner' was given without 'visuals'. This call was not executed. Nothing was closed. Ordinary close takes exactly {project_root, report}: every step of a format-4 project including its Verify, and format-5 non-Verify steps that cite no stored images. Typed close takes {project_root, report, expected_owner:{kind,ref}, visuals:{attachments,uses,declaration}} together: every format-5 Verify (empty arrays and declaration not_needed/missing when there are no images) and any format-5 report that cites stored images. Read gil_status/gil_context for the actual open step, then send one corrected call in the shape that step requires.",
-        (false, true) => "gil_close: 'visuals' was given without 'expected_owner' {kind, ref}. This call was not executed. Nothing was closed. Ordinary close takes exactly {project_root, report} (all format-4 steps including Verify; format-5 non-Verify steps without stored-image citations); typed close takes {project_root, report, expected_owner, visuals} together (every format-5 Verify, even without images, and any format-5 report citing stored images). Read gil_status/gil_context for the actual open step, then send one corrected call.",
+        (true, false) => "gil_close: 'expected_owner' was given without 'visuals'. This call was not executed. Nothing was closed. Ordinary close takes exactly {project_root, report}: every step, Verify included, of a project whose storage format has no visual registry (an even format number), and non-Verify steps of a visual-format project (an odd format number) that cite no stored images. Typed close takes {project_root, report, expected_owner:{kind,ref}, visuals:{attachments,uses,declaration}} together: every visual-format Verify (empty arrays and declaration not_needed/missing when there are no images) and any visual-format report that cites stored images. Read gil_status/gil_context for the actual open step, then send one corrected call in the shape that step requires.",
+        (false, true) => "gil_close: 'visuals' was given without 'expected_owner' {kind, ref}. This call was not executed. Nothing was closed. Ordinary close takes exactly {project_root, report} (every step, Verify included, of an even-format project without the visual registry; non-Verify steps of an odd visual-format project without stored-image citations); typed close takes {project_root, report, expected_owner, visuals} together (every visual-format Verify, even without images, and any visual-format report citing stored images). Read gil_status/gil_context for the actual open step, then send one corrected call.",
         (true, true) => "gil_close: 'expected_owner' and 'visuals' are present but malformed. Read gil_status for the actual open owner; declaration must not be null; a Verify needs exactly one declaration (attached with uses, not_needed with a reason and no uses, missing with reason and follow_up); at most 8 attachments/uses with unique keys; report up to 256 KiB. Nothing was closed; correct the call instead of repeating it.",
         (false, false) => "gil_close: invalid arguments. Expected {project_root (absolute string), report (string)}. Nothing was closed.",
     }
@@ -254,13 +267,25 @@ mod tests {
             assert!(said.contains("not supported by this GIL") && said.contains("nothing was closed"), "{said}");
             assert!(!said.contains("private body text") && !said.contains("will:W9"), "{said}");
         }
-        // Anything but the canonical reference of one Will is refused at the wire in every build.
-        for malformed in [json!("W9"), json!("will:W09"), json!("will:w9"), json!(" will:W9"), json!(9), json!(null), json!(true)] {
-            let mut input = named.clone();
-            input["unachieved_will"] = malformed.clone();
-            assert!(!valid_input(close, &input), "{malformed}");
-            assert!(rejection(close, &input).contains("unachieved_will"), "{malformed}");
+        // Anything but the canonical reference of one Will is refused at the wire in every build,
+        // in the ordinary shape and in the typed visual shape alike. `null` is not an omission.
+        let typed = json!({"project_root":"/synthetic","report":"private body text",
+            "expected_owner":{"kind":"step","ref":"step:C2/S3"},
+            "visuals":{"attachments":[],"uses":[],"declaration":{"state":"not_needed","reason":"byte comparison only"}}});
+        for shape in [json!({"project_root":"/synthetic","report":"private body text"}), typed.clone()] {
+            for malformed in [json!("W9"), json!("will:W09"), json!("will:w9"), json!(" will:W9"), json!(9), json!(null), json!(true), json!({}), json!(["will:W9"])] {
+                let mut input = shape.clone();
+                input["unachieved_will"] = malformed.clone();
+                assert!(!valid_input(close, &input), "{malformed} in {shape}");
+                let said = rejection(close, &input);
+                assert!(said.contains("unachieved_will") && said.contains("othing was closed"), "{malformed}: {said}");
+                assert!(!said.contains("private body text"), "{said}");
+            }
         }
+        // The typed shape with a well-formed marker passes the wire only where it can be recorded.
+        let mut marked = typed;
+        marked["unachieved_will"] = json!("will:W9");
+        assert_eq!(valid_input(close, &marked), cfg!(all(feature = "will-end-history", feature = "visual-authoring")));
     }
     #[test]
     fn rejections_name_the_missing_field_without_echoing_input() {

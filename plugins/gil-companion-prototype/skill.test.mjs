@@ -319,13 +319,13 @@ test("Synthesis 는 사람의 승인을 기다린다 — approved:yes 를 이전
 
 test("close 입력 형태와 -32602 뒤 절차 — 열린 Verify 의 정상 구현은 막지 않는다", () => {
   const closing = section("## Closing a step — two input shapes, never half of one");
-  // 두 형태가 구분되고, 이미지 없는 format-5 Verify 도 typed close 를 쓴다.
+  // 두 형태가 구분되고, 이미지 없는 시각 형식(홀수 번호) Verify 도 typed close 를 쓴다.
   assert.match(closing, /\*\*Ordinary close\*\*/); assert.match(closing, /\*\*Typed close\*\*/);
-  assert.match(closing, /open Verify of a format-5 project, always/);
-  assert.match(closing, /format-4 project \*\*including its Verify\*\*/, "format-4 Verify 는 ordinary close 다");
-  assert.match(closing, /any format-5 non-Verify step or Cycle report that cites stored images/, "기존 이미지 인용 예외가 없다");
+  assert.match(closing, /open Verify of a visual-format project, always/);
+  assert.match(closing, /even storage\s+format number\) \*\*including its Verify\*\*/, "시각 등록부가 없는 형식의 Verify 는 ordinary close 다");
+  assert.match(closing, /any visual-format non-Verify step or Cycle report that cites stored images/, "기존 이미지 인용 예외가 없다");
   assert.match(closing, /empty `attachments`\/`uses` and a\s+`declaration` of `not_needed`[^.]*or `missing`/);
-  assert.match(closing, /refuses an ordinary text close of a format-5 Verify/);
+  assert.match(closing, /refuses an ordinary text close of a visual-format Verify/);
   // -32602 는 「그 호출이 실행되지 않았다」이지 Step 상태의 단정이 아니다. 상태는 조회로 확인한다.
   assert.match(closing, /that call was not executed/);
   assert.match(closing, /does\s+not tell you what state the project is in/);

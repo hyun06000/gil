@@ -434,12 +434,15 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    with one explicit `gil_open(kind: chain)`; there, read `gil_context` once, then open its Question.
    The new Chain is approved in its own Opening Interview and reuses no earlier approval, plan or
    re-interview request. Never `gil_start` again.
-   Format-4 steps (including Verify) and format-5 non-Verify
-   reports without stored images use `{project_root, report}`. Every format-5 Verify uses
+   A project's storage format number says whether it holds the visual registry: an even format
+   has none, an odd one is a visual-format project (which formats exist is the connected
+   build's own; a number never implies a feature that build lacks). Every step of an even-format
+   project, Verify included, and visual-format non-Verify reports without stored images use
+   `{project_root, report}`. Every visual-format Verify uses
    `{project_root, report, expected_owner, visuals}`, even without images. Supply both
    `expected_owner: {kind: "step", ref: "<actual open step ref>"}` and `visuals`; with no images,
    use `visuals: {attachments: [], uses: [], declaration: {state: "not_needed", reason: "<what replaces the image>"}}`.
-   Format-5 non-Verify reports citing stored images also use both fields, per the connected schema.
+   Visual-format non-Verify reports citing stored images also use both fields, per the connected schema.
    Keep `evidence_files` in the Report in every Verify. Available capabilities and project format,
    not the OS name, determine the input shape. Never migrate an existing project merely to follow
    these instructions. The rules behind every visual refusal are one topic: `gil_help` with
@@ -672,19 +675,20 @@ position is in doubt read `gil_status` / `gil_context` first. Then act by the ki
 
 `gil_close` accepts exactly two shapes. Pick the one the open step requires; do not mix fields.
 
-- **Ordinary close** — every step of a format-4 project **including its Verify**, and every
-  non-Verify step (Interview question/interpretation/synthesis, Experiment define/hypothesis/
-  analysis/outcome) of a format-5 project that cites no stored images:
+- **Ordinary close** — every step of a project without the visual registry (an even storage
+  format number) **including its Verify**, and every non-Verify step (Interview question/
+  interpretation/synthesis, Experiment define/hypothesis/analysis/outcome) of a visual-format
+  project (an odd storage format number) that cites no stored images:
   `{"project_root": "<absolute root>", "report": "<fields the current grammar asks for>"}`.
   Nothing else. `report` is the stdin body; GIL validates its fields.
-- **Typed close** — the **open Verify of a format-5 project, always**, whether or not images exist,
-  **and any format-5 non-Verify step or Cycle report that cites stored images** (empty
+- **Typed close** — the **open Verify of a visual-format project, always**, whether or not images
+  exist, **and any visual-format non-Verify step or Cycle report that cites stored images** (empty
   `attachments`, `uses` with `source.kind: "stored"`, no `declaration`): `{"project_root": ..., "report": ...,
   "expected_owner": {"kind": "step", "ref": "step:C2/S3"}, "visuals": {"attachments": [...],
   "uses": [...], "declaration": {...}}}`. `expected_owner` and `visuals` always travel together.
   A Verify without images still uses this shape with empty `attachments`/`uses` and a
   `declaration` of `not_needed` (with a reason) or `missing` (with reason and `follow_up`);
-  GIL refuses an ordinary text close of a format-5 Verify, and never treats that refusal as
+  GIL refuses an ordinary text close of a visual-format Verify, and never treats that refusal as
   permission to convert the project. Details are in the visual reports section below.
 
 Sending `expected_owner` without `visuals` (or `visuals` without `expected_owner`) is a schema

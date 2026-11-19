@@ -453,6 +453,52 @@ fn mixed_missing_or_unknown_end_fields_are_refused() {
     assert!(matches!(err, StoreError::VisualState(_)), "{err}");
 }
 
+/// 목록 키는 **값이 아니라 존재로** 판정한다 — `null` 도, 빈 목록도, 값 있는 목록도 같은 키다.
+///
+/// 형식 8 에는 `done_wills` 가 없어야 하고, 4–7 에는 `ended_wills` 가 없어야 한다. 그 형식이
+/// 요구하는 목록은 빠져도 `null` 이어도 거절한다. 어느 거절도 파일을 바꾸지 않는다(`forged`).
+#[test]
+fn a_list_key_is_judged_by_its_presence_null_and_empty_lists_included() {
+    // 형식 8: 금지 키 `done_wills` 의 세 값, 필수 키 `ended_wills` 의 누락과 null.
+    let project = unachieved_experiment_closed();
+    let (_, mut file) = stored("end-presence-source", &project);
+    let mut plain = x1(&mut file)["ended_wills"][0].clone();
+    plain.as_mapping_mut().unwrap().remove(Value::from("end_result"));
+    for (label, value) in [("null", Value::Null), ("empty", Value::Sequence(Vec::new())), ("value", Value::Sequence(vec![plain.clone()]))] {
+        let err = forged(&project, &format!("end-presence-8-done-{label}"), |file| x1(file)["done_wills"] = value.clone());
+        assert!(matches!(err, StoreError::EndHistory(_)), "format 8 with done_wills {label}: {err}");
+    }
+    let err = forged(&project, "end-presence-8-ended-null", |file| x1(file)["ended_wills"] = Value::Null);
+    assert!(matches!(err, StoreError::EndHistory(_)), "format 8 with ended_wills null: {err}");
+    let err = forged(&project, "end-presence-8-ended-missing", |file| { x1(file).as_mapping_mut().unwrap().remove(Value::from("ended_wills")); });
+    assert!(matches!(err, StoreError::EndHistory(_)), "format 8 without ended_wills: {err}");
+
+    // 형식 4·6: 금지 키 `ended_wills` 의 세 값, 필수 키 `done_wills` 의 누락과 null.
+    for (layout, format) in [(Layout::Cycles, gil::FORMAT), (Layout::Chain, gil::CHAIN_FORMAT)] {
+        let dir = scratch(&format!("end-presence-legacy-{format}"));
+        let mut legacy = load(spec(), legacy::record(&dir, layout)).unwrap();
+        walked(&mut legacy, NodeKind::Question);
+        let (_, mut file) = stored(&format!("end-presence-legacy-{format}-source"), &legacy);
+        assert_eq!(file["format"], Value::from(format));
+        let mut ended = x1(&mut file)["done_wills"][0].clone();
+        ended["end_result"] = Value::from("achieved");
+        for (label, value) in [("null", Value::Null), ("empty", Value::Sequence(Vec::new())), ("value", Value::Sequence(vec![ended.clone()]))] {
+            let err = forged(&legacy, &format!("end-presence-{format}-ended-{label}"), |file| x1(file)["ended_wills"] = value.clone());
+            assert!(matches!(err, StoreError::EndHistory(_)), "format {format} with ended_wills {label}: {err}");
+        }
+        let err = forged(&legacy, &format!("end-presence-{format}-done-null"), |file| x1(file)["done_wills"] = Value::Null);
+        assert!(matches!(err, StoreError::EndHistory(_)), "format {format} with done_wills null: {err}");
+        let err = forged(&legacy, &format!("end-presence-{format}-done-missing"), |file| { x1(file).as_mapping_mut().unwrap().remove(Value::from("done_wills")); });
+        assert!(matches!(err, StoreError::EndHistory(_)), "format {format} without done_wills: {err}");
+
+        // 정상 구형 기록은 그대로 읽히고 같은 바이트로 다시 쓰인다.
+        let (path, _) = stored(&format!("end-presence-legacy-{format}-kept"), &legacy);
+        let bytes = std::fs::read(&path).unwrap();
+        save(&load(spec(), &path).expect("정상 구형 기록"), &path).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+    }
+}
+
 /// 이력 끝에 「있었던 적 없는 종료 기록」을 덧붙인다 — 판의 머리까지 맞춰서, E4 만 걸리게.
 fn append_ghost_record(file: &mut Value, target: &str) {
     let next = file["next_will_id"].as_u64().unwrap();

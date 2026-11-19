@@ -426,12 +426,15 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    with one explicit `gil_open(kind: chain)`; there, read `gil_context` once, then open its Question.
    The new Chain is approved in its own Opening Interview and reuses no earlier approval, plan or
    re-interview request. Never `gil_start` again.
-   Format-4 steps (including Verify) and format-5 non-Verify
-   reports without stored images use `{project_root, report}`. Every format-5 Verify uses
+   A project's storage format number says whether it holds the visual registry: an even format
+   has none, an odd one is a visual-format project (which formats exist is the connected
+   build's own; a number never implies a feature that build lacks). Every step of an even-format
+   project, Verify included, and visual-format non-Verify reports without stored images use
+   `{project_root, report}`. Every visual-format Verify uses
    `{project_root, report, expected_owner, visuals}`, even without images. Supply both
    `expected_owner: {kind: "step", ref: "<actual open step ref>"}` and `visuals`; with no images,
    use `visuals: {attachments: [], uses: [], declaration: {state: "not_needed", reason: "<what replaces the image>"}}`.
-   Format-5 non-Verify reports citing stored images also use both fields, per the connected schema.
+   Visual-format non-Verify reports citing stored images also use both fields, per the connected schema.
    Keep `evidence_files` in the Report in every Verify. Available capabilities and project format,
    not the OS name, determine the input shape. Never migrate an existing project merely to follow
    these instructions. The rules behind every visual refusal are one topic: `gil_help` with

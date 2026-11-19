@@ -59,8 +59,18 @@ struct Close {
     visuals: Visuals,
     /// Ends the open step's Will as unachieved. The catalog offers it only in a build that can
     /// record the result; the top-level schema boundary refuses it everywhere else.
-    #[serde(default)]
-    unachieved_will: Option<String>,
+    ///
+    /// Three states, never two: absent (`None`) is the ordinary achieved close; an explicit
+    /// `null` (`Some(None)`) is refused — reading it as absent would turn a malformed unachieved
+    /// request into an achieved end; a string (`Some(Some(_))`) must be a canonical Will reference.
+    #[serde(default, deserialize_with = "present")]
+    unachieved_will: Option<Option<String>>,
+}
+
+/// Keeps an explicit `null` apart from an absent field: present values, `null` included, become
+/// `Some(_)`; only a missing field takes the `#[serde(default)]` `None`.
+fn present<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(deserializer: D) -> Result<Option<Option<T>>, D::Error> {
+    Option::<T>::deserialize(deserializer).map(Some)
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -130,9 +140,13 @@ impl Close {
         if !Path::new(&self.project_root).is_absolute() { return fail("$.project_root", "expected absolute path"); }
         if self.report.len() > 262144 { return fail("$.report", "maximum 256 KiB"); }
         if self.expected_owner.parsed().is_err() { return fail("$.expected_owner.ref", "expected canonical Step or Cycle ref; use the actual open owner from gil_status"); }
-        if let Some(will) = &self.unachieved_will {
-            if !cfg!(feature = "will-end-history") { return fail("$.unachieved_will", "not supported by this GIL; nothing was dropped silently"); }
-            if will.parse::<crate::WillRef>().map_or(true, |parsed| parsed.to_string() != *will) { return fail("$.unachieved_will", "expected the canonical reference of the active Will from gil_status, for example will:W9"); }
+        match &self.unachieved_will {
+            None => {}
+            Some(_) if !cfg!(feature = "will-end-history") => return fail("$.unachieved_will", "not supported by this GIL; nothing was dropped silently"),
+            Some(None) => return fail("$.unachieved_will", "null is not an omission; leave the field out for an ordinary close"),
+            Some(Some(will)) => if will.parse::<crate::WillRef>().map_or(true, |parsed| parsed.to_string() != *will) {
+                return fail("$.unachieved_will", "expected the canonical reference of the active Will from gil_status, for example will:W9");
+            },
         }
         if self.visuals.attachments.len() > 8 { return fail("$.visuals.attachments", "maximum 8 entries"); }
         if self.visuals.uses.len() > 8 { return fail("$.visuals.uses", "maximum 8 entries"); }
@@ -315,8 +329,10 @@ fn execute_inner(name: &str, input: Value) -> Result<Value, (String, Option<Stri
     let r: Close = serde_json::from_value(input).map_err(|_| plain("invalid_request"))?;
     let owner = r.expected_owner.parsed().map_err(plain)?;
     let unachieved: Option<crate::WillRef> = match &r.unachieved_will {
-        Some(will) => Some(will.parse().map_err(|_| plain("invalid_request"))?),
         None => None,
+        // `valid` already refused it; never let a present-but-empty marker become an achieved close.
+        Some(None) => return Err(plain("invalid_request")),
+        Some(Some(will)) => Some(will.parse().map_err(|_| plain("invalid_request"))?),
     };
     let mut session = crate::open_project_root(rules, Path::new(&r.project_root))
         .map_err(|_| plain("project_unavailable"))?;
@@ -447,7 +463,7 @@ pub fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
     // Legacy receipts remain unchanged; typed close returns its durable Report projection.
     raw.as_object_mut().unwrap().remove("outputSchema");
     raw["description"] = json!(
-        "Close the current Report. Body key is report (string), never contract. Read gil_help({project_root, topic: close}) for current Report fields using this connected Core, not a PATH CLI. Two input shapes only. Ordinary close {project_root, report}: every step of a format-4 project (including its Verify), and format-5 non-Verify steps that cite no stored images. Typed close {project_root, report, expected_owner:{kind,ref}, visuals:{attachments,uses,declaration}} with expected_owner and visuals ALWAYS together: every format-5 Verify (with attachments/uses and declaration attached, or empty arrays and declaration not_needed (reason) / missing (reason, follow_up) when there are no images), and any format-5 non-Verify step or Cycle report that cites stored images (uses with source kind stored, empty attachments, no declaration). Sending expected_owner without visuals, or visuals without expected_owner, is rejected with -32602 naming the missing field; that call is not executed and nothing is closed — read gil_status/gil_context for the actual open step, then send one corrected call. New PNGs use attachments:[{key,path,source_kind,source_description}] and uses:[{source:{kind:new,key},caption,alt,purpose}], with declaration:{state:attached}; these three fields are siblings inside visuals. Stored reuse requires source:{kind:stored,owner:{kind,ref},asset_id,sha256} from the receipt, never a key. Complete JSON: gil_help topic report/visuals (CLI alias: gil help visuals). After an uncertain or lost response use gil_report_visuals; never automatically repeat close. Every Verify also requires evidence_files in report: 1–32 unique project-relative paths, all nonempty files in its Snapshot, at least one new or changed. No-image declarations do not waive file evidence. Visual evidence means a PNG that shows the real result: a plot or diagram drawn by code from the data, a headless or ordinary browser screenshot of the actual page/UI, a before/after comparison table. AI-generated or decorative pictures are never visual evidence. Contract checks: not_needed/missing reason must say what replaces the image (one-word or boilerplate reasons such as 없음/not needed are refused, code visual_reason_weak); a Verify whose evidence_files include an image file cannot close not_needed (visual_declaration_conflict); when the Verify attached assets, the Analysis and the Experiment Cycle Report must cite at least one of them with a stored source (visual_citation_required; the refusal lists asset_id and sha256). Analysis interpretation and Outcome lesson must be nonblank; Core links their actual evidence lineage. No migration."
+        "Close the current Report. Body key is report (string), never contract. Read gil_help({project_root, topic: close}) for current Report fields using this connected Core, not a PATH CLI. Two input shapes only. Ordinary close {project_root, report}: every step, Verify included, of a project whose storage format has no visual registry (an even format number), and non-Verify steps of a visual-format project (an odd format number) that cite no stored images. Typed close {project_root, report, expected_owner:{kind,ref}, visuals:{attachments,uses,declaration}} with expected_owner and visuals ALWAYS together: every visual-format Verify (with attachments/uses and declaration attached, or empty arrays and declaration not_needed (reason) / missing (reason, follow_up) when there are no images), and any visual-format non-Verify step or Cycle report that cites stored images (uses with source kind stored, empty attachments, no declaration). Sending expected_owner without visuals, or visuals without expected_owner, is rejected with -32602 naming the missing field; that call is not executed and nothing is closed — read gil_status/gil_context for the actual open step, then send one corrected call. New PNGs use attachments:[{key,path,source_kind,source_description}] and uses:[{source:{kind:new,key},caption,alt,purpose}], with declaration:{state:attached}; these three fields are siblings inside visuals. Stored reuse requires source:{kind:stored,owner:{kind,ref},asset_id,sha256} from the receipt, never a key. Complete JSON: gil_help topic report/visuals (CLI alias: gil help visuals). After an uncertain or lost response use gil_report_visuals; never automatically repeat close. Every Verify also requires evidence_files in report: 1–32 unique project-relative paths, all nonempty files in its Snapshot, at least one new or changed. No-image declarations do not waive file evidence. Visual evidence means a PNG that shows the real result: a plot or diagram drawn by code from the data, a headless or ordinary browser screenshot of the actual page/UI, a before/after comparison table. AI-generated or decorative pictures are never visual evidence. Contract checks: not_needed/missing reason must say what replaces the image (one-word or boilerplate reasons such as 없음/not needed are refused, code visual_reason_weak); a Verify whose evidence_files include an image file cannot close not_needed (visual_declaration_conflict); when the Verify attached assets, the Analysis and the Experiment Cycle Report must cite at least one of them with a stored source (visual_citation_required; the refusal lists asset_id and sha256). Analysis interpretation and Outcome lesson must be nonblank; Core links their actual evidence lineage. No migration."
     );
     raw["description"] = json!(format!("{} {}", raw["description"].as_str().unwrap(), crate::visual_report::image::limits_guidance()));
     *close = serde_json::from_value(raw).unwrap();

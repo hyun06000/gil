@@ -424,10 +424,18 @@ impl StoredState {
         // **One format number is one shape.** Formats 8/9 carry `ended_wills` and never
         // `done_wills`; formats 4–7 the reverse. A mixed or missing list is refused here, before
         // any record is interpreted, so neither shape can be read as the other.
+        //
+        // A key is judged by its **presence**, not by its value: `done_wills: null` in format 8 is
+        // still the forbidden key, and so is `ended_wills: null` in format 4–7. The list the format
+        // requires must be present and must be a list — absent or `null` is refused alike.
         let end_history = matches!(self.format, END_HISTORY_FORMAT | END_HISTORY_VISUAL_FORMAT);
         for (name, existence) in &self.existences {
             let journey = &existence.journey;
-            if journey.ended_wills.is_some() != end_history || journey.done_wills.is_some() == end_history {
+            let (required, forbidden) = match end_history {
+                true => (journey.ended_wills.as_ref().map(Option::is_some), journey.done_wills.is_some()),
+                false => (journey.done_wills.as_ref().map(Option::is_some), journey.ended_wills.is_some()),
+            };
+            if forbidden || required != Some(true) {
                 let expected = if end_history { "ended_wills" } else { "done_wills" };
                 return Err(StoreError::EndHistory(crate::tr!("store.end_history.shape",
                     existence = name, format = self.format, expected = expected)));
@@ -573,12 +581,12 @@ impl StoredExistence {
         };
         // The shape was matched against the format before this point: exactly one list is here.
         let mut ended = Vec::new();
-        for will in self.journey.done_wills.into_iter().flatten() {
+        for will in self.journey.done_wills.flatten().into_iter().flatten() {
             // Formats 4–7: a closed promise was always an achieved one. That is the format's
             // meaning, carried here unchanged — nothing is reclassified from Report text.
             ended.push(EndedWill::restore(will.into_will()?, EndResult::Achieved));
         }
-        for record in self.journey.ended_wills.into_iter().flatten() {
+        for record in self.journey.ended_wills.flatten().into_iter().flatten() {
             let result = record.end_result.into();
             ended.push(EndedWill::restore(record.into_will()?, result));
         }
@@ -809,13 +817,22 @@ struct StoredJourney {
     /// **형식 4–7 의 꼴이다.** 그 형식에서는 반드시 있고(비어 있어도 `[]` 로 적힌다),
     /// 형식 8 이상에서는 있으면 거절한다. `Option` 인 것은 「없어도 된다」가 아니라 두 꼴을
     /// 한 타입으로 읽고 **형식과 어긋난 쪽을 GIL 의 말로 거절하기** 위해서다.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    done_wills: Option<Vec<StoredWill>>,
+    ///
+    /// The outer `Option` is the key's presence and the inner one its value, so an explicit `null`
+    /// is a present key (`Some(None)`) — never read as an absent one.
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
+    done_wills: Option<Option<Vec<StoredWill>>>,
     /// 끝난 행동들의 단일 종료 이력 — **형식 8 이상의 꼴이다.** `done_wills` 를 대체하며
     /// 두 목록이 함께 있는 꼴은 없다(Storage Transition Contract §4.1).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    ended_wills: Option<Vec<StoredEndedWill>>,
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
+    ended_wills: Option<Option<Vec<StoredEndedWill>>>,
     revisions: BTreeMap<String, StoredRevision>,
+}
+
+/// A present key — its value `null` included — becomes `Some(_)`; only an absent key takes the
+/// `#[serde(default)]` `None`. The shape check reads presence from the outer `Option`.
+fn present<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(deserializer: D) -> Result<Option<Option<T>>, D::Error> {
+    Option::<T>::deserialize(deserializer).map(Some)
 }
 
 /// 끝난 행동 하나 — 원래 약속 그대로, 그리고 `end_result`.
@@ -1055,9 +1072,9 @@ impl StoredExistence {
             journey: StoredJourney {
                 active_will: existence.journey().active_will().map(StoredWill::from),
                 done_wills: (!end_history)
-                    .then(|| ended.iter().map(|ended| StoredWill::from(ended.will())).collect()),
+                    .then(|| Some(ended.iter().map(|ended| StoredWill::from(ended.will())).collect())),
                 ended_wills: end_history
-                    .then(|| ended.iter().map(StoredEndedWill::from).collect()),
+                    .then(|| Some(ended.iter().map(StoredEndedWill::from).collect())),
                 revisions: existence
                     .journey()
                     .revisions()

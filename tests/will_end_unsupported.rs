@@ -102,7 +102,12 @@ fn an_unachieved_request_is_refused_with_a_conversion_notice_and_closes_nothing(
     session.commit().unwrap();
     assert!(!session.project().records_end_results());
     let will: WillRef = session.project().active_will().unwrap().id();
+    // The whole folder is compared byte for byte, the lock file included — so it is read only
+    // while no session holds the lock. Windows refuses to read a byte-range-locked file (os error
+    // 33); the product lock is kept as it is and the comparison follows the lock's lifetime.
+    drop(session);
     let before = tree(&root);
+    let mut session = ProjectSession::open(common::spec(), root.join(gil::STATE_PATH)).unwrap();
     let memory = format!("{:?}", session.project());
     let format = if cfg!(feature = "chain-core") { gil::CHAIN_FORMAT } else { gil::FORMAT };
 

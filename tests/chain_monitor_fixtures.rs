@@ -14,10 +14,50 @@ fn rules() -> gil::RuleSet {
     gil::RuleSet::from_path(Path::new(env!("CARGO_MANIFEST_DIR")).join("spec/gil-spec.yaml"))
         .unwrap()
 }
+/// A `will-end-history` build answers with one more additive field, `steps[].will_end`, on every
+/// closed Step (these flows end every Will as achieved). The committed fixtures are the product
+/// profile's responses and stay byte for byte as they are: here the new field is checked against
+/// what that build must say, then removed, and the rest is compared with the same bytes.
+fn without_end_results(value: &Value) -> Value {
+    fn walk(value: &mut Value, in_steps: bool, seen: &mut usize) {
+        match value {
+            Value::Object(fields) => {
+                if in_steps && fields.contains_key("step_ref") && fields.contains_key("state") {
+                    let closed = fields["state"] == "closed";
+                    match fields.remove("will_end") {
+                        Some(end) => {
+                            assert!(closed, "an open Step carries an end result: {fields:?}");
+                            assert_eq!(end, "achieved", "these synthetic flows end every Will as achieved");
+                            *seen += 1;
+                        }
+                        None => assert!(!closed, "a closed Step lacks its recorded end result: {fields:?}"),
+                    }
+                } else {
+                    assert!(!fields.contains_key("will_end"), "will_end outside a Step of the view: {fields:?}");
+                }
+                for (key, child) in fields.iter_mut() { walk(child, key == "steps", seen); }
+            }
+            Value::Array(items) => for item in items { walk(item, in_steps, seen); },
+            _ => {}
+        }
+    }
+    let mut value = value.clone();
+    let mut seen = 0;
+    walk(&mut value, false, &mut seen);
+    let closed = serde_json::to_string(&value).unwrap().contains("\"state\":\"closed\"");
+    assert!(!closed || seen > 0, "no recorded end result although closed Steps are shown");
+    value
+}
+
 fn fixture(name: &str, value: &Value) {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("ui/fixtures/chain-core")
         .join(format!("{name}.json"));
+    // The committed bytes are the product profile's. Never rewrite them from another profile.
+    let value = &if cfg!(feature = "will-end-history") {
+        assert_ne!(std::env::var("GIL_CHAIN_MONITOR_WRITE").as_deref(), Ok("1"), "write fixtures from the product profile only");
+        without_end_results(value)
+    } else { value.clone() };
     let bytes = format!("{}\n", serde_json::to_string_pretty(value).unwrap());
     if std::env::var("GIL_CHAIN_MONITOR_WRITE").as_deref() == Ok("1") {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
