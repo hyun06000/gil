@@ -160,6 +160,8 @@ jobs:
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,recovery-auto-approval --test recovery_approval_mode
       - name: Compile all Core targets with opt-in recovery approval (not a product profile)
         run: cargo build --locked -p gil --all-targets --features approved-plan,visual-authoring,recovery-auto-approval
+      - name: Fresh temporary folder for the end-history steps (fixtures at fixed temp paths are never shared with the approval profiles above)
+        run: node tools/ci/fresh-temp.mjs end-history
       - name: Single end history, domain and store contracts of new format-8 projects (opt-in, not a product profile; E1–E9, forged records incl. null list keys, formats 4 and 6 preserved; synthetic)
         run: node tools/ci/expect-tests.mjs 17 cargo test --locked -p gil --features will-end-history --test will_end
       - name: Unachieved end over real files, the CLI and the stdio process (evidence and dirty gates kept, save failure, resend, restart, read surfaces; synthetic, no model evaluation)
