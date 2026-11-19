@@ -34,6 +34,7 @@ use std::path::Path;
 use sha2::{Digest, Sha256};
 
 mod codec;
+mod gilignore;
 mod registry;
 mod store;
 mod tracking_policy;
@@ -46,6 +47,14 @@ pub(crate) use tracking_policy::{
     Builtin, Decision, ExcludedDirectories, ExcludedEntry, ExcludedKind, ExclusionReason,
     IgnoreSource, PolicyError, PolicyObservation, PolicyObserveError, PolicyVersion, RuleRef,
     TrackingPolicy, discover_gitignore_sources,
+};
+
+// 구현 순서 2번 — **독립 추적 정책 엔진.** 시스템 보호 + 승인된 루트 `.gilignore` 원문 하나로
+// 추적 범위를 판정하는 읽기 전용 경로다. 위 `tracking_policy`(옛 `.gitignore` V1, M4-R 승인 복구가
+// 사용)와 이름공간이 다르고 그것을 바꾸지 않는다. 제품 관측·보관·복원은 아직 이 엔진을 부르지 않는다.
+#[allow(unused_imports)]
+pub(crate) use gilignore::{
+    ApprovedPolicy, EngineVersion, PathKind, PolicyIdentity, evaluate_tree,
 };
 
 // format 4 가 Cycle 의 entry/exit 와 함께 서면서 **쓰는 자리가 생겼다.** 도메인이
