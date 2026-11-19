@@ -1,4 +1,5 @@
-//! 구현 순서 3a(정책 기록 자료형과 부분 검증)가 **제품 저장 경로를 바꾸지 않았는가.**
+//! 구현 순서 3a(정책 기록 자료형과 부분 검증)와 그 뒤의 동기화 순서 제어(편의상 3b)가
+//! **제품 저장 경로를 바꾸지 않았는가.**
 //!
 //! 모든 빌드 구성에서 짓는다. 시험 자료는 합성 프로젝트다(독립 임시 폴더, 프로세스 번호가 붙은 이름).
 //!
@@ -120,6 +121,10 @@ fn no_product_source_calls_the_new_module() {
         "classify_policy_file",
         "StoredSyncBase",
         "PolicySourcesMatch",
+        "sync_order",
+        "PolicyFileSync",
+        "SyncRequest",
+        "base_for_new_policy",
     ];
     let mut users = Vec::new();
     let mut stack = vec![src.clone()];
