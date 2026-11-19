@@ -30,6 +30,11 @@ Chain 취소·Chain revisit의 우회 API는 없다.
 거절한다. 형식 번호만 낮추면 Chain 구조가 남으므로 역시 거절한다. 6에 visual registry를 넣거나
 7에서 빼도 거절한다. 4/5는 읽을 때 Chain을 만들지 않고, 일반 commit도 원래 형식을 유지한다.
 
+**후속 형식(2026-11-19 설계, 구현 대기):** 실행 약속의 단일 종료 이력은 형식 8/9, 승인 정책·관리 사건은
+형식 10/11로 도입한다. 6/7의 읽기·쓰기와 의미는 그대로이며 자동으로 올리지 않는다. 번호 배정·지원 관계·
+명시적 전환은 [공유 저장·전이 계약](GIL_Storage_Transition_Contract_v0.1.md#3-저장-형식-버전)을 따른다.
+현재 프로그램은 8 이상을 읽지 않는다.
+
 format 6/7의 World 부분은 다음과 같다. Existence/Will/Journey/Artifact registry는 기존 뿌리에
 그대로 있고 한 `state.yaml`에 원자적으로 저장한다.
 
@@ -67,7 +72,8 @@ chains:
 - Chain을 연 Existence는 내부 모든 Cycle의 실행 주체와 같고, Open Chain 중에 바뀌지 않는다.
 - 현행 World Current 경로는 `chains.current → cycles.current → 현재 Step`이다. 새 형식에서는
   사이클 사이 관리 사건의 성공한 기준점을 포함하도록 보완한다. 과거 Chain/Cycle Exit를
-  덮어쓰지 않으며, 다음 실험 Entry의 새 기준점 연결은 Artifact Model §3.6을 따른다.
+  덮어쓰지 않으며, 다음 실험 Entry의 새 기준점 연결은 Artifact Model §3.6을 따른다. 유도 규칙과
+  Entry 검증의 설계는 [공유 저장·전이 계약 §6](GIL_Storage_Transition_Contract_v0.1.md#6-현재-세계와-다음-실험-시작점)에 있다.
   아래는 관리 사건 도입 전 현재 구현의 경로다. 세계 Snapshot은
   기존 가장 깊은 Cycle의 Entry/Verify/Exit 규칙에서 유도한다. Chain Entry로 매번 되돌리지 않는다.
 - Cycle 생성·종료·revisit은 소유 Chain의 graph를 바꾼다. 기존 원자적 저장과 단일 활성 Cycle/
