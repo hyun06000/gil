@@ -4,6 +4,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string] $Exe,
+    [Parameter(Mandatory)] [string] $StartExe,
     [Parameter(Mandatory)] [string] $Version,
     # PR binaries carry a -dev suffix; MSIX versions must be numeric. Release callers omit this.
     [string] $ExpectedBinaryVersion = ''
@@ -33,7 +34,7 @@ try {
     Export-PfxCertificate -Cert $cert -FilePath $pfx -Password $secure | Out-Null
     Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\LocalMachine\TrustedPeople -Password $secure | Out-Null
     $msix = Join-Path $work 'gil-dev.msix'
-    & "$Here/build-msix.ps1" -Exe $Exe -Version $Version -IdentityName 'GIL.Dev' `
+    & "$Here/build-msix.ps1" -Exe $Exe -StartExe $StartExe -Version $Version -IdentityName 'GIL.Dev' `
         -Publisher 'CN=GIL Dev' -PublisherDisplayName 'GIL Dev' -Out $msix -SignWithPfx $pfx -PfxPassword $password
     Add-AppxPackage -Path $msix
     $package = Get-AppxPackage -Name 'GIL.Dev'
@@ -43,9 +44,22 @@ try {
     $ns.AddNamespace('f', 'http://schemas.microsoft.com/appx/manifest/foundation/windows10')
     $ns.AddNamespace('uap', 'http://schemas.microsoft.com/appx/manifest/uap/windows10')
     $ns.AddNamespace('desktop6', 'http://schemas.microsoft.com/appx/manifest/desktop/windows10/6')
-    if ($manifest.SelectSingleNode('//uap:VisualElements', $ns).AppListEntry -ne 'none') { throw 'CLI must be hidden from Start' }
+    if ($manifest.SelectSingleNode('//uap:VisualElements', $ns).AppListEntry -ne 'default') { throw 'GIL must be visible in Start' }
     if ($manifest.SelectSingleNode('//f:TargetDeviceFamily', $ns).MinVersion -ne '10.0.18362.0') { throw 'Unexpected minimum OS' }
     if ($manifest.SelectSingleNode('//desktop6:RegistryWriteVirtualization', $ns)) { throw 'Unexpected registry write exception' }
+    $application = $manifest.SelectSingleNode('//f:Application', $ns)
+    if ($application.Executable -ne 'gil-start.exe') { throw 'Start must launch the guide' }
+    $start = Join-Path $package.InstallLocation 'gil-start.exe'
+    # Activate the installed app by AUMID, then read and interact with its actual console.
+    $activationResult = Join-Path $work 'start-result.txt'
+    $activationLog = Join-Path $work 'start-output.txt'
+    & pwsh -NoProfile -STA -File "$Here/test-start-menu.ps1" -AppId "$($package.PackageFamilyName)!GIL" -ExpectedExe $start -ResultPath $activationResult *> $activationLog
+    $activationExit = $LASTEXITCODE
+    if (Test-Path -LiteralPath $activationResult) { Get-Content -LiteralPath $activationResult | Write-Host }
+    if ($activationExit -ne 0 -or -not (Test-Path -LiteralPath $activationResult)) {
+        Get-Content -LiteralPath $activationLog | Write-Host
+        throw 'Installed Start-menu activation/guide check failed'
+    }
     $alias = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\gil.exe'
     if (-not (Test-Path -LiteralPath $alias)) { throw 'App execution alias missing' }
     # Invoke the registered alias, never the unpacked exe or a PATH-selected native installation.
@@ -60,7 +74,7 @@ try {
     }
     $nativeAfter = if (Test-Path -LiteralPath $native) { (Get-FileHash -LiteralPath $native).Hash } else { $null }
     if ($nativeAfter -ne $nativeBefore) { throw 'Packaged install created or replaced a native gil.exe' }
-    Write-Host 'PASS: installed manifest, CLI/MCP alias, install and doctor; actual Host UI and WACK not tested'
+    Write-Host 'PASS: installed manifest, Start activation and bilingual console, CLI/MCP alias, install and doctor; actual Host UI and WACK not tested'
 } finally {
     # The preflight rejected an existing GIL.Dev. Remove only this check's package/certificates.
     try { Get-AppxPackage -Name 'GIL.Dev' | Remove-AppxPackage } finally {

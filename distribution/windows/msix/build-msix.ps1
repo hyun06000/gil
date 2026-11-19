@@ -1,8 +1,9 @@
-# Package the single static gil.exe as an MSIX for the Microsoft Store (unsigned upload) or,
+# Package the static gil.exe and Start-menu guide as an MSIX for the Microsoft Store (unsigned upload) or,
 # with -SignWithPfx, as a self-signed package for a sideload check. Windows only; needs the
 # Windows SDK (makeappx.exe, signtool.exe). Never installs anything by itself.
 #
 #   ./build-msix.ps1 -Exe target\x86_64-pc-windows-msvc\release\gil.exe -Version 0.3.0 `
+#       -StartExe target\x86_64-pc-windows-msvc\release\gil-start.exe `
 #       -IdentityName 12345Publisher.GIL -Publisher 'CN=...' -PublisherDisplayName 'Publisher' `
 #       -Out target\msix\gil-store.msix
 #
@@ -12,6 +13,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string] $Exe,
+    [Parameter(Mandatory)] [string] $StartExe,
     [Parameter(Mandatory)] [string] $Version,
     [Parameter(Mandatory)] [string] $IdentityName,
     [Parameter(Mandatory)] [string] $Publisher,
@@ -26,6 +28,7 @@ Set-StrictMode -Version Latest
 if (-not $IsWindows) { throw 'MSIX packaging runs on Windows (Windows SDK makeappx.exe).' }
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Version must be X.Y.Z (Store packages use X.Y.Z.0): $Version" }
 if (-not (Test-Path -LiteralPath $Exe -PathType Leaf)) { throw "executable not found: $Exe" }
+if (-not (Test-Path -LiteralPath $StartExe -PathType Leaf)) { throw "Start-menu executable not found: $StartExe" }
 if ($Publisher -notmatch '^CN=') { throw "Publisher must be the distinguished name from Partner Center (CN=...): $Publisher" }
 
 function Find-SdkTool([string] $Name) {
@@ -43,8 +46,9 @@ if ($OutDir) { New-Item -ItemType Directory -Force -Path $OutDir | Out-Null }
 New-Item -ItemType Directory -Force -Path $Layout | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $Layout 'Assets') | Out-Null
 
-# Layout: gil.exe + Assets + the manifest with the placeholders filled in. No other files.
+# Layout: gil.exe + gil-start.exe + Assets + the manifest with the placeholders filled in. No other files.
 Copy-Item -LiteralPath $Exe -Destination (Join-Path $Layout 'gil.exe')
+Copy-Item -LiteralPath $StartExe -Destination (Join-Path $Layout 'gil-start.exe')
 Get-ChildItem -LiteralPath (Join-Path $Here 'Assets') -Filter '*.png' | ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $Layout "Assets\$($_.Name)")
 }

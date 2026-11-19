@@ -119,7 +119,13 @@ jobs:
         shell: pwsh
         run: |
           $features = if ($env:GIL_RUNTIME_PROFILE -eq 'visual-authoring') { @('--features', 'visual-authoring') } elseif ($env:GIL_RUNTIME_PROFILE -eq 'default') { @() } else { throw 'unknown profile' }
-          cargo +1.97.1 build --locked -p gil --bin gil --target $env:GIL_NATIVE_TARGET @features
+          cargo +1.97.1 build --locked -p gil --bin gil --bin gil-start --target $env:GIL_NATIVE_TARGET @features
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Start-menu guide tests
+        shell: pwsh
+        run: |
+          $features = if ($env:GIL_RUNTIME_PROFILE -eq 'visual-authoring') { @('--features', 'visual-authoring') } else { @() }
+          cargo +1.97.1 test --locked -p gil --bin gil-start --test start_menu --target $env:GIL_NATIVE_TARGET @features
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Binding security and native MCP integration
         shell: pwsh
@@ -164,7 +170,7 @@ jobs:
           $exe = "target/$env:GIL_NATIVE_TARGET/debug/gil.exe"
           $version = ((& $exe --version) -replace '^gil ', '').Trim()
           if ($LASTEXITCODE -ne 0) { throw 'version query failed' }
-          ./distribution/windows/msix/test-msix-ci.ps1 -Exe $exe -Version ($version -replace '-.*$', '') -ExpectedBinaryVersion $version
+          ./distribution/windows/msix/test-msix-ci.ps1 -Exe $exe -StartExe "target/$env:GIL_NATIVE_TARGET/debug/gil-start.exe" -Version ($version -replace '-.*$', '') -ExpectedBinaryVersion $version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Windows distribution contracts (notice inventories, release workflow, legacy packaging)
         if: matrix.profile == 'default'
