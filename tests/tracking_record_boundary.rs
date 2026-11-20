@@ -1,5 +1,5 @@
-//! 구현 순서 3a(정책 기록 자료형과 부분 검증)와 그 뒤의 동기화 순서 제어(편의상 3b)가
-//! **제품 저장 경로를 바꾸지 않았는가.**
+//! 구현 순서 3a(정책 기록 자료형과 부분 검증)와 그 뒤의 동기화 순서 제어(편의상 3b), 정책 원장과
+//! 관리 사건의 정책 연결 검사(편의상 3c)가 **제품 저장 경로를 바꾸지 않았는가.**
 //!
 //! 모든 빌드 구성에서 짓는다. 시험 자료는 합성 프로젝트다(독립 임시 폴더, 프로세스 번호가 붙은 이름).
 //!
@@ -7,6 +7,8 @@
 //!   바꾸지 않는다.
 //! - 지금 형식의 `state.yaml` 에 `tracking` 블록(정책 원장·동기화 기준)을 덧붙여도 로더가 그것을 받아들여
 //!   무시한 채 진행하지 않는다 — 모르는 칸으로 거절하고 폴더를 바꾸지 않는다.
+//! - 관리 사건(`events`)을 담은 기록도 같다 — 3c 의 검사기는 저장 경로가 아니므로 사건이 든 기록을 읽게
+//!   만들지 않는다.
 //! - 새 모듈은 `src/artifact/tracking_record/` 밖의 어떤 소스에서도 불리지 않는다.
 
 mod common;
@@ -109,6 +111,54 @@ fn a_tracking_block_in_a_known_format_is_refused_not_ignored() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// 계약 §5.1 꼴의 합성 사건 하나 — 실제 사건 기록이 아니다.
+fn synthetic_events() -> Value {
+    serde_norway::from_str(
+        "- id: M1\n  kind: start\n  chain_ref: chain:C1\n  after_cycle_ref: null\n  review_cycle_ref: null\n  \
+         next_cycle_id: 1\n  policy_before_ref: null\n  policy_after_ref: policy:P1\n  world_before_ref: null\n  \
+         baseline: {after_cycle_ref: null, next_cycle_id: 1, snapshot_ref: snapshot:A1, attempts: [{result: archived}]}\n",
+    )
+    .unwrap()
+}
+
+#[test]
+fn records_carrying_management_events_are_refused_untouched() {
+    let known = gil::newest_known_format();
+    for format in [10u32, 11] {
+        let root = started(&format!("events-format-{format}"));
+        edit_state(&root, |file| {
+            file["format"] = Value::from(format);
+            let mut tracking = synthetic_tracking();
+            tracking["next_event_id"] = Value::from(2);
+            tracking["events"] = synthetic_events();
+            file["tracking"] = tracking;
+        });
+        let before = tree(&root);
+        let path = root.join(gil::STATE_PATH);
+        match gil::load(common::spec(), &path) {
+            Err(StoreError::UnknownFormat { found, known: said }) => assert_eq!((found, said), (format, known)),
+            other => panic!("사건이 든 형식 {format} 이 읽혔다: {other:?}"),
+        }
+        assert!(ProjectSession::open(common::spec(), &path).is_err());
+        assert!(ProjectSession::open_read_only(common::spec(), &path).is_err());
+        assert_eq!(tree(&root), before, "형식 {format} 을 거절하면서 폴더를 바꿨다");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    let root = started("events-in-known-format");
+    let path = root.join(gil::STATE_PATH);
+    edit_state(&root, |file| file["events"] = synthetic_events());
+    let before = tree(&root);
+    match gil::load(common::spec(), &path) {
+        Err(StoreError::Decode(err)) => assert!(err.to_string().contains("events"), "{err}"),
+        other => panic!("`events` 가 든 기록이 읽혔다: {other:?}"),
+    }
+    assert!(ProjectSession::open(common::spec(), &path).is_err());
+    assert!(ProjectSession::open_read_only(common::spec(), &path).is_err());
+    assert_eq!(tree(&root), before, "`events` 를 거절하면서 폴더를 바꿨다");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 #[test]
 fn no_product_source_calls_the_new_module() {
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
@@ -126,6 +176,14 @@ fn no_product_source_calls_the_new_module() {
         "begin_cleanup",
         "SyncRequest",
         "base_for_new_policy",
+        "event_links",
+        "check_policy_links",
+        "EventPolicyLink",
+        "PolicyLinksAgree",
+        "LinkProblem",
+        "EventKind",
+        "EventNamesError",
+        "LINKS_DO_NOT_SHOW",
     ];
     let mut users = Vec::new();
     let mut stack = vec![src.clone()];

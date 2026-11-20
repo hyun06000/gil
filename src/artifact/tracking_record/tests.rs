@@ -497,6 +497,7 @@ fn an_unreadable_file_is_never_an_absent_one() {
 fn no_item_here_is_named_as_an_approval_an_application_or_a_full_check() {
     let sources = [
         ("mod.rs", include_str!("mod.rs")),
+        ("event_links.rs", include_str!("event_links.rs")),
         ("source.rs", include_str!("source.rs")),
         ("sync.rs", include_str!("sync.rs")),
         ("sync_order.rs", include_str!("sync_order.rs")),

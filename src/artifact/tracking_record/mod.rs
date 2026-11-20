@@ -15,6 +15,8 @@
 //!
 //! 적용 원문 주소 + SyncBase + DiskReading ─classify_policy_file─▶ PolicyFileReading   §5.2 판정표
 //!                                      └─ PolicyFileSync::begin/advance ─▶ 다음 요청 또는 멈춤  §5.2 쓰기 순서
+//!
+//! PolicyLedger + 뽑아 건넨 사건 연결 ─check_policy_links─▶ PolicyLinksAgree   T1 사건 이름, T3, T4 (event_links, 「3c」)
 //! ```
 //!
 //! # 「형식이 맞다」는 「승인됐고 적용됐다」가 아니다
@@ -27,8 +29,9 @@
 //! - **저장하지 않는다.** `state.yaml` 의 읽기·쓰기 경로, 형식 상수·관문, 객체 창고 쓰기, `.gilignore`
 //!   읽기·쓰기에 연결하지 않았다. 직렬화 자료형([`wire`])은 후속 저장 구현이 쓸 칸의 꼴과 거절 규칙을
 //!   시험하는 데만 쓰며, 독립 파일이나 두 번째 원장 형식을 만들지 않는다.
-//! - **사건·세계·사이클을 모른다.** T1 의 사건 이름, T3–T13 은 이 모듈이 검사하지 않는다
-//!   ([`UNCHECKED_CONDITIONS`]). 현재 세계·보관 대기·복원은 3·5·6번이 공유하는 §6 규칙의 몫이다.
+//! - **세계·사이클을 모른다.** 사건에 대해서는 호출자가 뽑아 건넨 이름·종류·앞뒤 정책만 본다
+//!   ([`event_links`], 「3c」 — T1 의 사건 이름 부분, T3, T4 를 **그 입력 안에서만**). T5–T13 은 이 모듈이
+//!   검사하지 않는다([`UNCHECKED_CONDITIONS`]). 현재 세계·보관 대기·복원은 3·5·6번이 공유하는 §6 규칙의 몫이다.
 //!
 //! 이 모듈의 시험 자료는 모두 **합성 자료**다. 모니터가 실제로 승인한 기록이 아니다.
 
@@ -38,16 +41,24 @@ use super::ContentDigest;
 use super::gilignore::EngineVersion;
 use crate::refs::RefSyntaxError;
 
+mod event_links;
 mod source;
 mod sync;
 mod sync_order;
 mod wire;
 
 #[cfg(test)]
+mod event_links_tests;
+#[cfg(test)]
 mod sync_order_tests;
 #[cfg(test)]
 mod tests;
 
+#[allow(unused_imports)]
+pub(crate) use event_links::{
+    EventKind, EventName, EventNamesError, EventPolicyLink, EventPolicyLinks, LINKS_DO_NOT_SHOW, LinkField,
+    LinkProblem, PolicyLinksAgree, check_policy_links,
+};
 #[allow(unused_imports)]
 pub(crate) use source::{
     Condition, PolicySourceLookup, PolicySourcesMatch, ProvidedSources, SourceLookup,
@@ -68,9 +79,9 @@ pub(crate) use wire::{StoredPolicy, StoredPolicyFile, StoredRules, StoredSyncBas
 /// [`PolicySourcesMatch`] 를 손에 넣었다고 이 조건들이 성립하는 것이 아니다. 사건·세계·사이클·보관
 /// 중단 표식·파일 쓰기 순서와의 관계는 후속 저장 구현이 같은 계약으로 검증한다.
 pub(crate) const UNCHECKED_CONDITIONS: [&str; 12] = [
-    "T1 사건 이름(M1…)과 사건 발급기",
-    "T3 사건의 정책 사슬",
-    "T4 각 정책이 정확히 한 사건의 after, 적용 정책 = 마지막 사건의 after",
+    "T1 사건 이름(M1…)과 사건 발급기 — event_links 가 건넨 입력 안에서만 검사한다. 실제 원장 전체에서 뽑혔는지는 모른다",
+    "T3 사건의 정책 사슬 — event_links 가 건넨 입력 안에서만 검사한다",
+    "T4 각 정책이 정확히 한 start·scope_change 의 after, 마지막 정책 = 마지막 사건의 after — event_links 가 건넨 입력 안에서만 검사한다. 적용 여부는 판단하지 않는다",
     "T5 기준점이 없는 사건의 위치",
     "T6 archived 시도와 기준점",
     "T7 사건의 사이클 경계와 발급기 값",
