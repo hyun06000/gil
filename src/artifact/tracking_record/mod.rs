@@ -22,6 +22,9 @@
 //!                                                                   사건 정책 연결 칸의 보존 (link_history, 「3d」)
 //!
 //! 뽑아 건넨 기준점·시도 칸 + SnapshotRegistry ─check_baselines─▶ BaselinesAgree   T6 의 한 시점 부분 (baseline_record, 「3e」)
+//!
+//! 두 시점의 (기준점·시도 칸, 등록부) ─check_baseline_history─▶ BaselineHistoryKept   3e 두 번 + 입력 대응 +
+//!                                                                   기준점 칸·시도 결과 순서의 보존 (baseline_history, 「3f」)
 //! ```
 //!
 //! # 「형식이 맞다」는 「승인됐고 적용됐다」가 아니다
@@ -36,7 +39,8 @@
 //!   시험하는 데만 쓰며, 독립 파일이나 두 번째 원장 형식을 만들지 않는다.
 //! - **세계·사이클을 모른다.** 사건에 대해서는 호출자가 뽑아 건넨 이름·종류·앞뒤 정책만 본다
 //!   ([`event_links`], 「3c」 — T1 의 사건 이름 부분, T3, T4 를 **그 입력 안에서만**). 기준점·보관 시도는 뽑아 건넨
-//!   칸과 기존 등록부의 이름 조회로 T6 의 **한 시점 부분**만 본다([`baseline_record`], 「3e」). T5·T7–T13 과 T6 의
+//!   칸과 기존 등록부의 이름 조회로 T6 의 **한 시점 부분**만 보고([`baseline_record`], 「3e」), 건넨 두 시점 사이에서
+//!   기준점 칸과 시도 **결과 순서**가 보존됐는지 본다([`baseline_history`], 「3f」). T5·T7–T13 과 T6 의
 //!   나머지는 이 모듈이 검사하지 않는다([`UNCHECKED_CONDITIONS`]). 현재 세계·보관 대기·복원은 3·5·6번이 공유하는 §6 규칙의 몫이다.
 //!
 //! 이 모듈의 시험 자료는 모두 **합성 자료**다. 모니터가 실제로 승인한 기록이 아니다.
@@ -47,6 +51,7 @@ use super::ContentDigest;
 use super::gilignore::EngineVersion;
 use crate::refs::RefSyntaxError;
 
+mod baseline_history;
 mod baseline_record;
 mod event_links;
 mod link_history;
@@ -55,6 +60,8 @@ mod sync;
 mod sync_order;
 mod wire;
 
+#[cfg(test)]
+mod baseline_history_tests;
 #[cfg(test)]
 mod baseline_record_tests;
 #[cfg(test)]
@@ -66,6 +73,11 @@ mod sync_order_tests;
 #[cfg(test)]
 mod tests;
 
+#[allow(unused_imports)]
+pub(crate) use baseline_history::{
+    BASELINE_HISTORY_DOES_NOT_SHOW, BaselineChange, BaselineHistoryKept, BaselineHistoryProblem, BaselineUpdate,
+    MatchProblem, Side, check_baseline_history,
+};
 #[allow(unused_imports)]
 pub(crate) use baseline_record::{
     AttemptSeen, BASELINES_DO_NOT_SHOW, BaselineFacts, BaselineField, BaselineProblem, BaselineSlot, BaselinesAgree,
@@ -101,11 +113,11 @@ pub(crate) use wire::{StoredPolicy, StoredPolicyFile, StoredRules, StoredSyncBas
 /// [`PolicySourcesMatch`] 를 손에 넣었다고 이 조건들이 성립하는 것이 아니다. 사건·세계·사이클·보관
 /// 중단 표식·파일 쓰기 순서와의 관계는 후속 저장 구현이 같은 계약으로 검증한다.
 pub(crate) const UNCHECKED_CONDITIONS: [&str; 12] = [
-    "T1 사건 이름(M1…)과 사건 발급기 — event_links 가 건넨 입력 안에서만 검사한다. 실제 원장 전체에서 뽑혔는지는 모른다. 「추가만 한다」는 link_history 가 건넨 두 시점의 정책 판과 사건의 정책 연결 칸에만 검사한다",
+    "T1 사건 이름(M1…)과 사건 발급기 — event_links 가 건넨 입력 안에서만 검사한다. 실제 원장 전체에서 뽑혔는지는 모른다. 「추가만 한다」는 link_history 가 건넨 두 시점의 정책 판과 사건의 정책 연결 칸에만, baseline_history 가 건넨 두 시점의 기준점 입력에서 앞선 사건이 같은 자리·이름·종류로 남았는지와 기준점 칸·시도 결과 순서에만 검사한다",
     "T3 사건의 정책 사슬 — event_links 가 건넨 입력 안에서만 검사한다",
     "T4 각 정책이 정확히 한 start·scope_change 의 after, 마지막 정책 = 마지막 사건의 after — event_links 가 건넨 입력 안에서만 검사한다. 적용 여부는 판단하지 않는다",
     "T5 기준점이 없는 사건의 위치",
-    "T6 archived 시도와 기준점 — baseline_record 가 뽑아 건넨 한 시점의 기준점 칸·시도 결과 순서와 등록부의 이름 조회만 검사한다. 「한 번만 적는다」의 시간 보존, 원본 시도 레코드 전체, 기준점 객체의 실재·내용은 보지 않는다",
+    "T6 archived 시도와 기준점 — baseline_record 가 뽑아 건넨 한 시점의 기준점 칸·시도 결과 순서와 등록부의 이름 조회만 검사하고, baseline_history 가 건넨 두 시점 사이의 기준점 칸과 시도 결과 순서의 보존만 검사한다. 실패 사유·원본 시도 레코드 전체, 두 시점 사이의 되돌림, 등록부 매핑의 보존, 기준점 객체의 실재·내용은 보지 않는다",
     "T7 사건의 사이클 경계와 발급기 값",
     "T8 world_before_ref 와 마지막 확정 세계",
     "T9 실험 Entry 와 보관 대기",
