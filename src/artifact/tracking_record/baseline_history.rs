@@ -61,7 +61,7 @@ pub(crate) const BASELINE_HISTORY_DOES_NOT_SHOW: [&str; 14] = [
     "사건 종류·정책 연결 칸의 보존 — 3d(link_history)의 규칙이다. 여기서는 종류를 대응의 표지로만 쓴다",
     "등록부 자체의 과거 매핑 보존 — 두 등록부에서 같은 이름이 같은 manifest 를 가리키는가는 보지 않는다",
     "기준점 객체의 실재와 내용 — 각 시점의 등록부에서 이름이 조회되는지만 본다(3e)",
-    "대체된 사건의 재보관 금지(§5.2)와 기준점이 없는 사건의 위치(T5) — 앞 사건에 기준점이 새로 적혀도 그 자리가 보관 대기인 마지막 사건이었는지 판단하지 않는다",
+    "대체된 사건의 재보관 금지(§5.2)와 기준점이 없는 사건의 위치(T5) — 앞 사건에 기준점이 새로 적혀도 그 자리가 보관 대기인 마지막 사건이었는지 판단하지 않는다. 변경 전부터 목록상 대체된 사건의 기준점 추가는 baseline_position 의 check_replaced_baselines 가 따로 거절한다",
     "실패 시도를 덧붙일 자격 — 보관 대기인 마지막 사건이었는가, 실제로 보관을 시도했는가",
     "보관 경계·발급기 값의 의미(T7), world_before_ref 와 현재 세계 계산(T8, §6), 보관 대기 뒤의 실험(T9)",
     "사용자 승인, 사건을 만들 권한, 실제 보관 성공",
@@ -124,18 +124,22 @@ impl fmt::Display for MatchProblem {
     }
 }
 
-/// 한 시점의 이름이 `M1` 부터 자리와 같은가. 어긋난 첫 자리를 돌려준다.
-fn names_in_place(side: Side, events: &[BaselineFacts]) -> Option<MatchProblem> {
+/// 이름이 자리에서 어긋난 첫 사건 — (자리, 찾은 이름, 앞의 이름을 다시 쓰는가). 자리는 0 부터 센다.
+///
+/// 한 목록의 이름이 `M1` 부터 빈틈없이 자리와 같은가의 규칙 하나를 3f 의 입력 대응과 3g(`baseline_position`)의 한 시점
+/// 구분이 함께 쓴다.
+pub(super) fn first_name_out_of_place(events: &[BaselineFacts]) -> Option<(usize, EventName, bool)> {
     events.iter().enumerate().find_map(|(position, facts)| {
         let found = facts.event();
         let in_place = usize::try_from(found.number()).is_ok_and(|number| number == position + 1);
-        (!in_place).then(|| MatchProblem::NameOutOfPlace {
-            side,
-            position,
-            found,
-            repeated: events[..position].iter().any(|seen| seen.event() == found),
-        })
+        (!in_place).then(|| (position, found, events[..position].iter().any(|seen| seen.event() == found)))
     })
+}
+
+/// 한 시점의 이름이 `M1` 부터 자리와 같은가. 어긋난 첫 자리를 돌려준다.
+fn names_in_place(side: Side, events: &[BaselineFacts]) -> Option<MatchProblem> {
+    first_name_out_of_place(events)
+        .map(|(position, found, repeated)| MatchProblem::NameOutOfPlace { side, position, found, repeated })
 }
 
 /// 대응이 서면 견줄 짝(앞 사건, 뒤 사건)을, 아니면 그 이유를 모두 돌려준다.

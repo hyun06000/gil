@@ -1,6 +1,7 @@
 //! 구현 순서 3a(정책 기록 자료형과 부분 검증)와 그 뒤의 동기화 순서 제어(편의상 3b), 정책 원장과
 //! 관리 사건의 정책 연결 검사(편의상 3c), 그 두 시점의 추가 전후 보존 검사(편의상 3d), 기준점·보관 시도 기록의
-//! 한 시점 일관성 검사(편의상 3e), 그 두 시점 비교(편의상 3f)가 **제품 저장 경로를 바꾸지 않았는가.**
+//! 한 시점 일관성 검사(편의상 3e), 그 두 시점 비교(편의상 3f), 보관 대기·대체 위치 구분과 대체된 사건의 기준점 추가 거절
+//! (편의상 3g)이 **제품 저장 경로를 바꾸지 않았는가.**
 //!
 //! 모든 빌드 구성에서 짓는다. 시험 자료는 합성 프로젝트다(독립 임시 폴더, 프로세스 번호가 붙은 이름).
 //!
@@ -15,6 +16,9 @@
 //!   기록도 형식 10/11 은 `UnknownFormat`, 알려진 형식은 모르는 칸으로 거절하고 폴더를 바꾸지 않는다.
 //! - 3f 의 두 시점 비교도 저장 경로가 아니다. 같은 사건이 보관 대기(실패 시도)였다가 기준점이 확정된 앞뒤 두 기록도
 //!   형식 10/11 은 `UnknownFormat`, 알려진 형식은 모르는 칸으로 각각 거절하고 폴더를 바꾸지 않는다.
+//! - 3g 의 위치 구분·대체된 사건의 기준점 추가 거절도 저장 경로가 아니다. 대체된 사건(M2)과 보관 대기 사건(M3)이 든 기록과,
+//!   그 M2 에 뒤늦게 기준점이 적힌 기록도 형식 10/11 은 `UnknownFormat`, 알려진 형식은 모르는 칸으로 각각 거절하고 폴더를
+//!   바꾸지 않는다. 대체·보관 대기를 담는 새 저장 칸이나 플래그도 없다.
 //! - 새 모듈은 `src/artifact/tracking_record/` 밖의 어떤 소스에서도 불리지 않는다.
 
 mod common;
@@ -286,6 +290,71 @@ fn before_and_after_baseline_records_are_each_refused_untouched() {
     }
 }
 
+/// 같은 프로젝트의 앞뒤 두 기록 — 앞: M2 는 대체됨(실패 하나), M3 이 보관 대기. 뒤: 대체된 M2 에 기준점이 적혔다(3g 가
+/// 거절하는 꼴). 합성 값이다.
+fn synthetic_replaced_events() -> [Value; 2] {
+    let mut before = synthetic_waiting_events();
+    let mut third = before[1].clone();
+    third["id"] = Value::from("M3");
+    third["policy_before_ref"] = Value::from("policy:P2");
+    third["policy_after_ref"] = Value::from("policy:P3");
+    third["baseline"] = serde_norway::from_str("{snapshot_ref: null, attempts: []}").unwrap();
+    before.as_sequence_mut().unwrap().push(third);
+    let mut after = before.clone();
+    after[1]["baseline"] = serde_norway::from_str(
+        "{after_cycle_ref: cycle:C1, next_cycle_id: 2, snapshot_ref: snapshot:A1, \
+         attempts: [{result: failed, cause: external_change}, {result: archived}]}",
+    )
+    .unwrap();
+    [before, after]
+}
+
+#[test]
+fn replaced_and_rearchived_records_are_each_refused_untouched() {
+    let known = gil::newest_known_format();
+    for (label, events) in ["replaced", "rearchived"].into_iter().zip(synthetic_replaced_events()) {
+        for format in [10u32, 11] {
+            let root = started(&format!("positions-{label}-format-{format}"));
+            edit_state(&root, |file| {
+                file["format"] = Value::from(format);
+                let mut tracking = synthetic_tracking();
+                tracking["next_policy_id"] = Value::from(4);
+                for name in ["P2", "P3"] {
+                    let mut next = tracking["policies"][0].clone();
+                    next["id"] = Value::from(name);
+                    tracking["policies"].as_sequence_mut().unwrap().push(next);
+                }
+                tracking["next_event_id"] = Value::from(4);
+                tracking["events"] = events.clone();
+                file["tracking"] = tracking;
+            });
+            let before = tree(&root);
+            let path = root.join(gil::STATE_PATH);
+            match gil::load(common::spec(), &path) {
+                Err(StoreError::UnknownFormat { found, known: said }) => assert_eq!((found, said), (format, known)),
+                other => panic!("{label} 기록의 형식 {format} 이 읽혔다: {other:?}"),
+            }
+            assert!(ProjectSession::open(common::spec(), &path).is_err());
+            assert!(ProjectSession::open_read_only(common::spec(), &path).is_err());
+            assert_eq!(tree(&root), before, "{label} 기록의 형식 {format} 을 거절하면서 폴더를 바꿨다");
+            let _ = std::fs::remove_dir_all(&root);
+        }
+
+        let root = started(&format!("positions-{label}-known-format"));
+        let path = root.join(gil::STATE_PATH);
+        edit_state(&root, |file| file["events"] = events.clone());
+        let before = tree(&root);
+        match gil::load(common::spec(), &path) {
+            Err(StoreError::Decode(err)) => assert!(err.to_string().contains("events"), "{err}"),
+            other => panic!("{label} 기록의 `events` 가 읽혔다: {other:?}"),
+        }
+        assert!(ProjectSession::open(common::spec(), &path).is_err());
+        assert!(ProjectSession::open_read_only(common::spec(), &path).is_err());
+        assert_eq!(tree(&root), before, "{label} 기록의 `events` 를 거절하면서 폴더를 바꿨다");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+}
+
 #[test]
 fn no_product_source_calls_the_new_module() {
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
@@ -336,6 +405,19 @@ fn no_product_source_calls_the_new_module() {
         "BaselineUpdate",
         "MatchProblem",
         "BASELINE_HISTORY_DOES_NOT_SHOW",
+        "first_name_out_of_place",
+        "baseline_position",
+        "classify_baseline_positions",
+        "check_replaced_baselines",
+        "BaselinePosition",
+        "PositionProblem",
+        "ReplacedBaselineProblem",
+        "ReplacedBaselinesKept",
+        "ReplacedGainedBaseline",
+        "WaitingInList",
+        "ReplacedInList",
+        "unjudged_late_attempts",
+        "POSITIONS_DO_NOT_SHOW",
     ];
     let mut users = Vec::new();
     let mut stack = vec![src.clone()];

@@ -25,6 +25,10 @@
 //!
 //! 두 시점의 (기준점·시도 칸, 등록부) ─check_baseline_history─▶ BaselineHistoryKept   3e 두 번 + 입력 대응 +
 //!                                                                   기준점 칸·시도 결과 순서의 보존 (baseline_history, 「3f」)
+//!
+//! 뽑아 건넨 기준점·시도 칸 + 등록부 ─classify_baseline_positions─▶ BaselinePositions   목록상 보관 대기·대체 구분
+//! 두 시점의 (기준점·시도 칸, 등록부) ─check_replaced_baselines─▶ ReplacedBaselinesKept   3f 그대로 + 변경 전부터 대체된
+//!                                                                   사건의 기준점 추가 거절 (baseline_position, 「3g」)
 //! ```
 //!
 //! # 「형식이 맞다」는 「승인됐고 적용됐다」가 아니다
@@ -40,8 +44,9 @@
 //! - **세계·사이클을 모른다.** 사건에 대해서는 호출자가 뽑아 건넨 이름·종류·앞뒤 정책만 본다
 //!   ([`event_links`], 「3c」 — T1 의 사건 이름 부분, T3, T4 를 **그 입력 안에서만**). 기준점·보관 시도는 뽑아 건넨
 //!   칸과 기존 등록부의 이름 조회로 T6 의 **한 시점 부분**만 보고([`baseline_record`], 「3e」), 건넨 두 시점 사이에서
-//!   기준점 칸과 시도 **결과 순서**가 보존됐는지 본다([`baseline_history`], 「3f」). T5·T7–T13 과 T6 의
-//!   나머지는 이 모듈이 검사하지 않는다([`UNCHECKED_CONDITIONS`]). 현재 세계·보관 대기·복원은 3·5·6번이 공유하는 §6 규칙의 몫이다.
+//!   기준점 칸과 시도 **결과 순서**가 보존됐는지 본다([`baseline_history`], 「3f」). 건넨 목록 안의 보관 대기·대체
+//!   위치를 유도하고 변경 전부터 대체된 사건의 기준점 추가를 거절한다([`baseline_position`], 「3g」 — T5 의 일부).
+//!   T5·T6 의 나머지와 T7–T13 은 이 모듈이 검사하지 않는다([`UNCHECKED_CONDITIONS`]). 현재 세계·보관 대기·복원은 3·5·6번이 공유하는 §6 규칙의 몫이다.
 //!
 //! 이 모듈의 시험 자료는 모두 **합성 자료**다. 모니터가 실제로 승인한 기록이 아니다.
 
@@ -52,6 +57,7 @@ use super::gilignore::EngineVersion;
 use crate::refs::RefSyntaxError;
 
 mod baseline_history;
+mod baseline_position;
 mod baseline_record;
 mod event_links;
 mod link_history;
@@ -62,6 +68,8 @@ mod wire;
 
 #[cfg(test)]
 mod baseline_history_tests;
+#[cfg(test)]
+mod baseline_position_tests;
 #[cfg(test)]
 mod baseline_record_tests;
 #[cfg(test)]
@@ -77,6 +85,11 @@ mod tests;
 pub(crate) use baseline_history::{
     BASELINE_HISTORY_DOES_NOT_SHOW, BaselineChange, BaselineHistoryKept, BaselineHistoryProblem, BaselineUpdate,
     MatchProblem, Side, check_baseline_history,
+};
+#[allow(unused_imports)]
+pub(crate) use baseline_position::{
+    BaselinePosition, BaselinePositions, POSITIONS_DO_NOT_SHOW, PositionProblem, ReplacedBaselineProblem,
+    ReplacedBaselinesKept, check_replaced_baselines, classify_baseline_positions,
 };
 #[allow(unused_imports)]
 pub(crate) use baseline_record::{
@@ -116,7 +129,7 @@ pub(crate) const UNCHECKED_CONDITIONS: [&str; 12] = [
     "T1 사건 이름(M1…)과 사건 발급기 — event_links 가 건넨 입력 안에서만 검사한다. 실제 원장 전체에서 뽑혔는지는 모른다. 「추가만 한다」는 link_history 가 건넨 두 시점의 정책 판과 사건의 정책 연결 칸에만, baseline_history 가 건넨 두 시점의 기준점 입력에서 앞선 사건이 같은 자리·이름·종류로 남았는지와 기준점 칸·시도 결과 순서에만 검사한다",
     "T3 사건의 정책 사슬 — event_links 가 건넨 입력 안에서만 검사한다",
     "T4 각 정책이 정확히 한 start·scope_change 의 after, 마지막 정책 = 마지막 사건의 after — event_links 가 건넨 입력 안에서만 검사한다. 적용 여부는 판단하지 않는다",
-    "T5 기준점이 없는 사건의 위치",
+    "T5 기준점이 없는 사건의 위치 — baseline_position 이 건넨 한 시점 목록 안에서 보관 대기·대체를 구분하고, 건넨 두 시점에서 변경 전부터 목록상 대체된 사건의 기준점 추가만 거절한다. 실제 원장의 끝 잘림, 두 시점 사이의 실행 순서, 대체된 사건의 실패 기록 추가의 의미, 보관 실행 권한은 보지 않는다",
     "T6 archived 시도와 기준점 — baseline_record 가 뽑아 건넨 한 시점의 기준점 칸·시도 결과 순서와 등록부의 이름 조회만 검사하고, baseline_history 가 건넨 두 시점 사이의 기준점 칸과 시도 결과 순서의 보존만 검사한다. 실패 사유·원본 시도 레코드 전체, 두 시점 사이의 되돌림, 등록부 매핑의 보존, 기준점 객체의 실재·내용은 보지 않는다",
     "T7 사건의 사이클 경계와 발급기 값",
     "T8 world_before_ref 와 마지막 확정 세계",
