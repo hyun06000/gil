@@ -14,6 +14,7 @@
 //!     앞선 원장 ───────────────────┘ check_append_only     기존 판의 이름·내용·순서 보존(순수 비교)
 //!
 //! 적용 원문 주소 + SyncBase + DiskReading ─classify_policy_file─▶ PolicyFileReading   §5.2 판정표
+//!                                      └─ PolicyFileSync::begin/advance ─▶ 다음 요청 또는 멈춤  §5.2 쓰기 순서
 //! ```
 //!
 //! # 「형식이 맞다」는 「승인됐고 적용됐다」가 아니다
@@ -39,8 +40,11 @@ use crate::refs::RefSyntaxError;
 
 mod source;
 mod sync;
+mod sync_order;
 mod wire;
 
+#[cfg(test)]
+mod sync_order_tests;
 #[cfg(test)]
 mod tests;
 
@@ -51,6 +55,11 @@ pub(crate) use source::{
 };
 #[allow(unused_imports)]
 pub(crate) use sync::{DiskReading, PolicyFileReading, SyncBase, classify_policy_file};
+#[allow(unused_imports)]
+pub(crate) use sync_order::{
+    BaseUndecided, CALLER_DUTIES, PolicyFileSync, ReplaceResult, Reread, StoreResult, SyncOutOfOrder, SyncReport,
+    SyncRequest, SyncStep, SyncStop, Unsettled, base_for_new_policy,
+};
 #[allow(unused_imports)]
 pub(crate) use wire::{StoredPolicy, StoredPolicyFile, StoredRules, StoredSyncBase, SyncBaseShapeError};
 
@@ -70,7 +79,7 @@ pub(crate) const UNCHECKED_CONDITIONS: [&str; 12] = [
     "T10 .gitignore 비유래 — 원문 출처는 기록만으로 증명할 수 없다",
     "T11 사건이 약속·판·보고서·단계를 만들지 않음",
     "T12 보관 중단 표식의 전이 차단",
-    "T13 정책 파일 쓰기 순서 — 판정표만 있고 쓰기 실행은 없다",
+    "T13 정책 파일 쓰기 순서 — 판정표와 순서 제어 로직(sync_order)만 있고, 실제 잠금·쓰기·저장 실행과 그 보고의 진위는 없다",
 ];
 
 // ── 정책 판의 이름 ─────────────────────────────────────────────────────────

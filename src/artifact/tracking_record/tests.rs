@@ -499,6 +499,7 @@ fn no_item_here_is_named_as_an_approval_an_application_or_a_full_check() {
         ("mod.rs", include_str!("mod.rs")),
         ("source.rs", include_str!("source.rs")),
         ("sync.rs", include_str!("sync.rs")),
+        ("sync_order.rs", include_str!("sync_order.rs")),
         ("wire.rs", include_str!("wire.rs")),
     ];
     let forbidden = ["approv", "applicable", "apply", "applied", "verified", "complete", "valid"];
