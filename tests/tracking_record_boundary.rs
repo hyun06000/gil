@@ -1,6 +1,6 @@
 //! 구현 순서 3a(정책 기록 자료형과 부분 검증)와 그 뒤의 동기화 순서 제어(편의상 3b), 정책 원장과
-//! 관리 사건의 정책 연결 검사(편의상 3c), 그 두 시점의 추가 전후 보존 검사(편의상 3d)가 **제품 저장 경로를
-//! 바꾸지 않았는가.**
+//! 관리 사건의 정책 연결 검사(편의상 3c), 그 두 시점의 추가 전후 보존 검사(편의상 3d), 기준점·보관 시도 기록의
+//! 한 시점 일관성 검사(편의상 3e)가 **제품 저장 경로를 바꾸지 않았는가.**
 //!
 //! 모든 빌드 구성에서 짓는다. 시험 자료는 합성 프로젝트다(독립 임시 폴더, 프로세스 번호가 붙은 이름).
 //!
@@ -11,6 +11,8 @@
 //! - 관리 사건(`events`)을 담은 기록도 같다 — 3c 의 검사기는 저장 경로가 아니므로 사건이 든 기록을 읽게
 //!   만들지 않는다.
 //! - 3d 의 두 시점 비교도 저장 경로가 아니다. 앞선 기록과 새 기록을 견주는 곳이 생겨도 위의 거절은 그대로다.
+//! - 3e 의 기준점 검사도 저장 경로가 아니다. 보관 대기 사건(기준점 없음, 실패 시도)과 기준점이 있는 사건이 든
+//!   기록도 형식 10/11 은 `UnknownFormat`, 알려진 형식은 모르는 칸으로 거절하고 폴더를 바꾸지 않는다.
 //! - 새 모듈은 `src/artifact/tracking_record/` 밖의 어떤 소스에서도 불리지 않는다.
 
 mod common;
@@ -161,6 +163,67 @@ fn records_carrying_management_events_are_refused_untouched() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// 계약 §5.1·§5.8 꼴의 합성 사건 둘 — `start`(기준점 있음)와 보관 대기 `scope_change`(기준점 없음, 실패 시도 하나).
+/// 실제 사건 기록이 아니다.
+fn synthetic_waiting_events() -> Value {
+    let mut events = synthetic_events();
+    let waiting: Value = serde_norway::from_str(
+        "id: M2\nkind: scope_change\nchain_ref: chain:C1\nafter_cycle_ref: cycle:C1\nreview_cycle_ref: cycle:C1\n\
+         next_cycle_id: 2\npolicy_before_ref: policy:P1\npolicy_after_ref: policy:P2\nworld_before_ref: snapshot:A1\n\
+         baseline: {snapshot_ref: null, attempts: [{result: failed, cause: external_change}]}\n",
+    )
+    .unwrap();
+    events.as_sequence_mut().unwrap().push(waiting);
+    events
+}
+
+#[test]
+fn records_carrying_baselines_and_attempts_are_refused_untouched() {
+    let known = gil::newest_known_format();
+    for format in [10u32, 11] {
+        let root = started(&format!("baselines-format-{format}"));
+        edit_state(&root, |file| {
+            file["format"] = Value::from(format);
+            let mut tracking = synthetic_tracking();
+            tracking["next_policy_id"] = Value::from(3);
+            let second = tracking["policies"][0].clone();
+            tracking["policies"].as_sequence_mut().unwrap().push(second);
+            tracking["policies"][1]["id"] = Value::from("P2");
+            tracking["next_event_id"] = Value::from(3);
+            tracking["events"] = synthetic_waiting_events();
+            file["tracking"] = tracking;
+        });
+        let before = tree(&root);
+        let path = root.join(gil::STATE_PATH);
+        match gil::load(common::spec(), &path) {
+            Err(StoreError::UnknownFormat { found, known: said }) => assert_eq!((found, said), (format, known)),
+            other => panic!("기준점·시도가 든 형식 {format} 이 읽혔다: {other:?}"),
+        }
+        assert!(ProjectSession::open(common::spec(), &path).is_err());
+        assert!(ProjectSession::open_read_only(common::spec(), &path).is_err());
+        assert_eq!(tree(&root), before, "형식 {format} 을 거절하면서 폴더를 바꿨다");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    let root = started("baselines-in-known-format");
+    let path = root.join(gil::STATE_PATH);
+    let baseline = synthetic_waiting_events()[1]["baseline"].clone();
+    for (key, value) in [("events", synthetic_waiting_events()), ("baseline", baseline)] {
+        let copy = std::fs::read(&path).unwrap();
+        edit_state(&root, |file| file[key] = value);
+        let before = tree(&root);
+        match gil::load(common::spec(), &path) {
+            Err(StoreError::Decode(err)) => assert!(err.to_string().contains(key), "{err}"),
+            other => panic!("`{key}` 이 든 기록이 읽혔다: {other:?}"),
+        }
+        assert!(ProjectSession::open(common::spec(), &path).is_err());
+        assert!(ProjectSession::open_read_only(common::spec(), &path).is_err());
+        assert_eq!(tree(&root), before, "`{key}` 을 거절하면서 폴더를 바꿨다");
+        std::fs::write(&path, copy).unwrap();
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 #[test]
 fn no_product_source_calls_the_new_module() {
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
@@ -194,6 +257,15 @@ fn no_product_source_calls_the_new_module() {
         "HistoryProblem",
         "HistoryKept",
         "HISTORY_DOES_NOT_SHOW",
+        "baseline_record",
+        "check_baselines",
+        "BaselineFacts",
+        "BaselineSlot",
+        "BaselineField",
+        "BaselineProblem",
+        "BaselinesAgree",
+        "AttemptSeen",
+        "BASELINES_DO_NOT_SHOW",
     ];
     let mut users = Vec::new();
     let mut stack = vec![src.clone()];
