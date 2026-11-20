@@ -17,6 +17,9 @@
 //!                                      └─ PolicyFileSync::begin/advance ─▶ 다음 요청 또는 멈춤  §5.2 쓰기 순서
 //!
 //! PolicyLedger + 뽑아 건넨 사건 연결 ─check_policy_links─▶ PolicyLinksAgree   T1 사건 이름, T3, T4 (event_links, 「3c」)
+//!
+//! 두 시점의 (원장, 사건 연결) ─check_policy_history─▶ HistoryKept   3c 두 번 + check_append_only +
+//!                                                                   사건 정책 연결 칸의 보존 (link_history, 「3d」)
 //! ```
 //!
 //! # 「형식이 맞다」는 「승인됐고 적용됐다」가 아니다
@@ -42,6 +45,7 @@ use super::gilignore::EngineVersion;
 use crate::refs::RefSyntaxError;
 
 mod event_links;
+mod link_history;
 mod source;
 mod sync;
 mod sync_order;
@@ -49,6 +53,8 @@ mod wire;
 
 #[cfg(test)]
 mod event_links_tests;
+#[cfg(test)]
+mod link_history_tests;
 #[cfg(test)]
 mod sync_order_tests;
 #[cfg(test)]
@@ -58,6 +64,11 @@ mod tests;
 pub(crate) use event_links::{
     EventKind, EventName, EventNamesError, EventPolicyLink, EventPolicyLinks, LINKS_DO_NOT_SHOW, LinkField,
     LinkProblem, PolicyLinksAgree, check_policy_links,
+};
+#[allow(unused_imports)]
+pub(crate) use link_history::{
+    HISTORY_DOES_NOT_SHOW, HistoryKept, HistoryProblem, LinkAppendViolation, LinkSlot, check_link_append_only,
+    check_policy_history,
 };
 #[allow(unused_imports)]
 pub(crate) use source::{
@@ -79,7 +90,7 @@ pub(crate) use wire::{StoredPolicy, StoredPolicyFile, StoredRules, StoredSyncBas
 /// [`PolicySourcesMatch`] 를 손에 넣었다고 이 조건들이 성립하는 것이 아니다. 사건·세계·사이클·보관
 /// 중단 표식·파일 쓰기 순서와의 관계는 후속 저장 구현이 같은 계약으로 검증한다.
 pub(crate) const UNCHECKED_CONDITIONS: [&str; 12] = [
-    "T1 사건 이름(M1…)과 사건 발급기 — event_links 가 건넨 입력 안에서만 검사한다. 실제 원장 전체에서 뽑혔는지는 모른다",
+    "T1 사건 이름(M1…)과 사건 발급기 — event_links 가 건넨 입력 안에서만 검사한다. 실제 원장 전체에서 뽑혔는지는 모른다. 「추가만 한다」는 link_history 가 건넨 두 시점의 정책 판과 사건의 정책 연결 칸에만 검사한다",
     "T3 사건의 정책 사슬 — event_links 가 건넨 입력 안에서만 검사한다",
     "T4 각 정책이 정확히 한 start·scope_change 의 after, 마지막 정책 = 마지막 사건의 after — event_links 가 건넨 입력 안에서만 검사한다. 적용 여부는 판단하지 않는다",
     "T5 기준점이 없는 사건의 위치",

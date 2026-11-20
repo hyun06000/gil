@@ -1,5 +1,6 @@
 //! 구현 순서 3a(정책 기록 자료형과 부분 검증)와 그 뒤의 동기화 순서 제어(편의상 3b), 정책 원장과
-//! 관리 사건의 정책 연결 검사(편의상 3c)가 **제품 저장 경로를 바꾸지 않았는가.**
+//! 관리 사건의 정책 연결 검사(편의상 3c), 그 두 시점의 추가 전후 보존 검사(편의상 3d)가 **제품 저장 경로를
+//! 바꾸지 않았는가.**
 //!
 //! 모든 빌드 구성에서 짓는다. 시험 자료는 합성 프로젝트다(독립 임시 폴더, 프로세스 번호가 붙은 이름).
 //!
@@ -9,6 +10,7 @@
 //!   무시한 채 진행하지 않는다 — 모르는 칸으로 거절하고 폴더를 바꾸지 않는다.
 //! - 관리 사건(`events`)을 담은 기록도 같다 — 3c 의 검사기는 저장 경로가 아니므로 사건이 든 기록을 읽게
 //!   만들지 않는다.
+//! - 3d 의 두 시점 비교도 저장 경로가 아니다. 앞선 기록과 새 기록을 견주는 곳이 생겨도 위의 거절은 그대로다.
 //! - 새 모듈은 `src/artifact/tracking_record/` 밖의 어떤 소스에서도 불리지 않는다.
 
 mod common;
@@ -184,6 +186,14 @@ fn no_product_source_calls_the_new_module() {
         "EventKind",
         "EventNamesError",
         "LINKS_DO_NOT_SHOW",
+        "link_history",
+        "check_link_append_only",
+        "check_policy_history",
+        "LinkAppendViolation",
+        "LinkSlot",
+        "HistoryProblem",
+        "HistoryKept",
+        "HISTORY_DOES_NOT_SHOW",
     ];
     let mut users = Vec::new();
     let mut stack = vec![src.clone()];
