@@ -20,6 +20,8 @@
 //!
 //! 두 시점의 (원장, 사건 연결) ─check_policy_history─▶ HistoryKept   3c 두 번 + check_append_only +
 //!                                                                   사건 정책 연결 칸의 보존 (link_history, 「3d」)
+//!
+//! 뽑아 건넨 기준점·시도 칸 + SnapshotRegistry ─check_baselines─▶ BaselinesAgree   T6 의 한 시점 부분 (baseline_record, 「3e」)
 //! ```
 //!
 //! # 「형식이 맞다」는 「승인됐고 적용됐다」가 아니다
@@ -33,8 +35,9 @@
 //!   읽기·쓰기에 연결하지 않았다. 직렬화 자료형([`wire`])은 후속 저장 구현이 쓸 칸의 꼴과 거절 규칙을
 //!   시험하는 데만 쓰며, 독립 파일이나 두 번째 원장 형식을 만들지 않는다.
 //! - **세계·사이클을 모른다.** 사건에 대해서는 호출자가 뽑아 건넨 이름·종류·앞뒤 정책만 본다
-//!   ([`event_links`], 「3c」 — T1 의 사건 이름 부분, T3, T4 를 **그 입력 안에서만**). T5–T13 은 이 모듈이
-//!   검사하지 않는다([`UNCHECKED_CONDITIONS`]). 현재 세계·보관 대기·복원은 3·5·6번이 공유하는 §6 규칙의 몫이다.
+//!   ([`event_links`], 「3c」 — T1 의 사건 이름 부분, T3, T4 를 **그 입력 안에서만**). 기준점·보관 시도는 뽑아 건넨
+//!   칸과 기존 등록부의 이름 조회로 T6 의 **한 시점 부분**만 본다([`baseline_record`], 「3e」). T5·T7–T13 과 T6 의
+//!   나머지는 이 모듈이 검사하지 않는다([`UNCHECKED_CONDITIONS`]). 현재 세계·보관 대기·복원은 3·5·6번이 공유하는 §6 규칙의 몫이다.
 //!
 //! 이 모듈의 시험 자료는 모두 **합성 자료**다. 모니터가 실제로 승인한 기록이 아니다.
 
@@ -44,6 +47,7 @@ use super::ContentDigest;
 use super::gilignore::EngineVersion;
 use crate::refs::RefSyntaxError;
 
+mod baseline_record;
 mod event_links;
 mod link_history;
 mod source;
@@ -51,6 +55,8 @@ mod sync;
 mod sync_order;
 mod wire;
 
+#[cfg(test)]
+mod baseline_record_tests;
 #[cfg(test)]
 mod event_links_tests;
 #[cfg(test)]
@@ -60,6 +66,11 @@ mod sync_order_tests;
 #[cfg(test)]
 mod tests;
 
+#[allow(unused_imports)]
+pub(crate) use baseline_record::{
+    AttemptSeen, BASELINES_DO_NOT_SHOW, BaselineFacts, BaselineField, BaselineProblem, BaselineSlot, BaselinesAgree,
+    check_baselines,
+};
 #[allow(unused_imports)]
 pub(crate) use event_links::{
     EventKind, EventName, EventNamesError, EventPolicyLink, EventPolicyLinks, LINKS_DO_NOT_SHOW, LinkField,
@@ -94,7 +105,7 @@ pub(crate) const UNCHECKED_CONDITIONS: [&str; 12] = [
     "T3 사건의 정책 사슬 — event_links 가 건넨 입력 안에서만 검사한다",
     "T4 각 정책이 정확히 한 start·scope_change 의 after, 마지막 정책 = 마지막 사건의 after — event_links 가 건넨 입력 안에서만 검사한다. 적용 여부는 판단하지 않는다",
     "T5 기준점이 없는 사건의 위치",
-    "T6 archived 시도와 기준점",
+    "T6 archived 시도와 기준점 — baseline_record 가 뽑아 건넨 한 시점의 기준점 칸·시도 결과 순서와 등록부의 이름 조회만 검사한다. 「한 번만 적는다」의 시간 보존, 원본 시도 레코드 전체, 기준점 객체의 실재·내용은 보지 않는다",
     "T7 사건의 사이클 경계와 발급기 값",
     "T8 world_before_ref 와 마지막 확정 세계",
     "T9 실험 Entry 와 보관 대기",
