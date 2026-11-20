@@ -3,16 +3,33 @@
 //! 3번 전체의 완료가 아니며 정본의 공식 완료 단위도 아니다.
 //!
 //! ```text
-//! begin(적용 원문 주소, 저장된 sync_base, 잠금 안 재확인)
+//! begin(적용 원문 주소, 저장된 sync_base, 잠금 안 재확인)        ← 명시적 동기화만
+//!   ├─ 디스크 = 원문, 기준 = present + 원문 ──────────────▶ Stop  (파일도 기준도 쓰지 않는다)
+//!   ├─ 디스크 = 원문, 기준 그 밖 ─▶ StoreBase(present) ─▶ Stop (기준 갱신만, 파일은 쓰지 않는다)
 //!   ├─ 판정이 갱신 필요(구판 잔류)가 아니다 ──────────────▶ Stop  (쓰지 않는다)
-//!   ├─ 디스크 = 원문, 기준 unconfirmed ─▶ StoreBase(present) ─▶ Stop (기준 정리만, 파일은 쓰지 않는다)
 //!   └─ 쓰기 후보
 //!        ▼ ① StoreBase(unconfirmed) ── Stored 가 아니면 ─────▶ Stop  (파일 쓰기를 요청하지 않는다)
 //!        ▼ ② ReplaceFile ── Replaced + 재조회 = 원문 ─────────▶ ③
 //!        │                 NotReplaced + 같은 잠금 재조회 = 이전 기준 ─▶ StoreBase(이전 기준) ─▶ Stop
 //!        │                 그 밖 ───────────────────────────▶ Stop  (복귀하지 않는다. 기준 unconfirmed)
 //!        ▼ ③ StoreBase(present + 원문) ── Stored ─▶ Stop(InSync), 아니면 Stop(파일 = 원문, 기준 미확인)
+//!
+//! begin_cleanup(같은 입력)                                       ← 그 밖의 변경 명령
+//!   ├─ 디스크 = 원문, 기준 unconfirmed ─▶ StoreBase(present) ─▶ Stop (기준 정리만)
+//!   └─ 그 밖 ──────────────────────────────────────────────▶ Stop  (파일도 기준도 쓰지 않는다)
 //! ```
+//!
+//! # 누가 어느 입구를 부르나
+//!
+//! - **읽기 전용 조회**는 [`super::classify_policy_file`] 만 쓴다. 디스크가 원문과 같으면 동기화됨이고, 그 결과에는
+//!   저장 요청이 들어갈 자리가 없다 — 파일도 상태도 저장하지 않는다.
+//! - **명시적 동기화**(사용자가 동기화를 실행한 변경 명령)는 [`PolicyFileSync::begin`] 을 부른다. 디스크가 이미
+//!   원문 B와 같으면 파일은 그대로 두고, 기준이 `present`(B)가 아니면(`present`(A)·`absent`·`unconfirmed`)
+//!   `present`(B) 저장만 요청한다(계약 §5.2, 2026-11-20 사용자 결정).
+//! - **그 밖의 변경 명령**은 [`PolicyFileSync::begin_cleanup`] 을 부른다. 계약 §5.2 상황표의 「다음 변경 명령이
+//!   디스크를 확인하고 기준을 적용 원문으로 저장한다」 — 기준이 `unconfirmed` 일 때만이다. 확인된 다른 기준을
+//!   바꾸지 않으며 파일 쓰기를 요청하지 않는다. 그런 명령이 파일 쓰기까지 시작해도 되는지는 계약이 정하지
+//!   않았고 이 로직도 정하지 않는다.
 //!
 //! # 이 로직이 하지 않는 것
 //!
@@ -24,8 +41,8 @@
 //! - [`PolicyFileSync`] 는 한 번의 시도 동안만 메모리에 있는 **일시적 제어 값**이다. 저장하지 않으며 정책·승인
 //!   기록이 아니다. 새 영구 상태나 저장 칸을 만들지 않는다. 재시작 뒤에 남는 것은 저장된 `sync_base` 와
 //!   디스크뿐이므로 [`PolicyFileSync::begin`] 부터 다시 판정한다.
-//! - 읽기 전용 조회는 [`super::classify_policy_file`] 을 쓴다. 그 결과에는 저장 요청이 들어갈 자리가 없다.
-//!   `begin` 은 프로젝트 잠금을 쥔 **변경 명령**이 부른다고 가정한다(그 보장도 연결 계층의 몫이다).
+//! - 두 입구 모두 프로젝트 잠금을 쥔 **변경 명령**이 부른다고 가정한다. 그 보장과, 호출이 정말 명시적
+//!   동기화인지의 구분도 연결 계층의 몫이다.
 //! - 승인 확인·승인 처리가 아니다. [`base_for_new_policy`] 는 승인 저장이 함께 적을 `sync_base` 값을 고르는
 //!   규칙일 뿐이다.
 
@@ -35,13 +52,14 @@ use super::sync::{DiskReading, PolicyFileReading, SyncBase, classify_policy_file
 use crate::artifact::ContentDigest;
 
 /// 이 제어 로직이 **맡지 않는** 일 — 후속 연결 계층이 진다.
-pub(crate) const CALLER_DUTIES: [&str; 6] = [
-    "프로젝트 잠금을 쥐고 begin 의 재확인부터 마지막 저장까지 같은 잠금 범위에 머무는 것",
+pub(crate) const CALLER_DUTIES: [&str; 7] = [
+    "프로젝트 잠금을 쥐고 begin·begin_cleanup 의 재확인부터 마지막 저장까지 같은 잠금 범위에 머무는 것",
     "루트 .gilignore 경로의 안전 검사(연결 파일·디렉터리·경로 밖)",
     "임시 파일 배타 생성 → fsync → 교체 → 다시 읽기의 실제 실행",
     "sync_base 의 실제 상태 저장과 그 결과를 사실대로 보고하는 것",
     "교체가 일어났는지 알 수 없는 오류를 교체 전 실패로 보고하지 않는 것",
     "동시 외부 편집의 탐지 — 이 로직은 건네받은 관측만 비교한다",
+    "사용자가 명시적으로 동기화를 실행했을 때만 begin 을, 그 밖의 변경 명령은 begin_cleanup 을 부르는 것",
 ];
 
 /// 상태 저장 한 번의 결과 — 호출자의 보고다. **알 수 없음은 성공이 아니다.**
@@ -101,17 +119,23 @@ pub(crate) enum SyncStep {
 /// 시도가 멈춘 이유. 어느 것도 승인·적용·보관이 아니다.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum SyncStop {
-    /// 재확인한 디스크가 이미 원문과 같다. 쓰지 않는다. 기준이 `unconfirmed` 가 아니므로 기준도 저장하지 않는다.
+    /// 재확인한 디스크와 저장된 기준이 이미 모두 원문이다(`present` + 원문). 파일도 기준도 쓰지 않는다.
     AlreadyMatches,
     /// 재확인한 디스크가 쓰기 후보(갱신 필요 — 구판 잔류)가 아니다. 판정을 그대로 돌려주며 쓰지 않는다.
     NotWritable(PolicyFileReading),
+    /// [`PolicyFileSync::begin_cleanup`] 의 정리 대상(디스크 = 원문, 기준 `unconfirmed`)이 아니다. 판정을 그대로
+    /// 돌려주며 파일도 기준도 쓰지 않는다.
+    NoCleanup(PolicyFileReading),
     /// ① `unconfirmed` 저장이 확인되지 않았다. **파일 쓰기를 요청하지 않았다.** `Failed` 면 기준·파일이
     /// 그대로이고 나중에 처음부터 다시 할 수 있다. `Unknown` 이면 저장된 기준을 다시 읽어 판정한다.
     MarkNotStored(StoreResult),
-    /// 파일이 원문과 같고 그 원문을 기준으로 저장했다고 보고됐다.
+    /// 파일이 원문과 같고 그 원문을 기준으로 저장했다고 **보고됐다**. 기준 확정을 말할 수 있는 유일한 멈춤이다.
     InSync,
-    /// **파일 내용은 원문과 같다. 저장 기준은 미확인이다** — 마지막 기준 저장이 실패했거나 알 수 없다.
-    /// 표시는 동기화됨이다. 기준 정리는 다음 변경 명령이 디스크를 다시 확인하고 한다. 파일을 다시 쓰지 않는다.
+    /// **파일 내용은 원문과 같지만 기준 확정은 확인되지 않았다** — 마지막 기준 저장이 실패했거나 알 수 없다.
+    /// 저장된 기준은 앞 값(`present`(이전)·`absent`·`unconfirmed`)이거나 알 수 없다. 표시는 동기화됨이다. 파일을
+    /// 다시 쓰지 않는다. 다음 명시적 동기화가 저장된 기준과 디스크를 다시 읽어 판정한다(기준이 `unconfirmed` 면
+    /// 다른 변경 명령의 기준 정리도 한다). 기준이 이전 값으로 남은 채 사용자가 파일을 그 이전 내용으로
+    /// 되돌리면 구판 잔류와 구별할 수 없다 — 이 멈춤 뒤의 편집 보호는 보장하지 않는다.
     FileMatchesBaseUnsettled(StoreResult),
     /// 교체 전 실패가 분명했고 같은 잠금에서 다시 읽은 디스크가 이전 기준과 같아, 이전 기준으로 되돌려
     /// 저장했다고 보고됐다. 표시: 갱신 실패. 처음부터 다시 할 수 있다.
@@ -163,8 +187,9 @@ impl std::error::Error for SyncOutOfOrder {}
 /// 기다리는 보고. 각 값은 바로 앞에서 낸 요청 하나에 대응한다.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Awaiting {
-    /// 기준 정리(`unconfirmed` → `present`, 파일 쓰기 없음)의 저장 결과.
-    Cleanup,
+    /// 디스크가 이미 원문일 때 기준만 `present` + 원문으로 저장(파일 쓰기 없음)한 결과 — 명시적 동기화의 기준
+    /// 갱신과 다른 변경 명령의 `unconfirmed` 정리가 함께 쓴다.
+    Rebase,
     /// ① `unconfirmed` 저장의 결과.
     Mark,
     /// ② 파일 교체·재조회의 결과.
@@ -179,27 +204,48 @@ enum Awaiting {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PolicyFileSync {
     rules: ContentDigest,
-    /// 재확인 때 디스크와 같았던 확인된 기준(`present`·`absent`). 복귀할 수 있는 유일한 값이다.
+    /// 시작할 때 저장돼 있던 기준. 쓰기 후보였다면 재확인 때 디스크와 같았던 확인된 기준(`present`·`absent`)이고,
+    /// 교체 전 실패 뒤 복귀할 수 있는 유일한 값이다.
     previous: SyncBase,
     state: Result<(Awaiting, SyncRequest), SyncStop>,
 }
 
 impl PolicyFileSync {
-    /// 변경 명령이 잠금 안에서 디스크를 다시 읽은 뒤 부른다(쓰기 0단계). 요청 하나 또는 멈춤으로 시작한다.
+    /// **명시적 동기화**가 잠금 안에서 디스크를 다시 읽은 뒤 부른다(쓰기 0단계). 요청 하나 또는 멈춤으로 시작한다.
     ///
-    /// `rules` 는 적용 원문의 주소다 — 어느 판이 적용 정책인지 이 함수는 정하지 않는다.
+    /// `rules` 는 적용 원문의 주소다 — 어느 판이 적용 정책인지 이 함수는 정하지 않는다. 디스크가 이미 원문과
+    /// 같으면 파일 쓰기도 그를 위한 `unconfirmed` 저장도 요청하지 않고, 기준이 `present` + 원문이 아닐 때만
+    /// 그 값의 저장을 요청한다.
     pub(crate) fn begin(rules: &ContentDigest, base: &SyncBase, recheck: &DiskReading) -> (PolicyFileSync, SyncStep) {
         let state = match classify_policy_file(rules, base, recheck) {
             PolicyFileReading::StaleMatchesBase => {
                 Ok((Awaiting::Mark, SyncRequest::StoreBase(SyncBase::Unconfirmed)))
             }
-            // 디스크가 이미 원문과 같다 — 파일은 쓰지 않는다. 기준이 미확인이면 기준만 정리한다(§5.2 상황표).
             PolicyFileReading::MatchesApplied => match base {
-                SyncBase::Unconfirmed => Ok((Awaiting::Cleanup, SyncRequest::StoreBase(SyncBase::Present(rules.clone())))),
-                SyncBase::Present(_) | SyncBase::Absent => Err(SyncStop::AlreadyMatches),
+                SyncBase::Present(kept) if kept == rules => Err(SyncStop::AlreadyMatches),
+                SyncBase::Present(_) | SyncBase::Absent | SyncBase::Unconfirmed => Ok(Self::rebase(rules)),
             },
             other => Err(SyncStop::NotWritable(other)),
         };
+        Self::started(rules, base, state)
+    }
+
+    /// 명시적 동기화가 **아닌** 변경 명령이 잠금 안에서 디스크를 다시 읽은 뒤 부른다. 계약 §5.2 상황표의 기준
+    /// 정리 — 디스크가 원문과 같고 기준이 `unconfirmed` 일 때만 `present` + 원문 저장을 요청한다. 파일 쓰기는
+    /// 어떤 경우에도 요청하지 않는다.
+    pub(crate) fn begin_cleanup(rules: &ContentDigest, base: &SyncBase, recheck: &DiskReading) -> (PolicyFileSync, SyncStep) {
+        let state = match (classify_policy_file(rules, base, recheck), base) {
+            (PolicyFileReading::MatchesApplied, SyncBase::Unconfirmed) => Ok(Self::rebase(rules)),
+            (reading, _) => Err(SyncStop::NoCleanup(reading)),
+        };
+        Self::started(rules, base, state)
+    }
+
+    fn rebase(rules: &ContentDigest) -> (Awaiting, SyncRequest) {
+        (Awaiting::Rebase, SyncRequest::StoreBase(SyncBase::Present(rules.clone())))
+    }
+
+    fn started(rules: &ContentDigest, base: &SyncBase, state: Result<(Awaiting, SyncRequest), SyncStop>) -> (PolicyFileSync, SyncStep) {
         let sync = PolicyFileSync { rules: rules.clone(), previous: base.clone(), state };
         let step = sync.step();
         (sync, step)
@@ -220,7 +266,7 @@ impl PolicyFileSync {
             Err(stop) => return Err(SyncOutOfOrder::AlreadyStopped { stop: stop.clone(), got: report }),
         };
         let next = match (awaiting, report) {
-            (Awaiting::Cleanup, SyncReport::Store(result)) => Err(match result {
+            (Awaiting::Rebase, SyncReport::Store(result)) => Err(match result {
                 StoreResult::Stored => SyncStop::InSync,
                 unsettled => SyncStop::FileMatchesBaseUnsettled(unsettled),
             }),

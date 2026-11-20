@@ -110,10 +110,8 @@ fn a_recheck_that_is_not_the_confirmed_base_never_reaches_a_write() {
         // 읽지 못함 — 없음으로 보지 않는다.
         (SyncBase::Absent, unreadable(), stop(SyncStop::NotWritable(R::Unreadable { reason: "합성 읽기 오류".into() }))),
         (SyncBase::Present(old()), unreadable(), stop(SyncStop::NotWritable(R::Unreadable { reason: "합성 읽기 오류".into() }))),
-        // 이미 같다 — 쓰지 않는다. 확인된 기준은 건드리지 않는다.
-        (SyncBase::Present(old()), on_disk(new()), stop(SyncStop::AlreadyMatches)),
+        // 디스크도 기준도 이미 원문이다 — 파일도 기준도 쓰지 않는다. (기준이 다른 값인 일치는 아래 기준 갱신 시험.)
         (SyncBase::Present(new()), on_disk(new()), stop(SyncStop::AlreadyMatches)),
-        (SyncBase::Absent, on_disk(new()), stop(SyncStop::AlreadyMatches)),
     ];
     for (base, disk, wanted) in cases {
         let (mut sync, first) = PolicyFileSync::begin(&new(), &base, &disk);
@@ -126,16 +124,21 @@ fn a_recheck_that_is_not_the_confirmed_base_never_reaches_a_write() {
     }
 }
 
-/// 관측 하나만으로 나오는 첫 요청은 ①(쓰기 후보일 때) 또는 기준 정리(디스크 = 원문이고 기준 미확인일 때)뿐이다.
-/// 관측만으로 파일 쓰기나 새 `present` 기준 저장(구판 위에)을 요청하지 않는다.
+fn all_bases() -> [SyncBase; 5] {
+    [SyncBase::Present(old()), SyncBase::Present(new()), SyncBase::Present(edited()), SyncBase::Absent, SyncBase::Unconfirmed]
+}
+fn all_disks() -> [DiskReading; 5] {
+    [on_disk(old()), on_disk(new()), on_disk(edited()), DiskReading::Absent, unreadable()]
+}
+
+/// 관측 하나만으로 나오는 첫 요청은 ①(쓰기 후보일 때) 또는 기준 저장(디스크 = 원문이고 기준이 아직 그 원문이
+/// 아닐 때)뿐이다. 관측만으로 파일 쓰기나, 원문이 아닌 디스크 위의 새 `present` 기준 저장을 요청하지 않는다.
 #[test]
 fn an_observation_alone_never_requests_a_write_or_a_settled_base() {
-    let bases = [SyncBase::Present(old()), SyncBase::Present(new()), SyncBase::Present(edited()), SyncBase::Absent, SyncBase::Unconfirmed];
-    let disks = [on_disk(old()), on_disk(new()), on_disk(edited()), DiskReading::Absent, unreadable()];
-    for base in &bases {
-        for disk in &disks {
-            let (_, first) = PolicyFileSync::begin(&new(), base, disk);
+    for base in &all_bases() {
+        for disk in &all_disks() {
             let reading = classify_policy_file(&new(), base, disk);
+            let (_, first) = PolicyFileSync::begin(&new(), base, disk);
             match &first {
                 SyncStep::Request(SyncRequest::ReplaceFile { .. }) => panic!("관측만으로 쓰기를 요청했다: {base:?} / {disk:?}"),
                 SyncStep::Request(SyncRequest::StoreBase(SyncBase::Unconfirmed)) => {
@@ -143,9 +146,16 @@ fn an_observation_alone_never_requests_a_write_or_a_settled_base() {
                 }
                 SyncStep::Request(SyncRequest::StoreBase(other)) => {
                     assert_eq!(other, &SyncBase::Present(new()));
-                    assert_eq!((base, disk), (&SyncBase::Unconfirmed, &on_disk(new())), "기준 정리는 이 조합에서만");
+                    assert_eq!(disk, &on_disk(new()), "원문이 아닌 디스크 위에 새 기준을 요청했다: {base:?}");
+                    assert_ne!(base, &SyncBase::Present(new()), "이미 같은 기준을 다시 저장하려 했다");
                 }
                 SyncStep::Stop(_) => assert_ne!(reading, PolicyFileReading::StaleMatchesBase, "{base:?} / {disk:?}"),
+            }
+            // 명시적 동기화가 아닌 변경 명령: 요청은 unconfirmed 정리 하나뿐이다.
+            let (_, first) = PolicyFileSync::begin_cleanup(&new(), base, disk);
+            match (base, disk) {
+                (SyncBase::Unconfirmed, found) if found == &on_disk(new()) => assert_eq!(first, settle()),
+                _ => assert_eq!(first, stop(SyncStop::NoCleanup(reading)), "{base:?} / {disk:?}"),
             }
         }
     }
@@ -293,14 +303,17 @@ fn after_a_restart_a_matching_disk_is_not_rewritten_and_only_a_change_command_se
     let reading = classify_policy_file(&new(), &SyncBase::Unconfirmed, &on_disk(new()));
     assert_eq!(reading, PolicyFileReading::MatchesApplied);
 
-    // 변경 명령: 파일을 쓰지 않고 기준만 정리하도록 요청한다.
-    let (mut sync, first) = PolicyFileSync::begin(&new(), &SyncBase::Unconfirmed, &on_disk(new()));
-    assert_eq!(first, settle());
-    assert!(matches!(sync.advance(replaced(on_disk(new()))), Err(SyncOutOfOrder::UnexpectedReport { .. })));
-    assert_eq!(sync.advance(stored()), Ok(stop(SyncStop::InSync)));
-    for result in [failed(), unknown()] {
-        let (mut sync, _) = PolicyFileSync::begin(&new(), &SyncBase::Unconfirmed, &on_disk(new()));
-        assert_eq!(sync.advance(store(result.clone())), Ok(stop(SyncStop::FileMatchesBaseUnsettled(result))));
+    // 변경 명령(명시적 동기화든 아니든): 파일을 쓰지 않고 기준만 정리하도록 요청한다.
+    type Begin = fn(&ContentDigest, &SyncBase, &DiskReading) -> (PolicyFileSync, SyncStep);
+    for begin in [PolicyFileSync::begin as Begin, PolicyFileSync::begin_cleanup as Begin] {
+        let (mut sync, first) = begin(&new(), &SyncBase::Unconfirmed, &on_disk(new()));
+        assert_eq!(first, settle());
+        assert!(matches!(sync.advance(replaced(on_disk(new()))), Err(SyncOutOfOrder::UnexpectedReport { .. })));
+        assert_eq!(sync.advance(stored()), Ok(stop(SyncStop::InSync)));
+        for result in [failed(), unknown()] {
+            let (mut sync, _) = begin(&new(), &SyncBase::Unconfirmed, &on_disk(new()));
+            assert_eq!(sync.advance(store(result.clone())), Ok(stop(SyncStop::FileMatchesBaseUnsettled(result))));
+        }
     }
 }
 
@@ -342,6 +355,163 @@ fn reverting_the_file_after_a_successful_sync_is_a_user_edit() {
     for (disk, deleted) in [(on_disk(old()), false), (DiskReading::Absent, true)] {
         let (_, first) = PolicyFileSync::begin(&new(), &after, &disk);
         assert_eq!(first, stop(SyncStop::NotWritable(PolicyFileReading::UserChanged { deleted })), "{disk:?}");
+    }
+}
+
+// ── 명시적 동기화의 기준 갱신 (계약 §5.2, 2026-11-20 사용자 결정) ─────────────
+
+/// 디스크가 이미 원문 B인데 기준이 B가 아닌 시작 — 기준 present(A), absent, unconfirmed, 그리고 다른 present.
+fn matching_disk_bases() -> [SyncBase; 4] {
+    [SyncBase::Present(old()), SyncBase::Absent, SyncBase::Unconfirmed, SyncBase::Present(edited())]
+}
+
+#[test]
+fn an_explicit_sync_over_a_matching_disk_asks_only_for_the_new_base() {
+    for base in matching_disk_bases() {
+        let (mut sync, first) = PolicyFileSync::begin(&new(), &base, &on_disk(new()));
+        assert_eq!(first, settle(), "파일 쓰기도 unconfirmed 저장도 없이 present(B) 저장만 ({base:?})");
+        // 파일 쓰기 결과는 기다리지 않는다 — 들어와도 거절하고 바뀌지 않는다.
+        let before = sync.clone();
+        for report in [replaced(on_disk(new())), not_replaced(Reread::SameLock(on_disk(new())))] {
+            assert!(matches!(sync.advance(report), Err(SyncOutOfOrder::UnexpectedReport { .. })), "{base:?}");
+            assert_eq!(sync, before);
+        }
+        assert_eq!(sync.advance(stored()), Ok(stop(SyncStop::InSync)), "{base:?}");
+        assert!(matches!(sync.advance(stored()), Err(SyncOutOfOrder::AlreadyStopped { .. })));
+    }
+}
+
+#[test]
+fn an_explicit_sync_over_a_fully_synced_file_writes_nothing() {
+    let (mut sync, first) = PolicyFileSync::begin(&new(), &SyncBase::Present(new()), &on_disk(new()));
+    assert_eq!(first, stop(SyncStop::AlreadyMatches));
+    for report in [stored(), replaced(on_disk(new()))] {
+        assert!(matches!(sync.advance(report), Err(SyncOutOfOrder::AlreadyStopped { .. })));
+    }
+}
+
+#[test]
+fn a_failed_or_unknown_new_base_is_never_reported_as_settled() {
+    for base in matching_disk_bases() {
+        for result in [failed(), unknown()] {
+            let (mut sync, _) = PolicyFileSync::begin(&new(), &base, &on_disk(new()));
+            let got = sync.advance(store(result.clone()));
+            assert_eq!(got, Ok(stop(SyncStop::FileMatchesBaseUnsettled(result))), "{base:?}");
+            assert_ne!(got, Ok(stop(SyncStop::InSync)));
+            // 멈춘 뒤에는 어떤 보고로도 파일 쓰기로 넘어가지 않는다.
+            assert!(matches!(sync.advance(replaced(on_disk(new()))), Err(SyncOutOfOrder::AlreadyStopped { .. })));
+        }
+    }
+}
+
+#[test]
+fn other_change_commands_do_not_take_the_explicit_sync_base_update() {
+    use PolicyFileReading as R;
+    // 확인된 다른 기준 위의 일치 — 명시적 동기화가 아니면 기준을 바꾸지 않는다.
+    for base in [SyncBase::Present(old()), SyncBase::Absent, SyncBase::Present(edited())] {
+        let (mut sync, first) = PolicyFileSync::begin_cleanup(&new(), &base, &on_disk(new()));
+        assert_eq!(first, stop(SyncStop::NoCleanup(R::MatchesApplied)), "{base:?}");
+        assert!(matches!(sync.advance(stored()), Err(SyncOutOfOrder::AlreadyStopped { .. })));
+    }
+    // 구판 잔류여도 이 입구는 파일 쓰기를 시작하지 않는다.
+    for (base, disk) in stale_starts() {
+        let (_, first) = PolicyFileSync::begin_cleanup(&new(), &base, &disk);
+        assert_eq!(first, stop(SyncStop::NoCleanup(R::StaleMatchesBase)), "{base:?}");
+    }
+}
+
+/// B 관측 → 기준 B 저장 성공 → 사용자가 A로 되돌리거나 지움 → 다음 동기화.
+#[test]
+fn after_the_new_base_is_stored_a_revert_or_delete_is_a_user_change_and_is_not_overwritten() {
+    for start in [SyncBase::Present(old()), SyncBase::Absent, SyncBase::Unconfirmed] {
+        let mut model = Model { base: start.clone(), disk: on_disk(new()) };
+        let (mut sync, mut step) = PolicyFileSync::begin(&new(), &model.base, &model.disk);
+        while let SyncStep::Request(request) = step {
+            let report = perform(&mut model, &request, Fate::Ok);
+            step = sync.advance(report).unwrap();
+        }
+        assert_eq!(step, stop(SyncStop::InSync), "{start:?}");
+        assert_eq!(model, Model { base: SyncBase::Present(new()), disk: on_disk(new()) }, "파일은 그대로, 기준만 B");
+
+        for (user_disk, deleted) in [(on_disk(old()), false), (DiskReading::Absent, true)] {
+            let wanted = PolicyFileReading::UserChanged { deleted };
+            assert_eq!(classify_policy_file(&new(), &model.base, &user_disk), wanted, "{start:?} / {user_disk:?}");
+            let (_, next) = PolicyFileSync::begin(&new(), &model.base, &user_disk);
+            assert_eq!(next, stop(SyncStop::NotWritable(wanted.clone())), "{start:?} / {user_disk:?}");
+            let (_, next) = PolicyFileSync::begin_cleanup(&new(), &model.base, &user_disk);
+            assert_eq!(next, stop(SyncStop::NoCleanup(wanted)), "{start:?} / {user_disk:?}");
+        }
+    }
+}
+
+/// 실패·불명 뒤의 재시도는 제어 값이 기억한 것이 아니라 실제로 저장된 기준과 새 관측으로 판단한다.
+#[test]
+fn a_retry_after_an_unsettled_new_base_judges_the_base_actually_stored() {
+    for start in matching_disk_bases() {
+        for fate in [Fate::Fail, Fate::UnknownNoEffect, Fate::UnknownTookEffect] {
+            let mut model = Model { base: start.clone(), disk: on_disk(new()) };
+            let (mut sync, first) = PolicyFileSync::begin(&new(), &model.base, &model.disk);
+            let SyncStep::Request(request) = first else { panic!("{start:?}") };
+            let report = perform(&mut model, &request, fate);
+            assert!(matches!(sync.advance(report), Ok(SyncStep::Stop(SyncStop::FileMatchesBaseUnsettled(_)))));
+
+            let (_, retry) = PolicyFileSync::begin(&new(), &model.base, &model.disk);
+            match fate {
+                // 저장이 실제로 닿았다면 이제 할 일이 없다.
+                Fate::UnknownTookEffect => assert_eq!(retry, stop(SyncStop::AlreadyMatches), "{start:?}"),
+                // 닿지 않았다면 앞 기준이 그대로이므로 다시 기준 저장만 요청한다(파일 쓰기 없음).
+                _ => {
+                    assert_eq!(model.base, start);
+                    assert_eq!(retry, settle(), "{start:?} / {fate:?}");
+                }
+            }
+        }
+    }
+}
+
+/// 한계를 고정해 두는 시험 — 기준 저장이 실패해 이전 기준 A가 남은 채 사용자가 A로 되돌리면 구판 잔류와
+/// 구별할 수 없다. 이 경우의 편집 보호는 주장하지 않는다(계약 §5.2).
+#[test]
+fn after_a_failed_new_base_a_revert_cannot_be_told_from_a_stale_file() {
+    let mut model = Model { base: SyncBase::Present(old()), disk: on_disk(new()) };
+    let (mut sync, first) = PolicyFileSync::begin(&new(), &model.base, &model.disk);
+    let SyncStep::Request(request) = first else { panic!() };
+    let report = perform(&mut model, &request, Fate::Fail);
+    assert!(matches!(sync.advance(report), Ok(SyncStep::Stop(SyncStop::FileMatchesBaseUnsettled(_)))));
+    model.disk = on_disk(old());
+    assert_eq!(classify_policy_file(&new(), &model.base, &model.disk), PolicyFileReading::StaleMatchesBase);
+    assert_eq!(PolicyFileSync::begin(&new(), &model.base, &model.disk).1, mark());
+}
+
+/// 읽기 전용 조회는 어떤 조합에서도 판정만 낸다 — 디스크가 원문이면 기준이 무엇이든 동기화됨.
+#[test]
+fn a_read_only_query_is_only_a_reading_for_every_combination() {
+    for base in &all_bases() {
+        for disk in &all_disks() {
+            let reading: PolicyFileReading = classify_policy_file(&new(), base, disk);
+            if disk == &on_disk(new()) {
+                assert_eq!(reading, PolicyFileReading::MatchesApplied, "{base:?}");
+            }
+            // 같은 조회를 몇 번 해도 같은 판정이다 — 조회가 남기는 것이 없다.
+            assert_eq!(classify_policy_file(&new(), base, disk), reading);
+        }
+    }
+}
+
+/// 디스크가 이전 기준과도 적용 원문과도 다르면 어느 입구에서도 쓰지도 저장하지도 않는다.
+#[test]
+fn a_disk_unlike_both_the_base_and_the_rules_stays_protected_at_every_entry() {
+    for (base, disk) in [
+        (SyncBase::Present(old()), on_disk(edited())),
+        (SyncBase::Present(old()), DiskReading::Absent),
+        (SyncBase::Absent, on_disk(edited())),
+        (SyncBase::Present(new()), on_disk(old())),
+        (SyncBase::Present(new()), DiskReading::Absent),
+    ] {
+        let reading = classify_policy_file(&new(), &base, &disk);
+        assert!(matches!(reading, PolicyFileReading::UserChanged { .. }), "{base:?} / {disk:?}");
+        assert_eq!(PolicyFileSync::begin(&new(), &base, &disk).1, stop(SyncStop::NotWritable(reading.clone())));
+        assert_eq!(PolicyFileSync::begin_cleanup(&new(), &base, &disk).1, stop(SyncStop::NoCleanup(reading)));
     }
 }
 
@@ -505,7 +675,10 @@ fn every_interruption_point_keeps_the_base_truthful_and_never_rewrites_on_restar
                             "{context}"
                         ),
                         (SyncBase::Unconfirmed, true) => assert_eq!(again, settle(), "{context}: 기준 정리만"),
-                        (_, true) => assert_eq!(again, stop(SyncStop::AlreadyMatches), "{context}"),
+                        (SyncBase::Present(kept), true) if kept == &new() => {
+                            assert_eq!(again, stop(SyncStop::AlreadyMatches), "{context}")
+                        }
+                        (_, true) => assert_eq!(again, settle(), "{context}: 기준 갱신만"),
                         // 확인된 기준 위의 구판 — 처음부터 다시 할 수 있다.
                         (_, false) => assert_eq!(again, mark(), "{context}"),
                     }
@@ -514,4 +687,67 @@ fn every_interruption_point_keeps_the_base_truthful_and_never_rewrites_on_restar
         }
     }
     assert_eq!(runs, 2 * 4 * 6 * 4);
+}
+
+/// 디스크가 이미 원문인 모든 시작 × 기준 저장의 모든 결과 × 사용자의 다음 행동 → 다음 명시적 동기화.
+#[test]
+fn every_new_base_outcome_then_a_user_action_keeps_edits_protected_once_the_base_is_stored() {
+    #[derive(Debug, Clone, Copy)]
+    enum UserAction {
+        Nothing,
+        RevertToOld,
+        Delete,
+    }
+    let mut runs = 0;
+    for start in all_bases() {
+        for fate in STORE_FATES {
+            for action in [UserAction::Nothing, UserAction::RevertToOld, UserAction::Delete] {
+                let context = format!("{start:?} / {fate:?} / {action:?}");
+                let mut model = Model { base: start.clone(), disk: on_disk(new()) };
+                let (mut sync, mut step) = PolicyFileSync::begin(&new(), &model.base, &model.disk);
+                while let SyncStep::Request(request) = step {
+                    assert_eq!(request, SyncRequest::StoreBase(SyncBase::Present(new())), "{context}: 기준 저장 말고 다른 요청");
+                    let report = perform(&mut model, &request, fate);
+                    step = sync.advance(report).unwrap_or_else(|err| panic!("{context}: {err}"));
+                    // 시작 기준(A·absent)은 이미 디스크 B와 다를 수 있다 — 제어가 새로 적게 한 기준만 사실이어야 한다.
+                    if model.base != start {
+                        assert_base_is_truthful(&model, &context);
+                    }
+                }
+                assert_eq!(model.disk, on_disk(new()), "{context}: 파일이 바뀌었다");
+                let reported_stored = matches!(step, SyncStep::Stop(SyncStop::InSync | SyncStop::AlreadyMatches));
+                if reported_stored {
+                    assert_eq!(model.base, SyncBase::Present(new()), "{context}");
+                } else {
+                    assert!(matches!(step, SyncStep::Stop(SyncStop::FileMatchesBaseUnsettled(_))), "{context}: {step:?}");
+                }
+                runs += 1;
+
+                match action {
+                    UserAction::Nothing => {}
+                    UserAction::RevertToOld => model.disk = on_disk(old()),
+                    UserAction::Delete => model.disk = DiskReading::Absent,
+                }
+                let (_, next) = PolicyFileSync::begin(&new(), &model.base, &model.disk);
+                let reading = classify_policy_file(&new(), &model.base, &model.disk);
+                match (&model.base, action) {
+                    (SyncBase::Present(kept), UserAction::Nothing) if kept == &new() => {
+                        assert_eq!(next, stop(SyncStop::AlreadyMatches), "{context}")
+                    }
+                    (_, UserAction::Nothing) => assert_eq!(next, settle(), "{context}: 실제 기준으로 다시 기준 저장만"),
+                    // 기준 B가 실제로 저장됐다면 되돌림·삭제는 사용자 편집·삭제다 — 쓰지 않는다.
+                    (SyncBase::Present(kept), _) if kept == &new() => {
+                        assert!(matches!(reading, PolicyFileReading::UserChanged { .. }), "{context}");
+                        assert_eq!(next, stop(SyncStop::NotWritable(reading)), "{context}");
+                    }
+                    // 기준 저장이 닿지 않았다 — 앞 기준에 따라 판정한다. 보호를 주장하지 않는 자리다.
+                    _ => {
+                        assert!(!reported_stored, "{context}");
+                        assert_eq!(model.base, start, "{context}");
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(runs, 5 * 4 * 3);
 }

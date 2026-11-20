@@ -123,6 +123,7 @@ fn no_product_source_calls_the_new_module() {
         "PolicySourcesMatch",
         "sync_order",
         "PolicyFileSync",
+        "begin_cleanup",
         "SyncRequest",
         "base_for_new_policy",
     ];
