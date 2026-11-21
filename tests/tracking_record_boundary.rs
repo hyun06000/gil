@@ -1,7 +1,7 @@
 //! 구현 순서 3a(정책 기록 자료형과 부분 검증)와 그 뒤의 동기화 순서 제어(편의상 3b), 정책 원장과
 //! 관리 사건의 정책 연결 검사(편의상 3c), 그 두 시점의 추가 전후 보존 검사(편의상 3d), 기준점·보관 시도 기록의
 //! 한 시점 일관성 검사(편의상 3e), 그 두 시점 비교(편의상 3f), 보관 대기·대체 위치 구분과 대체된 사건의 기준점 추가 거절
-//! (편의상 3g)이 **제품 저장 경로를 바꾸지 않았는가.**
+//! (편의상 3g), 실제 사이클 참조의 존재·닫힘·체인 소속과 발급 번호 관계 검사(편의상 3h)가 **제품 저장 경로를 바꾸지 않았는가.**
 //!
 //! 모든 빌드 구성에서 짓는다. 시험 자료는 합성 프로젝트다(독립 임시 폴더, 프로세스 번호가 붙은 이름).
 //!
@@ -19,6 +19,9 @@
 //! - 3g 의 위치 구분·대체된 사건의 기준점 추가 거절도 저장 경로가 아니다. 대체된 사건(M2)과 보관 대기 사건(M3)이 든 기록과,
 //!   그 M2 에 뒤늦게 기준점이 적힌 기록도 형식 10/11 은 `UnknownFormat`, 알려진 형식은 모르는 칸으로 각각 거절하고 폴더를
 //!   바꾸지 않는다. 대체·보관 대기를 담는 새 저장 칸이나 플래그도 없다.
+//! - 3h 의 사이클 참조 검사도 저장 경로가 아니다. 과거 경계로 되돌아간 사건·같은 경계의 연속 사건·대기 중 인터뷰 뒤 다른 경계에서
+//!   보관한 사건처럼 실제 사이클 참조와 발급 번호가 든 기록도 형식 10/11 은 `UnknownFormat`, 알려진 형식은 모르는 칸으로 거절하고
+//!   폴더를 바꾸지 않는다. 사건 칸이 사이클을 가리켜도 로더가 그 참조를 읽어 따르는 길이 생기지 않았다.
 //! - 새 모듈은 `src/artifact/tracking_record/` 밖의 어떤 소스에서도 불리지 않는다.
 
 mod common;
@@ -355,6 +358,73 @@ fn replaced_and_rearchived_records_are_each_refused_untouched() {
     }
 }
 
+/// 실제 사이클 참조와 발급 번호가 든 사건 넷 — `start`(경계 `null`), C1 에서 승인·보관(발급 2), 같은 C1 경계의 대기(발급 2,
+/// 대체됨), 과거 경계 C1 에서 승인하고 대기 중 인터뷰 C2 뒤 C2 에서 보관(발급 3). 3h 가 받아들이는 꼴의 합성 값이며 실제 사건
+/// 기록이 아니다.
+fn synthetic_cycle_ref_events() -> Value {
+    let mut events = synthetic_events();
+    let more: Value = serde_norway::from_str(
+        "- id: M2\n  kind: scope_change\n  chain_ref: chain:C1\n  after_cycle_ref: cycle:C1\n  review_cycle_ref: cycle:C1\n  \
+         next_cycle_id: 2\n  policy_before_ref: policy:P1\n  policy_after_ref: policy:P2\n  world_before_ref: snapshot:A1\n  \
+         baseline: {after_cycle_ref: cycle:C1, next_cycle_id: 2, snapshot_ref: snapshot:A1, attempts: [{result: archived}]}\n\
+         - id: M3\n  kind: scope_change\n  chain_ref: chain:C1\n  after_cycle_ref: cycle:C1\n  review_cycle_ref: cycle:C1\n  \
+         next_cycle_id: 2\n  policy_before_ref: policy:P2\n  policy_after_ref: policy:P3\n  world_before_ref: snapshot:A1\n  \
+         baseline: {snapshot_ref: null, attempts: []}\n\
+         - id: M4\n  kind: scope_change\n  chain_ref: chain:C1\n  after_cycle_ref: cycle:C1\n  review_cycle_ref: cycle:C1\n  \
+         next_cycle_id: 2\n  policy_before_ref: policy:P3\n  policy_after_ref: policy:P4\n  world_before_ref: snapshot:A1\n  \
+         baseline: {after_cycle_ref: cycle:C2, next_cycle_id: 3, snapshot_ref: snapshot:A1, \
+         attempts: [{result: failed, cause: external_change}, {result: archived}]}\n",
+    )
+    .unwrap();
+    events.as_sequence_mut().unwrap().extend(more.as_sequence().unwrap().iter().cloned());
+    events
+}
+
+#[test]
+fn records_carrying_cycle_references_are_refused_untouched() {
+    let known = gil::newest_known_format();
+    let events = synthetic_cycle_ref_events();
+    for format in [10u32, 11] {
+        let root = started(&format!("cycle-refs-format-{format}"));
+        edit_state(&root, |file| {
+            file["format"] = Value::from(format);
+            let mut tracking = synthetic_tracking();
+            tracking["next_policy_id"] = Value::from(5);
+            for name in ["P2", "P3", "P4"] {
+                let mut next = tracking["policies"][0].clone();
+                next["id"] = Value::from(name);
+                tracking["policies"].as_sequence_mut().unwrap().push(next);
+            }
+            tracking["next_event_id"] = Value::from(5);
+            tracking["events"] = events.clone();
+            file["tracking"] = tracking;
+        });
+        let before = tree(&root);
+        let path = root.join(gil::STATE_PATH);
+        match gil::load(common::spec(), &path) {
+            Err(StoreError::UnknownFormat { found, known: said }) => assert_eq!((found, said), (format, known)),
+            other => panic!("사이클 참조가 든 형식 {format} 이 읽혔다: {other:?}"),
+        }
+        assert!(ProjectSession::open(common::spec(), &path).is_err());
+        assert!(ProjectSession::open_read_only(common::spec(), &path).is_err());
+        assert_eq!(tree(&root), before, "형식 {format} 을 거절하면서 폴더를 바꿨다");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    let root = started("cycle-refs-known-format");
+    let path = root.join(gil::STATE_PATH);
+    edit_state(&root, |file| file["events"] = events.clone());
+    let before = tree(&root);
+    match gil::load(common::spec(), &path) {
+        Err(StoreError::Decode(err)) => assert!(err.to_string().contains("events"), "{err}"),
+        other => panic!("사이클 참조가 든 `events` 가 읽혔다: {other:?}"),
+    }
+    assert!(ProjectSession::open(common::spec(), &path).is_err());
+    assert!(ProjectSession::open_read_only(common::spec(), &path).is_err());
+    assert_eq!(tree(&root), before, "`events` 를 거절하면서 폴더를 바꿨다");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 #[test]
 fn no_product_source_calls_the_new_module() {
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
@@ -418,6 +488,20 @@ fn no_product_source_calls_the_new_module() {
         "ReplacedInList",
         "unjudged_late_attempts",
         "POSITIONS_DO_NOT_SHOW",
+        "event_cycles",
+        "check_cycle_refs",
+        "EventCycleFacts",
+        "CycleRefsAgree",
+        "CycleRefProblem",
+        "CycleField",
+        "RefReading",
+        "EventRefs",
+        "LookupProblem",
+        "ChainLookup",
+        "NullNotJudged",
+        "UnwrittenNotJudged",
+        "chains_not_looked_up",
+        "CYCLE_REFS_DO_NOT_SHOW",
     ];
     let mut users = Vec::new();
     let mut stack = vec![src.clone()];
