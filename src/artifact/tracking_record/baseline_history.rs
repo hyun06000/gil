@@ -143,7 +143,9 @@ fn names_in_place(side: Side, events: &[BaselineFacts]) -> Option<MatchProblem> 
 }
 
 /// 대응이 서면 견줄 짝(앞 사건, 뒤 사건)을, 아니면 그 이유를 모두 돌려준다.
-fn match_events<'a>(
+///
+/// 3i(`event_cycle_history`)가 같은 사건의 승인 당시 칸을 견줄 짝을 정할 때도 이 규칙을 그대로 쓴다.
+pub(super) fn match_events<'a>(
     before: &'a [BaselineFacts],
     after: &'a [BaselineFacts],
 ) -> Result<Vec<(&'a BaselineFacts, &'a BaselineFacts)>, Vec<MatchProblem>> {
@@ -194,7 +196,7 @@ pub(crate) enum BaselineChange {
     AttemptsAfterBaseline { event: EventName, added: usize },
 }
 
-fn boundary_text(slot: &BaselineSlot<Option<CycleRef>>) -> String {
+pub(super) fn boundary_text(slot: &BaselineSlot<Option<CycleRef>>) -> String {
     match slot {
         BaselineSlot::Unwritten => "칸 없음".to_string(),
         BaselineSlot::Written(None) => "null".to_string(),

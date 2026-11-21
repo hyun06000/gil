@@ -22,6 +22,9 @@
 //! - 3h 의 사이클 참조 검사도 저장 경로가 아니다. 과거 경계로 되돌아간 사건·같은 경계의 연속 사건·대기 중 인터뷰 뒤 다른 경계에서
 //!   보관한 사건처럼 실제 사이클 참조와 발급 번호가 든 기록도 형식 10/11 은 `UnknownFormat`, 알려진 형식은 모르는 칸으로 거절하고
 //!   폴더를 바꾸지 않는다. 사건 칸이 사이클을 가리켜도 로더가 그 참조를 읽어 따르는 길이 생기지 않았다.
+//! - 3i(편의상)의 승인 당시 세 칸 두 시점 보존 검사도 저장 경로가 아니다. 같은 사건의 앞(승인 경계에서 대기) 기록, 다른 경계에서
+//!   보관한 뒤(세 칸 그대로) 기록, 승인 경계·발급 번호를 고쳐 쓴 뒤 기록도 형식 10/11 은 `UnknownFormat`, 알려진 형식은 모르는
+//!   칸으로 각각 거절하고 폴더를 바꾸지 않는다. 앞뒤 기록을 견주어 저장하는 길도 생기지 않았다.
 //! - 새 모듈은 `src/artifact/tracking_record/` 밖의 어떤 소스에서도 불리지 않는다.
 
 mod common;
@@ -425,6 +428,66 @@ fn records_carrying_cycle_references_are_refused_untouched() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// 같은 M2 의 앞뒤 세 기록 — 앞: C1 에서 승인(발급 2)하고 실패 하나로 대기. 뒤: 대기 중 인터뷰 C2 뒤 C2 에서 보관했고 승인 칸은
+/// 그대로(3i 가 받아들이는 꼴). 고쳐 쓴 뒤: 같은 보관에 맞춰 승인 경계·발급 번호를 C2·3 으로 고쳤다(3i 가 거절하는 꼴). 합성 값이다.
+fn synthetic_approval_history_events() -> [(&'static str, Value); 3] {
+    let before = synthetic_waiting_events();
+    let mut kept = before.clone();
+    kept[1]["baseline"] = serde_norway::from_str(
+        "{after_cycle_ref: cycle:C2, next_cycle_id: 3, snapshot_ref: snapshot:A1, \
+         attempts: [{result: failed, cause: external_change}, {result: archived}]}",
+    )
+    .unwrap();
+    let mut rewritten = kept.clone();
+    rewritten[1]["after_cycle_ref"] = Value::from("cycle:C2");
+    rewritten[1]["next_cycle_id"] = Value::from(3);
+    [("before", before), ("kept", kept), ("rewritten", rewritten)]
+}
+
+#[test]
+fn before_and_after_approval_records_are_each_refused_untouched() {
+    let known = gil::newest_known_format();
+    for (label, events) in synthetic_approval_history_events() {
+        for format in [10u32, 11] {
+            let root = started(&format!("approval-{label}-format-{format}"));
+            edit_state(&root, |file| {
+                file["format"] = Value::from(format);
+                let mut tracking = synthetic_tracking();
+                tracking["next_policy_id"] = Value::from(3);
+                let second = tracking["policies"][0].clone();
+                tracking["policies"].as_sequence_mut().unwrap().push(second);
+                tracking["policies"][1]["id"] = Value::from("P2");
+                tracking["next_event_id"] = Value::from(3);
+                tracking["events"] = events.clone();
+                file["tracking"] = tracking;
+            });
+            let before = tree(&root);
+            let path = root.join(gil::STATE_PATH);
+            match gil::load(common::spec(), &path) {
+                Err(StoreError::UnknownFormat { found, known: said }) => assert_eq!((found, said), (format, known)),
+                other => panic!("{label} 기록의 형식 {format} 이 읽혔다: {other:?}"),
+            }
+            assert!(ProjectSession::open(common::spec(), &path).is_err());
+            assert!(ProjectSession::open_read_only(common::spec(), &path).is_err());
+            assert_eq!(tree(&root), before, "{label} 기록의 형식 {format} 을 거절하면서 폴더를 바꿨다");
+            let _ = std::fs::remove_dir_all(&root);
+        }
+
+        let root = started(&format!("approval-{label}-known-format"));
+        let path = root.join(gil::STATE_PATH);
+        edit_state(&root, |file| file["events"] = events.clone());
+        let before = tree(&root);
+        match gil::load(common::spec(), &path) {
+            Err(StoreError::Decode(err)) => assert!(err.to_string().contains("events"), "{err}"),
+            other => panic!("{label} 기록의 `events` 가 읽혔다: {other:?}"),
+        }
+        assert!(ProjectSession::open(common::spec(), &path).is_err());
+        assert!(ProjectSession::open_read_only(common::spec(), &path).is_err());
+        assert_eq!(tree(&root), before, "{label} 기록의 `events` 를 거절하면서 폴더를 바꿨다");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+}
+
 #[test]
 fn no_product_source_calls_the_new_module() {
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
@@ -502,6 +565,18 @@ fn no_product_source_calls_the_new_module() {
         "UnwrittenNotJudged",
         "chains_not_looked_up",
         "CYCLE_REFS_DO_NOT_SHOW",
+        "event_cycle_history",
+        "check_event_cycle_history",
+        "EventCycleHistoryKept",
+        "EventCycleHistoryProblem",
+        "ApprovalChange",
+        "ApprovalField",
+        "PastApproval",
+        "BeforeRefs",
+        "AfterRefs",
+        "match_events",
+        "boundary_text",
+        "APPROVAL_HISTORY_DOES_NOT_SHOW",
     ];
     let mut users = Vec::new();
     let mut stack = vec![src.clone()];

@@ -88,6 +88,12 @@
 > 비감소(이름 자리가 섰을 때만, 같은 값 허용), `baseline.next_cycle_id` ≥ `next_cycle_id` — 를 검사하고, 3e 검사와 이름 자리 규칙은 그대로 불러
 > 다른 갈래로 돌려준다. `null`·칸 없음은 거절하지도 승인하지도 않고 성공 값에 드러낸다. 체인 목록의 조회가 모호하면 고르지 않고 거절한다.
 > 저장 당시의 닫힘, `review_cycle_ref`, 입력·체인 목록의 완전한 추출, 체인 사이의 이관(O-3), T8·§6은 말하지 않는다. **T7 전체의 완료가 아니다.**
+>
+> **3번 안의 승인 당시 세 칸 두 시점 보존 검사(편의상 「3i」, 2026-11-21, 제품 미연결).** 같은 모듈의 `event_cycle_history.rs`가 건네받은 두
+> 시점의 승인 당시 세 칸 보존을 검사한다: 앞선 사건의 `chain_ref`·`after_cycle_ref`·`next_cycle_id`가 그대로인가. 근거는 §5.1·T1 「추가만 한다」,
+> §5.3 저장 1·저장 2, §6.3의 재시도(보관 경계는 달라질 수 있으나 승인 경계를 고치지 않는다)다. 각 시점에 3h를, `baseline`에 3g(그 안의 3f)를
+> 그대로 부르고 사건 대응은 3f의 규칙을 쓴다. 두 관측 사이의 되돌림, 입력의 완전한 추출, `null`·칸 없음의 종류별 허용, `review_cycle_ref`·
+> `world_before_ref`, Chain 목록·등록부 매핑의 보존, O-3은 말하지 않는다. **사건 기록 전체의 보존이 아니다.**
 
 제품 의미의 정본은 [Will Model](GIL_Will_Model_v0.1.md), [Cycle Model](GIL_Cycle_Model_v0.1.md),
 [Artifact Model](GIL_Artifact_Model_v0.1.md), [Storage Model](GIL_Storage_Model_v0.1.md),

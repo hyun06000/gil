@@ -26,18 +26,20 @@ use EventKind::{RestoreResult, ScopeChange, Start};
 mod common;
 
 // ── 체인: 실제 전이로 만든다 ───────────────────────────────────────────────
+//
+// 아래의 `pub(super)` 도움 함수는 두 시점 보존 검사(「3i」, `event_cycle_history_tests`)도 같은 세계를 쓰려고 연 것이다. 동작은 같다.
 
-fn x1() -> ExistenceRef {
+pub(super) fn x1() -> ExistenceRef {
     ExistenceRef::new(1).expect("X1")
 }
 
-fn rules() -> RuleSet {
+pub(super) fn rules() -> RuleSet {
     common::spec().for_chain()
 }
 
 /// 지금 서 있는 열린 Interview 를 Question → Interpretation → 승인된 Synthesis → Outcome 으로 걷고 `action` 방향으로 닫는다.
 /// 돌려주는 것은 그 Synthesis 의 주소.
-fn close_interview(cycles: &mut Cycles, action: &str) -> StepRef {
+pub(super) fn close_interview(cycles: &mut Cycles, action: &str) -> StepRef {
     let (synthesis, report) = {
         let cycle = cycles.current_mut();
         for kind in [NodeKind::Question, NodeKind::Interpretation, NodeKind::Synthesis] {
@@ -72,16 +74,16 @@ fn close_interview(cycles: &mut Cycles, action: &str) -> StepRef {
     synthesis
 }
 
-fn open_interview(cycles: &mut Cycles) {
+pub(super) fn open_interview(cycles: &mut Cycles) {
     cycles.open_child(CycleKind::Interview, x1()).expect("적어 둔 방향대로 연다");
 }
 
-fn ch(number: u32) -> ChainRef {
+pub(super) fn ch(number: u32) -> ChainRef {
     ChainRef::new(number).expect("0 이 아니다")
 }
 
 /// 모든 시험의 세계 — 위 그림 그대로.
-fn world() -> Vec<Chain> {
+pub(super) fn world() -> Vec<Chain> {
     let mut first = Cycles::start_at(rules(), x1(), a(1), 1);
     close_interview(&mut first, "open_child");
     open_interview(&mut first);
@@ -128,20 +130,20 @@ fn the_world_is_what_the_fixture_says() {
 
 // ── 사건: 합성 입력 ─────────────────────────────────────────────────────────
 
-fn m(number: u32) -> EventName {
+pub(super) fn m(number: u32) -> EventName {
     EventName::new(number).expect("0 이 아니다")
 }
 
-fn a(number: u32) -> SnapshotRef {
+pub(super) fn a(number: u32) -> SnapshotRef {
     SnapshotRef::new(number).expect("0 이 아니다")
 }
 
-fn c(number: u32) -> CycleRef {
+pub(super) fn c(number: u32) -> CycleRef {
     CycleRef::new(number).expect("0 이 아니다")
 }
 
 /// `A1`…`A<count>` 를 아는 합성 등록부. 주소는 아무 객체도 가리키지 않는 합성 값이다.
-fn registry(count: u32) -> SnapshotRegistry {
+pub(super) fn registry(count: u32) -> SnapshotRegistry {
     let records = (1..=count)
         .map(|n| (n, ManifestAddress::from_parts("sha256", &[u8::try_from(n).unwrap(); 32]).unwrap()))
         .collect();
