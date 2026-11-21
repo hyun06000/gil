@@ -36,6 +36,10 @@
 //!
 //! 두 시점의 (사건의 사이클 칸, &[Chain], 등록부) ─check_event_cycle_history─▶ EventCycleHistoryKept   3h 두 번 + 3g 그대로 +
 //!                                          앞선 사건의 chain_ref·after_cycle_ref·next_cycle_id 보존 (event_cycle_history, 「3i」)
+//!
+//! 한 시점의 (PolicyLedger, EventPolicyLinks) + (사건의 사이클 칸, &[Chain], 등록부) ─check_event_inputs─▶ EventInputsAgree
+//!                                          3c 그대로 + 3h 그대로 + 두 입력의 사건 수·자리별 이름·같은 사건의 종류 대응
+//!                                          (event_inputs, 「3j」 — 실제 원장 추출·제품 연결 아님)
 //! ```
 //!
 //! # 「형식이 맞다」는 「승인됐고 적용됐다」가 아니다
@@ -56,7 +60,9 @@
 //!   건넨 실제 사이클 참조는 호출자가 건넨 `Chain` 목록의 읽기 전용 조회로 존재·소속·닫힘을, 발급 번호는 T7 의 비교를 본다
 //!   ([`event_cycles`], 「3h」 — T7 의 일부. 참조 부재의 종류별 의미는 판단하지 않는다). 건넨 두 시점 사이에서 앞선 사건의
 //!   승인 당시 세 칸(`chain_ref`·`after_cycle_ref`·`next_cycle_id`)이 그대로인지는 3h 를 각 시점에 그대로 부르고 본다
-//!   ([`event_cycle_history`], 「3i」 — 사건 기록 전체의 보존이 아니다).
+//!   ([`event_cycle_history`], 「3i」 — 사건 기록 전체의 보존이 아니다). 한 시점에 따로 건넨 3c 입력과 3h 입력이 같은 사건 목록을
+//!   나타내는지(사건 수·자리별 이름·같은 사건의 종류)는 두 검사를 그대로 부르고 본다([`event_inputs`], 「3j」 — 입력이 실제 원장에서
+//!   빠짐없이 뽑혔는지는 보지 않는다).
 //!   T5·T6·T7 의 나머지와 T8–T13 은 이 모듈이 검사하지 않는다([`UNCHECKED_CONDITIONS`]). 현재 세계·보관 대기·복원은 3·5·6번이 공유하는 §6 규칙의 몫이다.
 //!
 //! 이 모듈의 시험 자료는 모두 **합성 자료**다. 모니터가 실제로 승인한 기록이 아니다.
@@ -72,6 +78,7 @@ mod baseline_position;
 mod baseline_record;
 mod event_cycle_history;
 mod event_cycles;
+mod event_inputs;
 mod event_links;
 mod link_history;
 mod source;
@@ -89,6 +96,8 @@ mod baseline_record_tests;
 mod event_cycle_history_tests;
 #[cfg(test)]
 mod event_cycles_tests;
+#[cfg(test)]
+mod event_inputs_tests;
 #[cfg(test)]
 mod event_links_tests;
 #[cfg(test)]
@@ -124,6 +133,10 @@ pub(crate) use event_cycles::{
     RefReading, check_cycle_refs,
 };
 #[allow(unused_imports)]
+pub(crate) use event_inputs::{
+    EVENT_INPUTS_DO_NOT_SHOW, EventInputsAgree, EventInputsProblem, InputMismatch, InputSide, check_event_inputs,
+};
+#[allow(unused_imports)]
 pub(crate) use event_links::{
     EventKind, EventName, EventNamesError, EventPolicyLink, EventPolicyLinks, LINKS_DO_NOT_SHOW, LinkField,
     LinkProblem, PolicyLinksAgree, check_policy_links,
@@ -153,7 +166,7 @@ pub(crate) use wire::{StoredPolicy, StoredPolicyFile, StoredRules, StoredSyncBas
 /// [`PolicySourcesMatch`] 를 손에 넣었다고 이 조건들이 성립하는 것이 아니다. 사건·세계·사이클·보관
 /// 중단 표식·파일 쓰기 순서와의 관계는 후속 저장 구현이 같은 계약으로 검증한다.
 pub(crate) const UNCHECKED_CONDITIONS: [&str; 12] = [
-    "T1 사건 이름(M1…)과 사건 발급기 — event_links 가 건넨 입력 안에서만 검사한다. 실제 원장 전체에서 뽑혔는지는 모른다. 「추가만 한다」는 link_history 가 건넨 두 시점의 정책 판과 사건의 정책 연결 칸에만, baseline_history 가 건넨 두 시점의 기준점 입력에서 앞선 사건이 같은 자리·이름·종류로 남았는지와 기준점 칸·시도 결과 순서에만, event_cycle_history 가 건넨 두 시점에서 앞선 사건의 chain_ref·after_cycle_ref·next_cycle_id 에만 검사한다",
+    "T1 사건 이름(M1…)과 사건 발급기 — event_links 가 건넨 입력 안에서만 검사한다. 실제 원장 전체에서 뽑혔는지는 모른다. 한 시점에 따로 건넨 정책 연결 입력과 사이클 입력이 같은 사건 목록(사건 수·자리별 이름·같은 사건의 종류)인지만 event_inputs 가 본다. 「추가만 한다」는 link_history 가 건넨 두 시점의 정책 판과 사건의 정책 연결 칸에만, baseline_history 가 건넨 두 시점의 기준점 입력에서 앞선 사건이 같은 자리·이름·종류로 남았는지와 기준점 칸·시도 결과 순서에만, event_cycle_history 가 건넨 두 시점에서 앞선 사건의 chain_ref·after_cycle_ref·next_cycle_id 에만 검사한다",
     "T3 사건의 정책 사슬 — event_links 가 건넨 입력 안에서만 검사한다",
     "T4 각 정책이 정확히 한 start·scope_change 의 after, 마지막 정책 = 마지막 사건의 after — event_links 가 건넨 입력 안에서만 검사한다. 적용 여부는 판단하지 않는다",
     "T5 기준점이 없는 사건의 위치 — baseline_position 이 건넨 한 시점 목록 안에서 보관 대기·대체를 구분하고, 건넨 두 시점에서 변경 전부터 목록상 대체된 사건의 기준점 추가만 거절한다. 실제 원장의 끝 잘림, 두 시점 사이의 실행 순서, 대체된 사건의 실패 기록 추가의 의미, 보관 실행 권한은 보지 않는다",

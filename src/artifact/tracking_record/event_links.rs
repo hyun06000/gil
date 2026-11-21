@@ -44,7 +44,7 @@ use crate::refs::RefSyntaxError;
 
 /// 정책 연결 검사가 성공해도 **보이지 않은** 것.
 pub(crate) const LINKS_DO_NOT_SHOW: [&str; 11] = [
-    "입력이 실제 전체 원장·사건 기록에서 빠짐없이 뽑혔는가 — 후속 연결 계층의 책임",
+    "입력이 실제 전체 원장·사건 기록에서 빠짐없이 뽑혔는가 — 후속 연결 계층의 책임. 한 시점의 사이클 입력(3h)과 사건 수·이름·종류가 대응하는지만 event_inputs(「3j」)가 따로 본다",
     "모니터 승인 응답과 proposal_digest 의 연결, 사용자 승인 사실",
     "정책의 실제 적용과 사건 실행의 성공",
     "사건의 세계·사이클 참조와 경계 — T7 의 after_cycle_ref·next_cycle_id, T8 의 world_before_ref, T9 — 건넨 실제 사이클 참조의 존재·체인 소속·닫힘과 발급 번호 비교만 event_cycles(「3h」)가 따로 본다. 그 성공도 null·칸 없음의 의미를 판단하지 않는다",
