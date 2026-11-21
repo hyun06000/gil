@@ -6,6 +6,9 @@
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
+#[cfg(test)]
+mod lock_probe;
+
 const KEEP_BACKUPS: usize = 5;
 
 /// What `load` read: the exact bytes, whether the file existed, and their digest.
@@ -57,10 +60,15 @@ pub(crate) fn store(path: &Path, loaded: &Loaded, text: &str, what: &str) -> Res
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).ok_or_else(|| format!("{what} path has no file name"))?;
 
     // Keep the lock file in place: unlinking a held lock would let another writer lock a new inode.
+    let lock_path = dir.join(format!("{name}.gil-lock"));
     let lock = std::fs::OpenOptions::new().read(true).write(true).create(true).truncate(false)
-        .open(dir.join(format!("{name}.gil-lock")))
+        .open(&lock_path)
         .map_err(|err| format!("cannot open the {what} lock: {err}"))?;
-    lock.try_lock().map_err(|_| format!("another GIL registration of {what} is in progress; retry when it has finished"))?;
+    let attempt = lock.try_lock();
+    // Test builds only: note the error as returned before it is replaced by the message below.
+    #[cfg(test)]
+    lock_probe::observe(&lock_path, &attempt);
+    attempt.map_err(|_| format!("another GIL registration of {what} is in progress; retry when it has finished"))?;
     ensure_unchanged(path, loaded, what)?;
 
     let id = format!("{}-{}", now_unix(), std::process::id());
@@ -149,6 +157,62 @@ mod tests {
         assert!(err.contains("changed after it was read"), "{err}");
         assert_eq!(std::fs::read(&path).unwrap(), b"{\"a\":3}");
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Control for the test-only lock probe, not a reproduction of any past intermittent failure:
+    /// a second open of the same lock file holds the lock, so `store`'s `try_lock` must fail.
+    /// Both opens are in this thread, so no timing or synchronization is involved.
+    #[test]
+    fn lock_probe_records_the_returned_error_and_store_keeps_its_message() {
+        let dir = super::super::tests::scratch("lock-probe");
+        let path = dir.join("settings.json");
+        std::fs::write(&path, b"{\"a\":1}").unwrap();
+        let loaded = load(&path, 1024, "settings").unwrap();
+        let lock_path = dir.join("settings.json.gil-lock");
+        let holder = std::fs::OpenOptions::new().read(true).write(true).create(true).truncate(false)
+            .open(&lock_path).unwrap();
+        holder.try_lock().unwrap();
+
+        let err = store(&path, &loaded, "{\"a\":2}\n", "settings").unwrap_err();
+        assert_eq!(err, "another GIL registration of settings is in progress; retry when it has finished");
+        assert_eq!(std::fs::read(&path).unwrap(), b"{\"a\":1}");
+        let names: Vec<String> = std::fs::read_dir(&dir).unwrap().filter_map(Result::ok)
+            .map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        assert!(names.iter().all(|n| n == "settings.json" || n == "settings.json.gil-lock"), "{names:?}");
+
+        let lock = lock_probe::relative_to_temp(&lock_path);
+        assert!(lock.starts_with("$TMPDIR/gil-install-lock-probe-"), "{lock}");
+        let seen: Vec<_> = lock_probe::failures().into_iter().filter(|r| r.lock == lock).collect();
+        assert_eq!(seen.len(), 1, "{seen:?}");
+        let record = &seen[0];
+        assert_eq!(record.variant, "WouldBlock", "{record:?}");
+        // Observed with Rust 1.97.1: this variant's Debug is the quoted word, so `variant` is kept apart.
+        assert_eq!(record.debug, "\"WouldBlock\"");
+        assert_eq!(record.kind, None);
+        assert_eq!(record.raw_os_error, None);
+        assert_eq!(record.pid, std::process::id());
+        assert_eq!(record.thread_attempt, 1);
+        assert_eq!(record.since_previous_on_thread_us, None);
+        let line = lock_probe::render(record);
+        assert!(line.contains("raw_os_error=not provided (TryLockError::WouldBlock carries no io::Error)"), "{line}");
+        assert!(line.contains("RUST_TEST_THREADS="), "{line}");
+        assert!(!line.contains(&std::env::temp_dir().display().to_string()), "{line}");
+        drop(holder);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// The probe's formatting of the other variant, from a constructed value (not an OS result).
+    #[test]
+    fn lock_probe_keeps_the_inner_io_error_of_the_error_variant() {
+        let error = std::fs::TryLockError::Error(std::io::Error::from_raw_os_error(5));
+        let record = lock_probe::describe(&error);
+        assert_eq!(record.variant, "Error");
+        assert_eq!(record.raw_os_error, Some(5));
+        assert!(record.kind.is_some());
+        // Observed with Rust 1.97.1: this variant's Debug is the inner io::Error's, without a wrapper.
+        assert!(record.debug.starts_with("Os { code: 5"), "{}", record.debug);
+        let line = lock_probe::render(&record);
+        assert!(line.contains("raw_os_error=5"), "{line}");
     }
 
     #[test]
