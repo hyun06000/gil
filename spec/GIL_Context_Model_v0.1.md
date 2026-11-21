@@ -387,7 +387,7 @@ M3의 `gil context`는 전체 Snapshot registry나 파일 목록을 반복하지
   현재 위치에서 유도한 공개 SnapshotRef
   작업 폴더가 그 세계와 같은지(clean / dirty)
   현재 열린 Node가 변경을 확정할 수 있는 Verify인지
-  dirty인 비-Verify 자리라면 gil restore로 되돌릴 수 있다는 다음 행동
+  dirty인 비-Verify 자리라면 의도 확인·필요한 변경 보존과 제품이 허용하는 복구 절차 안내
 ```
 
 내부 manifest·blob 주소, Snapshot registry 전체, 모든 파일의 경로와 변경 목록, 이전 Cycle마다

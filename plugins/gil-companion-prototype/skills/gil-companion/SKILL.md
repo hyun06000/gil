@@ -111,6 +111,29 @@ GIL's own record/approval writes and explicitly authorized recovery use their ex
 and contracts; never edit `.gil` by hand. These are agent instructions, not an OS write lock.
 The current dirty gate detects changes at GIL boundaries; it does not intercept other tools.
 
+**Before closing, reconcile the world with what you know.** Inspect the available GIL world status
+and changed paths, then compare the actual differences with the work you can explain from your
+current session context. A path list alone does not explain its contents or author. A change you
+cannot explain is an unknown-origin change, including your own forgotten edit; do not assume the
+user made it. Pause closing, summarize the differences and their effects, and ask the user about
+origin and intent. Never silently accept, discard or restore such changes.
+Within Verify, the agreed general workflow requires explicit Monitor acceptance or restoration
+before closing. That general Monitor approval path is not yet connected in the current product:
+report the limitation and keep closing paused; do not invent a button/tool, substitute a chat reply
+for Monitor approval, or reuse failure-recovery approval for this purpose.
+Outside Verify, ask whether the change is needed, preserve needed contents and intent before any
+restoration, and follow only the recovery path supported by the current product. Confirm the world
+matches its baseline before closing the same node; perform the needed change in the next Cycle's
+Verify. Do not jump to Verify with unresolved changes or use approval to grant writes to another
+Step. Do not invent a preservation store or overwrite existing files; if safe preservation or recovery
+is unavailable, explain the limitation and pause.
+For `.gilignore`, use the existing explicit tracking-policy approval contract when available; a disk
+edit is a proposal, not activation. Policy history belongs to the forward-moving Journey even though
+the file is visible in the filesystem. Never roll it back with the world or add duplicate general-file
+approval. Its new policy engine is not yet connected to product capture/restore; do not claim it is.
+World records and the agent's recorded actions and learning must correspond in one version.
+This does not require author tracking, write hooks or a new Snapshot for every node.
+
 1. **Start and show.** Start a new project once. A successful `gil_start` receipt carries the exact
    next call, `show_gil_monitor({"scope_id": …})`, in its opening guidance and its final text block:
    `structuredContent.next_call` carries the same name and arguments for structured-only Hosts;
