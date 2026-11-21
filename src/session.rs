@@ -43,6 +43,9 @@ use crate::store::{self, LEGACY_WALK_PATH, StoreError};
 use crate::will::ActionContract;
 
 mod evidence;
+// Implementation order 1b: the explicit 6 → 8 / 7 → 9 transition (development profile only).
+#[cfg(feature = "will-end-history")]
+pub(crate) mod format_transition;
 #[cfg(feature = "product-safety")]
 mod revisit_recovery;
 // Read-only: a closed Verify's declared evidence from its own Snapshot (exploration profile).

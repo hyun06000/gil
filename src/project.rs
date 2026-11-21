@@ -140,6 +140,17 @@ impl Project {
         self.end_history
     }
 
+    /// The **candidate** of the explicit 6 → 8 / 7 → 9 transition (Storage Transition Contract
+    /// §7): the same Project, now recording end results. Every ended Will of a format 6/7 record
+    /// was restored as `achieved` — that is what format 6/7 meant — and keeps that result; nothing
+    /// is reclassified. The caller validates the result through a full format 8/9 load and a
+    /// value-preservation check before anything is written; nothing calls this on its own.
+    #[cfg(feature = "will-end-history")]
+    pub(crate) fn into_end_history_candidate(mut self) -> Project {
+        self.end_history = true;
+        self
+    }
+
     /// 그 이름의 약속이 **이미 끝났다면** 그 기록. 진행 중이거나 없는 이름이면 `None`.
     pub fn ended_will(&self, will: WillRef) -> Option<&EndedWill> {
         self.existences
@@ -1557,7 +1568,12 @@ impl std::fmt::Display for ActionError {
             ActionError::CycleReport { source, .. } => write!(f, "{source}"),
             ActionError::CycleDirection { source, .. } => write!(f, "{source}"),
             ActionError::RevisitPending { from, target } => f.write_str(&crate::tr!("action.revisit_pending", from = from, target = target)),
-            ActionError::EndHistoryUnsupported { format } => f.write_str(&crate::tr!("action.unachieved_needs_conversion", format = format)),
+            // A build that has the explicit transition names it — only for the formats it converts;
+            // every other build and format keeps the notice that no conversion is available.
+            ActionError::EndHistoryUnsupported { format } => match crate::store::transition_target(*format) {
+                Some(target) => f.write_str(&crate::tr!("action.unachieved_needs_transition", format = format, target = target)),
+                None => f.write_str(&crate::tr!("action.unachieved_needs_conversion", format = format)),
+            },
             ActionError::UnachievedWillMismatch { asked, active: Some((will, target)) } => f.write_str(&crate::tr!("action.unachieved_mismatch", asked = asked, will = will, target = target)),
             ActionError::UnachievedWillMismatch { asked, active: None } => f.write_str(&crate::tr!("action.unachieved_no_active", asked = asked)),
             ActionError::WillAlreadyEnded { will, target, result } => f.write_str(&crate::tr!("action.will_already_ended", will = will, target = target, result = result)),

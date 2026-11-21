@@ -808,6 +808,8 @@ pub(crate) fn verify_storage_tree(gil: &Path) -> io::Result<()> {
         &["artifacts", "manifests", "sha256"],
         &["artifacts", "tmp"],
         &["restore"],
+        // The explicit format transition's original-state copies (Storage Transition Contract §7.3).
+        &["conversion"],
     ] {
         let mut below = Chain::open(chain.path())?;
         let mut present = true;

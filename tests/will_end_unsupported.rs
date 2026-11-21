@@ -143,3 +143,47 @@ fn a_new_project_keeps_the_done_list_shape_of_its_format() {
     assert!(text.contains("done_wills: []"), "{text}");
     assert!(!text.contains("ended_wills") && !text.contains("end_result"), "{text}");
 }
+
+/// 명시적 전환 도구(구현 순서 1b)는 종료 이력을 아는 빌드에만 있다. 이 빌드는 그 도구를 내놓지
+/// 않고, 이름을 불러도 실행되지 않으며 폴더의 어느 파일도 바꾸지 않는다.
+#[test]
+fn the_transition_tools_are_not_offered_and_calling_them_changes_nothing() {
+    use std::io::{BufRead, BufReader};
+    let root = started("end-unsupported-transition");
+    let before = tree(&root);
+    let settings = std::env::temp_dir().join(format!("gil-end-unsupported-transition-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&settings);
+    let mut kid = Command::new(env!("CARGO_BIN_EXE_gil")).args(["mcp", "--serve"])
+        .env("GIL_MONITOR_STATE_DIR", settings.join("bindings")).current_dir(std::env::temp_dir())
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    let mut out = BufReader::new(kid.stdout.take().unwrap());
+    let mut stdin = kid.stdin.take().unwrap();
+    let mut ask = |id: i64, method: &str, params: serde_json::Value| -> serde_json::Value {
+        writeln!(stdin, "{}", serde_json::json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params})).unwrap();
+        stdin.flush().unwrap();
+        if method == "initialize" {
+            writeln!(stdin, "{}", serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"})).unwrap();
+        }
+        let mut line = String::new();
+        out.read_line(&mut line).unwrap();
+        serde_json::from_str(&line).unwrap()
+    };
+    ask(1, "initialize", serde_json::json!({"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "gil-test", "version": "0"}}));
+    let listed = ask(2, "tools/list", serde_json::json!({}));
+    let names: Vec<&str> = listed["result"]["tools"].as_array().unwrap().iter().filter_map(|t| t["name"].as_str()).collect();
+    assert!(!names.is_empty());
+    assert!(names.iter().all(|n| !n.starts_with("gil_format_transition_")), "{names:?}");
+    let digest = "a".repeat(64);
+    for (id, name, arguments) in [
+        (3, "gil_format_transition_check", serde_json::json!({"project_root": root})),
+        (4, "gil_format_transition_apply", serde_json::json!({"project_root": root, "current_format": 6, "target_format": 8,
+            "state_sha256": digest, "proposal_sha256": digest, "user_approved": true})),
+    ] {
+        let reply = ask(id, "tools/call", serde_json::json!({"name": name, "arguments": arguments}));
+        assert!(reply.get("error").is_some() || reply["result"]["isError"] == serde_json::json!(true), "{name} ran: {reply}");
+        assert_ne!(reply["result"]["structuredContent"]["ok"], serde_json::json!(true), "{reply}");
+    }
+    drop(stdin);
+    let _ = kid.wait();
+    assert_eq!(tree(&root), before, "an unknown transition tool changed the project");
+}

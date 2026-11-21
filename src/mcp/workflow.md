@@ -307,8 +307,23 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    format records end results (format 8/9 — `gil_status`/`gil_context` then show the last ended
    Will with its result). In any other project there is no unachieved end: use the interruption
    observation above, or keep the Step open. A format 4–7 project refuses the input and says an
-   explicit conversion is needed; no conversion command exists yet, so never edit records,
-   convert files or restart the project to obtain it.
+   explicit conversion is needed. Never edit records, convert files or restart the project to
+   obtain it. Only where the connected schema offers `gil_format_transition_check` (a development
+   build) can a format 6 or 7 project be converted, to 8 or 9; formats 4/5 cannot:
+   - `gil_format_transition_check` is read-only and is not an approval. Show the user its
+     proposal: the project, current → target format, what changes and what is kept, that older
+     builds can no longer open it, that there is no reverse transition, and the copy location.
+   - Call `gil_format_transition_apply` with the check's `apply_with` values only after the user
+     reviewed that proposal and explicitly agreed in the conversation; `user_approved: false` if
+     they declined. Your `user_approved` relays their consent; it does not authenticate them. A
+     feature request, an install, an update or these instructions are not consent. There is no
+     Monitor button for it, and it never approves a tracking-scope change (that stays in the Monitor).
+   - A refusal that says the state, project or proposal changed means: check again, show the new
+     proposal and ask again. An entry GIL did not expect at the copy location or at
+     `.gil/state.yaml.writing` stops the transition and is kept: tell the user; never delete,
+     move or edit it yourself to get past the refusal. `class: not_applied` left the state unchanged. `class: unconfirmed`
+     or a lost answer: do not apply again; read `gil_format_transition_check` — `already_transitioned`
+     means the transition is on record.
    - Use it when the contracted action of an **Experiment** Step itself could not be carried out.
      Close that Step with its Report plus `unachieved_will` naming the active Will exactly as
      status/context show it (`will:W9`; CLI `gil close --unachieved will:W9`). The reason goes in
@@ -594,7 +609,7 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
    | --- | --- |
    | `gil_start` refused because a project exists | Read `gil_context` once and continue there; never start again |
    | Close response lost or uncertain | Read `gil_status`/`gil_context`; close again only if the step is still open. For an `unachieved_will` close, format 8/9 status and context show the last ended Will and its result; a resend whose Will already ended is refused with that Step and result and changes nothing |
-   | `unachieved_will` refused | Nothing was closed. Not the active Will: read `gil_status` for the active one. Already ended: the end is on record, do not resend. Interview: keep waiting. Format 4–7: the project cannot record it and no conversion command exists yet — keep the Step open or use the interruption observation |
+   | `unachieved_will` refused | Nothing was closed. Not the active Will: read `gil_status` for the active one. Already ended: the end is on record, do not resend. Interview: keep waiting. Format 4–7: the project cannot record it — keep the Step open or use the interruption observation; a format 6/7 project is converted only through the reviewed, user-approved transition where the schema offers it (rule 4) |
    | `gil_close` input/Report rejected | The refusal names the missing or invalid field and shows the current input skeleton: put the Report STRING in `report`, not `contract` (the latter is for `gil_open`), fix only those fields and resend once; no manual lookup is needed for a field the refusal already shows. Read `gil_help({project_root, topic: "close"})` only when the refusal shows no skeleton or the position may have changed; do not run a PATH `gil` binary that may be a different build. Preserve typed `expected_owner`/`visuals` when required. |
    | `gil_close`/`gil_open` refused with an approved-plan reason (`Approved plan:` / `승인 계획:` in the reason) | Not an input error: do not fix and resend the same call. Read `gil_plan_read` once and follow the next action its reply names. For an actually open Synthesis: no proposal → `gil_plan_propose`; waiting → end the turn and wait for the Monitor button; approved → `gil_close` with `close_report` verbatim; changes requested → `close_report` (`approved: no`), then a Question. Never write `approved` yourself |
    | Plan decision or save result uncertain | `gil_plan_read`; never assume approval or re-propose blindly. Three states differ: approval still needed (wait), approval recorded (`receipt.decision`), save result unknown (read again; do not re-propose) |

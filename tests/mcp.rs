@@ -1036,6 +1036,16 @@ fn tools_list_includes_handoff_and_preserves_the_read_only_app_boundary() {
     if cfg!(feature="approved-plan") {
         expected.extend(["gil_plan_propose", "gil_plan_read", "gil_plan_request_interview", "gil_plan_review", "gil_plan_decide"]);
     }
+    if cfg!(feature="will-end-history") {
+        // Order 1b: model-only development tools; no App surface, the apply is the only writer.
+        expected.extend(["gil_format_transition_check", "gil_format_transition_apply"]);
+        for name in ["gil_format_transition_check", "gil_format_transition_apply"] {
+            let tool = tools.iter().find(|t| t["name"] == name).unwrap();
+            assert_eq!(tool["_meta"]["ui"]["visibility"], serde_json::json!(["model"]));
+            assert_eq!(tool["inputSchema"]["additionalProperties"], false);
+            assert_eq!(tool["annotations"]["readOnlyHint"], name == "gil_format_transition_check");
+        }
+    }
     if cfg!(feature="product-safety") {
         expected.extend(["gil_revisit_review", "gil_revisit_apply"]);
         for name in ["gil_revisit_review", "gil_revisit_apply"] {

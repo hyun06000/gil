@@ -78,6 +78,20 @@ pub const fn newest_known_format() -> u32 {
     }
 }
 
+/// The format the explicit transition of this build turns `format` into: 6 → 8 and 7 → 9 in a
+/// `will-end-history` build, nothing otherwise (Storage Transition Contract §7.1). Formats 4/5,
+/// adding the visual registry, 10/11 and every reverse direction have no transition.
+pub const fn transition_target(format: u32) -> Option<u32> {
+    if !cfg!(feature = "will-end-history") {
+        return None;
+    }
+    match format {
+        CHAIN_FORMAT => Some(END_HISTORY_FORMAT),
+        CHAIN_VISUAL_FORMAT => Some(END_HISTORY_VISUAL_FORMAT),
+        _ => None,
+    }
+}
+
 /// Formats that carry the visual registry and therefore the private-storage contract.
 pub const fn is_visual_format(format: u32) -> bool {
     matches!(format, VISUAL_FORMAT | CHAIN_VISUAL_FORMAT | END_HISTORY_VISUAL_FORMAT)
@@ -237,12 +251,20 @@ pub(crate) fn encode(project: &Project) -> Result<Vec<u8>, StoreError> {
 pub fn save(project: &Project, path: impl AsRef<Path>) -> Result<(), StoreError> {
     let path = path.as_ref();
     let encoded = encode(project)?;
+    publish(path, &encoded, project.visual_state().is_some())
+}
 
+/// Publish already encoded state bytes through the same path [`save`] uses: a temporary file
+/// written and flushed to disk, then renamed over the state file. A visual-format record keeps
+/// its owner-only, descriptor-relative writer. The rename is the commit point.
+pub(crate) fn publish(path: &Path, encoded: &[u8], visual: bool) -> Result<(), StoreError> {
     #[cfg(any(unix, windows))]
-    if project.visual_state().is_some() {
-        return crate::visual_report::state_file::write(path, &encoded)
+    if visual {
+        return crate::visual_report::state_file::write(path, encoded)
             .map_err(|source| StoreError::Write { path: said_path(path), source });
     }
+    #[cfg(not(any(unix, windows)))]
+    let _ = visual;
 
     if let Some(parent) = path.parent()
         && !parent.as_os_str().is_empty()
@@ -351,12 +373,18 @@ pub fn load(rules: RuleSet, path: impl AsRef<Path>) -> Result<Project, StoreErro
             source,
         },
     })?;
+    load_text(rules, &text, path)
+}
 
+/// [`load`] on state bytes the caller already read: the same format gate, structure, invariants
+/// and object check, without a second read of `path` (which only names the record and its
+/// `.gil` folder). The explicit format transition validates its candidate through this.
+pub(crate) fn load_text(rules: RuleSet, text: &str, path: &Path) -> Result<Project, StoreError> {
     // **형식을 먼저 읽는다.** 구조를 통째로 해석한 뒤에 보면, 모양이 바뀐 앞 형식은
     // "앞 형식이다" 가 아니라 파서 오류로 도착한다 — 사람이 무엇을 해야 할지 모른다.
-    declared_format(&text, path)?;
+    declared_format(text, path)?;
 
-    let stored: StoredState = serde_norway::from_str(&text).map_err(StoreError::Decode)?;
+    let stored: StoredState = serde_norway::from_str(text).map_err(StoreError::Decode)?;
     let project = stored.into_project(rules)?;
 
     // **구조가 맞물린 뒤에 객체를 본다.** registry 가 깨진 채로 디스크를 뒤지면 잘못된
