@@ -25,6 +25,10 @@
 //! - 3i(편의상)의 승인 당시 세 칸 두 시점 보존 검사도 저장 경로가 아니다. 같은 사건의 앞(승인 경계에서 대기) 기록, 다른 경계에서
 //!   보관한 뒤(세 칸 그대로) 기록, 승인 경계·발급 번호를 고쳐 쓴 뒤 기록도 형식 10/11 은 `UnknownFormat`, 알려진 형식은 모르는
 //!   칸으로 각각 거절하고 폴더를 바꾸지 않는다. 앞뒤 기록을 견주어 저장하는 길도 생기지 않았다.
+//! - 3j(편의상)의 한 시점 정책 연결·사이클 입력 대응 검사도 저장 경로가 아니다. 이 검사는 건네받은 값끼리만 견주며 실제 상태에서
+//!   입력을 뽑는 길이 없다. 사건이 든 기록의 거절(형식 10/11 은 `UnknownFormat`, 알려진 형식은 모르는 칸)은 위 시험들 그대로이고,
+//!   새 모듈의 이름도 아래 제품 호출 부재 검사에 들어 있다. 두 부분 입력이 함께 뽑힐 한 사건 목록(`restore_result` 포함)이 든 기록도
+//!   형식 10/11 은 `UnknownFormat`, 알려진 형식은 모르는 칸으로 거절하고 폴더를 바꾸지 않는다.
 //! - 새 모듈은 `src/artifact/tracking_record/` 밖의 어떤 소스에서도 불리지 않는다.
 
 mod common;
@@ -488,6 +492,59 @@ fn before_and_after_approval_records_are_each_refused_untouched() {
     }
 }
 
+/// 3c 입력(이름·종류·앞뒤 정책)과 3h 입력(이름·종류·체인·경계·발급 번호·baseline)이 함께 뽑힐 한 `events` 목록 — M2 는 `restore_result`.
+/// 대응 검사(3j)가 받아들이는 꼴의 합성 값이며, 저장 경로는 여전히 이 기록을 읽지 않는다.
+fn synthetic_single_list_events() -> Value {
+    let mut events = synthetic_events();
+    let more: Value = serde_norway::from_str(
+        "- id: M2\n  kind: restore_result\n  chain_ref: chain:C1\n  after_cycle_ref: cycle:C1\n  review_cycle_ref: null\n  \
+         next_cycle_id: 2\n  policy_before_ref: policy:P1\n  policy_after_ref: policy:P1\n  world_before_ref: snapshot:A1\n  \
+         baseline: {snapshot_ref: null, attempts: [{result: failed, cause: external_change}]}\n",
+    )
+    .unwrap();
+    events.as_sequence_mut().unwrap().extend(more.as_sequence().unwrap().iter().cloned());
+    events
+}
+
+#[test]
+fn a_single_event_list_for_both_partial_inputs_is_refused_untouched() {
+    let known = gil::newest_known_format();
+    let events = synthetic_single_list_events();
+    for format in [10u32, 11] {
+        let root = started(&format!("single-list-format-{format}"));
+        edit_state(&root, |file| {
+            file["format"] = Value::from(format);
+            let mut tracking = synthetic_tracking();
+            tracking["next_event_id"] = Value::from(3);
+            tracking["events"] = events.clone();
+            file["tracking"] = tracking;
+        });
+        let before = tree(&root);
+        let path = root.join(gil::STATE_PATH);
+        match gil::load(common::spec(), &path) {
+            Err(StoreError::UnknownFormat { found, known: said }) => assert_eq!((found, said), (format, known)),
+            other => panic!("한 사건 목록이 든 형식 {format} 이 읽혔다: {other:?}"),
+        }
+        assert!(ProjectSession::open(common::spec(), &path).is_err());
+        assert!(ProjectSession::open_read_only(common::spec(), &path).is_err());
+        assert_eq!(tree(&root), before, "형식 {format} 을 거절하면서 폴더를 바꿨다");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    let root = started("single-list-known-format");
+    let path = root.join(gil::STATE_PATH);
+    edit_state(&root, |file| file["events"] = events.clone());
+    let before = tree(&root);
+    match gil::load(common::spec(), &path) {
+        Err(StoreError::Decode(err)) => assert!(err.to_string().contains("events"), "{err}"),
+        other => panic!("한 사건 목록이 든 `events` 가 읽혔다: {other:?}"),
+    }
+    assert!(ProjectSession::open(common::spec(), &path).is_err());
+    assert!(ProjectSession::open_read_only(common::spec(), &path).is_err());
+    assert_eq!(tree(&root), before, "`events` 를 거절하면서 폴더를 바꿨다");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 #[test]
 fn no_product_source_calls_the_new_module() {
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
@@ -577,6 +634,16 @@ fn no_product_source_calls_the_new_module() {
         "match_events",
         "boundary_text",
         "APPROVAL_HISTORY_DOES_NOT_SHOW",
+        "event_inputs",
+        "check_event_inputs",
+        "EventInputsAgree",
+        "EventInputsProblem",
+        "InputMismatch",
+        "InputSide",
+        "CountDiffers",
+        "NameDiffers",
+        "KindDiffers",
+        "EVENT_INPUTS_DO_NOT_SHOW",
     ];
     let mut users = Vec::new();
     let mut stack = vec![src.clone()];
