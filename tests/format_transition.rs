@@ -37,11 +37,16 @@ fn tree(root: &Path) -> BTreeMap<PathBuf, Option<Vec<u8>>> {
         for entry in std::fs::read_dir(dir).unwrap() {
             let path = entry.unwrap().path();
             let name = path.strip_prefix(root).unwrap().to_path_buf();
-            if std::fs::symlink_metadata(&path).unwrap().is_dir() {
+            let kind = std::fs::symlink_metadata(&path).unwrap().file_type();
+            if kind.is_dir() {
                 out.insert(name, None);
                 walk(root, &path, out);
-            } else {
+            } else if kind.is_file() {
                 out.insert(name, Some(std::fs::read(&path).unwrap()));
+            } else {
+                // A link or a special entry is recorded as itself, never opened or followed.
+                let link = std::fs::read_link(&path).map(|to| to.display().to_string()).unwrap_or_default();
+                out.insert(name, Some(format!("entry {kind:?} {link}").into_bytes()));
             }
         }
     }
@@ -255,7 +260,10 @@ fn six_to_eight_through_the_mcp_path_keeps_every_value_but_the_end_history() {
         use std::os::unix::fs::PermissionsExt;
         assert_eq!(std::fs::metadata(&copy).unwrap().permissions().mode() & 0o777, 0o600);
         assert_eq!(std::fs::metadata(copy.parent().unwrap()).unwrap().permissions().mode() & 0o777, 0o700);
+        // Written by the exclusive record writer, whose file is owner-only.
+        assert_eq!(std::fs::metadata(&state).unwrap().permissions().mode() & 0o777, 0o600);
     }
+    assert!(!state.with_file_name("state.yaml.writing").exists());
 
     // Every value but the allowed changes is the same.
     assert_eq!(serde_norway::from_slice::<serde_norway::Value>(&now).unwrap(), expected_after(&original, 6));
@@ -431,7 +439,7 @@ fn blocked_records_are_refused_and_every_file_is_kept() {
 }
 
 #[test]
-fn copy_and_save_failures_leave_format_6_and_keep_what_was_there() {
+fn copy_failures_leave_format_6_and_keep_what_was_there() {
     let at = settings("failures");
 
     // Something that is not a folder stands where the copy folder belongs: it cannot be inspected
@@ -483,26 +491,103 @@ fn copy_and_save_failures_leave_format_6_and_keep_what_was_there() {
     drop(mcp);
     assert_eq!(tree(&root), before);
 
-    // The converted state cannot be saved: the state stays format 6 and the copy is kept, then reused.
-    let (root, state) = format_6("fail-save");
-    let original = std::fs::read(&state).unwrap();
-    let mut mcp = Mcp::serve(&at);
-    let checked = mcp.body(CHECK, json!({"project_root": root}));
-    let blocker = state.with_file_name("state.yaml.writing");
-    std::fs::create_dir_all(&blocker).unwrap();
-    let failed = mcp.call(APPLY, approval(&checked, &root, true));
-    let failed = &failed["result"]["structuredContent"];
-    assert_eq!((failed["code"].clone(), failed["class"].clone()), (json!("candidate_not_saved"), json!("not_applied")), "{failed}");
-    assert_eq!(std::fs::read(&state).unwrap(), original);
-    assert_eq!(std::fs::read(copy_path(&state, &checked)).unwrap(), original);
-    std::fs::remove_dir(&blocker).unwrap();
-    let again = mcp.body(CHECK, json!({"project_root": root}));
-    assert_eq!(again["proposal"]["copy_present"], "present_matching");
-    assert_eq!(again["proposal_sha256"], checked["proposal_sha256"]);
-    let applied = mcp.body(APPLY, approval(&again, &root, true));
-    assert_eq!(applied["copy"], "reused", "{applied}");
-    drop(mcp);
-    assert_eq!(std::fs::read(copy_path(&state, &checked)).unwrap(), original);
+}
+
+/// A synthetic entry planted at the state writer's temporary name.
+#[derive(Clone, Copy, Debug)]
+enum Planted { File, Folder, #[cfg(unix)] Link, #[cfg(unix)] DanglingLink, #[cfg(unix)] Fifo }
+
+fn plant(at: &Path, kind: Planted, sentinel: &Path) {
+    match kind {
+        Planted::File => std::fs::write(at, b"someone else's bytes").unwrap(),
+        Planted::Folder => {
+            std::fs::create_dir(at).unwrap();
+            std::fs::write(at.join("inside.txt"), b"kept").unwrap();
+        }
+        #[cfg(unix)]
+        Planted::Link => std::os::unix::fs::symlink(sentinel, at).unwrap(),
+        #[cfg(unix)]
+        Planted::DanglingLink => std::os::unix::fs::symlink(sentinel.with_file_name("absent.txt"), at).unwrap(),
+        #[cfg(unix)]
+        Planted::Fifo => {
+            let name = std::ffi::CString::new(at.as_os_str().as_encoded_bytes()).unwrap();
+            assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0, "mkfifo");
+        }
+    }
+    let _ = sentinel;
+}
+
+/// Whatever already stands at `.gil/state.yaml.writing` — in a format 6 record, where the ordinary
+/// even-format writer would have reused that name — is kept exactly: check and apply refuse with
+/// the same reason, no copy is written, and the entry, a non-target file a link points to and every
+/// other file keep their bytes and identity. An entry planted after the check is refused the same
+/// way. After the user removes it, the same proposal applies.
+#[test]
+fn a_pre_existing_temporary_entry_of_any_kind_is_kept_and_stops_the_transition() {
+    let at = settings("planted");
+    let mut kinds = vec![Planted::File, Planted::Folder];
+    #[cfg(unix)]
+    kinds.extend([Planted::Link, Planted::DanglingLink, Planted::Fifo]);
+    for kind in kinds {
+        let label = format!("planted-{kind:?}").to_lowercase();
+        let (root, state) = format_6(&label);
+        // A synthetic non-target file inside the test area, outside the record folder.
+        let sentinel = root.join("sentinel.txt");
+        std::fs::write(&sentinel, b"synthetic non-target bytes").unwrap();
+        let mut mcp = Mcp::serve(&at);
+        let checked = mcp.body(CHECK, json!({"project_root": root}));
+        assert_eq!(checked["status"], "ready", "{kind:?}: {checked}");
+        // Planted after the check the user approved, before the apply.
+        let temp = state.with_file_name("state.yaml.writing");
+        plant(&temp, kind, &sentinel);
+        drop(mcp);
+        let before = tree(&root);
+        let planted_identity = identity(&temp);
+        let sentinel_identity = identity_of_file(&sentinel);
+
+        let mut mcp = Mcp::serve(&at);
+        let blocked = mcp.body(CHECK, json!({"project_root": root}));
+        assert_eq!(blocked["status"], "blocked", "{kind:?}: {blocked}");
+        let reason = blocked["blocked_by"][0].as_str().unwrap().to_owned();
+        assert!(reason.contains("state.yaml.writing") && reason.contains("not overwritten"), "{kind:?}: {reason}");
+        let refused = mcp.call(APPLY, approval(&checked, &root, true));
+        let refused = &refused["result"]["structuredContent"];
+        assert_eq!((refused["code"].clone(), refused["class"].clone(), refused["state_changed"].clone()),
+            (json!("temporary_state_present"), json!("refused"), json!(false)), "{kind:?}: {refused}");
+        assert!(refused["said"].as_str().unwrap().starts_with(&reason), "check and apply must say the same thing");
+        drop(mcp);
+        assert_eq!(tree(&root), before, "{kind:?}: a file changed");
+        assert_eq!(identity(&temp), planted_identity, "{kind:?}: the planted entry was replaced");
+        assert_eq!(identity_of_file(&sentinel), sentinel_identity, "{kind:?}: the link target changed");
+        assert!(!state.parent().unwrap().join("conversion").exists(), "{kind:?}: a copy was written");
+
+        // The user removes the entry; the same proposal is then applied.
+        if matches!(kind, Planted::Folder) { std::fs::remove_dir_all(&temp).unwrap(); } else { std::fs::remove_file(&temp).unwrap(); }
+        let mut mcp = Mcp::serve(&at);
+        let again = mcp.body(CHECK, json!({"project_root": root}));
+        assert_eq!(again["proposal_sha256"], checked["proposal_sha256"]);
+        let applied = mcp.body(APPLY, approval(&again, &root, true));
+        assert_eq!(applied["ok"], true, "{kind:?}: {applied}");
+        drop(mcp);
+        assert_eq!(std::fs::read(&sentinel).unwrap(), b"synthetic non-target bytes");
+    }
+}
+
+/// The entry itself, never what it points to: kind, link target and (Unix) device/inode/mode.
+fn identity(path: &Path) -> String {
+    let meta = std::fs::symlink_metadata(path).unwrap();
+    let link = std::fs::read_link(path).ok();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        format!("{:?} {link:?} {} {} {:o}", meta.file_type(), meta.dev(), meta.ino(), meta.mode())
+    }
+    #[cfg(not(unix))]
+    format!("{:?} {link:?} {}", meta.file_type(), meta.len())
+}
+
+fn identity_of_file(path: &Path) -> String {
+    format!("{} {:?}", identity(path), std::fs::read(path).unwrap())
 }
 
 #[test]
@@ -569,6 +654,16 @@ fn seven_to_nine_keeps_the_visual_registry_and_private_storage() {
     let checked = mcp.body(CHECK, json!({"project_root": root}));
     assert_eq!(checked["status"], "ready", "{checked}");
     assert_eq!((checked["proposal"]["current_format"].clone(), checked["proposal"]["target_format"].clone()), (json!(7), json!(9)));
+
+    // An entry already at the writer's temporary name stops 7 → 9 the same way and is kept.
+    let temp = state.with_file_name("state.yaml.writing");
+    std::fs::create_dir(&temp).unwrap();
+    std::fs::write(temp.join("inside.txt"), b"kept").unwrap();
+    assert_eq!(mcp.body(CHECK, json!({"project_root": root}))["status"], "blocked");
+    assert_eq!(mcp.call(APPLY, approval(&checked, &root, true))["result"]["structuredContent"]["code"], "temporary_state_present");
+    assert_eq!(std::fs::read(&state).unwrap(), original);
+    assert_eq!(std::fs::read(temp.join("inside.txt")).unwrap(), b"kept");
+    std::fs::remove_dir_all(&temp).unwrap();
     let applied = mcp.body(APPLY, approval(&checked, &root, true));
     assert_eq!(applied["storage_format"], 9, "{applied}");
     let now = std::fs::read(&state).unwrap();

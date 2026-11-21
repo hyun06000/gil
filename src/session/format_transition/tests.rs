@@ -168,3 +168,108 @@ fn approval_and_transition_pairs_are_refused_before_anything_is_read() {
     }
     assert_eq!(tree(&root), before);
 }
+
+// ── An entry that appears at the writer's temporary name after the early answer ────────────
+
+/// What the race hook plants at `before_publish`, i.e. after the check, the approval checks, the
+/// candidate validation and the copy — the moment just before the writer creates its temporary file.
+#[derive(Clone)]
+enum Planted {
+    /// A regular file with these bytes.
+    File(Vec<u8>),
+    /// A link to a synthetic non-target file (Unix).
+    #[cfg(unix)]
+    Link(PathBuf),
+}
+
+thread_local! {
+    static RACE: std::cell::RefCell<Option<(PathBuf, Planted)>> = const { std::cell::RefCell::new(None) };
+}
+
+fn plant(stage: &str) -> io::Result<()> {
+    if stage != "before_publish" {
+        return Ok(());
+    }
+    RACE.with(|race| {
+        let (at, what) = race.borrow().clone().expect("a planted entry");
+        match what {
+            Planted::File(bytes) => std::fs::write(&at, bytes),
+            #[cfg(unix)]
+            Planted::Link(to) => std::os::unix::fs::symlink(to, &at),
+        }
+    })
+}
+
+/// The writer refuses the planted entry at creation time — the early answer saw nothing — and
+/// leaves it, what it points to, the state and the copy exactly as they were. After the user
+/// removes the entry, a fresh check finds the same proposal and the apply reuses the copy.
+fn a_late_entry_is_refused_at_creation_and_kept(label: &str, planted: Planted) {
+    let (root, state) = format_6(label);
+    let original = std::fs::read(&state).unwrap();
+    let checked = check(rules(), &root, &state).unwrap();
+    assert_eq!(checked["status"], "ready", "{checked}");
+    let temp = temporary_state(&state);
+    RACE.with(|race| *race.borrow_mut() = Some((temp.clone(), planted.clone())));
+    let failed = {
+        let _hook = Hook::set(plant);
+        run(&root, &state, &checked).unwrap_err()
+    };
+    RACE.with(|race| *race.borrow_mut() = None);
+    assert_eq!((failed.code, failed.class), ("candidate_not_saved", Class::NotApplied), "{failed:?}");
+    assert_eq!(std::fs::read(&state).unwrap(), original, "state.yaml changed");
+    let copy = root.join(".gil").join(checked["proposal"]["copy_file"].as_str().unwrap().trim_start_matches(".gil/"));
+    assert_eq!(std::fs::read(&copy).unwrap(), original, "the copy is kept");
+    match &planted {
+        Planted::File(bytes) => assert_eq!(&std::fs::read(&temp).unwrap(), bytes, "the planted file changed"),
+        #[cfg(unix)]
+        Planted::Link(to) => {
+            assert!(std::fs::symlink_metadata(&temp).unwrap().file_type().is_symlink(), "the link was replaced");
+            assert_eq!(&std::fs::read_link(&temp).unwrap(), to, "the link was redirected");
+        }
+    }
+    // Check and apply now say the same thing, and nothing changes.
+    let blocked = check(rules(), &root, &state).unwrap();
+    assert_eq!(blocked["status"], "blocked", "{blocked}");
+    assert!(blocked["blocked_by"][0].as_str().unwrap().contains("state.yaml.writing"), "{blocked}");
+    assert_eq!(run(&root, &state, &blocked).unwrap_err().code, "temporary_state_present");
+
+    // The user removes the entry; the same proposal applies and reuses the confirmed copy.
+    std::fs::remove_file(&temp).unwrap();
+    let again = check(rules(), &root, &state).unwrap();
+    assert_eq!(again["proposal_sha256"], checked["proposal_sha256"]);
+    assert_eq!(again["proposal"]["copy_present"], "present_matching");
+    let applied = run(&root, &state, &again).unwrap();
+    assert_eq!(applied["copy"], "reused", "{applied}");
+    assert_eq!(std::fs::read(&copy).unwrap(), original);
+}
+
+#[test]
+fn a_file_planted_before_the_writer_creates_its_temporary_is_kept_and_nothing_is_replaced() {
+    a_late_entry_is_refused_at_creation_and_kept("late-file", Planted::File(b"someone else's bytes".to_vec()));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_link_planted_before_the_writer_creates_its_temporary_is_not_followed() {
+    use std::os::unix::fs::MetadataExt;
+    let outside = scratch("late-link-outside").join("sentinel.txt");
+    std::fs::write(&outside, b"synthetic non-target bytes").unwrap();
+    let identity = std::fs::metadata(&outside).map(|m| (m.dev(), m.ino(), m.mode())).unwrap();
+    a_late_entry_is_refused_at_creation_and_kept("late-link", Planted::Link(outside.clone()));
+    assert_eq!(std::fs::read(&outside).unwrap(), b"synthetic non-target bytes", "the link target was written");
+    assert_eq!(std::fs::metadata(&outside).map(|m| (m.dev(), m.ino(), m.mode())).unwrap(), identity);
+}
+
+#[test]
+fn format_6_is_published_through_the_exclusive_writer() {
+    let (root, state) = format_6("exclusive-writer");
+    let checked = check(rules(), &root, &state).unwrap();
+    run(&root, &state, &checked).unwrap();
+    assert!(!temporary_state(&state).exists(), "the writer's own temporary was renamed away");
+    #[cfg(unix)]
+    {
+        // The record writer's own mode: owner-only, as for a visual-format record.
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(std::fs::metadata(&state).unwrap().permissions().mode() & 0o777, 0o600);
+    }
+}

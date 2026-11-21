@@ -327,7 +327,9 @@ The current dirty gate detects changes at GIL boundaries; it does not intercept 
      feature request, an install, an update or these instructions are not consent. There is no
      Monitor button for it, and it never approves a tracking-scope change (that stays in the Monitor).
    - A refusal that says the state, project or proposal changed means: check again, show the new
-     proposal and ask again. `class: not_applied` left the state unchanged. `class: unconfirmed`
+     proposal and ask again. An entry GIL did not expect at the copy location or at
+     `.gil/state.yaml.writing` stops the transition and is kept: tell the user; never delete,
+     move or edit it yourself to get past the refusal. `class: not_applied` left the state unchanged. `class: unconfirmed`
      or a lost answer: do not apply again; read `gil_format_transition_check` — `already_transitioned`
      means the transition is on record.
    - Use it when the contracted action of an **Experiment** Step itself could not be carried out.

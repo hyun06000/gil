@@ -7,9 +7,12 @@
 //!                      → the proposal and its digest
 //! apply   under lock   approval + bound values → read again → same proposal?
 //!                      → candidate again → original bytes to conversion/ (exclusive, synced,
-//!                      re-read) → candidate through the ordinary state writer
-//!                      (temporary file, flush, rename = the commit point) → read back
+//!                      re-read) → candidate through the exclusive, no-follow record writer
+//!                      (new temporary file, flush, re-read, rename = the commit point) → read back
 //! ```
+//!
+//! Nothing that already stands at `.gil/state.yaml.writing` or under `.gil/conversion/` is
+//! overwritten, followed, moved or removed, on either format; such an entry stops the transition.
 //!
 //! # What the approval is, and what it is not
 //!
@@ -458,12 +461,43 @@ fn write_copy(_: &Path, _: &str, _: &[u8]) -> io::Result<()> {
     Err(io::Error::other("the transition copy is not supported on this platform"))
 }
 
-/// A visual-format record's writer creates its temporary file exclusively and keeps a failed one
-/// for inspection; a leftover would make the publish fail after the copy, so it is named first.
-fn temporary_state_left(state: &Path) -> bool {
+/// The state writer's temporary name beside the state file.
+fn temporary_state(state: &Path) -> PathBuf {
     let mut temp = state.as_os_str().to_owned();
     temp.push(".writing");
-    std::fs::symlink_metadata(PathBuf::from(temp)).is_ok()
+    PathBuf::from(temp)
+}
+
+/// Whatever already stands at the temporary name — a file, a folder, a link or a special entry,
+/// on every format — is kept exactly as it is: the transition never overwrites, follows, moves or
+/// removes it, and does not apply while it is there. The entry itself is examined, never what a
+/// link points to; an entry that cannot be examined stops the transition the same way.
+/// Check and apply say the same thing. The writer below refuses such an entry again at creation
+/// time, so this early answer is a message, not the safety guarantee.
+fn temporary_blocker(state: &Path) -> Option<String> {
+    match std::fs::symlink_metadata(temporary_state(state)) {
+        Err(e) if e.kind() == io::ErrorKind::NotFound => None,
+        Ok(_) => Some("An entry already exists at the state writer's temporary name (.gil/state.yaml.writing), for example from an earlier failed save. GIL keeps it exactly as it is — it is not overwritten, followed, moved or deleted — and the transition is not applied while it is there. The user decides what to do with it.".into()),
+        Err(e) => Some(format!("The state writer's temporary name (.gil/state.yaml.writing) cannot be examined safely ({e}). GIL changes nothing there and the transition is not applied.")),
+    }
+}
+
+/// The commit point for **both** formats: the record writer that creates its temporary file
+/// exclusively under the held `.gil` directory without following links (an entry that appeared
+/// after the early answer fails the creation and stays untouched), flushes and re-reads it, then
+/// renames it over the state file relative to that same directory. It keeps a failed temporary
+/// file for inspection. This is the visual-format writer; the ordinary even-format `save` path is
+/// not used here and is not changed. Durability is what that writer provides, no more.
+fn publish_exclusive(state: &Path, bytes: &[u8]) -> io::Result<()> {
+    #[cfg(any(unix, windows))]
+    {
+        crate::visual_report::state_file::write(state, bytes)
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = (state, bytes);
+        Err(io::Error::other("the transition writer is not supported on this platform"))
+    }
 }
 
 // ── Test-only interruption points ───────────────────────────────────────────────────────
@@ -510,8 +544,8 @@ pub(crate) fn check(rules: RuleSet, root: &Path, state: &Path) -> Result<Value, 
     if copy == CopyState::Different {
         blocked.push(format!("A different file already exists at .gil/{COPY_DIR}/{}. GIL never overwrites or deletes it; the user decides what to do with it before a transition can be applied.", proposal.copy));
     }
-    if crate::store::is_visual_format(held.format) && temporary_state_left(state) {
-        blocked.push("A temporary state file (.gil/state.yaml.writing) is left from an earlier failed save. GIL keeps it for inspection and does not delete it; the transition cannot be applied while it is there.".into());
+    if let Some(why) = temporary_blocker(state) {
+        blocked.push(why);
     }
     let body = proposal.body(&held, root, &copy);
     Ok(json!({
@@ -570,8 +604,8 @@ pub(crate) fn apply(rules: RuleSet, root: &Path, state: &Path, approval: &Approv
         return Err(refused("proposal_mismatch", "The approved proposal is not the proposal for this project and state (another project, location or proposal). Nothing was changed. Check this project, show its proposal and ask the user again.")
             .with(json!({"proposal_sha256": proposal.digest})));
     }
-    if crate::store::is_visual_format(held.format) && temporary_state_left(state) {
-        return Err(refused("temporary_state_present", "A temporary state file (.gil/state.yaml.writing) is left from an earlier failed save. GIL does not delete it; nothing was changed."));
+    if let Some(why) = temporary_blocker(state) {
+        return Err(refused("temporary_state_present", format!("{why} Nothing was changed.")));
     }
     let bytes = candidate(&rules, &held.text, state, project, held.format)?;
 
@@ -598,12 +632,11 @@ pub(crate) fn apply(rules: RuleSet, root: &Path, state: &Path, approval: &Approv
     checkpoint("before_publish").map_err(failed_before)?;
     held.still_locked().map_err(failed_before)?;
 
-    // The commit point: the ordinary state writer (temporary file, flush, rename).
-    let visual = crate::store::is_visual_format(proposal.to);
-    if let Err(error) = store::publish(state, &bytes, visual) {
+    // The commit point: exclusive temporary creation, flush, re-read, rename (both formats).
+    if let Err(error) = publish_exclusive(state, &bytes) {
         return Err(match read_state(state) {
             Ok(now) if now == held.text => not_applied("candidate_not_saved", format!(
-                "The converted state could not be saved ({error}). state.yaml is unchanged (format {}); the copy at {copy_file} is kept. A temporary file may remain; GIL does not delete it.", held.format)),
+                "The converted state could not be saved ({error}). state.yaml is unchanged (format {}); the copy at {copy_file} is kept. Any entry at the temporary name is kept as it is; GIL does not delete it. Check again before any new request.", held.format)),
             Ok(now) if now.as_bytes() == bytes.as_slice() => unconfirmed(format!(
                 "state.yaml was replaced with format {}, but a later step reported an error ({error}). Do not apply again; read the project with the check tool.", proposal.to)),
             _ => unconfirmed(format!("The save reported an error ({error}) and the state file could not be confirmed. Do not apply again; read the project with the check tool.")),
