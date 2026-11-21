@@ -13,6 +13,9 @@
 //!                                  │
 //!     앞선 원장 ───────────────────┘ check_append_only     기존 판의 이름·내용·순서 보존(순수 비교)
 //!
+//! 호출자가 명시한 절대 경로의 루트 ─read_root_policy_file─▶ DiskReading   루트 `.gilignore` 한 파일의 읽기 전용 실제 관측
+//!                                          (policy_file_read — 잠금·저장·판정 없음, 승인·쓰기 허가 아님)
+//!
 //! 적용 원문 주소 + SyncBase + DiskReading ─classify_policy_file─▶ PolicyFileReading   §5.2 판정표
 //!                                      └─ PolicyFileSync::begin/advance ─▶ 다음 요청 또는 멈춤  §5.2 쓰기 순서
 //!
@@ -50,7 +53,8 @@
 //!   증명할 수 없으므로 그런 함수를 두지 않는다. [`classify_policy_file`] 은 적용 원문 주소를 **호출자가**
 //!   건네받는다.
 //! - **저장하지 않는다.** `state.yaml` 의 읽기·쓰기 경로, 형식 상수·관문, 객체 창고 쓰기, `.gilignore`
-//!   읽기·쓰기에 연결하지 않았다. 직렬화 자료형([`wire`])은 후속 저장 구현이 쓸 칸의 꼴과 거절 규칙을
+//!   쓰기에 연결하지 않았다. 루트 `.gilignore` 를 실제로 **읽는** 문은 [`read_root_policy_file`] 하나이며 제품 경로가
+//!   부르지 않는다 — 읽은 결과는 3a 의 [`DiskReading`] 값일 뿐 판정·승인·쓰기 허가가 아니다. 직렬화 자료형([`wire`])은 후속 저장 구현이 쓸 칸의 꼴과 거절 규칙을
 //!   시험하는 데만 쓰며, 독립 파일이나 두 번째 원장 형식을 만들지 않는다.
 //! - **세계·사이클을 모른다.** 사건에 대해서는 호출자가 뽑아 건넨 이름·종류·앞뒤 정책만 본다
 //!   ([`event_links`], 「3c」 — T1 의 사건 이름 부분, T3, T4 를 **그 입력 안에서만**). 기준점·보관 시도는 뽑아 건넨
@@ -81,6 +85,7 @@ mod event_cycles;
 mod event_inputs;
 mod event_links;
 mod link_history;
+mod policy_file_read;
 mod source;
 mod sync;
 mod sync_order;
@@ -102,6 +107,8 @@ mod event_inputs_tests;
 mod event_links_tests;
 #[cfg(test)]
 mod link_history_tests;
+#[cfg(test)]
+mod policy_file_read_tests;
 #[cfg(test)]
 mod sync_order_tests;
 #[cfg(test)]
@@ -146,6 +153,8 @@ pub(crate) use link_history::{
     HISTORY_DOES_NOT_SHOW, HistoryKept, HistoryProblem, LinkAppendViolation, LinkSlot, check_link_append_only,
     check_policy_history,
 };
+#[allow(unused_imports)]
+pub(crate) use policy_file_read::read_root_policy_file;
 #[allow(unused_imports)]
 pub(crate) use source::{
     Condition, PolicySourceLookup, PolicySourcesMatch, ProvidedSources, SourceLookup,

@@ -500,6 +500,7 @@ fn no_item_here_is_named_as_an_approval_an_application_or_a_full_check() {
         ("baseline_record.rs", include_str!("baseline_record.rs")),
         ("event_links.rs", include_str!("event_links.rs")),
         ("link_history.rs", include_str!("link_history.rs")),
+        ("policy_file_read.rs", include_str!("policy_file_read.rs")),
         ("source.rs", include_str!("source.rs")),
         ("sync.rs", include_str!("sync.rs")),
         ("sync_order.rs", include_str!("sync_order.rs")),

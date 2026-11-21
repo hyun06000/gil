@@ -659,8 +659,8 @@ mod os {
     use std::ffi::{CString, OsString};
     use std::fs::File;
     use std::io;
-    use std::os::fd::{AsRawFd, FromRawFd};
-    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+    use std::os::fd::AsRawFd;
+    use std::os::unix::ffi::OsStringExt;
     use std::path::Path;
 
     /// 열어 둔 디렉터리 — 목록과 자식은 **이 핸들 기준으로만** 연다.
@@ -679,22 +679,10 @@ mod os {
     }
 
     /// 루트 자신이 연결 파일이면 열지 않는다(`O_NOFOLLOW`). 조상 경로의 연결은 운영체제가 푼다.
+    /// 끝의 `/` 가 `O_NOFOLLOW` 를 무력화하지 않도록 구성 요소로 다시 세워 연다(`internal_fs::dir_nofollow`,
+    /// 루트 `.gilignore` 관측과 같은 문).
     pub(super) fn root(path: &Path) -> io::Result<Dir> {
-        // 끝의 `/` 는 마지막 연결을 풀게 만들어 `O_NOFOLLOW` 를 무력화한다 — 구성 요소로 다시 세운다.
-        let path: std::path::PathBuf = path.components().collect();
-        let path = CString::new(path.as_os_str().as_bytes())
-            .map_err(|_| io::Error::other("경로에 NUL 이 있다"))?;
-        // SAFETY: NUL 로 끝나는 경로, 성공한 fd 는 한 번만 소유한다.
-        let fd = unsafe {
-            libc::open(
-                path.as_ptr(),
-                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
-            )
-        };
-        if fd < 0 {
-            return Err(io::Error::last_os_error());
-        }
-        Ok(Dir(unsafe { File::from_raw_fd(fd) }))
+        crate::internal_fs::dir_nofollow(path).map(Dir)
     }
 
     pub(super) fn names(dir: &Dir) -> io::Result<Vec<OsString>> {
