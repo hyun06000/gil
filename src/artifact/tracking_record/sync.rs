@@ -35,6 +35,9 @@ pub(crate) enum DiskReading {
 
 impl DiskReading {
     /// 호출자가 읽은 결과를 관측으로 옮긴다. `NotFound` 만 없음이고 그 밖의 오류는 모두 읽지 못함이다.
+    ///
+    /// 이 변환은 읽기가 어떻게 이뤄졌는지 모른다 — 일반 `fs::read` 의 `NotFound` 에는 루트 부재·끊긴 연결 파일도
+    /// 섞인다. 실제 루트 `.gilignore` 의 관측은 그 구분을 확인하는 [`super::read_root_policy_file`] 이 만든다.
     pub(crate) fn from_read(read: io::Result<Vec<u8>>) -> DiskReading {
         match read {
             Ok(bytes) => DiskReading::Present(

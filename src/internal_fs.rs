@@ -24,6 +24,20 @@ fn open(dir: &File, name: &CStr, flags: i32) -> io::Result<File> {
         Ok(unsafe { File::from_raw_fd(fd) })
     }
 }
+/// Open a caller-named directory itself (`O_DIRECTORY | O_NOFOLLOW`): a symlink in the last
+/// component is refused, ancestors are resolved by the OS. A trailing `/` would make the kernel
+/// resolve the last link and defeat `O_NOFOLLOW`, so the path is rebuilt from its components.
+/// Shared by the policy engine's tree walk and the root `.gilignore` observation.
+pub(crate) fn dir_nofollow(path: &Path) -> io::Result<File> {
+    let path: std::path::PathBuf = path.components().collect();
+    let path = CString::new(path.as_os_str().as_bytes()).map_err(|_| io::Error::other("경로에 NUL 이 있다"))?;
+    // SAFETY: NUL-terminated path; a successful fd is owned exactly once.
+    let fd = unsafe { libc::open(path.as_ptr(), libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC) };
+    if fd < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(unsafe { File::from_raw_fd(fd) })
+}
 pub(crate) fn child_dir(dir: &File, name: &CStr) -> io::Result<File> {
     open(dir, name, libc::O_RDONLY | libc::O_DIRECTORY)
 }
