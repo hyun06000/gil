@@ -699,6 +699,8 @@ current Artifact tree != current snapshot_ref
 v0에는 dirty 상태를 덮어쓰는 강제 revisit을 두지 않는다. 현재 접근을 버리더라도 허용된 Step을
 통해 변경 상태를 snapshot으로 확정하고, Analysis·Outcome과 Cycle Report를 작성하여 현재
 실패 경로를 먼저 닫아야 한다. 실패의 Artifact snapshot과 Report는 Graph에 남는다.
+이 순서는 알 수 없는 수정을 그대로 보관하라는 허가가 아니다. 종료 전 사용자 확인과 필요한
+승인은 [Artifact Model §6](GIL_Artifact_Model_v0.1.md#6-변경-허용-경계)을 먼저 따른다.
 
 Cycle revisit의 정당한 순서는 다음과 같다.
 
@@ -1013,8 +1015,8 @@ Interview Cycle은 실험 계획을 고정하지 않는다.
 [Artifact Model §3.6](GIL_Artifact_Model_v0.1.md#36-인터뷰에서-정하는-명시적-추적-제외)을 따른다.
 기존 Cycle/Step 구조만으로 구현됐다고 주장하지 않으며 저장·현재 세계 참조 연결은 후속 구현이다.
 사건 기록·전이·다음 Entry 규칙의 설계는 [공유 저장·전이 계약 §5–6](GIL_Storage_Transition_Contract_v0.1.md)에 있다.
-관리 사건에도 기존 변경 검사·진행 차단·모니터 안내를 적용한다. 외부 변경은 기존 승인·복구
-원칙으로 정리하며, 인터뷰나 관리 사건을 일반 작업물 변경 또는 미확정 변경 확정의 우회로로 쓰지 않는다.
+관리 사건에도 기존 변경 검사·진행 차단·모니터 안내를 적용한다. 외부 변경은 [Artifact Model §6](GIL_Artifact_Model_v0.1.md#6-변경-허용-경계)의
+종료 전 의도 확인·승인·보존 후 복원 원칙으로 정리하며, 인터뷰나 관리 사건을 일반 작업물 변경 또는 미확정 변경 확정의 우회로로 쓰지 않는다.
 
 ## 13. Interview Cycle의 최소 Step Grammar
 
