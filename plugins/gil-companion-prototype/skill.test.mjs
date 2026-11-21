@@ -95,6 +95,19 @@ test("Skill 이 부르는 도구 이름은 전부 실제 tool 표에 있다", ()
       assert.ok(section("## Existing projects — separately approved image migration").includes(name));
       continue;
     }
+    if (name.startsWith("gil_format_transition_")) {
+      // will-end-history development feature only (src/mcp/transition.rs). Exact names, never the
+      // default catalog, and only under the condition that the connected schema offers them; the
+      // conversation approval is a relay, never authentication, and never a tracking-scope approval.
+      const catalog = JSON.parse(readFileSync(join(REPO,"src","mcp","transition-tools.json"),"utf8"));
+      assert.ok(catalog.some((t) => t.name === name), `Skill 이 transition catalog 에 없는 도구를 부른다 — ${name}`);
+      assert.ok(!TOOLS.includes(name), `형식 전환 도구가 기본 tools.json 에 들어왔다 — ${name}`);
+      assert.match(SKILL, /Only where the connected schema offers `gil_format_transition_check` \(a development\s+build\)/, "형식 전환 도구의 사용 조건이 Skill 에 없다");
+      assert.match(SKILL, /`gil_format_transition_check` is read-only and is not an approval/, "점검이 승인이 아니라는 문장이 Skill 에 없다");
+      assert.match(SKILL, /relays their consent; it does not authenticate them/, "승인 전달의 한계가 Skill 에 없다");
+      assert.match(SKILL, /There is no\s+Monitor button for it, and it never approves a tracking-scope change/, "모니터 승인과의 구분이 Skill 에 없다");
+      continue;
+    }
     if (name === "gil_report_visuals") {
       assert.ok(section("## Visual reports — capability-gated authoring").includes(name));
       continue; // Explicit opt-in authoring route, never a promise about the default catalog.

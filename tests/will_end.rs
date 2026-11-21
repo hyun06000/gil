@@ -615,6 +615,10 @@ fn format_4_and_6_keep_done_wills_resave_to_the_same_bytes_and_refuse_the_marker
         assert_eq!(err, ActionError::EndHistoryUnsupported { format });
         let said = err.to_string();
         assert!(said.contains("8/9") && said.contains(&format.to_string()), "{said}");
+        // The notice names the explicit transition only where this build has one (6 → 8); a format
+        // 4 project has none and is never pointed at it (Storage Transition Contract §7.1).
+        assert_eq!(said.contains("gil_format_transition_check"), format == gil::CHAIN_FORMAT, "{said}");
+        assert_eq!(gil::transition_target(format), (format == gil::CHAIN_FORMAT).then_some(gil::END_HISTORY_FORMAT));
         assert_eq!(frozen(&project), before);
         save(&project, &path).unwrap();
         assert_eq!(std::fs::read_to_string(&path).unwrap(), text);

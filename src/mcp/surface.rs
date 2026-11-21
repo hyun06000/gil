@@ -46,7 +46,7 @@ pub fn tools() -> &'static [Tool] {
         #[cfg(feature = "product-safety")]
         let tools = super::recovery::catalog(tools);
         #[cfg(feature = "will-end-history")]
-        let tools = unachieved_close(tools);
+        let tools = super::transition::catalog(unachieved_close(tools));
         let mut tools = tools;
         tools.push(serde_json::from_str(include_str!("handoff-tool.json")).expect("handoff tool"));
         for tool in &mut tools {
@@ -124,6 +124,10 @@ pub fn valid_input(tool: &Tool, input: &Value) -> bool {
     if tool.name.starts_with("gil_plan_") { return super::plans::valid(tool.name.as_ref(), input); }
     #[cfg(feature = "exploration-flow")]
     if super::records::NAMES.contains(&tool.name.as_ref()) { return super::records::valid(tool.name.as_ref(), input); }
+    #[cfg(feature = "will-end-history")]
+    if super::transition::NAMES.contains(&tool.name.as_ref()) {
+        return super::transition::valid(tool.name.as_ref(), input);
+    }
     #[cfg(feature = "visual-authoring")]
     if tool.name.starts_with("gil_migration_") {
         return super::migration::valid(tool.name.as_ref(), input);
@@ -207,6 +211,10 @@ fn rejection_hint(tool: &Tool, input: &Value) -> &'static str {
     }
     #[cfg(feature = "exploration-flow")]
     if let Some(hint) = super::records::rejection(tool.name.as_ref()) {
+        return hint;
+    }
+    #[cfg(feature = "will-end-history")]
+    if let Some(hint) = super::transition::rejection(tool.name.as_ref()) {
         return hint;
     }
     if tool.name != "gil_close" {

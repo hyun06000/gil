@@ -27,6 +27,9 @@ mod records;
 mod authoring;
 #[cfg(feature = "visual-authoring")]
 mod migration;
+// Implementation order 1b: explicit 6 → 8 / 7 → 9 transition tools (development profile only).
+#[cfg(feature = "will-end-history")]
+mod transition;
 #[cfg(all(feature = "visual-authoring", windows))]
 mod workspace;
 use monitor::Monitor;
@@ -224,6 +227,11 @@ impl GilServer {
             return tokio::task::spawn_blocking(move || locale::with(locale, || records::call(&name, input))).await
                 .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "record_tool.failed")));
         }
+        #[cfg(feature = "will-end-history")]
+        if transition::NAMES.contains(&name.as_str()) {
+            return tokio::task::spawn_blocking(move || locale::with(locale, || transition::call(&name, input))).await
+                .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "mcp.transition_uncertain")));
+        }
         #[cfg(feature = "visual-authoring")]
         if name.starts_with("gil_migration_") {
             return tokio::task::spawn_blocking(move || locale::with(locale, || migration::call(&name, input))).await
@@ -376,6 +384,8 @@ mod tests {
     const PLAN_APP_SURFACE: [&str; 2] = ["gil_plan_review", "gil_plan_decide"];
     /// 원본 기록 조회 둘 — exploration-flow 빌드에서만 등록된다(src/mcp/records.rs).
     const RECORD_READ_SURFACE: [&str; 2] = ["gil_report_read", "gil_evidence_read"];
+    /// 형식 6→8·7→9 명시적 전환의 점검·적용 — will-end-history 빌드에서만 등록된다(src/mcp/transition.rs).
+    const TRANSITION_SURFACE: [&str; 2] = ["gil_format_transition_check", "gil_format_transition_apply"];
 
     fn registered_names() -> Vec<String> {
         let mut names: Vec<String> = surface::tools().iter().map(|one| one.name.to_string()).collect();
@@ -405,6 +415,9 @@ mod tests {
         }
         if cfg!(feature = "exploration-flow") {
             expected.extend(RECORD_READ_SURFACE.iter().map(|s| s.to_string()));
+        }
+        if cfg!(feature = "will-end-history") {
+            expected.extend(TRANSITION_SURFACE.iter().map(|s| s.to_string()));
         }
         if cfg!(feature = "product-safety") { expected.extend(["gil_revisit_apply".into(), "gil_revisit_review".into()]); }
         expected.push("gil_await_user".to_string());
