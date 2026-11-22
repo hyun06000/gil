@@ -164,8 +164,9 @@ pub(crate) use source::{
 pub(crate) use sync::{DiskReading, PolicyFileReading, SyncBase, classify_policy_file};
 #[allow(unused_imports)]
 pub(crate) use sync_order::{
-    BaseUndecided, CALLER_DUTIES, PolicyFileSync, ReplaceResult, Reread, StoreResult, SyncOutOfOrder, SyncReport,
-    SyncRequest, SyncStep, SyncStop, Unsettled, base_for_new_policy,
+    BaseUndecided, CALLER_DUTIES, HOLD_CALLER_DUTIES, NewPolicyBase, PolicyFileSync, ReplaceResult, Reread,
+    StoreResult, SyncOutOfOrder, SyncReport, SyncRequest, SyncStep, SyncStop, ThreeWayDifference, Unsettled,
+    base_for_new_policy,
 };
 #[allow(unused_imports)]
 pub(crate) use wire::{StoredPolicy, StoredPolicyFile, StoredRules, StoredSyncBase, SyncBaseShapeError};
