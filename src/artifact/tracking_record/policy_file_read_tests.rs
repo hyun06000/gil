@@ -204,12 +204,22 @@ fn a_directory_at_the_policy_name_is_unreadable_not_absent() {
 
 #[test]
 fn a_same_length_rewrite_right_after_reading_is_refused() {
-    // 읽기 전 메타데이터를 잰 뒤 같은 크기로 다시 쓴 경우다 — 읽기 후 메타데이터 비교가 그 어긋남을 발견하므로
-    // 읽은 바이트의 지문을 내놓지 않는다. 읽기 전(열고 메타데이터를 잰 뒤)과 한 번 흘려 읽은 뒤 모두 그 비교 구간 안이다.
+    // 비교 대상 메타데이터가 달라진 같은 길이 변경은 거절한다. 읽기 전 메타데이터를 잰 뒤(열고 잰 뒤, 또는 한 번 흘려
+    // 읽은 뒤) 같은 크기로 다시 쓰고, 수정 시각을 원래 값과 충분히 다른 고정 값으로 명시해 그 설정이 실제로 반영됐음을
+    // 확인한다. 같은 길이의 쓰기가 언제나 메타데이터 차이로 드러난다는 계약은 아니다 — 읽기 후 메타데이터 비교가
+    // 달라진 값을 발견할 때 지문을 내놓지 않는다는 것만 고정한다.
+    let distinct = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000_000);
     for when in [Pause::FileOpened, Pause::AfterRead] {
         let root = scratch("rewrite");
         fs::write(policy(&root), b"aaaa\n").unwrap();
-        let result = at_pause(&root, when, || fs::write(policy(&root), b"bbbb\n").unwrap());
+        let result = at_pause(&root, when, || {
+            let original = fs::metadata(policy(&root)).unwrap().modified().unwrap();
+            assert_ne!(original, distinct, "준비: 원래 수정 시각이 지정할 값과 같다");
+            fs::write(policy(&root), b"bbbb\n").unwrap();
+            fs::File::options().write(true).open(policy(&root)).unwrap().set_modified(distinct).unwrap();
+            let now = fs::metadata(policy(&root)).unwrap().modified().unwrap();
+            assert_eq!(now, distinct, "준비: 이 운영체제에서 수정 시각 설정이 반영되지 않았다");
+        });
         assert!(changed(&result), "{when:?}: {result:?}");
         // 관측이 실패해도 파일을 되돌리거나 지우지 않는다.
         assert_eq!(fs::read(policy(&root)).unwrap(), b"bbbb\n");
