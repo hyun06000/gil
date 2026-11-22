@@ -33,6 +33,9 @@
 //!   그것을 부르지 않으므로 아래 제품 호출 부재 검사에 그 이름이 들어 있다.
 //! - 경로 하나의 계속 추적 판정(`path_continuity`, 편의상 3n)도 저장 경로가 아니다. 건넨 정책 구간과 경로 글자만 보고
 //!   원장·상태·폴더를 읽지 않으며, 제품의 변경 검사·승인·보관·복원이 그것을 부르지 않으므로 아래 검사에 그 이름이 들어 있다.
+//! - 건넨 정책 원장에서 명시된 시작 판부터 마지막 판까지 구간을 고르는 선택(`ledger_span`, 편의상 3o)도 저장 경로가 아니다.
+//!   메모리의 원장·시작점·이미 해석된 정책 자료만 받고 `state.yaml`·폴더·객체 창고를 읽지 않으며, 제품 경로가 그것을 부르지
+//!   않으므로 아래 검사에 그 이름이 들어 있다.
 //! - 새 모듈은 `src/artifact/tracking_record/` 밖의 어떤 소스에서도 불리지 않는다.
 
 mod common;
@@ -676,6 +679,20 @@ fn no_product_source_calls_the_new_module() {
         "legacy_observation_contains",
         "earlier_not_containing",
         "CONTINUITY_DOES_NOT_SHOW",
+        "ledger_span",
+        "select_ledger_span",
+        "classify_path_over_ledger",
+        "LedgerSpan",
+        "LedgerStart",
+        "BoardPolicies",
+        "BoardPolicyProblem",
+        "StartNotInLedger",
+        "NotInLedger",
+        "GivenTwice",
+        "differing_fields",
+        "applied_board",
+        "board_at",
+        "LEDGER_SPAN_DOES_NOT_SHOW",
     ];
     let mut users = Vec::new();
     let mut stack = vec![src.clone()];

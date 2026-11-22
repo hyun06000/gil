@@ -51,6 +51,11 @@
 //! 호출자가 건넨 구간(확정 정책 또는 정책 채택 전 → 적용된 판들 → 적용 정책) + 경로·종류
 //!     ─classify_path_continuity─▶ PathContinuity   §5.4 의 계속 추적 / 새로 추적 / 현재 범위 밖 — 판마다 엔진의 decide
 //!                                          (path_continuity, 「3n」 — 건넨 구간에 대한 판정. 구간의 완전성·승인·내용 비교 아님)
+//!
+//! PolicyLedger + 명시된 시작점(판 이름 또는 정책 채택 전) + 판 이름별 이미 해석된 정책 자료
+//!     ─select_ledger_span─▶ LedgerSpan ─classify─▶ PathContinuity   시작 판부터 원장의 마지막 판까지 빠짐없이 고르고, 판마다
+//!                                          자료의 정체성을 원장 기록과 견준 뒤 3n 그대로 판정 (ledger_span, 「3o」 — 원장의 출처·
+//!                                          시작 판의 §6.1 유도·승인 사실 아님)
 //! ```
 //!
 //! # 「형식이 맞다」는 「승인됐고 적용됐다」가 아니다
@@ -94,6 +99,7 @@ mod event_cycle_history;
 mod event_cycles;
 mod event_inputs;
 mod event_links;
+mod ledger_span;
 mod link_history;
 mod path_continuity;
 mod policy_file_read;
@@ -117,6 +123,8 @@ mod event_cycles_tests;
 mod event_inputs_tests;
 #[cfg(test)]
 mod event_links_tests;
+#[cfg(test)]
+mod ledger_span_tests;
 #[cfg(test)]
 mod link_history_tests;
 #[cfg(test)]
@@ -163,6 +171,11 @@ pub(crate) use event_inputs::{
 pub(crate) use event_links::{
     EventKind, EventName, EventNamesError, EventPolicyLink, EventPolicyLinks, LINKS_DO_NOT_SHOW, LinkField,
     LinkProblem, PolicyLinksAgree, check_policy_links,
+};
+#[allow(unused_imports)]
+pub(crate) use ledger_span::{
+    BoardPolicies, BoardPolicyProblem, LEDGER_SPAN_DOES_NOT_SHOW, LedgerSpan, LedgerSpanProblem, LedgerStart,
+    classify_path_over_ledger, select_ledger_span,
 };
 #[allow(unused_imports)]
 pub(crate) use link_history::{
