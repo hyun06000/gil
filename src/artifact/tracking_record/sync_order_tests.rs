@@ -517,6 +517,10 @@ fn a_disk_unlike_both_the_base_and_the_rules_stays_protected_at_every_entry() {
 
 // ── 11: 승인 저장 때의 기준 ─────────────────────────────────────────────────
 
+fn chosen(base: SyncBase) -> Result<NewPolicyBase, BaseUndecided> {
+    Ok(NewPolicyBase::Chosen(base))
+}
+
 #[test]
 fn the_base_written_with_a_new_policy_keeps_an_unconfirmed_mismatch() {
     let rows = [
@@ -537,18 +541,160 @@ fn the_base_written_with_a_new_policy_keeps_an_unconfirmed_mismatch() {
         (SyncBase::Absent, unreadable(), Ok(SyncBase::Absent)),
     ];
     for (base, disk, wanted) in rows {
-        assert_eq!(base_for_new_policy(&new(), &base, &disk), wanted, "{base:?} / {disk:?}");
+        assert_eq!(base_for_new_policy(&new(), &base, &disk), wanted.map(NewPolicyBase::Chosen), "{base:?} / {disk:?}");
     }
-    // 계약이 정하지 않은 조합 — 고르지 않는다.
+    // 계약이 정하지 않은 조합 — 고르지 않는다. 2026-11-22 결정의 보류로 넓히지 않는다.
     for (base, disk) in [
-        (SyncBase::Present(old()), on_disk(edited())),
+        // 삭제 — 기준 present(A), 파일 없음.
         (SyncBase::Present(old()), DiskReading::Absent),
+        // 기준 absent 위에 새 원문이 아닌 파일.
         (SyncBase::Absent, on_disk(edited())),
+        // A = B 인데 C 만 다르다.
+        (SyncBase::Present(new()), on_disk(edited())),
+        (SyncBase::Present(new()), on_disk(old())),
+        (SyncBase::Present(new()), DiskReading::Absent),
     ] {
         assert_eq!(
             base_for_new_policy(&new(), &base, &disk),
-            Err(BaseUndecided { base: base.clone(), disk: disk.clone() })
+            Err(BaseUndecided { base: base.clone(), disk: disk.clone() }),
+            "{base:?} / {disk:?}"
         );
+    }
+}
+
+// ── 11a: 세 내용이 모두 다를 때의 보류 (계약 §5.2, 2026-11-22 사용자 결정) ──────────
+
+/// 이 결정 **전**의 규칙을 그대로 옮긴 비교 기준 — 판정표의 전후 차이를 재기 위한 것이다.
+fn base_before_the_hold(new_rules: &ContentDigest, base: &SyncBase, recheck: &DiskReading) -> Result<SyncBase, BaseUndecided> {
+    match (base, recheck) {
+        (_, DiskReading::Present(found)) if found == new_rules => Ok(SyncBase::Present(new_rules.clone())),
+        (_, DiskReading::Unreadable { .. }) => Ok(base.clone()),
+        (SyncBase::Unconfirmed, _) => Ok(SyncBase::Unconfirmed),
+        (SyncBase::Present(kept), DiskReading::Present(found)) if kept == found => Ok(base.clone()),
+        (SyncBase::Absent, DiskReading::Absent) => Ok(SyncBase::Absent),
+        (SyncBase::Present(_) | SyncBase::Absent, disk) => Err(BaseUndecided { base: base.clone(), disk: disk.clone() }),
+    }
+}
+
+/// 결정의 정확한 조건: 기준 present(A), 디스크 present(C), 새 원문 B, A ≠ B·A ≠ C·B ≠ C.
+fn all_three_differ(new_rules: &ContentDigest, base: &SyncBase, disk: &DiskReading) -> Option<ThreeWayDifference> {
+    match (base, disk) {
+        (SyncBase::Present(a), DiskReading::Present(c)) if a != new_rules && a != c && new_rules != c => {
+            Some(ThreeWayDifference { base: a.clone(), new_rules: new_rules.clone(), disk: c.clone() })
+        }
+        _ => None,
+    }
+}
+
+/// 세 원문 × 모든 기준 × 모든 디스크(75가지). 보류는 정확한 조건에서만 나오고, 그 자리는 전에 `BaseUndecided`
+/// 였다. 나머지는 모두 전과 같다 — 고른 값도, `BaseUndecided` 의 입력도.
+#[test]
+fn only_three_distinct_contents_are_held_and_every_other_answer_is_unchanged() {
+    let mut held = 0;
+    let mut runs = 0;
+    for rules in [old(), new(), edited()] {
+        for base in &all_bases() {
+            for disk in &all_disks() {
+                let context = format!("원문 {rules:?} / {base:?} / {disk:?}");
+                let after = base_for_new_policy(&rules, base, disk);
+                let before = base_before_the_hold(&rules, base, disk);
+                match all_three_differ(&rules, base, disk) {
+                    Some(difference) => {
+                        held += 1;
+                        assert_eq!(after, Ok(NewPolicyBase::Held(difference)), "{context}");
+                        assert_eq!(
+                            before,
+                            Err(BaseUndecided { base: base.clone(), disk: disk.clone() }),
+                            "{context}: 보류 자리는 전에 BaseUndecided 였다"
+                        );
+                    }
+                    None => {
+                        assert!(!matches!(after, Ok(NewPolicyBase::Held(_))), "{context}: 조건 밖에서 보류했다");
+                        assert_eq!(after, before.map(NewPolicyBase::Chosen), "{context}: 결정 밖의 답이 바뀌었다");
+                    }
+                }
+                runs += 1;
+            }
+        }
+    }
+    assert_eq!(runs, 3 * 5 * 5);
+    // 원문마다 A 두 가지 × C 한 가지.
+    assert_eq!(held, 3 * 2);
+}
+
+/// 동등 관계 하나라도 성립하면 보류가 아니다 — 기존 계약의 답 그대로다.
+#[test]
+fn any_equality_among_the_three_keeps_the_earlier_answer() {
+    let a = old();
+    let b = new();
+    let c = edited();
+    // A = B, C 만 다르다 → 여전히 미결.
+    assert_eq!(
+        base_for_new_policy(&b, &SyncBase::Present(b.clone()), &on_disk(c.clone())),
+        Err(BaseUndecided { base: SyncBase::Present(b.clone()), disk: on_disk(c.clone()) })
+    );
+    // A = C ≠ B → 그 기준 그대로(구판 잔류).
+    assert_eq!(base_for_new_policy(&b, &SyncBase::Present(a.clone()), &on_disk(a.clone())), chosen(SyncBase::Present(a.clone())));
+    // B = C ≠ A → present + 새 원문.
+    assert_eq!(base_for_new_policy(&b, &SyncBase::Present(a.clone()), &on_disk(b.clone())), chosen(SyncBase::Present(b.clone())));
+    // 모두 같다 → present + 새 원문.
+    assert_eq!(base_for_new_policy(&b, &SyncBase::Present(b.clone()), &on_disk(b.clone())), chosen(SyncBase::Present(b.clone())));
+    // 모두 다르다 → 보류.
+    assert_eq!(
+        base_for_new_policy(&b, &SyncBase::Present(a.clone()), &on_disk(c.clone())),
+        Ok(NewPolicyBase::Held(ThreeWayDifference { base: a, new_rules: b, disk: c }))
+    );
+}
+
+/// 결정이 다루지 않은 입력 — 삭제, 기준 absent, unconfirmed, 읽기 실패 — 은 C 가 A·B 와 다르더라도 보류하지 않는다.
+#[test]
+fn deletion_absent_unconfirmed_and_unreadable_are_not_held() {
+    let rows = [
+        (SyncBase::Present(old()), DiskReading::Absent, Err(BaseUndecided { base: SyncBase::Present(old()), disk: DiskReading::Absent })),
+        (SyncBase::Absent, on_disk(edited()), Err(BaseUndecided { base: SyncBase::Absent, disk: on_disk(edited()) })),
+        (SyncBase::Absent, DiskReading::Absent, chosen(SyncBase::Absent)),
+        (SyncBase::Unconfirmed, on_disk(edited()), chosen(SyncBase::Unconfirmed)),
+        (SyncBase::Unconfirmed, DiskReading::Absent, chosen(SyncBase::Unconfirmed)),
+        (SyncBase::Present(old()), unreadable(), chosen(SyncBase::Present(old()))),
+        (SyncBase::Absent, unreadable(), chosen(SyncBase::Absent)),
+        (SyncBase::Unconfirmed, unreadable(), chosen(SyncBase::Unconfirmed)),
+    ];
+    for (base, disk, wanted) in rows {
+        assert_eq!(base_for_new_policy(&new(), &base, &disk), wanted, "{base:?} / {disk:?}");
+    }
+}
+
+/// 보류는 값을 고르지 않고 요청을 내지 않는다. 입력을 바꾸지 않고, 같은 입력의 동기화 입구도 여전히 쓰지 않는다.
+#[test]
+fn a_hold_chooses_no_base_requests_nothing_and_changes_no_input() {
+    let rules = new();
+    let base = SyncBase::Present(old());
+    let disk = on_disk(edited());
+    let (rules_before, base_before, disk_before) = (rules.clone(), base.clone(), disk.clone());
+
+    let first = base_for_new_policy(&rules, &base, &disk);
+    let again = base_for_new_policy(&rules, &base, &disk);
+    assert_eq!(first, again, "같은 입력에 다른 답");
+    let Ok(NewPolicyBase::Held(ThreeWayDifference { base: a, new_rules: b, disk: c })) = first else {
+        panic!("보류가 아니다: {first:?}");
+    };
+    // 세 칸은 입력의 주소 그대로이고, 어느 SyncBase 로도 감싸지 않았다.
+    assert_eq!((a, b, c), (old(), new(), edited()));
+    assert_eq!((rules, base.clone(), disk.clone()), (rules_before, base_before, disk_before), "입력이 바뀌었다");
+
+    // 같은 관측에서 동기화 입구는 사용자 편집으로 판정하고 쓰지도 저장하지도 않는다 — 보류가 그것을 바꾸지 않는다.
+    let reading = classify_policy_file(&new(), &base, &disk);
+    assert_eq!(reading, PolicyFileReading::UserChanged { deleted: false });
+    assert_eq!(PolicyFileSync::begin(&new(), &base, &disk).1, stop(SyncStop::NotWritable(reading.clone())));
+    assert_eq!(PolicyFileSync::begin_cleanup(&new(), &base, &disk).1, stop(SyncStop::NoCleanup(reading)));
+}
+
+/// 연결 계층의 의무 목록이 결정의 세 부분과 재개 금지를 담는다 — 판정이 그 일을 한다고 적지 않는다.
+#[test]
+fn the_hold_duties_name_what_the_caller_must_do() {
+    let duties = HOLD_CALLER_DUTIES.join("\n");
+    for needle in ["차이를 사용자에게 보여 주는 것", "명시적으로 해소하기 전에는", "디스크 파일을 바꾸지 않는 것", "재개 허가로 쓰지 않는 것"] {
+        assert!(duties.contains(needle), "{needle} 이 없다:\n{duties}");
     }
 }
 

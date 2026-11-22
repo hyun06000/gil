@@ -44,7 +44,9 @@
 //! - 두 입구 모두 프로젝트 잠금을 쥔 **변경 명령**이 부른다고 가정한다. 그 보장과, 호출이 정말 명시적
 //!   동기화인지의 구분도 연결 계층의 몫이다.
 //! - 승인 확인·승인 처리가 아니다. [`base_for_new_policy`] 는 승인 저장이 함께 적을 `sync_base` 값을 고르는
-//!   규칙일 뿐이다.
+//!   규칙일 뿐이다. 세 내용(이전 기준 A·새 원문 B·디스크 C)이 모두 다르면 값을 고르지 않고 보류
+//!   ([`NewPolicyBase::Held`], 계약 §5.2 2026-11-22 결정)를 돌려준다 — 차이 표시·사용자 확인·저장 보류의
+//!   실행은 연결 계층의 몫이다([`HOLD_CALLER_DUTIES`]).
 
 use std::fmt;
 
@@ -316,12 +318,55 @@ impl PolicyFileSync {
 
 // ── 승인 저장 때의 기준 ─────────────────────────────────────────────────────
 
+/// 승인 저장 때 기준 규칙의 결과 — 계약이 정한 조합의 답이다. 계약이 정하지 않은 조합은 [`BaseUndecided`] 다.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum NewPolicyBase {
+    /// 승인 저장(저장 1)이 함께 적을 `sync_base` 값. 저장 1 을 해도 된다는 뜻은 아니다.
+    Chosen(SyncBase),
+    /// 저장 1 전에 멈추는 자리다 — 고른 `sync_base` 값도, 저장·쓰기 요청도 없다.
+    Held(ThreeWayDifference),
+}
+
+/// 계약 §5.2 의 2026-11-22 사용자 결정이 정한 **보류** — 세 내용이 모두 다르다.
+///
+/// 조건은 정확히 이것뿐이다: 저장된 기준이 `present`(A), 재확인한 디스크가 `present`(C), 새 승인 원문의 주소가 B,
+/// 그리고 A ≠ B, A ≠ C, B ≠ C. A 는 이전 동기화 기준이며 지금 적용 정책의 원문이라는 뜻이 아니다.
+///
+/// 결정의 내용: 현재 파일과 승인안의 차이를 먼저 보여 주고, 사용자가 그 차이를 명시적으로 해소하기 전에는 새
+/// 정책을 저장·적용하지 않는다. 기존 적용 정책과 디스크 파일은 그대로 둔다.
+///
+/// **이 값은 그 판정일 뿐이다.** 이 함수는 차이를 보여 주지 않고, 사용자에게 묻지 않고, 승인 기록을 저장하거나
+/// 저장을 막지 않고, 정책을 적용하지 않고, 파일을 보존·복원하지 않는다. 그 의무는 [`HOLD_CALLER_DUTIES`] 의
+/// 연결 계층이 진다. 해소를 나타내는 입력이나 해소 뒤 자동으로 이어 가는 경로는 없다 — 해소의 형식, 승인과
+/// 이후 파일 변경의 결속, 변경의 보존·재적용은 계약이 정하지 않았다.
+///
+/// 세 칸은 차이를 보여 줄 연결 계층을 위한 주소다. 어느 것도 `sync_base` 로 고른 값이 아니다.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ThreeWayDifference {
+    /// A — 저장된 기준 `present` 의 주소.
+    pub(crate) base: ContentDigest,
+    /// B — 새 승인 원문의 주소.
+    pub(crate) new_rules: ContentDigest,
+    /// C — 재확인에서 읽은 디스크 `.gilignore` 의 주소.
+    pub(crate) disk: ContentDigest,
+}
+
+/// [`NewPolicyBase::Held`] 를 받은 연결 계층이 질 일 — 이 판정은 아무것도 실행하지 않는다.
+pub(crate) const HOLD_CALLER_DUTIES: [&str; 4] = [
+    "현재 디스크 파일(C)과 승인안(B)의 차이를 사용자에게 보여 주는 것",
+    "사용자가 그 차이를 명시적으로 해소하기 전에는 새 정책 판·사건·sync_base 를 저장하지 않고 새 정책을 적용하지 않는 것",
+    "기존 적용 정책과 디스크 파일을 바꾸지 않는 것 — 파일 쓰기도 기준 저장도 하지 않는다",
+    "보류를 해소의 증거나 재개 허가로 쓰지 않는 것 — 해소의 형식·승인 결속·이후 처리는 계약이 정하지 않았다",
+];
+
 /// 계약이 정하지 않은 조합 — 이 규칙은 값을 고르지 않는다.
 ///
-/// 확인된 기준(`present`·`absent`)이 있는데 재확인한 디스크가 그 기준과도 새 원문과도 다를 때다(사용자
-/// 편집·삭제). 계약은 「재확인에서 읽은 디스크 상태로 기준을 정한다」고만 적는다. 그 글자대로 디스크를
-/// 기준으로 삼으면 다음 동기화가 사용자의 편집을 덮어쓸 수 있는 후보가 되고, 이전 기준을 남기면 글자와
-/// 다르다. 어느 쪽인지는 승인 저장을 구현하는 작업이 계약을 먼저 고쳐 정한다.
+/// 확인된 기준(`present`·`absent`)이 있는데 재확인한 디스크가 그 기준과도 새 원문과도 다를 때 가운데
+/// [`ThreeWayDifference`] 가 아닌 것이다: 기준 `present`(A)에 파일 없음(삭제), 기준 `absent` 에 새 원문이 아닌
+/// 파일, 기준이 이미 새 원문(A = B)인데 디스크만 다른 경우. 계약은 「재확인에서 읽은 디스크 상태로 기준을
+/// 정한다」고만 적는다. 그 글자대로 디스크를 기준으로 삼으면 다음 동기화가 사용자의 편집을 덮어쓸 수 있는
+/// 후보가 되고, 이전 기준을 남기면 글자와 다르다. 어느 쪽인지는 승인 저장을 구현하는 작업이 계약을 먼저 고쳐
+/// 정한다. 2026-11-22 결정의 보류를 이 조합들로 넓히지 않는다.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BaseUndecided {
     pub(crate) base: SyncBase,
@@ -349,18 +394,29 @@ impl std::error::Error for BaseUndecided {}
 /// - 기준 `unconfirmed`, 디스크 ≠ 새 원문 → `unconfirmed` 유지. 승인이 미확인 상태를 확인된 상태로 바꾸지 않는다.
 /// - 확인된 기준과 디스크가 같다 → 그 기준 그대로(= 디스크 상태).
 /// - 디스크를 읽지 못했다 → 기준 그대로(상황표의 「디스크를 읽을 수 없다」).
-/// - 확인된 기준과도 새 원문과도 다르다 → [`BaseUndecided`].
+/// - 기준 `present`(A), 디스크 `present`(C), 새 원문 B 가 모두 다르다 → [`NewPolicyBase::Held`]
+///   (2026-11-22 사용자 결정). 값을 고르지 않는다.
+/// - 그 밖에 확인된 기준과도 새 원문과도 다르다 → [`BaseUndecided`].
 pub(crate) fn base_for_new_policy(
     new_rules: &ContentDigest,
     base: &SyncBase,
     recheck: &DiskReading,
-) -> Result<SyncBase, BaseUndecided> {
+) -> Result<NewPolicyBase, BaseUndecided> {
+    let chosen = |value: SyncBase| Ok(NewPolicyBase::Chosen(value));
     match (base, recheck) {
-        (_, DiskReading::Present(found)) if found == new_rules => Ok(SyncBase::Present(new_rules.clone())),
-        (_, DiskReading::Unreadable { .. }) => Ok(base.clone()),
-        (SyncBase::Unconfirmed, _) => Ok(SyncBase::Unconfirmed),
-        (SyncBase::Present(kept), DiskReading::Present(found)) if kept == found => Ok(base.clone()),
-        (SyncBase::Absent, DiskReading::Absent) => Ok(SyncBase::Absent),
+        (_, DiskReading::Present(found)) if found == new_rules => chosen(SyncBase::Present(new_rules.clone())),
+        (_, DiskReading::Unreadable { .. }) => chosen(base.clone()),
+        (SyncBase::Unconfirmed, _) => chosen(SyncBase::Unconfirmed),
+        (SyncBase::Present(kept), DiskReading::Present(found)) if kept == found => chosen(base.clone()),
+        (SyncBase::Absent, DiskReading::Absent) => chosen(SyncBase::Absent),
+        // 여기 닿은 디스크는 새 원문과도 기준과도 다르다(C ≠ B, C ≠ A). 남은 조건은 A ≠ B 뿐이다.
+        (SyncBase::Present(kept), DiskReading::Present(found)) if kept != new_rules => {
+            Ok(NewPolicyBase::Held(ThreeWayDifference {
+                base: kept.clone(),
+                new_rules: new_rules.clone(),
+                disk: found.clone(),
+            }))
+        }
         (SyncBase::Present(_) | SyncBase::Absent, disk) => Err(BaseUndecided { base: base.clone(), disk: disk.clone() }),
     }
 }
