@@ -441,8 +441,9 @@ fn sync_dir(_at: &Path) -> Result<(), ObjectError> {
 ///
 /// 「썼으니 있다」를 믿지 않는지 재려면 쓴 것과 앉은 것이 갈린 순간을 만들어야 하는데,
 /// 그 순간은 밖에서 만들 수 없다. 그래서 그 한 자리만 시험에 연다.
+/// 이 창고 위에서 정책 원문을 검증해 보관하는 경계의 시험도 같은 자리를 쓴다.
 #[cfg(test)]
-mod meddle {
+pub(crate) mod meddle {
     use std::cell::RefCell;
     use std::path::Path;
 
@@ -451,7 +452,7 @@ mod meddle {
     }
 
     /// 다음 확정 직후 객체를 이 바이트로 바꾼다. 한 번만 듣는다.
-    pub(super) fn plant(bytes: &[u8]) {
+    pub(crate) fn plant(bytes: &[u8]) {
         AFTER_LINK.with(|slot| *slot.borrow_mut() = Some(bytes.to_vec()));
     }
 

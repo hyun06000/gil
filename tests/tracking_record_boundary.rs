@@ -652,6 +652,13 @@ fn no_product_source_calls_the_new_module() {
         "policy_file_read",
         "read_root_policy_file",
         "ReadProblem",
+        "source_store",
+        "store_policy_source",
+        "PolicySourceStored",
+        "SourceStoreProblem",
+        "StoredAtOtherAddress",
+        "refused_before_write",
+        "SOURCE_STORE_DOES_NOT_SHOW",
     ];
     let mut users = Vec::new();
     let mut stack = vec![src.clone()];
