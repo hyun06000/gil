@@ -66,6 +66,13 @@
 //!     ─select_boundary_world─▶ BoundaryWorld   같은 호출에서 3j 그대로 + 대상의 유일한 위치·닫힘 뒤, 기준점이 있고 baseline.after_cycle_ref
 //!                                          = T 인 사건 가운데 이름이 가장 큰 것의 기준점·판(§6.1 의 B(T)), 없으면 등록부에 있는 T 의 Exit —
 //!                                          그 확정 정책은 유도하지 않음 (boundary_world — S(N)·T8·3n/3o 연결·실제 승인·보관 아님)
+//!
+//! 대상 비뿌리 사이클 N + 한 시점의 (PolicyLedger, EventPolicyLinks, 사건의 사이클 칸, &[Chain], 등록부)
+//!     ─select_opening_world─▶ OpeningWorld ─check_entry─▶ EntryCheck   같은 호출에서 3j 그대로 + 대상의 유일한 위치와 같은 체인의
+//!                                          구조적 부모 T(닫힘·Exit) 뒤, 기준점이 있고 baseline.after_cycle_ref = T 이며
+//!                                          baseline.next_cycle_id ≤ N 인 사건 가운데 이름이 가장 큰 것의 기준점·판(§6.2 의 S(N)), 없으면
+//!                                          등록부에 있는 T 의 Exit. 같은 값 안에서 N 의 실제 Entry 와 견주는 검증 ① — 뿌리는 범위 밖
+//!                                          (opening_world — 검증 ②·개방 허가·P(N)/B(T) 대입·3n/3o 연결·실제 승인·보관 아님)
 //! ```
 //!
 //! # 「형식이 맞다」는 「승인됐고 적용됐다」가 아니다
@@ -113,6 +120,7 @@ mod event_links;
 mod ledger_span;
 mod link_history;
 mod opening_policy;
+mod opening_world;
 mod path_continuity;
 mod policy_file_read;
 mod source;
@@ -143,6 +151,8 @@ mod ledger_span_tests;
 mod link_history_tests;
 #[cfg(test)]
 mod opening_policy_tests;
+#[cfg(test)]
+mod opening_world_tests;
 #[cfg(test)]
 mod path_continuity_tests;
 #[cfg(test)]
@@ -207,6 +217,11 @@ pub(crate) use link_history::{
 pub(crate) use opening_policy::{
     OPENING_POLICY_DOES_NOT_SHOW, OpeningPolicy, OpeningPolicyProblem, OpeningSelection, TargetProblem,
     select_opening_policy,
+};
+#[allow(unused_imports)]
+pub(crate) use opening_world::{
+    EntryCheck, EntryVerdict, OPENING_WORLD_DOES_NOT_SHOW, OpeningTargetProblem, OpeningWorld, OpeningWorldProblem,
+    ParentProblem, WorldSource, WorldSourcePolicy, select_opening_world,
 };
 #[allow(unused_imports)]
 pub(crate) use path_continuity::{
