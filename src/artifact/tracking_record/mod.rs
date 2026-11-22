@@ -47,6 +47,10 @@
 //! 한 시점의 (PolicyLedger, EventPolicyLinks) + (사건의 사이클 칸, &[Chain], 등록부) ─check_event_inputs─▶ EventInputsAgree
 //!                                          3c 그대로 + 3h 그대로 + 두 입력의 사건 수·자리별 이름·같은 사건의 종류 대응
 //!                                          (event_inputs, 「3j」 — 실제 원장 추출·제품 연결 아님)
+//!
+//! 호출자가 건넨 구간(확정 정책 또는 정책 채택 전 → 적용된 판들 → 적용 정책) + 경로·종류
+//!     ─classify_path_continuity─▶ PathContinuity   §5.4 의 계속 추적 / 새로 추적 / 현재 범위 밖 — 판마다 엔진의 decide
+//!                                          (path_continuity, 「3n」 — 건넨 구간에 대한 판정. 구간의 완전성·승인·내용 비교 아님)
 //! ```
 //!
 //! # 「형식이 맞다」는 「승인됐고 적용됐다」가 아니다
@@ -91,6 +95,7 @@ mod event_cycles;
 mod event_inputs;
 mod event_links;
 mod link_history;
+mod path_continuity;
 mod policy_file_read;
 mod source;
 mod source_store;
@@ -114,6 +119,8 @@ mod event_inputs_tests;
 mod event_links_tests;
 #[cfg(test)]
 mod link_history_tests;
+#[cfg(test)]
+mod path_continuity_tests;
 #[cfg(test)]
 mod policy_file_read_tests;
 #[cfg(test)]
@@ -161,6 +168,10 @@ pub(crate) use event_links::{
 pub(crate) use link_history::{
     HISTORY_DOES_NOT_SHOW, HistoryKept, HistoryProblem, LinkAppendViolation, LinkSlot, check_link_append_only,
     check_policy_history,
+};
+#[allow(unused_imports)]
+pub(crate) use path_continuity::{
+    AppliedSpan, CONTINUITY_DOES_NOT_SHOW, ConfirmedStart, PathContinuity, SpanProblem, classify_path_continuity,
 };
 #[allow(unused_imports)]
 pub(crate) use policy_file_read::read_root_policy_file;

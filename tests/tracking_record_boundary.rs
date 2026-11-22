@@ -31,6 +31,8 @@
 //!   형식 10/11 은 `UnknownFormat`, 알려진 형식은 모르는 칸으로 거절하고 폴더를 바꾸지 않는다.
 //! - 루트 `.gilignore` 의 읽기 전용 실제 관측(`policy_file_read`)도 저장 경로가 아니다. 제품의 시작·관측·보관·복원·동기화가
 //!   그것을 부르지 않으므로 아래 제품 호출 부재 검사에 그 이름이 들어 있다.
+//! - 경로 하나의 계속 추적 판정(`path_continuity`, 편의상 3n)도 저장 경로가 아니다. 건넨 정책 구간과 경로 글자만 보고
+//!   원장·상태·폴더를 읽지 않으며, 제품의 변경 검사·승인·보관·복원이 그것을 부르지 않으므로 아래 검사에 그 이름이 들어 있다.
 //! - 새 모듈은 `src/artifact/tracking_record/` 밖의 어떤 소스에서도 불리지 않는다.
 
 mod common;
@@ -659,6 +661,21 @@ fn no_product_source_calls_the_new_module() {
         "StoredAtOtherAddress",
         "refused_before_write",
         "SOURCE_STORE_DOES_NOT_SHOW",
+        "path_continuity",
+        "classify_path_continuity",
+        "AppliedSpan",
+        "ConfirmedStart",
+        "BeforePolicyAdoption",
+        "PathContinuity",
+        "ContinuouslyTracked",
+        "NewlyTracked",
+        "OutsideCurrentScope",
+        "is_comparison_target",
+        "SpanProblem",
+        "NoAppliedPolicy",
+        "legacy_observation_contains",
+        "earlier_not_containing",
+        "CONTINUITY_DOES_NOT_SHOW",
     ];
     let mut users = Vec::new();
     let mut stack = vec![src.clone()];
