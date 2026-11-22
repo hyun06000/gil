@@ -39,6 +39,9 @@
 //! - 사이클 N 을 열 당시의 적용 정책 P(N) 선택(`opening_policy`, 계약 §6.2)도 저장 경로가 아니다. 메모리의 원장·사건 입력·Chain 목록·
 //!   등록부만 받아 같은 호출에서 3j 를 실행하고, 파일·`state.yaml`·객체 창고를 읽지 않으며 3n·3o 의 시작점·구간을 만들지 않는다.
 //!   제품 경로가 그것을 부르지 않으므로 아래 검사에 그 이름이 들어 있고, 그 원문의 코드 줄은 따로 검사한다.
+//! - 닫힌 사이클 T 의 경계 세계 B(T) 출처 선택(`boundary_world`, 계약 §6.1)도 저장 경로가 아니다. 메모리의 원장·사건 입력·Chain 목록·
+//!   등록부만 받아 같은 호출에서 3j 를 실행하고, 파일·`state.yaml`·객체 창고를 읽지 않으며 3n·3o 의 시작점·구간이나 P(N) 선택을
+//!   쓰지 않는다. 제품 경로가 그것을 부르지 않으므로 아래 검사에 그 이름이 들어 있고, 그 원문의 코드 줄은 따로 검사한다.
 //! - 새 모듈은 `src/artifact/tracking_record/` 밖의 어떤 소스에서도 불리지 않는다.
 
 mod common;
@@ -706,6 +709,21 @@ fn no_product_source_calls_the_new_module() {
         "SeveralOwners",
         "OwnerChainRepeated",
         "OPENING_POLICY_DOES_NOT_SHOW",
+        "boundary_world",
+        "select_boundary_world",
+        "BoundaryWorld",
+        "BoundaryWorldProblem",
+        "BoundarySource",
+        "BoundaryPolicy",
+        "BoundaryTargetProblem",
+        "EventBaseline",
+        "ExitOfTarget",
+        "ExitPolicyNotDerived",
+        "ExitNotInRegistry",
+        "TargetNotClosed",
+        "ClosedWithoutExit",
+        "archive_issuer",
+        "BOUNDARY_WORLD_DOES_NOT_SHOW",
     ];
     let mut users = Vec::new();
     let mut stack = vec![src.clone()];
@@ -769,6 +787,54 @@ fn the_opening_policy_selection_touches_no_file_state_or_store_and_builds_no_spa
         .flat_map(|line| forbidden.iter().filter(|name| line.contains(*name)).map(move |name| format!("{name}: {line}")))
         .collect();
     assert!(used.is_empty(), "P(N) 선택이 파일·상태·창고·구간의 문을 쓴다:\n{used:#?}");
+    let calls: Vec<&&str> = code.iter().filter(|line| line.contains("check_event_inputs(")).collect();
+    assert_eq!(calls, [&"let inputs = check_event_inputs(ledger, links, facts, chains, registry);"], "같은 호출의 입력으로 3j 를 한 번 불러야 한다");
+    // 함수의 인자 자리(한 줄 서명의 괄호 안, 또는 여러 줄 서명의 `이름: &타입,` 줄)에 성공 값 타입이 있으면 안 된다.
+    let parameters = |line: &str| match (line.contains("fn "), line.find('('), line.find(')')) {
+        (true, Some(open), Some(close)) if open < close => line[open..close].to_string(),
+        _ if line.contains(": &") && line.ends_with(',') => line.to_string(),
+        _ => String::new(),
+    };
+    let takes_agreement: Vec<&&str> = code.iter().filter(|line| parameters(line).contains("Agree")).collect();
+    assert!(takes_agreement.is_empty(), "3j 성공 값을 받는 문이 있다: {takes_agreement:#?}");
+}
+
+/// B(T) 선택의 원문에서 주석과 문자열 목록 줄을 뺀 **코드 줄**이 파일·상태·창고·3n/3o·P(N) 의 문을 쓰지 않고, 같은 호출의 입력으로
+/// 3j 를 부르며, 다른 입력에서 얻은 3j 성공 값을 받는 함수가 없는가.
+#[test]
+fn the_boundary_world_selection_touches_no_file_state_or_store_and_builds_no_span() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("artifact").join("tracking_record").join("boundary_world.rs");
+    let text = std::fs::read_to_string(&path).unwrap();
+    let code: Vec<&str> =
+        text.lines().map(str::trim).filter(|line| !line.is_empty() && !line.starts_with("//") && !line.starts_with('"')).collect();
+    let forbidden = [
+        "std::fs",
+        "std::io",
+        "std::env",
+        "File",
+        "OpenOptions",
+        "read_to_string",
+        "ObjectStore",
+        "Project",
+        "state.yaml",
+        "gilignore",
+        "read_root_policy_file",
+        "store_policy_source",
+        "LedgerStart",
+        "ConfirmedStart",
+        "AppliedSpan",
+        "BoardPolicies",
+        "select_ledger_span",
+        "classify_path",
+        "select_opening_policy",
+        "OpeningSelection",
+        "put_blob",
+    ];
+    let used: Vec<String> = code
+        .iter()
+        .flat_map(|line| forbidden.iter().filter(|name| line.contains(*name)).map(move |name| format!("{name}: {line}")))
+        .collect();
+    assert!(used.is_empty(), "B(T) 선택이 파일·상태·창고·구간·P(N) 의 문을 쓴다:\n{used:#?}");
     let calls: Vec<&&str> = code.iter().filter(|line| line.contains("check_event_inputs(")).collect();
     assert_eq!(calls, [&"let inputs = check_event_inputs(ledger, links, facts, chains, registry);"], "같은 호출의 입력으로 3j 를 한 번 불러야 한다");
     // 함수의 인자 자리(한 줄 서명의 괄호 안, 또는 여러 줄 서명의 `이름: &타입,` 줄)에 성공 값 타입이 있으면 안 된다.
