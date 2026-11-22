@@ -382,7 +382,8 @@ fn missing_failed_mismatched_and_unreadable_sources_are_all_reported() {
 fn the_object_store_is_read_only_and_tells_missing_from_corrupt() {
     let root = scratch("store");
     let store = ObjectStore::at(&root.join(".gil"));
-    // 시험 준비로 합성 원문을 창고에 넣는다 — 이 모듈에는 창고에 쓰는 기능이 없다.
+    // 시험 준비로 합성 원문을 범용 put_blob 으로 창고에 넣는다 — 읽기 검사 자신은 창고에 쓰지 않는다.
+    // (원문을 검증해 보관하는 문은 store_policy_source 이며 source_store_tests 가 따로 시험한다.)
     let a = store.put_blob(A.as_bytes()).unwrap();
     let b = store.put_blob(B.as_bytes()).unwrap();
     assert_eq!(a, address(A.as_bytes()), "창고 주소 = 원문 sha256 = rules_digest");

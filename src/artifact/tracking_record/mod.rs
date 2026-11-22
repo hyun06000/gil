@@ -13,6 +13,10 @@
 //!                                  │
 //!     앞선 원장 ───────────────────┘ check_append_only     기존 판의 이름·내용·순서 보존(순수 비교)
 //!
+//! 호출자가 고른 ObjectStore + 엔진 + 기대 주소 + 메모리의 원문 ─store_policy_source─▶ PolicySourceStored
+//!                                          쓰기 전 주소·해석 확인 뒤 같은 바이트를 기존 put_blob 으로 보관
+//!                                          (source_store, 「3m」 — 승인·적용·판·사건·상태·파일 쓰기 아님)
+//!
 //! 호출자가 명시한 절대 경로의 루트 ─read_root_policy_file─▶ DiskReading   루트 `.gilignore` 한 파일의 읽기 전용 실제 관측
 //!                                          (policy_file_read — 잠금·저장·판정 없음, 승인·쓰기 허가 아님)
 //!
@@ -52,8 +56,10 @@
 //! - **정책을 적용하지 않는다.** 어느 판이 적용 정책인지(T4: 마지막 사건의 after)는 사건 원장 없이
 //!   증명할 수 없으므로 그런 함수를 두지 않는다. [`classify_policy_file`] 은 적용 원문 주소를 **호출자가**
 //!   건네받는다.
-//! - **저장하지 않는다.** `state.yaml` 의 읽기·쓰기 경로, 형식 상수·관문, 객체 창고 쓰기, `.gilignore`
-//!   쓰기에 연결하지 않았다. 루트 `.gilignore` 를 실제로 **읽는** 문은 [`read_root_policy_file`] 하나이며 제품 경로가
+//! - **저장하지 않는다.** `state.yaml` 의 읽기·쓰기 경로, 형식 상수·관문, `.gilignore` 쓰기에 연결하지 않았다.
+//!   객체 창고에 쓰는 문은 [`store_policy_source`] 하나다 — 호출자가 명시적으로 건넨 원문 바이트를 쓰기 전에 기대 주소·엔진
+//!   해석과 대조한 뒤 기존 [`ObjectStore::put_blob`](super::ObjectStore::put_blob) 으로 보관할 뿐이며, 정책 판·관리 사건·
+//!   상태를 만들거나 쓰지 않고 제품 경로가 부르지 않는다. 루트 `.gilignore` 를 실제로 **읽는** 문은 [`read_root_policy_file`] 하나이며 제품 경로가
 //!   부르지 않는다 — 읽은 결과는 3a 의 [`DiskReading`] 값일 뿐 판정·승인·쓰기 허가가 아니다. 직렬화 자료형([`wire`])은 후속 저장 구현이 쓸 칸의 꼴과 거절 규칙을
 //!   시험하는 데만 쓰며, 독립 파일이나 두 번째 원장 형식을 만들지 않는다.
 //! - **세계·사이클을 모른다.** 사건에 대해서는 호출자가 뽑아 건넨 이름·종류·앞뒤 정책만 본다
@@ -87,6 +93,7 @@ mod event_links;
 mod link_history;
 mod policy_file_read;
 mod source;
+mod source_store;
 mod sync;
 mod sync_order;
 mod wire;
@@ -109,6 +116,8 @@ mod event_links_tests;
 mod link_history_tests;
 #[cfg(test)]
 mod policy_file_read_tests;
+#[cfg(test)]
+mod source_store_tests;
 #[cfg(test)]
 mod sync_order_tests;
 #[cfg(test)]
@@ -159,6 +168,10 @@ pub(crate) use policy_file_read::read_root_policy_file;
 pub(crate) use source::{
     Condition, PolicySourceLookup, PolicySourcesMatch, ProvidedSources, SourceLookup,
     SourceProblem, SourceProblemKind, check_policy_sources,
+};
+#[allow(unused_imports)]
+pub(crate) use source_store::{
+    PolicySourceStored, SOURCE_STORE_DOES_NOT_SHOW, SourceStoreProblem, store_policy_source,
 };
 #[allow(unused_imports)]
 pub(crate) use sync::{DiskReading, PolicyFileReading, SyncBase, classify_policy_file};
