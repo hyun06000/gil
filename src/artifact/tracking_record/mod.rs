@@ -61,6 +61,11 @@
 //!     ─select_opening_policy─▶ OpeningPolicy   같은 호출에서 3j 그대로 + 대상의 유일한 위치 뒤, next_cycle_id ≤ N 인 사건 가운데
 //!                                          이름이 가장 큰 것의 사건·판(§6.2 의 P(N)), 없으면 건넨 이력 안의 정책 채택 전 (opening_policy —
 //!                                          확정 정책·세계 출처·3n/3o 연결·실제 승인 아님)
+//!
+//! 대상 닫힌 사이클 T + 한 시점의 (PolicyLedger, EventPolicyLinks, 사건의 사이클 칸, &[Chain], 등록부)
+//!     ─select_boundary_world─▶ BoundaryWorld   같은 호출에서 3j 그대로 + 대상의 유일한 위치·닫힘 뒤, 기준점이 있고 baseline.after_cycle_ref
+//!                                          = T 인 사건 가운데 이름이 가장 큰 것의 기준점·판(§6.1 의 B(T)), 없으면 등록부에 있는 T 의 Exit —
+//!                                          그 확정 정책은 유도하지 않음 (boundary_world — S(N)·T8·3n/3o 연결·실제 승인·보관 아님)
 //! ```
 //!
 //! # 「형식이 맞다」는 「승인됐고 적용됐다」가 아니다
@@ -100,6 +105,7 @@ use crate::refs::RefSyntaxError;
 mod baseline_history;
 mod baseline_position;
 mod baseline_record;
+mod boundary_world;
 mod event_cycle_history;
 mod event_cycles;
 mod event_inputs;
@@ -121,6 +127,8 @@ mod baseline_history_tests;
 mod baseline_position_tests;
 #[cfg(test)]
 mod baseline_record_tests;
+#[cfg(test)]
+mod boundary_world_tests;
 #[cfg(test)]
 mod event_cycle_history_tests;
 #[cfg(test)]
@@ -160,6 +168,11 @@ pub(crate) use baseline_position::{
 pub(crate) use baseline_record::{
     AttemptSeen, BASELINES_DO_NOT_SHOW, BaselineFacts, BaselineField, BaselineProblem, BaselineSlot, BaselinesAgree,
     check_baselines,
+};
+#[allow(unused_imports)]
+pub(crate) use boundary_world::{
+    BOUNDARY_WORLD_DOES_NOT_SHOW, BoundaryPolicy, BoundarySource, BoundaryTargetProblem, BoundaryWorld,
+    BoundaryWorldProblem, select_boundary_world,
 };
 #[allow(unused_imports)]
 pub(crate) use event_cycle_history::{
