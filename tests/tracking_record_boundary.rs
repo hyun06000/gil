@@ -29,6 +29,8 @@
 //!   입력을 뽑는 길이 없다. 사건이 든 기록의 거절(형식 10/11 은 `UnknownFormat`, 알려진 형식은 모르는 칸)은 위 시험들 그대로이고,
 //!   새 모듈의 이름도 아래 제품 호출 부재 검사에 들어 있다. 두 부분 입력이 함께 뽑힐 한 사건 목록(`restore_result` 포함)이 든 기록도
 //!   형식 10/11 은 `UnknownFormat`, 알려진 형식은 모르는 칸으로 거절하고 폴더를 바꾸지 않는다.
+//! - 루트 `.gilignore` 의 읽기 전용 실제 관측(`policy_file_read`)도 저장 경로가 아니다. 제품의 시작·관측·보관·복원·동기화가
+//!   그것을 부르지 않으므로 아래 제품 호출 부재 검사에 그 이름이 들어 있다.
 //! - 새 모듈은 `src/artifact/tracking_record/` 밖의 어떤 소스에서도 불리지 않는다.
 
 mod common;
@@ -644,6 +646,9 @@ fn no_product_source_calls_the_new_module() {
         "NameDiffers",
         "KindDiffers",
         "EVENT_INPUTS_DO_NOT_SHOW",
+        "policy_file_read",
+        "read_root_policy_file",
+        "ReadProblem",
     ];
     let mut users = Vec::new();
     let mut stack = vec![src.clone()];
