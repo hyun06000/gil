@@ -56,6 +56,11 @@
 //!     ─select_ledger_span─▶ LedgerSpan ─classify─▶ PathContinuity   시작 판부터 원장의 마지막 판까지 빠짐없이 고르고, 판마다
 //!                                          자료의 정체성을 원장 기록과 견준 뒤 3n 그대로 판정 (ledger_span, 「3o」 — 원장의 출처·
 //!                                          시작 판의 §6.1 유도·승인 사실 아님)
+//!
+//! 대상 사이클 N + 한 시점의 (PolicyLedger, EventPolicyLinks, 사건의 사이클 칸, &[Chain], 등록부)
+//!     ─select_opening_policy─▶ OpeningPolicy   같은 호출에서 3j 그대로 + 대상의 유일한 위치 뒤, next_cycle_id ≤ N 인 사건 가운데
+//!                                          이름이 가장 큰 것의 사건·판(§6.2 의 P(N)), 없으면 건넨 이력 안의 정책 채택 전 (opening_policy —
+//!                                          확정 정책·세계 출처·3n/3o 연결·실제 승인 아님)
 //! ```
 //!
 //! # 「형식이 맞다」는 「승인됐고 적용됐다」가 아니다
@@ -101,6 +106,7 @@ mod event_inputs;
 mod event_links;
 mod ledger_span;
 mod link_history;
+mod opening_policy;
 mod path_continuity;
 mod policy_file_read;
 mod source;
@@ -127,6 +133,8 @@ mod event_links_tests;
 mod ledger_span_tests;
 #[cfg(test)]
 mod link_history_tests;
+#[cfg(test)]
+mod opening_policy_tests;
 #[cfg(test)]
 mod path_continuity_tests;
 #[cfg(test)]
@@ -181,6 +189,11 @@ pub(crate) use ledger_span::{
 pub(crate) use link_history::{
     HISTORY_DOES_NOT_SHOW, HistoryKept, HistoryProblem, LinkAppendViolation, LinkSlot, check_link_append_only,
     check_policy_history,
+};
+#[allow(unused_imports)]
+pub(crate) use opening_policy::{
+    OPENING_POLICY_DOES_NOT_SHOW, OpeningPolicy, OpeningPolicyProblem, OpeningSelection, TargetProblem,
+    select_opening_policy,
 };
 #[allow(unused_imports)]
 pub(crate) use path_continuity::{
