@@ -543,13 +543,13 @@ mod lfs {
         if pid == 0 {
             unsafe {
                 let mut st: libc::stat = std::mem::zeroed();
-                if libc::stat(path_ptr, &mut st) < 0 { fail(err_fd, *libc::__error()); }
+                if libc::stat(path_ptr, &mut st) < 0 { fail(err_fd, last_errno()); }
                 if (st.st_dev as u64, st.st_ino as u64) != pinned { fail(err_fd, libc::ESTALE); }
-                if let Some(fd) = child_fds.0 { if libc::dup2(fd, 0) < 0 { fail(err_fd, *libc::__error()); } }
-                if let Some(fd) = child_fds.1 { if libc::dup2(fd, 1) < 0 { fail(err_fd, *libc::__error()); } }
-                if let Some(fd) = child_fds.2 { if libc::dup2(fd, 2) < 0 { fail(err_fd, *libc::__error()); } }
+                if let Some(fd) = child_fds.0 { if libc::dup2(fd, 0) < 0 { fail(err_fd, last_errno()); } }
+                if let Some(fd) = child_fds.1 { if libc::dup2(fd, 1) < 0 { fail(err_fd, last_errno()); } }
+                if let Some(fd) = child_fds.2 { if libc::dup2(fd, 2) < 0 { fail(err_fd, last_errno()); } }
                 libc::execve(path_ptr, argv_ptrs.as_ptr(), environ);
-                fail(err_fd, *libc::__error());
+                fail(err_fd, last_errno());
             }
         }
         drop(err_w);
@@ -584,6 +584,17 @@ mod lfs {
         }
     }
     fn describe(exit: &Option<Exit>) -> String { match exit { Some(x) => format!("reaped ({x:?})"), None => "still running or not reapable within 500 ms: the caller ends and reaps it".into() } }
+    /// Child side only: the errno the failed call just set, read before anything else can change
+    /// it. Reading the calling thread's errno slot is async-signal-safe; only its accessor's name
+    /// differs between the C libraries (as in `internal_fs`).
+    #[inline(always)]
+    unsafe fn last_errno() -> i32 {
+        #[cfg(target_os = "macos")]
+        let errno = unsafe { libc::__error() };
+        #[cfg(target_os = "linux")]
+        let errno = unsafe { libc::__errno_location() };
+        unsafe { *errno }
+    }
     /// Child side only: report errno through the pipe and exit without running destructors.
     unsafe fn fail(err_fd: i32, errno: i32) -> ! {
         let bytes = errno.to_ne_bytes();
