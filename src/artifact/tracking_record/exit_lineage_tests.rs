@@ -24,7 +24,11 @@
 //!
 //! 현재 문법의 Experiment 는 Outcome ← Analysis ← Verify 로만 이어지므로 Verify 없는 Experiment 종료를 만들 수 없다. Entry 계승 갈래는
 //! Experiment 의 Define 뒤에 Outcome 을 허락하는 **합성 문법**(현재 문법이 아니다)으로만 걷는다. 복원 구조는 `Cycles::restore` 의 그래프
-//! 불변식을 통과한 값이며, 저장 Exit 을 바꾼 값·Verify 의 snapshot 을 지운 값은 현행 `Project` load 의 세계 검사(③·④)가 거절할 값이다.
+//! 불변식을 통과한 합성 값이며 `Project` load 는 실행하지 않았다. 현행 `check_restored_worlds` 는 저장 Exit 을 그 Cycle 자신의 마지막 Outcome
+//! 계보 기대 세계와 견주지 않는다 — ②는 Exit 칸의 유무와 등록부, ③은 자식 Entry 와 부모 Exit 의 대응, ④는 Verify snapshot 의 유무·종류·
+//! 등록부를 본다. Exit 누락·미등록 값은 ②, 닫힌 Verify 의 snapshot 누락은 ④, 자식 Entry 가 기대는 Exit 을 바꾼 값(branching 의 C2)은 ③에
+//! 해당하지만, 자식 Entry 가 기대지 않는 Exit 을 등록된 다른 이름으로 바꾼 값(tree 의 C3 을 A1·A2 로, 합성 문법의 C2 를 A2 로)은 그 변경만으로
+//! ②–④에 걸리지 않는다. 전체 제품 load 의 성공·실패는 단정하지 않는다.
 //! 기존 복원 문이 먼저 거절하는 값은 그 사실을 적고 불변식을 풀지 않는다. 어떤 시험도 실제 관측·보관·승인·제품 load 성공을 검증했다고
 //! 말하지 않는다.
 
