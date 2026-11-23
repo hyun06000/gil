@@ -368,6 +368,20 @@ T6의 **한 시점 부분**을 검사한다. 범위 설명(적힌 조건·도출
 | 합성 시험과 한계 | Cycles 층의 메모리 전이로 Experiment 실패·revisit·새 갈래의 parent/revisit_from을 구성했다. 실제 Project 세션의 파일 복원·저장·승인 실행이 아니다. Entry가 부모 Exit과 다른 일치/불일치 및 부모 Exit 부재 사례는 별도 복원 구조로, 현행 Project load가 거절할 값이다. 실제 Experiment 세계 보관·관문 ②·Monitor 승인·Host 화면·필드 테스트 성공으로 확대하지 않는다 |
 | 남은 것과 순서 | 뿌리/후속 Chain Entry·Interview 정책 상속·열린 Verify 계보·검사 ②/T9·T8·실제 상태 추출/완전성/승인·3o 시작점·내용 비교·보관/재시도/복원·제품 열기/load·형식 활성화는 남는다. O-2·O-3과 기존 미결 결정, Monitor 승인 및 제품 복원 제한은 유지한다. `.gilignore`/Chain 제품 연결과 필수 검증을 먼저 완성한 뒤 설치·실행 가능한 Linux 배포를 진행한다. 이후 별도 opt-in 벤치마크는 사용자 조사 뒤 검토하며 아직 설계·실행하지 않는다. 성능 이득 입증 뒤 신규 Mac·Windows 작업을 검토한다. 이 PR은 그 배포·벤치마크·플랫폼 작업이나 릴리스 완료가 아니다 |
 
+**2026-11-23 §6.1 Experiment Exit — 건넨 기록에서 닫힌 Experiment의 Exit 세계와 확정 정책 유도(제품 미연결, 게시 전):**
+[공유 계약 §6.1](GIL_Storage_Transition_Contract_v0.1.md#61-단일-출처-규칙)의 「Experiment의 Verify·Exit → 그 실험을 열 때의 적용 정책」 가운데
+닫힌 Experiment의 Exit만 구현했다. 상세 범위는 [구현 순서](GIL_Implementation_Order_2026-11-19.md)의 같은 이름 기록을 따른다.
+**§6.1 전체·B(T)/S(N)의 Exit 정책 미유도 대체·제품 연결의 완료가 아니다.**
+
+| 단계 | 상태 |
+|---|---|
+| 구현 | `experiment_exit.rs`의 `select_experiment_exit`: 같은 호출의 `select_opening_policy(T, …)`를 한 번 부르고(3j·P(T) 선택은 그 안의 것), 그 결과와 무관하게 대상의 실재·유일한 소유·실제 종류 Experiment·닫힘·Exit 칸을 확인하고 그 Exit 이름을 등록부에서 조회한다. 모두 성립하면 T의 `exit_snapshot_ref`와 P(T) 결과 그대로를 돌려준다. Interview는 범위 밖, 열린 Experiment·Exit 없는 닫힘·없는/모호한 대상·등록부에 없는 Exit은 각각의 오류이며 입력 오류와 함께 보존한다. 등록부 조회는 유일한 닫힌 Experiment에 Exit 칸이 있을 때만 하며 다른 이름을 추정해 조회하지 않는다. B(T)·S(N)의 `ExitPolicyNotDerived`는 바꾸지 않았다 |
+| 자동 검사 범위(소스) | 신규 단위 시험 23개: 개방 뒤 정책 변경에도 과거 P(T), T 경계의 나중 기준점·restore_result가 Exit 세계·정책을 대신하지 않음, 같은 세계·같은 원문의 다른 판 비합침, 건넨 이력 안의 채택 전과 B(T)/S(N) 미유도의 구분, 실패 판정 Experiment, 보관 대기 사건의 정책, 검증 ① Entry 불일치를 보고도 거절하지 않음(검증 ②·T9는 검사하지 않음), Interview(열림·닫힘·다른 체인)·열린 Experiment·없는/모호한 대상·Exit 누락·등록부 누락, 입력 오류와 대상 오류·Exit 등록부 누락의 동시 보존(사건 기준점과 대상 Exit이 함께 등록부에 없는 경우 포함)과 소유 문제 한 번, 3j 미판정·잘린 이력·입력 불변. 경계 시험은 원문 검사 1개를 더해 총 14개이며 제품 호출 부재 이름 7개를 더했다 |
+| 공식 실행 | 이 상태 기록 작성 시점에는 공식 실행 증거가 없다. 이후 정확 head의 공식 실행 결과와 checkout/tree 대응은 PR에 기록한다 |
+| 작성 환경과 진단 | **정확 트리:** 정확 기준 `ff39bfe`와 정확 후보 트리의 Linux `cargo test --locked -p gil --lib --no-run`은 기존 `libc::__error` 오류 5개(첫 실패 `src/runtime_launch.rs:546`)로 빌드 실패, 시험 미실행. **작성자 진단(별도 사본):** 작업 폴더 밖 사본에서 `runtime_launch.rs`의 그 호출만 Linux 대응 함수로 바꾼 임시 조치(#241 아님, PR에 없음)로 `--lib experiment_exit` 23개, `--lib tracking_record` 421개, `--test tracking_record_boundary` 14개 통과. 네 구성(`approved-plan,visual-authoring,product-safety`, `exploration-flow,visual-authoring,product-safety`, `will-end-history`, `will-end-history,visual-authoring,product-safety`)에서는 `tracking_record` 대상 라이브러리 시험(`--lib tracking_record -- --test-threads=1`)만 실행해 각각 421개 통과했다. 전체 라이브러리 시험은 실행하지 않았다. 임시 결함 주입 11가지가 모두 실패로 잡혔다. 진단이며 정확 트리나 공식 Mac/Windows 성공의 대체가 아니다 |
+| 합성 시험과 한계 | Cycles 층의 메모리 전이로 Experiment의 Verify 세계 확정→Exit, 실패·revisit·새 갈래를 구성했다. 실제 Project 세션의 관측·보관·복원·저장·승인 실행이 아니다. Exit 없는 닫힌 Experiment는 별도 복원 구조이며 현행 Project load가 거절할 값이다 |
+| 남은 것 | Verify의 확정 정책·열린 Experiment의 Verify 계보, Interview Exit의 Entry 계승, B(T)·S(N)의 미유도 대체, 검사 ②·T8·T9, 실제 상태 추출·완전성·승인, 3o 시작점·내용 비교·보관·재시도·복원·제품 연결·형식 10/11 활성화. O-2·O-3과 기존 미결 결정은 그대로다 |
+
 **2026-11-21 개발 검증 신뢰성 보완(구현 순서 단계 아님, 설치 기능 변경 아님):** #179·#181·#183의 첫 전체
 시험에서 각각 한 번 관측된 설치 시험의 「another GIL registration … in progress」 실패에 대비해, 시험 빌드에서만
 `src/install/file.rs`의 `try_lock` 반환 오류(변형·Debug/Display, 내부 오류가 있으면 종류·번호)와 시도 순서·프로세스·
