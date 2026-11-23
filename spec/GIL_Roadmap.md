@@ -409,6 +409,21 @@ T6의 **한 시점 부분**을 검사한다. 범위 설명(적힌 조건·도출
 | 합성 시험과 한계 | Cycles 층의 메모리 전이로 Verify 세계 확정·Step 되돌아가기·Cycle 실패·revisit와 열린 Experiment의 걷기를 구성했다. 닫힌 Verify의 snapshot을 지운 값, Verify가 아닌 Step·열린 Verify에 snapshot을 적은 값은 `Cycles::restore`를 통과한 합성 복원 구조이며 현행 Project load의 세계 검사 ④가 거절할 값이다. Project load는 실행하지 않았다. 실제 Project 세션의 관측·보관·복원·저장·승인 실행이 아니다 |
 | 남은 것 | 열린 사이클의 마지막 확정 세계(가장 가까운 Verify 계보 선택), Interview 정책 상속, 뿌리·후속 Chain Entry, B(T)·S(N)의 미유도 대체, 검사 ①·②·T8·T9, 3n/3o 연결, 실제 상태 추출·완전성·승인, manifest/blob 실재, 보관·재시도·복원·제품 연결·Monitor·CLI·MCP, 형식 10/11 활성화. O-2·O-3, BaseUndecided의 나머지 조합, 승인 이후 변경의 결속·보존·재적용은 정하지 않았다 |
 
+**2026-11-23 4번 최초 시작 — 시작 준비·Monitor 승인·최초 보관·정식 시작·재시작 복구(개발 구성 `tracking-policy`, 제품 미활성화, 게시 전 검토 대상):**
+[구현 순서](GIL_Implementation_Order_2026-11-19.md)의 같은 날 「4번」 기록과 [공유 계약](GIL_Storage_Transition_Contract_v0.1.md) 머리말의 4번 상태,
+§5.2 「최초 시작의 정책 파일 동기화와 좁은 결합 예외」(2026-11-23 사용자 결정)를 구현했다. **5번(범위 변경)·6번(최신 정책 복원)·형식 전환·
+제품 활성화의 완료가 아니다.** 형식 10/11 에서 복원·되돌아가기는 실행 전에 거절한다.
+
+| 단계 | 상태 |
+|---|---|
+| 구현 | `src/start_prep/`(준비 기록·제안·응답·적용·취소·load 승인 검사), `src/artifact/tracking_state.rs`(형식 10/11 `tracking` 블록: 꼴·3j 연결·원문 객체·모든 세계의 범위), `src/artifact/scoped.rs`(승인 정책 범위의 두 번 관측·보관), `tracking_record/policy_file_write.rs`(§5.2 쓰기 2단계), `policy_file_read.rs` 의 바이트 읽기, `store.rs` 형식 10/11, `Project::start_tracked`, `session.rs` 의 `StartGate`·승인 정책 관측/보관·형식 10/11 복원 거절, `src/mcp/start.rs`(App-only capability), Monitor 준비 화면 `mcp-app/start-review.mjs`, CLI 시작 거절 |
+| 자동 검사 범위(소스) | `src/start_prep/tests.rs` 23개(정상 시작·승인 전 보관 없음, 재전송·적용 재시도·조회의 같은 결과, 결합 예외의 안내·D 승인·B 승인 비재사용·D 승인 뒤 변경 비덮어쓰기, 안내 전·승인 전 결합안 거절, 첫 제안 전에 생긴 C 를 보여 준 제안의 교체와 그 뒤 C′ 비덮어쓰기, 세 내용 다름 보류, 목록 변화 재승인과 내용만·제외 내부 변화의 비재승인, 하위 `.gilignore` 차단, 추적 연결 거절·제외 연결 비추종, 위조·오래된·다른 폴더 응답, 바꿔 넣은 원문·엔진·손상 기준의 거절(패닉 없음), 취소·재시작·연결 끊김, 파일 쓰기 실패·교체 결과 불명·교체 직전 편집 보존·중단 뒤 비자동 쓰기, 관측 불가의 무시작, load 의 승인·사건·기준점·형식·원문 객체 불일치 거절, 시작 뒤 변경 검사와 복원 거절, 기존 형식 8 의 무변경), `src/mcp/start_tests.rs` 3개(capability 비노출·결속·일회성·재시작 무효, 결정용·적용용 capability 의 분리, 카탈로그 가시성 — 적용도 App 전용), `tests/tracking_start.rs` 3개(실제 stdio 프로세스: 승인 없는 정책의 load 거절·무변경, 모델 입력의 적용 거절, Monitor 승인 시작·재전송·재시작 조회·문맥·정식 Monitor, CLI 거절), `mcp-app/start-review.test.mjs` 7개, `mcp-app/start-browser-check.mjs`(헤드리스 Chromium 의 합성 Host — 그래프 없음, 원문 글자 표시, 비신뢰 클릭 무승인, 신뢰 클릭의 정확한 판·digest·capability, DOM 의 capability 없음). 기존 시험: `tests/tracking_record_boundary.rs` 는 이 기능을 끈 빌드만 짓고 제품 호출 부재 검사가 기능 뒤의 연결 파일만 허용한다. `skill.test.mjs` 는 시작 준비 도구의 조건부 사용과 App 전용 도구의 비지시를 확인한다 |
+| 독립 검토(게시 전, 같은 세션의 별도 검토자) | 정확 커밋 diff 에 대한 별도 검토가 ① 에이전트가 파일 쓰기로 준비 기록에 승인 응답을 넣고 모델용 적용 도구로 시작할 수 있음 ② 승인 뒤 원문을 바꿔 넣어도 탐지하지 않음 ③ 판정 뒤 교체 직전의 사용자 편집을 덮어쓸 수 있음 ④ 첫 제안 전에 생긴 C 로 시작할 길이 없음 ⑤ 손상된 준비 기록에서의 패닉 ⑥ 준비 기록 크기 ⑦ 결합안의 안내·최신 승인 조건 누락을 찾았다. 모두 고쳤다: 적용을 App 전용(쓰임이 다른 capability)으로 바꿔 모델 도구로는 기록을 시작으로 바꿀 수 없게 했고, 읽을 때마다 원문 주소·제안 digest 를 다시 재고, 교체 직전 재관측·임시 파일을 `.gil/start/` 안으로 옮겼으며, ④ 는 공유 계약 §5.2 의 파생 규칙(반대 의견 요청)으로 정했다. 준비 기록은 서명된 기록이 아니므로 `.gil` 쓰기 권한자의 일관된 위조 전체를 막는다고 주장하지 않는다 |
+| 공식 실행 | 이 기록 작성 시점에는 정확 head 의 공식 CI·macOS 실행 증거가 없다. push·CI 실행은 별도 승인 대상이다 |
+| 작성 환경과 진단 | **정확 트리는 Linux 에서 빌드되지 않는다**(기준 main 도 같다: `src/runtime_launch.rs` 의 `libc::__error`, PR #241 의 대상). 그래서 작업 폴더 밖 사본에 #241 의 같은 한 함수 변경을 임시로 넣은 **Linux 임시 shim** 에서만 실행했다 — 정확 변경본의 성공이 아니다. 같은 shim 을 넣은 기준 main 사본과 견준 결과는 PR 본문의 TEST 보고에 적는다 |
+| 합성 시험과 한계 | 합성 임시 폴더만 썼고 소스 저장소에서 `gil start` 를 실행하지 않았다. Monitor 버튼은 capability 검사 뒤의 Core 함수·실제 stdio 의 App 도구 호출로 흉내 낸 시험 입력이며 사람의 동의·보이는 화면의 증거가 아니다. 실제 Host 화면·필드·Windows 는 하지 않았다. 최종 상태 저장 자체의 실패 주입은 하지 않았다(저장 실패·불확실은 `start_not_saved` 로 보고하고 조회로 확인하도록만 연결했다) |
+| 남은 것 | 5번 범위 변경 사건과 인터뷰 연계, 6번 최신 정책 복원(그 전까지 형식 10/11 의 복원·되돌아가기·승인 복구 거절), 8→10·6→10 전환, 형식 11 의 새 시작, 명시적 정책 파일 동기화 명령, Monitor 그래프 화면의 정책 표시, 내장 설명서 주제, O-2·O-3, 나머지 `BaseUndecided`, 일반 변경 승인의 결속·보존, 제품 활성화 |
+
 **2026-11-21 개발 검증 신뢰성 보완(구현 순서 단계 아님, 설치 기능 변경 아님):** #179·#181·#183의 첫 전체
 시험에서 각각 한 번 관측된 설치 시험의 「another GIL registration … in progress」 실패에 대비해, 시험 빌드에서만
 `src/install/file.rs`의 `try_lock` 반환 오류(변형·Debug/Display, 내부 오류가 있으면 종류·번호)와 시도 순서·프로세스·

@@ -22,6 +22,11 @@ fn hash(bytes: impl AsRef<[u8]>) -> String {
 
 impl ProjectSession {
     pub(crate) fn revisit_review(&self) -> Result<Value, String> {
+        // 형식 10/11: 최신 승인 정책 기준 복원(구현 순서 6번)이 없으므로 whole-tree 복구 계획을 만들지 않는다.
+        #[cfg(feature = "tracking-policy")]
+        if self.project.tracking().is_some() {
+            return Ok(json!({"supported":false,"reason":crate::locale::text("session.tracking_unsupported.revisit")}));
+        }
         if self.project.cycles().pending_revisit().is_none() && !self.project.cycles().can_revisit()
         {
             return Ok(json!({"supported":true,"state":"not_needed"}));
@@ -47,6 +52,10 @@ impl ProjectSession {
     }
 
     pub(crate) fn approve_revisit(&mut self, digest: &str) -> Result<Value, String> {
+        #[cfg(feature = "tracking-policy")]
+        if self.project.tracking().is_some() {
+            return Err(crate::locale::text("session.tracking_unsupported.revisit").into());
+        }
         #[cfg(not(any(target_os = "macos", windows)))]
         {
             let _ = digest;
@@ -67,6 +76,10 @@ impl ProjectSession {
     /// freshly checked plan and records that setting as the source. A pending recovery is always
     /// resumed from its stored approval, whatever the setting says now.
     pub(crate) fn resume_revisit(&mut self) -> Result<Value, String> {
+        #[cfg(feature = "tracking-policy")]
+        if self.project.tracking().is_some() {
+            return Err(crate::locale::text("session.tracking_unsupported.revisit").into());
+        }
         #[cfg(not(any(target_os = "macos", windows)))]
         return Err(
             "이 플랫폼의 승인 복원은 아직 제공하지 않는다. 기존 파일과 기록을 보존한다".into(),

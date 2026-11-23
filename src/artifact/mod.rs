@@ -40,6 +40,31 @@ mod store;
 mod tracking_policy;
 // 구현 순서 3a — 정책 기록 자료형과 부분 검증. **어떤 제품 경로도 부르지 않는다**(재수출 없음).
 mod tracking_record;
+// 구현 순서 4번(최초 시작·Monitor 승인) — `tracking-policy` 개발 구성에서만 제품 경로가 부른다.
+#[cfg(all(feature = "tracking-policy", unix))]
+mod scoped;
+#[cfg(feature = "tracking-policy")]
+mod tracking_state;
+#[cfg(all(feature = "tracking-policy", unix))]
+pub(crate) use scoped::{capture_scoped, evaluate_scope, observe_scoped};
+#[cfg(feature = "tracking-policy")]
+pub(crate) use tracking_state::{StartEvent, StoredTracking, TrackingError, TrackingState, load_policy};
+/// 시작 준비·확정이 쓰는 정책 엔진·기록 모듈의 이름들 — `tracking-policy` 개발 구성 전용 재수출.
+#[cfg(feature = "tracking-policy")]
+pub(crate) mod start_policy {
+    pub(crate) use super::gilignore::{
+        ApprovedPolicy, Decision, EngineVersion, ExclusionReason, Interior, PathKind, Recommendation,
+        RecommendationSource, TreeEvaluation, catalog, project_specific, review_gitignore, system_protections,
+    };
+    pub(crate) use super::tracking_record::{
+        BaseUndecided, DiskReading, NewPolicyBase, PolicyName, PolicyRecord, ProposalDigest, SyncBase,
+        base_for_new_policy, read_root_policy_source, store_policy_source,
+    };
+    // 제품 빌드는 `write_root_policy_file`, 시험 빌드는 실패 주입용 `write_with` 를 부른다.
+    #[cfg(unix)]
+    #[allow(unused_imports)]
+    pub(crate) use super::tracking_record::{PolicyWrite, write_root_policy_file, write_with};
+}
 
 // M3 추적 정책 — **정책이 선택된 새 읽기 경로.** 기본 `observe`/`capture` 의 의미와
 // `EntryPath` 규칙은 그대로다. 아직 crate 안의 아무도 이 경로를 부르지 않는다: 제품 기본
@@ -680,6 +705,9 @@ pub(crate) enum ObserveError {
     ChangedDuringObservation,
     /// 객체 창고가 답하지 못했다.
     ObjectStore(ObjectError),
+    /// 승인 정책 범위의 관측(형식 10/11)이 거절했다 — 하위 `.gilignore` 발견, 추적·재포함 경로의 연결 파일 등.
+    #[cfg_attr(not(feature = "tracking-policy"), allow(dead_code))]
+    Policy { code: &'static str, said: String },
 }
 
 impl fmt::Display for ObserveError {
@@ -718,6 +746,7 @@ impl fmt::Display for ObserveError {
                  어떤 Snapshot 도 확정하지 않았다. 읽을 수 있게 한 뒤 다시 시도한다."
             ),
             ObserveError::ObjectStore(source) => write!(f, "{source}"),
+            ObserveError::Policy { said, .. } => write!(f, "{said}\n어떤 Snapshot 도 확정하지 않았다."),
             ObserveError::ChangedDuringObservation => write!(
                 f,
                 "관측 중 Artifact 세계가 변경되었다. 서로 다른 순간의 파일을 한 세계로 \

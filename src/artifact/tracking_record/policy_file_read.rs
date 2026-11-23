@@ -158,6 +158,17 @@ impl fmt::Display for ReadProblem {
 
 /// 관측 한 번. `Ok(None)` 은 확인된 없음이다.
 pub(super) fn observe(root: &Path, pause: &mut dyn FnMut(Pause)) -> Result<Option<ContentDigest>, ReadProblem> {
+    observe_source(root, pause).map(|seen| seen.map(|(digest, _)| digest))
+}
+
+/// 루트 `.gilignore` 의 **바이트와 지문**을 같은 ①–⑥ 검사로 읽는다 — 시작 준비가 기존 파일을 보여 주고
+/// 결합안을 만들 때 쓴다. 검사·한계는 [`read_root_policy_file`] 과 같다. 쓰거나 잠그지 않는다.
+#[cfg(feature = "tracking-policy")]
+pub(crate) fn read_root_policy_source(project_root: &Path) -> Result<Option<(ContentDigest, Vec<u8>)>, String> {
+    observe_source(project_root, &mut |_| {}).map_err(|problem| problem.to_string())
+}
+
+fn observe_source(root: &Path, pause: &mut dyn FnMut(Pause)) -> Result<Option<(ContentDigest, Vec<u8>)>, ReadProblem> {
     if !root.is_absolute() {
         return Err(ReadProblem::RootNotAbsolute);
     }
@@ -178,7 +189,7 @@ pub(super) fn observe(root: &Path, pause: &mut dyn FnMut(Pause)) -> Result<Optio
             })?;
             let before = os::stamp(&file).map_err(unavailable)?;
             pause(Pause::FileOpened);
-            let (digest, length) = read_from_start(&mut file).map_err(unavailable)?;
+            let (digest, length, bytes) = read_from_start(&mut file).map_err(unavailable)?;
             pause(Pause::AfterRead);
             let after = os::stamp(&file).map_err(unavailable)?;
             if before != after || before.size() != length {
@@ -188,7 +199,7 @@ pub(super) fn observe(root: &Path, pause: &mut dyn FnMut(Pause)) -> Result<Optio
             if !held.still_names(&file).map_err(|_| ReadProblem::Changed { what: "읽은 뒤 그 이름을 다시 확인하지 못했다" })? {
                 return Err(ReadProblem::Changed { what: "읽은 뒤 그 이름이 다른 항목을 가리킨다" });
             }
-            Some(digest)
+            Some((digest, bytes))
         }
     };
     pause(Pause::BeforeRootRecheck);
@@ -204,22 +215,13 @@ fn unavailable(error: io::Error) -> ReadProblem {
 }
 
 /// 같은 핸들의 처음부터 끝까지 흘려 읽은 지문과 바이트 수.
-fn read_from_start(file: &mut std::fs::File) -> io::Result<(ContentDigest, u64)> {
-    struct Counting<'a> {
-        inner: &'a mut std::fs::File,
-        count: u64,
-    }
-    impl Read for Counting<'_> {
-        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-            let read = self.inner.read(buf)?;
-            self.count += read as u64;
-            Ok(read)
-        }
-    }
+fn read_from_start(file: &mut std::fs::File) -> io::Result<(ContentDigest, u64, Vec<u8>)> {
+    // 한 번 흘려 읽은 바이트 그대로 — 지문과 원문이 같은 읽기에서 나온다(두 번 읽지 않는다).
     file.seek(SeekFrom::Start(0))?;
-    let mut counting = Counting { inner: file, count: 0 };
-    let digest = crate::artifact::digest_of(&mut counting)?;
-    Ok((digest, counting.count))
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)?;
+    let digest = crate::artifact::digest_of(&bytes[..])?;
+    Ok((digest, bytes.len() as u64, bytes))
 }
 
 // ── 운영체제별 ───────────────────────────────────────────────────────────

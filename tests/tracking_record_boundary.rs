@@ -57,8 +57,12 @@
 //!   경로가 아니다. 메모리의 원장·사건 입력·Chain 목록·등록부만 받아 같은 호출에서 P(N) 선택을 한 번 부르고(3j 는 그 안에서만 실행된다),
 //!   Experiment Exit 선택과 같은 소유 조회를 한 번 쓰며, 파일·`state.yaml`·객체 창고를 읽지 않고 계보 선택·현재 세계 유도·Exit·B(T)·S(N)·
 //!   3n·3o 의 문을 쓰지 않는다. 제품 경로가 그것을 부르지 않으므로 아래 검사에 그 이름이 들어 있고, 그 원문의 코드 줄은 따로 검사한다.
-//! - 새 모듈은 `src/artifact/tracking_record/` 밖의 어떤 소스에서도 불리지 않는다.
+//! - 새 모듈은 `src/artifact/tracking_record/` 밖의 어떤 소스에서도 불리지 않는다 — **예외는 `tracking-policy` 개발 구성에서만
+//!   컴파일되는 구현 순서 4번의 연결 파일**(시작 준비 `src/start_prep/`, 형식 10/11 기록 `src/artifact/tracking_state.rs`, 그 재수출
+//!   블록 `start_policy`)뿐이며, 그 파일들이 실제로 그 기능 뒤에 있는지도 함께 본다(2026-11-23). 이 기능을 켠 빌드는 형식 10/11 을
+//!   읽으므로 아래 「알지 못한다」 시험들은 이 기능이 꺼진 빌드에서만 짓는다. 켠 빌드의 거절은 `tests/tracking_start.rs` 가 본다.
 
+#![cfg(not(feature = "tracking-policy"))]
 mod common;
 use gil::{ProjectSession, StoreError};
 use serde_norway::Value;
@@ -805,8 +809,22 @@ fn no_product_source_calls_the_new_module() {
             }
         }
     }
-    // 허용하는 것은 `src/artifact/mod.rs` 의 모듈 선언 한 줄뿐이다(재수출 없음).
-    let allowed = |line: &str| line.ends_with(": mod tracking_record;");
+    // 허용하는 것은 `src/artifact/mod.rs` 의 모듈 선언 한 줄과, `tracking-policy` 뒤의 4번 연결 파일·재수출 블록뿐이다.
+    let gated_files = ["artifact/tracking_state.rs", "start_prep/"];
+    let mod_rs = std::fs::read_to_string(src.join("artifact").join("mod.rs")).unwrap();
+    let block_start = mod_rs.lines().position(|l| l.starts_with("pub(crate) mod start_policy {")).expect("재수출 블록") + 1;
+    let block_end = block_start + mod_rs.lines().skip(block_start).position(|l| l == "}").expect("블록 끝");
+    assert!(mod_rs.lines().nth(block_start - 2).unwrap().contains("#[cfg(feature = \"tracking-policy\")]"), "재수출 블록이 기능 뒤에 있다");
+    let state = std::fs::read_to_string(src.join("artifact").join("tracking_state.rs")).unwrap();
+    assert!(state.contains("#![cfg(feature = \"tracking-policy\")]"), "형식 10/11 기록 모듈은 기능 뒤에 있다");
+    let lib = std::fs::read_to_string(src.join("lib.rs")).unwrap();
+    assert!(lib.contains("#[cfg(all(feature = \"tracking-policy\", unix))]\nmod start_prep;"), "시작 준비 모듈은 기능 뒤에 있다");
+    let allowed = |line: &str| {
+        line.ends_with(": mod tracking_record;")
+            || gated_files.iter().any(|file| line.starts_with(file))
+            || line.strip_prefix("artifact/mod.rs:").and_then(|rest| rest.split(':').next()).and_then(|n| n.parse::<usize>().ok())
+                .is_some_and(|n| n > block_start && n <= block_end)
+    };
     let outside: Vec<_> = users.iter().filter(|line| !allowed(line)).collect();
     assert!(outside.is_empty(), "새 모듈이 제품 소스에서 쓰였다:\n{outside:#?}");
     assert!(users.iter().any(|line| line.ends_with(": mod tracking_record;")), "{users:#?}");

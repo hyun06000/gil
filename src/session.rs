@@ -62,7 +62,62 @@ mod visual_start;
 ///
 /// 이전에 중단된 `gil start` 나 미참조 객체가 남긴 내부 흔적이다. 이것들만 있는 `.gil` 은
 /// 「아직 아무 논리 상태도 없는 자리」이므로 다시 시도할 수 있다.
+#[cfg(not(all(feature = "tracking-policy", unix)))]
 const INTERNAL_ONLY: &[&str] = &[LOCK_FILE, "artifacts", "restore"];
+/// `start/` 는 정식 시작 전의 **시작 준비 기록**이다(구현 순서 4번). 이 빌드만 그것을 알아보고 같은 준비를
+/// 이어 간다 — 잔해로 지우거나 초기화하지 않는다. 이 이름을 모르는 빌드는 기존대로 `NotEmpty` 로 거절한다.
+#[cfg(all(feature = "tracking-policy", unix))]
+const INTERNAL_ONLY: &[&str] = &[LOCK_FILE, "artifacts", "restore", crate::start_prep::PREP_DIR];
+
+/// 정식 시작 전 준비·확정이 쥐는 잠금과 자리 — 구현 순서 4번. `.gil/` 의 잠금을 쥔 채로만 존재한다.
+#[cfg(all(feature = "tracking-policy", unix))]
+pub(crate) struct StartGate {
+    lock: ProjectLock,
+    pub(crate) store: ObjectStore,
+    pub(crate) root: PathBuf,
+    pub(crate) gil: PathBuf,
+    pub(crate) state_path: PathBuf,
+}
+
+#[cfg(all(feature = "tracking-policy", unix))]
+impl StartGate {
+    /// 잠근 **뒤에** 상태 파일이 있는지 본다. 있으면 이미 정식 시작이 확정됐다.
+    pub(crate) fn started(&self) -> bool {
+        self.state_path.exists()
+    }
+
+    /// 기존 시작과 같은 「처음부터 시작해도 되는가」 — 상태 파일·옛 형식·모르는 항목을 거절한다.
+    pub(crate) fn initializable(&self) -> Result<(), SessionError> {
+        initializable(&self.gil, &self.state_path)?;
+        check_object_store(&self.store)
+    }
+
+    /// 잠금을 쥔 채로 이 프로젝트를 정식으로 세운다 — 저장은 [`ProjectSession::commit`] 이 한 번 한다.
+    pub(crate) fn into_session(self, project: Project) -> ProjectSession {
+        ProjectSession { project, project_root: self.root, state_path: self.state_path, _lock: self.lock }
+    }
+
+    pub(crate) fn lock(&self) -> &ProjectLock {
+        &self.lock
+    }
+}
+
+#[cfg(all(feature = "tracking-policy", unix))]
+impl ProjectSession {
+    /// 시작 준비·확정의 입구. `create` 이면 `.gil/` 을 만들며 잠근다(`gil start` 와 같은 bootstrap), 아니면 있는
+    /// `.gil/` 만 잠근다. 잠근 뒤 중단된 복원 흔적을 기존 규칙대로 처리하고 미완 임시 객체를 거둔다.
+    pub(crate) fn start_gate(project_root: &Path, create: bool) -> Result<StartGate, SessionError> {
+        let root = project_root.to_path_buf();
+        let gil = root.join(crate::artifact::GIL_DIR);
+        let state_path = root.join(crate::STATE_PATH);
+        let lock = if create { ProjectLock::bootstrap(&gil) } else { ProjectLock::acquire(&gil) }
+            .map_err(SessionError::from)?;
+        let store = ObjectStore::at(&gil);
+        restore::recover(&root, &gil).map_err(SessionError::Restore)?;
+        reap_tmp(&store)?;
+        Ok(StartGate { lock, store, root, gil, state_path })
+    }
+}
 
 /// 한 GIL 명령이 이 프로젝트를 쥐고 있는 동안 사는 값.
 pub struct ProjectSession {
@@ -378,6 +433,7 @@ impl ProjectSession {
         // ── 사전 검사 ─────────────────────────────────────────────────────
         //
         // 여기서 거절하면 state·작업 폴더·창고·Journey·Will 어느 것도 바뀌지 않는다.
+        self.refuse_on_tracking("session.tracking_unsupported.revisit")?;
         let before = self.world_state()?;
         if let WorldState::Dirty { world, changes } = before {
             return Err(SessionError::RevisitNeedsCleanWorld { world, changes });
@@ -502,7 +558,7 @@ impl ProjectSession {
     /// 실패하면 **객체는 미참조로 남을 수 있지만** 논리 상태의 부분 변경은 남지 않는다
     /// (Artifact Model §3.5·§10).
     fn close_verify(&mut self, report: Report, unachieved: Option<WillRef>) -> Result<Closed, SessionError> {
-        let world = capture(&self.root()?, &self.store()?)?;
+        let world = self.capture_world(&self.root()?, &self.store()?)?;
         let mut next = self.project.clone();
         let closed = next.close_step_ending(report.clone(), Some(world.clone()), unachieved)
             .map_err(SessionError::Action)?;
@@ -577,7 +633,7 @@ impl ProjectSession {
             }
         }
         let objects = self.store()?;
-        let world = capture(&root, &objects)?;
+        let world = self.capture_world(&root, &objects)?;
         let manifest = objects.read_manifest(&world).map_err(|_| error(crate::locale::text("session.visual.world_unreadable").into()))?;
         for ((file, input), meta) in files.iter_mut().zip(&attachments).zip(&metadata) {
             file.revalidate().map_err(error)?;
@@ -680,6 +736,7 @@ impl ProjectSession {
     ///
     /// 논리 상태는 하나도 바뀌지 않는다. `state.yaml` 도 저장하지 않는다.
     pub fn restore(&self) -> Result<Restored, SessionError> {
+        self.refuse_on_tracking("session.tracking_unsupported.restore")?;
         let world = self.project.world_snapshot();
         let address = self
             .project
@@ -736,6 +793,46 @@ impl ProjectSession {
     /// [`Project::world_snapshot`](crate::Project::world_snapshot) 이 유도한 것을 그대로 쓴다.
     ///
     /// **아무것도 쓰지 않는다.** 저장하지 않고 관측하므로 창고도 커지지 않는다.
+    /// 지금 폴더의 관측 — 형식 10/11 이면 **승인된 정책 P1 으로**, 그 밖이면 기존 전체 관측. 아무것도 쓰지 않는다.
+    fn observe_world(&self) -> Result<Manifest, String> {
+        #[cfg(all(feature = "tracking-policy", unix))]
+        if let Some(policy) = self.approved_policy().map_err(|e| e.to_string())? {
+            return artifact::observe_scoped(&self.root().map_err(|e| e.to_string())?, &policy)
+                .map(|world| world.manifest).map_err(|e| e.to_string());
+        }
+        artifact::observe(&self.root().map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+    }
+
+    /// 지금 세계를 객체로 확정한다 — 형식 10/11 이면 같은 승인 정책으로. 이름 발급·상태 저장은 부르는 쪽의 일이다.
+    fn capture_world(&self, root: &Path, store: &ObjectStore) -> Result<crate::ManifestAddress, SessionError> {
+        #[cfg(all(feature = "tracking-policy", unix))]
+        if let Some(policy) = self.approved_policy()? {
+            let world = artifact::capture_scoped(root, &policy, store)
+                .map_err(|source| SessionError::Observe { said: source.to_string() })?;
+            return store.put_manifest(&world.manifest).map_err(|source| SessionError::Object { said: source.to_string() });
+        }
+        capture(root, store)
+    }
+
+    /// 형식 10/11 의 적용 정책을 원문 객체에서 다시 해석한다(load 가 이미 검사한 같은 판). 다른 형식은 `None`.
+    #[cfg(all(feature = "tracking-policy", unix))]
+    pub(crate) fn approved_policy(&self) -> Result<Option<crate::artifact::start_policy::ApprovedPolicy>, SessionError> {
+        let Some(tracking) = self.project.tracking() else { return Ok(None) };
+        let record = tracking.applied();
+        crate::artifact::load_policy(&self.store()?, record.engine(), record.rules())
+            .map(Some).map_err(|e| SessionError::Observe { said: e.to_string() })
+    }
+
+    /// 형식 10/11 에서 아직 없는 경로를 실행 전에 거절한다.
+    fn refuse_on_tracking(&self, what: &str) -> Result<(), SessionError> {
+        #[cfg(feature = "tracking-policy")]
+        if self.project.tracking().is_some() {
+            return Err(SessionError::TrackingUnsupported { said: crate::locale::text(what).into() });
+        }
+        let _ = what;
+        Ok(())
+    }
+
     pub fn world_state(&self) -> Result<WorldState, SessionError> {
         let world = self.project.world_snapshot();
         let address = self
@@ -753,13 +850,10 @@ impl ProjectSession {
 
         // 관측이 실패하면 **모른다고 말한다.** 심볼릭 링크나 중첩 GIL 을 만나 못 본 것을
         // 「바뀌었다」로 옮기면, 사람은 바꾼 적 없는 것을 되돌리려 한다.
-        let found = match artifact::observe(&self.root()?) {
+        let found = match self.observe_world() {
             Ok(found) => found,
-            Err(source) => {
-                return Ok(WorldState::Unknown {
-                    world,
-                    said: source.to_string(),
-                });
+            Err(said) => {
+                return Ok(WorldState::Unknown { world, said });
             }
         };
 
@@ -1257,6 +1351,10 @@ pub enum SessionError {
     /// 관측기의 오류 타입은 안에 남는다 — 밖으로 내보내면 창고의 내부 구조가 공개 계약이
     /// 된다. 여기 오는 것은 **이미 사람의 말로 적힌 이유**다.
     Observe { said: String },
+    /// 형식 10/11(승인 정책) 프로젝트에서 이 빌드가 아직 제공하지 않는 경로 — 복원·되돌아가기(최신 정책 복원,
+    /// 구현 순서 6번)와 범위 변경(5번). 실행 전에 거절하며 아무것도 바꾸지 않는다.
+    #[cfg_attr(not(feature = "tracking-policy"), allow(dead_code))]
+    TrackingUnsupported { said: String },
     /// 객체를 확정하거나 읽지 못했다.
     Object { said: String },
     /// 기준 세계의 manifest 를 읽지 못했다.
@@ -1375,6 +1473,7 @@ impl fmt::Display for SessionError {
             SessionError::Action(source) => write!(f, "{source}"),
             SessionError::Cycles(source) => write!(f, "{source}"),
             SessionError::Observe { said } => f.write_str(&crate::tr!("session.observe", said = said)),
+            SessionError::TrackingUnsupported { said } => f.write_str(&crate::tr!("session.tracking_unsupported", said = said)),
             SessionError::Object { said } => write!(f, "{said}"),
             SessionError::Manifest { world, said } => f.write_str(&crate::tr!("session.manifest", world = world, said = said)),
             SessionError::UnknownWorld { world } => f.write_str(&crate::tr!("session.unknown_world", world = world)),

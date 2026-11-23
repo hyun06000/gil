@@ -617,14 +617,16 @@ fn formats_without_a_transition_are_refused() {
     assert_eq!((read["status"].clone(), read["storage_format"].clone()), (json!("already_transitioned"), json!(8)), "{read}");
     assert_eq!(read["copies"], json!([]));
 
-    // Format 10 is unknown to this build.
+    // Format 10 is unknown to this build — or, in a tracking-policy build that reads 10/11, a format 10
+    // record without its required `tracking` block is invalid. Either way nothing is converted or changed.
     let root = common::scratch(&format!("transition-format-10-{}", std::process::id()));
     let state = root.join(gil::STATE_PATH);
     ProjectSession::start(common::spec(), &state).unwrap().commit().unwrap();
     let text = std::fs::read_to_string(&state).unwrap().replacen("format: 8", "format: 10", 1);
     std::fs::write(&state, text).unwrap();
     let ten = tree(&root);
-    assert_eq!(mcp.call(CHECK, json!({"project_root": root}))["result"]["structuredContent"]["code"], "unknown_format");
+    let expected = if cfg!(feature = "tracking-policy") { "record_invalid" } else { "unknown_format" };
+    assert_eq!(mcp.call(CHECK, json!({"project_root": root}))["result"]["structuredContent"]["code"], expected);
     drop(mcp);
     assert_eq!(tree(&root), ten);
     let _ = before;

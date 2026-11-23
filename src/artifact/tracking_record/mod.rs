@@ -144,6 +144,7 @@ mod opening_policy;
 mod opening_world;
 mod path_continuity;
 mod policy_file_read;
+mod policy_file_write;
 mod source;
 mod source_store;
 mod sync;
@@ -266,6 +267,10 @@ pub(crate) use path_continuity::{
 };
 #[allow(unused_imports)]
 pub(crate) use policy_file_read::read_root_policy_file;
+#[cfg(feature = "tracking-policy")]
+pub(crate) use policy_file_read::read_root_policy_source;
+#[cfg(all(feature = "tracking-policy", unix))]
+pub(crate) use policy_file_write::{PolicyWrite, write_root_policy_file, write_with};
 #[allow(unused_imports)]
 pub(crate) use source::{
     Condition, PolicySourceLookup, PolicySourcesMatch, ProvidedSources, SourceLookup,
