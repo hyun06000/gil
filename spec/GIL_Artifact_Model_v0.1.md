@@ -758,7 +758,7 @@ GIL에는 필요할 수 있다. 추천을 채택하려면 이유와 영향을 �
   오류·불일치·미판정 및 함께 잘린 이력의 한계를 구분한다. 규범은 [공유 계약 §6.2](GIL_Storage_Transition_Contract_v0.1.md#62-다음-entry의-규칙과-검증),
   최초 코드 head의 공식 실행과 합성 시험 범위는 [Roadmap](GIL_Roadmap.md)의 「§6.2 S(N)」 기록을 따른다. 뿌리·정책 상속·검사 ②·
   실제 상태/승인·3o 연결·제품 열기/load·보관/복원·형식 활성화는 남는다. 기존 Monitor 승인과 제품 복원 제한을 바꾸지 않는다.
-- **2026-11-23 §6.1 닫힌 Experiment Exit의 확정 정책(게시 전):** `experiment_exit.rs`는 같은 호출의 P(T) 선택을 한 번 부른 뒤, 실재하고
+- **2026-11-23 §6.1 닫힌 Experiment Exit의 확정 정책(PR #252):** `experiment_exit.rs`는 같은 호출의 P(T) 선택을 한 번 부른 뒤, 실재하고
   하나로 정해진 닫힌 Experiment T의 §7.2 `exit_snapshot_ref`(등록부에 있을 때)와 그 확정 정책 = P(T)를 함께 돌려준다. B(T)·나중 기준점·
   현재 세계로 Exit을 대신하지 않고, 같은 세계·같은 원문의 다른 판을 합치지 않는다. Interview는 범위 밖이다. Exit이 §7.5의 계보로
   계산됐는지, T의 개방이 검사 ②를 만족했는지, manifest·blob의 실재는 증명하지 않는다. 규범은
@@ -1176,6 +1176,17 @@ Interview Exit:  A2
 
 반드시 **닫히는 마지막 Outcome의 구조적 lineage**(`parent` 사슬)를 따른다. 이는 `basis_refs`와
 `synthesis_ref`가 따르는 것과 같은 계보 규칙이다(`GIL Cycle Model v0.1` §16·§17).
+
+**구현 상태(2026-11-23, 게시 전 검토 대상 — 제품 미연결):** 저장된 Exit이 이 규칙과 같은지 건넨 기록에서 보는 순수 검사만
+`src/artifact/tracking_record/exit_lineage.rs`에 있다. 닫힌 Experiment T를 `select_experiment_exit`와 같은 소유 조회로 정하고,
+T를 닫은 자리(마지막 Outcome)의 `parent` 사슬을 기존 `Walk::lineage`로 읽어 가장 가까운 닫힌 Verify의 `snapshot_ref`, 없으면 T의
+Entry를 기대 세계로 삼아 저장 `exit_snapshot_ref`와 견준다. 결과는 대상·마지막 Outcome·저장 Exit·기대 세계·그 출처(Verify 주소 또는
+Entry)·일치/불일치이며, 불일치는 검사 불능이 아니다. 그 Verify에 `snapshot_ref`가 없는 손상은 더 오래된 Verify나 Entry로 넘어가지
+않고 손상으로 돌려준다. 버려진 가지·가장 큰 이름·목록의 끝·`revisit_from`·B(T)·나중 사건 기준점을 쓰지 않는다. 두 이름의 등록부
+조회만 하며 manifest·blob 실재는 증명하지 않는다. Interview·열린 Experiment는 범위 밖이다. 현재 문법의 Experiment는
+Outcome ← Analysis ← Verify로만 이어지므로 Entry 계승 갈래는 현재 문법의 Experiment 기록에서 나지 않는다. Cycle close의
+`exit_would_be`와 Project load는 바꾸지 않았고 이 검사를 부르지 않는다. 검증 범위는 [Roadmap](GIL_Roadmap.md)의 「§7.5 Exit 계보」
+기록을 따른다.
 
 ---
 

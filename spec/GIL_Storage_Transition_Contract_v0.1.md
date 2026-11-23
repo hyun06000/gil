@@ -1016,13 +1016,21 @@ M2는 P1→P2 사건으로 남고, C5의 Entry는 A5이며 확정 정책은 P2�
 §6.1 전체·Interview 정책 계승·S(N)·검증 ①·②·T8·3o 시작점·제품 연결의 완료가 아니다. 아래 규범 공식은 그대로이며,
 검증 범위와 문서 갱신 전 최초 헤드의 증거는 [Roadmap](GIL_Roadmap.md)의 「§6.1 B(T)」 기록을 따른다.
 
-**구현 상태(2026-11-23, 후속 — 게시 전 검토 대상):** 아래 확정 정책 표의 「Experiment의 Verify·Exit」 줄 가운데 **닫힌 Experiment의
+**구현 상태(2026-11-23, PR #252):** 아래 확정 정책 표의 「Experiment의 Verify·Exit」 줄 가운데 **닫힌 Experiment의
 Exit**만 `experiment_exit.rs`에 건넨 기록에 대한 순수 유도로 구현됐다. 같은 호출의 P(T) 선택(§6.2)을 한 번 부르고(3j는 그 안에서만 실행),
 그 결과와 무관하게 대상의 실재·유일한 소유·실제 종류 Experiment·닫힘·Exit 칸과 그 Exit의 등록부 조회를 확인한 뒤(입력 오류와 함께 보존),
 T의 `exit_snapshot_ref`와 P(T)의 사건·종류·판·승인 발급기를 그대로 돌려준다. B(T)·현재 세계·나중 기준점으로 Exit을 대신하지 않고 원장의 마지막 판·원문 지문으로 정책을 다시 고르지 않는다.
 Interview는 범위 밖 결과다. Verify의 확정 정책, Interview의 Entry 계승, T 개방의 검증 ②·T9, Exit의 Verify 계보, B(T)·S(N)의
 `ExitPolicyNotDerived` 대체, 3o 시작점·제품 연결은 남는다. 아래 규범 공식은 그대로이며, 검증 범위는 [Roadmap](GIL_Roadmap.md)의
 「§6.1 Experiment Exit」 기록을 따른다.
+
+**구현 상태(2026-11-23, 후속 — 게시 전 검토 대상):** 위 「`exit_snapshot_ref`는 한 번 쓰면 바꾸지 않는다」의 그 값이 Artifact Model §7.5의
+계보 규칙과 같은지 보는 순수 검사가 `exit_lineage.rs`에 있다. 건넨 Chain 목록과 등록부만 받아 닫힌 Experiment T의 마지막 Outcome 계보에서
+가장 가까운 닫힌 Verify의 `snapshot_ref`(없으면 T의 Entry)를 기대 세계로 유도하고 저장 Exit과 일치/불일치를 돌려준다. 정책 원장·사건
+입력을 받지 않으므로 B(T)·나중 사건 기준점·S(N)·현재 세계가 기대 세계가 되지 않고, P(T)·`select_experiment_exit`의 결과나 B(T)·S(N)의
+`ExitPolicyNotDerived`를 바꾸지 않는다. 검사 성공은 정책 선택·승인·이력 완전성·manifest/blob 실재·T 개방의 검증 ①·②의 증명이 아니다.
+Interview Exit의 Entry 계승·열린 Experiment는 범위 밖이며, 제품 close/load·3n/3o·형식 10/11과 연결하지 않았다. 검증 범위는
+[Roadmap](GIL_Roadmap.md)의 「§7.5 Exit 계보」 기록을 따른다.
 
 현재 세계는 **저장하지 않는다.** 기록에서 유도하는 한 함수가 변경 검사·Exit·복원 목표에 함께 쓰인다는
 현행 원칙(`src/project.rs:236-241`)을 그대로 지킨다. 다만 정책이 생기면 「현재」를 한 값으로 말할 수 없는

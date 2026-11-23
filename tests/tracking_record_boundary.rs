@@ -49,6 +49,10 @@
 //!   메모리의 원장·사건 입력·Chain 목록·등록부만 받아 같은 호출에서 P(N) 선택을 한 번 부르고(3j 는 그 안에서만 실행된다), 파일·
 //!   `state.yaml`·객체 창고를 읽지 않으며 3n·3o 의 시작점·구간이나 B(T)·S(N) 선택을 쓰지 않는다. 제품 경로가 그것을 부르지 않으므로
 //!   아래 검사에 그 이름이 들어 있고, 그 원문의 코드 줄은 따로 검사한다.
+//! - 닫힌 Experiment T 의 저장 Exit 과 마지막 Outcome 계보의 기대 세계 비교(`exit_lineage`, Artifact Model §7.5)도 저장 경로가 아니다.
+//!   메모리의 Chain 목록·등록부만 받아 기존 계보 조회(`Walk::lineage`)를 한 번 쓰고, 정책 원장·사건 입력·파일·`state.yaml`·객체 창고를
+//!   읽지 않으며 Cycle 을 닫는 규칙(`exit_would_be`)·P(N)·B(T)·S(N)·Experiment Exit 선택을 부르지 않는다. 제품의 close·load 가 그것을
+//!   부르지 않으므로 아래 검사에 그 이름이 들어 있고, 그 원문의 코드 줄은 따로 검사한다.
 //! - 새 모듈은 `src/artifact/tracking_record/` 밖의 어떤 소스에서도 불리지 않는다.
 
 mod common;
@@ -750,6 +754,20 @@ fn no_product_source_calls_the_new_module() {
         "ExperimentTargetProblem",
         "InterviewOutOfScope",
         "EXPERIMENT_EXIT_DOES_NOT_SHOW",
+        "owned_cycle",
+        "exit_lineage",
+        "check_experiment_exit_lineage",
+        "ExitLineageCheck",
+        "ExitLineageProblem",
+        "ExitLineageVerdict",
+        "ExpectedSource",
+        "OpenExperimentOutOfScope",
+        "StoredExitMissing",
+        "StoredExitNotInRegistry",
+        "LastOutcomeUnreadable",
+        "LineageVerifyLacksSnapshot",
+        "ExpectedNotInRegistry",
+        "EXIT_LINEAGE_DOES_NOT_SHOW",
     ];
     let mut users = Vec::new();
     let mut stack = vec![src.clone()];
@@ -1019,4 +1037,82 @@ fn the_experiment_exit_derivation_reuses_one_opening_policy_and_touches_no_file_
     assert!(shortcuts.is_empty(), "검사를 건너뛰는 인자가 있다: {shortcuts:#?}");
     let signature: Vec<&&str> = code.iter().filter(|line| line.starts_with("pub(crate) fn select_experiment_exit(")).collect();
     assert_eq!(signature.len(), 1, "유도의 문은 하나다");
+}
+
+/// Exit 계보 검사의 원문에서 주석과 문자열 목록 줄을 뺀 **코드 줄**이 파일·상태·창고·정책 원장·사건 입력의 문, Cycle 을 닫는 규칙과
+/// 현재 세계 유도(`exit_would_be`·`world_snapshot`), 이름·순서·출처 칸(`revisit_from`·목록 끝·최댓값), P(N)·B(T)·S(N)·Experiment Exit
+/// 선택을 쓰지 않고, 소유 조회와 계보 조회를 한 번씩만 쓰는가. 호출자가 고른 세계·기대값·사건을 받는 함수가 없는가.
+#[test]
+fn the_exit_lineage_check_reads_one_lineage_and_touches_no_file_state_store_or_event() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("artifact").join("tracking_record").join("exit_lineage.rs");
+    let text = std::fs::read_to_string(&path).unwrap();
+    let code: Vec<&str> =
+        text.lines().map(str::trim).filter(|line| !line.is_empty() && !line.starts_with("//") && !line.starts_with('"')).collect();
+    let forbidden = [
+        "std::fs",
+        "std::io",
+        "std::env",
+        "File",
+        "OpenOptions",
+        "read_to_string",
+        "ObjectStore",
+        "Project",
+        "state.yaml",
+        "gilignore",
+        "put_blob",
+        "PolicyLedger",
+        "EventPolicyLinks",
+        "EventCycleFacts",
+        "select_opening_policy",
+        "select_experiment_exit",
+        "select_boundary_world",
+        "select_opening_world",
+        "check_event_inputs",
+        "exit_would_be",
+        "world_snapshot",
+        "verify_in_lineage",
+        "revisit_from",
+        "parent",
+        "history()",
+        "nodes()",
+        ".last()",
+        "max",
+        "next_id",
+        "sort",
+    ];
+    let used: Vec<String> = code
+        .iter()
+        .flat_map(|line| forbidden.iter().filter(|name| line.contains(*name)).map(move |name| format!("{name}: {line}")))
+        .collect();
+    assert!(used.is_empty(), "Exit 계보 검사가 파일·상태·창고·사건·닫기 규칙·이름 순서·다른 선택의 문을 쓴다:\n{used:#?}");
+    let lineage: Vec<&&str> = code.iter().filter(|line| line.contains(".lineage(")).collect();
+    assert_eq!(lineage.len(), 1, "계보는 기존 Walk::lineage 로 한 번 읽는다: {lineage:#?}");
+    let owner: Vec<&&str> = code.iter().filter(|line| line.contains("owned_cycle(")).collect();
+    assert_eq!(owner.len(), 1, "대상은 Experiment Exit 선택과 같은 소유 조회로 한 번 정한다: {owner:#?}");
+    // 함수의 인자 자리(한 줄 서명의 괄호 안, 또는 여러 줄 서명에서 `fn 이름(` 줄과 `)` 줄 사이)에 세계·기대값·사건이 있으면 안 된다.
+    // `pub(crate)` 의 괄호를 인자로 읽지 않도록 `fn ` 뒤부터 본다.
+    let mut parameters: Vec<String> = Vec::new();
+    let mut in_signature = false;
+    for line in &code {
+        let line = &line[line.find("fn ").unwrap_or(0)..];
+        match (in_signature, line.starts_with("fn ") && line.contains('('), line.find('('), line.find(')')) {
+            (false, true, Some(open), Some(close)) if open < close => parameters.push(line[open..close].to_string()),
+            (false, true, _, None) => in_signature = true,
+            (true, ..) if line.starts_with(')') => in_signature = false,
+            (true, ..) => parameters.push(line.to_string()),
+            _ => {}
+        }
+    }
+    assert!(parameters.iter().any(|taken| taken.contains("target: CycleRef")), "서명을 읽지 못했다: {parameters:#?}");
+    let shortcuts: Vec<&String> = parameters
+        .iter()
+        .filter(|taken| {
+            ["SnapshotRef", "StepRef", "world", "expected", "exit", "Event", "Ledger", "Opening", "Boundary", "Selection"]
+                .iter()
+                .any(|name| taken.contains(name))
+        })
+        .collect();
+    assert!(shortcuts.is_empty(), "검사를 건너뛰는 인자가 있다: {shortcuts:#?}");
+    let signature: Vec<&&str> = code.iter().filter(|line| line.starts_with("pub(crate) fn check_experiment_exit_lineage(")).collect();
+    assert_eq!(signature.len(), 1, "검사의 문은 하나다");
 }

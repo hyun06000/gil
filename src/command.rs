@@ -117,7 +117,11 @@ fn run(ctx: &Invocation<'_>, args: &[String]) -> Result<String, String> {
         }
         "context" => {
             let session = open_session(ctx)?;
-            Ok(format!("{}{}", context(session.project()), crate::project_resume::status(&session.root().map_err(say)?)))
+            let root = session.root().map_err(say)?;
+            // A CLI process starts in the default language; the resumed Project's remembered
+            // language decides how it is described, as it already does for the MCP call.
+            Ok(crate::locale::with(crate::locale::for_project(&root), ||
+                format!("{}{}", context(session.project()), crate::project_resume::status(&root))))
         }
         "monitor" => monitor(ctx, args.get(1)),
         "mcp" => mcp(args.get(1).map(String::as_str)),

@@ -34,7 +34,7 @@ use crate::cycle::CycleState;
 use crate::cycles::{Cycles, CyclesState};
 use crate::refs::{JourneyRef, SnapshotRef};
 use crate::walk::{RestoreError, WalkState};
-use crate::{Chain, Cycle, CycleKind, NodeKind};
+use crate::{Chain, Cycle, CycleKind, NodeKind, RuleSet};
 
 use AttemptSeen::{Archived as A, NotArchived as F};
 use BaselineSlot::{Unwritten, Written};
@@ -45,10 +45,12 @@ use OpeningSelection::BeforeAdoptionInGivenHistory as Before;
 mod common;
 
 // ── 체인 ───────────────────────────────────────────────────────────────────
+//
+// 아래의 `pub(super)` 도움 함수는 Exit 계보 검사(`exit_lineage_tests`)도 같은 체인을 쓰려고 연 것이다. 동작은 같다.
 
 /// 지금 서 있는 열린 Experiment 를 Define → Hypothesis → Verify(세계 `A<verify>` 확정) → Analysis → Outcome 으로 걷고 닫는다.
 /// `success` 는 `open_child`, `failure` 는 부모로의 `revisit` 을 적는다(공통 도움 함수 `cycle_report` 가 부모를 대상으로 고른다).
-fn close_experiment(cycles: &mut Cycles, verify: u32, verdict: &str) {
+pub(super) fn close_experiment(cycles: &mut Cycles, verify: u32, verdict: &str) {
     let report = {
         let cycle = cycles.current_mut();
         for kind in [NodeKind::Define, NodeKind::Hypothesis, NodeKind::Verify, NodeKind::Analysis] {
@@ -81,7 +83,7 @@ fn close_experiment(cycles: &mut Cycles, verify: u32, verdict: &str) {
 }
 
 /// 위 그림의 `tree` — 모두 기존 전이 함수로 걸어 만든다.
-fn tree() -> Vec<Chain> {
+pub(super) fn tree() -> Vec<Chain> {
     let mut cycles = Cycles::start_at(rules(), x1(), a(1), 1);
     close_interview(&mut cycles, "open_child");
     cycles.open_child(CycleKind::Experiment, x1()).expect("승인된 인터뷰 뒤 C2 를 연다");
@@ -135,7 +137,16 @@ fn state_of(cycle: &Cycle) -> CycleState {
 }
 
 /// 체인의 사이클 상태를 `edit` 로 바꾼 뒤 기존 [`Cycles::restore`] 로 다시 세운다. 그 그래프 불변식이 거절하면 그 오류 그대로다.
-fn restored(chain: &Chain, edit: impl FnOnce(&mut [CycleState])) -> Result<Chain, RestoreError> {
+pub(super) fn restored(chain: &Chain, edit: impl FnOnce(&mut [CycleState])) -> Result<Chain, RestoreError> {
+    restored_under(rules(), chain, edit)
+}
+
+/// [`restored`] 와 같되 체인을 걸어 만든 문법 `rules` 로 다시 세운다.
+pub(super) fn restored_under(
+    rules: RuleSet,
+    chain: &Chain,
+    edit: impl FnOnce(&mut [CycleState]),
+) -> Result<Chain, RestoreError> {
     let cycles = chain.cycles();
     let mut nodes: Vec<CycleState> = cycles.nodes().iter().map(state_of).collect();
     edit(&mut nodes);
@@ -145,11 +156,11 @@ fn restored(chain: &Chain, edit: impl FnOnce(&mut [CycleState])) -> Result<Chain
         pending_revisit: cycles.pending_revisit(),
         nodes,
     };
-    Cycles::restore(rules(), state)
+    Cycles::restore(rules, state)
         .map(|cycles| Chain::restore(chain.id(), chain.existence(), chain.entry_snapshot(), chain.parent(), cycles))
 }
 
-fn at(number: u32) -> usize {
+pub(super) fn at(number: u32) -> usize {
     usize::try_from(number - 1).unwrap()
 }
 

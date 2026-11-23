@@ -150,8 +150,10 @@ This does not require author tracking, write hooks or a new Snapshot for every n
    recorded Interview via `gil_open`. A display failure alone does not block Project work. The App
    requests fullscreen by itself (at connect, again when the Monitor renders, bounded retries, then
    the user's first click); never call `show_gil_monitor` again to force fullscreen. A successful
-   tool response does not prove that a screen is visible. In a new session, read `gil_context` once;
-   its first bracketed block (`[Call now]` in English, `[지금 바로 할 호출]` in Korean) is the next call. Resume there instead of starting again.
+   tool response does not prove that a screen is visible. In a new session, read `gil_context` once
+   and find the next-call heading in the reply's language (`[Call now]` in English, `[지금 바로 할 호출]`
+   in Korean); the action under that heading is the next call, even when a resume summary such as
+   `[Resume from saved records]` comes before it. Resume there instead of starting again.
    **Keep the in-host MCP App present:** successful Project calls check recent App display reports.
    When a receipt supplies `show_gil_monitor(scope_id)` because the Monitor is absent/hidden/unknown,
    call it once before further work, without asking the user to open a Companion. For an explicit

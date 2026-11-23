@@ -79,6 +79,12 @@
 //!                                          소유·실제 종류 Experiment·닫힘·Exit 확인 뒤, 등록부에 있는 T 의 exit_snapshot_ref 와 그 확정 정책
 //!                                          = P(T) 그대로(§6.1 의 「Experiment 의 Exit」 줄). Interview 는 범위 밖 (experiment_exit — Verify 계보·
 //!                                          T 개방의 검증 ②·B(T)/S(N) 의 미유도 대체·3n/3o 연결·실제 승인·보관 아님)
+//!
+//! 대상 닫힌 Experiment T + 한 시점의 (&[Chain], 등록부)
+//!     ─check_experiment_exit_lineage─▶ ExitLineageCheck   select_experiment_exit 와 같은 소유 조회 뒤 T 의 저장 exit_snapshot_ref 를 마지막
+//!                                          Outcome 의 parent 사슬(Walk::lineage)에서 가장 가까운 닫힌 Verify 의 snapshot_ref, 없으면 T 의 Entry 와
+//!                                          견준다(Artifact Model §7.5). 그 Verify 의 snapshot 누락은 우회하지 않는 손상, 두 이름의 등록부 조회 —
+//!                                          Interview·열린 Experiment 는 범위 밖 (exit_lineage — P(T)·승인·manifest/blob 실재·제품 close/load 연결 아님)
 //! ```
 //!
 //! # 「형식이 맞다」는 「승인됐고 적용됐다」가 아니다
@@ -123,6 +129,7 @@ mod event_cycle_history;
 mod event_cycles;
 mod event_inputs;
 mod event_links;
+mod exit_lineage;
 mod experiment_exit;
 mod ledger_span;
 mod link_history;
@@ -152,6 +159,8 @@ mod event_cycles_tests;
 mod event_inputs_tests;
 #[cfg(test)]
 mod event_links_tests;
+#[cfg(test)]
+mod exit_lineage_tests;
 #[cfg(test)]
 mod experiment_exit_tests;
 #[cfg(test)]
@@ -211,6 +220,11 @@ pub(crate) use event_inputs::{
 pub(crate) use event_links::{
     EventKind, EventName, EventNamesError, EventPolicyLink, EventPolicyLinks, LINKS_DO_NOT_SHOW, LinkField,
     LinkProblem, PolicyLinksAgree, check_policy_links,
+};
+#[allow(unused_imports)]
+pub(crate) use exit_lineage::{
+    EXIT_LINEAGE_DOES_NOT_SHOW, ExitLineageCheck, ExitLineageProblem, ExitLineageVerdict, ExpectedSource,
+    check_experiment_exit_lineage,
 };
 #[allow(unused_imports)]
 pub(crate) use experiment_exit::{
