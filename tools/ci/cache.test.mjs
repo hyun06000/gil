@@ -63,7 +63,9 @@ test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired
   }
   assert.doesNotMatch(text, /windows-11-arm|codex-cli|runtime-testbed/);
   const chain = workflowText('chain-core');
-  assert.match(chain, /runner: macos-15/); assert.match(chain, /runner: windows-2025/);
+  // Windows test and build CI is paused: the Chain matrix is the macOS row alone.
+  assert.equal(chain.match(/\n        include:\n((?: {10}.*\n)+)/)?.[1], '          - runner: macos-15\n            shell: bash\n');
+  assert.doesNotMatch(chain, /runner: windows-|shell: pwsh/);
   // A guarded step (`node tools/ci/expect-tests.mjs <minimum> cargo test …`) is the same Cargo check.
   const features = [...chain.matchAll(/run: (?:node tools\/ci\/expect-tests\.mjs \d+ )?cargo (?:test|build).*?--features ([\w,-]+)/g)].map(m => m[1]);
   const groups = features.filter((f, i) => f !== features[i-1]);
@@ -74,6 +76,55 @@ test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired
   const companion = workflowText('companion-native');
   assert.doesNotMatch(companion, /windows-2025|windows-11-arm/);
   assert.match(companion, /paths:\n\s+- 'companion\/\*\*'/);
+});
+
+/// Each job under `jobs:` as {name, block}, block being the job's own lines.
+const jobsOf = text => text.slice(text.indexOf('\njobs:\n') + '\njobs:\n'.length).split(/\n(?=  [\w-]+:\n)/)
+  .map(block => ({name: block.match(/^  ([\w-]+):\n/)?.[1], block}));
+const PAUSED = '    if: ${{ false }}';
+
+test('Windows test and build CI is paused: no job outside the release workflow can start a Windows runner', () => {
+  const windowsRunner = /^\s+(?:runs-on|runner): windows-/m;
+  for (const file of readdirSync(join(root, '.github/workflows')).filter(f => f.endsWith('.yml') && f !== 'windows-release.yml')) {
+    for (const {name, block} of jobsOf(workflowText(file.slice(0, -4)))) {
+      if (windowsRunner.test(block)) assert.ok(block.split('\n').includes(PAUSED), `${file} ${name} would start a Windows runner`);
+    }
+  }
+  // The release workflow is not part of the pause: its definition keeps its tag trigger and runner.
+  const release = jobsOf(workflowText('windows-release'));
+  assert.ok(release.length > 0 && release.every(({block}) => !/^\s+if: \$\{\{ false \}\}$/m.test(block)));
+  assert.match(workflowText('windows-release'), /^    runs-on: windows-2025$/m);
+});
+
+test('paused Windows jobs are disabled unconditionally at job level; their triggers and steps stay as inactive text', () => {
+  // A disabled job still leaves a skipped record for its trigger; the file text is kept, but nothing in it runs.
+  for (const [file, job, triggers, steps] of [
+    ['windows-spike', 'windows-native', /\non:\n  pull_request:\n[\s\S]*\n  push:\n[\s\S]*\n  workflow_dispatch:\n/,
+      ['Build native Core and MCP for the selected profile', 'Native protocol, read-only Monitor and process restart', 'MSIX packaging, installed CLI and MCP (development identity only)']],
+    ['windows-msix', 'package', /\non:\n  workflow_dispatch:\n/,
+      ['Build static x64 product and Start-menu guide', 'Verify installed development MSIX through its execution alias', 'Package unsigned Store submission and provenance']],
+  ]) {
+    const text = workflowText(file);
+    const jobs = jobsOf(text);
+    assert.deepEqual(jobs.map(j => j.name), [job], file);
+    const lines = jobs[0].block.split('\n');
+    assert.equal(lines.filter(l => /^    if:/.test(l)).length, 1, file);
+    // The condition is the job's own first key (after its comment), a literal false: no event, input or variable enables it.
+    assert.equal(lines.slice(1).find(l => !l.startsWith('    #')), PAUSED, file);
+    assert.match(text, triggers, file);
+    assert.match(jobs[0].block, /^    runs-on: (?:windows-2025|\$\{\{ matrix\.runner \}\})$/m, file);
+    for (const step of steps) assert.ok(text.includes(`      - name: ${step}\n`), `${file}: ${step}`);
+  }
+});
+
+test('the manual capability probe keeps only its macOS row and its manual trigger', () => {
+  const probe = workflowText('u2-capability-probe');
+  assert.match(probe, /\non:\n  workflow_dispatch:\npermissions:/);
+  const rows = probe.match(/\n        include:\n((?: {10}.*\n)+)/)?.[1].split('\n').filter(l => !/^\s*(#|$)/.test(l));
+  assert.deepEqual(rows, ['          - label: macos-arm64', '            runner: macos-15', '            arch: arm64']);
+  assert.doesNotMatch(probe, /runner: windows-/);
+  assert.ok(probe.includes('      - name: Probe tests in isolated temp folders\n'));
+  assert.ok(!probe.split('\n').includes(PAUSED), 'the macOS probe stays runnable on demand');
 });
 
 // Dev/test build settings a job may set; the default-settings case removes inherited ones (the Chain
