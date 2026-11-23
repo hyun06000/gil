@@ -85,6 +85,13 @@
 //!                                          Outcome 의 parent 사슬(Walk::lineage)에서 가장 가까운 닫힌 Verify 의 snapshot_ref, 없으면 T 의 Entry 와
 //!                                          견준다(Artifact Model §7.5). 그 Verify 의 snapshot 누락은 우회하지 않는 손상, 두 이름의 등록부 조회 —
 //!                                          Interview·열린 Experiment 는 범위 밖 (exit_lineage — P(T)·승인·manifest/blob 실재·제품 close/load 연결 아님)
+//!
+//! 대상 Step(그 Cycle N) + 한 시점의 (PolicyLedger, EventPolicyLinks, 사건의 사이클 칸, &[Chain], 등록부)
+//!     ─select_verify_world─▶ VerifyWorld   같은 호출의 select_opening_policy(N) 한 번(그 안의 3j·대상 위치 그대로) + 같은 소유 조회로 N 의
+//!                                          실제 종류 Experiment(열림·닫힘 무관)와 지정 Step 의 실재·Verify·닫힘·snapshot_ref 확인 뒤, 등록부에 있는
+//!                                          그 Verify 자신의 snapshot_ref 와 그 확정 정책 = P(N) 그대로(§6.1 의 「Experiment 의 Verify」 줄). Interview·
+//!                                          없는 Step·Verify 아닌 Step·열린 Verify 는 범위 밖 (verify_world — 계보 선택·현재 세계·Exit 채택·N 개방의
+//!                                          검증 ②·3n/3o 연결·실제 승인·관측·보관 아님)
 //! ```
 //!
 //! # 「형식이 맞다」는 「승인됐고 적용됐다」가 아니다
@@ -141,6 +148,7 @@ mod source;
 mod source_store;
 mod sync;
 mod sync_order;
+mod verify_world;
 mod wire;
 
 #[cfg(test)]
@@ -181,6 +189,8 @@ mod source_store_tests;
 mod sync_order_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod verify_world_tests;
 
 #[allow(unused_imports)]
 pub(crate) use baseline_history::{
@@ -272,6 +282,10 @@ pub(crate) use sync_order::{
     BaseUndecided, CALLER_DUTIES, HOLD_CALLER_DUTIES, NewPolicyBase, PolicyFileSync, ReplaceResult, Reread,
     StoreResult, SyncOutOfOrder, SyncReport, SyncRequest, SyncStep, SyncStop, ThreeWayDifference, Unsettled,
     base_for_new_policy,
+};
+#[allow(unused_imports)]
+pub(crate) use verify_world::{
+    StepProblem, VERIFY_WORLD_DOES_NOT_SHOW, VerifyWorld, VerifyWorldProblem, select_verify_world,
 };
 #[allow(unused_imports)]
 pub(crate) use wire::{StoredPolicy, StoredPolicyFile, StoredRules, StoredSyncBase, SyncBaseShapeError};

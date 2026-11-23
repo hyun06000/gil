@@ -1032,6 +1032,17 @@ Interview는 범위 밖 결과다. Verify의 확정 정책, Interview의 Entry �
 Interview Exit의 Entry 계승·열린 Experiment는 범위 밖이며, 제품 close/load·3n/3o·형식 10/11과 연결하지 않았다. 검증 범위는
 [Roadmap](GIL_Roadmap.md)의 「§7.5 Exit 계보」 기록을 따른다.
 
+**구현 상태(2026-11-23, 후속 — 게시 전 검토 대상):** 아래 확정 정책 표의 「Experiment의 Verify·Exit」 줄 가운데 **Experiment 안의 지정한
+닫힌 Verify**가 `verify_world.rs`에 건넨 기록에 대한 순수 유도로 구현됐다. 대상 `StepRef`의 Cycle N으로 같은 호출의 P(N) 선택(§6.2)을 한 번
+부르고(3j는 그 안에서만 실행), 그 결과와 무관하게 N의 실재·유일한 소유(Experiment Exit과 같은 소유 조회)·실제 종류 Experiment와 지정 Step의
+실재·Verify·닫힘·`snapshot_ref`, 그 이름의 등록부 조회를 확인한 뒤(입력 오류와 함께 보존, 같은 소유 문제는 한 번), 그 Verify 자신의
+`snapshot_ref`와 P(N)의 사건·종류·판·승인 발급기를 그대로 돌려준다. 소유 Experiment의 열림·닫힘은 묻지 않는다. 다른 Verify·Entry·Exit·현재
+세계·B(T)로 세계를 대신하지 않고 원장의 마지막 판·보관 발급기·원문 지문으로 정책을 다시 고르지 않는다. 같은 세계를 가리키는 서로 다른 Verify와
+같은 원문의 다른 판은 합치지 않는다. 현재 계보에서 떨어진 가지의 Verify도 그 자체의 출처로 조회되며 현재 세계·Cycle Exit으로 채택됐다는 뜻이
+아니다. Interview·없는 Step·Verify가 아닌 Step·열린 Verify는 범위 밖이고 그 자리에 적힌 값을 조회하지 않는다. 열린 사이클의 마지막 확정 세계
+(가장 가까운 Verify를 찾는 계보 선택), Interview의 Entry 계승, 검증 ①·②·T8·T9, B(T)·S(N)의 `ExitPolicyNotDerived` 대체, 3n/3o 시작점·제품
+연결은 남는다. 아래 규범 공식은 그대로이며, 검증 범위는 [Roadmap](GIL_Roadmap.md)의 「§6.1 Experiment Verify」 기록을 따른다.
+
 현재 세계는 **저장하지 않는다.** 기록에서 유도하는 한 함수가 변경 검사·Exit·복원 목표에 함께 쓰인다는
 현행 원칙(`src/project.rs:236-241`)을 그대로 지킨다. 다만 정책이 생기면 「현재」를 한 값으로 말할 수 없는
 때가 있으므로, 서로 다른 세 값을 구분한다. 셋 다 기록에서 유도한다.
