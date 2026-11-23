@@ -353,6 +353,21 @@ T6의 **한 시점 부분**을 검사한다. 범위 설명(적힌 조건·도출
 | 작성 환경과 진단 | 작성자 보고: 정확 변경본의 Linux 빌드는 기존 `libc::__error` 오류 5개로 실패. 임시 호환 사본의 신규 35개·tracking_record 371개·경계 12개 통과는 진단이며 정확 변경본 또는 Mac/Windows 실행 성공이 아니다. 임시 호환 변경은 PR에 없고 Linux 지원을 추가하지 않았다 |
 | 한계와 남은 것 | 합성 Cycle은 Interview이며 실제 Experiment 세계 확정·revisit 전이·실제 승인·Host 화면·필드 테스트 검증이 아니다. 열린 Cycle 계보·Interview 정책 계승·S(N)·검증 ①·②·T8·실제 상태 추출·완전성·승인 확인·3o 시작점·내용 비교·보관·재시도·복원·제품 연결·형식 10/11 활성화는 남는다. O-2·O-3과 기존 미결 결정도 유지한다 |
 
+**2026-11-23 §6.2 S(N) — 비뿌리 사이클의 개방 당시 세계 선택과 Entry 검사 ①(제품 미연결):**
+[공유 계약 §6.2](GIL_Storage_Transition_Contract_v0.1.md#62-다음-entry의-규칙과-검증)의 건넨 기록에 대한 순수 기능이다.
+아래는 [PR #195](https://github.com/hyun06000/gil/pull/195)의 **문서 갱신 전 최초 코드 head** 증거이며 병합·릴리스·제품 연결 완료가 아니다.
+
+| 단계 | 상태 |
+|---|---|
+| 구현 | `opening_world.rs`의 `select_opening_world`: 같은 호출의 3j 검사와 N의 유일한 소유·같은 Chain의 닫힌 구조적 부모 T 확인 뒤, T에서 보관했고 보관 발급기가 N 이하인 기준점 중 최대 사건의 출처를 고른다. 없으면 등록된 부모 Exit이며 Exit 정책은 미유도다. 승인 발급기·revisit_from·현재 B(T)로 대신하지 않는다. 같은 선택 값의 `check_entry`가 실제 Entry와 기대 세계의 일치·불일치를 구분하며 오류·출처·3j 미판정·잘린 입력 한계를 보존한다 |
+| 자동 검사 범위 | 신규 고유 단위 시험 27개: 보관 발급기 전후·복수 후보·보관 대기·다른 보관 경계·restore_result·같은 세계/원문의 다른 정책 판·Entry 두 갈래 일치/불일치·구조적 부모/갈래 출처·입력/대상/부모/등록부 오류·뿌리 범위 밖·미판정/잘림 한계·입력 불변. 제품 미연결 포함 경계 시험은 신규 1개를 더한 총 13개 |
+| 최초 정확 head의 공식 실행 | `ddb31674bcfb53329aafb34705ad985c3fe44990`의 다섯 검사 성공. [Chain run 45080898346](https://github.com/hyun06000/gil/actions/runs/45080898346)의 Mac 잡 `137388598080`·Windows 잡 `137388598378` 각각 신규 S(N) 고유 27개 × 네 구성 = 108회, 기존 B(T) 35개 × 네 구성 = 140회, P(N) 28개 × 네 구성 = 112회, 연속성 17개 × 네 구성 = 68회, 구간 15개 × 네 구성 = 60회, 경계 고유 13개 × 한 번 통과. 네 구성은 `approved-plan,visual-authoring,product-safety`, `exploration-flow,visual-authoring,product-safety`, `will-end-history`, `will-end-history,visual-authoring,product-safety`다. 고유 커버리지와 실제 실행 횟수는 다르다 |
+| 시험 소스 대응 | 양쪽 실제 로그의 checkout은 `dbec47f13a9b3cb160ce72793e65761d4770b728`, 부모는 기준 main `723ef8ffc66fc048047daf4ccf432e8916d974f7`과 위 최초 head다. 시험 트리 `d616fba19b9312e54f14c6aad010f1adb6af7506`는 최초 head와 같다. 이 기록은 문서 갱신 뒤 새 head의 성공을 뜻하지 않는다. 최종 정확 head의 다섯 검사·양 OS 실제 로그·시험 트리는 별도 확인한다 |
+| 다른 공식 검사 | [macOS preview 45080898394](https://github.com/hyun06000/gil/actions/runs/45080898394) 잡 `137388598060`: Core/UI·전체 기본 대상 빌드·패키징·고지·내장 UI/MCP roundtrip 성공. [Windows native 45080898386](https://github.com/hyun06000/gil/actions/runs/45080898386)의 기본 잡 `137388598388`·visual-authoring 잡 `137388598113` 성공. 프로토콜 성공은 실제 Host 화면 인수가 아니다 |
+| 작성 환경과 진단 | 작성자 보고: Linux 정확 기준/변경 트리는 기존 `libc::__error` 오류 5개로 빌드 실패, 시험 미실행. 별도 임시 호환 사본의 27/13/398 및 승인 구성 27 통과는 진단이며 정확 트리 또는 공식 Mac/Windows 성공의 대체가 아니다. 진단 사본의 최초 신규 시험 5개 실패는 복원 fixture의 Journey 칸 누락이었고 시험 보정 뒤 통과했다고 보고했다. 호환 패치는 PR에 없으며 Linux 지원을 추가하지 않았다 |
+| 합성 시험과 한계 | Cycles 층의 메모리 전이로 Experiment 실패·revisit·새 갈래의 parent/revisit_from을 구성했다. 실제 Project 세션의 파일 복원·저장·승인 실행이 아니다. Entry가 부모 Exit과 다른 일치/불일치 및 부모 Exit 부재 사례는 별도 복원 구조로, 현행 Project load가 거절할 값이다. 실제 Experiment 세계 보관·관문 ②·Monitor 승인·Host 화면·필드 테스트 성공으로 확대하지 않는다 |
+| 남은 것과 순서 | 뿌리/후속 Chain Entry·Interview 정책 상속·열린 Verify 계보·검사 ②/T9·T8·실제 상태 추출/완전성/승인·3o 시작점·내용 비교·보관/재시도/복원·제품 열기/load·형식 활성화는 남는다. O-2·O-3과 기존 미결 결정, Monitor 승인 및 제품 복원 제한은 유지한다. `.gilignore`/Chain 제품 연결과 필수 검증을 먼저 완성한 뒤 설치·실행 가능한 Linux 배포를 진행한다. 이후 별도 opt-in 벤치마크는 사용자 조사 뒤 검토하며 아직 설계·실행하지 않는다. 성능 이득 입증 뒤 신규 Mac·Windows 작업을 검토한다. 이 PR은 그 배포·벤치마크·플랫폼 작업이나 릴리스 완료가 아니다 |
+
 **2026-11-21 개발 검증 신뢰성 보완(구현 순서 단계 아님, 설치 기능 변경 아님):** #179·#181·#183의 첫 전체
 시험에서 각각 한 번 관측된 설치 시험의 「another GIL registration … in progress」 실패에 대비해, 시험 빌드에서만
 `src/install/file.rs`의 `try_lock` 반환 오류(변형·Debug/Display, 내부 오류가 있으면 종류·번호)와 시도 순서·프로세스·
