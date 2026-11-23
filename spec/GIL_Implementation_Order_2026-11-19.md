@@ -564,6 +564,29 @@ T6 전체의 완료도, 3번 전체의 완료도 아니다.
   실제 상태 추출·승인 검증, 제품 close/load·Monitor·CLI·MCP 연결, 형식 10/11 활성화. O-2·O-3과 기존 미결 결정은 그대로다.
   검증 범위와 실행 증거의 구분은 [Roadmap](GIL_Roadmap.md)의 「§7.5 Exit 계보」 기록을 따른다.
 
+**진행 기록(2026-11-23, 3번 안의 작은 후속, 게시 전) — §6.1 Experiment 안의 지정한 닫힌 Verify의 세계와 확정 정책.**
+`verify_world.rs`의 `select_verify_world`는 건넨 기록 안의 순수 유도이며 제품 미연결이다. 정책 기록·세계 출처 연결 안의 작은 단위이며
+§6.1 전체·3번 전체·`.gilignore` 제품 기능의 완료가 아니다.
+
+- **입력과 검사.** 대상 `StepRef` 하나와 같은 호출의 원장·정책 연결·사이클 칸·Chain 목록·등록부로 기존 `select_opening_policy(N, …)`를 한 번
+  부른다(N은 대상 Step의 Cycle). 3j와 P(N)의 선택 규칙은 그 안의 것을 재사용하고 따로 복제하지 않는다. 다른 입력의 성공 값을 받는 문은 없다.
+  N의 실재·유일한 소유는 `experiment_exit.rs`의 `owned_cycle`로, 실제 종류 Experiment와 Step의 실재·종류·닫힘·`snapshot_ref`는 기존 `Cycle`·
+  `Walk` 접근자로 P(N) 결과와 무관하게 확인하고 입력 오류와 함께 돌려준다. 같은 소유 문제는 한 번만 담는다.
+- **유도.** 세계는 등록부에 있는 그 Verify 자신의 `snapshot_ref` 그대로다. 같은 Cycle의 다른 Verify·Entry·Exit·현재 세계·B(T)·나중 기준점으로
+  대신하지 않는다. 확정 정책은 P(N)의 결과 그대로이며(사건·종류·판·승인 당시 `next_cycle_id`, 또는 건넨 이력 안의 정책 채택 전), 원장의 마지막 판·
+  보관 발급기·Snapshot 이름·원문 지문으로 다시 고르지 않는다. 같은 원문의 P1·P3, 같은 Snapshot을 가리키는 서로 다른 Verify는 합치지 않는다.
+  소유 Experiment의 열림·닫힘과 판정으로 거르지 않는다.
+- **역사적 조회.** 현재 계보에서 떨어진 가지의 Verify도 그 자체의 세계·정책 출처를 돌려준다. 현재 세계나 Cycle Exit으로 채택됐다는 뜻이 아니며,
+  가장 가까운 Verify를 찾는 계보 선택은 추가하지 않았다.
+- **범위 밖과 오류.** 없는·모호한 Cycle, Interview(Step 실재와 무관), 없는 Step, Verify가 아닌 Step, 열린 Verify, 닫힌 Verify의 snapshot 누락,
+  등록부 누락을 구분한다. 범위 밖 Step에 적힌 snapshot은 조회·반환하지 않는다. 어느 것도 정책 채택 전으로 바뀌지 않는다. 3j의 `not_judged`·
+  `chains_not_looked_up`은 성공 값의 `inputs()`에 그대로 남는다.
+- **증명하지 않는 것.** 실제 관측·보관·승인, N의 개방이 검사 ②를 만족했는지, 이력의 완전성(함께 잘린 입력은 알아내지 못한다), 등록부 이름의
+  manifest·blob 실재, 계보·채택, 전체 상태의 유효성. 목록은 `VERIFY_WORLD_DOES_NOT_SHOW`에 있다.
+- **남은 것.** 열린 사이클의 마지막 확정 세계와 계보 선택, Interview 정책 상속, 뿌리·후속 Chain Entry, B(T)·S(N)의 `ExitPolicyNotDerived` 대체,
+  검사 ①·②·T8·T9, 3n/3o 시작점, 실제 상태 추출·완전성·승인, 보관·재시도·복원·제품 연결·형식 10/11 활성화. O-2·O-3과 기존 미결 결정은
+  그대로다. 검증 범위와 실행 증거의 구분은 [Roadmap](GIL_Roadmap.md)의 「§6.1 Experiment Verify」 기록을 따른다.
+
 1을 2–6의 완료 뒤로 미루지 않는다. 체인 실패 종료의 기존 제한 복구 경로는 계속 유지하며,
 새 정책에 따른 복원은 6까지 검증한 뒤 연결한다. 전체 복원 제품 차단을 이 계획으로 해제하지 않는다.
 

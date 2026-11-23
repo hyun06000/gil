@@ -764,6 +764,13 @@ GIL에는 필요할 수 있다. 추천을 채택하려면 이유와 영향을 �
   계산됐는지, T의 개방이 검사 ②를 만족했는지, manifest·blob의 실재는 증명하지 않는다. 규범은
   [공유 계약 §6.1](GIL_Storage_Transition_Contract_v0.1.md#61-단일-출처-규칙), 검증 범위는 [Roadmap](GIL_Roadmap.md)의 같은 이름 기록을 따른다.
   Verify·Interview의 확정 정책, B(T)·S(N)의 미유도 대체, 제품 연결은 남는다.
+- **2026-11-23 §6.1 Experiment 안의 닫힌 Verify의 세계와 확정 정책(게시 전 검토 대상):** `verify_world.rs`는 지정한 `StepRef`의 Cycle N으로
+  같은 호출의 P(N) 선택을 한 번 부른 뒤, 실재하고 하나로 정해진 Experiment(열림·닫힘 무관) 안의 실재하는 닫힌 Verify가 지닌 §7.3의 구조 필드
+  `snapshot_ref`(등록부에 있을 때)와 그 확정 정책 = P(N)을 함께 돌려준다. 다른 Verify·Entry·Exit·현재 세계로 대신하지 않고, 같은 세계를 가리키는
+  서로 다른 Verify와 같은 원문의 다른 판을 합치지 않는다. 버려진 가지의 Verify도 그 자체로 조회되며 현재 세계·Exit 채택이 아니다. Interview·
+  없는 Step·Verify가 아닌 Step·열린 Verify는 범위 밖이고, 닫힌 Verify의 snapshot 누락·등록부 누락은 오류다. 규범은
+  [공유 계약 §6.1](GIL_Storage_Transition_Contract_v0.1.md#61-단일-출처-규칙), 검증 범위는 [Roadmap](GIL_Roadmap.md)의 「§6.1 Experiment
+  Verify」 기록을 따른다. 열린 사이클의 계보 선택, Interview의 확정 정책, B(T)·S(N)의 미유도 대체, 실제 관측·승인·manifest/blob 실재, 제품 연결은 남는다.
 - **시작 순서는 위 2026-11-19 합의로 확정, 구현 대기.** 시작 준비 승인 기록과 승인 정책을 최초 보관·정식 체인 생성에 연결한다. 현행 §4의 시작을 그대로 호출해 전체 파일을 먼저 저장하는 방식으로 대신하지 않는다. 준비 중 재시작·보관 실패·중복 시작·승인 변경을 검사한다.
 - 재인터뷰에서 승인한 범위와 정책 파일 기록을 Verify·dirty 검사에 모순 없이 적용하는 경계.
   인터뷰 중 일반 파일 쓰기를 허용하지 않는다. 사이클 경계의 승인된 범위 변경에는 위 기준점
@@ -1148,6 +1155,11 @@ Verify Step        구조 필드 snapshot_ref를 직접 갖는다
 
 같은 세계를 여러 Step이 가리킬 수 있다. 변경이 없었다는 뜻이며, 그것을 이름의 중복 저장으로
 표현하지 않는다.
+
+**구현 상태(2026-11-23, 게시 전 검토 대상 — 제품 미연결):** 표의 첫 줄(Verify Step의 구조 필드)만 건넨 기록에서 읽는 순수 유도가
+`src/artifact/tracking_record/verify_world.rs`에 있다. 지정한 Experiment 안의 닫힌 Verify 하나의 `snapshot_ref`와 그 확정 정책(공유 계약 §6.1의
+P(N))을 돌려주며, 같은 세계를 가리키는 서로 다른 Verify는 각자의 결과로 남는다. 둘째·셋째 줄(다른 Closed Step의 계보 유도와 Entry 대안)과
+가장 가까운 Verify를 찾는 계보 선택은 구현하지 않았다. 검증 범위는 [Roadmap](GIL_Roadmap.md)의 「§6.1 Experiment Verify」 기록을 따른다.
 
 ### 7.5 Cycle Exit Snapshot
 
