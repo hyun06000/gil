@@ -19,6 +19,9 @@ name: First start (.gilignore to first Snapshot/Chain) focus on macOS, tracking-
 #     There is no injected evidence for `start_uncertain` or a final save that reports an error after
 #     saving and cannot be read back.
 #   - A Linux temporary-shim run or an earlier synthetic UI result is never this head's result.
+# Node.js for this job only is the exact official v22.23.5 darwin-arm64 tarball from nodejs.org,
+# checked against the SHA-256 pinned below (taken from that release's SHASUMS256.txt). The Preview
+# and Chain jobs keep their own runner Node.
 # It runs on pull_request only (no dispatch, no pull_request_target, no secrets). GitHub may hold the
 # run for maintainer approval (for example a first-time or fork contributor), and a macos-15 runner
 # may be unavailable or queued; nothing here changes that.
@@ -61,15 +64,44 @@ jobs:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: Record and require the exact PR head (not the merge commit), platform and toolchains
+      - name: Install the exact Node.js v22.23.5 (official nodejs.org darwin-arm64 tarball, SHA-256 pinned)
+        env:
+          NODE_VERSION: v22.23.5
+          NODE_TARBALL_SHA256: e7131995759b61a0170b646010d2ad35a5d37b4cb0d471f3e8317eac6f742f3d
+          NODE_DIR: ${{ runner.temp }}/gil-tracking-start-node
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          test ! -e "$NODE_DIR"
+          mkdir -p "$NODE_DIR"
+          name="node-$NODE_VERSION-darwin-arm64"
+          curl --fail --silent --show-error --proto '=https' --tlsv1.2 -o "$NODE_DIR/$name.tar.gz" "https://nodejs.org/dist/$NODE_VERSION/$name.tar.gz"
+          echo "$NODE_TARBALL_SHA256  $NODE_DIR/$name.tar.gz" | shasum -a 256 -c -
+          tar -xzf "$NODE_DIR/$name.tar.gz" -C "$NODE_DIR"
+          test "$("$NODE_DIR/$name/bin/node" -v)" = "$NODE_VERSION"
+          echo "$NODE_DIR/$name/bin" >> "$GITHUB_PATH"
+
+      - name: Record and require the exact PR head (not the merge commit), its commit header, platform and toolchains
         env:
           EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           EVENT_MERGE_SHA: ${{ github.sha }}
+          NODE_BIN_EXPECTED: ${{ runner.temp }}/gil-tracking-start-node/node-v22.23.5-darwin-arm64/bin/node
+          NODE_VERSION: v22.23.5
+          NPM_VERSION: 10.9.9
         run: |
           set -euo pipefail
           rustup toolchain install 1.97.1 --profile minimal
           head=$(git rev-parse HEAD)
+          # Tree and parents come from the HEAD commit object's own header (the lines before the first
+          # empty line), not from history walking: a shallow checkout has the commit object but may not
+          # have its parents, and `rev-list --parents` can then omit them. Only lines that start exactly
+          # with "tree " / "parent " count, so the message body and indented signature lines never do.
+          # Read the whole object (no early pipe close under pipefail) and keep only the header lines.
+          header=$(git cat-file commit HEAD | sed -n '/^$/,$!p')
+          trees=$(printf '%s\n' "$header" | sed -n 's/^tree \([0-9a-f]\{40\}\)$/\1/p')
+          parents=$(printf '%s\n' "$header" | sed -n 's/^parent \([0-9a-f]\{40\}\)$/\1/p')
+          parent_count=$(printf '%s\n' "$parents" | grep -c . || true)
           {
             echo '### Exact candidate'
             echo '```'
@@ -77,19 +109,29 @@ jobs:
             echo "event pull_request.base.sha: $EVENT_BASE_SHA"
             echo "event github.sha (merge ref, NOT tested): $EVENT_MERGE_SHA"
             echo "checkout HEAD: $head"
-            echo "checkout parents: $(git rev-list --parents -n1 HEAD | cut -d' ' -f2-)"
-            echo "checkout tree: $(git rev-parse 'HEAD^{tree}')"
+            echo "checkout tree (commit header): $trees"
+            echo "checkout tree (rev-parse): $(git rev-parse 'HEAD^{tree}')"
+            echo "checkout parent count (commit header): $parent_count"
+            printf '%s\n' "$parents" | sed 's/^/checkout parent (commit header): /'
+            echo "shallow checkout: $(git rev-parse --is-shallow-repository)"
             echo "os: $(sw_vers -productName) $(sw_vers -productVersion) ($(uname -sm))"
             echo "rustc: $(rustc -V)"
             echo "cargo: $(cargo -V)"
-            echo "node: $(node -v)"
+            echo "node: $(node -v) at $(command -v node)"
             echo "npm: $(npm -v)"
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
           test "$head" = "$EVENT_HEAD_SHA"
+          test "$(printf '%s\n' "$trees" | grep -c .)" = 1
+          test "$trees" = "$(git rev-parse 'HEAD^{tree}')"
+          # This candidate line is a chain of single-parent commits; a merge-commit head would need this
+          # check reconsidered. No particular parent SHA is required here.
+          test "$parent_count" = 1
           test -z "$(git status --porcelain)"
           test "$(uname -m)" = arm64
-          node -e 'if (Number(process.versions.node.split(".")[0]) < 22) process.exit(1)'
+          test "$(command -v node)" = "$NODE_BIN_EXPECTED"
+          test "$(node -v)" = "$NODE_VERSION"
+          test "$(npm -v)" = "$NPM_VERSION"
 
       - name: Per-group test gate contracts (pure Node, synthetic libtest text)
         run: node --test tools/ci/tracking-start/expect-test-groups.test.mjs
