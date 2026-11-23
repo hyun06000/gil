@@ -53,6 +53,30 @@ fn tr(key: &str) -> String {
     crate::locale::text(key).to_string()
 }
 
+// ── 기록하지 못한 조건 변경(이 프로세스 수명 동안만) ─────────────────────────
+
+/// 조건 변경을 발견했지만 준비 기록에 남기지 못한 판. **이 프로세스가 살아 있는 동안만** 기억하며 재시작 뒤에는 모른다 —
+/// 저장되지 않은 사실을 안다고 주장하지 않는다. 그동안 같은 판의 적용 재시도·적용 capability 를 막아, 다음 관측이 같은 변경을
+/// 다시 볼 것이라는 가정에 기대지 않는다.
+static UNRECORDED: std::sync::Mutex<std::collections::BTreeSet<String>> = std::sync::Mutex::new(std::collections::BTreeSet::new());
+
+fn unrecorded_key(project: &Identity, digest: &str) -> String {
+    format!("{}\0{}\0{}\0{digest}", project.root, project.device, project.inode)
+}
+
+pub(super) fn unrecorded(project: &Identity, digest: &str) -> bool {
+    UNRECORDED.lock().map_or(true, |set| set.contains(&unrecorded_key(project, digest)))
+}
+
+fn remember_unrecorded(project: &Identity, digest: &str) {
+    if let Ok(mut set) = UNRECORDED.lock() { set.insert(unrecorded_key(project, digest)); }
+}
+
+/// 이 판을 다시 적용하면 안 되는 이유 — 저장된 기록(`not_reusable`)과, 이 프로세스가 기록하지 못한 조건 변경.
+pub(super) fn reuse_blocked(ledger: &Ledger, p: &Proposal) -> Option<&'static str> {
+    ledger.not_reusable(p.revision).or_else(|| unrecorded(&ledger.project, &p.digest).then_some("condition_change_unrecorded"))
+}
+
 // ── 입구 ───────────────────────────────────────────────────────────────────
 
 /// 루트를 확인한다 — 절대 경로, 실제 폴더, 연결 파일이 아님. 상위 폴더나 현재 작업 폴더로 추측하지 않는다.
@@ -509,10 +533,10 @@ pub(crate) fn review(root: &Path) -> Result<(Value, Option<(u32, String, Purpose
         value["proposal"] = shown["proposal"].clone();
         value["current"] = shown["current"].clone();
         let open = started.is_none() && !ledger.canceled();
-        let changed = ledger.condition_changed(p.revision);
+        let blocked = reuse_blocked(&ledger, p).is_some();
         match ledger.response(&p.digest).map(|r| r.decision.as_str()) {
             None if open && approvable(p) => grant = Some((p.revision, p.digest.clone(), Purpose::Decide)),
-            Some("approve") if open && !changed => grant = Some((p.revision, p.digest.clone(), Purpose::Apply)),
+            Some("approve") if open && !blocked => grant = Some((p.revision, p.digest.clone(), Purpose::Apply)),
             _ => {}
         }
     }
@@ -654,11 +678,12 @@ fn apply_path(root: &Path, digest: &str) -> Result<Value, Refusal> {
         return Err(refuse("preparation_unreadable", "원문과 주소가 다르다"));
     }
     // 이 판에서 이미 승인 조건의 변경을 발견했다면 같은 승인으로 다시 적용하지 않는다 — 새 제안과 승인이 필요하다.
-    if let Some(what) = ledger.events.iter().find_map(|e| match e {
-        Event::ConditionChanged { revision, what } if *revision == proposal.revision => Some(what.clone()),
-        _ => None,
-    }) {
-        return Err(refuse_with("condition_changed", tr("start_prep.condition_changed"), json!({"what": what})));
+    //    쓰기를 시작했는데 결과가 기록되지 않은 판, 이 프로세스가 기록하지 못한 조건 변경도 같다(모르는 상태를 재사용 허가로 읽지 않는다).
+    match reuse_blocked(&ledger, &proposal) {
+        Some("condition_changed") => return Err(refuse("condition_changed", tr("start_prep.condition_changed"))),
+        Some(other) => return Err(refuse(if other == "sync_outcome_unrecorded" { "sync_outcome_unrecorded" } else { "condition_change_unrecorded" },
+            tr(&format!("start_prep.{other}")))),
+        None => {}
     }
     // ④ 정책 파일 — 잠금 안에서 다시 관측한다. 이 관측은 쓰기 허가가 아니다: 아래 판정이 허가를 정한다.
     let seen = disk_now(root);
@@ -707,7 +732,7 @@ fn apply_path(root: &Path, digest: &str) -> Result<Value, Refusal> {
     //    승인을 취소하지 않고 기준으로 따로 남긴다. 재확인이 디스크의 변경을 발견하면 쓰지 않고 시작도 하지 않는다.
     let (final_base, file) = match sync_policy_file(&gate, &mut ledger, &before, &proposal, &bytes, &rules, plan, root)? {
         Synced::Done { base, result } => (base, result),
-        Synced::ConditionChanged(held) => return Err(condition(&gate, root, &proposal, "policy_file", held)),
+        Synced::ConditionChanged(held) | Synced::Stopped(held) => return Err(held),
     };
     // ⑨ 정책 판 P1·사건 M1·기준점·첫 Chain·첫 Interview Entry — 한 번의 상태 저장.
     let record = sp::PolicyRecord::new(
@@ -740,14 +765,45 @@ fn is_condition(error: &crate::artifact::ObserveError) -> bool {
 }
 
 /// 승인 조건의 변경을 준비 기록에 남기고(이 판은 다시 적용하지 않는다) 그 보류를 돌려준다. 앞선 사실은 지우지 않는다.
-/// 기록 저장이 실패해도 보류는 그대로다 — 다음 시도가 같은 변경을 다시 발견한다.
+///
+/// 기록을 읽거나 저장하지 못하면 차단이 확정됐다고 말하지 않는다: 이번 적용은 멈췄고 변경을 발견했으나 그 사실이 저장되지
+/// 않았다(`condition_change_unrecorded`)고 알린다. 그 판은 이 프로세스 동안 다시 적용하지 않는다(재시작 뒤에는 모른다).
 fn condition(gate: &crate::session::StartGate, root: &Path, proposal: &Proposal, what: &str, held: Refusal) -> Refusal {
-    if let Ok(Some(saved)) = load_ledger(gate, root) {
-        let mut after = saved.clone();
-        after.events.push(Event::ConditionChanged { revision: proposal.revision, what: what.into() });
-        let _ = save(gate, Some(&saved), &after);
+    let recorded = match load_ledger(gate, root) {
+        Ok(Some(saved)) => {
+            let mut after = saved.clone();
+            after.events.push(Event::ConditionChanged { revision: proposal.revision, what: what.into() });
+            condition_save(gate, &saved, &after)
+        }
+        _ => false,
+    };
+    record_outcome(gate, root, proposal, held, recorded)
+}
+
+/// 조건 변경 보류의 보고 — 기록됐으면 원래 보류 그대로(기록됨 표시), 아니면 「발견했으나 기록하지 못함」.
+fn record_outcome(gate: &crate::session::StartGate, root: &Path, proposal: &Proposal, held: Refusal, recorded: bool) -> Refusal {
+    if recorded {
+        let mut held = held;
+        held.detail = json!({"recorded": true, "detail": held.detail});
+        return held;
     }
-    held
+    let project = load_ledger(gate, root).ok().flatten().map(|l| l.project).or_else(|| identity(root).ok());
+    if let Some(project) = project { remember_unrecorded(&project, &proposal.digest); }
+    refuse_with("condition_change_unrecorded", tr("start_prep.condition_change_unrecorded"),
+        json!({"recorded": false, "detected": held.code, "said": held.said, "detail": held.detail}))
+}
+
+#[cfg(not(test))]
+fn condition_save(gate: &crate::session::StartGate, before: &Ledger, after: &Ledger) -> bool {
+    save(gate, Some(before), after).is_ok()
+}
+
+#[cfg(test)]
+fn condition_save(gate: &crate::session::StartGate, before: &Ledger, after: &Ledger) -> bool {
+    if CONDITION_SAVE_FAULT.with(|f| f.borrow_mut().take()).is_some() {
+        return false;
+    }
+    save(gate, Some(before), after).is_ok()
 }
 
 #[cfg(not(test))]
@@ -872,7 +928,10 @@ fn policy_file_plan(
 /// 재확인이 승인 조건(디스크)의 변경을 발견해 시작을 멈춰야 하는 결과.
 enum Synced {
     Done { base: sp::SyncBase, result: &'static str },
+    /// 조건 변경 — 기록(또는 기록하지 못함)까지 마친 보류.
     ConditionChanged(Refusal),
+    /// 읽기 불가·관측 불안정 — 변경도 동일함도 증거가 없다. 이번 적용만 멈추고 승인을 취소하지 않는다.
+    Stopped(Refusal),
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -888,10 +947,17 @@ fn sync_policy_file(
         FilePlan::Write { previous, expect } => {
             // 0단계 재확인: 판정(④) 뒤 capture 까지 시간이 흘렀다. 디스크가 판정 때와 다르면 쓰지 않고 시작도 하지 않는다 —
             // 사용자가 그사이 정책 파일을 고쳤다면 그것은 규칙 변경이며 새 제안·승인의 일이다.
-            let now = disk_now(root).map(|seen| disk_value(&seen).clone());
             let want = match &expect { Some(d) => Disk::Present { digest: d.clone() }, None => Disk::Absent };
-            if now.as_ref() != Ok(&want) {
-                return Ok(Synced::ConditionChanged(changed()));
+            #[cfg(test)]
+            if UNREADABLE_BEFORE_SYNC.with(|e| e.borrow_mut().take()).is_some() {
+                let _ = std::fs::remove_file(root.join(".gilignore"));
+                std::fs::create_dir(root.join(".gilignore")).expect("시험 자리");
+            }
+            match disk_now(root) {
+                Ok(seen) if disk_value(&seen) == want => {}
+                Ok(_) => return Ok(Synced::ConditionChanged(condition(gate, root, proposal, "policy_file", changed()))),
+                // 읽지 못함은 없음이 아니다 — 쓰지 않고 이번 적용만 멈춘다.
+                Err(reason) => return Ok(Synced::Stopped(refuse_with("policy_file_unreadable", tr("start_prep.policy_file_unreadable"), json!(reason)))),
             }
             // 1단계: 쓰기 시작을 먼저 남긴다(기준 unconfirmed). 이 저장이 실패하면 쓰지 않는다.
             let mut marked = ledger.clone();
@@ -906,14 +972,18 @@ fn sync_policy_file(
             // 기준은 unconfirmed 로 남으며(쓰기를 시작했으므로 되돌리지 않는다) 시작하지 않는다.
             let (base, result) = match outcome {
                 sp::PolicyWrite::Replaced { reread: sp::DiskReading::Present(found) } if &found == rules => (present, "written"),
+                // 교체 직전 재관측이 기대와 **다른 상태를 확인**했다 — 조건 변경.
                 sp::PolicyWrite::ConditionChanged { .. } => (sp::SyncBase::Unconfirmed, "condition_changed"),
+                // 교체 직전 재관측을 하지 못했다 — 쓰지 않았지만 변경의 증거도 아니다. 이번 적용만 멈춘다.
+                sp::PolicyWrite::Unobservable { .. } => (sp::SyncBase::Unconfirmed, "unreadable_before_replace"),
                 sp::PolicyWrite::NotReplaced { .. } => match disk_now(root) {
                     // 교체 전의 확인된 장애 — 같은 잠금 안에서 다시 읽은 디스크가 이전 기준과 같을 때만 그 기준으로 되돌린다.
                     Ok(seen) if disk_value(&seen) == previous => (sync_base(&previous), "update_failed"),
-                    Ok(seen) if Some(disk_value(&seen)) != Some(want.clone()) => (sp::SyncBase::Unconfirmed, "condition_changed"),
-                    _ => (sp::SyncBase::Unconfirmed, "unsettled"),
+                    Ok(seen) if disk_value(&seen) == want => (sp::SyncBase::Unconfirmed, "unsettled"),
+                    Ok(_) => (sp::SyncBase::Unconfirmed, "condition_changed"),
+                    Err(_) => (sp::SyncBase::Unconfirmed, "unreadable_after_failure"),
                 },
-                // 교체 뒤 재확인 불일치·교체 여부 불명 — 결과 불확실. 승인을 취소하지 않고 기준을 unconfirmed 로 남긴다.
+                // 교체 뒤 재확인 불일치·읽기 실패·교체 여부 불명 — 쓰기 결과 불명. 승인을 취소하지 않고 기준을 unconfirmed 로 남긴다.
                 _ => (sp::SyncBase::Unconfirmed, "unsettled"),
             };
             // 3단계: 결과의 기준을 준비 기록에도 남긴다. 실패해도 정식 시작의 저장이 같은 값을 지닌다.
@@ -924,13 +994,36 @@ fn sync_policy_file(
                 sp::SyncBase::Unconfirmed => Disk::Unconfirmed,
             };
             settled.events.push(Event::SyncSettled { revision: proposal.revision, result: result.into(), base: settled.base.clone() });
-            if save(gate, Some(&marked), &settled).is_ok() { *ledger = settled; }
             if result == "condition_changed" {
-                return Ok(Synced::ConditionChanged(changed()));
+                // 결과와 조건 변경을 **한 번의 저장**으로 남긴다 — 둘 중 하나만 남는 상태를 만들지 않는다.
+                settled.events.push(Event::ConditionChanged { revision: proposal.revision, what: "policy_file".into() });
+                let recorded = condition_save(gate, &marked, &settled);
+                if recorded { *ledger = settled; }
+                return Ok(Synced::ConditionChanged(record_outcome(gate, root, proposal, changed(), recorded)));
+            }
+            let settled_saved = settle_save(gate, &marked, &settled);
+            if settled_saved { *ledger = settled; }
+            if matches!(result, "unreadable_before_replace" | "unreadable_after_failure") {
+                // 결과를 저장하지 못했으면 기록에는 쓰기 시작만 남는다 — 그 판은 다시 적용하지 않는다(`sync_outcome_unrecorded`).
+                return Ok(Synced::Stopped(refuse_with("policy_file_unreadable", tr("start_prep.policy_file_unreadable"),
+                    json!({"result": result, "recorded": settled_saved}))));
             }
             Ok(Synced::Done { base, result })
         }
     }
+}
+
+#[cfg(not(test))]
+fn settle_save(gate: &crate::session::StartGate, before: &Ledger, after: &Ledger) -> bool {
+    save(gate, Some(before), after).is_ok()
+}
+
+#[cfg(test)]
+fn settle_save(gate: &crate::session::StartGate, before: &Ledger, after: &Ledger) -> bool {
+    if SETTLE_SAVE_FAULT.with(|f| f.borrow_mut().take()).is_some() {
+        return false;
+    }
+    save(gate, Some(before), after).is_ok()
 }
 
 #[cfg(not(test))]
@@ -945,6 +1038,14 @@ thread_local! {
     pub(crate) static EDIT_BEFORE_REPLACE: std::cell::RefCell<Option<Vec<u8>>> = const { std::cell::RefCell::new(None) };
     /// 한 번의 최초 capture 를 관측 불안정(두 관측 사이 변경)으로 실패시킨다 — 다시 시도할 수 있는 장애.
     pub(crate) static CAPTURE_FAULT: std::cell::RefCell<Option<()>> = const { std::cell::RefCell::new(None) };
+    /// 조건 변경 기록의 저장 한 번을 실패로 만든다.
+    pub(crate) static CONDITION_SAVE_FAULT: std::cell::RefCell<Option<()>> = const { std::cell::RefCell::new(None) };
+    /// 정책 파일 쓰기 결과(`SyncSettled`) 저장 한 번을 실패로 만든다.
+    pub(crate) static SETTLE_SAVE_FAULT: std::cell::RefCell<Option<()>> = const { std::cell::RefCell::new(None) };
+    /// 교체 직전 재관측 바로 앞에서 루트 `.gilignore` 자리를 디렉터리로 바꾼다 — 읽기 불가를 흉내 낸다.
+    pub(crate) static UNREADABLE_BEFORE_REPLACE: std::cell::RefCell<Option<()>> = const { std::cell::RefCell::new(None) };
+    /// 쓰기 직전의 0단계 재확인 바로 앞에서 같은 자리를 디렉터리로 바꾼다 — 쓰기 시작 전의 읽기 불가.
+    pub(crate) static UNREADABLE_BEFORE_SYNC: std::cell::RefCell<Option<()>> = const { std::cell::RefCell::new(None) };
     /// 한 번의 최종 상태 저장을 실패로 보고하게 한다(저장은 하지 않는다).
     pub(crate) static COMMIT_FAULT: std::cell::RefCell<Option<()>> = const { std::cell::RefCell::new(None) };
 }
@@ -953,9 +1054,14 @@ thread_local! {
 fn write_policy(root: &Path, bytes: &[u8], expected: Option<&ContentDigest>) -> sp::PolicyWrite {
     let at = WRITE_FAULT.with(|f| *f.borrow());
     let edit = EDIT_BEFORE_REPLACE.with(|e| e.borrow_mut().take());
+    let unreadable = UNREADABLE_BEFORE_REPLACE.with(|e| e.borrow_mut().take()).is_some();
     sp::write_with(root, bytes, expected, &mut |step| {
         if step == "before_recheck" && let Some(edit) = &edit {
             std::fs::write(root.join(".gilignore"), edit).expect("시험 편집");
+        }
+        if step == "before_recheck" && unreadable {
+            let _ = std::fs::remove_file(root.join(".gilignore"));
+            std::fs::create_dir(root.join(".gilignore")).expect("시험 자리");
         }
         match at {
             Some(fault) if fault == step => Err(std::io::Error::other("시험이 넣은 실패")),

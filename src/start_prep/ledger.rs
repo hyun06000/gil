@@ -176,9 +176,26 @@ impl Ledger {
         self.proposals.iter().find(|p| p.digest == digest)
     }
 
-    /// 그 판의 적용 재확인이 승인 조건의 변경을 발견했는가 — 그렇다면 그 판은 다시 적용하지 않는다.
-    pub(crate) fn condition_changed(&self, revision: u32) -> bool {
-        self.events.iter().any(|e| matches!(e, Event::ConditionChanged { revision: r, .. } if *r == revision))
+    /// 그 판을 **다시 적용하면 안 되는 이유**가 기록에 있는가 — 저장된 사실만으로 판정한다.
+    ///
+    /// - `condition_changed`: 재확인이 승인 조건의 변경을 발견해 기록했다(`ConditionChanged`, 또는 파일 쓰기 결과로 남긴
+    ///   `SyncSettled(condition_changed)` — 둘 중 하나만 남은 상태도 같다).
+    /// - `sync_outcome_unrecorded`: 그 판의 정책 파일 쓰기를 시작했다(`SyncStarted`)는 기록 뒤에 결과(`SyncSettled`)가 없다 —
+    ///   중단이나 저장 실패로 쓰기 결과와 그때의 재확인 결과를 모른다. 모르는 상태를 같은 승인의 재사용 허가로 읽지 않는다.
+    pub(crate) fn not_reusable(&self, revision: u32) -> Option<&'static str> {
+        let mut open_write = false;
+        for e in &self.events {
+            match e {
+                Event::ConditionChanged { revision: r, .. } if *r == revision => return Some("condition_changed"),
+                Event::SyncSettled { revision: r, result, .. } if *r == revision => {
+                    if result == "condition_changed" { return Some("condition_changed"); }
+                    open_write = false;
+                }
+                Event::SyncStarted { revision: r, .. } if *r == revision => open_write = true,
+                _ => {}
+            }
+        }
+        open_write.then_some("sync_outcome_unrecorded")
     }
 
     pub(crate) fn response(&self, digest: &str) -> Option<&Response> {

@@ -1114,6 +1114,8 @@
   "start_prep.phase.started": "正式开始已确定。",
   "start_prep.phase.condition_changed": "Monitor 批准后批准条件发生变化,此提案不会被应用。",
   "start_prep.phase.policy_file_held": "最新提案的策略文件效果为暂停,无法批准。",
+  "start_prep.phase.condition_change_unrecorded": "检测到条件变化但未能记录;本进程中不会应用此提案。",
+  "start_prep.phase.sync_outcome_unrecorded": "已开始的 .gilignore 写入结果未记录;此提案不会再次应用。",
   "start_prep.next.preparing": "说明跟踪与排除的对象以及对归档/恢复的影响,然后用准确的规则文本调用 gil_start_prepare,再调用 show_gil_monitor(scope_id)。不要创建项目文件。",
   "start_prep.next.awaiting_approval": "请用户在 GIL Monitor 中审阅并批准准确的提案,然后等待。聊天同意不是批准。若 Monitor 不可用,则保持等待批准。",
   "start_prep.next.changes_requested": "询问要修改什么,然后用 gil_start_prepare 准备新提案。",
@@ -1124,6 +1126,8 @@
   "start_prep.next.not_preparing": "为用户选择的文件夹调用 gil_start。",
   "start_prep.next.condition_changed": "说明发生了什么变化,用 gil_start_prepare 准备新提案,并请用户在 Monitor 中批准。不要重复之前的批准。",
   "start_prep.next.policy_file_held": "向用户说明 .gilignore 的差异,并仅在其同意后整理(例如移除它,或按原文提出),然后准备新提案。在此期间不写入任何内容。",
+  "start_prep.next.condition_change_unrecorded": "用 gil_start_prepare 准备新提案,并请用户在 Monitor 中批准。不要重复之前的批准。",
+  "start_prep.next.sync_outcome_unrecorded": "用 gil_start_prepare 准备新提案,并请用户在 Monitor 中批准。不要重复之前的批准。",
   "start_prep.impact.archive": "被排除的路径从此开始不会放入新的归档。",
   "start_prep.impact.restore": "GIL 恢复不会创建、修改或删除被排除的路径;该期间的内容无法由 GIL 恢复。",
   "start_prep.impact.access": "排除不是禁止读取、修改或删除;文件仍可编辑。",
@@ -1134,5 +1138,7 @@
   "start_prep.condition_changed": "重新检查发现批准条件已变化(实际跟踪列表、路径类型、下层策略文件或磁盘上的策略文件)。未开始,此提案不会再次应用;请准备新提案并在 Monitor 中批准。之前的记录保留。",
   "start_prep.observation_unstable": "无法一致地观测文件夹(观测中变化或读取失败)。未开始;批准保留,文件夹安静后用户可在 Monitor 中重试。",
   "start_prep.start_uncertain": "无法确认正式开始是否已保存。请读取 gil_start_status;不要再次批准。",
-  "start_prep.policy_file_held": "此提案的策略文件效果为暂停,无法批准。请与用户整理 .gilignore 并准备新提案。"
+  "start_prep.policy_file_held": "此提案的策略文件效果为暂停,无法批准。请与用户整理 .gilignore 并准备新提案。",
+  "start_prep.condition_change_unrecorded": "检测到批准条件变化并已停止本次应用,但未能保存该检测记录。是否可以重复使用此批准尚未确认——本进程中不会重试,也未开始任何内容。请读取 gil_start_status,并通过新的提案和 Monitor 批准继续。",
+  "start_prep.sync_outcome_unrecorded": "已开始此提案的 .gilignore 写入,但结果未记录(中断或保存失败)。不会将这种未知状态视为重复使用批准的许可;请准备新提案并在 Monitor 中批准。未开始任何内容。"
 }

@@ -1114,6 +1114,8 @@
   "start_prep.phase.started": "The formal start is committed.",
   "start_prep.phase.condition_changed": "An approval condition changed after the Monitor approval; this proposal is not applied.",
   "start_prep.phase.policy_file_held": "The latest proposal cannot be approved: its policy-file effect is a hold.",
+  "start_prep.phase.condition_change_unrecorded": "A condition change was detected but not recorded; this proposal is not applied in this process.",
+  "start_prep.phase.sync_outcome_unrecorded": "The outcome of a started .gilignore write is not recorded; this proposal is not applied again.",
   "start_prep.next.preparing": "Explain tracked and excluded paths and their archive/restore impact, then call gil_start_prepare with the exact rules text and show_gil_monitor(scope_id). Do not create project files.",
   "start_prep.next.awaiting_approval": "Ask the user to review and approve the exact proposal in the GIL Monitor and wait. Chat consent is not approval. If the Monitor is unavailable the start stays waiting.",
   "start_prep.next.changes_requested": "Ask what to change, then prepare a new proposal with gil_start_prepare.",
@@ -1124,6 +1126,8 @@
   "start_prep.next.not_preparing": "Call gil_start for the user's selected folder.",
   "start_prep.next.condition_changed": "Explain what changed, prepare a new proposal with gil_start_prepare and ask the user to approve it in the Monitor. Do not repeat the earlier approval.",
   "start_prep.next.policy_file_held": "Explain the .gilignore difference to the user and tidy it only with their consent (for example remove it, or propose its exact text), then prepare a new proposal. Nothing is written meanwhile.",
+  "start_prep.next.condition_change_unrecorded": "Prepare a new proposal with gil_start_prepare and ask the user to approve it in the Monitor. Do not repeat the earlier approval.",
+  "start_prep.next.sync_outcome_unrecorded": "Prepare a new proposal with gil_start_prepare and ask the user to approve it in the Monitor. Do not repeat the earlier approval.",
   "start_prep.impact.archive": "Excluded paths are not put into new archives from this start on.",
   "start_prep.impact.restore": "GIL restore never creates, changes or deletes excluded paths; their content in that period cannot be restored by GIL.",
   "start_prep.impact.access": "Excluding is not a read, write or delete ban; files stay editable.",
@@ -1134,5 +1138,7 @@
   "start_prep.condition_changed": "The recheck found that an approval condition changed (the actual tracked list, a path's kind, a nested policy file or the policy file on disk). Nothing was started and this proposal is not applied again; prepare a new proposal and get it approved in the Monitor. Earlier records are kept.",
   "start_prep.observation_unstable": "The folder could not be observed consistently (files changed during observation or a read failed). Nothing was started; the approval is kept and the user can retry from the Monitor when the folder is quiet.",
   "start_prep.start_uncertain": "Whether the formal start was saved cannot be confirmed. Read gil_start_status; do not approve again.",
-  "start_prep.policy_file_held": "This proposal's policy-file effect is a hold, so it cannot be approved. Tidy the .gilignore with the user and prepare a new proposal."
+  "start_prep.policy_file_held": "This proposal's policy-file effect is a hold, so it cannot be approved. Tidy the .gilignore with the user and prepare a new proposal.",
+  "start_prep.condition_change_unrecorded": "An approval-condition change was detected and this application stopped, but the record of that detection could not be saved. Whether this approval may be reused is not confirmed: it is not retried in this process, and nothing was started. Read gil_start_status; a new proposal and Monitor approval is the way forward.",
+  "start_prep.sync_outcome_unrecorded": "A .gilignore write for this proposal was started but its outcome was not recorded (an interruption or a failed save). That unknown state is not treated as permission to reuse the approval; prepare a new proposal and get it approved in the Monitor. Nothing was started."
 }

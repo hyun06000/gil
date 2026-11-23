@@ -217,7 +217,8 @@ fn a_changed_tracked_list_needs_reapproval_but_content_only_and_excluded_interio
     fs::write(root.join("NEW.txt"), "new\n").unwrap();
     let held = approve(&root, &p).unwrap();
     assert_eq!(held["application_held"]["code"], "scope_changed");
-    assert_eq!(held["application_held"]["detail"]["added"][0], "NEW.txt");
+    assert_eq!(held["application_held"]["detail"]["recorded"], true);
+    assert_eq!(held["application_held"]["detail"]["detail"]["added"][0], "NEW.txt");
     fs::remove_file(root.join("NEW.txt")).unwrap();
     assert_eq!(apply(&root, proposal_of(&p).0, &proposal_of(&p).1).unwrap_err().code, "condition_changed",
         "목록을 되돌려도 같은 판의 승인을 다시 쓰지 않는다 — 새 제안·재승인이 필요하다");
@@ -363,14 +364,22 @@ fn an_interrupted_write_is_not_retried_automatically_when_the_disk_differs() {
     begin(&s(&root)).unwrap();
     let p = prepared(&root, RULES_B);
     let (revision, digest) = proposal_of(&p);
-    // Monitor 응답은 저장됐고, 쓰기 1단계(unconfirmed) 직후 프로세스가 끝났다 — 파일은 쓰이지 않았다.
+    // Monitor 응답은 저장됐고, 쓰기 1단계(unconfirmed) 직후 프로세스가 끝났다 — 파일은 쓰이지 않았고 결과 기록도 없다.
     let path = root.join(".gil/start/preparation.json");
     let mut ledger: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
     ledger["responses"] = serde_json::json!([{"revision": revision, "proposal_digest": digest, "decision": "approve", "source": "monitor_button"}]);
     ledger["base"] = serde_json::json!({"state": "unconfirmed"});
     ledger["events"] = serde_json::json!([{"kind": "sync_started", "revision": revision, "target": p["proposal"]["rules_digest"]}]);
     fs::write(&path, serde_json::to_vec(&ledger).unwrap()).unwrap();
-    let started = apply(&root, revision, &digest).unwrap();
+    // 결과가 기록되지 않은 쓰기 — 그 판의 승인을 다시 쓰지 않는다(재시작한 새 읽기에서도 같다).
+    assert_eq!(status(&s(&root)).unwrap()["phase"], "sync_outcome_unrecorded");
+    assert_eq!(apply(&root, revision, &digest).unwrap_err().code, "sync_outcome_unrecorded");
+    assert!(review(&root).unwrap().1.is_none(), "적용 capability 도 나오지 않는다");
+    assert!(!state(&root).exists());
+    // 새 제안·새 승인: unconfirmed 기준에서는 자동으로 쓰지 않고 시작은 따로 확정된다.
+    let p2 = prepared(&root, RULES_B);
+    assert_eq!(p2["proposal"]["policy_file"]["effect"], "not_written_unconfirmed");
+    let started = approve(&root, &p2).unwrap();
     assert_eq!(started["phase"], "started");
     assert_eq!(started["policy_file"], "not_written");
     assert_eq!(started["started"]["policy_file_sync_base"], "unconfirmed");
@@ -686,4 +695,145 @@ fn a_combined_text_equal_to_either_part_still_needs_its_own_approval() {
         assert_eq!(started["phase"], "started", "{label}: {started}");
         assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), d);
     }
+}
+
+// ── 두 번째 수정(조건 변경 기록의 영속성, 읽기 불가와 조건 변경의 구분) ─────────────
+
+#[test]
+fn a_detected_change_that_cannot_be_recorded_is_reported_as_unrecorded_and_not_reused_here() {
+    let root = project("cc-unrecorded");
+    begin(&s(&root)).unwrap();
+    let p = prepared(&root, RULES_B);
+    fs::write(root.join("NEW.txt"), "new\n").unwrap();
+    CONDITION_SAVE_FAULT.with(|f| *f.borrow_mut() = Some(()));
+    let held = approve(&root, &p).unwrap();
+    assert_eq!(held["application_held"]["code"], "condition_change_unrecorded", "{held}");
+    assert_eq!(held["application_held"]["detail"]["recorded"], false);
+    assert_eq!(held["application_held"]["detail"]["detected"], "scope_changed");
+    assert!(!state(&root).exists());
+    let ledger: Value = serde_json::from_slice(&fs::read(root.join(".gil/start/preparation.json")).unwrap()).unwrap();
+    assert!(ledger["events"].as_array().unwrap().is_empty(), "저장되지 않은 사실을 기록된 것처럼 남기지 않는다");
+    assert_eq!(ledger["responses"].as_array().unwrap().len(), 1, "승인 응답은 그대로다");
+    // 같은 프로세스에서는 변경이 되돌려져도 같은 판을 다시 적용하지 않는다(다음 관측에 기대지 않는다).
+    fs::remove_file(root.join("NEW.txt")).unwrap();
+    assert_eq!(apply(&root, proposal_of(&p).0, &proposal_of(&p).1).unwrap_err().code, "condition_change_unrecorded");
+    assert_eq!(status(&s(&root)).unwrap()["phase"], "condition_change_unrecorded");
+    assert!(review(&root).unwrap().1.is_none());
+    let p2 = prepared(&root, RULES_B);
+    assert_eq!(approve(&root, &p2).unwrap()["phase"], "started");
+}
+
+#[test]
+fn a_recorded_change_survives_a_fresh_reader_even_without_the_condition_event() {
+    let root = project("cc-partial");
+    begin(&s(&root)).unwrap();
+    let p = prepared(&root, RULES_B);
+    let (revision, digest) = proposal_of(&p);
+    // 앞선 후보가 남길 수 있던 부분 저장: 파일 쓰기 결과는 condition_changed 인데 ConditionChanged 사건은 없다.
+    let path = root.join(".gil/start/preparation.json");
+    let mut ledger: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    ledger["responses"] = serde_json::json!([{"revision": revision, "proposal_digest": digest, "decision": "approve", "source": "monitor_button"}]);
+    ledger["base"] = serde_json::json!({"state": "unconfirmed"});
+    ledger["events"] = serde_json::json!([
+        {"kind": "sync_started", "revision": revision, "target": p["proposal"]["rules_digest"]},
+        {"kind": "sync_settled", "revision": revision, "result": "condition_changed", "base": {"state": "unconfirmed"}},
+    ]);
+    fs::write(&path, serde_json::to_vec(&ledger).unwrap()).unwrap();
+    assert_eq!(status(&s(&root)).unwrap()["phase"], "condition_changed");
+    assert_eq!(apply(&root, revision, &digest).unwrap_err().code, "condition_changed");
+    assert!(review(&root).unwrap().1.is_none());
+    assert!(!state(&root).exists() && !root.join(".gilignore").exists());
+}
+
+#[test]
+fn a_change_found_at_replacement_is_recorded_in_one_save_with_its_outcome() {
+    let root = project("cc-one-save");
+    begin(&s(&root)).unwrap();
+    let p = prepared(&root, RULES_B);
+    EDIT_BEFORE_REPLACE.with(|e| *e.borrow_mut() = Some(b"*.tmp\n".to_vec()));
+    CONDITION_SAVE_FAULT.with(|f| *f.borrow_mut() = Some(()));
+    let held = approve(&root, &p).unwrap();
+    assert_eq!(held["application_held"]["code"], "condition_change_unrecorded", "{held}");
+    let ledger: Value = serde_json::from_slice(&fs::read(root.join(".gil/start/preparation.json")).unwrap()).unwrap();
+    let kinds: Vec<&str> = ledger["events"].as_array().unwrap().iter().map(|e| e["kind"].as_str().unwrap()).collect();
+    assert_eq!(kinds, ["sync_started"], "결과와 조건 변경은 함께 저장되거나 함께 빠진다");
+    assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), "*.tmp\n");
+    // 쓰기 시작만 남은 기록은 재시작 뒤에도 같은 판의 재사용을 허락하지 않는다 — 저장된 사실이 먼저 답한다.
+    assert_eq!(apply(&root, proposal_of(&p).0, &proposal_of(&p).1).unwrap_err().code, "sync_outcome_unrecorded");
+    assert!(ledger_block(&root, proposal_of(&p).0).is_some());
+}
+
+fn ledger_block(root: &Path, revision: u32) -> Option<&'static str> {
+    let ledger = super::read_checked(&root.join(".gil")).unwrap().unwrap();
+    ledger.not_reusable(revision)
+}
+
+#[test]
+fn an_unreadable_policy_file_at_replacement_stops_this_application_without_a_condition_change() {
+    let root = project("unreadable-replace");
+    begin(&s(&root)).unwrap();
+    let p = prepared(&root, RULES_B);
+    UNREADABLE_BEFORE_REPLACE.with(|e| *e.borrow_mut() = Some(()));
+    let held = approve(&root, &p).unwrap();
+    assert_eq!(held["application_held"]["code"], "policy_file_unreadable", "{held}");
+    assert_eq!(held["phase"], "approved", "읽기 불가는 조건 변경이 아니다 — 승인을 취소하지 않는다");
+    assert!(!state(&root).exists());
+    let ledger: Value = serde_json::from_slice(&fs::read(root.join(".gil/start/preparation.json")).unwrap()).unwrap();
+    let kinds: Vec<&str> = ledger["events"].as_array().unwrap().iter().map(|e| e["kind"].as_str().unwrap()).collect();
+    assert_eq!(kinds, ["sync_started", "sync_settled"]);
+    assert_eq!(ledger["events"][1]["result"], "unreadable_before_replace");
+    assert_eq!(ledger["base"]["state"], "unconfirmed", "쓰기를 시작했으므로 읽지 못한 디스크를 없음으로 바꾸지 않는다");
+    assert!(ledger_block(&root, proposal_of(&p).0).is_none());
+    // 읽을 수 있게 되면 같은 승인으로 다시 시도한다 — unconfirmed 기준이라 자동으로 쓰지 않고 시작은 따로 확정된다.
+    fs::remove_dir(root.join(".gilignore")).unwrap();
+    let started = apply(&root, proposal_of(&p).0, &proposal_of(&p).1).unwrap();
+    assert_eq!(started["phase"], "started", "{started}");
+    assert_eq!(started["facts"]["policy_file_write"], "not_written");
+    assert_eq!(started["started"]["policy_file_sync_base"], "unconfirmed");
+}
+
+#[test]
+fn an_unreadable_policy_file_before_the_write_starts_records_nothing_and_keeps_the_approval() {
+    let root = project("unreadable-presync");
+    begin(&s(&root)).unwrap();
+    let p = prepared(&root, RULES_B);
+    UNREADABLE_BEFORE_SYNC.with(|e| *e.borrow_mut() = Some(()));
+    let held = approve(&root, &p).unwrap();
+    assert_eq!(held["application_held"]["code"], "policy_file_unreadable", "{held}");
+    assert_eq!(held["phase"], "approved");
+    assert!(!state(&root).exists());
+    let ledger: Value = serde_json::from_slice(&fs::read(root.join(".gil/start/preparation.json")).unwrap()).unwrap();
+    assert!(ledger["events"].as_array().unwrap().iter().all(|e| !matches!(e["kind"].as_str(), Some("sync_started" | "sync_settled" | "condition_changed"))), "{ledger}");
+    assert_eq!(ledger["base"]["state"], "absent", "쓰기를 시작하지 않았고 읽기 실패를 없음이나 변경으로 바꾸지 않는다");
+    assert!(ledger_block(&root, proposal_of(&p).0).is_none());
+    fs::remove_dir(root.join(".gilignore")).unwrap();
+    let started = apply(&root, proposal_of(&p).0, &proposal_of(&p).1).unwrap();
+    assert_eq!(started["phase"], "started", "{started}");
+    assert_eq!(started["facts"]["policy_file_write"], "written");
+}
+
+#[test]
+fn an_unrecorded_write_outcome_on_a_successful_write_still_commits_the_start_and_reads_back() {
+    let root = project("settle-save-fail");
+    begin(&s(&root)).unwrap();
+    let p = prepared(&root, RULES_B);
+    SETTLE_SAVE_FAULT.with(|f| *f.borrow_mut() = Some(()));
+    let started = approve(&root, &p).unwrap();
+    assert_eq!(started["phase"], "started", "{started}");
+    assert_eq!(started["started"]["policy_file_sync_base"], "present", "정식 시작의 저장이 같은 기준을 지닌다");
+    // 정식 시작이 확정된 뒤에는 같은 승인의 재전송·조회가 같은 결과다.
+    assert_eq!(apply(&root, proposal_of(&p).0, &proposal_of(&p).1).unwrap()["started"], started["started"]);
+}
+
+#[test]
+fn an_empty_policy_file_is_present_not_absent() {
+    let root = project("empty-file");
+    fs::write(root.join(".gilignore"), "").unwrap();
+    begin(&s(&root)).unwrap();
+    let ledger: Value = serde_json::from_slice(&fs::read(root.join(".gil/start/preparation.json")).unwrap()).unwrap();
+    assert_eq!(ledger["base"]["state"], "present", "0바이트 일반 파일은 있음 + digest 다");
+    let p = prepared(&root, RULES_B);
+    assert_eq!(p["proposal"]["policy_file"]["effect"], "replace");
+    assert_eq!(approve(&root, &p).unwrap()["phase"], "started");
+    assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), RULES_B);
 }

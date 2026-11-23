@@ -38,7 +38,7 @@ pub(super) fn phase(ledger: &Ledger, started: Option<&StartedRecord>) -> &'stati
     }
     let Some(latest) = ledger.latest() else { return "preparing" };
     match ledger.response(&latest.digest).map(|r| r.decision.as_str()) {
-        Some("approve") if ledger.condition_changed(latest.revision) => "condition_changed",
+        Some("approve") if super::reuse_blocked(ledger, latest).is_some() => super::reuse_blocked(ledger, latest).unwrap_or("approved"),
         Some("approve") => "approved",
         Some(_) => "changes_requested",
         None if !latest.blockers.is_empty() => "blocked",

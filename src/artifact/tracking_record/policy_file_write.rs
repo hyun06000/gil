@@ -29,8 +29,10 @@ pub(crate) enum PolicyWrite {
     Replaced { reread: DiskReading },
     /// 교체 전에 장애로 멈췄다(만들기·쓰기·rename 실패) — 기존 `.gilignore` 는 건드리지 않았다.
     NotReplaced { reason: String },
-    /// 교체 직전 재관측이 부르는 쪽이 기대한 디스크와 다른 상태를 발견해 교체하지 않았다 — 장애가 아니라 **조건의 변경**이다.
+    /// 교체 직전 재관측이 부르는 쪽이 기대한 디스크와 **다른 상태를 확인**해 교체하지 않았다 — 장애가 아니라 조건의 변경이다.
     ConditionChanged { reread: DiskReading },
+    /// 교체 직전 재관측을 하지 못해(읽기 불가) 교체하지 않았다 — 변경의 증거도 동일함의 증거도 아니다.
+    Unobservable { reason: String },
     /// 교체 단계에서 실패해 교체 여부를 모른다.
     Unknown { reason: String },
 }
@@ -84,6 +86,10 @@ pub(crate) fn write_with(
     let _ = fault("before_recheck");
     let now = super::policy_file_read::read_root_policy_file(project_root);
     let as_expected = match (&now, expected) {
+        (DiskReading::Unreadable { reason }, _) => {
+            discard();
+            return PolicyWrite::Unobservable { reason: reason.clone() };
+        }
         (DiskReading::Absent, None) => true,
         (DiskReading::Present(found), Some(want)) => found == want,
         _ => false,

@@ -1114,6 +1114,8 @@
   "start_prep.phase.started": "정식 시작이 확정됐다.",
   "start_prep.phase.condition_changed": "Monitor 승인 뒤 승인 조건이 바뀌어 이 제안은 적용하지 않는다.",
   "start_prep.phase.policy_file_held": "최신 제안은 정책 파일 효과가 보류라 승인할 수 없다.",
+  "start_prep.phase.condition_change_unrecorded": "조건 변경을 발견했으나 기록하지 못했다. 이 프로세스에서는 이 제안을 적용하지 않는다.",
+  "start_prep.phase.sync_outcome_unrecorded": "시작한 .gilignore 쓰기의 결과가 기록되지 않아 이 제안은 다시 적용하지 않는다.",
   "start_prep.next.preparing": "추적·제외 대상과 보관·복원 영향을 설명한 뒤 정확한 원문으로 gil_start_prepare 를 부르고 show_gil_monitor(scope_id) 를 부른다. 프로젝트 파일을 만들지 않는다.",
   "start_prep.next.awaiting_approval": "사용자에게 GIL Monitor 에서 정확한 제안을 검토·승인해 달라고 하고 기다린다. 대화 동의는 승인이 아니다. Monitor 를 쓸 수 없으면 승인 대기로 남는다.",
   "start_prep.next.changes_requested": "무엇을 바꿀지 묻고 gil_start_prepare 로 새 제안을 준비한다.",
@@ -1124,6 +1126,8 @@
   "start_prep.next.not_preparing": "사용자가 고른 폴더로 gil_start 를 부른다.",
   "start_prep.next.condition_changed": "무엇이 바뀌었는지 설명하고 gil_start_prepare 로 새 제안을 준비해 사용자에게 Monitor 승인을 요청한다. 앞선 승인을 반복하지 않는다.",
   "start_prep.next.policy_file_held": "사용자에게 .gilignore 차이를 설명하고 동의를 받은 뒤에만 정리한다(예: 파일을 치우거나 그 원문 그대로를 제안). 그 다음 새 제안을 준비한다. 그동안 아무것도 쓰지 않는다.",
+  "start_prep.next.condition_change_unrecorded": "gil_start_prepare 로 새 제안을 준비해 사용자에게 Monitor 승인을 요청한다. 앞선 승인을 반복하지 않는다.",
+  "start_prep.next.sync_outcome_unrecorded": "gil_start_prepare 로 새 제안을 준비해 사용자에게 Monitor 승인을 요청한다. 앞선 승인을 반복하지 않는다.",
   "start_prep.impact.archive": "제외한 경로는 이 시작부터 새 보관본에 들어가지 않는다.",
   "start_prep.impact.restore": "GIL 복원은 제외 경로를 만들거나 바꾸거나 지우지 않는다. 그 기간의 내용은 GIL 로 되돌릴 수 없다.",
   "start_prep.impact.access": "제외는 읽기·수정·삭제 금지가 아니다. 파일은 계속 편집할 수 있다.",
@@ -1134,5 +1138,7 @@
   "start_prep.condition_changed": "재확인이 승인 조건의 변경(실제 추적 목록·경로 종류·하위 정책 파일·디스크의 정책 파일)을 발견했다. 시작하지 않았고 이 제안은 다시 적용하지 않는다. 새 제안을 준비해 Monitor 에서 승인받는다. 앞선 기록은 그대로다.",
   "start_prep.observation_unstable": "폴더를 일관되게 관측하지 못했다(관측 중 변경·읽기 실패). 시작하지 않았고 승인은 그대로다. 폴더가 조용해지면 사용자가 Monitor 에서 다시 시도할 수 있다.",
   "start_prep.start_uncertain": "정식 시작이 저장됐는지 확인할 수 없다. gil_start_status 를 읽는다. 다시 승인하지 않는다.",
-  "start_prep.policy_file_held": "이 제안의 정책 파일 효과가 보류라 승인할 수 없다. 사용자와 .gilignore 를 정리하고 새 제안을 준비한다."
+  "start_prep.policy_file_held": "이 제안의 정책 파일 효과가 보류라 승인할 수 없다. 사용자와 .gilignore 를 정리하고 새 제안을 준비한다.",
+  "start_prep.condition_change_unrecorded": "승인 조건의 변경을 발견해 이번 적용을 멈췄지만, 그 발견을 기록으로 저장하지 못했다. 이 승인을 다시 써도 되는지는 확인되지 않았다 — 이 프로세스에서는 다시 시도하지 않으며 아무것도 시작하지 않았다. gil_start_status 를 읽고, 새 제안과 Monitor 승인으로 이어 간다.",
+  "start_prep.sync_outcome_unrecorded": "이 제안의 .gilignore 쓰기를 시작했지만 결과가 기록되지 않았다(중단 또는 저장 실패). 그 모르는 상태를 승인 재사용의 허가로 보지 않는다. 새 제안을 준비해 Monitor 에서 승인받는다. 아무것도 시작하지 않았다."
 }
