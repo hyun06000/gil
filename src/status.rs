@@ -112,13 +112,20 @@ fn world_nudge(session: &ProjectSession) -> String {
         WorldState::Unknown { world, said } => tr!("status.world_unknown", world = world, why = indent(&said)),
         WorldState::Dirty { world, .. } => {
             let mut out = tr!("status.world_dirty", world = world);
-            out.push_str(match open_verify(session) {
+            if open_verify(session) {
                 // 세계를 확정할 권한은 Verify 에만 있다(Artifact Model §5).
-                true => text("status.dirty_verify"),
-                // **밟을 수 있는 길만 말한다.** Interview 안에는 verify 가 없고, 이 Cycle 을
-                // 닫는 것도 같은 gate 에 막힌다 — 그러니 먼저 되돌리는 수뿐이다.
-                false if cfg!(feature = "product-safety") => text("status.dirty_product"),
-                false => text("status.dirty_dev"),
+                out.push_str(text("status.dirty_verify"));
+                return out;
+            }
+            // **밟을 수 있는 길만 말한다.** Interview 안에는 verify 가 없고, 이 Cycle 을
+            // 닫는 것도 같은 gate 에 막힌다 — 그러니 먼저 되돌리는 수뿐이다.
+            out.push_str(text(if cfg!(feature = "product-safety") { "status.dirty_product" } else { "status.dirty_dev" }));
+            // Say that the Step and its Will stay open only when both exist: before the first
+            // Step opens there is nothing to keep open, and saying so reads as an open Question.
+            let open_step = session.project().cycles().current().step_now_open().is_some();
+            out.push_str(match open_step && session.project().active_will().is_some() {
+                true => text("status.dirty_keeps_open"),
+                false => "\n",
             });
             out
         }
