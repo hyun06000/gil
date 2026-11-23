@@ -135,6 +135,7 @@
   "cmd.mcp_missing_why": "This command stands by itself waiting on stdin, so starting it by mistake looks like a frozen terminal.",
   "cmd.mcp_only_serve": "`gil mcp` knows only `--serve`.",
   "cmd.mcp_unknown": "{other} is not something `gil mcp` knows.",
+  "cmd.serve_help": "gil serve (= gil mcp --serve) — run the GIL MCP server over stdio.\n\nThis is the command an Agent Host runs to connect. Once running it waits for JSON-RPC requests until stdin closes and prints nothing for a person to read; run by hand in a terminal it looks frozen.\n\nCommand for the Host configuration\n  gil serve\n  gil mcp --serve   (the same server)\n\nThis help does not start the server and does not read stdin.\n",
   "cmd.misspelled": "The name is misspelled.",
   "cmd.monitor_no_arg": "`gil monitor` does not take {other}.",
   "cmd.monitor_todo": "Run without arguments, or with exactly one of `--html` or `--serve`.",

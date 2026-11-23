@@ -135,6 +135,7 @@
   "cmd.mcp_missing_why": "此命令会独自停在那里等待 stdin，误启动时看起来像终端卡住了。",
   "cmd.mcp_only_serve": "`gil mcp` 只认识 `--serve`。",
   "cmd.mcp_unknown": "{other} 不是 `gil mcp` 认识的东西。",
+  "cmd.serve_help": "gil serve (= gil mcp --serve) — 通过 stdio 运行 GIL 的 MCP 服务器。\n\n这是 Agent Host 连接时调用的命令。运行后会一直等待 JSON-RPC 请求直到 stdin 关闭，不输出供人阅读的内容。在终端中直接运行看起来像是卡住了。\n\n写入 Host 配置的命令\n  gil serve\n  gil mcp --serve   （同一个服务器）\n\n此帮助不运行服务器，也不读取 stdin。\n",
   "cmd.misspelled": "名称拼写错误。",
   "cmd.monitor_no_arg": "`gil monitor` 不接受 {other}。",
   "cmd.monitor_todo": "不带参数运行，或只带 `--html` 和 `--serve` 中的一个。",

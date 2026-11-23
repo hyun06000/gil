@@ -135,6 +135,7 @@
   "cmd.mcp_missing_why": "このコマンドは自ら立って stdin を待つ場なので、誤って立ち上げると端末が止まったように見える。",
   "cmd.mcp_only_serve": "`gil mcp` は `--serve` 一つだけを知っている。",
   "cmd.mcp_unknown": "{other} は `gil mcp` が知るものではない。",
+  "cmd.serve_help": "gil serve (= gil mcp --serve) — GIL の MCP サーバーを stdio で実行する。\n\nAgent Host が接続するときに呼ぶコマンドだ。実行すると stdin が閉じるまで JSON-RPC リクエストを待ち、人が読む出力は出さない。ターミナルで直接実行すると止まったように見える。\n\nHost の設定に書くコマンド\n  gil serve\n  gil mcp --serve   （同じサーバー）\n\nこのヘルプはサーバーを実行せず、stdin も読まない。\n",
   "cmd.misspelled": "名前の綴りが違う。",
   "cmd.monitor_no_arg": "`gil monitor` は {other} を受け取らない。",
   "cmd.monitor_todo": "引数なしで実行するか、`--html` か `--serve` のどちらか一つだけを付ける。",
