@@ -50,8 +50,6 @@ jobs:
         include:
           - runner: macos-15
             shell: bash
-          - runner: windows-2025
-            shell: pwsh
     runs-on: ${{ matrix.runner }}
     # The opt-in end-history steps add about 10 minutes on Windows (measured on PR #172: the job
     # took 19-22 minutes before them and was cut at 30 while compiling their last profile).

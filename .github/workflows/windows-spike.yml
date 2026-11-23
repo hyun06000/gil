@@ -41,6 +41,10 @@ permissions:
   contents: read
 jobs:
   windows-native:
+    # Windows test and build CI is paused: this job never starts a runner, on pull requests, main
+    # pushes or manual runs. The definition below is kept verbatim but inactive; its skipped record
+    # is not a Windows test result. The release workflow (windows-release.yml) is separate and unchanged.
+    if: ${{ false }}
     name: Windows native (${{ matrix.label }})
     strategy:
       fail-fast: false
