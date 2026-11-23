@@ -965,3 +965,46 @@ fn visual_help_alias_answers_without_a_project() {
     let dir = nowhere("visual-help-alias");
     assert_eq!(ok(&dir, &["help", "visuals"]), ok(&dir, &["help", "report/visuals"]));
 }
+
+/// product-safety 빌드의 두 복구 도움말은 `gil status` 와 닫기 거절문이 실제로 보여 주는 것을
+/// 구분해 말한다 (#238). status 는 기준·dirty 여부만, 변경 종류와 경로는 비-Verify 닫기 거절문만.
+#[cfg(feature = "product-safety")]
+#[test]
+fn product_recovery_help_matches_what_status_and_the_close_refusal_show() {
+    let dir = started("ps-recovery-help", &[("keep.txt", "원래"), ("gone.txt", "지울 것")]);
+    open_step(&dir, "question");
+    fs::write(dir.join("keep.txt"), "바꿨다").unwrap();
+    fs::remove_file(dir.join("gone.txt")).unwrap();
+    fs::write(dir.join("new.txt"), "새 파일").unwrap();
+    let before = fs::read(dir.join(gil::STATE_PATH)).unwrap();
+
+    let restore = ok(&dir, &["help", "artifact/restore"]);
+    let non_verify = ok(&dir, &["help", "artifact/dirty/non-verify"]);
+    for topic in [&restore, &non_verify] {
+        assert!(!topic.contains("gil status 로 변경 목록") && !topic.contains("`gil status` 가 보여 준"), "{topic}");
+        assert!(topic.contains("경로는 보여 주지 않는다") || topic.contains("경로를 보여 주지 않는다"), "{topic}");
+        assert!(topic.contains("거절문"), "the list lives in the close refusal: {topic}");
+        assert!(topic.contains("일부러 닫기를 시도하지 않는다"), "{topic}");
+    }
+
+    // What the help says about status is what status shows: the reference and dirty, no paths.
+    let status = ok(&dir, &["status"]);
+    assert!(status.contains("상태: dirty"), "{status}");
+    for path in ["keep.txt", "gone.txt", "new.txt"] {
+        assert!(!status.contains(path), "status shows no paths: {status}");
+    }
+    // And the non-Verify close refusal is where each change and path appears.
+    let out = Command::new(GIL).arg("close").current_dir(&dir)
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()
+        .and_then(|mut child| {
+            use std::io::Write as _;
+            child.stdin.as_mut().expect("stdin").write_all("question: q\nchoices: A / B\nresponse: A\n".as_bytes())?;
+            child.wait_with_output()
+        }).expect("닫기를 시도한다");
+    assert!(!out.status.success());
+    let refusal = String::from_utf8_lossy(&out.stderr);
+    for (label, path) in [("바뀜", "keep.txt"), ("사라짐", "gone.txt"), ("새로 생김", "new.txt")] {
+        assert!(refusal.lines().any(|line| line.contains(label) && line.contains(path)), "{label} {path}: {refusal}");
+    }
+    assert_eq!(fs::read(dir.join(gil::STATE_PATH)).unwrap(), before, "reads and the refusal change nothing");
+}
