@@ -1071,6 +1071,10 @@ fn tools_list_includes_handoff_and_preserves_the_read_only_app_boundary() {
     }
     expected.sort();
     assert_eq!(names, expected);
+    // gil_restore overwrites files and deletes ones the target Snapshot lacks: not additive-only.
+    let restore = tools.iter().find(|t| t["name"] == "gil_restore").unwrap();
+    assert_eq!(restore["annotations"]["readOnlyHint"], false, "{restore}");
+    assert_eq!(restore["annotations"]["destructiveHint"], true, "{restore}");
     for tool in tools.iter().filter(|t| t["name"]=="gil_report_visuals") {
         assert_eq!(tool["annotations"]["readOnlyHint"],true);
         assert_eq!(tool["_meta"]["ui"]["visibility"],serde_json::json!(["model"]));
