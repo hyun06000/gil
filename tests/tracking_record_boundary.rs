@@ -42,6 +42,13 @@
 //! - 닫힌 사이클 T 의 경계 세계 B(T) 출처 선택(`boundary_world`, 계약 §6.1)도 저장 경로가 아니다. 메모리의 원장·사건 입력·Chain 목록·
 //!   등록부만 받아 같은 호출에서 3j 를 실행하고, 파일·`state.yaml`·객체 창고를 읽지 않으며 3n·3o 의 시작점·구간이나 P(N) 선택을
 //!   쓰지 않는다. 제품 경로가 그것을 부르지 않으므로 아래 검사에 그 이름이 들어 있고, 그 원문의 코드 줄은 따로 검사한다.
+//! - 비뿌리 사이클 N 의 세계 출처 S(N) 선택과 검증 ①(`opening_world`, 계약 §6.2)도 저장 경로가 아니다. 메모리의 원장·사건 입력·Chain
+//!   목록·등록부만 받아 같은 호출에서 3j 를 한 번 실행하고, 파일·`state.yaml`·객체 창고를 읽지 않으며 3n·3o 의 시작점·구간이나 P(N)·B(T)
+//!   선택을 쓰지 않는다. 제품의 열기·load 가 그것을 부르지 않으므로 아래 검사에 그 이름이 들어 있고, 그 원문의 코드 줄은 따로 검사한다.
+//! - 닫힌 Experiment T 의 Exit 세계와 그 확정 정책 유도(`experiment_exit`, 계약 §6.1 의 「Experiment 의 Exit」 줄)도 저장 경로가 아니다.
+//!   메모리의 원장·사건 입력·Chain 목록·등록부만 받아 같은 호출에서 P(N) 선택을 한 번 부르고(3j 는 그 안에서만 실행된다), 파일·
+//!   `state.yaml`·객체 창고를 읽지 않으며 3n·3o 의 시작점·구간이나 B(T)·S(N) 선택을 쓰지 않는다. 제품 경로가 그것을 부르지 않으므로
+//!   아래 검사에 그 이름이 들어 있고, 그 원문의 코드 줄은 따로 검사한다.
 //! - 새 모듈은 `src/artifact/tracking_record/` 밖의 어떤 소스에서도 불리지 않는다.
 
 mod common;
@@ -724,6 +731,25 @@ fn no_product_source_calls_the_new_module() {
         "ClosedWithoutExit",
         "archive_issuer",
         "BOUNDARY_WORLD_DOES_NOT_SHOW",
+        "opening_world",
+        "select_opening_world",
+        "OpeningWorld",
+        "OpeningTargetProblem",
+        "ParentProblem",
+        "WorldSource",
+        "EntryCheck",
+        "EntryVerdict",
+        "RootOutOfScope",
+        "ParentExit",
+        "NotInOwnerChain",
+        "OPENING_WORLD_DOES_NOT_SHOW",
+        "experiment_exit",
+        "select_experiment_exit",
+        "ExperimentExit",
+        "ExperimentExitProblem",
+        "ExperimentTargetProblem",
+        "InterviewOutOfScope",
+        "EXPERIMENT_EXIT_DOES_NOT_SHOW",
     ];
     let mut users = Vec::new();
     let mut stack = vec![src.clone()];
@@ -845,4 +871,152 @@ fn the_boundary_world_selection_touches_no_file_state_or_store_and_builds_no_spa
     };
     let takes_agreement: Vec<&&str> = code.iter().filter(|line| parameters(line).contains("Agree")).collect();
     assert!(takes_agreement.is_empty(), "3j 성공 값을 받는 문이 있다: {takes_agreement:#?}");
+}
+
+/// S(N) 선택·검증 ① 의 원문에서 주석과 문자열 목록 줄을 뺀 **코드 줄**이 파일·상태·창고·3n/3o·P(N)·B(T) 의 문을 쓰지 않고, 같은 호출의
+/// 입력으로 3j 를 한 번 부르며, 다른 입력에서 얻은 3j 성공 값이나 호출자가 고른 부모·기대 Entry 를 받는 함수가 없는가.
+#[test]
+fn the_opening_world_selection_touches_no_file_state_or_store_and_takes_no_shortcut() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("artifact").join("tracking_record").join("opening_world.rs");
+    let text = std::fs::read_to_string(&path).unwrap();
+    let code: Vec<&str> =
+        text.lines().map(str::trim).filter(|line| !line.is_empty() && !line.starts_with("//") && !line.starts_with('"')).collect();
+    let forbidden = [
+        "std::fs",
+        "std::io",
+        "std::env",
+        "File",
+        "OpenOptions",
+        "read_to_string",
+        "ObjectStore",
+        "Project",
+        "state.yaml",
+        "gilignore",
+        "read_root_policy_file",
+        "store_policy_source",
+        "LedgerStart",
+        "ConfirmedStart",
+        "AppliedSpan",
+        "BoardPolicies",
+        "select_ledger_span",
+        "classify_path",
+        "select_opening_policy",
+        "OpeningSelection",
+        "select_boundary_world",
+        "BoundarySource",
+        "BoundaryPolicy",
+        "revisit_from",
+        "put_blob",
+    ];
+    let used: Vec<String> = code
+        .iter()
+        .flat_map(|line| forbidden.iter().filter(|name| line.contains(*name)).map(move |name| format!("{name}: {line}")))
+        .collect();
+    assert!(used.is_empty(), "S(N) 선택이 파일·상태·창고·구간·P(N)·B(T)·revisit_from 의 문을 쓴다:\n{used:#?}");
+    let calls: Vec<&&str> = code.iter().filter(|line| line.contains("check_event_inputs(")).collect();
+    assert_eq!(calls, [&"let inputs = check_event_inputs(ledger, links, facts, chains, registry);"], "같은 호출의 입력으로 3j 를 한 번 불러야 한다");
+    // 함수의 인자 자리(한 줄 서명의 괄호 안, 또는 여러 줄 서명에서 `fn 이름(` 줄과 `)` 줄 사이)에 성공 값·부모·기대 세계가 있으면 안 된다.
+    let mut parameters: Vec<String> = Vec::new();
+    let mut in_signature = false;
+    for line in &code {
+        match (in_signature, line.contains("fn ") && line.contains('('), line.find('('), line.find(')')) {
+            (false, true, Some(open), Some(close)) if open < close => parameters.push(line[open..close].to_string()),
+            (false, true, _, None) => in_signature = true,
+            (true, ..) if line.starts_with(')') => in_signature = false,
+            (true, ..) => parameters.push(line.to_string()),
+            _ => {}
+        }
+    }
+    assert!(parameters.iter().any(|taken| taken.contains("target: CycleRef")), "서명을 읽지 못했다: {parameters:#?}");
+    let shortcuts: Vec<&String> = parameters
+        .iter()
+        .filter(|taken| ["Agree", "parent", "expected", "entry", "Verdict", "WorldSource", "Located"].iter().any(|name| taken.contains(name)))
+        .collect();
+    assert!(shortcuts.is_empty(), "검사를 건너뛰는 인자가 있다: {shortcuts:#?}");
+    let signature: Vec<&&str> = code.iter().filter(|line| line.starts_with("pub(crate) fn select_opening_world(")).collect();
+    assert_eq!(signature.len(), 1, "선택의 문은 하나다");
+}
+
+/// Experiment Exit 유도의 원문에서 주석과 문자열 목록 줄을 뺀 **코드 줄**이 파일·상태·창고·3n/3o·B(T)·S(N) 의 문, 원장의 판 목록·원문
+/// 지문·사건의 기준점·계보 칸을 쓰지 않고, 같은 호출의 입력으로 P(N) 선택을 한 번 부르며 3j 를 따로 부르지 않는가. 다른 입력에서 얻은
+/// P(N)·3j 성공 값이나 호출자가 고른 세계·정책을 받는 함수가 없는가.
+#[test]
+fn the_experiment_exit_derivation_reuses_one_opening_policy_and_touches_no_file_state_or_store() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("artifact").join("tracking_record").join("experiment_exit.rs");
+    let text = std::fs::read_to_string(&path).unwrap();
+    let code: Vec<&str> =
+        text.lines().map(str::trim).filter(|line| !line.is_empty() && !line.starts_with("//") && !line.starts_with('"')).collect();
+    let forbidden = [
+        "std::fs",
+        "std::io",
+        "std::env",
+        "File",
+        "OpenOptions",
+        "read_to_string",
+        "ObjectStore",
+        "Project",
+        "state.yaml",
+        "gilignore",
+        "read_root_policy_file",
+        "store_policy_source",
+        "LedgerStart",
+        "ConfirmedStart",
+        "AppliedSpan",
+        "BoardPolicies",
+        "select_ledger_span",
+        "classify_path",
+        "select_boundary_world",
+        "BoundarySource",
+        "BoundaryPolicy",
+        "select_opening_world",
+        "WorldSource",
+        "check_event_inputs",
+        "check_policy_links",
+        "check_cycle_refs",
+        "policies()",
+        "next_policy_id",
+        "rules()",
+        "baseline()",
+        "issuer()",
+        "events()",
+        "entry_snapshot",
+        "parent",
+        "revisit_from",
+        "put_blob",
+    ];
+    let used: Vec<String> = code
+        .iter()
+        .flat_map(|line| forbidden.iter().filter(|name| line.contains(*name)).map(move |name| format!("{name}: {line}")))
+        .collect();
+    assert!(used.is_empty(), "Experiment Exit 유도가 파일·상태·창고·구간·B(T)·S(N)·3j·원장 판·기준점·계보의 문을 쓴다:\n{used:#?}");
+    let calls: Vec<&&str> = code.iter().filter(|line| line.contains("select_opening_policy(")).collect();
+    assert_eq!(
+        calls,
+        [&"let opening = select_opening_policy(target, ledger, links, facts, chains, registry);"],
+        "같은 호출의 입력으로 P(N) 선택을 한 번 불러야 한다"
+    );
+    // 함수의 인자 자리(한 줄 서명의 괄호 안, 또는 여러 줄 서명에서 `fn 이름(` 줄과 `)` 줄 사이)에 성공 값·세계·정책이 있으면 안 된다.
+    let mut parameters: Vec<String> = Vec::new();
+    let mut in_signature = false;
+    for line in &code {
+        match (in_signature, line.contains("fn ") && line.contains('('), line.find('('), line.find(')')) {
+            (false, true, Some(open), Some(close)) if open < close => parameters.push(line[open..close].to_string()),
+            (false, true, _, None) => in_signature = true,
+            (true, ..) if line.starts_with(')') => in_signature = false,
+            (true, ..) => parameters.push(line.to_string()),
+            _ => {}
+        }
+    }
+    assert!(parameters.iter().any(|taken| taken.contains("target: CycleRef")), "서명을 읽지 못했다: {parameters:#?}");
+    let shortcuts: Vec<&String> = parameters
+        .iter()
+        .filter(|taken| {
+            ["Agree", "Opening", "Selection", "PolicyName", "EventName", "SnapshotRef", "world", "exit", "Located"]
+                .iter()
+                .any(|name| taken.contains(name))
+        })
+        .collect();
+    assert!(shortcuts.is_empty(), "검사를 건너뛰는 인자가 있다: {shortcuts:#?}");
+    let signature: Vec<&&str> = code.iter().filter(|line| line.starts_with("pub(crate) fn select_experiment_exit(")).collect();
+    assert_eq!(signature.len(), 1, "유도의 문은 하나다");
 }
