@@ -12,6 +12,10 @@ permissions:
 
 jobs:
   package:
+    # Windows MSIX build, packaging and install smoke are paused: this job never starts a runner,
+    # even when dispatched manually. The no-release definition below is kept verbatim but inactive;
+    # its skipped record is not a packaging result. The release workflow (windows-release.yml) is unchanged.
+    if: ${{ false }}
     name: Build and verify Store MSIX (x64)
     runs-on: windows-2025
     timeout-minutes: 45
