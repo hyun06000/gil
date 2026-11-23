@@ -1910,6 +1910,27 @@ fn help_without_a_project_points_at_start() {
     );
 }
 
+/// `gil start --help` 는 시작하는 법을 묻는 것이지 시작이 아니다 (#228).
+/// 빈 폴더에서 도움말을 읽어도 폴더는 비어 있고, 그 뒤의 `gil start` 가 첫 Interview 를 연다.
+#[test]
+fn start_help_explains_start_without_creating_anything() {
+    for flag in ["--help", "-h"] {
+        // A truly empty folder: `scratch` pre-sows `.gil/artifacts` for record fixtures.
+        let dir = std::env::temp_dir().join(format!("gil-test-start-help{flag}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let said = ok(&dir, &["start", flag], None);
+        assert_eq!(said, gil::locale::text_in(gil::Locale::Ko, "cmd.start_help"), "{flag}");
+        assert!(said.contains("gil start") && said.contains(".gil/"), "{said}");
+        let left: Vec<_> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name()).collect();
+        assert!(left.is_empty(), "gil start {flag} left {left:?}");
+        let started = ok(&dir, &["start"], None);
+        assert!(started.starts_with("프로젝트를 시작했다."), "{started}");
+        assert!(dir.join(gil::STATE_PATH).is_file());
+        assert!(ok(&dir, &["status"], None).contains("interview"), "the first Interview is open");
+    }
+}
+
 // ── Receipt 가 닫기 전에 계약을 알려 준다 ─────────────────────────────────
 
 #[test]

@@ -223,6 +223,7 @@
   "cmd.spec_unreadable": "无法读取随附的规范: {err}",
   "cmd.start_chain_line": "Chain: {id} · open · Entry {entry}\n",
   "cmd.start_exists.todo": "在这里另行开始会让一个项目有两份记录。\n要真正重新开始，请自行移走该文件 — gil 从不抹去已记录的思考。",
+  "cmd.start_help": "gil start — 把此文件夹作为 GIL 项目开始，并打开第一个 Interview。不接受参数。\n\n运行后\n  在 .gil/ 中创建项目记录\n  在 AGENTS.md 和 CLAUDE.md 中追加继续说明（保留现有内容）\n\n如果此文件夹或上层文件夹已有记录，就拒绝而不重新开始 — 此时用 gil status 或 gil context 继续。\n\n此帮助不创建也不更改任何内容。\n\n运行\n  gil start\n",
   "cmd.start_exists.what": "无法在这里重新开始。",
   "cmd.start_exists.why": "已经在行走（{path}）。",
   "cmd.start_receipt": "已开始项目。\n{chain}当前: {cycle} · {kind}\n\n下一步\n  弄清用户想要什么。\n\n执行\n  gil open\n\n记录: {record}\n",

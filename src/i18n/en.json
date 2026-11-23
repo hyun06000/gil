@@ -223,6 +223,7 @@
   "cmd.spec_unreadable": "Could not read the bundled specification: {err}",
   "cmd.start_chain_line": "Chain: {id} · open · Entry {entry}\n",
   "cmd.start_exists.todo": "Starting separately here would give one project two records.\nTo really start over, remove that file yourself — gil never erases recorded thinking.",
+  "cmd.start_help": "gil start — start this folder as a GIL project and open the first Interview. It takes no arguments.\n\nWhen run, it\n  creates the project record in .gil/\n  adds continuation instructions to AGENTS.md and CLAUDE.md (existing content is kept)\n\nIf this folder or a folder above it already holds a record, it refuses instead of starting again — continue with gil status or gil context.\n\nThis help creates and changes nothing.\n\nRun\n  gil start\n",
   "cmd.start_exists.what": "Cannot start anew here.",
   "cmd.start_exists.why": "Already walking ({path}).",
   "cmd.start_receipt": "Started the project.\n{chain}Now: {cycle} · {kind}\n\nNext\n  Find out what the user wants.\n\nRun\n  gil open\n\nRecord: {record}\n",
