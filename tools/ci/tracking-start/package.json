@@ -1,0 +1,6 @@
+{
+  "name": "gil-ci-tracking-start-browser",
+  "private": true,
+  "description": "CI-only: pinned Playwright for the synthetic start-preparation Monitor check. Not a product or runtime dependency.",
+  "dependencies": { "playwright": "1.63.0" }
+}
