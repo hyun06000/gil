@@ -219,6 +219,32 @@ fn starting_twice_does_not_wipe_what_was_written() {
     assert!(told.contains("이야기가 설명 없이 읽히는가"), "적은 것이 사라졌다");
 }
 
+/// `gil context` 는 이어받는 Project 가 기억한 언어로 말한다 (#234). 루트에서도 그 아래
+/// 폴더에서도 같고, 읽기만 하므로 기록과 언어 설정은 그대로다. 기억이 없으면 기본 언어다.
+#[test]
+fn context_speaks_the_language_the_project_remembers() {
+    use gil::{Locale, locale::text_in};
+    for (tag, locale) in [("en", Locale::En), ("ja", Locale::Ja)] {
+        let dir = scratch(&format!("context-locale-{tag}"));
+        ok(&dir, &["start"], None);
+        let memory = dir.join(".gil").join(gil::locale::MEMORY_FILE);
+        std::fs::write(&memory, format!("{{\"schema_version\":1,\"start\":\"{tag}\"}}")).unwrap();
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        let before = (std::fs::read(dir.join(gil::STATE_PATH)).unwrap(), std::fs::read(&memory).unwrap());
+        for at in [dir.clone(), dir.join("src")] {
+            let told = ok(&at, &["context"], None);
+            assert!(told.contains(text_in(locale, "context.next_call_heading")), "{tag} {at:?}: {told}");
+            assert!(told.contains(text_in(locale, "ctx.resume.heading").trim()), "{tag} {at:?}: {told}");
+            assert!(!told.contains(text_in(Locale::Ko, "context.next_call_heading")), "{tag}: no Korean heading: {told}");
+        }
+        assert_eq!((std::fs::read(dir.join(gil::STATE_PATH)).unwrap(), std::fs::read(&memory).unwrap()), before, "{tag}: reading changed nothing");
+    }
+    // Without a remembered language the default (Korean) stays.
+    let dir = scratch("context-locale-default");
+    ok(&dir, &["start"], None);
+    assert!(ok(&dir, &["context"], None).contains(text_in(Locale::Ko, "context.next_call_heading")));
+}
+
 #[test]
 fn there_is_nothing_to_read_before_there_is_a_walk() {
     // 아직 시작하지 않은 것과 망가진 것은 다르다 — 그리고 무엇을 하면 되는지 말해야 한다.
