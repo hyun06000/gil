@@ -935,6 +935,7 @@
   "status.dirty_dev": "此位置無法確定 Artifact 變更。\n先用 `gil restore` 復原基準世界。\n目前 Step 與 Active Will 保持開啟狀態。\n\n",
   "status.dirty_product": "此位置無法確定 Artifact 變更。\n此組建拒絕 Artifact 回復（restore）。把新建檔案移到專案外的新保留位置；對已變更的現有檔案，先另外保留目前內容，再復原為基準內容，使資料夾與基準世界一致。要保留的內容在下一個 Experiment 的 Verify 中重新製作。\n目前 Step 與 Active Will 保持開啟狀態。\n\n",
   "status.dirty_verify": "關閉此 Verify 會觀察已改變的世界並確定為 Snapshot。\n\n",
+  "status.next_after_dirty": "下一步: 先依上面的說明整理檔案變更，使其與基準世界一致。然後關閉這裡 — `gil close`（Report 透過 stdin）。只要還有變更，關閉就會被拒絕\n",
   "status.existence": "存在: {existence} · {journey}\n",
   "status.inherited": "繼承: {parent} 的 Cycle Report — 其內容在 `gil story` 中\n",
   "status.inherited_none": "繼承: {parent}（沒有 Cycle Report）\n",

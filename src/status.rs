@@ -81,13 +81,19 @@ pub fn where_now(session: &ProjectSession, state_is_elsewhere: bool) -> String {
         }
     }
 
-    // ⑤ 지금 세계는 기준과 같은가 — **짧은 nudge 하나.**
-    out.push_str(&world_nudge(session));
+    // ⑤ 지금 세계는 기준과 같은가 — **짧은 nudge 하나.** 한 번 관측한 것을 ⑥ 도 쓴다.
+    let world = session.world_state();
+    let dirty = matches!(world, Ok(WorldState::Dirty { .. }));
+    out.push_str(&world_nudge(session, world));
 
     // ⑥ 다음에 무엇을 할 수 있는가. **안내는 실행과 같은 자리에서 나온다.**
     match session.project().current_chain() {
         Some(chain) if chain.is_closed() => out.push_str(&tr!("status.chain_verdict", verdict = chain.report().unwrap().get("verdict").unwrap(), exit = chain.exit_snapshot().unwrap())),
         Some(chain) if chain.awaiting_report() => out.push_str(&chain.close_hint()),
+        // A non-Verify Step does not close while the files differ from its world (the close gate
+        // refuses it), so the next line must not offer the close the gate would refuse. An open
+        // Verify confirms the changed world by closing, so it keeps the ordinary next line.
+        _ if dirty && open_step(session) && !open_verify(session) => out.push_str(text("status.next_after_dirty")),
         _ => out.push_str(&crate::context::next_moves_of(session.project())),
     }
     out
@@ -97,8 +103,8 @@ pub fn where_now(session: &ProjectSession, state_is_elsewhere: bool) -> String {
 ///
 /// **전체 목록도 내부 주소도 내지 않는다.** 공개 표면은 `snapshot:A*` 하나이고, 여기서
 /// 필요한 것은 네 가지 물음의 답뿐이다 — 기준·상태·확정 가능 여부·지금 밟을 수 있는 수.
-fn world_nudge(session: &ProjectSession) -> String {
-    let state = match session.world_state() {
+fn world_nudge(session: &ProjectSession, world: Result<WorldState, crate::SessionError>) -> String {
+    let state = match world {
         Ok(state) => state,
         // 세계를 읽는 것 자체가 안 되면(창고 손상 등) status 를 통째로 실패시키지 않는다 —
         // 서 있는 자리는 이미 위에서 말했고, 그것은 여전히 참이다.
@@ -123,6 +129,11 @@ fn world_nudge(session: &ProjectSession) -> String {
             out
         }
     }
+}
+
+/// 지금 열려 있는 Step 이 있는가.
+fn open_step(session: &ProjectSession) -> bool {
+    session.project().cycles().current().step_now_open().is_some()
 }
 
 /// 지금 열려 있는 자리가 Verify 인가.
