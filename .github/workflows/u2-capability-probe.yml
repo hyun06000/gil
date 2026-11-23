@@ -12,12 +12,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - label: windows-x64
-            runner: windows-2025
-            arch: x64
-          - label: windows-arm64
-            runner: windows-11-arm
-            arch: arm64
+          # Windows rows are removed while Windows test and build CI is paused.
           - label: macos-arm64
             runner: macos-15
             arch: arm64
