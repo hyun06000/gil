@@ -195,6 +195,8 @@
   "cmd.report_unparsed": "無法把給定的文字讀作 Report。",
   "cmd.restore_failed": "無法復原 Artifact 世界。",
   "cmd.restore_no_arg": "`gil restore` 不接受 {extra}。",
+  "cmd.restore_no_dry_run": "`gil restore` 沒有預覽（--dry-run）。",
+  "cmd.restore_args_todo": "此拒絕沒有變更任何內容。還原之前，先與使用者確認被變更的檔案及其意圖。還原規則請閱讀下方說明 — 它只讀取，不變更任何內容。\n只有在使用者明確要求時才執行還原本身。它會把所有檔案還原到目前位置的基準世界，此後新建的檔案可能會被刪除。",
   "cmd.restore_noop": "沒有可復原的變更。\n\n目前 Artifact 世界與基準 Snapshot {world} 相同。\n",
   "cmd.restore_why": "要回到的世界已由目前位置決定 — 不是可選擇的值。\n只復原部分檔案會產生不屬於任何 Snapshot 的世界。",
   "cmd.restored_to": "已把 Artifact 世界復原到 {world}。\n\n",

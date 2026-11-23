@@ -195,6 +195,8 @@
   "cmd.report_unparsed": "적어 준 글을 Report 로 읽지 못했다.",
   "cmd.restore_failed": "Artifact 세계를 복원하지 못했다.",
   "cmd.restore_no_arg": "`gil restore` 는 {extra} 를 받지 않는다.",
+  "cmd.restore_no_dry_run": "`gil restore` 에는 미리보기(--dry-run)가 없다.",
+  "cmd.restore_args_todo": "이 거절은 아무것도 바꾸지 않았다. 되돌리기 전에 바뀐 파일과 그 의도를 사용자와 확인한다. 복원 규칙은 아래 도움말로 읽는다 — 읽기만 하고 아무것도 바꾸지 않는다.\n복원 자체는 사용자가 명시적으로 요청했을 때만 실행한다. 지금 위치의 기준 세계로 모든 파일을 되돌리며, 그 뒤에 새로 만든 파일은 지워질 수 있다.",
   "cmd.restore_noop": "복원할 변경이 없다.\n\n현재 Artifact 세계는 기준 Snapshot {world} 와 같다.\n",
   "cmd.restore_why": "되돌아갈 세계는 지금 위치가 이미 정한다 — 고르는 값이 아니다.\n일부 파일만 되돌리면 그 결과는 어느 Snapshot 에도 속하지 않는 세계가 된다.",
   "cmd.restored_to": "Artifact 세계를 {world} 로 복원했다.\n\n",

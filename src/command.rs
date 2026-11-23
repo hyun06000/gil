@@ -99,6 +99,8 @@ fn run(ctx: &Invocation<'_>, args: &[String]) -> Result<String, String> {
         "close" if asks_for_help(args.get(1)) => close_help(ctx),
         "open" => open(ctx, args.get(1)),
         "close" => close(ctx, &args[1..]),
+        // `restore --help` asks for the rules; the rules topic only reads (it differs by build).
+        "restore" if asks_for_help(args.get(1)) => help_topic("artifact/restore"),
         "restore" => restore(ctx, args.get(1)),
         "revisit" => revisit(ctx, args.get(1)),
         "status" => status(ctx),
@@ -852,14 +854,15 @@ fn restore(_ctx: &Invocation<'_>, _extra: Option<&String>) -> Result<String, Str
 fn restore(ctx: &Invocation<'_>, extra: Option<&String>) -> Result<String, String> {
     if let Some(extra) = extra {
         // Domain 명령이 서기 전의 거절도 복구할 Topic 이 있다 — 사용법 하나면 풀린다.
+        // The refusal changed nothing, and its next command must not either: following it must
+        // never restore (and delete) files the caller only wanted to inspect.
+        let what = match extra.as_str() {
+            "--dry-run" => text("cmd.restore_no_dry_run").to_string(),
+            _ => tr!("cmd.restore_no_arg", extra = format!("{extra:?}")),
+        };
         return Err(with_help(
             &Refusal::Usage(Usage::RestoreTakesNoArgument),
-            refusal(
-                &tr!("cmd.restore_no_arg", extra = format!("{extra:?}")),
-                text("cmd.restore_why"),
-                text("cmd.run_without_args"),
-                "gil restore",
-            ),
+            refusal(&what, text("cmd.restore_why"), text("cmd.restore_args_todo"), "gil help artifact/restore"),
         ));
     }
 

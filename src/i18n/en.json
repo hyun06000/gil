@@ -195,6 +195,8 @@
   "cmd.report_unparsed": "The given text could not be read as a Report.",
   "cmd.restore_failed": "Could not restore the Artifact world.",
   "cmd.restore_no_arg": "`gil restore` does not take {extra}.",
+  "cmd.restore_no_dry_run": "`gil restore` has no preview (--dry-run).",
+  "cmd.restore_args_todo": "This refusal changed nothing. Before restoring, confirm the changed files and their intent with the user. Read the restore rules in the help below — it only reads and changes nothing.\nRun the restore itself only when the user explicitly asks for it. It returns every file to the current position's reference world, and files created since then may be deleted.",
   "cmd.restore_noop": "There is no change to restore.\n\nThe current Artifact world equals the baseline Snapshot {world}.\n",
   "cmd.restore_why": "The world to return to is already decided by the current position — it is not a value to choose.\nRestoring only some files would produce a world that belongs to no Snapshot.",
   "cmd.restored_to": "Restored the Artifact world to {world}.\n\n",
