@@ -668,7 +668,8 @@ fn close_without_report_is_an_input_error_and_the_step_still_closes() {
     let opened = monitor_call(&mut mcp, "gil_open", json!({"project_root": at, "kind": "question",
         "contract": "objective: 사용자의 목표를 확인한다\nnext_action: 무엇을 만들고 싶은지 묻는다\ndone_when: 사용자의 원문 응답을 얻는다\n"}));
     assert_eq!(opened["structuredContent"]["ok"], true, "{opened}");
-    let state = product_state_path(&at);
+    // `started` uses the CLI, which keeps the record in the working folder on every platform.
+    let state = at.join(gil::STATE_PATH);
     let before = std::fs::read(&state).unwrap();
     let err = mcp.request("tools/call", json!({"name": "gil_close", "arguments": {"project_root": at}}));
     assert_eq!(err["error"]["code"], -32602, "{err}");
