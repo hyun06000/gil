@@ -1114,8 +1114,8 @@
   "start_prep.phase.started": "正式開始已確定。",
   "start_prep.phase.condition_changed": "Monitor 核准後核准條件發生變化,此提案不會被套用。",
   "start_prep.phase.policy_file_held": "最新提案的政策檔案效果為暫停,無法核准。",
-  "start_prep.phase.condition_change_unrecorded": "偵測到條件變更但未能記錄;本行程中不會套用此提案。",
   "start_prep.phase.sync_outcome_unrecorded": "已開始的 .gilignore 寫入結果未記錄;此提案不會再次套用。",
+  "start_prep.phase.attempt_outcome_unrecorded": "套用嘗試的結果未記錄;此提案被保留,不會再次套用。",
   "start_prep.next.preparing": "說明追蹤與排除的對象以及對封存/還原的影響,然後用準確的規則文字呼叫 gil_start_prepare,再呼叫 show_gil_monitor(scope_id)。不要建立專案檔案。",
   "start_prep.next.awaiting_approval": "請使用者在 GIL Monitor 中審閱並核准準確的提案,然後等待。聊天同意不是核准。若 Monitor 無法使用,則保持等待核准。",
   "start_prep.next.changes_requested": "詢問要修改什麼,然後用 gil_start_prepare 準備新提案。",
@@ -1126,8 +1126,8 @@
   "start_prep.next.not_preparing": "為使用者選擇的資料夾呼叫 gil_start。",
   "start_prep.next.condition_changed": "說明發生了什麼變化,用 gil_start_prepare 準備新提案,並請使用者在 Monitor 中核准。不要重複之前的核准。",
   "start_prep.next.policy_file_held": "向使用者說明 .gilignore 的差異,並僅在其同意後整理(例如移除它,或依原文提出),然後準備新提案。在此期間不寫入任何內容。",
-  "start_prep.next.condition_change_unrecorded": "用 gil_start_prepare 準備新提案,並請使用者在 Monitor 中核准。不要重複之前的核准。",
   "start_prep.next.sync_outcome_unrecorded": "用 gil_start_prepare 準備新提案,並請使用者在 Monitor 中核准。不要重複之前的核准。",
+  "start_prep.next.attempt_outcome_unrecorded": "用 gil_start_prepare 準備新提案,並請使用者在 Monitor 中核准。不要重複之前的核准。",
   "start_prep.impact.archive": "被排除的路徑從此開始不會放入新的封存。",
   "start_prep.impact.restore": "GIL 還原不會建立、修改或刪除被排除的路徑;該期間的內容無法由 GIL 還原。",
   "start_prep.impact.access": "排除不是禁止讀取、修改或刪除;檔案仍可編輯。",
@@ -1139,6 +1139,8 @@
   "start_prep.observation_unstable": "無法一致地觀測資料夾(觀測中變更或讀取失敗)。未開始;核准保留,資料夾安靜後使用者可在 Monitor 中重試。",
   "start_prep.start_uncertain": "無法確認正式開始是否已儲存。請讀取 gil_start_status;不要再次核准。",
   "start_prep.policy_file_held": "此提案的政策檔案效果為暫停,無法核准。請與使用者整理 .gilignore 並準備新提案。",
-  "start_prep.condition_change_unrecorded": "偵測到核准條件變更並已停止本次套用,但未能儲存該偵測記錄。是否可以重複使用此核准尚未確認——本行程中不會重試,也未開始任何內容。請讀取 gil_start_status,並透過新的提案和 Monitor 核准繼續。",
-  "start_prep.sync_outcome_unrecorded": "已開始此提案的 .gilignore 寫入,但結果未記錄(中斷或儲存失敗)。不會將這種未知狀態視為重複使用核准的許可;請準備新提案並在 Monitor 中核准。未開始任何內容。"
+  "start_prep.condition_change_unrecorded": "偵測到核准條件變更並已停止本次套用,但未能儲存該偵測記錄。此嘗試在觀測前已記錄且沒有結果記錄,因此無論在本行程中還是重新啟動後,都會將此提案作為結果未記錄的嘗試保留。沒有開始任何內容。請讀取 gil_start_status,並透過新提案和 Monitor 核准繼續。",
+  "start_prep.sync_outcome_unrecorded": "已開始此提案的 .gilignore 寫入,但結果未記錄(中斷或儲存失敗)。不會將這種未知狀態視為重複使用核准的許可;請準備新提案並在 Monitor 中核准。未開始任何內容。",
+  "start_prep.attempt_not_recorded": "未能記錄本次套用嘗試的開始,因此沒有觀測條件,也沒有套用任何內容。核准記錄保持不變。再次嘗試前請讀取 gil_start_status。",
+  "start_prep.attempt_outcome_unrecorded": "已開始此提案的套用嘗試,但結果未記錄(中斷或儲存失敗)。不會將其視為條件變更或無問題的結果,也不會因為重新讀取磁碟而清除它;此提案不再重複使用核准。核准記錄仍然保留。沒有開始任何內容。請準備新提案並在 Monitor 中取得核准。"
 }

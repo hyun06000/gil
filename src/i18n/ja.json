@@ -1114,8 +1114,8 @@
   "start_prep.phase.started": "正式開始が確定しました。",
   "start_prep.phase.condition_changed": "Monitor 承認後に承認条件が変わったため、この提案は適用しません。",
   "start_prep.phase.policy_file_held": "最新の提案はポリシーファイル効果が保留のため承認できません。",
-  "start_prep.phase.condition_change_unrecorded": "条件の変更を検出しましたが記録できませんでした。このプロセスではこの提案を適用しません。",
   "start_prep.phase.sync_outcome_unrecorded": "開始した .gilignore 書き込みの結果が記録されていないため、この提案は再適用しません。",
+  "start_prep.phase.attempt_outcome_unrecorded": "適用試行の結果が記録されていないため、この提案は保留され再適用しません。",
   "start_prep.next.preparing": "追跡・除外の対象と保管・復元への影響を説明してから、正確な原文で gil_start_prepare を呼び、show_gil_monitor(scope_id) を呼んでください。プロジェクトファイルは作成しないでください。",
   "start_prep.next.awaiting_approval": "GIL Monitor で正確な提案を確認・承認するようユーザーに依頼して待ってください。会話での同意は承認ではありません。Monitor が使えない場合は承認待ちのままです。",
   "start_prep.next.changes_requested": "何を変えるか尋ね、gil_start_prepare で新しい提案を準備してください。",
@@ -1126,8 +1126,8 @@
   "start_prep.next.not_preparing": "ユーザーが選んだフォルダーで gil_start を呼んでください。",
   "start_prep.next.condition_changed": "何が変わったかを説明し、gil_start_prepare で新しい提案を準備して Monitor での承認をユーザーに依頼してください。以前の承認を繰り返さないでください。",
   "start_prep.next.policy_file_held": "ユーザーに .gilignore の差分を説明し、同意を得てから整理してください(例: ファイルを片付ける、またはその原文どおりに提案する)。その後新しい提案を準備します。その間は何も書き込みません。",
-  "start_prep.next.condition_change_unrecorded": "gil_start_prepare で新しい提案を準備し、Monitor での承認をユーザーに依頼してください。以前の承認を繰り返さないでください。",
   "start_prep.next.sync_outcome_unrecorded": "gil_start_prepare で新しい提案を準備し、Monitor での承認をユーザーに依頼してください。以前の承認を繰り返さないでください。",
+  "start_prep.next.attempt_outcome_unrecorded": "gil_start_prepare で新しい提案を準備し、Monitor での承認をユーザーに依頼してください。以前の承認を繰り返さないでください。",
   "start_prep.impact.archive": "除外したパスは、この開始以降の新しい保管に入りません。",
   "start_prep.impact.restore": "GIL の復元は除外パスを作成・変更・削除しません。その期間の内容は GIL では戻せません。",
   "start_prep.impact.access": "除外は読み取り・編集・削除の禁止ではありません。ファイルは引き続き編集できます。",
@@ -1139,6 +1139,8 @@
   "start_prep.observation_unstable": "フォルダーを一貫して観測できませんでした(観測中の変更・読み取り失敗)。開始しておらず、承認は保持されます。フォルダーが落ち着いたら Monitor から再試行できます。",
   "start_prep.start_uncertain": "正式開始が保存されたか確認できません。gil_start_status を読んでください。再承認しないでください。",
   "start_prep.policy_file_held": "この提案のポリシーファイル効果が保留のため承認できません。ユーザーと .gilignore を整理し、新しい提案を準備してください。",
-  "start_prep.condition_change_unrecorded": "承認条件の変更を検出してこの適用を止めましたが、その検出を記録として保存できませんでした。この承認を再利用してよいかは確認されていません — このプロセスでは再試行せず、何も開始していません。gil_start_status を読み、新しい提案と Monitor 承認で進めてください。",
-  "start_prep.sync_outcome_unrecorded": "この提案の .gilignore 書き込みを開始しましたが、結果が記録されていません(中断または保存失敗)。その不明な状態を承認の再利用許可とは見なしません。新しい提案を準備し Monitor で承認してもらってください。何も開始していません。"
+  "start_prep.condition_change_unrecorded": "承認条件の変更を検出してこの適用を止めましたが、その検出を記録として保存できませんでした。この試行は観測の前に記録されており結果の記録がないため、このプロセスでも再起動後でも、この提案を結果未記録の試行として保留します。何も開始していません。gil_start_status を読み、新しい提案と Monitor での承認に進んでください。",
+  "start_prep.sync_outcome_unrecorded": "この提案の .gilignore 書き込みを開始しましたが、結果が記録されていません(中断または保存失敗)。その不明な状態を承認の再利用許可とは見なしません。新しい提案を準備し Monitor で承認してもらってください。何も開始していません。",
+  "start_prep.attempt_not_recorded": "この適用試行の開始を記録できなかったため、条件を観測せず何も適用していません。承認の記録はそのままです。再試行の前に gil_start_status を読んでください。",
+  "start_prep.attempt_outcome_unrecorded": "この提案の適用試行を開始しましたが、結果が記録されていません(中断または保存失敗)。それを条件の変更とも問題のない結果とも扱わず、ディスクを読み直したことを理由に消しません。この提案に承認を再利用しません。承認の記録は残っています。何も開始していません。新しい提案を準備し、Monitor で承認を受けてください。"
 }

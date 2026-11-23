@@ -150,7 +150,17 @@ pub(crate) enum Event {
     /// 적용 직전 재확인이 승인 조건(규칙·디스크 정책 파일·추적 목록·경로)의 변경을 발견했다. 이 판은 다시 적용하지 않는다 —
     /// 새 제안과 그 판의 Monitor 승인이 필요하다. 앞선 사실(제안·응답·객체·동기화)은 지우지 않는다.
     ConditionChanged { revision: u32, what: String },
+    /// 승인된 판의 적용 시도 하나를 **조건을 관측하기 전에** 남긴다 — 정확한 승인 대상(판·digest)에 묶인다. 이 기록의 저장을
+    /// 확인하지 못하면 관측·적용으로 나아가지 않는다. 결과(`AttemptSettled`)가 없는 시도는 새 프로세스에서도 미해결로 보류한다.
+    AttemptStarted { revision: u32, attempt: u32, proposal_digest: String },
+    /// 그 시도의 확정된 결과: `condition_changed`(확인된 승인 조건 변경 — 그 판을 다시 적용하지 않는다) 또는
+    /// `stopped`(읽기 불가·관측 불안정·확인된 저장 장애·기존 보류로 안전하게 멈췄다 — 승인은 그대로, 다시 시도할 수 있다).
+    /// `code` 는 멈춘 까닭의 보고 코드다. 정식 시작의 확정은 이 원장이 아니라 상태 파일이 말한다.
+    AttemptSettled { revision: u32, attempt: u32, outcome: String, code: String },
 }
+
+/// 적용 시도 결과의 두 값.
+pub(crate) const ATTEMPT_OUTCOMES: [&str; 2] = ["condition_changed", "stopped"];
 
 impl Ledger {
     pub(crate) fn new(project: Identity, base: Disk) -> Ledger {
@@ -180,10 +190,15 @@ impl Ledger {
     ///
     /// - `condition_changed`: 재확인이 승인 조건의 변경을 발견해 기록했다(`ConditionChanged`, 또는 파일 쓰기 결과로 남긴
     ///   `SyncSettled(condition_changed)` — 둘 중 하나만 남은 상태도 같다).
+    ///   `AttemptSettled(condition_changed)` 도 같다.
     /// - `sync_outcome_unrecorded`: 그 판의 정책 파일 쓰기를 시작했다(`SyncStarted`)는 기록 뒤에 결과(`SyncSettled`)가 없다 —
     ///   중단이나 저장 실패로 쓰기 결과와 그때의 재확인 결과를 모른다. 모르는 상태를 같은 승인의 재사용 허가로 읽지 않는다.
+    /// - `attempt_outcome_unrecorded`: 그 판의 적용 시도를 시작했다(`AttemptStarted`)는 기록 뒤에 결과(`AttemptSettled`)가
+    ///   없다 — 중단이나 결과 저장 실패로 그 시도가 무엇을 관측했는지 모른다. 변경이라고도, 문제없었다고도 보지 않는다.
+    ///   지금 디스크를 다시 읽는 것으로 이 상태를 지우지 않는다. 승인 기록은 지우지 않으며 승인을 취소하지도 않는다.
     pub(crate) fn not_reusable(&self, revision: u32) -> Option<&'static str> {
         let mut open_write = false;
+        let mut open_attempts = std::collections::BTreeSet::new();
         for e in &self.events {
             match e {
                 Event::ConditionChanged { revision: r, .. } if *r == revision => return Some("condition_changed"),
@@ -192,10 +207,26 @@ impl Ledger {
                     open_write = false;
                 }
                 Event::SyncStarted { revision: r, .. } if *r == revision => open_write = true,
+                Event::AttemptStarted { revision: r, attempt, .. } if *r == revision => { open_attempts.insert(*attempt); }
+                Event::AttemptSettled { revision: r, attempt, outcome, .. } if *r == revision => {
+                    if outcome == "condition_changed" { return Some("condition_changed"); }
+                    open_attempts.remove(attempt);
+                }
                 _ => {}
             }
         }
-        open_write.then_some("sync_outcome_unrecorded")
+        if open_write {
+            Some("sync_outcome_unrecorded")
+        } else if !open_attempts.is_empty() {
+            Some("attempt_outcome_unrecorded")
+        } else {
+            None
+        }
+    }
+
+    /// 다음 적용 시도 번호 — 원장 전체에서 하나씩 는다.
+    pub(crate) fn next_attempt(&self) -> u32 {
+        self.events.iter().filter(|e| matches!(e, Event::AttemptStarted { .. })).count() as u32 + 1
     }
 
     pub(crate) fn response(&self, digest: &str) -> Option<&Response> {

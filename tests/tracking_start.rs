@@ -119,6 +119,48 @@ fn the_monitor_approved_start_commits_once_over_the_real_stdio_process() {
 }
 
 #[test]
+fn a_fresh_process_holds_an_attempt_without_a_recorded_outcome_from_the_disk_record_alone() {
+    // 디스크 상태는 시험이 쓴 합성 기록이다(승인 응답 + 결과 없는 적용 시도) — 실제 중단·전원 장애를 일으킨 것이 아니다.
+    // 증명하는 것은 그 기록을 처음 읽는 **새 `gil` 프로세스**가 프로세스 메모리 없이 같은 판을 보류한다는 것뿐이다.
+    let root = project("tracking-open-attempt");
+    let settings = scratch("tracking-open-attempt-settings");
+    let r = root.display().to_string();
+    let mut c = Client::serve(&settings);
+    let begun = c.call("gil_start", json!({"project_root": r}));
+    assert!(!is_error(&begun), "{begun}");
+    let scope = sc(&begun)["scope_id"].as_str().unwrap().to_owned();
+    let prepared = c.call("gil_start_prepare", json!({"project_root": r, "rules": "node_modules/\n"}));
+    let digest = sc(&prepared)["proposal"]["digest"].as_str().unwrap().to_owned();
+    let revision = sc(&prepared)["proposal"]["revision"].as_u64().unwrap();
+    drop(c);
+    let path = root.join(".gil/start/preparation.json");
+    let mut ledger: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    ledger["responses"] = json!([{"revision": revision, "proposal_digest": digest, "decision": "approve", "source": "monitor_button"}]);
+    ledger["events"] = json!([{"kind": "attempt_started", "revision": revision, "attempt": 1, "proposal_digest": digest}]);
+    std::fs::write(&path, serde_json::to_vec_pretty(&ledger).unwrap()).unwrap();
+
+    let mut c = Client::serve(&settings);
+    let status = c.call("gil_start_status", json!({"project_root": r}));
+    assert_eq!(sc(&status)["phase"], "attempt_outcome_unrecorded", "{status}");
+    let review = c.call("gil_start_review", json!({"scope_id": scope}));
+    assert!(review["result"]["_meta"].get("gil/startApplyToken").is_none(), "{review}");
+    assert!(review["result"]["_meta"].get("gil/startApprovalToken").is_none(), "{review}");
+    assert!(!root.join(".gil/state.yaml").exists() && !root.join(".gilignore").exists());
+    let after: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(after["events"], ledger["events"], "조회는 미해결 시도를 지우거나 새 시도를 열지 않는다");
+    assert_eq!(after["responses"], ledger["responses"], "승인 기록은 그대로다");
+
+    // 새 제안과 그 판의 App 승인으로는 시작한다.
+    let next = c.call("gil_start_prepare", json!({"project_root": r, "rules": "node_modules/\n"}));
+    let d2 = sc(&next)["proposal"]["digest"].as_str().unwrap().to_owned();
+    let v2 = sc(&next)["proposal"]["revision"].clone();
+    let review = c.call("gil_start_review", json!({"scope_id": scope}));
+    let token = review["result"]["_meta"]["gil/startApprovalToken"].as_str().expect("새 판의 승인 capability").to_owned();
+    let decided = c.call("gil_start_decide", json!({"scope_id": scope, "revision": v2, "digest": d2, "token": token, "decision": "approve"}));
+    assert_eq!(sc(&decided)["phase"], "started", "{decided}");
+}
+
+#[test]
 fn the_cli_never_falls_back_to_a_whole_tree_start() {
     let root = project("tracking-cli");
     let out = std::process::Command::new(gil()).arg("start").current_dir(&root).output().unwrap();

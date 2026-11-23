@@ -581,8 +581,9 @@ fn a_change_found_right_before_the_replacement_holds_the_start_and_keeps_the_rec
     assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), "*.tmp\n");
     let ledger: Value = serde_json::from_slice(&fs::read(root.join(".gil/start/preparation.json")).unwrap()).unwrap();
     let kinds: Vec<&str> = ledger["events"].as_array().unwrap().iter().map(|e| e["kind"].as_str().unwrap()).collect();
-    assert_eq!(kinds, ["sync_started", "sync_settled", "condition_changed"], "앞선 사실을 지우지 않고 남긴다");
-    assert_eq!(ledger["events"][1]["result"], "condition_changed");
+    assert_eq!(kinds, ["attempt_started", "sync_started", "sync_settled", "condition_changed", "attempt_settled"], "앞선 사실을 지우지 않고 남긴다");
+    assert_eq!(ledger["events"][2]["result"], "condition_changed");
+    assert_eq!(ledger["events"][4]["outcome"], "condition_changed", "확인된 변경은 그 시도의 결과로 확정된다");
     assert_eq!(ledger["base"]["state"], "unconfirmed");
     assert_eq!(ledger["responses"].as_array().unwrap().len(), 1, "승인 응답은 그대로다");
     assert_eq!(apply(&root, proposal_of(&p).0, &proposal_of(&p).1).unwrap_err().code, "condition_changed");
@@ -700,7 +701,7 @@ fn a_combined_text_equal_to_either_part_still_needs_its_own_approval() {
 // ── 두 번째 수정(조건 변경 기록의 영속성, 읽기 불가와 조건 변경의 구분) ─────────────
 
 #[test]
-fn a_detected_change_that_cannot_be_recorded_is_reported_as_unrecorded_and_not_reused_here() {
+fn a_detected_change_that_cannot_be_recorded_is_reported_as_unrecorded_and_held_from_the_saved_attempt() {
     let root = project("cc-unrecorded");
     begin(&s(&root)).unwrap();
     let p = prepared(&root, RULES_B);
@@ -712,13 +713,15 @@ fn a_detected_change_that_cannot_be_recorded_is_reported_as_unrecorded_and_not_r
     assert_eq!(held["application_held"]["detail"]["detected"], "scope_changed");
     assert!(!state(&root).exists());
     let ledger: Value = serde_json::from_slice(&fs::read(root.join(".gil/start/preparation.json")).unwrap()).unwrap();
-    assert!(ledger["events"].as_array().unwrap().is_empty(), "저장되지 않은 사실을 기록된 것처럼 남기지 않는다");
+    let kinds: Vec<&str> = ledger["events"].as_array().unwrap().iter().map(|e| e["kind"].as_str().unwrap()).collect();
+    assert_eq!(kinds, ["attempt_started"], "저장되지 않은 변경을 기록된 것처럼 남기지 않고, 관측 전의 시도 기록만 남는다");
     assert_eq!(ledger["responses"].as_array().unwrap().len(), 1, "승인 응답은 그대로다");
-    // 같은 프로세스에서는 변경이 되돌려져도 같은 판을 다시 적용하지 않는다(다음 관측에 기대지 않는다).
+    // 변경이 되돌려져도(지금 디스크는 제안과 같다) 같은 판을 다시 적용하지 않는다 — 판정은 저장된 미해결 시도에서 온다.
     fs::remove_file(root.join("NEW.txt")).unwrap();
-    assert_eq!(apply(&root, proposal_of(&p).0, &proposal_of(&p).1).unwrap_err().code, "condition_change_unrecorded");
-    assert_eq!(status(&s(&root)).unwrap()["phase"], "condition_change_unrecorded");
+    assert_eq!(apply(&root, proposal_of(&p).0, &proposal_of(&p).1).unwrap_err().code, "attempt_outcome_unrecorded");
+    assert_eq!(status(&s(&root)).unwrap()["phase"], "attempt_outcome_unrecorded");
     assert!(review(&root).unwrap().1.is_none());
+    assert_eq!(ledger_block(&root, proposal_of(&p).0), Some("attempt_outcome_unrecorded"), "새로 읽은 기록만으로 같은 판정");
     let p2 = prepared(&root, RULES_B);
     assert_eq!(approve(&root, &p2).unwrap()["phase"], "started");
 }
@@ -756,7 +759,7 @@ fn a_change_found_at_replacement_is_recorded_in_one_save_with_its_outcome() {
     assert_eq!(held["application_held"]["code"], "condition_change_unrecorded", "{held}");
     let ledger: Value = serde_json::from_slice(&fs::read(root.join(".gil/start/preparation.json")).unwrap()).unwrap();
     let kinds: Vec<&str> = ledger["events"].as_array().unwrap().iter().map(|e| e["kind"].as_str().unwrap()).collect();
-    assert_eq!(kinds, ["sync_started"], "결과와 조건 변경은 함께 저장되거나 함께 빠진다");
+    assert_eq!(kinds, ["attempt_started", "sync_started"], "결과와 조건 변경은 함께 저장되거나 함께 빠진다");
     assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), "*.tmp\n");
     // 쓰기 시작만 남은 기록은 재시작 뒤에도 같은 판의 재사용을 허락하지 않는다 — 저장된 사실이 먼저 답한다.
     assert_eq!(apply(&root, proposal_of(&p).0, &proposal_of(&p).1).unwrap_err().code, "sync_outcome_unrecorded");
@@ -780,8 +783,10 @@ fn an_unreadable_policy_file_at_replacement_stops_this_application_without_a_con
     assert!(!state(&root).exists());
     let ledger: Value = serde_json::from_slice(&fs::read(root.join(".gil/start/preparation.json")).unwrap()).unwrap();
     let kinds: Vec<&str> = ledger["events"].as_array().unwrap().iter().map(|e| e["kind"].as_str().unwrap()).collect();
-    assert_eq!(kinds, ["sync_started", "sync_settled"]);
-    assert_eq!(ledger["events"][1]["result"], "unreadable_before_replace");
+    assert_eq!(kinds, ["attempt_started", "sync_started", "sync_settled", "attempt_settled"]);
+    assert_eq!(ledger["events"][2]["result"], "unreadable_before_replace");
+    assert_eq!(ledger["events"][3]["outcome"], "stopped");
+    assert_eq!(ledger["events"][3]["code"], "policy_file_unreadable");
     assert_eq!(ledger["base"]["state"], "unconfirmed", "쓰기를 시작했으므로 읽지 못한 디스크를 없음으로 바꾸지 않는다");
     assert!(ledger_block(&root, proposal_of(&p).0).is_none());
     // 읽을 수 있게 되면 같은 승인으로 다시 시도한다 — unconfirmed 기준이라 자동으로 쓰지 않고 시작은 따로 확정된다.
@@ -805,6 +810,9 @@ fn an_unreadable_policy_file_before_the_write_starts_records_nothing_and_keeps_t
     let ledger: Value = serde_json::from_slice(&fs::read(root.join(".gil/start/preparation.json")).unwrap()).unwrap();
     assert!(ledger["events"].as_array().unwrap().iter().all(|e| !matches!(e["kind"].as_str(), Some("sync_started" | "sync_settled" | "condition_changed"))), "{ledger}");
     assert_eq!(ledger["base"]["state"], "absent", "쓰기를 시작하지 않았고 읽기 실패를 없음이나 변경으로 바꾸지 않는다");
+    let kinds: Vec<&str> = ledger["events"].as_array().unwrap().iter().map(|e| e["kind"].as_str().unwrap()).collect();
+    assert_eq!(kinds, ["attempt_started", "attempt_settled"]);
+    assert_eq!(ledger["events"][1]["outcome"], "stopped", "읽기 불가의 안전 종료가 확정됐다 — 조건 변경이 아니다");
     assert!(ledger_block(&root, proposal_of(&p).0).is_none());
     fs::remove_dir(root.join(".gilignore")).unwrap();
     let started = apply(&root, proposal_of(&p).0, &proposal_of(&p).1).unwrap();
@@ -836,4 +844,138 @@ fn an_empty_policy_file_is_present_not_absent() {
     assert_eq!(p["proposal"]["policy_file"]["effect"], "replace");
     assert_eq!(approve(&root, &p).unwrap()["phase"], "started");
     assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), RULES_B);
+}
+
+// ── 세 번째 수정(적용 시도를 관측 전에 남기고, 결과가 없는 시도를 저장된 기록으로 보류) ─────────────
+
+fn kinds_of(root: &Path) -> Vec<String> {
+    let ledger: Value = serde_json::from_slice(&fs::read(root.join(".gil/start/preparation.json")).unwrap()).unwrap();
+    ledger["events"].as_array().unwrap().iter().map(|e| e["kind"].as_str().unwrap().to_owned()).collect()
+}
+
+#[test]
+fn an_attempt_whose_start_record_is_not_saved_observes_and_applies_nothing() {
+    let root = project("attempt-start-not-saved");
+    begin(&s(&root)).unwrap();
+    let p = prepared(&root, RULES_B);
+    ATTEMPT_START_FAULT.with(|f| *f.borrow_mut() = Some(false));
+    // 관측이 돌았다면 이 capture 고장이 쓰였을 것이다 — 남아 있으면 관측하지 않았다는 뜻이다.
+    CAPTURE_FAULT.with(|f| *f.borrow_mut() = Some(()));
+    let held = approve(&root, &p).unwrap();
+    assert_eq!(held["application_held"]["code"], "attempt_not_recorded", "{held}");
+    assert_ne!(held["phase"], "started");
+    assert!(CAPTURE_FAULT.with(|f| f.borrow_mut().take()).is_some(), "시도 기록 없이 관측하지 않는다");
+    assert!(!state(&root).exists() && !root.join(".gilignore").exists());
+    assert!(kinds_of(&root).is_empty());
+    // 저장되지 않았음이 기록으로 확인된다 — 같은 승인으로 다시 시도할 수 있다.
+    assert!(ledger_block(&root, proposal_of(&p).0).is_none());
+    let started = apply(&root, proposal_of(&p).0, &proposal_of(&p).1).unwrap();
+    assert_eq!(started["phase"], "started", "{started}");
+}
+
+#[test]
+fn an_attempt_whose_start_record_outcome_is_unknown_is_held_by_the_saved_record() {
+    let root = project("attempt-start-unknown");
+    begin(&s(&root)).unwrap();
+    let p = prepared(&root, RULES_B);
+    ATTEMPT_START_FAULT.with(|f| *f.borrow_mut() = Some(true));
+    CAPTURE_FAULT.with(|f| *f.borrow_mut() = Some(()));
+    let held = approve(&root, &p).unwrap();
+    assert_eq!(held["application_held"]["code"], "attempt_not_recorded", "{held}");
+    assert!(CAPTURE_FAULT.with(|f| f.borrow_mut().take()).is_some(), "저장을 확인하지 못하면 관측하지 않는다");
+    assert!(!state(&root).exists() && !root.join(".gilignore").exists());
+    // 실제로는 기록이 남았다 — 결과가 없는 시도이므로 같은 판을 보류한다(문제없었다고 단정하지 않는다).
+    assert_eq!(kinds_of(&root), ["attempt_started"]);
+    assert_eq!(ledger_block(&root, proposal_of(&p).0), Some("attempt_outcome_unrecorded"));
+    assert_eq!(apply(&root, proposal_of(&p).0, &proposal_of(&p).1).unwrap_err().code, "attempt_outcome_unrecorded");
+    assert!(review(&root).unwrap().1.is_none(), "적용 capability 를 내주지 않는다");
+    let status_now = status(&s(&root)).unwrap();
+    assert_eq!(status_now["phase"], "attempt_outcome_unrecorded");
+    assert!(!state(&root).exists(), "조회는 시작을 만들지 않는다");
+}
+
+#[test]
+fn a_safe_stop_whose_outcome_cannot_be_saved_stays_unresolved_and_a_saved_one_keeps_the_approval() {
+    // 결과 저장 성공: 관측 불안정의 안전 종료가 확정되고, 같은 승인으로 다시 시도해 시작한다.
+    let root = project("stop-settled");
+    begin(&s(&root)).unwrap();
+    let p = prepared(&root, RULES_B);
+    CAPTURE_FAULT.with(|f| *f.borrow_mut() = Some(()));
+    let held = approve(&root, &p).unwrap();
+    assert_eq!(held["application_held"]["code"], "capture_failed", "{held}");
+    assert_eq!(held["phase"], "approved");
+    assert_eq!(kinds_of(&root), ["attempt_started", "attempt_settled"]);
+    assert!(ledger_block(&root, proposal_of(&p).0).is_none());
+    let started = apply(&root, proposal_of(&p).0, &proposal_of(&p).1).unwrap();
+    assert_eq!(started["phase"], "started", "{started}");
+    // 정상 확정 뒤의 재전송·응답 유실·조회는 같은 결과이며 새 판·사건·Chain 을 만들지 않는다.
+    let state_bytes = fs::read(state(&root)).unwrap();
+    let again = apply(&root, proposal_of(&p).0, &proposal_of(&p).1).unwrap();
+    assert_eq!(again["started"], started["started"]);
+    assert_eq!(status(&s(&root)).unwrap()["started"], started["started"]);
+    assert_eq!(fs::read(state(&root)).unwrap(), state_bytes);
+
+    // 결과 저장 실패: 멈췄다는 사실을 확정하지 못했으므로 승인을 유지한 재시도로 말하지 않고, 같은 판을 보류한다.
+    let root = project("stop-unsettled");
+    begin(&s(&root)).unwrap();
+    let p = prepared(&root, RULES_B);
+    CAPTURE_FAULT.with(|f| *f.borrow_mut() = Some(()));
+    ATTEMPT_SETTLE_FAULT.with(|f| *f.borrow_mut() = Some(()));
+    let held = approve(&root, &p).unwrap();
+    assert_eq!(held["application_held"]["code"], "attempt_outcome_unrecorded", "{held}");
+    assert_eq!(held["application_held"]["detail"]["stopped"], "capture_failed");
+    assert_eq!(held["phase"], "attempt_outcome_unrecorded");
+    assert_eq!(kinds_of(&root), ["attempt_started"]);
+    // 지금 디스크는 제안 때와 같지만, 다시 읽었다는 이유로 미해결을 지우지 않는다.
+    assert_eq!(apply(&root, proposal_of(&p).0, &proposal_of(&p).1).unwrap_err().code, "attempt_outcome_unrecorded");
+    assert_eq!(ledger_block(&root, proposal_of(&p).0), Some("attempt_outcome_unrecorded"));
+    assert!(!state(&root).exists() && !root.join(".gilignore").exists());
+    assert_eq!(kinds_of(&root), ["attempt_started"], "보류된 판에는 새 시도를 열지 않는다");
+    // 승인 기록은 지우지 않는다. 앞으로 가는 길은 새 제안·새 승인이다.
+    let p2 = prepared(&root, RULES_B);
+    assert_eq!(approve(&root, &p2).unwrap()["phase"], "started");
+}
+
+#[test]
+fn a_confirmed_unsaved_final_state_settles_the_attempt_and_an_unsettled_one_is_held() {
+    let root = project("commit-settled");
+    begin(&s(&root)).unwrap();
+    let p = prepared(&root, RULES_B);
+    COMMIT_FAULT.with(|f| *f.borrow_mut() = Some(()));
+    assert_eq!(approve(&root, &p).unwrap()["application_held"]["code"], "start_not_saved");
+    let ledger: Value = serde_json::from_slice(&fs::read(root.join(".gil/start/preparation.json")).unwrap()).unwrap();
+    let last = ledger["events"].as_array().unwrap().last().unwrap().clone();
+    assert_eq!((last["kind"].as_str(), last["code"].as_str()), (Some("attempt_settled"), Some("start_not_saved")));
+
+    let root = project("commit-unsettled");
+    begin(&s(&root)).unwrap();
+    let p = prepared(&root, RULES_B);
+    COMMIT_FAULT.with(|f| *f.borrow_mut() = Some(()));
+    ATTEMPT_SETTLE_FAULT.with(|f| *f.borrow_mut() = Some(()));
+    let held = approve(&root, &p).unwrap();
+    assert_eq!(held["application_held"]["code"], "attempt_outcome_unrecorded", "{held}");
+    assert_eq!(held["application_held"]["detail"]["stopped"], "start_not_saved");
+    assert!(!state(&root).exists());
+    assert_eq!(apply(&root, proposal_of(&p).0, &proposal_of(&p).1).unwrap_err().code, "attempt_outcome_unrecorded");
+}
+
+#[test]
+fn a_malformed_attempt_record_is_refused_not_read_as_resolved() {
+    let root = project("attempt-malformed");
+    begin(&s(&root)).unwrap();
+    let p = prepared(&root, RULES_B);
+    let (revision, digest) = proposal_of(&p);
+    let path = root.join(".gil/start/preparation.json");
+    let mut ledger: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    ledger["responses"] = serde_json::json!([{"revision": revision, "proposal_digest": digest, "decision": "approve", "source": "monitor_button"}]);
+    // 시작하지 않은 시도의 결과, 다른 제안을 가리키는 시도.
+    for events in [
+        serde_json::json!([{"kind": "attempt_settled", "revision": revision, "attempt": 1, "outcome": "stopped", "code": "x"}]),
+        serde_json::json!([{"kind": "attempt_started", "revision": revision, "attempt": 1, "proposal_digest": "0".repeat(64)}]),
+    ] {
+        ledger["events"] = events;
+        fs::write(&path, serde_json::to_vec(&ledger).unwrap()).unwrap();
+        assert_eq!(apply(&root, revision, &digest).unwrap_err().code, "preparation_unreadable");
+        assert!(!state(&root).exists());
+    }
 }
