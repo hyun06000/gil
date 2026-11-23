@@ -28,14 +28,15 @@ fn waiting(s: &crate::ReadOnlySession) -> bool {
     false
 }
 /// Pure handoff validation: no consent, completion, Project mutation or persistent token.
+/// Refusals speak the language of the call (the MCP worker runs under the Project's locale).
 pub(crate) fn await_user(root: &str, question: &str) -> Result<Value, String> {
     if question.trim().is_empty() || question.len() > 4000 {
-        return Err("사용자에게 물을 구체적인 질문이 필요하다 (1..4000 bytes)".into());
+        return Err(crate::locale::text("mcp.await_user_question_required").into());
     }
     let root = project_root(&crate::mcp::resolve_guard_root(root)?)?;
     let s = session(&root)?;
     if !waiting(&s) {
-        return Err("gil_await_user는 열린 Question 또는 제안이 등록된 승인 대기 Synthesis의 선택적 읽기 확인이다. 이 도구 없이도 턴을 끝내거나 Monitor 승인을 기다릴 수 있다. 현재 위치는 gil_context로 확인하며 대기 확인을 위해 Step/Cycle을 만들지 않는다.".into());
+        return Err(crate::locale::text("mcp.await_user_not_waiting").into());
     }
     Ok(
         json!({"project_root":root,"state_digest":fingerprint(&s)?,"question":question,"status":"awaiting_user"}),

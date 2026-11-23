@@ -563,6 +563,8 @@
   "mcp.action_unfinished": "The GIL action did not finish. Check the state, then continue.",
   "mcp.await_user": "Waiting for user input: {question}. Write this question verbatim at the end of the reply. After the user answers, continue the same step with gil_context. Completion and approval records are unchanged.",
   "mcp.await_user_failed": "The user-wait state could not be checked. Confirm the current step with gil_context.",
+  "mcp.await_user_question_required": "A concrete question to ask the user is required (1..4000 bytes).",
+  "mcp.await_user_not_waiting": "gil_await_user is an optional read-only check for an open Question or for a Synthesis whose registered proposal awaits approval. The turn can end, or the Monitor approval can be awaited, without this tool. Check the current position with gil_context; do not create a Step or Cycle just to check a wait.",
   "mcp.companion_unavailable": "The Monitor connection could not be checked.",
   "mcp.connect_failed": "Could not establish the MCP connection: {err}",
   "mcp.disconnected": "The MCP connection was lost: {err}",

@@ -563,6 +563,8 @@
   "mcp.action_unfinished": "GIL 操作未能完成。确认状态后继续。",
   "mcp.await_user": "等待用户输入: {question}。在回复末尾原样写下此问题。用户回答后用 gil_context 继续同一步骤。完成·批准记录没有改变。",
   "mcp.await_user_failed": "无法确认用户等待状态。用 gil_context 确认当前步骤。",
+  "mcp.await_user_question_required": "需要向用户提出的具体问题 (1..4000 bytes)",
+  "mcp.await_user_not_waiting": "gil_await_user 是对已打开的 Question 或已登记提案、等待批准的 Synthesis 的可选只读确认。不用此工具也可以结束回合或等待 Monitor 批准。用 gil_context 确认当前位置，不要为了确认等待而创建 Step/Cycle。",
   "mcp.companion_unavailable": "无法确认 Monitor 连接。",
   "mcp.connect_failed": "无法建立 MCP 连接: {err}",
   "mcp.disconnected": "MCP 连接已断开: {err}",
