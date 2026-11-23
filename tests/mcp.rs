@@ -999,6 +999,20 @@ fn companion_session_tracks_actual_project_use_and_stdio_eof() {
     std::fs::remove_dir_all(base).unwrap();
 }
 
+/// gil_revisit returns the working folder to the target Cycle's exit Snapshot: it can overwrite
+/// files and delete ones that Snapshot lacks, so it is not an additive-only change.
+#[test]
+fn gil_revisit_is_listed_as_destructive() {
+    let mut mcp = Client::serve();
+    mcp.initialize();
+    let got = mcp.request("tools/list", serde_json::json!({}));
+    let tools = got["result"]["tools"].as_array().expect("tools");
+    let revisit = tools.iter().find(|t| t["name"] == "gil_revisit").expect("gil_revisit");
+    assert_eq!(revisit["annotations"]["readOnlyHint"], false, "{revisit}");
+    assert_eq!(revisit["annotations"]["destructiveHint"], true, "{revisit}");
+    assert!(mcp.eof().0.success());
+}
+
 #[test]
 fn initialize_succeeds_and_says_who_is_answering() {
     let mut mcp = Client::serve();
