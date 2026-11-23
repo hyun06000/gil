@@ -425,6 +425,22 @@ fn a_walk_is_continued_from_a_folder_below_it() {
     assert!(told.contains("이야기가 설명 없이 읽히는가"), "적은 것이 딴 데로 갔다:\n{told}");
 }
 
+/// `response` 를 두 번 적은 Report 는 거절되고 Question 은 열린 채다 (#243). 응답 하나로
+/// 다시 내면 같은 Question 이 닫히고, 새 프로세스의 `gil context` 가 그 값을 읽는다.
+#[test]
+fn a_report_with_a_field_written_twice_closes_nothing() {
+    let dir = scratch("cli-duplicate-field");
+    ok(&dir, &["start"], None);
+    open_action(&dir, "question");
+    let before = std::fs::read(dir.join(gil::STATE_PATH)).unwrap();
+    let said = refused(&dir, &["close"], Some("question: Which sample?\nchoices: A / B\nresponse: FIRST_ANSWER_A\nresponse: SECOND_ANSWER_B\n"));
+    assert!(said.contains("4번째 줄") && said.contains("response") && said.contains("3번째 줄"), "{said}");
+    assert_eq!(std::fs::read(dir.join(gil::STATE_PATH)).unwrap(), before, "nothing was closed");
+    ok(&dir, &["close"], Some("question: Which sample?\nchoices: A / B\nresponse: SECOND_ANSWER_B\n"));
+    let context = ok(&dir, &["context"], None);
+    assert!(context.contains("SECOND_ANSWER_B") && !context.contains("FIRST_ANSWER_A"), "{context}");
+}
+
 #[test]
 fn walking_from_below_does_not_leave_a_second_walk() {
     // 걷기가 둘이 되면 사고의 기록이 조용히 갈린다 — 마찰이 아니라 사고다.

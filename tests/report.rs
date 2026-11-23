@@ -158,6 +158,32 @@ fn a_name_with_a_space_in_it_is_refused() {
     assert_eq!(err.line, 1);
 }
 
+/// 같은 칸을 두 번 적으면 거절한다 (#243). 마지막 값만 남기면 어느 답이 제출됐는지 다음
+/// 세션이 알 수 없다. 거절은 다시 나온 줄과 처음 적은 줄을 함께 말한다.
+#[test]
+fn a_field_written_twice_is_refused_with_both_lines() {
+    for (text, line, first, name) in [
+        ("question: q\nchoices: A / B\nresponse: FIRST\nresponse: SECOND\n", 4, 3, "response"),
+        ("response: |\n  여러 줄\nresponse: 한 줄\n", 3, 1, "response"),
+        ("response: 한 줄\nresponse: |\n  여러 줄\n", 2, 1, "response"),
+        ("response:\nresponse: 값\n", 2, 1, "response"),
+        ("next_direction:\n  action: close_cycle\nnext_direction.action: revisit\n", 3, 2, "next_direction.action"),
+        ("next_direction:\n  action: close_cycle\nnext_direction:\n  action: revisit\n", 4, 2, "next_direction.action"),
+    ] {
+        let err = refused(text);
+        assert_eq!(err.line, line, "{text:?}: {err}");
+        assert!(err.detail.contains(name) && err.detail.contains(&first.to_string()), "{text:?}: {err}");
+    }
+}
+
+#[test]
+fn a_repeated_parent_with_different_children_is_not_a_duplicate() {
+    // 각 칸은 한 번씩만 적혔다 — 이름 마디를 다시 연 것은 같은 칸을 덮은 것이 아니다.
+    let report = parse("next_direction:\n  action: close_cycle\nnext_direction:\n  reason: 끝났다\n");
+    assert_eq!(report.get("next_direction.action"), Some("close_cycle"));
+    assert_eq!(report.get("next_direction.reason"), Some("끝났다"));
+}
+
 #[test]
 fn a_report_read_back_is_the_same_report() {
     // 한 번 읽은 것을 다시 적어 다시 읽어도 같아야 한다 — 값이 조용히 줄면 여기서 갈린다.

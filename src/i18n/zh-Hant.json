@@ -879,6 +879,7 @@
   "ref.wrong_letter": "{text} 必須以 {expected} 開頭",
   "ref.zero_not_allowed": "{text} 是不能使用 0 的種類 — 0 屬於初始 revision（J0）與初始 Existence State（ES0）",
   "report.bad_name": "{name} 不能作為欄位名 — 名稱中不能有空格",
+  "report.duplicate_field": "欄位 {name} 再次出現 — 第一次寫在第 {first} 行。一個欄位只寫一個值。確定哪個值正確並只保留它；多行時用 `{name}: |` 開啟",
   "report.dangling_indent": "這一行的縮排沒有依附任何內容 — 若是多行值，用 `名稱: |` 開啟上一行",
   "report.line": "第 {line} 行: {detail}",
   "report.no_name": "沒有欄位名 — 形式必須是 `名稱: 值`",
