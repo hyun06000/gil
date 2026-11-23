@@ -53,6 +53,10 @@
 //!   메모리의 Chain 목록·등록부만 받아 기존 계보 조회(`Walk::lineage`)를 한 번 쓰고, 정책 원장·사건 입력·파일·`state.yaml`·객체 창고를
 //!   읽지 않으며 Cycle 을 닫는 규칙(`exit_would_be`)·P(N)·B(T)·S(N)·Experiment Exit 선택을 부르지 않는다. 제품의 close·load 가 그것을
 //!   부르지 않으므로 아래 검사에 그 이름이 들어 있고, 그 원문의 코드 줄은 따로 검사한다.
+//! - Experiment 안의 지정한 닫힌 Verify 가 확정한 세계와 그 확정 정책 유도(`verify_world`, 계약 §6.1 의 「Experiment 의 Verify」 줄)도 저장
+//!   경로가 아니다. 메모리의 원장·사건 입력·Chain 목록·등록부만 받아 같은 호출에서 P(N) 선택을 한 번 부르고(3j 는 그 안에서만 실행된다),
+//!   Experiment Exit 선택과 같은 소유 조회를 한 번 쓰며, 파일·`state.yaml`·객체 창고를 읽지 않고 계보 선택·현재 세계 유도·Exit·B(T)·S(N)·
+//!   3n·3o 의 문을 쓰지 않는다. 제품 경로가 그것을 부르지 않으므로 아래 검사에 그 이름이 들어 있고, 그 원문의 코드 줄은 따로 검사한다.
 //! - 새 모듈은 `src/artifact/tracking_record/` 밖의 어떤 소스에서도 불리지 않는다.
 
 mod common;
@@ -768,6 +772,16 @@ fn no_product_source_calls_the_new_module() {
         "LineageVerifyLacksSnapshot",
         "ExpectedNotInRegistry",
         "EXIT_LINEAGE_DOES_NOT_SHOW",
+        "verify_world",
+        "select_verify_world",
+        "VerifyWorld",
+        "VerifyWorldProblem",
+        "StepProblem",
+        "NotVerifyOutOfScope",
+        "OpenVerifyOutOfScope",
+        "ClosedVerifyLacksSnapshot",
+        "SnapshotNotInRegistry",
+        "VERIFY_WORLD_DOES_NOT_SHOW",
     ];
     let mut users = Vec::new();
     let mut stack = vec![src.clone()];
@@ -1115,4 +1129,107 @@ fn the_exit_lineage_check_reads_one_lineage_and_touches_no_file_state_store_or_e
     assert!(shortcuts.is_empty(), "검사를 건너뛰는 인자가 있다: {shortcuts:#?}");
     let signature: Vec<&&str> = code.iter().filter(|line| line.starts_with("pub(crate) fn check_experiment_exit_lineage(")).collect();
     assert_eq!(signature.len(), 1, "검사의 문은 하나다");
+}
+
+/// Verify 세계 유도의 원문에서 주석과 문자열 목록 줄을 뺀 **코드 줄**이 파일·상태·창고·3j·구간의 문, 계보 선택과 현재 세계·Exit 유도
+/// (`lineage`·`world_snapshot`·`exit_would_be`·Exit 칸), 이름·순서·출처 칸(`parent`·`revisit_from`·목록 끝·최댓값), B(T)·S(N)·Experiment Exit·
+/// Exit 계보 선택을 쓰지 않고, 같은 호출의 입력으로 P(N) 선택·소유 조회·등록부 조회를 한 번씩만 쓰는가. 호출자가 고른 세계·정책·성공 값을
+/// 받는 함수가 없는가.
+#[test]
+fn the_verify_world_derivation_reuses_one_opening_policy_and_reads_only_the_named_verify() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("artifact").join("tracking_record").join("verify_world.rs");
+    let text = std::fs::read_to_string(&path).unwrap();
+    let code: Vec<&str> =
+        text.lines().map(str::trim).filter(|line| !line.is_empty() && !line.starts_with("//") && !line.starts_with('"')).collect();
+    let forbidden = [
+        "std::fs",
+        "std::io",
+        "std::env",
+        "File",
+        "OpenOptions",
+        "read_to_string",
+        "ObjectStore",
+        "Project",
+        "state.yaml",
+        "gilignore",
+        "read_root_policy_file",
+        "store_policy_source",
+        "put_blob",
+        "LedgerStart",
+        "ConfirmedStart",
+        "AppliedSpan",
+        "BoardPolicies",
+        "select_ledger_span",
+        "classify_path",
+        "select_boundary_world",
+        "BoundarySource",
+        "BoundaryPolicy",
+        "select_opening_world",
+        "WorldSource",
+        "select_experiment_exit",
+        "check_experiment_exit_lineage",
+        "check_event_inputs",
+        "check_policy_links",
+        "check_cycle_refs",
+        "policies()",
+        "next_policy_id",
+        "rules()",
+        "baseline()",
+        "issuer()",
+        "events()",
+        "entry_snapshot",
+        "exit_snapshot",
+        "world_snapshot",
+        "exit_would_be",
+        "verify_in_lineage",
+        "lineage(",
+        "current(",
+        "history()",
+        "parent",
+        "revisit_from",
+        ".last()",
+        "max",
+        "sort",
+    ];
+    let used: Vec<String> = code
+        .iter()
+        .flat_map(|line| forbidden.iter().filter(|name| line.contains(*name)).map(move |name| format!("{name}: {line}")))
+        .collect();
+    assert!(used.is_empty(), "Verify 세계 유도가 파일·상태·창고·3j·구간·계보 선택·현재 세계·Exit·다른 선택의 문을 쓴다:\n{used:#?}");
+    let calls: Vec<&&str> = code.iter().filter(|line| line.contains("select_opening_policy(")).collect();
+    assert_eq!(
+        calls,
+        [&"let opening = select_opening_policy(target.cycle(), ledger, links, facts, chains, registry);"],
+        "같은 호출의 입력으로 대상 Step 의 Cycle 에 대해 P(N) 선택을 한 번 불러야 한다"
+    );
+    let owner: Vec<&&str> = code.iter().filter(|line| line.contains("owned_cycle(")).collect();
+    assert_eq!(owner.len(), 1, "대상 Cycle 은 Experiment Exit 선택과 같은 소유 조회로 한 번 정한다: {owner:#?}");
+    let lookups: Vec<&&str> = code.iter().filter(|line| line.contains(".resolve(")).collect();
+    assert_eq!(lookups.len(), 1, "등록부 조회는 지정한 Verify 의 세계 하나다: {lookups:#?}");
+    // 함수의 인자 자리(한 줄 서명의 괄호 안, 또는 여러 줄 서명에서 `fn 이름(` 줄과 `)` 줄 사이)에 성공 값·세계·정책이 있으면 안 된다.
+    // `pub(crate)` 의 괄호를 인자로 읽지 않도록 `fn ` 뒤부터 본다.
+    let mut parameters: Vec<String> = Vec::new();
+    let mut in_signature = false;
+    for line in &code {
+        let line = &line[line.find("fn ").unwrap_or(0)..];
+        match (in_signature, line.starts_with("fn ") && line.contains('('), line.find('('), line.find(')')) {
+            (false, true, Some(open), Some(close)) if open < close => parameters.push(line[open..close].to_string()),
+            (false, true, _, None) => in_signature = true,
+            (true, ..) if line.starts_with(')') => in_signature = false,
+            (true, ..) => parameters.push(line.to_string()),
+            _ => {}
+        }
+    }
+    assert!(parameters.iter().any(|taken| taken.contains("target: StepRef")), "서명을 읽지 못했다: {parameters:#?}");
+    let shortcuts: Vec<&String> = parameters
+        .iter()
+        .filter(|taken| {
+            ["Agree", "Opening", "Selection", "PolicyName", "EventName", "SnapshotRef", "world", "exit", "Located", "Boundary"]
+                .iter()
+                .any(|name| taken.contains(name))
+        })
+        .collect();
+    assert!(shortcuts.is_empty(), "검사를 건너뛰는 인자가 있다: {shortcuts:#?}");
+    let signature: Vec<&&str> = code.iter().filter(|line| line.starts_with("pub(crate) fn select_verify_world(")).collect();
+    assert_eq!(signature.len(), 1, "유도의 문은 하나다");
 }
