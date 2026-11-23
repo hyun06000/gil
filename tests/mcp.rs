@@ -2280,3 +2280,22 @@ fn chain_profile_stdio_handoff_survives_restart_without_duplicate_or_lost_histor
         mcp.eof();
     }
 }
+
+/// The plan tools describe the exploration contract's fields only in a build that can open such a
+/// Chain. An approved-plan-only build describes ordered plan items and nothing else.
+#[cfg(feature = "approved-plan")]
+#[test]
+fn plan_tools_mention_the_exploration_contract_only_in_the_exploration_build() {
+    let mut mcp = Client::serve();
+    mcp.initialize();
+    let got = mcp.request("tools/list", serde_json::json!({}));
+    let tools = got["result"]["tools"].as_array().expect("tools");
+    let exploration = cfg!(feature = "exploration-flow");
+    for name in ["gil_plan_propose", "gil_plan_read"] {
+        let tool = tools.iter().find(|t| t["name"] == name).unwrap_or_else(|| panic!("{name}"));
+        let description = tool["description"].as_str().expect("description");
+        assert_eq!(description.contains("contract: exploration"), exploration, "{name}: {description}");
+        assert_eq!(description.contains("experiment_link") || description.contains("approved requirements"), exploration, "{name}: {description}");
+    }
+    assert!(mcp.eof().0.success());
+}

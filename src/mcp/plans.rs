@@ -235,6 +235,12 @@ pub(super) fn call(monitor: &Monitor, grants: &Grants, name: &str, input: Value)
     run().unwrap_or_else(|why| super::actions::refusal(&why))
 }
 
+/// What the plan tools add in a build that can open a Chain under the exploration contract.
+/// Each stays conditional on the response actually carrying `contract: exploration`, because the
+/// same build also reads Chains opened under the ordered-item contract.
+const PROPOSE_EXPLORATION: &str = " When gil_plan_read says contract: exploration, the items are the approved requirements (question to answer, judgment criteria) rather than an execution queue: do not list experiments in advance and do not re-propose merely to split, reorder or change the method of experiments.";
+const READ_EXPLORATION: &str = " Only when the response carries contract: exploration (Chains opened under that contract; absent everywhere else): requirements lists each approved requirement with the Experiments linked to it and their recorded verdicts, current_experiment is the link of the current Cycle, and experiment_link is the exact body for gil_open(kind: experiment, contract: ...). There pending means requirements with no linked Experiment yet, an Experiment's success never completes a requirement, and whether a requirement is answered is decided only in the user-approved Closing Interview.";
+
 pub(super) fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
     let input = |properties: Value, required: Vec<&str>| json!({"type":"object","properties":properties,"required":required,"additionalProperties":false});
     let string = json!({"type":"string"});
@@ -250,7 +256,7 @@ pub(super) fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
     for (name, description, schema, app, read) in [
         (
             "gil_plan_propose",
-            "Propose the complete scope and ordered experiment checklist in an OPEN Interview Synthesis. To extend an existing plan, read gil_plan_read.active_plan and copy ALL its items verbatim (including executed items), then add new IDs. Scope and item order may change subject to new approval; existing item definitions may not. Do not send only new items or reconstruct old text from memory. No file creation. Wait for the user's Monitor button; chat approval is insufficient. Then gil_plan_read and close Synthesis, Outcome and Interview before execution. When gil_plan_read says contract: exploration, the items are the approved requirements (question to answer, judgment criteria) rather than an execution queue: do not list experiments in advance and do not re-propose merely to split, reorder or change the method of experiments.",
+            "Propose the complete scope and ordered experiment checklist in an OPEN Interview Synthesis. To extend an existing plan, read gil_plan_read.active_plan and copy ALL its items verbatim (including executed items), then add new IDs. Scope and item order may change subject to new approval; existing item definitions may not. Do not send only new items or reconstruct old text from memory. No file creation. Wait for the user's Monitor button; chat approval is insufficient. Then gil_plan_read and close Synthesis, Outcome and Interview before execution.",
             input(
                 json!({"project_root":string,"draft":draft}),
                 vec!["project_root", "draft"],
@@ -270,7 +276,7 @@ pub(super) fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
         ),
         (
             "gil_plan_read",
-            "Read proposal/Monitor decision and current-state next guidance. active_plan is the complete executable approved revision {revision,digest,scope,items}, including executed items, even in an unbound Interview where document is null. Copy its items verbatim when extending a plan; null means no executable approved plan yet. close_report is the proposal's Synthesis report: use it unchanged only when that Synthesis is actually open. document is null before an Experiment binds; opening an Experiment immediately exposes the bound revision's exact UTF-8 document, even before Define/Verify. Reading or a failed close never creates it. Save it verbatim only during Verify; name plan_document and separate evidence_files. Each Experiment binds exactly one current_item; executed_cycles means opened/bound, not success or proof of all work. Other items stay pending even if a report mentions them. Never invent approval or summarize a missing document. Only when the response carries contract: exploration (Chains opened under that contract; absent everywhere else): requirements lists each approved requirement with the Experiments linked to it and their recorded verdicts, current_experiment is the link of the current Cycle, and experiment_link is the exact body for gil_open(kind: experiment, contract: ...). There pending means requirements with no linked Experiment yet, an Experiment's success never completes a requirement, and whether a requirement is answered is decided only in the user-approved Closing Interview.",
+            "Read proposal/Monitor decision and current-state next guidance. active_plan is the complete executable approved revision {revision,digest,scope,items}, including executed items, even in an unbound Interview where document is null. Copy its items verbatim when extending a plan; null means no executable approved plan yet. close_report is the proposal's Synthesis report: use it unchanged only when that Synthesis is actually open. document is null before an Experiment binds; opening an Experiment immediately exposes the bound revision's exact UTF-8 document, even before Define/Verify. Reading or a failed close never creates it. Save it verbatim only during Verify; name plan_document and separate evidence_files. Each Experiment binds exactly one current_item; executed_cycles means opened/bound, not success or proof of all work. Other items stay pending even if a report mentions them. Never invent approval or summarize a missing document.",
             input(json!({"project_root":string}), vec!["project_root"]),
             false,
             true,
@@ -302,11 +308,15 @@ pub(super) fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
             .expect("plan catalog"),
         );
     }
-    // The record reads exist only in an exploration-flow build, so only there does the link
-    // list say where the linked originals are opened. Every other build keeps the description
-    // above byte for byte.
+    // Only an exploration-flow build opens Chains under the exploration contract, and only there
+    // do the record reads exist. So only there do the proposal and the read describe that
+    // contract's fields and say where the linked originals are opened. Every other build keeps
+    // the ordered-item descriptions above byte for byte.
     if cfg!(feature = "exploration-flow") {
+        let propose = tools.iter_mut().find(|tool| tool.name == "gil_plan_propose").expect("plan propose");
+        propose.description.get_or_insert_with(Default::default).to_mut().push_str(PROPOSE_EXPLORATION);
         let read = tools.iter_mut().find(|tool| tool.name == "gil_plan_read").expect("plan read");
+        read.description.get_or_insert_with(Default::default).to_mut().push_str(READ_EXPLORATION);
         read.description.get_or_insert_with(Default::default).to_mut().push_str(
             " To read what a linked Experiment actually recorded, pass its cycle_ref to gil_report_read (Step references and Cycle Report, then one Step Report at a time) and read the files a Verify declared with gil_evidence_read; this tool lists links and verdicts, it does not carry Report bodies or synthesize an answer.");
     }
@@ -317,6 +327,25 @@ pub(super) fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
 mod tests {
     use super::*;
     use crate::plan_test_helpers as h;
+    /// The exploration-contract guidance in the two model-facing plan tools exists only in a build
+    /// that can open such a Chain; there it is appended whole, so that build's text is unchanged.
+    #[test]
+    fn plan_descriptions_carry_exploration_guidance_only_in_the_exploration_build() {
+        let tools = catalog(vec![]);
+        let description = |name: &str| tools.iter().find(|tool| tool.name == name).unwrap().description.as_deref().unwrap().to_owned();
+        let (propose, read) = (description("gil_plan_propose"), description("gil_plan_read"));
+        let exploration = cfg!(feature = "exploration-flow");
+        for phrase in ["contract: exploration", "approved requirements", "do not list experiments in advance"] {
+            assert_eq!(propose.contains(phrase), exploration, "propose {phrase}: {propose}");
+        }
+        for phrase in ["contract: exploration", "experiment_link", "current_experiment", "requirements lists", "Closing Interview", "gil_report_read"] {
+            assert_eq!(read.contains(phrase), exploration, "read {phrase}: {read}");
+        }
+        assert_eq!(propose.ends_with(PROPOSE_EXPLORATION), exploration);
+        assert_eq!(read.contains(READ_EXPLORATION), exploration);
+        // The ordered-item guidance is the same in every build.
+        assert!(propose.contains("copy ALL its items verbatim") && read.contains("Each Experiment binds exactly one current_item"));
+    }
     #[test]
     fn synthesis_schema_exposes_basis_rules_and_required_string_fields() {
         let tools = catalog(vec![]);
