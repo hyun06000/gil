@@ -38,9 +38,11 @@ pub(super) fn phase(ledger: &Ledger, started: Option<&StartedRecord>) -> &'stati
     }
     let Some(latest) = ledger.latest() else { return "preparing" };
     match ledger.response(&latest.digest).map(|r| r.decision.as_str()) {
+        Some("approve") if ledger.condition_changed(latest.revision) => "condition_changed",
         Some("approve") => "approved",
         Some(_) => "changes_requested",
         None if !latest.blockers.is_empty() => "blocked",
+        None if !super::approvable(latest) => "policy_file_held",
         None => "awaiting_approval",
     }
 }
@@ -106,23 +108,21 @@ pub(super) fn started(root: &Path, s: &StartedRecord, repeated: bool) -> Value {
     })
 }
 
+/// 제안 판 하나의 화면 값 — **저장된 그 판의 값만으로** 만든다(원문·엔진·추적/제외·추천과 출처·정책 파일 효과와 차이·결합의
+/// B/C 원문과 효과). 지금 디스크를 다시 본 결과는 승인 근거와 섞지 않고 `current` 로 따로 싣는다.
 pub(super) fn proposal(root: &Path, ledger: &Ledger, p: &Proposal) -> Value {
-    let text = String::from_utf8_lossy(&B64.decode(&p.rules).unwrap_or_default()).into_owned();
-    let disk_text = super::disk_now(root).ok().flatten().map(|(_, b)| String::from_utf8_lossy(&b).into_owned());
-    let effect = match (&p.disk, disk_text.as_deref()) {
-        (Disk::Absent, _) => json!({"disk": "absent", "effect": "create"}),
-        (Disk::Present { digest }, _) if *digest == p.rules_digest => json!({"disk": "present", "effect": "unchanged"}),
-        (Disk::Present { .. }, Some(now)) => json!({"disk": "present", "effect": "replace", "diff": line_diff(now, &text)}),
-        (Disk::Present { .. }, None) => json!({"disk": "present", "effect": "replace"}),
-        (Disk::Unconfirmed, _) => json!({"disk": "unconfirmed", "effect": "unknown"}),
+    let decode = |b64: &str| String::from_utf8_lossy(&B64.decode(b64).unwrap_or_default()).into_owned();
+    let text = decode(&p.rules);
+    let shown_disk = p.disk_text.as_deref().map(decode);
+    let diff = match (&p.policy_file_effect[..], shown_disk.as_deref()) {
+        ("replace" | "held_three_way" | "held_base_undecided" | "replace_shown_disk", Some(before)) => Some(line_diff(before, &text)),
+        _ => None,
     };
     let combination = p.combination.as_ref().map(|c| {
-        let b = ledger.proposal(&c.approved_digest).map(|b| String::from_utf8_lossy(&B64.decode(&b.rules).unwrap_or_default()).into_owned()).unwrap_or_default();
-        let c_text = String::from_utf8_lossy(&B64.decode(&c.disk_rules).unwrap_or_default()).into_owned();
-        let b_tracked = ledger.proposal(&c.approved_digest).map(|b| b.tracked.clone()).unwrap_or_default();
-        let c_tracked = sp::ApprovedPolicy::compile(sp::EngineVersion::V1, c_text.as_bytes()).ok()
-            .and_then(|policy| crate::artifact::evaluate_scope(root, &policy).ok())
-            .map(|e| e.tracked().iter().map(|f| f.path.as_str().to_owned()).collect::<Vec<_>>());
+        let b_proposal = ledger.proposal(&c.approved_digest);
+        let b = b_proposal.map(|b| decode(&b.rules)).unwrap_or_default();
+        let c_text = decode(&c.disk_rules);
+        let b_tracked = b_proposal.map(|b| b.tracked.clone()).unwrap_or_default();
         json!({
             "approved_revision": c.approved_revision,
             "approved_rules": b,
@@ -130,10 +130,13 @@ pub(super) fn proposal(root: &Path, ledger: &Ledger, p: &Proposal) -> Value {
             "diff_vs_approved": line_diff(&b, &text),
             "diff_vs_disk": line_diff(&c_text, &text),
             "tracked_vs_approved": set_diff(&b_tracked, &p.tracked),
-            "tracked_vs_disk": c_tracked.as_ref().map(|c| set_diff(c, &p.tracked)),
-            "rule_order_effects": rule_effects(&text, &b_tracked, c_tracked.as_deref().unwrap_or(&[]), &p.tracked),
+            "tracked_vs_disk": c.disk_tracked.as_ref().map(|t| set_diff(t, &p.tracked)),
+            "disk_problems": c.disk_problems,
+            "rule_order_effects": rule_effects(&text, &b_tracked, c.disk_tracked.as_deref().unwrap_or(&[]), &p.tracked),
         })
     });
+    let shown = super::ledger::Disk::clone(&p.disk);
+    let now = super::disk_now(root).map(|seen| super::disk_value(&seen));
     json!({
         "phase": phase(ledger, None),
         "proposal": {
@@ -147,20 +150,40 @@ pub(super) fn proposal(root: &Path, ledger: &Ledger, p: &Proposal) -> Value {
             "tracked_truncated": p.tracked.len() > SHOWN,
             "excluded": p.excluded.iter().take(SHOWN).map(|e| json!({"path": e.path, "kind": e.kind, "reason": e.reason, "interior": e.interior})).collect::<Vec<_>>(),
             "excluded_count": p.excluded.len(),
+            "excluded_truncated": p.excluded.len() > SHOWN,
             "blockers": p.blockers,
             "notices": p.notices,
             "recommendations": p.recommendations.iter().map(|r| json!({
                 "key": r.key, "category": r.category, "sources": r.sources, "rules": r.rules,
                 "default_selected": r.default_selected, "in_rules": r.in_rules, "reason": r.reason, "impacts": r.impacts,
             })).collect::<Vec<_>>(),
-            "policy_file": effect,
+            "policy_file": {"disk": disk_word(&p.disk), "base": disk_word(&p.base), "effect": p.policy_file_effect, "diff": diff},
             "impact": [tr("start_prep.impact.archive"), tr("start_prep.impact.restore"), tr("start_prep.impact.access"), tr("start_prep.impact.unexplored")],
             "system_protections": system_protections(),
             "combination": combination,
             "response": ledger.response(&p.digest).map(|r| json!({"decision": r.decision, "source": r.source})),
-            "approvable": p.blockers.is_empty(),
+            "approvable": super::approvable(p),
+        },
+        // 승인 근거가 아닌 지금의 관측 — 제안 때와 다르면 적용은 보류되고 새 제안이 필요하다.
+        "current": {
+            "policy_file": match &now { Ok(disk) => disk_word(disk), Err(_) => "unreadable" },
+            "policy_file_matches_proposal": now.as_ref().is_ok_and(|disk| *disk == shown),
         },
     })
+}
+
+/// 저장된 제안 판의 목록 한 쪽 — 화면이 줄여 보인 목록 전체를 같은 판에 대해 끝까지 읽을 수 있게 한다.
+pub(super) fn list_page(p: &Proposal, list: &str, offset: usize) -> Option<Value> {
+    const PAGE: usize = 500;
+    let items: Vec<Value> = match list {
+        "tracked" => p.tracked.iter().map(|t| json!(t)).collect(),
+        "excluded" => p.excluded.iter().map(|e| json!({"path": e.path, "kind": e.kind, "reason": e.reason, "interior": e.interior})).collect(),
+        _ => return None,
+    };
+    let end = (offset + PAGE).min(items.len());
+    let page = if offset < items.len() { items[offset..end].to_vec() } else { Vec::new() };
+    Some(json!({"revision": p.revision, "digest": p.digest, "list": list, "offset": offset, "total": items.len(),
+        "items": page, "next_offset": if end < items.len() { json!(end) } else { Value::Null }}))
 }
 
 pub(super) fn recommendations(list: &[sp::Recommendation], text: &str) -> Value {

@@ -472,4 +472,12 @@ export default {
   "start.undelivered": "未確認已傳送到聊天。請在聊天中要求讀取 gil_start_status 並繼續。",
   "start.apply_retry": "重試套用已核准的提案",
   "start.apply_note": "這不是新的核准。它會在重新檢查資料夾後套用您已核准的提案。",
+  "start.list_all": "顯示此提案的完整清單",
+  "start.list_complete": "此提案的完整清單:{n} 項。",
+  "start.current_differs": "磁碟上目前的 .gilignore({now})與此提案顯示的不同。核准也不會覆寫該變更;套用將暫停,需要新的提案。",
+  "start.disk_problems": "引擎無法解釋磁碟上的檔案:{problems}",
+  "start.policy_file.replace_shown_disk": "僅用合併文字取代此處顯示的檔案(差異見下)。之後若檔案再變更則不覆寫。",
+  "start.policy_file.not_written_unconfirmed": "不寫入:之前的寫入未確認,因此不會自動覆寫檔案。",
+  "start.policy_file.held_base_undecided": "暫停:磁碟上的檔案與 GIL 之前確認的狀態不符。此提案無法核准;請先與使用者整理檔案。",
+  "start.policy_file.held_three_way": "暫停:最後確認的檔案、此提案和目前檔案都不同。在明確解決差異之前無法核准。",
 };

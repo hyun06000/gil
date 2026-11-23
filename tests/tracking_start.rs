@@ -62,6 +62,7 @@ fn the_monitor_approved_start_commits_once_over_the_real_stdio_process() {
     assert_eq!(tool("gil_start_decide")["_meta"]["ui"]["visibility"], json!(["app"]));
     assert_eq!(tool("gil_start_review")["_meta"]["ui"]["visibility"], json!(["app"]));
     assert_eq!(tool("gil_start_apply")["_meta"]["ui"]["visibility"], json!(["app"]));
+    assert_eq!(tool("gil_start_list")["_meta"]["ui"]["visibility"], json!(["app"]));
 
     let begun = c.call("gil_start", json!({"project_root": r}));
     assert!(!is_error(&begun), "{begun}");

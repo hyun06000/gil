@@ -473,4 +473,12 @@ export default {
   "start.undelivered": "대화 전달을 확인하지 못했다. 대화에서 gil_start_status 를 읽고 이어 가라고 요청한다.",
   "start.apply_retry": "승인한 제안 적용 다시 시도",
   "start.apply_note": "새로 승인하는 것이 아니다. 이미 승인한 제안을, 폴더를 다시 확인한 뒤 적용한다.",
+  "start.list_all": "이 제안의 전체 목록 보기",
+  "start.list_complete": "이 제안의 전체 목록: {n}개.",
+  "start.current_differs": "지금 디스크의 .gilignore({now})가 이 제안이 보여 준 것과 다르다. 승인해도 그 변경을 덮어쓰지 않으며 적용은 보류되고 새 제안이 필요하다.",
+  "start.disk_problems": "디스크의 파일을 엔진이 해석하지 못한다: {problems}",
+  "start.policy_file.replace_shown_disk": "여기 보인 바로 그 파일을 결합안으로 교체한다(아래 차이). 그 뒤 파일이 또 바뀌면 덮어쓰지 않는다.",
+  "start.policy_file.not_written_unconfirmed": "쓰지 않는다: 앞선 쓰기가 확인되지 않아 파일을 자동으로 덮어쓰지 않는다.",
+  "start.policy_file.held_base_undecided": "보류: 디스크의 파일이 GIL 이 앞서 확인한 상태와 맞지 않는다. 이 제안은 승인할 수 없다. 먼저 사용자와 파일을 정리한다.",
+  "start.policy_file.held_three_way": "보류: 마지막으로 확인한 파일·이 제안·지금 파일이 모두 다르다. 차이를 명시적으로 해소하기 전에는 승인할 수 없다.",
 };

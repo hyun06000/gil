@@ -61,7 +61,7 @@ try {
   const decided = await page.evaluate(() => window.decided);
   assert.deepEqual(decided, [{ scope_id: scope, revision: 1, digest: 'd'.repeat(64), token: 'PRIVATE-CAPABILITY', decision: 'approve' }]);
   assert.ok(!(await page.frames()[1].content()).includes('PRIVATE-CAPABILITY'));
-  await page.screenshot({ path: process.env.GIL_START_SCREENSHOT || '/dev/null', fullPage: true });
+  if (process.env.GIL_START_SCREENSHOT) await page.screenshot({ path: process.env.GIL_START_SCREENSHOT, fullPage: true });
   assert.deepEqual(errors, []);
   console.log('start preparation mock-host check: ok (synthetic Host, not a real Host acceptance)');
 } finally { await browser.close(); server.close(); }

@@ -68,6 +68,13 @@ pub(crate) struct Proposal {
     pub(crate) rules_digest: String,
     /// 제안할 때 Core 가 본 루트 `.gilignore` (`absent` 또는 `present`).
     pub(crate) disk: Disk,
+    /// 제안할 때의 시작 전 동기화 기준(준비 기록의 `base`). 정책 파일 효과는 이 값·`disk`·원문만으로 정한다.
+    pub(crate) base: Disk,
+    /// 제안할 때 본 디스크 원문(base64, 없으면 `None`) — 화면의 차이는 이 저장값에서만 계산한다.
+    pub(crate) disk_text: Option<String>,
+    /// 이 판이 승인되면 정책 파일에 일어날 일: `create`·`replace`·`unchanged`·`replace_shown_disk`(결합안)·
+    /// `not_written_unconfirmed`·`held_base_undecided`·`held_three_way`. 제안 때 정하고 저장한다.
+    pub(crate) policy_file_effect: String,
     pub(crate) tracked: Vec<String>,
     pub(crate) excluded: Vec<Excluded>,
     pub(crate) blockers: Vec<String>,
@@ -111,6 +118,9 @@ pub(crate) struct Combination {
     /// D 승인 화면이 보여 준 디스크 C 의 지문과 원문(base64). 적용 직전 디스크가 정확히 이것이어야 D 로 교체한다.
     pub(crate) disk_digest: String,
     pub(crate) disk_rules: String,
+    /// D 를 준비할 때 C 를 같은 엔진으로 평가한 추적 목록. C 를 해석하지 못하면 `None` 과 `disk_problems`.
+    pub(crate) disk_tracked: Option<Vec<String>>,
+    pub(crate) disk_problems: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -137,6 +147,9 @@ pub(crate) enum Event {
     SyncStarted { revision: u32, target: String },
     /// 그 쓰기의 결과와 남긴 기준.
     SyncSettled { revision: u32, result: String, base: Disk },
+    /// 적용 직전 재확인이 승인 조건(규칙·디스크 정책 파일·추적 목록·경로)의 변경을 발견했다. 이 판은 다시 적용하지 않는다 —
+    /// 새 제안과 그 판의 Monitor 승인이 필요하다. 앞선 사실(제안·응답·객체·동기화)은 지우지 않는다.
+    ConditionChanged { revision: u32, what: String },
 }
 
 impl Ledger {
@@ -161,6 +174,11 @@ impl Ledger {
 
     pub(crate) fn proposal(&self, digest: &str) -> Option<&Proposal> {
         self.proposals.iter().find(|p| p.digest == digest)
+    }
+
+    /// 그 판의 적용 재확인이 승인 조건의 변경을 발견했는가 — 그렇다면 그 판은 다시 적용하지 않는다.
+    pub(crate) fn condition_changed(&self, revision: u32) -> bool {
+        self.events.iter().any(|e| matches!(e, Event::ConditionChanged { revision: r, .. } if *r == revision))
     }
 
     pub(crate) fn response(&self, digest: &str) -> Option<&Response> {

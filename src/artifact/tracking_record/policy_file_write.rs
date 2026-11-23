@@ -27,8 +27,10 @@ use crate::artifact::ContentDigest;
 pub(crate) enum PolicyWrite {
     /// 교체했고 다시 읽은 디스크가 이것이다(같기를 기대하지만 견주는 것은 부르는 쪽이다).
     Replaced { reread: DiskReading },
-    /// 교체 전에 멈췄다 — 기존 `.gilignore` 는 건드리지 않았다.
+    /// 교체 전에 장애로 멈췄다(만들기·쓰기·rename 실패) — 기존 `.gilignore` 는 건드리지 않았다.
     NotReplaced { reason: String },
+    /// 교체 직전 재관측이 부르는 쪽이 기대한 디스크와 다른 상태를 발견해 교체하지 않았다 — 장애가 아니라 **조건의 변경**이다.
+    ConditionChanged { reread: DiskReading },
     /// 교체 단계에서 실패해 교체 여부를 모른다.
     Unknown { reason: String },
 }
@@ -88,7 +90,7 @@ pub(crate) fn write_with(
     };
     if !as_expected {
         discard();
-        return not(format!("교체 직전에 다시 본 .gilignore 가 판정 때와 다르다({now:?}) — 덮어쓰지 않았다"));
+        return PolicyWrite::ConditionChanged { reread: now };
     }
     // 같은 파일 시스템 안의 두 디렉터리 핸들 사이 rename. 연결 파일을 따라가지 않는다.
     let renamed = fault("rename").and_then(|()| {

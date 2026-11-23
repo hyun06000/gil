@@ -22,11 +22,11 @@ use std::{collections::BTreeMap, sync::Mutex};
 
 pub(super) const NAMES: &[&str] = &[
     "gil_start", "gil_start_prepare", "gil_start_status", "gil_start_cancel",
-    "gil_start_review", "gil_start_decide", "gil_start_apply",
+    "gil_start_review", "gil_start_decide", "gil_start_apply", "gil_start_list",
 ];
 /// App 전용 두 도구 — 카탈로그 가시성 시험과 Plugin Skill 시험(`skill.test.mjs`)이 이 목록을 읽는다.
 #[cfg_attr(not(test), allow(dead_code))]
-pub(super) const APP_NAMES: &[&str] = &["gil_start_review", "gil_start_decide", "gil_start_apply"];
+pub(super) const APP_NAMES: &[&str] = &["gil_start_review", "gil_start_decide", "gil_start_apply", "gil_start_list"];
 
 #[derive(Debug, Default)]
 pub(super) struct Grants(Mutex<BTreeMap<String, Grant>>);
@@ -66,6 +66,9 @@ struct Apply { scope_id: String, revision: u32, digest: String, token: String }
 struct Review { scope_id: String }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct List { scope_id: String, revision: u32, digest: String, list: String, offset: u32 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Decide { scope_id: String, revision: u32, digest: String, token: String, decision: Decision }
 #[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -83,6 +86,7 @@ pub(super) fn valid(name: &str, input: &Value) -> bool {
         "gil_start_apply" => ok(serde_json::from_value::<Apply>(input.clone()).map(drop)),
         "gil_start_review" => ok(serde_json::from_value::<Review>(input.clone()).map(drop)),
         "gil_start_decide" => ok(serde_json::from_value::<Decide>(input.clone()).map(drop)),
+        "gil_start_list" => ok(serde_json::from_value::<List>(input.clone()).map(drop)),
         _ => false,
     }
 }
@@ -212,6 +216,11 @@ pub(super) fn call(monitor: &Monitor, grants: &Grants, name: &str, input: Value)
                 Err(e) => refused(e),
             }
         }
+        "gil_start_list" => {
+            let Ok(r) = serde_json::from_value::<List>(input) else { return bad() };
+            let root = match monitor.root(&r.scope_id) { Ok(root) => root, Err(e) => return super::actions::refusal(e.said) };
+            sp::list(&root, r.revision, &r.digest, &r.list, r.offset as usize).map(CallToolResult::structured).unwrap_or_else(refused)
+        }
         "gil_start_decide" => {
             let Ok(r) = serde_json::from_value::<Decide>(input) else { return bad() };
             if let Err(why) = grants.take(&r.scope_id, r.revision, &r.digest, &r.token, sp::Purpose::Decide) {
@@ -258,6 +267,10 @@ pub(super) fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
          "App-only: submit explicit trusted Monitor button input for the displayed scope, revision and digest. Requires the private capability from review.",
          input(json!({"scope_id":string,"revision":{"type":"integer","minimum":1},"digest":string,"token":string,"decision":{"type":"string","enum":["approve","request_changes"]}}),
              vec!["scope_id","revision","digest","token","decision"]), true, false),
+        ("gil_start_list",
+         "App-only, read-only: one page (500 entries) of the tracked or excluded list of the exact stored proposal revision/digest the Monitor shows, so a shortened list can be read in full before approval. Creates no approval, application or capability.",
+         input(json!({"scope_id":string,"revision":{"type":"integer","minimum":1},"digest":string,"list":{"type":"string","enum":["tracked","excluded"]},"offset":{"type":"integer","minimum":0}}),
+             vec!["scope_id","revision","digest","list","offset"]), true, true),
         ("gil_start_apply",
          "App-only: on a trusted Monitor click, retry applying the proposal ALREADY approved in the Monitor (after a held application or a lost reply). Requires the private apply capability from review; never creates approval. Under the project lock it rechecks rules, the actual tracked list, path safety and .gilignore, captures the initial Snapshot with the same policy and commits P1, M1, the first Chain and Interview in one save; a repeat after success returns the same start.",
          input(json!({"scope_id":string,"revision":{"type":"integer","minimum":1},"digest":string,"token":string}),

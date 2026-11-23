@@ -46,7 +46,7 @@ mod scoped;
 #[cfg(feature = "tracking-policy")]
 mod tracking_state;
 #[cfg(all(feature = "tracking-policy", unix))]
-pub(crate) use scoped::{capture_scoped, evaluate_scope, observe_scoped};
+pub(crate) use scoped::{ScopedWorld, capture_scoped, evaluate_scope, observe_scoped};
 #[cfg(feature = "tracking-policy")]
 pub(crate) use tracking_state::{StartEvent, StoredTracking, TrackingError, TrackingState, load_policy};
 /// 시작 준비·확정이 쓰는 정책 엔진·기록 모듈의 이름들 — `tracking-policy` 개발 구성 전용 재수출.

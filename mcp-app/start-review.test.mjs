@@ -30,6 +30,7 @@ function rig({ value, token = 'private-token', applyToken = null, decideResult, 
     async callServerTool(call) {
       calls.push(call);
       if (call.name === 'gil_start_review') return { structuredContent: state.value, _meta: state.token ? { 'gil/startApprovalToken': state.token } : applyToken ? { 'gil/startApplyToken': applyToken } : undefined };
+      if (call.name === 'gil_start_list') return { structuredContent: state.listPages[call.arguments.offset] };
       if (refuse) return { isError: true, structuredContent: { said: 'stale' } };
       if (loseReply) throw new Error('reply lost');
       return { structuredContent: decideResult };
@@ -131,4 +132,22 @@ test('an approved but held start offers only a trusted retry of that exact propo
   const sent = r.calls.filter((c) => c.name === 'gil_start_apply');
   assert.deepEqual(sent.map((c) => c.arguments), [{ scope_id: 'project:' + 'a'.repeat(64), revision: 2, digest: 'd'.repeat(64), token: 'apply-token' }]);
   assert.equal(r.calls.filter((c) => c.name === 'gil_start_decide').length, 0, 'a retry is not a new approval');
+});
+
+test('a shortened list is read in full from the same revision without creating approval', async () => {
+  const value = { phase: 'awaiting_approval', said: 'w', proposal: proposal({ tracked_count: 3, tracked: ['a'], tracked_truncated: true }), current: { policy_file: 'present', policy_file_matches_proposal: false } };
+  const r = rig({ value });
+  r.state.listPages = { 0: { revision: 2, digest: 'd'.repeat(64), items: ['a', 'b'], next_offset: 2 }, 2: { revision: 2, digest: 'd'.repeat(64), items: ['c'], next_offset: null } };
+  await r.review.refresh();
+  assert.ok(r.panel.allText().includes(TABLES.ko['start.current_differs'].replace('{now}', 'present')), 'the current disk is reported apart from the approved proposal');
+  const listButton = buttonsOf(r.panel).find((b) => b.textContent === TABLES.ko['start.list_all']);
+  assert.ok(listButton);
+  await listButton.click(false);
+  assert.equal(r.calls.filter((c) => c.name === 'gil_start_list').length, 0, 'untrusted clicks do nothing');
+  await listButton.click(true);
+  const listed = r.calls.filter((c) => c.name === 'gil_start_list');
+  assert.deepEqual(listed.map((c) => c.arguments.offset), [0, 2]);
+  assert.ok(listed.every((c) => c.arguments.digest === 'd'.repeat(64) && c.arguments.revision === 2 && !('token' in c.arguments)));
+  assert.ok(r.panel.allText().includes('c'));
+  assert.equal(r.calls.filter((c) => c.name === 'gil_start_decide' || c.name === 'gil_start_apply').length, 0);
 });

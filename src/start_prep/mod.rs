@@ -109,6 +109,15 @@ fn check_ledger(l: &Ledger) -> Result<(), String> {
         let Ok(address) = crate::artifact::digest_of(&bytes[..]) else { return bad("원문") };
         if address.hex() != p.rules_digest { return bad("원문과 주소가 다르다"); }
         match &p.disk { Disk::Present { digest } if !hex(digest) => return bad("디스크 지문"), Disk::Unconfirmed => return bad("제안의 디스크"), _ => {} }
+        if let Disk::Present { digest } = &p.base && !hex(digest) { return bad("제안 때의 기준"); }
+        let shown = match (&p.disk, &p.disk_text) {
+            (Disk::Absent, None) => true,
+            (Disk::Present { digest }, Some(text)) => B64.decode(text).ok()
+                .and_then(|b| crate::artifact::digest_of(&b[..]).ok()).is_some_and(|d| d.hex() == *digest),
+            _ => false,
+        };
+        if !shown { return bad("제안 때의 디스크 원문"); }
+        if planned_effect(&p.base, &p.disk, &address, p.combination.is_some()) != p.policy_file_effect { return bad("정책 파일 효과"); }
         if let Some(c) = &p.combination
             && (!hex(&c.disk_digest) || !hex(&c.approved_rules_digest) || B64.decode(&c.disk_rules).is_err()) { return bad("결합 출처"); }
         if sp::ProposalDigest::parse(&p.digest).is_none() || proposal_digest(&l.project, p) != p.digest {
@@ -123,6 +132,7 @@ fn check_ledger(l: &Ledger) -> Result<(), String> {
     }
     for e in &l.events {
         let at = match e { Event::Cancel { after_revision } | Event::Restart { after_revision } => *after_revision,
+            Event::ConditionChanged { revision, .. } => *revision,
             Event::CombineAnnounced { approved_revision, .. } => *approved_revision,
             Event::SyncStarted { revision, .. } | Event::SyncSettled { revision, .. } => *revision };
         if at >= l.next_revision { return bad("사건의 판"); }
@@ -294,10 +304,11 @@ pub(crate) fn prepare(root: &str, input: PrepareInput) -> Result<Value, Refusal>
 
     let combination = match input.combine_with_revision {
         None => None,
-        Some(revision) => Some(combination(&ledger, revision, &seen, &policy)?),
+        Some(revision) => Some(combination(&ledger, &root, revision, &seen, &policy)?),
     };
     let recs = recommendations(&root, &input.project_recommendations);
-    let proposal = build_proposal(&ledger, &root, &bytes, &policy, &evaluation, disk, &recs, &input.rules, combination)?;
+    let disk_text = seen.as_ref().map(|(_, b)| B64.encode(b));
+    let proposal = build_proposal(&ledger, &bytes, &policy, &evaluation, disk, disk_text, &recs, &input.rules, combination)?;
     ledger.next_revision += 1;
     ledger.proposals.push(proposal.clone());
     // 적용의 작은 사건 저장이 상한에 걸리지 않도록 여유를 남긴다.
@@ -308,7 +319,7 @@ pub(crate) fn prepare(root: &str, input: PrepareInput) -> Result<Value, Refusal>
     Ok(view::proposal(&root, &ledger, &proposal))
 }
 
-fn combination(ledger: &Ledger, revision: u32, seen: &Option<(ContentDigest, Vec<u8>)>, d: &sp::ApprovedPolicy) -> Result<Combination, Refusal> {
+fn combination(ledger: &Ledger, root: &Path, revision: u32, seen: &Option<(ContentDigest, Vec<u8>)>, d: &sp::ApprovedPolicy) -> Result<Combination, Refusal> {
     let not = |said: String| refuse("combination_not_allowed", said);
     let approved = ledger.proposals.iter().find(|p| p.revision == revision && p.epoch == ledger.epoch())
         .ok_or_else(|| not(tr("start_prep.combination_no_approved")))?;
@@ -328,23 +339,32 @@ fn combination(ledger: &Ledger, revision: u32, seen: &Option<(ContentDigest, Vec
         if *approved_revision == approved.revision && *disk_digest == c_digest.hex())) {
         return Err(not(tr("start_prep.combination_not_announced")));
     }
-    if d.identity().rules_digest() == c_digest || d.identity().rules_digest().hex() == approved.rules_digest {
-        // D 가 B 나 C 와 바이트가 같다면 결합이 아니다 — 그 자체로 새 제안이면 된다.
-        return Err(not(tr("start_prep.combination_same_as_part")));
-    }
+    // D 가 우연히 B 나 C 와 바이트가 같아도 거절하지 않는다 — 결합안은 여전히 그 자체의 판이며 별도 Monitor 승인을 받는다.
+    // 바이트가 같다는 이유로 B 의 승인을 다시 쓰거나 자동 승인하지 않는다.
+    let _ = d;
+    // C 의 실제 효과도 D 를 준비하는 지금 한 번 평가해 저장한다 — 화면은 이 저장값만 보여 준다.
+    let (disk_tracked, disk_problems) = match sp::ApprovedPolicy::compile(sp::EngineVersion::V1, c_bytes) {
+        Ok(c_policy) => match crate::artifact::evaluate_scope(root, &c_policy) {
+            Ok(evaluation) => (Some(evaluation.tracked().iter().map(|f| f.path.as_str().to_owned()).collect()), Vec::new()),
+            Err(e) => (None, vec![e.to_string()]),
+        },
+        Err(rejected) => (None, rejected.problems.iter().map(|p| format!("line {}: {}", p.line, p.reason)).collect()),
+    };
     Ok(Combination {
         approved_revision: approved.revision,
         approved_digest: approved.digest.clone(),
         approved_rules_digest: approved.rules_digest.clone(),
         disk_digest: c_digest.hex(),
         disk_rules: B64.encode(c_bytes),
+        disk_tracked,
+        disk_problems,
     })
 }
 
 #[allow(clippy::too_many_arguments)]
 fn build_proposal(
-    ledger: &Ledger, root: &Path, bytes: &[u8], policy: &sp::ApprovedPolicy, evaluation: &sp::TreeEvaluation,
-    disk: Disk, recs: &[sp::Recommendation], text: &str, combination: Option<Combination>,
+    ledger: &Ledger, bytes: &[u8], policy: &sp::ApprovedPolicy, evaluation: &sp::TreeEvaluation,
+    disk: Disk, disk_text: Option<String>, recs: &[sp::Recommendation], text: &str, combination: Option<Combination>,
 ) -> Result<Proposal, Refusal> {
     let tracked: Vec<String> = evaluation.tracked().iter().map(|f| f.path.as_str().to_owned()).collect();
     let excluded: Vec<Excluded> = evaluation.excluded().iter().map(|e| Excluded {
@@ -382,7 +402,10 @@ fn build_proposal(
         engine: sp::EngineVersion::V1.number(),
         rules: B64.encode(bytes),
         rules_digest: policy.identity().rules_digest().hex(),
+        policy_file_effect: planned_effect(&ledger.base, &disk, policy.identity().rules_digest(), combination.is_some()).into(),
+        base: ledger.base.clone(),
         disk,
+        disk_text,
         tracked,
         excluded,
         blockers: evaluation.blockers().iter().map(ToString::to_string).collect(),
@@ -391,8 +414,36 @@ fn build_proposal(
         combination,
     };
     proposal.digest = proposal_digest(&ledger.project, &proposal);
-    let _ = root;
     Ok(proposal)
+}
+
+/// 이 판을 승인할 수 있는가 — 차단 사유(하위 `.gilignore`)가 없고, 정책 파일 효과가 보류가 아닐 때만. 보류로 정해진 판을
+/// 승인받아 두었다가 나중에 쓰기 권한으로 바꾸는 길을 만들지 않는다.
+pub(super) fn approvable(p: &Proposal) -> bool {
+    p.blockers.is_empty() && !p.policy_file_effect.starts_with("held_")
+}
+
+/// 이 판이 승인되면 정책 파일에 일어날 일 — 제안 때의 기준·디스크·원문만으로 정한다(적용 때의 판정 [`policy_file_plan`] 과 같은
+/// 규칙이며, 적용은 그때의 실제 디스크로 다시 판정한다). 표시를 위해 쓰기 권한을 넓히지 않는다.
+fn planned_effect(base: &Disk, disk: &Disk, rules: &ContentDigest, combination: bool) -> &'static str {
+    let reading = match disk {
+        Disk::Absent => sp::DiskReading::Absent,
+        Disk::Present { digest } => sp::DiskReading::Present(crate::artifact::sha256_from_hex(digest).expect("잰 지문")),
+        Disk::Unconfirmed => return "held_base_undecided",
+    };
+    if matches!(&reading, sp::DiskReading::Present(found) if found == rules) {
+        return "unchanged";
+    }
+    if combination {
+        return "replace_shown_disk";
+    }
+    match sp::base_for_new_policy(rules, &sync_base(base), &reading) {
+        Ok(sp::NewPolicyBase::Chosen(sp::SyncBase::Unconfirmed)) => "not_written_unconfirmed",
+        Ok(sp::NewPolicyBase::Chosen(_)) if matches!(reading, sp::DiskReading::Absent) => "create",
+        Ok(sp::NewPolicyBase::Chosen(_)) => "replace",
+        Ok(sp::NewPolicyBase::Held(_)) => "held_three_way",
+        Err(_) => "held_base_undecided",
+    }
 }
 
 /// 제안 digest — Monitor 가 보여 준 판의 의미 있는 내용 전체(프로젝트·판·원문 주소·엔진·추적/제외 효과·차단·
@@ -400,7 +451,7 @@ fn build_proposal(
 fn proposal_digest(project: &Identity, p: &Proposal) -> String {
     let canonical = json!({
         "project": project, "revision": p.revision, "epoch": p.epoch, "engine": p.engine, "rules_digest": p.rules_digest,
-        "disk": p.disk, "tracked": p.tracked, "excluded": p.excluded, "blockers": p.blockers, "notices": p.notices,
+        "disk": p.disk, "base": p.base, "disk_text": p.disk_text, "policy_file_effect": p.policy_file_effect, "tracked": p.tracked, "excluded": p.excluded, "blockers": p.blockers, "notices": p.notices,
         "recommendations": p.recommendations, "combination": p.combination,
     });
     let mut hash = Sha256::new();
@@ -454,15 +505,33 @@ pub(crate) fn review(root: &Path) -> Result<(Value, Option<(u32, String, Purpose
     let mut value = view::status(root, &ledger, started.as_ref());
     let mut grant = None;
     if let Some(p) = ledger.latest() {
-        value["proposal"] = view::proposal(root, &ledger, p)["proposal"].clone();
+        let shown = view::proposal(root, &ledger, p);
+        value["proposal"] = shown["proposal"].clone();
+        value["current"] = shown["current"].clone();
         let open = started.is_none() && !ledger.canceled();
+        let changed = ledger.condition_changed(p.revision);
         match ledger.response(&p.digest).map(|r| r.decision.as_str()) {
-            None if open && p.blockers.is_empty() => grant = Some((p.revision, p.digest.clone(), Purpose::Decide)),
-            Some("approve") if open => grant = Some((p.revision, p.digest.clone(), Purpose::Apply)),
+            None if open && approvable(p) => grant = Some((p.revision, p.digest.clone(), Purpose::Decide)),
+            Some("approve") if open && !changed => grant = Some((p.revision, p.digest.clone(), Purpose::Apply)),
             _ => {}
         }
     }
     Ok((value, grant))
+}
+
+/// Monitor 가 줄여 보인 목록의 전체를 **같은 제안 판**(판 번호 + digest)에서 쪽 단위로 읽는다. 읽기만 한다 — 승인·적용·
+/// capability 를 만들지 않는다. 그 판이 이제 최신이 아니면 그 사실도 함께 알린다.
+pub(crate) fn list(root: &Path, revision: u32, digest: &str, which: &str, offset: usize) -> Result<Value, Refusal> {
+    let ledger = read_checked(&root.join(crate::artifact::GIL_DIR)).map_err(|e| refuse("preparation_unreadable", e))?
+        .ok_or_else(|| refuse("not_preparing", tr("start_prep.not_preparing")))?;
+    if ledger.project != identity(root)? {
+        return Err(refuse("preparation_other_folder", tr("start_prep.other_folder")));
+    }
+    let p = ledger.proposal(digest).filter(|p| p.revision == revision)
+        .ok_or_else(|| refuse("unknown_proposal", tr("start_prep.unknown_proposal")))?;
+    let mut page = view::list_page(p, which, offset).ok_or_else(|| refuse("unknown_list", tr("start_tool.bad_input")))?;
+    page["latest"] = json!(ledger.latest().is_some_and(|l| l.digest == p.digest));
+    Ok(page)
 }
 
 /// 정식 시작이 확정됐다면 그 기록(P1 의 proposal_digest·M1·A1·C1). 상태 파일이 없으면 `None`.
@@ -518,8 +587,8 @@ pub(crate) fn decide(root: &Path, revision: u32, digest: &str, approve: bool) ->
             if latest.revision != revision || latest.digest != digest {
                 return Err(refuse("stale_proposal", tr("start_prep.stale_proposal")));
             }
-            if approve && !latest.blockers.is_empty() {
-                return Err(refuse("blocked", tr("start_prep.blocked")));
+            if approve && !approvable(latest) {
+                return Err(refuse("blocked", tr(if latest.blockers.is_empty() { "start_prep.policy_file_held" } else { "start_prep.blocked" })));
             }
             let mut after = before.clone();
             after.responses.push(Response { revision, proposal_digest: digest.into(), decision: decision.into(), source: "monitor_button".into() });
@@ -584,6 +653,13 @@ fn apply_path(root: &Path, digest: &str) -> Result<Value, Refusal> {
     if rules.hex() != proposal.rules_digest {
         return Err(refuse("preparation_unreadable", "원문과 주소가 다르다"));
     }
+    // 이 판에서 이미 승인 조건의 변경을 발견했다면 같은 승인으로 다시 적용하지 않는다 — 새 제안과 승인이 필요하다.
+    if let Some(what) = ledger.events.iter().find_map(|e| match e {
+        Event::ConditionChanged { revision, what } if *revision == proposal.revision => Some(what.clone()),
+        _ => None,
+    }) {
+        return Err(refuse_with("condition_changed", tr("start_prep.condition_changed"), json!({"what": what})));
+    }
     // ④ 정책 파일 — 잠금 안에서 다시 관측한다. 이 관측은 쓰기 허가가 아니다: 아래 판정이 허가를 정한다.
     let seen = disk_now(root);
     let plan = policy_file_plan(&mut ledger, &proposal, &rules, &seen);
@@ -591,29 +667,48 @@ fn apply_path(root: &Path, digest: &str) -> Result<Value, Refusal> {
         save(&gate, Some(&before), &ledger)?; // 결합 안내 기록
         return Err(plan.expect_err("안내를 기록한 판정은 보류다"));
     }
-    let plan = plan?;
-    // ⑤ 추적 목록 재확인 — 규칙·목록이 바뀌면 재승인. 내용만 바뀐 것은 아래 안정 관측이 본다.
-    let evaluation = crate::artifact::evaluate_scope(root, &policy).map_err(|e| refuse("scope_unobservable", e.to_string()))?;
+    let plan = match plan {
+        Ok(plan) => plan,
+        Err(held) if held.code == "policy_file_changed" => return Err(condition(&gate, root, &proposal, "policy_file", held)),
+        Err(held) => return Err(held),
+    };
+    // ⑤ 추적 목록·경로 재확인 — 규칙·목록·경로 조건이 바뀌면 이 판으로 시작하지 않는다(새 제안·재승인). 관측이 흔들렸을 뿐이면
+    //    (동시 변경·읽기 실패) 조건 변경이 아니므로 승인은 그대로이고 다시 시도할 수 있다. 내용만 바뀐 것은 아래 안정 관측이 본다.
+    let evaluation = match crate::artifact::evaluate_scope(root, &policy) {
+        Ok(evaluation) => evaluation,
+        Err(e) if is_condition(&e) => return Err(condition(&gate, root, &proposal, "path",
+            refuse_with("condition_changed", tr("start_prep.condition_changed"), json!({"what": "path", "said": e.to_string()})))),
+        Err(e) => return Err(refuse_with("observation_unstable", tr("start_prep.observation_unstable"), json!(e.to_string()))),
+    };
     if !evaluation.blockers().is_empty() {
-        return Err(refuse_with("blocked", tr("start_prep.blocked"), json!(evaluation.blockers().iter().map(ToString::to_string).collect::<Vec<_>>())));
+        let held = refuse_with("blocked", tr("start_prep.blocked"), json!(evaluation.blockers().iter().map(ToString::to_string).collect::<Vec<_>>()));
+        return Err(condition(&gate, root, &proposal, "nested_policy_file", held));
     }
     let now: Vec<String> = evaluation.tracked().iter().map(|f| f.path.as_str().to_owned()).collect();
     if now != proposal.tracked {
-        return Err(scope_changed(&proposal.tracked, &now));
+        return Err(condition(&gate, root, &proposal, "tracked_list", scope_changed(&proposal.tracked, &now)));
     }
-    // ⑥ 원문 객체를 상태보다 먼저 확정한다.
+    // ⑥ 원문 객체를 상태보다 먼저 확정한다. 실패는 저장 장애이며 승인은 그대로다.
     sp::store_policy_source(&gate.store, policy.identity().engine(), &rules, &bytes)
         .map_err(|e| refuse("policy_source_not_stored", format!("{e:?}")))?;
     // ⑦ 같은 정책으로 최초 세계를 두 번 관측·보관한다. 실패하면 정식 시작을 만들지 않고 정책 파일도 건드리지 않는다.
     //    루트 `.gilignore` 는 시스템 보호라 보관 세계에 들어가지 않으므로, 파일 쓰기를 뒤에 두어도 보관 내용은 같다.
-    let world = crate::artifact::capture_scoped(root, &policy, &gate.store)
-        .map_err(|e| refuse_with("capture_failed", tr("start_prep.capture_failed"), json!(e.to_string())))?;
+    let world = match capture(root, &policy, &gate.store) {
+        Ok(world) => world,
+        Err(e) if is_condition(&e) => return Err(condition(&gate, root, &proposal, "path",
+            refuse_with("condition_changed", tr("start_prep.condition_changed"), json!({"what": "path", "said": e.to_string()})))),
+        Err(e) => return Err(refuse_with("capture_failed", tr("start_prep.capture_failed"), json!(e.to_string()))),
+    };
     if world.tracked_paths() != proposal.tracked {
-        return Err(scope_changed(&proposal.tracked, &world.tracked_paths()));
+        return Err(condition(&gate, root, &proposal, "tracked_list", scope_changed(&proposal.tracked, &world.tracked_paths())));
     }
     let address = gate.store.put_manifest(&world.manifest).map_err(|e| refuse("capture_failed", e.to_string()))?;
-    // ⑧ 정책 파일 쓰기(§5.2) — 시작 전 기준은 준비 기록에 둔다. 판정(④) 뒤 같은 잠금 안이다. 실패는 승인을 취소하지 않는다.
-    let (final_base, file) = sync_policy_file(&gate, &mut ledger, &before, &proposal, &bytes, &rules, plan, root)?;
+    // ⑧ 정책 파일 쓰기(§5.2) — 시작 전 기준은 준비 기록에 둔다. 판정(④) 뒤 같은 잠금 안이다. 확인된 쓰기 장애·결과 불확실은
+    //    승인을 취소하지 않고 기준으로 따로 남긴다. 재확인이 디스크의 변경을 발견하면 쓰지 않고 시작도 하지 않는다.
+    let (final_base, file) = match sync_policy_file(&gate, &mut ledger, &before, &proposal, &bytes, &rules, plan, root)? {
+        Synced::Done { base, result } => (base, result),
+        Synced::ConditionChanged(held) => return Err(condition(&gate, root, &proposal, "policy_file", held)),
+    };
     // ⑨ 정책 판 P1·사건 M1·기준점·첫 Chain·첫 Interview Entry — 한 번의 상태 저장.
     let record = sp::PolicyRecord::new(
         sp::PolicyName::new(1).expect("P1"), policy.identity().engine(), rules.clone(),
@@ -622,13 +717,63 @@ fn apply_path(root: &Path, digest: &str) -> Result<Value, Refusal> {
     let project = crate::Project::start_tracked(crate::RuleSet::builtin().map_err(|e| refuse("unavailable", e.to_string()))?, address, record, final_base)
         .map_err(|e| refuse("start_not_valid", e.to_string()))?;
     let session = gate.into_session(project);
-    session.commit().map_err(|e| refuse_with("start_not_saved", tr("start_prep.start_not_saved"), json!(e.to_string())))?;
+    let committed = commit(&session);
     drop(session);
-    // ⑩ 저장한 것을 다시 읽어(같은 load 검사 전체) 결과를 말한다.
-    let started = started_record(root)?.ok_or_else(|| refuse("start_not_saved", tr("start_prep.start_not_saved")))?;
+    // ⑩ 저장 결과를 다시 읽어(같은 load 검사 전체) 말한다. 저장이 오류를 돌려줬어도 결과가 불확실할 수 있으므로 조회로 가린다:
+    //    확정돼 있으면 시작이고(응답만 불확실했다), 상태 파일이 없으면 시작하지 않았고, 읽을 수 없으면 불확실로 보고한다.
+    let started = match (started_record(root), committed) {
+        (Ok(Some(started)), _) => started,
+        (Ok(None), Err(e)) => return Err(refuse_with("start_not_saved", tr("start_prep.start_not_saved"), json!(e))),
+        (Ok(None), Ok(())) | (Err(_), _) => return Err(refuse("start_uncertain", tr("start_prep.start_uncertain"))),
+    };
     let mut out = view::started(root, &started, false);
     out["policy_file"] = json!(file);
+    out["facts"]["policy_file_write"] = json!(file);
     Ok(out)
+}
+
+/// 관측 오류 가운데 **승인 조건의 변경**(경로 종류·연결 파일·특수 항목·중첩 경계·하위 정책 파일·적을 수 없는 이름)과, 관측이
+/// 흔들렸을 뿐인 경우(두 관측 사이의 변경·읽기 실패·객체 창고 오류)를 가른다. 뒤쪽은 승인을 그대로 두고 다시 시도할 수 있다.
+fn is_condition(error: &crate::artifact::ObserveError) -> bool {
+    use crate::artifact::ObserveError as E;
+    !matches!(error, E::ChangedDuringObservation | E::ReadFailed { .. } | E::ObjectStore(_))
+}
+
+/// 승인 조건의 변경을 준비 기록에 남기고(이 판은 다시 적용하지 않는다) 그 보류를 돌려준다. 앞선 사실은 지우지 않는다.
+/// 기록 저장이 실패해도 보류는 그대로다 — 다음 시도가 같은 변경을 다시 발견한다.
+fn condition(gate: &crate::session::StartGate, root: &Path, proposal: &Proposal, what: &str, held: Refusal) -> Refusal {
+    if let Ok(Some(saved)) = load_ledger(gate, root) {
+        let mut after = saved.clone();
+        after.events.push(Event::ConditionChanged { revision: proposal.revision, what: what.into() });
+        let _ = save(gate, Some(&saved), &after);
+    }
+    held
+}
+
+#[cfg(not(test))]
+fn capture(root: &Path, policy: &sp::ApprovedPolicy, store: &crate::artifact::ObjectStore) -> Result<crate::artifact::ScopedWorld, crate::artifact::ObserveError> {
+    crate::artifact::capture_scoped(root, policy, store)
+}
+
+#[cfg(not(test))]
+fn commit(session: &crate::ProjectSession) -> Result<(), String> {
+    session.commit().map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+fn capture(root: &Path, policy: &sp::ApprovedPolicy, store: &crate::artifact::ObjectStore) -> Result<crate::artifact::ScopedWorld, crate::artifact::ObserveError> {
+    if CAPTURE_FAULT.with(|f| f.borrow_mut().take()).is_some() {
+        return Err(crate::artifact::ObserveError::ChangedDuringObservation);
+    }
+    crate::artifact::capture_scoped(root, policy, store)
+}
+
+#[cfg(test)]
+fn commit(session: &crate::ProjectSession) -> Result<(), String> {
+    if COMMIT_FAULT.with(|f| f.borrow_mut().take()).is_some() {
+        return Err("시험이 넣은 저장 실패".into());
+    }
+    session.commit().map_err(|e| e.to_string())
 }
 
 fn scope_changed(approved: &[String], now: &[String]) -> Refusal {
@@ -662,6 +807,18 @@ fn policy_file_plan(
     if matches!(&disk, sp::DiskReading::Present(found) if found == rules) {
         return Ok(FilePlan::Matches);
     }
+    // 승인 조건: 승인된 판이 보여 준 디스크(`proposal.disk`)와 지금 디스크가 다르면 그것은 규칙 입력의 변경이다. 예외는
+    // 좁은 결합 예외의 입구(기준·B 의 디스크 모두 없음 → 그 뒤 처음 생긴 C)와 결합안 자체(아래)뿐이다.
+    let shown = match &proposal.disk {
+        Disk::Absent => sp::DiskReading::Absent,
+        Disk::Present { digest } => sp::DiskReading::Present(crate::artifact::sha256_from_hex(digest).expect("잰 지문")),
+        Disk::Unconfirmed => sp::DiskReading::Unreadable { reason: String::new() },
+    };
+    if let sp::DiskReading::Unreadable { reason } = &disk {
+        // 읽지 못함은 변경의 증거도 동일의 증거도 아니다 — 쓰지 않고 이번 적용을 멈춘다(승인은 그대로, 다시 시도할 수 있다).
+        return Err(refuse_with("policy_file_unreadable", tr("start_prep.policy_file_unreadable"), json!(reason)));
+    }
+    let changed = || Err(refuse("policy_file_changed", tr("start_prep.policy_file_changed")));
     if let Some(comb) = &proposal.combination {
         // 결합안 D: 승인 화면이 보여 준 C 가 아직 그대로일 때만 C → D 교체를 허락한다. 승인 뒤 달라진 디스크는 덮어쓰지 않는다.
         return match (&ledger.base, &disk) {
@@ -670,11 +827,13 @@ fn policy_file_plan(
             // 앞선 시도가 쓰기를 시작했으나 끝을 확인하지 못했다 — 디스크가 아직 보여 준 C 여도 자동으로 쓰지 않는다(§5.2).
             (Disk::Unconfirmed, sp::DiskReading::Present(found)) if found.hex() == comb.disk_digest =>
                 Ok(FilePlan::Keep { base: sp::SyncBase::Unconfirmed }),
-            _ => Err(refuse("changed_after_approval", tr("start_prep.changed_after_approval"))),
+            _ => Err(refuse("policy_file_changed", tr("start_prep.changed_after_approval"))),
         };
     }
     let base = sync_base(&ledger.base);
     match sp::base_for_new_policy(rules, &base, &disk) {
+        // 쓰기·유지로 정해지는 조합이라도, 승인된 판이 보여 준 디스크와 지금 디스크가 다르면 규칙 입력이 바뀐 것이다.
+        Ok(sp::NewPolicyBase::Chosen(_)) if disk != shown => changed(),
         Ok(sp::NewPolicyBase::Chosen(chosen)) => Ok(match (&disk, &chosen) {
             (sp::DiskReading::Present(found), _) if found == rules => FilePlan::Matches,
             (sp::DiskReading::Absent, sp::SyncBase::Absent) => FilePlan::Write { previous: Disk::Absent, expect: None },
@@ -686,16 +845,10 @@ fn policy_file_plan(
             "base": three.base.hex(), "approved": three.new_rules.hex(), "disk": three.disk.hex(),
             "disk_text": seen.as_ref().ok().and_then(|s| s.as_ref()).map(|(_, b)| String::from_utf8_lossy(b).into_owned()),
         }))),
-        // 파생 규칙(2026-11-23 결정의 ④ 와 같은 근거): 시작 전 기준은 없음인데 그 뒤 생긴 C 를 **제안이 이미 보여 주고**
-        // (정책 파일 효과 「교체」 + 차이) 사용자가 그 제안을 Monitor 에서 승인했다면, 그 승인은 보여 준 바로 그 C 의 교체를 덮는다.
-        // 지금 디스크가 그 C 일 때만 쓴다. 다른 C′ 는 승인 뒤의 변경이므로 덮어쓰지 않는다.
+        // 좁은 결합 예외의 입구는 **승인된 B 의 제안 당시 디스크도 없음**이었을 때뿐이다(B 승인 뒤 처음 생긴 C). B 의 제안이
+        // 이미 어떤 파일을 보여 줬다면 그것은 이 예외가 아니다 — 표시만으로 쓰기 권한을 만들지 않고 아래 보류(BaseUndecided)로 둔다.
         Err(sp::BaseUndecided { base: sp::SyncBase::Absent, disk: sp::DiskReading::Present(found) })
-            if matches!(&proposal.disk, Disk::Present { digest } if *digest == found.hex()) =>
-            Ok(FilePlan::Write { previous: Disk::Absent, expect: Some(found.hex()) }),
-        Err(sp::BaseUndecided { base: sp::SyncBase::Absent, disk: sp::DiskReading::Present(_) })
-            if matches!(&proposal.disk, Disk::Present { .. }) =>
-            Err(refuse("changed_after_approval", tr("start_prep.changed_after_approval"))),
-        Err(sp::BaseUndecided { base: sp::SyncBase::Absent, disk: sp::DiskReading::Present(found) }) => {
+            if proposal.disk == Disk::Absent => {
             // 좁은 결합 예외의 입구 — 한 번 안내하고 결합안 D 의 준비를 기다린다. 허락을 따로 묻지 않는다.
             let announced = ledger.events.iter().any(|e| matches!(e,
                 Event::CombineAnnounced { approved_revision, disk_digest } if *approved_revision == proposal.revision && *disk_digest == found.hex()));
@@ -710,26 +863,35 @@ fn policy_file_plan(
                 "announce_once": !announced,
             })))
         }
+        Err(_) if disk != shown => changed(),
         Err(undecided) => Err(refuse_with("base_undecided", tr("start_prep.base_undecided"), json!(format!("{undecided:?}")))),
     }
+}
+
+/// 정책 파일 쓰기의 결과 — 시작을 이어 가도 되는 결과(쓰기 성공·확인된 쓰기 장애·결과 불확실은 모두 기준으로 따로 남는다)와,
+/// 재확인이 승인 조건(디스크)의 변경을 발견해 시작을 멈춰야 하는 결과.
+enum Synced {
+    Done { base: sp::SyncBase, result: &'static str },
+    ConditionChanged(Refusal),
 }
 
 #[allow(clippy::too_many_arguments)]
 fn sync_policy_file(
     gate: &crate::session::StartGate, ledger: &mut Ledger, before: &Ledger, proposal: &Proposal, bytes: &[u8],
     rules: &ContentDigest, plan: FilePlan, root: &Path,
-) -> Result<(sp::SyncBase, &'static str), Refusal> {
+) -> Result<Synced, Refusal> {
     let present = sp::SyncBase::Present(rules.clone());
+    let changed = || refuse("policy_file_changed", tr("start_prep.policy_file_changed"));
     match plan {
-        FilePlan::Matches => Ok((present, "already_matches")),
-        FilePlan::Keep { base } => Ok((base, "not_written")),
+        FilePlan::Matches => Ok(Synced::Done { base: present, result: "already_matches" }),
+        FilePlan::Keep { base } => Ok(Synced::Done { base, result: "not_written" }),
         FilePlan::Write { previous, expect } => {
             // 0단계 재확인: 판정(④) 뒤 capture 까지 시간이 흘렀다. 디스크가 판정 때와 다르면 쓰지 않고 시작도 하지 않는다 —
             // 사용자가 그사이 정책 파일을 고쳤다면 그것은 규칙 변경이며 새 제안·승인의 일이다.
             let now = disk_now(root).map(|seen| disk_value(&seen).clone());
             let want = match &expect { Some(d) => Disk::Present { digest: d.clone() }, None => Disk::Absent };
             if now.as_ref() != Ok(&want) {
-                return Err(refuse("policy_file_changed", tr("start_prep.policy_file_changed")));
+                return Ok(Synced::ConditionChanged(changed()));
             }
             // 1단계: 쓰기 시작을 먼저 남긴다(기준 unconfirmed). 이 저장이 실패하면 쓰지 않는다.
             let mut marked = ledger.clone();
@@ -740,13 +902,18 @@ fn sync_policy_file(
             // 2단계: 파일 쓰기.
             let expected = expect.as_deref().map(|d| crate::artifact::sha256_from_hex(d).expect("판정이 잰 지문"));
             let outcome = write_policy(root, bytes, expected.as_ref());
+            // 판정 뒤 디스크가 판정 때와 다르면(교체 직전 재관측, 또는 교체 전 장애 뒤의 재관측) 조건 변경이다: 쓰지 않았고
+            // 기준은 unconfirmed 로 남으며(쓰기를 시작했으므로 되돌리지 않는다) 시작하지 않는다.
             let (base, result) = match outcome {
                 sp::PolicyWrite::Replaced { reread: sp::DiskReading::Present(found) } if &found == rules => (present, "written"),
-                sp::PolicyWrite::NotReplaced { .. } => {
-                    // 교체 전에 멈췄다 — 같은 잠금 안에서 다시 읽은 디스크가 이전 기준과 같을 때만 그 기준으로 되돌린다.
-                    let reread = disk_value(&disk_now(root).unwrap_or(Some((rules.clone(), Vec::new()))));
-                    if reread == previous { (sync_base(&previous), "update_failed") } else { (sp::SyncBase::Unconfirmed, "unsettled") }
-                }
+                sp::PolicyWrite::ConditionChanged { .. } => (sp::SyncBase::Unconfirmed, "condition_changed"),
+                sp::PolicyWrite::NotReplaced { .. } => match disk_now(root) {
+                    // 교체 전의 확인된 장애 — 같은 잠금 안에서 다시 읽은 디스크가 이전 기준과 같을 때만 그 기준으로 되돌린다.
+                    Ok(seen) if disk_value(&seen) == previous => (sync_base(&previous), "update_failed"),
+                    Ok(seen) if Some(disk_value(&seen)) != Some(want.clone()) => (sp::SyncBase::Unconfirmed, "condition_changed"),
+                    _ => (sp::SyncBase::Unconfirmed, "unsettled"),
+                },
+                // 교체 뒤 재확인 불일치·교체 여부 불명 — 결과 불확실. 승인을 취소하지 않고 기준을 unconfirmed 로 남긴다.
                 _ => (sp::SyncBase::Unconfirmed, "unsettled"),
             };
             // 3단계: 결과의 기준을 준비 기록에도 남긴다. 실패해도 정식 시작의 저장이 같은 값을 지닌다.
@@ -758,7 +925,10 @@ fn sync_policy_file(
             };
             settled.events.push(Event::SyncSettled { revision: proposal.revision, result: result.into(), base: settled.base.clone() });
             if save(gate, Some(&marked), &settled).is_ok() { *ledger = settled; }
-            Ok((base, result))
+            if result == "condition_changed" {
+                return Ok(Synced::ConditionChanged(changed()));
+            }
+            Ok(Synced::Done { base, result })
         }
     }
 }
@@ -773,6 +943,10 @@ thread_local! {
     pub(crate) static WRITE_FAULT: std::cell::RefCell<Option<&'static str>> = const { std::cell::RefCell::new(None) };
     /// 교체 직전 재관측 바로 앞에서 디스크에 쓸 바이트 — 판정 뒤의 사용자 편집을 흉내 낸다.
     pub(crate) static EDIT_BEFORE_REPLACE: std::cell::RefCell<Option<Vec<u8>>> = const { std::cell::RefCell::new(None) };
+    /// 한 번의 최초 capture 를 관측 불안정(두 관측 사이 변경)으로 실패시킨다 — 다시 시도할 수 있는 장애.
+    pub(crate) static CAPTURE_FAULT: std::cell::RefCell<Option<()>> = const { std::cell::RefCell::new(None) };
+    /// 한 번의 최종 상태 저장을 실패로 보고하게 한다(저장은 하지 않는다).
+    pub(crate) static COMMIT_FAULT: std::cell::RefCell<Option<()>> = const { std::cell::RefCell::new(None) };
 }
 
 #[cfg(test)]

@@ -472,4 +472,12 @@ export default {
   "start.undelivered": "Delivery to the chat was not confirmed. Ask in the chat to read gil_start_status and continue.",
   "start.apply_retry": "Retry applying the approved proposal",
   "start.apply_note": "This does not approve anything new. It applies the proposal you already approved, after checking the folder again.",
+  "start.list_all": "Show the whole list of this proposal",
+  "start.list_complete": "Whole list of this proposal: {n} entries.",
+  "start.current_differs": "The .gilignore on disk now ({now}) differs from what this proposal showed. Approving it will not overwrite the change; the application will hold and a new proposal will be needed.",
+  "start.disk_problems": "The file on disk cannot be interpreted by the engine: {problems}",
+  "start.policy_file.replace_shown_disk": "Replaces exactly the file shown here with the combined text (difference below). A later change of that file is not overwritten.",
+  "start.policy_file.not_written_unconfirmed": "Not written: an earlier write was not confirmed, so the file is never overwritten automatically.",
+  "start.policy_file.held_base_undecided": "Held: the file on disk does not match what GIL confirmed earlier. This proposal cannot be approved; tidy the file with the user first.",
+  "start.policy_file.held_three_way": "Held: the last confirmed file, this proposal and the current file all differ. This proposal cannot be approved until the difference is resolved explicitly.",
 };

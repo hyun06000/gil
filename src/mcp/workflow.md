@@ -156,7 +156,8 @@ This does not require author tracking, write hooks or a new Snapshot for every n
    Do not create project files while preparing. A nested `.gilignore` holds the start: explain it and
    tidy it only with the user's consent. After a lost reply, restart or reconnect read `gil_start_status`
    once; if it says `approved` but not started, ask the user to press the Monitor's retry button — no model
-   tool applies a start. `scope_changed` needs a new proposal and approval. On `combine_required` tell the user once that you will combine the approved rules and
+   tool applies a start. A detected condition change (`scope_changed`, `condition_changed`, `policy_file_changed`) needs a new
+   proposal and approval; an unstable observation or a storage failure keeps the approval for a Monitor retry. On `combine_required` tell the user once that you will combine the approved rules and
    the file now on disk (do not ask whether you may), write the combined text keeping the engine's
    last-matching-rule order and send it with `combine_with_revision`; it needs its own Monitor approval.
    Cancel only on the user's explicit request (`gil_start_cancel`); a closed app is not a cancel, and a

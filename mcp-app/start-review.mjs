@@ -29,11 +29,15 @@ export function makeStartReview({ app, scope, panel, document, changed = () => {
     panel.append(text('p', t('start.identity', { engine: p.engine, digest: String(p.digest).slice(0, 16) })));
     panel.append(text('h4', t('start.rules')));
     panel.append(text('pre', p.rules));
+    const showExcluded = (e) => `${e.path} — ${e.reason}${e.interior === 'not_explored' ? ` · ${t('start.not_explored')}` : ''}`;
     panel.append(text('h4', t('start.tracked', { n: p.tracked_count })));
-    panel.append(list(p.tracked, (path) => path));
-    if (p.tracked_truncated) panel.append(text('p', t('start.truncated')));
+    const tracked = list(p.tracked, (path) => path);
+    panel.append(tracked);
+    if (p.tracked_truncated) fullList(p, 'tracked', tracked, (path) => path);
     panel.append(text('h4', t('start.excluded', { n: p.excluded_count })));
-    panel.append(list(p.excluded, (e) => `${e.path} — ${e.reason}${e.interior === 'not_explored' ? ` · ${t('start.not_explored')}` : ''}`));
+    const excluded = list(p.excluded, showExcluded);
+    panel.append(excluded);
+    if (p.excluded_truncated) fullList(p, 'excluded', excluded, showExcluded);
     panel.append(text('h4', t('start.protections')));
     panel.append(list(p.system_protections, (s) => s.shown));
     panel.append(text('h4', t('start.recommendations')));
@@ -44,6 +48,7 @@ export function makeStartReview({ app, scope, panel, document, changed = () => {
     if (Array.isArray(p.policy_file?.diff)) panel.append(text('pre', p.policy_file.diff.join('\n')));
     if (p.combination) {
       const c = p.combination;
+      if ((c.disk_problems || []).length) panel.append(text('p', t('start.disk_problems', { problems: c.disk_problems.join('; ') })));
       panel.append(text('h4', t('start.combination', { revision: c.approved_revision })));
       panel.append(text('p', t('start.combination_note')));
       panel.append(text('h4', t('start.diff_vs_approved')), text('pre', (c.diff_vs_approved || []).join('\n')));
@@ -57,6 +62,33 @@ export function makeStartReview({ app, scope, panel, document, changed = () => {
       panel.append(text('h4', t('start.blockers')));
       panel.append(list(p.blockers, (line) => line));
     }
+  }
+
+  // A shortened list says so, and the whole list of THIS stored revision can be read before approving.
+  // Reading pages creates no approval, application or capability.
+  function fullList(p, which, ul, show) {
+    const note = text('p', t('start.truncated'));
+    const more = text('button', t('start.list_all')); more.type = 'button';
+    more.addEventListener('click', async (event) => {
+      if (!event.isTrusted || stopped || busy) return;
+      more.disabled = true;
+      try {
+        const items = []; let offset = 0;
+        for (;;) {
+          const result = await app.callServerTool({ name: 'gil_start_list', arguments: { scope_id: scope, revision: p.revision, digest: p.digest, list: which, offset } }, { timeout: 10000 });
+          const page = result.structuredContent;
+          if (result.isError || !page || page.digest !== p.digest || page.revision !== p.revision) throw new Error(page?.said || t('start.read_failed'));
+          items.push(...page.items);
+          if (page.next_offset == null) break;
+          offset = page.next_offset;
+        }
+        if (stopped || value?.proposal?.digest !== p.digest) return;
+        ul.replaceChildren(...items.map((item) => text('li', show(item))));
+        note.textContent = t('start.list_complete', { n: items.length });
+        more.remove();
+      } catch (e) { if (!stopped) { note.textContent = e.message || t('start.read_failed'); more.disabled = false; } }
+    });
+    panel.append(note, more);
   }
 
   function buttons(p) {
@@ -125,11 +157,13 @@ export function makeStartReview({ app, scope, panel, document, changed = () => {
     }
     if (value?.proposal) {
       proposalSection(value.proposal);
+      // The current disk is an observation, not part of what is approved; a difference means the application will hold.
+      if (value.current && value.current.policy_file_matches_proposal === false) panel.append(text('p', t('start.current_differs', { now: value.current.policy_file })));
       if (value.proposal.response) {
         panel.append(text('p', t('start.responded', { decision: value.proposal.response.decision })));
         if (value.phase === 'approved' && value.proposal.response.decision === 'approve') applyButton(value.proposal);
       }
-      else if (value.phase === 'awaiting_approval' || value.phase === 'blocked') buttons(value.proposal);
+      else if (['awaiting_approval', 'blocked', 'policy_file_held'].includes(value.phase)) buttons(value.proposal);
     }
     rereadButton();
   }

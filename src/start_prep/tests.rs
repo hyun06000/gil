@@ -185,7 +185,8 @@ fn a_disk_changed_after_the_combined_approval_is_never_overwritten() {
     // D 가 보여 준 C 와 다른 C' 로 사용자가 다시 바꾼다.
     fs::write(root.join(".gilignore"), "node_modules/\n# edited again\n").unwrap();
     let held = approve(&root, &dv).unwrap();
-    assert_eq!(held["application_held"]["code"], "changed_after_approval", "{held}");
+    assert_eq!(held["application_held"]["code"], "policy_file_changed", "{held}");
+    assert_eq!(held["phase"], "condition_changed", "이 판은 다시 적용하지 않는다");
     assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), "node_modules/\n# edited again\n");
     assert!(!state(&root).exists());
 }
@@ -217,6 +218,10 @@ fn a_changed_tracked_list_needs_reapproval_but_content_only_and_excluded_interio
     let held = approve(&root, &p).unwrap();
     assert_eq!(held["application_held"]["code"], "scope_changed");
     assert_eq!(held["application_held"]["detail"]["added"][0], "NEW.txt");
+    fs::remove_file(root.join("NEW.txt")).unwrap();
+    assert_eq!(apply(&root, proposal_of(&p).0, &proposal_of(&p).1).unwrap_err().code, "condition_changed",
+        "목록을 되돌려도 같은 판의 승인을 다시 쓰지 않는다 — 새 제안·재승인이 필요하다");
+    fs::write(root.join("NEW.txt"), "new\n").unwrap();
     assert!(!root.join(".gilignore").exists(), "보류된 적용은 정책 파일도 쓰지 않는다");
     assert!(!state(&root).exists() && !objects_exist(&root) || !state(&root).exists());
 
@@ -372,23 +377,6 @@ fn an_interrupted_write_is_not_retried_automatically_when_the_disk_differs() {
     assert!(!root.join(".gilignore").exists(), "unconfirmed 에서는 자동으로 쓰지 않는다");
 }
 
-#[test]
-fn an_unobservable_world_commits_no_start_and_keeps_the_approval() {
-    let root = project("capture-fail");
-    begin(&s(&root)).unwrap();
-    let p = prepared(&root, RULES_B);
-    // 승인 뒤 추적 영역에 특수 항목이 생긴다 → 관측 불가. 정식 시작 없음, 승인 응답은 남는다.
-    let fifo = std::ffi::CString::new(root.join("src/pipe").display().to_string()).unwrap();
-    assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
-    let held = approve(&root, &p).unwrap();
-    assert_eq!(held["phase"], "approved");
-    assert_eq!(held["application_held"]["code"], "scope_unobservable", "{held}");
-    assert!(!state(&root).exists());
-    assert!(!root.join(".gilignore").exists(), "관측 불가로 멈춘 적용은 정책 파일을 쓰지 않는다");
-    fs::remove_file(root.join("src/pipe")).unwrap();
-    assert_eq!(apply(&root, proposal_of(&p).0, &proposal_of(&p).1).unwrap()["phase"], "started");
-}
-
 // ── load 의 연결 검사 ──────────────────────────────────────────────────────
 
 fn started_project(label: &str) -> (PathBuf, String) {
@@ -498,9 +486,8 @@ fn a_swapped_rules_text_or_a_damaged_record_is_never_read_as_approved() {
     let root = project("swapped");
     begin(&s(&root)).unwrap();
     let p = prepared(&root, RULES_B);
-    fs::write(root.join("NEW.txt"), "hold the application\n").unwrap();
-    assert_eq!(approve(&root, &p).unwrap()["application_held"]["code"], "scope_changed");
-    fs::remove_file(root.join("NEW.txt")).unwrap();
+    CAPTURE_FAULT.with(|f| *f.borrow_mut() = Some(())); // 다시 시도할 수 있는 보류로 승인만 남긴다
+    assert_eq!(approve(&root, &p).unwrap()["application_held"]["code"], "capture_failed");
     let path = root.join(".gil/start/preparation.json");
     let saved = fs::read(&path).unwrap();
     use base64::Engine as _;
@@ -525,42 +512,6 @@ fn a_swapped_rules_text_or_a_damaged_record_is_never_read_as_approved() {
 }
 
 #[test]
-fn a_file_created_before_the_first_proposal_is_replaced_only_as_shown() {
-    let root = project("shown-c");
-    begin(&s(&root)).unwrap(); // 기준 absent
-    fs::write(root.join(".gilignore"), "node_modules/\n").unwrap(); // 첫 제안 전에 생긴 C
-    let p = prepared(&root, RULES_B);
-    assert_eq!(p["proposal"]["policy_file"]["effect"], "replace", "제안이 C 의 교체를 보여 준다");
-    let started = approve(&root, &p).unwrap();
-    assert_eq!(started["phase"], "started", "{started}");
-    assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), RULES_B);
-
-    let other = project("shown-c-changed");
-    begin(&s(&other)).unwrap();
-    fs::write(other.join(".gilignore"), "node_modules/\n").unwrap();
-    let p = prepared(&other, RULES_B);
-    fs::write(other.join(".gilignore"), "node_modules/\n# edited after the proposal\n").unwrap();
-    let held = approve(&other, &p).unwrap();
-    assert_eq!(held["application_held"]["code"], "changed_after_approval", "{held}");
-    assert_eq!(fs::read_to_string(other.join(".gilignore")).unwrap(), "node_modules/\n# edited after the proposal\n");
-}
-
-#[test]
-fn an_edit_right_before_the_replacement_is_kept_and_the_base_stays_unconfirmed() {
-    let root = project("edit-before-replace");
-    begin(&s(&root)).unwrap();
-    let p = prepared(&root, RULES_B);
-    EDIT_BEFORE_REPLACE.with(|e| *e.borrow_mut() = Some(b"*.tmp\n".to_vec()));
-    let started = approve(&root, &p).unwrap();
-    assert_eq!(started["policy_file"], "unsettled", "{started}");
-    assert_eq!(started["started"]["policy_file_sync_base"], "unconfirmed");
-    assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), "*.tmp\n", "교체 직전의 사용자 편집을 덮어쓰지 않는다");
-    let leftovers: Vec<_> = fs::read_dir(root.join(".gil/start")).unwrap().filter_map(Result::ok)
-        .filter(|e| e.file_name().to_string_lossy().ends_with(".writing")).collect();
-    assert!(leftovers.is_empty(), "임시 파일은 GIL 내부 자리에만 만들고 치운다");
-}
-
-#[test]
 fn a_combination_needs_the_announcement_and_the_latest_approved_proposal() {
     let root = project("combine-guard");
     begin(&s(&root)).unwrap();
@@ -569,4 +520,170 @@ fn a_combination_needs_the_announcement_and_the_latest_approved_proposal() {
     fs::write(root.join(".gilignore"), "*.log\n").unwrap();
     let early = prepare(&s(&root), PrepareInput { rules: "x/\n".into(), project_recommendations: vec![], combine_with_revision: Some(proposal_of(&b).0), restart_canceled: false }).unwrap_err();
     assert_eq!(early.code, "combination_not_allowed");
+}
+
+// ── 수정 묶음(2026-11-23 검토 결함 네 가지)의 회귀 ─────────────────────────
+
+#[test]
+fn a_file_shown_on_an_absent_base_stays_held_and_is_not_made_writable() {
+    let root = project("absent-shown");
+    begin(&s(&root)).unwrap(); // 실제 준비 기준: 없음
+    fs::write(root.join(".gilignore"), "node_modules/\n").unwrap(); // 첫 제안 전에 생긴 C
+    let p = prepared(&root, RULES_B);
+    assert_eq!(p["proposal"]["policy_file"]["effect"], "held_base_undecided");
+    assert_eq!(p["proposal"]["approvable"], false, "표시만으로 쓰기 권한이 생기지 않는다");
+    assert_eq!(p["phase"], "policy_file_held");
+    assert_eq!(approve(&root, &p).unwrap_err().code, "blocked");
+    assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), "node_modules/\n");
+    assert!(!state(&root).exists());
+    let ledger: Value = serde_json::from_slice(&fs::read(root.join(".gil/start/preparation.json")).unwrap()).unwrap();
+    assert_eq!(ledger["base"]["state"], "absent", "기준을 present(C) 로 바꾸지 않는다");
+    // 파일을 정리해 기준과 맞추면 정상 경로로 시작한다.
+    fs::remove_file(root.join(".gilignore")).unwrap();
+    let p2 = prepared(&root, RULES_B);
+    assert_eq!(p2["proposal"]["policy_file"]["effect"], "create");
+    assert_eq!(approve(&root, &p2).unwrap()["phase"], "started");
+}
+
+#[test]
+fn a_file_confirmed_at_preparation_is_synchronized_to_the_approved_text() {
+    let root = project("present-c");
+    fs::write(root.join(".gilignore"), "node_modules/\n").unwrap();
+    begin(&s(&root)).unwrap(); // 처음부터 확인·저장된 present(C)
+    let p = prepared(&root, RULES_B);
+    assert_eq!(p["proposal"]["policy_file"]["effect"], "replace");
+    assert_eq!(p["proposal"]["policy_file"]["diff"], serde_json::json!(["  node_modules/", "+ .env"]));
+    let started = approve(&root, &p).unwrap();
+    assert_eq!(started["phase"], "started", "{started}");
+    assert_eq!(started["facts"]["policy_file_write"], "written");
+    assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), RULES_B);
+}
+
+#[test]
+fn a_change_found_right_before_the_replacement_holds_the_start_and_keeps_the_records() {
+    let root = project("edit-before-replace");
+    begin(&s(&root)).unwrap();
+    let p = prepared(&root, RULES_B);
+    EDIT_BEFORE_REPLACE.with(|e| *e.borrow_mut() = Some(b"*.tmp\n".to_vec()));
+    let held = approve(&root, &p).unwrap();
+    assert_eq!(held["application_held"]["code"], "policy_file_changed", "{held}");
+    assert_eq!(held["phase"], "condition_changed");
+    assert!(!state(&root).exists(), "덮어쓰지 않았다는 이유만으로 시작하지 않는다");
+    assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), "*.tmp\n");
+    let ledger: Value = serde_json::from_slice(&fs::read(root.join(".gil/start/preparation.json")).unwrap()).unwrap();
+    let kinds: Vec<&str> = ledger["events"].as_array().unwrap().iter().map(|e| e["kind"].as_str().unwrap()).collect();
+    assert_eq!(kinds, ["sync_started", "sync_settled", "condition_changed"], "앞선 사실을 지우지 않고 남긴다");
+    assert_eq!(ledger["events"][1]["result"], "condition_changed");
+    assert_eq!(ledger["base"]["state"], "unconfirmed");
+    assert_eq!(ledger["responses"].as_array().unwrap().len(), 1, "승인 응답은 그대로다");
+    assert_eq!(apply(&root, proposal_of(&p).0, &proposal_of(&p).1).unwrap_err().code, "condition_changed");
+    // 새 제안·새 승인: 기준 unconfirmed 에서는 자동으로 쓰지 않고, 시작은 따로 확정된다.
+    let p2 = prepared(&root, RULES_B);
+    assert_eq!(p2["proposal"]["policy_file"]["effect"], "not_written_unconfirmed");
+    let started = approve(&root, &p2).unwrap();
+    assert_eq!(started["phase"], "started", "{started}");
+    assert_eq!(started["facts"]["policy_file_write"], "not_written");
+    assert_eq!(started["started"]["policy_file_sync_base"], "unconfirmed");
+    assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), "*.tmp\n");
+}
+
+#[test]
+fn a_path_condition_change_needs_a_new_proposal_but_an_unstable_observation_does_not() {
+    let root = project("path-change");
+    begin(&s(&root)).unwrap();
+    let p = prepared(&root, RULES_B);
+    let fifo = std::ffi::CString::new(root.join("src/pipe").display().to_string()).unwrap();
+    assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
+    let held = approve(&root, &p).unwrap();
+    assert_eq!(held["application_held"]["code"], "condition_changed", "{held}");
+    assert!(!state(&root).exists() && !root.join(".gilignore").exists());
+    fs::remove_file(root.join("src/pipe")).unwrap();
+    assert_eq!(apply(&root, proposal_of(&p).0, &proposal_of(&p).1).unwrap_err().code, "condition_changed");
+
+    let other = project("unstable");
+    begin(&s(&other)).unwrap();
+    let p = prepared(&other, RULES_B);
+    CAPTURE_FAULT.with(|f| *f.borrow_mut() = Some(()));
+    let held = approve(&other, &p).unwrap();
+    assert_eq!(held["application_held"]["code"], "capture_failed", "{held}");
+    assert_eq!(held["phase"], "approved", "관측 불안정은 조건 변경이 아니다");
+    assert!(!state(&other).exists() && !other.join(".gilignore").exists(), "보관 실패 때 정책 파일을 쓰지 않는다");
+    assert_eq!(apply(&other, proposal_of(&p).0, &proposal_of(&p).1).unwrap()["phase"], "started");
+}
+
+#[test]
+fn a_failed_or_uncertain_final_save_is_settled_by_reading_the_stored_state() {
+    let root = project("commit-fail");
+    begin(&s(&root)).unwrap();
+    let p = prepared(&root, RULES_B);
+    COMMIT_FAULT.with(|f| *f.borrow_mut() = Some(()));
+    let held = approve(&root, &p).unwrap();
+    assert_eq!(held["application_held"]["code"], "start_not_saved", "{held}");
+    assert!(!state(&root).exists());
+    // 파일 쓰기 성공·승인 기록·보관 객체는 따로 남아 있고, 다시 시도하면 같은 판으로 시작한다.
+    assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), RULES_B);
+    let again = apply(&root, proposal_of(&p).0, &proposal_of(&p).1).unwrap();
+    assert_eq!(again["phase"], "started");
+    assert_eq!(again["facts"]["policy_file_write"], "already_matches");
+}
+
+#[test]
+fn the_screen_shows_the_stored_proposal_and_reports_the_current_disk_separately() {
+    let root = project("bound-view");
+    fs::write(root.join(".gilignore"), "node_modules/\n").unwrap();
+    begin(&s(&root)).unwrap();
+    let p = prepared(&root, RULES_B);
+    let shown_before = p["proposal"].clone();
+    fs::write(root.join(".gilignore"), "edited after the proposal\n").unwrap();
+    let (review_value, grant) = review(&root).unwrap();
+    assert_eq!(review_value["proposal"], shown_before, "지금 디스크가 제안 판의 표시에 섞이지 않는다");
+    assert_eq!(review_value["current"]["policy_file_matches_proposal"], false);
+    assert!(grant.is_some(), "조회는 승인을 만들지 않으며 capability 발급 여부만 알린다");
+    assert!(state(&root).exists() == false);
+    let held = approve(&root, &p).unwrap();
+    assert_eq!(held["application_held"]["code"], "held_three_way", "기준 A·승인 B·디스크 C 가 모두 다르면 기존 보류 그대로");
+    assert!(!state(&root).exists());
+    assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), "edited after the proposal\n");
+}
+
+#[test]
+fn a_shortened_list_can_be_read_in_full_for_the_same_proposal() {
+    let root = project("long-list");
+    for i in 0..650 { fs::write(root.join(format!("f{i:04}.txt")), "x").unwrap(); }
+    begin(&s(&root)).unwrap();
+    let p = prepared(&root, RULES_B);
+    assert_eq!(p["proposal"]["tracked_truncated"], true);
+    let (revision, digest) = proposal_of(&p);
+    let total = p["proposal"]["tracked_count"].as_u64().unwrap() as usize;
+    let mut all = Vec::new();
+    let mut offset = 0;
+    loop {
+        let page = list(&root, revision, &digest, "tracked", offset).unwrap();
+        all.extend(page["items"].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_owned()));
+        match page["next_offset"].as_u64() { Some(next) => offset = next as usize, None => break }
+    }
+    assert_eq!(all.len(), total);
+    assert_eq!(list(&root, revision + 1, &digest, "tracked", 0).unwrap_err().code, "unknown_proposal", "다른 판의 목록은 주지 않는다");
+    assert!(!state(&root).exists());
+}
+
+#[test]
+fn a_combined_text_equal_to_either_part_still_needs_its_own_approval() {
+    for (label, d_equals_c) in [("combine-eq-c", true), ("combine-eq-b", false)] {
+        let root = project(label);
+        begin(&s(&root)).unwrap();
+        let b = prepared(&root, RULES_B);
+        let c = "node_modules/\n*.log\n";
+        fs::write(root.join(".gilignore"), c).unwrap();
+        assert_eq!(approve(&root, &b).unwrap()["application_held"]["code"], "combine_required");
+        let d = if d_equals_c { c } else { RULES_B };
+        let dv = prepare(&s(&root), PrepareInput { rules: d.into(), project_recommendations: vec![], combine_with_revision: Some(proposal_of(&b).0), restart_canceled: false })
+            .unwrap_or_else(|e| panic!("{label}: 바이트가 같다는 이유로 거절하지 않는다: {}", e.said));
+        assert!(dv["proposal"]["combination"].is_object());
+        assert_eq!(dv["phase"], "awaiting_approval", "{label}: 자동 승인하지 않는다");
+        assert_eq!(apply(&root, proposal_of(&b).0, &proposal_of(&b).1).unwrap_err().code, "superseded");
+        let started = approve(&root, &dv).unwrap();
+        assert_eq!(started["phase"], "started", "{label}: {started}");
+        assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), d);
+    }
 }

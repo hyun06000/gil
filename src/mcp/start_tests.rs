@@ -99,12 +99,12 @@ fn a_held_approval_is_retried_only_with_the_separate_apply_capability() {
     let scope = wire(call(&monitor, &grants, "gil_start", json!({"project_root": r})))["structuredContent"]["scope_id"].as_str().unwrap().to_owned();
     let p = wire(call(&monitor, &grants, "gil_start_prepare", json!({"project_root": r, "rules": "node_modules/\n"})));
     let (revision, digest) = (p["structuredContent"]["proposal"]["revision"].clone(), p["structuredContent"]["proposal"]["digest"].clone());
-    std::fs::write(root.join("late.txt"), "changes the tracked list\n").unwrap();
     let review = wire(call(&monitor, &grants, "gil_start_review", json!({"scope_id": scope})));
     let token = review["_meta"]["gil/startApprovalToken"].as_str().unwrap().to_owned();
+    // 다시 시도할 수 있는 보류(관측 불안정) — 승인 조건의 변경이 아니다.
+    crate::start_prep::CAPTURE_FAULT.with(|f| *f.borrow_mut() = Some(()));
     let held = wire(call(&monitor, &grants, "gil_start_decide", json!({"scope_id": scope, "revision": revision, "digest": digest, "token": token, "decision": "approve"})));
-    assert_eq!(held["structuredContent"]["application_held"]["code"], "scope_changed", "{held}");
-    std::fs::remove_file(root.join("late.txt")).unwrap();
+    assert_eq!(held["structuredContent"]["application_held"]["code"], "capture_failed", "{held}");
     // 승인된 제안에는 결정용이 아닌 적용용 capability 만 나온다. 서로 바꿔 쓸 수 없다.
     let review = wire(call(&monitor, &grants, "gil_start_review", json!({"scope_id": scope})));
     assert!(review["_meta"].get("gil/startApprovalToken").is_none());
@@ -116,4 +116,25 @@ fn a_held_approval_is_retried_only_with_the_separate_apply_capability() {
     let started = wire(call(&monitor, &grants, "gil_start_apply", json!({"scope_id": scope, "revision": revision, "digest": digest, "token": apply_token})));
     assert_eq!(started["structuredContent"]["phase"], "started", "{started}");
     assert!(!std::fs::read_to_string(root.join(".gil/start/preparation.json")).unwrap().contains(&apply_token));
+}
+
+#[test]
+fn the_full_list_is_read_only_and_bound_to_the_shown_revision() {
+    let root = scratch("list-tool");
+    let monitor = Monitor::with_store(Store::at(root.with_extension("consent")));
+    let grants = Grants::default();
+    let r = root.display().to_string();
+    let scope = wire(call(&monitor, &grants, "gil_start", json!({"project_root": r})))["structuredContent"]["scope_id"].as_str().unwrap().to_owned();
+    let p = wire(call(&monitor, &grants, "gil_start_prepare", json!({"project_root": r, "rules": "node_modules/\n"})));
+    let (revision, digest) = (p["structuredContent"]["proposal"]["revision"].clone(), p["structuredContent"]["proposal"]["digest"].clone());
+    let ledger_before = std::fs::read(root.join(".gil/start/preparation.json")).unwrap();
+    let page = wire(call(&monitor, &grants, "gil_start_list", json!({"scope_id": scope, "revision": revision, "digest": digest, "list": "tracked", "offset": 0})));
+    let items = page["structuredContent"]["items"].as_array().unwrap().clone();
+    assert!(items.contains(&json!("a.txt")) && !items.iter().any(|i| i.as_str().unwrap().starts_with("node_modules")), "{page}");
+    assert_eq!(page["structuredContent"]["total"].as_u64().unwrap() as usize, items.len());
+    assert!(page.get("_meta").and_then(|m| m.get("gil/startApprovalToken")).is_none());
+    assert_eq!(std::fs::read(root.join(".gil/start/preparation.json")).unwrap(), ledger_before, "읽기만 한다");
+    assert!(format!("{grants:?}").contains("data: {}"), "목록 조회는 capability 를 만들지 않는다: {grants:?}");
+    let other = wire(call(&monitor, &grants, "gil_start_list", json!({"scope_id": scope, "revision": 2, "digest": digest, "list": "tracked", "offset": 0})));
+    assert_eq!(other["isError"], json!(true));
 }

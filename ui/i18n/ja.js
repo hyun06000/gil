@@ -472,4 +472,12 @@ export default {
   "start.undelivered": "会話への送信を確認できませんでした。会話で gil_start_status を読んで続けるよう依頼してください。",
   "start.apply_retry": "承認した提案の適用を再試行",
   "start.apply_note": "新たな承認ではありません。すでに承認した提案を、フォルダーを再確認してから適用します。",
+  "start.list_all": "この提案の一覧をすべて表示",
+  "start.list_complete": "この提案の一覧すべて: {n} 件。",
+  "start.current_differs": "現在ディスクの .gilignore({now})はこの提案が示したものと異なります。承認してもその変更は上書きせず、適用は保留され、新しい提案が必要になります。",
+  "start.disk_problems": "ディスク上のファイルをエンジンが解釈できません: {problems}",
+  "start.policy_file.replace_shown_disk": "ここに表示したファイルだけを結合案で置き換えます(差分は下記)。その後ファイルが変わった場合は上書きしません。",
+  "start.policy_file.not_written_unconfirmed": "書き込みません: 以前の書き込みが確認できていないため、ファイルを自動で上書きしません。",
+  "start.policy_file.held_base_undecided": "保留: ディスク上のファイルが GIL が以前確認した状態と一致しません。この提案は承認できません。先にユーザーとファイルを整理してください。",
+  "start.policy_file.held_three_way": "保留: 最後に確認したファイル・この提案・現在のファイルがすべて異なります。差分を明示的に解消するまで承認できません。",
 };

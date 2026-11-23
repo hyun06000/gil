@@ -623,7 +623,7 @@ T6 전체의 완료도, 3번 전체의 완료도 아니다.
   소급하지 않는다.
 - **하지 않은 것.** 범위 변경 사건(5번)·최신 정책 복원(6번)·8→10/6→10 전환·형식 11 의 새 시작·명시적 정책 파일 동기화 명령·O-2·O-3·일반 변경
   승인의 결속·삭제 등 나머지 `BaseUndecided` 의 결정, Windows. Monitor 그래프 화면의 정책 표시(값만 실린다), 내장 설명서 주제 추가.
-- **검증.** `src/start_prep/tests.rs`(23)·`src/mcp/start_tests.rs`(3)·`tests/tracking_start.rs`(3, 실제 stdio)·`mcp-app/start-review.test.mjs`(7)·`mcp-app/start-browser-check.mjs`(합성 Host).
+- **검증.** `src/start_prep/tests.rs`(28)·`src/mcp/start_tests.rs`(4)·`tests/tracking_start.rs`(3, 실제 stdio)·`mcp-app/start-review.test.mjs`(8)·`mcp-app/start-browser-check.mjs`(합성 Host). 같은 날 후보 검토의 네 결함(표시만으로 쓰기 권한, 조건 변경과 장애의 혼동, 화면과 제안 판의 결속, 결합안의 바이트 같음 거절)을 고친 수정 묶음이 포함돼 있다 — 상세는 Roadmap 같은 기록.
   실행 환경과 결과의 구분은 [Roadmap](GIL_Roadmap.md)의 「4번 최초 시작」 기록을 따른다. 실제 Host 화면·사람의 버튼 입력·필드 테스트는 없다.
 
 1을 2–6의 완료 뒤로 미루지 않는다. 체인 실패 종료의 기존 제한 복구 경로는 계속 유지하며,

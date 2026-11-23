@@ -312,7 +312,7 @@ impl GilServer {
 fn locale_for_call(monitor: &Monitor, name: &str, input: &Value) -> Locale {
     let root = match input.get("project_root").and_then(Value::as_str) {
         Some(root) if std::path::Path::new(root).is_absolute() => Some(std::path::PathBuf::from(root)),
-        _ if name.starts_with("gil_monitor_") || matches!(name, "show_gil_monitor" | "gil_plan_review" | "gil_plan_decide" | "gil_revisit_review" | "gil_revisit_apply" | "gil_start_review" | "gil_start_decide") =>
+        _ if name.starts_with("gil_monitor_") || matches!(name, "show_gil_monitor" | "gil_plan_review" | "gil_plan_decide" | "gil_revisit_review" | "gil_revisit_apply" | "gil_start_review" | "gil_start_decide" | "gil_start_apply" | "gil_start_list") =>
             input.get("scope_id").and_then(Value::as_str).and_then(|scope| monitor.root(scope).ok()),
         _ => None,
     };
@@ -435,8 +435,8 @@ mod tests {
         }
         if cfg!(feature = "product-safety") { expected.extend(["gil_revisit_apply".into(), "gil_revisit_review".into()]); }
         if cfg!(all(feature = "tracking-policy", unix)) {
-            // `gil_start` 는 기본 표에 이미 있다 — 이 구성은 그 설명만 바꾸고 여섯 도구를 더한다.
-            expected.extend(["gil_start_prepare", "gil_start_status", "gil_start_apply", "gil_start_cancel", "gil_start_review", "gil_start_decide"]
+            // `gil_start` 는 기본 표에 이미 있다 — 이 구성은 그 설명만 바꾸고 일곱 도구를 더한다.
+            expected.extend(["gil_start_prepare", "gil_start_status", "gil_start_apply", "gil_start_cancel", "gil_start_review", "gil_start_decide", "gil_start_list"]
                 .map(String::from));
         }
         expected.push("gil_await_user".to_string());

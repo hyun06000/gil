@@ -472,4 +472,12 @@ export default {
   "start.undelivered": "未确认已发送到聊天。请在聊天中要求读取 gil_start_status 并继续。",
   "start.apply_retry": "重试应用已批准的提案",
   "start.apply_note": "这不是新的批准。它会在重新检查文件夹后应用您已批准的提案。",
+  "start.list_all": "显示此提案的完整列表",
+  "start.list_complete": "此提案的完整列表:{n} 项。",
+  "start.current_differs": "磁盘上当前的 .gilignore({now})与此提案显示的不同。批准也不会覆盖该更改;应用将暂停,需要新的提案。",
+  "start.disk_problems": "引擎无法解释磁盘上的文件:{problems}",
+  "start.policy_file.replace_shown_disk": "仅用合并文本替换此处显示的文件(差异见下)。之后若文件再变化则不覆盖。",
+  "start.policy_file.not_written_unconfirmed": "不写入:之前的写入未确认,因此不会自动覆盖文件。",
+  "start.policy_file.held_base_undecided": "暂停:磁盘上的文件与 GIL 之前确认的状态不符。此提案无法批准;请先与用户整理文件。",
+  "start.policy_file.held_three_way": "暂停:最后确认的文件、此提案和当前文件都不同。在明确解决差异之前无法批准。",
 };
