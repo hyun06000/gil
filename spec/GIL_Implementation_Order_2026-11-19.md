@@ -528,7 +528,7 @@ T6 전체의 완료도, 3번 전체의 완료도 아니다.
 - **남은 것.** 뿌리·후속 Chain Entry, Interview 정책 상속, 열린 Verify 계보, 검사 ②·T8·T9, 실제 상태 추출·완전성·승인,
   3o 시작점·내용 비교·보관·재시도·복원·제품 열기/load·형식 10/11 활성화. O-2·O-3 및 기존 미결 결정과 Monitor 승인 경로는 그대로다.
 
-**진행 기록(2026-11-23, 3번 안의 작은 후속, 게시 전) — §6.1 닫힌 Experiment Exit의 세계와 확정 정책.**
+**진행 기록(2026-11-23, 3번 안의 작은 후속, PR #252) — §6.1 닫힌 Experiment Exit의 세계와 확정 정책.**
 `experiment_exit.rs`의 `select_experiment_exit`는 건넨 기록 안의 순수 유도이며 제품 미연결이다. §6.1 전체·3번 전체의 완료가 아니다.
 
 - **입력과 검사.** 같은 호출의 원장·정책 연결·사이클 칸·Chain 목록·등록부로 기존 `select_opening_policy(T, …)`를 한 번 부른다.
@@ -545,6 +545,24 @@ T6 전체의 완료도, 3번 전체의 완료도 아니다.
 - **남은 것.** Verify의 확정 정책·열린 Experiment의 Verify 계보, Interview Exit의 Entry 계승, B(T)·S(N)의 `ExitPolicyNotDerived`
   대체(이번에 바꾸지 않았다), 검사 ②·T8·T9, 실제 상태 추출·완전성·승인, 3o 시작점·내용 비교·보관·재시도·복원·제품 연결·형식 10/11 활성화.
   O-2·O-3과 기존 미결 결정은 그대로다. 검증 범위와 실행 증거의 구분은 [Roadmap](GIL_Roadmap.md)의 「§6.1 Experiment Exit」 기록을 따른다.
+
+**진행 기록(2026-11-23, 3번 안의 작은 후속, 게시 전) — 닫힌 Experiment의 저장 Exit과 Artifact Model §7.5 계보의 비교.**
+`exit_lineage.rs`의 `check_experiment_exit_lineage`는 건넨 기록 안의 순수 검사이며 제품 미연결이다. §6.1 전체·3번 전체의 완료가 아니다.
+
+- **입력과 대상.** 건넨 Chain 목록과 등록부만 받는다. 대상은 `select_experiment_exit`와 같은 소유 조회(`experiment_exit.rs`에서 꺼낸
+  `owned_cycle`, 동작 그대로)로 정한다. 없는·모호한 대상은 그 소유 문제, Interview·열린 Experiment는 범위 밖 결과다.
+- **기대 세계.** T를 닫은 자리(마지막 Outcome)의 `parent` 사슬을 기존 `Walk::lineage`로 읽고 가장 가까운 닫힌 Verify의 `snapshot_ref`를,
+  없으면 T의 Entry를 쓴다. 버려진 가지·가장 큰 Snapshot/Step 이름·목록의 끝·`revisit_from`·B(T)·나중 사건 기준점을 쓰지 않는다.
+  성공·실패 판정을 거르지 않는다. 그 Verify에 `snapshot_ref`가 없으면 손상으로 돌려주며 더 오래된 Verify·Entry로 우회하지 않는다. 그래서
+  이 손상에서 더 오래된 값으로 넘어가는 `Cycle::exit_would_be`(비공개 `verify_in_lineage`)를 부르지 않는다. 손상 없는 기록에서 두 결과가
+  같음은 시험이 확인하며 그 함수와 Cycle close·Project load는 바꾸지 않았다.
+- **결과.** 대상·소유 체인·마지막 Outcome·저장 Exit·기대 세계·그 출처(Verify 주소 또는 Entry)와 일치/불일치. 저장 Exit 누락·등록부 누락,
+  계보 손상, 기대 세계의 등록부 누락은 서로 무관하게 평가해 함께 돌려주는 검사 불능이며 불일치와 구분한다. 등록부는 이름만 조회한다.
+- **증명하지 않는 것.** P(T)·확정 정책 선택, 승인, 이력 완전성, manifest·blob 실재, T 개방의 검증 ①·②·T9, 계보 밖의 손상, 전체 상태의 유효성.
+  목록은 `EXIT_LINEAGE_DOES_NOT_SHOW`에 있다. 현재 문법의 Experiment는 Verify 없는 종료를 만들 수 없어 Entry 갈래는 합성 문법 시험으로만 걷는다.
+- **남은 것.** Interview 정책 상속, 뿌리·후속 Chain Entry, 열린 Experiment의 세계, B(T)·S(N)의 미유도 대체, 검사 ②·T8·T9, 3n/3o 연결,
+  실제 상태 추출·승인 검증, 제품 close/load·Monitor·CLI·MCP 연결, 형식 10/11 활성화. O-2·O-3과 기존 미결 결정은 그대로다.
+  검증 범위와 실행 증거의 구분은 [Roadmap](GIL_Roadmap.md)의 「§7.5 Exit 계보」 기록을 따른다.
 
 1을 2–6의 완료 뒤로 미루지 않는다. 체인 실패 종료의 기존 제한 복구 경로는 계속 유지하며,
 새 정책에 따른 복원은 6까지 검증한 뒤 연결한다. 전체 복원 제품 차단을 이 계획으로 해제하지 않는다.
