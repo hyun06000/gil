@@ -782,8 +782,18 @@ pub(super) fn call(name: &str, input: Value) -> CallToolResult {
     }
 }
 
+/// The base `gil_open` text says a Cycle open takes no contract. Only this build can open a
+/// Chain under the exploration contract, so only here does it learn the one exception.
+const OPEN_GENERAL: &str = " A Cycle open takes no contract.";
+const OPEN_EXPLORATION: &str = " Only in a Chain whose gil_plan_read says contract: exploration, kind: experiment also takes contract: the requirement link STRING (plan_revision, plan_digest, requirement_id, relevance, readiness, uncertainty; copy gil_plan_read.experiment_link and fill it in). Every other Cycle open takes no contract.";
+
 pub(super) fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
-    let owner = |kinds: Value| json!({"type":"object","additionalProperties":false,"required":["kind","ref"],
+    if let Some(open) = tools.iter_mut().find(|t| t.name == "gil_open") {
+        let description = open.description.as_deref().unwrap_or_default();
+        assert_eq!(description.matches(OPEN_GENERAL).count(), 1, "gil_open names the Cycle open rule once");
+        open.description = Some(description.replacen(OPEN_GENERAL, OPEN_EXPLORATION, 1).into());
+    }
+    let owner =|kinds: Value| json!({"type":"object","additionalProperties":false,"required":["kind","ref"],
         "properties":{"kind":{"enum":kinds},"ref":{"type":"string","description":"Canonical reference exactly as GIL printed it: chain:C<n>, cycle:C<n> or step:C<n>/S<m>."}}});
     let root = json!({"type":"string","description":"Exact absolute project root explicitly selected by the user."});
     let visuals = if cfg!(feature = "visual-authoring") {

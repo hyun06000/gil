@@ -437,6 +437,24 @@ mod tests {
         }
     }
 
+    /// gil_open 의 탐색형 링크 안내는 탐색형 Chain 을 열 수 있는 빌드에만 있다.
+    /// 기본·승인 계획만의 빌드에는 gil_plan_read.experiment_link 가 없거나 쓸 수 없다.
+    #[test]
+    fn gil_open_names_the_exploration_link_only_where_exploration_chains_exist() {
+        let open = surface::tools().iter().find(|t| t.name == "gil_open").expect("gil_open");
+        let description = open.description.as_deref().expect("description");
+        let exploration = cfg!(feature = "exploration-flow");
+        for phrase in ["gil_plan_read.experiment_link", "contract: exploration", "requirement link STRING"] {
+            assert_eq!(description.contains(phrase), exploration, "{phrase}: {description}");
+        }
+        assert_eq!(description.contains("A Cycle open takes no contract."), !exploration, "{description}");
+        assert_eq!(description.contains("Every other Cycle open takes no contract."), exploration, "{description}");
+        // The checked-in base catalog never carries the exploration-only sentence.
+        let catalog: Vec<serde_json::Value> = serde_json::from_str(include_str!("mcp/tools.json")).expect("tools.json");
+        let base = catalog.iter().find(|t| t["name"] == "gil_open").unwrap()["description"].as_str().unwrap();
+        assert!(!base.contains("experiment_link") && base.contains("A Cycle open takes no contract."), "{base}");
+    }
+
     /// 원본 기록 조회는 exploration-flow 에서만 등록되고, 모델이 부르는 읽기 전용 도구다.
     /// 승인 계획만의 빌드와 기본 빌드의 도구 표는 그대로다.
     #[test]
