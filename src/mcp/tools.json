@@ -795,7 +795,8 @@
         }
       },
       "required": [
-        "project_root"
+        "project_root",
+        "report"
       ],
       "additionalProperties": false,
       "$schema": "http://json-schema.org/draft-07/schema#"

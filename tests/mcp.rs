@@ -649,6 +649,49 @@ fn half_typed_close_is_rejected_with_the_missing_field_and_recovery_is_an_ordina
     std::fs::remove_dir_all(at).unwrap();
 }
 
+/// `report` is required on the wire. A close without the key is a -32602 that names it and touches
+/// nothing; a close whose body lacks Question fields still gets the current step's skeleton; the
+/// same step then closes with a valid body.
+#[test]
+fn close_without_report_is_an_input_error_and_the_step_still_closes() {
+    use serde_json::json;
+    use gil::{CycleKind, NodeKind};
+    let at = scratch("close-without-report");
+    started(&at);
+    let mut mcp = Client::serve_with(&scratch("close-without-report-settings"));
+    mcp.initialize();
+    let listed = mcp.request("tools/list", json!({}));
+    let close = listed["result"]["tools"].as_array().unwrap().iter()
+        .find(|tool| tool["name"] == "gil_close").expect("gil_close is listed");
+    let required = close["inputSchema"]["required"].as_array().unwrap();
+    assert!(required.contains(&json!("project_root")) && required.contains(&json!("report")), "{close}");
+    let opened = monitor_call(&mut mcp, "gil_open", json!({"project_root": at, "kind": "question",
+        "contract": "objective: 사용자의 목표를 확인한다\nnext_action: 무엇을 만들고 싶은지 묻는다\ndone_when: 사용자의 원문 응답을 얻는다\n"}));
+    assert_eq!(opened["structuredContent"]["ok"], true, "{opened}");
+    let state = product_state_path(&at);
+    let before = std::fs::read(&state).unwrap();
+    let err = mcp.request("tools/call", json!({"name": "gil_close", "arguments": {"project_root": at}}));
+    assert_eq!(err["error"]["code"], -32602, "{err}");
+    let message = err["error"]["message"].as_str().unwrap();
+    assert!(message.contains("'report' is missing") && message.contains("Nothing was closed"), "{message}");
+    assert!(!message.contains(at.to_str().unwrap()), "input values must not be echoed");
+    assert_eq!(std::fs::read(&state).unwrap(), before, "a rejected close must not touch the project");
+    // A body without the Question fields is Core's refusal, with the current step's skeleton.
+    let partial = monitor_call(&mut mcp, "gil_close", json!({"project_root": at, "report": "question: 무엇을 만들까\n"}));
+    assert_eq!(partial["isError"], true, "{partial}");
+    let problem = partial["structuredContent"]["problem"].as_str().unwrap();
+    assert!(problem.contains("choices") && problem.contains("response"), "{problem}");
+    assert!(partial.to_string().contains("\\\"report\\\""), "the refusal shows the input skeleton: {partial}");
+    assert_eq!(std::fs::read(&state).unwrap(), before);
+    let r = common::full_report(&common::spec(), CycleKind::Interview, NodeKind::Question);
+    let report: String = r.field_names().map(|k| format!("{k}: {}\n", r.get(k).unwrap())).collect();
+    let closed = monitor_call(&mut mcp, "gil_close", json!({"project_root": at, "report": report}));
+    assert_eq!(closed["structuredContent"]["ok"], true, "{closed}");
+    assert_ne!(std::fs::read(&state).unwrap(), before);
+    mcp.eof();
+    std::fs::remove_dir_all(at).unwrap();
+}
+
 /// 진짜 Project 하나를 만든다 — CLI 로. 시험이 저장 형식을 손으로 짓지 않는다.
 fn started(at: &Path) {
     let done = Command::new(gil())
