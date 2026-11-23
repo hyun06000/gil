@@ -98,6 +98,24 @@ fn a_block_keeps_every_line_it_was_given() {
     assert_eq!(report.get("next"), Some("뒤"), "블록이 뒤 칸까지 먹었다");
 }
 
+/// 전각 공백(U+3000)으로 들여쓴 여러 줄 값도 본문을 한 글자도 잃지 않는다 (#242).
+/// 들여쓰기는 글자 수로 재고 글자 수만큼 벗긴다 — 일반 공백으로 쓴 것과 같은 값이 된다.
+#[test]
+fn a_full_width_space_indent_strips_only_the_indent() {
+    for (ascii, wide) in [
+        ("response: |\n 절대 배송하지 마세요\n", "response: |\n\u{3000}절대 배송하지 마세요\n"),
+        ("response: |\n  첫 줄\n  둘째 줄\n", "response: |\n\u{3000}\u{3000}첫 줄\n\u{3000}\u{3000}둘째 줄\n"),
+    ] {
+        assert_eq!(parse(wide).get("response"), parse(ascii).get("response"), "{wide:?}");
+    }
+    assert_eq!(parse("response: |\n\u{3000}절대 배송하지 마세요\n").get("response"), Some("절대 배송하지 마세요"));
+    // Only the block's own indent is stripped; deeper indentation stays as it was written.
+    assert_eq!(parse("response: |\n\u{3000}첫 줄\n\u{3000}\u{3000}들여 쓴 줄\n").get("response"), Some("첫 줄\n\u{3000}들여 쓴 줄"));
+    // A field nested under a full-width-indented name keeps its value too.
+    let nested = parse("synthesis:\n\u{3000}statement: |\n\u{3000}\u{3000}승인된 범위\n");
+    assert_eq!(nested.get("synthesis.statement"), Some("승인된 범위"));
+}
+
 #[test]
 fn a_blank_line_inside_a_block_is_part_of_the_value() {
     // 빈 줄 뒤에 두 줄을 둔다 — 빈 줄이 **한 번만** 들어가는지까지 재려면 그래야 한다.

@@ -485,6 +485,22 @@ fn a_walk_that_is_not_here_says_where_it_is() {
     );
 }
 
+/// 전각 공백으로 들여쓴 응답이 첫 글자부터 저장되고, 새 프로세스의 `gil context` 도 그대로
+/// 읽는다 (#242). 일반 공백으로 들여쓴 대조군과 같은 값이다.
+#[test]
+fn a_full_width_indented_response_is_stored_whole() {
+    for (label, indent) in [("ascii", " "), ("wide", "\u{3000}")] {
+        let dir = scratch(&format!("cli-indent-{label}"));
+        ok(&dir, &["start"], None);
+        open_action(&dir, "question");
+        ok(&dir, &["close"], Some(&format!("question: 배송이 필요한가요?\nchoices: 필요 / 불필요\nresponse: |\n{indent}절대 배송하지 마세요\n")));
+        let stored = std::fs::read_to_string(dir.join(gil::STATE_PATH)).unwrap();
+        assert!(stored.contains("절대 배송하지 마세요"), "{label}: {stored}");
+        let context = ok(&dir, &["context"], None);
+        assert!(context.contains("절대 배송하지 마세요"), "{label}: {context}");
+    }
+}
+
 #[test]
 fn a_walk_above_is_not_borrowed_from_outside_the_project() {
     // 위로 거슬러 오르는 것은 **가장 가까운 것 하나**다. 옆 프로젝트의 걷기를 끌어오면 안 된다.

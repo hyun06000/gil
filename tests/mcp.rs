@@ -948,6 +948,31 @@ fn monitor_preparation_failure_does_not_erase_a_successful_start() {
     std::fs::remove_dir_all(base).unwrap();
 }
 
+/// The MCP close keeps a full-width-indented response whole (#242), as the CLI does.
+#[test]
+fn mcp_close_keeps_a_full_width_indented_response_whole() {
+    use serde_json::json;
+    let at = scratch("mcp-wide-indent");
+    started(&at);
+    let mut mcp = Client::serve_with(&scratch("mcp-wide-indent-settings"));
+    mcp.initialize();
+    let opened = monitor_call(&mut mcp, "gil_open", json!({"project_root": at, "kind": "question",
+        "contract": "objective: 사용자의 목표를 확인한다\nnext_action: 무엇을 만들고 싶은지 묻는다\ndone_when: 사용자의 원문 응답을 얻는다\n"}));
+    assert_eq!(opened["structuredContent"]["ok"], true, "{opened}");
+    let closed = monitor_call(&mut mcp, "gil_close", json!({"project_root": at,
+        "report": "question: 배송이 필요한가요?\nchoices: 필요 / 불필요\nresponse: |\n\u{3000}절대 배송하지 마세요\n"}));
+    assert_eq!(closed["structuredContent"]["ok"], true, "{closed}");
+    mcp.eof();
+    let stored = std::fs::read_to_string(at.join(gil::STATE_PATH)).unwrap();
+    assert!(stored.contains("절대 배송하지 마세요"), "{stored}");
+    let mut fresh = Client::serve_with(&scratch("mcp-wide-indent-settings-2"));
+    fresh.initialize();
+    let context = monitor_call(&mut fresh, "gil_context", json!({"project_root": at}));
+    assert!(text_of(&json!({"result": context})).contains("절대 배송하지 마세요"), "{context}");
+    fresh.eof();
+    std::fs::remove_dir_all(at).unwrap();
+}
+
 #[cfg(target_os = "macos")]
 #[test]
 fn companion_session_tracks_actual_project_use_and_stdio_eof() {
