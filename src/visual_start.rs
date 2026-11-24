@@ -221,20 +221,16 @@ mod reserve {
     /// falls back to a weaker publication. The list is a support scope, not a durability claim.
     #[cfg(target_os = "linux")]
     fn local_storage(parent: &std::fs::File) -> std::io::Result<()> {
-        // statfs(2) `f_type` values: ext2/3/4, XFS, Btrfs, tmpfs, overlayfs.
-        const LISTED: [i64; 5] = [0xEF53, 0x5846_5342, 0x9123_683E, 0x0102_1994, 0x794C_7630];
-        let mut filesystem = std::mem::MaybeUninit::<libc::statfs>::uninit();
-        if unsafe { libc::fstatfs(parent.as_raw_fd(), filesystem.as_mut_ptr()) } < 0 {
-            return Err(std::io::Error::last_os_error());
-        }
-        let kind = unsafe { filesystem.assume_init() }.f_type as i64;
-        if !LISTED.contains(&kind) {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Unsupported,
-                "이미지 프로젝트 생성은 검수 대상 로컬 파일 시스템(ext4·XFS·Btrfs·tmpfs·overlayfs)에서만 진행한다",
-            ));
-        }
-        Ok(())
+        crate::internal_fs::listed_local_filesystem(parent).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::Unsupported {
+                std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "이미지 프로젝트 생성은 검수 대상 로컬 파일 시스템(ext4·XFS·Btrfs·tmpfs·overlayfs)에서만 진행한다",
+                )
+            } else {
+                e
+            }
+        })
     }
 }
 

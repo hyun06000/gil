@@ -134,9 +134,6 @@ fn one_requirement_takes_two_small_defines_without_reapproval_and_reads_the_same
     assert_eq!(r.experiments("R1").len(), 2, "earlier links stay with their own revision");
 }
 
-// The approved recovery of a closed failure is provided on macOS and Windows only; elsewhere the Core refuses it and keeps
-// everything (see `the_approved_recovery_is_refused_and_everything_is_kept_where_it_is_not_provided` in exploration_flow.rs).
-#[cfg(any(target_os = "macos", windows))]
 #[test]
 fn a_failure_restores_work_and_outputs_through_the_approved_revisit_before_a_new_small_define() {
     let mut r = Rig::start("explore-failure-restore", &[("src/convert.py", "def convert(v): return v\n"), ("data/dates.csv", "id,date\n1,2026-01-02\n2,02/01/2026\n")]);
@@ -210,7 +207,6 @@ fn a_failure_restores_work_and_outputs_through_the_approved_revisit_before_a_new
     reads_change_nothing(&mut r);
 }
 
-#[cfg(any(target_os = "macos", windows))]
 #[test]
 fn a_failure_that_leaves_no_file_difference_still_takes_the_recorded_revisit() {
     // C2 writes log=A, C3 writes log=B, the failing C4 writes log=A again: its world is the C2
@@ -315,37 +311,4 @@ fn an_item_queue_chain_keeps_its_meaning_and_the_next_chain_opens_under_the_new_
     assert_eq!(r.read(), plan);
     assert_eq!(record_bytes(&r.record), bytes);
     assert_eq!(yaml(&r.record)["chains"]["nodes"][0], first_chain);
-}
-
-/// The approved recovery of a closed failure exists on macOS and Windows. On every other platform it
-/// is **not provided**: the failed Experiment's files and record stay exactly as they are, the review
-/// hands out no approval capability, and nothing — not an apply, a model-side revisit or a general
-/// restore — moves a file. The next Experiment stays refused: the limit is stated, not worked around.
-#[cfg(not(any(target_os = "macos", windows)))]
-#[test]
-fn the_approved_recovery_is_refused_and_everything_is_kept_where_it_is_not_provided() {
-    let mut r = Rig::start("explore-recovery-not-provided", &[("src/convert.py", "def convert(v): return v\n"), ("data/dates.csv", "id,date\n1,2026-01-02\n2,02/01/2026\n")]);
-    r.interview(&["R1"], 1, &[], "open_child");
-    let c2 = r.open_experiment("R1");
-    r.run(c2, &Run { requirement: "R1", problem: "허용 날짜 형식을 벗어나는 값이 존재하는가?",
-        files: &[("evidence/C2.md", "벗어나는 값 1건\n"), ("out/report.txt", "C2 output: 1 irregular date\n")], evidence: "evidence/C2.md", fails_back_to: None });
-    let c3 = r.open_experiment("R1");
-    r.run(c3, &Run { requirement: "R1", problem: "대상 파일의 모든 날짜를 합의한 규칙으로 공통 형식에 변환할 수 있는가?",
-        files: &[("src/convert.py", "def convert(v): return v[::-1]  # wrong\n"), ("out/report.txt", "C3 output: half converted\n"),
-            ("evidence/C3.md", "2행을 변환하지 못했다: 결측 규칙이 없다\n")],
-        evidence: "evidence/C3.md", fails_back_to: Some("cycle:C2") });
-    let (files, record, objects) = (world(&r.root), record_bytes(&r.record), object_count(&r.record));
-
-    let view = r.recovery_not_provided();
-    assert!(view.get("changes").is_none(), "no recovery plan is drawn up here: {view}");
-    let link = r.link("R1");
-    refused(r.model("gil_open", json!({"kind":"experiment","contract":link})), "the next Experiment while the failure is unrecovered");
-    assert_eq!(world(&r.root), files, "a file moved");
-    assert_eq!(record_bytes(&r.record), record, "the record changed");
-    assert_eq!(object_count(&r.record), objects);
-    // A fresh process answers the same and still changes nothing.
-    r.restart();
-    r.recovery_not_provided();
-    assert_eq!(world(&r.root), files);
-    assert_eq!(record_bytes(&r.record), record);
 }

@@ -154,24 +154,7 @@ impl Rig {
         fs::create_dir_all(at.parent().unwrap()).unwrap();
         fs::write(at, bytes).unwrap();
     }
-    /// Where the approved recovery is not provided (every platform but macOS and Windows): the review
-    /// says so and hands out no capability, an apply is refused, and the model-side calls stay refused.
-    /// Returns the review's answer. Nothing may change; the caller compares the record and the files.
-    #[cfg_attr(any(target_os = "macos", windows), allow(dead_code))]
-    pub fn recovery_not_provided(&mut self) -> Value {
-        let response = ok(self.app("gil_revisit_review", json!({})), "recovery review");
-        assert!(response["result"]["_meta"]["gil/revisitApprovalToken"].is_null(), "a capability was handed out for a recovery this platform cannot run: {response}");
-        let view = structured(&response).clone();
-        assert_eq!(view["supported"], false, "{view}");
-        assert!(view.get("digest").is_none() && view["reason"].as_str().is_some_and(|reason| !reason.is_empty()), "{view}");
-        let applied = self.app("gil_revisit_apply", json!({"digest": "0".repeat(64), "token": "f".repeat(64)}));
-        assert!(applied.get("error").is_some() || !is_ok(&applied), "{applied}");
-        refused(self.model("gil_revisit", json!({})), "the model-side revisit");
-        refused(self.model("gil_restore", json!({})), "general restore stays blocked");
-        view
-    }
     /// Approved recovery through the App-only pair; returns the reviewed plan.
-    #[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
     pub fn recover(&mut self) -> Value {
         let response = ok(self.app("gil_revisit_review", json!({})), "recovery review");
         let token = response["result"]["_meta"]["gil/revisitApprovalToken"].as_str().expect("recovery capability").to_owned();

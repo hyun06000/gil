@@ -22,8 +22,7 @@
     feature = "exploration-flow",
     feature = "product-safety",
     feature = "visual-authoring",
-    // The fixture walks the approved recovery of a closed failure, which only macOS and Windows provide.
-    any(target_os = "macos", windows)
+    any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows)
 ))]
 #[path = "support_wave1/mod.rs"]
 mod support;

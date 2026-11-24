@@ -304,7 +304,6 @@ const ROWS_SEEN: &str = "행 수 관측: 1\n";
 
 /// One requirement, a successful Experiment, then a failed one that rewrote the first one's
 /// evidence path and added a file, then the approved revisit and a third, still empty Experiment.
-#[cfg(any(target_os = "macos", windows))]
 fn two_experiments_and_a_revisit(label: &str) -> (Rig, Walked, Walked, u32) {
     let mut r = Rig::start(label, &[("data/input.csv", "a,b\n1,2\n")]);
     r.interview(&["R1", "R2"], 1, &[], "open_child");
@@ -325,9 +324,6 @@ fn two_experiments_and_a_revisit(label: &str) -> (Rig, Walked, Walked, u32) {
     (r, first, second, third)
 }
 
-// The approved recovery of a closed failure is provided on macOS and Windows only; elsewhere the Core refuses it and keeps
-// everything (see `the_approved_recovery_is_refused_and_everything_is_kept_where_it_is_not_provided` in exploration_flow.rs).
-#[cfg(any(target_os = "macos", windows))]
 #[test]
 fn a_requirement_leads_to_each_linked_experiments_original_reports_and_stored_evidence() {
     let (mut r, first, second, third) = two_experiments_and_a_revisit("evidence-path");
@@ -495,9 +491,6 @@ fn a_requirement_leads_to_each_linked_experiments_original_reports_and_stored_ev
     assert_eq!(world(&r.root), world_before);
 }
 
-// The approved recovery of a closed failure is provided on macOS and Windows only; elsewhere the Core refuses it and keeps
-// everything (see `the_approved_recovery_is_refused_and_everything_is_kept_where_it_is_not_provided` in exploration_flow.rs).
-#[cfg(any(target_os = "macos", windows))]
 #[test]
 fn absent_other_scope_open_and_unreadable_are_each_told_apart() {
     let (mut r, first, second, third) = two_experiments_and_a_revisit("evidence-absent");

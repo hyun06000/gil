@@ -182,13 +182,83 @@ async function imageReports(binary, state, home) {
     mustSucceed(await p.model('gil_close', {report: `verdict: success\noutcome_ref: ${outcome}\nhandoff_summary: ${cycle}의 관측과 한계를 남겼다\nnext_direction.action: open_child\nnext_direction.reason: 관측에 따라 다음을 정한다\n`,
       expected_owner: cycleOwner, visuals: citing('인계의 근거')}), 'Cycle Report citing the image');
 
+    // A failed Experiment that declares a return to the earlier Cycle, then the approved recovery.
+    // The approval is the App-only pair; here it is harness input, not a person's click.
+    const work = async () => Object.fromEntries(Object.entries(await tree(p.root)).filter(([path]) => path !== '.gil' && !path.startsWith('.gil/')));
+    const worldAtSuccess = await work();
+    mustSucceed(await p.model('gil_open', await p.experimentArgs('R1')), 'a second Experiment on R1');
+    const failedCycle = (await p.plan()).current_experiment.cycle_ref;
+    mustSucceed(await p.model('gil_open', {kind: 'define', contract: CONTRACT}), 'define');
+    mustSucceed(await p.model('gil_close', {report: 'problem: 대상 파일의 모든 날짜를 공통 형식으로 변환할 수 있는가?\nsuccess_condition: 지정한 파일의 관측 증거가 위 명제의 긍정 답을 뒷받침한다. 근거 있는 부정 답이나 판정 미도달은 성공이 아니다\n'}), 'close define');
+    mustSucceed(await p.model('gil_open', {kind: 'hypothesis', contract: CONTRACT}), 'hypothesis');
+    mustSucceed(await p.model('gil_close', {report: 'hypothesis: 합성 자료만으로 판정할 수 있다\nrationale: 자료가 제공됐다\nguardrail: 외부 데이터를 쓰지 않는다\n'}), 'close hypothesis');
+    const failing = {kind: 'step', ref: stepRef(mustSucceed(await p.model('gil_open', {kind: 'verify', contract: CONTRACT}), 'failing verify'), 'verify')};
+    await p.write('data/dates.csv', 'id,date\n1,2026-01-02\n2,\n');           // an existing work file is overwritten
+    await p.write('out/half-converted.csv', 'id,date\n1,2026-01-02\n');        // a new output only the failure made
+    await p.write('evidence/failed.md', '2행을 변환하지 못했다: 결측 규칙이 없다\n');
+    mustSucceed(await p.model('gil_close', {expected_owner: failing,
+      report: `execution: 합성 자료를 관측했다\nresult: 판정 기준에 미달했다\nplan_document: ${PLAN_DOCUMENT}\nevidence_files: |\n  evidence/failed.md\n`,
+      visuals: {attachments: [], uses: [], declaration: {state: 'not_needed', reason: '변환 실패의 경위는 evidence/failed.md 문서가 대신하며 그릴 수치가 없다'}}}), 'close the failing Verify');
+    mustSucceed(await p.model('gil_open', {kind: 'analysis', contract: CONTRACT}), 'analysis');
+    mustSucceed(await p.model('gil_close', {report: 'hypothesis_fit: no\nproblem_solved: no\nsuccess_condition_met: no\nguardrail_triggered: no\ninterpretation: 관측한 값과 판정 기준을 대조했다\n'}), 'close analysis');
+    const failedOutcome = stepRef(mustSucceed(await p.model('gil_open', {kind: 'outcome', contract: CONTRACT}), 'outcome'), 'outcome');
+    mustSucceed(await p.model('gil_close', {report: 'verdict: failure\nlesson: 원인 위치와 복원 기준점을 구분해 다음 작은 질문의 근거로 남긴다\nnext_direction.action: close_cycle\nnext_direction.reason: 이 질문의 판정을 마쳤다\n'}), 'close outcome');
+    mustSucceed(await p.model('gil_close', {report: `verdict: failure\noutcome_ref: ${failedOutcome}\nhandoff_summary: ${failedCycle}의 관측과 한계를 남겼다\nnext_direction.action: revisit\nnext_direction.target_cycle_ref: ${cycle}\nnext_direction.reason: 관측에 따라 다음을 정한다\n`}), 'close the failed Experiment');
+    const worldAtFailure = await work(), recordAtFailure = await p.record();
+    assert.notDeepEqual(worldAtFailure, worldAtSuccess);
+
+    // Before the approval nothing moves and nothing opens: not the next Experiment, not a model-side
+    // revisit, not a general restore. Reading the review does not apply it, in this process or a new one.
+    mustRefuse(await p.model('gil_open', await p.experimentArgs('R2')), 'the next Experiment before the approved recovery');
+    mustRefuse(await p.model('gil_revisit'), 'a model-side revisit without an approval');
+    mustRefuse(await p.model('gil_restore'), 'general restore');
+    const reviewed = mustSucceed(await p.app('gil_revisit_review'), 'recovery review');
+    assert.equal(reviewed.structuredContent.supported, true, `the approved recovery is not provided here: ${JSON.stringify(reviewed.structuredContent).slice(0, 600)}`);
+    assert.equal(reviewed.structuredContent.state, 'awaiting_approval');
+    assert.deepEqual([reviewed.structuredContent.from, reviewed.structuredContent.target], [failedCycle, cycle]);
+    const planned = Object.fromEntries(reviewed.structuredContent.changes.map(change => [change.path, change.action]));
+    assert.equal(planned['data/dates.csv'], 'replace'); assert.equal(planned['out/half-converted.csv'], 'preserve');
+    await p.restart();
+    mustSucceed(await p.model('gil_context'), 'context after a restart, before the approval');
+    mustSucceed(await p.model('gil_status'), 'status after a restart, before the approval');
+    p.scope = mustSucceed(await p.model('gil_monitor_prepare'), 'monitor scope after a restart').structuredContent.scope_id;
+    mustRefuse(await p.model('gil_revisit'), 'a model-side revisit after a restart');
+    const again = mustSucceed(await p.app('gil_revisit_review'), 'recovery review in a fresh process');
+    assert.equal(again.structuredContent.state, 'awaiting_approval', 'a restart or a read applied or changed the recovery');
+    assert.equal(again.structuredContent.digest, reviewed.structuredContent.digest);
+    assert.deepEqual(await work(), worldAtFailure, 'a file moved before the approval');
+    assert.ok((await p.record()).equals(recordAtFailure), 'the record changed before the approval');
+    await assert.rejects(lstat(join(p.root, '.gil/revisit-preserved')), 'something was preserved before the approval');
+    const recoveryToken = again._meta?.['gil/revisitApprovalToken'];
+    assert.ok(recoveryToken && !JSON.stringify([again.content, again.structuredContent]).includes(recoveryToken), 'the recovery capability is App-only');
+    const guessed = await p.mcp.raw('gil_revisit_apply', {scope_id: p.scope, digest: again.structuredContent.digest, token: 'f'.repeat(64)});
+    assert.ok(guessed.error || !succeeded(guessed.result), 'a guessed capability applied the recovery');
+    assert.deepEqual(await work(), worldAtFailure);
+    const recovered = mustSucceed(await p.app('gil_revisit_apply', {digest: again.structuredContent.digest, token: recoveryToken}), 'approved recovery');
+    assert.equal(recovered.structuredContent.state, 'completed');
+    assert.equal(recovered.structuredContent.approval_source, 'monitor_button');
+    // The work files are the earlier Cycle's again; what only the failure had is kept as preserved bytes.
+    assert.deepEqual(await work(), worldAtSuccess, 'the working folder is not the earlier recorded world');
+    const preserved = join(p.root, '.gil/revisit-preserved', recovered.structuredContent.pending_state_sha256);
+    const mapping = JSON.parse(await readFile(join(preserved, 'files.json'), 'utf8'));
+    const kept = mapping.find(entry => entry.path === 'out/half-converted.csv');
+    assert.ok(kept, 'the failed-only output was not preserved');
+    assert.equal(sha256(await readFile(join(preserved, kept.saved_as))), worldAtFailure['out/half-converted.csv']);
+    assert.equal(sha256(await readFile(join(preserved, mapping.find(entry => entry.path === 'data/dates.csv').saved_as))), worldAtFailure['data/dates.csv']);
+    for (const receipt of ['approval.json', 'source.json']) assert.ok((await lstat(join(preserved, receipt))).isFile(), receipt);
+    const used = await p.mcp.raw('gil_revisit_apply', {scope_id: p.scope, digest: again.structuredContent.digest, token: recoveryToken});
+    assert.ok(used.error || !succeeded(used.result) || used.result.structuredContent?.state === 'completed', 'a used capability started another recovery');
+    assert.deepEqual(await work(), worldAtSuccess);
+
     // The single Will end history of this storage: the closed steps above ended their Wills as
     // achieved. A second Experiment (requirement R2) then ends its Verify's Will as UNACHIEVED,
     // which only the Will that is active right now can do.
     const history = () => p.record().then(bytes => bytes.toString('utf8'));
     assert.ok((await history()).includes('ended_wills:') && !(await history()).includes('done_wills:'), 'one end history, not the older done list');
     assert.ok(!(await history()).includes('end_result: unachieved'));
-    mustSucceed(await p.model('gil_open', await p.experimentArgs('R2')), 'second linked Experiment');
+    // The next Experiment of the same Chain opens after the recovery and records where it came from.
+    mustSucceed(await p.model('gil_open', await p.experimentArgs('R2')), 'the next Experiment after the approved recovery');
+    assert.equal((await p.plan()).current_experiment.revisit_from, failedCycle);
     mustSucceed(await p.model('gil_open', {kind: 'define', contract: CONTRACT}), 'define');
     mustSucceed(await p.model('gil_close', {report: 'problem: 지정한 자료에 빈 행이 존재하는가?\nsuccess_condition: 지정한 파일의 관측 증거가 위 명제의 긍정 답을 뒷받침한다. 근거 있는 부정 답이나 판정 미도달은 성공이 아니다\n'}), 'close define');
     mustSucceed(await p.model('gil_open', {kind: 'hypothesis', contract: CONTRACT}), 'hypothesis');
@@ -217,7 +287,7 @@ async function imageReports(binary, state, home) {
       assert.equal(image.sha256, asset.sha256);
       assert.ok(Buffer.from(image.data_base64, 'base64').equals(picture), 'the Monitor reads back the exact stored PNG bytes');
       const requirement = (await p.plan()).requirements.find(r => r.id === 'R1');
-      assert.deepEqual(requirement.experiments.map(e => [e.cycle_ref, e.verdict]), [[cycle, 'success']]);
+      assert.deepEqual(requirement.experiments.map(e => [e.cycle_ref, e.verdict]), [[cycle, 'success'], [failedCycle, 'failure']]);
       return {visuals, original};
     };
     const record = await p.record();
@@ -230,7 +300,13 @@ async function imageReports(binary, state, home) {
     assert.deepEqual(await reads(), first, 'a fresh process reads the same Reports and visuals');
     assert.ok((await p.record()).equals(record), 'reading after a restart changed the record');
     assert.equal((await history()).match(/end_result: unachieved/g)?.length, 1, 'the end history survived the restart');
-    return {started_format: 9, asset_sha256: asset.sha256, experiment: cycle, end_history: 'achieved ends and one unachieved end recorded', restart: 'same records and bytes'};
+    // After the last restart: the recovered work files and the preserved bytes are still the same.
+    assert.deepEqual(Object.fromEntries(Object.entries(await work()).filter(([path]) => Object.hasOwn(worldAtSuccess, path))), worldAtSuccess, 'a restart moved a recovered file');
+    assert.equal(sha256(await readFile(join(preserved, kept.saved_as))), worldAtFailure['out/half-converted.csv']);
+    assert.equal(mustSucceed(await p.app('gil_revisit_review'), 'recovery review at the end').structuredContent.state, 'not_needed', 'a finished recovery was offered or run again');
+    return {started_format: 9, asset_sha256: asset.sha256, experiment: cycle,
+      recovery: {from: failedCycle, target: cycle, approval: 'App-only capability (harness input, not a person)', before_approval: 'next Experiment, model revisit and restore refused; restart and reads changed nothing',
+        after: 'earlier world restored, failed bytes preserved, next Experiment opened in the same Chain'}, end_history: 'achieved ends and one unachieved end recorded', restart: 'same records and bytes'};
   } finally { await p.mcp.close(); }
 }
 
