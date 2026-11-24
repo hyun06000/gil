@@ -7,6 +7,10 @@ import {dirname, join, relative, resolve, parse, sep} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 
 export const TARGET = 'aarch64-apple-darwin';
+// Targets a notice inventory may be collected and validated for. Each has its own reviewed policy
+// and legal texts in its own directory (Linux: distribution/linux/compliance); one target's
+// inventory is never used for another target's artifact.
+export const TARGETS = [TARGET, 'x86_64-unknown-linux-gnu', 'x86_64-pc-windows-msvc', 'aarch64-pc-windows-msvc'];
 export const DIRECTORY = 'distribution/compliance';
 export const INPUTS = ['Cargo.toml', 'Cargo.lock', 'mcp-app/package-lock.json', 'mcp-app/build.mjs',
   'plugins/gil-companion-prototype/assets/monitor.html'];
@@ -67,7 +71,7 @@ export async function legalFiles(root) {
 }
 
 export async function collect(root = repository, {cargo = 'cargo', rustc = 'rustc', target = TARGET} = {}) {
-  assert.ok([TARGET, 'x86_64-pc-windows-msvc', 'aarch64-pc-windows-msvc'].includes(target), 'unreviewed target');
+  assert.ok(TARGETS.includes(target), 'unreviewed target');
   const run = (cmd, args) => execFileSync(cmd, args, {cwd: root, encoding: 'utf8', maxBuffer: 64e6, timeout: 120000});
   const metadata = JSON.parse(run(cargo, ['metadata', '--locked', '--offline', '--format-version', '1', '--filter-platform', target]));
   const tree = edges => new Set(run(cargo, ['tree', '--locked', '--offline', '--target', target,
@@ -135,7 +139,7 @@ export async function collect(root = repository, {cargo = 'cargo', rustc = 'rust
 }
 
 export function validatePolicy(policy, target = TARGET) {
-  assert.ok([TARGET, 'x86_64-pc-windows-msvc', 'aarch64-pc-windows-msvc'].includes(target));
+  assert.ok(TARGETS.includes(target));
   assert.equal(policy.schema, 1); assert.equal(policy.target, target);
   assert.deepEqual(Object.keys(policy.inputs).sort(), [...INPUTS].sort());
   for (const hash of Object.values(policy.inputs)) assert.match(hash, /^[a-f0-9]{64}$/);

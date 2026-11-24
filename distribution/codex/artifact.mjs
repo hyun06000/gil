@@ -6,7 +6,7 @@ import {chmod, lstat, mkdir, readFile, readdir, writeFile} from 'node:fs/promise
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {OUTPUTS as NOTICE_FILES, loadBundle, validatePolicy} from '../compliance/notices.mjs';
-import {compatibility, developmentFeatures, profileFromFeatures} from './compatibility.mjs';
+import {PROFILES, compatibility, developmentFeatures, profileFromFeatures, startKinds} from './compatibility.mjs';
 
 export const NAME = 'gil-companion-prototype';
 export const PREFIX = `plugins/${NAME}`;
@@ -154,7 +154,7 @@ export async function sourceSnapshot(root) {
 }
 
 export async function createTree({root = repository, binary, output, profile = 'default'}) {
-  assert.ok(['default', 'visual-authoring', 'approved-plan', 'exploration-flow'].includes(profile));
+  assert.ok(PROFILES.includes(profile));
   const destination = resolve(output);
   // Existing paths, including dangling symlinks, are never replaced. Failure leaves no receipt.
   await mkdir(destination, {recursive: false, mode: 0o755});
@@ -181,7 +181,9 @@ export async function createTree({root = repository, binary, output, profile = '
   checkMachO(content.get(CORE));
   content.set('PREVIEW.md', Buffer.from(profile === 'default' ? preview : preview.replace(
     'Visual report reads are included; experimental visual-authoring is not enabled.',
-    `EXPERIMENTAL ${profile} enabled. Synthetic projects only; no automatic migration. Public candidate staging requires explicit profile, clean source and separate review.`)));
+    profile === 'product'
+      ? 'PRODUCT feature set: tracked-scope start (Monitor-approved .gilignore, scope change) and image-report start (PNG visuals) in one executable; a new project is one kind or the other and is never converted. Approved plans, requirement-linked Experiments and original record reads are included. No automatic migration of existing records. Candidate staging still requires clean source and separate review.'
+      : `EXPERIMENTAL ${profile} enabled. Synthetic projects only; no automatic migration. Public candidate staging requires explicit profile, clean source and separate review.`)));
   // Locked inputs and original legal-text hashes are checked before any notice can be packaged.
   for (const [name, bytes] of await loadBundle(root)) {
     checkNoLocalPaths(bytes);
@@ -199,6 +201,7 @@ export async function createTree({root = repository, binary, output, profile = '
     source, binary_origin: 'supplied_binary; source correspondence requires build pipeline evidence',
     compatibility: compatibility(profile), migration: profile === 'default' ? 'none' : 'requires_review',
     ...(profile !== 'default' ? {development_features:developmentFeatures(profile)} : {}),
+    ...(startKinds(profile) ? {start_kinds: startKinds(profile)} : {}),
     gates: {developer_id: 'not_verified', notarization: 'not_verified',
       clean_machine_install: 'not_verified', marketplace_install: 'not_verified',
       first_launch_timeout: 'unresolved'}, files: await inventory(destination)};
@@ -218,6 +221,7 @@ export async function verifyTree(root) {
   const profile = profileFromFeatures(receipt.development_features);
   assert.deepEqual(receipt.compatibility, compatibility(profile));
   assert.equal(receipt.migration, profile === 'default' ? 'none' : 'requires_review');
+  assert.deepEqual(receipt.start_kinds, startKinds(profile), 'receipt and profile disagree on the kinds of new project');
   assert.deepEqual(receipt.gates, {developer_id: 'not_verified', notarization: 'not_verified',
     clean_machine_install: 'not_verified', marketplace_install: 'not_verified',
     first_launch_timeout: 'unresolved'});

@@ -1,0 +1,212 @@
+name: Product build candidate, macOS arm64 and Linux x64 (NOT a release)
+
+# What this is: the one user build per platform — every approved feature in one executable,
+#   features `tracking-policy,exploration-flow,visual-authoring,product-safety` — tested and packaged
+#   natively on each platform from the exact PR head. Both jobs use the same commit; the two binaries
+#   are different bytes and each is recorded by its own hash, source snapshot and Git tree.
+#   - Rust: the product feature set's lib tests, the start-kind selection (unit + real stdio), the
+#     tracked-scope start and same-Chain scope change over the real stdio process (now also walked
+#     under the exploration contract), the exploration and image-report suites, and an all-targets
+#     build. Suites that a feature or platform gate would compile away are counted by
+#     tools/ci/expect-tests.mjs: `running 0 tests` is never a pass.
+#   - Packaging: distribution/product/build.mjs builds the release binary, assembles the platform's
+#     install archive, and verifies it. On Linux every functional check after the archive is written
+#     goes through the archive bytes: checksum, member inspection, fresh extraction, an install into
+#     an isolated HOME, and both kinds of new project through the INSTALLED binary, then uninstall.
+# What this is not, and what it does not prove:
+#   - Not a required check, a release, a tag, a publication or an installation on a user's machine.
+#     Nothing is uploaded except short-lived review evidence. No secret is used.
+#   - The App approvals in the stdio suites and in the installed-binary check are harness input: not a
+#     person's click, not a rendered Host screen. Failure injection (archive failure, in-flight halt)
+#     uses debug-only failpoints and is evidence for the debug build only, never for the release bytes.
+#   - A pass on ubuntu-24.04 is not a statement of supported distributions. The glibc floor is read
+#     from the binary and recorded; the support range is decided separately, after a run on a clean
+#     proposed environment.
+#   - The Linux job needs the reviewed Linux notice inventory (distribution/linux/compliance). Until it
+#     exists the packaging step fails closed; the macOS inventory is never substituted.
+#   - It does not replace or change the Preview, Chain or first-start jobs or any required check, and
+#     starts no Windows runner.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'mcp-app/**'
+      - 'plugins/gil-companion-prototype/**'
+      - 'distribution/product/**'
+      - 'distribution/linux/**'
+      - 'distribution/codex/**'
+      - 'distribution/compliance/**'
+      - 'tools/ci/expect-tests.mjs'
+      - '.github/workflows/product-candidate.yml'
+  workflow_dispatch:
+    inputs:
+      unsigned_preview_version:
+        description: 'Optional X.Y.Z-preview.N stamp compiled into the Core; no publication or installation'
+        required: false
+        default: ''
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  RUSTUP_TOOLCHAIN: 1.97.1
+  GIL_PRODUCT_FEATURES: tracking-policy,exploration-flow,visual-authoring,product-safety
+
+jobs:
+  linux-x64-product:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      # Same CI-only dev/test build settings as the Chain job (release untouched).
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24 (same pin as the Preview and Chain jobs)
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Check build machine and record the exact head (never a user installation requirement)
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = x86_64
+          node -e 'if (Number(process.versions.node.split(".")[0]) < 22) { console.error("Node >= 22 is required on the build machine"); process.exit(1) }'
+          rustup toolchain install 1.97.1 --profile minimal --target x86_64-unknown-linux-gnu
+          {
+            echo '### Product candidate, Linux x64'
+            echo '```'
+            echo "head:  $(git rev-parse HEAD)"
+            echo "tree:  $(git rev-parse 'HEAD^{tree}')"
+            uname -srm
+            ldd --version | head -n 1
+            rustc -vV
+            cargo -V
+            node -v
+            /usr/bin/tar --version | head -n 1
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          npm ci --prefix mcp-app
+          npm ci --prefix plugins/gil-companion-prototype
+          cargo fetch --locked
+      - name: Packaging contract tests (synthetic inputs; no artifact is executed)
+        run: node --test distribution/product/*.test.mjs distribution/codex/compatibility.test.mjs distribution/codex/tool-contract.test.mjs
+      - name: "[default] Core tests and all targets on Linux (the launcher errno path and the Unix storage paths)"
+        run: |
+          cargo test --locked -p gil -- --test-threads=1
+          cargo build --locked -p gil --all-targets
+      - name: "[product] lib tests (start-kind selection, Linux image-report creation, user install)"
+        run: cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --lib -- --test-threads=1
+      - name: "[product] start-kind selection over the real stdio process, at least 5"
+        run: node tools/ci/expect-tests.mjs 5 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test unified_start
+      - name: "[product] tracked-scope start (4) and same-Chain scope change (6) over the real stdio process, exploration contract"
+        run: |
+          node tools/ci/expect-tests.mjs 4 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test tracking_start
+          node tools/ci/expect-tests.mjs 6 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test tracking_scope_change
+      - name: "[product] exploration and image-report suites over the real stdio process, at least 20"
+        run: node tools/ci/expect-tests.mjs 20 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test exploration_flow --test exploration_tools --test exploration_evidence --test exploration_plan_panel --test closing_handoff
+      - name: "[product] image-report creation entry and existing-record preservation"
+        run: |
+          node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test visual_start
+          node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test mcp visual_start_preserves_existing_and_partial_records_and_survives_response_loss -- --exact
+      - name: "[product] compile all Core targets (compile evidence only, not execution)"
+        run: cargo build --locked -p gil --all-targets --features "$GIL_PRODUCT_FEATURES"
+      - name: Shared UI regression
+        run: node --test ui/layout.test.mjs mcp-app/*.test.mjs plugins/gil-companion-prototype/*.test.mjs
+      - name: Prepare fresh output parent
+        run: mkdir -p target
+      - name: Build, package and verify the Linux install archive through its own bytes (no publication)
+        env:
+          GIL_PREVIEW_VERSION: ${{ inputs.unsigned_preview_version }}
+        run: node distribution/product/build.mjs target/product-linux-x64
+      - name: Retain development evidence only (not a publication)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
+        with:
+          archive: true # Keep the tar, checksum and evidence together; not direct-file publication.
+          name: gil-linux-x64-DEVELOPMENT-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            target/product-linux-x64/gil-linux-x64.tar.gz
+            target/product-linux-x64/SHA256SUMS
+            target/product-linux-x64/checks.json
+            target/product-linux-x64/provenance.json
+          if-no-files-found: error
+          retention-days: 7
+
+  macos-arm64-product:
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24 (same pin as the Preview and Chain jobs)
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Check build machine and record the exact head (never a user installation requirement)
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          node -e 'if (Number(process.versions.node.split(".")[0]) < 22) { console.error("Node >= 22 is required on the build machine"); process.exit(1) }'
+          rustup toolchain install 1.97.1 --profile minimal --target aarch64-apple-darwin
+          {
+            echo '### Product candidate, macOS arm64'
+            echo '```'
+            echo "head:  $(git rev-parse HEAD)"
+            echo "tree:  $(git rev-parse 'HEAD^{tree}')"
+            sw_vers
+            rustc -vV
+            cargo -V
+            node -v
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          npm ci --prefix mcp-app
+          npm ci --prefix plugins/gil-companion-prototype
+          cargo fetch --locked
+      - name: Packaging contract tests (synthetic inputs; no artifact is executed)
+        run: node --test distribution/product/*.test.mjs
+      # The default Core suite of this platform and head is the Preview job's; it is not repeated here.
+      - name: "[product] lib tests (start-kind selection)"
+        run: cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --lib -- --test-threads=1
+      - name: "[product] start-kind selection over the real stdio process, at least 5"
+        run: node tools/ci/expect-tests.mjs 5 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test unified_start
+      - name: "[product] tracked-scope start (4) and same-Chain scope change (6) over the real stdio process, exploration contract"
+        run: |
+          node tools/ci/expect-tests.mjs 4 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test tracking_start
+          node tools/ci/expect-tests.mjs 6 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test tracking_scope_change
+      - name: "[product] exploration and image-report suites over the real stdio process, at least 20"
+        run: node tools/ci/expect-tests.mjs 20 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test exploration_flow --test exploration_tools --test exploration_evidence --test exploration_plan_panel --test closing_handoff
+      - name: "[product] image-report creation entry and existing-record preservation"
+        run: |
+          node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test visual_start
+          node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test mcp visual_start_preserves_existing_and_partial_records_and_survives_response_loss -- --exact
+      - name: "[product] compile all Core targets (compile evidence only, not execution)"
+        run: cargo build --locked -p gil --all-targets --features "$GIL_PRODUCT_FEATURES"
+      - name: Prepare fresh output parent
+        run: mkdir -p target
+      # Unchanged macOS pipeline with the product profile: UI rebuild, notice recheck, Mach-O and system-library
+      # checks, archive roundtrip, protocol smoke with integrity first, then both kinds of new project through the
+      # packaged Core. Unsigned and not notarized; Gatekeeper is not bypassed and no credential is read.
+      - name: Build, package and verify the macOS Plugin archive (no publication)
+        env:
+          GIL_PREVIEW_VERSION: ${{ inputs.unsigned_preview_version }}
+        run: node distribution/product/build.mjs target/product-macos-arm64
+      - name: Retain development evidence only (not a marketplace publication)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
+        with:
+          archive: true
+          name: gil-macos-arm64-PRODUCT-DEVELOPMENT-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            target/product-macos-arm64/gil-codex-macos-arm64-preview.tar.gz
+            target/product-macos-arm64/SHA256SUMS
+            target/product-macos-arm64/checks.json
+            target/product-macos-arm64/provenance.json
+          if-no-files-found: error
+          retention-days: 7

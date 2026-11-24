@@ -53,6 +53,9 @@ records; installing an older Plugin never downgrades project records.
 
 function checkProfile(receipt, profile) {
   compatibility(profile); // Reject unknown profiles, never infer permission from a feature flag.
+  // Known to packaging is not approved for this channel: the product profile has no reviewed
+  // publication notice here, so staging it is refused until that text and its review exist.
+  assert.notEqual(profile, 'product', 'product profile has no reviewed unsigned-preview publication notice');
   assert.deepEqual(receipt.development_features ?? [], developmentFeatures(profile),
     'candidate profile must explicitly match the reviewed development tree');
   assert.deepEqual(receipt.compatibility, compatibility(profile));

@@ -7,13 +7,15 @@ import {join, resolve} from 'node:path';
 import {ARCHIVE_FLAGS, createTree, hash, inventory, repository, sourceSnapshot, verifyTree} from './artifact.mjs';
 import {smoke} from './smoke.mjs';
 import {buildVersion, selectedPreview} from './build-version.mjs';
+import {cargoFeatures} from './compatibility.mjs';
+import {verifyStartKinds} from '../product/verify-install.mjs';
 import {checkNativeOutputContract} from '../../plugins/gil-companion-prototype/native-output-contract.mjs';
 import {check as checkNotices} from '../compliance/notices.mjs';
 
 assert.equal(process.platform, 'darwin');
 assert.equal(process.arch, 'arm64', 'only tested architecture may be packaged');
 const [destination, ...extra] = process.argv.slice(2);
-assert.ok(destination && (extra.length === 0 || (extra.length === 1 && ['--visual-authoring', '--approved-plan', '--exploration-flow'].includes(extra[0]))), 'Usage: build-preview.mjs <new-output-directory> [--visual-authoring|--approved-plan|--exploration-flow]');
+assert.ok(destination && (extra.length === 0 || (extra.length === 1 && ['--visual-authoring', '--approved-plan', '--exploration-flow', '--product'].includes(extra[0]))), 'Usage: build-preview.mjs <new-output-directory> [--visual-authoring|--approved-plan|--exploration-flow|--product]');
 const profile = extra.length ? extra[0].slice(2) : 'default';
 const coreVersion = buildVersion(await selectedPreview(process.env, readFile), JSON.parse(await readFile(join(repository, 'plugins/gil-companion-prototype/.codex-plugin/plugin.json'))).version);
 const output = resolve(destination);
@@ -32,9 +34,7 @@ const target = join(repository, 'target/plugin-core-build');
 const cargoHome = process.env.CARGO_HOME || join(homedir(), '.cargo');
 const rustflags = `--remap-path-prefix=${cargoHome}=/cargo --remap-path-prefix=${repository}=/gil`;
 assert.ok(!/\s/.test(repository + cargoHome), 'build roots containing whitespace need encoded rustflags support');
-const productFeatures = profile === 'exploration-flow' ? 'exploration-flow,visual-authoring,product-safety' : profile === 'approved-plan' ? 'approved-plan,visual-authoring,product-safety' : profile === 'visual-authoring'
-  ? 'visual-authoring,product-safety'
-  : 'product-safety';
+const productFeatures = cargoFeatures(profile);
 await run('cargo', ['build', '--locked', '--release', '-p', 'gil', '--target', 'aarch64-apple-darwin', '--features', productFeatures], {
   ...process.env, GIL_BUILD_VERSION: coreVersion, RUSTFLAGS: rustflags, CARGO_TARGET_DIR: target,
 });
@@ -53,6 +53,9 @@ try {
   await verifyTree(extracted);
   assert.deepEqual(await inventory(extracted), await inventory(marketplace), 'archive roundtrip changed files/modes');
   const check = await smoke(extracted, join(repository, 'plugins/gil-companion-prototype/assets/monitor.html'), verifyTree, profile, coreVersion);
+  // The product build has two kinds of new project. Each is exercised through the packaged binary
+  // itself, in a synthetic project, with a restart; the catalog smoke above is not that evidence.
+  if (profile === 'product') check.start_kinds = await verifyStartKinds(join(extracted, 'plugins/gil-companion-prototype/core/darwin-arm64/gil'));
   const archiveHash = hash(await readFile(archive));
   await writeFile(join(output, 'SHA256SUMS'), `${archiveHash}  gil-codex-macos-arm64-preview.tar.gz\n`, {flag: 'wx'});
   await writeFile(join(output, 'checks.json'), JSON.stringify({channel: 'development_unsigned', publishable: false,
