@@ -68,7 +68,7 @@ export async function checkInstallFailpoints(binary) {
     const refused = run(a, ['install', '--no-wait'], first.env, 'first-receipt');
     assert.notEqual(refused.status, 0);
     assert.match(refused.stderr, /Nothing was installed/);
-    assert.deepEqual(await names(first.bin), [], 'something of the failed first install stayed');
+    assert.deepEqual(await names(join(first.at, '.local/share')), [], 'new folders survived the failed first install');
     assert.equal(await readFile(join(first.at, '.codex/config.toml'), 'utf8'), CONFIG, 'a Host setting changed although the install failed');
     assert.equal(run(a, ['install', '--no-wait'], first.env).status, 0);
     results['first-receipt'] = 'receipt publication refused before binary placement; Host settings untouched; rerun installed';

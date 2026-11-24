@@ -240,15 +240,22 @@ pub(super) fn place(fixed: &Path, bytes: &[u8], digest: &str, receipt: &str) -> 
         if entry(&receipt_path)?.is_some() && previous.is_none() {
             return Err(format!("{} exists without the executable it would record, so it cannot be shown to be gil install's. Nothing was changed; move it away yourself, then run gil install again", receipt_path.display()));
         }
-        let dirs = previous.as_ref().map_or(made, |record| record.made_dirs.clone());
-        let settled = receipt_with(receipt, &dirs, None)?;
-        fail_at("first-receipt").map_err(|err| format!("cannot record first installation: {err}. Nothing was installed"))?;
+        let dirs = previous.as_ref().map_or(made.as_slice(), |record| &record.made_dirs);
+        let settled = receipt_with(receipt, dirs, None)?;
         if let Some(record) = &previous { clean_staged(dir, record)?; }
-        let staged = write_new(dir, "gil", 0o755, bytes)?;
-        if let Err(why) = pending_receipt(dir, &settled, &staged, true, previous.is_some()) {
-            let _ = std::fs::remove_file(&staged);
-            return Err(why);
-        }
+        let prepare = || {
+            fail_at("first-receipt").map_err(|err| format!("cannot record first installation: {err}. Nothing was installed"))?;
+            let staged = write_new(dir, "gil", 0o755, bytes)?;
+            if let Err(why) = pending_receipt(dir, &settled, &staged, true, previous.is_some()) {
+                let _ = std::fs::remove_file(&staged);
+                return Err(why);
+            }
+            Ok(staged)
+        };
+        let staged = prepare().inspect_err(|_| {
+            // No intent was published. Return only the empty folders created by this call.
+            remove_made_folders(dir, &made);
+        })?;
         fail_at("first-intent").map_err(|err| err.to_string())?;
         let result = fail_at("first-binary").and_then(|()| std::fs::hard_link(&staged, fixed));
         let _ = std::fs::remove_file(staged);
@@ -342,12 +349,20 @@ pub(super) fn remove(fixed: &Path) -> Result<Removal, String> {
     }
     // Folders: only the ones the receipt says this installation made, innermost first, when empty.
     // A folder that existed before the installation, or one whose origin was never recorded, stays.
-    for (folder, name) in [(dir, "gil/bin"), (product, "gil")] {
-        if record.made_dirs.iter().any(|made| made == name) && std::fs::remove_dir(folder).is_ok() {
-            done.removed.push(folder.display().to_string());
+    done.removed.extend(remove_made_folders(dir, &record.made_dirs));
+    Ok(done)
+}
+
+fn remove_made_folders(dir: &Path, made_dirs: &[String]) -> Vec<String> {
+    let mut removed = Vec::new();
+    for (folder, name) in [(Some(dir), "gil/bin"), (dir.parent(), "gil")] {
+        if let Some(folder) = folder {
+            if made_dirs.iter().any(|made| made == name) && std::fs::remove_dir(folder).is_ok() {
+                removed.push(folder.display().to_string());
+            }
         }
     }
-    Ok(done)
+    removed
 }
 
 #[cfg(test)]
@@ -644,7 +659,7 @@ mod tests {
         let failed = failing("first-receipt", || put(&fixed, b"core one")).unwrap_err();
         assert!(failed.contains("Nothing was installed") && !failed.contains("yourself"), "{failed}");
         let dir = fixed.parent().unwrap();
-        assert!(names(dir).is_empty(), "something of the failed installation stayed: {:?}", names(dir));
+        assert!(!dir.exists(), "new folders remained after the pre-publication failure");
         assert_eq!(put(&fixed, b"core one").unwrap(), "UPDATED");
         let _ = std::fs::remove_dir_all(root);
         // The executable itself cannot be placed: nothing is installed and nothing staged stays.
