@@ -540,4 +540,7 @@ export default {
   "scope.halt_register": "Record this halt again",
   "scope.halt_identity": "Halt {id}… · state {state}…",
   "scope.state_unconfirmed": "The current state could not be confirmed after the last request. Read again before deciding anything.",
+  "scope.halt_note_received": "Halt request: received. The running work stops at its next write boundary and the halt is applied then.",
+  "scope.halt_note_applied": "Halt request: received and applied.",
+  "scope.halt_note_failed": "Halt request: {why}",
 };

@@ -326,7 +326,7 @@ impl GilServer {
 fn locale_for_call(monitor: &Monitor, name: &str, input: &Value) -> Locale {
     let root = match input.get("project_root").and_then(Value::as_str) {
         Some(root) if std::path::Path::new(root).is_absolute() => Some(std::path::PathBuf::from(root)),
-        _ if name.starts_with("gil_monitor_") || matches!(name, "show_gil_monitor" | "gil_plan_review" | "gil_plan_decide" | "gil_revisit_review" | "gil_revisit_apply" | "gil_start_review" | "gil_start_decide" | "gil_start_apply" | "gil_start_list") =>
+        _ if name.starts_with("gil_monitor_") || name.starts_with("gil_scope_") || matches!(name, "show_gil_monitor" | "gil_plan_review" | "gil_plan_decide" | "gil_revisit_review" | "gil_revisit_apply" | "gil_start_review" | "gil_start_decide" | "gil_start_apply" | "gil_start_list") =>
             input.get("scope_id").and_then(Value::as_str).and_then(|scope| monitor.root(scope).ok()),
         _ => None,
     };

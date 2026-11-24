@@ -540,4 +540,7 @@ export default {
   "scope.halt_register": "重新记录此次中止",
   "scope.halt_identity": "中止 {id}… · 状态 {state}…",
   "scope.state_unconfirmed": "上一次请求之后无法确认当前状态。在做任何决定之前请重新读取。",
+  "scope.halt_note_received": "中止请求:已收到。进行中的工作将在下一个写入边界停止,届时应用中止。",
+  "scope.halt_note_applied": "中止请求:已收到并已应用。",
+  "scope.halt_note_failed": "中止请求:{why}",
 };

@@ -125,3 +125,75 @@ test('when the server could not re-read the record the panel says the current st
   assert.ok(r.panel.allText().includes('현재 상태를 확인하지 못했다'), r.panel.allText());
   assert.equal(r.buttons().filter((b) => b.textContent !== '다시 읽기').length, 0);
 });
+
+// A rig whose approve/retry answer is held until the test releases it, so a halt can be sent meanwhile.
+function slowRig({ value, meta, haltResult }) {
+  const panel = new Element('section'), calls = [], doc = { createElement: (tag) => new Element(tag) };
+  let release; const held = new Promise((r) => { release = r; });
+  const app = {
+    async callServerTool(call) {
+      calls.push(call);
+      if (call.name === 'gil_scope_review') return { structuredContent: value, _meta: meta };
+      if (call.name === 'gil_scope_halt') return { structuredContent: haltResult };
+      await held;
+      return { structuredContent: value };
+    },
+    async sendMessage() { return {}; },
+  };
+  const review = makeScopeReview({ app, scope: 'project:' + 'a'.repeat(64), panel, document: doc });
+  const button = (label) => panel.querySelectorAll('button').find((b) => b.textContent === label);
+  return { panel, calls, review, button, release, sent: (name) => calls.filter((c) => c.name === name) };
+}
+
+const proposal = { revision: 3, digest: 'd'.repeat(64), engine: 'gil-gilignore/1', rules: 'data/\n', review_interview: 'cycle:C1',
+  policy_before: 'policy:P1', world_before: 'snapshot:A1', confirmed_policy: 'policy:P1', newly_tracked: [], newly_excluded: ['data/raw.csv'], effects: [], response: null };
+
+test('while an approval is running the halt can still be sent, with its own capability and its own answer', async () => {
+  const r = slowRig({
+    value: { phase: 'awaiting_approval', said: 'waiting', policy_file: 'synced', proposal, tracking: tracking({ waiting: null, basis_agrees: true }) },
+    meta: { 'gil/scopeApprovalToken': 'approve-token', 'gil/scopeHaltToken': 'halt-token' },
+    haltResult: { said: 'received', halt_request: { received: true, applied: false } },
+  });
+  await r.review.refresh();
+  const running = r.button('이 범위 변경 승인').click(true);
+  await Promise.resolve();
+  assert.equal(r.sent('gil_scope_decide').length, 1);
+  // The approval is in flight: its buttons are disabled, a second click sends nothing, the halt button still works.
+  assert.equal(r.button('이 범위 변경 승인').disabled, true);
+  await r.button('이 범위 변경 승인').click(true);
+  await r.button('변경 요청').click(true);
+  assert.equal(r.sent('gil_scope_decide').length, 1, 'no duplicate approval or second decision');
+  const halt = r.button('지금 보관과 진행 중단');
+  assert.equal(halt.disabled, false, 'the halt stays available during the work');
+  await halt.click(false);
+  assert.equal(r.sent('gil_scope_halt').length, 0, 'untrusted click');
+  await halt.click(true);
+  assert.deepEqual(r.sent('gil_scope_halt').map((c) => c.arguments), [{ scope_id: 'project:' + 'a'.repeat(64), token: 'halt-token' }]);
+  assert.equal(r.sent('gil_scope_decide')[0].arguments.token, 'approve-token', 'each request carried its own capability');
+  // The halt answer is shown as received, not as the approval's result, and no re-read interrupts the running work.
+  assert.ok(r.panel.allText().includes('중단 요청: 받았다'), r.panel.allText());
+  assert.equal(r.sent('gil_scope_review').length, 1, 'no re-read while the approval is still running');
+  await halt.click(true);
+  assert.equal(r.sent('gil_scope_halt').length, 1, 'the spent halt capability is not resent');
+  r.release();
+  await running;
+  assert.equal(r.sent('gil_scope_review').length, 2, 'after the approval answers the stored state is read again');
+});
+
+test('while an explicit retry is running the halt can still be sent and the retry is not repeated', async () => {
+  const r = slowRig({
+    value: { phase: 'applied', said: 'state', policy_file: 'synced', tracking: tracking() },
+    meta: { 'gil/scopeRetryToken': 'retry-token', 'gil/scopeHaltToken': 'halt-token' },
+    haltResult: { said: 'halted', halt_request: { received: true, applied: true }, tracking: tracking({ archive_halt: 'event:M2' }) },
+  });
+  await r.review.refresh();
+  const running = r.button('지금 기준점 보관 재시도').click(true);
+  await Promise.resolve();
+  await r.button('지금 기준점 보관 재시도').click(true);
+  assert.equal(r.sent('gil_scope_retry').length, 1, 'no duplicate retry');
+  await r.button('지금 보관과 진행 중단').click(true);
+  assert.equal(r.sent('gil_scope_halt').length, 1);
+  assert.ok(r.panel.allText().includes('중단 요청: 받았고 적용됐다'), r.panel.allText());
+  r.release();
+  await running;
+});

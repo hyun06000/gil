@@ -639,8 +639,10 @@ fn a_halt_received_during_an_approval_stops_at_the_next_write_boundary_without_u
     let decided = decide(&root, revision, &digest, true).expect("응답은 기록된다");
     assert_eq!(decided["facts"]["policy_applied"], true, "끝난 승인 저장은 되돌리지 않는다: {decided}");
     assert_eq!(decided["facts"]["policy_file"], "not_written_halt_requested");
-    assert_eq!(decided["facts"]["baseline"]["result"], "not_started");
-    assert_eq!(decided["facts"]["halt_applied"], true);
+    // 보관은 실패한 것이 아니라 시작하지 않은 것이다 — 관측 전에 멈췄고 시도 기록도 없다.
+    assert_eq!(decided["facts"]["baseline"]["result"], "halted", "{decided}");
+    assert_eq!(decided["facts"]["baseline"]["before"], "observe");
+    assert_eq!(decided["facts"]["baseline"]["halt_request"], serde_json::json!({"received": true, "applied": true}));
     assert_eq!(decided["tracking"]["archive_halt"], "event:M2", "표식은 적용되는 때의 자리를 가리킨다");
     assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), P1, "정책 파일을 쓰지 않았다");
     assert!(failed_attempts(&root).is_empty(), "중단은 시도를 실패로 적지 않는다");
@@ -890,4 +892,119 @@ fn after_the_baseline_is_confirmed_the_closing_approval_the_chain_report_and_the
     assert_eq!(seen["tracking"]["applied_policy"], "policy:P2", "{seen}");
     assert!(seen["tracking"]["confirmed_policy"].is_null());
     assert!(open_session(&root).project().tracking().unwrap().ledger().policies().len() == 2);
+}
+
+// ── 중단 적용은 최신 저장 상태를 보존한다 ──────────────────────────────────
+
+fn halt_arrives_after(step: &'static str, root: &Path) {
+    let gil = root.join(".gil");
+    AFTER_ADAPTER_SAVE.with(|slot| *slot.borrow_mut() = Some((step, Box::new(move || {
+        ledger::receive_halt_request(&gil, "synthetic-request").expect("수신 표식");
+    }))));
+}
+
+/// 기준점 저장이 **끝난 직후** 받은 중단 요청: 표식은 그 최신 저장 상태 위에 더해진다. 방금 확정한 기준점·등록 세계·시도 이력·적용
+/// 정책·sync_base 가 그대로다 — 저장 전의 메모리 값을 다시 저장해 덮지 않는다. 저장이 오류를 돌려줬지만 실제로는 저장된 경우도 같다.
+#[test]
+fn a_halt_applied_right_after_a_finished_baseline_save_keeps_that_save() {
+    for (label, stored_then_error) in [("halt-after-save", false), ("halt-after-save-error", true)] {
+        let root = started(label);
+        let (revision, digest) = proposed(&root, P2);
+        if stored_then_error {
+            SAVE_FAULT.with(|slot| *slot.borrow_mut() = Some(("baseline", true)));
+        }
+        halt_arrives_after("baseline", &root);
+        let decided = decide(&root, revision, &digest, true).expect("응답은 기록된다");
+        assert_eq!(decided["facts"]["baseline"]["result"], "archived", "{label}: 끝난 저장은 확정으로 읽힌다: {decided}");
+        assert_eq!(decided["facts"]["baseline"]["halt_request"], serde_json::json!({"received": true, "applied": true}), "{label}");
+        // 저장된 기록: 기준점과 표식이 함께 있다.
+        let session = open_session(&root);
+        let tracking = session.project().tracking().unwrap();
+        let (_, event) = tracking.events().last().unwrap();
+        let archived = event.archived.expect("확정한 기준점이 남아 있다");
+        assert_eq!(archived.snapshot.to_string(), "snapshot:A2", "{label}");
+        assert_eq!(archived.after_cycle.unwrap().to_string(), "cycle:C1");
+        assert!(session.project().world_manifest(archived.snapshot).is_some(), "{label}: 등록부의 세계가 남아 있다");
+        assert_eq!(tracking.ledger().policies().len(), 2, "{label}: 적용 정책 P2");
+        assert!(matches!(tracking.sync_base(), sp::SyncBase::Present(_)), "{label}: sync_base 가 남아 있다");
+        // 대기가 없으므로 표식은 서 있는 경계를 가리킨다.
+        assert_eq!(tracking.halt().expect("적용된 표식").to_string(), "cycle:C1", "{label}");
+        assert!(!halt_requested(&root.join(".gil")), "{label}: 적용된 요청의 수신 표식은 치워졌다");
+        drop(session);
+        let seen = now(&root);
+        assert!(seen["tracking"]["waiting"].is_null(), "{label}: {seen}");
+        assert_eq!(seen["tracking"]["last_confirmed_world"], "snapshot:A2");
+        assert_eq!(seen["policy_file"], "synced");
+    }
+}
+
+/// 실패 시도 기록이 **끝난 직후** 받은 요청: 그 실패 기록과 보관 대기가 그대로이고 표식만 더해진다. 중단이 새 실패를 만들지 않는다.
+#[test]
+fn a_halt_applied_right_after_a_recorded_failure_keeps_the_failure_and_adds_none() {
+    let root = started("halt-after-failure");
+    let (revision, digest) = proposed(&root, P2);
+    let changed = root.join("src/a.txt");
+    AFTER_APPROVAL.with(|slot| *slot.borrow_mut() = Some(Box::new(move || fs::write(&changed, "changed outside\n").unwrap())));
+    halt_arrives_after("failure", &root);
+    let decided = decide(&root, revision, &digest, true).expect("응답은 기록된다");
+    assert_eq!(decided["facts"]["baseline"]["result"], "failed", "{decided}");
+    assert_eq!(decided["facts"]["baseline"]["cause"], "external_change");
+    assert_eq!(decided["facts"]["baseline"]["failure_recorded"], true);
+    assert_eq!(decided["facts"]["baseline"]["halt_request"]["applied"], true);
+    assert_eq!(failed_attempts(&root), ["external_change"], "기록된 실패가 남아 있고 늘지도 않았다");
+    let seen = now(&root);
+    assert_eq!(seen["tracking"]["archive_halt"], "event:M2", "{seen}");
+    assert_eq!(seen["tracking"]["waiting"]["event"], "event:M2");
+    assert_eq!(seen["tracking"]["applied_policy"], "policy:P2");
+}
+
+/// 최신 저장 상태를 읽지 못하면 표식을 적용하지 않는다: 옛 복사본을 저장하지 않고, 수신 요청을 남기고, 적용을 말하지 않는다.
+#[test]
+fn when_the_latest_state_cannot_be_read_the_halt_is_not_applied_and_the_request_stays_received() {
+    let root = started("halt-reread");
+    let (revision, digest) = proposed(&root, P2);
+    halt_arrives_after("baseline", &root);
+    ABSORB_REREAD_FAULT.with(|slot| *slot.borrow_mut() = Some(()));
+    let decided = decide(&root, revision, &digest, true).expect("응답은 기록된다");
+    assert_eq!(decided["facts"]["baseline"]["result"], "archived", "끝난 저장은 그대로다: {decided}");
+    assert_eq!(decided["facts"]["baseline"]["halt_request"], serde_json::json!({"received": true, "applied": false}));
+    assert!(halt_requested(&root.join(".gil")), "요청은 받은 채로 남는다");
+    let state = fs::read_to_string(root.join(".gil/state.yaml")).unwrap();
+    assert!(state.contains("snapshot:A2") && state.contains("archive_halt: null"), "기준점은 남고 표식은 아직 없다");
+    // 받은 요청이 남아 있는 동안 조회는 그 사실을 싣고, 다음 쓰기 열기가 최신 상태 위에 표식을 적용한다.
+    assert_eq!(now(&root)["halt_request_pending"], true);
+    let session = open_session(&root);
+    let tracking = session.project().tracking().unwrap();
+    assert_eq!(tracking.halt().expect("이제 적용됐다").to_string(), "cycle:C1");
+    assert!(tracking.events().last().unwrap().1.archived.is_some(), "기준점이 보존됐다");
+}
+
+/// 관측 뒤·capture 앞, capture 뒤·manifest 저장 앞, manifest 뒤·상태 저장 앞에서 받은 요청: 그 걸음을 시작하지 않는다. 실패가 아니며
+/// 시도 기록이 늘지 않고, 어떤 세계도 확정되지 않는다.
+#[test]
+fn a_halt_received_between_archive_steps_starts_no_further_step_and_records_no_failure() {
+    for step in ["capture", "store_manifest", "save"] {
+        let root = waiting(&format!("halt-step-{step}"));
+        let attempts = failed_attempts(&root);
+        let objects = object_files(&root);
+        HALT_BEFORE_STEP.with(|slot| *slot.borrow_mut() = Some(step));
+        let retried = retry(&root, "event:M2").expect("요청은 받는다");
+        let baseline = &retried["facts"]["baseline"];
+        assert_eq!(baseline["result"], "halted", "{step}: {retried}");
+        assert_eq!(baseline["before"], step);
+        assert_eq!(baseline["failure_recorded"], false);
+        assert_eq!(baseline["halt_request"], serde_json::json!({"received": true, "applied": true}), "{step}");
+        assert_eq!(failed_attempts(&root), attempts, "{step}: 중단을 실패 이력으로 바꾸지 않는다");
+        if step == "capture" {
+            assert_eq!(object_files(&root), objects, "관측만 했고 객체를 쓰지 않았다");
+        }
+        let seen = now(&root);
+        assert_eq!(seen["tracking"]["waiting"]["event"], "event:M2", "{step}: 여전히 대기다");
+        assert_eq!(seen["tracking"]["archive_halt"], "event:M2");
+        assert_eq!(seen["tracking"]["last_confirmed_world"], "snapshot:A1", "{step}: 확정된 세계가 없다");
+        // 해제 뒤의 명시 재시도는 처음부터 다시 해서 확정한다 — 앞선 시도가 남긴 객체로 성공을 추정하지 않는다.
+        let shown = shown_halt(&root);
+        release_as(&root, &shown, "continue", true).expect("해제");
+        assert_eq!(retry(&root, "event:M2").expect("명시 재시도")["facts"]["baseline"]["result"], "archived", "{step}");
+    }
 }

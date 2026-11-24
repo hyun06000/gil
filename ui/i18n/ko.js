@@ -541,4 +541,7 @@ export default {
   "scope.halt_register": "이 중단의 기록 다시 남기기",
   "scope.halt_identity": "중단 건 {id}… · 상태 {state}…",
   "scope.state_unconfirmed": "마지막 요청 뒤 현재 상태를 확인하지 못했다. 무엇을 결정하기 전에 다시 읽는다.",
+  "scope.halt_note_received": "중단 요청: 받았다. 진행 중인 작업은 다음 쓰기 경계에서 멈추고 그때 중단이 적용된다.",
+  "scope.halt_note_applied": "중단 요청: 받았고 적용됐다.",
+  "scope.halt_note_failed": "중단 요청: {why}",
 };

@@ -25,7 +25,8 @@
 //!
 //! # 기준점 보관과 재시도는 기존 바탕을 그대로 부른다
 //!
-//! 관측·범위 변화 검사·객체 확정·저장 결과의 재확인은 `baseline_retry::run_retry` 가 한다. 이 모듈이 더하는 것은 **실제 저장 경계**
+//! 관측·범위 변화 검사·객체 확정·저장 결과의 재확인은 `baseline_retry` 의 `RetryAttempt` 가 한다(그 모듈의 `run_retry` 와 같은 순서로
+//! 걸음을 밀되, 보관을 진행시키는 걸음 앞에서 수신된 중단 요청을 본다 — [`drive`]). 이 모듈이 더하는 것은 **실제 저장 경계**
 //! ([`StateAdapter`])뿐이다: 쓰는 그 시점에 디스크의 기록을 새로 읽어(load 의 검사 전체) 같은 상태에서 빠짐없이 입력을 뽑고, 결속 전체
 //! ([`AttemptBinding::holds_in`])가 그대로일 때만 한 저장 단위(세계 이름 등록·`baseline` 경계/발급기/참조·`archived` 시도)를 한 번의
 //! `state.yaml` 교체로 적는다. 다시 읽기도 같은 디스크 읽기다. 호출자가 고른 정책·성공값·「없다」는 표식을 받는 자리가 없다 — 미완 복원
@@ -63,7 +64,8 @@ use sha2::{Digest, Sha256};
 use crate::artifact::start_policy as sp;
 use crate::artifact::tracking::{
     AfterFailure, BaselineCommit, BaselineState, EventKind, EventName, FailedAttempt, FailureCause, FailureRecord, HaltAt,
-    MarkSeen, OwnedRecords, PolicyName, RecordStanding, RetryOutcome, SaveAnswer, StandingAt, TrackedEvent, run_retry,
+    MarkSeen, OwnedRecords, PolicyName, RecordStanding, RetryAttempt, RetryOutcome, RetryRequest, SaveAnswer, StandingAt,
+    TrackedEvent,
 };
 use crate::artifact::{ContentDigest, TrackingState};
 use crate::{CycleKind, Project, ProjectSession};
@@ -744,20 +746,10 @@ fn apply(session: &mut ProjectSession, root: &Path, gil: &Path, found: &Ledger, 
     if let Some(hook) = AFTER_APPROVAL.with(|slot| slot.borrow_mut().take()) {
         hook();
     }
-    // 저장 1 은 끝났다 — 그 뒤에 받은 중단 요청은 이미 끝난 승인 저장을 되돌리지 않는다. 남은 걸음(파일 쓰기·기준점 보관)만 멈춘다.
-    if halt_requested(gil) {
-        let applied = absorb_halt_request(session);
-        return Ok(json!({
-            "policy_applied": true,
-            "policy": policy_name.to_string(),
-            "event": event_name.to_string(),
-            "policy_file": "not_written_halt_requested",
-            "baseline": {"result": "not_started", "why": "halt_requested", "record_reread": applied.is_ok()},
-            "halt_applied": applied.unwrap_or(false),
-        }));
-    }
+    // 저장 1 은 끝났다 — 그 뒤에 받은 중단 요청은 이미 끝난 승인 저장을 되돌리지 않는다. 남은 걸음은 각자의 경계에서 그 요청을 보고
+    // 시작하지 않으며(파일 쓰기 세 걸음의 앞, 보관의 관측·capture·manifest·저장 앞), 표식의 적용은 보관 시도의 끝이 한다.
     // 정책 파일 동기화 — 실패해도 정책은 유효하다. 따로 표시한다.
-    let file = sync_policy_file(session, root, &bytes, &rules, &chosen, &disk);
+    let file = sync_policy_file(session, gil, root, &bytes, &rules, &chosen, &disk);
     // 기준점 보관 — 승인 흐름의 한 시도. 실패하면 보관 대기가 남고, 그 뒤의 시도는 명시 재시도뿐이다.
     let baseline = attempt(session, root, gil, event_name);
     Ok(json!({
@@ -806,8 +798,28 @@ thread_local! {
     pub(crate) static AFTER_APPROVAL: std::cell::RefCell<Option<Box<dyn FnOnce()>>> = const { std::cell::RefCell::new(None) };
     /// 시도가 끝난 뒤의 마지막 다시 읽기 한 번을 실패로 만든다 — 시도의 사실은 있고 현재 상태는 확인하지 못한 경우.
     pub(crate) static FINAL_REREAD_FAULT: std::cell::RefCell<Option<()>> = const { std::cell::RefCell::new(None) };
+    /// 중단 적용이 최신 저장 상태를 읽는 한 번을 실패로 만든다 — 표식을 적용하지 않고 요청을 남겨야 한다.
+    pub(crate) static ABSORB_REREAD_FAULT: std::cell::RefCell<Option<()>> = const { std::cell::RefCell::new(None) };
+    /// 보관 시도가 이 걸음(`observe`·`capture`·`store_manifest`·`save`)을 시작하기 직전에 중단 요청이 수신된 것으로 만든다.
+    pub(crate) static HALT_BEFORE_STEP: std::cell::RefCell<Option<&'static str>> = const { std::cell::RefCell::new(None) };
+    /// 저장 경계의 이 저장(`baseline`·`failure`)이 끝난 직후 한 번 부른다 — 끝난 저장 바로 뒤에 수신된 중단 요청.
+    pub(crate) static AFTER_ADAPTER_SAVE: std::cell::RefCell<Option<(&'static str, Box<dyn FnOnce()>)>> = const { std::cell::RefCell::new(None) };
     /// 다시 읽기 한 번을 실패로 만든다 — 결과 불명.
     pub(crate) static REREAD_FAULT: std::cell::RefCell<Option<()>> = const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(test)]
+fn after_adapter_save(step: &'static str) {
+    let hook = AFTER_ADAPTER_SAVE.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        match &*slot {
+            Some((at, _)) if *at == step => slot.take(),
+            _ => None,
+        }
+    });
+    if let Some((_, hook)) = hook {
+        hook();
+    }
 }
 
 #[cfg(not(test))]
@@ -830,12 +842,18 @@ fn write_policy(root: &Path, bytes: &[u8], expected: Option<&ContentDigest>) -> 
 /// `unconfirmed` 에서는 자동으로 쓰지 않는다.
 fn sync_policy_file(
     session: &mut ProjectSession,
+    gil: &Path,
     root: &Path,
     bytes: &[u8],
     rules: &ContentDigest,
     base: &sp::SyncBase,
     disk: &sp::DiskReading,
 ) -> &'static str {
+    // 수신된 중단 요청이 있으면 쓰기 세 걸음을 **시작하지 않는다.** 이미 시작한 세 걸음(기준 unconfirmed 저장 뒤)은 한 단위로 끝낸다 —
+    // 중간에 버리면 기준이 미확인으로 남아 쓰기가 닿았는지 알 수 없는 상태를 중단이 만들게 된다.
+    if halt_requested(gil) {
+        return "not_written_halt_requested";
+    }
     let expected = match (disk, base) {
         (sp::DiskReading::Present(found), _) if found == rules => return "already_matches",
         (sp::DiskReading::Unreadable { .. }, _) => return "not_written_unreadable",
@@ -889,6 +907,8 @@ fn sync_policy_file(
 struct StateAdapter<'s> {
     session: &'s mut ProjectSession,
     gil: PathBuf,
+    /// 이 경계가 수신된 중단 요청 때문에 쓰지 않은 걸음 — 그것은 저장 실패가 아니며 실패 시도로 적히지도 않는다.
+    stopped_for_halt: Option<&'static str>,
 }
 
 impl StateAdapter<'_> {
@@ -909,6 +929,7 @@ impl BaselineState for StateAdapter<'_> {
         let not = |said: String| SaveAnswer::NotStored { said };
         // 진행 중에 중단 요청을 받았다 — 세계를 확정하지 않는다. 표식의 적용은 이 시도가 끝난 직후다.
         if halt_requested(&self.gil) {
+            self.stopped_for_halt = Some("save");
             return not("즉시 보관 중단 요청을 받아 기준점을 저장하지 않았다".into());
         }
         // 쓰는 그 시점에 결속 전체를 다시 확인한다 — 경계·발급기·적용 정책·마지막 확정 세계와 확정 정책·그 근거·시도 수.
@@ -927,7 +948,10 @@ impl BaselineState for StateAdapter<'_> {
         if snapshot != commit.snapshot() {
             return not(format!("등록부가 준 이름 {snapshot} 이 이 시도가 정한 {} 과 다르다", commit.snapshot()));
         }
-        match save_step(self.session, &next, "baseline") {
+        let saved = save_step(self.session, &next, "baseline");
+        #[cfg(test)]
+        after_adapter_save("baseline");
+        match saved {
             Ok(()) => SaveAnswer::Stored,
             // 오류가 났지만 닿았는지 모른다 — 다시 읽기가 가린다.
             Err(e) => SaveAnswer::Uncertain { said: e.to_string() },
@@ -942,6 +966,7 @@ impl BaselineState for StateAdapter<'_> {
         let not = |said: String| FailureRecord::NotRecorded { said };
         // 중단은 시도를 실패로 적지 않는다(§5.6 「실패로 판정하지 않는다」).
         if halt_requested(&self.gil) {
+            self.stopped_for_halt.get_or_insert("record_failure");
             return not("즉시 보관 중단 요청을 받아 시도 기록을 덧붙이지 않았다".into());
         }
         let (now, records) = match self.fresh() {
@@ -955,7 +980,10 @@ impl BaselineState for StateAdapter<'_> {
             Ok(next) => next,
             Err(e) => return not(e.to_string()),
         };
-        match save_step(self.session, &next, "failure") {
+        let saved = save_step(self.session, &next, "failure");
+        #[cfg(test)]
+        after_adapter_save("failure");
+        match saved {
             Ok(()) => FailureRecord::Recorded,
             Err(e) => not(e.to_string()),
         }
@@ -972,15 +1000,93 @@ fn cause_word(cause: &FailureCause) -> &'static str {
     }
 }
 
+/// 한 시도가 끝난 꼴.
+enum Driven {
+    /// 시도가 제 판정으로 끝났다 — 확정 / 실패 / 결과 불명.
+    Ended { boundary: crate::refs::CycleRef, outcome: RetryOutcome },
+    /// 수신된 중단 요청 때문에 `before` 걸음을 **시작하지 않았다.** 실패가 아니다: 시도 기록을 남기지 않고, 이미 놓인 객체가 있어도
+    /// 어떤 세계도 확정되지 않았다.
+    Halted { before: &'static str },
+}
+
+/// `baseline_retry` 의 한 시도를 걸음마다 민다 — 그 모듈의 `run_retry` 와 같은 순서(`perform` → `advance`)이고, 다만 **보관을 진행시키는 걸음**
+/// (관측 · capture · manifest 저장 · 상태 저장)의 앞에서 수신된 중단 요청을 본다. 요청이 있으면 그 걸음을 시작하지 않고 시도를 놓는다.
+/// 판정 걸음(다시 읽기, 실패 기록)은 막지 않는다 — 이미 끝난 저장을 다시 읽어 확인하는 일은 중단이 되돌릴 것이 아니다(실패 기록
+/// 자체는 저장 경계가 중단 중에 적지 않는다).
+fn drive<'a>(
+    event: EventName,
+    inputs: crate::artifact::tracking::RecordInputs<'a>,
+    root: &Path,
+    state: &'a mut dyn BaselineState,
+    gil: &Path,
+) -> Result<Driven, crate::artifact::tracking::NotStarted> {
+    if halt_requested(gil) {
+        return Ok(Driven::Halted { before: "observe" });
+    }
+    let mut attempt = RetryAttempt::begin(event, inputs, root, state)?;
+    loop {
+        if let Some(outcome) = attempt.outcome() {
+            return Ok(Driven::Ended { boundary: attempt.binding().boundary(), outcome: outcome.clone() });
+        }
+        let next = match attempt.pending() {
+            Some(RetryRequest::Observe { .. }) => Some("observe"),
+            Some(RetryRequest::Capture { .. }) => Some("capture"),
+            Some(RetryRequest::StoreManifest { .. }) => Some("store_manifest"),
+            Some(RetryRequest::Save { .. }) => Some("save"),
+            _ => None,
+        };
+        if let Some(step) = next {
+            #[cfg(test)]
+            if HALT_BEFORE_STEP.with(|slot| *slot.borrow()) == Some(step) {
+                HALT_BEFORE_STEP.with(|slot| *slot.borrow_mut() = None);
+                ledger::receive_halt_request(gil, "synthetic-request").expect("시험의 수신 표식");
+            }
+            #[cfg(debug_assertions)]
+            hold_before(step);
+            if halt_requested(gil) {
+                return Ok(Driven::Halted { before: step });
+            }
+        }
+        let report = attempt.perform().expect("끝나지 않은 시도에는 실행할 요청이 있다");
+        attempt.advance(report).expect("이 시도가 방금 낸 보고는 기다리던 보고다");
+    }
+}
+
+/// 통합 시험이 새 프로세스의 보관을 한 걸음 앞에 **세워 두는** 자리 — `GIL_SCOPE_FAIL` 과 같은 규율이며 **release 빌드에는 없다.**
+/// `GIL_SCOPE_HOLD=<걸음>:<파일>` 이면 그 걸음 앞에서 `<파일>.reached` 를 만들고 `<파일>` 이 생길 때까지(길어야 30초) 기다린다. 그 사이
+/// 이 명령은 프로젝트 잠금을 쥐고 있다 — 같은 서버가 그동안 다른 요청을 받는지를 실제 프로세스로 보려는 것이다.
+#[cfg(debug_assertions)]
+fn hold_before(step: &str) {
+    let Ok(spec) = std::env::var("GIL_SCOPE_HOLD") else { return };
+    let Some((at, file)) = spec.split_once(':') else { return };
+    if at != step {
+        return;
+    }
+    let file = std::path::PathBuf::from(file);
+    let _ = std::fs::write(file.with_extension("reached"), b"");
+    for _ in 0..600 {
+        if file.exists() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
 /// 기준점 보관의 **한 시도** — 지금 서 있는 경계에서 새 검사와 안정 관측부터 한다. 앞선 시도의 객체나 기록으로 성공을 추정하지 않는다.
+///
+/// 결과의 `result` 는 서로 다른 여섯 가지다: `archived`(저장을 다시 읽어 확인한 확정) · `failed`(이 시도가 확정하지 못했다 — 그 사유와,
+/// 지금도 대기인지는 따로) · `unknown`(저장됐을 수도 있다) · `not_started`(시도를 만들지 않았다) · `halted`(수신된 중단 요청 때문에
+/// 그 걸음을 시작하지 않았다 — 실패가 아니다). 중단 요청의 수신·적용은 `halt_request` 가, 지금 기록을 다시 읽었는지는 `record_reread` 가
+/// 따로 말한다.
 fn attempt(session: &mut ProjectSession, root: &Path, gil: &Path, event: EventName) -> Value {
     let records = match owned(session.project(), restore_mark(gil)) {
         Ok(records) => records,
         Err(said) => return json!({"result": "not_started", "why": said}),
     };
-    let run = {
-        let mut adapter = StateAdapter { session: &mut *session, gil: gil.to_path_buf() };
-        run_retry(event, records.inputs(), root, &mut adapter)
+    let (run, stopped_at_boundary) = {
+        let mut adapter = StateAdapter { session: &mut *session, gil: gil.to_path_buf(), stopped_for_halt: None };
+        let run = drive(event, records.inputs(), root, &mut adapter, gil);
+        (run, adapter.stopped_for_halt)
     };
     // 시도 중에 받은 중단 요청을 지금 적용한다. 이미 끝난 저장(기준점 확정 포함)은 되돌리지 않는다.
     let halt_applied = match halt_requested(gil) {
@@ -1003,11 +1109,17 @@ fn attempt(session: &mut ProjectSession, root: &Path, gil: &Path, event: EventNa
     };
     let mut out = match run {
         Err(why) => json!({"result": "not_started", "why": why.to_string()}),
-        Ok(run) => match run.outcome {
+        Ok(Driven::Halted { before }) => json!({"result": "halted", "before": before, "failure_recorded": false}),
+        // 저장 경계가 중단 요청을 보고 쓰지 않은 것은 저장 실패가 아니다 — 시도의 판정이 그것을 실패로 읽었더라도 중단으로 싣는다.
+        // (실패 기록의 경계에서만 멈춘 경우는 다르다: 시도는 제 사유로 실패했고 그 기록만 덧붙이지 않았다 — 아래 `failed` 로 싣는다.)
+        Ok(Driven::Ended { outcome: RetryOutcome::Failed { .. }, .. }) if stopped_at_boundary == Some("save") => {
+            json!({"result": "halted", "before": "save", "failure_recorded": false})
+        }
+        Ok(Driven::Ended { boundary, outcome }) => match outcome {
             RetryOutcome::Confirmed { commit, delta, .. } => json!({
                 "result": "archived",
                 "snapshot": commit.snapshot().to_string(),
-                "archived_at": run.binding.boundary().to_string(),
+                "archived_at": boundary.to_string(),
                 "compared": delta.compared(),
                 "newly_tracked": delta.newly_tracked().len(),
             }),
@@ -1103,6 +1215,17 @@ pub(crate) fn absorb_halt_request(session: &mut ProjectSession) -> Result<bool, 
         // 추적 정책 기록이 없는 프로젝트에는 표식의 자리가 없다. 요청을 적용한 것으로 치지 않고 그대로 둔다.
         return Ok(false);
     }
+    // **최신 저장 상태**에 표식만 더한다. 이 세션의 메모리 값은 방금 끝난 저장(기준점 확정·실패 시도·sync_base)을 모를 수 있으므로,
+    // 같은 잠금 안에서 디스크의 기록을 load 의 검사 전체로 새로 읽어 그것을 바탕으로 삼는다. 읽지 못하면 아무것도 저장하지 않는다 —
+    // 옛 복사본을 저장해 끝난 저장을 덮지 않고, 수신 표식을 남겨 다음 쓰기가 계속 멈추게 한다.
+    #[cfg(test)]
+    if ABSORB_REREAD_FAULT.with(|slot| slot.borrow_mut().take()).is_some() {
+        return Err("최신 저장 상태를 읽지 못해 중단 표식을 적용하지 않았다(요청은 받은 채로 남는다): 시험이 넣은 실패".into());
+    }
+    let latest = session
+        .reload()
+        .map_err(|e| format!("최신 저장 상태를 읽지 못해 중단 표식을 적용하지 않았다(요청은 받은 채로 남는다): {e}"))?;
+    *session.project_mut() = latest;
     if session.project().tracking().and_then(TrackingState::halt).is_none() {
         let (next, at) = session.project().with_halt().map_err(|e| e.to_string())?;
         let id = if id.is_empty() { new_halt_id()? } else { id };
@@ -1112,11 +1235,13 @@ pub(crate) fn absorb_halt_request(session: &mut ProjectSession) -> Result<bool, 
         after.events.push(Event::HaltRequested { at: at.to_string(), source: MONITOR.into(), id });
         let _ = ledger::write(session.project_lock(), &gil, before.as_ref(), &after);
         let saved = save_step(session, &next, "halt");
-        let reread = session.reload().map_err(|e| format!("중단 표식의 저장을 확인하지 못했다: {e}"))?;
+        // 저장 결과도 다시 읽어 판정한다. 읽지 못하면 결과 불명이다 — 메모리에는 방금 읽은 최신 상태가 그대로 있고 `next` 를 다시
+        // 저장하지 않는다.
+        let reread = session.reload().map_err(|e| format!("중단 표식의 저장을 확인하지 못했다(요청은 받은 채로 남는다): {e}"))?;
         let stored = reread.tracking().and_then(TrackingState::halt) == Some(at);
         *session.project_mut() = reread;
         if !stored {
-            return Err(format!("중단 표식이 저장되지 않았다: {}", saved.err().map(|e| e.to_string()).unwrap_or_default()));
+            return Err(format!("중단 표식이 저장되지 않았다(요청은 받은 채로 남는다): {}", saved.err().map(|e| e.to_string()).unwrap_or_default()));
         }
     }
     ledger::clear_halt_request(&gil)?;

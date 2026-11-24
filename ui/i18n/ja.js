@@ -540,4 +540,7 @@ export default {
   "scope.halt_register": "この停止の記録を残し直す",
   "scope.halt_identity": "停止 {id}… · 状態 {state}…",
   "scope.state_unconfirmed": "直前の要求の後、現在の状態を確認できませんでした。何かを決める前に読み直してください。",
+  "scope.halt_note_received": "停止要求: 受領しました。実行中の作業は次の書き込み境界で止まり、その時点で停止が適用されます。",
+  "scope.halt_note_applied": "停止要求: 受領し、適用されました。",
+  "scope.halt_note_failed": "停止要求: {why}",
 };

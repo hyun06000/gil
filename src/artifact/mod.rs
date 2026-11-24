@@ -61,8 +61,8 @@ pub(crate) mod tracking {
     #[cfg(unix)]
     pub(crate) use super::tracking_record::{
         AfterFailure, BaselineCommit, BaselineState, BoardPolicies, EventStanding, FailedAttempt, FailureCause, FailureRecord,
-        LedgerStart, NotStarted, OwnedRecords, RetryOutcome, SaveAnswer, ScopeDelta, UnknownWhy, run_retry, scope_delta_over,
-        select_ledger_span,
+        LedgerStart, NotStarted, OwnedRecords, RetryAttempt, RetryOutcome, RetryRequest, SaveAnswer, ScopeDelta, UnknownWhy,
+        run_retry, scope_delta_over, select_ledger_span,
     };
 }
 /// 시작 준비·확정이 쓰는 정책 엔진·기록 모듈의 이름들 — `tracking-policy` 개발 구성 전용 재수출.

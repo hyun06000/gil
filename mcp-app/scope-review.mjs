@@ -11,7 +11,8 @@ import { t } from '../ui/locale.js';
 export const scopeContinuation = (what) => `The user acted in the GIL Monitor (${what}). Read gil_scope_status once with the same project_root and follow its next guidance. Do not repeat an approval, do not start an archive retry, and do not treat a released halt as permission to continue by itself: wait for the user's explicit next instruction. Answer the user in their language.`;
 
 export function makeScopeReview({ app, scope, panel, document, changed = () => {} }) {
-  let stopped = false, busy = false, reading = false, value = null, tokens = {}, uncertain = false, delivery = null;
+  let stopped = false, busy = false, halting = false, reading = false, value = null, tokens = {}, uncertain = false, delivery = null;
+  let haltNote = null, haltNoteLine = null;
   const text = (tag, content) => { const e = document.createElement(tag); e.textContent = content ?? ''; return e; };
   const list = (items, show) => { const ul = document.createElement('ul'); for (const item of items || []) ul.append(text('li', show(item))); return ul; };
   function head(content) { panel.hidden = false; panel.replaceChildren(text('h2', t('scope.title')), text('p', content)); }
@@ -24,13 +25,15 @@ export function makeScopeReview({ app, scope, panel, document, changed = () => {
     } catch { delivery = 'undelivered'; }
   }
 
-  // One trusted click → one tool call with the capability for exactly this purpose and target. The
-  // capability is spent whatever the outcome; after an unknown result only a re-read decides.
+  // One trusted click → one tool call with the capability for exactly this purpose and target. Only
+  // THAT capability is spent; the halt capability stays so the halt button keeps working while an
+  // approval or a retry is in flight. A second approve/retry click is ignored while one is running.
+  // After an unknown result only a re-read decides.
   async function send(event, key, name, args, what, guard = () => true) {
     if (!event.isTrusted || stopped || busy || !tokens[key] || !guard()) return;
-    busy = true; panel.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+    busy = true; panel.querySelectorAll('button').forEach((b) => { if (!b.staysDuringWork) b.disabled = true; });
     const request = { scope_id: scope, ...args, token: tokens[key] };
-    tokens = {};
+    tokens[key] = null;
     try {
       const result = await app.callServerTool({ name, arguments: request }, { timeout: 180000 });
       if (stopped) return;
@@ -38,12 +41,44 @@ export function makeScopeReview({ app, scope, panel, document, changed = () => {
       value = result.structuredContent; uncertain = false; changed();
       await notify(what);
     } catch (e) {
-      if (!stopped) { uncertain = !e.refused; head(e.refused ? e.message : t('scope.result_unknown')); rereadButton(); }
+      if (!stopped) { uncertain = !e.refused; head(e.refused ? e.message : t('scope.result_unknown')); haltLine(); rereadButton(); }
     } finally { busy = false; if (!stopped && !uncertain) await api.refresh(); }
   }
 
-  function button(label, onClick, enabled) {
-    const b = text('button', label); b.type = 'button'; b.disabled = busy || !enabled;
+  // The halt request has its own path: it may be sent while another request of this panel is still
+  // running, and its answer (received / applied) is kept apart from that request's answer.
+  async function sendHalt(event, what) {
+    if (!event.isTrusted || stopped || halting || !tokens.halt) return;
+    halting = true; event.currentTarget && (event.currentTarget.disabled = true);
+    const request = { scope_id: scope, token: tokens.halt };
+    tokens.halt = null;
+    try {
+      const result = await app.callServerTool({ name: 'gil_scope_halt', arguments: request }, { timeout: 60000 });
+      if (stopped) return;
+      if (result.isError || !result.structuredContent) throw Object.assign(new Error(result.structuredContent?.said || result.structuredContent?.problem || t('scope.action_failed')), { refused: true });
+      const got = result.structuredContent;
+      haltNote = got.halt_request?.applied ? t('scope.halt_note_applied') : t('scope.halt_note_received');
+      // While another request is running its own answer will arrive and be shown; this answer does not replace it.
+      if (!busy) { value = got; changed(); await notify(what); }
+    } catch (e) {
+      if (!stopped) haltNote = t('scope.halt_note_failed', { why: e.refused ? e.message : t('scope.result_unknown') });
+    } finally {
+      halting = false;
+      if (!stopped) { if (busy) haltLine(); else await api.refresh(); }
+    }
+  }
+
+  // The latest answer to a halt request, shown as its own line.
+  function haltLine() {
+    if (!haltNote) return;
+    if (!haltNoteLine) haltNoteLine = text('p', '');
+    haltNoteLine.textContent = haltNote;
+    if (!Array.from(panel.children).includes(haltNoteLine)) panel.append(haltNoteLine);
+  }
+
+  function button(label, onClick, enabled, staysDuringWork = false) {
+    const b = text('button', label); b.type = 'button'; b.disabled = (staysDuringWork ? halting : busy) || !enabled;
+    b.staysDuringWork = staysDuringWork;
     b.addEventListener('click', onClick);
     return b;
   }
@@ -79,7 +114,7 @@ export function makeScopeReview({ app, scope, panel, document, changed = () => {
       // The marker exists but this halt has no record to confirm against: releasing is not offered.
       // The only button re-records this halt; the release then needs a fresh screen.
       panel.append(text('p', t('scope.halted_at', { at: k.archive_halt })), text('p', t('scope.halt_record_missing')));
-      panel.append(button(t('scope.halt_register'), (event) => send(event, 'halt', 'gil_scope_halt', {}, 'archive halt record'), !!tokens.halt));
+      panel.append(button(t('scope.halt_register'), (event) => sendHalt(event, 'archive halt record'), !!tokens.halt, true));
       return;
     }
     if (k.archive_halt) {
@@ -98,7 +133,8 @@ export function makeScopeReview({ app, scope, panel, document, changed = () => {
           && value?.tracking?.archive_halt === h.at), !!tokens.release);
       panel.append(confirm, label, select, release, text('p', t('scope.release_note')));
     } else {
-      const halt = button(t('scope.halt'), (event) => send(event, 'halt', 'gil_scope_halt', {}, 'archive halt request'), !!tokens.halt);
+      // Stays usable while an approval or a retry of this panel is running.
+      const halt = button(t('scope.halt'), (event) => sendHalt(event, 'archive halt request'), !!tokens.halt, true);
       panel.append(halt, text('p', t('scope.halt_note')));
     }
   }
@@ -140,12 +176,15 @@ export function makeScopeReview({ app, scope, panel, document, changed = () => {
     }
     if (value?.proposal) proposalSection(value.proposal);
     if (delivery) panel.append(text('p', t(delivery === 'delivered' ? 'scope.delivered' : 'scope.undelivered')));
+    haltLine();
     rereadButton();
   }
 
   const api = {
     async refresh() {
-      if (stopped || busy || reading) return;
+      // No re-read while a request is running: a re-render would drop the buttons that are waiting for it,
+      // and the server could not read the record while that request holds the project anyway.
+      if (stopped || busy || halting || reading) return;
       reading = true;
       try {
         const result = await app.callServerTool({ name: 'gil_scope_review', arguments: { scope_id: scope } }, { timeout: 10000 });
