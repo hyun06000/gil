@@ -163,8 +163,15 @@ jobs:
         run: node tools/ci/tracking-start/expect-test-groups.mjs '*=3' -- cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test approved_plan_wire_wave1
       - name: "[product] compile all Core targets (compile evidence only, not execution)"
         run: cargo build --locked -p gil --all-targets --features "$GIL_PRODUCT_FEATURES"
-      - name: Shared UI regression
-        run: node --test ui/layout.test.mjs mcp-app/*.test.mjs plugins/gil-companion-prototype/*.test.mjs
+      # The Plugin's Core locator (core.test.mjs) finds the Core bundled for macOS or Windows and answers
+      # unsupported_platform on Linux, where no Plugin bundle exists; its six cases are that platform's, not Linux's.
+      # Everything else in the shared UI and Plugin suites runs here.
+      - name: Shared UI regression (without the macOS/Windows Plugin Core locator)
+        run: |
+          set -euo pipefail
+          files=$(ls plugins/gil-companion-prototype/*.test.mjs | grep -v '/core\.test\.mjs$')
+          test "$(echo "$files" | wc -l)" -ge 5
+          node --test ui/layout.test.mjs mcp-app/*.test.mjs $files
       - name: Prepare fresh output parent
         run: mkdir -p target
       - name: Build, package and verify the Linux install archive through its own bytes (no publication)
