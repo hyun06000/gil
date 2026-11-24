@@ -154,6 +154,16 @@ This does not require author tracking, write hooks or a new Snapshot for every n
    and find the next-call heading in the reply's language (`[Call now]` in English, `[지금 바로 할 호출]`
    in Korean); the action under that heading is the next call, even when a resume summary such as
    `[Resume from saved records]` comes before it. Resume there instead of starting again.
+   **Start kind (only when the connected `gil_start` schema has a `start_kind` input with both
+   `tracked_scope` and `image_reports`).** The two are separate kinds of new project and a project is
+   never converted from one to the other. Before starting in a folder with no `.gil`, tell the user
+   both options with their limits as the tool description states them, and pass the user's own choice
+   as `start_kind`; never choose for the user. `tracked_scope` begins the start preparation below;
+   `image_reports` creates the project at once and its receipt names the `show_gil_monitor` call. If
+   `gil_start` answers `code: start_kind_required`, nothing was created: ask the user and call it once
+   more with their choice. Any other `start_kind` refusal changed nothing: report its words, read
+   `gil_context` or `gil_start_status` as it says, and do not try the other kind, edit `.gil` or
+   delete records to make the start pass. An existing project or preparation keeps its own kind.
    **Start preparation (only when `gil_start` answers `phase: preparing`; development tracking-policy
    builds).** No Chain, Cycle or Snapshot exists yet and no project file is archived. Explain, grouped by
    folder, what will be tracked and excluded and the archive/restore impact; keep general and

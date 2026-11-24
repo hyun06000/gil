@@ -18,9 +18,32 @@ use std::time::Duration;
 /// Per-request wait for one JSON-RPC frame; a hung Core fails the test instead of blocking forever.
 pub const FRAME_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// The binary Cargo built for this very test run; never PATH or an installed Core.
+/// The binary Cargo built for this very test run; never PATH or a Core found by search.
+///
+/// `GIL_INSTALLED_BINARY` (an absolute path, set explicitly by the person running the suite) puts
+/// an installed product binary under the same stdio checks instead. Suites that need a debug
+/// failpoint cannot pass against a release binary and are not evidence for it; a success of the
+/// Cargo-built binary is likewise not a success of the installed one.
 pub fn gil() -> PathBuf {
-    PathBuf::from(env!("CARGO_BIN_EXE_gil"))
+    match std::env::var_os("GIL_INSTALLED_BINARY") {
+        Some(path) => {
+            let path = PathBuf::from(path);
+            assert!(path.is_absolute() && path.is_file(), "GIL_INSTALLED_BINARY must be the absolute path of an existing file");
+            path
+        }
+        None => PathBuf::from(env!("CARGO_BIN_EXE_gil")),
+    }
+}
+
+/// `gil_start` arguments of a direct start (image reports where built, otherwise the plain start).
+/// A build that also holds the tracked-scope preparation has two kinds of new project and takes the
+/// explicit selection; every other build keeps the bare call it always had.
+pub fn direct_start() -> Value {
+    if cfg!(all(feature = "tracking-policy", feature = "visual-authoring", unix)) {
+        json!({"start_kind": "image_reports"})
+    } else {
+        json!({})
+    }
 }
 
 /// Isolated private roots below a settings folder: HOME/USERPROFILE and LOCALAPPDATA for the child.

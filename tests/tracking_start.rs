@@ -64,7 +64,7 @@ fn the_monitor_approved_start_commits_once_over_the_real_stdio_process() {
     assert_eq!(tool("gil_start_apply")["_meta"]["ui"]["visibility"], json!(["app"]));
     assert_eq!(tool("gil_start_list")["_meta"]["ui"]["visibility"], json!(["app"]));
 
-    let begun = c.call("gil_start", json!({"project_root": r}));
+    let begun = c.call("gil_start", json!({"project_root": r, "start_kind": "tracked_scope"}));
     assert!(!is_error(&begun), "{begun}");
     assert_eq!(sc(&begun)["phase"], "preparing");
     let scope = sc(&begun)["scope_id"].as_str().unwrap().to_owned();
@@ -126,7 +126,7 @@ fn a_fresh_process_holds_an_attempt_without_a_recorded_outcome_from_the_disk_rec
     let settings = scratch("tracking-open-attempt-settings");
     let r = root.display().to_string();
     let mut c = Client::serve(&settings);
-    let begun = c.call("gil_start", json!({"project_root": r}));
+    let begun = c.call("gil_start", json!({"project_root": r, "start_kind": "tracked_scope"}));
     assert!(!is_error(&begun), "{begun}");
     let scope = sc(&begun)["scope_id"].as_str().unwrap().to_owned();
     let prepared = c.call("gil_start_prepare", json!({"project_root": r, "rules": "node_modules/\n"}));

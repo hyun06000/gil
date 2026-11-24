@@ -21,7 +21,7 @@ fn failed(label: &str, protect: Option<&str>) -> (Rig, std::path::PathBuf) {
         scope: String::new(),
         c,
     };
-    ok(r.model("gil_start", json!({})), "start");
+    ok(r.model("gil_start", direct_start()), "start");
     as_item_queue_record(&r.record);
     let prepared = ok(r.model("gil_monitor_prepare", json!({})), "prepare");
     r.scope = structured(&prepared)["scope_id"].as_str().unwrap().into();
