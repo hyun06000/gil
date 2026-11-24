@@ -222,14 +222,17 @@ fn close_name(names: &mut Vec<(usize, String, bool)>, report: &mut Report) {
 }
 
 /// 앞의 빈칸을 센다. 탭은 거절한다 — 폭이 보는 곳마다 달라 값이 조용히 어긋난다.
+///
+/// **글자 수로 센다.** 여러 줄 값은 이 수만큼 글자를 벗겨 내므로 단위가 같아야 한다 —
+/// 바이트로 세면 전각 공백(U+3000, 3바이트) 하나가 본문 두 글자까지 함께 지운다.
 fn indent_of(raw: &str, line: usize) -> Result<usize, ReportSyntaxError> {
-    let width = raw.len() - raw.trim_start().len();
-    match raw[..width].contains('\t') {
+    let lead = &raw[..raw.len() - raw.trim_start().len()];
+    match lead.contains('\t') {
         true => Err(ReportSyntaxError {
             line,
             detail: crate::locale::text("report.tab_indent").to_string(),
         }),
-        false => Ok(width),
+        false => Ok(lead.chars().count()),
     }
 }
 
