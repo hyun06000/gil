@@ -67,7 +67,9 @@
 //!   제품 경로가 그것을 부르지 않으므로 아래 검사에 그 이름이 들어 있고, 그 원문의 코드 줄은 따로 검사한다.
 //! - 새 모듈은 `src/artifact/tracking_record/` 밖의 어떤 소스에서도 불리지 않는다 — **예외는 `tracking-policy` 개발 구성에서만
 //!   컴파일되는 구현 순서 4번의 연결 파일**(시작 준비 `src/start_prep/`, 형식 10/11 기록 `src/artifact/tracking_state.rs`, 그 재수출
-//!   블록 `start_policy`)뿐이며, 그 파일들이 실제로 그 기능 뒤에 있는지도 함께 본다(2026-11-23). 이 기능을 켠 빌드는 형식 10/11 을
+//!   블록 `start_policy`)과, **구현 순서 5번(같은 Chain 범위 변경, 2026-11-24 승인)의 정확한 연결**(재수출 블록 `tracking` 의 고정된
+//!   이름 집합, `src/scope_change/` 세 파일의 고정된 참조 집합, 그것을 부르는 제품 줄의 `tracking-policy` + Unix 문)뿐이며, 그 파일들이
+//!   실제로 그 기능 뒤에 있는지도 함께 본다(2026-11-23, 5번은 2026-11-24). 이 기능을 켠 빌드는 형식 10/11 을
 //!   읽으므로 아래 「알지 못한다」 시험들은 이 기능이 꺼진 빌드에서만 짓는다. 켠 빌드의 거절은 `tests/tracking_start.rs` 가 본다.
 
 #![cfg(not(feature = "tracking-policy"))]
@@ -585,6 +587,131 @@ fn a_single_event_list_for_both_partial_inputs_is_refused_untouched() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// 구현 순서 4·5번의 제품 연결이 서는 정확한 구성 조건 — 이 한 줄이 아니면 문이 아니다.
+const UNIX_TRACKING_GATE: &str = "#[cfg(all(feature = \"tracking-policy\", unix))]";
+
+/// 구현 순서 5번(같은 Chain 범위 변경, 2026-11-24 승인)의 재수출 블록 `artifact::tracking` — 공백만 정규화한 **블록 전체**. 블록의
+/// 어느 이름이 늘거나 줄거나, 재시도 재수출의 `#[cfg(unix)]` 가 빠지면 이 글과 달라진다.
+const TRACKING_REEXPORT_BLOCK: &str = concat!(
+    "pub(crate) mod tracking { pub(crate) use super::tracking_record::{ AppliedPolicy, EventKind, EventName, ",
+    "LastConfirmed, MarkSeen, PolicyFileReading, PolicyName, PolicyStep, RecordInputs, RecordStanding, ",
+    "StandingAt, classify_policy_file, }; pub(crate) use super::tracking_state::{ATTEMPT_CAUSES, Archived, ",
+    "Extracted, HaltAt, TrackedEvent}; #[cfg(unix)] pub(crate) use super::tracking_record::{ AfterFailure, ",
+    "BaselineCommit, BaselineState, BoardPolicies, EventStanding, FailedAttempt, FailureCause, FailureRecord, ",
+    "LedgerStart, NotStarted, OwnedRecords, RetryAttempt, RetryOutcome, RetryRequest, SaveAnswer, ScopeDelta, ",
+    "UnknownWhy, run_retry, scope_delta_over, select_ledger_span, }; }",
+);
+
+fn is_name_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_'
+}
+
+/// 한 줄의 식별자 낱말들.
+fn identifiers(line: &str) -> Vec<&str> {
+    line.split(|c: char| !is_name_char(c)).filter(|word| !word.is_empty()).collect()
+}
+
+/// 한 소스가 금지 이름을 **어떻게** 담고 있는가. 줄 단위 부분 문자열 검색이 잡는 모든 줄을 셋으로 가른다.
+#[derive(Debug, Default, PartialEq)]
+struct NameUses {
+    /// 코드 줄에서 낱말 전체가 금지 이름인 것 — 실제 참조.
+    referenced: std::collections::BTreeSet<String>,
+    /// 코드 줄에서 금지 이름을 **속에 품은 다른 낱말**(예: `RetryRequested` 속의 `RetryRequest`) — 그 모듈의 참조가 아니다.
+    inside_other_names: std::collections::BTreeSet<String>,
+    /// 금지 이름이 주석 줄에만 있는 줄의 수 — 참조가 아니다.
+    comment_lines: usize,
+}
+
+/// 금지 이름은 모두 식별자이므로, 주석이 아닌 줄의 부분 문자열 일치는 반드시 그 줄의 어느 낱말 **전체**이거나 어느 낱말의 **속**이다.
+/// 따라서 기존 검색(`line.contains(name)`)이 잡던 코드 줄은 하나도 빠지지 않고 `referenced` 나 `inside_other_names` 에 드러난다.
+/// 주석으로 치는 것은 `//` 로 **시작하는** 줄뿐이다 — 코드 뒤의 꼬리 주석은 코드로 본다(더 엄격한 쪽).
+fn name_uses(text: &str, names: &[&str]) -> NameUses {
+    let mut uses = NameUses::default();
+    for line in text.lines().map(str::trim) {
+        if !names.iter().any(|name| line.contains(name)) {
+            continue;
+        }
+        if line.starts_with("//") {
+            uses.comment_lines += 1;
+            continue;
+        }
+        for word in identifiers(line) {
+            if names.contains(&word) {
+                uses.referenced.insert(word.to_string());
+            } else if names.iter().any(|name| word.contains(name)) {
+                uses.inside_other_names.insert(word.to_string());
+            }
+        }
+    }
+    uses
+}
+
+fn mentions_path(line: &str, needle: &str) -> bool {
+    line.match_indices(needle).any(|(at, _)| !line[..at].chars().next_back().is_some_and(is_name_char))
+}
+
+/// `needle`(예: `scope::`)을 쓰는 코드 줄의 수와, 그 가운데 [`UNIX_TRACKING_GATE`] 뒤에 있지 **않은** 줄들.
+///
+/// 문 뒤로 치는 것은 셋뿐이다: 같은 줄에 그 속성이 있다 · 바로 앞 줄(사이의 주석과 다른 속성 줄은 건너뛴다)이 그 속성이다 · 그렇게
+/// 문 뒤에 선 줄이 연 중괄호 구간 안이다. 조건이 한 글자라도 다른 속성(`unix` 가 빠진 것 등)은 문이 아니다.
+fn ungated_uses(text: &str, needle: &str) -> (usize, Vec<String>) {
+    let (mut uses, mut ungated) = (0, Vec::new());
+    let mut cover: Option<i64> = None;
+    let mut after_gate = false;
+    for line in text.lines().map(str::trim) {
+        if line.is_empty() || line.starts_with("//") {
+            continue;
+        }
+        let same_line = line.contains(UNIX_TRACKING_GATE);
+        let gate_only = line == UNIX_TRACKING_GATE;
+        if mentions_path(line, needle) {
+            uses += 1;
+            if !(same_line || after_gate || cover.is_some()) {
+                ungated.push(line.to_string());
+            }
+        }
+        let opened = line.matches('{').count() as i64 - line.matches('}').count() as i64;
+        cover = match cover {
+            Some(depth) => Some(depth + opened).filter(|depth| *depth > 0),
+            None => ((after_gate || (same_line && !gate_only)) && opened > 0).then_some(opened),
+        };
+        after_gate = gate_only || (after_gate && line.starts_with("#["));
+    }
+    (uses, ungated)
+}
+
+/// `src/artifact/mod.rs` 에서 `opening` 으로 여는 재수출 블록 — (여는 줄 번호, 닫는 줄 번호, 공백을 정규화한 블록 전체).
+/// 여는 줄 바로 위에 이어진 속성 줄들 가운데 `#[cfg(feature = "tracking-policy")]` 가 없으면 블록으로 치지 않는다.
+fn gated_reexport_block(mod_rs: &str, opening: &str) -> Result<(usize, usize, String), String> {
+    let lines: Vec<&str> = mod_rs.lines().collect();
+    let start = lines.iter().position(|line| *line == opening).ok_or_else(|| format!("`{opening}` 블록이 없다"))?;
+    let end = start + lines[start..].iter().position(|line| *line == "}").ok_or("블록의 끝이 없다")?;
+    let attributes: Vec<&str> = lines[..start].iter().rev().take_while(|line| line.trim_start().starts_with("#[")).copied().collect();
+    if !attributes.contains(&"#[cfg(feature = \"tracking-policy\")]") {
+        return Err(format!("`{opening}` 블록이 tracking-policy 뒤에 있지 않다: {attributes:?}"));
+    }
+    let text = lines[start..=end].join(" ").split_whitespace().collect::<Vec<_>>().join(" ");
+    Ok((start + 1, end + 1, text))
+}
+
+/// `src` 아래의 모든 `.rs` — (`/` 로 적은 상대 경로, 글).
+fn rust_sources(src: &Path) -> Vec<(String, String)> {
+    let (mut found, mut stack) = (Vec::new(), vec![src.to_path_buf()]);
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().and_then(|ext| ext.to_str()) == Some("rs") {
+                let relative: Vec<String> = path.strip_prefix(src).unwrap().components().map(|part| part.as_os_str().to_string_lossy().into_owned()).collect();
+                found.push((relative.join("/"), std::fs::read_to_string(&path).unwrap()));
+            }
+        }
+    }
+    found.sort();
+    found
+}
+
 #[test]
 fn no_product_source_calls_the_new_module() {
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
@@ -864,7 +991,8 @@ fn no_product_source_calls_the_new_module() {
             }
         }
     }
-    // 허용하는 것은 `src/artifact/mod.rs` 의 모듈 선언 한 줄과, `tracking-policy` 뒤의 4번 연결 파일·재수출 블록뿐이다.
+    // 허용하는 것은 `src/artifact/mod.rs` 의 모듈 선언 한 줄과, `tracking-policy` 뒤의 4번 연결 파일·재수출 블록, 그리고 아래에서
+    // 정확히 고정하는 5번의 연결뿐이다.
     let gated_files = ["artifact/tracking_state.rs", "start_prep/"];
     let mod_rs = std::fs::read_to_string(src.join("artifact").join("mod.rs")).unwrap();
     let block_start = mod_rs.lines().position(|l| l.starts_with("pub(crate) mod start_policy {")).expect("재수출 블록") + 1;
@@ -874,15 +1002,133 @@ fn no_product_source_calls_the_new_module() {
     assert!(state.contains("#![cfg(feature = \"tracking-policy\")]"), "형식 10/11 기록 모듈은 기능 뒤에 있다");
     let lib = std::fs::read_to_string(src.join("lib.rs")).unwrap();
     assert!(lib.contains("#[cfg(all(feature = \"tracking-policy\", unix))]\nmod start_prep;"), "시작 준비 모듈은 기능 뒤에 있다");
+
+    // ── 구현 순서 5번(같은 Chain 범위 변경, 2026-11-24 승인)의 연결 — 정확히 승인된 것만 ─────────────────────────────
+    // (1) 재수출 블록 `artifact::tracking`: 바깥 `tracking-policy` 속성 뒤에 있고, 블록 전체가 고정한 글과 같다. 재시도 재수출은 그
+    //     안에서 다시 `#[cfg(unix)]` 뒤에 있다. 허용은 그 블록의 줄 구간뿐이다 — 파일 전체가 아니다.
+    let (tracking_open, tracking_close, tracking_block) = gated_reexport_block(&mod_rs, "pub(crate) mod tracking {").expect("범위 변경 재수출 블록");
+    assert_eq!(tracking_block, TRACKING_REEXPORT_BLOCK, "범위 변경 재수출 블록이 승인된 이름 집합과 다르다");
+    assert!(tracking_block.contains("#[cfg(unix)] pub(crate) use super::tracking_record::{ AfterFailure,"), "재시도 재수출은 unix 뒤에 있다");
+    assert_eq!(tracking_block.matches("#[cfg(unix)]").count(), 1);
+    // 범위 변경 모듈이 닿을 수 있는 이름 — 두 재수출 블록(`tracking`, 4번의 `start_policy`)이 내보내는 것뿐이다.
+    let start_policy_block = mod_rs.lines().skip(block_start - 1).take(block_end - block_start + 1).collect::<Vec<_>>().join(" ");
+    let exported: Vec<&str> = identifiers(&tracking_block).into_iter().chain(identifiers(&start_policy_block)).collect();
+
+    // (2) `src/scope_change/` 의 세 파일: 파일을 통째로 예외로 두지 않는다. 파일마다 **실제로 참조하는 금지 이름의 정확한 집합**과,
+    //     금지 이름을 속에 품었을 뿐인 다른 낱말의 정확한 집합을 고정한다. 하나가 늘어도 줄어도 실패한다. 줄 번호에 기대지 않는다.
+    //     그 폴더의 다른 파일은 여기 없으므로 아래의 일반 규칙이 그대로 거절한다.
+    let scope_files: [(&str, &[&str], &[&str]); 3] = [
+        (
+            "scope_change/mod.rs",
+            &[
+                // 기준점 보관 한 시도의 실행과 판정(§5.3·§6.3) — 재시도 바탕을 그대로 부른다.
+                "RetryAttempt", "RetryRequest", "RetryOutcome", "NotStarted", "AfterFailure", "FailureRecord", "FailureCause", "FailedAttempt",
+                // 그 바탕이 요구하는 실제 저장 경계(`state.yaml`)의 구현.
+                "BaselineState", "BaselineCommit", "SaveAnswer", "OwnedRecords", "RecordInputs",
+                // 저장된 기록의 읽기 — 사건 종류, 미완 복원 표시, 정책 파일 상태의 판정.
+                "EventKind", "MarkSeen", "classify_policy_file",
+                // 새 정책의 원문 보관과 동기화 기준(§5.2) — 4번의 `start_policy` 재수출을 통해.
+                "NewPolicyBase", "base_for_new_policy", "store_policy_source",
+            ],
+            // 원장의 사건 이름과 조회 결과의 칸 이름 — 금지 이름을 속에 품었을 뿐이다.
+            &["RetryRequested", "last_confirmed_world"],
+        ),
+        // 제안·응답 원장: 그 모듈을 참조하지 않는다. `RetryRequested` 는 이 파일이 정의하는 사건 이름이다.
+        ("scope_change/ledger.rs", &[], &["RetryRequested"]),
+        // 단위 시험(`#[cfg(test)]`): 조회 결과의 칸 `last_confirmed_world` 를 읽을 뿐이다.
+        ("scope_change/tests.rs", &[], &["last_confirmed_world"]),
+    ];
+    let set = |words: &[&str]| words.iter().map(|word| word.to_string()).collect::<std::collections::BTreeSet<String>>();
+    for (file, referenced, inside) in scope_files {
+        let text = std::fs::read_to_string(src.join(file)).unwrap();
+        let found = name_uses(&text, &names);
+        assert_eq!(found.referenced, set(referenced), "{file}: 승인된 참조 집합과 다르다");
+        assert_eq!(found.inside_other_names, set(inside), "{file}: 금지 이름을 품은 낱말이 예상과 다르다");
+        for name in referenced {
+            assert!(exported.contains(name), "{file}: {name} 은 재수출 블록이 내보내는 이름이 아니다");
+        }
+    }
+    // (3) 그 연결은 `tracking-policy` + Unix 에서만 컴파일된다. 모듈 선언, 그 자식, 그것을 부르는 제품 줄 모두.
+    assert!(lib.contains(&format!("{UNIX_TRACKING_GATE}\nmod scope_change;")), "범위 변경 모듈은 기능과 Unix 뒤에 있다");
+    let sources = rust_sources(&src);
+    assert_eq!(sources.iter().map(|(_, text)| text.lines().filter(|line| line.trim() == "mod scope_change;").count()).sum::<usize>(), 1);
+    assert!(!sources.iter().any(|(_, text)| text.lines().any(|line| line.contains("#[path") && line.contains("scope_change"))), "다른 자리에서 끌어오지 않는다");
+    let scope_mod = std::fs::read_to_string(src.join("scope_change").join("mod.rs")).unwrap();
+    assert!(scope_mod.contains("\nmod ledger;\n"), "원장은 그 모듈의 자식이다");
+    assert!(scope_mod.contains("#[cfg(all(test, not(feature = \"exploration-flow\")))]\nmod tests;"), "단위 시험은 시험 빌드의 자식이다");
+    let callers: Vec<(&str, usize, Vec<String>)> = sources.iter()
+        .filter(|(file, _)| !file.starts_with("scope_change/") && file != "mcp/scope.rs" && file != "mcp/scope_tests.rs")
+        .map(|(file, text)| { let (uses, ungated) = ungated_uses(text, "scope_change::"); (file.as_str(), uses, ungated) })
+        .filter(|(_, uses, _)| *uses > 0)
+        .collect();
+    assert_eq!(callers.iter().map(|(file, _, _)| *file).collect::<Vec<_>>(), ["mcp/monitor.rs", "session.rs", "store.rs"], "범위 변경 모듈을 부르는 제품 파일");
+    assert!(callers.iter().all(|(_, _, ungated)| ungated.is_empty()), "문 밖에서 범위 변경 모듈을 부른다:\n{callers:#?}");
+    // MCP 의 범위 도구 모듈과 그 등록·호출 경로도 같은 문 뒤에 있다(`mcp/scope.rs` 는 그 모듈 자신이다).
+    let mcp = std::fs::read_to_string(src.join("mcp.rs")).unwrap();
+    assert!(mcp.contains(&format!("{UNIX_TRACKING_GATE}\nmod scope;")), "MCP 범위 도구 모듈은 기능과 Unix 뒤에 있다");
+    let routes: Vec<(&str, usize, Vec<String>)> = sources.iter()
+        .filter(|(file, _)| (file == "mcp.rs" || file.starts_with("mcp/")) && file != "mcp/scope.rs" && file != "mcp/scope_tests.rs")
+        .map(|(file, text)| { let (uses, ungated) = ungated_uses(text, "scope::"); (file.as_str(), uses, ungated) })
+        .filter(|(_, uses, _)| *uses > 0)
+        .collect();
+    assert_eq!(routes.iter().map(|(file, _, _)| *file).collect::<Vec<_>>(), ["mcp.rs", "mcp/surface.rs"], "MCP 범위 도구를 등록·호출하는 파일");
+    assert!(routes.iter().all(|(_, _, ungated)| ungated.is_empty()), "문 밖에서 MCP 범위 도구를 부른다:\n{routes:#?}");
+
     let allowed = |line: &str| {
+        let line = line.replace('\\', "/");
+        let numbered = |file: &str| line.strip_prefix(file).and_then(|rest| rest.split(':').next()).and_then(|n| n.parse::<usize>().ok());
         line.ends_with(": mod tracking_record;")
             || gated_files.iter().any(|file| line.starts_with(file))
-            || line.strip_prefix("artifact/mod.rs:").and_then(|rest| rest.split(':').next()).and_then(|n| n.parse::<usize>().ok())
-                .is_some_and(|n| n > block_start && n <= block_end)
+            || numbered("artifact/mod.rs:").is_some_and(|n| n > block_start && n <= block_end)
+            // 5번: 재수출 블록의 줄 구간, 그리고 위에서 참조 집합을 정확히 고정한 세 파일.
+            || numbered("artifact/mod.rs:").is_some_and(|n| n > tracking_open && n < tracking_close)
+            || scope_files.iter().any(|(file, _, _)| line.starts_with(&format!("{file}:")))
     };
     let outside: Vec<_> = users.iter().filter(|line| !allowed(line)).collect();
     assert!(outside.is_empty(), "새 모듈이 제품 소스에서 쓰였다:\n{outside:#?}");
     assert!(users.iter().any(|line| line.ends_with(": mod tracking_record;")), "{users:#?}");
+}
+
+/// 위 검사의 도우미들이 **정확히 승인된 연결만** 받아들이는가 — 작은 합성 소스 글로 본다. 제품 파일을 고치거나 실행하지 않는다.
+#[test]
+fn the_boundary_helpers_accept_the_exact_approved_connection_and_refuse_extra_references_and_missing_gates() {
+    let names = ["RetryRequest", "run_retry", "confirmed_world", "tracking_record"];
+    let set = |words: &[&str]| words.iter().map(|word| word.to_string()).collect::<std::collections::BTreeSet<String>>();
+    // 승인된 참조 하나, 금지 이름을 품은 다른 낱말 둘, 주석의 언급 하나.
+    let approved = "use crate::artifact::tracking::RetryRequest;\n// run_retry 를 부르지 않는다\nlet e = Event::RetryRequested;\nlet w = view.last_confirmed_world;\n";
+    let found = name_uses(approved, &names);
+    assert_eq!(found, NameUses { referenced: set(&["RetryRequest"]), inside_other_names: set(&["RetryRequested", "last_confirmed_world"]), comment_lines: 1 });
+    // 예상 밖 참조 하나가 더해지면 참조 집합이 달라진다 — 직접 경로든, 꼬리 주석 속이든(꼬리 주석은 코드로 본다).
+    for extra in ["let out = run_retry(event);\n", "use crate::artifact::tracking_record::Anything;\n", "let x = 1; // confirmed_world\n"] {
+        let found = name_uses(&format!("{approved}{extra}"), &names);
+        assert_ne!(found.referenced, set(&["RetryRequest"]), "{extra}");
+    }
+    // 기존 부분 문자열 검색이 잡는 코드 줄은 하나도 빠지지 않는다.
+    for line in ["x.run_retry()", "RetryRequestedAgain", "a::confirmed_world::b", "mod tracking_record;"] {
+        let found = name_uses(line, &names);
+        assert!(!found.referenced.is_empty() || !found.inside_other_names.is_empty(), "{line}");
+    }
+
+    // 문: 같은 줄, 바로 앞 줄(주석·다른 속성은 건너뛴다), 문 뒤의 줄이 연 구간.
+    let gate = UNIX_TRACKING_GATE;
+    let gated = format!("{gate}\nmod scope;\nstruct S {{\n    {gate}\n    // 설명\n    #[allow(dead_code)]\n    grants: scope::Grants,\n    other: u8,\n}}\nfn f() {{\n    let s = S {{ {gate} grants: scope::Grants::default(), other: 0 }};\n    {gate}\n    if scope::NAMES.contains(&name) {{\n        return scope::call(name);\n    }}\n}}\n");
+    assert_eq!(ungated_uses(&gated, "scope::"), (4, vec![]));
+    // 문이 없거나, 구간이 닫힌 뒤이거나, 조건이 다른 속성(`unix` 없음)이면 문 밖이다. 다른 낱말 속의 `scope::` 는 세지 않는다.
+    assert_eq!(ungated_uses("fn f() { scope::call(name) }\n", "scope::"), (1, vec!["fn f() { scope::call(name) }".to_string()]));
+    assert_eq!(ungated_uses(&format!("{gate}\nif a {{\n    b();\n}}\nscope::call(name);\n"), "scope::").1, ["scope::call(name);"]);
+    assert_eq!(ungated_uses("#[cfg(feature = \"tracking-policy\")]\nlet t = scope::catalog(t);\n", "scope::").1, ["let t = scope::catalog(t);"]);
+    assert_eq!(ungated_uses(&format!("{gate}\nlet a = 1;\nlet t = scope::catalog(t);\n"), "scope::").1, ["let t = scope::catalog(t);"]);
+    assert_eq!(ungated_uses("let t = telescope::look();\n", "scope::"), (0, vec![]));
+
+    // 재수출 블록: 바깥 속성이 있어야 블록이고, 블록의 글은 이름 하나·속성 하나의 차이도 드러낸다.
+    let block = "#[cfg(feature = \"tracking-policy\")]\n#[allow(unused_imports)]\npub(crate) mod tracking {\n    pub(crate) use super::tracking_record::{\n        A, B,\n    };\n    #[cfg(unix)]\n    pub(crate) use super::tracking_record::{C};\n}\n";
+    let expected = "pub(crate) mod tracking { pub(crate) use super::tracking_record::{ A, B, }; #[cfg(unix)] pub(crate) use super::tracking_record::{C}; }";
+    assert_eq!(gated_reexport_block(block, "pub(crate) mod tracking {"), Ok((3, 9, expected.to_string())));
+    assert_ne!(gated_reexport_block(&block.replace("A, B,", "A, B, Extra,"), "pub(crate) mod tracking {").unwrap().2, expected);
+    assert_ne!(gated_reexport_block(&block.replace("    #[cfg(unix)]\n", ""), "pub(crate) mod tracking {").unwrap().2, expected);
+    assert!(gated_reexport_block(&block.replace("#[cfg(feature = \"tracking-policy\")]\n", ""), "pub(crate) mod tracking {").is_err(), "바깥 문이 없다");
+    assert!(gated_reexport_block(&block.replace("#[cfg(feature = \"tracking-policy\")]", "#[cfg(feature = \"other\")]"), "pub(crate) mod tracking {").is_err());
+    assert!(gated_reexport_block("mod other {\n}\n", "pub(crate) mod tracking {").is_err(), "블록이 없다");
 }
 
 /// P(N) 선택의 원문에서 주석과 문자열 목록 줄을 뺀 **코드 줄**이 파일·상태·창고·3n/3o 의 문을 쓰지 않고, 같은 호출의 입력으로 3j 를
