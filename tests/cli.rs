@@ -417,7 +417,7 @@ fn a_question_does_not_close_on_an_empty_response() {
     ok(&dir, &["start"], None);
     open_action(&dir, "question");
     let before = std::fs::read(dir.join(gil::STATE_PATH)).unwrap();
-    for empty in ["response:\n", "response:    \n"] {
+    for empty in ["response:\n", "response:    \n", "response: \t　\n"] {
         let said = refused(&dir, &["close"], Some(&format!("question: 어느 표본인가\nchoices: A / B\n{empty}")));
         assert!(said.contains("response") && said.contains("비워 둘 수 없다"), "{empty:?}: {said}");
         assert!(said.contains("step:C1/S1"), "the refusal names the still-open Question: {said}");
