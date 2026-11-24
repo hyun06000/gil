@@ -214,9 +214,17 @@ fn tracked_scope_archives_nothing_before_the_monitor_approval_and_nothing_turns_
     assert!(!is_ok(&bare), "{bare}");
     assert_eq!(std::fs::read(root.join(".gil/state.yaml")).unwrap(), state);
 
-    // A report of this project cannot take image attachments: the typed visual read refuses and converts nothing.
+    // A report of this project cannot take image attachments. The limit is on writing: a close that
+    // carries visuals is refused before anything is read into the record, and the read of a report's
+    // visuals answers truthfully that there are none. Neither converts the project.
+    let attach = c.call("gil_close", json!({"project_root": r, "report": "verdict: success\n", "expected_owner": {"kind": "cycle", "ref": "cycle:C1"},
+        "visuals": {"attachments": [], "uses": []}}));
+    assert!(attach.get("error").is_some() || !is_ok(&attach), "{attach}");
+    assert!(attach.to_string().contains("visual_upgrade_required"), "the refusal names the missing image-report storage: {attach}");
     let visuals = c.call("gil_report_visuals", json!({"project_root": r, "owner": {"kind": "cycle", "ref": "cycle:C1"}}));
-    assert!(visuals.get("error").is_some() || !is_ok(&visuals), "{visuals}");
+    assert!(is_ok(&visuals), "{visuals}");
+    assert_eq!(sc(&visuals)["visuals"]["uses"], json!([]), "a tracked-scope project holds no visuals: {visuals}");
+    assert_eq!(std::fs::read(root.join(".gil/state.yaml")).unwrap(), state, "neither request converted the project");
 
     drop(c);
     let mut c = Client::serve(&settings);
@@ -237,5 +245,41 @@ fn leftovers_of_an_unknown_creation_are_preserved_by_every_start_request() {
     assert_eq!(sc(&tracked)["code"], "start_record_unsettled", "{tracked}");
     refused(start(&mut c, &r, Some("image_reports")), "image reports over unknown leftovers");
     refused(start(&mut c, &r, None), "a start without a kind over unknown leftovers");
+    for tool in ["gil_start_prepare", "gil_start_cancel"] {
+        let mut args = json!({"project_root": r});
+        if tool == "gil_start_prepare" { args["rules"] = json!("data/\n"); }
+        let answer = refused(c.call(tool, args), "a preparation tool over unknown leftovers");
+        assert_eq!(sc(&answer)["code"], "start_record_unsettled", "{answer}");
+    }
     assert_eq!(tree(&root), before, "nothing was reaped, locked, adopted or created");
+}
+
+/// The interrupted bootstrap has an ordinary retry: a `.gil` that holds nothing, or only the lock
+/// file, records nothing of either kind. The tracked-scope start begins there again; the
+/// image-report creation still never creates into an existing `.gil`, and a start without a kind
+/// still starts nothing.
+#[test]
+fn a_start_that_stopped_before_recording_anything_is_retried_by_the_tracked_scope_start() {
+    for (name, lock_file) in [("unified-interrupted-empty", false), ("unified-interrupted-lock", true)] {
+        let (root, settings, r) = project(name);
+        std::fs::create_dir(root.join(".gil")).unwrap();
+        if lock_file { std::fs::write(root.join(".gil/project.lock"), b"").unwrap(); }
+        let before = tree(&root);
+        let mut c = Client::serve(&settings);
+        refused(start(&mut c, &r, None), "a start without a kind over an empty .gil");
+        refused(start(&mut c, &r, Some("image_reports")), "image reports into an existing .gil");
+        assert_eq!(tree(&root), before, "the refusals recorded nothing");
+        assert!(!root.join(".gil/state.yaml").exists());
+
+        let begun = start(&mut c, &r, Some("tracked_scope"));
+        assert!(is_ok(&begun), "{begun}");
+        assert_eq!(sc(&begun)["phase"], "preparing", "{begun}");
+        assert!(root.join(".gil/start/preparation.json").is_file());
+        assert!(!root.join(".gil/state.yaml").exists() && !root.join(".gil/artifacts").exists(), "a retried preparation is still not a project");
+        // From a new process the same preparation is continued, and the other kind stays refused.
+        drop(c);
+        let mut c = Client::serve(&settings);
+        assert_eq!(sc(&start(&mut c, &r, None))["phase"], "preparing");
+        assert_eq!(sc(&refused(start(&mut c, &r, Some("image_reports")), "image reports over the retried preparation"))["code"], "start_kind_conflict");
+    }
 }

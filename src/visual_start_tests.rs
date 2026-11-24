@@ -250,6 +250,33 @@ fn concurrent_state_entry_is_not_overwritten_at_publication() {
     );
 }
 
+/// A build that also holds the tracked-scope preparation: that preparation may begin in the entry
+/// this creation reserved, before this creation takes the lock (its request saw an empty folder).
+/// The creation then refuses under the lock; the preparation stays byte for byte and no image
+/// project is published over it.
+#[cfg(all(feature = "tracking-policy", unix))]
+#[test]
+fn a_tracked_scope_preparation_that_began_in_the_reserved_entry_is_never_published_over() {
+    let root = scratch().canonicalize().unwrap();
+    fs::write(root.join("README.md"), "hello\n").unwrap();
+    let ledger = root.join(".gil").join(crate::start_prep::PREP_DIR).join("preparation.json");
+    let mut recorded = None;
+    let result = create(rules(), &root, &root, true, &mut |stage| {
+        if stage == "reserved" {
+            let begun = crate::start_prep::begin(&root.display().to_string()).map_err(|refusal| std::io::Error::other(refusal.code))?;
+            assert_eq!(begun["phase"], "preparing");
+            recorded = Some(fs::read(&ledger)?);
+        }
+        Ok(())
+    });
+    assert!(result.is_err(), "an image project was created over a tracked-scope preparation");
+    assert!(!root.join(crate::STATE_PATH).exists());
+    assert!(!root.join(".gil/state.yaml.writing").exists() && !root.join(".gil/artifacts").exists(), "nothing was captured or staged");
+    assert_eq!(fs::read(&ledger).unwrap(), recorded.expect("the preparation began at the reservation"));
+    // The preparation is still the same one: the tracked-scope start continues it.
+    assert_eq!(crate::start_prep::begin(&root.display().to_string()).unwrap()["phase"], "preparing");
+}
+
 #[test]
 fn changed_directory_lock_or_temporary_entry_is_preserved_and_refused() {
     for kind in ["directory", "lock", "temp"] {

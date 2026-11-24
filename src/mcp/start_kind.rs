@@ -63,6 +63,9 @@ pub(super) struct Held {
     pub(super) preparation: bool,
     /// `.gil/state.yaml` exists: a started project.
     pub(super) state: bool,
+    /// `.gil` is a real folder that holds nothing, or nothing but the project lock file: a start
+    /// stopped before it recorded anything of either kind. There is nothing to adopt or convert.
+    pub(super) bare: bool,
 }
 
 fn present(path: &Path) -> bool {
@@ -80,7 +83,14 @@ const PREPARATION_DIR: &str = "start";
 pub(super) fn held(root: &Path) -> Held {
     let gil = root.join(".gil");
     if !present(&gil) { return Held::default(); }
-    Held { record: true, preparation: present(&gil.join(PREPARATION_DIR)), state: present(&gil.join("state.yaml")) }
+    Held { record: true, preparation: present(&gil.join(PREPARATION_DIR)), state: present(&gil.join("state.yaml")), bare: bare(&gil) }
+}
+
+/// Listing only: the entry itself must be a folder (a link is not followed), and an entry that
+/// cannot be read counts as something else being there.
+fn bare(gil: &Path) -> bool {
+    std::fs::symlink_metadata(gil).is_ok_and(|entry| entry.is_dir())
+        && std::fs::read_dir(gil).is_ok_and(|mut entries| entries.all(|entry| entry.is_ok_and(|entry| entry.file_name() == crate::lock::LOCK_FILE)))
 }
 
 /// The already resolved absolute root of this call, if it carries one. A missing or relative
@@ -111,8 +121,11 @@ pub(super) fn decide(chosen: Option<&str>, held: Option<Held>, tracked: bool, im
             Some(Held { preparation: true, .. }) | None => Route::Preparation,
             // A started project of the other contract: read it, never prepare over it.
             Some(Held { record: true, state: true, .. }) => STARTED,
-            // `.gil` without a state file and without a preparation: its origin cannot be told
-            // (an interrupted creation of either contract). Preserved; neither contract adopts it.
+            // A start that stopped before it recorded anything (an empty `.gil`, or only its lock
+            // file): the ordinary retry. The preparation checks the same thing again under the lock.
+            Some(Held { record: true, bare: true, .. }) => Route::Preparation,
+            // Any other `.gil` without a state file and without a preparation: its origin cannot be
+            // told (an interrupted creation of either contract). Preserved; neither contract adopts it.
             Some(Held { record: true, .. }) => UNSETTLED,
             Some(_) => Route::Preparation,
         },
@@ -144,8 +157,9 @@ pub(super) fn decide(chosen: Option<&str>, held: Option<Held>, tracked: bool, im
 pub(super) fn other_record(name: &str, input: &Value) -> Option<(&'static str, &'static str)> {
     if !(HAS_TRACKED && HAS_IMAGES) || !matches!(name, "gil_start_prepare" | "gil_start_cancel") { return None; }
     match held(&root_of(input)?) {
-        Held { record: true, preparation: false, state: true } => Some(("already_started", "start_prep.already_started")),
-        Held { record: true, preparation: false, state: false } => Some(("start_record_unsettled", "start_kind.unsettled")),
+        Held { record: true, preparation: false, state: true, .. } => Some(("already_started", "start_prep.already_started")),
+        // An empty `.gil` holds no preparation: the tool's own "nothing is being prepared" answers it.
+        Held { record: true, preparation: false, state: false, bare: false } => Some(("start_record_unsettled", "start_kind.unsettled")),
         _ => None,
     }
 }
@@ -172,7 +186,7 @@ const BOTH: &str = "Start a NEW GIL project in the user's explicitly selected ab
 - start_kind \"tracked_scope\": the user approves exactly which files GIL tracks. This call only begins or resumes a START PREPARATION: no Chain, Cycle, Step or Snapshot is created and no work-file content is archived. It returns recommendations (general/secret candidates preselected, project-specific ones unselected; .gitignore is reference only), a default .gilignore text and the Monitor scope. Next: discuss the scope with the user, call gil_start_prepare with the exact rules text, then show_gil_monitor(scope_id) and wait for the user's Monitor approval. Chat approval, editing .gilignore or any agent input is never approval, and no model tool turns the preparation into a start. Later scope changes go through the same Monitor approval. Limits: reports cannot hold image attachments, and restore/revisit of work files is refused in such a project.\n\
 - start_kind \"image_reports\": reports can hold PNG visuals (declare, cite, read in the Monitor). The project is created at once with one Interview and zero Steps, observing the whole folder with GIL's fixed exclusions; there is no tracked-scope approval and no scope change. Requires verified private local storage and refuses elsewhere; it never falls back to the other kind. Success also prepares the Monitor: the receipt names the exact show_gil_monitor({scope_id}) call, which is the only next call before the first gil_open.\n\
 Both kinds keep Chains, approved plans, requirement-linked Experiments, original report and evidence reads and the single Will end history.\n\
-Without start_kind: an open preparation in the folder is continued; an existing project or other .gil record is only reported (read gil_context); in a folder with no .gil the call refuses with code start_kind_required, lists both options and creates nothing. A choice the folder's existing record contradicts is refused and nothing is changed. Never repeat start to open a screen or after a display failure.";
+Without start_kind: an open preparation in the folder is continued; an existing project or other .gil record is only reported (read gil_context); in a folder with no .gil the call refuses with code start_kind_required, lists both options and creates nothing. A .gil that an interrupted start left empty holds no record: tracked_scope may be started there again, while image_reports never creates into an existing .gil (the user removes that empty folder themself if they want that kind). A choice the folder's existing record contradicts is refused and nothing is changed. Never repeat start to open a screen or after a display failure.";
 
 const TRACKED_ONLY_NOTE: &str = " Optional start_kind \"tracked_scope\" names this same preparation path explicitly; omitting it keeps the same behavior.";
 
@@ -206,11 +220,13 @@ pub(super) fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
 mod tests {
     use super::*;
 
-    const EMPTY: Held = Held { record: false, preparation: false, state: false };
-    const PREPARING: Held = Held { record: true, preparation: true, state: false };
-    const TRACKED_PROJECT: Held = Held { record: true, preparation: true, state: true };
-    const OTHER_PROJECT: Held = Held { record: true, preparation: false, state: true };
-    const REMNANT: Held = Held { record: true, preparation: false, state: false };
+    const EMPTY: Held = Held { record: false, preparation: false, state: false, bare: false };
+    const PREPARING: Held = Held { record: true, preparation: true, state: false, bare: false };
+    const TRACKED_PROJECT: Held = Held { record: true, preparation: true, state: true, bare: false };
+    const OTHER_PROJECT: Held = Held { record: true, preparation: false, state: true, bare: false };
+    const REMNANT: Held = Held { record: true, preparation: false, state: false, bare: false };
+    /// A start that stopped before it recorded anything: `.gil` is empty or holds only the lock file.
+    const INTERRUPTED: Held = Held { record: true, preparation: false, state: false, bare: true };
 
     fn code(route: Route) -> &'static str {
         match route { Route::Refused { code, .. } => code, Route::Preparation => "preparation", Route::Direct => "direct" }
@@ -218,7 +234,7 @@ mod tests {
 
     #[test]
     fn builds_with_one_start_keep_their_route_when_the_input_is_omitted() {
-        for held in [None, Some(EMPTY), Some(PREPARING), Some(TRACKED_PROJECT), Some(OTHER_PROJECT), Some(REMNANT)] {
+        for held in [None, Some(EMPTY), Some(PREPARING), Some(TRACKED_PROJECT), Some(OTHER_PROJECT), Some(REMNANT), Some(INTERRUPTED)] {
             assert_eq!(decide(None, held, false, false), Route::Direct);
             assert_eq!(decide(None, held, false, true), Route::Direct);
             assert_eq!(decide(None, held, true, false), Route::Preparation);
@@ -267,6 +283,29 @@ mod tests {
     }
 
     #[test]
+    fn with_both_kinds_a_start_that_recorded_nothing_is_retried_by_the_tracked_scope_start_only() {
+        // The interrupted bootstrap has an ordinary retry; the preparation rechecks under the lock.
+        assert_eq!(decide(Some(TRACKED), Some(INTERRUPTED), true, true), Route::Preparation);
+        // The image-report creation never creates into an existing `.gil`: its entry inspects and refuses.
+        assert_eq!(decide(Some(IMAGES), Some(INTERRUPTED), true, true), Route::Direct);
+        assert_eq!(decide(None, Some(INTERRUPTED), true, true), Route::Direct);
+        // The preparation tools: an empty `.gil` is answered by their own "nothing is being prepared".
+        let root = std::env::temp_dir().join(format!("gil-start-kind-bare-{}-{}", std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir_all(root.join(".gil")).unwrap();
+        let input = json!({"project_root": root});
+        if HAS_TRACKED && HAS_IMAGES {
+            assert_eq!(other_record("gil_start_prepare", &input), None);
+            std::fs::create_dir(root.join(".gil/artifacts")).unwrap();
+            assert_eq!(other_record("gil_start_prepare", &input), Some(("start_record_unsettled", "start_kind.unsettled")));
+            assert_eq!(other_record("gil_start_cancel", &input), Some(("start_record_unsettled", "start_kind.unsettled")));
+        } else {
+            assert_eq!(other_record("gil_start_prepare", &input), None, "a build with one kind is unchanged");
+        }
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
     fn a_call_without_an_absolute_root_is_left_to_the_tools_own_root_refusal() {
         assert_eq!(decide(None, None, true, true), Route::Direct);
         assert_eq!(decide(Some(TRACKED), None, true, true), Route::Preparation);
@@ -282,7 +321,11 @@ mod tests {
         assert_eq!(held(&root), EMPTY);
         assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0, "reading created an entry");
         std::fs::create_dir(root.join(".gil")).unwrap();
-        assert_eq!(held(&root), REMNANT);
+        assert_eq!(held(&root), INTERRUPTED, "an empty `.gil` holds no record");
+        std::fs::write(root.join(".gil").join(crate::lock::LOCK_FILE), b"").unwrap();
+        assert_eq!(held(&root), INTERRUPTED, "the lock file alone is not a record");
+        std::fs::create_dir(root.join(".gil/artifacts")).unwrap();
+        assert_eq!(held(&root), REMNANT, "anything else is a leftover to preserve");
         std::fs::write(root.join(".gil/state.yaml"), b"x").unwrap();
         assert_eq!(held(&root), OTHER_PROJECT);
         std::fs::create_dir(root.join(".gil").join(PREPARATION_DIR)).unwrap();
@@ -291,7 +334,15 @@ mod tests {
         // A `.gil` that is a file (or a dangling link) is still a record to preserve.
         std::fs::create_dir(&root).unwrap();
         std::fs::write(root.join(".gil"), b"not a folder").unwrap();
-        assert!(held(&root).record);
+        assert!(held(&root).record && !held(&root).bare);
+        // A link named `.gil` is never followed into the folder it points at.
+        std::fs::remove_file(root.join(".gil")).unwrap();
+        std::fs::create_dir(root.join("elsewhere")).unwrap();
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(root.join("elsewhere"), root.join(".gil")).unwrap();
+            assert!(held(&root).record && !held(&root).bare, "a linked `.gil` is not an empty start");
+        }
         std::fs::remove_dir_all(&root).unwrap();
     }
 

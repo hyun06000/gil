@@ -91,6 +91,16 @@ fn create_inner(rules: RuleSet, root: &Path, storage_root: &Path, _check_working
     let state_path = gil.join("state.yaml");
     identity().map_err(error)?;
     initializable(&gil, &state_path)?;
+    // The entry reserved above was created empty by this call. In a build that also holds the
+    // tracked-scope preparation, that preparation may have begun here between the reservation and
+    // this lock (its request saw an empty folder). It is a record of the other kind: refuse and
+    // leave it exactly as it is. A build without that start is unchanged.
+    #[cfg(all(feature = "tracking-policy", unix))]
+    if std::fs::symlink_metadata(gil.join(crate::start_prep::PREP_DIR)).is_ok() {
+        return Err(error(std::io::Error::other(
+            "예약한 .gil 에 추적 범위 시작 준비가 먼저 기록됐다. 이미지 프로젝트를 만들지 않고 그 기록을 그대로 둔다",
+        )));
+    }
     let objects = ObjectStore::owner_only(&gil);
     if guidance { crate::project_resume::ensure(&root); }
     let world = capture(&root, &objects)?;

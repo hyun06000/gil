@@ -216,10 +216,36 @@ fn gitignore_text(root: &Path) -> Option<String> {
 
 // ── begin ──────────────────────────────────────────────────────────────────
 
+/// This build also holds the image-report creation: a `.gil` without a state file and without a preparation
+/// may be the other kind's interrupted creation.
+const OTHER_START: bool = cfg!(feature = "visual-authoring");
+
+/// Asked under the lock, before recovery or reaping: in a build with two kinds of new project, a new
+/// preparation begins only where nothing was recorded yet — an empty `.gil` or one holding the lock file
+/// alone. A started project and an existing preparation are answered by `begin` itself. Everything else
+/// (objects, a restore area, an unfinished state file) is left exactly as it is: the call that routed here
+/// saw an empty folder, and something appeared since. A build with this start alone keeps its bootstrap rule.
+fn no_other_start(gil: &Path) -> Result<(), crate::SessionError> {
+    if !OTHER_START { return Ok(()); }
+    let seen = |name: &str| std::fs::symlink_metadata(gil.join(name)).is_ok();
+    if seen("state.yaml") || seen(PREP_DIR) { return Ok(()); }
+    let unreadable = |source: std::io::Error| crate::SessionError::Unreadable { path: gil.display().to_string(), source: source.to_string() };
+    for entry in std::fs::read_dir(gil).map_err(unreadable)? {
+        let name = entry.map_err(unreadable)?.file_name();
+        if name != crate::lock::LOCK_FILE {
+            return Err(crate::SessionError::NotEmpty { path: gil.display().to_string(), found: name.to_string_lossy().into_owned() });
+        }
+    }
+    Ok(())
+}
+
 /// `gil_start`(tracking-policy 구성) — 준비 기록을 만들거나 이어 간다. 정식 Chain·Cycle·Step·Snapshot 을 만들지 않는다.
 pub(crate) fn begin(root: &str) -> Result<Value, Refusal> {
     let root = root_of(root)?;
-    let gate = gate(&root, true)?;
+    let gate = crate::ProjectSession::start_gate_with(&root, true, no_other_start).map_err(|error| match error {
+        crate::SessionError::NotEmpty { .. } if OTHER_START => refuse("start_record_unsettled", tr("start_kind.unsettled")),
+        other => session_refusal(other),
+    })?;
     if gate.started() {
         return Err(refuse("already_started", tr("start_prep.already_started")));
     }
@@ -565,6 +591,12 @@ pub(crate) struct StartedRecord {
     pub(crate) sync: String,
 }
 
+/// The lock holder saw a state file and it is gone at the unlocked read that follows. Answered as a held
+/// request, never as a panic: nothing was written, and the caller reads the stored state again.
+fn state_gone() -> Refusal {
+    refuse("state_unreadable", tr("start_tool.uncertain"))
+}
+
 fn started_record(root: &Path) -> Result<Option<StartedRecord>, Refusal> {
     let state = root.join(crate::STATE_PATH);
     if !state.exists() {
@@ -648,7 +680,7 @@ fn apply_path(root: &Path, digest: &str) -> Result<Value, Refusal> {
     // ① 이미 정식 시작이 확정됐는가 — 같은 승인이면 같은 결과를 조회해 돌려준다. 새 판·사건·Chain 을 만들지 않는다.
     if gate.started() {
         drop(gate);
-        let started = started_record(root)?.expect("상태 파일이 있다");
+        let started = started_record(root)?.ok_or_else(state_gone)?;
         if started.proposal_digest == digest {
             return Ok(view::started(root, &started, true));
         }
@@ -1178,7 +1210,7 @@ pub(crate) fn cancel(root: &str) -> Result<Value, Refusal> {
     let gate = gate(&root, false)?;
     if gate.started() {
         drop(gate);
-        let started = started_record(&root)?.expect("상태 파일이 있다");
+        let started = started_record(&root)?.ok_or_else(state_gone)?;
         let mut out = view::started(&root, &started, true);
         out["said"] = json!(tr("start_prep.cancel_after_start"));
         return Ok(out);
