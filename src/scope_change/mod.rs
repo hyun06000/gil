@@ -664,6 +664,11 @@ fn apply(session: &mut ProjectSession, root: &Path, gil: &Path, found: &Ledger, 
     });
     let _ = save_ledger(session, gil, Some(found), &logged);
 
+    // 시험만 쓰는 자리 — 승인 저장과 기준점 보관 사이의 외부 변경을 흉내 낸다.
+    #[cfg(test)]
+    if let Some(hook) = AFTER_APPROVAL.with(|slot| slot.borrow_mut().take()) {
+        hook();
+    }
     // 정책 파일 동기화 — 실패해도 정책은 유효하다. 따로 표시한다.
     let file = sync_policy_file(session, root, &bytes, &rules, &chosen, &disk);
     // 기준점 보관 — 승인 흐름의 한 시도. 실패하면 보관 대기가 남고, 그 뒤의 시도는 명시 재시도뿐이다.
@@ -695,6 +700,11 @@ fn save_step(session: &ProjectSession, next: &Project, step: &'static str) -> Re
             return Err(crate::SessionError::Observe { said: "시험이 넣은 저장 실패".into() });
         }
     }
+    // 통합 시험이 새 프로세스에 넣는 실패 자리 — 복원·되돌아가기의 failpoint 와 같은 규율이며 **release 빌드에는 없다.**
+    #[cfg(debug_assertions)]
+    if std::env::var("GIL_SCOPE_FAIL").is_ok_and(|at| at == step) {
+        return Err(crate::SessionError::Observe { said: format!("failpoint GIL_SCOPE_FAIL={step}") });
+    }
     let _ = step;
     session.save_project(next)
 }
@@ -705,6 +715,8 @@ thread_local! {
     pub(crate) static SAVE_FAULT: std::cell::RefCell<Option<(&'static str, bool)>> = const { std::cell::RefCell::new(None) };
     /// 정책 파일 쓰기의 실패 주입 자리 이름(`write_with` 의 단계).
     pub(crate) static WRITE_FAULT: std::cell::RefCell<Option<&'static str>> = const { std::cell::RefCell::new(None) };
+    /// 승인 저장(저장 1)이 확인된 직후, 파일 동기화·기준점 보관 전에 한 번 부른다.
+    pub(crate) static AFTER_APPROVAL: std::cell::RefCell<Option<Box<dyn FnOnce()>>> = const { std::cell::RefCell::new(None) };
     /// 다시 읽기 한 번을 실패로 만든다 — 결과 불명.
     pub(crate) static REREAD_FAULT: std::cell::RefCell<Option<()>> = const { std::cell::RefCell::new(None) };
 }
@@ -1030,5 +1042,7 @@ pub(crate) fn verify_approvals(gil: &Path, tracking: &TrackingState) -> Result<(
     Ok(())
 }
 
-#[cfg(test)]
+// 이 시험은 합성 Interview 를 맨 `approved: yes` 로 걷는다. 승인 계획 프로필(`approved-plan`)의 Core 는 그 승인을 거절하는 것이 계약이라
+// 그 프로필에서는 이 모듈이 컴파일되지 않는다 — 그 프로필에서의 0건은 실행 성공이 아니다.
+#[cfg(all(test, not(feature = "approved-plan")))]
 mod tests;
