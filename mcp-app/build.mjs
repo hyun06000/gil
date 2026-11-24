@@ -35,6 +35,7 @@ must('<footer class="status"><i></i><span></span></footer>',
   <section id="plan-review" class="plan-review" role="region" aria-label="사용자 계획 승인" data-i18n-aria="html.plan_review_aria" hidden></section>
   <section id="revisit-review" class="plan-review" role="region" aria-label="되돌아가기 변경 목록과 승인" data-i18n-aria="html.revisit_review_aria" hidden></section>
   <section id="start-review" class="plan-review" role="region" aria-label="시작 준비와 추적 범위 승인" data-i18n-aria="html.start_review_aria" hidden></section>
+  <section id="scope-review" class="plan-review" role="region" aria-label="추적 범위 변경·기준점 보관·보관 중단" data-i18n-aria="html.scope_review_aria" hidden></section>
   </div>
   <section class="host-bar" aria-label="Monitor 표시 모드" data-i18n-aria="html.host_bar_aria">
     <span id="host-say" role="status" data-i18n="html.connecting">MCP Apps 연결 중…</span>

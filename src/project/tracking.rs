@@ -85,6 +85,37 @@ impl Project {
         Ok(Some(confirmed.world))
     }
 
+    /// status·context 가 함께 싣는 안내 — **보관 대기이거나 중단 표식이 있을 때만** 말한다(그 밖에는 빈 문자열이라 기존 출력이 그대로다).
+    ///
+    /// 세 값을 따로 말한다(§6.3): 적용 정책, 마지막 확정 세계와 그 확정 정책, 보관 대기. 새 정책이 이미 보관에 반영된 것처럼도, 이전
+    /// 정책이 아직 적용 중인 것처럼도 말하지 않는다.
+    pub(crate) fn tracking_note(&self) -> String {
+        let Some(tracking) = self.tracking.as_ref() else { return String::new() };
+        let (waiting, halt) = (tracking.waiting().map(|(name, _)| name), tracking.halt());
+        if waiting.is_none() && halt.is_none() {
+            return String::new();
+        }
+        let mut out = match tracking.standing(self.chains(), &self.artifacts) {
+            Ok(standing) => match standing.confirmed {
+                Some(confirmed) => crate::tr!(
+                    "tracking.note_values",
+                    applied = standing.applied.policy,
+                    world = confirmed.world,
+                    confirmed = confirmed.policy
+                ),
+                None => crate::tr!("tracking.note_applied", applied = standing.applied.policy),
+            },
+            Err(problem) => crate::tr!("tracking.note_unread", why = problem),
+        };
+        if let Some(event) = waiting {
+            out.push_str(&crate::tr!("tracking.note_waiting", event = event));
+        }
+        if let Some(at) = halt {
+            out.push_str(&crate::tr!("tracking.note_halted", at = at));
+        }
+        out
+    }
+
     /// 전이 뒤의 값이 load 와 같은 검사를 통과하는가.
     fn checked(next: Project) -> Result<Project, TrackingError> {
         if let Some(tracking) = next.tracking.as_ref() {
