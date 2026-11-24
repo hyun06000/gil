@@ -1146,6 +1146,11 @@ the Monitor:
   vocabulary.
 - If the tools are unavailable, say the plugin MCP server is not connected. Do not reinterpret
   the GIL Monitor as something you can open another way.
+- The **Scope change** path above is a capability of the connected server, not of a build name: use
+  it only when the connected `tools/list` offers both `gil_scope_propose` and `gil_scope_status`. Do
+  not infer the capability from a development-build name or from the record format. When those tools
+  are absent, do not ask for that call, and do not ask for a tracking-scope approval through chat or
+  file edits instead.
 
 ## A note on persistent host surfaces
 
