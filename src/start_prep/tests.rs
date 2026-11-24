@@ -1021,8 +1021,8 @@ fn a_bootstrap_that_stopped_before_recording_anything_is_retried_by_the_same_req
 #[test]
 fn leftovers_that_appeared_before_the_lock_are_preserved_where_another_start_exists() {
     let root = project("other-start-leftovers");
-    fs::create_dir_all(root.join(".gil/artifacts/tmp")).unwrap();
-    fs::write(root.join(".gil/artifacts/tmp/unfinished"), b"keep evidence").unwrap();
+    // GIL's own internal folder and nothing else: the smallest leftover that is not "nothing recorded".
+    fs::create_dir_all(root.join(".gil/artifacts")).unwrap();
     let before = entries(&root);
     let answer = begin(&s(&root));
     if OTHER_START {
