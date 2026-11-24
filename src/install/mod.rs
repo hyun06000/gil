@@ -599,6 +599,9 @@ mod tests {
         assert!(!is_gil_executable(""));
     }
 
+    // The parking flow of the Windows-style placement. The Linux user install never parks: its own
+    // rules are in `user_place::tests` and in the Linux test below, so this one is not compiled there.
+    #[cfg(not(target_os = "linux"))]
     #[test]
     fn placing_the_binary_parks_a_different_previous_file_and_keeps_an_identical_one() {
         let dir = scratch("place");

@@ -684,6 +684,11 @@ mod lfs {
     }
 }
 
-#[cfg(test)]
+// These fixtures are written for the platforms where the runtime store's protection can be verified
+// (macOS: owner, exact mode and no extended ACL; Windows: its own checks). On Linux the extended-ACL
+// check is not implemented and the observer therefore blocks every root — fail closed, see
+// `runtime_observe::tests_linux`. Running the fixtures there would only assert that refusal 46 times
+// under other names, so they are not compiled for Linux; that is not a pass of them on Linux.
+#[cfg(all(test, not(target_os = "linux")))]
 #[path = "runtime_launch_tests.rs"]
 mod tests;
