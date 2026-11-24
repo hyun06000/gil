@@ -1124,6 +1124,7 @@
   "start_prep.phase.policy_file_held": "최신 제안은 정책 파일 효과가 보류라 승인할 수 없다.",
   "start_prep.phase.sync_outcome_unrecorded": "시작한 .gilignore 쓰기의 결과가 기록되지 않아 이 제안은 다시 적용하지 않는다.",
   "start_prep.phase.attempt_outcome_unrecorded": "적용 시도의 결과가 기록되지 않아 이 제안은 보류되며 다시 적용하지 않는다.",
+  "start_tool.headless_prepare": "추적 범위를 설명하고 정확한 규칙을 gil_start_prepare로 제안한다. 정식 시작은 사용자 승인을 기다린다.",
   "start_prep.next.preparing": "추적·제외 대상과 보관·복원 영향을 설명한 뒤 정확한 원문으로 gil_start_prepare 를 부르고 show_gil_monitor(scope_id) 를 부른다. 프로젝트 파일을 만들지 않는다.",
   "start_prep.next.awaiting_approval": "사용자에게 GIL Monitor 에서 정확한 제안을 검토·승인해 달라고 하고 기다린다. 대화 동의는 승인이 아니다. Monitor 를 쓸 수 없으면 승인 대기로 남는다.",
   "start_prep.next.changes_requested": "무엇을 바꿀지 묻고 gil_start_prepare 로 새 제안을 준비한다.",

@@ -364,7 +364,7 @@ pub(crate) fn start_visual_action(root: &Path) -> Result<String, String> {
 
 /// Safe post-start inspection: no recovery, temporary-object reaping, or bootstrap lock.
 #[cfg(feature = "visual-authoring")]
-pub(crate) fn visual_read_action(root: &Path, command: &str) -> Result<String, String> {
+fn visual_read_session(root: &Path) -> Result<crate::ReadOnlySession, String> {
     #[cfg(windows)]
     let state = crate::project_state::state_for_root(root)?;
     #[cfg(not(windows))]
@@ -386,11 +386,27 @@ pub(crate) fn visual_read_action(root: &Path, command: &str) -> Result<String, S
     #[cfg(not(windows))]
     let session = ProjectSession::open_read_only(rules()?, &state)
         .map_err(|e| e.to_string())?;
+    Ok(session)
+}
+
+#[cfg(feature = "visual-authoring")]
+pub(crate) fn visual_read_action(root: &Path, command: &str) -> Result<String, String> {
+    let session = visual_read_session(root)?;
     match command {
         "status" => Ok(session.status_said()),
         "context" => Ok(format!("{}{}", context(session.project()), crate::project_resume::status(root))),
         _ => Err(text("cmd.visual.read_disallowed").into()),
     }
+}
+
+/// Both parts describe the same loaded revision, using the usual profile-specific read boundary.
+pub(crate) fn headless_context(root: &Path) -> Result<(String, String), String> {
+    #[cfg(feature = "visual-authoring")]
+    let session = visual_read_session(root)?;
+    #[cfg(not(feature = "visual-authoring"))]
+    let session = open_session(&Invocation { root: Root::Exact(root), input: Input::Body("") })?;
+    let project = session.project();
+    Ok((format!("{}{}", context(project), crate::project_resume::status(root)), crate::context::next_call(project)))
 }
 
 fn start_receipt(ctx: &Invocation<'_>, session: &ProjectSession) -> String {

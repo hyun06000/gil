@@ -1124,6 +1124,7 @@
   "start_prep.phase.policy_file_held": "最新提案的策略文件效果为暂停,无法批准。",
   "start_prep.phase.sync_outcome_unrecorded": "已开始的 .gilignore 写入结果未记录;此提案不会再次应用。",
   "start_prep.phase.attempt_outcome_unrecorded": "应用尝试的结果未记录;此提案被保留,不会再次应用。",
+  "start_tool.headless_prepare": "说明跟踪范围，并通过 gil_start_prepare 提交准确的规则。等待用户批准后再开始。",
   "start_prep.next.preparing": "说明跟踪与排除的对象以及对归档/恢复的影响,然后用准确的规则文本调用 gil_start_prepare,再调用 show_gil_monitor(scope_id)。不要创建项目文件。",
   "start_prep.next.awaiting_approval": "请用户在 GIL Monitor 中审阅并批准准确的提案,然后等待。聊天同意不是批准。若 Monitor 不可用,则保持等待批准。",
   "start_prep.next.changes_requested": "询问要修改什么,然后用 gil_start_prepare 准备新提案。",

@@ -1124,6 +1124,7 @@
   "start_prep.phase.policy_file_held": "最新の提案はポリシーファイル効果が保留のため承認できません。",
   "start_prep.phase.sync_outcome_unrecorded": "開始した .gilignore 書き込みの結果が記録されていないため、この提案は再適用しません。",
   "start_prep.phase.attempt_outcome_unrecorded": "適用試行の結果が記録されていないため、この提案は保留され再適用しません。",
+  "start_tool.headless_prepare": "追跡範囲を説明し、正確なルールを gil_start_prepare で提案する。開始前にユーザーの承認を待つ。",
   "start_prep.next.preparing": "追跡・除外の対象と保管・復元への影響を説明してから、正確な原文で gil_start_prepare を呼び、show_gil_monitor(scope_id) を呼んでください。プロジェクトファイルは作成しないでください。",
   "start_prep.next.awaiting_approval": "GIL Monitor で正確な提案を確認・承認するようユーザーに依頼して待ってください。会話での同意は承認ではありません。Monitor が使えない場合は承認待ちのままです。",
   "start_prep.next.changes_requested": "何を変えるか尋ね、gil_start_prepare で新しい提案を準備してください。",

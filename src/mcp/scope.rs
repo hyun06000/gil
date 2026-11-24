@@ -158,7 +158,7 @@ pub(super) fn call(monitor: &Monitor, grants: &Grants, name: &str, input: Value)
     };
     // 사용자가 결정할 화면은 같은 Monitor 다. scope 는 비밀이 아니다(capability 가 아니다).
     let with_monitor = |mut value: Value, root: &str| -> Value {
-        if let Ok(prepared) = monitor.prepare_start(root)
+        if !monitor.headless && let Ok(prepared) = monitor.prepare_start(root)
             && let Some(scope) = prepared["scope_id"].as_str()
         {
             value["scope_id"] = json!(scope);

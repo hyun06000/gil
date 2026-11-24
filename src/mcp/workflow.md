@@ -49,7 +49,7 @@ No global/project/Plugin/Skill hooks or global instruction edits are part of thi
 1. A GIL project is not finished in chat. When continuing that project, follow the last receipt's next call **or wait**.
    Do not close a step before its completion condition is met. If no receipt exists yet, read
    `gil_context` once (existing project) or call `gil_start` once (new project).
-2. After `gil_start`: call the `show_gil_monitor(scope_id)` the receipt names, then
+2. In an explicitly headless session, follow the recorded next action or wait. On desktop after `gil_start`: call the `show_gil_monitor(scope_id)` the receipt names, then
    `gil_open(kind: question)` with `objective`, `next_action`, `done_when` in its `contract` string.
 3. A Question is answered by the user, not by you. Ask and wait. Close it only with the user's actual reply;
    never paste the original request as the answer. Synthesis needs explicit approval;
@@ -126,7 +126,7 @@ approval. Its new policy engine is not yet connected to product capture/restore;
 World records and the agent's recorded actions and learning must correspond in one version.
 This does not require author tracking, write hooks or a new Snapshot for every node.
 
-1. **Start and show.** Start a new project once. A successful `gil_start` receipt carries the exact
+1. **Start and show (desktop display mode).** Start a new project once. A successful `gil_start` receipt carries the exact
    next call, `show_gil_monitor({"scope_id": …})`, in its opening guidance and its final text block:
    `structuredContent.next_call` carries the same name and arguments for structured-only Hosts;
    that single call is the next call on every Host (Codex, Claude Desktop's Claude Code tab, Plugin or

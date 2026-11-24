@@ -150,14 +150,24 @@ fn refused(r: crate::start_prep::Refusal) -> CallToolResult {
 pub(super) fn call(monitor: &Monitor, grants: &Grants, name: &str, input: Value) -> CallToolResult {
     use crate::start_prep as sp;
     let bad = || super::actions::refusal(crate::locale::text("start_tool.bad_input"));
+    let headless_next = |mut value: Value| {
+        if monitor.headless {
+            match value["phase"].as_str() {
+                Some("preparing") => value["next"] = json!(crate::locale::text("start_tool.headless_prepare")),
+                Some("started") => value["next"] = json!(crate::locale::text("ctx.next.new_interview")),
+                _ => {}
+            }
+        }
+        value
+    };
     let with_scope = |mut value: Value, root: &str| -> Value {
         // 정식 시작 전에도 같은 Monitor 경로로 준비 화면을 띄운다. scope 는 비밀이 아니다(capability 가 아니다).
-        if let Ok(prepared) = monitor.prepare_start(root)
+        if !monitor.headless && let Ok(prepared) = monitor.prepare_start(root)
             && let Some(scope) = prepared["scope_id"].as_str() {
             value["scope_id"] = json!(scope);
             value["next_call"] = json!({"name": "show_gil_monitor", "arguments": {"scope_id": scope}});
         }
-        value
+        headless_next(value)
     };
     match name {
         "gil_start" => {
@@ -183,7 +193,7 @@ pub(super) fn call(monitor: &Monitor, grants: &Grants, name: &str, input: Value)
         }
         "gil_start_status" => {
             let Ok(r) = serde_json::from_value::<Root>(input) else { return bad() };
-            sp::status(&r.project_root).map(structured).unwrap_or_else(refused)
+            sp::status(&r.project_root).map(headless_next).map(structured).unwrap_or_else(refused)
         }
         "gil_start_apply" => {
             let Ok(r) = serde_json::from_value::<Apply>(input) else { return bad() };

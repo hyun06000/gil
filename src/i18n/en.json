@@ -1124,6 +1124,7 @@
   "start_prep.phase.policy_file_held": "The latest proposal cannot be approved: its policy-file effect is a hold.",
   "start_prep.phase.sync_outcome_unrecorded": "The outcome of a started .gilignore write is not recorded; this proposal is not applied again.",
   "start_prep.phase.attempt_outcome_unrecorded": "The outcome of an application attempt is not recorded; this proposal is held and not applied again.",
+  "start_tool.headless_prepare": "Explain the tracked paths and propose the exact rules with gil_start_prepare. Wait for authorized review before starting.",
   "start_prep.next.preparing": "Explain tracked and excluded paths and their archive/restore impact, then call gil_start_prepare with the exact rules text and show_gil_monitor(scope_id). Do not create project files.",
   "start_prep.next.awaiting_approval": "Ask the user to review and approve the exact proposal in the GIL Monitor and wait. Chat consent is not approval. If the Monitor is unavailable the start stays waiting.",
   "start_prep.next.changes_requested": "Ask what to change, then prepare a new proposal with gil_start_prepare.",

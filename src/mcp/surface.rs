@@ -23,6 +23,30 @@ const START_SHAPE: &str = if cfg!(feature = "will-end-history") {
     "Cycles with the visual registry"
 };
 
+pub fn connection_tools(headless: bool) -> &'static [Tool] {
+    if !headless { return tools(); }
+    static HEADLESS: OnceLock<Vec<Tool>> = OnceLock::new();
+    HEADLESS.get_or_init(|| {
+        let mut catalog = tools().to_vec();
+        for tool in &mut catalog {
+            if !matches!(tool.name.as_ref(), "gil_start" | "gil_context") { continue; }
+            if let Some(schema) = &mut tool.output_schema {
+                let properties = std::sync::Arc::make_mut(schema).get_mut("properties").expect("receipt properties");
+                properties["next_action"] = json!({"type":"string","description":"Recorded next step or wait in a headless session."});
+            }
+            if tool.name == "gil_start" {
+                let kind = if super::start_kind::HAS_TRACKED && super::start_kind::HAS_IMAGES {
+                    " Choose start_kind explicitly on a new project: tracked_scope prepares a scope requiring the human's approval; image_reports creates an image-report project."
+                } else if super::start_kind::HAS_TRACKED {
+                    " Prepares tracked scope; the human must approve before the first archive."
+                } else { "" };
+                tool.description = Some(format!("Start the selected absolute project_root. The runner selected headless display. Follow the recorded next step; an approval or answer must still be supplied by its authorized source.{kind}").into());
+            }
+        }
+        catalog
+    })
+}
+
 pub fn tools() -> &'static [Tool] {
     static TOOLS: OnceLock<Vec<Tool>> = OnceLock::new();
     TOOLS.get_or_init(|| {
