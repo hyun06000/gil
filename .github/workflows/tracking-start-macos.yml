@@ -6,6 +6,11 @@ name: First start (.gilignore to first Snapshot/Chain) focus on macOS, tracking-
 #     `tracking-policy,approved-plan,visual-authoring,product-safety`. Each group must run exactly
 #     the expected number of tests by name prefix (tools/ci/tracking-start/expect-test-groups.mjs);
 #     an all-targets build is compile evidence only, never execution evidence.
+#   - Same-Chain scope change (same two feature sets): the scope_change unit tests (25 / 24 — one
+#     closing/next-Chain internal-API test is compiled only without approved-plan), the MCP scope unit
+#     tests (2) and the real Unix stdio suite (6), each exact by name prefix. One stdio test writes the
+#     Monitor HTML that this profile's own executable returned from resources/read; the synthetic
+#     scope panel check then loads exactly those bytes. exploration-flow is not covered here.
 #   - UI: the committed Monitor bundle is rebuilt from the locked UI inputs and must be byte-equal,
 #     then the synthetic start-preparation panel check runs in headless Chromium from a pinned
 #     Playwright (tools/ci/tracking-start/npm-shrinkwrap.json). That check answers the App with mock
@@ -179,6 +184,34 @@ jobs:
       - name: "[tracking-policy] baseline_retry 37 unit tests, focused run, exact by name prefix"
         run: |
           node tools/ci/tracking-start/expect-test-groups.mjs 'artifact::tracking_record::baseline_retry_tests::=37' -- cargo test --locked -p gil --features tracking-policy --lib -- artifact::tracking_record::baseline_retry_tests:: --test-threads=1
+      - name: "[tracking-policy] scope change 25 + MCP scope 2 unit tests, exact by name prefix"
+        run: |
+          node tools/ci/tracking-start/expect-test-groups.mjs 'scope_change::tests::=25' 'mcp::scope::tests::=2' -- cargo test --locked -p gil --features tracking-policy --lib -- scope_change::tests:: mcp::scope::tests::
+      # All six walk the real `gil mcp --serve` process with this profile's own approval contract (active when
+      # tracking-policy + unix and NOT exploration-flow). One of them links tools/list -> resources/read (one content,
+      # returned URI = requested URI, MIME, bytes, SHA-256, packaged asset) and requires the scope panel in the
+      # returned HTML: it fails closed when the packaged Monitor lacks that panel. It also writes the returned bytes for
+      # the next step. Failures and the in-flight hold are debug-only failpoints (GIL_SCOPE_FAIL, GIL_SCOPE_HOLD):
+      # process environment variables read only in debug builds, absent from release builds, not product conditions.
+      - name: "[tracking-policy] scope change over the real Unix stdio process, exactly 6 (synthetic projects, debug failpoints)"
+        env:
+          GIL_SCOPE_MONITOR_HTML_OUT: ${{ runner.temp }}/gil-scope-monitor-dev.html
+        run: |
+          node tools/ci/tracking-start/expect-test-groups.mjs '*=6' -- cargo test --locked -p gil --features tracking-policy --test tracking_scope_change
+      # Synthetic Host and synthetic tool answers on the HTML bytes THIS executable returned. Not a real Host, not a
+      # human approval, not Core behaviour.
+      - name: "[tracking-policy] synthetic scope-change Monitor check on the HTML this executable returned (mock Host; NOT a real Host or human approval)"
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/gil-tracking-start-browsers
+          GIL_PLAYWRIGHT_MODULE: ${{ github.workspace }}/tools/ci/tracking-start/node_modules/playwright
+          GIL_SCOPE_MONITOR_HTML: ${{ runner.temp }}/gil-scope-monitor-dev.html
+        run: |
+          set -euo pipefail
+          unset GIL_BROWSER_EXECUTABLE
+          GIL_SCOPE_MONITOR_SHA256="$(shasum -a 256 "$GIL_SCOPE_MONITOR_HTML" | cut -d' ' -f1)"; export GIL_SCOPE_MONITOR_SHA256
+          test "$GIL_SCOPE_MONITOR_SHA256" = "$(node -p 'require("./plugins/gil-companion-prototype/assets/monitor.json").sha256')"
+          node mcp-app/scope-browser-check.mjs
+          echo "synthetic scope-change Monitor check [dev]: exit 0 (mock Host only), html sha256 $GIL_SCOPE_MONITOR_SHA256" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: "[tracking-policy] compile all Core targets (compile evidence only, not execution)"
         run: cargo build --locked -p gil --all-targets --features tracking-policy
 
@@ -191,5 +224,33 @@ jobs:
       - name: "[tracking-policy,approved-plan,visual-authoring,product-safety] baseline_retry 37 unit tests, focused run, exact by name prefix"
         run: |
           node tools/ci/tracking-start/expect-test-groups.mjs 'artifact::tracking_record::baseline_retry_tests::=37' -- cargo test --locked -p gil --features tracking-policy,approved-plan,visual-authoring,product-safety --lib -- artifact::tracking_record::baseline_retry_tests:: --test-threads=1
+      - name: "[tracking-policy,approved-plan,visual-authoring,product-safety] scope change 24 + MCP scope 2 unit tests, exact by name prefix"
+        run: |
+          node tools/ci/tracking-start/expect-test-groups.mjs 'scope_change::tests::=24' 'mcp::scope::tests::=2' -- cargo test --locked -p gil --features tracking-policy,approved-plan,visual-authoring,product-safety --lib -- scope_change::tests:: mcp::scope::tests::
+      # All six walk the real `gil mcp --serve` process with this profile's own approval contract (active when
+      # tracking-policy + unix and NOT exploration-flow). One of them links tools/list -> resources/read (one content,
+      # returned URI = requested URI, MIME, bytes, SHA-256, packaged asset) and requires the scope panel in the
+      # returned HTML: it fails closed when the packaged Monitor lacks that panel. It also writes the returned bytes for
+      # the next step. Failures and the in-flight hold are debug-only failpoints (GIL_SCOPE_FAIL, GIL_SCOPE_HOLD):
+      # process environment variables read only in debug builds, absent from release builds, not product conditions.
+      - name: "[tracking-policy,approved-plan,visual-authoring,product-safety] scope change over the real Unix stdio process, exactly 6 (synthetic projects, debug failpoints)"
+        env:
+          GIL_SCOPE_MONITOR_HTML_OUT: ${{ runner.temp }}/gil-scope-monitor-combined.html
+        run: |
+          node tools/ci/tracking-start/expect-test-groups.mjs '*=6' -- cargo test --locked -p gil --features tracking-policy,approved-plan,visual-authoring,product-safety --test tracking_scope_change
+      # Synthetic Host and synthetic tool answers on the HTML bytes THIS executable returned. Not a real Host, not a
+      # human approval, not Core behaviour.
+      - name: "[tracking-policy,approved-plan,visual-authoring,product-safety] synthetic scope-change Monitor check on the HTML this executable returned (mock Host; NOT a real Host or human approval)"
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/gil-tracking-start-browsers
+          GIL_PLAYWRIGHT_MODULE: ${{ github.workspace }}/tools/ci/tracking-start/node_modules/playwright
+          GIL_SCOPE_MONITOR_HTML: ${{ runner.temp }}/gil-scope-monitor-combined.html
+        run: |
+          set -euo pipefail
+          unset GIL_BROWSER_EXECUTABLE
+          GIL_SCOPE_MONITOR_SHA256="$(shasum -a 256 "$GIL_SCOPE_MONITOR_HTML" | cut -d' ' -f1)"; export GIL_SCOPE_MONITOR_SHA256
+          test "$GIL_SCOPE_MONITOR_SHA256" = "$(node -p 'require("./plugins/gil-companion-prototype/assets/monitor.json").sha256')"
+          node mcp-app/scope-browser-check.mjs
+          echo "synthetic scope-change Monitor check [combined]: exit 0 (mock Host only), html sha256 $GIL_SCOPE_MONITOR_SHA256" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: "[tracking-policy,approved-plan,visual-authoring,product-safety] compile all Core targets (compile evidence only, not execution)"
         run: cargo build --locked -p gil --all-targets --features tracking-policy,approved-plan,visual-authoring,product-safety
