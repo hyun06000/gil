@@ -98,7 +98,7 @@ if (host === 'darwin-arm64') {
   // From here on only the archive bytes are used: checksum, members, a fresh extraction, an
   // isolated install, and every functional check through the INSTALLED binary.
   const installed = await verifyLinuxArchive({archive, sums: join(output, 'SHA256SUMS'), expectedVersion: coreVersion,
-    expectedHtml: join(repository, 'plugins/gil-companion-prototype/assets/monitor.html')});
+    expectedHtml: join(repository, 'plugins/gil-companion-prototype/assets/monitor.html'), htmlOut: join(output, 'monitor-returned.html')});
   const record = {...provenance(LINUX, source), archive: {name: LINUX.archive, sha256: archiveHash},
     binary_sha256: receipt.files.find(file => file.path === LINUX.core).sha256, elf: receipt.elf,
     signing: 'none', support: 'run-time floor is the glibc version read from the binary; supported distributions are not stated by this build'};

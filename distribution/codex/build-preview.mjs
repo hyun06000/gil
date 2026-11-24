@@ -8,7 +8,7 @@ import {ARCHIVE_FLAGS, createTree, hash, inventory, repository, sourceSnapshot, 
 import {smoke} from './smoke.mjs';
 import {buildVersion, selectedPreview} from './build-version.mjs';
 import {cargoFeatures} from './compatibility.mjs';
-import {verifyStartKinds} from '../product/verify-install.mjs';
+import {verifyMacosArchive} from '../product/verify-install.mjs';
 import {checkNativeOutputContract} from '../../plugins/gil-companion-prototype/native-output-contract.mjs';
 import {check as checkNotices} from '../compliance/notices.mjs';
 
@@ -53,13 +53,17 @@ try {
   await verifyTree(extracted);
   assert.deepEqual(await inventory(extracted), await inventory(marketplace), 'archive roundtrip changed files/modes');
   const check = await smoke(extracted, join(repository, 'plugins/gil-companion-prototype/assets/monitor.html'), verifyTree, profile, coreVersion);
-  // The product build has two kinds of new project. Each is exercised through the packaged binary
-  // itself, in a synthetic project, with a restart; the catalog smoke above is not that evidence.
-  if (profile === 'product') check.start_kinds = await verifyStartKinds(join(extracted, 'plugins/gil-companion-prototype/core/darwin-arm64/gil'));
   const archiveHash = hash(await readFile(archive));
   await writeFile(join(output, 'SHA256SUMS'), `${archiveHash}  gil-codex-macos-arm64-preview.tar.gz\n`, {flag: 'wx'});
+  // The product build: from here only the archive bytes are used. Checksum, members, a new prefix,
+  // the Core the Plugin manifest names with an isolated HOME, both kinds of new project with a
+  // restart, removal. The catalog smoke above is not that evidence. `monitor-returned.html` is the
+  // exact HTML that Core served, kept for the separate synthetic Monitor check.
+  const installed = profile === 'product' ? await verifyMacosArchive({archive, sums: join(output, 'SHA256SUMS'), expectedVersion: coreVersion,
+    expectedHtml: join(repository, 'plugins/gil-companion-prototype/assets/monitor.html'), htmlOut: join(output, 'monitor-returned.html')}) : undefined;
   await writeFile(join(output, 'checks.json'), JSON.stringify({channel: 'development_unsigned', publishable: false,
-    source, profile, host_output_contract: hostOutputContract, third_party_notices: notices, archive_sha256: archiveHash, roundtrip: 'passed', smoke: check}, null, 2) + '\n', {flag: 'wx'});
+    source, profile, host_output_contract: hostOutputContract, third_party_notices: notices, archive_sha256: archiveHash, roundtrip: 'passed', smoke: check,
+    ...(installed ? {installed} : {})}, null, 2) + '\n', {flag: 'wx'});
   console.log(JSON.stringify({channel: 'development_unsigned', publishable: false,
     archive_sha256: archiveHash, roundtrip: 'passed', tools: check.tools, source_dirty: source.dirty}));
 } finally {

@@ -10,7 +10,7 @@
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {createHash, randomUUID} from 'node:crypto';
-import {lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rm, writeFile} from 'node:fs/promises';
+import {chmod, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -18,7 +18,8 @@ import {deflateSync} from 'node:zlib';
 import {checkCore, compatibility} from '../codex/compatibility.mjs';
 import {checkVersionAgreement} from '../codex/build-version.mjs';
 import {checkProductTools, withoutRecoveryTools} from '../codex/tool-contract.mjs';
-import {LINUX, PROFILE, verifyLinuxTree} from './artifact.mjs';
+import {CORE as DARWIN_CORE, MANIFEST as DARWIN_MANIFEST, PREFIX as DARWIN_PREFIX, verifyTree as verifyDarwinTree} from '../codex/artifact.mjs';
+import {DARWIN, LINUX, PROFILE, verifyLinuxTree} from './artifact.mjs';
 import {Mcp, mustRefuse, mustSucceed, said, succeeded} from './mcp-client.mjs';
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -72,12 +73,12 @@ function stepRef(result, kind) {
 }
 
 class Project {
-  constructor(binary, state, name) { this.binary = binary; this.state = state; this.name = name; }
+  constructor(binary, state, name, home) { this.binary = binary; this.state = state; this.name = name; this.home = home ?? join(state, 'home'); }
   async create(files) {
     this.root = join(this.state, this.name);
     await mkdir(this.root);
     for (const [path, bytes] of Object.entries(files)) await this.write(path, bytes);
-    this.env = {PATH: '/usr/bin:/bin', HOME: join(this.state, 'home'), TMPDIR: tmpdir(), GIL_MONITOR_STATE_DIR: join(this.state, 'bindings', this.name)};
+    this.env = {PATH: '/usr/bin:/bin', HOME: this.home, TMPDIR: tmpdir(), GIL_MONITOR_STATE_DIR: join(this.state, 'bindings', this.name)};
     await this.connect();
     return this;
   }
@@ -125,8 +126,8 @@ class Project {
   }
 }
 
-async function imageReports(binary, state) {
-  const p = await new Project(binary, state, 'image-reports').create({'data/dates.csv': 'id,date\n1,2026-01-02\n2,02/01/2026\n'});
+async function imageReports(binary, state, home) {
+  const p = await new Project(binary, state, 'image-reports', home).create({'data/dates.csv': 'id,date\n1,2026-01-02\n2,02/01/2026\n'});
   try {
     const started = mustSucceed(await p.model('gil_start', {start_kind: 'image_reports'}), 'image-report start');
     assert.equal(started.structuredContent.storage_format, 9, 'an image-report project of this build');
@@ -181,6 +182,33 @@ async function imageReports(binary, state) {
     mustSucceed(await p.model('gil_close', {report: `verdict: success\noutcome_ref: ${outcome}\nhandoff_summary: ${cycle}의 관측과 한계를 남겼다\nnext_direction.action: open_child\nnext_direction.reason: 관측에 따라 다음을 정한다\n`,
       expected_owner: cycleOwner, visuals: citing('인계의 근거')}), 'Cycle Report citing the image');
 
+    // The single Will end history of this storage: the closed steps above ended their Wills as
+    // achieved. A second Experiment (requirement R2) then ends its Verify's Will as UNACHIEVED,
+    // which only the Will that is active right now can do.
+    const history = () => p.record().then(bytes => bytes.toString('utf8'));
+    assert.ok((await history()).includes('ended_wills:') && !(await history()).includes('done_wills:'), 'one end history, not the older done list');
+    assert.ok(!(await history()).includes('end_result: unachieved'));
+    mustSucceed(await p.model('gil_open', await p.experimentArgs('R2')), 'second linked Experiment');
+    mustSucceed(await p.model('gil_open', {kind: 'define', contract: CONTRACT}), 'define');
+    mustSucceed(await p.model('gil_close', {report: 'problem: 지정한 자료에 빈 행이 존재하는가?\nsuccess_condition: 지정한 파일의 관측 증거가 위 명제의 긍정 답을 뒷받침한다. 근거 있는 부정 답이나 판정 미도달은 성공이 아니다\n'}), 'close define');
+    mustSucceed(await p.model('gil_open', {kind: 'hypothesis', contract: CONTRACT}), 'hypothesis');
+    mustSucceed(await p.model('gil_close', {report: 'hypothesis: 합성 자료만으로 판정할 수 있다\nrationale: 자료가 제공됐다\nguardrail: 외부 데이터를 쓰지 않는다\n'}), 'close hypothesis');
+    const attempt = {kind: 'step', ref: stepRef(mustSucceed(await p.model('gil_open', {kind: 'verify', contract: CONTRACT}), 'second verify'), 'verify')};
+    const active = Number((await history()).match(/^next_will_id: (\d+)$/m)?.[1]) - 1;
+    assert.ok(active > 1, 'the record names the next Will');
+    await p.write('evidence/C3.md', '입력 파일을 열 수 없어 계약한 관측을 수행하지 못했다\n');
+    const unachieved = marker => p.mcp.raw('gil_close', {project_root: p.root, expected_owner: attempt, unachieved_will: marker,
+      report: `execution: 계약한 관측을 수행하지 못했다\nresult: 관측값이 없다\nplan_document: ${PLAN_DOCUMENT}\nevidence_files: |\n  evidence/C3.md\n`,
+      visuals: {attachments: [], uses: [], declaration: {state: 'not_needed', reason: '수행하지 못한 관측이라 그릴 값이 없고 경위는 evidence/C3.md 문서가 대신한다'}}});
+    const open = await history();
+    const stale = await unachieved(`will:W${active - 1}`);
+    assert.ok(stale.error || !succeeded(stale.result), 'a Will that already ended closed the open step');
+    assert.equal(await history(), open, 'the refused marker changed the record');
+    const ended = await unachieved(`will:W${active}`);
+    assert.ok(!ended.error && succeeded(ended.result), `the active Will could not end unachieved: ${JSON.stringify(ended).slice(0, 1500)}`);
+    assert.equal((await history()).match(/end_result: unachieved/g)?.length, 1, 'exactly one Will ended unachieved');
+    assert.ok((await history()).startsWith('format: 9\n'));
+
     // Read back: the model-side read, the original Report read, and the stored bytes through the Monitor scope.
     const reads = async () => {
       const visuals = mustSucceed(await p.model('gil_report_visuals', {owner: verify}), 'report visuals').structuredContent;
@@ -201,12 +229,13 @@ async function imageReports(binary, state) {
     p.scope = prepared.structuredContent.scope_id; // the scope this process prepared for the same project
     assert.deepEqual(await reads(), first, 'a fresh process reads the same Reports and visuals');
     assert.ok((await p.record()).equals(record), 'reading after a restart changed the record');
-    return {started_format: 9, asset_sha256: asset.sha256, experiment: cycle, restart: 'same records and bytes'};
+    assert.equal((await history()).match(/end_result: unachieved/g)?.length, 1, 'the end history survived the restart');
+    return {started_format: 9, asset_sha256: asset.sha256, experiment: cycle, end_history: 'achieved ends and one unachieved end recorded', restart: 'same records and bytes'};
   } finally { await p.mcp.close(); }
 }
 
-async function trackedScope(binary, state) {
-  const p = await new Project(binary, state, 'tracked-scope').create({'README.md': 'hello\n', 'src/a.txt': 'alpha\n', 'data/raw.csv': '1,2,3\n'});
+async function trackedScope(binary, state, home) {
+  const p = await new Project(binary, state, 'tracked-scope', home).create({'README.md': 'hello\n', 'src/a.txt': 'alpha\n', 'data/raw.csv': '1,2,3\n'});
   const P1 = 'scratch/\n', P2 = 'scratch/\ndata/\n';
   const absent = path => assert.rejects(lstat(join(p.root, path)), `${path} exists before the approval`);
   try {
@@ -279,27 +308,39 @@ async function trackedScope(binary, state) {
     mustSucceed(await p.model('gil_context'), 'context after a restart');
     // The limits this kind states are real refusals, not silent fallbacks.
     mustRefuse(await p.model('gil_restore'), 'restore in a tracked-scope project');
-    const visuals = await p.mcp.raw('gil_report_visuals', {project_root: p.root, owner: {kind: 'cycle', ref: 'cycle:C1'}});
-    assert.ok(visuals.error || !succeeded(visuals.result), 'a tracked-scope project accepted an image-report read');
+    // No image attachments: the limit is on writing. A close that carries visuals is refused before
+    // the record is touched; reading a report's visuals truthfully answers that there are none.
+    const before = await p.record();
+    const attach = await p.mcp.raw('gil_close', {project_root: p.root, report: 'verdict: success\n',
+      expected_owner: {kind: 'cycle', ref: 'cycle:C1'}, visuals: {attachments: [], uses: []}});
+    assert.ok(attach.error || !succeeded(attach.result), 'a tracked-scope project accepted a close with visuals');
+    assert.ok(JSON.stringify(attach).includes('visual_upgrade_required'), 'the refusal names the missing image-report storage');
+    const visuals = mustSucceed(await p.model('gil_report_visuals', {owner: {kind: 'cycle', ref: 'cycle:C1'}}), 'visual read in a tracked-scope project');
+    assert.deepEqual(visuals.structuredContent.visuals.uses, [], 'a tracked-scope project holds no visuals');
+    assert.ok((await p.record()).equals(before), 'the refused close or the read changed the record');
     assert.ok((await p.record()).toString('utf8').startsWith('format: 10\n'), 'nothing converted the project');
     return {started_format: 10, policies: ['policy:P1', 'policy:P2'], scope_change: 'approved and archived', restart: 'same records'};
   } finally { await p.mcp.close(); }
 }
 
 // Both kinds of new project through `binary`. Returns a small summary for a receipt.
-export async function verifyStartKinds(binary) {
+// `home`, when given, is the HOME the child runs with (an install check passes the isolated home it
+// compares afterwards); otherwise a fresh one inside this check's own directory.
+export async function verifyStartKinds(binary, {home} = {}) {
   const state = await realpath(await mkdtemp(join(tmpdir(), 'gil-product-kinds-')));
-  await mkdir(join(state, 'home'));
+  if (!home) await mkdir(join(state, 'home'));
   try {
-    return {tracked_scope: await trackedScope(resolve(binary), state), image_reports: await imageReports(resolve(binary), state),
+    return {tracked_scope: await trackedScope(resolve(binary), state, home), image_reports: await imageReports(resolve(binary), state, home),
       scope: 'synthetic projects and harness App input; not a person\'s approval, a Host screen or failure injection'};
   } finally { await rm(state, {recursive: true, force: true}); } // Exactly the directory this check created.
 }
 
 // Protocol identity of `binary`: version agreement, probe, catalog contract, the embedded Monitor.
-export async function verifyProtocol(binary, {platform, expectedVersion, expectedHtml}) {
+// `htmlOut`, when given, receives the exact HTML bytes this binary returned (a new file), so a
+// separate synthetic Monitor check can load what was served rather than a file from the source tree.
+export async function verifyProtocol(binary, {platform, expectedVersion, expectedHtml, home, htmlOut}) {
   const state = await realpath(await mkdtemp(join(tmpdir(), 'gil-product-protocol-')));
-  const env = {PATH: '/usr/bin:/bin', HOME: state, GIL_MONITOR_STATE_DIR: join(state, 'bindings')};
+  const env = {PATH: '/usr/bin:/bin', HOME: home ?? state, GIL_MONITOR_STATE_DIR: join(state, 'bindings')};
   let mcp;
   try {
     const version = spawnSync(binary, ['--version'], {cwd: state, env, encoding: 'utf8', timeout: 10000});
@@ -328,6 +369,7 @@ export async function verifyProtocol(binary, {platform, expectedVersion, expecte
     const htmlBytes = Buffer.from(html.text, 'utf8'), uiHash = sha256(htmlBytes);
     assert.equal(uri, `ui://gil-monitor/${uiHash.slice(0, 20)}.html`);
     if (expectedHtml) assert.ok(htmlBytes.equals(await readFile(expectedHtml)), 'the embedded Monitor differs from the packaged asset');
+    if (htmlOut) await writeFile(htmlOut, htmlBytes, {flag: 'wx'});
     return {version: core.core_version, core, tools: tools.length, ui: {uri, mime: html.mimeType, bytes: htmlBytes.length, sha256: uiHash},
       compatibility: compatibility(PROFILE)};
   } finally {
@@ -336,65 +378,186 @@ export async function verifyProtocol(binary, {platform, expectedVersion, expecte
   }
 }
 
+// Member names of a tar.gz, read without extracting. The shell checker beside the macOS install
+// script refuses absolute paths, parent traversal, links and special entries; this adds what it
+// does not look at: a name that occurs twice (the later entry would silently replace the earlier
+// one on extraction).
+export function archiveMembers(archive) {
+  const checker = spawnSync('/bin/sh', [fileURLToPath(new URL('../codex/check-archive-members.sh', import.meta.url)), resolve(archive)], {encoding: 'utf8', timeout: 60000});
+  assert.equal(checker.status, 0, `archive member inspection refused: ${checker.stderr}`);
+  const listed = spawnSync('/usr/bin/tar', ['-tzf', resolve(archive)], {encoding: 'utf8', timeout: 60000, maxBuffer: 16 * 1024 * 1024});
+  assert.equal(listed.status, 0, 'archive listing failed');
+  const names = listed.stdout.split('\n').filter(Boolean).map(name => name.replace(/^\.\//, '').replace(/\/$/, '') || '.');
+  assert.equal(new Set(names).size, names.length, 'the archive holds the same member name more than once');
+  return names;
+}
+
+async function checkedArchive(archive, sums, name) {
+  const digest = sha256(await readFile(archive));
+  assert.equal(await readFile(sums, 'utf8'), `${digest}  ${name}\n`, 'archive differs from its published checksum');
+  return digest;
+}
+
+// Everything in `home` except what the check itself is allowed to leave: unchanged, byte for byte.
+function assertUntouched(before, after, allowed = () => false) {
+  for (const [path, value] of Object.entries(before)) assert.equal(after[path], value, `changed or removed: ${path}`);
+  const added = Object.keys(after).filter(path => !Object.hasOwn(before, path) && !allowed(path));
+  assert.deepEqual(added, [], 'entries were left behind');
+}
+
 // Linux: the exact archive → integrity → member inspection → extraction into a new folder →
 // install into an isolated HOME → the INSTALLED binary's protocol and both kinds of project →
-// uninstall → only the files the install recorded are gone.
-export async function verifyLinuxArchive({archive, sums, expectedHtml, expectedVersion}) {
+// uninstall through the installed binary → only the files the install recorded are gone.
+export async function verifyLinuxArchive({archive, sums, expectedHtml, expectedVersion, htmlOut}) {
   assert.equal(process.platform, 'linux'); assert.equal(process.arch, 'x64');
-  const bytes = await readFile(archive), digest = sha256(bytes);
-  assert.equal((await readFile(sums, 'utf8')), `${digest}  ${LINUX.archive}\n`, 'archive differs from its published checksum');
+  const digest = await checkedArchive(archive, sums, LINUX.archive);
   const state = await realpath(await mkdtemp(join(tmpdir(), 'gil-product-install-')));
   try {
-    const members = spawnSync('/bin/sh', [fileURLToPath(new URL('../codex/check-archive-members.sh', import.meta.url)), resolve(archive)], {encoding: 'utf8', timeout: 60000});
-    assert.equal(members.status, 0, `archive member inspection refused: ${members.stderr}`);
+    const members = archiveMembers(archive);
     const extracted = join(state, 'extracted'), home = join(state, 'home');
-    await mkdir(extracted); await mkdir(home);
-    const untar = spawnSync('/usr/bin/tar', ['-xzf', resolve(archive), '--no-same-owner', '-C', extracted], {encoding: 'utf8', timeout: 60000});
+    await mkdir(extracted, {mode: 0o700}); await mkdir(home);
+    // -p: the reviewed modes are restored whatever this process's umask is; ownership is not applied.
+    const untar = spawnSync('/usr/bin/tar', ['-xzpf', resolve(archive), '--no-same-owner', '-C', extracted], {encoding: 'utf8', timeout: 60000});
     assert.equal(untar.status, 0, 'extraction failed');
+    await chmod(extracted, 0o700); // the archive's top-level entry would otherwise widen the folder reserved above
     const receipt = await verifyLinuxTree(extracted); // Integrity before executing any artifact byte.
     if (expectedVersion !== undefined) assert.equal(receipt.version, expectedVersion);
-
-    // Synthetic pre-existing settings and files that the install must leave as they are.
-    await mkdir(join(home, '.codex'));
+    assert.deepEqual(members.filter(name => !['.', 'bin'].includes(name)).sort(), [...receipt.files.map(file => file.path), 'release.json'].sort(),
+      'the archive lists other members than the receipt');
+    const packaged = join(extracted, LINUX.core);
     const config = '# sentinel: an existing Codex setting\n[mcp_servers.other]\ncommand = "/usr/bin/true"\nargs = []\n';
-    await writeFile(join(home, '.codex/config.toml'), config);
-    await mkdir(join(home, '.local/share/other-app'), {recursive: true});
-    await writeFile(join(home, '.local/share/other-app/data'), 'sentinel\n');
-    const env = {PATH: '/usr/bin:/bin', HOME: home, CODEX_HOME: join(home, '.codex')};
-    const run = (binary, args) => spawnSync(binary, args, {cwd: state, env, encoding: 'utf8', timeout: 60000});
-    const packaged = join(extracted, LINUX.core), installed = join(home, '.local/share/gil/bin/gil');
-    const install = run(packaged, ['install', '--no-wait']);
+    const profile = async at => {
+      // Synthetic pre-existing settings and files that the install must leave as they are.
+      await mkdir(join(at, '.codex'), {recursive: true});
+      await writeFile(join(at, '.codex/config.toml'), config);
+      await mkdir(join(at, '.local/share/other-app'), {recursive: true});
+      await writeFile(join(at, '.local/share/other-app/data'), 'sentinel\n');
+      await mkdir(join(at, '.config/other-host'), {recursive: true});
+      await writeFile(join(at, '.config/other-host/settings.json'), '{"sentinel": true}\n');
+      return {PATH: '/usr/bin:/bin', HOME: at, CODEX_HOME: join(at, '.codex')};
+    };
+    const run = (binary, args, env) => spawnSync(binary, args, {cwd: state, env, encoding: 'utf8', timeout: 60000});
+
+    // An entry at the fixed path that no install recorded — here the very same bytes — stops the
+    // install before anything is written, Host settings included.
+    const occupied = join(state, 'occupied-home'), occupiedEnv = await profile(occupied);
+    await mkdir(join(occupied, '.local/share/gil/bin'), {recursive: true});
+    await writeFile(join(occupied, '.local/share/gil/bin/gil'), await readFile(packaged), {mode: 0o755});
+    const occupiedBefore = await tree(occupied);
+    const refused = run(packaged, ['install', '--no-wait'], occupiedEnv);
+    assert.notEqual(refused.status, 0, 'the install took over a file it did not place');
+    assert.match(refused.stderr, /Nothing was changed/);
+    assert.deepEqual(await tree(occupied), occupiedBefore, 'a refused install changed something');
+    const kept = run(packaged, ['uninstall', '--remove-binary'], occupiedEnv);
+    assert.equal(kept.status, 0, `gil uninstall failed: ${kept.stderr}`);
+    assert.match(kept.stdout, /^binary: KEPT /m);
+    assert.deepEqual(await tree(occupied), occupiedBefore, 'uninstall removed or changed a file that was never installed');
+
+    const env = await profile(home), before = await tree(home);
+    const installed = join(home, '.local/share/gil/bin/gil');
+    const install = run(packaged, ['install', '--no-wait'], env);
     assert.equal(install.status, 0, `gil install failed: ${install.stderr}`);
     assert.match(install.stdout, /^binary: UPDATED /m);
     assert.match(install.stdout, /^claude-desktop: NOT_INSTALLED$/m, 'a Host that does not exist on this machine was reported as registered');
     assert.ok((await readFile(installed)).equals(await readFile(packaged)), 'the installed file is not the packaged bytes');
-    assert.equal((await lstat(installed)).mode & 0o111, 0o111, 'the installed Core is not executable');
+    assert.equal((await lstat(installed)).mode & 0o777, 0o755, 'the installed Core does not have the reviewed mode');
+    assert.deepEqual((await readdir(join(home, '.local/share/gil/bin'))).sort(), ['gil', 'install.json'], 'the install folder holds other names than the two recorded files');
+    const recorded = JSON.parse(await readFile(join(home, '.local/share/gil/bin/install.json'), 'utf8'));
+    assert.equal(recorded.sha256, sha256(await readFile(installed)), 'install.json records another digest than the installed file');
+    assert.equal(recorded.version, receipt.version, 'install.json records another version than the packaged Core');
     const registered = await readFile(join(home, '.codex/config.toml'), 'utf8');
     assert.ok(registered.includes('[mcp_servers.other]') && registered.includes('# sentinel'), 'existing Codex settings were rewritten');
     assert.ok(registered.includes(installed), 'Codex was not pointed at the installed path');
-    assert.equal(run(installed, ['install', '--no-wait']).status, 0, 'a repeated install is not idempotent');
-    assert.equal(run(installed, ['doctor']).status, 0, 'gil doctor reports an unhealthy installation');
+    const repeated = run(installed, ['install', '--no-wait'], env);
+    assert.equal(repeated.status, 0, 'a repeated install is not idempotent');
+    assert.match(repeated.stdout, /^binary: OK /m);
+    assert.equal(run(installed, ['doctor'], env).status, 0, 'gil doctor reports an unhealthy installation');
 
-    const protocol = await verifyProtocol(installed, {platform: LINUX.platform, expectedVersion: receipt.version, expectedHtml});
-    const kinds = await verifyStartKinds(installed);
+    const protocol = await verifyProtocol(installed, {platform: LINUX.platform, expectedVersion: receipt.version, expectedHtml, home, htmlOut});
+    const kinds = await verifyStartKinds(installed, {home});
 
-    const removed = run(packaged, ['uninstall', '--remove-binary']);
+    // The documented removal: the installed executable removes its own recorded files.
+    const removed = run(installed, ['uninstall', '--remove-binary'], env);
     assert.equal(removed.status, 0, `gil uninstall failed: ${removed.stderr}`);
+    assert.match(removed.stdout, /^binary: REMOVED /m);
     await assert.rejects(lstat(installed), 'the installed Core was not removed');
     const after = await readFile(join(home, '.codex/config.toml'), 'utf8');
     assert.ok(after.includes('[mcp_servers.other]') && after.includes('# sentinel') && !after.includes(installed), 'uninstall did not restore exactly the foreign settings');
-    assert.equal(await readFile(join(home, '.local/share/other-app/data'), 'utf8'), 'sentinel\n');
-    const left = Object.keys(await tree(join(home, '.local/share'))).filter(path => path.startsWith('gil/') && !path.endsWith('/'));
-    assert.deepEqual(left.filter(path => path !== 'gil/bin'), [], 'files of the installation were left behind');
+    // Everything that was there before is byte-identical, except the one Codex file the install
+    // registered in; the only new entries are that file's own backups beside it.
+    const {'.codex/config.toml': _edited, ...untouched} = before;
+    assertUntouched(untouched, await tree(home), path => /^\.codex\/config\.toml\.bak-[^/]+$/.test(path));
+    const again = run(packaged, ['uninstall', '--remove-binary'], env);
+    assert.equal(again.status, 0);
+    assert.match(again.stdout, /^binary: NOT_INSTALLED /m);
     return {archive_sha256: digest, receipt: {version: receipt.version, elf: receipt.elf, source: receipt.source}, protocol, start_kinds: kinds,
-      install: 'isolated HOME; existing Codex settings and unrelated files unchanged; uninstall removed the recorded files only'};
+      install: 'isolated HOME; a foreign entry refused unchanged; existing Codex settings and unrelated files unchanged; the installed executable removed the recorded files only'};
+  } finally { await rm(state, {recursive: true, force: true}); }
+}
+
+// macOS: the user channel is the Plugin marketplace folder itself; a Host registers that folder with
+// its own command and then runs the Core inside it. This check does everything up to and after
+// that Host step without performing it: the exact archive → integrity → member inspection → a new
+// owner-only prefix → the tree's receipt, Mach-O and notices → the Core the Plugin manifest names,
+// run in place with an isolated HOME → protocol and both kinds of project → the prefix removed →
+// the isolated HOME (synthetic Host settings and unrelated files) byte-identical.
+// It registers nothing with any Host, and it is not a signature, notarization or Gatekeeper result.
+export async function verifyMacosArchive({archive, sums, expectedHtml, expectedVersion, htmlOut}) {
+  assert.equal(process.platform, 'darwin'); assert.equal(process.arch, 'arm64');
+  const digest = await checkedArchive(archive, sums, DARWIN.archive);
+  const state = await realpath(await mkdtemp(join(tmpdir(), 'gil-product-install-')));
+  try {
+    const members = archiveMembers(archive);
+    const prefix = join(state, 'marketplace'), home = join(state, 'home');
+    await mkdir(prefix, {mode: 0o700}); await mkdir(home);
+    const untar = spawnSync('/usr/bin/tar', ['-xzpf', resolve(archive), '--no-same-owner', '-C', prefix], {encoding: 'utf8', timeout: 60000});
+    assert.equal(untar.status, 0, 'extraction failed');
+    await chmod(prefix, 0o700);
+    const receipt = await verifyDarwinTree(prefix); // Integrity before executing any artifact byte.
+    assert.equal(receipt.platform, DARWIN.platform);
+    assert.deepEqual(receipt.development_features, ['tracking-policy', 'approved-plan', 'visual-authoring', 'exploration-flow'], 'not the product build');
+    const files = [...receipt.files.map(file => file.path), 'release.json'];
+    const folders = new Set(files.flatMap(path => path.split('/').slice(0, -1).map((_, depth, parts) => parts.slice(0, depth + 1).join('/'))));
+    assert.deepEqual(members.filter(name => name !== '.' && !folders.has(name)).sort(), files.sort(), 'the archive lists other members than the receipt');
+    const entry = JSON.parse(await readFile(join(prefix, DARWIN_MANIFEST), 'utf8')).mcpServers['gil-companion'];
+    const core = resolve(join(prefix, DARWIN_PREFIX, entry.cwd), entry.command);
+    assert.equal(core, join(prefix, DARWIN_CORE), 'the Plugin manifest starts another file than the packaged Core');
+    assert.deepEqual(entry.args, ['mcp', '--serve']);
+
+    await mkdir(join(home, '.codex'));
+    await writeFile(join(home, '.codex/config.toml'), '# sentinel: an existing Codex setting\n[mcp_servers.other]\ncommand = "/usr/bin/true"\nargs = []\n');
+    await mkdir(join(home, 'Library/Application Support/Claude'), {recursive: true});
+    await writeFile(join(home, 'Library/Application Support/Claude/claude_desktop_config.json'), '{"mcpServers": {"other": {"command": "/usr/bin/true"}}}\n');
+    await mkdir(join(home, 'Library/Application Support/other-app'), {recursive: true});
+    await writeFile(join(home, 'Library/Application Support/other-app/data'), 'sentinel\n');
+    const before = await tree(home), packagedBefore = await tree(prefix);
+
+    const protocol = await verifyProtocol(core, {platform: DARWIN.platform, expectedVersion: expectedVersion ?? receipt.version, expectedHtml, home, htmlOut});
+    const kinds = await verifyStartKinds(core, {home});
+    assert.deepEqual(await tree(prefix), packagedBefore, 'running the Core changed the installed folder');
+    assertUntouched(before, await tree(home));
+
+    // Removal is the removal of that one folder. Nothing else was created by the installation.
+    await rm(prefix, {recursive: true});
+    assertUntouched(before, await tree(home));
+    assert.deepEqual((await readdir(state)).sort(), ['home']);
+    return {archive_sha256: digest, receipt: {version: receipt.version, source: receipt.source, core_sha256: receipt.files.find(file => file.path === DARWIN_CORE).sha256},
+      protocol, start_kinds: kinds,
+      install: 'new owner-only prefix and isolated HOME; the Core the Plugin manifest names ran in place; no Host registration was performed; synthetic Host settings and unrelated files unchanged; removal was that one folder',
+      trust: 'not signed with a Developer ID and not notarized; Gatekeeper was neither consulted nor bypassed'};
   } finally { await rm(state, {recursive: true, force: true}); }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const [command, ...args] = process.argv.slice(2);
-  if (command === 'kinds' && args.length === 1) console.log(JSON.stringify(await verifyStartKinds(resolve(args[0])), null, 2));
-  else if (command === 'linux-archive' && (args.length === 2 || args.length === 3)) {
-    console.log(JSON.stringify(await verifyLinuxArchive({archive: resolve(args[0]), sums: resolve(args[1]), expectedHtml: args[2] && resolve(args[2])}), null, 2));
-  } else throw new Error('Usage: verify-install.mjs kinds <binary> | linux-archive <archive.tar.gz> <SHA256SUMS> [expected-monitor.html]');
+  const [command, ...rest] = process.argv.slice(2);
+  // `--html-out <new file>`: keep the exact Monitor HTML the checked binary returned.
+  const at = rest.indexOf('--html-out');
+  const htmlOut = at < 0 ? undefined : resolve(rest[at + 1] ?? '');
+  const args = at < 0 ? rest : [...rest.slice(0, at), ...rest.slice(at + 2)];
+  const usage = 'Usage: verify-install.mjs kinds <binary> | (linux-archive|macos-archive) <archive.tar.gz> <SHA256SUMS> [expected-monitor.html] [--html-out <new file>]';
+  if (command === 'kinds' && args.length === 1 && at < 0) console.log(JSON.stringify(await verifyStartKinds(resolve(args[0])), null, 2));
+  else if (['linux-archive', 'macos-archive'].includes(command) && (args.length === 2 || args.length === 3)) {
+    const verify = command === 'linux-archive' ? verifyLinuxArchive : verifyMacosArchive;
+    console.log(JSON.stringify(await verify({archive: resolve(args[0]), sums: resolve(args[1]), expectedHtml: args[2] && resolve(args[2]), htmlOut}), null, 2));
+  } else throw new Error(usage);
 }

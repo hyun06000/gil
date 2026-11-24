@@ -1,15 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdir, mkdtemp, readdir, rm, writeFile} from 'node:fs/promises';
+import {mkdir, mkdtemp, readFile, readdir, rm, writeFile} from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {ARCHIVE_FLAGS} from '../codex/artifact.mjs';
 import {PLATFORMS, PROFILES, cargoFeatures, checkCore, compatibility, developmentFeatures, profileFromFeatures, startKinds} from '../codex/compatibility.mjs';
 import {checkDefaultTools, checkProductTools} from '../codex/tool-contract.mjs';
-import {TARGETS} from '../compliance/notices.mjs';
+import {TARGETS, assertCoverage, collect, loadBundle, repository} from '../compliance/notices.mjs';
 import {DARWIN, LINUX, LINUX_ARCHIVE_FLAGS, LINUX_FILES, PROFILE, createLinuxTree, verifyLinuxTree} from './artifact.mjs';
 import {image} from './elf-fixture.mjs';
-import {png} from './verify-install.mjs';
+import {archiveMembers, png} from './verify-install.mjs';
 
 test('the product profile is one explicit feature set, the same on both platforms', () => {
   assert.equal(PROFILE, 'product');
@@ -104,4 +105,65 @@ test('the synthetic image used by the installed-binary check is a well-formed on
   assert.equal(bytes.toString('latin1', bytes.length - 8, bytes.length - 4), 'IEND');
   assert.equal(bytes.readUInt32BE(bytes.length - 4), 0xae426082, 'the fixed CRC of an empty IEND chunk');
   assert.notDeepEqual(png(91), png(92));
+});
+
+// Needs the locked dependencies restored (npm ci --prefix mcp-app, cargo fetch --locked), like the
+// macOS inventory's own check. Offline; nothing is refreshed.
+test('the committed Linux inventory is the Linux target graph, with its own platform packages and texts', async () => {
+  const policy = JSON.parse(await readFile(join(repository, LINUX.notices.directory, 'notice-policy.json'), 'utf8'));
+  assert.equal(policy.target, LINUX.triple);
+  assertCoverage(policy, await collect(repository, {target: LINUX.triple}), LINUX.triple);
+  const names = policy.packages.map(p => p.name);
+  for (const linuxOnly of ['inotify', 'inotify-sys', 'mio']) assert.ok(names.includes(linuxOnly), `${linuxOnly} is in the Linux graph`);
+  for (const other of ['fsevent-sys', 'windows-sys']) assert.ok(!names.includes(other), `${other} belongs to another platform's inventory`);
+  // The macOS inventory does not cover this graph: it cannot stand in for the Linux one.
+  const darwin = JSON.parse(await readFile(join(repository, 'distribution/compliance/notice-policy.json'), 'utf8'));
+  assert.throws(() => assertCoverage(darwin, {...darwin, stdlib: undefined}, LINUX.triple));
+  const bundle = await loadBundle(repository, LINUX.notices);
+  const text = bundle.get('THIRD-PARTY-NOTICES.txt').toString('utf8');
+  for (const p of policy.packages) for (const f of p.files) assert.ok(text.includes(`===== ORIGINAL LEGAL TEXT SHA-256 ${f.sha256} =====`), `${p.name}: ${f.path}`);
+  assert.match(text, /^Target: x86_64-unknown-linux-gnu$/m);
+});
+
+test('the Linux tree assembles from the real inventory with exact members and modes, and a changed file no longer verifies', async () => {
+  const scratch = await mkdtemp(join(tmpdir(), 'gil-product-artifact-'));
+  try {
+    // A synthetic ELF stands in for the Core: this checks the assembly, never an executable.
+    await writeFile(join(scratch, 'gil'), image());
+    const output = join(scratch, 'out');
+    // No snapshot is handed in: the real repository's own is taken and rechecked after assembly.
+    const receipt = await createLinuxTree({binary: join(scratch, 'gil'), output, version: '0.2.0-preview.1'});
+    assert.match(receipt.source.head, /^[a-f0-9]{40}$/);
+    assert.deepEqual(Object.fromEntries(receipt.files.map(file => [file.path, file.mode])),
+      Object.fromEntries(LINUX_FILES.map(path => [path, path === LINUX.core ? 0o755 : 0o644])));
+    assert.equal(receipt.publishable, false);
+    assert.deepEqual(receipt.start_kinds, startKinds(PROFILE));
+    await verifyLinuxTree(output);
+    const install = await readFile(join(output, 'INSTALL.md'), 'utf8');
+    assert.match(install, /unsigned development build/);
+    for (const untrue of [/Claude Desktop is registered/i, /notari[sz]ed/i]) assert.doesNotMatch(install, untrue);
+    await writeFile(join(output, 'unreviewed.txt'), 'extra');
+    await assert.rejects(verifyLinuxTree(output), 'an extra file verified');
+    await rm(join(output, 'unreviewed.txt'));
+    await writeFile(join(output, 'INSTALL.md'), install + '\nedited\n');
+    await assert.rejects(verifyLinuxTree(output), 'an edited file verified');
+  } finally { await rm(scratch, {recursive: true, force: true}); }
+});
+
+test('an archive that lists one member name twice is refused before extraction', async () => {
+  const scratch = await mkdtemp(join(tmpdir(), 'gil-product-members-'));
+  try {
+    await mkdir(join(scratch, 'tree/bin'), {recursive: true});
+    await writeFile(join(scratch, 'tree/bin/gil'), 'first');
+    const tar = (...args) => execFileSync('/usr/bin/tar', args, {cwd: scratch, env: {...process.env, COPYFILE_DISABLE: '1'}});
+    tar('-cf', 'once.tar', '-C', 'tree', '.');
+    execFileSync('/usr/bin/gzip', ['-k', 'once.tar'], {cwd: scratch});
+    assert.deepEqual(archiveMembers(join(scratch, 'once.tar.gz')).sort(), ['.', 'bin', 'bin/gil']);
+    // The same name appended again: a later entry would replace the earlier one on extraction.
+    await writeFile(join(scratch, 'tree/bin/gil'), 'second');
+    tar('-cf', 'twice.tar', '-C', 'tree', '.');
+    tar('-rf', 'twice.tar', '-C', 'tree', './bin/gil');
+    execFileSync('/usr/bin/gzip', ['-k', 'twice.tar'], {cwd: scratch});
+    assert.throws(() => archiveMembers(join(scratch, 'twice.tar.gz')), /more than once/);
+  } finally { await rm(scratch, {recursive: true, force: true}); }
 });

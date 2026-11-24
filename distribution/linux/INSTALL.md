@@ -21,8 +21,11 @@ Check the archive against its published `SHA256SUMS`, extract it to a new folder
 - The executable is copied to `~/.local/share/gil/bin/gil` together with `install.json`, which
   records its version and digest. No administrator rights are used and no security setting is
   changed.
-- If something else already exists at that path and was not placed by `gil install`, the install
-  stops and changes nothing. Move that entry away yourself, then run the command again.
+- If something else already exists at that path and was not placed by `gil install` (no
+  `install.json` beside it that records exactly that file — even when its bytes are the same), or
+  if `~/.local/share/gil` or its `bin` folder is a link or not your own folder, the install stops
+  and changes nothing, Host settings included. Move that entry away yourself, then run the command
+  again.
 - Codex is registered when its settings folder exists (`~/.codex`, or `CODEX_HOME`): one
   `gil` entry is added to `config.toml`; everything else in that file is kept, and a backup is
   written beside it before the change.
@@ -60,15 +63,15 @@ property of that Host; the tool answers do not claim that a screen is visible.
 ~/.local/share/gil/bin/gil uninstall
 ```
 
-removes the `gil` entry from the Host settings it registered. To remove the executable as well,
-run the copy in the extracted folder (a running executable does not delete itself):
+removes the `gil` entry from the Host settings it registered. To remove the executable as well:
 
 ```sh
-./bin/gil uninstall --remove-binary
+~/.local/share/gil/bin/gil uninstall --remove-binary
 ```
 
-Only the executable and `install.json` recorded by the install are removed. A different file at
-that path is kept and reported. Projects, their `.gil` records and unrelated settings are never
+Only the executable and `install.json` recorded by the install are removed, and then the two
+folders the install made when they are empty. A file at that path that the install did not record,
+or that was changed afterwards, is kept and reported, and so is anything else you put in that folder. Projects, their `.gil` records and unrelated settings are never
 touched by install or uninstall.
 
 Third-party notices are in `THIRD-PARTY-NOTICES.txt`, `THIRD-PARTY-NOTICES.json` and
