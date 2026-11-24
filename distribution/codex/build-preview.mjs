@@ -39,7 +39,8 @@ await run('cargo', ['build', '--locked', '--release', '-p', 'gil', '--target', '
   ...process.env, GIL_BUILD_VERSION: coreVersion, RUSTFLAGS: rustflags, CARGO_TARGET_DIR: target,
 });
 assert.deepEqual(await sourceSnapshot(repository), source, 'source changed during build');
-const hostOutputContract = await checkNativeOutputContract(join(target, 'aarch64-apple-darwin/release/gil'), coreVersion);
+const hostOutputContract = await checkNativeOutputContract(join(target, 'aarch64-apple-darwin/release/gil'), coreVersion,
+  profile === 'product' ? {start_kind: 'image_reports'} : {});
 const marketplace = join(output, 'marketplace');
 const receipt = await createTree({binary: join(target, 'aarch64-apple-darwin/release/gil'), output: marketplace, profile});
 assert.deepEqual(receipt.source, source);
