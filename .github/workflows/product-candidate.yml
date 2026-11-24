@@ -126,7 +126,8 @@ jobs:
         run: node --test distribution/product/*.test.mjs distribution/codex/compatibility.test.mjs distribution/codex/tool-contract.test.mjs
       - name: "[default] Core tests and all targets on Linux (the launcher errno path and the Unix storage paths)"
         run: |
-          cargo test --locked -p gil -- --test-threads=1
+          # --no-fail-fast: every failing suite is reported in one run; the step still fails on any of them.
+          cargo test --locked -p gil --no-fail-fast -- --test-threads=1
           cargo build --locked -p gil --all-targets
       - name: "[product] lib tests (start-kind selection, Linux image-report creation, user install)"
         run: cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --lib -- --test-threads=1

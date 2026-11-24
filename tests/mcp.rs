@@ -1234,8 +1234,16 @@ fn monitor_uses_exact_scope_and_canonical_view_without_touching_project_bytes() 
     assert_eq!(hint["structuredContent"].as_object().unwrap().len(), 4);
     assert!(hint["structuredContent"]["revision"].is_string());
     assert!(hint["structuredContent"].get("view").is_none());
-    // A development binary is not an installation: no feed fetch, explicit state.
-    assert_eq!(hint["structuredContent"]["update"]["state"], "not_installed");
+    // A development binary is not an installation: no feed fetch, explicit state. Where the update
+    // feed has no entry for the platform at all (Linux), the state is `unavailable` with its reason,
+    // again without a fetch: the Monitor never offers an update it cannot name.
+    if cfg!(any(target_os = "macos", windows)) {
+        assert_eq!(hint["structuredContent"]["update"]["state"], "not_installed");
+    } else {
+        assert_eq!(hint["structuredContent"]["update"]["state"], "unavailable");
+        assert_eq!(hint["structuredContent"]["update"]["platform"], serde_json::Value::Null);
+        assert_eq!(hint["structuredContent"]["update"]["error"], "unsupported platform or no state directory");
+    }
     assert!(hint["structuredContent"]["update"]["latest"].is_null());
     assert_eq!(std::fs::read(at.join(gil::STATE_PATH)).unwrap(), state);
     assert_eq!(std::fs::read_to_string(at.join("work.txt")).unwrap(), "원문 세계");

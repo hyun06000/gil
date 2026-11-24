@@ -37,6 +37,10 @@ Check the archive against its published `SHA256SUMS`, extract it to a new folder
 
 `gil doctor` prints the state of the installation. Restart a registered Host before use.
 
+This build does not check for updates: the update feed has no Linux entry, the Monitor reports that
+state as unavailable, and nothing is fetched. A newer build is installed by running its own
+`./bin/gil install`.
+
 ## Starting a project
 
 In a folder with no GIL record, the Agent asks which kind of new project to start. A project is
