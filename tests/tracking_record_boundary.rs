@@ -57,6 +57,13 @@
 //!   경로가 아니다. 메모리의 원장·사건 입력·Chain 목록·등록부만 받아 같은 호출에서 P(N) 선택을 한 번 부르고(3j 는 그 안에서만 실행된다),
 //!   Experiment Exit 선택과 같은 소유 조회를 한 번 쓰며, 파일·`state.yaml`·객체 창고를 읽지 않고 계보 선택·현재 세계 유도·Exit·B(T)·S(N)·
 //!   3n·3o 의 문을 쓰지 않는다. 제품 경로가 그것을 부르지 않으므로 아래 검사에 그 이름이 들어 있고, 그 원문의 코드 줄은 따로 검사한다.
+//! - 범위 변경 사건의 세 값 읽기(`confirmed_world`, 계약 §6.1·§6.3)도 저장 경로가 아니다. 메모리의 원장·사건 입력·보충 칸·Chain 목록·
+//!   등록부만 받아 같은 호출에서 기존 검사·선택(3j·3g·B(T)·S(N)·Experiment Exit·Exit 계보)을 다시 실행하고, 폴더 관측·객체 창고·상태
+//!   저장으로 나가는 통로가 없으며 호출자가 고른 확정 정책·성공 값을 받는 문이 없다. 제품 경로가 그것을 부르지 않으므로 아래 검사에 그
+//!   이름이 들어 있고, 그 원문의 코드 줄은 따로 검사한다.
+//! - 보관 대기 사건의 명시 재시도(`baseline_retry`, 계약 §5.3·§5.4·§6.3)도 제품 저장 경로가 아니다. `tracking-policy` + Unix 에서만
+//!   컴파일되고, 기존 `observe_scoped`·`capture_scoped`·객체 창고와 호출자가 건넨 내부 저장 경계만 부르며 `state.yaml`·ProjectSession·CLI·
+//!   MCP·Monitor 에 닿지 않는다. 제품 경로가 그것을 부르지 않으므로 아래 검사에 그 이름이 들어 있고, 그 원문의 코드 줄은 따로 검사한다.
 //! - 새 모듈은 `src/artifact/tracking_record/` 밖의 어떤 소스에서도 불리지 않는다 — **예외는 `tracking-policy` 개발 구성에서만
 //!   컴파일되는 구현 순서 4번의 연결 파일**(시작 준비 `src/start_prep/`, 형식 10/11 기록 `src/artifact/tracking_state.rs`, 그 재수출
 //!   블록 `start_policy`)뿐이며, 그 파일들이 실제로 그 기능 뒤에 있는지도 함께 본다(2026-11-23). 이 기능을 켠 빌드는 형식 10/11 을
@@ -786,6 +793,53 @@ fn no_product_source_calls_the_new_module() {
         "ClosedVerifyLacksSnapshot",
         "SnapshotNotInRegistry",
         "VERIFY_WORLD_DOES_NOT_SHOW",
+        "confirmed_world",
+        "read_scope_change",
+        "ScopeChangeReading",
+        "RecordInputs",
+        "EventWorldFacts",
+        "ScopeMarks",
+        "MarkSeen",
+        "ConfirmedWorld",
+        "PolicyStep",
+        "EventStanding",
+        "ReadingProblem",
+        "ScopeLimit",
+        "WorldFactsMismatch",
+        "StartProblem",
+        "ReviewProblem",
+        "SecondBasis",
+        "BasisAt",
+        "Unjudged",
+        "AppliedPolicy",
+        "CONFIRMED_WORLD_DOES_NOT_SHOW",
+        "baseline_retry",
+        "RetryAttempt",
+        "run_retry",
+        "RetryEnv",
+        "BaselineState",
+        "BaselineCommit",
+        "AttemptBinding",
+        "AttemptTicket",
+        "RetryOutcome",
+        "RetryReport",
+        "RetryRequest",
+        "RetryStep",
+        "RetryOutOfOrder",
+        "RetryClosed",
+        "RetryRun",
+        "ScopeDelta",
+        "PathDifference",
+        "DifferenceKind",
+        "NotStarted",
+        "BASELINE_RETRY_DOES_NOT_SHOW",
+        "OwnedRecords",
+        "SaveAnswer",
+        "FailureRecord",
+        "FailedAttempt",
+        "FailureCause",
+        "UnknownWhy",
+        "SeenAt",
     ];
     let mut users = Vec::new();
     let mut stack = vec![src.clone()];
@@ -1250,4 +1304,148 @@ fn the_verify_world_derivation_reuses_one_opening_policy_and_reads_only_the_name
     assert!(shortcuts.is_empty(), "검사를 건너뛰는 인자가 있다: {shortcuts:#?}");
     let signature: Vec<&&str> = code.iter().filter(|line| line.starts_with("pub(crate) fn select_verify_world(")).collect();
     assert_eq!(signature.len(), 1, "유도의 문은 하나다");
+}
+
+/// 원문에서 주석과 문자열 목록 줄을 뺀 **코드 줄**.
+fn code_lines(text: &str) -> Vec<&str> {
+    text.lines().map(str::trim).filter(|line| !line.is_empty() && !line.starts_with("//") && !line.starts_with('"')).collect()
+}
+
+/// 범위 변경 사건의 세 값 읽기의 코드 줄이 폴더 관측·객체 창고·상태 저장·재시도의 문을 쓰지 않고, 같은 호출의 입력으로 기존 검사·선택을
+/// 부르며, 호출자가 고른 확정 정책·경계·성공 값을 받는 문이 없는가.
+#[test]
+fn the_scope_change_reading_has_no_channel_to_observation_store_or_state_and_takes_no_chosen_policy() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("artifact").join("tracking_record").join("confirmed_world.rs");
+    let text = std::fs::read_to_string(&path).unwrap();
+    let code = code_lines(&text);
+    let forbidden = [
+        "std::fs",
+        "std::io",
+        "std::env",
+        "std::path",
+        "File",
+        "OpenOptions",
+        "read_to_string",
+        "ObjectStore",
+        "put_blob",
+        "put_manifest",
+        "read_manifest",
+        "read_blob",
+        "observe_scoped",
+        "capture_scoped",
+        "evaluate_scope",
+        "ScopedWorld",
+        "load_policy",
+        "ApprovedPolicy",
+        "Project",
+        "state.yaml",
+        "intern(",
+        "baseline_retry",
+        "BaselineState",
+        "RetryAttempt",
+        "run_retry",
+        "save_baseline",
+        "record_failure",
+    ];
+    let used: Vec<String> = code
+        .iter()
+        .flat_map(|line| forbidden.iter().filter(|name| line.contains(*name)).map(move |name| format!("{name}: {line}")))
+        .collect();
+    assert!(used.is_empty(), "읽기가 관측·창고·상태·재시도의 문을 쓴다:\n{used:#?}");
+
+    // 기존 검사·선택을 같은 호출의 입력으로 부른다.
+    for call in [
+        "let agreed = check_event_inputs(ledger, links, facts, chains, registry);",
+        "classify_baseline_positions(&baselines, registry)",
+        "select_boundary_world(target, i.ledger, i.links, i.facts, i.chains, i.registry)",
+        "select_opening_world(target, i.ledger, i.links, i.facts, i.chains, i.registry)",
+        "select_experiment_exit(target, i.ledger, i.links, i.facts, i.chains, i.registry)",
+        "check_experiment_exit_lineage(target, i.chains, i.registry)",
+    ] {
+        assert!(code.iter().any(|line| line.contains(call)), "기존 검사·선택을 같은 호출의 입력으로 불러야 한다: {call}");
+    }
+
+    // 읽기를 만드는 문은 하나이고, 호출자가 건네는 것은 대상 사건 이름과 한 입력 묶음뿐이다.
+    let doors: Vec<&&str> = code.iter().filter(|line| line.contains("-> Result<ScopeChangeReading")).collect();
+    assert_eq!(
+        doors,
+        [&"pub(crate) fn read_scope_change(event: EventName, inputs: &RecordInputs<'_>) -> Result<ScopeChangeReading, Vec<ReadingProblem>> {"],
+        "읽기를 만드는 문이 하나여야 하고 확정 정책·경계·성공 값을 받지 않아야 한다"
+    );
+    // 함수의 인자 자리에 다른 호출의 성공 값(…Agree)이 있으면 안 된다.
+    let parameters = |line: &str| match (line.contains("fn "), line.find('('), line.find(')')) {
+        (true, Some(open), Some(close)) if open < close => line[open..close].to_string(),
+        _ if line.contains(": &") && line.ends_with(',') => line.to_string(),
+        _ => String::new(),
+    };
+    let takes_agreement: Vec<&&str> = code.iter().filter(|line| parameters(line).contains("Agree")).collect();
+    assert!(takes_agreement.is_empty(), "다른 호출의 성공 값을 받는 문이 있다: {takes_agreement:#?}");
+}
+
+/// 명시 재시도의 원문이 `tracking-policy` + Unix 뒤에 있고, 기존 실제 관측·보관을 그 자리에서 부르며, 확정 정책을 읽기에서만 얻고,
+/// 보고의 내용과 표를 모듈 밖에서 지어낼 수 없으며, 제품의 상태 저장·세션·도구에 닿지 않는가.
+#[test]
+fn the_baseline_retry_is_feature_gated_observes_for_real_and_reaches_no_product_state() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("artifact").join("tracking_record");
+    let text = std::fs::read_to_string(dir.join("baseline_retry.rs")).unwrap();
+    let code = code_lines(&text);
+    assert!(code.contains(&"#![cfg(all(feature = \"tracking-policy\", unix))]"), "재시도 모듈은 기능 뒤에 있다");
+    let module = std::fs::read_to_string(dir.join("mod.rs")).unwrap();
+    assert!(
+        module.contains("#[cfg(all(feature = \"tracking-policy\", unix))]\n#[allow(unused_imports)]\npub(crate) use baseline_retry::{"),
+        "재시도 모듈의 재수출은 기능 뒤에 있다"
+    );
+    assert!(
+        module.contains("#[cfg(all(test, feature = \"tracking-policy\", unix))]\nmod baseline_retry_tests;"),
+        "재시도 시험은 같은 기능 뒤에서만 짓는다"
+    );
+
+    // 실제 관측·보관을 이 모듈이 그 자리에서 부른다 — 결과를 받아 통과시키기만 하는 문이 아니다.
+    for call in [
+        "Phase::Observing => ReportBody::Observed(observe_scoped(env.root, self.applied_policy())),",
+        "Phase::Capturing => ReportBody::Captured(capture_scoped(env.root, self.applied_policy(), env.store)),",
+        "let delta = scope_delta(&span, &self.base, &world.manifest);",
+    ] {
+        assert!(code.contains(&call), "실제 관측 경로와 범위 변화 검사를 불러야 한다: {call}");
+    }
+    // 시도를 만드는 문은 읽기를 다시 실행하고, 확정 정책을 그 읽기에서만 얻는다.
+    for line in [
+        "pub(crate) fn begin(event: EventName, inputs: RecordInputs<'a>, env: &RetryEnv<'_>) -> Result<RetryAttempt<'a>, NotStarted> {",
+        "let before = read_scope_change(event, &inputs).map_err(NotStarted::Reading)?;",
+        "let confirmed_policy = before.confirmed().policy();",
+    ] {
+        assert!(code.contains(&line), "시도는 읽기가 유도한 값에서 시작해야 한다: {line}");
+    }
+    // 보고의 내용과 표는 모듈 밖에서 만들 수 없다 — 칸이 비공개이고 만드는 공개 문이 없다.
+    for private in ["enum ReportBody {", "ticket: AttemptTicket,", "body: ReportBody,", "attempt: u64,", "step: u32,"] {
+        assert!(code.contains(&private), "비공개 칸이어야 한다: {private}");
+    }
+    let report_makers: Vec<&&str> = code.iter().filter(|line| line.contains("RetryReport {") && !line.contains("struct") && !line.contains("impl")).collect();
+    assert_eq!(report_makers, [&"Ok(RetryReport { ticket: self.ticket(), body })"], "보고를 만드는 자리는 perform 하나다");
+
+    let forbidden = [
+        "state.yaml",
+        "ProjectSession",
+        "crate::session",
+        "crate::store",
+        "crate::project",
+        "crate::mcp",
+        "crate::monitor",
+        "crate::command",
+        "start_prep",
+        "tracking_state",
+        "policy_file_write",
+        "write_root_policy_file",
+        "read_root_policy_file",
+        "std::fs",
+        "File::",
+        "OpenOptions",
+        "remove_file",
+        "rename(",
+    ];
+    let used: Vec<String> = code
+        .iter()
+        .flat_map(|line| forbidden.iter().filter(|name| line.contains(*name)).map(move |name| format!("{name}: {line}")))
+        .collect();
+    assert!(used.is_empty(), "재시도가 제품 상태·세션·도구·작업 파일 쓰기의 문을 쓴다:\n{used:#?}");
 }

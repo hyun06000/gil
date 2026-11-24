@@ -626,6 +626,32 @@ T6 전체의 완료도, 3번 전체의 완료도 아니다.
 - **검증.** `src/start_prep/tests.rs`(28)·`src/mcp/start_tests.rs`(4)·`tests/tracking_start.rs`(3, 실제 stdio)·`mcp-app/start-review.test.mjs`(8)·`mcp-app/start-browser-check.mjs`(합성 Host). 같은 날 후보 검토의 네 결함(표시만으로 쓰기 권한, 조건 변경과 장애의 혼동, 화면과 제안 판의 결속, 결합안의 바이트 같음 거절)을 고친 수정 묶음이 포함돼 있다 — 상세는 Roadmap 같은 기록.
   실행 환경과 결과의 구분은 [Roadmap](GIL_Roadmap.md)의 「4번 최초 시작」 기록을 따른다. 실제 Host 화면·사람의 버튼 입력·필드 테스트는 없다.
 
+**진행 기록(2026-11-24, 3·5번 사이의 독립 바탕, 게시 전 검토 대상) — 이미 저장된 범위 변경 사건의 세 값 읽기와 명시 재시도의 실행·판정, 제품 미연결.**
+5번(인터뷰 연계 관리 사건) 전체의 완료가 아니다. 승인 저장(저장 1)·정책 파일 동기화·다음 Entry 선택과 Experiment 개방 허가·형식 10/11 의
+범위 변경 기록 읽기와 제품 저장·6번 복원은 하지 않았다. 새 사용자 의미 결정·새 영구 저장 필드·직렬화 형식은 없다.
+
+- **두 연결.** ① `confirmed_world.rs`의 `read_scope_change` — 한 입력 묶음(원장·정책 연결·사이클 칸·보충 칸 `review_cycle_ref`·
+  `world_before_ref`·Chain 목록·등록부)에서 기존 3j·3g·B(T)·S(N)·P(T)·Experiment Exit·Exit 계보를 **그 호출에서 다시** 실행해 적용 정책 /
+  지금 닫힌 경계의 마지막 확정 세계와 확정 정책(Interview 의 Entry 계승과 Experiment 의 검증 ①·② 를 출처까지) / 사건의 대기·이미 확정·대체를
+  따로 읽는다. ② `baseline_retry.rs`(`tracking-policy` + Unix) — 그 읽기가 대기라고 답한 사건에 한해, 명시적으로 시작한 한 시도가 지금 경계에서
+  기존 `observe_scoped`·`capture_scoped`·정책 엔진·객체 창고와 3n·3o 로 새 관측·범위 변화 검사·객체 확정을 하고, 한 저장 단위의 저장 결과를
+  다시 읽어 확인한 경우에만 확정 후보를 확정으로 보고한다.
+- **재사용.** `event_inputs`·`event_links`·`link_history`·`event_cycles`·`event_cycle_history`·`baseline_record`·`baseline_history`·
+  `baseline_position`·`boundary_world`·`opening_world`·`opening_policy`·`experiment_exit`·`exit_lineage`·`ledger_span`·`path_continuity` 의
+  검사·선택을 고치지 않고 부른다. 그 의미와 한계(`…_DO_NOT_SHOW`)는 그대로다. `tracking_state` 의 최초 시작 전용 범위와 `start_prep` 의
+  시도 규칙은 넓히거나 복제하지 않았다(start 에는 보관 대기가 없고 scope_change 에는 있다).
+- **범위.** 뿌리가 `start` 기준점인 열린 Chain 안의 닫힌 경계, 승인 뒤 0개 이상의 닫힌 Interview. 열린 사이클·후속 Chain·Chain 종료 경계·
+  보관 중단 표식·미완 복원·`restore_result`·정책 미채택 출처는 범위 밖 결과이거나 판단하지 않은 칸으로 드러낸다. O-2·O-3 을 정하지 않는다.
+- **호출자의 성공 보고를 믿지 않는다.** 읽기는 호출자가 고른 경계·확정 정책·성공 값을 받지 않는다. 재시도의 관측·보관 결과는 실제 manifest 로
+  받아 이 모듈이 직접 검사하고, 그 보고를 만드는 문은 실제 관측을 부르는 한 자리뿐이다. 저장 경계의 「저장했다」는 답만으로 확정하지 않는다.
+  시도와 걸음을 가리키는 표는 프로세스 메모리 값이며 영구 시도 ID·승인 원장·복구 프로토콜을 도입하지 않았다.
+- **증명하지 않는 것.** 입력의 완전성·동일 원본 추출·실제 승인(저장 1 의 성공)·사람의 재시도 요청, 실제 저장의 원자성과 내구성(저장 경계는
+  호출자가 건넨 값이고 시험의 것은 메모리 어댑터다), 새로 추적하는 경로의 승인 뒤 변경, 외부 쓰기의 차단. 목록은
+  `CONFIRMED_WORLD_DOES_NOT_SHOW`·`BASELINE_RETRY_DOES_NOT_SHOW` 에 있다.
+- **남은 것.** 승인 저장과 그 사전 조건 ①②③, 정책 파일 동기화와의 순서, 형식 10/11 의 사건 기록 저장 꼴과 load, 다음 Entry·실험 개방의
+  한 함수(§6.2), 열린 사이클의 마지막 확정 세계, 중단 표식(O-2)·Chain 종료 경계(O-3), `cause` 값 목록, Monitor·도구·안내, 6번 복원.
+  검증 범위와 실행 증거의 구분은 [Roadmap](GIL_Roadmap.md)의 「범위 변경 사건의 세 값 읽기와 명시 재시도」 기록을 따른다.
+
 1을 2–6의 완료 뒤로 미루지 않는다. 체인 실패 종료의 기존 제한 복구 경로는 계속 유지하며,
 새 정책에 따른 복원은 6까지 검증한 뒤 연결한다. 전체 복원 제품 차단을 이 계획으로 해제하지 않는다.
 

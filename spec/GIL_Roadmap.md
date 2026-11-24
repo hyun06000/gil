@@ -409,6 +409,20 @@ T6의 **한 시점 부분**을 검사한다. 범위 설명(적힌 조건·도출
 | 합성 시험과 한계 | Cycles 층의 메모리 전이로 Verify 세계 확정·Step 되돌아가기·Cycle 실패·revisit와 열린 Experiment의 걷기를 구성했다. 닫힌 Verify의 snapshot을 지운 값, Verify가 아닌 Step·열린 Verify에 snapshot을 적은 값은 `Cycles::restore`를 통과한 합성 복원 구조이며 현행 Project load의 세계 검사 ④가 거절할 값이다. Project load는 실행하지 않았다. 실제 Project 세션의 관측·보관·복원·저장·승인 실행이 아니다 |
 | 남은 것 | 열린 사이클의 마지막 확정 세계(가장 가까운 Verify 계보 선택), Interview 정책 상속, 뿌리·후속 Chain Entry, B(T)·S(N)의 미유도 대체, 검사 ①·②·T8·T9, 3n/3o 연결, 실제 상태 추출·완전성·승인, manifest/blob 실재, 보관·재시도·복원·제품 연결·Monitor·CLI·MCP, 형식 10/11 활성화. O-2·O-3, BaseUndecided의 나머지 조합, 승인 이후 변경의 결속·보존·재적용은 정하지 않았다 |
 
+**2026-11-24 범위 변경 사건의 세 값 읽기와 명시 재시도 — 건넨 기록의 읽기와 격리 실행·판정 바탕(제품 미연결, 게시 전 검토 대상):**
+[공유 계약 §6.1·§6.3](GIL_Storage_Transition_Contract_v0.1.md#63-보관-대기-상태)의 「읽기」와 「재시도」만, 이미 저장됐다고 건넨 범위 변경 사건에
+대해 구현했다. 상세 범위는 [구현 순서](GIL_Implementation_Order_2026-11-19.md)의 같은 날 기록을 따른다.
+**5번 전체·승인 저장·다음 Entry 선택과 실험 개방 허가·형식 10/11 의 범위 변경 기록·제품 저장·6번 복원의 완료가 아니다.**
+
+| 단계 | 상태 |
+|---|---|
+| 구현 | `tracking_record/confirmed_world.rs`의 `read_scope_change(사건 이름, 입력 묶음)`(모든 구성에서 컴파일, 순수 읽기)과 `tracking_record/baseline_retry.rs`의 `RetryAttempt::begin`·`perform`·`advance`·`run_retry`(`tracking-policy` + Unix 에서만 컴파일). `src/artifact/scoped.rs`에는 시험에서만 컴파일되는 호출 횟수·두 훑기 사이 틈(`probe`)을 더했고 실제 실행의 동작은 같다. 제품 CLI·MCP·Monitor·ProjectSession·store load/save·도구 schema·안내·workflow 는 바꾸지 않았다 |
+| 자동 검사 범위(소스) | 신규 단위 시험 — `confirmed_world_tests.rs` 23개(모든 구성): start 에서 이어진 Experiment·Interview 계보와 유도 경로, 대기의 세 값(P2 적용 / A2(P1) / 기준점 없음), 여러 인터뷰 뒤에도 같은 확정 세계·정책과 그 인터뷰들의 P(N)=P2 대비, 나중 경계에서 보관한 사건과 그 뒤 실험, 늦게 보관한 기준점의 과거 Entry 비사용, 같은 세계 이름·같은 원문의 다른 판 비합침, 대체된 사건, 반복·재생성 읽기, 판단하지 않은 칸과 함께 잘린 입력의 한계, 범위 밖 결과, 잘못된 Exit 계보·Entry·Interview Exit·검증 ②·T9·`world_before_ref`(자기 기준점 순환 포함)·`review_cycle_ref`·보충 입력·원장 대응·부분 기준점의 거절. `baseline_retry_tests.rs` 22개(`tracking-policy` 구성): 실제 임시 폴더·객체 창고에서 재시도마다 `observe_scoped`·`capture_scoped` 호출 횟수, 실패 뒤 고친 파일의 새 관측, 계속 추적한 경로의 변경·삭제·새 파일, 범위 밖·새로 추적 경로, 중간 판의 제외·재포함, 미승인 제안의 비사용, 검사 뒤 capture 전 변화, 두 훑기 사이의 불안정(관측·보관), 관측 거절, 남은 객체의 비성공, 저장 결과의 갈래(확인된 실패 / 저장 뒤 오류 보고 + 다시 읽기 / 다시 읽기 불가의 결과 불명 / 「저장했다」는 답만 있는 경우 / 다른 저장 단위·이력 유실), 실패 기록 저장 실패, 이미 확정·대체·범위 밖 요청의 호출 0회, 다른 시도·다른 걸음·끝난 시도의 보고 거절. `tests/tracking_record_boundary.rs`(기능이 꺼진 구성) 2개 추가와 제품 호출 부재 검사의 이름 추가 |
+| 공식 실행 | 없다. push·PR·CI 실행은 하지 않았다(별도 승인 대상) |
+| 작성 환경과 진단 | Linux x86_64, rustc 1.97.1. **정확 기준 `503a3a1`과 정확 후보 모두 Linux 에서 빌드되지 않는다** — 기존 `libc::__error` 오류 5개(첫 실패 `src/runtime_launch.rs:546`, PR #241 의 대상). 그래서 `cargo test --locked -p gil`·`cargo build --locked -p gil --all-targets`와 기능 구성별 시험은 **한 건도 실행되지 않았다**(0-test 도 통과도 아니다). 호환 조치(shim)·도구 설치·CI 우회를 하지 않았다. **작성자 정적 진단(정확 후보, 호환 조치 없음):** 기본·`tracking-policy`·`tracking-policy,approved-plan,visual-authoring,product-safety` 세 구성의 `cargo check --locked -p gil --all-targets` 진단은 그 5개와 기존 경고 1개뿐이었다. 임시로 넣은 타입 오류·빌림 오류가 같은 빌드에서 함께 보고되어 rustc 가 그 5개 뒤에도 새 소스와 시험 소스의 타입·빌림 검사를 수행함을 확인한 뒤 되돌렸다. 이것은 시험 통과의 증거가 아니다 |
+| 합성 시험과 한계 | 정책 판·사건·보충 칸·시도 결과는 시험이 만든 값이며 모니터 승인이 아니다. 체인은 Cycles 층의 메모리 전이와 `Cycles::restore`를 통과한 합성 복원 구조이고 Project load 를 거치지 않았다. 재시도 시험의 저장 경계는 메모리 어댑터다 — 실패 주입은 실제 저장의 원자성·프로세스 강제 종료·전원 장애 내구성의 증거가 아니다. 새로 만든 값으로 다시 읽는 시험은 제품 재시작 시험이 아니다. 실제 Host·사람의 승인·필드 인수는 없다 |
+| 남은 것 | 승인 저장(저장 1)과 사전 조건, 정책 파일 동기화와의 순서, 형식 10/11 사건 기록의 저장 꼴·load·제품 저장, §6.2 의 한 함수(다음 Entry·실험 개방), 열린 사이클의 마지막 확정 세계, 뿌리가 start 가 아닌 출처·후속 Chain, `cause` 값 목록, Monitor·CLI·MCP·안내, 6번 복원. O-2·O-3, BaseUndecided 의 나머지 조합, 일반 변경 승인의 결속·보존·재적용은 정하지 않았다. macOS 에서의 시험 실행과 독립 검토 |
+
 **2026-11-23 4번 최초 시작 — 시작 준비·Monitor 승인·최초 보관·정식 시작·재시작 복구(개발 구성 `tracking-policy`, 제품 미활성화, 게시 전 검토 대상):**
 [구현 순서](GIL_Implementation_Order_2026-11-19.md)의 같은 날 「4번」 기록과 [공유 계약](GIL_Storage_Transition_Contract_v0.1.md) 머리말의 4번 상태,
 §5.2 「최초 시작의 정책 파일 동기화와 좁은 결합 예외」(2026-11-23 사용자 결정)를 구현했다. **5번(범위 변경)·6번(최신 정책 복원)·형식 전환·
