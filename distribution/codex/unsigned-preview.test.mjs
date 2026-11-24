@@ -262,3 +262,39 @@ test('exploration candidate is explicit, preserves bytes and warns against recor
   await rewriteReceipt(f.output,r=>r.runtime_profile='approved-plan');
   await assert.rejects(verifyUnsignedTree(f.output));
 });
+
+test('product candidate is explicit, preserves bytes, states both kinds of new project and claims no Apple trust', async t => {
+  const f = await fixture(t, false, 'product');
+  const before = await verifyTree(f.input);
+  assert.deepEqual(before.development_features, ['tracking-policy', 'approved-plan', 'visual-authoring', 'exploration-flow']);
+  // The profile is never inferred or downgraded: a reduced declaration over the product tree is refused.
+  await assert.rejects(stageUnsigned({...f, version: '0.2.1-preview.33', profile: 'exploration-flow'}), /explicitly match/);
+  await assert.rejects(stageUnsigned({...f, version: '0.2.1-preview.33'}), /explicitly match/);
+  const result = await stageUnsigned({...f, version: '0.2.1-preview.33', profile: 'product'});
+  assert.equal(result.runtime_profile, 'product');
+  assert.equal(result.publishable, false);
+  assert.equal(result.migration, 'requires_review');
+  assert.deepEqual(result.compatibility.storage_format, {min: 4, max: 11});
+  assert.deepEqual(result.start_kinds, [{start_kind: 'tracked_scope', storage_format: 10}, {start_kind: 'image_reports', storage_format: 9}]);
+  assert.deepEqual(result.trust, TRUST);
+  assert.equal(result.trust.developer_id, 'not_provided'); assert.equal(result.trust.notarization, 'not_performed');
+  // Core, Skill and notices are the reviewed development bytes; only the two manifests and the notice change.
+  for (const file of before.files.filter(file => ![MANIFEST, CLAUDE_MANIFEST, 'PREVIEW.md'].includes(file.path))) {
+    assert.deepEqual(result.files.find(staged => staged.path === file.path), file, file.path);
+  }
+  const notice = await readFile(join(f.output, 'PREVIEW.md'), 'utf8');
+  for (const needed of [/No Apple Developer ID signature or notarization is provided/, /Do not disable Gatekeeper/, /tracked scope/, /image reports/,
+    /never converted later/, /NOT\nautomatically converted|NOT automatically converted/, /No start writes format 11/, /chat is never approval/]) assert.match(notice, needed);
+  await verifyUnsignedTree(f.output);
+  // A receipt that drops or rewrites the kinds, or claims another profile, no longer verifies.
+  await rewriteReceipt(f.output, r => { delete r.start_kinds; });
+  await assert.rejects(verifyUnsignedTree(f.output));
+});
+
+test('an existing profile receipt cannot carry the product-only field', async t => {
+  const f = await fixture(t, false, 'exploration-flow');
+  await stageUnsigned({...f, version: '0.2.1-preview.33', profile: 'exploration-flow'});
+  await verifyUnsignedTree(f.output);
+  await rewriteReceipt(f.output, r => { r.start_kinds = [{start_kind: 'tracked_scope', storage_format: 10}]; });
+  await assert.rejects(verifyUnsignedTree(f.output));
+});
