@@ -429,6 +429,22 @@ impl TrackingState {
                 "기준점 보관을 기다리는 사건이 있는데 그 Chain 이 종료 경계이거나 닫혔다 — 이 빌드는 보관 확정 전에 Chain 종료 승인으로 나아가지 않는다".into(),
             ));
         }
+        // 보관 대기와 **승인된 종료 Synthesis** 가 함께 있는 열린 Interview 도 같은 뜻으로 거절한다 — 쓰기 쪽이 그 승인 기록을 거절하므로
+        // (O-3) 걸어서 만들 수 없는 기록이고, 그대로 읽으면 정상 전진이 종료 경계로만 좁혀져 재시도할 닫힌 경계를 잃는다.
+        // 일반 Interview 의 승인된 Synthesis(`chain_verdict` 없음)는 해당하지 않는다.
+        if let (Some(event), StandingAt::OpenInterview { cycle }) = (standing.waiting, standing.at)
+            && let Some(current) = chains.last().map(|chain| chain.cycles().current())
+            && let Some(node) = current.steps().nodes().iter().find(|node| {
+                node.kind == NodeKind::Synthesis
+                    && node.is_closed()
+                    && node.report.as_ref().is_some_and(|report| report.has("chain_verdict") && report.get("approved") == Some("yes"))
+            })
+        {
+            return Err(TrackingError::Unsupported(format!(
+                "{event} 이 기준점 보관을 기다리는데 열린 {cycle} 에 승인된 종료 Synthesis {} 가 있다 — 이 빌드는 보관 확정 전에 Chain 종료 승인으로 나아가지 않는다",
+                current.step_ref(node.id)
+            )));
+        }
         if let Some(at) = self.halt {
             let expected = self.halt_place(chains, &standing);
             if expected != Some(at) {

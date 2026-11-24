@@ -710,6 +710,26 @@ T6 전체의 완료도, 3번 전체의 완료도 아니다.
   Windows, 실제 Host 화면·사람의 버튼 입력·필드 테스트.
 - **검증.** 작성한 시험과 실행의 구분은 [Roadmap](GIL_Roadmap.md)의 「5번 범위 변경 사건의 제품 연결」을 따른다.
 
+**진행 기록(2026-11-24, 위 5번 후보의 수정 증분 — 같은 비공개 후보 위, 독립 검토 전).** 정적 검토에서 드러난 다섯 가지를 고쳤다.
+작성만 했고 빌드·시험을 실행하지 않았다. 새 제품 의미를 정하지 않았다(O-2·O-3 의 2026-11-24 결정 그대로).
+
+- **중단의 실제 보관 차단.** `ProjectSession::refuse_archive_while_halted` 를 객체 보관 앞(`capture_world` — 일반 Verify 와 이미지 Verify
+  가 모두 지난다)과 상태 저장 앞(`commit`, 이미지 Verify 의 저장)에 두었다. `Project` 의 마지막 전이 검사는 그대로다. 진행 중인 승인·
+  보관·재시도에 대한 요청은 수신 표식(`.gil/scope/halt-request`, 잠금 없이)으로 받고, 그 명령은 저장 1 전·정책 파일 쓰기 전·저장 2 전·
+  실패 기록 전에 그것을 보고 멈춘 뒤 표식을 적용한다. 그 밖에는 다음 쓰기 열기가 적용한다. 결과는 수신과 적용을 따로 싣고, 이미 끝난
+  저장은 소급 취소하지 않으며, 중단은 시도를 실패로 적지 않는다.
+- **중단 건과 확인의 결속.** 원장의 `HaltRequested`·`HaltReleased` 에 중단 건의 이름(`id`)을 더했다(R1 후보가 쓴 이름 없는 기록은 읽히되
+  확인 근거가 되지 못한다). 검토 화면은 자리·이름·상태 지문을 싣고, 해제 요청과 그 capability 는 셋 모두에 묶인다. Core 는 잠금 안에서
+  저장 직전에 셋을 다시 보고, 상태 확인(`state_confirmed`)과 정리 방법을 서버에서도 요구한다. 해제 기록을 표식 삭제보다 먼저 남긴다.
+  기록이 없는 표식은 해제할 수 없고 기록을 다시 남긴 뒤 그 화면에서 확인한다.
+- **O-3 쓰기/load 일치.** `TrackingState::standing` 이 보관 대기 중 열린 Interview 의 닫힌 Synthesis 가운데 `chain_verdict` + `approved: yes`
+  인 것을 거절한다. 일반 Interview 의 승인·Outcome·닫기, 닫힌 종료 경계의 거절, Chain Report 의 재확인은 그대로다.
+- **승인과 사건의 대응.** `scope_change::verify_approvals` 가 제안의 Chain·경계·발급기·앞 정책·비교 세계를 사건의 승인 칸과, 제안의 확정
+  정책을 `check_record` 가 승인 경계의 앞선 기록으로 유도한 값(`RecordStanding::approval_bases`)과 견준다.
+- **결과.** 마지막 다시 읽기가 실패하면 `tracking` 을 비우고 `current_state.reread: false`, 마지막으로 알던 값은 따로 싣는다.
+- **시험 소스.** `scope_change::tests` 가 승인 계획 구성에서는 `approved_plan::tests` 의 제안 → 결정 → `close_report` 경로로 Interview 를
+  걷는다(맨 `approved: yes` 를 쓰지 않는다). 탐색 계약(`exploration-flow`) 구성에는 fixture 가 없어 컴파일되지 않는다.
+
 1을 2–6의 완료 뒤로 미루지 않는다. 체인 실패 종료의 기존 제한 복구 경로는 계속 유지하며,
 새 정책에 따른 복원은 6까지 검증한 뒤 연결한다. 전체 복원 제품 차단을 이 계획으로 해제하지 않는다.
 

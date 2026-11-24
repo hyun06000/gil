@@ -535,4 +535,9 @@ export default {
   "scope.held": "未生效({code}):{said}",
   "scope.delivered": "已通知 Agent 读取已存储的状态。",
   "scope.undelivered": "无法通知 Agent。请让它读取范围状态。",
+  "scope.halt_pending": "已收到中止请求。另一个命令正占用项目;它在下一个写入边界停止后才会应用中止。请稍后重新读取。",
+  "scope.halt_record_missing": "此次中止没有可供确认的记录,暂不提供解除。请先重新记录;之后在刷新的界面上确认解除。",
+  "scope.halt_register": "重新记录此次中止",
+  "scope.halt_identity": "中止 {id}… · 状态 {state}…",
+  "scope.state_unconfirmed": "上一次请求之后无法确认当前状态。在做任何决定之前请重新读取。",
 };

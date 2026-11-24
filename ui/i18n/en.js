@@ -535,4 +535,9 @@ export default {
   "scope.held": "Not applied ({code}): {said}",
   "scope.delivered": "The Agent was told to read the stored state.",
   "scope.undelivered": "The Agent could not be notified. Ask it to read the scope status.",
+  "scope.halt_pending": "Halt request received. Another command holds the project; it stops at its next write boundary and the halt is applied then. Read again shortly.",
+  "scope.halt_record_missing": "This halt has no record to confirm against, so releasing is not offered yet. Record it again first; the release is then confirmed on the refreshed screen.",
+  "scope.halt_register": "Record this halt again",
+  "scope.halt_identity": "Halt {id}… · state {state}…",
+  "scope.state_unconfirmed": "The current state could not be confirmed after the last request. Read again before deciding anything.",
 };

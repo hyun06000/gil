@@ -215,6 +215,8 @@ fn a_halt_survives_a_restart_refuses_progress_and_is_released_only_with_the_expl
     let halted = c.call("gil_scope_halt", json!({"scope_id": scope, "token": halt}));
     assert!(!is_error(&halted), "{halted}");
     assert_eq!(sc(&halted)["tracking"]["archive_halt"], "cycle:C1");
+    // 수신과 적용을 따로 말한다 — 잠금을 바로 얻었으므로 둘 다 참이다.
+    assert_eq!(sc(&halted)["halt_request"], json!({"received": true, "applied": true}));
     let frozen = std::fs::read(&state).unwrap();
     // 표식이 있는 동안 제안·열기가 거절된다.
     let proposed = c.call("gil_scope_propose", json!({"project_root": r, "rules": P2}));
@@ -229,11 +231,27 @@ fn a_halt_survives_a_restart_refuses_progress_and_is_released_only_with_the_expl
     let review = c.call("gil_scope_review", json!({"scope_id": scope}));
     let release = meta(&review, "gil/scopeReleaseToken").expect("해제 capability").to_owned();
     assert!(meta(&review, "gil/scopeHaltToken").is_none() && meta(&review, "gil/scopeApprovalToken").is_none());
+    // 화면이 보여 준 확인 근거: 그 중단 건의 이름과 그때 상태의 지문. 새 프로세스에서도 같은 건이다.
+    let (halt_id, state_digest) = (sc(&review)["halt"]["id"].as_str().expect("중단 건의 이름").to_owned(),
+        sc(&review)["halt"]["state_digest"].as_str().expect("상태의 지문").to_owned());
+    assert_eq!(sc(&review)["halt"]["at"], "cycle:C1");
+    let release_with = |halt_id: &str, state_digest: &str, state_confirmed: bool, token: &str| json!({"scope_id": scope, "at": "cycle:C1",
+        "halt_id": halt_id, "state_digest": state_digest, "cleanup": "continue", "state_confirmed": state_confirmed, "token": token});
+    // 자리만 실은 옛 꼴의 요청은 입력 검사에서 걸린다.
+    let place_only = c.call("gil_scope_release", json!({"scope_id": scope, "at": "cycle:C1", "cleanup": "continue", "state_confirmed": true, "token": release}));
+    assert!(place_only.get("error").is_some() || is_error(&place_only), "{place_only}");
     // 상태 확인 없는 해제는 받지 않는다 — capability 도 소모되지 않는다.
-    let unconfirmed = c.call("gil_scope_release", json!({"scope_id": scope, "at": "cycle:C1", "cleanup": "continue", "state_confirmed": false, "token": release}));
+    let unconfirmed = c.call("gil_scope_release", release_with(&halt_id, &state_digest, false, &release));
     assert!(is_error(&unconfirmed), "{unconfirmed}");
+    // 다른 중단 건·다른 상태에 대한 확인으로는 그 capability 가 통하지 않는다.
+    let other = c.call("gil_scope_release", release_with(&"0".repeat(32), &state_digest, true, &release));
+    assert!(is_error(&other), "{other}");
     assert_eq!(std::fs::read(&state).unwrap(), frozen);
-    let released = c.call("gil_scope_release", json!({"scope_id": scope, "at": "cycle:C1", "cleanup": "continue", "state_confirmed": true, "token": release}));
+    // 화면을 다시 읽으면 같은 건에 대한 capability 가 다시 온다(같은 대상이면 같은 값) — 그것으로 해제한다.
+    let again = c.call("gil_scope_review", json!({"scope_id": scope}));
+    let release = meta(&again, "gil/scopeReleaseToken").expect("같은 건의 해제 capability").to_owned();
+    assert_eq!(sc(&again)["halt"]["id"].as_str(), Some(halt_id.as_str()), "화면 갱신이 새 중단 건을 만들지 않는다");
+    let released = c.call("gil_scope_release", release_with(&halt_id, &state_digest, true, &release));
     assert!(!is_error(&released), "{released}");
     assert!(sc(&released)["tracking"]["archive_halt"].is_null());
     drop(c);

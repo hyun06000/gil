@@ -89,10 +89,12 @@ pub(crate) enum Event {
     Applied { revision: u32, proposal_digest: String, policy: String, event: String },
     /// Monitor 에서 받은 명시 재시도 요청 — 시도를 시작하기 전에 남긴다.
     RetryRequested { event: String, boundary: String, source: String },
-    /// Monitor 에서 받은 즉시 보관 중단 요청.
-    HaltRequested { at: String, source: String },
-    /// Monitor 에서 사용자가 현재 상태와 정리 방법을 확인하고 해제했다. 정리 방법은 기록일 뿐 실행이 아니다.
-    HaltReleased { at: String, cleanup: String, source: String },
+    /// Monitor 에서 받은 즉시 보관 중단 요청이 표식으로 적용됐다(또는 이미 있는 표식의 기록을 다시 남겼다). `id` 는 **이 중단 건**의
+    /// 이름이다 — 같은 자리에서 다시 중단해도 다른 값이다. R1 이 쓴 기록에는 `id` 가 없고(빈 값) 그런 건은 확인 근거가 되지 못한다.
+    HaltRequested { at: String, source: String, #[serde(default)] id: String },
+    /// Monitor 에서 사용자가 그 중단 건(`id`)의 현재 상태와 정리 방법을 확인하고 해제를 요청했다. 표식을 지우는 저장보다 **먼저** 남긴다.
+    /// 정리 방법은 기록일 뿐 실행이 아니다.
+    HaltReleased { at: String, cleanup: String, source: String, #[serde(default)] id: String },
 }
 
 impl Ledger {
@@ -111,6 +113,16 @@ impl Ledger {
     /// 그 제안 digest 의 응답들. 정상 기록에는 많아야 하나다.
     pub(crate) fn responses_to<'a>(&'a self, digest: &'a str) -> impl Iterator<Item = &'a Response> {
         self.responses.iter().filter(move |response| response.proposal_digest == digest)
+    }
+
+    /// 아직 해제 기록이 없는 **지금의 중단 건** — 마지막 중단·해제 사건이 `id` 있는 `HaltRequested` 일 때의 (id, at).
+    /// 기록이 없거나 마지막이 해제면 `None` 이다. 기록의 부재는 확인 근거가 아니다.
+    pub(crate) fn open_halt(&self) -> Option<(&str, &str)> {
+        self.events.iter().rev().find_map(|event| match event {
+            Event::HaltRequested { id, at, .. } => Some((!id.is_empty()).then_some((id.as_str(), at.as_str()))),
+            Event::HaltReleased { .. } => Some(None),
+            _ => None,
+        })?
     }
 
     fn extends(&self, before: &Ledger) -> bool {
@@ -194,4 +206,79 @@ pub(crate) fn write(lock: &crate::lock::ProjectLock, gil: &Path, before: Option<
     }
     fsx::fsync(&scope).map_err(|e| format!("범위 변경 기록의 교체를 디스크에 밀어 넣지 못했다(결과 불확실): {e}"))?;
     lock.validate(&gil.join(crate::lock::LOCK_FILE)).map_err(|e| format!("프로젝트 잠금을 확인하지 못했다: {e}"))
+}
+
+// ── 중단 요청의 수신 표식 ──────────────────────────────────────────────────
+//
+// 즉시 보관 중단 표식(`tracking.archive_halt`)은 `state.yaml` 에 있고 프로젝트 잠금 안에서만 적힌다. 다른 명령이 그 잠금을 쥐고 승인·
+// 보관·재시도를 진행 중이면 요청은 곧바로 적용될 수 없다. 그래서 요청의 **수신**을 잠금 없이 이 작은 파일로 먼저 남긴다. 진행 중인
+// 명령은 다음 쓰기 경계에서 이 파일을 보고 멈추며, 표식의 **적용**은 잠금을 쥔 쪽이 한다. `state.yaml` 의 꼴은 바뀌지 않는다.
+
+const HALT_REQUEST: &str = "halt-request";
+
+fn scope_dir(gil: &Path, create: bool) -> std::io::Result<File> {
+    let dir = fsx::directory(gil, false)?;
+    let name = cstr(SCOPE_DIR);
+    match fsx::child_dir(&dir, &name) {
+        Ok(scope) => Ok(scope),
+        Err(e) if create && e.kind() == std::io::ErrorKind::NotFound => match fsx::create_dir_at(&dir, &name, 0o700) {
+            Ok(made) => {
+                fsx::fsync(&dir)?;
+                Ok(made)
+            }
+            // 다른 쪽이 방금 만들었다.
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => fsx::child_dir(&dir, &name),
+            Err(e) => Err(e),
+        },
+        Err(e) => Err(e),
+    }
+}
+
+/// 받은 중단 요청이 아직 적용을 기다리는가 — 그 요청의 `id`. 없으면 `Ok(None)`. 읽지 못하면 `Err` 이며 부르는 쪽은 그것을
+/// 「요청 없음」으로 읽지 않는다.
+pub(crate) fn halt_request(gil: &Path) -> Result<Option<String>, String> {
+    let scope = match scope_dir(gil, false) {
+        Ok(scope) => scope,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(format!("범위 변경 기록 폴더를 열지 못했다: {e}")),
+    };
+    let file = match fsx::regular_at(&scope, &cstr(HALT_REQUEST)) {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(format!("중단 요청 표식을 열지 못했다: {e}")),
+    };
+    let mut id = String::new();
+    file.take(256).read_to_string(&mut id).map_err(|e| format!("중단 요청 표식을 읽지 못했다: {e}"))?;
+    Ok(Some(id.trim().to_string()))
+}
+
+/// 중단 요청의 수신을 남긴다 — **잠금 없이.** 이미 받은 요청이 있으면 그 `id` 를 돌려주고 새로 쓰지 않는다.
+pub(crate) fn receive_halt_request(gil: &Path, id: &str) -> Result<String, String> {
+    let scope = scope_dir(gil, true).map_err(|e| format!("범위 변경 기록 폴더를 열지 못했다: {e}"))?;
+    match fsx::create_file_at(&scope, &cstr(HALT_REQUEST), 0o600) {
+        Ok(mut file) => {
+            file.write_all(id.as_bytes()).and_then(|()| file.flush()).and_then(|()| fsx::fsync(&file))
+                .and_then(|()| fsx::fsync(&scope))
+                .map_err(|e| format!("중단 요청 표식을 쓰지 못했다: {e}"))?;
+            Ok(id.to_string())
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            halt_request(gil)?.ok_or_else(|| "중단 요청 표식이 읽는 사이에 사라졌다".to_string())
+        }
+        Err(e) => Err(format!("중단 요청 표식을 만들지 못했다: {e}")),
+    }
+}
+
+/// 적용이 확인된 요청의 수신 표식을 치운다. 잠금을 쥔 쪽만 부른다.
+pub(crate) fn clear_halt_request(gil: &Path) -> Result<(), String> {
+    let scope = match scope_dir(gil, false) {
+        Ok(scope) => scope,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e.to_string()),
+    };
+    match fsx::unlink_at(&scope, &cstr(HALT_REQUEST)) {
+        Ok(()) => fsx::fsync(&scope).map_err(|e| e.to_string()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
 }

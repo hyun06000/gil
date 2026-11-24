@@ -34,6 +34,10 @@ fn approval_retry_halt_and_release_are_app_only_and_the_model_tools_carry_no_suc
     assert!(!valid("gil_scope_status", &json!({"project_root": "/tmp/x", "retry": true})));
     // 해제는 화면에서 상태를 확인했다는 명시 입력이 없으면 꼴부터 맞지 않는다.
     assert!(!valid("gil_scope_release", &json!({"scope_id": "project:x", "at": "event:M2", "cleanup": "continue", "token": "t"})));
+    // 자리만으로는 꼴이 서지 않는다 — 화면이 보여 준 그 중단 건의 이름과 상태 지문이 함께 있어야 한다.
+    assert!(!valid("gil_scope_release", &json!({"scope_id": "project:x", "at": "event:M2", "cleanup": "continue", "state_confirmed": true, "token": "t"})));
+    assert!(valid("gil_scope_release", &json!({"scope_id": "project:x", "at": "event:M2", "halt_id": "h", "state_digest": "d",
+        "cleanup": "continue", "state_confirmed": true, "token": "t"})));
 }
 
 #[test]
@@ -63,7 +67,12 @@ fn a_capability_is_bound_to_its_scope_purpose_and_exact_target_and_is_spent_once
     let newer = grants.token("project:a", Purpose::Decide, "2:def").unwrap();
     assert!(grants.take("project:a", Purpose::Decide, "1:abc", &newer).is_err());
     assert!(grants.take("project:a", Purpose::Decide, "2:def", &newer).is_ok());
-    // 해제의 대상은 화면에 보인 표식의 자리다.
-    assert!(grants.take("project:a", Purpose::Release, "cycle:C1", &release).is_err());
-    assert!(grants.take("project:a", Purpose::Release, "event:M2", &release).is_ok());
+    // 해제의 대상은 자리만이 아니라 화면이 보여 준 그 중단 건과 그 상태다 — 같은 자리의 다른 건, 달라진 상태에는 통하지 않는다.
+    let shown = sc::release_target("event:M2", "halt-one", "state-one");
+    let bound = grants.token("project:a", Purpose::Release, &shown).unwrap();
+    assert_ne!(bound, release);
+    assert!(grants.take("project:a", Purpose::Release, "event:M2", &bound).is_err(), "자리만으로는 안 된다");
+    assert!(grants.take("project:a", Purpose::Release, &sc::release_target("event:M2", "halt-two", "state-one"), &bound).is_err());
+    assert!(grants.take("project:a", Purpose::Release, &sc::release_target("event:M2", "halt-one", "state-two"), &bound).is_err());
+    assert!(grants.take("project:a", Purpose::Release, &shown, &bound).is_ok());
 }

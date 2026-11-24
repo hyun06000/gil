@@ -536,4 +536,9 @@ export default {
   "scope.held": "적용되지 않음 ({code}): {said}",
   "scope.delivered": "에이전트에게 저장된 상태를 읽으라고 알렸다.",
   "scope.undelivered": "에이전트에게 알리지 못했다. 범위 상태를 읽으라고 직접 요청한다.",
+  "scope.halt_pending": "중단 요청을 받았다. 다른 명령이 프로젝트를 쥐고 있어, 그 명령이 다음 쓰기 경계에서 멈춘 뒤 중단이 적용된다. 잠시 뒤 다시 읽는다.",
+  "scope.halt_record_missing": "이 중단 건에는 확인할 기록이 없어 아직 해제를 제공하지 않는다. 먼저 기록을 다시 남긴다. 해제는 그 뒤 갱신된 화면에서 확인한다.",
+  "scope.halt_register": "이 중단의 기록 다시 남기기",
+  "scope.halt_identity": "중단 건 {id}… · 상태 {state}…",
+  "scope.state_unconfirmed": "마지막 요청 뒤 현재 상태를 확인하지 못했다. 무엇을 결정하기 전에 다시 읽는다.",
 };

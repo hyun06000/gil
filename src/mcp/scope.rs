@@ -8,7 +8,8 @@
 //!        gil_scope_decide(scope_id, revision, digest, token, decision)      Monitor 버튼의 응답. 승인이면 적용까지
 //!        gil_scope_retry(scope_id, event, token)                            기준점 보관의 명시 재시도
 //!        gil_scope_halt(scope_id, token)                                    즉시 보관 중단
-//!        gil_scope_release(scope_id, at, cleanup, state_confirmed, token)   현재 상태와 정리 방법을 확인한 해제
+//!        gil_scope_release(scope_id, at, halt_id, state_digest, cleanup, state_confirmed, token)
+//!                                                                           화면이 보여 준 그 중단 건·그 상태와 정리 방법을 확인한 해제
 //! ```
 //!
 //! 승인·재시도·중단 요청·해제는 **App 전용**이다(공유 계약 §5.1 「승인 채널은 모니터 하나」, §12 O-2 의 2026-11-24 결정: 사람과 소통하는
@@ -62,7 +63,7 @@ struct Retry { scope_id: String, event: String, token: String }
 struct Halt { scope_id: String, token: String }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Release { scope_id: String, at: String, cleanup: String, state_confirmed: bool, token: String }
+struct Release { scope_id: String, at: String, halt_id: String, state_digest: String, cleanup: String, state_confirmed: bool, token: String }
 
 pub(super) fn valid(name: &str, input: &Value) -> bool {
     if serde_json::to_vec(input).map_or(true, |bytes| bytes.len() > 512 * 1024) {
@@ -246,11 +247,21 @@ pub(super) fn call(monitor: &Monitor, grants: &Grants, name: &str, input: Value)
             if !r.state_confirmed {
                 return super::actions::refusal(crate::locale::text("scope_tool.release_needs_confirmation"));
             }
-            if let Err(why) = grants.take(&r.scope_id, Purpose::Release, &r.at, &r.token) {
+            // capability 는 자리만이 아니라 화면이 보여 준 **그 중단 건과 그 상태**에 묶여 있다. 화면 갱신 뒤의 값, 같은 자리의 새 중단,
+            // 달라진 상태에는 통하지 않는다. Core 가 잠금 안에서 같은 근거를 저장 직전에 다시 본다.
+            let target = sc::release_target(&r.at, &r.halt_id, &r.state_digest);
+            if let Err(why) = grants.take(&r.scope_id, Purpose::Release, &target, &r.token) {
                 return super::actions::refusal(&why);
             }
             let root = root_of!(&r.scope_id);
-            match sc::release(&root, &r.at, &r.cleanup) {
+            let confirmed = sc::Confirmation {
+                at: &r.at,
+                halt_id: &r.halt_id,
+                state_digest: &r.state_digest,
+                cleanup: &r.cleanup,
+                state_confirmed: r.state_confirmed,
+            };
+            match sc::release(&root, &confirmed) {
                 Ok(value) => with_scope(value, &r.scope_id),
                 Err(e) => refused(e),
             }
@@ -282,12 +293,12 @@ pub(super) fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
          "App-only: on a trusted Monitor click, explicitly retry the baseline archive of the waiting event at the closed boundary the project stands on now, starting from a fresh check and a fresh stable observation. Never automatic; refused inside an open Cycle, at a Chain closing boundary or while halted. An already confirmed baseline is never confirmed twice.",
          input(json!({"scope_id":string,"event":string,"token":string}), vec!["scope_id","event","token"]), true, false),
         ("gil_scope_halt",
-         "App-only: on a trusted Monitor click, record the archive halt marker immediately. Leaves every record and file as it is: nothing is closed, failed, restored or deleted. While it is present every open, close and world confirmation is refused; reads stay available.",
+         "App-only: on a trusted Monitor click, request an archive halt. The request is RECEIVED at once, without waiting for the project lock, and from then on every command stops before archiving objects or saving state. The marker is APPLIED as soon as the lock is held; if another command is mid-approval, mid-archive or mid-retry it stops at its next write boundary and applies the marker then. A save that already finished is never undone. The result reports received and applied separately. Leaves every record and file as it is: nothing is closed, failed, restored or deleted. Reads stay available.",
          input(json!({"scope_id":string,"token":string}), vec!["scope_id","token"]), true, false),
         ("gil_scope_release",
-         "App-only: release the archive halt marker after the user explicitly confirmed the displayed state and chose how to clean up. Changes nothing else and starts nothing: it is not a retry, archive, restore or closing approval. Reconnect, restart or a repeated request never releases.",
-         input(json!({"scope_id":string,"at":string,"cleanup":{"type":"string","enum":sc::CLEANUPS},"state_confirmed":{"type":"boolean"},"token":string}),
-             vec!["scope_id","at","cleanup","state_confirmed","token"]), true, false),
+         "App-only: release the archive halt marker after the user explicitly confirmed the displayed halt and state and chose how to clean up. The request carries what the screen showed: the place (at), that halt's id and the state digest; under the project lock they are checked again right before the release is saved. A refreshed screen, a new halt at the same place, a changed state or a missing halt record needs a new confirmation on a fresh screen. Changes nothing else and starts nothing: it is not a retry, archive, restore or closing approval. Reconnect, restart or a repeated request never releases.",
+         input(json!({"scope_id":string,"at":string,"halt_id":string,"state_digest":string,"cleanup":{"type":"string","enum":sc::CLEANUPS},"state_confirmed":{"type":"boolean"},"token":string}),
+             vec!["scope_id","at","halt_id","state_digest","cleanup","state_confirmed","token"]), true, false),
     ] {
         tools.push(serde_json::from_value(json!({"name":name,"description":description,"inputSchema":schema,
             "annotations":{"readOnlyHint":read,"destructiveHint":false,"openWorldHint":false},

@@ -1202,5 +1202,15 @@
   "tracking.note_applied": "\n跟踪范围\n  生效策略 {applied} · 此处未推导最后世界的确认策略\n",
   "tracking.note_unread": "\n跟踪范围\n  无法读取跟踪记录:{why}\n",
   "tracking.note_waiting": "  {event}:需要归档基准点 — 下一个 Experiment 暂缓。可打开 Interview;归档重试由用户在 Monitor 中进行。请读取 gil_scope_status,绝不自动重试。\n",
-  "tracking.note_halted": "  {at} 处立即归档中止:在用户于 Monitor 中解除之前,所有打开、关闭与归档均被拒绝。请等待;不要自行继续、重试或清理。\n"
+  "tracking.note_halted": "  {at} 处立即归档中止:在用户于 Monitor 中解除之前,所有打开、关闭与归档均被拒绝。请等待;不要自行继续、重试或清理。\n",
+  "tracking.halt_requested": "已在 Monitor 中请求立即归档中止,正在应用。此命令不再归档或保存;已完成的保存不会撤销。请读取状态、告知用户并等待。",
+  "scope.halt_not_received": "无法记录中止请求。",
+  "scope.halt_received": "已收到中止请求。另一个命令正占用此项目:它将在下一个写入边界停止,届时应用标记。已完成的保存不会撤销。",
+  "scope.next.halt_received": "中止请求已收到但尚未应用。请稍后重新读取状态;不要开始任何操作。",
+  "scope.state_not_confirmed": "解除需要用户对所示当前状态的明确确认。未做任何更改。",
+  "scope.halt_confirmation_stale": "此确认并非针对当前存储的中止与状态(界面已过期、同一位置有新的中止,或状态已变化)。未解除;请在新界面上重新确认。",
+  "scope.halt_record_missing": "此次中止没有可供确认的记录,暂不能解除。请在 Monitor 中重新记录该中止,然后在该界面确认。未做任何更改。",
+  "scope.state_unconfirmed": "此请求之后无法回读记录,因此当前状态未确认。本次尝试所确认的事实另行列出;其余不作假设。",
+  "scope.next.state_unconfirmed": "在做任何事之前请重新读取 gil_scope_status。不要重复请求。",
+  "scope.halt_stopped_before_approval_save": "在应用此批准期间收到立即归档中止请求,因此未保存或应用新策略。批准响应仍已记录;解除中止后需批准新提案。"
 }

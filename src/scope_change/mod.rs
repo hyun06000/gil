@@ -13,8 +13,8 @@
 //!            [저장 1] 새 판 + scope_change 사건(기준점 없음) + sync_base  ← 승인 기록 저장 = 정책 적용
 //!            → 다시 읽어 확인 → [파일 동기화] §5.2 세 걸음 → [기준점 보관] 한 시도 → [저장 2]
 //!        retry(root, event)        명시 재시도 — 지금 서 있는 닫힌 경계에서 새 검사·안정 관측부터
-//!        halt(root)                즉시 보관 중단 표식. 현재 상태를 그대로 둔다
-//!        release(root, at, how)    사용자가 현재 상태와 정리 방법을 확인한 뒤의 해제. 아무것도 실행하지 않는다
+//!        halt(root)                즉시 보관 중단 요청 — 수신(잠금 없이)과 적용(잠금 안의 표식)을 따로 말한다. 현재 상태를 그대로 둔다
+//!        release(root, 확인)        화면이 보여 준 그 중단 건·그 상태와 정리 방법을 확인한 뒤의 해제. 아무것도 실행하지 않는다
 //! ```
 //!
 //! # 세 가지 성공은 따로 선다(§5.2)
@@ -35,6 +35,17 @@
 //!
 //! 조회·재연결·재시작·같은 승인의 재전송은 판·사건·시도를 만들지 않는다. 승인 흐름 안의 첫 보관 시도 하나 말고는, 보관은 Monitor 의
 //! 명시 재시도 요청이 있을 때만 시작한다. 중단 표식의 해제는 재시도·보관·복원·종료 승인이 아니다.
+//!
+//! # 중단 요청의 수신과 적용(O-2)
+//!
+//! 표식(`tracking.archive_halt`)은 프로젝트 잠금 안에서만 적힌다. 다른 명령이 승인·보관·재시도를 진행하며 잠금을 쥐고 있을 때의 요청을
+//! 「바쁨」으로 돌려보내지 않으려고, 요청의 **수신**을 잠금 없이 작은 파일(`.gil/scope/halt-request`)로 먼저 남긴다. 그 뒤로는 어느
+//! 명령이든 객체 보관 전(`ProjectSession::capture_world`)과 상태 저장 전(`commit`, 저장 1, 저장 2, 실패 기록, 정책 파일 쓰기)에 멈춘다.
+//! **적용**은 잠금을 쥔 쪽이 한다: 진행 중이던 명령이 멈춘 직후, 또는 다음 쓰기 열기([`absorb_halt_request`]). 이미 끝난 저장은
+//! 되돌리지 않으며 표식은 적용되는 때의 자리를 가리킨다. `state.yaml` 의 꼴은 그대로다.
+//!
+//! 해제는 자리만으로 받지 않는다. 화면이 보여 준 **그 중단 건의 이름**(원장의 `HaltRequested.id`)과 **그때 상태의 지문**을 요청에
+//! 싣고, 잠금 안에서 해제를 저장하기 직전에 다시 견준다. 그 건의 기록이 없으면 확인으로 치지 않는다.
 //!
 //! # 미결 조합은 고르지 않는다
 //!
@@ -338,6 +349,24 @@ fn applied_as(tracking: &TrackingState, digest: &str) -> Option<(PolicyName, Eve
     Some((record.name(), event))
 }
 
+/// 잠금을 쥔 세션의 **지금 상태** — 원장을 새로 읽어 [`status_of`] 로 싣는다.
+///
+/// `reread` 가 거짓이면 세션의 메모리 값은 마지막 저장 뒤 디스크에서 다시 읽어 확인한 것이 아니다. 그 값을 현재 확정 상태로 싣지 않는다:
+/// `tracking` 을 비우고, 마지막으로 알던 값은 `last_known_before_reread_failed` 로 따로 싣는다.
+fn current(root: &Path, session: &ProjectSession, reread: bool) -> Result<Value, Refusal> {
+    let gil = gil_of(session)?;
+    let found = read_ledger(&gil).ok().flatten();
+    let mut out = status_of(root, session.project(), found.as_ref())?;
+    out["current_state"] = json!({"reread": reread});
+    if !reread {
+        out["last_known_before_reread_failed"] = out["tracking"].take();
+        out["phase"] = json!("unconfirmed");
+        out["said"] = json!(tr("scope.state_unconfirmed"));
+        out["next"] = json!(tr("scope.next.state_unconfirmed"));
+    }
+    Ok(out)
+}
+
 fn status_of(root: &Path, project: &Project, found: Option<&Ledger>) -> Result<Value, Refusal> {
     let tracking = tracking(project);
     let now = standing_view(project).map_err(|e| refuse("record_unreadable", e))?;
@@ -462,8 +491,15 @@ fn status_at(root: &Path) -> Result<Value, Refusal> {
     if session.project().tracking().is_none() {
         return Err(refuse("not_tracking_project", tr("scope.not_tracking_project")));
     }
-    let found = read_ledger(&root.join(crate::artifact::GIL_DIR))?;
-    status_of(root, session.project(), found.as_ref())
+    let gil = root.join(crate::artifact::GIL_DIR);
+    let found = read_ledger(&gil)?;
+    let mut out = status_of(root, session.project(), found.as_ref())?;
+    // 받았지만 아직 표식으로 적용되지 않은 중단 요청 — 조회는 그것을 적용하지 않고 사실만 싣는다.
+    if halt_requested(&gil) && session.project().tracking().and_then(TrackingState::halt).is_none() {
+        out["halt_request_pending"] = json!(true);
+        out["next"] = json!(tr("scope.next.halt_received"));
+    }
+    Ok(out)
 }
 
 // ── App 전용: 검토 화면 ────────────────────────────────────────────────────
@@ -471,14 +507,42 @@ fn status_at(root: &Path) -> Result<Value, Refusal> {
 /// 한 capability 가 묶이는 값 — 쓰임과, 그 쓰임이 가리키는 정확한 대상.
 pub(crate) type GrantFor = (Purpose, String);
 
-/// Monitor 가 보여 줄 값과, 지금 줄 수 있는 capability 의 대상들. **조회다** — 아무것도 쓰지 않는다.
+/// Monitor 가 보여 줄 값과, 지금 줄 수 있는 capability 의 대상들.
+///
+/// 조회다 — 한 가지만 빼고 아무것도 쓰지 않는다: **이미 받은 중단 요청**이 적용을 기다리고 있고 잠금을 얻을 수 있으면, 쓰기 열기가 그
+/// 요청을 표식으로 적용한다(받은 요청을 화면 갱신 때문에 미루지 않는다). 승인·재시도·해제는 여기서 일어나지 않는다.
 pub(crate) fn review(root: &Path) -> Result<(Value, Vec<GrantFor>), Refusal> {
+    let gil = root.join(crate::artifact::GIL_DIR);
+    let mut pending = halt_requested(&gil);
+    if pending && let Ok(session) = open(root) {
+        // 열기가 요청을 적용했는지는 표식과 남은 수신 표식이 말한다.
+        pending = halt_requested(&gil) && session.project().tracking().and_then(TrackingState::halt).is_none();
+    }
     let mut view = status_at(root)?;
     let mut grants = Vec::new();
     let halted = view["tracking"]["archive_halt"].as_str().map(str::to_owned);
+    view["halt_request_pending"] = json!(pending);
     match &halted {
         // 중단 중에는 해제만 줄 수 있다 — 승인·재시도는 표식이 있는 동안 받지 않는다(T12).
-        Some(at) => grants.push((Purpose::Release, at.clone())),
+        Some(at) => {
+            // 해제의 확인 근거: 이 중단 건의 이름과 지금 상태의 지문. 기록이 없으면 해제를 줄 수 없고, 기록을 다시 남기는 요청만 줄 수 있다.
+            let record = read_ledger(&gil)?;
+            let open_halt = record.as_ref().and_then(Ledger::open_halt).filter(|(_, recorded)| *recorded == at.as_str());
+            let digest = crate::internal_fs::read_state(&root.join(crate::STATE_PATH)).ok()
+                .map(|text| Sha256::digest(text.as_bytes()).iter().map(|byte| format!("{byte:02x}")).collect::<String>());
+            match (open_halt, digest) {
+                (Some((id, _)), Some(digest)) => {
+                    view["halt"] = json!({"at": at, "id": id, "state_digest": digest});
+                    grants.push((Purpose::Release, release_target(at, id, &digest)));
+                }
+                _ => {
+                    view["halt"] = json!({"at": at, "id": null, "record_missing": true});
+                    grants.push((Purpose::Halt, "halt".to_string()));
+                }
+            }
+        }
+        // 받은 요청이 적용을 기다리는 동안에는 어떤 capability 도 주지 않는다.
+        None if pending => {}
         None => {
             grants.push((Purpose::Halt, "halt".to_string()));
             if view["phase"] == "awaiting_approval"
@@ -495,6 +559,11 @@ pub(crate) fn review(root: &Path) -> Result<(Value, Vec<GrantFor>), Refusal> {
     }
     view["cleanups"] = json!(CLEANUPS);
     Ok((view, grants))
+}
+
+/// 해제 capability 가 묶이는 대상 — 자리만이 아니라 **그 중단 건**과 **화면이 보여 준 상태**.
+pub(crate) fn release_target(at: &str, halt_id: &str, state_digest: &str) -> String {
+    format!("{at}|{halt_id}|{state_digest}")
 }
 
 // ── App 전용: Monitor 응답과 적용 ──────────────────────────────────────────
@@ -532,8 +601,9 @@ pub(crate) fn decide(root: &Path, revision: u32, digest: &str, approve: bool) ->
     }
     // 승인 응답은 저장됐다. 그것은 아직 정책 적용이 아니다 — 적용은 아래 저장 1 이 다시 읽혀 확인될 때다.
     let applied = apply(&mut session, root, &gil, &after, &proposal);
-    let found = read_ledger(&gil).ok().flatten();
-    let mut out = status_of(root, session.project(), found.as_ref().or(Some(&after)))?;
+    // 시도에서 확인된 사실(`facts`)과 지금 상태를 따로 싣는다. 마지막 다시 읽기가 실패했으면 메모리의 값을 현재 상태로 싣지 않는다.
+    let reread = applied.as_ref().map_or(true, |facts| facts["baseline"]["record_reread"] != false);
+    let mut out = current(root, &session, reread)?;
     out["facts"] = json!({"approval_response": "recorded"});
     match applied {
         Ok(facts) => {
@@ -621,6 +691,11 @@ fn apply(session: &mut ProjectSession, root: &Path, gil: &Path, found: &Ledger, 
     let store = session.object_store().map_err(|e| refuse("unavailable", e.to_string()))?;
     sp::store_policy_source(&store, engine, &rules, &bytes)
         .map_err(|e| refuse_with("policy_source_not_stored", tr("scope.policy_source_not_stored"), json!(e.to_string())))?;
+    // 진행 중에 중단 요청을 받았으면 저장 1 을 하지 않는다. 표식을 적용하고 멈춘다 — 승인 응답은 이미 기록돼 있고 정책은 적용되지 않았다.
+    if halt_requested(gil) {
+        let applied = absorb_halt_request(session);
+        return Err(refuse_with("halted", tr("scope.halt_stopped_before_approval_save"), json!({"halt_applied": applied.unwrap_or(false)})));
+    }
     // 저장 1 — 새 판 + scope_change 사건(기준점 없음) + sync_base 를 한 번의 상태 저장으로.
     let state = tracking(session.project());
     let name = PolicyName::new(state.ledger().next_policy_id()).ok_or_else(|| refuse("unavailable", "정책 이름이 소진됐다"))?;
@@ -668,6 +743,18 @@ fn apply(session: &mut ProjectSession, root: &Path, gil: &Path, found: &Ledger, 
     #[cfg(test)]
     if let Some(hook) = AFTER_APPROVAL.with(|slot| slot.borrow_mut().take()) {
         hook();
+    }
+    // 저장 1 은 끝났다 — 그 뒤에 받은 중단 요청은 이미 끝난 승인 저장을 되돌리지 않는다. 남은 걸음(파일 쓰기·기준점 보관)만 멈춘다.
+    if halt_requested(gil) {
+        let applied = absorb_halt_request(session);
+        return Ok(json!({
+            "policy_applied": true,
+            "policy": policy_name.to_string(),
+            "event": event_name.to_string(),
+            "policy_file": "not_written_halt_requested",
+            "baseline": {"result": "not_started", "why": "halt_requested", "record_reread": applied.is_ok()},
+            "halt_applied": applied.unwrap_or(false),
+        }));
     }
     // 정책 파일 동기화 — 실패해도 정책은 유효하다. 따로 표시한다.
     let file = sync_policy_file(session, root, &bytes, &rules, &chosen, &disk);
@@ -717,6 +804,8 @@ thread_local! {
     pub(crate) static WRITE_FAULT: std::cell::RefCell<Option<&'static str>> = const { std::cell::RefCell::new(None) };
     /// 승인 저장(저장 1)이 확인된 직후, 파일 동기화·기준점 보관 전에 한 번 부른다.
     pub(crate) static AFTER_APPROVAL: std::cell::RefCell<Option<Box<dyn FnOnce()>>> = const { std::cell::RefCell::new(None) };
+    /// 시도가 끝난 뒤의 마지막 다시 읽기 한 번을 실패로 만든다 — 시도의 사실은 있고 현재 상태는 확인하지 못한 경우.
+    pub(crate) static FINAL_REREAD_FAULT: std::cell::RefCell<Option<()>> = const { std::cell::RefCell::new(None) };
     /// 다시 읽기 한 번을 실패로 만든다 — 결과 불명.
     pub(crate) static REREAD_FAULT: std::cell::RefCell<Option<()>> = const { std::cell::RefCell::new(None) };
 }
@@ -818,6 +907,10 @@ impl StateAdapter<'_> {
 impl BaselineState for StateAdapter<'_> {
     fn save_baseline(&mut self, commit: &BaselineCommit) -> SaveAnswer {
         let not = |said: String| SaveAnswer::NotStored { said };
+        // 진행 중에 중단 요청을 받았다 — 세계를 확정하지 않는다. 표식의 적용은 이 시도가 끝난 직후다.
+        if halt_requested(&self.gil) {
+            return not("즉시 보관 중단 요청을 받아 기준점을 저장하지 않았다".into());
+        }
         // 쓰는 그 시점에 결속 전체를 다시 확인한다 — 경계·발급기·적용 정책·마지막 확정 세계와 확정 정책·그 근거·시도 수.
         let (now, records) = match self.fresh() {
             Ok(found) => found,
@@ -847,6 +940,10 @@ impl BaselineState for StateAdapter<'_> {
 
     fn record_failure(&mut self, failure: &FailedAttempt) -> FailureRecord {
         let not = |said: String| FailureRecord::NotRecorded { said };
+        // 중단은 시도를 실패로 적지 않는다(§5.6 「실패로 판정하지 않는다」).
+        if halt_requested(&self.gil) {
+            return not("즉시 보관 중단 요청을 받아 시도 기록을 덧붙이지 않았다".into());
+        }
         let (now, records) = match self.fresh() {
             Ok(found) => found,
             Err(said) => return not(said),
@@ -885,8 +982,19 @@ fn attempt(session: &mut ProjectSession, root: &Path, gil: &Path, event: EventNa
         let mut adapter = StateAdapter { session: &mut *session, gil: gil.to_path_buf() };
         run_retry(event, records.inputs(), root, &mut adapter)
     };
+    // 시도 중에 받은 중단 요청을 지금 적용한다. 이미 끝난 저장(기준점 확정 포함)은 되돌리지 않는다.
+    let halt_applied = match halt_requested(gil) {
+        true => Some(absorb_halt_request(session).unwrap_or(false)),
+        false => None,
+    };
     // 메모리의 값을 저장된 기록에 맞춘다. 읽지 못하면 결과를 확정으로 말하지 않는다.
-    let refreshed = match session.reload() {
+    let reloaded = session.reload();
+    #[cfg(test)]
+    let reloaded = match FINAL_REREAD_FAULT.with(|slot| slot.borrow_mut().take()) {
+        Some(()) => Err(crate::SessionError::Observe { said: "시험이 넣은 마지막 다시 읽기 실패".into() }),
+        None => reloaded,
+    };
+    let refreshed = match reloaded {
         Ok(project) => {
             *session.project_mut() = project;
             true
@@ -922,13 +1030,18 @@ fn attempt(session: &mut ProjectSession, root: &Path, gil: &Path, event: EventNa
             RetryOutcome::Unknown { why, .. } => json!({"result": "unknown", "why": format!("{why:?}")}),
         },
     };
+    // 시도에서 확인된 사실과 따로, 지금 기록을 다시 읽었는가. 거짓이면 현재 상태를 말하지 않는다.
     out["record_reread"] = json!(refreshed);
+    if let Some(applied) = halt_applied {
+        out["halt_request"] = json!({"received": true, "applied": applied});
+    }
     out
 }
 
 /// **명시 재시도** — Monitor 의 요청으로만 부른다. 지금 서 있는 유효한 닫힌 경계에서 한다(과거 경계로 되돌아가지 않는다).
 /// 대기가 아니거나, 중단 표식이 있거나, 열린 사이클·종료 경계면 시도를 만들지 않는다.
 pub(crate) fn retry(root: &Path, event: &str) -> Result<Value, Refusal> {
+    // 쓰기 열기가 받은 중단 요청을 먼저 적용한다 — 그 뒤의 표식 검사가 재시도를 거절한다.
     let mut session = open(root)?;
     let gil = gil_of(&session)?;
     session.project().refuse_while_halted().map_err(|said| refuse("halted", said))?;
@@ -951,43 +1064,156 @@ pub(crate) fn retry(root: &Path, event: &str) -> Result<Value, Refusal> {
     after.events.push(Event::RetryRequested { event: event.to_string(), boundary: cycle.to_string(), source: MONITOR.into() });
     save_ledger(&session, &gil, before.as_ref(), &after)?;
     let baseline = attempt(&mut session, root, &gil, waiting);
-    let mut out = status_of(root, session.project(), Some(&after))?;
+    let mut out = current(root, &session, baseline["record_reread"] != false)?;
     out["facts"] = json!({"baseline": baseline});
     Ok(out)
 }
 
 // ── 즉시 보관 중단(§5.6, O-2) ──────────────────────────────────────────────
 
-/// 중단 표식을 적는다 — Monitor 의 요청. 현재 상태를 그대로 둔다: 열린 단계를 닫지 않고, 실패로 판정하지 않고, 복원·삭제·범위 변경을
-/// 하지 않는다. 이미 표식이 있으면 같은 표식을 돌려준다.
-pub(crate) fn halt(root: &Path) -> Result<Value, Refusal> {
-    let mut session = open(root)?;
-    let gil = gil_of(&session)?;
-    let (next, at) = session.project().with_halt().map_err(|e| refuse("record_refused", e.to_string()))?;
+/// 새 중단 건의 이름 — 같은 자리의 다른 중단과 구분하는 값이다. 비밀이 아니다(capability 가 아니다).
+fn new_halt_id() -> Result<String, String> {
+    let mut bytes = [0u8; 16];
+    getrandom::fill(&mut bytes).map_err(|e| e.to_string())?;
+    Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+/// 받은 중단 요청이 적용을 기다리는가. 읽지 못하면 **기다린다고 본다** — 모르는 상태에서 보관을 시작하지 않는다.
+pub(crate) fn halt_requested(gil: &Path) -> bool {
+    !matches!(ledger::halt_request(gil), Ok(None))
+}
+
+/// 지금 `state.yaml` 바이트의 지문 — 사용자가 화면에서 확인한 「현재 상태」의 식별 근거. 표식이 있는 동안에는 어떤 전이도 상태를
+/// 바꾸지 않으므로, 확인한 뒤 이 값이 달라졌다면 확인한 상태가 아니다.
+fn state_digest(session: &ProjectSession) -> Result<String, String> {
+    let text = crate::internal_fs::read_state(session.state_path()).map_err(|e| e.to_string())?;
+    Ok(Sha256::digest(text.as_bytes()).iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+/// **받은 중단 요청을 표식으로 적용한다** — 프로젝트 잠금을 쥔 쪽이 부른다(모든 쓰기 열기, 그리고 진행 중이던 승인·보관·재시도가
+/// 쓰기 경계에서 멈춘 직후).
+///
+/// 순서: 이 중단 건의 기록(`HaltRequested { id }`)을 원장에 남긴다(최선 노력 — 실패해도 중단은 적용한다) → 표식 저장 → 다시 읽어
+/// 확인 → 수신 표식을 치운다. 이미 끝난 저장을 되돌리지 않는다: 표식은 **지금의 자리**를 가리킨다. 적용을 확인하지 못하면 수신 표식을
+/// 그대로 두어 다음 쓰기가 계속 멈추게 하고 `Err` 를 돌려준다.
+pub(crate) fn absorb_halt_request(session: &mut ProjectSession) -> Result<bool, String> {
+    let gil = session.gil().map_err(|e| e.to_string())?;
+    let Some(id) = ledger::halt_request(&gil)? else { return Ok(false) };
+    if session.project().tracking().is_none() {
+        // 추적 정책 기록이 없는 프로젝트에는 표식의 자리가 없다. 요청을 적용한 것으로 치지 않고 그대로 둔다.
+        return Ok(false);
+    }
     if session.project().tracking().and_then(TrackingState::halt).is_none() {
-        let saved = save_step(&session, &next, "halt");
-        let reread = session.reload().map_err(|e| refuse_with("halt_uncertain", tr("scope.halt_uncertain"), json!(e.to_string())))?;
+        let (next, at) = session.project().with_halt().map_err(|e| e.to_string())?;
+        let id = if id.is_empty() { new_halt_id()? } else { id };
+        // 이 중단 건의 기록을 표식보다 먼저 남긴다. 표식만 있고 기록이 없는 건은 해제 전에 기록을 다시 남겨야 한다.
+        let before = ledger::read(&gil).ok().flatten();
+        let mut after = before.clone().unwrap_or_else(Ledger::new);
+        after.events.push(Event::HaltRequested { at: at.to_string(), source: MONITOR.into(), id });
+        let _ = ledger::write(session.project_lock(), &gil, before.as_ref(), &after);
+        let saved = save_step(session, &next, "halt");
+        let reread = session.reload().map_err(|e| format!("중단 표식의 저장을 확인하지 못했다: {e}"))?;
         let stored = reread.tracking().and_then(TrackingState::halt) == Some(at);
         *session.project_mut() = reread;
         if !stored {
-            return Err(refuse_with("halt_not_saved", tr("scope.halt_not_saved"), json!(saved.err().map(|e| e.to_string()))));
+            return Err(format!("중단 표식이 저장되지 않았다: {}", saved.err().map(|e| e.to_string()).unwrap_or_default()));
         }
-        let before = read_ledger(&gil).ok().flatten();
-        let mut after = before.clone().unwrap_or_else(Ledger::new);
-        after.events.push(Event::HaltRequested { at: at.to_string(), source: MONITOR.into() });
-        let _ = save_ledger(&session, &gil, before.as_ref(), &after);
     }
-    let found = read_ledger(&gil).ok().flatten();
-    let mut out = status_of(root, session.project(), found.as_ref())?;
+    ledger::clear_halt_request(&gil)?;
+    Ok(true)
+}
+
+/// 이미 있는 표식에 **이 중단 건의 기록**이 없으면 새 `id` 로 남긴다 — 해제의 확인 근거를 세우는 일이며 표식·상태를 바꾸지 않는다.
+fn ensure_halt_record(session: &ProjectSession, gil: &Path) -> Result<(), Refusal> {
+    let Some(at) = session.project().tracking().and_then(TrackingState::halt) else { return Ok(()) };
+    let before = read_ledger(gil)?;
+    if before.as_ref().and_then(Ledger::open_halt).is_some_and(|(_, recorded)| recorded == at.to_string()) {
+        return Ok(());
+    }
+    let mut after = before.clone().unwrap_or_else(Ledger::new);
+    let id = new_halt_id().map_err(|e| refuse("unavailable", e))?;
+    after.events.push(Event::HaltRequested { at: at.to_string(), source: MONITOR.into(), id });
+    save_ledger(session, gil, before.as_ref(), &after)
+}
+
+/// **즉시 보관 중단 요청** — Monitor 의 요청.
+///
+/// ① 요청의 **수신**을 잠금 없이 먼저 남긴다. 이 뒤로는 어느 프로세스의 어느 명령도 객체 보관·상태 저장의 경계에서 멈춘다.
+/// ② 잠금을 얻으면 곧바로 표식을 **적용**한다(쓰기 열기가 적용한다). 다른 명령이 승인·보관·재시도를 진행 중이라 잠금을 얻지 못하면
+/// 요청은 받은 상태로 남고, 그 명령이 다음 쓰기 경계에서 멈춘 뒤 표식을 적용한다. 그 경계 전에 이미 끝난 저장은 되돌리지 않는다 —
+/// 표식은 적용되는 때의 자리를 가리킨다. 결과는 수신과 적용을 따로 말한다.
+///
+/// 현재 상태를 그대로 둔다: 열린 단계를 닫지 않고, 실패로 판정하지 않고, 복원·삭제·범위 변경을 하지 않는다. 이미 표식이 있으면 같은
+/// 표식을 돌려준다(그 건의 기록이 없으면 다시 남긴다).
+pub(crate) fn halt(root: &Path) -> Result<Value, Refusal> {
+    if !root.join(crate::STATE_PATH).exists() {
+        return Err(refuse("not_started", tr("scope.not_started")));
+    }
+    let gil = root.join(crate::artifact::GIL_DIR);
+    let id = new_halt_id().map_err(|e| refuse("unavailable", e))?;
+    ledger::receive_halt_request(&gil, &id).map_err(|e| refuse_with("halt_not_received", tr("scope.halt_not_received"), json!(e)))?;
+    // 쓰기 열기가 받은 요청을 적용한다(`ProjectSession::open_at`).
+    let session = match open(root) {
+        Ok(session) => session,
+        Err(held) if held.code == "busy" => {
+            return Ok(json!({
+                "said": tr("scope.halt_received"),
+                "next": tr("scope.next.halt_received"),
+                "halt_request": {"received": true, "applied": false, "why": "another_command_holds_the_project"},
+            }));
+        }
+        Err(held) if held.code == "not_tracking_project" => {
+            let _ = ledger::clear_halt_request(&gil);
+            return Err(held);
+        }
+        // 요청은 받았다. 적용 여부는 확인하지 못했다 — 수신 표식이 남아 다음 쓰기를 멈춘다.
+        Err(held) => {
+            return Err(refuse_with("halt_uncertain", tr("scope.halt_uncertain"),
+                json!({"received": true, "applied": null, "open": held.said})));
+        }
+    };
+    let Some(at) = session.project().tracking().and_then(TrackingState::halt) else {
+        return Err(refuse_with("halt_uncertain", tr("scope.halt_uncertain"), json!({"received": true, "applied": false})));
+    };
+    ensure_halt_record(&session, &gil)?;
+    let mut out = current(root, &session, true)?;
     out["said"] = json!(crate::tr!("scope.halted", at = at));
     out["next"] = json!(tr("scope.next.halted"));
+    out["halt_request"] = json!({"received": true, "applied": true});
     Ok(out)
 }
 
-/// 중단 표식을 지운다 — Monitor 에서 사용자가 **현재 상태(`at`)와 정리 방법**을 확인했을 때만. 그 밖의 어떤 기록도 바꾸지 않고
-/// 아무것도 실행하지 않는다: 보관·재시도·복원·닫기·종료 승인이 아니며, 해제 뒤의 진행은 별도의 명시 행동이다.
-pub(crate) fn release(root: &Path, at: &str, cleanup: &str) -> Result<Value, Refusal> {
-    if !CLEANUPS.contains(&cleanup) {
+/// 사용자가 Monitor 에서 확인한 것 — 화면이 실제로 보여 준 **중단 건**과 그때의 **상태**.
+pub(crate) struct Confirmation<'a> {
+    /// 표식의 자리.
+    pub(crate) at: &'a str,
+    /// 그 중단 건의 이름(원장의 `HaltRequested.id`).
+    pub(crate) halt_id: &'a str,
+    /// 화면이 보여 준 상태의 지문.
+    pub(crate) state_digest: &'a str,
+    /// 사용자가 고른 정리 방법.
+    pub(crate) cleanup: &'a str,
+    /// 사용자가 현재 상태를 확인했다고 명시했는가.
+    pub(crate) state_confirmed: bool,
+}
+
+/// 중단 표식을 지운다 — Monitor 에서 사용자가 **그 중단 건의 현재 상태와 정리 방법**을 확인했을 때만.
+///
+/// 자리(`at`)만으로는 해제하지 않는다. 잠금 안에서, 해제를 저장하기 직전에 세 근거를 다시 본다: 표식의 자리, 원장에 남은 그 중단 건의
+/// 이름, 지금 상태의 지문. 하나라도 없거나 다르면(화면이 낡았다·같은 자리의 새 중단이다·기록이 없다) 아무것도 바꾸지 않고 새 화면
+/// 확인을 요구한다. 기록의 부재를 확인으로 치지 않는다.
+///
+/// 해제 기록을 원장에 **먼저** 남기고 표식을 지운다. 표식 저장이 실패하면 표식은 남고 그 건은 이미 해제 기록이 있으므로, 다시 해제하려면
+/// 그 표식의 기록을 새로 남기고 새로 확인해야 한다 — 옛 확인이 다시 쓰이지 않는다.
+///
+/// 그 밖의 어떤 기록도 바꾸지 않고 아무것도 실행하지 않는다: 보관·재시도·복원·닫기·종료 승인이 아니며, 해제 뒤의 진행은 별도의 명시
+/// 행동이다.
+pub(crate) fn release(root: &Path, confirmed: &Confirmation<'_>) -> Result<Value, Refusal> {
+    // 사용자의 두 명시 입력 — 상태 확인과 정리 방법. 서버가 같은 뜻으로 다시 본다.
+    if !confirmed.state_confirmed {
+        return Err(refuse("state_not_confirmed", tr("scope.state_not_confirmed")));
+    }
+    if !CLEANUPS.contains(&confirmed.cleanup) {
         return Err(refuse("cleanup_unknown", tr("scope.cleanup_unknown")));
     }
     let mut session = open(root)?;
@@ -996,9 +1222,30 @@ pub(crate) fn release(root: &Path, at: &str, cleanup: &str) -> Result<Value, Ref
     let Some(now) = halted else {
         return Err(refuse("not_halted", tr("scope.not_halted")));
     };
-    if now.to_string() != at {
+    let again = || refuse("halt_confirmation_stale", tr("scope.halt_confirmation_stale"));
+    if now.to_string() != confirmed.at {
         return Err(refuse("halt_place_differs", tr("scope.halt_place_differs")));
     }
+    let before = read_ledger(&gil)?;
+    match before.as_ref().and_then(Ledger::open_halt) {
+        Some((id, at)) if id == confirmed.halt_id && at == confirmed.at => {}
+        // 기록이 없다 — 확인할 대상이 서지 않는다. 기록을 다시 남기고(`halt`) 그 화면에서 확인해야 한다.
+        None => return Err(refuse("halt_record_missing", tr("scope.halt_record_missing"))),
+        Some(_) => return Err(again()),
+    }
+    let digest = state_digest(&session).map_err(|e| refuse_with("halt_confirmation_stale", tr("scope.halt_confirmation_stale"), json!(e)))?;
+    if digest != confirmed.state_digest {
+        return Err(again());
+    }
+    // 해제 기록을 먼저 남긴다. 남기지 못하면 해제하지 않는다.
+    let mut after = before.clone().unwrap_or_else(Ledger::new);
+    after.events.push(Event::HaltReleased {
+        at: confirmed.at.to_string(),
+        cleanup: confirmed.cleanup.to_string(),
+        source: MONITOR.into(),
+        id: confirmed.halt_id.to_string(),
+    });
+    save_ledger(&session, &gil, before.as_ref(), &after)?;
     let next = session.project().without_halt().map_err(|e| refuse("record_refused", e.to_string()))?;
     let saved = save_step(&session, &next, "release");
     let reread = session.reload().map_err(|e| refuse_with("release_uncertain", tr("scope.release_uncertain"), json!(e.to_string())))?;
@@ -1007,21 +1254,23 @@ pub(crate) fn release(root: &Path, at: &str, cleanup: &str) -> Result<Value, Ref
     if !cleared {
         return Err(refuse_with("release_not_saved", tr("scope.release_not_saved"), json!(saved.err().map(|e| e.to_string()))));
     }
-    let before = read_ledger(&gil).ok().flatten();
-    let mut after = before.clone().unwrap_or_else(Ledger::new);
-    after.events.push(Event::HaltReleased { at: at.to_string(), cleanup: cleanup.to_string(), source: MONITOR.into() });
-    let _ = save_ledger(&session, &gil, before.as_ref(), &after);
-    let mut out = status_of(root, session.project(), Some(&after))?;
+    let mut out = current(root, &session, true)?;
     out["said"] = json!(tr("scope.released"));
     out["next"] = json!(tr("scope.next.released"));
-    out["cleanup_confirmed"] = json!(cleanup);
+    out["cleanup_confirmed"] = json!(confirmed.cleanup);
     Ok(out)
 }
 
 // ── load 의 승인 연결 ──────────────────────────────────────────────────────
 
 /// P2 이후의 모든 판이 범위 변경 원장의 **정확히 하나의 Monitor 승인 응답**에 묶여 있는가(§5.1). P1 은 시작 준비 기록이 본다.
-pub(crate) fn verify_approvals(gil: &Path, tracking: &TrackingState) -> Result<(), String> {
+///
+/// 응답이 있다는 것만으로는 부족하다. **승인된 제안이 묶은 것**(Chain, 승인 경계 = 검토 Interview, 그때의 Cycle 발급기, 앞 정책, 비교
+/// 근거인 세계와 그 확정 정책)이 **실제로 저장된 사건**의 승인 당시 칸과 같아야 한다 — 다른 경계·다른 세계에 대한 승인으로 저장된
+/// 사건을 승인된 것으로 읽지 않는다. 견주는 것은 사건의 승인 칸(`after_cycle_ref`·`review_cycle_ref`·`next_cycle_id`·
+/// `policy_before_ref`·`world_before_ref`)과, 같은 기록에서 승인 경계의 앞선 기록으로 유도한 확정 정책이다. 재시도 뒤의 보관 경계
+/// (`baseline.after_cycle_ref`)는 승인 경계가 아니므로 견주지 않는다. 어긋나면 거절할 뿐, 사건을 고치거나 새 승인을 만들지 않는다.
+pub(crate) fn verify_approvals(gil: &Path, tracking: &TrackingState, standing: &RecordStanding) -> Result<(), String> {
     let later = tracking.ledger().policies().iter().skip(1);
     if later.clone().next().is_none() {
         return Ok(());
@@ -1038,11 +1287,35 @@ pub(crate) fn verify_approvals(gil: &Path, tracking: &TrackingState) -> Result<(
         if !matches!(approvals.as_slice(), [only] if only.decision == "approve" && only.source == MONITOR) {
             return Err(format!("{} 의 제안에 정확히 하나의 Monitor 승인 응답이 없다", record.name()));
         }
+        // 그 판을 도입한 사건의 승인 당시 칸.
+        let (name, event) = tracking
+            .events()
+            .find(|(_, event)| event.after == record.name())
+            .ok_or_else(|| format!("{} 을 도입한 사건이 없다", record.name()))?;
+        let differs = |what: &str, approved: &str, stored: Option<String>| match stored.as_deref() == Some(approved) {
+            true => Ok(()),
+            false => Err(format!(
+                "{name} 의 {what} {} 이 승인된 제안(판 {})의 {approved} 와 다르다",
+                stored.unwrap_or_else(|| "없음".into()),
+                proposal.revision
+            )),
+        };
+        differs("chain_ref", &proposal.chain, Some(event.chain.to_string()))?;
+        differs("after_cycle_ref", &proposal.boundary, event.after_cycle.map(|cycle| cycle.to_string()))?;
+        differs("review_cycle_ref", &proposal.boundary, event.review_cycle.map(|cycle| cycle.to_string()))?;
+        differs("policy_before_ref", &proposal.policy_before, event.before.map(|policy| policy.to_string()))?;
+        differs("world_before_ref", &proposal.world_before, event.world_before.map(|world| world.to_string()))?;
+        if event.next_cycle_id != proposal.issuer {
+            return Err(format!("{name} 의 next_cycle_id {} 가 승인된 제안의 발급기 {} 와 다르다", event.next_cycle_id, proposal.issuer));
+        }
+        let basis = standing.approval_bases.iter().find(|(event, _)| *event == name).map(|(_, policy)| policy.to_string());
+        differs("승인 경계의 확정 정책", &proposal.confirmed_policy, basis)?;
     }
     Ok(())
 }
 
-// 이 시험은 합성 Interview 를 맨 `approved: yes` 로 걷는다. 승인 계획 프로필(`approved-plan`)의 Core 는 그 승인을 거절하는 것이 계약이라
-// 그 프로필에서는 이 모듈이 컴파일되지 않는다 — 그 프로필에서의 0건은 실행 성공이 아니다.
-#[cfg(all(test, not(feature = "approved-plan")))]
+// 이 시험은 프로필마다 그 프로필의 계약으로 Interview 를 걷는다: 승인 계획이 없는 구성은 맨 `approved: yes`, 승인 계획 구성
+// (`approved-plan`, 순서 항목 계약)은 `approved_plan::tests` 의 제안 → Monitor 결정 → 그 `close_report` 경로다. 탐색 계약
+// (`exploration-flow`)의 fixture 는 아직 없어 그 구성에서는 이 모듈이 컴파일되지 않는다 — 그 구성의 0건은 실행 성공이 아니다.
+#[cfg(all(test, not(feature = "exploration-flow")))]
 mod tests;

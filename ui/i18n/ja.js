@@ -535,4 +535,9 @@ export default {
   "scope.held": "未適用({code}): {said}",
   "scope.delivered": "エージェントに保存状態を読むよう伝えました。",
   "scope.undelivered": "エージェントに通知できませんでした。範囲の状態を読むよう依頼してください。",
+  "scope.halt_pending": "停止要求を受け取りました。別のコマンドがプロジェクトを保持中で、次の書き込み境界で止まった後に停止が適用されます。少し後で読み直してください。",
+  "scope.halt_record_missing": "この停止には確認の基になる記録がないため、解除はまだ提供されません。先に記録を残し直してください。解除は更新後の画面で確認します。",
+  "scope.halt_register": "この停止の記録を残し直す",
+  "scope.halt_identity": "停止 {id}… · 状態 {state}…",
+  "scope.state_unconfirmed": "直前の要求の後、現在の状態を確認できませんでした。何かを決める前に読み直してください。",
 };

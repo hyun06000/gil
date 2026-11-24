@@ -1176,6 +1176,9 @@ pub(crate) struct RecordStanding {
     pub(crate) closing_boundary: bool,
     /// 지금 Chain 이 닫혔다.
     pub(crate) chain_closed: bool,
+    /// 범위 변경 사건마다, **승인 경계의 앞선 기록으로 유도한** 확정 정책(T8 의 승인 쪽 근거) — 사건 순서. 승인된 제안이 묶은 비교
+    /// 근거와 견주는 데 쓴다. 보관 경계의 근거가 아니다.
+    pub(crate) approval_bases: Vec<(EventName, PolicyName)>,
 }
 
 impl RecordStanding {
@@ -1305,6 +1308,7 @@ pub(crate) fn check_record(inputs: &RecordInputs<'_>) -> Result<RecordStanding, 
     };
 
     // 모든 scope_change 사건의 T8 과 review_cycle_ref.
+    let mut approval_bases = Vec::new();
     for (index, ((link, fact), world_facts)) in links.events().iter().zip(facts).zip(worlds).enumerate() {
         if link.kind() != EventKind::ScopeChange {
             continue;
@@ -1335,6 +1339,7 @@ pub(crate) fn check_record(inputs: &RecordInputs<'_>) -> Result<RecordStanding, 
                         derived: basis.world,
                     });
                 }
+                approval_bases.push((event, basis.policy));
                 Some(basis.policy)
             }
             Err(found) => {
@@ -1412,5 +1417,6 @@ pub(crate) fn check_record(inputs: &RecordInputs<'_>) -> Result<RecordStanding, 
         waiting,
         closing_boundary: current_chain.awaiting_report(),
         chain_closed: current_chain.is_closed(),
+        approval_bases,
     })
 }

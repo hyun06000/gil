@@ -1202,5 +1202,15 @@
   "tracking.note_applied": "\n追蹤範圍\n  生效政策 {applied} · 此處未推導最後世界的確認政策\n",
   "tracking.note_unread": "\n追蹤範圍\n  無法讀取追蹤記錄:{why}\n",
   "tracking.note_waiting": "  {event}:需要封存基準點 — 下一個 Experiment 暫緩。可開啟 Interview;封存重試由使用者在 Monitor 中進行。請讀取 gil_scope_status,絕不自動重試。\n",
-  "tracking.note_halted": "  {at} 處立即封存中止:在使用者於 Monitor 中解除之前,所有開啟、關閉與封存均被拒絕。請等待;不要自行繼續、重試或清理。\n"
+  "tracking.note_halted": "  {at} 處立即封存中止:在使用者於 Monitor 中解除之前,所有開啟、關閉與封存均被拒絕。請等待;不要自行繼續、重試或清理。\n",
+  "tracking.halt_requested": "已在 Monitor 中請求立即封存中止,正在套用。此命令不再封存或儲存;已完成的儲存不會撤銷。請讀取狀態、告知使用者並等待。",
+  "scope.halt_not_received": "無法記錄中止請求。",
+  "scope.halt_received": "已收到中止請求。另一個命令正佔用此專案:它將在下一個寫入邊界停止,屆時套用標記。已完成的儲存不會撤銷。",
+  "scope.next.halt_received": "中止請求已收到但尚未套用。請稍後重新讀取狀態;不要開始任何操作。",
+  "scope.state_not_confirmed": "解除需要使用者對所示目前狀態的明確確認。未做任何變更。",
+  "scope.halt_confirmation_stale": "此確認並非針對目前儲存的中止與狀態(畫面已過期、同一位置有新的中止,或狀態已變化)。未解除;請在新畫面上重新確認。",
+  "scope.halt_record_missing": "此次中止沒有可供確認的記錄,暫不能解除。請在 Monitor 中重新記錄該中止,然後在該畫面確認。未做任何變更。",
+  "scope.state_unconfirmed": "此請求之後無法回讀記錄,因此目前狀態未確認。本次嘗試所確認的事實另行列出;其餘不作假設。",
+  "scope.next.state_unconfirmed": "在做任何事之前請重新讀取 gil_scope_status。不要重複請求。",
+  "scope.halt_stopped_before_approval_save": "在套用此核准期間收到立即封存中止請求,因此未儲存或套用新政策。核准回應仍已記錄;解除中止後需核准新提案。"
 }

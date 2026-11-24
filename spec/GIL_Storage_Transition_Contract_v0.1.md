@@ -206,6 +206,15 @@
 > 주제, Monitor 번들(`plugins/…/assets/monitor.html`)의 재생성, 실제 Host 화면·사람의 버튼 입력·필드 테스트. 상세와 검증 범위는
 > [구현 순서](GIL_Implementation_Order_2026-11-19.md)의 같은 날 기록과 [Roadmap](GIL_Roadmap.md)의 「5번 범위 변경 사건의 제품 연결」을 따른다.
 
+> **위 후보의 수정 증분(2026-11-24, 같은 비공개 후보 위 — 독립 검토 전, 빌드·시험 미실행).** ㉮ 즉시 보관 중단: 요청의 **수신**(잠금 없이
+> `.gil/scope/halt-request`)과 **적용**(잠금 안의 `archive_halt`)을 나눠, 다른 명령이 승인·보관·재시도 중이어도 요청을 받고 그 명령이 다음
+> 쓰기 경계에서 멈추게 했다. 일반 Verify 와 이미지 Verify 는 객체 보관 **전에**, 모든 명령은 상태 저장 전에 같은 경계를 묻는다. 이미 끝난
+> 저장은 되돌리지 않는다. ㉯ 해제: 자리만이 아니라 화면이 보여 준 그 중단 건의 이름과 그때 상태의 지문을 요청에 싣고 저장 직전에 다시
+> 견준다. 기록이 없는 건은 확인으로 치지 않는다. `state.yaml` 의 꼴은 그대로다(중단 건의 이름은 제안·응답 원장에 있다). ㉰ O-3: 쓰기가
+> 거절하는 「보관 대기 + 승인된 종료 Synthesis 가 있는 열린 Interview」를 load 도 거절한다. ㉱ load 가 승인된 제안이 묶은 Chain·승인 경계·
+> 발급기·앞 정책·비교 세계·확정 정책을 저장된 사건의 승인 칸과 견준다(보관 경계는 견주지 않는다). ㉲ 마지막 다시 읽기가 실패하면 현재
+> 상태를 싣지 않고 시도의 사실과 따로 둔다. 번들 재생성·내장 설명서·후속 Chain 의 범위 변경은 여전히 하지 않았다.
+
 제품 의미의 정본은 [Will Model](GIL_Will_Model_v0.1.md), [Cycle Model](GIL_Cycle_Model_v0.1.md),
 [Artifact Model](GIL_Artifact_Model_v0.1.md), [Storage Model](GIL_Storage_Model_v0.1.md),
 [Chain 저장 계약](GIL_Chain_Storage_v0.1.md)이다. 이 문서는 그 합의를 **필드·참조·불변식·저장 순서**로

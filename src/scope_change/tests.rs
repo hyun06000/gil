@@ -38,24 +38,49 @@ fn open_session(root: &Path) -> ProjectSession {
     ProjectSession::open(crate::RuleSet::builtin().unwrap(), root.join(".gil/state.yaml")).expect("기록이 load 검사 전체를 통과한다")
 }
 
-/// 지금 열린 Interview 를 Question → Interpretation → 승인된 Synthesis → Outcome 으로 걷고 `open_child` 방향으로 닫아 저장한다.
-fn close_interview(root: &Path) {
-    let mut session = open_session(root);
-    let project = session.project_mut();
-    for kind in [NodeKind::Question, NodeKind::Interpretation, NodeKind::Synthesis] {
-        project.open_action_step(kind, common::plan(kind)).unwrap_or_else(|err| panic!("{kind} 를 열지 못했다: {err}"));
-        let cycle = project.cycles().current();
-        let mut report = common::full_report(cycle.rules(), CycleKind::Interview, kind);
-        if kind == NodeKind::Synthesis {
-            report.insert(common::APPROVED, common::APPROVAL);
-            let basis: Vec<String> = cycle.steps().nodes().iter()
-                .filter(|node| matches!(node.kind, NodeKind::Question | NodeKind::Interpretation) && node.is_closed())
-                .map(|node| cycle.step_ref(node.id).to_string())
-                .collect();
-            report.insert(common::BASIS_REFS, basis.join("\n"));
-        }
-        project.close_action_step(report).unwrap_or_else(|err| panic!("{kind} 를 닫지 못했다: {err}"));
+/// 열린 Synthesis 까지 걸은 Interview — 그 Synthesis 를 **이 프로필의 계약대로** 승인해 닫는 데 필요한 것.
+struct AtSynthesis {
+    /// 닫힌 Question·Interpretation 의 참조(한 줄에 하나).
+    basis: String,
+    /// 승인 계획 구성: 이 Interview 가 승인받을 계획 초안.
+    #[cfg(feature = "approved-plan")]
+    draft: crate::approved_plan::Draft,
+}
+
+/// 지금 열린 Interview 를 Question → Interpretation 까지 닫고 Synthesis 를 **열어 둔다.** `note` 는 Interview 마다 다른 한 줄이다.
+#[cfg(not(feature = "approved-plan"))]
+fn to_synthesis(project: &mut Project, _note: &str) -> AtSynthesis {
+    for kind in [NodeKind::Question, NodeKind::Interpretation] {
+        common::walked(project, kind);
     }
+    common::opened(project, NodeKind::Synthesis);
+    AtSynthesis { basis: basis_of(project) }
+}
+
+/// 승인 계획 구성(순서 항목 계약): 맨 `approved: yes` 는 Core 가 거절한다. 실제 계약 그대로 계획 초안을 만든다.
+#[cfg(feature = "approved-plan")]
+fn to_synthesis(project: &mut Project, note: &str) -> AtSynthesis {
+    let mut draft = crate::approved_plan::tests::synthesis(project, &["A", "B", "C"]);
+    draft.scope.in_scope = format!("Synthetic fixture — {note}");
+    AtSynthesis { basis: basis_of(project), draft }
+}
+
+fn basis_of(project: &Project) -> String {
+    let cycle = project.cycles().current();
+    cycle.steps().nodes().iter()
+        .filter(|node| matches!(node.kind, NodeKind::Question | NodeKind::Interpretation) && node.is_closed())
+        .map(|node| cycle.step_ref(node.id).to_string())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// 열린 Synthesis 를 승인으로 닫고 Outcome 을 거쳐 Interview 를 `open_child` 방향으로 닫는다 — 일반 Interview 의 완결.
+#[cfg(not(feature = "approved-plan"))]
+fn finish_interview(project: &mut Project, at: AtSynthesis) {
+    let report = common::full_report(project.cycles().current().rules(), CycleKind::Interview, NodeKind::Synthesis)
+        .with(common::APPROVED, common::APPROVAL)
+        .with(common::BASIS_REFS, at.basis);
+    project.close_action_step(report).expect("일반 Synthesis 는 닫힌다");
     let synthesis = project.cycles().current().step_ref(project.cycles().current().steps().current().expect("Synthesis 에 서 있다"));
     let outcome = common::opened(project, NodeKind::Outcome);
     let report = common::full_report(project.cycles().current().rules(), CycleKind::Interview, NodeKind::Outcome)
@@ -65,6 +90,19 @@ fn close_interview(root: &Path) {
     let mut report = common::cycle_report(project.cycles().current(), "success", common::step_id(project, outcome));
     report.insert(common::ACTION, "open_child");
     project.close_cycle(report).expect("Interview 를 닫는다");
+}
+
+/// 승인 계획 구성: 제안 → Monitor 결정(시험이 흉내 낸 값) → 그 `close_report` 로 Synthesis, 이어서 Outcome 과 Interview 닫기.
+#[cfg(feature = "approved-plan")]
+fn finish_interview(project: &mut Project, at: AtSynthesis) {
+    crate::approved_plan::tests::approve_close(project, at.draft);
+}
+
+/// 지금 열린 Interview 를 끝까지 걸어 닫고 저장한다.
+fn close_interview(root: &Path, note: &str) {
+    let mut session = open_session(root);
+    let at = to_synthesis(session.project_mut(), note);
+    finish_interview(session.project_mut(), at);
     session.commit().expect("저장한다");
 }
 
@@ -86,7 +124,7 @@ fn started(label: &str) -> PathBuf {
     let (revision, digest) = (prepared["proposal"]["revision"].as_u64().unwrap() as u32, prepared["proposal"]["digest"].as_str().unwrap().to_owned());
     let begun = prep::decide(&root, revision, &digest, true).expect("Monitor 승인 흉내");
     assert_eq!(begun["phase"], "started", "{begun}");
-    close_interview(&root);
+    close_interview(&root, "review");
     root
 }
 
@@ -185,39 +223,20 @@ fn approval_applies_the_policy_then_a_failed_archive_waits_through_an_interview_
     assert_eq!(inside["tracking"]["last_confirmed_world"], "snapshot:A1");
     assert_eq!(inside["tracking"]["confirmed_policy"], "policy:P1");
 
-    // 대기 중에는 종료 Synthesis 를 승인으로 닫지 못한다(O-3). 일반 Interview 로는 완결된다.
+    // 대기 중에는 종료 Synthesis 를 승인으로 닫지 못한다(O-3). 같은 Interview 는 일반 Interview 로 완결된다.
     {
         let mut session = open_session(&root);
         let project = session.project_mut();
-        for kind in [NodeKind::Question, NodeKind::Interpretation] {
-            common::walked(project, kind);
-        }
-        project.open_action_step(NodeKind::Synthesis, common::plan(NodeKind::Synthesis)).unwrap();
-        let cycle = project.cycles().current();
-        let basis: Vec<String> = cycle.steps().nodes().iter()
-            .filter(|node| matches!(node.kind, NodeKind::Question | NodeKind::Interpretation))
-            .map(|node| cycle.step_ref(node.id).to_string()).collect();
-        let closing = common::full_report(cycle.rules(), CycleKind::Interview, NodeKind::Synthesis)
+        let at = to_synthesis(project, "while waiting");
+        let closing = common::full_report(project.cycles().current().rules(), CycleKind::Interview, NodeKind::Synthesis)
             .with(common::APPROVED, common::APPROVAL)
-            .with(common::BASIS_REFS, basis.join("\n"))
+            .with(common::BASIS_REFS, at.basis.clone())
             .with("chain_verdict", "success");
         let refused = project.close_action_step(closing).expect_err("보관 확정 전에는 종료 승인으로 나아가지 않는다");
         assert!(matches!(refused, crate::ActionError::Tracking(_)), "{refused}");
         assert!(project.cycles().current().step_now_open().is_some(), "거절된 Synthesis 는 열린 그대로다");
-        // 같은 Synthesis 를 일반 승인으로 닫는 것은 막지 않는다 — 시험이 직접 닫아 그 뒤를 걷는다.
-        let ordinary = common::full_report(project.cycles().current().rules(), CycleKind::Interview, NodeKind::Synthesis)
-            .with(common::APPROVED, common::APPROVAL)
-            .with(common::BASIS_REFS, basis.join("\n"));
-        project.close_action_step(ordinary).expect("일반 Synthesis 는 닫힌다");
-        let synthesis = project.cycles().current().step_ref(project.cycles().current().steps().current().unwrap());
-        let outcome = common::opened(project, NodeKind::Outcome);
-        let report = common::full_report(project.cycles().current().rules(), CycleKind::Interview, NodeKind::Outcome)
-            .with(common::SYNTHESIS_REF, synthesis.to_string())
-            .with(common::REASON, "승인된 Synthesis 를 얻었다");
-        project.close_action_step(report).unwrap();
-        let mut report = common::cycle_report(project.cycles().current(), "success", common::step_id(project, outcome));
-        report.insert(common::ACTION, "open_child");
-        project.close_cycle(report).expect("일반 Interview 는 대기 중에도 닫힌다");
+        finish_interview(project, at);
+        assert!(project.cycles().current().is_closed(), "일반 Interview 는 대기 중에도 닫힌다");
         assert_eq!(project.cycles().current().exit_snapshot().unwrap().to_string(), "snapshot:A1");
         session.commit().unwrap();
     }
@@ -389,20 +408,46 @@ fn a_reread_failure_at_the_time_of_writing_stores_no_baseline_and_never_reports_
 
 // ── 즉시 보관 중단(O-2) ────────────────────────────────────────────────────
 
-#[test]
-fn a_halt_stops_every_transition_keeps_the_state_and_only_an_explicit_release_removes_it_without_retrying() {
-    let root = started("halt");
+/// 화면이 보여 준 해제의 확인 근거 — 검토 읽기가 싣는 그 중단 건의 자리·이름·상태 지문.
+fn shown_halt(root: &Path) -> (String, String, String) {
+    let (view, _) = review(root).expect("검토 화면 읽기");
+    let halt = &view["halt"];
+    (
+        halt["at"].as_str().expect("표식의 자리").to_owned(),
+        halt["id"].as_str().expect("이 중단 건의 기록").to_owned(),
+        halt["state_digest"].as_str().expect("상태의 지문").to_owned(),
+    )
+}
+
+fn release_as(root: &Path, shown: &(String, String, String), cleanup: &str, state_confirmed: bool) -> Result<Value, Refusal> {
+    release(root, &Confirmation { at: &shown.0, halt_id: &shown.1, state_digest: &shown.2, cleanup, state_confirmed })
+}
+
+/// 보관은 실패해 대기 중인 프로젝트.
+fn waiting(label: &str) -> PathBuf {
+    let root = started(label);
     let (revision, digest) = proposed(&root, P2);
     SAVE_FAULT.with(|slot| *slot.borrow_mut() = Some(("baseline", false)));
-    decide(&root, revision, &digest, true).expect("승인 — 보관은 실패해 대기");
+    let decided = decide(&root, revision, &digest, true).expect("승인 — 보관은 실패해 대기");
+    assert_eq!(decided["facts"]["baseline"]["result"], "failed", "{decided}");
+    root
+}
+
+#[test]
+fn a_halt_stops_every_transition_keeps_the_state_and_only_an_explicit_release_removes_it_without_retrying() {
+    let root = waiting("halt");
     let attempts = failed_attempts(&root);
 
     let halted = halt(&root).expect("중단");
     assert_eq!(halted["tracking"]["archive_halt"], "event:M2", "보관 대기 중의 표식은 그 사건을 가리킨다: {halted}");
+    assert_eq!(halted["halt_request"], serde_json::json!({"received": true, "applied": true}));
+    assert_eq!(halted["current_state"]["reread"], true);
     let state = fs::read(root.join(".gil/state.yaml")).unwrap();
-    // 재전송은 표식을 옮기지도 무엇을 더하지도 않는다.
+    // 재전송은 표식을 옮기지도 무엇을 더하지도 않는다 — 같은 중단 건이다.
+    let shown = shown_halt(&root);
     assert_eq!(halt(&root).expect("같은 표식")["tracking"]["archive_halt"], "event:M2");
     assert_eq!(fs::read(root.join(".gil/state.yaml")).unwrap(), state);
+    assert_eq!(shown_halt(&root), shown, "재전송이 새 중단 건을 만들지 않는다");
 
     // 표식이 있는 동안: 재시도·승인·제안·사이클 열기(인터뷰 포함)가 모두 거절되고 기록은 그대로다. 조회는 된다.
     assert_eq!(retry(&root, "event:M2").expect_err("중단 중").code, "halted");
@@ -412,24 +457,68 @@ fn a_halt_stops_every_transition_keeps_the_state_and_only_an_explicit_release_re
         assert!(session.open_child_cycle(CycleKind::Interview).is_err(), "인터뷰도 멈춘다");
         assert!(session.open_child_cycle(CycleKind::Experiment).is_err());
         assert!(session.project().tracking_note().contains("event:M2"));
+        assert!(session.commit().is_err(), "중단 중에는 일반 저장 문도 닫혀 있다");
     }
     assert_eq!(now(&root)["tracking"]["archive_halt"], "event:M2");
     let (_, grants) = review(&root).expect("조회");
-    assert_eq!(grants, [(Purpose::Release, "event:M2".to_string())], "중단 중에는 해제만 줄 수 있다");
+    assert_eq!(grants, [(Purpose::Release, release_target(&shown.0, &shown.1, &shown.2))], "중단 중에는 그 건의 해제만 줄 수 있다");
     assert_eq!(fs::read(root.join(".gil/state.yaml")).unwrap(), state, "다시 열기·조회로 풀리지 않는다");
 
-    // 해제는 화면에 보인 자리와 정리 방법을 요구한다.
-    assert_eq!(release(&root, "cycle:C1", "continue").expect_err("다른 자리").code, "halt_place_differs");
-    assert_eq!(release(&root, "event:M2", "anything").expect_err("모르는 정리 방법").code, "cleanup_unknown");
-    assert_eq!(fs::read(root.join(".gil/state.yaml")).unwrap(), state);
-    let released = release(&root, "event:M2", "continue").expect("해제");
+    // 해제는 사용자의 두 명시 입력을 서버에서도 요구한다: 상태 확인과 정리 방법.
+    assert_eq!(release_as(&root, &shown, "continue", false).expect_err("상태 확인 없음").code, "state_not_confirmed");
+    assert_eq!(release_as(&root, &shown, "anything", true).expect_err("모르는 정리 방법").code, "cleanup_unknown");
+    // 자리만 맞는 요청, 다른 중단 건의 이름, 달라진 상태 지문 — 어느 것도 해제하지 못한다.
+    let other_place = ("cycle:C1".to_string(), shown.1.clone(), shown.2.clone());
+    assert_eq!(release_as(&root, &other_place, "continue", true).expect_err("다른 자리").code, "halt_place_differs");
+    let other_halt = (shown.0.clone(), "0".repeat(32), shown.2.clone());
+    assert_eq!(release_as(&root, &other_halt, "continue", true).expect_err("다른 중단 건").code, "halt_confirmation_stale");
+    let other_state = (shown.0.clone(), shown.1.clone(), "0".repeat(64));
+    assert_eq!(release_as(&root, &other_state, "continue", true).expect_err("다른 상태").code, "halt_confirmation_stale");
+    assert_eq!(fs::read(root.join(".gil/state.yaml")).unwrap(), state, "거절된 해제는 아무것도 바꾸지 않는다");
+
+    let released = release_as(&root, &shown, "continue", true).expect("해제");
     assert!(released["tracking"]["archive_halt"].is_null());
     // 해제는 재시도가 아니다: 여전히 대기이고 시도 수가 그대로다.
     assert_eq!(released["tracking"]["waiting"]["event"], "event:M2");
     assert_eq!(failed_attempts(&root), attempts);
     assert_eq!(policies(&root), 2);
+    // 같은 확인은 다시 쓰이지 않는다.
+    assert_eq!(release_as(&root, &shown, "continue", true).expect_err("이미 해제됐다").code, "not_halted");
     // 해제 뒤의 진행은 별도의 명시 행동이다.
     assert_eq!(retry(&root, "event:M2").expect("명시 재시도")["facts"]["baseline"]["result"], "archived");
+}
+
+#[test]
+fn a_new_halt_at_the_same_place_needs_its_own_confirmation_and_a_missing_record_is_never_a_confirmation() {
+    let root = waiting("halt-again");
+    halt(&root).expect("첫 중단");
+    let first = shown_halt(&root);
+    release_as(&root, &first, "continue", true).expect("첫 해제");
+
+    // 같은 자리에서 다시 중단했다 — 자리도 상태 파일의 바이트도 첫 중단 때와 같지만 다른 중단 건이다.
+    halt(&root).expect("둘째 중단");
+    let second = shown_halt(&root);
+    assert_eq!((&first.0, &first.2), (&second.0, &second.2), "자리와 상태 지문은 같다");
+    assert_ne!(first.1, second.1, "중단 건의 이름이 다르다");
+    assert_eq!(release_as(&root, &first, "continue", true).expect_err("첫 중단의 확인").code, "halt_confirmation_stale");
+
+    // 이 중단 건의 기록이 없는 경우(합성: 원장에서 중단·해제 사건을 지운다) — 해제도 그 capability 도 없다.
+    let ledger_path = root.join(".gil/scope/changes.json");
+    let kept = fs::read(&ledger_path).unwrap();
+    let mut without: Value = serde_json::from_slice(&kept).unwrap();
+    without["events"].as_array_mut().unwrap().retain(|event| !matches!(event["kind"].as_str(), Some("halt_requested" | "halt_released")));
+    fs::write(&ledger_path, serde_json::to_vec_pretty(&without).unwrap()).unwrap();
+    assert_eq!(release_as(&root, &second, "continue", true).expect_err("기록 없음").code, "halt_record_missing");
+    let (view, grants) = review(&root).expect("조회");
+    assert_eq!(view["halt"]["record_missing"], true, "{view}");
+    assert_eq!(grants, [(Purpose::Halt, "halt".to_string())], "기록을 다시 남기는 요청만 줄 수 있다");
+    assert!(open_session(&root).project().tracking().unwrap().halt().is_some(), "표식은 그대로다");
+    // 기록을 다시 남기면 새 이름의 건이 되고, 그 화면의 확인으로만 해제된다.
+    halt(&root).expect("기록 다시 남기기");
+    let recorded = shown_halt(&root);
+    assert_ne!(recorded.1, second.1);
+    assert_eq!(release_as(&root, &second, "continue", true).expect_err("옛 확인").code, "halt_confirmation_stale");
+    release_as(&root, &recorded, "propose_scope_change", true).expect("새 확인으로 해제");
 }
 
 #[test]
@@ -448,6 +537,124 @@ fn a_halt_inside_an_open_step_points_at_that_step_and_closes_nothing() {
     assert!(project.cycles().current().step_now_open().is_some(), "열린 단계를 닫지 않는다");
     let report = common::full_report(project.cycles().current().rules(), CycleKind::Interview, NodeKind::Question);
     assert!(matches!(project.close_action_step(report), Err(crate::ActionError::Tracking(_))), "닫기도 멈춘다");
+}
+
+fn object_files(root: &Path) -> usize {
+    fn count(dir: &Path) -> usize {
+        fs::read_dir(dir).map_or(0, |entries| {
+            entries.flatten().map(|entry| if entry.path().is_dir() { count(&entry.path()) } else { 1 }).sum()
+        })
+    }
+    count(&root.join(".gil/artifacts"))
+}
+
+/// 중단 중의 Verify 닫기는 **객체를 쓰기 전에** 거절된다 — 표식이 저장돼 있을 때도, 요청만 받고 아직 적용되지 않았을 때도.
+#[test]
+fn a_halted_verify_is_refused_before_any_object_is_archived() {
+    let root = started("halt-verify");
+    {
+        let mut session = open_session(&root);
+        session.open_child_cycle(CycleKind::Experiment).expect("대기가 없으면 실험이 열린다");
+        common::up_to_verify(session.project_mut());
+        session.commit().unwrap();
+    }
+    fs::write(root.join("src/new-evidence.txt"), "evidence\n").unwrap();
+    let verify_report = |session: &ProjectSession| {
+        common::full_report(session.project().cycles().current().rules(), CycleKind::Experiment, NodeKind::Verify)
+            .with("evidence_files", "src/new-evidence.txt")
+    };
+
+    // ① 요청은 받았고 아직 적용되지 않았다 — 이미 잠금을 쥐고 진행 중이던 명령이 보관 경계에 닿는 경우.
+    let mut session = open_session(&root);
+    let before = (object_files(&root), fs::read(root.join(".gil/state.yaml")).unwrap());
+    ledger::receive_halt_request(&root.join(".gil"), "synthetic-request").expect("수신 표식");
+    let report = verify_report(&session);
+    let refused = session.close_step(report).expect_err("받은 중단 요청이 보관을 멈춘다");
+    assert!(matches!(refused, crate::SessionError::Action(crate::ActionError::Tracking(_))), "{refused}");
+    assert!(session.commit().is_err(), "마지막 저장 문도 닫혀 있다");
+    assert_eq!((object_files(&root), fs::read(root.join(".gil/state.yaml")).unwrap()), before, "객체도 상태도 그대로다");
+    drop(session);
+
+    // ② 다음 쓰기 열기가 그 요청을 표식으로 적용한다. 표식은 열린 Verify 를 가리키고 그것을 닫지 않는다.
+    let mut session = open_session(&root);
+    let at = session.project().tracking().unwrap().halt().expect("적용된 표식").to_string();
+    assert!(at.starts_with("step:C2/"), "{at}");
+    assert!(!halt_requested(&root.join(".gil")), "적용된 요청의 수신 표식은 치워졌다");
+    let objects = object_files(&root);
+    let report = verify_report(&session);
+    let refused = session.close_step(report).expect_err("표식이 있는 동안 Verify 를 닫지 않는다");
+    assert!(matches!(refused, crate::SessionError::Action(crate::ActionError::Tracking(_))), "{refused}");
+    assert_eq!(object_files(&root), objects, "blob·manifest 를 하나도 쓰지 않았다");
+    assert!(session.project().cycles().current().step_now_open().is_some(), "Verify 는 열린 그대로다");
+    drop(session);
+
+    // ③ 해제는 그 Verify 를 대신 닫지도, 보관하지도 않는다 — 표식만 지운다. 그 뒤의 닫기는 별도의 명시 행동이다.
+    let shown = shown_halt(&root);
+    release_as(&root, &shown, "continue", true).expect("해제");
+    let session = open_session(&root);
+    assert!(session.project().cycles().current().step_now_open().is_some(), "Verify 는 여전히 열려 있다");
+    assert_eq!(object_files(&root), objects, "해제가 보관을 시작하지 않았다");
+}
+
+/// 다른 명령이 잠금을 쥐고 있는 동안의 중단 요청: 받았다고 답하고(Busy 로 끝내지 않는다), 적용은 잠금을 얻는 쪽이 한다.
+#[test]
+fn a_halt_requested_while_another_command_holds_the_project_is_received_then_applied_by_the_next_writer() {
+    let root = waiting("halt-busy");
+    let state = fs::read(root.join(".gil/state.yaml")).unwrap();
+    let holder = open_session(&root);
+    let asked = halt(&root).expect("요청은 받는다");
+    assert_eq!(asked["halt_request"]["received"], true, "{asked}");
+    assert_eq!(asked["halt_request"]["applied"], false);
+    assert!(asked.get("tracking").is_none(), "적용되지 않은 상태를 현재 상태처럼 싣지 않는다");
+    assert_eq!(fs::read(root.join(".gil/state.yaml")).unwrap(), state, "표식은 아직 저장되지 않았다");
+    // 잠금을 쥔 그 명령의 저장 문은 이미 닫혔다.
+    assert!(holder.commit().is_err());
+    drop(holder);
+    // 조회는 요청을 적용하지 않고 사실만 싣는다.
+    assert_eq!(now(&root)["halt_request_pending"], true);
+    assert_eq!(fs::read(root.join(".gil/state.yaml")).unwrap(), state);
+    // 다음 쓰기(여기서는 재시도 요청)가 열리며 표식을 적용하고, 그 재시도는 시작되지 않는다.
+    let attempts = failed_attempts_raw(&state);
+    assert_eq!(retry(&root, "event:M2").expect_err("중단됐다").code, "halted");
+    let seen = now(&root);
+    assert_eq!(seen["tracking"]["archive_halt"], "event:M2", "{seen}");
+    assert!(seen.get("halt_request_pending").is_none());
+    assert_eq!(failed_attempts(&root).len(), attempts, "새 시도가 없다");
+}
+
+fn failed_attempts_raw(state: &[u8]) -> usize {
+    String::from_utf8_lossy(state).matches("result: failed").count()
+}
+
+/// 승인을 적용하는 도중에 받은 요청: 저장 1 전이면 정책을 적용하지 않고, 저장 1 뒤면 끝난 승인을 되돌리지 않고 남은 걸음만 멈춘다.
+#[test]
+fn a_halt_received_during_an_approval_stops_at_the_next_write_boundary_without_undoing_a_finished_save() {
+    // 저장 1 뒤에 받은 요청.
+    let root = started("halt-mid-approval");
+    let (revision, digest) = proposed(&root, P2);
+    let gil = root.join(".gil");
+    AFTER_APPROVAL.with(|slot| *slot.borrow_mut() = Some(Box::new(move || {
+        ledger::receive_halt_request(&gil, "synthetic-request").expect("수신 표식");
+    })));
+    let decided = decide(&root, revision, &digest, true).expect("응답은 기록된다");
+    assert_eq!(decided["facts"]["policy_applied"], true, "끝난 승인 저장은 되돌리지 않는다: {decided}");
+    assert_eq!(decided["facts"]["policy_file"], "not_written_halt_requested");
+    assert_eq!(decided["facts"]["baseline"]["result"], "not_started");
+    assert_eq!(decided["facts"]["halt_applied"], true);
+    assert_eq!(decided["tracking"]["archive_halt"], "event:M2", "표식은 적용되는 때의 자리를 가리킨다");
+    assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), P1, "정책 파일을 쓰지 않았다");
+    assert!(failed_attempts(&root).is_empty(), "중단은 시도를 실패로 적지 않는다");
+    assert_eq!(policies(&root), 2);
+
+    // 승인 전에 받은 요청: 열기가 표식을 적용하고 응답도 정책도 기록되지 않는다.
+    let root = started("halt-before-approval");
+    let (revision, digest) = proposed(&root, P2);
+    ledger::receive_halt_request(&root.join(".gil"), "synthetic-request").expect("수신 표식");
+    assert_eq!(decide(&root, revision, &digest, true).expect_err("중단됐다").code, "halted");
+    assert_eq!(policies(&root), 1);
+    let seen = now(&root);
+    assert_eq!(seen["tracking"]["archive_halt"], "cycle:C1");
+    assert_eq!(seen["phase"], "awaiting_approval", "응답이 기록되지 않았다: {seen}");
 }
 
 // ── load 가 거절하는 기록 ──────────────────────────────────────────────────
@@ -491,4 +698,196 @@ fn load_refuses_a_forged_entry_a_missing_approval_and_an_experiment_opened_while
     assert!(matches!(load(), Err(crate::StoreError::Tracking(_))), "승인 응답 없는 정책 판");
     fs::write(&ledger, kept).unwrap();
     assert!(load().is_ok(), "되돌린 기록은 다시 읽힌다");
+}
+
+// ── O-3: 쓰기와 load 가 같은 뜻 ────────────────────────────────────────────
+
+/// 보관 대기와 **승인된 종료 Synthesis** 가 함께 있는 열린 Interview 는 쓰기가 거절하므로, 그런 기록은 load 도 받지 않는다.
+/// 일반 Interview 의 승인된 Synthesis 는 대기 중에도 그대로 읽힌다.
+#[test]
+fn load_refuses_an_open_interview_whose_closing_synthesis_was_approved_while_a_baseline_is_pending() {
+    let root = waiting("closing-load");
+    {
+        let mut session = open_session(&root);
+        session.open_child_cycle(CycleKind::Interview).unwrap();
+        let at = to_synthesis(session.project_mut(), "ordinary while waiting");
+        finish_interview(session.project_mut(), at);
+        session.commit().unwrap();
+        // 한 번 더: 이번에는 Synthesis 를 일반 승인으로 닫은 데까지만 저장한다(Outcome 전의 열린 Interview).
+        session.open_child_cycle(CycleKind::Interview).unwrap();
+        session.commit().unwrap();
+    }
+    let state = root.join(".gil/state.yaml");
+    let load = || crate::load(crate::RuleSet::builtin().unwrap(), &state);
+    assert!(load().is_ok(), "대기 중의 닫힌 일반 Interview 와 새로 연 Interview 는 정상 기록이다");
+
+    // 합성 기록: 닫힌 일반 Interview C2 를 「아직 열린 Interview, 그 승인된 Synthesis 에 chain_verdict」 로 바꿀 수는 없으므로(닫힘·보고서가
+    // 얽힌다), C2 의 저장된 Synthesis Report 에 chain_verdict 를 더하고 C2 가 지금 열린 사이클인 꼴은 따로 만든다 — C3 를 지우는 대신
+    // C3 에서 같은 일을 한다: C3 를 Synthesis 승인까지 걸어 저장한 뒤 그 Report 에 chain_verdict 를 더한다.
+    {
+        let mut session = open_session(&root);
+        let project = session.project_mut();
+        let at = to_synthesis(project, "third");
+        approve_synthesis_only(project, at);
+        session.commit().unwrap();
+    }
+    let good = fs::read_to_string(&state).unwrap();
+    assert!(load().is_ok(), "일반 승인된 Synthesis 가 있는 열린 Interview 는 대기 중에도 읽힌다");
+    fs::write(&state, with_chain_verdict_on_the_last_approved_synthesis(&good)).unwrap();
+    let refused = load().expect_err("보관 대기 중 승인된 종료 Synthesis 는 읽히지 않는다");
+    #[cfg(not(feature = "approved-plan"))]
+    assert!(matches!(refused, crate::StoreError::Tracking(_)), "{refused}");
+    let _ = refused;
+    fs::write(&state, &good).unwrap();
+    assert!(load().is_ok());
+}
+
+/// 열린 Synthesis 를 이 프로필의 계약대로 승인해 닫기만 한다(Outcome·Interview 닫기 없음).
+#[cfg(not(feature = "approved-plan"))]
+fn approve_synthesis_only(project: &mut Project, at: AtSynthesis) {
+    let report = common::full_report(project.cycles().current().rules(), CycleKind::Interview, NodeKind::Synthesis)
+        .with(common::APPROVED, common::APPROVAL)
+        .with(common::BASIS_REFS, at.basis);
+    project.close_action_step(report).expect("일반 Synthesis 는 닫힌다");
+}
+
+#[cfg(feature = "approved-plan")]
+fn approve_synthesis_only(project: &mut Project, at: AtSynthesis) {
+    let proposal = project.propose_plan(at.draft).expect("제안");
+    let decided = project
+        .decide_plan(proposal.revision, &proposal.digest, crate::approved_plan::Decision::Approve)
+        .expect("Monitor 결정(시험이 흉내 낸 값)");
+    project.close_action_step(decided.report().expect("close_report")).expect("승인된 Synthesis 를 닫는다");
+}
+
+/// 저장된 본문에서 **마지막** `approved: yes` 줄(지금 열린 Interview 의 Synthesis Report) 앞에 같은 들여쓰기로 `chain_verdict: success`
+/// 를 더한 합성 기록. Report 가 mapping 으로 눕든 본문 블록으로 눕든 같은 줄 꼴이다.
+fn with_chain_verdict_on_the_last_approved_synthesis(text: &str) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    let at = lines.iter().rposition(|line| line.trim_start().starts_with("approved: yes") || line.trim_start().starts_with("approved: 'yes'"))
+        .expect("저장된 승인 Synthesis Report 가 있다");
+    let indent: String = lines[at].chars().take_while(|c| c.is_whitespace()).collect();
+    let mut out: Vec<String> = lines.iter().map(|line| line.to_string()).collect();
+    out.insert(at, format!("{indent}chain_verdict: success"));
+    out.join("\n") + "\n"
+}
+
+// ── 승인된 제안과 저장된 사건의 대응 ───────────────────────────────────────
+
+/// 응답이 있는 승인이라도, 그 제안이 묶은 경계·발급기·비교 근거가 저장된 사건의 승인 칸과 다르면 load 가 거절한다. 재시도로 보관
+/// 경계가 승인 경계와 달라진 정상 기록은 그대로 읽힌다(전체 흐름 시험이 그 경우를 load 한다).
+#[test]
+fn load_refuses_an_approval_whose_bound_boundary_or_basis_differs_from_the_stored_event() {
+    let root = started("approval-binding");
+    let (revision, digest) = proposed(&root, P2);
+    assert_eq!(decide(&root, revision, &digest, true).unwrap()["facts"]["baseline"]["result"], "archived");
+    let state = root.join(".gil/state.yaml");
+    let ledger_path = root.join(".gil/scope/changes.json");
+    let load = || crate::load(crate::RuleSet::builtin().unwrap(), &state);
+    assert!(load().is_ok());
+    let (good_state, good_ledger) = (fs::read_to_string(&state).unwrap(), fs::read(&ledger_path).unwrap());
+
+    // 합성 기록: 제안의 한 칸을 바꾸고, 그 제안 digest·응답·정책 판의 proposal_digest 를 함께 일관되게 고친다. 원장과 정책 판은 서로
+    // 맞지만 저장된 사건의 승인 칸과는 맞지 않는다.
+    let forge = |change: &dyn Fn(&mut Proposal)| {
+        let mut found = ledger::read(&root.join(".gil")).unwrap().expect("원장");
+        let old = found.proposals[0].digest.clone();
+        change(&mut found.proposals[0]);
+        let new = digest_of(&found.proposals[0]);
+        found.proposals[0].digest = new.clone();
+        for response in &mut found.responses {
+            response.proposal_digest = new.clone();
+        }
+        for event in &mut found.events {
+            if let Event::Applied { proposal_digest, .. } = event {
+                *proposal_digest = new.clone();
+            }
+        }
+        fs::write(&ledger_path, serde_json::to_vec_pretty(&found).unwrap()).unwrap();
+        fs::write(&state, good_state.replace(&old, &new)).unwrap();
+        let refused = load().expect_err("사건과 대응하지 않는 승인");
+        assert!(matches!(refused, crate::StoreError::Tracking(_)), "{refused}");
+        fs::write(&ledger_path, &good_ledger).unwrap();
+        fs::write(&state, &good_state).unwrap();
+        refused.to_string()
+    };
+    assert!(forge(&|proposal| proposal.issuer += 1).contains("next_cycle_id"));
+    assert!(forge(&|proposal| proposal.boundary = "cycle:C9".into()).contains("after_cycle_ref"));
+    assert!(forge(&|proposal| proposal.world_before = "snapshot:A2".into()).contains("world_before_ref"));
+    assert!(forge(&|proposal| proposal.policy_before = "policy:P2".into()).contains("policy_before_ref"));
+    assert!(forge(&|proposal| proposal.confirmed_policy = "policy:P2".into()).contains("확정 정책"));
+    assert!(forge(&|proposal| proposal.chain = "chain:C2".into()).contains("chain_ref"));
+    assert!(load().is_ok(), "되돌린 기록은 다시 읽힌다");
+}
+
+// ── 시도의 사실과 현재 상태 ────────────────────────────────────────────────
+
+/// 시도가 기준점 확정을 확인한 뒤 마지막 다시 읽기만 실패한 경우: 시도의 사실은 싣되, 메모리의 옛 값을 현재 상태로 싣지 않는다.
+#[test]
+fn when_the_final_reread_fails_the_attempts_facts_are_reported_but_no_current_state_is_claimed() {
+    let root = started("final-reread");
+    let (revision, digest) = proposed(&root, P2);
+    FINAL_REREAD_FAULT.with(|slot| *slot.borrow_mut() = Some(()));
+    let decided = decide(&root, revision, &digest, true).expect("응답은 기록된다");
+    assert_eq!(decided["facts"]["policy_applied"], true, "{decided}");
+    assert_eq!(decided["facts"]["baseline"]["result"], "archived", "시도가 다시 읽어 확인한 사실이다");
+    assert_eq!(decided["facts"]["baseline"]["record_reread"], false);
+    assert_eq!(decided["current_state"]["reread"], false);
+    assert_eq!(decided["phase"], "unconfirmed");
+    assert!(decided["tracking"].is_null(), "확인하지 못한 값을 현재 상태로 싣지 않는다: {decided}");
+    assert!(decided["last_known_before_reread_failed"].is_object());
+    // 조회가 현재 상태를 말한다.
+    let seen = now(&root);
+    assert!(seen["tracking"]["waiting"].is_null(), "{seen}");
+    assert_eq!(seen["tracking"]["last_confirmed_world"], "snapshot:A2");
+}
+
+// ── 회귀: 확정 뒤의 종료 승인·Chain Report·후속 Chain ──────────────────────
+
+/// 기준점이 확정된 뒤에는 기존 종료 흐름이 그대로다: 종료 Synthesis 승인 → Outcome → `close_chain` → Chain Report → 다음 Chain.
+/// 다음 Chain 의 Entry 는 닫힌 Chain 의 Exit(= 종료 Interview 의 Entry = 기준점)이고, 그 기록이 load 를 통과한다.
+#[cfg(not(feature = "approved-plan"))]
+#[test]
+fn after_the_baseline_is_confirmed_the_closing_approval_the_chain_report_and_the_next_chain_work_as_before() {
+    let root = started("closing-after");
+    let (revision, digest) = proposed(&root, P2);
+    assert_eq!(decide(&root, revision, &digest, true).unwrap()["facts"]["baseline"]["result"], "archived");
+    let mut session = open_session(&root);
+    session.open_child_cycle(CycleKind::Interview).expect("종료 Interview");
+    assert_eq!(session.project().cycles().current().entry_snapshot().to_string(), "snapshot:A2", "Entry 는 기준점이다");
+    let project = session.project_mut();
+    let at = to_synthesis(project, "closing");
+    let closing = common::full_report(project.cycles().current().rules(), CycleKind::Interview, NodeKind::Synthesis)
+        .with(common::APPROVED, common::APPROVAL)
+        .with(common::BASIS_REFS, at.basis)
+        .with("chain_verdict", "success");
+    project.close_action_step(closing).expect("대기가 없으면 종료 Synthesis 승인은 막지 않는다");
+    let synthesis = project.cycles().current().step_ref(project.cycles().current().steps().current().unwrap());
+    let outcome = common::opened(project, NodeKind::Outcome);
+    let report = common::full_report(project.cycles().current().rules(), CycleKind::Interview, NodeKind::Outcome)
+        .with(common::SYNTHESIS_REF, synthesis.to_string());
+    project.close_action_step(report).expect("Outcome");
+    let report = common::cycle_report(project.cycles().current(), "success", common::step_id(project, outcome))
+        .with(common::ACTION, "close_chain");
+    project.close_cycle(report).expect("종료 Interview 를 닫는다");
+    session.commit().unwrap();
+    // 종료 경계에서는 새 승인을 저장하지 않는다(§6.6).
+    drop(session);
+    assert_eq!(propose(&s(&root), P1.into()).expect_err("종료 경계").code, "chain_boundary");
+    let mut session = open_session(&root);
+    let report = crate::Report::new()
+        .with("verdict", "success")
+        .with("closing_synthesis_ref", synthesis.to_string())
+        .with("handoff_summary", "합성 인계 — 시험 자료");
+    session.close_chain(report).expect("Chain Report");
+    session.commit().unwrap();
+    session.open_child_chain().expect("다음 Chain");
+    assert_eq!(session.project().current_chain().unwrap().entry_snapshot().to_string(), "snapshot:A2");
+    session.commit().unwrap();
+    drop(session);
+    // 후속 Chain 안에서는 확정 정책을 유도하지 않는다 — 적용 정책과 같다고 채우지 않는다. 범위 변경도 받지 않는다.
+    let seen = now(&root);
+    assert_eq!(seen["tracking"]["applied_policy"], "policy:P2", "{seen}");
+    assert!(seen["tracking"]["confirmed_policy"].is_null());
+    assert!(open_session(&root).project().tracking().unwrap().ledger().policies().len() == 2);
 }

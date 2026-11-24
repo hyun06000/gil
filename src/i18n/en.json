@@ -1202,5 +1202,15 @@
   "tracking.note_applied": "\nTracking scope\n  applied policy {applied} · the confirming policy of the last world is not derived here\n",
   "tracking.note_unread": "\nTracking scope\n  the tracking record could not be read: {why}\n",
   "tracking.note_waiting": "  {event}: baseline archive needed — the next Experiment is on hold. An Interview may be opened; the user retries the archive in the Monitor. Read gil_scope_status; never retry automatically.\n",
-  "tracking.note_halted": "  archive halt at {at}: every open, close and archive is refused until the user releases it in the Monitor. Wait; do not continue, retry or clean up by yourself.\n"
+  "tracking.note_halted": "  archive halt at {at}: every open, close and archive is refused until the user releases it in the Monitor. Wait; do not continue, retry or clean up by yourself.\n",
+  "tracking.halt_requested": "An archive halt was requested in the Monitor and is being applied. Nothing more is archived or saved by this command; a save that already finished is not undone. Read the status, tell the user and wait.",
+  "scope.halt_not_received": "The halt request could not be recorded.",
+  "scope.halt_received": "Halt request received. Another command holds the project right now: it stops at its next write boundary and the marker is applied then. Saves that already finished are not undone.",
+  "scope.next.halt_received": "The halt is received but not applied yet. Read the state again shortly; do not start anything.",
+  "scope.state_not_confirmed": "The release needs the user's explicit confirmation of the displayed state. Nothing was changed.",
+  "scope.halt_confirmation_stale": "This confirmation is not for the halt and state that are stored now (the screen was older, a new halt was made at the same place, or the state changed). Nothing was released; confirm again on a fresh screen.",
+  "scope.halt_record_missing": "This halt has no record to confirm against, so it cannot be released yet. Record the halt again in the Monitor, then confirm on that screen. Nothing was changed.",
+  "scope.state_unconfirmed": "The record could not be read back after this request, so the current state is not confirmed. What the attempt itself established is listed separately; nothing else is assumed.",
+  "scope.next.state_unconfirmed": "Read gil_scope_status again before doing anything. Do not repeat the request.",
+  "scope.halt_stopped_before_approval_save": "An archive halt was requested while this approval was being applied, so the new policy was not saved or applied. The approval response stays recorded; after the halt is released a new proposal must be approved."
 }

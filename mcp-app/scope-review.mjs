@@ -72,8 +72,19 @@ export function makeScopeReview({ app, scope, panel, document, changed = () => {
 
   function haltSection(k) {
     panel.append(text('h3', t('scope.halt_title')));
+    // A request that was received but could not be applied yet (another command holds the project).
+    if (value.halt_request_pending) { panel.append(text('p', t('scope.halt_pending'))); return; }
+    const h = value.halt;
+    if (k.archive_halt && (!h || !h.id)) {
+      // The marker exists but this halt has no record to confirm against: releasing is not offered.
+      // The only button re-records this halt; the release then needs a fresh screen.
+      panel.append(text('p', t('scope.halted_at', { at: k.archive_halt })), text('p', t('scope.halt_record_missing')));
+      panel.append(button(t('scope.halt_register'), (event) => send(event, 'halt', 'gil_scope_halt', {}, 'archive halt record'), !!tokens.halt));
+      return;
+    }
     if (k.archive_halt) {
       panel.append(text('p', t('scope.halted_at', { at: k.archive_halt })));
+      panel.append(text('p', t('scope.halt_identity', { id: String(h.id).slice(0, 12), state: String(h.state_digest).slice(0, 12) })));
       // Release needs two explicit inputs made on this screen: the state was read, and how to clean up.
       const confirm = document.createElement('input'); confirm.type = 'checkbox'; confirm.id = 'scope-release-confirm';
       const label = text('label', t('scope.release_confirm', { at: k.archive_halt })); label.htmlFor = confirm.id;
@@ -81,8 +92,10 @@ export function makeScopeReview({ app, scope, panel, document, changed = () => {
       const none = text('option', t('scope.cleanup.choose')); none.value = ''; select.append(none);
       for (const how of value.cleanups || []) { const o = text('option', t(`scope.cleanup.${how}`)); o.value = how; select.append(o); }
       const release = button(t('scope.release'), (event) => send(event, 'release', 'gil_scope_release',
-        { at: k.archive_halt, cleanup: select.value, state_confirmed: confirm.checked }, 'archive halt release',
-        () => confirm.checked && !!select.value && value?.tracking?.archive_halt === k.archive_halt), !!tokens.release);
+        { at: h.at, halt_id: h.id, state_digest: h.state_digest, cleanup: select.value, state_confirmed: confirm.checked }, 'archive halt release',
+        // Sent only for the halt and the state this screen is showing right now, with both explicit inputs made.
+        () => confirm.checked && !!select.value && value?.halt?.id === h.id && value?.halt?.state_digest === h.state_digest
+          && value?.tracking?.archive_halt === h.at), !!tokens.release);
       panel.append(confirm, label, select, release, text('p', t('scope.release_note')));
     } else {
       const halt = button(t('scope.halt'), (event) => send(event, 'halt', 'gil_scope_halt', {}, 'archive halt request'), !!tokens.halt);
@@ -117,6 +130,8 @@ export function makeScopeReview({ app, scope, panel, document, changed = () => {
     if (value?.next) panel.append(text('p', value.next));
     if (value?.application_held) panel.append(text('p', t('scope.held', { code: value.application_held.code, said: value.application_held.said })));
     if (value?.facts) panel.append(text('pre', JSON.stringify(value.facts, null, 2)));
+    // After a final re-read failed the server sends no current state; what it last knew is shown as such.
+    if (value?.current_state?.reread === false) panel.append(text('p', t('scope.state_unconfirmed')));
     const k = value?.tracking;
     if (k) {
       valuesSection(k);

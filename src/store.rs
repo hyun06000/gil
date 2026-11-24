@@ -412,7 +412,9 @@ pub(crate) fn load_text(rules: RuleSet, text: &str, path: &Path) -> Result<Proje
             // P1 은 시작 준비 기록의, P2 이후는 범위 변경 제안 기록의 정확히 하나의 Monitor 승인 응답에 묶여 있다(§5.1).
             let start = tracking.ledger().policies().first().expect("이 모양의 원장에는 P1 이 있다");
             crate::start_prep::verify_started_approval(gil, start).map_err(StoreError::Tracking)?;
-            crate::scope_change::verify_approvals(gil, tracking).map_err(StoreError::Tracking)?;
+            let standing = tracking.standing(project.chains(), project.artifacts())
+                .map_err(|e| StoreError::Tracking(e.to_string()))?;
+            crate::scope_change::verify_approvals(gil, tracking, &standing).map_err(StoreError::Tracking)?;
         }
     }
     #[cfg(all(feature = "tracking-policy", not(unix)))]
