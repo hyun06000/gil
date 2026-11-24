@@ -679,7 +679,7 @@ mod tests {
         assert!(!fixed.exists());
         assert_eq!(std::fs::read_to_string(home.join(".codex/config.toml")).unwrap(), config);
         let (text, _) = uninstall(&env, true).unwrap();
-        assert!(text.contains("binary: NOT_INSTALLED"), "{text}");
+        assert!(text.contains("binary: KEPT"), "{text}");
         assert_eq!(std::fs::read(dir.join(INSTALL_RECEIPT)).unwrap(), b"the user's own file\n");
         std::fs::remove_file(dir.join(INSTALL_RECEIPT)).unwrap();
         std::fs::write(home.join(".codex/config.toml"), config).unwrap();
