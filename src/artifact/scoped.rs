@@ -42,7 +42,11 @@ impl ScopedWorld {
 
 /// 승인 정책으로 두 번 관측한다. 아무것도 쓰지 않는다.
 pub(crate) fn observe_scoped(root: &Path, policy: &ApprovedPolicy) -> Result<ScopedWorld, ObserveError> {
+    #[cfg(test)]
+    probe::observe_called();
     let first = scan(root, policy, None)?;
+    #[cfg(test)]
+    probe::between_scans();
     let again = scan(root, policy, None)?;
     if first != again {
         return Err(ObserveError::ChangedDuringObservation);
@@ -55,12 +59,61 @@ pub(crate) fn observe_scoped(root: &Path, policy: &ApprovedPolicy) -> Result<Sco
 /// 두 번째 관측이 다르면 첫 훑기의 blob 은 미참조로 남는다 — 어떤 Snapshot 도 가리키지 않으므로
 /// 성공으로 보지 않는다(Artifact Model §3.5, 공유 계약 §5.3 「객체 일부가 남았다는 사실도 성공이 아니다」).
 pub(crate) fn capture_scoped(root: &Path, policy: &ApprovedPolicy, store: &ObjectStore) -> Result<ScopedWorld, ObserveError> {
+    #[cfg(test)]
+    probe::capture_called();
     let first = scan(root, policy, Some(store))?;
+    #[cfg(test)]
+    probe::between_scans();
     let again = scan(root, policy, None)?;
     if first != again {
         return Err(ObserveError::ChangedDuringObservation);
     }
     Ok(first)
+}
+
+/// 시험만 쓰는 틈 — **시험에서만 컴파일된다.** 관측·보관이 실제로 몇 번 불렸는지 세고, 두 훑기 사이에 한 번 끼어든다.
+///
+/// 「새로 관측했다」는 결과만 봐서는 잴 수 없고(세계가 조용하면 앞선 결과와 같다), 두 훑기 사이의 변화는 잠을 재워 운에 맡기면 시험이
+/// 깜빡인다. thread 마다 따로 세므로 나란히 도는 다른 시험의 호출이 섞이지 않는다. 실제 실행의 동작은 바꾸지 않는다.
+#[cfg(test)]
+pub(crate) mod probe {
+    use std::cell::{Cell, RefCell};
+
+    thread_local! {
+        static OBSERVES: Cell<usize> = const { Cell::new(0) };
+        static CAPTURES: Cell<usize> = const { Cell::new(0) };
+        static BETWEEN: RefCell<Option<Box<dyn FnOnce()>>> = const { RefCell::new(None) };
+    }
+
+    pub(super) fn observe_called() {
+        OBSERVES.with(|count| count.set(count.get() + 1));
+    }
+
+    pub(super) fn capture_called() {
+        CAPTURES.with(|count| count.set(count.get() + 1));
+    }
+
+    pub(super) fn between_scans() {
+        let hook = BETWEEN.with(|slot| slot.borrow_mut().take());
+        if let Some(hook) = hook {
+            hook();
+        }
+    }
+
+    /// 이 thread 에서 `observe_scoped` 가 불린 횟수.
+    pub(crate) fn observes() -> usize {
+        OBSERVES.with(Cell::get)
+    }
+
+    /// 이 thread 에서 `capture_scoped` 가 불린 횟수.
+    pub(crate) fn captures() -> usize {
+        CAPTURES.with(Cell::get)
+    }
+
+    /// 이 thread 의 **다음** 관측·보관 한 번에서, 두 훑기 사이에 `hook` 을 부른다. 한 번 쓰이면 사라진다.
+    pub(crate) fn between_next_scans(hook: impl FnOnce() + 'static) {
+        BETWEEN.with(|slot| *slot.borrow_mut() = Some(Box::new(hook)));
+    }
 }
 
 /// 정책 평가만 — 파일 내용을 읽지 않는다. 시작 준비의 추적 목록 제시·재확인이 쓴다.

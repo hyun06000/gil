@@ -176,6 +176,9 @@ jobs:
       - name: "[tracking-policy] first start over the real Unix stdio process, exactly 4 (synthetic projects and records)"
         run: |
           node tools/ci/tracking-start/expect-test-groups.mjs '*=4' -- cargo test --locked -p gil --features tracking-policy --test tracking_start
+      - name: "[tracking-policy] baseline_retry 37 unit tests, focused run, exact by name prefix"
+        run: |
+          node tools/ci/tracking-start/expect-test-groups.mjs 'artifact::tracking_record::baseline_retry_tests::=37' -- cargo test --locked -p gil --features tracking-policy --lib -- artifact::tracking_record::baseline_retry_tests:: --test-threads=1
       - name: "[tracking-policy] compile all Core targets (compile evidence only, not execution)"
         run: cargo build --locked -p gil --all-targets --features tracking-policy
 
@@ -185,5 +188,8 @@ jobs:
       - name: "[tracking-policy,approved-plan,visual-authoring,product-safety] first start over the real Unix stdio process, exactly 4 (synthetic projects and records)"
         run: |
           node tools/ci/tracking-start/expect-test-groups.mjs '*=4' -- cargo test --locked -p gil --features tracking-policy,approved-plan,visual-authoring,product-safety --test tracking_start
+      - name: "[tracking-policy,approved-plan,visual-authoring,product-safety] baseline_retry 37 unit tests, focused run, exact by name prefix"
+        run: |
+          node tools/ci/tracking-start/expect-test-groups.mjs 'artifact::tracking_record::baseline_retry_tests::=37' -- cargo test --locked -p gil --features tracking-policy,approved-plan,visual-authoring,product-safety --lib -- artifact::tracking_record::baseline_retry_tests:: --test-threads=1
       - name: "[tracking-policy,approved-plan,visual-authoring,product-safety] compile all Core targets (compile evidence only, not execution)"
         run: cargo build --locked -p gil --all-targets --features tracking-policy,approved-plan,visual-authoring,product-safety
