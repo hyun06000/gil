@@ -807,6 +807,8 @@ thread_local! {
     pub(crate) static HALT_BEFORE_STEP: std::cell::RefCell<Option<&'static str>> = const { std::cell::RefCell::new(None) };
     /// 저장 경계의 이 저장(`baseline`·`failure`)이 끝난 직후 한 번 부른다 — 끝난 저장 바로 뒤에 수신된 중단 요청.
     pub(crate) static AFTER_ADAPTER_SAVE: std::cell::RefCell<Option<(&'static str, Box<dyn FnOnce()>)>> = const { std::cell::RefCell::new(None) };
+    /// 정책 파일 동기화의 이 저장(`sync_start`·`sync_done`) 뒤의 다시 읽기 한 번을 실패로 만든다 — 그 걸음의 결과 불명.
+    pub(crate) static SYNC_REREAD_FAULT: std::cell::RefCell<Option<&'static str>> = const { std::cell::RefCell::new(None) };
     /// 다시 읽기 한 번을 실패로 만든다 — 결과 불명.
     pub(crate) static REREAD_FAULT: std::cell::RefCell<Option<()>> = const { std::cell::RefCell::new(None) };
 }
@@ -839,34 +841,119 @@ fn write_policy(root: &Path, bytes: &[u8], expected: Option<&ContentDigest>) -> 
     })
 }
 
-/// 정책 파일 동기화의 결과 — 한 낱말(`word`)과, 세 걸음 각각이 **끝났는지·시작하지 않았는지·알 수 없는지**.
+/// 기준(`sync_base`)을 저장하는 한 걸음의 사실. **저장 호출이 돌려준 값**과 **같은 잠금 안에서 저장된 상태를 다시 읽어 확인한 것**은
+/// 다른 사실이다 — 저장한 뒤 오류로 보고된 저장과 저장하지 못한 저장을 반환값만으로는 가릴 수 없다.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BaseStep {
+    /// 이 걸음을 시작하지 않았다(저장을 부르지 않았다).
+    NotStarted,
+    /// 다시 읽은 기록의 기준이 이 걸음이 적으려던 값이다. `returned_ok` 는 저장 호출의 반환이다.
+    Saved { returned_ok: bool },
+    /// 다시 읽은 기록의 기준이 이 걸음이 적으려던 값이 아니다 — 저장되지 않았다.
+    NotSaved { returned_ok: bool },
+    /// 다시 읽지 못했다. 저장됐는지 알 수 없다.
+    Unknown { returned_ok: bool },
+}
+
+impl BaseStep {
+    fn word(self) -> &'static str {
+        match self {
+            BaseStep::NotStarted => "not_started",
+            BaseStep::Saved { .. } => "saved",
+            BaseStep::NotSaved { .. } => "not_saved",
+            BaseStep::Unknown { .. } => "unknown",
+        }
+    }
+
+    /// 저장 호출의 반환 — 부르지 않았으면 `null`. 저장 상태의 확인이 아니다.
+    fn returned(self) -> Value {
+        match self {
+            BaseStep::NotStarted => Value::Null,
+            BaseStep::Saved { returned_ok } | BaseStep::NotSaved { returned_ok } | BaseStep::Unknown { returned_ok } => {
+                json!(if returned_ok { "ok" } else { "error" })
+            }
+        }
+    }
+}
+
+fn base_word(base: &sp::SyncBase) -> &'static str {
+    match base {
+        sp::SyncBase::Absent => "absent",
+        sp::SyncBase::Present(_) => "present",
+        sp::SyncBase::Unconfirmed => "unconfirmed",
+    }
+}
+
+/// 정책 파일 동기화의 결과 — 한 낱말(`word`)과, 세 걸음 각각의 사실, 그리고 **마지막으로 확인된** 저장 기준.
 struct FileSync {
     word: &'static str,
-    /// 1. 쓰기 시작 기록(기준 `unconfirmed`)의 저장이 끝났는가.
-    start_saved: bool,
-    /// 2. 파일 교체: `Some(true)` 교체됨(다시 읽어 확인) · `Some(false)` 교체하지 않음 · `None` 알 수 없음.
-    file_replaced: Option<bool>,
-    /// 3. 쓰기 뒤 기준 저장이 끝났는가.
-    base_saved: bool,
+    /// 1. 쓰기 시작 기록(기준 `unconfirmed`)의 저장.
+    start: BaseStep,
+    /// 2. 파일 교체: `not_started` · `replaced`(다시 읽어 확인) · `not_replaced` · `unknown`.
+    file: &'static str,
+    /// 3. 쓰기 뒤 기준 저장.
+    base: BaseStep,
+    /// 이 동기화의 마지막 쓰기 뒤에 **다시 읽어 확인한** 저장 기준. 다시 읽지 못했으면 `None` — 추정으로 채우지 않는다.
+    stored_base: Option<&'static str>,
     /// 수신된 중단 요청 때문에 **시작하지 않은** 걸음 — `start` · `file_write` · `base_save`.
     halted_before: Option<&'static str>,
 }
 
 impl FileSync {
-    fn early(word: &'static str) -> Self {
-        FileSync { word, start_saved: false, file_replaced: Some(false), base_saved: false, halted_before: None }
+    /// 어느 걸음도 시작하지 않은 결과. 기준은 이 명령이 잠금 안에서 읽은 그대로다(이 동기화가 쓰지 않았다).
+    fn untouched(word: &'static str, session: &ProjectSession) -> Self {
+        let stored_base = session.project().tracking().map(|tracking| base_word(tracking.sync_base()));
+        FileSync { word, start: BaseStep::NotStarted, file: "not_started", base: BaseStep::NotStarted, stored_base, halted_before: None }
     }
 
-    /// 결과에 싣는 꼴. `base_left_unconfirmed` 는 이 동기화가 기준을 `unconfirmed` 로 남겼다는 뜻이다 — 그 뒤의 판정은 §5.2 대로
-    /// 디스크를 다시 읽어 한다(같으면 동기화됨, 다르면 자동으로 쓰지 않는다).
+    /// 결과에 싣는 꼴. 걸음마다 「시작하지 않음 · 확인된 저장 · 확인된 미저장 · 결과 불명」을 가르고, 저장 호출의 반환은 따로 싣는다.
+    /// `stored_base` 와 `base_left_unconfirmed` 는 다시 읽어 확인한 값에서만 나온다 — 확인하지 못했으면 둘 다 `null` 이다. 기준이
+    /// `unconfirmed` 로 남은 뒤의 판정은 §5.2 대로 디스크를 다시 읽어 한다(같으면 동기화됨, 다르면 자동으로 쓰지 않는다).
     fn steps(&self) -> Value {
         json!({
-            "start_saved": self.start_saved,
-            "file_replaced": self.file_replaced,
-            "base_saved": self.base_saved,
-            "base_left_unconfirmed": self.start_saved && !self.base_saved,
+            "start": self.start.word(),
+            "start_save_returned": self.start.returned(),
+            "file": self.file,
+            "base": self.base.word(),
+            "base_save_returned": self.base.returned(),
+            "stored_base": self.stored_base,
+            "base_left_unconfirmed": self.stored_base.map(|base| base == "unconfirmed"),
             "halted_before": self.halted_before,
         })
+    }
+}
+
+/// 기준을 `value` 로 저장하는 한 걸음 — 저장을 부른 뒤 **같은 잠금 안에서 저장된 상태를 다시 읽어** 판정한다. 다시 읽은 값이 세션의
+/// 값이 된다(저장 오류 뒤 앞선 메모리 사본을 쓰지 않는다). 다시 읽지 못하면 세션의 값을 바꾸지 않고 결과 불명으로 돌려준다.
+/// 돌려주는 둘째 값은 다시 읽어 확인한 저장 기준이다.
+fn store_base(session: &mut ProjectSession, value: sp::SyncBase, step: &'static str) -> (BaseStep, Option<&'static str>) {
+    let returned_ok = match session.project().with_sync_base(value.clone()) {
+        Some(next) => save_step(session, &next, step).is_ok(),
+        None => false,
+    };
+    let reread = session.reload();
+    #[cfg(test)]
+    let reread = match SYNC_REREAD_FAULT.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        match *slot {
+            Some(at) if at == step => slot.take(),
+            _ => None,
+        }
+    }) {
+        Some(_) => Err(crate::SessionError::Observe { said: "시험이 넣은 다시 읽기 실패".into() }),
+        None => reread,
+    };
+    match reread {
+        Ok(project) => {
+            let stored = project.tracking().map(|tracking| tracking.sync_base().clone());
+            *session.project_mut() = project;
+            let word = stored.as_ref().map(base_word);
+            match stored == Some(value) {
+                true => (BaseStep::Saved { returned_ok }, word),
+                false => (BaseStep::NotSaved { returned_ok }, word),
+            }
+        }
+        Err(_) => (BaseStep::Unknown { returned_ok }, None),
     }
 }
 
@@ -900,40 +987,36 @@ fn sync_policy_file(
     #[cfg(test)]
     synthetic_halt_before("sync_start", gil);
     if halt_requested(gil) {
-        return FileSync { halted_before: Some("start"), ..FileSync::early("not_written_halt_requested") };
+        return FileSync { halted_before: Some("start"), ..FileSync::untouched("not_written_halt_requested", session) };
     }
     let expected = match (disk, base) {
-        (sp::DiskReading::Present(found), _) if found == rules => return FileSync::early("already_matches"),
-        (sp::DiskReading::Unreadable { .. }, _) => return FileSync::early("not_written_unreadable"),
-        (_, sp::SyncBase::Unconfirmed) => return FileSync::early("not_written_base_unconfirmed"),
+        (sp::DiskReading::Present(found), _) if found == rules => return FileSync::untouched("already_matches", session),
+        (sp::DiskReading::Unreadable { .. }, _) => return FileSync::untouched("not_written_unreadable", session),
+        (_, sp::SyncBase::Unconfirmed) => return FileSync::untouched("not_written_base_unconfirmed", session),
         (sp::DiskReading::Absent, sp::SyncBase::Absent) => None,
         (sp::DiskReading::Present(found), sp::SyncBase::Present(kept)) if found == kept => Some(found.clone()),
-        _ => return FileSync::early("not_written"),
-    };
-    let store = |session: &mut ProjectSession, value: sp::SyncBase, step: &'static str| -> bool {
-        let Some(next) = session.project().with_sync_base(value) else { return false };
-        match save_step(session, &next, step) {
-            Ok(()) => {
-                *session.project_mut() = next;
-                true
-            }
-            Err(_) => false,
-        }
+        _ => return FileSync::untouched("not_written", session),
     };
     // 0. 잠금 안에서 디스크가 확인된 기준과 같음을 다시 본다. 아니면 쓰지 않는다.
     if reading(&disk_now(root)) != *disk {
-        return FileSync::early("not_written_disk_changed");
+        return FileSync::untouched("not_written_disk_changed", session);
     }
-    // 1. 쓰기 시작을 먼저 남긴다. 이 저장이 실패하면 파일을 쓰지 않는다.
-    if !store(session, sp::SyncBase::Unconfirmed, "sync_start") {
-        return FileSync::early("not_written_start_not_saved");
+    // 1. 쓰기 시작을 먼저 남긴다. **다시 읽어 확인된** 시작 기록이 있을 때만 파일을 쓴다.
+    let (start, stored_base) = store_base(session, sp::SyncBase::Unconfirmed, "sync_start");
+    let stopped = |word: &'static str, halted_before: Option<&'static str>| FileSync {
+        word, start, file: "not_started", base: BaseStep::NotStarted, stored_base, halted_before };
+    match start {
+        BaseStep::Saved { .. } => {}
+        // 저장되지 않았음을 확인했다 — 기준은 앞의 확인된 값 그대로다.
+        BaseStep::NotSaved { .. } => return stopped("not_written_start_not_saved", None),
+        // 저장됐는지 알 수 없다 — 파일을 쓰지 않는다. 기준이 무엇으로 남았는지도 여기서 말하지 않는다.
+        _ => return stopped("not_written_start_unknown", None),
     }
-    // 시작 기록은 끝났다. 파일 교체를 시작하기 전에 수신된 요청을 본다 — 있으면 쓰지 않고, 기준은 `unconfirmed` 그대로다.
+    // 시작 기록은 확인됐다. 파일 교체를 시작하기 전에 수신된 요청을 본다 — 있으면 쓰지 않고, 기준은 `unconfirmed` 그대로다.
     #[cfg(test)]
     synthetic_halt_before("sync_file_write", gil);
     if halt_requested(gil) {
-        return FileSync { word: "not_written_halted_base_unconfirmed", start_saved: true, file_replaced: Some(false), base_saved: false,
-            halted_before: Some("file_write") };
+        return stopped("not_written_halted_base_unconfirmed", Some("file_write"));
     }
     // 2. 파일 쓰기 — 임시 파일 → fsync → 교체 직전 재관측 → 교체 → 다시 읽기. 이 한 번의 교체는 중간에 끊지 않는다.
     let written = write_policy(root, bytes, expected.as_ref());
@@ -941,31 +1024,39 @@ fn sync_policy_file(
     #[cfg(test)]
     synthetic_halt_before("sync_base_save", gil);
     let halted = halt_requested(gil);
+    // 3. 의 결과를 낱말로 — 확인된 저장 / 확인된 미저장(기준은 `unconfirmed` 로 확인됨) / 그 밖(결과 불명).
+    let settle = |file: &'static str, step: BaseStep, stored: Option<&'static str>, saved: &'static str, unconfirmed: &'static str,
+                  unknown: &'static str| FileSync {
+        word: match (step, stored) {
+            (BaseStep::Saved { .. }, _) => saved,
+            (BaseStep::NotSaved { .. }, Some("unconfirmed")) => unconfirmed,
+            _ => unknown,
+        },
+        start, file, base: step, stored_base: stored, halted_before: None,
+    };
     match written {
         sp::PolicyWrite::Replaced { reread: sp::DiskReading::Present(found) } if &found == rules => {
             if halted {
-                // 디스크 = 적용 원문(다시 읽어 확인), 기준 `unconfirmed` — §5.2 의 재조회로 동기화됨으로 읽힌다.
-                return FileSync { word: "written_halted_base_unconfirmed", start_saved: true, file_replaced: Some(true), base_saved: false,
-                    halted_before: Some("base_save") };
+                // 디스크 = 적용 원문(다시 읽어 확인), 기준은 1. 에서 확인된 `unconfirmed` — §5.2 의 재조회로 동기화됨으로 읽힌다.
+                return FileSync { word: "written_halted_base_unconfirmed", start, file: "replaced", base: BaseStep::NotStarted,
+                    stored_base, halted_before: Some("base_save") };
             }
-            // 3. 쓰기 성공 뒤에 기준을 옮긴다. 실패하면 디스크 = 적용 원문, 기준 unconfirmed — 동기화됨으로 읽힌다.
-            let saved = store(session, sp::SyncBase::Present(rules.clone()), "sync_done");
-            FileSync { word: if saved { "written" } else { "written_base_unconfirmed" }, start_saved: true, file_replaced: Some(true),
-                base_saved: saved, halted_before: None }
+            // 쓰기 성공 뒤에 기준을 옮긴다. 저장되지 않았으면 디스크 = 적용 원문, 기준 unconfirmed — 동기화됨으로 읽힌다.
+            let (step, stored) = store_base(session, sp::SyncBase::Present(rules.clone()), "sync_done");
+            settle("replaced", step, stored, "written", "written_base_unconfirmed", "written_base_unknown")
         }
         // 교체 전의 확인된 장애 — 같은 잠금 안에서 다시 읽은 디스크가 이전 기준과 같을 때만 그 기준으로 되돌린다.
         sp::PolicyWrite::NotReplaced { .. } if reading(&disk_now(root)) == *disk => {
             if halted {
                 // 기준을 되돌리는 저장도 「다음 쓰기」다 — 시작하지 않는다. 기준은 `unconfirmed` 로 남는다.
-                return FileSync { word: "update_failed_halted_base_unconfirmed", start_saved: true, file_replaced: Some(false),
-                    base_saved: false, halted_before: Some("base_save") };
+                return FileSync { word: "update_failed_halted_base_unconfirmed", start, file: "not_replaced", base: BaseStep::NotStarted,
+                    stored_base, halted_before: Some("base_save") };
             }
-            let saved = store(session, base.clone(), "sync_done");
-            FileSync { word: if saved { "update_failed" } else { "update_failed_base_unconfirmed" }, start_saved: true,
-                file_replaced: Some(false), base_saved: saved, halted_before: None }
+            let (step, stored) = store_base(session, base.clone(), "sync_done");
+            settle("not_replaced", step, stored, "update_failed", "update_failed_base_unconfirmed", "update_failed_base_unknown")
         }
         // 교체 여부를 알 수 없거나 그사이 디스크가 달라졌다 — 되돌리지 않는다. 자동으로 다시 쓰지 않는다.
-        _ => FileSync { word: "unsettled", start_saved: true, file_replaced: None, base_saved: false, halted_before: None },
+        _ => FileSync { word: "unsettled", start, file: "unknown", base: BaseStep::NotStarted, stored_base, halted_before: None },
     }
 }
 

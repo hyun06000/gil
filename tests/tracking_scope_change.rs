@@ -521,8 +521,8 @@ fn the_same_server_receives_a_halt_while_its_approval_is_in_flight_and_the_archi
     assert_eq!(sc(&second)["facts"]["approval_response"], "recorded");
     assert_eq!(sc(&second)["facts"]["policy_applied"], true, "끝난 승인 저장은 그대로다: {second}");
     assert_eq!(sc(&second)["facts"]["policy_file"], "written", "중단 요청 전에 끝난 파일 동기화는 그대로다");
-    assert_eq!(sc(&second)["facts"]["policy_file_steps"], json!({"start_saved": true, "file_replaced": true, "base_saved": true,
-        "base_left_unconfirmed": false, "halted_before": null}));
+    assert_eq!(sc(&second)["facts"]["policy_file_steps"], json!({"start": "saved", "start_save_returned": "ok", "file": "replaced",
+        "base": "saved", "base_save_returned": "ok", "stored_base": "present", "base_left_unconfirmed": false, "halted_before": null}));
     assert_eq!(sc(&second)["tracking"]["archive_halt"], "event:M2", "{second}");
     assert_eq!(sc(&second)["facts"]["baseline"]["result"], "halted", "{second}");
     assert_eq!(sc(&second)["facts"]["baseline"]["before"], "capture");

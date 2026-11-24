@@ -88,7 +88,8 @@ try {
           // Held back: the approval stays "running" until the check lets it finish.
           window.pendingDecision = () => post({ id: p.id, result: { content: [], structuredContent: { phase: 'applied', said: '승인을 저장했다.', policy_file: 'present',
             tracking: halted, facts: { approval_response: 'recorded', policy_applied: true, policy_file: 'not_written_halt_requested',
-              policy_file_steps: { start_saved: false, file_replaced: false, base_saved: false, base_left_unconfirmed: false, halted_before: 'start' },
+              policy_file_steps: { start: 'not_started', start_save_returned: null, file: 'not_started', base: 'not_started', base_save_returned: null,
+                stored_base: 'present', base_left_unconfirmed: false, halted_before: 'start' },
               baseline: { result: 'halted', before: 'observe', failure_recorded: false, halt_request: { received: true, applied: true } } }, current_state: { reread: true }, halt: HALT } } });
         } else if (name === 'gil_scope_halt') {
           // Received while the other command holds the project: not applied yet.

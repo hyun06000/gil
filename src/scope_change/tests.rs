@@ -1014,16 +1014,19 @@ fn a_halt_received_between_archive_steps_starts_no_further_step_and_records_no_f
 /// 않으며, 적용 정책은 P2 그대로다. (함수 수준 주입 — 걸음 직전에 수신 표식 파일을 놓는다.)
 #[test]
 fn a_halt_received_between_policy_file_sync_steps_starts_no_further_write_and_restores_nothing() {
-    let steps = |start: bool, file: bool, left: bool, before: &str| {
-        serde_json::json!({"start_saved": start, "file_replaced": file, "base_saved": false, "base_left_unconfirmed": left, "halted_before": before})
+    // (시작 기록, 파일, 다시 읽어 확인한 기준, 멈춘 걸음) — 멈춘 뒤의 걸음은 시작하지 않았다.
+    let steps = |start: &str, file: &str, stored: &str, before: &str| {
+        serde_json::json!({"start": start, "start_save_returned": if start == "saved" { serde_json::json!("ok") } else { Value::Null },
+            "file": file, "base": "not_started", "base_save_returned": null, "stored_base": stored,
+            "base_left_unconfirmed": stored == "unconfirmed", "halted_before": before})
     };
     for (step, word, on_disk, expected, base, read_as) in [
         // 시작 기록 전: 아무 걸음도 시작하지 않았다. 기준은 확인된 그대로다.
-        ("sync_start", "not_written_halt_requested", P1, steps(false, false, false, "start"), "present", "update_needed"),
+        ("sync_start", "not_written_halt_requested", P1, steps("not_started", "not_started", "present", "start"), "present", "update_needed"),
         // 시작 기록 뒤, 파일 교체 전: 파일을 쓰지 않았고 기준은 unconfirmed 로 남는다.
-        ("sync_file_write", "not_written_halted_base_unconfirmed", P1, steps(true, false, true, "file_write"), "unconfirmed", "update_needed_cause_unconfirmed"),
+        ("sync_file_write", "not_written_halted_base_unconfirmed", P1, steps("saved", "not_started", "unconfirmed", "file_write"), "unconfirmed", "update_needed_cause_unconfirmed"),
         // 파일 교체 뒤, 기준 저장 전: 파일은 적용 원문이고 기준은 unconfirmed — 재조회가 동기화됨으로 읽는다.
-        ("sync_base_save", "written_halted_base_unconfirmed", P2, steps(true, true, true, "base_save"), "unconfirmed", "synced"),
+        ("sync_base_save", "written_halted_base_unconfirmed", P2, steps("saved", "replaced", "unconfirmed", "base_save"), "unconfirmed", "synced"),
     ] {
         let root = started(&format!("halt-{step}"));
         let (revision, digest) = proposed(&root, P2);
@@ -1097,4 +1100,92 @@ fn a_release_recorded_in_history_but_not_removed_from_the_state_keeps_the_halt_a
     assert_eq!(released["tracking"]["waiting"]["event"], "event:M2");
     assert_eq!(failed_attempts(&root), attempts);
     assert_eq!(policies(&root), 2);
+}
+
+/// 정책 파일 동기화의 저장 걸음: **저장 호출의 반환**과 **다시 읽어 확인한 저장 상태**는 다른 사실이다. 저장하지 못한 오류와 저장한 뒤의
+/// 오류를 가르고, 다시 읽지 못하면 그 걸음과 기준을 미확정(`unknown`·`null`)으로 남긴다. 결과의 낱말·걸음별 사실, 실제 저장된 기준,
+/// 이어지는 현재 상태 표시가 서로 어긋나지 않는다. 어느 경우에도 적용 정책은 P2 이고, 스스로 다시 쓰거나 기준을 되돌리지 않는다.
+/// (함수 수준 주입 — 그 저장을 건너뛰거나 저장한 뒤 오류를 돌려주고, 다시 읽기 한 번을 실패로 돌려준다. 실제 디스크 장애·전원 장애의
+/// 증거가 아니다.)
+#[test]
+fn a_policy_file_sync_save_is_reported_from_the_reread_state_not_from_the_save_call() {
+    use serde_json::json;
+    struct Case {
+        label: &'static str,
+        /// (자리, 저장한 뒤 오류인가) — 없으면 저장은 정상이다.
+        save: Option<(&'static str, bool)>,
+        /// 이 저장 뒤의 다시 읽기를 실패로 만든다.
+        reread_fails: Option<&'static str>,
+        word: &'static str,
+        steps: Value,
+        on_disk: &'static str,
+        /// 실제로 저장된 기준과, 재조회가 읽는 정책 파일 상태.
+        stored: &'static str,
+        read_as: &'static str,
+    }
+    let steps = |start: (&str, &str), file: &str, base: (&str, Value), stored: Value| {
+        let left = stored.as_str().map(|base| base == "unconfirmed");
+        json!({"start": start.0, "start_save_returned": start.1, "file": file, "base": base.0, "base_save_returned": base.1,
+            "stored_base": stored, "base_left_unconfirmed": left, "halted_before": null})
+    };
+    let cases = [
+        // ── 시작 기록(sync_start)
+        Case { label: "start-not-stored", save: Some(("sync_start", false)), reread_fails: None, word: "not_written_start_not_saved",
+            steps: steps(("not_saved", "error"), "not_started", ("not_started", Value::Null), json!("present")),
+            on_disk: P1, stored: "present", read_as: "update_needed" },
+        // 저장한 뒤의 오류: 시작 기록은 저장돼 있다 — 미저장으로 말하지 않고 이어서 쓴다.
+        Case { label: "start-stored-then-error", save: Some(("sync_start", true)), reread_fails: None, word: "written",
+            steps: steps(("saved", "error"), "replaced", ("saved", json!("ok")), json!("present")),
+            on_disk: P2, stored: "present", read_as: "synced" },
+        // 다시 읽지 못했다: 저장은 됐지만 그것을 확인하지 못했으므로 파일을 쓰지 않고, 기준을 말하지 않는다.
+        Case { label: "start-reread-fails-stored", save: None, reread_fails: Some("sync_start"), word: "not_written_start_unknown",
+            steps: steps(("unknown", "ok"), "not_started", ("not_started", Value::Null), Value::Null),
+            on_disk: P1, stored: "unconfirmed", read_as: "update_needed_cause_unconfirmed" },
+        Case { label: "start-reread-fails-not-stored", save: Some(("sync_start", false)), reread_fails: Some("sync_start"),
+            word: "not_written_start_unknown",
+            steps: steps(("unknown", "error"), "not_started", ("not_started", Value::Null), Value::Null),
+            on_disk: P1, stored: "present", read_as: "update_needed" },
+        // ── 쓰기 뒤 기준 저장(sync_done)
+        Case { label: "done-not-stored", save: Some(("sync_done", false)), reread_fails: None, word: "written_base_unconfirmed",
+            steps: steps(("saved", "ok"), "replaced", ("not_saved", json!("error")), json!("unconfirmed")),
+            on_disk: P2, stored: "unconfirmed", read_as: "synced" },
+        // 저장한 뒤의 오류: 기준은 옮겨져 있다 — 「기준 미확인」으로 말하지 않는다.
+        Case { label: "done-stored-then-error", save: Some(("sync_done", true)), reread_fails: None, word: "written",
+            steps: steps(("saved", "ok"), "replaced", ("saved", json!("error")), json!("present")),
+            on_disk: P2, stored: "present", read_as: "synced" },
+        Case { label: "done-reread-fails-stored", save: None, reread_fails: Some("sync_done"), word: "written_base_unknown",
+            steps: steps(("saved", "ok"), "replaced", ("unknown", json!("ok")), Value::Null),
+            on_disk: P2, stored: "present", read_as: "synced" },
+        Case { label: "done-reread-fails-not-stored", save: Some(("sync_done", false)), reread_fails: Some("sync_done"),
+            word: "written_base_unknown",
+            steps: steps(("saved", "ok"), "replaced", ("unknown", json!("error")), Value::Null),
+            on_disk: P2, stored: "unconfirmed", read_as: "synced" },
+    ];
+    for case in cases {
+        let label = case.label;
+        let root = started(&format!("sync-{label}"));
+        let (revision, digest) = proposed(&root, P2);
+        SAVE_FAULT.with(|slot| *slot.borrow_mut() = case.save);
+        SYNC_REREAD_FAULT.with(|slot| *slot.borrow_mut() = case.reread_fails);
+        let decided = decide(&root, revision, &digest, true).expect("응답은 기록된다");
+        assert!(SAVE_FAULT.with(|slot| slot.borrow().is_none()) && SYNC_REREAD_FAULT.with(|slot| slot.borrow().is_none()), "{label}: 주입이 쓰였다");
+        assert_eq!(decided["facts"]["policy_applied"], true, "{label}: {decided}");
+        assert_eq!(decided["facts"]["policy_file"], case.word, "{label}");
+        assert_eq!(decided["facts"]["policy_file_steps"], case.steps, "{label}");
+        assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), case.on_disk, "{label}: 디스크의 정책 파일");
+        // 결과가 말한 기준은 실제 저장된 기준과 같거나, 확인하지 못했으면 비어 있다 — 다른 값을 확정으로 말하지 않는다.
+        let said = &decided["facts"]["policy_file_steps"]["stored_base"];
+        assert!(said.is_null() || *said == case.stored, "{label}: 결과의 기준 {said} 과 실제 기준 {}", case.stored);
+        // 같은 응답의 현재 상태 표시와, 그 뒤 새로 읽은 상태가 실제 저장 기준을 말한다.
+        let seen = now(&root);
+        for (when, view) in [("응답", &decided), ("재조회", &seen)] {
+            assert_eq!(view["tracking"]["policy_file_sync_base"], case.stored, "{label} {when}: 실제 저장된 기준");
+            assert_eq!(view["policy_file"], case.read_as, "{label} {when}: 정책 파일 상태");
+            assert_eq!(view["tracking"]["applied_policy"], "policy:P2", "{label} {when}");
+        }
+        assert_eq!(policies(&root), 2, "{label}");
+        // 재조회는 다시 쓰지도 기준을 고치지도 않는다.
+        assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), case.on_disk, "{label}");
+        assert_eq!(now(&root)["tracking"]["policy_file_sync_base"], case.stored, "{label}");
+    }
 }
