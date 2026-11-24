@@ -409,6 +409,45 @@ fn walk_to_a_revisit(dir: &Path) {
     );
 }
 
+/// 빈 `response` 는 사용자의 답이 아니다 (#245). 새 Question 닫기는 빈 값과 공백뿐인 값을 거절하고
+/// 기록을 그대로 둔다. 실제 답을 넣으면 같은 Question 이 닫힌다.
+#[test]
+fn a_question_does_not_close_on_an_empty_response() {
+    let dir = scratch("cli-empty-response");
+    ok(&dir, &["start"], None);
+    open_action(&dir, "question");
+    let before = std::fs::read(dir.join(gil::STATE_PATH)).unwrap();
+    for empty in ["response:\n", "response:    \n", "response: \t　\n"] {
+        let said = refused(&dir, &["close"], Some(&format!("question: 어느 표본인가\nchoices: A / B\n{empty}")));
+        assert!(said.contains("response") && said.contains("비워 둘 수 없다"), "{empty:?}: {said}");
+        assert!(said.contains("step:C1/S1"), "the refusal names the still-open Question: {said}");
+        assert_eq!(std::fs::read(dir.join(gil::STATE_PATH)).unwrap(), before, "{empty:?}: nothing was closed");
+    }
+    let closed = ok(&dir, &["close"], Some("question: 어느 표본인가\nchoices: A / B\nresponse: A\n"));
+    assert!(closed.contains("step:C1/S1"), "{closed}");
+}
+
+/// 이미 빈 `response` 로 저장된 Question 은 그대로 읽힌다 — 새 쓰기 규칙이 옛 기록을 무효로
+/// 만들지 않는다. 이어서 Interpretation 을 열 수 있다.
+#[test]
+fn a_question_stored_with_an_empty_response_stays_readable() {
+    use gil::{CycleKind, NodeKind};
+    let dir = scratch("cli-stored-empty-response");
+    ok(&dir, &["start"], None);
+    let path = dir.join(gil::STATE_PATH);
+    let mut project = gil::load(common::spec(), &path).unwrap();
+    common::opened(&mut project, NodeKind::Question);
+    // The domain API is not the user-facing close; it stands in for a record an older build wrote.
+    project.close_action_step(common::full_report(&common::spec(), CycleKind::Interview, NodeKind::Question).with("response", "")).unwrap();
+    gil::save(&project, &path).unwrap();
+    let stored = std::fs::read(&path).unwrap();
+    assert!(String::from_utf8_lossy(&stored).contains("response: ''"), "fixture stores an empty response");
+    ok(&dir, &["status"], None);
+    ok(&dir, &["context"], None);
+    assert_eq!(std::fs::read(&path).unwrap(), stored, "reading changed nothing");
+    assert!(open_action(&dir, "interpretation").contains("step:C1/S2"));
+}
+
 #[test]
 fn a_sentence_with_a_node_name_in_it_survives_the_close() {
     // 실사용 보고 #124 — `#7` 부터 문장 끝까지 조용히 사라졌고 close 는 성공했다.
