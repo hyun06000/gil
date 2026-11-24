@@ -1358,30 +1358,37 @@ fn queries_rebuilt_readings_and_out_of_scope_requests_call_no_observation_and_no
 
 #[test]
 fn a_retry_whose_policy_source_or_base_world_cannot_be_read_does_not_start() {
+    // 측정 경계: `Lab::new` 는 마지막 확정 세계 A1 을 준비하려고 `capture_scoped` 를 한 번 부른다(fixture 준비이지 재시도가 아니다).
+    // 그래서 경우마다 fixture 와 저장 경계를 **모두 준비한 뒤**, 검증하려는 `retry` 호출 바로 앞에서 기준값을 읽고 그 호출의 증가량만 본다.
+
     // 적용 정책 P2 의 원문이 창고에 없다 — 원장의 주소만 있고 객체가 없다.
     let mut lab = Lab::new("no-source", 0);
     let absent: &[u8] = b"never-stored/\n";
     lab.records.ledger =
         PolicyLedger::from_records(3, vec![record(1, P1_TEXT), record(2, absent)]).expect("시험 원장은 꼴이 맞다");
     let desk = lab.desk(Save::Store);
+    // 여기까지가 준비다. 아래 한 호출이 측정 대상이다.
     let (observes, captures) = (probe::observes(), probe::captures());
     let Err(NotStarted::PolicySource { policy, .. }) = lab.retry(2, &desk) else {
         panic!("원문을 확인하지 못하면 시작하지 않는다");
     };
     assert_eq!(policy, p(2));
+    assert_eq!((probe::observes() - observes, probe::captures() - captures), (0, 0), "원문 부재: 이 호출은 관측도 보관도 하지 않았다");
+    assert_eq!(desk.calls(), (0, 0, 0), "원문 부재: 상태 저장·다시 읽기·실패 기록을 부르지 않았다");
 
     // 마지막 확정 세계의 이름은 등록부에 있지만 그 manifest 객체가 창고에 없다.
     let mut lab = Lab::new("no-base", 0);
     let nowhere = crate::ManifestAddress::from_parts("sha256", &[7u8; 32]).expect("꼴이 맞는 주소다");
     lab.records.registry = SnapshotRegistry::restore(2, vec![(1, nowhere)]).expect("시험 등록부는 꼴이 맞다");
     let other = lab.desk(Save::Store);
+    // 여기까지가 준비다(위 `Lab::new` 의 fixture 보관 포함). 새 기준값을 읽고, 아래 한 호출이 측정 대상이다.
+    let (observes, captures) = (probe::observes(), probe::captures());
     let Err(NotStarted::BaseWorld { world, .. }) = lab.retry(2, &other) else {
         panic!("기준 manifest 를 읽지 못하면 시작하지 않는다");
     };
     assert_eq!(world, a(1));
-
-    assert_eq!((probe::observes() - observes, probe::captures() - captures), (0, 0));
-    assert_eq!((desk.calls(), other.calls()), ((0, 0, 0), (0, 0, 0)));
+    assert_eq!((probe::observes() - observes, probe::captures() - captures), (0, 0), "기준 manifest 부재: 이 호출은 관측도 보관도 하지 않았다");
+    assert_eq!(other.calls(), (0, 0, 0), "기준 manifest 부재: 상태 저장·다시 읽기·실패 기록을 부르지 않았다");
 }
 
 // ── 보고의 결속 ────────────────────────────────────────────────────────────
