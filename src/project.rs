@@ -76,6 +76,9 @@ pub struct Project {
     /// 온다. 조회나 실행으로 바뀌지 않는다 — 형식 4–7 의 프로젝트는 끝까지 `done_wills` 로
     /// 눕고, 미달성 종료를 받지 않는다(Storage Transition Contract §3.2).
     end_history: bool,
+    /// 형식 10/11 의 추적 정책 기록. 승인된 정책으로 시작한 프로젝트에만 있다.
+    #[cfg(feature = "tracking-policy")]
+    pub(crate) tracking: Option<crate::artifact::TrackingState>,
 }
 
 /// Legacy worlds remain unwrapped when read; only new chain-profile projects create a Chain.
@@ -129,7 +132,36 @@ impl Project {
             artifacts,
             // `will-end-history` 는 `chain-core` 를 포함한다 — 종료 이력은 Chain 형식에만 있다.
             end_history: cfg!(feature = "will-end-history"),
+            #[cfg(feature = "tracking-policy")]
+            tracking: None,
         }
+    }
+
+    /// **승인 정책으로 시작한 프로젝트** — 형식 10(공유 계약 §5.1, 구현 순서 4번).
+    ///
+    /// `first_world` 는 승인된 정책으로 관측·보관한 최초 세계다. 그것이 `snapshot:A1`·뿌리 Interview 의 Entry·
+    /// 첫 Chain 의 Entry 이고, 같은 값이 시작 사건 `M1` 의 기준점이다. 정책 판·사건·기준점·Chain·Entry 는 이 값
+    /// 하나에서 함께 생기고 한 번의 상태 저장으로 확정된다 — 보관 대기 상태의 start 는 없다.
+    #[cfg(feature = "tracking-policy")]
+    pub(crate) fn start_tracked(
+        rules: RuleSet,
+        first_world: ManifestAddress,
+        policy: crate::artifact::start_policy::PolicyRecord,
+        sync_base: crate::artifact::start_policy::SyncBase,
+    ) -> Result<Project, crate::artifact::TrackingError> {
+        let mut project = Project::start(rules, first_world);
+        let chain = project.current_chain().expect("tracking-policy 는 Chain 형식이다");
+        let start = crate::artifact::StartEvent { chain: chain.id(), snapshot: chain.entry_snapshot() };
+        let tracking = crate::artifact::TrackingState::started(policy, sync_base, start)?;
+        tracking.check_links(project.chains(), project.artifacts())?;
+        project.tracking = Some(tracking);
+        Ok(project)
+    }
+
+    /// 형식 10/11 의 추적 정책 기록. 다른 형식에서는 `None`.
+    #[cfg(feature = "tracking-policy")]
+    pub(crate) fn tracking(&self) -> Option<&crate::artifact::TrackingState> {
+        self.tracking.as_ref()
     }
 
     /// 이 프로젝트가 **종료 결과를 기록하는 형식**(8/9)인가.
@@ -482,6 +514,8 @@ impl Project {
             next_will_id,
             artifacts,
             end_history,
+            #[cfg(feature = "tracking-policy")]
+            tracking: None,
         };
         project.check_restored()?;
         Ok(project)

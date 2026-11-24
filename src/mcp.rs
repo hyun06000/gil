@@ -30,6 +30,9 @@ mod migration;
 // Implementation order 1b: explicit 6 → 8 / 7 → 9 transition tools (development profile only).
 #[cfg(feature = "will-end-history")]
 mod transition;
+// Implementation order 4: start preparation and Monitor approval (tracking-policy development profile).
+#[cfg(all(feature = "tracking-policy", unix))]
+mod start;
 #[cfg(all(feature = "visual-authoring", windows))]
 mod workspace;
 use monitor::Monitor;
@@ -41,6 +44,8 @@ pub struct GilServer {
     monitor: Arc<Monitor>,
     #[cfg(feature = "approved-plan")]
     plan_grants: Arc<plans::Grants>,
+    #[cfg(all(feature = "tracking-policy", unix))]
+    start_grants: Arc<start::Grants>,
     native_gate: Arc<Mutex<()>>,
     companion_session: Arc<Mutex<crate::companion_ipc::McpSession>>,
 }
@@ -54,6 +59,7 @@ impl GilServer {
     pub fn with_companion_endpoint(endpoint: Option<std::path::PathBuf>) -> Self {
         Self { #[cfg(feature = "product-safety")] recovery_grants: Arc::new(recovery::Grants::default()),
             #[cfg(feature = "approved-plan")] plan_grants: Arc::new(plans::Grants::default()),
+            #[cfg(all(feature = "tracking-policy", unix))] start_grants: Arc::new(start::Grants::default()),
             monitor: Arc::new(Monitor::default()), native_gate: Arc::new(Mutex::new(())),
             companion_session: Arc::new(Mutex::new(crate::companion_ipc::McpSession::new(endpoint))) }
     }
@@ -93,7 +99,8 @@ impl GilServer {
         let mut result = self.dispatch(name.clone(), input.clone(), locale).await;
         let succeeded = result.is_error != Some(true)
             && result.structured_content.as_ref().is_none_or(|v| v["ok"] != false);
-        if name == "gil_start" && succeeded
+        // A tracking-policy start is a preparation: its own tool prepares the Monitor scope (no Project yet).
+        if name == "gil_start" && succeeded && !cfg!(all(feature = "tracking-policy", unix))
             && result.structured_content.as_ref().is_some_and(|v| v["ok"] == true) {
             // Creation is already committed. A display preparation failure must never turn
             // that success into a failed start or encourage a duplicate creation.
@@ -215,6 +222,13 @@ impl GilServer {
             return tokio::task::spawn_blocking(move || locale::with(locale, || recovery::call(&monitor, &grants, &name, input))).await
                 .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "mcp.revisit_uncertain")));
         }
+        #[cfg(all(feature = "tracking-policy", unix))]
+        if start::NAMES.contains(&name.as_str()) {
+            let monitor = self.monitor.clone();
+            let grants = self.start_grants.clone();
+            return tokio::task::spawn_blocking(move || locale::with(locale, || start::call(&monitor, &grants, &name, input))).await
+                .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "start_tool.uncertain")));
+        }
         #[cfg(feature = "approved-plan")]
         if name.starts_with("gil_plan_") {
             let monitor = self.monitor.clone();
@@ -298,7 +312,7 @@ impl GilServer {
 fn locale_for_call(monitor: &Monitor, name: &str, input: &Value) -> Locale {
     let root = match input.get("project_root").and_then(Value::as_str) {
         Some(root) if std::path::Path::new(root).is_absolute() => Some(std::path::PathBuf::from(root)),
-        _ if name.starts_with("gil_monitor_") || matches!(name, "show_gil_monitor" | "gil_plan_review" | "gil_plan_decide" | "gil_revisit_review" | "gil_revisit_apply") =>
+        _ if name.starts_with("gil_monitor_") || matches!(name, "show_gil_monitor" | "gil_plan_review" | "gil_plan_decide" | "gil_revisit_review" | "gil_revisit_apply" | "gil_start_review" | "gil_start_decide" | "gil_start_apply" | "gil_start_list") =>
             input.get("scope_id").and_then(Value::as_str).and_then(|scope| monitor.root(scope).ok()),
         _ => None,
     };
@@ -420,6 +434,11 @@ mod tests {
             expected.extend(TRANSITION_SURFACE.iter().map(|s| s.to_string()));
         }
         if cfg!(feature = "product-safety") { expected.extend(["gil_revisit_apply".into(), "gil_revisit_review".into()]); }
+        if cfg!(all(feature = "tracking-policy", unix)) {
+            // `gil_start` 는 기본 표에 이미 있다 — 이 구성은 그 설명만 바꾸고 일곱 도구를 더한다.
+            expected.extend(["gil_start_prepare", "gil_start_status", "gil_start_apply", "gil_start_cancel", "gil_start_review", "gil_start_decide", "gil_start_list"]
+                .map(String::from));
+        }
         expected.push("gil_await_user".to_string());
         expected.sort();
         assert_eq!(registered_names(), expected);

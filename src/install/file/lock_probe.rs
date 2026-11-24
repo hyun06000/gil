@@ -161,6 +161,7 @@ fn environment() -> String {
         (cfg!(feature = "approved-plan"), "approved-plan"),
         (cfg!(feature = "exploration-flow"), "exploration-flow"),
         (cfg!(feature = "will-end-history"), "will-end-history"),
+        (cfg!(feature = "tracking-policy"), "tracking-policy"),
         (cfg!(feature = "visual-authoring"), "visual-authoring"),
         (cfg!(feature = "product-safety"), "product-safety"),
         (cfg!(feature = "recovery-auto-approval"), "recovery-auto-approval"),

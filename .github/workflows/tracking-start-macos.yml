@@ -1,0 +1,189 @@
+name: First start (.gilignore to first Snapshot/Chain) focus on macOS, tracking-policy development profile (NOT a release)
+
+# What this job is: a focused macOS check of the opt-in first-start feature on the exact PR head.
+#   - Rust: the start preparation (40) and MCP start (4) unit tests, the real Unix stdio first-start
+#     suite (4), and all-targets builds, in exactly two feature sets: `tracking-policy` and
+#     `tracking-policy,approved-plan,visual-authoring,product-safety`. Each group must run exactly
+#     the expected number of tests by name prefix (tools/ci/tracking-start/expect-test-groups.mjs);
+#     an all-targets build is compile evidence only, never execution evidence.
+#   - UI: the committed Monitor bundle is rebuilt from the locked UI inputs and must be byte-equal,
+#     then the synthetic start-preparation panel check runs in headless Chromium from a pinned
+#     Playwright (tools/ci/tracking-start/npm-shrinkwrap.json). That check answers the App with mock
+#     Host replies: it is NOT a real Host screen, a human approval or the Core-connected product flow.
+# What this job is not, and what it does not prove:
+#   - It does not replace or change the Preview or Chain jobs, their commands, features, filters,
+#     timeouts or required checks. It is not a required check, and adds no release, packaging,
+#     publication, Windows, real Host or field step.
+#   - The stdio restart test reads a synthetic pending record written by the test in a fresh process.
+#     Save-failure injection is function-level: no forced kill or power-loss durability is shown.
+#     There is no injected evidence for `start_uncertain` or a final save that reports an error after
+#     saving and cannot be read back.
+#   - A Linux temporary-shim run or an earlier synthetic UI result is never this head's result.
+# Node.js for this job only is the exact official v22.23.5 darwin-arm64 tarball from nodejs.org,
+# checked against the SHA-256 pinned below (taken from that release's SHASUMS256.txt). The Preview
+# and Chain jobs keep their own runner Node.
+# It runs on pull_request only (no dispatch, no pull_request_target, no secrets). GitHub may hold the
+# run for maintainer approval (for example a first-time or fork contributor), and a macos-15 runner
+# may be unavailable or queued; nothing here changes that.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'mcp-app/**'
+      - 'ui/**'
+      - 'plugins/gil-companion-prototype/assets/**'
+      - 'tools/ci/expect-tests.mjs'
+      - 'tools/ci/tracking-start/**'
+      - '.github/workflows/tracking-start-macos.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  first-start-macos:
+    runs-on: macos-15
+    # Cold build each run (no dependency cache): two feature sets, each compiled once for its tests and
+    # all targets, plus the UI rebuild and one headless browser check.
+    timeout-minutes: 60
+    env:
+      RUSTUP_TOOLCHAIN: 1.97.1
+      # Same CI-only dev/test build settings as the Chain job (release untouched).
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24 (same pin as the Preview and Chain jobs)
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Install the exact Node.js v22.23.5 (official nodejs.org darwin-arm64 tarball, SHA-256 pinned)
+        env:
+          NODE_VERSION: v22.23.5
+          NODE_TARBALL_SHA256: e7131995759b61a0170b646010d2ad35a5d37b4cb0d471f3e8317eac6f742f3d
+          NODE_DIR: ${{ runner.temp }}/gil-tracking-start-node
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          test ! -e "$NODE_DIR"
+          mkdir -p "$NODE_DIR"
+          name="node-$NODE_VERSION-darwin-arm64"
+          curl --fail --silent --show-error --proto '=https' --tlsv1.2 -o "$NODE_DIR/$name.tar.gz" "https://nodejs.org/dist/$NODE_VERSION/$name.tar.gz"
+          echo "$NODE_TARBALL_SHA256  $NODE_DIR/$name.tar.gz" | shasum -a 256 -c -
+          tar -xzf "$NODE_DIR/$name.tar.gz" -C "$NODE_DIR"
+          test "$("$NODE_DIR/$name/bin/node" -v)" = "$NODE_VERSION"
+          echo "$NODE_DIR/$name/bin" >> "$GITHUB_PATH"
+
+      - name: Record and require the exact PR head (not the merge commit), its commit header, platform and toolchains
+        env:
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          EVENT_MERGE_SHA: ${{ github.sha }}
+          NODE_BIN_EXPECTED: ${{ runner.temp }}/gil-tracking-start-node/node-v22.23.5-darwin-arm64/bin/node
+          NODE_VERSION: v22.23.5
+          NPM_VERSION: 10.9.9
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.97.1 --profile minimal
+          head=$(git rev-parse HEAD)
+          # Tree and parents come from the HEAD commit object's own header (the lines before the first
+          # empty line), not from history walking: a shallow checkout has the commit object but may not
+          # have its parents, and `rev-list --parents` can then omit them. Only lines that start exactly
+          # with "tree " / "parent " count, so the message body and indented signature lines never do.
+          # Read the whole object (no early pipe close under pipefail) and keep only the header lines.
+          header=$(git cat-file commit HEAD | sed -n '/^$/,$!p')
+          trees=$(printf '%s\n' "$header" | sed -n 's/^tree \([0-9a-f]\{40\}\)$/\1/p')
+          parents=$(printf '%s\n' "$header" | sed -n 's/^parent \([0-9a-f]\{40\}\)$/\1/p')
+          parent_count=$(printf '%s\n' "$parents" | grep -c . || true)
+          {
+            echo '### Exact candidate'
+            echo '```'
+            echo "event pull_request.head.sha: $EVENT_HEAD_SHA"
+            echo "event pull_request.base.sha: $EVENT_BASE_SHA"
+            echo "event github.sha (merge ref, NOT tested): $EVENT_MERGE_SHA"
+            echo "checkout HEAD: $head"
+            echo "checkout tree (commit header): $trees"
+            echo "checkout tree (rev-parse): $(git rev-parse 'HEAD^{tree}')"
+            echo "checkout parent count (commit header): $parent_count"
+            printf '%s\n' "$parents" | sed 's/^/checkout parent (commit header): /'
+            echo "shallow checkout: $(git rev-parse --is-shallow-repository)"
+            echo "os: $(sw_vers -productName) $(sw_vers -productVersion) ($(uname -sm))"
+            echo "rustc: $(rustc -V)"
+            echo "cargo: $(cargo -V)"
+            echo "node: $(node -v) at $(command -v node)"
+            echo "npm: $(npm -v)"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          test "$head" = "$EVENT_HEAD_SHA"
+          test "$(printf '%s\n' "$trees" | grep -c .)" = 1
+          test "$trees" = "$(git rev-parse 'HEAD^{tree}')"
+          # This candidate line is a chain of single-parent commits; a merge-commit head would need this
+          # check reconsidered. No particular parent SHA is required here.
+          test "$parent_count" = 1
+          test -z "$(git status --porcelain)"
+          test "$(uname -m)" = arm64
+          test "$(command -v node)" = "$NODE_BIN_EXPECTED"
+          test "$(node -v)" = "$NODE_VERSION"
+          test "$(npm -v)" = "$NPM_VERSION"
+
+      - name: Per-group test gate contracts (pure Node, synthetic libtest text)
+        run: node --test tools/ci/tracking-start/expect-test-groups.test.mjs
+
+      - name: Rebuild the Monitor bundle from the locked UI inputs; it must equal the committed bundle
+        run: |
+          set -euo pipefail
+          A=plugins/gil-companion-prototype/assets
+          echo 'committed:'; shasum -a 256 "$A/monitor.html" "$A/monitor.json"
+          npm ci --prefix mcp-app --no-audit --no-fund
+          node mcp-app/build.mjs
+          git diff --exit-code -- "$A/monitor.html" "$A/monitor.json"
+          test -z "$(git status --porcelain -- "$A")"
+          { echo '### Monitor bundle (rebuilt = committed)'; echo '```'; shasum -a 256 "$A/monitor.html" "$A/monitor.json"; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Install the pinned Playwright (exact lock) and its pinned headless Chromium into a fresh directory
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/gil-tracking-start-browsers
+        run: |
+          set -euo pipefail
+          test ! -e "$PLAYWRIGHT_BROWSERS_PATH"
+          npm ci --prefix tools/ci/tracking-start --ignore-scripts --no-audit --no-fund
+          P=tools/ci/tracking-start/node_modules
+          node -e 'for (const m of ["playwright", "playwright-core"]) { const v = require(`./${process.argv[1]}/${m}/package.json`).version; if (v !== "1.63.0") { console.error(m, v); process.exit(1); } }' "$P"
+          { echo '### Browser (pinned by playwright 1.63.0)'; echo '```'; node "$P/playwright/cli.js" install --dry-run --only-shell chromium; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
+          node "$P/playwright/cli.js" install --only-shell chromium
+
+      - name: Synthetic start-preparation Monitor check (mock Host, headless; NOT a real Host, human approval or Core flow)
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/gil-tracking-start-browsers
+          GIL_PLAYWRIGHT_MODULE: ${{ github.workspace }}/tools/ci/tracking-start/node_modules/playwright
+        run: |
+          set -euo pipefail
+          unset GIL_BROWSER_EXECUTABLE
+          shasum -a 256 plugins/gil-companion-prototype/assets/monitor.html
+          node mcp-app/start-browser-check.mjs
+          echo 'synthetic start-preparation Monitor check: exit 0 (mock Host only)' | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: "[tracking-policy] start preparation 40 + MCP start 4 unit tests, exact by name prefix"
+        run: |
+          node tools/ci/tracking-start/expect-test-groups.mjs 'start_prep::tests::=40' 'mcp::start::tests::=4' -- cargo test --locked -p gil --features tracking-policy --lib -- start_prep::tests:: mcp::start::tests::
+      - name: "[tracking-policy] first start over the real Unix stdio process, exactly 4 (synthetic projects and records)"
+        run: |
+          node tools/ci/tracking-start/expect-test-groups.mjs '*=4' -- cargo test --locked -p gil --features tracking-policy --test tracking_start
+      - name: "[tracking-policy] compile all Core targets (compile evidence only, not execution)"
+        run: cargo build --locked -p gil --all-targets --features tracking-policy
+
+      - name: "[tracking-policy,approved-plan,visual-authoring,product-safety] start preparation 40 + MCP start 4 unit tests, exact by name prefix"
+        run: |
+          node tools/ci/tracking-start/expect-test-groups.mjs 'start_prep::tests::=40' 'mcp::start::tests::=4' -- cargo test --locked -p gil --features tracking-policy,approved-plan,visual-authoring,product-safety --lib -- start_prep::tests:: mcp::start::tests::
+      - name: "[tracking-policy,approved-plan,visual-authoring,product-safety] first start over the real Unix stdio process, exactly 4 (synthetic projects and records)"
+        run: |
+          node tools/ci/tracking-start/expect-test-groups.mjs '*=4' -- cargo test --locked -p gil --features tracking-policy,approved-plan,visual-authoring,product-safety --test tracking_start
+      - name: "[tracking-policy,approved-plan,visual-authoring,product-safety] compile all Core targets (compile evidence only, not execution)"
+        run: cargo build --locked -p gil --all-targets --features tracking-policy,approved-plan,visual-authoring,product-safety

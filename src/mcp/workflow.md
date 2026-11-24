@@ -146,6 +146,23 @@ This does not require author tracking, write hooks or a new Snapshot for every n
    and find the next-call heading in the reply's language (`[Call now]` in English, `[지금 바로 할 호출]`
    in Korean); the action under that heading is the next call, even when a resume summary such as
    `[Resume from saved records]` comes before it. Resume there instead of starting again.
+   **Start preparation (only when `gil_start` answers `phase: preparing`; development tracking-policy
+   builds).** No Chain, Cycle or Snapshot exists yet and no project file is archived. Explain, grouped by
+   folder, what will be tracked and excluded and the archive/restore impact; keep general and
+   secret-candidate recommendations preselected and project-specific ones unselected unless the user
+   chooses them (`.gitignore` is reference only). Call `gil_start_prepare` with the exact `.gilignore`
+   text, then `show_gil_monitor(scope_id)`, and wait for the user's button in the Monitor. Chat consent,
+   editing `.gilignore` or your own input is never approval; without a Monitor the start stays waiting.
+   Do not create project files while preparing. A nested `.gilignore` holds the start: explain it and
+   tidy it only with the user's consent. After a lost reply, restart or reconnect read `gil_start_status`
+   once; if it says `approved` but not started, ask the user to press the Monitor's retry button — no model
+   tool applies a start. A detected condition change (`scope_changed`, `condition_changed`, `policy_file_changed`) needs a new
+   proposal and approval; an unstable observation or a storage failure keeps the approval for a Monitor retry. On `combine_required` tell the user once that you will combine the approved rules and
+   the file now on disk (do not ask whether you may), write the combined text keeping the engine's
+   last-matching-rule order and send it with `combine_with_revision`; it needs its own Monitor approval.
+   Cancel only on the user's explicit request (`gil_start_cancel`); a closed app is not a cancel, and a
+   canceled preparation restarts only when the user explicitly asks. In such a project `gil_restore`
+   and revisits are refused until latest-policy restore exists; never work around them.
    **Keep the in-host MCP App present:** successful Project calls check recent App display reports.
    When a receipt supplies `show_gil_monitor(scope_id)` because the Monitor is absent/hidden/unknown,
    call it once before further work, without asking the user to open a Companion. For an explicit

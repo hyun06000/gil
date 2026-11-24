@@ -130,6 +130,20 @@ test("Skill 이 부르는 도구 이름은 전부 실제 tool 표에 있다", ()
       assert.match(SKILL, /`truncated: true`\s+left\s+part\s+out[\s\S]{0,200}left\s+out\s+never\s+means\s+absent/, "생략과 이어 읽기의 뜻이 Skill 에 없다");
       continue;
     }
+    if (name.startsWith("gil_start_")) {
+      // tracking-policy development feature only (src/mcp/start.rs). Exact model-visible names, never the
+      // default catalog, used only under the condition that gil_start answered a start preparation; the
+      // App-only Monitor decision tools are never asked of the model.
+      const rust = readFileSync(join(REPO, "src", "mcp", "start.rs"), "utf8");
+      const names = rust.slice(rust.indexOf("pub(super) const NAMES"), rust.indexOf("pub(super) const APP_NAMES"));
+      const app = rust.slice(rust.indexOf("pub(super) const APP_NAMES"), rust.indexOf("#[derive(Debug, Default)]"));
+      assert.ok(names.includes(`"${name}"`), `Skill 이 start catalog 에 없는 도구를 부른다 — ${name}`);
+      assert.ok(!app.includes(`"${name}"`), `App 전용 시작 승인 도구를 모델에게 시켰다 — ${name}`);
+      assert.ok(!TOOLS.includes(name), `시작 준비 도구가 기본 tools.json 에 들어왔다 — ${name}`);
+      assert.match(SKILL, /only when `gil_start` answers `phase: preparing`; development tracking-policy\s+builds/, "시작 준비 도구의 사용 조건이 Skill 에 없다");
+      assert.match(SKILL, /Chat consent,\s+editing `\.gilignore` or your own input is never approval/, "대화·편집·에이전트 입력이 승인이 아니라는 문장이 Skill 에 없다");
+      continue;
+    }
     if (name === "gil_prepare_workspace") {
       // Windows development surface only (src/mcp/workspace.rs); mentioned solely in the
       // unsupported-location paragraph, which is entered only after that refusal code.
