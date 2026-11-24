@@ -124,6 +124,9 @@ fn run(ctx: &Invocation<'_>, args: &[String]) -> Result<String, String> {
                 format!("{}{}", context(session.project()), crate::project_resume::status(&root))))
         }
         "monitor" => monitor(ctx, args.get(1)),
+        // A help flag anywhere after the server command asks how to connect; starting the server
+        // instead would wait on stdin like a frozen terminal.
+        "mcp" | "serve" if args[1..].iter().any(|arg| asks_for_help(Some(arg))) => Ok(text("cmd.serve_help").to_string()),
         "mcp" => mcp(args.get(1).map(String::as_str)),
         // `gil serve` — the same MCP stdio surface under the name the install guide uses.
         "serve" => mcp(Some("--serve")),

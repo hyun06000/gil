@@ -2111,3 +2111,36 @@ fn a_question_after_an_executed_experiment_is_told_to_show_the_result_first() {
     let context = ok(&dir, &["context"], None);
     assert!(context.contains("결과물을 먼저 보여 준다"), "{context}");
 }
+
+/// 서버 명령에 붙은 `--help`·`-h` 는 연결하는 법을 묻는 것이다 (#229). stdin 을 열어 둔 채여도
+/// 서버를 띄우지 않고 사용법만 내고 끝난다. 도움말 없는 `gil serve` 는 여전히 MCP 를 연다.
+#[test]
+fn server_help_prints_usage_and_exits_even_with_stdin_open() {
+    use std::time::{Duration, Instant};
+    let dir = scratch("serve-help");
+    let usage = gil::locale::text_in(gil::Locale::Ko, "cmd.serve_help");
+    for args in [&["serve", "--help"][..], &["serve", "-h"], &["mcp", "--serve", "--help"], &["mcp", "--serve", "-h"], &["mcp", "--help"]] {
+        let mut child = Command::new(GIL).args(args).current_dir(&dir)
+            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+        let stdin = child.stdin.take(); // held open: a server would wait on it
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let status = loop {
+            if let Some(status) = child.try_wait().unwrap() { break status; }
+            if Instant::now() > deadline { child.kill().ok(); panic!("gil {args:?} waited on stdin instead of printing usage"); }
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        drop(stdin);
+        let out = child.wait_with_output().unwrap();
+        assert!(status.success(), "gil {args:?}: {}", String::from_utf8_lossy(&out.stderr));
+        assert_eq!(String::from_utf8(out.stdout).unwrap(), usage, "gil {args:?}");
+    }
+    // The server itself still answers: one initialize request, then EOF ends it.
+    let mut child = Command::new(GIL).arg("serve").current_dir(&dir)
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    child.stdin.take().unwrap().write_all(br#"{"jsonrpc":"2.0","id":7,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}
+"#).unwrap();
+    let out = child.wait_with_output().unwrap();
+    let reply: serde_json::Value = serde_json::from_str(String::from_utf8(out.stdout).unwrap().lines().next().unwrap()).unwrap();
+    assert_eq!(reply["id"], 7);
+    assert_eq!(reply["result"]["serverInfo"]["name"], "gil");
+}
