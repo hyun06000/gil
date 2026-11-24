@@ -1033,6 +1033,28 @@ fn initialize_succeeds_and_says_who_is_answering() {
     assert!(done.success());
 }
 
+/// Only a build that can open a Chain under the exploration contract tells the model to copy
+/// gil_plan_read.experiment_link into gil_open. Elsewhere gil_plan_read may not even exist.
+#[test]
+fn gil_open_mentions_the_experiment_link_only_in_the_exploration_build() {
+    let mut mcp = Client::serve();
+    mcp.initialize();
+    let got = mcp.request("tools/list", serde_json::json!({}));
+    let tools = got["result"]["tools"].as_array().expect("tools");
+    let open = tools.iter().find(|t| t["name"] == "gil_open").expect("gil_open");
+    let description = open["description"].as_str().expect("description");
+    let exploration = cfg!(feature = "exploration-flow");
+    assert_eq!(description.contains("gil_plan_read.experiment_link"), exploration, "{description}");
+    assert_eq!(description.contains("contract: exploration"), exploration, "{description}");
+    if exploration {
+        assert!(tools.iter().any(|t| t["name"] == "gil_plan_read"), "the named tool is listed");
+        assert!(description.contains("Every other Cycle open takes no contract."), "{description}");
+    } else {
+        assert!(description.contains("A Cycle open takes no contract."), "{description}");
+    }
+    assert!(mcp.eof().0.success());
+}
+
 #[test]
 fn tools_list_includes_handoff_and_preserves_the_read_only_app_boundary() {
     let mut mcp = Client::serve();
