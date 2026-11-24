@@ -17,7 +17,8 @@ mod support;
 use serde_json::{Value, json};
 use std::path::Path;
 use support::*;
-#[cfg(all(feature = "product-safety", feature = "visual-authoring", any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows)))]
+// The approved recovery of a closed failure is provided on macOS and Windows only.
+#[cfg(all(feature = "product-safety", feature = "visual-authoring", any(target_os = "macos", windows)))]
 #[path = "support_wave1/revisit_cases.rs"]
 mod revisit_cases;
 

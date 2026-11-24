@@ -143,8 +143,13 @@ jobs:
         run: |
           node tools/ci/expect-tests.mjs 4 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test tracking_start
           node tools/ci/expect-tests.mjs 6 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test tracking_scope_change
-      - name: "[product] exploration and image-report suites over the real stdio process, at least 20"
-        run: node tools/ci/expect-tests.mjs 20 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test exploration_flow --test exploration_tools --test exploration_evidence --test exploration_plan_panel --test closing_handoff
+      # Linux does not provide the approved recovery of a closed failure (existing limit, not extended here). The
+      # suites' recovery cases and the plan-panel fixture that walks one are not compiled on Linux; what runs is counted,
+      # and the refusal itself is checked by name: review without a capability, no apply, nothing moved, also after a restart.
+      - name: "[product] exploration and image-report suites over the real stdio process, at least 15 on Linux (recovery cases excluded)"
+        run: node tools/ci/expect-tests.mjs 15 cargo test --locked -p gil --no-fail-fast --features "$GIL_PRODUCT_FEATURES" --test exploration_flow --test exploration_tools --test exploration_evidence --test closing_handoff
+      - name: "[product] the approved recovery is refused and everything is kept on this platform, exactly 1"
+        run: node tools/ci/tracking-start/expect-test-groups.mjs 'the_approved_recovery_is_refused_and_everything_is_kept_where_it_is_not_provided=1' -- cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test exploration_flow the_approved_recovery_is_refused
       # tests/visual_start.rs: the creation entry (its first-Verify declaration test is walked with the bare-approval
       # fixture and does not exist in an approved-plan build; the declaration rules are in the exploration suites above).
       - name: "[product] image-report creation entry (1 + lib creation tests) and existing-record preservation (1)"
@@ -152,8 +157,8 @@ jobs:
           node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test visual_start
           node tools/ci/expect-tests.mjs 10 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --lib -- session::visual_start::tests:: --test-threads=1
           node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test mcp visual_start_preserves_existing_and_partial_records_and_survives_response_loss -- --exact
-      - name: "[product] approval wire, product restore protection and closed-failure preservation over the real stdio process, at least 15"
-        run: node tools/ci/expect-tests.mjs 15 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test approved_plan_wire_wave1 --test chain_recovery_preservation
+      - name: "[product] approval wire over the real stdio process, at least 5 on Linux (the recovery cases exist on macOS and Windows only)"
+        run: node tools/ci/expect-tests.mjs 5 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test approved_plan_wire_wave1
       - name: "[product] compile all Core targets (compile evidence only, not execution)"
         run: cargo build --locked -p gil --all-targets --features "$GIL_PRODUCT_FEATURES"
       - name: Shared UI regression

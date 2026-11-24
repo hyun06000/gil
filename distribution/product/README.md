@@ -34,8 +34,10 @@
 | 같은 Chain 범위 변경 · 보관 대기 · 명시 재시도 | `gil_scope_propose`·`gil_scope_status`, App 전용 `gil_scope_review`·`gil_scope_decide`·`gil_scope_retry` (`src/scope_change`, #323) | 형식 10 | 기존(개발 구성) | 공통(Unix) |
 | O-2 즉시 보관 중단 · 명시 해제 | App 전용 `gil_scope_halt`·`gil_scope_release` | 형식 10 | 기존 | 공통(Unix) |
 | O-3 일반 Interview 보존 · 최종 종료 보호 | 종료 Synthesis 승인의 거절(`src/scope_change`) | 형식 10 | 기존 | 공통(Unix) |
-| 닫힌 실패의 보존·복구 승인(제품 보호) | App 전용 `gil_revisit_review`·`gil_revisit_apply` (`src/mcp/recovery.rs`) | 형식 9 | 기존 | 공통. **형식 10/11은 restore·revisit을 실행 전에 거절**(현재 제한 그대로) |
+| 닫힌 실패의 보존·복구 승인(제품 보호) | App 전용 `gil_revisit_review`·`gil_revisit_apply` (`src/mcp/recovery.rs`, `src/session/revisit_recovery.rs`) | 형식 9 | 기존. **형식 10/11은 restore·revisit을 실행 전에 거절**(현재 제한 그대로) | **제한(기존)**: 승인 복구는 macOS·Windows에만 있다. Linux에서는 검토가 `supported: false`로 답하고 승인 capability를 주지 않으며, 파일과 기록을 그대로 둔다. 이번 범위에서 넓히지 않았다 |
 | 일반 restore · Step revisit | `gil_restore`·`gil_revisit` | — | 제품 보호로 차단(기존) | 같음 |
+| 업데이트 안내 | Monitor의 update 상태(`src/mcp/update.rs`) | — | 기존 | **없음(기존)**: feed에 Linux 항목이 없어 `unavailable`로 답하고 아무것도 받아 오지 않는다 |
+| 런타임 저장소 계층(런처의 버전 선택) | `src/runtime_*` | — | 기존(개발) | **없음(기존)**: 확장 ACL 검사가 없어 모든 루트를 막는다(fail closed). 제품 `gil`의 기능은 이 계층에 기대지 않는다 |
 | Monitor(MCP App) | `show_gil_monitor`·`gil_monitor_*`, 내장 HTML(`src/mcp/surface.rs`) | 두 종류 모두 | 기존 | 공통. 화면 표시는 Host의 MCP App 지원에 달려 있고 이 빌드가 보증하지 않는다 |
 | 지속형 Companion 창 | `gil_companion_status`·`show_gil_companion` (`src/launcher.rs`) | — | 선택 기능(별도 설치) | **없음**: `this_machine()`이 `None`, 도구는 미지원으로 답한다. Core 기능과 Monitor는 영향받지 않는다 |
 | 사용자 설치 · 제거 | `gil install`·`gil doctor`·`gil uninstall` (`src/install`) | — | 사용자 채널은 Plugin 묶음(기존) | **이식**: `~/.local/share/gil/bin/gil`, 남의 항목은 덮지 않음, 기록된 파일만 제거, Codex만 등록, Claude Desktop은 찾지 않음 |
@@ -109,6 +111,12 @@ node tools/ci/expect-tests.mjs 15 cargo test --locked -p gil --features $F --tes
 cargo build --locked -p gil --all-targets --features $F
 ```
 
+Linux에서는 승인 복구가 없으므로 그 경로를 걷는 시험(`exploration_flow` 2건·`exploration_tools` 1건·
+`exploration_evidence` 2건·`exploration_plan_panel`·`chain_recovery_preservation`·`revisit_cases`)이 컴파일되지 않는다.
+대신 `the_approved_recovery_is_refused_and_everything_is_kept_where_it_is_not_provided`가 거절과 무변경을 확인한다.
+**Linux에서 실패한 Experiment가 되돌아가기를 선언하면 그 뒤의 Experiment는 열리지 않는다** — 이 제한의 사용자 영향은
+결정이 필요한 사항이다(§5).
+
 이 조합에서 **컴파일되지 않는** 기존 통합 시험이 있다(각자의 gate가 `approved-plan`을 제외한다):
 `will_end*`·`format_transition`(맨 승인 fixture), `tracking_record_boundary`(추적 범위가 없는 빌드용).
 `tests/visual_start.rs`의 첫 Verify 선언 시험도 같은 이유로 빠지고 생성 입구 시험 하나만 돈다. 이 조합의 0건을
@@ -155,3 +163,12 @@ Developer ID 서명·공증·Gatekeeper 결과가 아니다.
 
 CI는 [product-candidate.yml](../../.github/workflows/product-candidate.yml)이 두 플랫폼에서 같은 head로 위 절차를
 실행하도록 적혀 있다. 필수 check가 아니며 게시 단계가 없다.
+
+## 5. 결정이 필요한 Linux 제한 (2026-11-25 첫 Linux 실행에서 확인)
+
+- **닫힌 실패의 승인 복구가 Linux에 없다.** 코드의 기존 gate(`any(target_os = "macos", windows)`)이며 이 후보가 만든
+  제한이 아니다. 실패한 Experiment가 `revisit`을 선언하면 Core는 승인된 되돌아가기 전에는 다음 Experiment를 열지
+  않는데, Linux에서는 그 승인 복구가 제공되지 않는다. 파일과 기록은 보존된다. 이 경로를 Linux에 제공할지(검수 범위·
+  보존 위치·복구 중단 처리 포함)는 별도 결정이며, 그 전에는 Linux 설치 안내가 이 제한을 적는다.
+- 런타임 저장소 계층·업데이트 안내·Companion·형식 4 이관은 Linux에 없다(위 표). 제품 `gil`의 두 시작 종류·승인 계획·
+  탐색·시각 작성·범위 변경은 Linux CI에서 실제로 돈다.

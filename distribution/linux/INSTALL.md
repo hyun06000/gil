@@ -55,6 +55,12 @@ one kind or the other and is not converted later.
   overlayfs) and refuses elsewhere; it has no tracked-scope approval.
 
 Both kinds keep Chains, approved plans, requirement-linked Experiments and original record reads.
+
+**Limit of this build on Linux.** The approved recovery of a failed Experiment — returning the
+work files to an earlier recorded state after you approve it in the Monitor — is not provided on
+Linux. GIL refuses it, keeps every file and record as it is, and does not open the next Experiment
+of that failure. Converting older format-4 projects to image reports, the persistent Companion
+window and update notices are not available on Linux either.
 Existing projects keep the kind and storage they were started with; installing or updating GIL
 never converts a project.
 

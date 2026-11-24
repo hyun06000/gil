@@ -323,6 +323,9 @@ fn attached_visuals_are_cited_by_later_reports_and_read_the_same_after_a_restart
     assert_eq!(record_bytes(&r.record), bytes, "restarting or reading changed the record");
 }
 
+// The approved recovery of a closed failure is provided on macOS and Windows only; elsewhere the Core refuses it and keeps
+// everything (see `the_approved_recovery_is_refused_and_everything_is_kept_where_it_is_not_provided` in exploration_flow.rs).
+#[cfg(any(target_os = "macos", windows))]
 #[test]
 fn a_failed_experiments_visual_evidence_survives_the_approved_revisit_and_stays_citable() {
     let mut r = Rig::start("explore-visual-failure", &[("data/dates.csv", "id,date\n1,2026-01-02\n2,02/01/2026\n")]);
