@@ -427,6 +427,54 @@ MSIX 패키지 캐시와 `%APPDATA%` 두 곳)과 Codex(`config.toml`, 서식 보
 금지의 본뜻 — 보안 기능 해제, 실행 정책 변경, 관리자 권한, cache 손편집 금지 — 는 그대로다. 서명·Store는
 미서명 exe가 실기기에서 실제로 차단되거나(특히 Smart App Control) 차단·오탐 신고가 들어올 때만 재검토한다.
 
+### 6.2d OS마다 하나의 사용자 설치물과 두 종류의 새 시작 (2026-11-24 결정, 후보 구현)
+
+사용자 결정(2026-11-24): macOS Apple Silicon과 Linux x64(GNU) 각각 **하나의 사용자 설치물**을 제공한다.
+Linux는 benchmark 전용이나 기능 축소판이 아니며, Agent와 함께 쓰는 같은 기능을 담는다. 기능별 edition·
+프로필·다운로드를 사용자에게 고르게 하지 않는다. 이 절은 그 결정을 구현 후보의 계약으로 적은 것이며,
+**빌드·시험·설치·게시를 수행했다는 기록이 아니다.** 실행 증거는 [제품 빌드 안내](../distribution/product/README.md)의
+검증 절차가 만든다.
+
+**기능 집합.** 제품 빌드는 `tracking-policy,exploration-flow,visual-authoring,product-safety`다(`approved-plan`·
+`will-end-history`·`chain-core`는 의존성으로 포함). `runtime-testbed`·`recovery-auto-approval`은 넣지 않는다.
+Cargo 기본 feature와 기존 배포 프로필(`default`·`visual-authoring`·`approved-plan`·`exploration-flow`)의 내용과
+도구 계약은 바꾸지 않는다.
+
+**두 종류의 새 시작.** 한 실행 파일이 서로 섞이지 않는 두 저장 계약으로 새 프로젝트를 시작한다. 사용자는
+기능과 제한을 듣고 종류를 고르며, 저장 형식 번호나 빌드 feature 이름은 사용자 화면·도구 설명에 나오지 않는다.
+
+| `gil_start`의 `start_kind` | 시작 방식 | 새 기록 | 이 종류의 제한 |
+|---|---|---|---|
+| `tracked_scope` | 시작 준비 → 정확한 `.gilignore` 제안 → Monitor 승인 → 최초 보관. 승인 전에는 Chain·Cycle·Step·Snapshot을 만들지 않고 아무것도 보관하지 않는다 | 형식 10 | 보고서에 이미지를 붙일 수 없다. 작업 파일 restore·revisit은 거절된다([저장 전환 계약](GIL_Storage_Transition_Contract_v0.1.md)) |
+| `image_reports` | 검수된 비공개 로컬 저장 위치에 즉시 생성(Interview 1, Step 0) | 형식 9 | 추적 범위 승인·범위 변경이 없다. 고정 제외를 뺀 폴더 전체를 관측한다 |
+
+- 형식 11(한 프로젝트에 추적 범위와 시각 등록부)은 이 빌드가 **읽을 수 있는** 범위에 있을 뿐, 어떤 시작도 만들지
+  않는다. 10→11, 9→10 등 어떤 변환도 시작·조회·설치가 하지 않는다. 기존 형식 4 시각 이관 도구는 macOS 전용 그대로다.
+- **입력이 없을 때(호환 동작).** 한 종류만 가진 빌드는 종전과 같다(`start_kind`는 schema에 없거나, 추적 범위
+  전용 빌드에서는 `tracked_scope`만 받는다). 두 종류를 가진 빌드에서는: 그 폴더에 시작 준비가 있으면 그것을 이어
+  가고, 다른 `.gil` 기록이 있으면 읽기만 하고 거절하며, `.gil`이 없으면 `start_kind_required`로 거절하고
+  **아무것도 쓰지 않는다.** 기본값으로 한 종류를 고르지 않는다.
+- **섞지 않는다.** 고른 종류와 폴더의 기존 기록이 다르면 거절하고 바꾸지 않는다(`start_kind_conflict`,
+  `already_started`). 출처를 가릴 수 없는 `.gil` 잔여물은 어느 종류도 이어받지 않고 보존한다
+  (`start_record_unsettled`). 판정은 잠금·복구·임시 객체 정리 **전에** 한다.
+- 승인 의미는 그대로다: 추적 범위 시작·범위 변경의 승인은 App 전용 capability를 거친 Monitor 버튼뿐이고,
+  모델 도구는 승인 값을 실을 칸이 없다. 이미지 보고서 시작은 종전과 같이 승인 단계가 없다.
+
+**Linux x64 범위.** 대상은 `x86_64-unknown-linux-gnu`다. 이미지 보고서의 새 생성은 보유 descriptor의
+`statfs` 유형이 ext4·XFS·Btrfs·tmpfs·overlayfs일 때만 진행하고(목록은 지원 범위이지 내구성 보증이 아니다), 최초
+공개는 `renameat2(RENAME_NOREPLACE)` 하나로 한다. 그 호출을 지원하지 않는 커널·파일시스템에서는 오류를 그대로
+돌려주며, 존재 검사 뒤 일반 rename으로 내려가지 않는다. 설치는 사용자 단위다: `gil install`이 실행 파일을
+`~/.local/share/gil/bin/gil`에 두고, 그 자리에 자신이 두지 않은 항목이 있으면 아무것도 바꾸지 않고 멈춘다.
+Codex는 설정 폴더가 있을 때만 등록하고, 이 플랫폼에 없는 Host(Claude Desktop)는 찾지도 등록하지도 않는다.
+그 밖의 MCP Host에는 명령과 인자를 안내할 뿐 설정을 고치지 않는다. 지원 배포판 범위는 실제 ELF 요구(glibc
+하한은 바이너리에서 읽어 영수증에 적는다)와 제안 환경에서의 실행 뒤에 따로 정한다.
+
+**포장.** 같은 source commit·tree에서 두 target을 각자의 플랫폼에서 제작한다. 두 binary의 hash가 같기를
+요구하지 않고 각각 기록한다. macOS는 기존 Plugin marketplace 묶음과 그 검사(Mach-O·시스템 라이브러리·고지·
+roundtrip·smoke)를 그대로 쓴다. Linux는 `bin/gil`·LICENSE·고지 세 파일·`INSTALL.md`·`release.json`의 묶음이며
+ELF x86-64·interpreter·NEEDED·GLIBC 버전 심볼을 검사한다. 고지는 target별 검토 inventory를 쓰며 한 target의
+것을 다른 target에 쓰지 않는다. 서명·공증·tag·게시는 이 절의 범위가 아니다.
+
 ### 6.3 정식 배포 전 오픈소스 공개 준비 게이트
 
 GIL은 GitHub 소스를 공개하는 오픈소스 프로젝트로 배포한다. 새 정본 `hyun06000/gil`은
