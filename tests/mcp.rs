@@ -1024,6 +1024,20 @@ fn companion_session_tracks_actual_project_use_and_stdio_eof() {
     std::fs::remove_dir_all(base).unwrap();
 }
 
+/// gil_revisit returns the working folder to the target Cycle's exit Snapshot: it can overwrite
+/// files and delete ones that Snapshot lacks, so it is not an additive-only change.
+#[test]
+fn gil_revisit_is_listed_as_destructive() {
+    let mut mcp = Client::serve();
+    mcp.initialize();
+    let got = mcp.request("tools/list", serde_json::json!({}));
+    let tools = got["result"]["tools"].as_array().expect("tools");
+    let revisit = tools.iter().find(|t| t["name"] == "gil_revisit").expect("gil_revisit");
+    assert_eq!(revisit["annotations"]["readOnlyHint"], false, "{revisit}");
+    assert_eq!(revisit["annotations"]["destructiveHint"], true, "{revisit}");
+    assert!(mcp.eof().0.success());
+}
+
 #[test]
 fn initialize_succeeds_and_says_who_is_answering() {
     let mut mcp = Client::serve();
@@ -1082,6 +1096,10 @@ fn tools_list_includes_handoff_and_preserves_the_read_only_app_boundary() {
     }
     expected.sort();
     assert_eq!(names, expected);
+    // gil_restore overwrites files and deletes ones the target Snapshot lacks: not additive-only.
+    let restore = tools.iter().find(|t| t["name"] == "gil_restore").unwrap();
+    assert_eq!(restore["annotations"]["readOnlyHint"], false, "{restore}");
+    assert_eq!(restore["annotations"]["destructiveHint"], true, "{restore}");
     for tool in tools.iter().filter(|t| t["name"]=="gil_report_visuals") {
         assert_eq!(tool["annotations"]["readOnlyHint"],true);
         assert_eq!(tool["_meta"]["ui"]["visibility"],serde_json::json!(["model"]));
@@ -1241,8 +1259,16 @@ fn monitor_uses_exact_scope_and_canonical_view_without_touching_project_bytes() 
     assert_eq!(hint["structuredContent"].as_object().unwrap().len(), 4);
     assert!(hint["structuredContent"]["revision"].is_string());
     assert!(hint["structuredContent"].get("view").is_none());
-    // A development binary is not an installation: no feed fetch, explicit state.
-    assert_eq!(hint["structuredContent"]["update"]["state"], "not_installed");
+    // A development binary is not an installation: no feed fetch, explicit state. Where the update
+    // feed has no entry for the platform at all (Linux), the state is `unavailable` with its reason,
+    // again without a fetch: the Monitor never offers an update it cannot name.
+    if cfg!(any(target_os = "macos", windows)) {
+        assert_eq!(hint["structuredContent"]["update"]["state"], "not_installed");
+    } else {
+        assert_eq!(hint["structuredContent"]["update"]["state"], "unavailable");
+        assert_eq!(hint["structuredContent"]["update"]["platform"], serde_json::Value::Null);
+        assert_eq!(hint["structuredContent"]["update"]["error"], "unsupported platform or no state directory");
+    }
     assert!(hint["structuredContent"]["update"]["latest"].is_null());
     assert_eq!(std::fs::read(at.join(gil::STATE_PATH)).unwrap(), state);
     assert_eq!(std::fs::read_to_string(at.join("work.txt")).unwrap(), "원문 세계");
@@ -1594,10 +1620,15 @@ fn binding_files(settings: &Path) -> usize {
         .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "json")).count()).unwrap_or(0)
 }
 
-#[cfg(all(feature="visual-authoring", any(all(target_os="macos", target_arch="aarch64"), windows)))]
+#[cfg(all(feature="visual-authoring", any(all(target_os="macos", target_arch="aarch64"), all(target_os = "linux", target_arch = "x86_64"), windows)))]
 #[test]
 fn visual_start_preserves_existing_and_partial_records_and_survives_response_loss() {
     use serde_json::json;
+    // A build that also holds the tracked-scope preparation starts an image-report project only on
+    // the explicit selection; every other build keeps the bare call. Refusals below stay bare.
+    fn new_visual(root: &Path) -> serde_json::Value {
+        if cfg!(all(feature = "tracking-policy", unix)) { json!({"project_root":root,"start_kind":"image_reports"}) } else { json!({"project_root":root}) }
+    }
     fn files(root: &Path) -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
         fn walk(root:&Path, path:&Path, out:&mut std::collections::BTreeMap<PathBuf,Vec<u8>>) {
             for entry in std::fs::read_dir(path).unwrap() {
@@ -1614,7 +1645,7 @@ fn visual_start_preserves_existing_and_partial_records_and_survives_response_los
     for kind in ["legacy", "visual", "partial", "unknown", "no-lock"] {
         let root=base.join(kind); std::fs::create_dir(&root).unwrap();
         if kind=="visual" {
-            assert_eq!(monitor_call(&mut mcp,"gil_start",json!({"project_root":root}))["structuredContent"]["ok"],true);
+            assert_eq!(monitor_call(&mut mcp,"gil_start",new_visual(&root))["structuredContent"]["ok"],true);
         } else if kind=="legacy" {
             let s=gil::ProjectSession::start(common::spec(),root.join(gil::STATE_PATH)).unwrap(); s.commit().unwrap();
         } else {
@@ -1639,7 +1670,7 @@ fn visual_start_preserves_existing_and_partial_records_and_survives_response_los
         assert_eq!(files(&root),before,"{kind}");
     }
     let root=base.join("response-lost"); std::fs::create_dir(&root).unwrap();
-    assert_eq!(monitor_call(&mut mcp,"gil_start",json!({"project_root":root}))["structuredContent"]["ok"],true);
+    assert_eq!(monitor_call(&mut mcp,"gil_start",new_visual(&root))["structuredContent"]["ok"],true);
     let before=files(&root);
     mcp.eof(); // Caller loses the receipt; new server must inspect, not restart.
     let mut mcp=Client::serve_with(&settings); mcp.initialize();

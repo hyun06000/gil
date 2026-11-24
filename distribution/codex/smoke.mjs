@@ -7,12 +7,12 @@ import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {CORE, MANIFEST, PREFIX, checkLibraries, hash, verifyTree} from './artifact.mjs';
-import {checkDefaultTools, checkAuthoringTools, checkApprovedPlanTools, checkExplorationTools, withoutRecoveryTools} from './tool-contract.mjs';
-import {checkCore, compatibility, developmentFeatures} from './compatibility.mjs';
+import {checkDefaultTools, checkAuthoringTools, checkApprovedPlanTools, checkExplorationTools, checkProductTools, withoutRecoveryTools} from './tool-contract.mjs';
+import {PROFILES, checkCore, compatibility, developmentFeatures} from './compatibility.mjs';
 import {checkVersionAgreement} from './build-version.mjs';
 
 export async function smoke(root, expectedHtml, verify = verifyTree, profile = 'default', expectedVersion) {
-  assert.ok(['default', 'visual-authoring', 'approved-plan', 'exploration-flow'].includes(profile));
+  assert.ok(PROFILES.includes(profile));
   assert.equal(process.platform, 'darwin');
   assert.equal(process.arch, 'arm64');
   const receipt = await verify(root); // Integrity before executing any artifact.
@@ -97,7 +97,7 @@ export async function smoke(root, expectedHtml, verify = verifyTree, profile = '
     child.stdin.write(JSON.stringify({jsonrpc: '2.0', method: 'notifications/initialized'}) + '\n');
     const initMs = Math.round(performance.now() - at);
     const {tools} = await request('tools/list', {});
-    (profile === 'default' ? checkDefaultTools : profile === 'exploration-flow' ? checkExplorationTools : profile === 'approved-plan' ? checkApprovedPlanTools : checkAuthoringTools)(withoutRecoveryTools(tools));
+    (profile === 'default' ? checkDefaultTools : profile === 'product' ? checkProductTools : profile === 'exploration-flow' ? checkExplorationTools : profile === 'approved-plan' ? checkApprovedPlanTools : checkAuthoringTools)(withoutRecoveryTools(tools));
     let exploration;
     if (profile === 'exploration-flow') {
       const project = join(state, 'project');

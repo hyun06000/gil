@@ -1,0 +1,377 @@
+name: Product build candidate, macOS arm64 and Linux x64 (NOT a release)
+
+# What this is: the one user build per platform — every approved feature in one executable,
+#   features `tracking-policy,exploration-flow,visual-authoring,product-safety` — tested and packaged
+#   natively on each platform from the exact PR head. Both jobs use the same commit; the two binaries
+#   are different bytes and each is recorded by its own hash, source snapshot and Git tree.
+#   - Rust: the product feature set's lib tests, the start-kind selection (unit + real stdio), the
+#     tracked-scope start and same-Chain scope change over the real stdio process (now also walked
+#     under the exploration contract), the exploration and image-report suites, and an all-targets
+#     build. Suites that a feature or platform gate would compile away are counted by
+#     tools/ci/expect-tests.mjs: `running 0 tests` is never a pass.
+#   - Packaging: distribution/product/build.mjs builds the release binary, assembles the platform's
+#     install archive, and verifies it. On Linux every functional check after the archive is written
+#     goes through the archive bytes: checksum, member inspection, fresh extraction, an install into
+#     an isolated HOME, and both kinds of new project through the INSTALLED binary, then uninstall.
+# What this is not, and what it does not prove:
+#   - Not a required check, a release, a tag, a publication or an installation on a user's machine.
+#     Nothing is uploaded except short-lived review evidence. No secret is used.
+#   - The App approvals in the stdio suites and in the installed-binary check are harness input: not a
+#     person's click, not a rendered Host screen. Failure injection (archive failure, in-flight halt)
+#     uses debug-only failpoints and is evidence for the debug build only, never for the release bytes.
+#   - A pass on ubuntu-24.04 is not a statement of supported distributions. The glibc floor is read
+#     from the binary and recorded; the support range is decided separately, after a run on a clean
+#     proposed environment.
+#   - Each job packages with its own target's reviewed notice inventory (Linux: distribution/linux/compliance)
+#     and rechecks it against that target's locked dependency graph; neither inventory stands in for the other.
+#   - Build tools are fixed, not taken from the runner image: Node.js from the official tarball with a pinned
+#     SHA-256, Rust by exact version, npm and Cargo dependencies from the lock files.
+#   - The Monitor check at the end loads the exact HTML the packaged/installed Core returned into a mock Host
+#     with synthetic tool answers. It is not a real Host, a person's approval or Core behaviour.
+#   - It does not replace or change the Preview, Chain or first-start jobs or any required check, and
+#     starts no Windows runner.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'mcp-app/**'
+      - 'plugins/gil-companion-prototype/**'
+      - 'distribution/product/**'
+      - 'distribution/linux/**'
+      - 'distribution/codex/**'
+      - 'distribution/compliance/**'
+      - 'tools/ci/expect-tests.mjs'
+      - 'tools/ci/tracking-start/**'
+      - '.github/workflows/product-candidate.yml'
+  workflow_dispatch:
+    inputs:
+      unsigned_preview_version:
+        description: 'Optional X.Y.Z-preview.N stamp compiled into the Core; no publication or installation'
+        required: false
+        default: ''
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  RUSTUP_TOOLCHAIN: 1.97.1
+  GIL_PRODUCT_FEATURES: tracking-policy,exploration-flow,visual-authoring,product-safety
+
+jobs:
+  linux-x64-product:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      # Same CI-only dev/test build settings as the Chain job (release untouched).
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24 (same pin as the Preview and Chain jobs)
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Install the exact Node.js v22.23.5 (official nodejs.org linux-x64 tarball, SHA-256 pinned)
+        env:
+          NODE_VERSION: v22.23.5
+          NODE_TARBALL_SHA256: c54118104acc524633b5abe106bbf44a53126ec8b4e5fa105cb92b5d7de8a1a1
+          NODE_DIR: ${{ runner.temp }}/gil-product-node
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = x86_64
+          test ! -e "$NODE_DIR"
+          mkdir -p "$NODE_DIR"
+          name="node-$NODE_VERSION-linux-x64"
+          curl --fail --silent --show-error --proto '=https' --tlsv1.2 -o "$NODE_DIR/$name.tar.gz" "https://nodejs.org/dist/$NODE_VERSION/$name.tar.gz"
+          echo "$NODE_TARBALL_SHA256  $NODE_DIR/$name.tar.gz" | sha256sum -c -
+          tar -xzf "$NODE_DIR/$name.tar.gz" -C "$NODE_DIR"
+          test "$("$NODE_DIR/$name/bin/node" -v)" = "$NODE_VERSION"
+          echo "$NODE_DIR/$name/bin" >> "$GITHUB_PATH"
+      - name: Check build machine and record and require the exact head (never a user installation requirement)
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = x86_64
+          test "$(node -v)" = v22.23.5
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          test -z "$(git status --porcelain)"
+          rustup toolchain install 1.97.1 --profile minimal --target x86_64-unknown-linux-gnu
+          {
+            echo '### Product candidate, Linux x64'
+            echo '```'
+            echo "head:  $(git rev-parse HEAD)"
+            echo "tree:  $(git rev-parse 'HEAD^{tree}')"
+            echo "npm:   $(npm -v)"
+            uname -srm
+            ldd --version | head -n 1
+            rustc -vV
+            cargo -V
+            node -v
+            /usr/bin/tar --version | head -n 1
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          npm ci --prefix mcp-app --no-audit --no-fund
+          npm ci --prefix plugins/gil-companion-prototype --no-audit --no-fund
+          cargo fetch --locked
+      - name: Packaging contract tests (synthetic inputs; no artifact is executed)
+        run: node --test distribution/product/*.test.mjs distribution/codex/compatibility.test.mjs distribution/codex/tool-contract.test.mjs
+      - name: "[default] Core tests and all targets on Linux (the launcher errno path and the Unix storage paths)"
+        run: |
+          # --no-fail-fast: every failing suite is reported in one run; the step still fails on any of them.
+          cargo test --locked -p gil --no-fail-fast -- --test-threads=1
+          cargo build --locked -p gil --all-targets
+      - name: "[product] lib tests (start-kind selection, Linux image-report creation, user install)"
+        run: cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --lib -- --test-threads=1
+      # Groups a feature or platform gate could compile away are counted exactly by name prefix: the start-kind
+      # decision, the start preparation, the same-Chain scope change (now also under the exploration contract),
+      # the Linux per-user placement rule (compiled on every Unix) and the explicit format transition.
+      - name: "[product] lib groups, exact by name prefix (start kind 8, preparation 43, MCP start 4, scope change 24, MCP scope 2, baseline retry 37, user placement 9, format transition 7)"
+        run: |
+          node tools/ci/tracking-start/expect-test-groups.mjs 'mcp::start_kind::tests::=8' 'start_prep::tests::=43' 'mcp::start::tests::=4' 'scope_change::tests::=24' 'mcp::scope::tests::=2' 'artifact::tracking_record::baseline_retry_tests::=37' 'install::user_place::tests::=9' 'session::format_transition::tests::=7' -- cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --lib -- mcp::start_kind::tests:: start_prep::tests:: mcp::start::tests:: scope_change::tests:: mcp::scope::tests:: artifact::tracking_record::baseline_retry_tests:: install::user_place::tests:: session::format_transition::tests:: --test-threads=1
+      - name: "[product] start-kind selection over the real stdio process, exactly 6"
+        run: node tools/ci/tracking-start/expect-test-groups.mjs '*=6' -- cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test unified_start
+      - name: "[product] tracked-scope start (4) and same-Chain scope change (6) over the real stdio process, exploration contract"
+        run: |
+          node tools/ci/expect-tests.mjs 4 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test tracking_start
+          node tools/ci/expect-tests.mjs 6 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test tracking_scope_change
+      # The recovery cases (approved recovery of a closed failure) run here as on macOS: the same suites, the same count.
+      - name: "[product] exploration and image-report suites over the real stdio process, at least 20 (approved recovery included)"
+        run: node tools/ci/expect-tests.mjs 20 cargo test --locked -p gil --no-fail-fast --features "$GIL_PRODUCT_FEATURES" --test exploration_flow --test exploration_tools --test exploration_evidence --test exploration_plan_panel --test closing_handoff
+      # tests/visual_start.rs: the creation entry (its first-Verify declaration test is walked with the bare-approval
+      # fixture and does not exist in an approved-plan build; the declaration rules are in the exploration suites above).
+      - name: "[product] image-report creation entry (1 + lib creation tests) and existing-record preservation (1)"
+        run: |
+          node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test visual_start
+          node tools/ci/expect-tests.mjs 10 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --lib -- session::visual_start::tests:: --test-threads=1
+          node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test mcp visual_start_preserves_existing_and_partial_records_and_survives_response_loss -- --exact
+      # Two cases of the wire suite and one recovery case carry their own macOS gates; the rest runs on Linux,
+      # including the approved recovery after a state save followed by process death (debug failpoint).
+      - name: "[product] approval wire, product restore protection and closed-failure preservation over the real stdio process, at least 12 on Linux"
+        run: node tools/ci/expect-tests.mjs 12 cargo test --locked -p gil --no-fail-fast --features "$GIL_PRODUCT_FEATURES" --test approved_plan_wire_wave1 --test chain_recovery_preservation
+      - name: "[product] compile all Core targets (compile evidence only, not execution)"
+        run: cargo build --locked -p gil --all-targets --features "$GIL_PRODUCT_FEATURES"
+      # The Plugin's Core locator (core.test.mjs) finds the Core bundled for macOS or Windows and answers
+      # unsupported_platform on Linux, where no Plugin bundle exists; its six cases are that platform's, not Linux's.
+      # Everything else in the shared UI and Plugin suites runs here.
+      # Debug build only: the steps between two renames or unlinks of the Linux user install are made to fail with
+      # GIL_INSTALL_FAIL through the real `gil install` / `gil uninstall --remove-binary` entries, in an isolated HOME.
+      # Evidence for the debug executable's handling of injected failures; not for release bytes, not a kill test.
+      - name: "[product, debug] Linux user install: interrupted update, failed first install and partial removal through the real entries"
+        run: node distribution/product/install-failpoints.mjs target/debug/gil
+      # The standard library notice in the Linux inventory is compared, byte for byte, with the notice of THIS job's own
+      # toolchain (the official rust-docs component for x86_64-unknown-linux-gnu, installed here by rustup). A difference
+      # fails the job; nothing is refreshed.
+      - name: Compare the Linux inventory's standard library notice with this toolchain's own rust-docs notice
+        run: |
+          set -euo pipefail
+          rustup component add rust-docs --toolchain 1.97.1
+          notice="$(find "$(rustc --print sysroot)/share/doc/rust" -maxdepth 2 -name COPYRIGHT-library.html | head -n 1)"
+          test -n "$notice" && test -f "$notice"
+          expected="$(node -p 'require("./distribution/linux/compliance/notice-policy.json").stdlib.sha256')"
+          actual="$(sha256sum "$notice" | cut -d' ' -f1)"
+          node -e 'const [text, hash] = process.argv.slice(1); const stored = Buffer.from(JSON.parse(require("fs").readFileSync(`distribution/linux/compliance/texts/${hash}.json`)).text, "utf8"); if (!stored.equals(require("fs").readFileSync(text))) { console.error("the stored notice text differs from this toolchain\u0027s notice"); process.exit(1); }' "$notice" "$expected"
+          {
+            echo '### Standard library notice (Linux toolchain vs. inventory)'
+            echo '```'
+            echo "toolchain: $(rustc -vV | sed -n 's/^host: //p') $(rustc -V)"
+            echo "component: rust-docs (rustup), file share/doc/rust/COPYRIGHT-library.html, $(wc -c < "$notice") bytes"
+            echo "toolchain sha256: $actual"
+            echo "inventory sha256: $expected"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          test "$actual" = "$expected"
+      - name: Shared UI regression (without the macOS/Windows Plugin Core locator)
+        run: |
+          set -euo pipefail
+          files=$(ls plugins/gil-companion-prototype/*.test.mjs | grep -v '/core\.test\.mjs$')
+          test "$(echo "$files" | wc -l)" -ge 5
+          node --test ui/layout.test.mjs mcp-app/*.test.mjs $files
+      - name: Prepare fresh output parent
+        run: mkdir -p target
+      - name: Build, package and verify the Linux install archive through its own bytes (no publication)
+        env:
+          GIL_PREVIEW_VERSION: ${{ inputs.unsigned_preview_version }}
+        run: node distribution/product/build.mjs target/product-linux-x64
+      - name: Install the pinned Playwright (exact lock) and its pinned headless Chromium into a fresh directory
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/gil-product-browsers
+        run: |
+          set -euo pipefail
+          test ! -e "$PLAYWRIGHT_BROWSERS_PATH"
+          npm ci --prefix tools/ci/tracking-start --ignore-scripts --no-audit --no-fund
+          P=tools/ci/tracking-start/node_modules
+          node -e 'for (const m of ["playwright", "playwright-core"]) { const v = require(`./${process.argv[1]}/${m}/package.json`).version; if (v !== "1.63.0") { console.error(m, v); process.exit(1); } }' "$P"
+          node "$P/playwright/cli.js" install --only-shell chromium
+      # Synthetic Host and synthetic tool answers on the HTML bytes the packaged/installed Core returned (written by the
+      # step above from resources/read, already compared with the committed asset). Not a real Host, not a human
+      # approval, not Core behaviour.
+      - name: Synthetic Monitor checks on the exact HTML this build's Core returned (mock Host; NOT a real Host or human approval)
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/gil-product-browsers
+          GIL_PLAYWRIGHT_MODULE: ${{ github.workspace }}/tools/ci/tracking-start/node_modules/playwright
+          GIL_SCOPE_MONITOR_HTML: ${{ github.workspace }}/target/product-linux-x64/monitor-returned.html
+        run: |
+          set -euo pipefail
+          unset GIL_BROWSER_EXECUTABLE
+          GIL_SCOPE_MONITOR_SHA256="$(node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$GIL_SCOPE_MONITOR_HTML")"; export GIL_SCOPE_MONITOR_SHA256
+          test "$GIL_SCOPE_MONITOR_SHA256" = "$(node -p 'require("./plugins/gil-companion-prototype/assets/monitor.json").sha256')"
+          cmp "$GIL_SCOPE_MONITOR_HTML" plugins/gil-companion-prototype/assets/monitor.html
+          node mcp-app/scope-browser-check.mjs
+          node mcp-app/start-browser-check.mjs
+          echo "synthetic Monitor checks: exit 0 (mock Host only), html sha256 $GIL_SCOPE_MONITOR_SHA256" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Retain development evidence only (not a publication)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
+        with:
+          archive: true # Keep the tar, checksum and evidence together; not direct-file publication.
+          name: gil-linux-x64-DEVELOPMENT-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            target/product-linux-x64/gil-linux-x64.tar.gz
+            target/product-linux-x64/SHA256SUMS
+            target/product-linux-x64/checks.json
+            target/product-linux-x64/provenance.json
+            target/product-linux-x64/monitor-returned.html
+          if-no-files-found: error
+          retention-days: 7
+
+  macos-arm64-product:
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24 (same pin as the Preview and Chain jobs)
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Install the exact Node.js v22.23.5 (official nodejs.org darwin-arm64 tarball, SHA-256 pinned)
+        env:
+          NODE_VERSION: v22.23.5
+          NODE_TARBALL_SHA256: e7131995759b61a0170b646010d2ad35a5d37b4cb0d471f3e8317eac6f742f3d
+          NODE_DIR: ${{ runner.temp }}/gil-product-node
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          test ! -e "$NODE_DIR"
+          mkdir -p "$NODE_DIR"
+          name="node-$NODE_VERSION-darwin-arm64"
+          curl --fail --silent --show-error --proto '=https' --tlsv1.2 -o "$NODE_DIR/$name.tar.gz" "https://nodejs.org/dist/$NODE_VERSION/$name.tar.gz"
+          echo "$NODE_TARBALL_SHA256  $NODE_DIR/$name.tar.gz" | shasum -a 256 -c -
+          tar -xzf "$NODE_DIR/$name.tar.gz" -C "$NODE_DIR"
+          test "$("$NODE_DIR/$name/bin/node" -v)" = "$NODE_VERSION"
+          echo "$NODE_DIR/$name/bin" >> "$GITHUB_PATH"
+      - name: Check build machine and record and require the exact head (never a user installation requirement)
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          test "$(node -v)" = v22.23.5
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          test -z "$(git status --porcelain)"
+          rustup toolchain install 1.97.1 --profile minimal --target aarch64-apple-darwin
+          {
+            echo '### Product candidate, macOS arm64'
+            echo '```'
+            echo "head:  $(git rev-parse HEAD)"
+            echo "tree:  $(git rev-parse 'HEAD^{tree}')"
+            echo "npm:   $(npm -v)"
+            sw_vers
+            rustc -vV
+            cargo -V
+            node -v
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          npm ci --prefix mcp-app --no-audit --no-fund
+          npm ci --prefix plugins/gil-companion-prototype --no-audit --no-fund
+          cargo fetch --locked
+      - name: Packaging contract tests (synthetic inputs; no artifact is executed)
+        run: node --test distribution/product/*.test.mjs
+      # The default Core suite of this platform and head is the Preview job's; it is not repeated here.
+      - name: "[product] lib tests (start-kind selection)"
+        run: cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --lib -- --test-threads=1
+      # Groups a feature or platform gate could compile away are counted exactly by name prefix: the start-kind
+      # decision, the start preparation, the same-Chain scope change (now also under the exploration contract),
+      # the Linux per-user placement rule (compiled on every Unix) and the explicit format transition.
+      - name: "[product] lib groups, exact by name prefix (start kind 8, preparation 43, MCP start 4, scope change 24, MCP scope 2, baseline retry 37, user placement 9, format transition 7)"
+        run: |
+          node tools/ci/tracking-start/expect-test-groups.mjs 'mcp::start_kind::tests::=8' 'start_prep::tests::=43' 'mcp::start::tests::=4' 'scope_change::tests::=24' 'mcp::scope::tests::=2' 'artifact::tracking_record::baseline_retry_tests::=37' 'install::user_place::tests::=9' 'session::format_transition::tests::=7' -- cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --lib -- mcp::start_kind::tests:: start_prep::tests:: mcp::start::tests:: scope_change::tests:: mcp::scope::tests:: artifact::tracking_record::baseline_retry_tests:: install::user_place::tests:: session::format_transition::tests:: --test-threads=1
+      - name: "[product] start-kind selection over the real stdio process, exactly 6"
+        run: node tools/ci/tracking-start/expect-test-groups.mjs '*=6' -- cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test unified_start
+      - name: "[product] tracked-scope start (4) and same-Chain scope change (6) over the real stdio process, exploration contract"
+        run: |
+          node tools/ci/expect-tests.mjs 4 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test tracking_start
+          node tools/ci/expect-tests.mjs 6 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test tracking_scope_change
+      - name: "[product] exploration and image-report suites over the real stdio process, at least 20"
+        run: node tools/ci/expect-tests.mjs 20 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test exploration_flow --test exploration_tools --test exploration_evidence --test exploration_plan_panel --test closing_handoff
+      # tests/visual_start.rs: the creation entry (its first-Verify declaration test is walked with the bare-approval
+      # fixture and does not exist in an approved-plan build; the declaration rules are in the exploration suites above).
+      - name: "[product] image-report creation entry (1 + lib creation tests) and existing-record preservation (1)"
+        run: |
+          node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test visual_start
+          node tools/ci/expect-tests.mjs 10 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --lib -- session::visual_start::tests:: --test-threads=1
+          node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test mcp visual_start_preserves_existing_and_partial_records_and_survives_response_loss -- --exact
+      - name: "[product] approval wire, product restore protection and closed-failure preservation over the real stdio process, at least 15"
+        run: node tools/ci/expect-tests.mjs 15 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test approved_plan_wire_wave1 --test chain_recovery_preservation
+      - name: "[product] compile all Core targets (compile evidence only, not execution)"
+        run: cargo build --locked -p gil --all-targets --features "$GIL_PRODUCT_FEATURES"
+      - name: Prepare fresh output parent
+        run: mkdir -p target
+      # The macOS pipeline with the product profile: UI rebuild, notice recheck, Mach-O and system-library checks,
+      # archive roundtrip, protocol smoke with integrity first; then, from the archive bytes alone, a new owner-only
+      # prefix and an isolated HOME, the Core the Plugin manifest names, both kinds of new project with a restart,
+      # removal, and unchanged synthetic Host settings. No Host registration is performed. Unsigned and not
+      # notarized; Gatekeeper is neither consulted nor bypassed and no credential is read.
+      - name: Build, package and verify the macOS Plugin archive (no publication)
+        env:
+          GIL_PREVIEW_VERSION: ${{ inputs.unsigned_preview_version }}
+        run: node distribution/product/build.mjs target/product-macos-arm64
+      - name: Install the pinned Playwright (exact lock) and its pinned headless Chromium into a fresh directory
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/gil-product-browsers
+        run: |
+          set -euo pipefail
+          test ! -e "$PLAYWRIGHT_BROWSERS_PATH"
+          npm ci --prefix tools/ci/tracking-start --ignore-scripts --no-audit --no-fund
+          P=tools/ci/tracking-start/node_modules
+          node -e 'for (const m of ["playwright", "playwright-core"]) { const v = require(`./${process.argv[1]}/${m}/package.json`).version; if (v !== "1.63.0") { console.error(m, v); process.exit(1); } }' "$P"
+          node "$P/playwright/cli.js" install --only-shell chromium
+      # Synthetic Host and synthetic tool answers on the HTML bytes the packaged/installed Core returned (written by the
+      # step above from resources/read, already compared with the committed asset). Not a real Host, not a human
+      # approval, not Core behaviour.
+      - name: Synthetic Monitor checks on the exact HTML this build's Core returned (mock Host; NOT a real Host or human approval)
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/gil-product-browsers
+          GIL_PLAYWRIGHT_MODULE: ${{ github.workspace }}/tools/ci/tracking-start/node_modules/playwright
+          GIL_SCOPE_MONITOR_HTML: ${{ github.workspace }}/target/product-macos-arm64/monitor-returned.html
+        run: |
+          set -euo pipefail
+          unset GIL_BROWSER_EXECUTABLE
+          GIL_SCOPE_MONITOR_SHA256="$(node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$GIL_SCOPE_MONITOR_HTML")"; export GIL_SCOPE_MONITOR_SHA256
+          test "$GIL_SCOPE_MONITOR_SHA256" = "$(node -p 'require("./plugins/gil-companion-prototype/assets/monitor.json").sha256')"
+          cmp "$GIL_SCOPE_MONITOR_HTML" plugins/gil-companion-prototype/assets/monitor.html
+          node mcp-app/scope-browser-check.mjs
+          node mcp-app/start-browser-check.mjs
+          echo "synthetic Monitor checks: exit 0 (mock Host only), html sha256 $GIL_SCOPE_MONITOR_SHA256" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Retain development evidence only (not a marketplace publication)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
+        with:
+          archive: true
+          name: gil-macos-arm64-PRODUCT-DEVELOPMENT-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            target/product-macos-arm64/gil-codex-macos-arm64-preview.tar.gz
+            target/product-macos-arm64/SHA256SUMS
+            target/product-macos-arm64/checks.json
+            target/product-macos-arm64/provenance.json
+            target/product-macos-arm64/monitor-returned.html
+          if-no-files-found: error
+          retention-days: 7

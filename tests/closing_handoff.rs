@@ -57,7 +57,7 @@ impl Rig {
         let settings = scratch(&format!("{label}-settings"));
         let record = product_state_path(&root, &private_local_app_data(&settings));
         let mut r = Rig { root, settings: settings.clone(), record, scope: String::new(), c: Client::serve(&settings) };
-        let started = ok(r.model("gil_start", json!({})), "start");
+        let started = ok(r.model("gil_start", direct_start()), "start");
         as_item_queue_record(&r.record);
         let next = &structured(&started)["next_call"];
         r.scope = next["arguments"]["scope_id"].as_str().unwrap().to_owned();
@@ -340,11 +340,11 @@ fn a_change_request_on_a_closing_proposal_is_not_an_approval_and_closes_nothing(
 /// requirement that no Experiment answered is closed as it is, by the user's approval of the
 /// exact proposal, and stays stated as unanswered. Reached the way a Host reaches it: `gil_start`
 /// in an `exploration-flow` build, a linked Experiment, the App-only review and decision.
-#[cfg(all(feature = "exploration-flow", feature = "product-safety", feature = "visual-authoring", any(target_os = "macos", windows)))]
+#[cfg(all(feature = "exploration-flow", feature = "product-safety", feature = "visual-authoring", any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows)))]
 #[path = "support_wave1/exploration.rs"]
 mod exploration;
 
-#[cfg(all(feature = "exploration-flow", feature = "product-safety", feature = "visual-authoring", any(target_os = "macos", windows)))]
+#[cfg(all(feature = "exploration-flow", feature = "product-safety", feature = "visual-authoring", any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows)))]
 #[test]
 fn an_exploration_chain_closes_with_an_unanswered_requirement_only_as_the_user_approved_it() {
     use exploration::{Rig as Explore, Run};

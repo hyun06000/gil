@@ -107,6 +107,32 @@ impl Monitor {
         Ok(json!({ "scope_id": scope, "label": label }))
     }
 
+    /// Start preparation (tracking-policy development profile): the same consent binding and scope as a
+    /// Project, for a root whose `.gil/start/` preparation exists before any `state.yaml`. No Chain is
+    /// faked; the App shows only the preparation panel until the formal start is committed.
+    #[cfg(all(feature = "tracking-policy", unix))]
+    pub fn prepare_start(&self, root: &str) -> Result<Value, Refusal> {
+        let path = Path::new(root);
+        if !path.is_absolute() { return Err(Refusal::new("invalid_root", text("madapter.invalid_root"))); }
+        let root = path.canonicalize().map_err(|_| Refusal::new("unreadable", text("madapter.root_unreadable")))?;
+        if crate::project_state::state_for_root(&root).map(|s| s.is_file()).unwrap_or(false) {
+            return self.prepare(root.to_str().unwrap_or_default());
+        }
+        crate::start_prep::review(&root).map_err(|e| { let _ = e; Refusal::new("not_a_project", text("madapter.start_preparation_unreadable")) })?;
+        let binding = Binding::capture(root)?;
+        let scope = binding.scope();
+        let label = binding.label();
+        let mut entries = self.entries.lock().map_err(|_| Refusal::new("unavailable", text("madapter.registry")))?;
+        if let Some(old) = entries.get(&scope) {
+            if old.binding != binding { return Err(Refusal::new("scope_collision", text("madapter.scope_collision"))); }
+        } else if entries.len() >= MAX_PROJECTS {
+            return Err(Refusal::new("limit", text("madapter.limit")));
+        }
+        self.store.save(&binding)?;
+        entries.entry(scope.clone()).or_insert_with(|| Entry::new(binding));
+        Ok(json!({ "scope_id": scope, "label": label }))
+    }
+
     /// Read-only status: do not prepare/register a Project just to inspect display.
     pub fn presence_status(&self, root: &str) -> Result<Value, Refusal> {
         let path = Path::new(root);
@@ -188,6 +214,18 @@ impl Monitor {
     pub fn view(&self, scope: &str) -> Result<Value, Refusal> {
         // Capture cursor BEFORE reading, so changes during the read cause another refresh.
         let hint = self.poll(scope)?;
+        #[cfg(all(feature = "tracking-policy", unix))]
+        {
+            let root = self.root(scope)?;
+            let started = crate::project_state::state_for_root(&root).map(|s| s.is_file()).unwrap_or(false);
+            if !started {
+                // Before the formal start there is no Project to read: show only the preparation, never a fake Chain.
+                let (preparation, _) = crate::start_prep::review(&root).map_err(|e| { let _ = e; Refusal::new("not_a_project", text("madapter.start_preparation_unreadable")) })?;
+                let label = self.entries.lock().map_err(|_| Refusal::new("unavailable", text("madapter.registry")))?[scope].binding.label();
+                return Ok(json!({ "scope_id": scope, "label": label, "start_review_supported": true,
+                    "start_preparation": preparation, "revision": hint["revision"], "watching": hint["watching"] }));
+            }
+        }
         let session = self.session(scope)?;
         let snapshot = session.monitor().map_err(refuse)?;
         let view = crate::monitor_view_v1(&snapshot).map_err(|_| Refusal::new("unsupported_vocabulary", text("madapter.unsupported_vocabulary")))?;
@@ -196,6 +234,23 @@ impl Monitor {
             "revision": hint["revision"], "watching": hint["watching"] });
         if cfg!(feature = "approved-plan") && session.project().approved_plan().is_some() { value["plan_review_supported"] = json!(true); }
         if cfg!(feature = "product-safety") { value["revisit_review_supported"] = json!(true); }
+        #[cfg(all(feature = "tracking-policy", unix))]
+        if let Some(tracking) = session.project().tracking() {
+            // Read-only facts beside the Graph: the applied approved policy and the policy-file sync base.
+            value["tracking"] = json!({"policy": format!("policy:{}", tracking.applied().name().id()),
+                "engine": "gil-gilignore/1", "event": "event:M1", "baseline": tracking.start().snapshot.to_string(),
+                "policy_file_sync_base": match tracking.sync_base() {
+                    crate::artifact::start_policy::SyncBase::Absent => "absent",
+                    crate::artifact::start_policy::SyncBase::Present(_) => "present",
+                    crate::artifact::start_policy::SyncBase::Unconfirmed => "unconfirmed" }});
+            // 세 값을 따로 싣는다(공유 계약 §6.3): 적용 정책 · 마지막 확정 세계와 그 확정 정책 · 보관 대기. 중단 표식도 조회로 보인다.
+            // 유도하지 못하면 그 사실을 싣고, 적용 정책을 확정 정책처럼 채우지 않는다.
+            match crate::scope_change::standing_view(session.project()) {
+                Ok(now) => value["tracking"]["now"] = now,
+                Err(why) => value["tracking"]["now_unreadable"] = json!(why),
+            }
+            value["scope_review_supported"] = json!(true);
+        }
         #[cfg(feature = "product-safety")]
         { value["recovery_approval"] = session.recovery_approval_view(); }
         Ok(value)

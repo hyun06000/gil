@@ -197,6 +197,14 @@ mod session;
 #[cfg(feature = "product-safety")]
 mod recovery_mode;
 mod store;
+// 구현 순서 4번 — 시작 준비·제안·Monitor 승인 응답·정식 시작 확정(`tracking-policy` 개발 구성).
+#[cfg(all(feature = "tracking-policy", unix))]
+mod start_prep;
+// 구현 순서 5번 — 범위 변경 제안·Monitor 승인·승인 저장·기준점 보관과 명시 재시도·즉시 보관 중단(같은 개발 구성).
+#[cfg(all(feature = "tracking-policy", unix))]
+mod scope_change;
+#[cfg(all(feature = "tracking-policy", not(unix)))]
+compile_error!("`tracking-policy` is a Unix development profile; this build does not provide it on this OS");
 mod status;
 mod story;
 mod validate;
@@ -254,7 +262,7 @@ pub use session::{
 pub use root::{RootError, open_project_root, open_project_root_read_only};
 pub use status::where_now;
 pub use story::{story, story_of};
-pub use store::{FORMAT, VISUAL_FORMAT, CHAIN_FORMAT, CHAIN_VISUAL_FORMAT, END_HISTORY_FORMAT, END_HISTORY_VISUAL_FORMAT, newest_known_format, is_visual_format, transition_target, LEGACY_WALK_PATH, STATE_PATH, StoreError, load, said_path, save};
+pub use store::{FORMAT, VISUAL_FORMAT, CHAIN_FORMAT, CHAIN_VISUAL_FORMAT, END_HISTORY_FORMAT, END_HISTORY_VISUAL_FORMAT, TRACKING_FORMAT, TRACKING_VISUAL_FORMAT, newest_known_format, is_visual_format, transition_target, LEGACY_WALK_PATH, STATE_PATH, StoreError, load, said_path, save};
 pub use validate::{GrammarError, Subject};
 pub use walk::{NextDirectionError, NodeId, RestoreError, StepNode, Walk, WalkError};
 pub use will::{ActionContract, ContractError, DONE_WHEN, NEXT_ACTION, OBJECTIVE, Will};

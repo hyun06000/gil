@@ -117,7 +117,11 @@ fn run(ctx: &Invocation<'_>, args: &[String]) -> Result<String, String> {
         }
         "context" => {
             let session = open_session(ctx)?;
-            Ok(format!("{}{}", context(session.project()), crate::project_resume::status(&session.root().map_err(say)?)))
+            let root = session.root().map_err(say)?;
+            // A CLI process starts in the default language; the resumed Project's remembered
+            // language decides how it is described, as it already does for the MCP call.
+            Ok(crate::locale::with(crate::locale::for_project(&root), ||
+                format!("{}{}", context(session.project()), crate::project_resume::status(&root))))
         }
         "monitor" => monitor(ctx, args.get(1)),
         "mcp" => mcp(args.get(1).map(String::as_str)),
@@ -259,6 +263,11 @@ fn say(err: SessionError) -> String {
 // ── 명령 ───────────────────────────────────────────────────────────────────
 
 fn start(ctx: &Invocation<'_>) -> Result<String, String> {
+    // tracking-policy 개발 구성: 최초 시작은 Monitor 승인을 거치는 준비 경로뿐이다(CLI 에는 Monitor 가 없다).
+    // 기존 전체 관측 시작으로 물러서지 않는다.
+    if cfg!(feature = "tracking-policy") {
+        return Err(text("cmd.start_tracking_monitor_only").into());
+    }
     // 위에 이미 기록이 있으면 여기서 새로 시작하지 않는다 — 그러면 한 프로젝트에
     // 기록이 둘이 되고, 어느 쪽에 적히는지는 서 있는 자리가 정하게 된다.
     match find_gil(ctx)? {

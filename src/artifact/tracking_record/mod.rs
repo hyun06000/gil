@@ -79,6 +79,38 @@
 //!                                          소유·실제 종류 Experiment·닫힘·Exit 확인 뒤, 등록부에 있는 T 의 exit_snapshot_ref 와 그 확정 정책
 //!                                          = P(T) 그대로(§6.1 의 「Experiment 의 Exit」 줄). Interview 는 범위 밖 (experiment_exit — Verify 계보·
 //!                                          T 개방의 검증 ②·B(T)/S(N) 의 미유도 대체·3n/3o 연결·실제 승인·보관 아님)
+//!
+//! 대상 닫힌 Experiment T + 한 시점의 (&[Chain], 등록부)
+//!     ─check_experiment_exit_lineage─▶ ExitLineageCheck   select_experiment_exit 와 같은 소유 조회 뒤 T 의 저장 exit_snapshot_ref 를 마지막
+//!                                          Outcome 의 parent 사슬(Walk::lineage)에서 가장 가까운 닫힌 Verify 의 snapshot_ref, 없으면 T 의 Entry 와
+//!                                          견준다(Artifact Model §7.5). 그 Verify 의 snapshot 누락은 우회하지 않는 손상, 두 이름의 등록부 조회 —
+//!                                          Interview·열린 Experiment 는 범위 밖 (exit_lineage — P(T)·승인·manifest/blob 실재·제품 close/load 연결 아님)
+//!
+//! 대상 Step(그 Cycle N) + 한 시점의 (PolicyLedger, EventPolicyLinks, 사건의 사이클 칸, &[Chain], 등록부)
+//!     ─select_verify_world─▶ VerifyWorld   같은 호출의 select_opening_policy(N) 한 번(그 안의 3j·대상 위치 그대로) + 같은 소유 조회로 N 의
+//!                                          실제 종류 Experiment(열림·닫힘 무관)와 지정 Step 의 실재·Verify·닫힘·snapshot_ref 확인 뒤, 등록부에 있는
+//!                                          그 Verify 자신의 snapshot_ref 와 그 확정 정책 = P(N) 그대로(§6.1 의 「Experiment 의 Verify」 줄). Interview·
+//!                                          없는 Step·Verify 아닌 Step·열린 Verify 는 범위 밖 (verify_world — 계보 선택·현재 세계·Exit 채택·N 개방의
+//!                                          검증 ②·3n/3o 연결·실제 승인·관측·보관 아님)
+//!
+//! 대상 범위 변경 사건 + 한 시점의 입력 묶음(위 다섯 + 뽑아 건넨 review_cycle_ref·world_before_ref 칸 + 범위 밖 표식)
+//!     ─read_scope_change─▶ ScopeChangeReading   같은 호출에서 3j·3g·B(T)·S(N)·Experiment Exit·Exit 계보를 다시 실행해 적용 정책(원장의 마지막 판과
+//!                                          그 출처) / 지금 닫힌 경계의 마지막 확정 세계와 확정 정책·유도 경로(Interview 는 Entry 의 출처에서 계승,
+//!                                          Experiment 는 P(T)·검증 ①·②, 뿌리는 start 기준점) / 사건의 대기·이미 확정·대체를 따로 읽는다.
+//!                                          world_before_ref 는 대상 사건보다 앞의 기록만으로, 승인 경계·보관 경계에서 지금 경계와 같은 유도를
+//!                                          해 얻은 세계·확정 정책과 견준다. 기준점이 없는 사건의 정상 부재와 확인하지 못한 칸을 따로 남긴다
+//!                                          (confirmed_world — 읽기 전용. 열린 사이클·후속 Chain·Chain 종료 경계·보관 중단은 범위 밖 결과, 실제
+//!                                          승인·개방 허가·제품 연결 아님)
+//!
+//! 대상 사건 + 같은 입력 묶음 + 격리 루트(객체 창고는 그 `.gil/`) + 호출자가 건넨 내부 저장 경계   (tracking-policy + Unix 에서만 컴파일)
+//!     ─RetryAttempt::begin / run_retry─▶ RetryOutcome   읽기를 다시 실행해 대기이고 실행 전제(보관 중단·미완 복원의 부재, review_cycle_ref,
+//!                                          다른 사건의 경계)가 확인됐을 때만 한 시도를 시작한다. 루트·창고·저장 경계는 그때 한 번 정해 시도가
+//!                                          지닌다. 구간의 원문을 그 창고에서 다시 읽어 3o 구간을 세운 뒤 observe_scoped → 범위 변화 검사(3n) →
+//!                                          capture_scoped → 같은 검사 → manifest → 한 저장 단위 저장 → 다시 읽어 앞선 기록의 보존(3d·3i), 이 시도의
+//!                                          저장 단위, 의존한 세계·확정 정책 근거의 재유도 일치를 확인했을 때만 확정. 실패한 시도는 지금 기록을 다시
+//!                                          읽어 「이 시도의 실패」와 「지금의 대기」를 따로 말하고, 결과 불명을 구분하며, 다른 시도·다른 걸음·끝난
+//!                                          시도의 보고를 거절한다 (baseline_retry — 승인 저장·정책 파일·state.yaml 저장·다음 실험 개방·복원 아님,
+//!                                          사람의 재시도 요청의 인증 아님)
 //! ```
 //!
 //! # 「형식이 맞다」는 「승인됐고 적용됐다」가 아니다
@@ -105,7 +137,10 @@
 //!   ([`event_cycle_history`], 「3i」 — 사건 기록 전체의 보존이 아니다). 한 시점에 따로 건넨 3c 입력과 3h 입력이 같은 사건 목록을
 //!   나타내는지(사건 수·자리별 이름·같은 사건의 종류)는 두 검사를 그대로 부르고 본다([`event_inputs`], 「3j」 — 입력이 실제 원장에서
 //!   빠짐없이 뽑혔는지는 보지 않는다).
-//!   T5·T6·T7 의 나머지와 T8–T13 은 이 모듈이 검사하지 않는다([`UNCHECKED_CONDITIONS`]). 현재 세계·보관 대기·복원은 3·5·6번이 공유하는 §6 규칙의 몫이다.
+//!   범위 변경 사건 하나에 대해서는 적용 정책·지금 닫힌 경계의 마지막 확정 세계와 확정 정책·기준점 유무를 건넨 입력에서 따로 읽고
+//!   ([`confirmed_world`] — T8·T9 를 그 사건과 유도 경로 안에서만), `tracking-policy` + Unix 에서는 그 대기 사건의 명시 재시도를 격리된
+//!   폴더·창고·내부 저장 경계로 실행·판정한다(`baseline_retry` — 제품의 `state.yaml` 저장이 아니다).
+//!   T5·T6·T7 의 나머지와 T8·T9 의 나머지, T10–T13 은 이 모듈이 검사하지 않는다([`UNCHECKED_CONDITIONS`]). 제품의 현재 세계·보관 대기·복원 연결은 5·6번의 몫이다.
 //!
 //! 이 모듈의 시험 자료는 모두 **합성 자료**다. 모니터가 실제로 승인한 기록이 아니다.
 
@@ -118,11 +153,14 @@ use crate::refs::RefSyntaxError;
 mod baseline_history;
 mod baseline_position;
 mod baseline_record;
+mod baseline_retry;
 mod boundary_world;
+mod confirmed_world;
 mod event_cycle_history;
 mod event_cycles;
 mod event_inputs;
 mod event_links;
+mod exit_lineage;
 mod experiment_exit;
 mod ledger_span;
 mod link_history;
@@ -130,10 +168,12 @@ mod opening_policy;
 mod opening_world;
 mod path_continuity;
 mod policy_file_read;
+mod policy_file_write;
 mod source;
 mod source_store;
 mod sync;
 mod sync_order;
+mod verify_world;
 mod wire;
 
 #[cfg(test)]
@@ -142,8 +182,12 @@ mod baseline_history_tests;
 mod baseline_position_tests;
 #[cfg(test)]
 mod baseline_record_tests;
+#[cfg(all(test, feature = "tracking-policy", unix))]
+mod baseline_retry_tests;
 #[cfg(test)]
 mod boundary_world_tests;
+#[cfg(test)]
+mod confirmed_world_tests;
 #[cfg(test)]
 mod event_cycle_history_tests;
 #[cfg(test)]
@@ -152,6 +196,8 @@ mod event_cycles_tests;
 mod event_inputs_tests;
 #[cfg(test)]
 mod event_links_tests;
+#[cfg(test)]
+mod exit_lineage_tests;
 #[cfg(test)]
 mod experiment_exit_tests;
 #[cfg(test)]
@@ -172,6 +218,8 @@ mod source_store_tests;
 mod sync_order_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod verify_world_tests;
 
 #[allow(unused_imports)]
 pub(crate) use baseline_history::{
@@ -188,11 +236,27 @@ pub(crate) use baseline_record::{
     AttemptSeen, BASELINES_DO_NOT_SHOW, BaselineFacts, BaselineField, BaselineProblem, BaselineSlot, BaselinesAgree,
     check_baselines,
 };
+#[cfg(all(feature = "tracking-policy", unix))]
+#[allow(unused_imports)]
+pub(crate) use baseline_retry::{
+    AfterFailure, AttemptBinding, AttemptTicket, BASELINE_RETRY_DOES_NOT_SHOW, BaselineCommit, BaselineState,
+    DifferenceKind, FailedAttempt, FailureCause, FailureRecord, NotStarted, OwnedRecords, PathDifference, RetryAttempt,
+    RetryClosed, RetryOutOfOrder, RetryOutcome, RetryReport, RetryRequest, RetryRun, RetryStep, SaveAnswer, ScopeDelta,
+    SeenAt, UnknownWhy, run_retry, scope_delta_over,
+};
 #[allow(unused_imports)]
 pub(crate) use boundary_world::{
     BOUNDARY_WORLD_DOES_NOT_SHOW, BoundaryPolicy, BoundarySource, BoundaryTargetProblem, BoundaryWorld,
     BoundaryWorldProblem, select_boundary_world,
 };
+#[allow(unused_imports)]
+pub(crate) use confirmed_world::{
+    AppliedPolicy, BasisAt, CONFIRMED_WORLD_DOES_NOT_SHOW, ConfirmedWorld, EventStanding, EventWorldFacts, MarkSeen,
+    PolicyStep, ReadingProblem, RecordInputs, ReviewProblem, ScopeChangeReading, ScopeLimit, ScopeMarks, SecondBasis,
+    StartProblem, Unjudged, WorldBefore, WorldFactsMismatch, read_scope_change,
+};
+#[allow(unused_imports)]
+pub(crate) use confirmed_world::{LastConfirmed, RecordStanding, StandingAt, check_record};
 #[allow(unused_imports)]
 pub(crate) use event_cycle_history::{
     APPROVAL_HISTORY_DOES_NOT_SHOW, ApprovalChange, ApprovalField, EventCycleHistoryKept, EventCycleHistoryProblem,
@@ -211,6 +275,11 @@ pub(crate) use event_inputs::{
 pub(crate) use event_links::{
     EventKind, EventName, EventNamesError, EventPolicyLink, EventPolicyLinks, LINKS_DO_NOT_SHOW, LinkField,
     LinkProblem, PolicyLinksAgree, check_policy_links,
+};
+#[allow(unused_imports)]
+pub(crate) use exit_lineage::{
+    EXIT_LINEAGE_DOES_NOT_SHOW, ExitLineageCheck, ExitLineageProblem, ExitLineageVerdict, ExpectedSource,
+    check_experiment_exit_lineage,
 };
 #[allow(unused_imports)]
 pub(crate) use experiment_exit::{
@@ -242,6 +311,10 @@ pub(crate) use path_continuity::{
 };
 #[allow(unused_imports)]
 pub(crate) use policy_file_read::read_root_policy_file;
+#[cfg(feature = "tracking-policy")]
+pub(crate) use policy_file_read::read_root_policy_source;
+#[cfg(all(feature = "tracking-policy", unix))]
+pub(crate) use policy_file_write::{PolicyWrite, write_root_policy_file, write_with};
 #[allow(unused_imports)]
 pub(crate) use source::{
     Condition, PolicySourceLookup, PolicySourcesMatch, ProvidedSources, SourceLookup,
@@ -260,6 +333,10 @@ pub(crate) use sync_order::{
     base_for_new_policy,
 };
 #[allow(unused_imports)]
+pub(crate) use verify_world::{
+    StepProblem, VERIFY_WORLD_DOES_NOT_SHOW, VerifyWorld, VerifyWorldProblem, select_verify_world,
+};
+#[allow(unused_imports)]
 pub(crate) use wire::{StoredPolicy, StoredPolicyFile, StoredRules, StoredSyncBase, SyncBaseShapeError};
 
 /// 이 모듈이 **검사하지 않는** 공유 계약 §5.7 의 조건.
@@ -273,8 +350,8 @@ pub(crate) const UNCHECKED_CONDITIONS: [&str; 12] = [
     "T5 기준점이 없는 사건의 위치 — baseline_position 이 건넨 한 시점 목록 안에서 보관 대기·대체를 구분하고, 건넨 두 시점에서 변경 전부터 목록상 대체된 사건의 기준점 추가만 거절한다. 실제 원장의 끝 잘림, 두 시점 사이의 실행 순서, 대체된 사건의 실패 기록 추가의 의미, 보관 실행 권한은 보지 않는다",
     "T6 archived 시도와 기준점 — baseline_record 가 뽑아 건넨 한 시점의 기준점 칸·시도 결과 순서와 등록부의 이름 조회만 검사하고, baseline_history 가 건넨 두 시점 사이의 기준점 칸과 시도 결과 순서의 보존만 검사한다. 실패 사유·원본 시도 레코드 전체, 두 시점 사이의 되돌림, 등록부 매핑의 보존, 기준점 객체의 실재·내용은 보지 않는다",
     "T7 사건의 사이클 경계와 발급기 값 — event_cycles 가 건넨 사건의 실제 사이클 참조(after_cycle_ref·baseline.after_cycle_ref)만 건넨 Chain 목록의 읽기 전용 조회로 존재·체인 소속·지금 기록의 닫힘을 보고, 번호 < 견주는 발급 번호, next_cycle_id 의 비감소(이름 자리가 섰을 때), baseline.next_cycle_id ≥ next_cycle_id 를 검사한다. null·칸 없음의 종류별 의미, 저장 당시의 닫힘, 입력·체인 목록의 완전한 추출, review_cycle_ref 는 보지 않는다. 건넨 두 시점 사이에서 앞선 사건의 chain_ref·after_cycle_ref·next_cycle_id 가 그대로인지는 event_cycle_history 가 본다 — 두 관측 사이의 되돌림과 null·칸 없음의 허용은 보지 않는다",
-    "T8 world_before_ref 와 마지막 확정 세계",
-    "T9 실험 Entry 와 보관 대기",
+    "T8 world_before_ref 와 마지막 확정 세계 — confirmed_world 가 건넨 입력 안에서 대상 범위 변경 사건 하나에 대해서만 견준다(승인 경계와, 대기면 지금 경계·이미 확정이면 보관 경계의 앞선 기록으로 유도한 세계). 다른 사건, 입력의 완전성, 실제 보관 당시의 폴더는 보지 않는다",
+    "T9 실험 Entry 와 보관 대기 — confirmed_world 가 대상 사건의 승인과 기준점 보관(또는 대체) 사이에 연 Experiment 와, 유도 경로 위 사이클의 검증 ①·② 만 본다. 전체 사이클의 ①·②, 실제 개방 허가·거절은 없다",
     "T10 .gitignore 비유래 — 원문 출처는 기록만으로 증명할 수 없다",
     "T11 사건이 약속·판·보고서·단계를 만들지 않음",
     "T12 보관 중단 표식의 전이 차단",

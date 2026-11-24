@@ -26,6 +26,8 @@ mod doctor;
 mod file;
 mod paths;
 mod probe;
+#[cfg(unix)]
+mod user_place;
 
 pub use doctor::Status;
 pub use paths::{Env, packaged_now};
@@ -85,6 +87,20 @@ pub fn cli(args: &[String]) -> ExitCode {
         None => return usage(),
     };
     let env = Env::from_process();
+    // The HOME directory is stable across removal of our install folders. The kernel releases
+    // this lock on process exit. Hold it through Host registration as well as file publication.
+    #[cfg(target_os = "linux")]
+    let _installation_lock = if matches!(command, "install" | "uninstall") {
+        let Some(home) = &env.home else { return refuse("HOME is not set"); };
+        let file = match std::fs::File::open(home) {
+            Ok(file) => file,
+            Err(err) => return refuse(&format!("cannot open HOME for installation: {err}")),
+        };
+        if let Err(err) = file.try_lock() {
+            return refuse(&format!("cannot lock HOME for installation: {err}; retry after the other operation finishes"));
+        }
+        Some(file)
+    } else { None };
     let outcome = match command {
         "install" => {
             let mut options = InstallOptions::default();
@@ -165,6 +181,11 @@ fn install(env: &Env, options: InstallOptions) -> Outcome {
         lines.push("Restart the Hosts that were registered (Claude Desktop: quit from the tray icon, then reopen; Codex: restart). Tools appear only after a restart.".into());
         lines.push("등록된 Host를 다시 시작하세요(Claude Desktop은 트레이에서 완전 종료 후 다시 열기, Codex는 재시작). 재시작 전에는 도구가 보이지 않습니다.".into());
     }
+    if cfg!(target_os = "linux") {
+        // Only the Hosts listed above are registered. Nothing else on this PC is edited or assumed.
+        lines.push(format!("Other MCP Hosts: gil install does not edit their settings. A Host that runs a local stdio MCP server can use the command {} with the arguments mcp --serve.", fixed.display()));
+        lines.push(format!("다른 MCP Host의 설정은 gil install이 고치지 않습니다. 로컬 stdio MCP 서버를 실행하는 Host에는 명령 {} 와 인자 mcp --serve 를 직접 등록하세요.", fixed.display()));
+    }
     lines.push("Check: gil doctor".into());
     lines.push("NOT_INSTALLED means no Host settings folder was found; PENDING is not completed registration. / NOT_INSTALLED는 Host 설정 폴더를 찾지 못했다는 뜻이며 PENDING은 등록 완료가 아닙니다.".into());
     Ok((lines.join("\n") + "\n", ExitCode::SUCCESS))
@@ -201,6 +222,25 @@ fn uninstall(env: &Env, remove_binary: bool) -> Outcome {
     } else if remove_binary {
         let dir = fixed.parent().ok_or("fixed path has no parent")?;
         let current = std::env::current_exe().ok();
+        #[cfg(unix)]
+        if cfg!(target_os = "linux") {
+            // Linux user install: only the file `install.json` records is removed, and a running
+            // executable can remove its own file there.
+            let removal = user_place::remove(&fixed)?;
+            let complete = removal.complete() || !removal.found || removal.kept;
+            lines.push(if !removal.found {
+                format!("binary: NOT_INSTALLED {} (nothing recorded to remove)", fixed.display())
+            } else if removal.kept {
+                format!("binary: KEPT (unverified entry in {}; no installation files removed)", dir.display())
+            } else if removal.complete() {
+                format!("binary: REMOVED {}", removal.removed.join(", "))
+            } else {
+                // Part of the removal did not happen. Both lists are what was actually done.
+                format!("binary: PARTIAL removed [{}]; remaining [{}]", removal.removed.join(", "), removal.remaining.join(", "))
+            });
+            lines.push("Restart the Hosts for the change to take effect.".into());
+            return Ok((lines.join("\n") + "\n", if complete { ExitCode::SUCCESS } else { ExitCode::FAILURE }));
+        }
         if current.as_deref().is_some_and(|me| same_file(me, &fixed)) {
             lines.push(format!("binary: KEPT {} (cannot delete the running executable; delete the folder after this process ends)", fixed.display()));
         } else {
@@ -225,6 +265,14 @@ fn same_file(a: &Path, b: &Path) -> bool {
 /// connections that already run it, and new connections start the new file.
 fn place_binary(current: &Path, fixed: &Path) -> Result<&'static str, String> {
     let dir = fixed.parent().ok_or("fixed path has no parent")?;
+    #[cfg(unix)]
+    if cfg!(target_os = "linux") {
+        // Linux user install has its own placement: the ownership rule is asked before any write,
+        // also when this very file or equal bytes are already at the fixed path (`user_place`).
+        let my_bytes = std::fs::read(current).map_err(|err| format!("cannot read my own file: {err}"))?;
+        let my_digest = hex(&Sha256::digest(&my_bytes));
+        return user_place::place(fixed, &my_bytes, &my_digest, &receipt_text(&my_digest)?);
+    }
     std::fs::create_dir_all(dir).map_err(|err| format!("cannot create {}: {err}", dir.display()))?;
     let my_bytes = std::fs::read(current).map_err(|err| format!("cannot read my own file: {err}"))?;
     let my_digest = hex(&Sha256::digest(&my_bytes));
@@ -258,14 +306,18 @@ fn prune_parked(dir: &Path) {
     }
 }
 
-fn write_receipt(dir: &Path, sha256: &str) -> Result<(), String> {
+fn receipt_text(sha256: &str) -> Result<String, String> {
     let receipt = serde_json::json!({
         "schema": 1,
         "version": crate::CORE_VERSION,
         "sha256": sha256,
         "installed_at": now_unix(),
     });
-    let text = serde_json::to_string_pretty(&receipt).map_err(|err| err.to_string())? + "\n";
+    Ok(serde_json::to_string_pretty(&receipt).map_err(|err| err.to_string())? + "\n")
+}
+
+fn write_receipt(dir: &Path, sha256: &str) -> Result<(), String> {
+    let text = receipt_text(sha256)?;
     let temporary = dir.join(format!("{INSTALL_RECEIPT}.next"));
     std::fs::write(&temporary, text).map_err(|err| format!("cannot write {INSTALL_RECEIPT}: {err}"))?;
     std::fs::rename(&temporary, dir.join(INSTALL_RECEIPT)).map_err(|err| format!("cannot replace {INSTALL_RECEIPT}: {err}"))
@@ -568,6 +620,9 @@ mod tests {
         assert!(!is_gil_executable(""));
     }
 
+    // The parking flow of the Windows-style placement. The Linux user install never parks: its own
+    // rules are in `user_place::tests` and in the Linux test below, so this one is not compiled there.
+    #[cfg(not(target_os = "linux"))]
     #[test]
     fn placing_the_binary_parks_a_different_previous_file_and_keeps_an_identical_one() {
         let dir = scratch("place");
@@ -586,6 +641,91 @@ mod tests {
         assert_eq!(place_binary(&download, &fixed).unwrap(), "UPDATED");
         assert_eq!(std::fs::read(&fixed).unwrap(), b"newer bytes");
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Linux user install through the public entries: a foreign entry stops the install before any
+    /// Host file is touched, and the installed executable removes exactly what the install recorded.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_install_never_takes_over_an_entry_it_did_not_place_and_uninstall_removes_only_its_own() {
+        let root = scratch("linux-own");
+        let home = root.join("home");
+        std::fs::create_dir_all(home.join(".codex")).unwrap();
+        let config = "# sentinel\n[mcp_servers.other]\ncommand = \"/usr/bin/true\"\nargs = []\n";
+        std::fs::write(home.join(".codex/config.toml"), config).unwrap();
+        let env = Env { home: Some(home.clone()), ..Env::default() };
+        let fixed = paths::fixed_exe(&env).unwrap();
+        let dir = fixed.parent().unwrap();
+        std::fs::create_dir_all(dir).unwrap();
+        let me = std::fs::read(std::env::current_exe().unwrap()).unwrap();
+
+        // Equal bytes that no install recorded: refused, and Codex was not registered.
+        std::fs::write(&fixed, &me).unwrap();
+        let refused = install(&env, InstallOptions::default()).unwrap_err();
+        assert!(refused.contains("Nothing was changed"), "{refused}");
+        assert!(!dir.join(INSTALL_RECEIPT).exists());
+        assert_eq!(std::fs::read_to_string(home.join(".codex/config.toml")).unwrap(), config, "a Host setting changed before the install could succeed");
+        let (text, _) = uninstall(&env, true).unwrap();
+        assert!(text.contains("binary: KEPT"), "{text}");
+        assert_eq!(std::fs::read(&fixed).unwrap(), me);
+        std::fs::remove_file(&fixed).unwrap();
+        std::fs::write(home.join(".codex/config.toml"), config).unwrap();
+
+        // A regular install.json with no executable beside it: not overwritten, nothing placed, no Host change.
+        std::fs::write(dir.join(INSTALL_RECEIPT), b"the user's own file\n").unwrap();
+        let refused = install(&env, InstallOptions::default()).unwrap_err();
+        assert!(refused.contains("Nothing was changed"), "{refused}");
+        assert_eq!(std::fs::read(dir.join(INSTALL_RECEIPT)).unwrap(), b"the user's own file\n");
+        assert!(!fixed.exists());
+        assert_eq!(std::fs::read_to_string(home.join(".codex/config.toml")).unwrap(), config);
+        let (text, _) = uninstall(&env, true).unwrap();
+        assert!(text.contains("binary: KEPT"), "{text}");
+        assert_eq!(std::fs::read(dir.join(INSTALL_RECEIPT)).unwrap(), b"the user's own file\n");
+        std::fs::remove_file(dir.join(INSTALL_RECEIPT)).unwrap();
+        std::fs::write(home.join(".codex/config.toml"), config).unwrap();
+
+        // Our own install, its repeat, and the removal of exactly the two recorded files. The two
+        // folders were there before this installation (created above), so they stay, empty.
+        let (text, _) = install(&env, InstallOptions::default()).unwrap();
+        assert!(text.contains("binary: UPDATED") && text.contains("claude-desktop: NOT_INSTALLED"), "{text}");
+        assert_eq!(std::fs::read(&fixed).unwrap(), me);
+        assert!(std::fs::read_to_string(home.join(".codex/config.toml")).unwrap().contains("# sentinel"));
+        let (text, _) = install(&env, InstallOptions::default()).unwrap();
+        assert!(text.contains("binary: OK"), "{text}");
+        let sentinel = home.join(".local/share/other-app.conf");
+        std::fs::write(&sentinel, b"keep").unwrap();
+        let (text, code) = uninstall(&env, true).unwrap();
+        assert!(text.contains("binary: REMOVED") && code == ExitCode::SUCCESS, "{text}");
+        assert!(!fixed.exists() && !dir.join(INSTALL_RECEIPT).exists());
+        assert!(dir.is_dir() && std::fs::read_dir(dir).unwrap().count() == 0, "folders that were there before the installation stay");
+        assert_eq!(std::fs::read(&sentinel).unwrap(), b"keep");
+        let after = std::fs::read_to_string(home.join(".codex/config.toml")).unwrap();
+        assert!(after.contains("[mcp_servers.other]") && after.contains("# sentinel"));
+        let (text, _) = uninstall(&env, true).unwrap();
+        assert!(text.contains("binary: NOT_INSTALLED"), "{text}");
+
+        // A home with no gil folders: the installation makes them and its removal takes them again.
+        let fresh = root.join("fresh-home");
+        std::fs::create_dir_all(&fresh).unwrap();
+        let fresh_env = Env { home: Some(fresh.clone()), ..Env::default() };
+        install(&fresh_env, InstallOptions::default()).unwrap();
+        let (text, _) = uninstall(&fresh_env, true).unwrap();
+        assert!(text.contains("binary: REMOVED"), "{text}");
+        assert!(!fresh.join(".local/share/gil").exists() && fresh.join(".local/share").is_dir());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// The same four rules through the public entries on every Unix where the placement compiles,
+    /// by handing `uninstall`'s Linux branch its result type directly is not possible off Linux;
+    /// what is checked here is the report line of a partial removal, which must never read REMOVED.
+    #[cfg(unix)]
+    #[test]
+    fn a_partial_removal_is_never_reported_as_removed() {
+        let partial = user_place::Removal { found: true, kept: false, removed: vec!["/x/gil".into()], remaining: vec!["/x/install.json (denied)".into()] };
+        assert!(!partial.complete());
+        let whole = user_place::Removal { found: true, kept: false, removed: vec!["/x/gil".into(), "/x/install.json".into()], remaining: vec![] };
+        assert!(whole.complete());
+        assert!(!user_place::Removal::default().complete() && !user_place::Removal { found: true, kept: true, ..Default::default() }.complete());
     }
 
     #[test]
