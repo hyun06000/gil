@@ -98,6 +98,31 @@ fn finish_interview(project: &mut Project, at: AtSynthesis) {
     crate::approved_plan::tests::approve_close(project, at.draft);
 }
 
+/// 다음 Experiment 를 **이 프로필의 계약대로** 연다. 탐색 계약(`exploration-flow`)의 Experiment 는 지금 활성인 승인 판의 요구 하나에
+/// 명시 연결해 열린다 — 연결 없는 열기는 그 계약 자체의 거절이라, 그대로 부르면 「보관 대기·중단 때문에 거절된다」를 확인하지 못한다.
+/// 그 밖의 구성은 종전의 맨 열기다. 범위 변경·대기·재시도·중단의 단정은 두 계약에서 같다.
+fn open_experiment(session: &mut ProjectSession) -> Result<crate::CycleId, crate::SessionError> {
+    #[cfg(feature = "exploration-flow")]
+    {
+        let project = session.project();
+        let active = project.approved_plan().expect("승인 계획 상태")
+            .active(project.current_chain().expect("열린 Chain")).expect("활성 승인 판");
+        let link = crate::approved_plan::ExperimentLink {
+            revision: active.revision,
+            digest: active.digest.clone(),
+            requirement_id: "A".into(),
+            selection: crate::approved_plan::Selection {
+                relevance: "요구 A의 답에 필요한 관측이다".into(),
+                readiness: "입력 파일이 프로젝트에 있다".into(),
+                uncertainty: "아직 판정하지 못한 한 가지를 줄인다".into(),
+            },
+        };
+        session.open_child_cycle_linked(CycleKind::Experiment, Some(&link))
+    }
+    #[cfg(not(feature = "exploration-flow"))]
+    session.open_child_cycle(CycleKind::Experiment)
+}
+
 /// 지금 열린 Interview 를 끝까지 걸어 닫고 저장한다.
 fn close_interview(root: &Path, note: &str) {
     let mut session = open_session(root);
@@ -206,7 +231,7 @@ fn approval_applies_the_policy_then_a_failed_archive_waits_through_an_interview_
     // 대기 중: Experiment 는 거절되고 아무것도 바뀌지 않는다. Interview 는 열린다(Entry = 마지막 확정 세계 A1).
     {
         let mut session = open_session(&root);
-        let refused = session.open_child_cycle(CycleKind::Experiment).expect_err("② 위반 — 다음 실험 보류");
+        let refused = open_experiment(&mut session).expect_err("② 위반 — 다음 실험 보류");
         assert!(matches!(refused, crate::SessionError::Cycles(crate::cycles::CyclesError::Tracking(_))), "{refused}");
         assert_eq!(session.project().cycles().nodes().len(), 1, "거절은 이름 발급기도 움직이지 않는다");
         let opened = session.open_child_cycle(CycleKind::Interview).expect("인터뷰는 막지 않는다");
@@ -280,7 +305,7 @@ fn approval_applies_the_policy_then_a_failed_archive_waits_through_an_interview_
     // 다음 Experiment: 부모는 C2, Entry 는 사건의 기준점 A2.
     {
         let mut session = open_session(&root);
-        let opened = session.open_child_cycle(CycleKind::Experiment).expect("기준점 확정 뒤에는 실험이 열린다");
+        let opened = open_experiment(&mut session).expect("기준점 확정 뒤에는 실험이 열린다");
         let cycle = session.project().cycles().current();
         assert_eq!(opened.to_ref().to_string(), "cycle:C3");
         assert_eq!(cycle.parent().unwrap().to_ref().to_string(), "cycle:C2");
@@ -455,7 +480,7 @@ fn a_halt_stops_every_transition_keeps_the_state_and_only_an_explicit_release_re
     {
         let mut session = open_session(&root);
         assert!(session.open_child_cycle(CycleKind::Interview).is_err(), "인터뷰도 멈춘다");
-        assert!(session.open_child_cycle(CycleKind::Experiment).is_err());
+        assert!(open_experiment(&mut session).is_err());
         assert!(session.project().tracking_note().contains("event:M2"));
         assert!(session.commit().is_err(), "중단 중에는 일반 저장 문도 닫혀 있다");
     }
@@ -554,7 +579,7 @@ fn a_halted_verify_is_refused_before_any_object_is_archived() {
     let root = started("halt-verify");
     {
         let mut session = open_session(&root);
-        session.open_child_cycle(CycleKind::Experiment).expect("대기가 없으면 실험이 열린다");
+        open_experiment(&mut session).expect("대기가 없으면 실험이 열린다");
         common::up_to_verify(session.project_mut());
         session.commit().unwrap();
     }
@@ -668,7 +693,7 @@ fn load_refuses_a_forged_entry_a_missing_approval_and_an_experiment_opened_while
     assert_eq!(decide(&root, revision, &digest, true).unwrap()["facts"]["baseline"]["result"], "archived");
     {
         let mut session = open_session(&root);
-        session.open_child_cycle(CycleKind::Experiment).unwrap();
+        open_experiment(&mut session).unwrap();
         session.commit().unwrap();
     }
     let state = root.join(".gil/state.yaml");

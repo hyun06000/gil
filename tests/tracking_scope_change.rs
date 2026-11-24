@@ -16,8 +16,8 @@
 //!   빌드의 failpoint(`GIL_SCOPE_FAIL`)로 넣은 것이며, 강제 종료·전원 장애를 일으킨 것이 아니다.
 //! - 탐색 계약 구성(`exploration-flow`, 카탈로그에 `gil_report_read` 가 있다)에서도 같은 경로를 걷는다. 달라지는 것은 그 계약이 정한
 //!   둘뿐이다: Experiment 는 활성 승인 판의 요구에 **명시 연결**해 열고(`Rig::experiment_args`), 답하지 못한 요구가 남은 Chain 은
-//!   사용자가 승인한 `failure` 로만 닫는다(`Rig::closing_verdict`). 범위 변경·보관 대기·재시도·중단의 단정은 그대로다. 이 구성의
-//!   단위 시험(`scope_change::tests`)은 여전히 컴파일되지 않으며, 그 0건은 실행 성공이 아니다.
+//!   사용자가 승인한 `failure` 로만 닫는다(`Rig::closing_verdict`). 범위 변경·보관 대기·재시도·중단의 단정은 그대로다. 단위 시험
+//!   (`scope_change::tests`)도 이 구성에서 같은 연결 열기로 돈다.
 #![cfg(all(feature = "tracking-policy", unix))]
 #[path = "support_wave1/mod.rs"]
 mod support;
