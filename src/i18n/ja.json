@@ -565,6 +565,8 @@
   "mcp.action_unfinished": "GIL の動作を終えられなかった。状態を確認してから続ける。",
   "mcp.await_user": "ユーザー入力待ち: {question}。応答の最後にこの質問をそのまま書く。ユーザーの回答後、gil_context で同じ段階を続ける。完了・承認の記録は変わっていない。",
   "mcp.await_user_failed": "ユーザー待ち状態を確認できなかった。gil_context で現在の段階を確認する。",
+  "mcp.await_user_question_required": "ユーザーに尋ねる具体的な質問が必要だ (1..4000 bytes)",
+  "mcp.await_user_not_waiting": "gil_await_user は、開いている Question または提案が登録された承認待ちの Synthesis に対する任意の読み取り確認だ。このツールが無くてもターンを終えたり Monitor の承認を待ったりできる。現在の位置は gil_context で確認し、待機の確認のために Step/Cycle を作らない。",
   "mcp.companion_unavailable": "Monitor 接続を確認できなかった。",
   "mcp.connect_failed": "MCP 接続を確立できなかった: {err}",
   "mcp.disconnected": "MCP 接続が切れた: {err}",

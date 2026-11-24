@@ -171,3 +171,35 @@ fn in_five_languages_the_context_head_keeps_the_applicability_and_the_body_keeps
     mcp.done();
     std::fs::remove_dir_all(settings).ok();
 }
+
+/// gil_await_user's two refusals speak the Project's language, like its success answer does. The
+/// input refusal (blank question) and the state refusal (nothing awaits the user) stay distinct,
+/// and neither touches the record.
+#[test]
+fn gil_await_user_refusals_speak_the_project_language() {
+    let settings = scratch("locale-await-settings");
+    let mut mcp = Mcp::serve(&settings);
+    for (tag, locale) in [("en", Locale::En), ("ko", Locale::Ko), ("ja", Locale::Ja), ("zh-Hans", Locale::ZhHans), ("zh-Hant", Locale::ZhHant)] {
+        let root = scratch(&format!("locale-await-{tag}"));
+        ok(mcp.call("gil_start", &root, json!({"locale": tag})), "gil_start");
+        #[cfg(not(windows))]
+        let before = std::fs::read(root.join(gil::STATE_PATH)).unwrap();
+        let problem = |result: &Value| result["structuredContent"]["problem"].as_str().unwrap_or_default().to_owned();
+        let blank = support::refused(mcp.call("gil_await_user", &root, json!({"question": "   "})), "blank question");
+        assert_eq!(problem(&blank), text_in(locale, "mcp.await_user_question_required"), "{tag}: {blank}");
+        let idle = support::refused(mcp.call("gil_await_user", &root, json!({"question": "Do you approve?"})), "nothing awaits");
+        assert_eq!(problem(&idle), text_in(locale, "mcp.await_user_not_waiting"), "{tag}: {idle}");
+        assert_ne!(problem(&blank), problem(&idle), "{tag}: input and state refusals differ");
+        if locale != Locale::Ko {
+            assert!(!problem(&blank).contains("질문") && !problem(&idle).contains("선택적"), "{tag}: no Korean leaks");
+        }
+        #[cfg(not(windows))]
+        assert_eq!(std::fs::read(root.join(gil::STATE_PATH)).unwrap(), before, "{tag}: refusals keep the record");
+        ok(mcp.call("gil_open", &root, json!({"kind": "question", "contract": "objective: ask the goal\nnext_action: ask the user\ndone_when: an answer arrives\n"})), "gil_open");
+        let waiting = ok(mcp.call("gil_await_user", &root, json!({"question": "Do you approve?"})), "open Question");
+        assert!(hints(&waiting).contains(&text_in(locale, "mcp.await_user").replace("{question}", "Do you approve?")), "{tag}: {waiting}");
+        std::fs::remove_dir_all(&root).ok();
+    }
+    mcp.done();
+    std::fs::remove_dir_all(settings).ok();
+}
