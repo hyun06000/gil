@@ -26,6 +26,8 @@ mod doctor;
 mod file;
 mod paths;
 mod probe;
+#[cfg(unix)]
+mod user_place;
 
 pub use doctor::Status;
 pub use paths::{Env, packaged_now};
@@ -206,16 +208,23 @@ fn uninstall(env: &Env, remove_binary: bool) -> Outcome {
     } else if remove_binary {
         let dir = fixed.parent().ok_or("fixed path has no parent")?;
         let current = std::env::current_exe().ok();
-        if cfg!(target_os = "linux") && std::fs::symlink_metadata(&fixed).is_ok() && !placed_by_install(dir, &fixed) {
-            // Only what `install.json` records is removed. Anything else at that path stays.
-            lines.push(format!("binary: KEPT {} (not the file recorded by install.json; nothing was removed)", fixed.display()));
-        } else if current.as_deref().is_some_and(|me| same_file(me, &fixed)) {
+        #[cfg(unix)]
+        if cfg!(target_os = "linux") {
+            // Linux user install: only the file `install.json` records is removed, and a running
+            // executable can remove its own file there.
+            lines.push(match user_place::remove(&fixed)? {
+                user_place::Removal::Removed => format!("binary: REMOVED {}", fixed.display()),
+                user_place::Removal::NotInstalled => format!("binary: NOT_INSTALLED {} (nothing to remove)", fixed.display()),
+                user_place::Removal::Kept => format!("binary: KEPT {} (not the file recorded by install.json; nothing was removed)", fixed.display()),
+            });
+            lines.push("Restart the Hosts for the change to take effect.".into());
+            return Ok((lines.join("\n") + "\n", ExitCode::SUCCESS));
+        }
+        if current.as_deref().is_some_and(|me| same_file(me, &fixed)) {
             lines.push(format!("binary: KEPT {} (cannot delete the running executable; delete the folder after this process ends)", fixed.display()));
         } else {
             std::fs::remove_file(&fixed).map_err(|err| format!("cannot remove {}: {err}", fixed.display()))?;
             let _ = std::fs::remove_file(dir.join(INSTALL_RECEIPT));
-            // Linux: the folder was created for these two files. It goes only when it is empty.
-            if cfg!(target_os = "linux") { let _ = std::fs::remove_dir(dir); }
             lines.push(format!("binary: REMOVED {}", fixed.display()));
         }
     }
@@ -235,6 +244,14 @@ fn same_file(a: &Path, b: &Path) -> bool {
 /// connections that already run it, and new connections start the new file.
 fn place_binary(current: &Path, fixed: &Path) -> Result<&'static str, String> {
     let dir = fixed.parent().ok_or("fixed path has no parent")?;
+    #[cfg(unix)]
+    if cfg!(target_os = "linux") {
+        // Linux user install has its own placement: the ownership rule is asked before any write,
+        // also when this very file or equal bytes are already at the fixed path (`user_place`).
+        let my_bytes = std::fs::read(current).map_err(|err| format!("cannot read my own file: {err}"))?;
+        let my_digest = hex(&Sha256::digest(&my_bytes));
+        return user_place::place(fixed, &my_bytes, &my_digest, &receipt_text(&my_digest)?);
+    }
     std::fs::create_dir_all(dir).map_err(|err| format!("cannot create {}: {err}", dir.display()))?;
     let my_bytes = std::fs::read(current).map_err(|err| format!("cannot read my own file: {err}"))?;
     let my_digest = hex(&Sha256::digest(&my_bytes));
@@ -243,7 +260,6 @@ fn place_binary(current: &Path, fixed: &Path) -> Result<&'static str, String> {
     } else if std::fs::read(fixed).ok().is_some_and(|bytes| hex(&Sha256::digest(&bytes)) == my_digest) {
         "OK"
     } else {
-        if cfg!(target_os = "linux") { refuse_foreign_entry(dir, fixed)?; }
         if fixed.exists() {
             let previous = receipt_version(dir).unwrap_or_else(|| format!("{}", now_unix()));
             let parked = dir.join(format!("gil.exe.old-{previous}"));
@@ -259,40 +275,6 @@ fn place_binary(current: &Path, fixed: &Path) -> Result<&'static str, String> {
     Ok(outcome)
 }
 
-/// The digest `install.json` records for the installed executable, if the receipt is sane.
-fn receipt_digest(dir: &Path) -> Option<String> {
-    let path = dir.join(INSTALL_RECEIPT);
-    let metadata = std::fs::symlink_metadata(&path).ok()?;
-    if !metadata.is_file() || metadata.len() > 4096 { return None; }
-    let value: serde_json::Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
-    if value.get("schema")?.as_u64()? != 1 { return None; }
-    let digest = value.get("sha256")?.as_str()?;
-    (digest.len() == 64 && digest.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))).then(|| digest.to_owned())
-}
-
-/// Whether the entry at the fixed path is the regular file a previous `gil install` placed there:
-/// its bytes have the digest the receipt beside it records. A link, a folder, an unreadable file
-/// or a file with other bytes is not ours.
-fn placed_by_install(dir: &Path, fixed: &Path) -> bool {
-    let regular = std::fs::symlink_metadata(fixed).is_ok_and(|metadata| metadata.is_file());
-    regular && match (receipt_digest(dir), std::fs::read(fixed)) {
-        (Some(recorded), Ok(bytes)) => hex(&Sha256::digest(&bytes)) == recorded,
-        _ => false,
-    }
-}
-
-/// Linux user install: an existing entry at the fixed path is replaced only when a previous
-/// `gil install` placed it. Anything else — another program's file, a link, a folder — is left
-/// exactly as it is and the install stops before any Host file is touched.
-fn refuse_foreign_entry(dir: &Path, fixed: &Path) -> Result<(), String> {
-    match std::fs::symlink_metadata(fixed) {
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(err) => Err(format!("cannot inspect {}: {err}. Nothing was changed", fixed.display())),
-        Ok(_) if placed_by_install(dir, fixed) => Ok(()),
-        Ok(_) => Err(format!("{} already exists and is not a file placed by gil install (no matching install.json). Nothing was changed; move it away yourself, then run gil install again", fixed.display())),
-    }
-}
-
 fn prune_parked(dir: &Path) {
     for entry in std::fs::read_dir(dir).into_iter().flatten().filter_map(Result::ok) {
         let name = entry.file_name();
@@ -303,14 +285,18 @@ fn prune_parked(dir: &Path) {
     }
 }
 
-fn write_receipt(dir: &Path, sha256: &str) -> Result<(), String> {
+fn receipt_text(sha256: &str) -> Result<String, String> {
     let receipt = serde_json::json!({
         "schema": 1,
         "version": crate::CORE_VERSION,
         "sha256": sha256,
         "installed_at": now_unix(),
     });
-    let text = serde_json::to_string_pretty(&receipt).map_err(|err| err.to_string())? + "\n";
+    Ok(serde_json::to_string_pretty(&receipt).map_err(|err| err.to_string())? + "\n")
+}
+
+fn write_receipt(dir: &Path, sha256: &str) -> Result<(), String> {
+    let text = receipt_text(sha256)?;
     let temporary = dir.join(format!("{INSTALL_RECEIPT}.next"));
     std::fs::write(&temporary, text).map_err(|err| format!("cannot write {INSTALL_RECEIPT}: {err}"))?;
     std::fs::rename(&temporary, dir.join(INSTALL_RECEIPT)).map_err(|err| format!("cannot replace {INSTALL_RECEIPT}: {err}"))
@@ -633,52 +619,50 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
-    /// Linux user install: what is already at the fixed path stays unless a previous install put it there.
+    /// Linux user install through the public entries: a foreign entry stops the install before any
+    /// Host file is touched, and the installed executable removes exactly what the install recorded.
     #[cfg(target_os = "linux")]
     #[test]
     fn linux_install_never_takes_over_an_entry_it_did_not_place_and_uninstall_removes_only_its_own() {
         let root = scratch("linux-own");
-        let env = Env { home: Some(root.join("home")), ..Env::default() };
+        let home = root.join("home");
+        std::fs::create_dir_all(home.join(".codex")).unwrap();
+        let config = "# sentinel\n[mcp_servers.other]\ncommand = \"/usr/bin/true\"\nargs = []\n";
+        std::fs::write(home.join(".codex/config.toml"), config).unwrap();
+        let env = Env { home: Some(home.clone()), ..Env::default() };
         let fixed = paths::fixed_exe(&env).unwrap();
         let dir = fixed.parent().unwrap();
         std::fs::create_dir_all(dir).unwrap();
-        let download = root.join("gil-download");
-        std::fs::write(&download, b"core bytes").unwrap();
+        let me = std::fs::read(std::env::current_exe().unwrap()).unwrap();
 
-        // Another program's file, with no receipt: refused, bytes kept, no receipt written.
-        std::fs::write(&fixed, b"someone else's tool").unwrap();
-        let refused = place_binary(&download, &fixed).unwrap_err();
+        // Equal bytes that no install recorded: refused, and Codex was not registered.
+        std::fs::write(&fixed, &me).unwrap();
+        let refused = install(&env, InstallOptions::default()).unwrap_err();
         assert!(refused.contains("Nothing was changed"), "{refused}");
-        assert_eq!(std::fs::read(&fixed).unwrap(), b"someone else's tool");
         assert!(!dir.join(INSTALL_RECEIPT).exists());
-        // A receipt that records other bytes does not make that file ours.
-        write_receipt(dir, &hex(&Sha256::digest(b"an older core"))).unwrap();
-        assert!(place_binary(&download, &fixed).is_err());
-        assert_eq!(std::fs::read(&fixed).unwrap(), b"someone else's tool");
-        // Uninstall keeps it too, and says so.
+        assert_eq!(std::fs::read_to_string(home.join(".codex/config.toml")).unwrap(), config, "a Host setting changed before the install could succeed");
         let (text, _) = uninstall(&env, true).unwrap();
         assert!(text.contains("binary: KEPT"), "{text}");
-        assert_eq!(std::fs::read(&fixed).unwrap(), b"someone else's tool");
-        // A link is never written through.
-        std::fs::remove_file(&fixed).unwrap();
-        std::fs::remove_file(dir.join(INSTALL_RECEIPT)).unwrap();
-        let elsewhere = root.join("elsewhere");
-        std::os::unix::fs::symlink(&elsewhere, &fixed).unwrap();
-        assert!(place_binary(&download, &fixed).is_err());
-        assert!(!elsewhere.exists(), "the install wrote through a link");
+        assert_eq!(std::fs::read(&fixed).unwrap(), me);
         std::fs::remove_file(&fixed).unwrap();
 
-        // Our own install, its update, and the removal of exactly the two recorded files.
-        assert_eq!(place_binary(&download, &fixed).unwrap(), "UPDATED");
-        std::fs::write(&download, b"newer core bytes").unwrap();
-        assert_eq!(place_binary(&download, &fixed).unwrap(), "UPDATED");
-        assert_eq!(std::fs::read(&fixed).unwrap(), b"newer core bytes");
-        let sentinel = root.join("home/.local/share/other-app.conf");
+        // Our own install, its repeat, and the removal of exactly the two recorded files.
+        let (text, _) = install(&env, InstallOptions::default()).unwrap();
+        assert!(text.contains("binary: UPDATED") && text.contains("claude-desktop: NOT_INSTALLED"), "{text}");
+        assert_eq!(std::fs::read(&fixed).unwrap(), me);
+        assert!(std::fs::read_to_string(home.join(".codex/config.toml")).unwrap().contains("# sentinel"));
+        let (text, _) = install(&env, InstallOptions::default()).unwrap();
+        assert!(text.contains("binary: OK"), "{text}");
+        let sentinel = home.join(".local/share/other-app.conf");
         std::fs::write(&sentinel, b"keep").unwrap();
         let (text, _) = uninstall(&env, true).unwrap();
         assert!(text.contains("binary: REMOVED"), "{text}");
-        assert!(!fixed.exists() && !dir.exists(), "only the emptied install folder goes");
+        assert!(!fixed.exists() && !dir.exists(), "only the emptied install folders go");
         assert_eq!(std::fs::read(&sentinel).unwrap(), b"keep");
+        let after = std::fs::read_to_string(home.join(".codex/config.toml")).unwrap();
+        assert!(after.contains("[mcp_servers.other]") && after.contains("# sentinel"));
+        let (text, _) = uninstall(&env, true).unwrap();
+        assert!(text.contains("binary: NOT_INSTALLED"), "{text}");
         let _ = std::fs::remove_dir_all(root);
     }
 
