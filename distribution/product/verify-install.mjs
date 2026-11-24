@@ -484,14 +484,17 @@ export async function verifyLinuxArchive({archive, sums, expectedHtml, expectedV
     const after = await readFile(join(home, '.codex/config.toml'), 'utf8');
     assert.ok(after.includes('[mcp_servers.other]') && after.includes('# sentinel') && !after.includes(installed), 'uninstall did not restore exactly the foreign settings');
     // Everything that was there before is byte-identical, except the one Codex file the install
-    // registered in; the only new entries are that file's own backups beside it.
+    // registered in (checked above). The only new entries are what the Host registration itself
+    // leaves beside that file: its backups and its edit lock. Those two kinds of leftover are the
+    // registration's existing behaviour on every platform; nothing else may remain.
     const {'.codex/config.toml': _edited, ...untouched} = before;
-    assertUntouched(untouched, await tree(home), path => /^\.codex\/config\.toml\.bak-[^/]+$/.test(path));
+    assertUntouched(untouched, await tree(home), path => /^\.codex\/config\.toml(\.bak-[^/]+|\.gil-lock)?$/.test(path));
     const again = run(packaged, ['uninstall', '--remove-binary'], env);
     assert.equal(again.status, 0);
     assert.match(again.stdout, /^binary: NOT_INSTALLED /m);
     return {archive_sha256: digest, receipt: {version: receipt.version, elf: receipt.elf, source: receipt.source}, protocol, start_kinds: kinds,
-      install: 'isolated HOME; a foreign entry refused unchanged; existing Codex settings and unrelated files unchanged; the installed executable removed the recorded files only'};
+      install: 'isolated HOME; a foreign entry refused unchanged; existing Codex settings and unrelated files unchanged; the installed executable removed the recorded files only',
+      left_by_host_registration: Object.keys(await tree(home)).filter(path => !Object.hasOwn(before, path)).sort().map(path => path.replace(/\.bak-.*$/, '.bak-*'))};
   } finally { await rm(state, {recursive: true, force: true}); }
 }
 
