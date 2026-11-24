@@ -223,6 +223,7 @@
   "cmd.spec_unreadable": "同梱の仕様を読めなかった: {err}",
   "cmd.start_chain_line": "Chain: {id} · open · Entry {entry}\n",
   "cmd.start_exists.todo": "ここで別に始めると一つのプロジェクトに記録が二つできる。\n本当にやり直すならそのファイルを自分で片付ける — gil は書かれた思考を消さない。",
+  "cmd.start_help": "gil start — このフォルダーを GIL プロジェクトとして始め、最初の Interview を開く。引数は取らない。\n\n実行すると\n  .gil/ にプロジェクトの記録を作る\n  AGENTS.md・CLAUDE.md に継続の案内を書き足す（既存の内容はそのまま残す）\n\nこのフォルダーか上のフォルダーにすでに記録があれば、新しく始めずに拒否する — そのときは gil status か gil context で続ける。\n\nこのヘルプは何も作らず、何も変えない。\n\n実行\n  gil start\n",
   "cmd.start_exists.what": "ここで新しく始められない。",
   "cmd.start_exists.why": "すでに歩いている（{path}）。",
   "cmd.start_receipt": "プロジェクトを始めた。\n{chain}現在: {cycle} · {kind}\n\n次\n  ユーザーが何を望むかを確認する。\n\n実行\n  gil open\n\n記録: {record}\n",

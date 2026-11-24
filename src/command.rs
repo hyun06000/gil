@@ -92,6 +92,8 @@ fn run(ctx: &Invocation<'_>, args: &[String]) -> Result<String, String> {
         "help" => help_here(ctx),
         "--help" | "-h" => Ok(help()),
         "--version" | "-V" | "version" => Ok(format!("gil {}\n", crate::CORE_VERSION)),
+        // `start --help` asks how to start; reading it as a start would create the project.
+        "start" if asks_for_help(args.get(1)) => Ok(text("cmd.start_help").to_string()),
         "start" => start(ctx),
         // **`--help` 는 요청이 아니다.** stdin 없는 실제 Open·Close 로 읽으면, 계약을
         // 물어본 사람이 빈 Report 를 낸 것으로 거절당한다(실사용 M2C 보고).

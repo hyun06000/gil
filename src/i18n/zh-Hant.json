@@ -223,6 +223,7 @@
   "cmd.spec_unreadable": "無法讀取隨附的規格: {err}",
   "cmd.start_chain_line": "Chain: {id} · open · Entry {entry}\n",
   "cmd.start_exists.todo": "在這裡另行開始會讓一個專案有兩份紀錄。\n要真正重新開始，請自行移走該檔案 — gil 從不抹去已記錄的思考。",
+  "cmd.start_help": "gil start — 把此資料夾作為 GIL 專案開始，並開啟第一個 Interview。不接受參數。\n\n執行後\n  在 .gil/ 中建立專案紀錄\n  在 AGENTS.md 和 CLAUDE.md 中附加繼續說明（保留現有內容）\n\n如果此資料夾或上層資料夾已有紀錄，就拒絕而不重新開始 — 此時用 gil status 或 gil context 繼續。\n\n此說明不建立也不變更任何內容。\n\n執行\n  gil start\n",
   "cmd.start_exists.what": "無法在這裡重新開始。",
   "cmd.start_exists.why": "已經在行走（{path}）。",
   "cmd.start_receipt": "已開始專案。\n{chain}目前: {cycle} · {kind}\n\n下一步\n  弄清使用者想要什麼。\n\n執行\n  gil open\n\n紀錄: {record}\n",

@@ -223,6 +223,7 @@
   "cmd.spec_unreadable": "함께 실린 명세를 읽지 못했다: {err}",
   "cmd.start_chain_line": "Chain: {id} · open · Entry {entry}\n",
   "cmd.start_exists.todo": "여기서 따로 시작하면 한 프로젝트에 기록이 둘이 된다.\n정말 다시 시작하려면 그 파일을 직접 치워라 — gil 은 적힌 사고를 지우지 않는다.",
+  "cmd.start_help": "gil start — 이 폴더를 GIL 프로젝트로 시작하고 첫 Interview 를 연다. 인수는 받지 않는다.\n\n실행하면\n  .gil/ 에 프로젝트 기록을 만든다\n  AGENTS.md · CLAUDE.md 에 이어가기 안내를 덧붙인다 (기존 내용은 그대로 둔다)\n\n이 폴더나 위쪽 폴더에 이미 기록이 있으면 새로 시작하지 않고 거절한다 — 그때는 gil status 나 gil context 로 이어간다.\n\n이 도움말은 아무것도 만들거나 바꾸지 않는다.\n\n실행\n  gil start\n",
   "cmd.start_exists.what": "여기서 새로 시작할 수 없다.",
   "cmd.start_exists.why": "이미 걷고 있다 ({path}).",
   "cmd.start_receipt": "프로젝트를 시작했다.\n{chain}현재: {cycle} · {kind}\n\n다음\n  사용자가 무엇을 원하는지 확인한다.\n\n실행\n  gil open\n\n기록: {record}\n",
