@@ -414,6 +414,10 @@ mod tests {
     const RECORD_READ_SURFACE: [&str; 2] = ["gil_report_read", "gil_evidence_read"];
     /// 형식 6→8·7→9 명시적 전환의 점검·적용 — will-end-history 빌드에서만 등록된다(src/mcp/transition.rs).
     const TRANSITION_SURFACE: [&str; 2] = ["gil_format_transition_check", "gil_format_transition_apply"];
+    /// 구현 순서 5번(같은 Chain 범위 변경)의 일곱 도구 — 모델용 둘(제안·조회)과 App 전용 다섯. `tracking-policy` + Unix 빌드에서만
+    /// 등록된다(src/mcp/scope.rs). 그 모듈의 목록을 읽지 않고 **여기에 따로 고정한다**: 그 모듈은 그 구성에서만 컴파일되므로, 다른
+    /// 구성의 시험이 그 이름을 참조하면 컴파일되지 않는다(`if cfg!(..)` 는 꺼진 본문의 이름 해석을 없애지 않는다).
+    const SCOPE_SURFACE: [&str; 7] = ["gil_scope_propose", "gil_scope_status", "gil_scope_review", "gil_scope_decide", "gil_scope_retry", "gil_scope_halt", "gil_scope_release"];
 
     fn registered_names() -> Vec<String> {
         let mut names: Vec<String> = surface::tools().iter().map(|one| one.name.to_string()).collect();
@@ -453,11 +457,17 @@ mod tests {
             expected.extend(["gil_start_prepare", "gil_start_status", "gil_start_apply", "gil_start_cancel", "gil_start_review", "gil_start_decide", "gil_start_list"]
                 .map(String::from));
             // 구현 순서 5번의 일곱 도구 — 모델용 둘(제안·조회)과 App 전용 다섯.
-            expected.extend(scope::NAMES.iter().map(|name| name.to_string()));
+            expected.extend(SCOPE_SURFACE.iter().map(|s| s.to_string()));
         }
         expected.push("gil_await_user".to_string());
         expected.sort();
-        assert_eq!(registered_names(), expected);
+        let registered = registered_names();
+        assert_eq!(registered, expected);
+        // 범위 변경 도구 각각의 등록 여부는 그 구성 조건과 정확히 같다 — 켜진 구성에서는 일곱이 모두 있고, 꺼진 구성에서는 하나도 없다.
+        let scope_enabled = cfg!(all(feature = "tracking-policy", unix));
+        for name in SCOPE_SURFACE {
+            assert_eq!(registered.iter().any(|one| one == name), scope_enabled, "{name} 의 등록 여부가 구성 조건과 다르다");
+        }
     }
 
     /// 기본 표 파일 자체에는 승인 계획 도구가 없다 — 승인 계획은 feature 가 더하는 것이지 기본 계약이 아니다.
@@ -467,7 +477,9 @@ mod tests {
         let mut names: Vec<&str> = catalog.iter().map(|t| t["name"].as_str().expect("name")).collect();
         names.sort();
         assert_eq!(names, DEFAULT_SURFACE);
-        for name in PLAN_MODEL_SURFACE.iter().chain(PLAN_APP_SURFACE.iter()).chain(VISUAL_SURFACE.iter()).chain(RECORD_READ_SURFACE.iter()) {
+        for name in PLAN_MODEL_SURFACE.iter().chain(PLAN_APP_SURFACE.iter()).chain(VISUAL_SURFACE.iter()).chain(RECORD_READ_SURFACE.iter())
+            .chain(SCOPE_SURFACE.iter())
+        {
             assert!(!names.contains(name), "{name} 이 기본 표에 들어왔다");
         }
     }
