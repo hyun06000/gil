@@ -106,6 +106,11 @@ fn pointed_at(said: &str) -> Option<String> {
     Some(line.to_string())
 }
 
+/// 거절의 `실행` 아래 첫 명령.
+fn run_line(said: &str) -> &str {
+    said.split_once("실행\n").map_or("", |(_, rest)| rest.lines().next().unwrap_or_default().trim())
+}
+
 /// 열린 question 자리 하나를 둔 프로젝트.
 fn started(label: &str, files: &[(&str, &str)]) -> PathBuf {
     let dir = bare(label);
@@ -286,12 +291,45 @@ fn restore_with_any_argument_points_at_the_restore_topic() {
         vec!["restore", "a.txt", "b.txt"],
     ] {
         let said = refused(&dir, &extra, None);
+        // The run line itself names the restore topic, so no separate pointer is repeated.
         assert_eq!(
-            pointed_at(&said).as_deref(),
+            pointed_at(&said).or_else(|| run_line(&said).strip_prefix("gil help ").map(str::to_owned)).as_deref(),
             Some("artifact/restore"),
             "{extra:?}: {said}"
         );
         assert!(said.contains("받지 않는다"), "{extra:?}: {said}");
+    }
+}
+
+/// 미리 보려는 호출(`--dry-run`)과 도움말(`--help`·`-h`)은 파일을 그대로 두고, 그 응답이
+/// 권하는 다음 명령도 읽기만 한다 (#239). 거절문을 따랐다가 새 파일이 지워지지 않는다.
+#[cfg(not(feature = "product-safety"))]
+#[test]
+fn restore_preview_and_help_keep_files_and_point_only_at_read_only_commands() {
+    let dir = started("restore-preview", &[("keep.txt", "original")]);
+    fs::write(dir.join("keep.txt"), "changed").unwrap();
+    fs::write(dir.join("new.txt"), "made after start").unwrap();
+    let before = fs::read(dir.join(gil::STATE_PATH)).unwrap();
+    let preserved = |what: &str| {
+        assert_eq!(fs::read_to_string(dir.join("keep.txt")).unwrap(), "changed", "{what}");
+        assert_eq!(fs::read_to_string(dir.join("new.txt")).unwrap(), "made after start", "{what}");
+        assert_eq!(fs::read(dir.join(gil::STATE_PATH)).unwrap(), before, "{what}");
+    };
+    let restoring = |said: &str| said.lines().any(|line| line.trim() == "gil restore");
+
+    let preview = refused(&dir, &["restore", "--dry-run"], None);
+    preserved("--dry-run");
+    assert!(preview.contains("미리보기") && preview.contains("아무것도 바꾸지 않았다"), "{preview}");
+    assert_eq!(run_line(&preview), "gil help artifact/restore", "{preview}");
+    assert!(!restoring(&preview), "the refusal must not hand out the restoring command: {preview}");
+    assert_eq!(pointed_at(&preview), None, "the run line already names the topic: {preview}");
+
+    // The command that the refusal names is itself read-only.
+    let topic = ok(&dir, &["help", "artifact/restore"]);
+    preserved("gil help artifact/restore");
+    for flag in ["--help", "-h"] {
+        assert_eq!(ok(&dir, &["restore", flag]), topic, "{flag} shows the restore rules");
+        preserved(flag);
     }
 }
 

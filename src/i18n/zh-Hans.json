@@ -195,6 +195,8 @@
   "cmd.report_unparsed": "无法把给定的文本读作 Report。",
   "cmd.restore_failed": "无法恢复 Artifact 世界。",
   "cmd.restore_no_arg": "`gil restore` 不接受 {extra}。",
+  "cmd.restore_no_dry_run": "`gil restore` 没有预览（--dry-run）。",
+  "cmd.restore_args_todo": "此拒绝没有更改任何内容。恢复之前，先与用户确认被更改的文件及其意图。恢复规则请阅读下方帮助 — 它只读取，不更改任何内容。\n只有在用户明确要求时才执行恢复本身。它会把所有文件恢复到当前位置的基准世界，此后新建的文件可能会被删除。",
   "cmd.restore_noop": "没有可恢复的变更。\n\n当前 Artifact 世界与基准 Snapshot {world} 相同。\n",
   "cmd.restore_why": "要回到的世界已由当前位置决定 — 不是可选择的值。\n只恢复部分文件会产生不属于任何 Snapshot 的世界。",
   "cmd.restored_to": "已把 Artifact 世界恢复到 {world}。\n\n",

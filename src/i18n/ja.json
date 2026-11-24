@@ -195,6 +195,8 @@
   "cmd.report_unparsed": "与えられた文を Report として読めなかった。",
   "cmd.restore_failed": "Artifact の世界を復元できなかった。",
   "cmd.restore_no_arg": "`gil restore` は {extra} を受け取らない。",
+  "cmd.restore_no_dry_run": "`gil restore` にはプレビュー（--dry-run）がない。",
+  "cmd.restore_args_todo": "この拒否は何も変えていない。戻す前に、変わったファイルとその意図をユーザーと確認する。復元の規則は下のヘルプで読む — 読むだけで何も変えない。\n復元そのものは、ユーザーが明示的に求めたときだけ実行する。現在の位置の基準世界にすべてのファイルを戻し、その後に新しく作ったファイルは削除されることがある。",
   "cmd.restore_noop": "復元する変更がない。\n\n現在の Artifact の世界は基準 Snapshot {world} と同じだ。\n",
   "cmd.restore_why": "戻る世界はいまの位置がすでに決めている — 選ぶ値ではない。\n一部のファイルだけ戻すと、その結果はどの Snapshot にも属さない世界になる。",
   "cmd.restored_to": "Artifact の世界を {world} に復元した。\n\n",
