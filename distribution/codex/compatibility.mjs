@@ -25,6 +25,12 @@ export function cargoFeatures(profile) {
     'exploration-flow': 'exploration-flow,visual-authoring,product-safety',
     product: 'tracking-policy,exploration-flow,visual-authoring,product-safety'}[profile];
 }
+// The exact `cargo` arguments of a packaged Core build. One list is both what is run and what the
+// provenance records, so the record cannot drift from the command. `binOnly`: the Linux archive
+// ships the one `gil` executable; the macOS Plugin build keeps its existing invocation.
+export function coreBuildArgs(profile, triple, {binOnly = false} = {}) {
+  return ['build', '--locked', '--release', '-p', 'gil', ...(binOnly ? ['--bin', 'gil'] : []), '--target', triple, '--features', cargoFeatures(profile)];
+}
 export function checkCore(core, profile = 'default', platform = 'darwin-arm64') {
   assert.equal(core.schema_version,1); assert.equal(core.product,'gil_core');
   assert.ok(Object.hasOwn(PLATFORMS, platform), 'unknown packaged platform');

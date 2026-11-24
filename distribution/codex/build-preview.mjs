@@ -7,7 +7,7 @@ import {join, resolve} from 'node:path';
 import {ARCHIVE_FLAGS, createTree, hash, inventory, repository, sourceSnapshot, verifyTree} from './artifact.mjs';
 import {smoke} from './smoke.mjs';
 import {buildVersion, selectedPreview} from './build-version.mjs';
-import {cargoFeatures} from './compatibility.mjs';
+import {coreBuildArgs} from './compatibility.mjs';
 import {verifyMacosArchive} from '../product/verify-install.mjs';
 import {checkNativeOutputContract} from '../../plugins/gil-companion-prototype/native-output-contract.mjs';
 import {check as checkNotices} from '../compliance/notices.mjs';
@@ -34,8 +34,8 @@ const target = join(repository, 'target/plugin-core-build');
 const cargoHome = process.env.CARGO_HOME || join(homedir(), '.cargo');
 const rustflags = `--remap-path-prefix=${cargoHome}=/cargo --remap-path-prefix=${repository}=/gil`;
 assert.ok(!/\s/.test(repository + cargoHome), 'build roots containing whitespace need encoded rustflags support');
-const productFeatures = cargoFeatures(profile);
-await run('cargo', ['build', '--locked', '--release', '-p', 'gil', '--target', 'aarch64-apple-darwin', '--features', productFeatures], {
+const buildArgs = coreBuildArgs(profile, 'aarch64-apple-darwin');
+await run('cargo', buildArgs, {
   ...process.env, GIL_BUILD_VERSION: coreVersion, RUSTFLAGS: rustflags, CARGO_TARGET_DIR: target,
 });
 assert.deepEqual(await sourceSnapshot(repository), source, 'source changed during build');
@@ -63,7 +63,7 @@ try {
   const installed = profile === 'product' ? await verifyMacosArchive({archive, sums: join(output, 'SHA256SUMS'), expectedVersion: coreVersion,
     expectedHtml: join(repository, 'plugins/gil-companion-prototype/assets/monitor.html'), htmlOut: join(output, 'monitor-returned.html')}) : undefined;
   await writeFile(join(output, 'checks.json'), JSON.stringify({channel: 'development_unsigned', publishable: false,
-    source, profile, host_output_contract: hostOutputContract, third_party_notices: notices, archive_sha256: archiveHash, roundtrip: 'passed', smoke: check,
+    source, profile, build: {program: 'cargo', args: buildArgs}, host_output_contract: hostOutputContract, third_party_notices: notices, archive_sha256: archiveHash, roundtrip: 'passed', smoke: check,
     ...(installed ? {installed} : {})}, null, 2) + '\n', {flag: 'wx'});
   console.log(JSON.stringify({channel: 'development_unsigned', publishable: false,
     archive_sha256: archiveHash, roundtrip: 'passed', tools: check.tools, source_dirty: source.dirty}));

@@ -384,6 +384,10 @@ async function trackedScope(binary, state, home) {
     mustSucceed(await p.model('gil_context'), 'context after a restart');
     // The limits this kind states are real refusals, not silent fallbacks.
     mustRefuse(await p.model('gil_restore'), 'restore in a tracked-scope project');
+    mustRefuse(await p.model('gil_revisit'), 'revisit in a tracked-scope project');
+    const noRecovery = mustSucceed(await p.app('gil_revisit_review'), 'recovery review in a tracked-scope project');
+    assert.equal(noRecovery.structuredContent.supported, false, 'a tracked-scope project was offered the whole-tree recovery');
+    assert.equal(noRecovery._meta?.['gil/revisitApprovalToken'], undefined, 'a recovery capability was handed out in a tracked-scope project');
     // No image attachments: the limit is on writing. A close that carries visuals is refused before
     // the record is touched; reading a report's visuals truthfully answers that there are none.
     const before = await p.record();
@@ -529,6 +533,27 @@ export async function verifyLinuxArchive({archive, sums, expectedHtml, expectedV
     assert.match(kept.stdout, /^binary: KEPT /m);
     assert.deepEqual(await tree(occupied), occupiedBefore, 'uninstall removed or changed a file that was never installed');
 
+    // A regular install.json with no executable beside it, in folders that were there before any
+    // installation: the install refuses and changes nothing. With that file moved away by its owner
+    // the install succeeds, and its removal leaves the two pre-existing folders in place, empty.
+    const prepared = join(state, 'prepared-home'), preparedEnv = await profile(prepared);
+    await mkdir(join(prepared, '.local/share/gil/bin'), {recursive: true});
+    await writeFile(join(prepared, '.local/share/gil/bin/install.json'), 'the user\'s own file\n');
+    const preparedBefore = await tree(prepared);
+    const lone = run(packaged, ['install', '--no-wait'], preparedEnv);
+    assert.notEqual(lone.status, 0, 'the install overwrote a receipt it cannot show to be its own');
+    assert.match(lone.stderr, /Nothing was changed/);
+    assert.deepEqual(await tree(prepared), preparedBefore, 'a refused install changed something');
+    await rm(join(prepared, '.local/share/gil/bin/install.json'));
+    const emptyFolders = await tree(prepared);
+    assert.equal(run(packaged, ['install', '--no-wait'], preparedEnv).status, 0);
+    const preparedRemoved = run(join(prepared, '.local/share/gil/bin/gil'), ['uninstall', '--remove-binary'], preparedEnv);
+    assert.equal(preparedRemoved.status, 0, `gil uninstall failed: ${preparedRemoved.stderr}`);
+    assert.match(preparedRemoved.stdout, /^binary: REMOVED /m);
+    assertUntouched(emptyFolders, await tree(prepared), path => /^\.codex\/config\.toml(\.bak-[^/]+|\.gil-lock)$/.test(path));
+    assert.deepEqual(await readdir(join(prepared, '.local/share/gil/bin')), [], 'the folder that existed before the installation is not there, empty, afterwards');
+    assert.equal(await readFile(join(prepared, '.codex/config.toml'), 'utf8'), config, 'the Host settings file is not byte-identical after install and uninstall');
+
     const env = await profile(home), before = await tree(home);
     const installed = join(home, '.local/share/gil/bin/gil');
     const install = run(packaged, ['install', '--no-wait'], env);
@@ -538,16 +563,38 @@ export async function verifyLinuxArchive({archive, sums, expectedHtml, expectedV
     assert.ok((await readFile(installed)).equals(await readFile(packaged)), 'the installed file is not the packaged bytes');
     assert.equal((await lstat(installed)).mode & 0o777, 0o755, 'the installed Core does not have the reviewed mode');
     assert.deepEqual((await readdir(join(home, '.local/share/gil/bin'))).sort(), ['gil', 'install.json'], 'the install folder holds other names than the two recorded files');
-    const recorded = JSON.parse(await readFile(join(home, '.local/share/gil/bin/install.json'), 'utf8'));
+    const receiptOf = async () => JSON.parse(await readFile(join(home, '.local/share/gil/bin/install.json'), 'utf8'));
+    let recorded = await receiptOf();
     assert.equal(recorded.sha256, sha256(await readFile(installed)), 'install.json records another digest than the installed file');
     assert.equal(recorded.version, receipt.version, 'install.json records another version than the packaged Core');
+    assert.deepEqual(recorded.made_dirs, ['gil', 'gil/bin'], 'the folders this installation created are not recorded');
     const registered = await readFile(join(home, '.codex/config.toml'), 'utf8');
-    assert.ok(registered.includes('[mcp_servers.other]') && registered.includes('# sentinel'), 'existing Codex settings were rewritten');
+    assert.ok(registered.startsWith(config), 'existing Codex settings were rewritten');
     assert.ok(registered.includes(installed), 'Codex was not pointed at the installed path');
     const repeated = run(installed, ['install', '--no-wait'], env);
     assert.equal(repeated.status, 0, 'a repeated install is not idempotent');
     assert.match(repeated.stdout, /^binary: OK /m);
     assert.equal(run(installed, ['doctor'], env).status, 0, 'gil doctor reports an unhealthy installation');
+
+    // An update and the way back, through these release bytes: a second executable that differs
+    // only by trailing bytes replaces the installed one, and the packaged one replaces it again.
+    // The failure-injection variable of debug builds is set for the second run on purpose: a release
+    // build must not know it, so the update simply completes.
+    const variant = join(state, 'gil-variant');
+    await writeFile(variant, Buffer.concat([await readFile(packaged), Buffer.from('\n# variant for the update check\n')]), {mode: 0o755});
+    const updated = run(variant, ['install', '--no-wait'], env);
+    assert.equal(updated.status, 0, `the update failed: ${updated.stderr}`);
+    assert.match(updated.stdout, /^binary: UPDATED /m);
+    assert.ok((await readFile(installed)).equals(await readFile(variant)));
+    recorded = await receiptOf();
+    assert.equal(recorded.sha256, sha256(await readFile(variant)));
+    assert.equal(recorded.previous_sha256, undefined, 'a finished update still names the replaced digest');
+    const back = spawnSync(packaged, ['install', '--no-wait'], {cwd: state, env: {...env, GIL_INSTALL_FAIL: 'update-binary'}, encoding: 'utf8', timeout: 60000});
+    assert.equal(back.status, 0, `a release build obeyed a debug failure injection: ${back.stderr}`);
+    assert.ok((await readFile(installed)).equals(await readFile(packaged)));
+    recorded = await receiptOf();
+    assert.deepEqual([recorded.sha256, recorded.previous_sha256, recorded.made_dirs], [sha256(await readFile(packaged)), undefined, ['gil', 'gil/bin']]);
+    assert.deepEqual((await readdir(join(home, '.local/share/gil/bin'))).sort(), ['gil', 'install.json'], 'an update left a staged or parked name');
 
     const protocol = await verifyProtocol(installed, {platform: LINUX.platform, expectedVersion: receipt.version, expectedHtml, home, htmlOut});
     const kinds = await verifyStartKinds(installed, {home});
@@ -557,20 +604,22 @@ export async function verifyLinuxArchive({archive, sums, expectedHtml, expectedV
     assert.equal(removed.status, 0, `gil uninstall failed: ${removed.stderr}`);
     assert.match(removed.stdout, /^binary: REMOVED /m);
     await assert.rejects(lstat(installed), 'the installed Core was not removed');
-    const after = await readFile(join(home, '.codex/config.toml'), 'utf8');
-    assert.ok(after.includes('[mcp_servers.other]') && after.includes('# sentinel') && !after.includes(installed), 'uninstall did not restore exactly the foreign settings');
-    // Everything that was there before is byte-identical, except the one Codex file the install
-    // registered in (checked above). The only new entries are what the Host registration itself
-    // leaves beside that file: its backups and its edit lock. Those two kinds of leftover are the
-    // registration's existing behaviour on every platform; nothing else may remain.
-    const {'.codex/config.toml': _edited, ...untouched} = before;
-    assertUntouched(untouched, await tree(home), path => /^\.codex\/config\.toml(\.bak-[^/]+|\.gil-lock)?$/.test(path));
+    // The Host settings file is the pre-install bytes again, whole: the other server's command and
+    // args and every unrelated line. Everything else that was there before is byte-identical too.
+    assert.ok((await readFile(join(home, '.codex/config.toml'))).equals(Buffer.from(config)), 'the Host settings file is not byte-identical to its pre-install bytes');
+    const leftovers = path => /^\.codex\/config\.toml(\.bak-[^/]+|\.gil-lock)$/.test(path);
+    const after = await tree(home);
+    assertUntouched(before, after, leftovers);
+    // What the Host registration itself leaves beside the settings file (its backups and its edit
+    // lock) is recorded apart; it is the registration's existing behaviour on every platform.
+    const left = Object.keys(after).filter(path => !Object.hasOwn(before, path)).sort();
     const again = run(packaged, ['uninstall', '--remove-binary'], env);
     assert.equal(again.status, 0);
     assert.match(again.stdout, /^binary: NOT_INSTALLED /m);
     return {archive_sha256: digest, receipt: {version: receipt.version, elf: receipt.elf, source: receipt.source}, protocol, start_kinds: kinds,
-      install: 'isolated HOME; a foreign entry refused unchanged; existing Codex settings and unrelated files unchanged; the installed executable removed the recorded files only',
-      left_by_host_registration: Object.keys(await tree(home)).filter(path => !Object.hasOwn(before, path)).sort().map(path => path.replace(/\.bak-.*$/, '.bak-*'))};
+      install: 'isolated HOME; a foreign executable and a lone receipt refused unchanged; pre-existing folders kept; update and return through release bytes; Host settings file byte-identical after removal; the installed executable removed the recorded files only',
+      host_settings: {path: '.codex/config.toml', sha256_before: sha256(Buffer.from(config)), sha256_after: sha256(await readFile(join(home, '.codex/config.toml'))), identical: true},
+      left_by_host_registration: left.map(path => path.replace(/\.bak-.*$/, '.bak-*'))};
   } finally { await rm(state, {recursive: true, force: true}); }
 }
 

@@ -22,8 +22,9 @@ license와 일치하는 전문이며 그대로 실었다. 빌드 의존성을 �
 파일에 링크됐다는 뜻이 아니다.
 
 표준 라이브러리 고지는 macOS·Windows inventory가 고정한 것과 같은 bytes(공식 Rust 1.97.1 배포의
-`COPYRIGHT-library.html`)다. `x86_64-unknown-linux-gnu` rust-docs component 안의 사본을 따로 내려받아
-대조하지는 않았다(`stdlib.note`에 적었다).
+`COPYRIGHT-library.html`)다. Linux CI job이 같은 toolchain의 `x86_64-unknown-linux-gnu` rust-docs component를
+그 runner에 설치해 그 안의 `COPYRIGHT-library.html`과 이 원문을 바이트 단위로 대조한다(`product-candidate.yml`).
+다르면 job이 실패하며 원문·정책을 자동으로 고치지 않는다. 대조 결과(양쪽 SHA-256)는 그 실행의 요약에 남는다.
 
 ## 실패 조건
 

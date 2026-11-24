@@ -22,10 +22,12 @@ Check the archive against its published `SHA256SUMS`, extract it to a new folder
   records its version and digest. No administrator rights are used and no security setting is
   changed.
 - If something else already exists at that path and was not placed by `gil install` (no
-  `install.json` beside it that records exactly that file — even when its bytes are the same), or
-  if `~/.local/share/gil` or its `bin` folder is a link or not your own folder, the install stops
-  and changes nothing, Host settings included. Move that entry away yourself, then run the command
-  again.
+  `install.json` beside it that records exactly that file — even when its bytes are the same), if
+  an `install.json` is there without the executable, or if `~/.local/share/gil` or its `bin`
+  folder is a link or not your own folder, the install stops and changes nothing, Host settings
+  included. Move that entry away yourself, then run the command again.
+- An update that is interrupted leaves the installed executable recorded; running
+  `./bin/gil install` again finishes it.
 - Codex is registered when its settings folder exists (`~/.codex`, or `CODEX_HOME`): one
   `gil` entry is added to `config.toml`; everything else in that file is kept, and a backup is
   written beside it before the change.
@@ -56,11 +58,17 @@ one kind or the other and is not converted later.
 
 Both kinds keep Chains, approved plans, requirement-linked Experiments and original record reads.
 
-**Limit of this build on Linux.** The approved recovery of a failed Experiment — returning the
-work files to an earlier recorded state after you approve it in the Monitor — is not provided on
-Linux. GIL refuses it, keeps every file and record as it is, and does not open the next Experiment
-of that failure. Converting older format-4 projects to image reports, the persistent Companion
-window and update notices are not available on Linux either.
+**After a failed Experiment (image-report projects).** When a failed Experiment declares a return
+to an earlier Cycle, GIL shows the list of file changes in the Monitor and waits for your
+approval there. Nothing moves before that. After you approve, the files only the failure had are
+kept under `.gil/revisit-preserved/`, the work files return to the earlier recorded state, and
+the next Experiment of the same Chain can be opened. This needs the project folder to be on a
+local filesystem GIL has listed (ext4, XFS, Btrfs, tmpfs, overlayfs); elsewhere GIL does not
+offer the recovery and keeps every file and record as it is. Tracked-scope projects do not have
+this recovery.
+
+**Not available on Linux in this build:** converting older format-4 projects to image reports,
+the persistent Companion window and update notices.
 Existing projects keep the kind and storage they were started with; installing or updating GIL
 never converts a project.
 
@@ -79,9 +87,12 @@ removes the `gil` entry from the Host settings it registered. To remove the exec
 ~/.local/share/gil/bin/gil uninstall --remove-binary
 ```
 
-Only the executable and `install.json` recorded by the install are removed, and then the two
-folders the install made when they are empty. A file at that path that the install did not record,
-or that was changed afterwards, is kept and reported, and so is anything else you put in that folder. Projects, their `.gil` records and unrelated settings are never
+Only the executable and `install.json` recorded by the install are removed, and then the folders
+that installation itself created, when they are empty; a folder that was already there stays. A
+file at that path that the install did not record, or that was changed afterwards, is kept and
+reported, and so is anything else you put in that folder. If only part of the removal could be
+done, the command says `PARTIAL`, lists what was removed and what remains, and exits with an error.
+The Host registration leaves its own backups and an edit-lock file beside the Host settings file. Projects, their `.gil` records and unrelated settings are never
 touched by install or uninstall.
 
 Third-party notices are in `THIRD-PARTY-NOTICES.txt`, `THIRD-PARTY-NOTICES.json` and

@@ -1869,6 +1869,6 @@
     "path": "COPYRIGHT-library.html",
     "sha256": "0a65bb747c49c7bb816cbc7188319bd6e4e8d08091c1190b8a3c0971c47968ed",
     "source": "https://static.rust-lang.org/dist/rust-docs-1.97.1-aarch64-apple-darwin.tar.xz",
-    "note": "Unmodified library notice of the official Rust 1.97.1 distribution, the same reviewed bytes the macOS and Windows inventories pin (taken from the aarch64-apple-darwin rust-docs component named in source). The copy inside the x86_64-unknown-linux-gnu rust-docs component was not separately downloaded and compared. Includes standard library dependencies; no assumption every described component is linked."
+    "note": "Unmodified library notice of the official Rust 1.97.1 distribution, the same reviewed bytes the macOS and Windows inventories pin (first taken from the aarch64-apple-darwin rust-docs component named in source). The product-candidate workflow installs the x86_64-unknown-linux-gnu rust-docs component of the same toolchain on the Linux runner and compares its COPYRIGHT-library.html with this text byte for byte on every run; a difference fails the job and nothing is refreshed. Includes standard library dependencies; no assumption every described component is linked."
   }
 }

@@ -12,7 +12,7 @@ import {homedir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {hash, inventory, repository, sourceSnapshot} from '../codex/artifact.mjs';
 import {buildVersion, selectedPreview} from '../codex/build-version.mjs';
-import {cargoFeatures} from '../codex/compatibility.mjs';
+import {cargoFeatures, coreBuildArgs} from '../codex/compatibility.mjs';
 import {TARGETS, collect, assertCoverage, regular} from '../compliance/notices.mjs';
 import {DARWIN, LINUX, LINUX_ARCHIVE_FLAGS, PROFILE, createLinuxTree, gitIdentity, verifyLinuxTree} from './artifact.mjs';
 import {verifyLinuxArchive} from './verify-install.mjs';
@@ -36,12 +36,16 @@ const said = (command, args) => {
 };
 // Where and with what this was made. Environment values are copied only from this fixed list of
 // CI identifiers; nothing secret and no local path is recorded.
-function provenance(target, source) {
+// `build` is the argument list that was actually handed to cargo for this platform.
+function provenance(target, source, build) {
   const ci = Object.fromEntries(['GITHUB_ACTIONS', 'GITHUB_REPOSITORY', 'GITHUB_SHA', 'GITHUB_REF', 'GITHUB_WORKFLOW', 'GITHUB_RUN_ID',
     'GITHUB_RUN_ATTEMPT', 'GITHUB_JOB', 'RUNNER_OS', 'RUNNER_ARCH', 'ImageOS', 'ImageVersion'].map(key => [key, process.env[key] ?? null]));
   return {schema: 1, profile: PROFILE, platform: target.platform, target: target.triple, cargo_features: cargoFeatures(PROFILE),
     source, git: gitIdentity(repository), toolchain: {rustc: said('rustc', ['-vV']).split('\n'), cargo: said('cargo', ['-V']), node: process.version},
-    commands: [`node mcp-app/build.mjs`, `cargo build --locked --release -p gil --target ${target.triple} --features ${cargoFeatures(PROFILE)}`],
+    commands: [{program: 'node', args: ['mcp-app/build.mjs']},
+      // Environment of the cargo run, with the two machine paths named instead of written out.
+      {program: build.program, args: build.args, env: {GIL_BUILD_VERSION: '<the compiled version, see the receipt>',
+        RUSTFLAGS: '--remap-path-prefix=<cargo home>=/cargo --remap-path-prefix=<repository>=/gil', CARGO_TARGET_DIR: build.target_dir}}],
     ci, built_on: host};
 }
 
@@ -53,7 +57,8 @@ if (host === 'darwin-arm64') {
   assert.deepEqual(await sourceSnapshot(repository), source, 'source changed during the build');
   const checks = JSON.parse(await readFile(join(output, 'checks.json'), 'utf8'));
   assert.deepEqual(checks.source, source, 'the packaged build saw another source than this run');
-  const record = {...provenance(DARWIN, source), archive: {name: DARWIN.archive, sha256: checks.archive_sha256},
+  assert.deepEqual(checks.build?.args, coreBuildArgs(PROFILE, DARWIN.triple), 'the packaged build ran another cargo command than this profile states');
+  const record = {...provenance(DARWIN, source, {...checks.build, target_dir: 'target/plugin-core-build'}), archive: {name: DARWIN.archive, sha256: checks.archive_sha256},
     signing: 'not signed or notarized by this pipeline; Gatekeeper is not bypassed and no credential was read'};
   await writeFile(join(output, 'provenance.json'), JSON.stringify(record, null, 2) + '\n', {flag: 'wx'});
   console.log(JSON.stringify({platform: DARWIN.platform, archive_sha256: checks.archive_sha256, git: record.git, source_dirty: source.dirty}));
@@ -75,7 +80,9 @@ if (host === 'darwin-arm64') {
   const cargoHome = process.env.CARGO_HOME || join(homedir(), '.cargo');
   assert.ok(!/\s/.test(repository + cargoHome), 'build roots containing whitespace need encoded rustflags support');
   const rustflags = `--remap-path-prefix=${cargoHome}=/cargo --remap-path-prefix=${repository}=/gil`;
-  await run('cargo', ['build', '--locked', '--release', '-p', 'gil', '--bin', 'gil', '--target', LINUX.triple, '--features', cargoFeatures(PROFILE)], {
+  const buildArgs = coreBuildArgs(PROFILE, LINUX.triple, {binOnly: true});
+  for (const needed of ['--locked', '--release', '--bin', 'gil', '--target', LINUX.triple, '--features', cargoFeatures(PROFILE)]) assert.ok(buildArgs.includes(needed), needed);
+  await run('cargo', buildArgs, {
     ...process.env, GIL_BUILD_VERSION: coreVersion, RUSTFLAGS: rustflags, CARGO_TARGET_DIR: target,
   });
   assert.deepEqual(await sourceSnapshot(repository), source, 'source changed during build');
@@ -99,7 +106,7 @@ if (host === 'darwin-arm64') {
   // isolated install, and every functional check through the INSTALLED binary.
   const installed = await verifyLinuxArchive({archive, sums: join(output, 'SHA256SUMS'), expectedVersion: coreVersion,
     expectedHtml: join(repository, 'plugins/gil-companion-prototype/assets/monitor.html'), htmlOut: join(output, 'monitor-returned.html')});
-  const record = {...provenance(LINUX, source), archive: {name: LINUX.archive, sha256: archiveHash},
+  const record = {...provenance(LINUX, source, {program: 'cargo', args: buildArgs, target_dir: 'target/product-core-build'}), archive: {name: LINUX.archive, sha256: archiveHash},
     binary_sha256: receipt.files.find(file => file.path === LINUX.core).sha256, elf: receipt.elf,
     signing: 'none', support: 'run-time floor is the glibc version read from the binary; supported distributions are not stated by this build'};
   await writeFile(join(output, 'provenance.json'), JSON.stringify(record, null, 2) + '\n', {flag: 'wx'});

@@ -34,7 +34,7 @@
 | 같은 Chain 범위 변경 · 보관 대기 · 명시 재시도 | `gil_scope_propose`·`gil_scope_status`, App 전용 `gil_scope_review`·`gil_scope_decide`·`gil_scope_retry` (`src/scope_change`, #323) | 형식 10 | 기존(개발 구성) | 공통(Unix) |
 | O-2 즉시 보관 중단 · 명시 해제 | App 전용 `gil_scope_halt`·`gil_scope_release` | 형식 10 | 기존 | 공통(Unix) |
 | O-3 일반 Interview 보존 · 최종 종료 보호 | 종료 Synthesis 승인의 거절(`src/scope_change`) | 형식 10 | 기존 | 공통(Unix) |
-| 닫힌 실패의 보존·복구 승인(제품 보호) | App 전용 `gil_revisit_review`·`gil_revisit_apply` (`src/mcp/recovery.rs`, `src/session/revisit_recovery.rs`) | 형식 9 | 기존. **형식 10/11은 restore·revisit을 실행 전에 거절**(현재 제한 그대로) | **제한(기존)**: 승인 복구는 macOS·Windows에만 있다. Linux에서는 검토가 `supported: false`로 답하고 승인 capability를 주지 않으며, 파일과 기록을 그대로 둔다. 이번 범위에서 넓히지 않았다 |
+| 닫힌 실패의 보존·복구 승인(제품 보호) | App 전용 `gil_revisit_review`·`gil_revisit_apply` (`src/mcp/recovery.rs`, `src/session/revisit_recovery.rs`) | 형식 9 | 기존. **형식 10/11은 restore·revisit을 실행 전에 거절**(현재 제한 그대로) | **이식**: 같은 검토·같은 App 전용 승인·같은 보존 자리. Linux 전제로 작업 폴더와 기록 폴더가 목록의 로컬 파일시스템(ext4·XFS·Btrfs·tmpfs·overlayfs)이어야 하며, 그 밖에서는 `supported: false`로 답하고 capability를 주지 않는다. 형식 10/11 거절은 같다 |
 | 일반 restore · Step revisit | `gil_restore`·`gil_revisit` | — | 제품 보호로 차단(기존) | 같음 |
 | 업데이트 안내 | Monitor의 update 상태(`src/mcp/update.rs`) | — | 기존 | **없음(기존)**: feed에 Linux 항목이 없어 `unavailable`로 답하고 아무것도 받아 오지 않는다 |
 | 런타임 저장소 계층(런처의 버전 선택) | `src/runtime_*` | — | 기존(개발) | **없음(기존)**: 확장 ACL 검사가 없어 모든 루트를 막는다(fail closed). 제품 `gil`의 기능은 이 계층에 기대지 않는다 |
@@ -111,12 +111,6 @@ node tools/ci/expect-tests.mjs 15 cargo test --locked -p gil --features $F --tes
 cargo build --locked -p gil --all-targets --features $F
 ```
 
-Linux에서는 승인 복구가 없으므로 그 경로를 걷는 시험(`exploration_flow` 2건·`exploration_tools` 1건·
-`exploration_evidence` 2건·`exploration_plan_panel`·`chain_recovery_preservation`·`revisit_cases`)이 컴파일되지 않는다.
-대신 `the_approved_recovery_is_refused_and_everything_is_kept_where_it_is_not_provided`가 거절과 무변경을 확인한다.
-**Linux에서 실패한 Experiment가 되돌아가기를 선언하면 그 뒤의 Experiment는 열리지 않는다** — 이 제한의 사용자 영향은
-결정이 필요한 사항이다(§5).
-
 이 조합에서 **컴파일되지 않는** 기존 통합 시험이 있다(각자의 gate가 `approved-plan`을 제외한다):
 `will_end*`·`format_transition`(맨 승인 fixture), `tracking_record_boundary`(추적 범위가 없는 빌드용).
 `tests/visual_start.rs`의 첫 Verify 선언 시험도 같은 이유로 빠지고 생성 입구 시험 하나만 돈다. 이 조합의 0건을
@@ -135,11 +129,18 @@ node distribution/product/verify-install.mjs kinds <설치된 또는 포장된 g
 ```
 
 `linux-archive`: checksum → 멤버 검사(절대 경로·상위 이동·링크·특수 파일·**같은 이름의 중복** 거절, 영수증의 파일
-목록과 일치) → 새 폴더에 풀기(`-p`, 소유권 미적용) → 영수증·멤버·권한·ELF·고지 검사 → 남의 항목이 놓인 격리
-HOME에서 설치 거절과 무변경 → 격리된 HOME에 `gil install` → 설치 폴더가 기록된 두 파일뿐인지, `install.json`의
-digest·버전 → **설치된 binary**의 버전·probe·catalog·MCP·내장 HTML(URI·MIME·bytes·SHA-256을 포장 자산과 비교)
-→ 두 시작 종류 → 새 프로세스의 재시작 → **설치된 binary의** `gil uninstall --remove-binary` → 설치 전 HOME의 모든
-파일이 byte 단위로 그대로이고(등록했던 Codex 설정은 내용 확인), 새로 남은 것은 그 설정의 백업뿐인지 확인.
+목록과 일치) → 새 폴더에 풀기(`-p`, 소유권 미적용) → 영수증·멤버·권한·ELF·고지 검사 → 남의 실행 파일(같은 bytes)이
+놓인 HOME과, 실행 파일 없이 `install.json`만 있는 HOME에서 설치 거절과 무변경 → 설치 전에 있던 빈 폴더가 제거 뒤에도
+남는지 → 격리된 HOME에 `gil install` → 설치 폴더가 기록된 두 파일뿐인지, `install.json`의 digest·버전·만든 폴더 →
+release bytes로 업데이트와 되돌림(이때 debug 전용 실패 주입 변수를 일부러 주어 release가 그것을 모른다는 것도 확인) →
+**설치된 binary**의 버전·probe·catalog·MCP·내장 HTML(URI·MIME·bytes·SHA-256을 포장 자산과 비교) → 두 시작 종류 →
+새 프로세스의 재시작 → **설치된 binary의** `gil uninstall --remove-binary` → **Host 설정 파일 전체가 설치 전 bytes와
+같은지**(다른 서버의 command·args·무관한 줄 포함), 설치 전 HOME의 다른 모든 파일도 byte 단위로 같은지. 등록이 설정 파일
+옆에 남기는 백업·편집 잠금 파일은 영수증에 따로 적는다.
+
+단계 사이의 실패(업데이트 중단, 첫 설치의 영수증 실패, 부분 제거)는 release bytes로 만들 수 없다.
+`install-failpoints.mjs <debug gil>`이 debug 빌드의 `GIL_INSTALL_FAIL`로 실제 `gil install`·`gil uninstall` 진입점을
+걷는다 — debug 실행 파일의 증거이며 release 설치물의 증거가 아니다.
 
 `macos-archive`: checksum → 같은 멤버 검사 → 새 소유자 전용 prefix에 풀기 → 영수증·Mach-O·고지 검사 →
 Plugin manifest가 가리키는 Core가 포장된 그 파일인지 → 합성 Host 설정을 둔 격리 HOME으로 그 Core를 **제자리에서**
@@ -152,9 +153,10 @@ Developer ID 서명·공증·Gatekeeper 결과가 아니다.
 
 `kinds`가 확인하는 것: 빈 폴더의 무선택 거절과 무기록, 추적 범위(승인 전 무보관 → 제안 → App 전용 승인 →
 형식 10 → 계획 승인 → 범위 변경 승인·보관 → 요구 연결 Experiment → 재시작 → 시각 자료를 실은 닫기의 거절),
-이미지 보고서(형식 9 → 계획 승인 → 요구 연결 Experiment → PNG 첨부·선언 → Analysis·Cycle Report 인용 → 달성 종료
-이력 → 두 번째 Experiment의 미달성 종료(끝난 Will 지목은 거절) → 원본·Monitor 읽기 → 재시작), 두 종류가 서로를
-대체하지 않음.
+이미지 보고서(형식 9 → 계획 승인 → 요구 연결 Experiment → PNG 첨부·선언 → Analysis·Cycle Report 인용 → 실패한
+Experiment의 되돌아가기 선언 → 승인 전 차단과 재시작 뒤 무변경 → App 전용 승인으로 복구 → 실패 파일 보존 → 같은 Chain의
+다음 Experiment → 달성 종료 이력과 미달성 종료(끝난 Will 지목은 거절) → 원본·Monitor 읽기 → 재시작), 추적 범위
+프로젝트에서 복구 검토가 `supported: false`로 답함, 두 종류가 서로를 대체하지 않음.
 
 확인하지 **않는** 것: 사람의 승인(App 호출은 시험 입력이다), 실제 Host 화면, 전원 손실 내구성,
 보관 실패·대기·명시 재시도·O-2 중단(이들은 debug 전용 failpoint가 필요하므로 `tracking_scope_change`의 debug
@@ -164,11 +166,16 @@ Developer ID 서명·공증·Gatekeeper 결과가 아니다.
 CI는 [product-candidate.yml](../../.github/workflows/product-candidate.yml)이 두 플랫폼에서 같은 head로 위 절차를
 실행하도록 적혀 있다. 필수 check가 아니며 게시 단계가 없다.
 
-## 5. 결정이 필요한 Linux 제한 (2026-11-25 첫 Linux 실행에서 확인)
+## 5. Linux의 승인 복구와 남은 제한
 
-- **닫힌 실패의 승인 복구가 Linux에 없다.** 코드의 기존 gate(`any(target_os = "macos", windows)`)이며 이 후보가 만든
-  제한이 아니다. 실패한 Experiment가 `revisit`을 선언하면 Core는 승인된 되돌아가기 전에는 다음 Experiment를 열지
-  않는데, Linux에서는 그 승인 복구가 제공되지 않는다. 파일과 기록은 보존된다. 이 경로를 Linux에 제공할지(검수 범위·
-  보존 위치·복구 중단 처리 포함)는 별도 결정이며, 그 전에는 Linux 설치 안내가 이 제한을 적는다.
-- 런타임 저장소 계층·업데이트 안내·Companion·형식 4 이관은 Linux에 없다(위 표). 제품 `gil`의 두 시작 종류·승인 계획·
-  탐색·시각 작성·범위 변경은 Linux CI에서 실제로 돈다.
+- **닫힌 실패의 승인 복구는 Linux x64에서 제공된다**(2026-11-25). macOS와 같은 계약이다: 실패한 Experiment가 되돌아가기를
+  선언하면 Monitor의 검토 → App 전용 capability로 승인 → 실패 세계의 파일을 `.gil/revisit-preserved/`에 보존 → 대상 세계로
+  복원 → 같은 Chain의 다음 Experiment. 승인 전에는 다음 Experiment·모델 쪽 revisit·일반 restore가 거절되고, 조회·재연결·
+  재시작은 아무것도 적용하지 않는다. 승인과 보존본이 저장된 뒤 중단되면 `gil_revisit`이 **같은 승인**을 이어 갈 뿐 새 승인을
+  만들지 않는다. 새 저장 형식·승인 정책·복구 의미는 없다.
+- Linux의 추가 전제는 파일시스템이다. 로컬 mount 표시가 없으므로 작업 폴더와 기록 폴더가 이미지 프로젝트 생성이 받는
+  목록에 있어야 한다. 목록 밖(네트워크·FUSE·FAT 계열·알 수 없는 종류)에서는 복구를 제안하지 않고 파일과 기록을 그대로 둔다.
+- 형식 10/11(추적 범위) 프로젝트의 restore·revisit 거절은 플랫폼과 무관하게 그대로다.
+- 런타임 저장소 계층·업데이트 안내·Companion·형식 4 이관은 Linux에 없다(위 표).
+- 확인한 것은 합성 프로젝트와 합성 App 입력(시험 하네스의 승인)이다. 사람의 승인, 실제 Host 화면, 강제 종료·전원 손실은
+  확인하지 않았다. 복구 중 프로세스 종료는 debug failpoint 시험(`revisit_cases`)이 본다.

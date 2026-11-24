@@ -134,22 +134,18 @@ jobs:
       # Groups a feature or platform gate could compile away are counted exactly by name prefix: the start-kind
       # decision, the start preparation, the same-Chain scope change (now also under the exploration contract),
       # the Linux per-user placement rule (compiled on every Unix) and the explicit format transition.
-      - name: "[product] lib groups, exact by name prefix (start kind 8, preparation 43, MCP start 4, scope change 24, MCP scope 2, baseline retry 37, user placement 5, format transition 7)"
+      - name: "[product] lib groups, exact by name prefix (start kind 8, preparation 43, MCP start 4, scope change 24, MCP scope 2, baseline retry 37, user placement 9, format transition 7)"
         run: |
-          node tools/ci/tracking-start/expect-test-groups.mjs 'mcp::start_kind::tests::=8' 'start_prep::tests::=43' 'mcp::start::tests::=4' 'scope_change::tests::=24' 'mcp::scope::tests::=2' 'artifact::tracking_record::baseline_retry_tests::=37' 'install::user_place::tests::=5' 'session::format_transition::tests::=7' -- cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --lib -- mcp::start_kind::tests:: start_prep::tests:: mcp::start::tests:: scope_change::tests:: mcp::scope::tests:: artifact::tracking_record::baseline_retry_tests:: install::user_place::tests:: session::format_transition::tests:: --test-threads=1
+          node tools/ci/tracking-start/expect-test-groups.mjs 'mcp::start_kind::tests::=8' 'start_prep::tests::=43' 'mcp::start::tests::=4' 'scope_change::tests::=24' 'mcp::scope::tests::=2' 'artifact::tracking_record::baseline_retry_tests::=37' 'install::user_place::tests::=9' 'session::format_transition::tests::=7' -- cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --lib -- mcp::start_kind::tests:: start_prep::tests:: mcp::start::tests:: scope_change::tests:: mcp::scope::tests:: artifact::tracking_record::baseline_retry_tests:: install::user_place::tests:: session::format_transition::tests:: --test-threads=1
       - name: "[product] start-kind selection over the real stdio process, exactly 6"
         run: node tools/ci/tracking-start/expect-test-groups.mjs '*=6' -- cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test unified_start
       - name: "[product] tracked-scope start (4) and same-Chain scope change (6) over the real stdio process, exploration contract"
         run: |
           node tools/ci/expect-tests.mjs 4 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test tracking_start
           node tools/ci/expect-tests.mjs 6 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test tracking_scope_change
-      # Linux does not provide the approved recovery of a closed failure (existing limit, not extended here). The
-      # suites' recovery cases and the plan-panel fixture that walks one are not compiled on Linux; what runs is counted,
-      # and the refusal itself is checked by name: review without a capability, no apply, nothing moved, also after a restart.
-      - name: "[product] exploration and image-report suites over the real stdio process, at least 15 on Linux (recovery cases excluded)"
-        run: node tools/ci/expect-tests.mjs 15 cargo test --locked -p gil --no-fail-fast --features "$GIL_PRODUCT_FEATURES" --test exploration_flow --test exploration_tools --test exploration_evidence --test closing_handoff
-      - name: "[product] the approved recovery is refused and everything is kept on this platform, exactly 1"
-        run: node tools/ci/tracking-start/expect-test-groups.mjs 'the_approved_recovery_is_refused_and_everything_is_kept_where_it_is_not_provided=1' -- cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test exploration_flow the_approved_recovery_is_refused
+      # The recovery cases (approved recovery of a closed failure) run here as on macOS: the same suites, the same count.
+      - name: "[product] exploration and image-report suites over the real stdio process, at least 20 (approved recovery included)"
+        run: node tools/ci/expect-tests.mjs 20 cargo test --locked -p gil --no-fail-fast --features "$GIL_PRODUCT_FEATURES" --test exploration_flow --test exploration_tools --test exploration_evidence --test exploration_plan_panel --test closing_handoff
       # tests/visual_start.rs: the creation entry (its first-Verify declaration test is walked with the bare-approval
       # fixture and does not exist in an approved-plan build; the declaration rules are in the exploration suites above).
       - name: "[product] image-report creation entry (1 + lib creation tests) and existing-record preservation (1)"
@@ -157,15 +153,42 @@ jobs:
           node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test visual_start
           node tools/ci/expect-tests.mjs 10 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --lib -- session::visual_start::tests:: --test-threads=1
           node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test mcp visual_start_preserves_existing_and_partial_records_and_survives_response_loss -- --exact
-      # Of this suite's 12 on macOS, Linux runs 3: the 7 recovery cases exist on macOS and Windows only, and two more
-      # (the guarded closing project and the macOS storage case) carry their own macOS gates.
-      - name: "[product] approval wire over the real stdio process, exactly 3 on Linux"
-        run: node tools/ci/tracking-start/expect-test-groups.mjs '*=3' -- cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test approved_plan_wire_wave1
+      # Two cases of the wire suite and one recovery case carry their own macOS gates; the rest runs on Linux,
+      # including the approved recovery after a state save followed by process death (debug failpoint).
+      - name: "[product] approval wire, product restore protection and closed-failure preservation over the real stdio process, at least 12 on Linux"
+        run: node tools/ci/expect-tests.mjs 12 cargo test --locked -p gil --no-fail-fast --features "$GIL_PRODUCT_FEATURES" --test approved_plan_wire_wave1 --test chain_recovery_preservation
       - name: "[product] compile all Core targets (compile evidence only, not execution)"
         run: cargo build --locked -p gil --all-targets --features "$GIL_PRODUCT_FEATURES"
       # The Plugin's Core locator (core.test.mjs) finds the Core bundled for macOS or Windows and answers
       # unsupported_platform on Linux, where no Plugin bundle exists; its six cases are that platform's, not Linux's.
       # Everything else in the shared UI and Plugin suites runs here.
+      # Debug build only: the steps between two renames or unlinks of the Linux user install are made to fail with
+      # GIL_INSTALL_FAIL through the real `gil install` / `gil uninstall --remove-binary` entries, in an isolated HOME.
+      # Evidence for the debug executable's handling of injected failures; not for release bytes, not a kill test.
+      - name: "[product, debug] Linux user install: interrupted update, failed first install and partial removal through the real entries"
+        run: node distribution/product/install-failpoints.mjs target/debug/gil
+      # The standard library notice in the Linux inventory is compared, byte for byte, with the notice of THIS job's own
+      # toolchain (the official rust-docs component for x86_64-unknown-linux-gnu, installed here by rustup). A difference
+      # fails the job; nothing is refreshed.
+      - name: Compare the Linux inventory's standard library notice with this toolchain's own rust-docs notice
+        run: |
+          set -euo pipefail
+          rustup component add rust-docs --toolchain 1.97.1
+          notice="$(find "$(rustc --print sysroot)/share/doc/rust" -maxdepth 2 -name COPYRIGHT-library.html | head -n 1)"
+          test -n "$notice" && test -f "$notice"
+          expected="$(node -p 'require("./distribution/linux/compliance/notice-policy.json").stdlib.sha256')"
+          actual="$(sha256sum "$notice" | cut -d' ' -f1)"
+          node -e 'const [text, hash] = process.argv.slice(1); const stored = Buffer.from(JSON.parse(require("fs").readFileSync(`distribution/linux/compliance/texts/${hash}.json`)).text, "utf8"); if (!stored.equals(require("fs").readFileSync(text))) { console.error("the stored notice text differs from this toolchain\u0027s notice"); process.exit(1); }' "$notice" "$expected"
+          {
+            echo '### Standard library notice (Linux toolchain vs. inventory)'
+            echo '```'
+            echo "toolchain: $(rustc -vV | sed -n 's/^host: //p') $(rustc -V)"
+            echo "component: rust-docs (rustup), file share/doc/rust/COPYRIGHT-library.html, $(wc -c < "$notice") bytes"
+            echo "toolchain sha256: $actual"
+            echo "inventory sha256: $expected"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          test "$actual" = "$expected"
       - name: Shared UI regression (without the macOS/Windows Plugin Core locator)
         run: |
           set -euo pipefail
@@ -279,9 +302,9 @@ jobs:
       # Groups a feature or platform gate could compile away are counted exactly by name prefix: the start-kind
       # decision, the start preparation, the same-Chain scope change (now also under the exploration contract),
       # the Linux per-user placement rule (compiled on every Unix) and the explicit format transition.
-      - name: "[product] lib groups, exact by name prefix (start kind 8, preparation 43, MCP start 4, scope change 24, MCP scope 2, baseline retry 37, user placement 5, format transition 7)"
+      - name: "[product] lib groups, exact by name prefix (start kind 8, preparation 43, MCP start 4, scope change 24, MCP scope 2, baseline retry 37, user placement 9, format transition 7)"
         run: |
-          node tools/ci/tracking-start/expect-test-groups.mjs 'mcp::start_kind::tests::=8' 'start_prep::tests::=43' 'mcp::start::tests::=4' 'scope_change::tests::=24' 'mcp::scope::tests::=2' 'artifact::tracking_record::baseline_retry_tests::=37' 'install::user_place::tests::=5' 'session::format_transition::tests::=7' -- cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --lib -- mcp::start_kind::tests:: start_prep::tests:: mcp::start::tests:: scope_change::tests:: mcp::scope::tests:: artifact::tracking_record::baseline_retry_tests:: install::user_place::tests:: session::format_transition::tests:: --test-threads=1
+          node tools/ci/tracking-start/expect-test-groups.mjs 'mcp::start_kind::tests::=8' 'start_prep::tests::=43' 'mcp::start::tests::=4' 'scope_change::tests::=24' 'mcp::scope::tests::=2' 'artifact::tracking_record::baseline_retry_tests::=37' 'install::user_place::tests::=9' 'session::format_transition::tests::=7' -- cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --lib -- mcp::start_kind::tests:: start_prep::tests:: mcp::start::tests:: scope_change::tests:: mcp::scope::tests:: artifact::tracking_record::baseline_retry_tests:: install::user_place::tests:: session::format_transition::tests:: --test-threads=1
       - name: "[product] start-kind selection over the real stdio process, exactly 6"
         run: node tools/ci/tracking-start/expect-test-groups.mjs '*=6' -- cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test unified_start
       - name: "[product] tracked-scope start (4) and same-Chain scope change (6) over the real stdio process, exploration contract"
