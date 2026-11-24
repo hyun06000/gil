@@ -14,9 +14,11 @@
 //!   전용 capability 를 `_meta` 에서 꺼내 되보낸다. 마지막 것은 시험 하네스의 입력이며 사람의 동의나 보이는 화면의 증거가 아니다.
 //! - 프로세스를 여러 번 새로 띄워 **앞 프로세스가 저장한 기록을 새 프로세스가 처음 읽는** 경우를 본다. 기준점 저장의 실패는 debug
 //!   빌드의 failpoint(`GIL_SCOPE_FAIL`)로 넣은 것이며, 강제 종료·전원 장애를 일으킨 것이 아니다.
-//! - 탐색 계약 구성(`exploration-flow`)은 Experiment 를 여는 계약이 달라 이 시험의 경로가 아니다 — 그 구성에서는 컴파일되지 않으며
-//!   그 구성의 0건은 실행 성공이 아니다.
-#![cfg(all(feature = "tracking-policy", unix, not(feature = "exploration-flow")))]
+//! - 탐색 계약 구성(`exploration-flow`, 카탈로그에 `gil_report_read` 가 있다)에서도 같은 경로를 걷는다. 달라지는 것은 그 계약이 정한
+//!   둘뿐이다: Experiment 는 활성 승인 판의 요구에 **명시 연결**해 열고(`Rig::experiment_args`), 답하지 못한 요구가 남은 Chain 은
+//!   사용자가 승인한 `failure` 로만 닫는다(`Rig::closing_verdict`). 범위 변경·보관 대기·재시도·중단의 단정은 그대로다. 단위 시험
+//!   (`scope_change::tests`)도 이 구성에서 같은 연결 열기로 돈다.
+#![cfg(all(feature = "tracking-policy", unix))]
 #[path = "support_wave1/mod.rs"]
 mod support;
 mod common;
@@ -72,6 +74,8 @@ struct Rig {
     scope: String,
     /// 이 빌드가 승인 계획 구성인가 — 연결된 도구 카탈로그에서 읽은 값.
     plan: bool,
+    /// 이 빌드가 탐색 계약 구성인가 — 같은 카탈로그에서 읽은 값(원본 기록 조회 도구의 존재).
+    explore: bool,
 }
 
 impl Rig {
@@ -88,7 +92,8 @@ impl Rig {
         let mut c = Client::serve(&settings);
         let listed = c.request("tools/list", json!({}));
         let plan = listed["result"]["tools"].as_array().unwrap().iter().any(|tool| tool["name"] == "gil_plan_propose");
-        let begun = c.call("gil_start", json!({"project_root": r}));
+        let explore = listed["result"]["tools"].as_array().unwrap().iter().any(|tool| tool["name"] == "gil_report_read");
+        let begun = c.call("gil_start", json!({"project_root": r, "start_kind": "tracked_scope"}));
         assert!(!is_error(&begun), "{begun}");
         let scope = sc(&begun)["scope_id"].as_str().unwrap().to_owned();
         let prepared = c.call("gil_start_prepare", json!({"project_root": r, "rules": P1}));
@@ -97,7 +102,28 @@ impl Rig {
         let token = meta(&review, "gil/startApprovalToken").expect("시작 승인 capability").to_owned();
         let decided = c.call("gil_start_decide", json!({"scope_id": scope, "revision": revision, "digest": digest, "token": token, "decision": "approve"}));
         assert_eq!(sc(&decided)["phase"], "started", "{decided}");
-        Rig { c, settings, root, r, scope, plan }
+        Rig { c, settings, root, r, scope, plan, explore }
+    }
+
+    /// `gil_open(kind: experiment)` 의 인자. 탐색 계약 구성에서는 지금 활성인 승인 판의 요구 A 에 연결한다 — 연결 없는 열기는 그
+    /// 계약의 거절이라, 그대로 보내면 「보관 대기 때문에 거절된다」를 확인하지 못한다. 조회는 기록을 바꾸지 않는다.
+    fn experiment_args(&mut self) -> Value {
+        if !self.explore {
+            return json!({"kind": "experiment"});
+        }
+        let read = ok(self.model("gil_plan_read", json!({})), "plan read");
+        let active = structured(&read)["active_plan"].clone();
+        let digest = active["digest"].as_str().expect("활성 승인 판의 digest").to_owned();
+        let link = format!(
+            "plan_revision: {}\nplan_digest: {digest}\nrequirement_id: A\nrelevance: 요구 A의 답에 필요한 관측이다\nreadiness: 입력 파일이 프로젝트에 있다\nuncertainty: 아직 판정하지 못한 한 가지를 줄인다\n",
+            active["revision"]
+        );
+        json!({"kind": "experiment", "contract": link})
+    }
+
+    /// 이 시험이 Chain 을 닫을 때 쓰는 판정. 탐색 계약에서는 어느 요구도 답하지 않은 Chain 을 성공으로 닫을 수 없다.
+    fn closing_verdict(&self) -> &'static str {
+        if self.explore { "failure" } else { "success" }
     }
 
     /// 프로세스를 끝내고 새로 띄운다 — 다음 호출은 저장된 기록을 처음 읽는다.
@@ -264,7 +290,8 @@ fn an_approved_scope_change_waits_after_a_failed_archive_and_a_fresh_process_ret
     assert_eq!(rig.state(), waiting_state, "조회는 아무것도 바꾸지 않는다");
 
     // 대기 중: Experiment 는 거절되고 Interview 는 열린다.
-    refused(rig.model("gil_open", json!({"kind": "experiment"})), "experiment while a baseline is pending");
+    let pending_experiment = rig.experiment_args();
+    refused(rig.model("gil_open", pending_experiment), "experiment while a baseline is pending");
     assert_eq!(rig.state(), waiting_state, "거절은 아무것도 바꾸지 않는다");
     ok(rig.model("gil_open", json!({"kind": "interview"})), "interview while waiting");
     // 열린 사이클에서는 재시도 capability 가 없다.
@@ -299,7 +326,8 @@ fn an_approved_scope_change_waits_after_a_failed_archive_and_a_fresh_process_ret
     assert!(meta(&after, "gil/scopeRetryToken").is_none(), "확정된 기준점은 다시 확정하지 않는다");
 
     // 다음 Experiment — 최신 확정 세계(기준점 A2)에서 열린다.
-    ok(rig.model("gil_open", json!({"kind": "experiment"})), "experiment after the baseline");
+    let next_experiment = rig.experiment_args();
+    ok(rig.model("gil_open", next_experiment), "experiment after the baseline");
 
     // ── 프로세스 5: 그 기록을 새 프로세스가 읽는다(load 의 검사 전체).
     rig.restart();
@@ -324,11 +352,12 @@ fn after_the_baseline_is_confirmed_the_chain_closes_and_the_next_chain_opens_ove
 
     ok(rig.model("gil_open", json!({"kind": "interview"})), "closing interview");
     let (synthesis, basis) = rig.to_synthesis();
-    ok(rig.approve_synthesis(&basis, Some("success")), "closing approval after the baseline");
+    let verdict = rig.closing_verdict();
+    ok(rig.approve_synthesis(&basis, Some(verdict)), "closing approval after the baseline");
     rig.finish_interview(&synthesis, "close_chain");
     // 종료 경계: 새 승인을 저장하지 않는다(§6.6).
     refused(rig.model("gil_scope_propose", json!({"rules": P1})), "proposal at the closing boundary");
-    ok(rig.model("gil_close", json!({"report": format!("verdict: success\nclosing_synthesis_ref: {synthesis}\nhandoff_summary: 합성 인계 — 시험 자료\n")})), "chain report");
+    ok(rig.model("gil_close", json!({"report": format!("verdict: {verdict}\nclosing_synthesis_ref: {synthesis}\nhandoff_summary: 합성 인계 — 시험 자료\n")})), "chain report");
     ok(rig.model("gil_open", json!({"kind": "chain"})), "next chain");
 
     rig.restart();

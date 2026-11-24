@@ -1633,6 +1633,6 @@ pub(crate) fn verify_approvals(gil: &Path, tracking: &TrackingState, standing: &
 
 // 이 시험은 프로필마다 그 프로필의 계약으로 Interview 를 걷는다: 승인 계획이 없는 구성은 맨 `approved: yes`, 승인 계획 구성
 // (`approved-plan`, 순서 항목 계약)은 `approved_plan::tests` 의 제안 → Monitor 결정 → 그 `close_report` 경로다. 탐색 계약
-// (`exploration-flow`)의 fixture 는 아직 없어 그 구성에서는 이 모듈이 컴파일되지 않는다 — 그 구성의 0건은 실행 성공이 아니다.
-#[cfg(all(test, not(feature = "exploration-flow")))]
+// (`exploration-flow`)에서도 같은 시험이 돈다: 달라지는 것은 Experiment 를 승인 요구에 명시 연결해 여는 것 하나다(`open_experiment`).
+#[cfg(test)]
 mod tests;

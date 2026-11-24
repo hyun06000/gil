@@ -35,7 +35,7 @@ pub fn tools() -> &'static [Tool] {
             let tools = super::workspace::catalog(tools);
             let mut tools = tools;
             if let Some(start) = tools.iter_mut().find(|t| t.name == "gil_start") {
-                start.description = Some(format!("Development image-report creation: creates format {} ({}) {}", crate::store::newest_known_format(), START_SHAPE, "on verified private storage (macOS Apple Silicon; Windows private app data). Requires the user's explicitly selected absolute project_root. On Windows the working folder may remain in OneDrive: GIL records are kept separately under the current user's local app data, while file observation still targets project_root. An existing inline Windows record is copied byte-for-byte to that private store and verified before publication; the inline source is never changed or deleted. Success commits one Interview, zero Steps; does not open or confirm the Monitor. Unsupported platforms refuse, never fall back to format 4. Migrating existing format-4 records stays macOS-only.").into());
+                start.description = Some(format!("Development image-report creation: creates format {} ({}) {}", crate::store::newest_known_format(), START_SHAPE, "on verified private storage (macOS Apple Silicon; Linux x86-64 on a listed local filesystem: ext4, XFS, Btrfs, tmpfs, overlayfs; Windows private app data). Requires the user's explicitly selected absolute project_root. On Windows the working folder may remain in OneDrive: GIL records are kept separately under the current user's local app data, while file observation still targets project_root. An existing inline Windows record is copied byte-for-byte to that private store and verified before publication; the inline source is never changed or deleted. Success commits one Interview, zero Steps; does not open or confirm the Monitor. Unsupported platforms refuse, never fall back to format 4. Migrating existing format-4 records stays macOS-only.").into());
             }
             tools
         };
@@ -49,11 +49,14 @@ pub fn tools() -> &'static [Tool] {
         let tools = super::transition::catalog(unachieved_close(tools));
         #[cfg(all(feature = "tracking-policy", unix))]
         let tools = super::scope::catalog(super::start::catalog(tools));
+        // After both start descriptions: the selection input and, with two kinds, one description of both.
+        let tools = super::start_kind::catalog(tools);
         let mut tools = tools;
         tools.push(serde_json::from_str(include_str!("handoff-tool.json")).expect("handoff tool"));
         for tool in &mut tools {
             let hint = match tool.name.as_ref() {
                 "gil_context" => " Read the existing selected GIL project before file-producing tools in every new session, including requests to add charts to an existing report without saying GIL. Resume its actual plan and Step; do not append a new objective to an old Verify or repeat start. This read does not install project instructions or change Snapshots.",
+                "gil_start" if super::start_kind::HAS_TRACKED && super::start_kind::HAS_IMAGES => " Either kind adds local Codex/Claude continuity instructions while preserving existing bytes (before any proposal, or before the initial Snapshot); no Host hooks.",
                 "gil_start" if cfg!(all(feature = "tracking-policy", unix)) => " Preparation adds local Codex/Claude continuity instructions while preserving existing bytes, before any proposal; no Host hooks.",
                 "gil_start" => " Start adds local Codex/Claude continuity instructions while preserving existing bytes, before the initial Snapshot; no Host hooks. It also prepares the Monitor; the receipt names the exact show_gil_monitor({scope_id}) call, which is the only next call on every Host, before the first gil_open. Never repeat start after display failure.",
                 "gil_open" => " Choose one independently checkable objective and observable done_when. Perform it, then gil_close before another objective. Creating, modifying, deleting, moving or importing project Artifact files requires an actually open Experiment Verify, including DOCX/PDF/PNG generation and rendering. All other stages keep project files unchanged. GIL deliverables default to project_root during Verify, including scripts and renders; never choose scratchpad to evade an unfinished stage. Only when external creation is necessary, explain why and where before writing, explicitly disclose that GIL does not track those files, and do not claim them as GIL-verified delivery. Unrelated outside work and file-free web research remain allowed. An Interview Outcome judges the approved scope, not completion of the whole project.",

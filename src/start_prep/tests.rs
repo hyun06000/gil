@@ -979,3 +979,74 @@ fn a_malformed_attempt_record_is_refused_not_read_as_resolved() {
         assert!(!state(&root).exists());
     }
 }
+
+/// Every entry below `root` with its bytes (folders as `None`), for "nothing was touched".
+fn entries(root: &Path) -> std::collections::BTreeMap<PathBuf, Option<Vec<u8>>> {
+    fn walk(root: &Path, at: &Path, out: &mut std::collections::BTreeMap<PathBuf, Option<Vec<u8>>>) {
+        for entry in fs::read_dir(at).unwrap() {
+            let path = entry.unwrap().path();
+            let rel = path.strip_prefix(root).unwrap().to_owned();
+            if fs::symlink_metadata(&path).unwrap().is_dir() {
+                out.insert(rel, None);
+                walk(root, &path, out);
+            } else {
+                out.insert(rel, Some(fs::read(&path).unwrap()));
+            }
+        }
+    }
+    let mut out = std::collections::BTreeMap::new();
+    walk(root, root, &mut out);
+    out
+}
+
+/// The interrupted bootstrap: `.gil` and its lock file exist, nothing was recorded. The same request
+/// is the retry, in every build that holds this start.
+#[test]
+fn a_bootstrap_that_stopped_before_recording_anything_is_retried_by_the_same_request() {
+    for (label, lock_file) in [("retry-empty", false), ("retry-lock", true)] {
+        let root = project(label);
+        fs::create_dir(root.join(".gil")).unwrap();
+        if lock_file { fs::write(root.join(".gil").join(crate::lock::LOCK_FILE), b"").unwrap(); }
+        let begun = begin(&s(&root)).unwrap();
+        assert_eq!(begun["phase"], "preparing", "{begun}");
+        assert!(root.join(".gil/start/preparation.json").is_file());
+        assert!(!state(&root).exists());
+    }
+}
+
+/// A `.gil` that holds something other than the lock file, with no preparation and no state file. A
+/// build that also holds the image-report creation cannot tell whose interrupted creation it is, so
+/// the preparation refuses **under the lock, before recovery or reaping**, and every byte stays. A
+/// build with this start alone keeps its bootstrap rule (GIL's own internal leftovers are continued).
+#[test]
+fn leftovers_that_appeared_before_the_lock_are_preserved_where_another_start_exists() {
+    let root = project("other-start-leftovers");
+    // GIL's own internal folder and nothing else: the smallest leftover that is not "nothing recorded".
+    fs::create_dir_all(root.join(".gil/artifacts")).unwrap();
+    let before = entries(&root);
+    let answer = begin(&s(&root));
+    if OTHER_START {
+        assert_eq!(answer.unwrap_err().code, "start_record_unsettled");
+        let mut after = entries(&root);
+        // The lock file is the only entry a refused request may leave: it is how the question was asked.
+        after.remove(Path::new(".gil").join(crate::lock::LOCK_FILE).as_path());
+        assert_eq!(after, before, "nothing was reaped, adopted or recorded");
+    } else {
+        assert_eq!(answer.unwrap()["phase"], "preparing");
+    }
+}
+
+/// `cancel` and the application retry read the started record after releasing the lock. A project that
+/// is not a tracked-scope one, or a state file that is gone by then, is a refusal and never a panic.
+#[test]
+fn a_started_record_of_another_kind_or_a_vanished_one_is_refused_without_a_panic() {
+    let root = project("other-kind-cancel");
+    fs::create_dir(root.join(".gil")).unwrap();
+    fs::write(state(&root), b"format: 999\n").unwrap();
+    let before = fs::read(state(&root)).unwrap();
+    let refused = cancel(&s(&root)).unwrap_err();
+    assert!(["state_unreadable", "not_tracking_project"].contains(&refused.code), "{}", refused.code);
+    assert_eq!(apply_path(&root, &"0".repeat(64)).unwrap_err().code, refused.code);
+    assert_eq!(fs::read(state(&root)).unwrap(), before);
+    assert_eq!(state_gone().code, "state_unreadable");
+}

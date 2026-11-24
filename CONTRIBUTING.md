@@ -86,6 +86,12 @@ node --test ui/layout.test.mjs mcp-app/*.test.mjs plugins/gil-companion-prototyp
 node --test distribution/codex/*.test.mjs distribution/compliance/notices.test.mjs
 ```
 
+OS마다 하나의 사용자 설치물을 만드는 제품 빌드(`tracking-policy,exploration-flow,visual-authoring,product-safety`,
+macOS arm64·Linux x64)의 기능 대응표·새 시작 선택 계약·제작·검증 절차는
+[distribution/product/README.md](distribution/product/README.md)에 있다. 기본 Core의 성공은 그 조합의 성공이 아니며,
+조건부 컴파일로 빠지는 시험은 `tools/ci/expect-tests.mjs`로 건수를 확인한다.
+`node --test distribution/product/*.test.mjs`는 합성 입력으로 포장 계약만 검사하고 어떤 산출물도 실행하지 않는다.
+
 실제 Project 조작 시험은 독립 임시 폴더에서 한다. GIL 자체 source 저장소에 `gil start`를 실행하거나
 실제 사용자 기록을 시험 데이터로 쓰지 않는다. native MCP/화면 인수는
 [NATIVE-ACCEPTANCE](mcp-app/NATIVE-ACCEPTANCE.md)와 [ACCEPTANCE](mcp-app/ACCEPTANCE.md)를 따른다.

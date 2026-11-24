@@ -1199,7 +1199,10 @@ fn no_product_source_calls_the_new_module() {
     assert!(!sources.iter().any(|(_, text)| text.lines().any(|line| line.contains("#[path") && line.contains("scope_change"))), "다른 자리에서 끌어오지 않는다");
     let scope_mod = std::fs::read_to_string(src.join("scope_change").join("mod.rs")).unwrap();
     assert!(scope_mod.contains("\nmod ledger;\n"), "원장은 그 모듈의 자식이다");
-    assert!(scope_mod.contains("#[cfg(all(test, not(feature = \"exploration-flow\")))]\nmod tests;"), "단위 시험은 시험 빌드의 자식이다");
+    // 시험 모듈은 시험 빌드에서만 있다. 탐색 계약 구성에서도 같은 시험이 돈다(Experiment 를 요구에 연결해 여는 helper 하나만 다르다) —
+    // 문이 넓어진 것은 시험 빌드 안에서뿐이며, 제품 빌드에는 종전처럼 이 모듈이 없다.
+    assert!(scope_mod.contains("\n#[cfg(test)]\nmod tests;"), "단위 시험은 시험 빌드의 자식이다");
+    assert_eq!(scope_mod.lines().filter(|line| line.trim() == "mod tests;").count(), 1);
     // 그 모듈을 부르는 제품 줄과 MCP 범위 도구의 등록·호출 줄: 파일 목록이 아니라 **승인된 자리의 열**과 견주고(새 자리·중복·이동·
     // 누락은 실패), 그 줄 하나하나가 문 뒤에 있는지도 함께 본다.
     let routed = |needle: &str, covers: &dyn Fn(&str) -> bool| -> (Vec<(String, Site)>, Vec<String>) {

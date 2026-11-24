@@ -107,11 +107,21 @@ impl ProjectSession {
     /// 시작 준비·확정의 입구. `create` 이면 `.gil/` 을 만들며 잠근다(`gil start` 와 같은 bootstrap), 아니면 있는
     /// `.gil/` 만 잠근다. 잠근 뒤 중단된 복원 흔적을 기존 규칙대로 처리하고 미완 임시 객체를 거둔다.
     pub(crate) fn start_gate(project_root: &Path, create: bool) -> Result<StartGate, SessionError> {
+        Self::start_gate_with(project_root, create, |_| Ok(()))
+    }
+
+    /// [`start_gate`](Self::start_gate) with one more question, asked **under the lock and before recovery or
+    /// reaping touches anything**: may this caller work in this `.gil` at all? `admit` only reads; when it
+    /// refuses, the lock is released and nothing in the folder was recovered, reaped or written.
+    pub(crate) fn start_gate_with(
+        project_root: &Path, create: bool, admit: impl FnOnce(&Path) -> Result<(), SessionError>,
+    ) -> Result<StartGate, SessionError> {
         let root = project_root.to_path_buf();
         let gil = root.join(crate::artifact::GIL_DIR);
         let state_path = root.join(crate::STATE_PATH);
         let lock = if create { ProjectLock::bootstrap(&gil) } else { ProjectLock::acquire(&gil) }
             .map_err(SessionError::from)?;
+        admit(&gil)?;
         let store = ObjectStore::at(&gil);
         restore::recover(&root, &gil).map_err(SessionError::Restore)?;
         reap_tmp(&store)?;

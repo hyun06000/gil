@@ -1,7 +1,7 @@
 name: First start (.gilignore to first Snapshot/Chain) focus on macOS, tracking-policy development profile (NOT a release)
 
 # What this job is: a focused macOS check of the opt-in first-start feature on the exact PR head.
-#   - Rust: the start preparation (40) and MCP start (4) unit tests, the real Unix stdio first-start
+#   - Rust: the start preparation (43) and MCP start (4) unit tests, the real Unix stdio first-start
 #     suite (4), and all-targets builds, in exactly two feature sets: `tracking-policy` and
 #     `tracking-policy,approved-plan,visual-authoring,product-safety`. Each group must run exactly
 #     the expected number of tests by name prefix (tools/ci/tracking-start/expect-test-groups.mjs);
@@ -175,9 +175,9 @@ jobs:
           node mcp-app/start-browser-check.mjs
           echo 'synthetic start-preparation Monitor check: exit 0 (mock Host only)' | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: "[tracking-policy] start preparation 40 + MCP start 4 unit tests, exact by name prefix"
+      - name: "[tracking-policy] start preparation 43 + MCP start 4 unit tests, exact by name prefix"
         run: |
-          node tools/ci/tracking-start/expect-test-groups.mjs 'start_prep::tests::=40' 'mcp::start::tests::=4' -- cargo test --locked -p gil --features tracking-policy --lib -- start_prep::tests:: mcp::start::tests::
+          node tools/ci/tracking-start/expect-test-groups.mjs 'start_prep::tests::=43' 'mcp::start::tests::=4' -- cargo test --locked -p gil --features tracking-policy --lib -- start_prep::tests:: mcp::start::tests::
       - name: "[tracking-policy] first start over the real Unix stdio process, exactly 4 (synthetic projects and records)"
         run: |
           node tools/ci/tracking-start/expect-test-groups.mjs '*=4' -- cargo test --locked -p gil --features tracking-policy --test tracking_start
@@ -215,9 +215,9 @@ jobs:
       - name: "[tracking-policy] compile all Core targets (compile evidence only, not execution)"
         run: cargo build --locked -p gil --all-targets --features tracking-policy
 
-      - name: "[tracking-policy,approved-plan,visual-authoring,product-safety] start preparation 40 + MCP start 4 unit tests, exact by name prefix"
+      - name: "[tracking-policy,approved-plan,visual-authoring,product-safety] start preparation 43 + MCP start 4 unit tests, exact by name prefix"
         run: |
-          node tools/ci/tracking-start/expect-test-groups.mjs 'start_prep::tests::=40' 'mcp::start::tests::=4' -- cargo test --locked -p gil --features tracking-policy,approved-plan,visual-authoring,product-safety --lib -- start_prep::tests:: mcp::start::tests::
+          node tools/ci/tracking-start/expect-test-groups.mjs 'start_prep::tests::=43' 'mcp::start::tests::=4' -- cargo test --locked -p gil --features tracking-policy,approved-plan,visual-authoring,product-safety --lib -- start_prep::tests:: mcp::start::tests::
       - name: "[tracking-policy,approved-plan,visual-authoring,product-safety] first start over the real Unix stdio process, exactly 4 (synthetic projects and records)"
         run: |
           node tools/ci/tracking-start/expect-test-groups.mjs '*=4' -- cargo test --locked -p gil --features tracking-policy,approved-plan,visual-authoring,product-safety --test tracking_start

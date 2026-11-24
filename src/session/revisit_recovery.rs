@@ -8,14 +8,14 @@
 //! replaces the click. A released setting never cancels or re-approves a started recovery.
 use super::*;
 use serde_json::{Value, json};
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows))]
 use sha2::{Digest, Sha256};
 
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows))]
 fn error(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows))]
 fn hash(bytes: impl AsRef<[u8]>) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
@@ -31,12 +31,17 @@ impl ProjectSession {
         {
             return Ok(json!({"supported":true,"state":"not_needed"}));
         }
-        #[cfg(not(any(target_os = "macos", windows)))]
+        #[cfg(not(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows)))]
         return Ok(
             json!({"supported":false,"reason":"이 플랫폼의 승인 복원은 아직 제공하지 않는다. 기존 파일과 기록을 보존한다."}),
         );
-        #[cfg(any(target_os = "macos", windows))]
+        #[cfg(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows))]
         {
+            // Linux: a place whose filesystem is not on the reviewed list gets no plan and no
+            // approval capability. The answer names the reason; nothing was read into a plan.
+            if let Err(reason) = self.recovery_place() {
+                return Ok(json!({"supported":false,"reason":reason}));
+            }
             let plan = self.recovery_plan()?;
             // Shown beside the plan, never inside the digest or the stored approval.
             let mut view = plan.view;
@@ -56,13 +61,14 @@ impl ProjectSession {
         if self.project.tracking().is_some() {
             return Err(crate::locale::text("session.tracking_unsupported.revisit").into());
         }
-        #[cfg(not(any(target_os = "macos", windows)))]
+        #[cfg(not(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows)))]
         {
             let _ = digest;
             Err("이 플랫폼의 승인 복원은 아직 제공하지 않는다".into())
         }
-        #[cfg(any(target_os = "macos", windows))]
+        #[cfg(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows))]
         {
+            self.recovery_place()?;
             let plan = self.recovery_plan()?;
             if plan.view["digest"].as_str() != Some(digest) {
                 return Err("복원 계획이 바뀌었다. 변경 목록을 다시 확인하고 승인한다".into());
@@ -80,12 +86,13 @@ impl ProjectSession {
         if self.project.tracking().is_some() {
             return Err(crate::locale::text("session.tracking_unsupported.revisit").into());
         }
-        #[cfg(not(any(target_os = "macos", windows)))]
+        #[cfg(not(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows)))]
         return Err(
             "이 플랫폼의 승인 복원은 아직 제공하지 않는다. 기존 파일과 기록을 보존한다".into(),
         );
-        #[cfg(any(target_os = "macos", windows))]
+        #[cfg(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows))]
         {
+            self.recovery_place()?;
             if self.project.cycles().pending_revisit().is_none() {
                 #[cfg(feature = "recovery-auto-approval")]
                 if let Some(setting) = crate::recovery_mode::read(&self.state_path).automatic {
@@ -103,7 +110,7 @@ impl ProjectSession {
     /// Automatic approval: the same plan and refusals as the Monitor path; the setting that
     /// stood in for the click is re-read right before the approval record is written and must
     /// be byte-identical. No token exists on this path and none is minted.
-    #[cfg(all(feature = "recovery-auto-approval", any(target_os = "macos", windows)))]
+    #[cfg(all(feature = "recovery-auto-approval", any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows)))]
     fn automatic_revisit(
         &mut self,
         setting: crate::recovery_mode::AutomaticSetting,
@@ -118,7 +125,7 @@ impl ProjectSession {
 
 /// Who stood in for the approval of one recovery. Recorded once, beside the plan; a resumption
 /// follows the stored approval and never rewrites it.
-#[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
+#[cfg_attr(not(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows)), allow(dead_code))]
 pub(crate) enum ApprovalSource {
     /// The user's Monitor button through the App-only `gil_revisit_apply`.
     MonitorButton,
@@ -129,7 +136,7 @@ pub(crate) enum ApprovalSource {
     Resumed,
 }
 
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows))]
 impl ApprovalSource {
     /// Deterministic bytes for `source.json`. No timestamp, token, person or path inside.
     fn record(&self, plan: &Recovery) -> Option<Value> {
@@ -155,19 +162,19 @@ impl ApprovalSource {
     }
 }
 
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows))]
 use crate::{
     artifact::{IgnoreSource, PolicyVersion, TrackingPolicy},
     restore::preview,
 };
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows))]
 use std::{
     ffi::CString,
     fs::File,
     io::{Read, Write},
 };
 
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows))]
 struct Recovery {
     next: Project,
     before: Manifest,
@@ -177,7 +184,7 @@ struct Recovery {
     view: Value,
 }
 
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows))]
 fn policy(store: &ObjectStore, manifest: &Manifest) -> Result<TrackingPolicy, String> {
     let mut sources = Vec::new();
     for entry in manifest.entries() {
@@ -197,8 +204,28 @@ fn policy(store: &ObjectStore, manifest: &Manifest) -> Result<TrackingPolicy, St
     TrackingPolicy::from_sources(PolicyVersion::V1, sources).map_err(error)
 }
 
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows))]
 impl ProjectSession {
+    /// Where the approved recovery may run at all. macOS and Windows keep their existing checks
+    /// (the visual creation's local-storage rule, the Windows recovery check inside the plan).
+    /// Linux has no local-mount flag, so both the working folder and the record folder must sit on
+    /// one of the filesystems the image-report creation itself accepts — the ones whose in-folder
+    /// rename, directory `fsync` and no-follow opens the preservation and the restore rely on.
+    /// Read-only: it opens the two folders without following a link and asks their type.
+    fn recovery_place(&self) -> Result<(), String> {
+        #[cfg(target_os = "linux")]
+        {
+            let unlisted = |what: &str, e: std::io::Error| format!(
+                "{what}: {e}. 승인 복원은 검수 대상 로컬 파일 시스템(ext4·XFS·Btrfs·tmpfs·overlayfs)에서만 진행한다. 파일과 기록은 바꾸지 않았다");
+            let root = self.root().map_err(error)?;
+            let work = crate::internal_fs::dir_nofollow(&root).map_err(|e| unlisted("작업 폴더", e))?;
+            crate::internal_fs::listed_local_filesystem(&work).map_err(|e| unlisted("작업 폴더", e))?;
+            let gil = crate::internal_fs::dir_nofollow(&gil_dir(&self.state_path).map_err(error)?).map_err(|e| unlisted("기록 폴더", e))?;
+            crate::internal_fs::listed_local_filesystem(&gil).map_err(|e| unlisted("기록 폴더", e))?;
+        }
+        Ok(())
+    }
+
     fn recovery_plan(&self) -> Result<Recovery, String> {
         let mut next = self.project.clone();
         let from = if let Some(from) = next.cycles().pending_revisit() {
@@ -410,7 +437,7 @@ impl ProjectSession {
     }
 }
 
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows))]
 fn archive(s: &ProjectSession, key: &str, create: bool) -> std::io::Result<ArchiveDir> {
     let gil = guarded::directory(s.state_path.parent().unwrap(), false)?;
     fn child(
@@ -433,7 +460,7 @@ fn archive(s: &ProjectSession, key: &str, create: bool) -> std::io::Result<Archi
     let base = child(&gil, c"revisit-preserved", create)?;
     child(&base, &CString::new(key).unwrap(), create)
 }
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows))]
 fn write_once(dir: &ArchiveDir, name: &std::ffi::CStr, bytes: &[u8]) -> Result<(), String> {
     match guarded::regular_at(dir, name) {
         Ok(mut f) => {
@@ -453,7 +480,7 @@ fn write_once(dir: &ArchiveDir, name: &std::ffi::CStr, bytes: &[u8]) -> Result<(
 }
 /// The stored approval source, or `unrecorded` for an approval saved before source records
 /// existed or interrupted before its source was written. Never invents a click.
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows))]
 fn read_source(dir: &ArchiveDir) -> String {
     guarded::regular_at(dir, c"source.json")
         .ok()
@@ -461,7 +488,7 @@ fn read_source(dir: &ArchiveDir) -> String {
         .and_then(|v| v["approval_source"].as_str().map(str::to_owned))
         .unwrap_or_else(|| "unrecorded".into())
 }
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows))]
 fn verify_approval(dir: &ArchiveDir, plan: &Recovery) -> Result<(), String> {
     let f = guarded::regular_at(dir, c"approval.json").map_err(error)?;
     let got: Value = serde_json::from_reader(f.take(4 * 1024 * 1024)).map_err(error)?;
@@ -473,7 +500,7 @@ fn verify_approval(dir: &ArchiveDir, plan: &Recovery) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows))]
 fn publish(
     dir: &ArchiveDir,
     name: &std::ffi::CStr,
@@ -489,18 +516,24 @@ fn publish(
     guarded::fsync(dir).map_err(error)
 }
 
-#[cfg(target_os = "macos")]
+// macOS and Linux share the descriptor-relative, no-follow file access (`internal_fs`): exclusive
+// creation, in-folder rename and directory `fsync` are the same POSIX calls on both.
+#[cfg(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64")))]
 use crate::internal_fs as guarded;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64")))]
 type ArchiveDir = File;
 #[cfg(windows)]
 type ArchiveDir = crate::recovery_fs_windows::Dir;
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows))]
 fn recovery_os() -> preview::TargetOs {
     if cfg!(windows) {
         preview::TargetOs::Windows
-    } else {
+    } else if cfg!(target_os = "macos") {
         preview::TargetOs::MacOs
+    } else {
+        // Linux: names are compared as bytes (no case or normalization folding), so two paths
+        // that differ only by case are two files and are previewed as such.
+        preview::TargetOs::Unix
     }
 }
 #[cfg(windows)]

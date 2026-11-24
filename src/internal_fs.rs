@@ -38,6 +38,31 @@ pub(crate) fn dir_nofollow(path: &Path) -> io::Result<File> {
     }
     Ok(unsafe { File::from_raw_fd(fd) })
 }
+/// Linux has no local-mount flag. The folder must sit on one of the filesystems named here — an
+/// allow-list, read from the held descriptor, of local filesystems whose no-replace rename, in-folder
+/// rename, directory identity and `fsync` GIL relies on. Every other type (network, FUSE, FAT-family,
+/// unknown) is refused; nothing falls back to a weaker path. The list is a support scope, not a
+/// durability claim. Shared by the image-report creation and the approved recovery.
+#[cfg(target_os = "linux")]
+pub(crate) fn listed_local_filesystem(dir: &File) -> io::Result<()> {
+    let mut filesystem = std::mem::MaybeUninit::<libc::statfs>::uninit();
+    // SAFETY: a valid descriptor and a buffer of the type the call fills.
+    if unsafe { libc::fstatfs(dir.as_raw_fd(), filesystem.as_mut_ptr()) } < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    #[allow(clippy::unnecessary_cast)]
+    let kind = unsafe { filesystem.assume_init() }.f_type as i64;
+    if !listed_filesystem_type(kind) {
+        return Err(io::Error::new(io::ErrorKind::Unsupported, "검수 대상 로컬 파일 시스템(ext4·XFS·Btrfs·tmpfs·overlayfs)이 아니다"));
+    }
+    Ok(())
+}
+/// statfs(2) `f_type` values: ext2/3/4, XFS, Btrfs, tmpfs, overlayfs.
+#[cfg(any(target_os = "linux", test))]
+pub(crate) fn listed_filesystem_type(kind: i64) -> bool {
+    const LISTED: [i64; 5] = [0xEF53, 0x5846_5342, 0x9123_683E, 0x0102_1994, 0x794C_7630];
+    LISTED.contains(&kind)
+}
 pub(crate) fn child_dir(dir: &File, name: &CStr) -> io::Result<File> {
     open(dir, name, libc::O_RDONLY | libc::O_DIRECTORY)
 }
@@ -209,4 +234,19 @@ pub(crate) fn read_state(path: &Path) -> io::Result<String> {
         return Err(refused());
     }
     Ok(text)
+}
+
+#[cfg(test)]
+mod tests {
+    /// The allow-list names exactly five local filesystems; a network, FUSE or FAT-family type
+    /// (and anything unknown) is not on it.
+    #[test]
+    fn only_the_reviewed_local_filesystem_types_are_listed() {
+        for (name, kind) in [("ext2/3/4", 0xEF53_i64), ("XFS", 0x5846_5342), ("Btrfs", 0x9123_683E), ("tmpfs", 0x0102_1994), ("overlayfs", 0x794C_7630)] {
+            assert!(super::listed_filesystem_type(kind), "{name}");
+        }
+        for (name, kind) in [("NFS", 0x6969_i64), ("CIFS", 0xFF53_4D42), ("SMB2", 0xFE53_4D42), ("FUSE", 0x6573_5546), ("vfat", 0x4d44), ("exFAT", 0x2011_BAB0), ("9p", 0x0102_1997), ("unknown", 0), ("negative", -1)] {
+            assert!(!super::listed_filesystem_type(kind), "{name}");
+        }
+    }
 }

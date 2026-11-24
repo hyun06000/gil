@@ -43,7 +43,12 @@ impl std::fmt::Debug for Grant {
 struct Root { project_root: String }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Begin { project_root: String, #[allow(dead_code)] locale: Option<String> }
+struct Begin {
+    project_root: String,
+    #[allow(dead_code)] locale: Option<String>,
+    /// The explicit new-start selection. Its value is judged in `start_kind`, before this tool runs.
+    #[allow(dead_code)] start_kind: Option<String>,
+}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct AgentRec { key: String, rules: Vec<String>, why: String }

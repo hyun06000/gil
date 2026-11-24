@@ -12,6 +12,8 @@ mod presence;
 mod update;
 mod bindings;
 mod actions;
+// Which new-start contract a `gil_start` call takes (one binary may hold two).
+mod start_kind;
 mod hangul;
 mod native;
 mod surface;
@@ -102,11 +104,18 @@ impl GilServer {
                 tokio::task::spawn_blocking(move || locale_for_call(&monitor, &for_name, &for_input)).await.unwrap_or(DEFAULT_LOCALE)
             }
         };
-        let mut result = self.dispatch(name.clone(), input.clone(), locale).await;
+        // The new-start contract of this call is decided once, here, from the explicit input and
+        // from what the (already resolved) folder holds. Deciding reads two entries and creates
+        // nothing; the same decision then selects the worker, the Monitor handoff and the hint.
+        let start_route = if name == "gil_start" {
+            let probe = input.clone();
+            Some(tokio::task::spawn_blocking(move || start_kind::route(&probe)).await.unwrap_or(start_kind::UNDECIDED))
+        } else { None };
+        let mut result = self.dispatch(name.clone(), input.clone(), locale, start_route).await;
         let succeeded = result.is_error != Some(true)
             && result.structured_content.as_ref().is_none_or(|v| v["ok"] != false);
-        // A tracking-policy start is a preparation: its own tool prepares the Monitor scope (no Project yet).
-        if name == "gil_start" && succeeded && !cfg!(all(feature = "tracking-policy", unix))
+        // A tracked-scope start is a preparation: its own tool prepares the Monitor scope (no Project yet).
+        if name == "gil_start" && succeeded && start_route == Some(start_kind::Route::Direct)
             && result.structured_content.as_ref().is_some_and(|v| v["ok"] == true) {
             // Creation is already committed. A display preparation failure must never turn
             // that success into a failed start or encourage a duplicate creation.
@@ -148,7 +157,10 @@ impl GilServer {
                 guidance::prepend(&mut result, hint);
             }
         }
-        locale::with(locale, || guidance::after(&name, &mut result));
+        // A preparation is not a project yet: its own answer carries the next step, so the
+        // "this folder is now a GIL project" hint of a committed start is not added to it.
+        let prepared_only = start_route == Some(start_kind::Route::Preparation) && succeeded;
+        if !prepared_only { locale::with(locale, || guidance::after(&name, &mut result)); }
         if project_use && succeeded && name != "gil_start" && name != "gil_monitor_prepare" {
             let monitor = self.monitor.clone();
             let root = input["project_root"].as_str().unwrap_or_default().to_owned();
@@ -211,7 +223,16 @@ impl GilServer {
     }
     /// Every worker that produces user-facing text runs under `locale`; the receipt and the
     /// guidance that reads it therefore always speak the same language.
-    async fn dispatch(&self, name: String, input: Value, locale: Locale) -> CallToolResult {
+    async fn dispatch(&self, name: String, mut input: Value, locale: Locale, start_route: Option<start_kind::Route>) -> CallToolResult {
+        if name == "gil_start" {
+            // No route means the decision was not made for this call: start nothing.
+            match start_route.unwrap_or(start_kind::UNDECIDED) {
+                start_kind::Route::Refused { code, key } => return locale::with(locale, || start_kind::refusal(code, key)),
+                // The selection is consumed here; the direct start keeps its existing input.
+                start_kind::Route::Direct => { if let Some(fields) = input.as_object_mut() { fields.remove(start_kind::INPUT); } }
+                start_kind::Route::Preparation => {}
+            }
+        }
         if name == "gil_await_user" {
             return tokio::task::spawn_blocking(move || locale::with(locale, || match crate::write_guard::automatic::await_user(
                 input["project_root"].as_str().unwrap_or_default(), input["question"].as_str().unwrap_or_default()) {
@@ -229,10 +250,13 @@ impl GilServer {
                 .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "mcp.revisit_uncertain")));
         }
         #[cfg(all(feature = "tracking-policy", unix))]
-        if start::NAMES.contains(&name.as_str()) {
+        if start::NAMES.contains(&name.as_str()) && !(name == "gil_start" && start_route == Some(start_kind::Route::Direct)) {
             let monitor = self.monitor.clone();
             let grants = self.start_grants.clone();
-            return tokio::task::spawn_blocking(move || locale::with(locale, || start::call(&monitor, &grants, &name, input))).await
+            return tokio::task::spawn_blocking(move || locale::with(locale, || {
+                if let Some((code, key)) = start_kind::other_record(&name, &input) { return start_kind::refusal(code, key); }
+                start::call(&monitor, &grants, &name, input)
+            })).await
                 .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "start_tool.uncertain")));
         }
         #[cfg(all(feature = "tracking-policy", unix))]

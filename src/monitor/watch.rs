@@ -61,7 +61,7 @@ pub fn watch_hints(
             // 관측을 부르는 것이 되고, 그래도 reconciliation 기한이 수렴을 맡는다.
             return;
         };
-        if !event.paths.iter().any(|path| worth_looking(path, &gil)) {
+        if !may_have_changed(&event) || !event.paths.iter().any(|path| worth_looking(path, &gil)) {
             return;
         }
         hint();
@@ -98,6 +98,22 @@ pub fn watch_project_hints(
         watchers.push(watch_hints(&at, move || hint())?);
     }
     Ok(Watching(Box::new(watchers)))
+}
+
+/// 이 사건이 **무엇인가 바뀌었을 수 있다는 말인가.**
+///
+/// 읽기만 한 사건은 변화가 아니다. Linux 의 감시(inotify)는 파일을 열고·읽고·닫는 것도 사건으로 알린다. 관측은 작업 파일을
+/// 읽어 세계를 재므로, 그 사건을 hint 로 되받으면 경로 필터(`.gil`)와 무관하게 같은 고리가 생긴다.
+///
+/// ```text
+/// 관측(작업 파일 읽기) → 열림/닫힘 사건 → hint → 관측 → …     ← 이 고리를 끊는다
+/// ```
+///
+/// 접근 사건만 거른다. 내용·이름·속성의 변화, 생성·삭제, 종류를 모르는 사건은 그대로 hint 다(놓치는 쪽이 아니라 한 번 더 보는
+/// 쪽으로 틀린다) — 쓰기로 연 파일의 닫힘은 걸러지지만 그 쓰기 자체가 따로 변경 사건으로 온다. macOS·Windows 의 감시는 접근
+/// 사건을 내지 않으므로 그 플랫폼의 동작은 같다.
+fn may_have_changed(event: &notify::Event) -> bool {
+    !event.kind.is_access()
 }
 
 /// 이 경로의 변화가 **다시 볼 만한 것인가.**
@@ -139,6 +155,15 @@ pub(crate) fn worth_looking(path: &Path, gil: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A kind the watcher cannot classify errs toward one more look, never toward a missed change.
+    /// That access-only events are dropped is checked where a watcher reports them: on Linux the two
+    /// live tests in `monitor::serve` (`looking_does_not_make_more_hints`, `an_idle_stretch_only_reconciles`)
+    /// fail without this filter, because the observation's own reads come back as hints.
+    #[test]
+    fn an_event_of_unknown_kind_is_still_a_hint() {
+        assert!(may_have_changed(&notify::Event::default()));
+    }
 
     #[test]
     fn the_filter_is_deaf_only_to_gils_own_noise() {

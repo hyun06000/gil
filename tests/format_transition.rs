@@ -633,7 +633,7 @@ fn formats_without_a_transition_are_refused() {
 }
 
 /// Format 7 → 9 keeps the visual registry and the owner-only private storage.
-#[cfg(all(feature = "visual-authoring", any(all(target_os = "macos", target_arch = "aarch64"), windows)))]
+#[cfg(all(feature = "visual-authoring", any(all(target_os = "macos", target_arch = "aarch64"), all(target_os = "linux", target_arch = "x86_64"), windows)))]
 #[test]
 fn seven_to_nine_keeps_the_visual_registry_and_private_storage() {
     let root = std::env::temp_dir().join(format!("gil-transition-visual-{}", std::process::id()));
@@ -688,7 +688,7 @@ fn seven_to_nine_keeps_the_visual_registry_and_private_storage() {
     assert!(reread.current_existence().journey().ended_wills().iter().all(|e| e.result() == EndResult::Achieved));
 }
 
-#[cfg(all(feature = "visual-authoring", any(all(target_os = "macos", target_arch = "aarch64"), windows)))]
+#[cfg(all(feature = "visual-authoring", any(all(target_os = "macos", target_arch = "aarch64"), all(target_os = "linux", target_arch = "x86_64"), windows)))]
 fn product_state_path(root: &Path) -> PathBuf {
     #[cfg(windows)]
     {
