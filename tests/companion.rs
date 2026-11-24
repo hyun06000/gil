@@ -1260,7 +1260,19 @@ fn dropping_the_watch_really_stops_it() {
 
     // **놓으면 멈춘다.**
     drop(watching);
-    let after_stop = hints.load(std::sync::atomic::Ordering::SeqCst);
+    // 놓기 **전의** 쓰기 하나가 사건 여럿(생성·내용 변경)을 낼 수 있고, 감시 backend 에 따라 이미 받아 둔 사건이 놓은 직후에
+    // 전달된다(inotify). 그것은 놓기 전 변화의 hint 다. 조용해진 값을 기준으로 삼고, 그 뒤의 변화가 하나도 닿지 않는지를 본다.
+    let mut after_stop = hints.load(std::sync::atomic::Ordering::SeqCst);
+    let mut quiet_since = std::time::Instant::now();
+    while quiet_since.elapsed() < std::time::Duration::from_millis(300) {
+        assert!(std::time::Instant::now() < deadline, "놓은 뒤에도 hint 가 계속 온다");
+        let now = hints.load(std::sync::atomic::Ordering::SeqCst);
+        if now != after_stop {
+            after_stop = now;
+            quiet_since = std::time::Instant::now();
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
     for at in 0..5 {
         fs::write(dir.join(format!("뒤-{at}.txt")), "나").expect("적는다");
     }
