@@ -212,13 +212,20 @@ fn uninstall(env: &Env, remove_binary: bool) -> Outcome {
         if cfg!(target_os = "linux") {
             // Linux user install: only the file `install.json` records is removed, and a running
             // executable can remove its own file there.
-            lines.push(match user_place::remove(&fixed)? {
-                user_place::Removal::Removed => format!("binary: REMOVED {}", fixed.display()),
-                user_place::Removal::NotInstalled => format!("binary: NOT_INSTALLED {} (nothing to remove)", fixed.display()),
-                user_place::Removal::Kept => format!("binary: KEPT {} (not the file recorded by install.json; nothing was removed)", fixed.display()),
+            let removal = user_place::remove(&fixed)?;
+            let complete = removal.complete() || !removal.found || removal.kept;
+            lines.push(if !removal.found {
+                format!("binary: NOT_INSTALLED {} (nothing recorded to remove)", fixed.display())
+            } else if removal.kept {
+                format!("binary: KEPT {} (not the file recorded by install.json; nothing was removed)", fixed.display())
+            } else if removal.complete() {
+                format!("binary: REMOVED {}", removal.removed.join(", "))
+            } else {
+                // Part of the removal did not happen. Both lists are what was actually done.
+                format!("binary: PARTIAL removed [{}]; remaining [{}]", removal.removed.join(", "), removal.remaining.join(", "))
             });
             lines.push("Restart the Hosts for the change to take effect.".into());
-            return Ok((lines.join("\n") + "\n", ExitCode::SUCCESS));
+            return Ok((lines.join("\n") + "\n", if complete { ExitCode::SUCCESS } else { ExitCode::FAILURE }));
         }
         if current.as_deref().is_some_and(|me| same_file(me, &fixed)) {
             lines.push(format!("binary: KEPT {} (cannot delete the running executable; delete the folder after this process ends)", fixed.display()));
@@ -648,8 +655,23 @@ mod tests {
         assert!(text.contains("binary: KEPT"), "{text}");
         assert_eq!(std::fs::read(&fixed).unwrap(), me);
         std::fs::remove_file(&fixed).unwrap();
+        std::fs::write(home.join(".codex/config.toml"), config).unwrap();
 
-        // Our own install, its repeat, and the removal of exactly the two recorded files.
+        // A regular install.json with no executable beside it: not overwritten, nothing placed, no Host change.
+        std::fs::write(dir.join(INSTALL_RECEIPT), b"the user's own file\n").unwrap();
+        let refused = install(&env, InstallOptions::default()).unwrap_err();
+        assert!(refused.contains("Nothing was changed"), "{refused}");
+        assert_eq!(std::fs::read(dir.join(INSTALL_RECEIPT)).unwrap(), b"the user's own file\n");
+        assert!(!fixed.exists());
+        assert_eq!(std::fs::read_to_string(home.join(".codex/config.toml")).unwrap(), config);
+        let (text, _) = uninstall(&env, true).unwrap();
+        assert!(text.contains("binary: NOT_INSTALLED"), "{text}");
+        assert_eq!(std::fs::read(dir.join(INSTALL_RECEIPT)).unwrap(), b"the user's own file\n");
+        std::fs::remove_file(dir.join(INSTALL_RECEIPT)).unwrap();
+        std::fs::write(home.join(".codex/config.toml"), config).unwrap();
+
+        // Our own install, its repeat, and the removal of exactly the two recorded files. The two
+        // folders were there before this installation (created above), so they stay, empty.
         let (text, _) = install(&env, InstallOptions::default()).unwrap();
         assert!(text.contains("binary: UPDATED") && text.contains("claude-desktop: NOT_INSTALLED"), "{text}");
         assert_eq!(std::fs::read(&fixed).unwrap(), me);
@@ -658,15 +680,38 @@ mod tests {
         assert!(text.contains("binary: OK"), "{text}");
         let sentinel = home.join(".local/share/other-app.conf");
         std::fs::write(&sentinel, b"keep").unwrap();
-        let (text, _) = uninstall(&env, true).unwrap();
-        assert!(text.contains("binary: REMOVED"), "{text}");
-        assert!(!fixed.exists() && !dir.exists(), "only the emptied install folders go");
+        let (text, code) = uninstall(&env, true).unwrap();
+        assert!(text.contains("binary: REMOVED") && code == ExitCode::SUCCESS, "{text}");
+        assert!(!fixed.exists() && !dir.join(INSTALL_RECEIPT).exists());
+        assert!(dir.is_dir() && std::fs::read_dir(dir).unwrap().count() == 0, "folders that were there before the installation stay");
         assert_eq!(std::fs::read(&sentinel).unwrap(), b"keep");
         let after = std::fs::read_to_string(home.join(".codex/config.toml")).unwrap();
         assert!(after.contains("[mcp_servers.other]") && after.contains("# sentinel"));
         let (text, _) = uninstall(&env, true).unwrap();
         assert!(text.contains("binary: NOT_INSTALLED"), "{text}");
+
+        // A home with no gil folders: the installation makes them and its removal takes them again.
+        let fresh = root.join("fresh-home");
+        std::fs::create_dir_all(&fresh).unwrap();
+        let fresh_env = Env { home: Some(fresh.clone()), ..Env::default() };
+        install(&fresh_env, InstallOptions::default()).unwrap();
+        let (text, _) = uninstall(&fresh_env, true).unwrap();
+        assert!(text.contains("binary: REMOVED"), "{text}");
+        assert!(!fresh.join(".local/share/gil").exists() && fresh.join(".local/share").is_dir());
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// The same four rules through the public entries on every Unix where the placement compiles,
+    /// by handing `uninstall`'s Linux branch its result type directly is not possible off Linux;
+    /// what is checked here is the report line of a partial removal, which must never read REMOVED.
+    #[cfg(unix)]
+    #[test]
+    fn a_partial_removal_is_never_reported_as_removed() {
+        let partial = user_place::Removal { found: true, kept: false, removed: vec!["/x/gil".into()], remaining: vec!["/x/install.json (denied)".into()] };
+        assert!(!partial.complete());
+        let whole = user_place::Removal { found: true, kept: false, removed: vec!["/x/gil".into(), "/x/install.json".into()], remaining: vec![] };
+        assert!(whole.complete());
+        assert!(!user_place::Removal::default().complete() && !user_place::Removal { found: true, kept: true, ..Default::default() }.complete());
     }
 
     #[test]
