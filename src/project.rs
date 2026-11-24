@@ -571,8 +571,8 @@ impl Project {
     ) -> Result<Result<Project, crate::artifact::TrackingError>, ProjectError> {
         let project = Project::restore_with(world, existences, existence_states, current_existence, next_will_id, artifacts,
             end_history, Some(tracking))?;
-        let tracking = project.tracking.as_ref().expect("방금 붙였다");
-        Ok(tracking.check_links(project.chains(), project.artifacts()).map(|()| project))
+        let checked = project.tracking.as_ref().expect("방금 붙였다").check_links(project.chains(), project.artifacts());
+        Ok(checked.map(|()| project))
     }
 
     #[allow(clippy::too_many_arguments)]
