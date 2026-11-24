@@ -807,6 +807,10 @@ thread_local! {
     pub(crate) static HALT_BEFORE_STEP: std::cell::RefCell<Option<&'static str>> = const { std::cell::RefCell::new(None) };
     /// 저장 경계의 이 저장(`baseline`·`failure`)이 끝난 직후 한 번 부른다 — 끝난 저장 바로 뒤에 수신된 중단 요청.
     pub(crate) static AFTER_ADAPTER_SAVE: std::cell::RefCell<Option<(&'static str, Box<dyn FnOnce()>)>> = const { std::cell::RefCell::new(None) };
+    /// 정책 파일 동기화의 이 저장(`sync_start`·`sync_done`)과 다시 읽기 사이에 한 번 부른다 — (세션, 이 저장의 예상 상태).
+    #[allow(clippy::type_complexity)]
+    pub(crate) static SYNC_AFTER_SAVE: std::cell::RefCell<Option<(&'static str, Box<dyn FnOnce(&ProjectSession, &Project)>)>> =
+        const { std::cell::RefCell::new(None) };
     /// 정책 파일 동기화의 이 저장(`sync_start`·`sync_done`) 뒤의 다시 읽기 한 번을 실패로 만든다 — 그 걸음의 결과 불명.
     pub(crate) static SYNC_REREAD_FAULT: std::cell::RefCell<Option<&'static str>> = const { std::cell::RefCell::new(None) };
     /// 다시 읽기 한 번을 실패로 만든다 — 결과 불명.
@@ -817,10 +821,7 @@ thread_local! {
 fn after_adapter_save(step: &'static str) {
     let hook = AFTER_ADAPTER_SAVE.with(|slot| {
         let mut slot = slot.borrow_mut();
-        match &*slot {
-            Some((at, _)) if *at == step => slot.take(),
-            _ => None,
-        }
+        if matches!(&*slot, Some((at, _)) if *at == step) { slot.take() } else { None }
     });
     if let Some((_, hook)) = hook {
         hook();
@@ -923,14 +924,41 @@ impl FileSync {
     }
 }
 
-/// 기준을 `value` 로 저장하는 한 걸음 — 저장을 부른 뒤 **같은 잠금 안에서 저장된 상태를 다시 읽어** 판정한다. 다시 읽은 값이 세션의
-/// 값이 된다(저장 오류 뒤 앞선 메모리 사본을 쓰지 않는다). 다시 읽지 못하면 세션의 값을 바꾸지 않고 결과 불명으로 돌려준다.
-/// 돌려주는 둘째 값은 다시 읽어 확인한 저장 기준이다.
+/// 기준을 `value` 로 저장하는 한 걸음 — 저장을 부른 뒤 **같은 잠금 안에서 저장된 상태를 다시 읽어** 판정한다.
+///
+/// 판정은 목표 기준값 하나가 아니라 **저장된 상태 전체**로 한다. 저장하기 전에 두 가지를 잡아 둔다: 지금 저장돼 있는 정확한 상태
+/// (상태 파일의 바이트)와, 이번 저장이 만들 예상 상태(저장이 쓰는 것과 같은 인코더 [`crate::store::encode`] 의 바이트). 그 뒤 다시 읽은
+/// 상태가
+///
+/// - 예상 상태와 **정확히 같을 때만** `Saved`,
+/// - 저장 전 상태와 **정확히 같을 때만** `NotSaved`,
+/// - 읽지 못했거나(바이트든 load 의 검사든), 어느 쪽과도 같지 않으면 `Unknown` 이다.
+///
+/// 기준값은 목표와 같은데 그 밖의 기록(사건·시도·표식 등 이 저장이 묶여 있던 상태)이 다르면 이 저장의 결과로 치지 않는다 — `Unknown`
+/// 이며, 부르는 쪽은 그것을 근거로 다음 쓰기를 진행하지 않는다. 저장 호출의 반환(`returned_ok`)은 이 확인과 별개의 사실이다.
+///
+/// load 의 검사를 지나 다시 읽힌 기록은 세션의 값이 된다(저장 오류 뒤 앞선 메모리 사본을 쓰지 않는다). 다시 읽지 못하면 세션의 값을
+/// 바꾸지 않는다. 돌려주는 둘째 값은 **이 걸음이 확인한** 저장 기준이며 `Unknown` 에서는 없다 — 그때의 현재 상태는 이 결과가 아니라
+/// 별도의 현재 상태 조회가 말한다.
 fn store_base(session: &mut ProjectSession, value: sp::SyncBase, step: &'static str) -> (BaseStep, Option<&'static str>) {
-    let returned_ok = match session.project().with_sync_base(value.clone()) {
-        Some(next) => save_step(session, &next, step).is_ok(),
+    let stored_bytes = |session: &ProjectSession| crate::internal_fs::read_state(session.state_path()).ok().map(String::into_bytes);
+    // 저장 전의 정확한 상태와, 이번 저장이 만들 예상 상태.
+    let before = stored_bytes(session);
+    let next = session.project().with_sync_base(value);
+    let expected = next.as_ref().and_then(|next| crate::store::encode(next).ok());
+    let returned_ok = match &next {
+        Some(next) => save_step(session, next, step).is_ok(),
         None => false,
     };
+    // 시험만 쓰는 자리 — 이 저장과 다시 읽기 사이에 저장된 상태가 달라진 경우.
+    #[cfg(test)]
+    if let (Some(next), Some((_, hook))) = (&next, SYNC_AFTER_SAVE.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        if matches!(&*slot, Some((at, _)) if *at == step) { slot.take() } else { None }
+    })) {
+        hook(session, next);
+    }
+    let after = stored_bytes(session);
     let reread = session.reload();
     #[cfg(test)]
     let reread = match SYNC_REREAD_FAULT.with(|slot| {
@@ -943,17 +971,18 @@ fn store_base(session: &mut ProjectSession, value: sp::SyncBase, step: &'static 
         Some(_) => Err(crate::SessionError::Observe { said: "시험이 넣은 다시 읽기 실패".into() }),
         None => reread,
     };
-    match reread {
-        Ok(project) => {
-            let stored = project.tracking().map(|tracking| tracking.sync_base().clone());
-            *session.project_mut() = project;
-            let word = stored.as_ref().map(base_word);
-            match stored == Some(value) {
-                true => (BaseStep::Saved { returned_ok }, word),
-                false => (BaseStep::NotSaved { returned_ok }, word),
-            }
-        }
-        Err(_) => (BaseStep::Unknown { returned_ok }, None),
+    let unknown = (BaseStep::Unknown { returned_ok }, None);
+    let Ok(project) = reread else { return unknown };
+    let base = project.tracking().map(|tracking| base_word(tracking.sync_base()));
+    *session.project_mut() = project;
+    let (Some(before), Some(after)) = (before, after) else { return unknown };
+    if expected.as_ref() == Some(&after) {
+        (BaseStep::Saved { returned_ok }, base)
+    } else if after == before {
+        (BaseStep::NotSaved { returned_ok }, base)
+    } else {
+        // 저장 전 상태도 예상 상태도 아니다 — 기준값이 목표와 같더라도 이 저장의 결과로 치지 않는다.
+        unknown
     }
 }
 

@@ -1189,3 +1189,69 @@ fn a_policy_file_sync_save_is_reported_from_the_reread_state_not_from_the_save_c
         assert_eq!(now(&root)["tracking"]["policy_file_sync_base"], case.stored, "{label}");
     }
 }
+
+/// 저장 걸음의 판정은 **저장된 상태 전체**로 한다(방어적 일관성 검사). 다시 읽은 상태가 저장 전 상태도, 이 저장의 예상 상태도 아니면 —
+/// 기준값이 목표와 같더라도 — 그 걸음은 `unknown` 이다. `unknown` 을 근거로 다음 쓰기를 하지 않고, 기준을 말하지 않으며, 스스로 다시
+/// 쓰거나 다시 시도하지 않는다. (정확한 이전 상태 = `not_saved`, 정확한 예상 상태 = `saved` 는 위 시험의 여덟 경우가 본다.)
+///
+/// 함수 수준 주입이다: 저장과 다시 읽기 사이에 시험이 같은 잠금으로 **다른 유효한 상태**를 저장해 둔다. 실제로 그런 일이 일어나는
+/// 경로를 보이려는 것이 아니며, 실제 디스크 장애·전원 장애의 증거도 아니다.
+#[test]
+fn a_sync_save_whose_reread_state_is_neither_the_previous_nor_the_expected_one_is_unknown_and_drives_no_further_write() {
+    use serde_json::json;
+    // (자리, 무엇을 저장해 두는가, 그 뒤 실제 저장 기준, 재조회의 정책 파일 상태, 저장된 실패 시도 수)
+    for (step, other, stored, read_as, failures) in [
+        // 둘과 다른 유효한 상태 — 기준값부터 다르다.
+        ("sync_start", "other_base", "absent", "user_changed", 0),
+        // 기준값은 목표(unconfirmed)와 같지만 묶여 있던 기록이 다르다.
+        ("sync_start", "same_base_other_record", "unconfirmed", "update_needed_cause_unconfirmed", 1),
+        ("sync_done", "other_base", "absent", "synced", 0),
+        // 기준값은 목표(적용 원문)와 같지만 묶여 있던 기록이 다르다.
+        ("sync_done", "same_base_other_record", "present", "synced", 1),
+    ] {
+        let label = format!("{step}-{other}");
+        let root = started(&format!("sync-bind-{label}"));
+        let (revision, digest) = proposed(&root, P2);
+        SYNC_AFTER_SAVE.with(|slot| *slot.borrow_mut() = Some((step, Box::new(move |session: &ProjectSession, expected: &Project| {
+            let state = match other {
+                "other_base" => session.project().with_sync_base(sp::SyncBase::Absent).expect("추적 기록이 있다"),
+                _ => {
+                    let event = expected.waiting_event().expect("M2 가 보관 대기다");
+                    expected.with_failed_attempt(event, "external_change").expect("유효한 다른 상태")
+                }
+            };
+            session.save_project(&state).expect("시험이 저장해 두는 다른 유효한 상태");
+        }))));
+        let decided = decide(&root, revision, &digest, true).expect("응답은 기록된다");
+        assert!(SYNC_AFTER_SAVE.with(|slot| slot.borrow().is_none()), "{label}: 주입이 쓰였다");
+        assert_eq!(decided["facts"]["policy_applied"], true, "{label}: {decided}");
+        let steps = &decided["facts"]["policy_file_steps"];
+        match step {
+            "sync_start" => {
+                assert_eq!(decided["facts"]["policy_file"], "not_written_start_unknown", "{label}");
+                assert_eq!(*steps, json!({"start": "unknown", "start_save_returned": "ok", "file": "not_started", "base": "not_started",
+                    "base_save_returned": null, "stored_base": null, "base_left_unconfirmed": null, "halted_before": null}), "{label}");
+                assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), P1, "{label}: unknown 을 근거로 파일을 쓰지 않는다");
+            }
+            _ => {
+                assert_eq!(decided["facts"]["policy_file"], "written_base_unknown", "{label}");
+                assert_eq!(*steps, json!({"start": "saved", "start_save_returned": "ok", "file": "replaced", "base": "unknown",
+                    "base_save_returned": "ok", "stored_base": null, "base_left_unconfirmed": null, "halted_before": null}), "{label}");
+                assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), P2, "{label}: 끝난 교체는 그대로다");
+            }
+        }
+        // 동기화 시점의 결과는 기준을 말하지 않았다. 현재 상태는 따로, 실제 저장된 것을 말한다.
+        let seen = now(&root);
+        for (when, view) in [("응답", &decided), ("재조회", &seen)] {
+            assert_eq!(view["tracking"]["policy_file_sync_base"], stored, "{label} {when}: 실제 저장된 기준");
+            assert_eq!(view["policy_file"], read_as, "{label} {when}");
+            assert_eq!(view["tracking"]["applied_policy"], "policy:P2", "{label} {when}");
+        }
+        // 동기화가 실패 이력을 더하지 않았고, 그 뒤 스스로 다시 쓰거나 기준을 고치지 않는다.
+        assert_eq!(failed_attempts_raw(&fs::read(root.join(".gil/state.yaml")).unwrap()), failures, "{label}: 시험이 둔 것 말고는 없다");
+        let on_disk = fs::read_to_string(root.join(".gilignore")).unwrap();
+        assert_eq!(now(&root)["tracking"]["policy_file_sync_base"], stored, "{label}");
+        assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), on_disk, "{label}");
+        assert_eq!(policies(&root), 2, "{label}");
+    }
+}
