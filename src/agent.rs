@@ -19,10 +19,15 @@ pub const SCHEMA_VERSION: u32 = 1;
 pub const PROTOCOL_VERSION: u32 = 1;
 /// Agent 가 부를 수 있는 명령의 판. 명령이 늘거나 뜻이 바뀌면 이 수가 오른다.
 pub const ACTION_SURFACE: u32 = if cfg!(feature = "visual-authoring") { 2 } else { 1 };
-/// Full image authoring is accepted only on the reviewed local macOS arm64 target.
+/// Full image authoring is accepted only where new visual creation is implemented: macOS arm64,
+/// Linux x86-64 and Windows. The cfg is the same one `visual_start` compiles its creation under.
 pub const IMAGE_STORAGE_SUPPORTED: bool = cfg!(all(
     feature = "visual-authoring",
-    any(all(target_os = "macos", target_arch = "aarch64"), target_os = "windows")
+    any(
+        all(target_os = "macos", target_arch = "aarch64"),
+        all(target_os = "linux", target_arch = "x86_64"),
+        target_os = "windows"
+    )
 ));
 pub const PRODUCT: &str = "gil_core";
 

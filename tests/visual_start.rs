@@ -1,7 +1,7 @@
 //! Public Core entry only, not CLI/MCP routing or Host rendering acceptance.
 #![cfg(all(
     feature = "visual-authoring",
-    any(all(target_os = "macos", target_arch = "aarch64"), windows)
+    any(all(target_os = "macos", target_arch = "aarch64"), all(target_os = "linux", target_arch = "x86_64"), windows)
 ))]
 mod common;
 use gil::visual_report::{VisualDeclaration, registry::ReportVisuals};
