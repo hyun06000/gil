@@ -179,12 +179,19 @@ impl ProjectSession {
         let project = store::load_within(&lock, rules, &state_path).map_err(SessionError::Store)?;
         private_visual_storage(&gil, &project)?;
 
-        Ok(ProjectSession {
+        #[cfg_attr(not(all(feature = "tracking-policy", unix)), allow(unused_mut))]
+        let mut session = ProjectSession {
             project,
             project_root,
             state_path,
             _lock: lock,
-        })
+        };
+        // Monitor 가 보낸 즉시 보관 중단 요청을 받았지만 아직 적용하지 못했으면, 잠금을 쥔 지금 표식으로 적용한다 — 그 뒤 이 명령의
+        // 전이는 표식이 거절한다. 적용을 확인하지 못하면 이 명령을 실행하지 않는다(읽기 전용 열기는 이 길을 지나지 않는다).
+        #[cfg(all(feature = "tracking-policy", unix))]
+        crate::scope_change::absorb_halt_request(&mut session)
+            .map_err(|said| SessionError::Action(ActionError::Tracking(said)))?;
+        Ok(session)
     }
 
     /// 이미 있는 프로젝트를 **읽기만 하려고** 연다.
@@ -330,6 +337,8 @@ impl ProjectSession {
     /// 여기 닿았을 때는 이미 필요한 blob·manifest 가 전부 확정되고 재검증까지 끝나 있다.
     /// 순서가 뒤집히면 `state.yaml` 이 아직 없는 객체를 가리키는 순간이 생긴다(§10).
     pub fn commit(&self) -> Result<(), SessionError> {
+        // 진행 중에 받은 중단 요청은 이 명령의 마지막 저장도 멈춘다 — 객체가 이미 놓였더라도 논리 상태는 바뀌지 않는다(미참조 객체로 남는다).
+        self.refuse_archive_while_halted()?;
         store::save_within(&self._lock, &self.project, &self.state_path).map_err(SessionError::Store)
     }
 
@@ -648,6 +657,8 @@ impl ProjectSession {
         self.require_verify_evidence(&report, &world)?;
         for file in &files { objects.put_visual(&file.image).map_err(|e| error(e.to_string()))?; }
         for file in &mut files { file.revalidate().map_err(error)?; }
+        // 이미지 Verify 는 제 손으로 저장한다 — 같은 경계를 다시 묻는다.
+        self.refuse_archive_while_halted()?;
         store::save_within(&self._lock, &next, &self.state_path).map_err(SessionError::Store)?;
         self.project = next;
         Ok(receipt)
@@ -805,6 +816,8 @@ impl ProjectSession {
 
     /// 지금 세계를 객체로 확정한다 — 형식 10/11 이면 같은 승인 정책으로. 이름 발급·상태 저장은 부르는 쪽의 일이다.
     fn capture_world(&self, root: &Path, store: &ObjectStore) -> Result<crate::ManifestAddress, SessionError> {
+        // 중단 중에는 객체를 하나도 쓰지 않는다 — blob·manifest 보관 **전에** 거절한다(일반 Verify 와 이미지 Verify 가 모두 이 문을 지난다).
+        self.refuse_archive_while_halted()?;
         #[cfg(all(feature = "tracking-policy", unix))]
         if let Some(policy) = self.approved_policy()? {
             let world = artifact::capture_scoped(root, &policy, store)
@@ -823,6 +836,92 @@ impl ProjectSession {
             .map(Some).map_err(|e| SessionError::Observe { said: e.to_string() })
     }
 
+    /// **확정 정책 ≠ 적용 정책**(보관 대기)일 때의 변경 검사 — 공유 계약 §5.4·§6.3.
+    ///
+    /// 비교 근거는 마지막 확정 세계와 그 확정 정책이다. 적용 정책으로 관측하고, 확정 정책부터 적용 정책까지 **모든 판**의 범위에 속한
+    /// 경로(계속 추적한 경로)만 내용을 견준다. 새로 추적할 경로는 아직 기준이 없어 판정하지 않고, 적용된 판이 한 번이라도 제외한 경로는
+    /// 보지 않는다. 기준이 일치하면(`None`) 현행 비교 그대로다.
+    #[cfg(all(feature = "tracking-policy", unix))]
+    fn world_state_between_policies(&self) -> Result<Option<WorldState>, SessionError> {
+        use crate::artifact::tracking::scope_delta_over;
+        let Some(standing) = self.project.tracking_standing() else { return Ok(None) };
+        let standing = standing.map_err(|e| SessionError::Observe { said: e.to_string() })?;
+        let Some(confirmed) = standing.confirmed else { return Ok(None) };
+        if confirmed.policy == standing.applied.policy {
+            return Ok(None);
+        }
+        let tracking = self.project.tracking().expect("자리의 읽기가 있으므로 기록이 있다");
+        let world = confirmed.world;
+        let store = self.store()?;
+        let address = self.project.world_manifest(world).ok_or(SessionError::UnknownWorld { world })?.clone();
+        let base = store.read_manifest(&address).map_err(|source| SessionError::Manifest { world, said: source.to_string() })?;
+        let mut policies = Vec::new();
+        for record in tracking.ledger().policies().iter().filter(|record| record.name() >= confirmed.policy) {
+            let policy = crate::artifact::load_policy(&store, record.engine(), record.rules())
+                .map_err(|e| SessionError::Observe { said: e.to_string() })?;
+            policies.push((record.name(), policy));
+        }
+        let applied = &policies.last().expect("확정 정책 뒤에 적용 정책이 있다").1;
+        let found = match artifact::observe_scoped(&self.root()?, applied) {
+            Ok(seen) => seen.manifest,
+            // 관측할 수 없는 상태는 변경 없음이 아니다.
+            Err(e) => return Ok(Some(WorldState::Unknown { world, said: e.to_string() })),
+        };
+        let delta = scope_delta_over(tracking.ledger(), confirmed.policy, &policies, &base, &found)
+            .map_err(|e| SessionError::Observe { said: format!("{e:?}") })?;
+        Ok(Some(match delta.differences().is_empty() {
+            true => WorldState::Clean { world },
+            false => WorldState::Dirty {
+                world,
+                changes: delta.differences().iter().map(|found| format!("{:?} {}", found.kind, found.path)).collect(),
+            },
+        }))
+    }
+
+    /// 잠금을 쥔 채로 저장된 기록을 **새로 읽는다** — load 의 검사 전체를 다시 지난다. 메모리의 값을 바꾸지 않는다.
+    #[cfg(all(feature = "tracking-policy", unix))]
+    pub(crate) fn reload(&self) -> Result<Project, SessionError> {
+        store::load_within(&self._lock, self.project.cycles().rules().clone(), &self.state_path).map_err(SessionError::Store)
+    }
+
+    /// 잠금을 쥔 채로 `next` 를 저장한다. 메모리의 값은 부르는 쪽이 저장 결과를 확인한 뒤 갈아 끼운다.
+    #[cfg(all(feature = "tracking-policy", unix))]
+    pub(crate) fn save_project(&self, next: &Project) -> Result<(), SessionError> {
+        store::save_within(&self._lock, next, &self.state_path).map_err(SessionError::Store)
+    }
+
+    #[cfg(all(feature = "tracking-policy", unix))]
+    pub(crate) fn project_lock(&self) -> &ProjectLock {
+        &self._lock
+    }
+
+    #[cfg(all(feature = "tracking-policy", unix))]
+    pub(crate) fn gil(&self) -> Result<PathBuf, SessionError> {
+        gil_dir(&self.state_path)
+    }
+
+    #[cfg(all(feature = "tracking-policy", unix))]
+    pub(crate) fn object_store(&self) -> Result<ObjectStore, SessionError> {
+        self.store()
+    }
+
+    /// **즉시 보관 중단의 공통 실행 경계**(공유 계약 §5.6·T12, O-2) — 세계를 관측해 객체로 확정하기 전과 상태를 저장하기 전에 묻는다.
+    ///
+    /// 저장된 표식(`archive_halt`)이 있거나, Monitor 가 보낸 중단 요청을 받았지만 아직 표식으로 적용하지 못했으면 거절한다. 뒤의 경우는
+    /// 이 명령이 잠금을 쥐고 진행하던 중에 요청이 들어온 것이다: 이미 끝난 저장은 되돌리지 않고, 이 뒤의 보관·저장만 하지 않는다. 표식은
+    /// 다음 쓰기 열기가 적용한다. 순수 계층의 마지막 전이 검사(`Project::refuse_while_halted`)는 그대로 있다 — 이 문은 그보다 앞에 선다.
+    /// 추적 정책 기록이 없는 형식에서는 아무것도 묻지 않는다.
+    fn refuse_archive_while_halted(&self) -> Result<(), SessionError> {
+        #[cfg(all(feature = "tracking-policy", unix))]
+        if self.project.tracking().is_some() {
+            self.project.refuse_while_halted().map_err(|said| SessionError::Action(ActionError::Tracking(said)))?;
+            if crate::scope_change::halt_requested(&gil_dir(&self.state_path)?) {
+                return Err(SessionError::Action(ActionError::Tracking(crate::locale::text("tracking.halt_requested").into())));
+            }
+        }
+        Ok(())
+    }
+
     /// 형식 10/11 에서 아직 없는 경로를 실행 전에 거절한다.
     fn refuse_on_tracking(&self, what: &str) -> Result<(), SessionError> {
         #[cfg(feature = "tracking-policy")]
@@ -834,6 +933,11 @@ impl ProjectSession {
     }
 
     pub fn world_state(&self) -> Result<WorldState, SessionError> {
+        // 형식 10/11 의 보관 대기: 확정 정책과 적용 정책이 다르다. 계속 추적한 경로만 마지막 확정 세계와 견준다(공유 계약 §6.3).
+        #[cfg(all(feature = "tracking-policy", unix))]
+        if let Some(state) = self.world_state_between_policies()? {
+            return Ok(state);
+        }
         let world = self.project.world_snapshot();
         let address = self
             .project

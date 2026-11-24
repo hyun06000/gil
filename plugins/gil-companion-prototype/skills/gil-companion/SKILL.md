@@ -171,6 +171,25 @@ This does not require author tracking, write hooks or a new Snapshot for every n
    Cancel only on the user's explicit request (`gil_start_cancel`); a closed app is not a cancel, and a
    canceled preparation restarts only when the user explicitly asks. In such a project `gil_restore`
    and revisits are refused until latest-policy restore exists; never work around them.
+   **Scope change (development tracking-policy builds; a started format-10 project).** Changing what is
+   tracked is reviewed in an Interview: discuss the reason, what becomes newly tracked or excluded and
+   the archive/restore impact, and write no project files. After that Interview is closed, call
+   `gil_scope_propose` with the exact new `.gilignore` text, then `show_gil_monitor(scope_id)`, and wait
+   for the user's decision in the Monitor. Approval applies the new policy the moment it is saved; the
+   policy-file sync and the baseline archive are separate results. Never describe a failed archive as
+   an unapplied policy, or a saved approval as an archived world. `gil_scope_status` reports three
+   distinct values: the applied policy, the last confirmed world with the policy that confirmed it, and
+   whether an event waits for its baseline archive. While it waits (baseline archive needed — next
+   Experiment on hold) an Experiment is refused and an ordinary Interview may be opened, carried through
+   and closed on its own decision. Do not approve a Chain-closing Synthesis (`chain_verdict` with
+   `approved: yes`) before the baseline is confirmed; Core refuses it. The archive retry, the archive
+   halt and its release are the user's Monitor buttons: no model tool performs them, and you never retry
+   after a reconnect, a restart or by repeating a request. While a halt marker is present every open and
+   close is refused: read the status, tell the user and wait. A release only removes the marker; wait
+   for the user's explicit next instruction. Unconfirmed changes on continuously tracked paths block an
+   approval even when the proposal would exclude those paths. On `held_three_way` or `base_undecided`
+   show the user the exact difference and do not work around it. After a lost reply read
+   `gil_scope_status` once instead of repeating an approval.
    **Keep the in-host MCP App present:** successful Project calls check recent App display reports.
    When a receipt supplies `show_gil_monitor(scope_id)` because the Monitor is absent/hidden/unknown,
    call it once before further work, without asking the user to open a Companion. For an explicit
@@ -1127,6 +1146,11 @@ the Monitor:
   vocabulary.
 - If the tools are unavailable, say the plugin MCP server is not connected. Do not reinterpret
   the GIL Monitor as something you can open another way.
+- The **Scope change** path above is a capability of the connected server, not of a build name: use
+  it only when the connected `tools/list` offers both `gil_scope_propose` and `gil_scope_status`. Do
+  not infer the capability from a development-build name or from the record format. When those tools
+  are absent, do not ask for that call, and do not ask for a tracking-scope approval through chat or
+  file edits instead.
 
 ## A note on persistent host surfaces
 

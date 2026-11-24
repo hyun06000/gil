@@ -3,6 +3,7 @@ import { makePlanReview } from './plans.mjs';
 import { makePlanPolling } from './plan-poll.mjs';
 import { makeRecoveryReview } from './recovery.mjs';
 import { makeStartReview } from './start-review.mjs';
+import { makeScopeReview } from './scope-review.mjs';
 import { makeHost, unwrap, retryAfter, connectionMessage } from './host.mjs';
 import { graphOrientation, initialFullscreen, fullscreenFailure, hostIdentity, hostStyles, styleEvidence, updateNotice, updateGuide } from './presentation.mjs';
 import { setLocale, getLocale, normalizeLocale, t, applyStaticText } from '../ui/locale.js';
@@ -13,7 +14,7 @@ const el = (id) => document.getElementById(id);
 const raw = (v) => v === undefined ? 'undefined' : JSON.stringify(v, null, 2);
 let context = {}, connected = false, pending = false, booted = false, stopped = false;
 let rendererReady = false, planReview = null, planPolling = null;
-let recoveryReview = null, recoveryReadAt = 0, startReview = null;
+let recoveryReview = null, recoveryReadAt = 0, startReview = null, scopeReview = null;
 let response = null, eventMode = null, timer, pollFailures = 0;
 let suspended = false, polling = false, refreshOnReturn = false;
 let connectionIssue = null;
@@ -294,6 +295,11 @@ app.ontoolresult = async (result) => {
     if (data.plan_review_supported) planReview = makePlanReview({ app, scope: data.scope_id,
       panel: el('plan-review'), banner: el('plan-banner'), document, changed: () => { refreshOnReturn = true; } });
     if (planReview) planPolling = makePlanPolling(planReview);
+    // Scope change, pending baseline and archive halt (development tracking-policy profile): shown beside the Graph.
+    if (data.scope_review_supported) {
+      scopeReview = makeScopeReview({ app, scope: data.scope_id, panel: el('scope-review'), document, changed: () => { refreshOnReturn = true; } });
+      void scopeReview.refresh();
+    }
     window.GIL_HOST = makeHost(app, data, { presence });
     window.GIL_HOST.listen('gil://update', renderUpdate);
     if (data.revisit_review_supported) {
@@ -322,7 +328,7 @@ app.ontoolresult = async (result) => {
     maybeFullscreen();
   } catch (err) { renderFailed = true; void reportPresence(); modes(err?.said || t('app.data_failed')); }
 };
-function stop() { stopped = true; planReview?.stop(); recoveryReview?.stop(); startReview?.stop(); initialDisplay.cancel(); clearTimeout(timer); clearTimeout(retryTimer); window.GIL_COMPANION?.clearVisuals?.(); return reportPresence(); }
+function stop() { stopped = true; planReview?.stop(); recoveryReview?.stop(); startReview?.stop(); scopeReview?.stop(); initialDisplay.cancel(); clearTimeout(timer); clearTimeout(retryTimer); window.GIL_COMPANION?.clearVisuals?.(); return reportPresence(); }
 function resume() {
   if (stopped || suspended || document.hidden) return;
   refreshOnReturn = true;

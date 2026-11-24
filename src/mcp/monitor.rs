@@ -243,6 +243,13 @@ impl Monitor {
                     crate::artifact::start_policy::SyncBase::Absent => "absent",
                     crate::artifact::start_policy::SyncBase::Present(_) => "present",
                     crate::artifact::start_policy::SyncBase::Unconfirmed => "unconfirmed" }});
+            // 세 값을 따로 싣는다(공유 계약 §6.3): 적용 정책 · 마지막 확정 세계와 그 확정 정책 · 보관 대기. 중단 표식도 조회로 보인다.
+            // 유도하지 못하면 그 사실을 싣고, 적용 정책을 확정 정책처럼 채우지 않는다.
+            match crate::scope_change::standing_view(session.project()) {
+                Ok(now) => value["tracking"]["now"] = now,
+                Err(why) => value["tracking"]["now_unreadable"] = json!(why),
+            }
+            value["scope_review_supported"] = json!(true);
         }
         #[cfg(feature = "product-safety")]
         { value["recovery_approval"] = session.recovery_approval_view(); }

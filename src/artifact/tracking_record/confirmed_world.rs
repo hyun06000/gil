@@ -72,7 +72,7 @@ use super::event_inputs::{EventInputsProblem, check_event_inputs};
 use super::event_links::{EventKind, EventName, EventPolicyLinks};
 use super::exit_lineage::{ExitLineageProblem, ExitLineageVerdict, ExpectedSource, check_experiment_exit_lineage};
 use super::experiment_exit::{ExperimentExitProblem, owned_cycle, select_experiment_exit};
-use super::opening_policy::{OpeningSelection, TargetProblem};
+use super::opening_policy::{OpeningSelection, TargetProblem, select_opening_policy};
 use super::opening_world::{EntryVerdict, OpeningWorldProblem, WorldSource, select_opening_world};
 use super::{PolicyLedger, PolicyName};
 use crate::refs::{ChainRef, CycleRef, SnapshotRef};
@@ -1131,5 +1131,292 @@ pub(crate) fn read_scope_change(event: EventName, inputs: &RecordInputs<'_>) -> 
         standing,
         world_before,
         not_judged,
+    })
+}
+
+// ── 기록 전체의 읽기 — 제품의 load·열기·조회가 함께 쓰는 한 규칙 ───────────
+
+/// 지금 서 있는 자리 — 닫힌 경계이거나 열린 사이클 안이다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StandingAt {
+    /// 닫힌 사이클 T 의 경계(방금 닫았거나 되돌아와 서 있다).
+    ClosedBoundary { cycle: CycleRef },
+    /// 열린 Interview 안. Interview 는 세계를 확정하지 않는다 — 마지막 확정 세계는 그 Entry 다(§6.1·§6.3).
+    OpenInterview { cycle: CycleRef },
+    /// 열린 Experiment 안. 마지막 확정 세계는 계보의 가장 가까운 닫힌 Verify, 없으면 Entry 다(§6.1, 현행).
+    OpenExperiment { cycle: CycleRef },
+}
+
+/// 지금 자리의 마지막 확정 세계와 그 확정 정책 — 건넨 기록 안의 유도다. 열린 사이클이면 `path` 는 그 Entry 의 출처다.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LastConfirmed {
+    pub(crate) world: SnapshotRef,
+    pub(crate) policy: PolicyName,
+    pub(crate) path: Vec<PolicyStep>,
+}
+
+/// [`check_record`] 가 건넨 기록 전체를 검사한 뒤 돌려주는, 지금 자리의 세 값(§6.1).
+///
+/// `confirmed` 는 **최초 `start` 의 Chain 안에 서 있을 때만** 유도한다. 후속 Chain 안의 자리는 이 읽기가 확정 정책을 유도하지
+/// 않으며(`None`), 그것을 적용 정책과 같다고 채우지 않는다.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RecordStanding {
+    /// 지금 Chain(건넨 목록의 마지막).
+    pub(crate) chain: ChainRef,
+    /// 최초 `start` 사건의 Chain — 이 읽기가 사건을 다루는 유일한 Chain 이다.
+    pub(crate) start_chain: ChainRef,
+    /// 지금 Chain 의 Cycle 발급기 값.
+    pub(crate) issuer: u32,
+    pub(crate) applied: AppliedPolicy,
+    pub(crate) at: StandingAt,
+    pub(crate) confirmed: Option<LastConfirmed>,
+    /// 기준점이 없는 마지막 사건 — 「기준점 보관 필요 — 다음 실험 보류」(§5.2).
+    pub(crate) waiting: Option<EventName>,
+    /// 지금 Chain 이 종료 인터뷰를 닫고 Chain 보고서를 기다리는 경계다(§6.6).
+    pub(crate) closing_boundary: bool,
+    /// 지금 Chain 이 닫혔다.
+    pub(crate) chain_closed: bool,
+    /// 범위 변경 사건마다, **승인 경계의 앞선 기록으로 유도한** 확정 정책(T8 의 승인 쪽 근거) — 사건 순서. 승인된 제안이 묶은 비교
+    /// 근거와 견주는 데 쓴다. 보관 경계의 근거가 아니다.
+    pub(crate) approval_bases: Vec<(EventName, PolicyName)>,
+}
+
+impl RecordStanding {
+    /// 기준 일치(§6.1) — 유도한 확정 정책이 적용 정책과 같은 판인가. 유도하지 않았으면 `None` 이다.
+    pub(crate) fn basis_agrees(&self) -> Option<bool> {
+        self.confirmed.as_ref().map(|confirmed| confirmed.policy == self.applied.policy)
+    }
+}
+
+/// 건넨 한 시점의 기록 **전체**를 검사하고 지금 자리의 세 값을 읽는다 — load 와 사이클 열기가 같은 이 함수를 쓴다(§6.2 「한 함수」).
+///
+/// - 3j·보충 입력의 대응·3g 위치 구분(그대로).
+/// - 최초 `start` 기준점 = Chain Entry = 뿌리 Entry, 모든 사건이 그 Chain 의 것.
+/// - 그 Chain 의 **모든 사이클**에 검증 ①(Entry = S(N) 의 세계)과, Experiment 에 검증 ②(S(N) 의 확정 정책 = P(N))를 적용한다. 대기 사건
+///   뒤에 연 Experiment 는 ② 위반으로 걸린다(T9).
+/// - 모든 `scope_change` 사건에 T8(승인 경계의 앞선 기록, 그리고 이미 확정이면 보관 경계의 앞선 기록·대기면 지금 자리의 마지막 확정
+///   세계)과 `review_cycle_ref` 를 [`read_scope_change`] 와 같은 유도([`prior_basis`]·[`review_cycle`])로 본다.
+///
+/// [`read_scope_change`] 와 달리 지금 자리가 열린 사이클이어도, Chain 이 종료 경계·닫힘이어도 **기록의 일관성**은 읽는다 — 그 자리에서
+/// 무엇을 실행해도 되는지는 이 함수가 정하지 않는다. 표식(`marks`)은 읽지 않는다. 순수 함수다.
+pub(crate) fn check_record(inputs: &RecordInputs<'_>) -> Result<RecordStanding, Vec<ReadingProblem>> {
+    let RecordInputs { ledger, links, facts, worlds, chains, registry, .. } = *inputs;
+
+    let mut problems = Vec::new();
+    let agreed = check_event_inputs(ledger, links, facts, chains, registry);
+    if let Err(found) = &agreed {
+        problems.push(ReadingProblem::Inputs(found.clone()));
+    }
+    let mismatches = world_facts_mismatches(links, worlds);
+    if !mismatches.is_empty() {
+        problems.push(ReadingProblem::WorldFacts(mismatches));
+    }
+    let agreed = match agreed {
+        Ok(agreed) if problems.is_empty() => agreed,
+        _ => return Err(problems),
+    };
+    let baselines: Vec<BaselineFacts> = facts.iter().map(|fact| fact.baseline().clone()).collect();
+    let positions =
+        classify_baseline_positions(&baselines, registry).map_err(|found| vec![ReadingProblem::Positions(found)])?;
+
+    let (Some(first), Some(last)) = (facts.first(), links.events().last()) else {
+        let event = EventName::new(1).expect("M1 은 유효한 이름이다");
+        return one(ReadingProblem::UnknownEvent { event, events: 0 });
+    };
+    let owners: Vec<&Chain> = chains.iter().filter(|chain| chain.id() == first.chain()).collect();
+    let [chain] = owners.as_slice() else {
+        return one(ReadingProblem::EventChain { event: first.event(), chain: first.chain(), count: owners.len() });
+    };
+    let chain: &Chain = *chain;
+    let start = start_link(chain, links, facts).map_err(|problem| vec![problem])?;
+    if let Some(parent) = chain.parent() {
+        return one(ReadingProblem::OutOfScope(ScopeLimit::ChainHasParent { chain: chain.id(), parent }));
+    }
+    for fact in facts {
+        if fact.chain() != chain.id() {
+            problems.push(ReadingProblem::OutOfScope(ScopeLimit::StartInOtherChain { chain: fact.chain(), start_chain: chain.id() }));
+        }
+    }
+    if !problems.is_empty() {
+        return Err(problems);
+    }
+
+    let derivation = Derivation { inputs, chain, start };
+    let budget = chain.cycles().nodes().len();
+
+    // §6.2 검증 ①(모든 사이클)·②(Experiment) — 열 때와 load 때 같은 규칙.
+    for cycle in chain.cycles().nodes() {
+        let target = cycle.id().to_ref();
+        let mut path = Vec::new();
+        let entry_confirmed = match derivation.entry(target, cycle, &mut path, budget) {
+            Ok((_, policy)) => policy,
+            Err(found) => {
+                problems.extend(found);
+                continue;
+            }
+        };
+        if cycle.kind() != CycleKind::Experiment {
+            continue;
+        }
+        match select_opening_policy(target, ledger, links, facts, chains, registry).map(|opening| opening.selection()) {
+            Ok(OpeningSelection::Applied { policy, .. }) if policy == entry_confirmed => {}
+            Ok(OpeningSelection::Applied { policy, .. }) => {
+                problems.push(ReadingProblem::ExperimentPolicyDiffers { cycle: target, opened_under: policy, entry_confirmed });
+            }
+            Ok(OpeningSelection::BeforeAdoptionInGivenHistory) => {
+                problems.push(ReadingProblem::ExperimentBeforeAdoption { cycle: target });
+            }
+            Err(_) => problems.push(ReadingProblem::Cycle(TargetProblem::NotFound { cycle: target })),
+        }
+    }
+
+    // 지금 자리와 그 마지막 확정 세계.
+    let current_chain = chains.last().expect("대상 Chain 을 찾았으므로 목록이 비어 있지 않다");
+    let standing_on = current_chain.cycles().current();
+    let here = standing_on.id().to_ref();
+    let at = match (standing_on.is_closed(), standing_on.kind()) {
+        (true, _) => StandingAt::ClosedBoundary { cycle: here },
+        (false, CycleKind::Interview) => StandingAt::OpenInterview { cycle: here },
+        (false, CycleKind::Experiment) => StandingAt::OpenExperiment { cycle: here },
+    };
+    let confirmed = if current_chain.id() == chain.id() {
+        let derived = match at {
+            StandingAt::ClosedBoundary { cycle } => derivation
+                .boundary(cycle)
+                .map(|basis| LastConfirmed { world: basis.world, policy: basis.policy, path: basis.path }),
+            StandingAt::OpenInterview { cycle } => {
+                let mut path = Vec::new();
+                derivation.entry(cycle, standing_on, &mut path, budget).map(|(world, policy)| LastConfirmed { world, policy, path })
+            }
+            StandingAt::OpenExperiment { cycle } => {
+                let mut path = Vec::new();
+                // 검증 ② 가 위에서 Entry 출처의 확정 정책 = P(N) 을 봤다. 한 실험의 생애에는 정책이 하나다(§6.1).
+                derivation
+                    .entry(cycle, standing_on, &mut path, budget)
+                    .map(|(_, policy)| LastConfirmed { world: standing_on.world_snapshot(), policy, path })
+            }
+        };
+        match derived {
+            Ok(confirmed) => Some(confirmed),
+            Err(found) => {
+                problems.extend(found);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    // 모든 scope_change 사건의 T8 과 review_cycle_ref.
+    let mut approval_bases = Vec::new();
+    for (index, ((link, fact), world_facts)) in links.events().iter().zip(facts).zip(worlds).enumerate() {
+        if link.kind() != EventKind::ScopeChange {
+            continue;
+        }
+        let event = link.name();
+        let BaselineSlot::Written(Some(approval)) = fact.boundary() else {
+            problems.push(ReadingProblem::ApprovalBoundaryMissing { event });
+            continue;
+        };
+        let recorded = match world_facts.world_before() {
+            BaselineSlot::Written(Some(world)) => world,
+            slot => {
+                problems.push(ReadingProblem::WorldBeforeMissing { event, written_null: slot == BaselineSlot::Written(None) });
+                continue;
+            }
+        };
+        if registry.resolve(recorded).is_none() {
+            problems.push(ReadingProblem::WorldBeforeNotInRegistry { event, world: recorded });
+        }
+        let approval_policy = match prior_basis(inputs, chain, start, index, event, approval, fact.issuer(), BasisAt::Approval) {
+            Ok(basis) => {
+                if basis.world != recorded {
+                    problems.push(ReadingProblem::WorldBeforeDiffers {
+                        event,
+                        at: BasisAt::Approval,
+                        boundary: approval,
+                        recorded,
+                        derived: basis.world,
+                    });
+                }
+                approval_bases.push((event, basis.policy));
+                Some(basis.policy)
+            }
+            Err(found) => {
+                problems.extend(found);
+                None
+            }
+        };
+        let position = positions
+            .entries()
+            .iter()
+            .find(|(name, _)| *name == event)
+            .map(|(_, position)| *position)
+            .expect("위치 목록은 건넨 사건마다 하나씩 있다");
+        let second = match position {
+            BaselinePosition::HasBaseline => {
+                let baseline = fact.baseline();
+                let (BaselineSlot::Written(Some(archived_at)), BaselineSlot::Written(archive_issuer)) =
+                    (baseline.boundary(), baseline.issuer())
+                else {
+                    problems.push(ReadingProblem::ArchiveBoundaryMissing { event });
+                    continue;
+                };
+                match prior_basis(inputs, chain, start, index, event, archived_at, archive_issuer, BasisAt::Archive) {
+                    Ok(basis) => Some((BasisAt::Archive, archived_at, basis.world, basis.policy)),
+                    Err(found) => {
+                        problems.extend(found);
+                        None
+                    }
+                }
+            }
+            // 대기 사건은 마지막 사건이라 지금 자리의 유도가 곧 앞선 기록의 유도다. 열린 Interview 안이면 그 Entry 의 계승이다(§6.3).
+            BaselinePosition::WaitingInList => {
+                confirmed.as_ref().map(|now| (BasisAt::CurrentBoundary, here, now.world, now.policy))
+            }
+            BaselinePosition::ReplacedInList => None,
+        };
+        if let Some((at, boundary, derived, policy)) = second {
+            if derived != recorded {
+                problems.push(ReadingProblem::WorldBeforeDiffers { event, at, boundary, recorded, derived });
+            }
+            if let Some(approval) = approval_policy
+                && approval != policy
+            {
+                problems.push(ReadingProblem::BasisPolicyDiffers { event, at, approval, second: policy });
+            }
+        }
+        if let Err(problem) = review_cycle(world_facts, fact, chains) {
+            problems.push(problem);
+        }
+    }
+    if !problems.is_empty() {
+        return Err(problems);
+    }
+
+    let applied_policy = last.after().expect("3c 의 성공은 모든 사건의 after 에 판이 있음을 보장한다");
+    let applied = AppliedPolicy {
+        policy: applied_policy,
+        introduced_by: agreed
+            .policy_links()
+            .introduced_by(applied_policy)
+            .expect("3c 의 성공은 원장의 모든 판에 도입 사건이 있음을 보장한다"),
+        last_event: last.name(),
+    };
+    let waiting = positions
+        .entries()
+        .last()
+        .and_then(|(name, position)| matches!(position, BaselinePosition::WaitingInList).then_some(*name));
+    Ok(RecordStanding {
+        chain: current_chain.id(),
+        start_chain: chain.id(),
+        issuer: current_chain.cycles().next_name(),
+        applied,
+        at,
+        confirmed,
+        waiting,
+        closing_boundary: current_chain.awaiting_report(),
+        chain_closed: current_chain.is_closed(),
+        approval_bases,
     })
 }

@@ -174,6 +174,18 @@ impl Client {
         assert_eq!(got["id"], json!(id), "id mismatch: {got}");
         got
     }
+    /// Sends one request **without waiting** for its response and returns its id. For the cases
+    /// where a second request must reach the server while the first is still being handled.
+    pub fn post(&mut self, method: &str, params: Value) -> Value {
+        let id = self.next;
+        self.next += 1;
+        self.send(&json!({"jsonrpc":"2.0","id":id,"method":method,"params":params}));
+        json!(id)
+    }
+    /// The next response frame, whichever posted request it answers.
+    pub fn next_frame(&mut self) -> Value {
+        self.read()
+    }
     /// tools/call → whole frame (result or error).
     pub fn call(&mut self, name: &str, arguments: Value) -> Value {
         self.request("tools/call", json!({"name":name,"arguments":arguments}))

@@ -200,6 +200,9 @@ mod store;
 // 구현 순서 4번 — 시작 준비·제안·Monitor 승인 응답·정식 시작 확정(`tracking-policy` 개발 구성).
 #[cfg(all(feature = "tracking-policy", unix))]
 mod start_prep;
+// 구현 순서 5번 — 범위 변경 제안·Monitor 승인·승인 저장·기준점 보관과 명시 재시도·즉시 보관 중단(같은 개발 구성).
+#[cfg(all(feature = "tracking-policy", unix))]
+mod scope_change;
 #[cfg(all(feature = "tracking-policy", not(unix)))]
 compile_error!("`tracking-policy` is a Unix development profile; this build does not provide it on this OS");
 mod status;

@@ -242,7 +242,7 @@ pub(crate) use baseline_retry::{
     AfterFailure, AttemptBinding, AttemptTicket, BASELINE_RETRY_DOES_NOT_SHOW, BaselineCommit, BaselineState,
     DifferenceKind, FailedAttempt, FailureCause, FailureRecord, NotStarted, OwnedRecords, PathDifference, RetryAttempt,
     RetryClosed, RetryOutOfOrder, RetryOutcome, RetryReport, RetryRequest, RetryRun, RetryStep, SaveAnswer, ScopeDelta,
-    SeenAt, UnknownWhy, run_retry,
+    SeenAt, UnknownWhy, run_retry, scope_delta_over,
 };
 #[allow(unused_imports)]
 pub(crate) use boundary_world::{
@@ -255,6 +255,8 @@ pub(crate) use confirmed_world::{
     PolicyStep, ReadingProblem, RecordInputs, ReviewProblem, ScopeChangeReading, ScopeLimit, ScopeMarks, SecondBasis,
     StartProblem, Unjudged, WorldBefore, WorldFactsMismatch, read_scope_change,
 };
+#[allow(unused_imports)]
+pub(crate) use confirmed_world::{LastConfirmed, RecordStanding, StandingAt, check_record};
 #[allow(unused_imports)]
 pub(crate) use event_cycle_history::{
     APPROVAL_HISTORY_DOES_NOT_SHOW, ApprovalChange, ApprovalField, EventCycleHistoryKept, EventCycleHistoryProblem,

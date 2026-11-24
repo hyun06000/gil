@@ -425,6 +425,31 @@ T6의 **한 시점 부분**을 검사한다. 범위 설명(적힌 조건·도출
 | 합성 시험과 한계 | 정책 판·사건·보충 칸·시도 결과·표식의 「없음」은 시험이 만든 값이며 모니터 승인이 아니다. 체인은 Cycles 층의 메모리 전이와 `Cycles::restore`를 통과한 합성 복원 구조이고 Project load 를 거치지 않았다. 재시도 시험의 저장 경계는 메모리 어댑터다 — 실패 주입은 실제 저장의 원자성·프로세스 강제 종료·전원 장애 내구성의 증거가 아니다. 새로 만든 값으로 다시 읽는 시험은 제품 재시작 시험이 아니다. 실제 저장 1·실제 Host·사람의 승인·필드 인수는 없다 |
 | 남은 것 | 승인 저장(저장 1)과 사전 조건, 정책 파일 동기화와의 순서, 형식 10/11 사건 기록의 저장 꼴·load·제품 저장, §6.2 의 한 함수(다음 Entry·실험 개방), 열린 사이클의 마지막 확정 세계, 뿌리가 start 가 아닌 출처·후속 Chain, `cause` 값 목록, Monitor·CLI·MCP·안내, 6번 복원. O-2·O-3, BaseUndecided 의 나머지 조합, 일반 변경 승인의 결속·보존·재적용은 정하지 않았다. macOS 에서의 시험 실행과 독립 재검토 |
 
+**위 표의 시점(2026-11-24 보완).** 「게시 전 검토 대상」「공식 실행 — 없다」「어느 필터도 `baseline_retry` 시험을 고르지 않는다」와 작성
+환경 줄은 **R3 작성 당시의 기록**이다. 그 뒤 R4 가 `tracking-start-macos` 에 두 `baseline_retry` 집중 단계를 더했고(R4 실행은 36 pass·1 fail),
+정확 R5 `a8753692` 의 공식 증거는 [PR #322](https://github.com/hyun06000/gil/pull/322) 최종 부록에 있다 — Preview run 45397281155 / attempt 1 /
+job 138456298309(`confirmed_world` 26, 신규 boundary 2), tracking-start run 45397281074 / attempt 1 / job 138456298456(두 프로필 각각
+`baseline_retry` 37), Chain run 45397281281 / attempt 2 / job 138464349528(합성 merge `9431046647a04d7eb36164f2ca97c85e21a6c3b5`, tree 는 R5 와
+같음), Windows 45397281026 은 skipped. 취소된 R5 Chain attempt 1 과 R4 의 실패는 역사로 남긴다. 이 증거는 그 읽기·재시도 바탕의 것이며
+아래 제품 연결 후보의 실행 증거가 아니다.
+
+**2026-11-24 5번 범위 변경 사건의 제품 연결 — 같은 Chain 안의 제안·Monitor 승인·저장 1·파일 동기화·보관 대기·명시 재시도·다음 Entry,
+즉시 보관 중단(개발 구성 `tracking-policy`, 제품 미활성화, 비공개 후보 — 독립 검토 전):**
+범위는 [구현 순서](GIL_Implementation_Order_2026-11-19.md)의 같은 날 기록을 따른다. **5번 전체·6번·형식 전환·기본 활성화·배포의 완료가 아니다.**
+
+| 단계 | 상태 |
+|---|---|
+| 구현 | 작성 완료(컴파일하지 않았다). `artifact/tracking_state.rs`, `tracking_record/confirmed_world.rs`(`check_record` 추가 — 기존 `read_scope_change` 는 그대로), `tracking_record/baseline_retry.rs`(`scope_delta_over` 한 문 추가), `project.rs`·`project/tracking.rs`, `cycles.rs`(`open_child_from`), `store.rs`, `session.rs`, `status.rs`·`context.rs`, `scope_change/`, `mcp/scope.rs`·`mcp.rs`·`mcp/surface.rs`·`mcp/monitor.rs`, `mcp-app/scope-review.mjs`·`app.js`·`build.mjs`, `src/mcp/workflow.md` 와 Plugin Skill, 다섯 언어 문자열 |
+| 작성한 시험(소스) — 첫 후보 때의 기록, 지금의 수는 아래 「수정 증분」 | `scope_change::tests` 9개(실제 `.gil/state.yaml`·객체 창고, 함수 수준 실패 주입, 같은 프로세스의 다시 열기 — `approved-plan` 이 없는 프로필에서만 컴파일), `mcp::scope::tests` 2개(카탈로그 가시성·capability 결속), `tests/tracking_scope_change.rs` 2개(실제 stdio, 프로세스를 새로 띄워 앞 프로세스의 기록을 읽음, debug failpoint `GIL_SCOPE_FAIL` — 같은 프로필 조건) |
+| 실행 | **없다.** `cargo build`·`cargo test`·`node --test`·번들 빌드 어느 것도 실행하지 않았다(작성 단계의 승인 범위 밖). 0-test·컴파일 성공·통과를 주장하지 않는다. 기존 시험의 건수 기대(`start_prep::tests::=40`, `mcp::start::tests::=4`, `tracking_start *=4`, `baseline_retry_tests::=37`, `confirmed_world` 26)는 이 후보가 그 모듈에 시험을 더하지 않아 그대로일 것으로 **예상**하지만 확인하지 않았다 |
+| 알려진 미완 | Monitor 번들 미재생성(패널이 설치 자산에 없다 — 번들 일치 시험은 재생성 전까지 맞지 않을 수 있다), 내장 설명서 주제 없음, `approved-plan` 을 포함한 프로필에는 이 연결의 실행 시험이 없다(컴파일 증거만 될 수 있다), 후속 Chain 의 범위 변경 미지원 |
+| 수정 증분(같은 날, 같은 후보 위) | 중단 요청의 수신/적용 분리와 보관·저장 전 공통 경계, 해제의 중단 건·상태 결속, O-3 의 load 판정, 승인 제안과 사건 승인 칸의 대응, 현재 상태 미확인의 분리. 작성한 시험(소스): `scope_change::tests` — `tracking-policy` 17개, `tracking-policy,approved-plan,visual-authoring,product-safety` 16개(종료·후속 Chain 회귀 1개는 승인 계획 fixture 가 없어 그 구성에서 빠진다) / `mcp::scope::tests` 2개(두 구성) / `tests/tracking_scope_change.rs` 2개(`approved-plan` 이 없는 구성만) / `mcp-app/scope-review.test.mjs` 5개(가짜 DOM). **실행 0건** — 이 수는 소스에서 센 것이며 실행 결과가 아니다 |
+| 두 번째 수정 증분(같은 날, 같은 후보 위) | 중단 적용이 저장된 최신 상태를 다시 읽어 표식만 더한다(끝난 기준점·시도 이력 보존, 읽지 못하면 저장하지 않음). 보관의 걸음(관측·capture·manifest·상태 저장)과 정책 파일 동기화 앞의 수신 요청 확인 — 멈춤은 `halted` 이며 실패 이력이 아니다. 같은 Monitor 의 진행 중 중단(작업별 capability, 중복 방지 유지). 작성한 시험(소스): `scope_change::tests` — `tracking-policy` 21개, `tracking-policy,approved-plan,visual-authoring,product-safety` 20개; `mcp::scope::tests` 2개; `tests/tracking_scope_change.rs` 5개(두 구성 모두, 실제 `gil mcp --serve` 프로세스 — 그 가운데 자산 연결 시험은 포장 자산 재생성 전까지 실패한다); `mcp-app/scope-review.test.mjs` 7개(가짜 DOM); `mcp-app/scope-browser-check.mjs`(고정 Playwright 합성 Host, 실행 파일이 낸 HTML 필수). **어느 것도 실행하지 않았다.** Monitor 번들 재생성은 별도 실행 승인 항목이다. |
+| 세 번째 최소 수정 증분(같은 날, 같은 후보 위) | 정책 파일 동기화의 세 걸음 각각의 앞에서 수신된 중단을 본다(끝난 걸음 보존, 기준 `unconfirmed` 는 §5.2 재조회로 판정 — 자동 재쓰기·기준 추정 복구·앞 판 회귀 없음, 걸음별 사실 `policy_file_steps`). 해제의 부분 저장은 제품 변경 없이 시험 소스로 고정. 실제 프로세스 시험의 Report 직렬화(여러 줄 값)와 보관 대기 중 중단 자리(`event:M2`) 교정, `resources/read` 본문 개수·URI 대조. **이 행의 수가 위 행의 수를 대신한다** — 작성한 시험(소스): `scope_change::tests` `tracking-policy` 23개 / 네 기능 구성 22개; `mcp::scope::tests` 2개; `tests/tracking_scope_change.rs` 6개(두 구성 모두, 실제 프로세스 — 자산 연결 시험은 포장 자산 재생성 전까지 실패한다); `mcp-app/scope-review.test.mjs` 7개; `mcp-app/scope-browser-check.mjs`. **어느 것도 실행하지 않았다.** Monitor 번들 재생성과 CI 적용은 다음 별도 단계다. |
+| 네 번째 최소 수정 증분(같은 날, 같은 후보 위) | 정책 파일 동기화의 기준 저장 걸음을 저장 호출의 반환이 아니라 같은 잠금 안의 다시 읽기로 판정한다(시작하지 않음 · 확인된 저장 · 확인된 미저장 · 결과 불명, 확인 못 한 기준은 `null`). **이 행의 수가 위 행의 수를 대신한다** — `scope_change::tests` `tracking-policy` 24개 / 네 기능 구성 23개; 그 밖의 수(`mcp::scope::tests` 2, `tests/tracking_scope_change.rs` 6, 가짜 DOM 7)는 그대로. **어느 것도 실행하지 않았다.** |
+| 다섯 번째 최소 수정 증분(같은 날, 같은 후보 위) | 동기화 기준 저장 걸음의 판정을 목표 기준값이 아니라 저장된 상태 전체(저장 전 상태의 바이트 / 예상 상태의 바이트)로 한다 — 어느 쪽과도 같지 않으면 `unknown`, 그것을 근거로 다음 쓰기를 하지 않는다. **이 행의 수가 위 행의 수를 대신한다** — `scope_change::tests` `tracking-policy` 25개 / 네 기능 구성 24개; 그 밖의 수는 그대로. **어느 것도 실행하지 않았다.** |
+| 합성 시험과 한계 | 시험의 Monitor 응답은 capability 검사 뒤의 함수를 직접 부르거나 시험 하네스가 `_meta` 의 값을 되보낸 것이며 사람의 승인이 아니다. 실패 주입은 실제 저장의 원자성·강제 종료·전원 장애의 증거가 아니다. 실제 Host 화면·사람의 버튼 입력·필드 인수는 없다 |
+
 **2026-11-23 4번 최초 시작 — 시작 준비·Monitor 승인·최초 보관·정식 시작·재시작 복구(개발 구성 `tracking-policy`, 제품 미활성화, 게시 전 검토 대상):**
 [구현 순서](GIL_Implementation_Order_2026-11-19.md)의 같은 날 「4번」 기록과 [공유 계약](GIL_Storage_Transition_Contract_v0.1.md) 머리말의 4번 상태,
 §5.2 「최초 시작의 정책 파일 동기화와 좁은 결합 예외」(2026-11-23 사용자 결정)를 구현했다. **5번(범위 변경)·6번(최신 정책 복원)·형식 전환·

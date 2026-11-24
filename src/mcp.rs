@@ -33,6 +33,9 @@ mod transition;
 // Implementation order 4: start preparation and Monitor approval (tracking-policy development profile).
 #[cfg(all(feature = "tracking-policy", unix))]
 mod start;
+// Implementation order 5: scope change, baseline archive retry and archive halt (same development profile).
+#[cfg(all(feature = "tracking-policy", unix))]
+mod scope;
 #[cfg(all(feature = "visual-authoring", windows))]
 mod workspace;
 use monitor::Monitor;
@@ -46,6 +49,8 @@ pub struct GilServer {
     plan_grants: Arc<plans::Grants>,
     #[cfg(all(feature = "tracking-policy", unix))]
     start_grants: Arc<start::Grants>,
+    #[cfg(all(feature = "tracking-policy", unix))]
+    scope_grants: Arc<scope::Grants>,
     native_gate: Arc<Mutex<()>>,
     companion_session: Arc<Mutex<crate::companion_ipc::McpSession>>,
 }
@@ -60,6 +65,7 @@ impl GilServer {
         Self { #[cfg(feature = "product-safety")] recovery_grants: Arc::new(recovery::Grants::default()),
             #[cfg(feature = "approved-plan")] plan_grants: Arc::new(plans::Grants::default()),
             #[cfg(all(feature = "tracking-policy", unix))] start_grants: Arc::new(start::Grants::default()),
+            #[cfg(all(feature = "tracking-policy", unix))] scope_grants: Arc::new(scope::Grants::default()),
             monitor: Arc::new(Monitor::default()), native_gate: Arc::new(Mutex::new(())),
             companion_session: Arc::new(Mutex::new(crate::companion_ipc::McpSession::new(endpoint))) }
     }
@@ -229,6 +235,14 @@ impl GilServer {
             return tokio::task::spawn_blocking(move || locale::with(locale, || start::call(&monitor, &grants, &name, input))).await
                 .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "start_tool.uncertain")));
         }
+        #[cfg(all(feature = "tracking-policy", unix))]
+        if scope::NAMES.contains(&name.as_str()) {
+            let monitor = self.monitor.clone();
+            let grants = self.scope_grants.clone();
+            // A lost task is not a refusal: the stored record decides. Read gil_scope_status instead of repeating.
+            return tokio::task::spawn_blocking(move || locale::with(locale, || scope::call(&monitor, &grants, &name, input))).await
+                .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "scope_tool.uncertain")));
+        }
         #[cfg(feature = "approved-plan")]
         if name.starts_with("gil_plan_") {
             let monitor = self.monitor.clone();
@@ -312,7 +326,7 @@ impl GilServer {
 fn locale_for_call(monitor: &Monitor, name: &str, input: &Value) -> Locale {
     let root = match input.get("project_root").and_then(Value::as_str) {
         Some(root) if std::path::Path::new(root).is_absolute() => Some(std::path::PathBuf::from(root)),
-        _ if name.starts_with("gil_monitor_") || matches!(name, "show_gil_monitor" | "gil_plan_review" | "gil_plan_decide" | "gil_revisit_review" | "gil_revisit_apply" | "gil_start_review" | "gil_start_decide" | "gil_start_apply" | "gil_start_list") =>
+        _ if name.starts_with("gil_monitor_") || name.starts_with("gil_scope_") || matches!(name, "show_gil_monitor" | "gil_plan_review" | "gil_plan_decide" | "gil_revisit_review" | "gil_revisit_apply" | "gil_start_review" | "gil_start_decide" | "gil_start_apply" | "gil_start_list") =>
             input.get("scope_id").and_then(Value::as_str).and_then(|scope| monitor.root(scope).ok()),
         _ => None,
     };
@@ -400,6 +414,10 @@ mod tests {
     const RECORD_READ_SURFACE: [&str; 2] = ["gil_report_read", "gil_evidence_read"];
     /// 형식 6→8·7→9 명시적 전환의 점검·적용 — will-end-history 빌드에서만 등록된다(src/mcp/transition.rs).
     const TRANSITION_SURFACE: [&str; 2] = ["gil_format_transition_check", "gil_format_transition_apply"];
+    /// 구현 순서 5번(같은 Chain 범위 변경)의 일곱 도구 — 모델용 둘(제안·조회)과 App 전용 다섯. `tracking-policy` + Unix 빌드에서만
+    /// 등록된다(src/mcp/scope.rs). 그 모듈의 목록을 읽지 않고 **여기에 따로 고정한다**: 그 모듈은 그 구성에서만 컴파일되므로, 다른
+    /// 구성의 시험이 그 이름을 참조하면 컴파일되지 않는다(`if cfg!(..)` 는 꺼진 본문의 이름 해석을 없애지 않는다).
+    const SCOPE_SURFACE: [&str; 7] = ["gil_scope_propose", "gil_scope_status", "gil_scope_review", "gil_scope_decide", "gil_scope_retry", "gil_scope_halt", "gil_scope_release"];
 
     fn registered_names() -> Vec<String> {
         let mut names: Vec<String> = surface::tools().iter().map(|one| one.name.to_string()).collect();
@@ -438,10 +456,18 @@ mod tests {
             // `gil_start` 는 기본 표에 이미 있다 — 이 구성은 그 설명만 바꾸고 일곱 도구를 더한다.
             expected.extend(["gil_start_prepare", "gil_start_status", "gil_start_apply", "gil_start_cancel", "gil_start_review", "gil_start_decide", "gil_start_list"]
                 .map(String::from));
+            // 구현 순서 5번의 일곱 도구 — 모델용 둘(제안·조회)과 App 전용 다섯.
+            expected.extend(SCOPE_SURFACE.iter().map(|s| s.to_string()));
         }
         expected.push("gil_await_user".to_string());
         expected.sort();
-        assert_eq!(registered_names(), expected);
+        let registered = registered_names();
+        assert_eq!(registered, expected);
+        // 범위 변경 도구 각각의 등록 여부는 그 구성 조건과 정확히 같다 — 켜진 구성에서는 일곱이 모두 있고, 꺼진 구성에서는 하나도 없다.
+        let scope_enabled = cfg!(all(feature = "tracking-policy", unix));
+        for name in SCOPE_SURFACE {
+            assert_eq!(registered.iter().any(|one| one == name), scope_enabled, "{name} 의 등록 여부가 구성 조건과 다르다");
+        }
     }
 
     /// 기본 표 파일 자체에는 승인 계획 도구가 없다 — 승인 계획은 feature 가 더하는 것이지 기본 계약이 아니다.
@@ -451,7 +477,9 @@ mod tests {
         let mut names: Vec<&str> = catalog.iter().map(|t| t["name"].as_str().expect("name")).collect();
         names.sort();
         assert_eq!(names, DEFAULT_SURFACE);
-        for name in PLAN_MODEL_SURFACE.iter().chain(PLAN_APP_SURFACE.iter()).chain(VISUAL_SURFACE.iter()).chain(RECORD_READ_SURFACE.iter()) {
+        for name in PLAN_MODEL_SURFACE.iter().chain(PLAN_APP_SURFACE.iter()).chain(VISUAL_SURFACE.iter()).chain(RECORD_READ_SURFACE.iter())
+            .chain(SCOPE_SURFACE.iter())
+        {
             assert!(!names.contains(name), "{name} 이 기본 표에 들어왔다");
         }
     }
