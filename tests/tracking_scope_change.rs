@@ -39,8 +39,28 @@ fn meta<'a>(frame: &'a Value, key: &str) -> Option<&'a str> {
     frame["result"]["_meta"][key].as_str()
 }
 
+/// Report 를 **제품의 Report 문법**(`gil::Report::parse` 가 읽는 꼴)으로 적는다. 한 줄 값은 `이름: 값`, 여러 줄 값(예: 한 줄에 하나씩
+/// 적는 `basis_refs`)은 `이름: |` 아래 들여쓴 줄들이다. 적은 글을 제품 파서로 다시 읽어 **칸의 이름과 값이 원래 Report 와 같은지**
+/// 여기서 확인한다 — 값이 조용히 잘리거나 다른 칸으로 읽힌 글을 보내지 않는다. 문법이나 승인 검사를 느슨하게 하는 것이 아니다.
 fn report_text(report: &gil::Report) -> String {
-    report.field_names().map(|key| format!("{key}: {}\n", report.get(key).unwrap())).collect()
+    let mut text = String::new();
+    for key in report.field_names() {
+        let value = report.get(key).unwrap();
+        if value.contains('\n') || value == "|" {
+            text.push_str(&format!("{key}: |\n"));
+            for line in value.split('\n') {
+                text.push_str(&format!("  {line}\n"));
+            }
+        } else {
+            text.push_str(&format!("{key}: {value}\n"));
+        }
+    }
+    let read = gil::Report::parse(&text).unwrap_or_else(|e| panic!("제품 파서가 읽지 못한 Report: {e}\n{text}"));
+    assert_eq!(read.field_names().collect::<Vec<_>>(), report.field_names().collect::<Vec<_>>(), "칸의 이름이 그대로다:\n{text}");
+    for key in report.field_names() {
+        assert_eq!(read.get(key), report.get(key), "칸 {key} 의 값이 그대로다:\n{text}");
+    }
+    text
 }
 
 /// 한 합성 프로젝트와 그것에 연결된 실제 `gil` 프로세스.
@@ -380,6 +400,79 @@ fn a_halt_survives_a_restart_refuses_progress_and_is_released_only_with_the_expl
     ok(rig.model("gil_open", json!({"kind": "interview"})), "interview after the release");
 }
 
+/// 해제의 **부분 저장**: 해제 이력(원장)은 저장됐는데 표식을 지우는 상태 저장이 실패한 경우. 표식과 진행 차단이 남고, 새 프로세스의
+/// 조회가 그것을 스스로 풀지 않으며, 옛 확인 근거로는 해제할 수 없다. 명시 재등록 → 새 화면의 새 확인 뒤에만 해제되고, 어느 걸음도
+/// 재시도·보관을 시작하지 않는다.
+///
+/// 증거의 종류: 상태 저장의 실패는 debug 빌드의 failpoint(`GIL_SCOPE_FAIL=release`)가 그 저장을 **하지 않고** 오류를 돌려준 것이다.
+/// 그 뒤의 읽기는 **새 프로세스**가 저장된 파일을 처음 읽은 것이다. 실제 디스크 장애·강제 종료·전원 장애의 증거는 아니다.
+#[test]
+fn a_release_whose_history_was_saved_but_whose_marker_was_not_removed_stays_halted_until_a_new_record_and_a_new_confirmation() {
+    let mut rig = Rig::start("scope-release-partial");
+    rig.interview();
+    let review = rig.app("gil_scope_review", json!({}));
+    let halt = meta(&review, "gil/scopeHaltToken").expect("중단 capability").to_owned();
+    assert!(!is_error(&rig.app("gil_scope_halt", json!({"token": halt}))));
+    let frozen = rig.state();
+
+    // ── 표식 제거 저장이 실패하는 프로세스.
+    rig.restart_with(&[("GIL_SCOPE_FAIL", "release")]);
+    let review = rig.app("gil_scope_review", json!({}));
+    let old_token = meta(&review, "gil/scopeReleaseToken").expect("해제 capability").to_owned();
+    let (old_id, digest) = (sc(&review)["halt"]["id"].as_str().expect("중단 건의 이름").to_owned(),
+        sc(&review)["halt"]["state_digest"].as_str().expect("상태의 지문").to_owned());
+    let release = |halt_id: &str, token: &str| json!({"at": "cycle:C1", "halt_id": halt_id, "state_digest": digest, "cleanup": "continue",
+        "state_confirmed": true, "token": token});
+    let failed = rig.app("gil_scope_release", release(&old_id, &old_token));
+    assert!(is_error(&failed), "표식을 지우지 못한 해제는 성공이 아니다: {failed}");
+    assert_eq!(rig.state(), frozen, "표식이 그대로다");
+
+    // ── 새 프로세스(failpoint 없음): 조회가 스스로 해제하지 않는다. 표식과 진행 차단이 남아 있다.
+    rig.restart();
+    let status = rig.status();
+    assert_eq!(status["tracking"]["archive_halt"], "cycle:C1", "{status}");
+    refused(rig.model("gil_open", json!({"kind": "interview"})), "interview while still halted");
+    refused(rig.model("gil_scope_propose", json!({"rules": P2})), "proposal while still halted");
+    let review = rig.app("gil_scope_review", json!({}));
+    // 그 중단 건은 해제 이력이 적혔으므로 더는 확인 근거가 아니다: 해제 capability 가 없고, 기록을 다시 남기는 길만 있다.
+    assert!(meta(&review, "gil/scopeReleaseToken").is_none(), "옛 건에 대한 해제는 제공되지 않는다: {review}");
+    assert_eq!(sc(&review)["halt"]["record_missing"], true, "{review}");
+    assert!(sc(&review)["halt"]["id"].is_null());
+    let register = meta(&review, "gil/scopeHaltToken").expect("기록을 다시 남기는 capability").to_owned();
+    assert_eq!(rig.state(), frozen, "조회·화면 읽기는 아무것도 바꾸지 않는다");
+    // 옛 확인 근거(옛 이름·옛 capability)로는 해제할 수 없다.
+    let stale = rig.app("gil_scope_release", release(&old_id, &old_token));
+    assert!(is_error(&stale), "{stale}");
+    assert_eq!(rig.state(), frozen);
+
+    // 명시 재등록 → 새 화면이 **새 중단 건**과 그 건의 해제 capability 를 준다.
+    let registered = rig.app("gil_scope_halt", json!({"token": register}));
+    assert!(!is_error(&registered), "{registered}");
+    assert_eq!(rig.state(), frozen, "재등록은 표식을 옮기지 않는다");
+    let review = rig.app("gil_scope_review", json!({}));
+    let new_token = meta(&review, "gil/scopeReleaseToken").expect("새 건의 해제 capability").to_owned();
+    let new_id = sc(&review)["halt"]["id"].as_str().expect("새 중단 건의 이름").to_owned();
+    assert_ne!(new_id, old_id, "재등록은 새 확인 대상을 만든다");
+    // 옛 이름에 새 capability 를 붙여도 통하지 않는다.
+    let mixed = rig.app("gil_scope_release", release(&old_id, &new_token));
+    assert!(is_error(&mixed), "{mixed}");
+    assert_eq!(rig.state(), frozen);
+    let review = rig.app("gil_scope_review", json!({}));
+    let new_token = meta(&review, "gil/scopeReleaseToken").expect("같은 새 건의 해제 capability").to_owned();
+    assert_eq!(sc(&review)["halt"]["id"].as_str(), Some(new_id.as_str()));
+    let released = rig.app("gil_scope_release", release(&new_id, &new_token));
+    assert!(!is_error(&released), "{released}");
+    assert!(sc(&released)["tracking"]["archive_halt"].is_null());
+
+    // 해제는 아무것도 진행시키지 않았다.
+    rig.restart();
+    let status = rig.status();
+    assert!(status["tracking"]["archive_halt"].is_null(), "{status}");
+    assert_eq!(status["tracking"]["standing"], json!({"cycle": "cycle:C1", "state": "closed_boundary"}));
+    assert_eq!(status["tracking"]["applied_policy"], "policy:P1");
+    assert!(status["tracking"]["waiting"].is_null());
+}
+
 /// **같은 서버 연결**이 승인을 처리하는 동안 즉시 보관 중단 요청을 받는다(실제 요청 경로). 승인의 보관은 debug 빌드의 대기 자리
 /// (`GIL_SCOPE_HOLD`)로 capture 앞에 세워 둔다 — 그 사이 그 명령이 프로젝트 잠금을 쥐고 있다. 그동안 같은 stdio 로 보낸 중단 요청의
 /// 응답이 **승인의 응답보다 먼저** 돌아오고(수신됨·아직 적용 안 됨), 승인의 보관은 다음 걸음을 시작하지 않으며(`halted`, 실패 기록 없음),
@@ -428,6 +521,9 @@ fn the_same_server_receives_a_halt_while_its_approval_is_in_flight_and_the_archi
     assert_eq!(sc(&second)["facts"]["approval_response"], "recorded");
     assert_eq!(sc(&second)["facts"]["policy_applied"], true, "끝난 승인 저장은 그대로다: {second}");
     assert_eq!(sc(&second)["facts"]["policy_file"], "written", "중단 요청 전에 끝난 파일 동기화는 그대로다");
+    assert_eq!(sc(&second)["facts"]["policy_file_steps"], json!({"start_saved": true, "file_replaced": true, "base_saved": true,
+        "base_left_unconfirmed": false, "halted_before": null}));
+    assert_eq!(sc(&second)["tracking"]["archive_halt"], "event:M2", "{second}");
     assert_eq!(sc(&second)["facts"]["baseline"]["result"], "halted", "{second}");
     assert_eq!(sc(&second)["facts"]["baseline"]["before"], "capture");
     assert_eq!(sc(&second)["facts"]["baseline"]["failure_recorded"], false);
@@ -437,7 +533,9 @@ fn the_same_server_receives_a_halt_while_its_approval_is_in_flight_and_the_archi
     // 새 프로세스가 읽는 기록: 중단이 적용돼 있고, 사건은 대기이며, 실패 시도는 없다. 확정 세계는 그대로다.
     rig.restart();
     let status = rig.status();
-    assert_eq!(status["tracking"]["archive_halt"], "cycle:C1", "{status}");
+    // 승인 저장 뒤에는 M2 가 보관 대기다 — 표식은 적용되는 때의 자리, 곧 그 사건을 가리킨다(`halt_place`).
+    assert_eq!(status["tracking"]["archive_halt"], "event:M2", "{status}");
+    assert_eq!(status["tracking"]["standing"]["cycle"], "cycle:C1");
     assert_eq!(status["tracking"]["applied_policy"], "policy:P2");
     assert_eq!(status["tracking"]["last_confirmed_world"], "snapshot:A1");
     assert_eq!(status["tracking"]["confirmed_policy"], "policy:P1");
@@ -446,6 +544,7 @@ fn the_same_server_receives_a_halt_while_its_approval_is_in_flight_and_the_archi
     // 중단 중에는 재시도 capability 가 없고, 해제만 있다 — 자동 재시도도 없다.
     let review = rig.app("gil_scope_review", json!({}));
     assert!(meta(&review, "gil/scopeRetryToken").is_none() && meta(&review, "gil/scopeReleaseToken").is_some(), "{review}");
+    assert_eq!(sc(&review)["halt"]["at"], "event:M2", "{review}");
     assert_eq!(rig.status()["tracking"]["waiting"]["failed_attempts"], json!([]));
 }
 
@@ -467,7 +566,11 @@ fn this_executable_serves_the_packaged_monitor_and_the_scope_panel_is_in_it() {
     let uri = show["_meta"]["ui"]["resourceUri"].as_str().expect("resourceUri").to_owned();
     assert_eq!(show["_meta"]["ui/resourceUri"], json!(uri));
     let resource = c.request("resources/read", json!({"uri": uri}));
-    let content = &resource["result"]["contents"][0];
+    assert!(resource.get("error").is_none(), "{resource}");
+    let contents = resource["result"]["contents"].as_array().expect("contents 배열");
+    assert_eq!(contents.len(), 1, "정확히 하나의 본문이 온다");
+    let content = &contents[0];
+    assert_eq!(content["uri"], json!(uri), "돌려준 본문의 URI 가 요청한 URI 다");
     assert_eq!(content["mimeType"], "text/html;profile=mcp-app");
     let html = content["text"].as_str().expect("HTML 본문");
     let sha: String = Sha256::digest(html.as_bytes()).iter().map(|byte| format!("{byte:02x}")).collect();

@@ -21,7 +21,7 @@
 //!
 //! 승인 저장이 성공해 다시 읽힌 순간부터 새 판이 적용 정책이다. 정책 파일 쓰기가 실패해도, 기준점 보관이 실패해도 앞 판으로 되돌리지
 //! 않는다. 승인 저장이 실패했거나 결과를 확인하지 못했으면 승인·적용 완료를 말하지 않는다. 결과는 `approval_response`·`policy_applied`·
-//! `policy_file`·`baseline` 을 따로 싣는다.
+//! `policy_file`(+ 걸음별 사실 `policy_file_steps`)·`baseline` 을 따로 싣는다.
 //!
 //! # 기준점 보관과 재시도는 기존 바탕을 그대로 부른다
 //!
@@ -747,7 +747,7 @@ fn apply(session: &mut ProjectSession, root: &Path, gil: &Path, found: &Ledger, 
         hook();
     }
     // 저장 1 은 끝났다 — 그 뒤에 받은 중단 요청은 이미 끝난 승인 저장을 되돌리지 않는다. 남은 걸음은 각자의 경계에서 그 요청을 보고
-    // 시작하지 않으며(파일 쓰기 세 걸음의 앞, 보관의 관측·capture·manifest·저장 앞), 표식의 적용은 보관 시도의 끝이 한다.
+    // 시작하지 않으며(정책 파일 동기화의 걸음마다 그 앞, 보관의 관측·capture·manifest·저장 앞), 표식의 적용은 보관 시도의 끝이 한다.
     // 정책 파일 동기화 — 실패해도 정책은 유효하다. 따로 표시한다.
     let file = sync_policy_file(session, gil, root, &bytes, &rules, &chosen, &disk);
     // 기준점 보관 — 승인 흐름의 한 시도. 실패하면 보관 대기가 남고, 그 뒤의 시도는 명시 재시도뿐이다.
@@ -756,7 +756,9 @@ fn apply(session: &mut ProjectSession, root: &Path, gil: &Path, found: &Ledger, 
         "policy_applied": true,
         "policy": policy_name.to_string(),
         "event": event_name.to_string(),
-        "policy_file": file,
+        "policy_file": file.word,
+        // 세 걸음 각각의 사실. 중단 요청의 수신·적용은 `baseline.halt_request` 가 말한다.
+        "policy_file_steps": file.steps(),
         "baseline": baseline,
     }))
 }
@@ -800,7 +802,8 @@ thread_local! {
     pub(crate) static FINAL_REREAD_FAULT: std::cell::RefCell<Option<()>> = const { std::cell::RefCell::new(None) };
     /// 중단 적용이 최신 저장 상태를 읽는 한 번을 실패로 만든다 — 표식을 적용하지 않고 요청을 남겨야 한다.
     pub(crate) static ABSORB_REREAD_FAULT: std::cell::RefCell<Option<()>> = const { std::cell::RefCell::new(None) };
-    /// 보관 시도가 이 걸음(`observe`·`capture`·`store_manifest`·`save`)을 시작하기 직전에 중단 요청이 수신된 것으로 만든다.
+    /// 이 걸음을 시작하기 직전에 중단 요청이 수신된 것으로 만든다 — 보관의 `observe`·`capture`·`store_manifest`·`save`, 정책 파일
+    /// 동기화의 `sync_start`·`sync_file_write`·`sync_base_save`.
     pub(crate) static HALT_BEFORE_STEP: std::cell::RefCell<Option<&'static str>> = const { std::cell::RefCell::new(None) };
     /// 저장 경계의 이 저장(`baseline`·`failure`)이 끝난 직후 한 번 부른다 — 끝난 저장 바로 뒤에 수신된 중단 요청.
     pub(crate) static AFTER_ADAPTER_SAVE: std::cell::RefCell<Option<(&'static str, Box<dyn FnOnce()>)>> = const { std::cell::RefCell::new(None) };
@@ -836,10 +839,55 @@ fn write_policy(root: &Path, bytes: &[u8], expected: Option<&ContentDigest>) -> 
     })
 }
 
+/// 정책 파일 동기화의 결과 — 한 낱말(`word`)과, 세 걸음 각각이 **끝났는지·시작하지 않았는지·알 수 없는지**.
+struct FileSync {
+    word: &'static str,
+    /// 1. 쓰기 시작 기록(기준 `unconfirmed`)의 저장이 끝났는가.
+    start_saved: bool,
+    /// 2. 파일 교체: `Some(true)` 교체됨(다시 읽어 확인) · `Some(false)` 교체하지 않음 · `None` 알 수 없음.
+    file_replaced: Option<bool>,
+    /// 3. 쓰기 뒤 기준 저장이 끝났는가.
+    base_saved: bool,
+    /// 수신된 중단 요청 때문에 **시작하지 않은** 걸음 — `start` · `file_write` · `base_save`.
+    halted_before: Option<&'static str>,
+}
+
+impl FileSync {
+    fn early(word: &'static str) -> Self {
+        FileSync { word, start_saved: false, file_replaced: Some(false), base_saved: false, halted_before: None }
+    }
+
+    /// 결과에 싣는 꼴. `base_left_unconfirmed` 는 이 동기화가 기준을 `unconfirmed` 로 남겼다는 뜻이다 — 그 뒤의 판정은 §5.2 대로
+    /// 디스크를 다시 읽어 한다(같으면 동기화됨, 다르면 자동으로 쓰지 않는다).
+    fn steps(&self) -> Value {
+        json!({
+            "start_saved": self.start_saved,
+            "file_replaced": self.file_replaced,
+            "base_saved": self.base_saved,
+            "base_left_unconfirmed": self.start_saved && !self.base_saved,
+            "halted_before": self.halted_before,
+        })
+    }
+}
+
+/// 시험만 쓰는 자리 — 이 걸음을 시작하기 직전에 중단 요청이 수신된 것으로 만든다.
+#[cfg(test)]
+fn synthetic_halt_before(step: &'static str, gil: &Path) {
+    if HALT_BEFORE_STEP.with(|slot| *slot.borrow()) == Some(step) {
+        HALT_BEFORE_STEP.with(|slot| *slot.borrow_mut() = None);
+        ledger::receive_halt_request(gil, "synthetic-request").expect("시험의 수신 표식");
+    }
+}
+
 /// 정책 파일 동기화(§5.2 의 세 걸음, T13). 승인·적용은 이미 유효하며 이 결과는 따로 선다.
 ///
 /// 디스크가 확인된 기준과 같을 때만 쓴다. 쓰기 전에 기준을 `unconfirmed` 로, 쓰기 성공을 확인한 뒤에 적용 원문으로 저장한다.
 /// `unconfirmed` 에서는 자동으로 쓰지 않는다.
+///
+/// **세 걸음은 한 단위가 아니다.** 각 걸음(시작 기록의 저장 · 파일 교체 · 기준 저장)은 저마다 원자적이고, 수신된 중단 요청은 **다음
+/// 걸음을 시작하기 전마다** 본다. 요청이 있으면 그 걸음을 시작하지 않는다. 이미 끝난 걸음은 그대로 둔다 — 시작 기록 뒤에 멈추면
+/// 기준은 `unconfirmed` 로 남고, 그것을 이전 기준으로 되돌리거나(추정 복구) 뒤에 스스로 다시 쓰지 않는다. 그 뒤의 판정은 §5.2 의
+/// `unconfirmed` 계약대로 디스크를 다시 읽어 한다.
 fn sync_policy_file(
     session: &mut ProjectSession,
     gil: &Path,
@@ -848,19 +896,19 @@ fn sync_policy_file(
     rules: &ContentDigest,
     base: &sp::SyncBase,
     disk: &sp::DiskReading,
-) -> &'static str {
-    // 수신된 중단 요청이 있으면 쓰기 세 걸음을 **시작하지 않는다.** 이미 시작한 세 걸음(기준 unconfirmed 저장 뒤)은 한 단위로 끝낸다 —
-    // 중간에 버리면 기준이 미확인으로 남아 쓰기가 닿았는지 알 수 없는 상태를 중단이 만들게 된다.
+) -> FileSync {
+    #[cfg(test)]
+    synthetic_halt_before("sync_start", gil);
     if halt_requested(gil) {
-        return "not_written_halt_requested";
+        return FileSync { halted_before: Some("start"), ..FileSync::early("not_written_halt_requested") };
     }
     let expected = match (disk, base) {
-        (sp::DiskReading::Present(found), _) if found == rules => return "already_matches",
-        (sp::DiskReading::Unreadable { .. }, _) => return "not_written_unreadable",
-        (_, sp::SyncBase::Unconfirmed) => return "not_written_base_unconfirmed",
+        (sp::DiskReading::Present(found), _) if found == rules => return FileSync::early("already_matches"),
+        (sp::DiskReading::Unreadable { .. }, _) => return FileSync::early("not_written_unreadable"),
+        (_, sp::SyncBase::Unconfirmed) => return FileSync::early("not_written_base_unconfirmed"),
         (sp::DiskReading::Absent, sp::SyncBase::Absent) => None,
         (sp::DiskReading::Present(found), sp::SyncBase::Present(kept)) if found == kept => Some(found.clone()),
-        _ => return "not_written",
+        _ => return FileSync::early("not_written"),
     };
     let store = |session: &mut ProjectSession, value: sp::SyncBase, step: &'static str| -> bool {
         let Some(next) = session.project().with_sync_base(value) else { return false };
@@ -874,30 +922,50 @@ fn sync_policy_file(
     };
     // 0. 잠금 안에서 디스크가 확인된 기준과 같음을 다시 본다. 아니면 쓰지 않는다.
     if reading(&disk_now(root)) != *disk {
-        return "not_written_disk_changed";
+        return FileSync::early("not_written_disk_changed");
     }
     // 1. 쓰기 시작을 먼저 남긴다. 이 저장이 실패하면 파일을 쓰지 않는다.
     if !store(session, sp::SyncBase::Unconfirmed, "sync_start") {
-        return "not_written_start_not_saved";
+        return FileSync::early("not_written_start_not_saved");
     }
-    // 2. 파일 쓰기 — 임시 파일 → fsync → 교체 직전 재관측 → 교체 → 다시 읽기.
-    match write_policy(root, bytes, expected.as_ref()) {
+    // 시작 기록은 끝났다. 파일 교체를 시작하기 전에 수신된 요청을 본다 — 있으면 쓰지 않고, 기준은 `unconfirmed` 그대로다.
+    #[cfg(test)]
+    synthetic_halt_before("sync_file_write", gil);
+    if halt_requested(gil) {
+        return FileSync { word: "not_written_halted_base_unconfirmed", start_saved: true, file_replaced: Some(false), base_saved: false,
+            halted_before: Some("file_write") };
+    }
+    // 2. 파일 쓰기 — 임시 파일 → fsync → 교체 직전 재관측 → 교체 → 다시 읽기. 이 한 번의 교체는 중간에 끊지 않는다.
+    let written = write_policy(root, bytes, expected.as_ref());
+    // 파일 걸음은 끝났다. 기준 저장을 시작하기 전에 수신된 요청을 본다.
+    #[cfg(test)]
+    synthetic_halt_before("sync_base_save", gil);
+    let halted = halt_requested(gil);
+    match written {
         sp::PolicyWrite::Replaced { reread: sp::DiskReading::Present(found) } if &found == rules => {
-            // 3. 쓰기 성공 뒤에 기준을 옮긴다. 실패하면 디스크 = 적용 원문, 기준 unconfirmed — 동기화됨으로 읽힌다.
-            match store(session, sp::SyncBase::Present(rules.clone()), "sync_done") {
-                true => "written",
-                false => "written_base_unconfirmed",
+            if halted {
+                // 디스크 = 적용 원문(다시 읽어 확인), 기준 `unconfirmed` — §5.2 의 재조회로 동기화됨으로 읽힌다.
+                return FileSync { word: "written_halted_base_unconfirmed", start_saved: true, file_replaced: Some(true), base_saved: false,
+                    halted_before: Some("base_save") };
             }
+            // 3. 쓰기 성공 뒤에 기준을 옮긴다. 실패하면 디스크 = 적용 원문, 기준 unconfirmed — 동기화됨으로 읽힌다.
+            let saved = store(session, sp::SyncBase::Present(rules.clone()), "sync_done");
+            FileSync { word: if saved { "written" } else { "written_base_unconfirmed" }, start_saved: true, file_replaced: Some(true),
+                base_saved: saved, halted_before: None }
         }
         // 교체 전의 확인된 장애 — 같은 잠금 안에서 다시 읽은 디스크가 이전 기준과 같을 때만 그 기준으로 되돌린다.
         sp::PolicyWrite::NotReplaced { .. } if reading(&disk_now(root)) == *disk => {
-            match store(session, base.clone(), "sync_done") {
-                true => "update_failed",
-                false => "update_failed_base_unconfirmed",
+            if halted {
+                // 기준을 되돌리는 저장도 「다음 쓰기」다 — 시작하지 않는다. 기준은 `unconfirmed` 로 남는다.
+                return FileSync { word: "update_failed_halted_base_unconfirmed", start_saved: true, file_replaced: Some(false),
+                    base_saved: false, halted_before: Some("base_save") };
             }
+            let saved = store(session, base.clone(), "sync_done");
+            FileSync { word: if saved { "update_failed" } else { "update_failed_base_unconfirmed" }, start_saved: true,
+                file_replaced: Some(false), base_saved: saved, halted_before: None }
         }
         // 교체 여부를 알 수 없거나 그사이 디스크가 달라졌다 — 되돌리지 않는다. 자동으로 다시 쓰지 않는다.
-        _ => "unsettled",
+        _ => FileSync { word: "unsettled", start_saved: true, file_replaced: None, base_saved: false, halted_before: None },
     }
 }
 
@@ -1037,10 +1105,7 @@ fn drive<'a>(
         };
         if let Some(step) = next {
             #[cfg(test)]
-            if HALT_BEFORE_STEP.with(|slot| *slot.borrow()) == Some(step) {
-                HALT_BEFORE_STEP.with(|slot| *slot.borrow_mut() = None);
-                ledger::receive_halt_request(gil, "synthetic-request").expect("시험의 수신 표식");
-            }
+            synthetic_halt_before(step, gil);
             #[cfg(debug_assertions)]
             hold_before(step);
             if halt_requested(gil) {
@@ -1052,7 +1117,14 @@ fn drive<'a>(
     }
 }
 
-/// 통합 시험이 새 프로세스의 보관을 한 걸음 앞에 **세워 두는** 자리 — `GIL_SCOPE_FAIL` 과 같은 규율이며 **release 빌드에는 없다.**
+/// 시험이 보관의 한 걸음 앞에 이 명령을 **세워 두는** 자리 — `GIL_SCOPE_FAIL` 과 같은 규율이다.
+///
+/// - **debug 빌드 전용이다.** 이 함수와 그 호출부가 모두 `#[cfg(debug_assertions)]` 아래에 있어 release 빌드에는 구현도 호출도 없다.
+/// - **stdio 에 묶인 것이 아니다.** 프로세스의 환경 변수를 읽으므로, debug 빌드라면 보관 시도를 실행하는 어느 진입점(MCP 서버든 CLI 든
+///   같은 프로세스 안의 시험이든)에서나 동작한다. 지금 이것을 쓰는 것은 실제 `gil mcp --serve` 프로세스 시험 하나다.
+/// - **제품 조건이 아니다.** 어느 제품 판정도 이 변수에 기대지 않고, CI 에서만 켜지는 제품 동작을 만들지 않는다. 변수가 없으면 아무
+///   일도 하지 않는다.
+///
 /// `GIL_SCOPE_HOLD=<걸음>:<파일>` 이면 그 걸음 앞에서 `<파일>.reached` 를 만들고 `<파일>` 이 생길 때까지(길어야 30초) 기다린다. 그 사이
 /// 이 명령은 프로젝트 잠금을 쥐고 있다 — 같은 서버가 그동안 다른 요청을 받는지를 실제 프로세스로 보려는 것이다.
 #[cfg(debug_assertions)]

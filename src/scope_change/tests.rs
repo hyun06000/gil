@@ -1008,3 +1008,93 @@ fn a_halt_received_between_archive_steps_starts_no_further_step_and_records_no_f
         assert_eq!(retry(&root, "event:M2").expect("명시 재시도")["facts"]["baseline"]["result"], "archived", "{step}");
     }
 }
+
+/// 정책 파일 동기화의 세 걸음은 한 단위가 아니다: 걸음 사이에 받은 중단 요청은 **다음 쓰기를 시작하지 않게** 할 뿐이다. 끝난 걸음은
+/// 그대로이고, 기준이 `unconfirmed` 로 남으면 §5.2 대로 디스크를 다시 읽어 판정한다. 이전 기준으로 되돌리지 않고, 스스로 다시 쓰지
+/// 않으며, 적용 정책은 P2 그대로다. (함수 수준 주입 — 걸음 직전에 수신 표식 파일을 놓는다.)
+#[test]
+fn a_halt_received_between_policy_file_sync_steps_starts_no_further_write_and_restores_nothing() {
+    let steps = |start: bool, file: bool, left: bool, before: &str| {
+        serde_json::json!({"start_saved": start, "file_replaced": file, "base_saved": false, "base_left_unconfirmed": left, "halted_before": before})
+    };
+    for (step, word, on_disk, expected, base, read_as) in [
+        // 시작 기록 전: 아무 걸음도 시작하지 않았다. 기준은 확인된 그대로다.
+        ("sync_start", "not_written_halt_requested", P1, steps(false, false, false, "start"), "present", "update_needed"),
+        // 시작 기록 뒤, 파일 교체 전: 파일을 쓰지 않았고 기준은 unconfirmed 로 남는다.
+        ("sync_file_write", "not_written_halted_base_unconfirmed", P1, steps(true, false, true, "file_write"), "unconfirmed", "update_needed_cause_unconfirmed"),
+        // 파일 교체 뒤, 기준 저장 전: 파일은 적용 원문이고 기준은 unconfirmed — 재조회가 동기화됨으로 읽는다.
+        ("sync_base_save", "written_halted_base_unconfirmed", P2, steps(true, true, true, "base_save"), "unconfirmed", "synced"),
+    ] {
+        let root = started(&format!("halt-{step}"));
+        let (revision, digest) = proposed(&root, P2);
+        HALT_BEFORE_STEP.with(|slot| *slot.borrow_mut() = Some(step));
+        let decided = decide(&root, revision, &digest, true).expect("응답은 기록된다");
+        assert_eq!(decided["facts"]["policy_applied"], true, "{step}: 끝난 승인 저장은 그대로다: {decided}");
+        assert_eq!(decided["facts"]["policy_file"], word, "{step}");
+        assert_eq!(decided["facts"]["policy_file_steps"], expected, "{step}: 끝난 걸음과 시작하지 않은 걸음");
+        // 보관은 시작하지 않았고 실패로 적히지 않았다. 중단은 적용됐다.
+        assert_eq!(decided["facts"]["baseline"]["result"], "halted", "{step}: {decided}");
+        assert_eq!(decided["facts"]["baseline"]["before"], "observe");
+        assert_eq!(decided["facts"]["baseline"]["halt_request"], serde_json::json!({"received": true, "applied": true}));
+        assert_eq!(decided["tracking"]["archive_halt"], "event:M2");
+        assert!(failed_attempts(&root).is_empty(), "{step}");
+        assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), on_disk, "{step}: 디스크의 정책 파일");
+        // 저장된 기록: 적용 정책은 P2, 기준과 디스크의 판정은 재조회가 말한다.
+        let check = |when: &str| {
+            let seen = now(&root);
+            assert_eq!(seen["tracking"]["applied_policy"], "policy:P2", "{step} {when}: 앞 판으로 돌아가지 않는다");
+            assert_eq!(seen["tracking"]["policy_file_sync_base"], base, "{step} {when}: 기준을 추정으로 되돌리지 않는다");
+            assert_eq!(seen["policy_file"], read_as, "{step} {when}");
+            assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), on_disk, "{step} {when}: 스스로 다시 쓰지 않는다");
+            assert_eq!(policies(&root), 2);
+        };
+        check("중단 중");
+        // 해제도 다시 쓰기·기준 복구·보관을 시작하지 않는다.
+        let shown = shown_halt(&root);
+        release_as(&root, &shown, "continue", true).expect("해제");
+        check("해제 뒤");
+        assert!(failed_attempts(&root).is_empty());
+        assert_eq!(now(&root)["tracking"]["waiting"]["event"], "event:M2", "{step}: 여전히 보관 대기다");
+    }
+}
+
+/// 해제의 부분 저장: 해제 이력(원장)은 저장됐고 표식을 지우는 상태 저장은 실패했다. 표식과 차단이 남고, 다시 열어 읽는 것으로는 풀리지
+/// 않으며, 옛 확인 근거는 다시 쓰이지 못한다. 명시 재등록이 만든 **새 중단 건**을 새로 확인해야만 해제된다. 재시도는 일어나지 않는다.
+/// (함수 수준 주입 — 그 저장을 하지 않고 오류를 돌려준다. 실제 영속 장애의 증거가 아니다.)
+#[test]
+fn a_release_recorded_in_history_but_not_removed_from_the_state_keeps_the_halt_and_needs_a_new_record_and_confirmation() {
+    let root = waiting("release-partial");
+    halt(&root).expect("중단");
+    let shown = shown_halt(&root);
+    let attempts = failed_attempts(&root);
+    let state = fs::read(root.join(".gil/state.yaml")).unwrap();
+
+    SAVE_FAULT.with(|slot| *slot.borrow_mut() = Some(("release", false)));
+    assert_eq!(release_as(&root, &shown, "continue", true).expect_err("표식을 지우지 못했다").code, "release_not_saved");
+    assert_eq!(fs::read(root.join(".gil/state.yaml")).unwrap(), state, "표식이 그대로다");
+
+    // 다시 열어 읽어도(새 인스턴스의 조회) 풀리지 않고, 진행은 여전히 막혀 있다.
+    assert_eq!(now(&root)["tracking"]["archive_halt"], "event:M2");
+    assert_eq!(retry(&root, "event:M2").expect_err("중단 중").code, "halted");
+    assert!(open_session(&root).open_child_cycle(CycleKind::Interview).is_err());
+    let (view, grants) = review(&root).expect("조회");
+    assert_eq!(view["halt"]["record_missing"], true, "해제 이력이 적힌 건은 더는 확인 근거가 아니다: {view}");
+    assert!(view["halt"]["id"].is_null());
+    assert_eq!(grants, [(Purpose::Halt, "halt".to_string())], "해제는 제공되지 않고 기록을 다시 남기는 길만 있다");
+    assert_eq!(fs::read(root.join(".gil/state.yaml")).unwrap(), state, "조회는 스스로 해제하지 않는다");
+    // 옛 확인 근거는 다시 쓰이지 못한다.
+    assert_eq!(release_as(&root, &shown, "continue", true).expect_err("옛 확인").code, "halt_record_missing");
+
+    // 명시 재등록 → 새 중단 건. 옛 이름으로는 여전히 안 되고, 새 화면의 확인으로만 해제된다.
+    assert_eq!(halt(&root).expect("재등록")["tracking"]["archive_halt"], "event:M2");
+    assert_eq!(fs::read(root.join(".gil/state.yaml")).unwrap(), state, "재등록은 표식을 옮기지 않는다");
+    let fresh = shown_halt(&root);
+    assert_ne!(fresh.1, shown.1, "새 확인 대상이다");
+    assert_eq!(release_as(&root, &shown, "continue", true).expect_err("옛 이름").code, "halt_confirmation_stale");
+    let released = release_as(&root, &fresh, "continue", true).expect("새 확인으로 해제");
+    assert!(released["tracking"]["archive_halt"].is_null());
+    // 어느 걸음도 재시도·보관을 시작하지 않았다.
+    assert_eq!(released["tracking"]["waiting"]["event"], "event:M2");
+    assert_eq!(failed_attempts(&root), attempts);
+    assert_eq!(policies(&root), 2);
+}

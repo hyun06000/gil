@@ -44,7 +44,7 @@ const proposal = {
   world_before: 'snapshot:A1', confirmed_policy: 'policy:P1', rules: 'scratch/\ndata/\n<b>not markup</b>\n',
   newly_tracked: [], newly_excluded: ['data/raw.csv'], effects: ['effect line'], response: null,
 };
-const HALT = { at: 'cycle:C1', id: '1'.repeat(32), state_digest: '2'.repeat(64) };
+const HALT = { at: 'event:M2', id: '1'.repeat(32), state_digest: '2'.repeat(64) };
 const server = createServer((req, res) => res.end('<html><head><meta charset="utf-8"></head><body><h1>Mock Host — scope change regression only</h1></body></html>'));
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const browser = await chromium.launch({ headless: true, ...(process.env.GIL_BROWSER_EXECUTABLE ? { executablePath: process.env.GIL_BROWSER_EXECUTABLE } : {}) });
@@ -88,7 +88,8 @@ try {
           // Held back: the approval stays "running" until the check lets it finish.
           window.pendingDecision = () => post({ id: p.id, result: { content: [], structuredContent: { phase: 'applied', said: '승인을 저장했다.', policy_file: 'present',
             tracking: halted, facts: { approval_response: 'recorded', policy_applied: true, policy_file: 'not_written_halt_requested',
-              baseline: { result: 'halted', before: 'observe', failure_recorded: false } }, current_state: { reread: true }, halt: HALT } } });
+              policy_file_steps: { start_saved: false, file_replaced: false, base_saved: false, base_left_unconfirmed: false, halted_before: 'start' },
+              baseline: { result: 'halted', before: 'observe', failure_recorded: false, halt_request: { received: true, applied: true } } }, current_state: { reread: true }, halt: HALT } } });
         } else if (name === 'gil_scope_halt') {
           // Received while the other command holds the project: not applied yet.
           window.stage = 'halted';
@@ -101,7 +102,7 @@ try {
     });
     frame.srcdoc = html; document.body.append(frame);
   }, { html, scope, view, proposal, awaiting: tracking(), HALT,
-    halted: tracking({ applied_policy: 'policy:P2', applied_by: 'event:M2', basis_agrees: false, archive_halt: 'cycle:C1',
+    halted: tracking({ applied_policy: 'policy:P2', applied_by: 'event:M2', basis_agrees: false, archive_halt: 'event:M2',
       waiting: { event: 'event:M2', policy: 'policy:P2', world_before: 'snapshot:A1', failed_attempts: [] } }),
     applied: tracking({ applied_policy: 'policy:P2', applied_by: 'event:M2', basis_agrees: false,
       waiting: { event: 'event:M2', policy: 'policy:P2', world_before: 'snapshot:A1', failed_attempts: [] } }) });
@@ -137,7 +138,7 @@ try {
   await noCapabilityInDom();
   // The approval's own answer arrives afterwards and is shown as its own result (halted, no failure recorded).
   await page.evaluate(() => window.pendingDecision());
-  await panel.getByText('cycle:C1 에서 중단됐다.', { exact: false }).waitFor();
+  await panel.getByText('event:M2 에서 중단됐다.', { exact: false }).waitFor();
   await panel.getByText('적용 정책: policy:P2', { exact: false }).waitFor();
   await panel.getByText('마지막 확정 세계: snapshot:A1, 확정 정책 policy:P1', { exact: false }).waitFor();
 
