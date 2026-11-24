@@ -23,7 +23,7 @@
 //!   ④ Save            그 저장 경계의 save_baseline(한 저장 단위: 세계 이름 · 보관 경계 · 발급기 · archived 시도)
 //!   ⑤ Reread          그 저장 경계의 reread → 앞선 기록의 보존(3d·3i 와 그 안의 3f·3g·3h) + read_scope_change 로
 //!                     실행 전제 · 이 시도의 저장 단위 · 시작할 때 의존한 세계·확정 정책 근거의 재유도 일치를 확인
-//!   ✗ 어느 걸음이든 실패하면: Reread 로 지금 기록을 확인 → 여전히 그 결속의 대기일 때만 record_failure(최선 노력)
+//!   ✗ 어느 걸음이든 실패하면: Reread 로 지금 기록을 확인 → 시작할 때의 결속 전체 그대로의 대기일 때만 record_failure(최선 노력)
 //!                                                  ▼
 //! RetryOutcome::Confirmed | Failed { cause, now } | Unknown { why }
 //! ```
@@ -57,8 +57,11 @@
 //!
 //! # 한 시도의 결속
 //!
-//! - **기록.** 시도는 시작할 때 읽은 사건·적용 정책·확정 정책·`world_before_ref`·지금 경계·발급기·그때의 시도 수([`AttemptBinding`])에
-//!   묶인다.
+//! - **기록.** 시도는 시작할 때의 읽기 전체([`AttemptBinding`])에 묶인다 — 사건과 Chain, 지금 경계와 Cycle 발급기, 적용 정책과 그 출처,
+//!   마지막 확정 세계·확정 정책과 그 유도 경로, `world_before_ref` 와 승인 경계의 근거, 기준점 없음과 그때의 시도 수. 다시 읽은 기록이
+//!   「같은 결속의 대기」인지는 그 전부를 견주는 한 판정([`AttemptBinding::changes`])이 정한다. 시도 수가 같다는 것만으로는 같은 결속이
+//!   아니다 — 대기 중 인터뷰가 닫히면 시도 수는 같고 경계는 다르다. 저장 경계가 쓰는 시점에 해야 하는 확인도 같은 판정
+//!   ([`AttemptBinding::holds_in`])이다.
 //! - **실제 대상.** 관측할 루트, 객체 창고, 저장 경계는 `begin` 에서 한 번 정해 시도가 지닌다. 걸음마다 다시 받지 않는다. 창고는 그 루트의
 //!   `.gil/` 아래로 고정이라 루트와 다른 곳의 창고를 짝지을 수 없다. 정책 원문과 기준 manifest 의 읽기, 관측, 보관, manifest 저장이 모두
 //!   그 한 창고·한 루트이고, 저장 요청과 다시 읽기가 그 한 저장 경계다. 관측·보관·manifest 저장의 앞뒤로 그 루트와 창고 디렉터리가 시작할
@@ -79,12 +82,16 @@
 //! - 관측 불가·불안정은 「변경 없음」이 아니다. 계속 추적한 경로의 차이(내용 변경·삭제·새 파일)는 미확정 변경이다. 어느 것이든 보관하지
 //!   않는다.
 //! - **「이 시도가 확정하지 못했다」와 「지금 사건이 여전히 대기다」는 다른 사실이다.** 실패한 시도는 지금 기록을 다시 읽고, 그 결과를
-//!   [`AfterFailure`] 로 따로 돌려준다: 사건이 시작할 때의 시도 수 그대로 대기일 때만 실패 시도 기록을 한 번 청하고(그 기록이 저장되지
-//!   않아도 실패다), 그 사이 다른 시도가 확정했거나 대체됐거나 시도 수가 달라졌으면 그 **지금의** 읽기를 돌려주며 실패 시도를 덧붙이지
-//!   않는다. 지금 기록을 확인하지 못했으면 대기라고도 확정이라고도 말하지 않는다. 시작할 때의 읽기를 「지금」으로 내놓지 않는다.
+//!   [`AfterFailure`] 로 따로 돌려준다: 다시 읽은 기록이 시작할 때의 결속 전체 그대로의 대기일 때만 실패 시도 기록을 한 번 청하고(그 기록이
+//!   저장되지 않아도 실패다), 그 사이 다른 시도가 확정했거나 대체됐거나 — 여전히 대기이고 시도 수가 같더라도 — 경계·발급기·적용 정책·확정
+//!   세계와 그 근거 가운데 달라진 것이 있으면 그 **지금의** 읽기와 달라진 곳을 돌려주며 이전 결속의 실패 시도를 덧붙이지 않는다. 지금
+//!   기록을 확인하지 못했으면(다시 읽기 불가·전제 미확인·근거 미유도·이력 불일치) 대기라고도 확정이라고도 말하지 않고 실패 시도도 청하지
+//!   않는다. 시작할 때의 읽기를 「지금」으로 내놓지 않는다.
 //! - 저장 경계가 「저장하지 않았다」고 확인하면 이 시도의 실패다. 저장됐을 수도 있는데(불확실한 답, 또는 「저장했다」는 답) 다시 읽어
-//!   확인하지 못하면 [`RetryOutcome::Unknown`] 이다 — 성공도, 확정된 대기도 아니다. 불확실한 답 뒤에 다시 읽은 기록이 앞선 기록 그대로의
-//!   대기이면 저장되지 않은 것으로 확인된 실패다.
+//!   확인하지 못하면 [`RetryOutcome::Unknown`] 이다 — 성공도, 확정된 대기도 아니다. 불확실한 답 뒤의 저장 여부는 따로 판단한다: 다시 읽은
+//!   기록이 **같은 결속 그대로의** 대기일 때만 저장되지 않은 것으로 확인된 실패다(기준점은 한 번 적으면 지워지지 않는다 — T6). 결속이
+//!   달라진 기록에서는 그 사건에 기준점이 없어 보여도 저장 여부를 확정하지 않고 결과 불명으로 둔다 — 이 시도가 모르는 진행을 겪은
+//!   기록이기 때문이다. 이전 결속의 실패 시도도 청하지 않는다.
 //! - 다시 읽기는 조회다. 그것이 새 시도나 자동 재실행으로 이어지지 않는다.
 //!
 //! 실패 사유([`FailureCause`])는 이 모듈 안의 분류다. 계약 §5.3 이 5번 작업에 남긴 `cause` 값 목록을 정하지 않으며 저장 꼴이 없다.
@@ -183,9 +190,14 @@ pub(crate) enum FailureRecord {
 
 /// 내부 저장 경계 — 제품의 `state.yaml` 저장이 아니다. 이 모듈은 이 세 문만 부른다.
 ///
-/// 저장 경계의 일: 저장 단위나 실패 시도의 결속([`AttemptBinding`] — 대상 사건이 아직 기준점 없이 그때의 시도 수 그대로인가)이 **지금
-/// 기록**과 맞을 때만 적고, 적는다면 한 번의 저장으로 전부 적으며, 앞선 정책·사건·기준점·시도를 지우거나 고치지 않는다. 이 모듈은 그
-/// 일을 대신하지 않고, 다시 읽은 기록에서 그 결과만 확인한다.
+/// 저장 경계의 일: 저장 단위나 실패 시도를 **쓰는 그 시점에** 제 기록이 그 결속 **전체**와 맞을 때만 적는다. 「맞는다」의 판정은
+/// [`AttemptBinding::holds_in`] 하나다 — 대상 사건이 기준점 없이 그때의 시도 수 그대로인 것만이 아니라, 지금 경계·Cycle 발급기·적용 정책·
+/// 마지막 확정 세계와 확정 정책·그 유도 근거·승인 경계의 근거가 시작할 때와 같아야 한다. 적는다면 한 번의 저장으로 전부 적으며, 앞선
+/// 정책·사건·기준점·시도를 지우거나 고치지 않는다.
+///
+/// 이 모듈은 실패 시도 기록을 청하기 전에 다시 읽은 기록으로 **같은 판정**([`AttemptBinding::changes`])을 하지만, 그 읽기와 저장 경계의
+/// 쓰기 사이에 기록이 달라질 수 있다. 그래서 앞선 판정은 쓰는 시점의 확인을 대신하지 않는다 — 쓰는 시점에 결속이 유효할 때만 한 단위로
+/// 적는 것은 저장 경계의 일이고, 이 모듈은 그 일을 대신하지 않으며 다시 읽은 기록에서 그 결과만 확인한다.
 pub(crate) trait BaselineState {
     /// 한 저장 단위(세계 이름·보관 경계·발급기·`archived` 시도)를 **한 번의 저장**으로 적는다.
     fn save_baseline(&mut self, commit: &BaselineCommit) -> SaveAnswer;
@@ -256,7 +268,49 @@ pub(crate) struct AttemptTicket {
     step: u32,
 }
 
+/// 결속 가운데 다시 읽은 기록에서 달라진 곳.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BindingPart {
+    /// 대상 사건.
+    Event,
+    /// 대상 사건의 Chain.
+    Chain,
+    /// 기준점 유무·대체 여부·시도 수 — 시작할 때는 그 시도 수의 보관 대기였다.
+    Standing,
+    /// 지금 서 있는 경계.
+    Boundary,
+    /// Cycle 발급기 값.
+    Issuer,
+    /// 적용 정책과 그 출처, 대상 사건의 정책 연결.
+    AppliedPolicy,
+    /// 마지막 확정 세계의 이름.
+    ConfirmedWorld,
+    /// 그 세계의 확정 정책.
+    ConfirmedPolicy,
+    /// 그 세계·확정 정책의 유도 경로 — 유도는 서지만 시작할 때의 근거와 다른 값이다.
+    ConfirmedBasis,
+    /// `world_before_ref` 와 승인 경계·그 시도 경계의 근거.
+    ApprovalBasis,
+    /// 판단하지 않은 칸.
+    NotJudged,
+}
+
+/// 지금 기록이 그 결속 그대로의 보관 대기가 아닌 까닭 — [`AttemptBinding::holds_in`] 의 답.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum BindingLost {
+    /// 지금 기록을 읽기가 받아들이지 않는다(범위 밖 포함).
+    Unreadable(Vec<ReadingProblem>),
+    /// 지금 기록에서 실행 전제를 확인하지 못했다.
+    PrerequisitesUnconfirmed(Vec<Unjudged>),
+    /// 읽히지만 결속과 다른 곳이 있다.
+    Changed(Vec<BindingPart>),
+}
+
 /// 한 시도가 시작할 때 읽어 묶인 값 — 다시 읽은 기록과 견주는 기준이다.
+///
+/// 결속은 시도 수 하나가 아니라 **시작할 때의 읽기 전체**다: 대상 사건과 Chain, 지금 경계와 Cycle 발급기, 적용 정책과 그 출처, 마지막 확정
+/// 세계·확정 정책과 그 유도 경로, `world_before_ref` 와 승인 경계의 근거, 기준점 없음과 시도 수. 같은지의 판정은 [`AttemptBinding::changes`]
+/// 한 곳에서 한다 — 시도가 다시 읽은 기록으로 하는 판정도, 저장 경계가 쓰는 시점에 하는 판정([`AttemptBinding::holds_in`])도 그것이다.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AttemptBinding {
     event: EventName,
@@ -267,6 +321,8 @@ pub(crate) struct AttemptBinding {
     boundary: CycleRef,
     issuer: u32,
     attempts_before: usize,
+    /// 시작할 때의 읽기 — 위 칸들은 모두 이 값에서 나왔다.
+    started: ScopeChangeReading,
 }
 
 impl AttemptBinding {
@@ -307,6 +363,59 @@ impl AttemptBinding {
     /// 시작할 때 기록에 있던 시도 수 — 새 시도 기록은 이 자리에 붙는다.
     pub(crate) fn attempts_before(&self) -> usize {
         self.attempts_before
+    }
+
+    /// 시작할 때의 읽기 — **그때의** 값이다. 지금 기록이 아니다.
+    pub(crate) fn started(&self) -> &ScopeChangeReading {
+        &self.started
+    }
+
+    /// 다시 읽은 읽기가 이 결속과 다른 곳. **비어 있을 때만 같은 결속의 보관 대기다.**
+    ///
+    /// 시작할 때의 읽기와 칸마다 견준다. 시도 수가 같다는 사실로 나머지를 대신하지 않는다 — 대기 중 인터뷰가 닫혀 경계와 발급기가
+    /// 달라졌으면 시도 수가 같아도 다른 결속이다. 유도 경로는 값으로 견주므로, 다시 읽은 기록에서 유도가 **서더라도** 시작할 때의 근거와
+    /// 다르면 달라진 곳으로 나온다. 새 유도 규칙은 없다 — 두 값 모두 [`read_scope_change`] 의 결과다.
+    pub(crate) fn changes(&self, now: &ScopeChangeReading) -> Vec<BindingPart> {
+        let was = &self.started;
+        [
+            (now.event() != was.event(), BindingPart::Event),
+            (now.chain() != was.chain(), BindingPart::Chain),
+            (now.standing() != was.standing(), BindingPart::Standing),
+            (now.confirmed().boundary() != was.confirmed().boundary(), BindingPart::Boundary),
+            (now.issuer() != was.issuer(), BindingPart::Issuer),
+            (
+                now.applied() != was.applied()
+                    || now.policy_before() != was.policy_before()
+                    || now.policy_after() != was.policy_after(),
+                BindingPart::AppliedPolicy,
+            ),
+            (now.confirmed().world() != was.confirmed().world(), BindingPart::ConfirmedWorld),
+            (now.confirmed().policy() != was.confirmed().policy(), BindingPart::ConfirmedPolicy),
+            (now.confirmed().path() != was.confirmed().path(), BindingPart::ConfirmedBasis),
+            (now.world_before() != was.world_before(), BindingPart::ApprovalBasis),
+            (now.not_judged() != was.not_judged(), BindingPart::NotJudged),
+        ]
+        .into_iter()
+        .filter(|(differs, _)| *differs)
+        .map(|(_, part)| part)
+        .collect()
+    }
+
+    /// 건넨 기록이 이 결속 **그대로의** 보관 대기인가 — 저장 경계가 저장 단위나 실패 시도를 **쓰는 그 시점에** 제 기록으로 부르는 판정이다.
+    ///
+    /// 그 기록으로 [`read_scope_change`] 를 다시 실행하고, 실행 전제를 확인하고, [`AttemptBinding::changes`] 가 비어 있을 때만 `Ok` 다.
+    /// 시도가 실패 시도 기록을 청하기 전에 하는 판정과 같은 비교이므로 두 자리의 「같은 결속」이 갈리지 않는다. 아무것도 쓰지 않는다.
+    pub(crate) fn holds_in(&self, now: &RecordInputs<'_>) -> Result<(), BindingLost> {
+        let reading = read_scope_change(self.event, now).map_err(BindingLost::Unreadable)?;
+        let unconfirmed = unconfirmed_prerequisites(&reading);
+        if !unconfirmed.is_empty() {
+            return Err(BindingLost::PrerequisitesUnconfirmed(unconfirmed));
+        }
+        let changed = self.changes(&reading);
+        match changed.is_empty() {
+            true => Ok(()),
+            false => Err(BindingLost::Changed(changed)),
+        }
     }
 }
 
@@ -524,21 +633,24 @@ pub(crate) enum UnknownWhy {
     PrerequisitesUnconfirmed { unconfirmed: Vec<Unjudged> },
     /// 다시 읽은 기록에서 시작할 때 의존한 세계·확정 정책의 근거(승인 경계·보관 경계의 유도 경로)가 같은 값으로 다시 유도되지 않는다.
     BasisNotKept,
-    /// 다시 읽은 기록의 대상 사건이 이 시도의 저장 단위와 다르다 — 다른 시도의 결과이거나 다른 값이다.
-    RereadDiffers { found: EventStanding },
-    /// 저장했다고 답했는데 다시 읽은 기록은 앞선 대기 그대로다.
+    /// 다시 읽은 기록에 이 시도의 저장 단위가 없고, 기록이 시작할 때의 결속과도 다르다 — 다른 시도가 확정했거나, 대체됐거나, 대기이지만
+    /// 경계·발급기·근거·시도 수가 달라졌다. `found` 는 지금의 기준점 유무, `changed` 는 결속에서 달라진 곳이다. 기록이 이 시도가 모르는
+    /// 진행을 겪었으므로 「이 시도의 저장 단위가 적히지 않았다」를 이 모듈이 확정하지 않는다.
+    RereadDiffers { found: EventStanding, changed: Vec<BindingPart> },
+    /// 저장했다고 답했는데 다시 읽은 기록은 시작할 때의 결속 그대로의 대기다.
     StoredButStillWaiting,
 }
 
 /// 실패한 시도가 **지금 기록**에 대해 확인한 것. 「이 시도가 확정하지 못했다」와 「지금 사건이 여전히 대기다」는 다른 사실이다.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum AfterFailure {
-    /// 다시 읽은 기록에서 사건이 시작할 때의 시도 수 그대로 보관 대기다. 적용 정책·마지막 확정 세계·확정 정책은 `reading` 의 값이다
-    /// (실패 시도 기록을 청하기 직전의 읽기). 그 결속의 대기에 실패 시도 기록을 한 번 청했고 `record` 가 그 답이다.
+    /// 다시 읽은 기록이 시작할 때의 **결속 전체 그대로**의 보관 대기다([`AttemptBinding::changes`] 가 비어 있다) — 같은 경계·발급기·적용
+    /// 정책·마지막 확정 세계와 확정 정책·같은 유도 근거·같은 시도 수. 그 값들은 `reading` 에 있다(실패 시도 기록을 청하기 직전의 읽기).
+    /// 그 결속의 대기에 실패 시도 기록을 한 번 청했고 `record` 가 그 답이다.
     StillWaiting { reading: ScopeChangeReading, record: FailureRecord },
-    /// 다시 읽은 기록의 사건이 시작할 때의 결속과 다르다 — 이미 확정됐거나, 대체됐거나, 시도 수가 달라졌다. `reading` 이 **지금의**
-    /// 값이다. 실패 시도를 덧붙이지 않았다.
-    BindingGone { reading: ScopeChangeReading },
+    /// 다시 읽은 기록이 시작할 때의 결속과 다르다 — 이미 확정됐거나, 대체됐거나, 여전히 대기이지만 경계·발급기·근거·시도 수 가운데 달라진
+    /// 것이 있다. `reading` 이 **지금의** 값이고 `changed` 가 달라진 곳이다. 실패 시도를 덧붙이지 않았다.
+    BindingGone { reading: ScopeChangeReading, changed: Vec<BindingPart> },
     /// 지금 기록을 확인하지 못했다. 대기라고도 확정이라고도 말하지 않는다. 실패 시도를 덧붙이지 않았다.
     NotVerified { why: UnknownWhy },
 }
@@ -724,9 +836,9 @@ enum Phase {
     Saving { commit: BaselineCommit, delta: ScopeDelta },
     /// 저장 뒤의 확인 — 「저장했다」 또는 불확실한 답을 받았다.
     Rereading { commit: BaselineCommit, delta: ScopeDelta, answer: SaveAnswer },
-    /// 실패 뒤 지금 기록의 확인 — 그 결속의 대기일 때만 실패 시도 기록으로 간다.
+    /// 실패 뒤 지금 기록의 확인 — 시작할 때의 결속 전체 그대로의 대기일 때만 실패 시도 기록으로 간다.
     Checking { cause: FailureCause },
-    /// `reading` 은 방금 다시 읽은 기록의 읽기 — 사건이 시작할 때의 시도 수 그대로 대기다.
+    /// `reading` 은 방금 다시 읽은 기록의 읽기 — 시작할 때의 결속 전체 그대로의 대기다.
     RecordingFailure { cause: FailureCause, reading: ScopeChangeReading },
     Done(RetryOutcome),
 }
@@ -813,6 +925,7 @@ impl<'a> RetryAttempt<'a> {
             boundary: before.confirmed().boundary(),
             issuer: before.issuer(),
             attempts_before,
+            started: before.clone(),
         };
         Ok(RetryAttempt {
             serial: NEXT_ATTEMPT.fetch_add(1, Ordering::Relaxed),
@@ -1029,29 +1142,40 @@ impl<'a> RetryAttempt<'a> {
                     false => unknown(UnknownWhy::BasisNotKept),
                 }
             }
-            EventStanding::Waiting { attempts } if attempts == binding.attempts_before => match answer {
-                // 불확실한 답 뒤에 그 결속의 대기를 다시 읽었다 — 저장되지 않은 것으로 확인된 실패이고, 지금도 대기다.
-                SaveAnswer::Uncertain { said } => Phase::RecordingFailure {
-                    cause: FailureCause::StateNotStored { said: format!("다시 읽은 기록에 저장되지 않았다: {said}") },
-                    reading,
-                },
-                _ => unknown(UnknownWhy::StoredButStillWaiting),
-            },
-            found => unknown(UnknownWhy::RereadDiffers { found }),
+            found => {
+                // 이 시도의 저장 단위는 다시 읽은 기록에 없다. 시도 수만이 아니라 시작할 때의 결속 전체와 견준다.
+                let changed = binding.changes(&reading);
+                match (changed.is_empty(), answer) {
+                    // 불확실한 답 뒤에 **같은 결속 그대로의** 대기를 다시 읽었다. 기준점은 한 번 적으면 지워지지 않으므로(T6), 이 사건에
+                    // 기준점이 없고 그 밖의 결속도 그대로인 이 기록은 이 시도의 저장 단위가 적히지 않았음을 말한다 — 확인된 미저장이다.
+                    (true, SaveAnswer::Uncertain { said }) => Phase::RecordingFailure {
+                        cause: FailureCause::StateNotStored { said: format!("다시 읽은 기록에 저장되지 않았다: {said}") },
+                        reading,
+                    },
+                    (true, _) => unknown(UnknownWhy::StoredButStillWaiting),
+                    // 결속이 달라졌다. 기록이 이 시도가 모르는 진행을 겪었으므로 저장 여부를 단정하지 않고 결과 불명으로 둔다 —
+                    // 성공으로도, 확인된 미저장으로도 바꾸지 않으며 이전 결속의 실패 시도를 청하지 않는다.
+                    (false, _) => unknown(UnknownWhy::RereadDiffers { found, changed }),
+                }
+            }
         }
     }
 
-    /// 실패한 뒤 다시 읽은 기록으로 **지금**을 정한다 — 그 결속의 대기일 때만 실패 시도 기록으로 간다.
+    /// 실패한 뒤 다시 읽은 기록으로 **지금**을 정한다 — 시작할 때의 결속 전체 그대로의 대기일 때만 실패 시도 기록으로 간다.
+    ///
+    /// 다시 읽지 못했거나, 이력이 보존되지 않았거나, 읽히지 않거나(근거 미유도 포함), 전제를 확인하지 못했으면 확인 못 함이다. 읽혔지만
+    /// 결속에서 달라진 곳이 하나라도 있으면(시도 수가 같아도) 결속이 사라진 것이다. 어느 쪽도 실패 시도 기록을 청하지 않는다.
     fn after_failure(&self, cause: &FailureCause, read: Result<OwnedRecords, String>) -> Phase {
         let failed = |now| Phase::Done(RetryOutcome::Failed { cause: cause.clone(), now });
         match self.reread(read) {
             Err(why) => failed(AfterFailure::NotVerified { why }),
-            Ok((reading, _)) => match reading.standing() {
-                EventStanding::Waiting { attempts } if attempts == self.binding.attempts_before => {
-                    Phase::RecordingFailure { cause: cause.clone(), reading }
+            Ok((reading, _)) => {
+                let changed = self.binding.changes(&reading);
+                match changed.is_empty() {
+                    true => Phase::RecordingFailure { cause: cause.clone(), reading },
+                    false => failed(AfterFailure::BindingGone { reading, changed }),
                 }
-                _ => failed(AfterFailure::BindingGone { reading }),
-            },
+            }
         }
     }
 }

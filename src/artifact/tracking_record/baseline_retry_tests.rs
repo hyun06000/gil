@@ -21,6 +21,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+use super::baseline_retry::{BindingLost, BindingPart};
 use super::event_cycles_tests::{a, c, ch, close_interview, m, open_interview, rules, x1};
 use super::experiment_exit_tests::{at, p, restored};
 use super::*;
@@ -276,10 +277,10 @@ impl Held {
         usize::try_from(event.number()).unwrap() - 1
     }
 
-    /// 지금 기록이 저장 단위의 결속과 맞는가 — 대상 사건이 아직 기준점 없이, 시도가 묶인 때의 시도 수 그대로인가.
+    /// **쓰는 시점에** 지금 기록이 그 결속 전체 그대로의 보관 대기인가 — 기준점 없음과 시도 수만이 아니라 경계·발급기·적용 정책·마지막
+    /// 확정 세계와 확정 정책·그 근거까지. 시도가 실패 시도 기록을 청하기 전에 하는 판정과 같은 [`AttemptBinding::holds_in`] 이다.
     fn fits(&self, binding: &AttemptBinding) -> bool {
-        let baseline = self.records.facts[Held::slot(binding.event())].baseline();
-        baseline.snapshot().is_none() && baseline.attempts().len() == binding.attempts_before()
+        binding.holds_in(&self.records.inputs()).is_ok()
     }
 
     /// 한 저장 단위를 한 번에 적는다 — 세계 이름, `baseline` 의 경계·발급기·`snapshot_ref`, `archived` 시도.
@@ -949,7 +950,10 @@ fn a_reread_record_that_is_not_this_attempts_unit_or_lost_history_is_not_a_confi
     assert!(
         matches!(
             &run.outcome,
-            RetryOutcome::Unknown { why: UnknownWhy::RereadDiffers { found: EventStanding::AlreadyConfirmed { attempts: 2, .. } }, .. }
+            RetryOutcome::Unknown {
+                why: UnknownWhy::RereadDiffers { found: EventStanding::AlreadyConfirmed { attempts: 2, .. }, .. },
+                ..
+            }
         ),
         "{:#?}",
         run.outcome
@@ -1015,9 +1019,10 @@ fn an_older_attempt_that_fails_after_another_confirmed_reports_the_present_recor
     };
     assert!(matches!(cause, FailureCause::StateNotStored { .. }), "{cause:#?}");
     // 「이 시도가 저장하지 못했다」와 「지금 사건이 대기다」는 다르다 — 지금 기록은 이미 확정이고, 그 지금의 읽기를 돌려준다.
-    let AfterFailure::BindingGone { reading } = now else {
+    let AfterFailure::BindingGone { reading, changed } = now else {
         panic!("시작할 때의 대기가 그대로라고 말하지 않는다: {now:#?}");
     };
+    assert!(changed.contains(&BindingPart::Standing) && !changed.contains(&BindingPart::Boundary), "{changed:?}");
     assert_eq!(
         reading.standing(),
         EventStanding::AlreadyConfirmed { snapshot: a(2), archived_at: c(1), archive_issuer: 2, attempts: 1 }
@@ -1056,11 +1061,236 @@ fn an_older_attempt_that_fails_before_saving_does_not_append_to_a_record_another
     };
     assert!(matches!(cause, FailureCause::UnconfirmedChange { seen_at: SeenAt::Observation, .. }), "{cause:#?}");
     assert!(
-        matches!(now, AfterFailure::BindingGone { reading } if matches!(reading.standing(), EventStanding::AlreadyConfirmed { .. })),
+        matches!(now, AfterFailure::BindingGone { reading, .. } if matches!(reading.standing(), EventStanding::AlreadyConfirmed { .. })),
         "{now:#?}"
     );
     assert_eq!(desk.calls(), (calls.0, calls.1 + 1, calls.2), "다시 읽기 한 번뿐 — 저장 요청도 실패 기록 요청도 없다");
     assert_eq!(desk.attempts(2), [Archived]);
+}
+
+// ── 같은 시도 수, 다른 결속 ────────────────────────────────────────────────
+
+/// 대기 중 인터뷰 C2 가 열려 닫힌 뒤의 결속에서 달라지는 곳 — 사건·시도 수·적용 정책·확정 세계와 확정 정책은 그대로이고, 서 있는 경계와
+/// 발급기, 그 경계의 유도 경로, `world_before_ref` 의 두 번째 근거(지금 경계)가 다르다.
+const AFTER_ONE_MORE_INTERVIEW: [BindingPart; 4] =
+    [BindingPart::Boundary, BindingPart::Issuer, BindingPart::ConfirmedBasis, BindingPart::ApprovalBasis];
+
+#[test]
+fn a_wait_with_the_same_attempt_count_at_a_later_boundary_is_not_the_binding_the_attempt_started_with() {
+    let lab = Lab::new("moved-boundary", 0);
+    let desk = lab.desk(Save::Store);
+    let given = desk.records();
+    let mut boundary = desk.clone();
+    let mut attempt = RetryAttempt::begin(m(2), given.inputs(), &lab.root, &mut boundary).expect("시작된다");
+    let started = attempt.before().clone();
+    assert_eq!(
+        (started.confirmed().boundary(), started.issuer(), started.standing()),
+        (c(1), 2, EventStanding::Waiting { attempts: 0 })
+    );
+
+    // 정상적인 기록 진행: 대기 중 인터뷰 C2 가 열려 닫혔다(§6.3). 사건은 여전히 기준점 없이 같은 시도 수로 대기한다.
+    desk.set(|held| held.records.chains = interviews(2));
+    // 그 뒤 이 시도는 계속 추적한 파일의 변경으로 실패한다.
+    write(&lab.root, "src/a.txt", b"changed outside");
+    while attempt.outcome().is_none() {
+        step(&mut attempt);
+    }
+    let Some(RetryOutcome::Failed { cause, now }) = attempt.outcome() else {
+        panic!("실패로 끝난다: {:#?}", attempt.outcome());
+    };
+    assert!(matches!(cause, FailureCause::UnconfirmedChange { seen_at: SeenAt::Observation, .. }), "{cause:#?}");
+    let AfterFailure::BindingGone { reading, changed } = now else {
+        panic!("시도 수가 같다는 것만으로 같은 결속의 대기라고 하지 않는다: {now:#?}");
+    };
+
+    // 다시 읽은 기록은 읽히고 유도도 선다 — 같은 시도 수의 대기, 같은 적용 정책 P2, 같은 마지막 확정 세계 A1 과 확정 정책 P1.
+    assert_eq!(reading.standing(), EventStanding::Waiting { attempts: 0 });
+    assert_eq!((reading.applied().policy, reading.confirmed().world(), reading.confirmed().policy()), (p(2), a(1), p(1)));
+    assert_eq!(reading.world_before().approval, started.world_before().approval, "승인 경계 C1 의 근거는 그대로다");
+    // 그러나 서 있는 경계와 발급기가 다르고, 지금 경계의 유도는 서지만 시작할 때의 근거와 다른 값이다.
+    assert_eq!((reading.confirmed().boundary(), reading.issuer()), (c(2), 3));
+    assert_ne!(reading.confirmed().path(), started.confirmed().path());
+    assert_eq!(changed, &AFTER_ONE_MORE_INTERVIEW);
+
+    // 이전 결속의 실패 시도를 청하지 않았다 — 다시 읽기 한 번뿐이고 시도 이력은 그대로다.
+    assert_eq!(desk.calls(), (0, 1, 0));
+    assert_eq!(desk.attempts(2), []);
+    assert_eq!(desk.records().registry.next_id(), 2);
+}
+
+#[test]
+fn an_uncertain_save_reread_at_a_later_boundary_stays_unknown_and_records_no_failure() {
+    let lab = Lab::new("uncertain-moved", 0);
+    let desk = lab.desk(Save::UncertainWithoutStoring);
+    let given = desk.records();
+    let mut boundary = desk.clone();
+    let mut attempt = RetryAttempt::begin(m(2), given.inputs(), &lab.root, &mut boundary).expect("시작된다");
+    assert!(matches!(step(&mut attempt), RetryStep::Next(RetryRequest::Capture { .. })));
+    assert!(matches!(step(&mut attempt), RetryStep::Next(RetryRequest::StoreManifest { .. })));
+    assert!(matches!(step(&mut attempt), RetryStep::Next(RetryRequest::Save { .. })));
+
+    // 저장 요청 전에 기록이 정상적으로 진행했다 — 대기 중 인터뷰 C2 가 닫혔다. 저장 경계는 불확실하다고 답한다.
+    desk.set(|held| held.records.chains = interviews(2));
+    assert!(matches!(step(&mut attempt), RetryStep::Next(RetryRequest::Reread { .. })), "불확실한 답 뒤에는 다시 읽는다");
+    let RetryStep::Done(RetryOutcome::Unknown { answer, why, .. }) = step(&mut attempt) else {
+        panic!("결속이 달라진 기록으로 저장 여부를 단정하지 않는다: {:#?}", attempt.outcome());
+    };
+    assert!(matches!(answer, SaveAnswer::Uncertain { .. }));
+    let UnknownWhy::RereadDiffers { found, changed } = &why else {
+        panic!("달라진 결속을 말해야 한다: {why:#?}");
+    };
+    // 사건에는 기준점이 없고 시도 수도 같다. 그래도 같은 결속의 대기가 아니므로 확인된 미저장으로 바꾸지 않고, 실패 시도도 청하지 않는다.
+    assert_eq!(*found, EventStanding::Waiting { attempts: 0 });
+    assert_eq!(changed, &AFTER_ONE_MORE_INTERVIEW);
+    assert_eq!(desk.calls(), (1, 1, 0));
+    assert_eq!(desk.attempts(2), []);
+}
+
+#[test]
+fn the_state_boundary_refuses_a_unit_whose_binding_moved_and_the_attempt_reports_the_present_record() {
+    let lab = Lab::new("refused-moved", 1);
+    let desk = lab.desk(Save::Store);
+    let given = desk.records();
+    let mut boundary = desk.clone();
+    let mut attempt = RetryAttempt::begin(m(2), given.inputs(), &lab.root, &mut boundary).expect("시작된다");
+    assert!(matches!(step(&mut attempt), RetryStep::Next(RetryRequest::Capture { .. })));
+    assert!(matches!(step(&mut attempt), RetryStep::Next(RetryRequest::StoreManifest { .. })));
+    assert!(matches!(step(&mut attempt), RetryStep::Next(RetryRequest::Save { .. })));
+
+    // 저장 요청 전에 인터뷰 C2 가 닫혔다. 저장 경계는 쓰는 시점에 결속 전체를 다시 보고, 시도 수가 같아도 이 저장 단위를 적지 않는다.
+    desk.set(|held| held.records.chains = interviews(2));
+    while attempt.outcome().is_none() {
+        step(&mut attempt);
+    }
+    let Some(RetryOutcome::Failed { cause, now }) = attempt.outcome() else {
+        panic!("저장하지 못한 시도다: {:#?}", attempt.outcome());
+    };
+    assert!(matches!(cause, FailureCause::StateNotStored { .. }), "{cause:#?}");
+    let AfterFailure::BindingGone { reading, changed } = now else {
+        panic!("지금 기록은 다른 결속의 대기다: {now:#?}");
+    };
+    // 단계 전 판정이 말하는 달라진 곳과 저장 경계가 쓰는 시점에 본 것이 같은 비교다.
+    assert_eq!(changed, &AFTER_ONE_MORE_INTERVIEW);
+    assert_eq!(
+        attempt.binding().holds_in(&desk.records().inputs()),
+        Err(BindingLost::Changed(AFTER_ONE_MORE_INTERVIEW.to_vec()))
+    );
+    assert_eq!(reading.standing(), EventStanding::Waiting { attempts: 1 });
+    assert_eq!((reading.applied().policy, reading.confirmed().world(), reading.confirmed().policy()), (p(2), a(1), p(1)));
+    // 저장 요청 한 번(거절됨)과 다시 읽기 한 번. 기준점도, 세계 이름도, 이전 결속의 실패 시도도 덧붙지 않았다.
+    assert_eq!(desk.calls(), (1, 1, 0));
+    assert_eq!(desk.attempts(2), [NotArchived]);
+    assert_eq!(desk.records().registry.next_id(), 2);
+}
+
+#[test]
+fn the_write_time_check_of_the_state_boundary_is_the_comparison_the_attempt_makes() {
+    let lab = Lab::new("holds", 0);
+    let desk = lab.desk(Save::Store);
+    let given = desk.records();
+    let mut boundary = desk.clone();
+    let attempt = RetryAttempt::begin(m(2), given.inputs(), &lab.root, &mut boundary).expect("시작된다");
+    let binding = attempt.binding().clone();
+    drop(attempt);
+
+    // 시작할 때의 기록 그대로 — 결속이 선다. 같은 기록을 새로 복사해 물어도(새 판정 인스턴스) 같고, 아무것도 실행되지 않는다.
+    assert_eq!(binding.changes(binding.started()), []);
+    assert_eq!(binding.holds_in(&given.inputs()), Ok(()));
+    assert_eq!(binding.holds_in(&given.clone().inputs()), Ok(()));
+
+    // 시도 수는 같고 경계만 나아간 기록 — 같은 결속이 아니다.
+    let mut moved = given.clone();
+    moved.chains = interviews(2);
+    assert_eq!(binding.holds_in(&moved.inputs()), Err(BindingLost::Changed(AFTER_ONE_MORE_INTERVIEW.to_vec())));
+
+    // 실패 시도 하나가 덧붙은 기록 — 시도 수가 다르다.
+    let mut tried = given.clone();
+    tried.facts[1] = waiting(2, 1, 2, 1);
+    assert_eq!(binding.holds_in(&tried.inputs()), Err(BindingLost::Changed(vec![BindingPart::Standing])));
+
+    // 실행 전제를 건네지 않은 기록과 보관 중단 표식이 있다고 건넨 기록 — 결속이 선다고 말하지 않는다.
+    let mut unmarked = given.clone();
+    unmarked.marks = ScopeMarks::not_provided();
+    assert_eq!(
+        binding.holds_in(&unmarked.inputs()),
+        Err(BindingLost::PrerequisitesUnconfirmed(vec![Unjudged::ArchiveHaltNotProvided, Unjudged::UnfinishedRestoreNotProvided]))
+    );
+    let mut halted = given.clone();
+    halted.marks = ScopeMarks { archive_halt: MarkSeen::Present, unfinished_restore: MarkSeen::Absent };
+    assert_eq!(
+        binding.holds_in(&halted.inputs()),
+        Err(BindingLost::Unreadable(vec![ReadingProblem::OutOfScope(ScopeLimit::ArchiveHaltPresent)]))
+    );
+
+    assert_eq!(desk.calls(), (0, 0, 0));
+    assert_eq!(desk.records().facts, lab.records.facts);
+}
+
+#[test]
+fn a_failure_after_the_event_was_replaced_reports_the_replacement_and_appends_nothing() {
+    let lab = Lab::new("replaced-meanwhile", 0);
+    let desk = lab.desk(Save::Store);
+    let given = desk.records();
+    let mut boundary = desk.clone();
+    let mut attempt = RetryAttempt::begin(m(2), given.inputs(), &lab.root, &mut boundary).expect("시작된다");
+
+    // 정상적인 기록 진행: 기준점 없이 대기하던 M2 뒤에 새 범위 변경 M3(P2 → P3)이 승인·저장됐다 — M2 는 대체된 사건이다(§6.3). 앞선
+    // 판·사건 칸·보충 칸·등록부는 그대로이고 M3 의 판과 칸만 덧붙었다.
+    let later = Lab::with("replaced-later", &[P1_TEXT, P2_TEXT, b"notes/\n"], &[(1, 2, 0), (1, 2, 0)], 1);
+    desk.set(|held| {
+        let registry = held.records.registry.clone();
+        held.records = OwnedRecords { registry, ..later.records.clone() };
+    });
+    write(&lab.root, "src/a.txt", b"changed outside");
+    while attempt.outcome().is_none() {
+        step(&mut attempt);
+    }
+    let Some(RetryOutcome::Failed { cause, now }) = attempt.outcome() else {
+        panic!("실패로 끝난다: {:#?}", attempt.outcome());
+    };
+    assert!(matches!(cause, FailureCause::UnconfirmedChange { seen_at: SeenAt::Observation, .. }), "{cause:#?}");
+    let AfterFailure::BindingGone { reading, changed } = now else {
+        panic!("대체된 사건을 시작할 때의 대기라고 말하지 않는다: {now:#?}");
+    };
+    assert_eq!(reading.standing(), EventStanding::Replaced { by: m(3) });
+    assert_eq!(reading.applied().policy, p(3));
+    assert!(changed.contains(&BindingPart::Standing) && changed.contains(&BindingPart::AppliedPolicy), "{changed:?}");
+    // 대체된 사건에도, 새 사건에도 이전 결속의 실패 시도를 덧붙이지 않았다.
+    assert_eq!(desk.calls(), (0, 1, 0));
+    assert_eq!(desk.attempts(2), []);
+    assert_eq!(desk.attempts(3), []);
+}
+
+#[test]
+fn a_reread_without_confirmed_prerequisites_after_a_failure_or_an_uncertain_save_is_left_unverified() {
+    let withheld = [Unjudged::ArchiveHaltNotProvided, Unjudged::UnfinishedRestoreNotProvided];
+
+    // 저장 경계가 저장하지 않았다고 답했고, 다시 읽기는 보관 중단 표식·미완 복원 흔적을 건네지 않는다.
+    let lab = Lab::new("failed-no-marks", 0);
+    let desk = lab.desk(Save::Refuse);
+    desk.set(|held| held.reread_without_marks = true);
+    let run = lab.retry(2, &desk).expect("시작된다");
+    let (cause, now) = failed(&run);
+    assert!(matches!(cause, FailureCause::StateNotStored { .. }), "{cause:#?}");
+    let AfterFailure::NotVerified { why: UnknownWhy::PrerequisitesUnconfirmed { unconfirmed } } = now else {
+        panic!("전제를 확인하지 못한 기록으로 지금의 대기를 말하지 않는다: {now:#?}");
+    };
+    assert_eq!(unconfirmed, &withheld);
+    assert_eq!(desk.calls(), (1, 1, 0), "지금 기록을 확인하지 못했으므로 실패 시도를 청하지 않았다");
+    assert_eq!(desk.attempts(2), []);
+
+    // 저장 경계가 불확실하다고 답했고(적지 않았다), 다시 읽기는 같은 전제를 건네지 않는다 — 성공도, 확인된 미저장도 아니다.
+    let lab = Lab::new("uncertain-no-marks", 0);
+    let desk = lab.desk(Save::UncertainWithoutStoring);
+    desk.set(|held| held.reread_without_marks = true);
+    let run = lab.retry(2, &desk).expect("시작된다");
+    let RetryOutcome::Unknown { answer, why: UnknownWhy::PrerequisitesUnconfirmed { unconfirmed }, .. } = &run.outcome else {
+        panic!("전제를 확인하지 못한 기록으로 저장 여부를 단정하지 않는다: {:#?}", run.outcome);
+    };
+    assert!(matches!(answer, SaveAnswer::Uncertain { .. }));
+    assert_eq!(unconfirmed, &withheld);
+    assert_eq!(desk.calls(), (1, 1, 0));
+    assert_eq!(desk.attempts(2), []);
 }
 
 // ── 시도를 만들지 않는 요청 ────────────────────────────────────────────────
