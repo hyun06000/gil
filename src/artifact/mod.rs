@@ -49,6 +49,22 @@ mod tracking_state;
 pub(crate) use scoped::{ScopedWorld, capture_scoped, evaluate_scope, observe_scoped};
 #[cfg(feature = "tracking-policy")]
 pub(crate) use tracking_state::{StartEvent, StoredTracking, TrackingError, TrackingState, load_policy};
+/// 범위 변경 사건(구현 순서 5번)의 제품 연결이 쓰는 이름들 — `tracking-policy` 개발 구성 전용 재수출.
+#[cfg(feature = "tracking-policy")]
+#[allow(unused_imports)]
+pub(crate) mod tracking {
+    pub(crate) use super::tracking_record::{
+        AppliedPolicy, EventKind, EventName, LastConfirmed, MarkSeen, PolicyFileReading, PolicyName, PolicyStep, RecordInputs,
+        RecordStanding, StandingAt, classify_policy_file,
+    };
+    pub(crate) use super::tracking_state::{ATTEMPT_CAUSES, Archived, Extracted, HaltAt, TrackedEvent};
+    #[cfg(unix)]
+    pub(crate) use super::tracking_record::{
+        AfterFailure, BaselineCommit, BaselineState, BoardPolicies, EventStanding, FailedAttempt, FailureCause, FailureRecord,
+        LedgerStart, NotStarted, OwnedRecords, RetryOutcome, SaveAnswer, ScopeDelta, UnknownWhy, run_retry, scope_delta_over,
+        select_ledger_span,
+    };
+}
 /// 시작 준비·확정이 쓰는 정책 엔진·기록 모듈의 이름들 — `tracking-policy` 개발 구성 전용 재수출.
 #[cfg(feature = "tracking-policy")]
 pub(crate) mod start_policy {

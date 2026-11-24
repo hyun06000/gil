@@ -48,7 +48,7 @@ pub fn tools() -> &'static [Tool] {
         #[cfg(feature = "will-end-history")]
         let tools = super::transition::catalog(unachieved_close(tools));
         #[cfg(all(feature = "tracking-policy", unix))]
-        let tools = super::start::catalog(tools);
+        let tools = super::scope::catalog(super::start::catalog(tools));
         let mut tools = tools;
         tools.push(serde_json::from_str(include_str!("handoff-tool.json")).expect("handoff tool"));
         for tool in &mut tools {
@@ -125,6 +125,8 @@ pub fn valid_input(tool: &Tool, input: &Value) -> bool {
     if tool.name.starts_with("gil_revisit_") { return super::recovery::valid(tool.name.as_ref(), input); }
     #[cfg(all(feature = "tracking-policy", unix))]
     if super::start::NAMES.contains(&tool.name.as_ref()) { return super::start::valid(tool.name.as_ref(), input); }
+    #[cfg(all(feature = "tracking-policy", unix))]
+    if super::scope::NAMES.contains(&tool.name.as_ref()) { return super::scope::valid(tool.name.as_ref(), input); }
     #[cfg(feature = "approved-plan")]
     if tool.name.starts_with("gil_plan_") { return super::plans::valid(tool.name.as_ref(), input); }
     #[cfg(feature = "exploration-flow")]

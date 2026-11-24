@@ -33,6 +33,9 @@ mod transition;
 // Implementation order 4: start preparation and Monitor approval (tracking-policy development profile).
 #[cfg(all(feature = "tracking-policy", unix))]
 mod start;
+// Implementation order 5: scope change, baseline archive retry and archive halt (same development profile).
+#[cfg(all(feature = "tracking-policy", unix))]
+mod scope;
 #[cfg(all(feature = "visual-authoring", windows))]
 mod workspace;
 use monitor::Monitor;
@@ -46,6 +49,8 @@ pub struct GilServer {
     plan_grants: Arc<plans::Grants>,
     #[cfg(all(feature = "tracking-policy", unix))]
     start_grants: Arc<start::Grants>,
+    #[cfg(all(feature = "tracking-policy", unix))]
+    scope_grants: Arc<scope::Grants>,
     native_gate: Arc<Mutex<()>>,
     companion_session: Arc<Mutex<crate::companion_ipc::McpSession>>,
 }
@@ -60,6 +65,7 @@ impl GilServer {
         Self { #[cfg(feature = "product-safety")] recovery_grants: Arc::new(recovery::Grants::default()),
             #[cfg(feature = "approved-plan")] plan_grants: Arc::new(plans::Grants::default()),
             #[cfg(all(feature = "tracking-policy", unix))] start_grants: Arc::new(start::Grants::default()),
+            #[cfg(all(feature = "tracking-policy", unix))] scope_grants: Arc::new(scope::Grants::default()),
             monitor: Arc::new(Monitor::default()), native_gate: Arc::new(Mutex::new(())),
             companion_session: Arc::new(Mutex::new(crate::companion_ipc::McpSession::new(endpoint))) }
     }
@@ -228,6 +234,14 @@ impl GilServer {
             let grants = self.start_grants.clone();
             return tokio::task::spawn_blocking(move || locale::with(locale, || start::call(&monitor, &grants, &name, input))).await
                 .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "start_tool.uncertain")));
+        }
+        #[cfg(all(feature = "tracking-policy", unix))]
+        if scope::NAMES.contains(&name.as_str()) {
+            let monitor = self.monitor.clone();
+            let grants = self.scope_grants.clone();
+            // A lost task is not a refusal: the stored record decides. Read gil_scope_status instead of repeating.
+            return tokio::task::spawn_blocking(move || locale::with(locale, || scope::call(&monitor, &grants, &name, input))).await
+                .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "scope_tool.uncertain")));
         }
         #[cfg(feature = "approved-plan")]
         if name.starts_with("gil_plan_") {
@@ -438,6 +452,8 @@ mod tests {
             // `gil_start` 는 기본 표에 이미 있다 — 이 구성은 그 설명만 바꾸고 일곱 도구를 더한다.
             expected.extend(["gil_start_prepare", "gil_start_status", "gil_start_apply", "gil_start_cancel", "gil_start_review", "gil_start_decide", "gil_start_list"]
                 .map(String::from));
+            // 구현 순서 5번의 일곱 도구 — 모델용 둘(제안·조회)과 App 전용 다섯.
+            expected.extend(scope::NAMES.iter().map(|name| name.to_string()));
         }
         expected.push("gil_await_user".to_string());
         expected.sort();

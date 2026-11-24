@@ -823,6 +823,75 @@ impl ProjectSession {
             .map(Some).map_err(|e| SessionError::Observe { said: e.to_string() })
     }
 
+    /// **확정 정책 ≠ 적용 정책**(보관 대기)일 때의 변경 검사 — 공유 계약 §5.4·§6.3.
+    ///
+    /// 비교 근거는 마지막 확정 세계와 그 확정 정책이다. 적용 정책으로 관측하고, 확정 정책부터 적용 정책까지 **모든 판**의 범위에 속한
+    /// 경로(계속 추적한 경로)만 내용을 견준다. 새로 추적할 경로는 아직 기준이 없어 판정하지 않고, 적용된 판이 한 번이라도 제외한 경로는
+    /// 보지 않는다. 기준이 일치하면(`None`) 현행 비교 그대로다.
+    #[cfg(all(feature = "tracking-policy", unix))]
+    fn world_state_between_policies(&self) -> Result<Option<WorldState>, SessionError> {
+        use crate::artifact::tracking::scope_delta_over;
+        let Some(standing) = self.project.tracking_standing() else { return Ok(None) };
+        let standing = standing.map_err(|e| SessionError::Observe { said: e.to_string() })?;
+        let Some(confirmed) = standing.confirmed else { return Ok(None) };
+        if confirmed.policy == standing.applied.policy {
+            return Ok(None);
+        }
+        let tracking = self.project.tracking().expect("자리의 읽기가 있으므로 기록이 있다");
+        let world = confirmed.world;
+        let store = self.store()?;
+        let address = self.project.world_manifest(world).ok_or(SessionError::UnknownWorld { world })?.clone();
+        let base = store.read_manifest(&address).map_err(|source| SessionError::Manifest { world, said: source.to_string() })?;
+        let mut policies = Vec::new();
+        for record in tracking.ledger().policies().iter().filter(|record| record.name() >= confirmed.policy) {
+            let policy = crate::artifact::load_policy(&store, record.engine(), record.rules())
+                .map_err(|e| SessionError::Observe { said: e.to_string() })?;
+            policies.push((record.name(), policy));
+        }
+        let applied = &policies.last().expect("확정 정책 뒤에 적용 정책이 있다").1;
+        let found = match artifact::observe_scoped(&self.root()?, applied) {
+            Ok(seen) => seen.manifest,
+            // 관측할 수 없는 상태는 변경 없음이 아니다.
+            Err(e) => return Ok(Some(WorldState::Unknown { world, said: e.to_string() })),
+        };
+        let delta = scope_delta_over(tracking.ledger(), confirmed.policy, &policies, &base, &found)
+            .map_err(|e| SessionError::Observe { said: format!("{e:?}") })?;
+        Ok(Some(match delta.differences().is_empty() {
+            true => WorldState::Clean { world },
+            false => WorldState::Dirty {
+                world,
+                changes: delta.differences().iter().map(|found| format!("{:?} {}", found.kind, found.path)).collect(),
+            },
+        }))
+    }
+
+    /// 잠금을 쥔 채로 저장된 기록을 **새로 읽는다** — load 의 검사 전체를 다시 지난다. 메모리의 값을 바꾸지 않는다.
+    #[cfg(all(feature = "tracking-policy", unix))]
+    pub(crate) fn reload(&self) -> Result<Project, SessionError> {
+        store::load_within(&self._lock, self.project.cycles().rules().clone(), &self.state_path).map_err(SessionError::Store)
+    }
+
+    /// 잠금을 쥔 채로 `next` 를 저장한다. 메모리의 값은 부르는 쪽이 저장 결과를 확인한 뒤 갈아 끼운다.
+    #[cfg(all(feature = "tracking-policy", unix))]
+    pub(crate) fn save_project(&self, next: &Project) -> Result<(), SessionError> {
+        store::save_within(&self._lock, next, &self.state_path).map_err(SessionError::Store)
+    }
+
+    #[cfg(all(feature = "tracking-policy", unix))]
+    pub(crate) fn project_lock(&self) -> &ProjectLock {
+        &self._lock
+    }
+
+    #[cfg(all(feature = "tracking-policy", unix))]
+    pub(crate) fn gil(&self) -> Result<PathBuf, SessionError> {
+        gil_dir(&self.state_path)
+    }
+
+    #[cfg(all(feature = "tracking-policy", unix))]
+    pub(crate) fn object_store(&self) -> Result<ObjectStore, SessionError> {
+        self.store()
+    }
+
     /// 형식 10/11 에서 아직 없는 경로를 실행 전에 거절한다.
     fn refuse_on_tracking(&self, what: &str) -> Result<(), SessionError> {
         #[cfg(feature = "tracking-policy")]
@@ -834,6 +903,11 @@ impl ProjectSession {
     }
 
     pub fn world_state(&self) -> Result<WorldState, SessionError> {
+        // 형식 10/11 의 보관 대기: 확정 정책과 적용 정책이 다르다. 계속 추적한 경로만 마지막 확정 세계와 견준다(공유 계약 §6.3).
+        #[cfg(all(feature = "tracking-policy", unix))]
+        if let Some(state) = self.world_state_between_policies()? {
+            return Ok(state);
+        }
         let world = self.project.world_snapshot();
         let address = self
             .project

@@ -253,6 +253,19 @@ impl Cycles {
         kind: CycleKind,
         existence: ExistenceRef,
     ) -> Result<CycleId, CyclesError> {
+        self.open_child_from(kind, existence, None)
+    }
+
+    /// [`open_child`](Self::open_child) 와 같은 문 — 다만 Entry 의 **세계 출처**를 받는다.
+    ///
+    /// `None` 이면 부모의 Exit 이다(현행). `Some` 은 그 경계에서 보관한 관리 사건의 기준점이며, 형식 10/11 의 `Project` 만 건넨다.
+    /// 무엇이 출처인지는 여기서 판정하지 않는다 — 그 검증(§6.2 ①·②)은 기록 전체를 보는 쪽의 일이다.
+    pub(crate) fn open_child_from(
+        &mut self,
+        kind: CycleKind,
+        existence: ExistenceRef,
+        source: Option<SnapshotRef>,
+    ) -> Result<CycleId, CyclesError> {
         if let Some(why) = self.why_not_open_child() {
             return Err(CyclesError::OpenChild(why));
         }
@@ -260,10 +273,14 @@ impl Cycles {
         let parent = self.current;
         // **자식의 Entry 는 부모의 Exit 이다** — 그 전이가 떠난 세계가 곧 이 Cycle 이 도착한
         // 세계다(Artifact Model §7.1). 고르지 않고 읽는다.
-        let entry = self
+        //
+        // 관리 사건이 그 경계에서 기준점을 보관했으면 Entry 는 그 기준점이다(공유 계약 §6.2 의 S(N)). 그 값은 이 Graph 가
+        // 알 수 없으므로 `Project` 가 기록에서 유도해 건넨다 — 구조적 부모와 과거의 Exit 은 그대로다.
+        let exit = self
             .current()
             .exit_snapshot()
             .ok_or(CyclesError::OpenChild(OpenChildError::NoExitWorld(parent)))?;
+        let entry = source.unwrap_or(exit);
 
         let id = CycleId(self.next_id);
         self.next_id += 1;
@@ -742,6 +759,8 @@ pub(crate) struct CyclesState {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CyclesError {
     Plan(String),
+    /// 추적 정책 기록(형식 10/11)이 이 열기를 거절했다 — 보관 대기 중의 Experiment, 보관 중단 표식, Entry 규칙 위반.
+    Tracking(String),
     /// 이 Graph 에 그런 이름의 Cycle 이 없다.
     UnknownCycle(CycleId),
     /// 자식을 열 수 없다.
@@ -981,7 +1000,7 @@ impl From<OpenChildError> for CyclesError {
 impl fmt::Display for CyclesError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CyclesError::Plan(reason) => write!(f, "{reason}"),
+            CyclesError::Plan(reason) | CyclesError::Tracking(reason) => write!(f, "{reason}"),
             CyclesError::UnknownCycle(id) => {
                 write!(f, "{id} 은(는) 이 Cycle Graph 에 없다")
             }
@@ -1027,7 +1046,7 @@ impl std::error::Error for CyclesError {
         match self {
             CyclesError::OpenChild(err) => Some(err),
             CyclesError::Cycle(err) => Some(err),
-            CyclesError::UnknownCycle(_) | CyclesError::Plan(_) => None,
+            CyclesError::UnknownCycle(_) | CyclesError::Plan(_) | CyclesError::Tracking(_) => None,
         }
     }
 }

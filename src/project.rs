@@ -45,6 +45,15 @@ use crate::artifact::{ManifestAddress, RegistryError, SnapshotRegistry};
 use crate::rules::RuleSet;
 use crate::will::{ActionContract, Will};
 
+#[cfg(feature = "tracking-policy")]
+mod tracking;
+
+/// 복원할 때 함께 붙이는 추적 정책 기록의 자리 — 형식 10/11 을 읽는 빌드에만 값이 있다.
+#[cfg(feature = "tracking-policy")]
+type TrackingSlot = Option<crate::artifact::TrackingState>;
+#[cfg(not(feature = "tracking-policy"))]
+type TrackingSlot = ();
+
 /// 최초 Existence 의 이름.
 const FIRST_EXISTENCE: u32 = 1;
 /// 최초 Existence State 의 이름. 초기 State 만 0 을 쓴다.
@@ -239,6 +248,8 @@ impl Project {
     pub fn open_child_chain(&mut self) -> Result<crate::ChainRef, crate::ChainError> {
         use crate::ChainError;
         let parent = self.current_chain().ok_or(ChainError::LegacyProject)?;
+        #[cfg(feature = "tracking-policy")]
+        if self.refuse_while_halted().is_err() { return Err(ChainError::Invalid("archive halt marker is present; release it in the Monitor first")); }
         if !parent.is_closed() { return Err(ChainError::ParentOpen(parent.id())); }
         let id = crate::ChainRef::new(parent.id().number().checked_add(1).ok_or(ChainError::IdExhausted)?)
             .ok_or(ChainError::IdExhausted)?;
@@ -265,6 +276,16 @@ impl Project {
 
     /// Container close changes neither Will nor Journey nor the artifact registry.
     pub fn close_chain(&mut self, report: Report) -> Result<crate::ChainRef, crate::ChainError> {
+        #[cfg(feature = "tracking-policy")]
+        {
+            if self.refuse_while_halted().is_err() {
+                return Err(crate::ChainError::Invalid("archive halt marker is present; release it in the Monitor first"));
+            }
+            // 보관 확정 전에는 Chain 을 닫지 않는다(공유 계약 §12 O-3). 종료 Synthesis 승인에서 이미 막지만 파일이 두 번째 통로다.
+            if self.waiting_event().is_some() {
+                return Err(crate::ChainError::Invalid("a scope change still waits for its baseline archive"));
+            }
+        }
         let owner = self.current_existence_ref();
         let journey = self.current_existence().current_journey();
         let WorldGraph::Chains(chains) = &mut self.world else { return Err(crate::ChainError::LegacyProject); };
@@ -331,7 +352,16 @@ impl Project {
     /// dirty 판정·Cycle Exit·훗날의 restore 가 **같은 함수**를 쓴다 — 두 자리에 적으면
     /// 한쪽이 낡고, 그러면 「닫을 수 있다」와 「되돌아갈 곳」이 서로 다른 세계를 가리킨다.
     pub fn world_snapshot(&self) -> SnapshotRef {
-        self.cycles().current().world_snapshot()
+        let cycle = self.cycles().current();
+        // 닫힌 경계 T 에서 관리 사건이 기준점을 보관했으면 그 경계의 세계는 그 기준점이다 — B(T)(공유 계약 §6.1). 과거의 Exit 은
+        // 그대로 두고 사건이 그 옆에 선다. 사건이 없으면 현행 그대로 T 의 Exit 이다.
+        #[cfg(feature = "tracking-policy")]
+        if cycle.is_closed()
+            && let Some(baseline) = self.tracking.as_ref().and_then(|tracking| tracking.baseline_at(cycle.id().to_ref()))
+        {
+            return baseline;
+        }
+        cycle.world_snapshot()
     }
 
     /// 그 이름이 가리키는 세계의 manifest 주소. 모르는 이름이면 `None`.
@@ -435,6 +465,18 @@ impl Project {
     ) -> Result<CycleId, CyclesError> {
         let existence = self.current_existence;
         let binding = if kind == CycleKind::Experiment { self.next_plan_execution(link).map_err(CyclesError::Plan)? } else { None };
+        // 형식 10/11: Entry 는 S(N) 이고 Experiment 는 적용 정책으로 확정한 세계에서만 연다(공유 계약 §6.2). 복제본에서 연 뒤
+        // load 와 같은 검사를 통과했을 때만 갈아 끼운다 — 거절하면 이름 발급기도 움직이지 않는다.
+        #[cfg(feature = "tracking-policy")]
+        if self.tracking.is_some() {
+            let source = self.tracked_entry(kind).map_err(CyclesError::Tracking)?;
+            let mut next = self.clone();
+            let id = next.cycles_mut().open_child_from(kind, existence, source)?;
+            if let Some(binding) = binding { next.bind_plan_execution(binding, id.to_ref().to_string()); }
+            next.check_tracking_after_open().map_err(CyclesError::Tracking)?;
+            *self = next;
+            return Ok(id);
+        }
         let id = self.cycles_mut().open_child(kind, existence)?;
         if let Some(binding) = binding { self.bind_plan_execution(binding, id.to_ref().to_string()); }
         Ok(id)
@@ -450,6 +492,8 @@ impl Project {
         kind: CycleKind,
         link: Option<&crate::approved_plan::ExperimentLink>,
     ) -> Result<CycleId, OpenAfterRevisitError> {
+        #[cfg(feature = "tracking-policy")]
+        self.refuse_while_halted().map_err(OpenAfterRevisitError::Plan)?;
         let existence = self.current_existence;
         let binding = if kind == CycleKind::Experiment {
             // The item queue keeps its one fixed sentence. A requirement link is an input the
@@ -505,6 +549,45 @@ impl Project {
         artifacts: SnapshotRegistry,
         end_history: bool,
     ) -> Result<Project, ProjectError> {
+        Project::restore_with(world, existences, existence_states, current_existence, next_will_id, artifacts, end_history,
+            TrackingSlot::default())
+    }
+
+    /// 형식 10/11 의 복원 — `tracking` 기록을 **불변식 검사 전에** 붙인다.
+    ///
+    /// 관리 사건이 기준점을 보관한 경계의 자식은 Entry 가 부모의 Exit 이 아니라 그 기준점이다(공유 계약 §6.2). 그 기록을 모르는 채로
+    /// 옛 규칙 ③ 을 먼저 재면 정상 기록이 거절되므로, 추적 기록이 있는 Chain 의 Entry 는 그 기록의 검사(①·②)가 잰다. 구조 검사는
+    /// 그대로 먼저 지난다.
+    #[cfg(feature = "tracking-policy")]
+    pub(crate) fn restore_tracked(
+        world: WorldGraph,
+        existences: BTreeMap<u32, Existence>,
+        existence_states: BTreeMap<u32, ExistenceState>,
+        current_existence: ExistenceRef,
+        next_will_id: u32,
+        artifacts: SnapshotRegistry,
+        end_history: bool,
+        tracking: crate::artifact::TrackingState,
+    ) -> Result<Result<Project, crate::artifact::TrackingError>, ProjectError> {
+        let project = Project::restore_with(world, existences, existence_states, current_existence, next_will_id, artifacts,
+            end_history, Some(tracking))?;
+        let tracking = project.tracking.as_ref().expect("방금 붙였다");
+        Ok(tracking.check_links(project.chains(), project.artifacts()).map(|()| project))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn restore_with(
+        world: WorldGraph,
+        existences: BTreeMap<u32, Existence>,
+        existence_states: BTreeMap<u32, ExistenceState>,
+        current_existence: ExistenceRef,
+        next_will_id: u32,
+        artifacts: SnapshotRegistry,
+        end_history: bool,
+        tracking: TrackingSlot,
+    ) -> Result<Project, ProjectError> {
+        #[cfg(not(feature = "tracking-policy"))]
+        let () = tracking;
         let project = Project {
             visual_state: None,
             world,
@@ -515,7 +598,7 @@ impl Project {
             artifacts,
             end_history,
             #[cfg(feature = "tracking-policy")]
-            tracking: None,
+            tracking,
         };
         project.check_restored()?;
         Ok(project)
@@ -666,6 +749,15 @@ impl Project {
     /// 무엇이 진짜였는지 더는 말하지 못한다.
     fn check_restored_worlds(&self) -> Result<(), ProjectError> {
         let known = |world: SnapshotRef| self.artifacts.resolve(world).is_some();
+        // 형식 10/11: 최초 start 의 Chain 에서는 Entry 의 출처가 관리 사건의 기준점일 수 있다. 그 Chain 의 ③ 은 추적 기록의 검사
+        // (공유 계약 §6.2 ①·②)가 사건을 읽고 잰다 — 여기서 옛 규칙으로 먼저 거절하지 않는다. 그 밖의 Chain 은 현행 그대로다.
+        #[cfg(feature = "tracking-policy")]
+        let start_chain = self.tracking.as_ref().map(|tracking| tracking.start().chain);
+        #[cfg(not(feature = "tracking-policy"))]
+        let start_chain: Option<crate::ChainRef> = None;
+        let entry_by_events = |cycle: CycleRef| {
+            start_chain.is_some_and(|start| self.chains().iter().any(|chain| chain.id() == start && chain.owns(cycle)))
+        };
 
         for cycle in self.all_cycles() {
             let id = cycle.id().to_ref();
@@ -695,7 +787,7 @@ impl Project {
 
             // ③ 자식의 Entry 는 **부모의 Exit** 이다. 다른 값이면 그 Cycle 은 걸어서
             //    만들 수 없다 — `open_child` 가 읽는 자리가 하나뿐이기 때문이다.
-            if let Some(parent) = cycle.parent() {
+            if let Some(parent) = cycle.parent().filter(|_| !entry_by_events(id)) {
                 let parent = self
                     .all_cycles()
                     .find(|candidate| candidate.id() == parent)
@@ -1048,6 +1140,8 @@ impl Project {
         contract: ActionContract,
     ) -> Result<Opened, ActionError> {
         self.no_pending_revisit()?;
+        #[cfg(feature = "tracking-policy")]
+        self.refuse_while_halted().map_err(ActionError::Tracking)?;
         let mut next = self.clone();
         let owner = next.current_existence;
 
@@ -1263,6 +1357,12 @@ impl Project {
         let node = cycle.steps().node(at).expect("방금 자리를 받아 왔다");
         let (kind, target) = (node.kind, cycle.step_ref(at));
         let (cycle_kind, cycle_ref) = (cycle.kind(), cycle.id().to_ref());
+        // 형식 10/11: 중단 표식이 있으면 닫지 않고(T12), 기준점 보관을 기다리는 동안에는 종료 Synthesis 승인으로 나아가지 않는다(O-3).
+        #[cfg(feature = "tracking-policy")]
+        {
+            self.refuse_while_halted().map_err(ActionError::Tracking)?;
+            self.refuse_closing_approval_while_waiting(kind, &report).map_err(ActionError::Tracking)?;
+        }
         self.check_plan_close(kind, &report).map_err(ActionError::Plan)?;
         let result = match unachieved {
             Some(_) => EndResult::Unachieved,
@@ -1387,6 +1487,8 @@ impl Project {
         report: Report,
         uses: Vec<crate::visual_report::VisualUse>,
     ) -> Result<ClosedCycle, ActionError> {
+        #[cfg(feature = "tracking-policy")]
+        self.refuse_while_halted().map_err(ActionError::Tracking)?;
         let mut next = self.clone();
         let owner = next.current_existence;
         let cycle = next.cycles().current();
@@ -1464,6 +1566,8 @@ impl Project {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ActionError {
     Plan(String),
+    /// 추적 정책 기록(형식 10/11)이 이 전이를 거절했다 — 보관 중단 표식, 보관 대기 중의 종료 Synthesis 승인.
+    Tracking(String),
     Chain(crate::ChainError),
     Visual(String),
     /// 닫을 실행형 자리가 없다.
@@ -1573,7 +1677,7 @@ impl From<CycleError> for ActionError {
 impl std::fmt::Display for ActionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ActionError::Plan(reason) => write!(f, "{reason}"),
+            ActionError::Plan(reason) | ActionError::Tracking(reason) => write!(f, "{reason}"),
             ActionError::Chain(reason) => write!(f, "{reason}"),
             ActionError::Visual(reason) => f.write_str(&crate::tr!("action.visual_failed", reason = reason)),
             ActionError::Registry(source) => write!(f, "{source}"),

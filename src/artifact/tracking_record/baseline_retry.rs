@@ -591,6 +591,20 @@ fn scope_delta(span: &LedgerSpan<'_>, base: &Manifest, now: &Manifest) -> ScopeD
     delta
 }
 
+/// 같은 범위 변화 검사를 **제품의 변경 검사**가 쓰는 문(§5.4 ②·§6.3 「변경 검사」) — 확정 정책부터 적용 정책까지의 판(원장 순서, 창고의
+/// 원문에서 다시 해석한 값)으로 구간(3o)을 세우고, 마지막 확정 세계의 manifest 와 지금 관측을 견준다. 제안 정책을 받는 자리가 없다 —
+/// 새 제외 규칙으로 검사 범위를 좁힐 수 없다.
+pub(crate) fn scope_delta_over(
+    ledger: &PolicyLedger,
+    confirmed: PolicyName,
+    policies: &[(PolicyName, ApprovedPolicy)],
+    base: &Manifest,
+    now: &Manifest,
+) -> Result<ScopeDelta, LedgerSpanProblem> {
+    let span = span_of(ledger, confirmed, policies)?;
+    Ok(scope_delta(&span, base, now))
+}
+
 // ── 결과 ───────────────────────────────────────────────────────────────────
 
 /// 어느 걸음의 관측이었는가.
