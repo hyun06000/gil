@@ -4,19 +4,17 @@
 //! it** — a regular file (never a link) whose bytes have a digest the regular `install.json`
 //! beside it records. The rule is asked before anything is written, including when the bytes at
 //! the fixed path already equal this executable's: equal bytes without our receipt are someone
-//! else's file. A receipt with no executable beside it proves nothing either and is never
-//! overwritten.
+//! else's file. A standalone receipt can resume only if its pending inode and parent match.
 //!
 //! ```text
 //! parent folders   gil/ and gil/bin must be real folders of this user (created one level at a
 //!                  time when absent; a link or another owner's folder refuses). The receipt
 //!                  records which of the two THIS installation created; only those are removed.
-//! fixed path       absent, no receipt → place · absent, receipt present → refuse, unchanged ·
+//! fixed path       absent, no receipt → place · absent, pending receipt → resume; other receipt → refuse ·
 //!                  ours, same digest → nothing to do · ours, other digest → update ·
 //!                  anything else → refuse, unchanged
 //! install.json     absent or a regular file; a link or a folder refuses before any write
-//! first install    executable, then receipt. If the receipt cannot be placed, the executable
-//!                  this call just placed is taken back: the folder is as it was.
+//! first install    publish pending receipt, link the recorded inode at the fixed path, settle receipt.
 //! update           receipt first, naming the new digest AND the installed one, then the
 //!                  executable, then the receipt without the old digest. Whichever step fails or
 //!                  is interrupted, the installed file is still recorded as ours, so running
@@ -43,6 +41,10 @@ fn fail_at(stage: &str) -> std::io::Result<()> {
     #[cfg(test)]
     if tests::STAGE.with(|at| at.borrow().as_deref() == Some(stage)) {
         return Err(std::io::Error::other(format!("injected failure at {stage}")));
+    }
+    #[cfg(debug_assertions)]
+    if std::env::var("GIL_INSTALL_EXIT").is_ok_and(|at| at == stage) {
+        std::process::exit(86);
     }
     #[cfg(debug_assertions)]
     if std::env::var("GIL_INSTALL_FAIL").is_ok_and(|at| at == stage) {
@@ -102,6 +104,9 @@ struct Recorded {
     /// The folders this installation created (`gil`, `gil/bin`). Absent in a receipt written
     /// before this was recorded: then no folder is known to be ours and none is removed.
     made_dirs: Vec<String>,
+    pending: bool,
+    binary_identity: Option<[u64; 2]>,
+    staged_name: Option<String>,
 }
 
 fn digest_text(value: Option<&serde_json::Value>) -> Option<String> {
@@ -118,7 +123,16 @@ fn recorded(dir: &Path) -> Option<Recorded> {
     let made_dirs = value.get("made_dirs").and_then(|dirs| dirs.as_array())
         .map(|dirs| dirs.iter().filter_map(|d| d.as_str()).filter(|d| matches!(*d, "gil" | "gil/bin")).map(str::to_owned).collect())
         .unwrap_or_default();
-    Some(Recorded { sha256: digest_text(value.get("sha256"))?, previous: digest_text(value.get("previous_sha256")), made_dirs })
+    // A pending receipt remains evidence after the executable disappears. A copied or moved
+    // receipt does not have the recorded identity in this directory.
+    let pending = value.get("pending_identity").is_some_and(|id| {
+        std::fs::metadata(dir).is_ok_and(|parent|
+            *id == serde_json::json!([metadata.dev(), metadata.ino(), parent.dev(), parent.ino()]))
+    });
+    if value.get("pending_identity").is_some() && !pending { return None; }
+    let binary_identity = if pending { Some(serde_json::from_value(value.get("binary_identity")?.clone()).ok()?) } else { None };
+    let staged_name = value.get("staged_name").and_then(|v| v.as_str()).map(str::to_owned);
+    Some(Recorded { pending, binary_identity, staged_name, sha256: digest_text(value.get("sha256"))?, previous: digest_text(value.get("previous_sha256")), made_dirs })
 }
 
 /// The digest of the file at `fixed` and what the receipt records, when the entry there is ours:
@@ -126,6 +140,10 @@ fn recorded(dir: &Path) -> Option<Recorded> {
 fn ours(dir: &Path, fixed: &Path) -> Option<(String, Recorded)> {
     if !std::fs::symlink_metadata(fixed).is_ok_and(|metadata| metadata.is_file()) { return None; }
     let record = recorded(dir)?;
+    if let Some(expected) = record.binary_identity {
+        let meta = std::fs::symlink_metadata(fixed).ok()?;
+        if expected != [meta.dev(), meta.ino()] { return None; }
+    }
     let installed = hex(&Sha256::digest(std::fs::read(fixed).ok()?));
     (installed == record.sha256 || record.previous.as_deref() == Some(installed.as_str())).then_some((installed, record))
 }
@@ -170,6 +188,44 @@ fn put_receipt(dir: &Path, text: &str, stage: &str) -> Result<(), String> {
     })
 }
 
+/// Publish an intent before the executable appears or disappears. Construct the entire record
+/// on a private inode before publishing it. A first install never replaces a pre-existing receipt.
+fn pending_receipt(dir: &Path, text: &str, binary: &Path, first: bool, replace: bool) -> Result<(), String> {
+    let mut value: serde_json::Value = serde_json::from_str(text).map_err(|err| err.to_string())?;
+    let path = write_new(dir, INSTALL_RECEIPT, 0o644, b"")?;
+    let mut publish = || -> std::io::Result<()> {
+        let parent = std::fs::metadata(dir)?;
+        let mut file = std::fs::OpenOptions::new().write(true).open(&path)?;
+        let meta = file.metadata()?;
+        value["pending_identity"] = serde_json::json!([meta.dev(), meta.ino(), parent.dev(), parent.ino()]);
+        let binary_meta = std::fs::symlink_metadata(binary)?;
+        value["binary_identity"] = serde_json::json!([binary_meta.dev(), binary_meta.ino()]);
+        if first { value["staged_name"] = serde_json::json!(binary.file_name().and_then(|n| n.to_str())); }
+        serde_json::to_writer_pretty(&mut file, &value)?;
+        file.write_all(b"\n")?;
+        file.sync_all()?;
+        let receipt = dir.join(INSTALL_RECEIPT);
+        if replace { std::fs::rename(&path, receipt) } else { std::fs::hard_link(&path, receipt) }
+    };
+    let result = publish();
+    let _ = std::fs::remove_file(&path);
+    result.map_err(|err| format!("cannot record the installation in {}: {err}", dir.display()))
+}
+
+/// An interrupted first publication may still have its private link. Match its recorded inode
+/// before unlinking. A different entry at that name belongs to somebody else.
+fn clean_staged(dir: &Path, record: &Recorded) -> Result<(), String> {
+    if let (Some(id), Some(name)) = (record.binary_identity, record.staged_name.as_deref()) {
+        if name.starts_with(".gil.next-") && !name.contains('/') {
+            let path = dir.join(name);
+            if entry(&path)?.is_some_and(|m| m.is_file() && [m.dev(), m.ino()] == id) {
+                std::fs::remove_file(&path).map_err(|err| format!("cannot remove {}: {err}", path.display()))?;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Place `bytes` (this executable, digest `digest`) at `fixed`. `receipt` is the base text of the
 /// new `install.json`. Returns `OK` when our own file with the same digest is already there.
 pub(super) fn place(fixed: &Path, bytes: &[u8], digest: &str, receipt: &str) -> Result<&'static str, String> {
@@ -180,21 +236,36 @@ pub(super) fn place(fixed: &Path, bytes: &[u8], digest: &str, receipt: &str) -> 
         return Err(format!("{} is not a regular file (a link or a folder). Nothing was changed; move it away yourself, then run gil install again", receipt_path.display()));
     }
     if entry(fixed)?.is_none() {
-        // A receipt with no executable beside it records nothing we can check: it may be the user's
-        // own file, and it is not overwritten.
-        if entry(&receipt_path)?.is_some() {
+        let previous = recorded(dir).filter(|record| record.pending);
+        if entry(&receipt_path)?.is_some() && previous.is_none() {
             return Err(format!("{} exists without the executable it would record, so it cannot be shown to be gil install's. Nothing was changed; move it away yourself, then run gil install again", receipt_path.display()));
         }
-        return first(fixed, dir, bytes, &receipt_with(receipt, &made, None)?);
+        let dirs = previous.as_ref().map_or(made, |record| record.made_dirs.clone());
+        let settled = receipt_with(receipt, &dirs, None)?;
+        fail_at("first-receipt").map_err(|err| format!("cannot record first installation: {err}. Nothing was installed"))?;
+        if let Some(record) = &previous { clean_staged(dir, record)?; }
+        let staged = write_new(dir, "gil", 0o755, bytes)?;
+        if let Err(why) = pending_receipt(dir, &settled, &staged, true, previous.is_some()) {
+            let _ = std::fs::remove_file(&staged);
+            return Err(why);
+        }
+        fail_at("first-intent").map_err(|err| err.to_string())?;
+        let result = fail_at("first-binary").and_then(|()| std::fs::hard_link(&staged, fixed));
+        let _ = std::fs::remove_file(staged);
+        result.map_err(|err| format!("cannot place {}: {err}. Run gil install again", fixed.display()))?;
+        fail_at("first-published").map_err(|err| err.to_string())?;
+        put_receipt(dir, &settled, "settle-receipt")?;
+        return Ok("UPDATED");
     }
     let Some((installed, record)) = ours(dir, fixed) else {
         return Err(format!("{} already exists and is not a file placed by gil install (no matching install.json). Nothing was changed; move it away yourself, then run gil install again", fixed.display()));
     };
+    clean_staged(dir, &record)?;
     // Folders are ours only as the receipt of the installation that made them says; an update never claims more.
     let settled = receipt_with(receipt, &record.made_dirs, None)?;
     if installed == digest {
         // This very file is installed. A receipt left between the steps of an update is settled.
-        if record.sha256 != digest || record.previous.is_some() {
+        if record.pending || record.sha256 != digest || record.previous.is_some() {
             put_receipt(dir, &settled, "settle-receipt").map_err(|why| format!("{why}. The installation was not changed; run gil install again"))?;
         }
         return Ok("OK");
@@ -218,27 +289,6 @@ pub(super) fn place(fixed: &Path, bytes: &[u8], digest: &str, receipt: &str) -> 
     Ok("UPDATED")
 }
 
-/// First installation into a folder that holds neither file: the executable, then its receipt.
-fn first(fixed: &Path, dir: &Path, bytes: &[u8], receipt: &str) -> Result<&'static str, String> {
-    let staged = write_new(dir, "gil", 0o755, bytes)?;
-    if let Err(err) = fail_at("first-binary").and_then(|()| std::fs::rename(&staged, fixed)) {
-        let _ = std::fs::remove_file(&staged);
-        return Err(format!("cannot place {}: {err}. Nothing was installed", fixed.display()));
-    }
-    if let Err(why) = put_receipt(dir, receipt, "first-receipt") {
-        // Take back the file this call placed a moment ago, and only that file: same bytes, regular.
-        let ours_still = std::fs::symlink_metadata(fixed).is_ok_and(|metadata| metadata.is_file())
-            && std::fs::read(fixed).is_ok_and(|now| now == bytes);
-        let taken_back = ours_still && fail_at("first-rollback").and_then(|()| std::fs::remove_file(fixed)).is_ok();
-        return Err(if taken_back {
-            format!("{why}. The executable placed by this run was removed again; nothing is installed and no Host setting was changed. Run gil install again")
-        } else {
-            format!("{why}, and the executable placed by this run at {} could not be removed again. It is not recorded as installed and no Host setting was changed; remove that file yourself, then run gil install again", fixed.display())
-        });
-    }
-    Ok("UPDATED")
-}
-
 /// What a removal actually did.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(super) struct Removal {
@@ -258,25 +308,31 @@ impl Removal {
 /// process keeps its file. Ownership is asked again right before the first unlink.
 pub(super) fn remove(fixed: &Path) -> Result<Removal, String> {
     let (product, dir) = folders(fixed)?;
-    if entry(fixed)?.is_none() {
-        return Ok(Removal::default());
-    }
-    let Some((_, record)) = ours(dir, fixed) else { return Ok(Removal { found: true, kept: true, ..Removal::default() }); };
-    // Right before removing: the two folders are still this user's real folders, and the file is
-    // still the recorded one. A swap since the check above stops here with nothing removed.
+    let receipt = dir.join(INSTALL_RECEIPT);
+    let binary_present = entry(fixed)?.is_some();
+    if !binary_present && entry(&receipt)?.is_none() { return Ok(Removal::default()); }
     own_folder(product)?;
     own_folder(dir)?;
-    if ours(dir, fixed).is_none() {
+    let record = if binary_present {
+        ours(dir, fixed).map(|(_, record)| record)
+    } else {
+        recorded(dir).filter(|record| record.pending)
+    };
+    let Some(record) = record else {
         return Ok(Removal { found: true, kept: true, ..Removal::default() });
-    }
+    };
     let mut done = Removal { found: true, ..Removal::default() };
-    let receipt = dir.join(INSTALL_RECEIPT);
-    if let Err(err) = fail_at("remove-binary").and_then(|()| std::fs::remove_file(fixed)) {
-        done.remaining.push(format!("{} ({err})", fixed.display()));
-        done.remaining.push(receipt.display().to_string());
-        return Ok(done);
+    clean_staged(dir, &record)?;
+    if binary_present {
+        let text = std::fs::read_to_string(&receipt).map_err(|err| err.to_string())?;
+        pending_receipt(dir, &text, fixed, false, true)?;
+        if let Err(err) = fail_at("remove-binary").and_then(|()| std::fs::remove_file(fixed)) {
+            done.remaining.push(format!("{} ({err})", fixed.display()));
+            done.remaining.push(receipt.display().to_string());
+            return Ok(done);
+        }
+        done.removed.push(fixed.display().to_string());
     }
-    done.removed.push(fixed.display().to_string());
     match fail_at("remove-receipt").and_then(|()| std::fs::remove_file(&receipt)) {
         Ok(()) => done.removed.push(receipt.display().to_string()),
         Err(err) => {
@@ -390,8 +446,8 @@ mod tests {
             assert!(refused.contains("Nothing was changed"), "{tag}: {refused}");
             assert_eq!(std::fs::read(dir.join(INSTALL_RECEIPT)).unwrap(), text, "{tag}: the file was rewritten");
             assert_eq!(names(dir), ["install.json"], "{tag}: something was placed or staged");
-            // Removal has nothing recorded to remove and leaves that file alone.
-            assert_eq!(remove(&fixed).unwrap(), Removal::default());
+            // Removal reports the collision and leaves the standalone file alone.
+            assert!(remove(&fixed).unwrap().kept);
             assert_eq!(std::fs::read(dir.join(INSTALL_RECEIPT)).unwrap(), text);
             let _ = std::fs::remove_dir_all(root);
         }
@@ -523,8 +579,9 @@ mod tests {
         assert_eq!(partial.removed, [fixed.display().to_string()]);
         assert!(partial.remaining.len() == 1 && partial.remaining[0].starts_with(&dir.join(INSTALL_RECEIPT).display().to_string()), "{partial:?}");
         assert!(!fixed.exists() && dir.join(INSTALL_RECEIPT).exists() && dir.is_dir(), "the folders stay while something of the installation remains");
-        // What is left is a receipt without its executable: not overwritten by a later install (①).
-        assert!(put(&fixed, b"core one").is_err());
+        // This partial removal, unlike a foreign standalone receipt, can be finished.
+        assert!(remove(&fixed).unwrap().complete());
+        assert!(!dir.exists());
         let _ = std::fs::remove_dir_all(root);
 
         // The executable itself cannot be removed: nothing went, and both are reported as remaining.
@@ -580,21 +637,29 @@ mod tests {
         let _ = std::fs::remove_dir_all(root);
     }
 
-    /// A first installation whose receipt cannot be placed takes its own executable back: the
-    /// folder holds nothing of it, and the same command works afterwards.
+    /// A first installation can retry both before and after publishing its intent.
     #[test]
-    fn a_first_install_that_cannot_record_itself_takes_its_executable_back() {
+    fn a_first_install_can_retry_a_receipt_or_binary_failure() {
         let (root, fixed) = home("first-rollback");
         let failed = failing("first-receipt", || put(&fixed, b"core one")).unwrap_err();
-        assert!(failed.contains("removed again") && !failed.contains("yourself"), "{failed}");
+        assert!(failed.contains("Nothing was installed") && !failed.contains("yourself"), "{failed}");
         let dir = fixed.parent().unwrap();
         assert!(names(dir).is_empty(), "something of the failed installation stayed: {:?}", names(dir));
         assert_eq!(put(&fixed, b"core one").unwrap(), "UPDATED");
         let _ = std::fs::remove_dir_all(root);
         // The executable itself cannot be placed: nothing is installed and nothing staged stays.
         let (root, fixed) = home("first-binary");
-        assert!(failing("first-binary", || put(&fixed, b"core one")).unwrap_err().contains("Nothing was installed"));
-        assert!(names(fixed.parent().unwrap()).is_empty());
+        assert!(failing("first-binary", || put(&fixed, b"core one")).is_err());
+        assert!(recorded(fixed.parent().unwrap()).unwrap().pending);
+        let dir = fixed.parent().unwrap();
+        let original = dir.join(INSTALL_RECEIPT);
+        let saved = dir.join("saved-receipt");
+        std::fs::rename(&original, &saved).unwrap();
+        std::fs::copy(&saved, &original).unwrap();
+        assert!(put(&fixed, b"core one").is_err(), "a byte-identical copy cannot resume");
+        assert!(remove(&fixed).unwrap().kept);
+        std::fs::rename(&saved, &original).unwrap();
+        assert_eq!(put(&fixed, b"core one").unwrap(), "UPDATED");
         let _ = std::fs::remove_dir_all(root);
     }
 }

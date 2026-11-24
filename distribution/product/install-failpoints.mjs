@@ -3,7 +3,7 @@
 // or unlinks are made to fail with `GIL_INSTALL_FAIL=<stage>`, which only a debug build reads.
 // What this is evidence of: the debug executable's handling of those injected failures in an
 // isolated HOME. It is not evidence about release bytes (a release build has no such variable;
-// verify-install.mjs checks that) and not a power-loss or kill test.
+// verify-install.mjs checks that) and not a power-loss test.
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
@@ -67,11 +67,11 @@ export async function checkInstallFailpoints(binary) {
     const first = await home('first-receipt');
     const refused = run(a, ['install', '--no-wait'], first.env, 'first-receipt');
     assert.notEqual(refused.status, 0);
-    assert.match(refused.stderr, /removed again/);
+    assert.match(refused.stderr, /Nothing was installed/);
     assert.deepEqual(await names(first.bin), [], 'something of the failed first install stayed');
     assert.equal(await readFile(join(first.at, '.codex/config.toml'), 'utf8'), CONFIG, 'a Host setting changed although the install failed');
     assert.equal(run(a, ['install', '--no-wait'], first.env).status, 0);
-    results['first-receipt'] = 'executable taken back; Host settings untouched; rerun installed';
+    results['first-receipt'] = 'receipt publication refused before binary placement; Host settings untouched; rerun installed';
 
     // (3) A removal that only half happens is reported as partial, with both lists, and fails.
     const partial = run(first.fixed, ['uninstall', '--remove-binary'], first.env, 'remove-receipt');
@@ -80,6 +80,36 @@ export async function checkInstallFailpoints(binary) {
     assert.doesNotMatch(partial.stdout, /^binary: REMOVED/m);
     assert.deepEqual(await names(first.bin), ['install.json'], 'the report and the folder disagree');
     results['remove-receipt'] = 'PARTIAL with the removed executable and the remaining receipt; non-zero exit';
+    assert.equal(run(a, ['uninstall', '--remove-binary'], first.env).status, 0);
+    assert.deepEqual(await names(join(first.at, '.local/share')), []);
+    for (const stage of ['first-intent', 'first-published', 'remove-receipt']) {
+      for (const retry of ['install', 'uninstall']) {
+        const h = await home(`exit-${stage}-${retry}`);
+        const install = ['install', '--no-wait'], remove = ['uninstall', '--remove-binary'];
+        if (stage === 'remove-receipt') assert.equal(run(a, install, h.env).status, 0);
+        const exited = run(a, stage === 'remove-receipt' ? remove : install, {...h.env, GIL_INSTALL_EXIT: stage});
+        assert.equal(exited.status, 86, `the process did not exit at ${stage}: ${exited.stderr}`);
+        if (retry === 'install') {
+          assert.equal(run(b, install, h.env).status, 0);
+          assert.equal(sha256(await readFile(h.fixed)), digestB);
+          assert.deepEqual(await names(h.bin), ['gil', 'install.json']);
+        }
+        assert.equal(run(a, remove, h.env).status, 0);
+        assert.deepEqual(await names(join(h.at, '.local/share')), []);
+        assert.equal(await readFile(join(h.at, '.codex/config.toml'), 'utf8'), CONFIG);
+      }
+      results[`exit-${stage}`] = 'abrupt process exit; both explicit retry commands verified';
+    }
+    const held = await home('concurrent');
+    for (const args of [['install', '--no-wait'], ['uninstall', '--remove-binary']]) {
+      const blocked = spawnSync('flock', ['--exclusive', held.at, a, ...args], {env: held.env, encoding: 'utf8', timeout: 10000});
+      assert.equal(blocked.status, 1);
+      assert.match(blocked.stderr, /cannot lock HOME/);
+      assert.equal(await readFile(join(held.at, '.codex/config.toml'), 'utf8'), CONFIG);
+    }
+    assert.equal(run(a, ['install', '--no-wait'], held.env).status, 0);
+    assert.equal(run(a, ['uninstall', '--remove-binary'], held.env).status, 0);
+    results.concurrent = 'both mutating entries refuse while locked; retry after release succeeds';
     const untouched = await home('remove-binary');
     assert.equal(run(a, ['install', '--no-wait'], untouched.env).status, 0);
     const nothing = run(untouched.fixed, ['uninstall', '--remove-binary'], untouched.env, 'remove-binary');
@@ -92,7 +122,7 @@ export async function checkInstallFailpoints(binary) {
     assert.deepEqual(await names(join(untouched.at, '.local/share')), [], 'the folders this installation made were left');
     assert.equal(await readFile(join(untouched.at, '.codex/config.toml'), 'utf8'), CONFIG);
     results['remove-binary'] = 'nothing removed, reported as partial; a later removal completed and took the folders it had made';
-    return {evidence: 'debug build with GIL_INSTALL_FAIL; isolated HOME; not release bytes, not a kill or power-loss test', results};
+    return {evidence: 'debug build with GIL_INSTALL_FAIL; isolated HOME; not release bytes, process exits are separate from error returns; no power-loss test', results};
   } finally { await rm(state, {recursive: true, force: true}); }
 }
 

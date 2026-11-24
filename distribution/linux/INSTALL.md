@@ -23,9 +23,12 @@ Check the archive against its published `SHA256SUMS`, extract it to a new folder
   changed.
 - If something else already exists at that path and was not placed by `gil install` (no
   `install.json` beside it that records exactly that file — even when its bytes are the same), if
-  an `install.json` is there without the executable, or if `~/.local/share/gil` or its `bin`
+  an unverified standalone `install.json` is there, or if `~/.local/share/gil` or its `bin`
   folder is a link or not your own folder, the install stops and changes nothing, Host settings
   included. Move that entry away yourself, then run the command again.
+- After an interrupted first install or partial removal, use the archive binary to run
+  `./bin/gil install` or `./bin/gil uninstall --remove-binary` again. The pending receipt records
+  file and directory identity. Older standalone receipts and unrecorded executables are kept.
 - An update that is interrupted leaves the installed executable recorded; running
   `./bin/gil install` again finishes it.
 - Codex is registered when its settings folder exists (`~/.codex`, or `CODEX_HOME`): one

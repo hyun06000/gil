@@ -87,6 +87,20 @@ pub fn cli(args: &[String]) -> ExitCode {
         None => return usage(),
     };
     let env = Env::from_process();
+    // The HOME directory is stable across removal of our install folders. The kernel releases
+    // this lock on process exit. Hold it through Host registration as well as file publication.
+    #[cfg(target_os = "linux")]
+    let _installation_lock = if matches!(command, "install" | "uninstall") {
+        let Some(home) = &env.home else { return refuse("HOME is not set"); };
+        let file = match std::fs::File::open(home) {
+            Ok(file) => file,
+            Err(err) => return refuse(&format!("cannot open HOME for installation: {err}")),
+        };
+        if let Err(err) = file.try_lock() {
+            return refuse(&format!("cannot lock HOME for installation: {err}; retry after the other operation finishes"));
+        }
+        Some(file)
+    } else { None };
     let outcome = match command {
         "install" => {
             let mut options = InstallOptions::default();
@@ -217,7 +231,7 @@ fn uninstall(env: &Env, remove_binary: bool) -> Outcome {
             lines.push(if !removal.found {
                 format!("binary: NOT_INSTALLED {} (nothing recorded to remove)", fixed.display())
             } else if removal.kept {
-                format!("binary: KEPT {} (not the file recorded by install.json; nothing was removed)", fixed.display())
+                format!("binary: KEPT (unverified entry in {}; no installation files removed)", dir.display())
             } else if removal.complete() {
                 format!("binary: REMOVED {}", removal.removed.join(", "))
             } else {
