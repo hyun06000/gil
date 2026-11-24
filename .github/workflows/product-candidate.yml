@@ -157,8 +157,10 @@ jobs:
           node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test visual_start
           node tools/ci/expect-tests.mjs 10 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --lib -- session::visual_start::tests:: --test-threads=1
           node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test mcp visual_start_preserves_existing_and_partial_records_and_survives_response_loss -- --exact
-      - name: "[product] approval wire over the real stdio process, at least 5 on Linux (the recovery cases exist on macOS and Windows only)"
-        run: node tools/ci/expect-tests.mjs 5 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test approved_plan_wire_wave1
+      # Of this suite's 12 on macOS, Linux runs 3: the 7 recovery cases exist on macOS and Windows only, and two more
+      # (the guarded closing project and the macOS storage case) carry their own macOS gates.
+      - name: "[product] approval wire over the real stdio process, exactly 3 on Linux"
+        run: node tools/ci/tracking-start/expect-test-groups.mjs '*=3' -- cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test approved_plan_wire_wave1
       - name: "[product] compile all Core targets (compile evidence only, not execution)"
         run: cargo build --locked -p gil --all-targets --features "$GIL_PRODUCT_FEATURES"
       - name: Shared UI regression
