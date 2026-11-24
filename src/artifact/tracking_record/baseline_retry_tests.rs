@@ -5,7 +5,7 @@
 //! - 기록: 정책 판·사건·보충 칸·시도 결과는 시험이 만든 값이다. 모니터가 승인한 기록이 아니고 `state.yaml` 도 `gil start` 도 쓰지 않는다.
 //!   승인 저장(저장 1)은 「이미 저장됐다고 건넨 입력」일 뿐이다.
 //! - 저장 경계(`Desk`): 메모리의 기록을 고쳐 쓰는 **시험용 어댑터**다. 그 실패 주입은 실제 저장의 원자성·프로세스 강제 종료·전원 장애
-//!   내구성의 증거가 아니다. 다시 읽기도 그 메모리 값의 복사다.
+//!   내구성의 증거가 아니다. 다시 읽기도 그 메모리 값의 복사다. 보관 중단 표식·미완 복원 흔적이 「없다」는 것도 시험이 건넨 말이다.
 //! - 「새로 만든 값으로 다시 읽는다」는 순수 판정의 반복이며 제품 재시작 시험이 아니다. 실제 Host·사람의 승인·필드 인수의 증거도 아니다.
 //!
 //! ```text
@@ -16,11 +16,13 @@
 //! 사건            M1 start(없음→P1, 기준점 A1)   M2 scope_change(P1→P2, C1 에서 승인, 발급기 2, world_before A1, 기준점 없음)
 //! ```
 
+use std::cell::RefCell;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use super::event_cycles_tests::{a, c, ch, close_interview, m, open_interview, rules, x1};
-use super::experiment_exit_tests::p;
+use super::experiment_exit_tests::{at, p, restored};
 use super::*;
 use crate::artifact::gilignore::{ApprovedPolicy, EngineVersion};
 use crate::artifact::scoped::probe;
@@ -68,13 +70,19 @@ fn path(text: &str) -> EntryPath {
 /// 합성 프로젝트 하나 — 임시 루트, 그 `.gil/` 의 실제 창고, 그리고 그 폴더에서 실제로 보관한 A1 을 가리키는 처음 기록.
 struct Lab {
     root: PathBuf,
+    /// 그 루트의 `.gil/` 창고 — 재시도가 스스로 정하는 창고와 같은 자리다. 시험이 자료를 놓고 결과를 들여다보는 데만 쓴다.
     store: ObjectStore,
     records: OwnedRecords,
+    /// 시험이 루트 옆에 더 만든 폴더 — 끝날 때 함께 지운다.
+    beside: RefCell<Vec<PathBuf>>,
 }
 
 impl Drop for Lab {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.root);
+        for extra in self.beside.borrow().iter() {
+            let _ = fs::remove_dir_all(extra);
+        }
     }
 }
 
@@ -152,9 +160,10 @@ impl Lab {
             worlds,
             chains: interviews(closed_interviews),
             registry,
-            marks: ScopeMarks::not_provided(),
+            // 실행 전제 — 보관 중단 표식과 미완 복원 흔적이 「없다」고 건넨다(시험이 건넨 말이다).
+            marks: ScopeMarks { archive_halt: MarkSeen::Absent, unfinished_restore: MarkSeen::Absent },
         };
-        Lab { root, store, records }
+        Lab { root, store, records, beside: RefCell::new(Vec::new()) }
     }
 
     /// 그림의 기본 — P1·P2, M2 는 C1 에서 승인(발급기 2)했고 실패 시도 `failed` 개가 적혀 있다. 서 있는 경계는 C1 이다.
@@ -162,18 +171,33 @@ impl Lab {
         Lab::with(label, &[P1_TEXT, P2_TEXT], &[(1, 2, failed)], 1)
     }
 
-    fn env(&self) -> RetryEnv<'_> {
-        RetryEnv { root: &self.root, store: &self.store }
-    }
-
     fn desk(&self, save: Save) -> Desk {
-        Desk { records: self.records.clone(), save, reread_fails: false, record_fails: false, saves: 0, rereads: 0, failures: 0 }
+        Desk(Rc::new(RefCell::new(Held {
+            records: self.records.clone(),
+            save,
+            reread_fails: false,
+            reread_without_marks: false,
+            record_fails: false,
+            saves: 0,
+            rereads: 0,
+            failures: 0,
+        })))
     }
 
-    /// 저장 경계가 지금 지닌 기록을 입력으로 명시 재시도 하나를 끝까지 실행한다.
-    fn retry(&self, event: u32, desk: &mut Desk) -> Result<RetryRun, NotStarted> {
-        let given = desk.records.clone();
-        run_retry(m(event), given.inputs(), &self.env(), desk)
+    /// 저장 경계가 지금 지닌 기록을 입력으로 명시 재시도 하나를 끝까지 실행한다. 대상은 이 루트와 이 저장 경계다.
+    fn retry(&self, event: u32, desk: &Desk) -> Result<RetryRun, NotStarted> {
+        let given = desk.records();
+        let mut boundary = desk.clone();
+        run_retry(m(event), given.inputs(), &self.root, &mut boundary)
+    }
+
+    /// 루트 옆의 새 이름 — 시험이 폴더를 옮겨 둘 자리. 끝날 때 지운다.
+    fn beside(&self, label: &str) -> PathBuf {
+        let mut name = self.root.file_name().expect("임시 루트에는 이름이 있다").to_os_string();
+        name.push(format!("-{label}"));
+        let path = self.root.with_file_name(name);
+        self.beside.borrow_mut().push(path.clone());
+        path
     }
 
     fn has_blob(&self, bytes: &[u8]) -> bool {
@@ -191,7 +215,7 @@ impl Lab {
 /// 저장 요청에 저장 경계가 하는 일 — 시험이 고른다.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Save {
-    /// 저장하고 「저장했다」고 답한다.
+    /// 결속이 지금 기록과 맞으면 저장하고 「저장했다」고, 맞지 않으면 저장하지 않고 「저장하지 않았다」고 답한다.
     Store,
     /// 저장하지 않고 「저장하지 않았다」고 답한다.
     Refuse,
@@ -205,35 +229,56 @@ enum Save {
     StoreWithAnExtraFailure,
     /// 앞선 시도 기록을 지우고 저장한다 — 이력을 보존하지 않는 저장.
     StoreButForgetAttempts,
+    /// 저장 단위는 그대로 적되, 유도 경로 위 인터뷰 C2 의 저장 Exit 을 등록부에 없는 A9 로 바꾼다 — 사건 칸·기준점·시도·등록부는 그대로다.
+    StoreAndBendAnAncestor,
 }
 
-/// 메모리의 기록을 고쳐 쓰는 시험용 저장 경계. 호출 횟수를 센다.
-struct Desk {
+struct Held {
     records: OwnedRecords,
     save: Save,
     reread_fails: bool,
+    /// 다시 읽기가 보관 중단 표식·미완 복원 흔적을 건네지 않는다.
+    reread_without_marks: bool,
     record_fails: bool,
     saves: usize,
     rereads: usize,
     failures: usize,
 }
 
+/// 메모리의 기록을 고쳐 쓰는 시험용 저장 경계. 호출 횟수를 센다. 복제한 값은 **같은** 기록을 가리킨다 — 시도가 하나를 빌려 쓰는 동안
+/// 시험이 다른 하나로 들여다본다.
+#[derive(Clone)]
+struct Desk(Rc<RefCell<Held>>);
+
 impl Desk {
+    /// (저장 요청, 다시 읽기, 실패 기록 요청)의 횟수.
     fn calls(&self) -> (usize, usize, usize) {
-        (self.saves, self.rereads, self.failures)
+        let held = self.0.borrow();
+        (held.saves, held.rereads, held.failures)
     }
 
+    /// 지금 지닌 기록의 복사.
+    fn records(&self) -> OwnedRecords {
+        self.0.borrow().records.clone()
+    }
+
+    fn attempts(&self, event: u32) -> Vec<AttemptSeen> {
+        self.0.borrow().records.facts[Held::slot(m(event))].baseline().attempts().to_vec()
+    }
+
+    fn set(&self, change: impl FnOnce(&mut Held)) {
+        change(&mut self.0.borrow_mut());
+    }
+}
+
+impl Held {
     fn slot(event: EventName) -> usize {
         usize::try_from(event.number()).unwrap() - 1
     }
 
-    fn attempts(&self, event: u32) -> Vec<AttemptSeen> {
-        self.records.facts[Desk::slot(m(event))].baseline().attempts().to_vec()
-    }
-
     /// 지금 기록이 저장 단위의 결속과 맞는가 — 대상 사건이 아직 기준점 없이, 시도가 묶인 때의 시도 수 그대로인가.
     fn fits(&self, binding: &AttemptBinding) -> bool {
-        let baseline = self.records.facts[Desk::slot(binding.event())].baseline();
+        let baseline = self.records.facts[Held::slot(binding.event())].baseline();
         baseline.snapshot().is_none() && baseline.attempts().len() == binding.attempts_before()
     }
 
@@ -244,7 +289,7 @@ impl Desk {
             assert_eq!(named, commit.snapshot(), "저장 단위의 세계 이름은 등록부의 다음 이름이다");
         }
         let binding = commit.binding();
-        let at = Desk::slot(binding.event());
+        let at = Held::slot(binding.event());
         let old = self.records.facts[at].clone();
         let mut attempts = if forget { Vec::new() } else { old.baseline().attempts().to_vec() };
         if extra_failure {
@@ -265,64 +310,78 @@ impl Desk {
 
 impl BaselineState for Desk {
     fn save_baseline(&mut self, commit: &BaselineCommit) -> SaveAnswer {
-        self.saves += 1;
+        let mut held = self.0.borrow_mut();
+        held.saves += 1;
         let uncertain = || SaveAnswer::Uncertain { said: "시험이 넣은 저장 뒤 오류".to_string() };
-        match self.save {
+        match held.save {
             // 결속이 지금 기록과 맞지 않는 저장 단위는 적지 않는다 — 저장 경계의 일이다.
-            Save::Store if !self.fits(commit.binding()) => {
+            Save::Store if !held.fits(commit.binding()) => {
                 SaveAnswer::NotStored { said: "저장 단위의 결속이 지금 기록과 다르다".to_string() }
             }
             Save::Store => {
-                self.store(commit, false, false);
+                held.store(commit, false, false);
                 SaveAnswer::Stored
             }
             Save::Refuse => SaveAnswer::NotStored { said: "시험이 넣은 저장 실패".to_string() },
             Save::StoreButSayUncertain => {
-                self.store(commit, false, false);
+                held.store(commit, false, false);
                 uncertain()
             }
             Save::UncertainWithoutStoring => uncertain(),
             Save::SayStoredWithoutStoring => SaveAnswer::Stored,
             Save::StoreWithAnExtraFailure => {
-                self.store(commit, true, false);
+                held.store(commit, true, false);
                 SaveAnswer::Stored
             }
             Save::StoreButForgetAttempts => {
-                self.store(commit, false, true);
+                held.store(commit, false, true);
+                SaveAnswer::Stored
+            }
+            Save::StoreAndBendAnAncestor => {
+                held.store(commit, false, false);
+                let bent = restored(&held.records.chains[0], |nodes| nodes[at(2)].exit = Some(a(9)))
+                    .expect("Cycles::restore 가 받아들인다");
+                held.records.chains[0] = bent;
                 SaveAnswer::Stored
             }
         }
     }
 
     fn reread(&mut self) -> Result<OwnedRecords, String> {
-        self.rereads += 1;
-        match self.reread_fails {
-            true => Err("시험이 넣은 재조회 실패".to_string()),
-            false => Ok(self.records.clone()),
+        let mut held = self.0.borrow_mut();
+        held.rereads += 1;
+        if held.reread_fails {
+            return Err("시험이 넣은 재조회 실패".to_string());
         }
+        let mut records = held.records.clone();
+        if held.reread_without_marks {
+            records.marks = ScopeMarks::not_provided();
+        }
+        Ok(records)
     }
 
     fn record_failure(&mut self, failure: &FailedAttempt) -> FailureRecord {
-        self.failures += 1;
-        if self.record_fails {
+        let mut held = self.0.borrow_mut();
+        held.failures += 1;
+        if held.record_fails {
             return FailureRecord::NotRecorded { said: "시험이 넣은 실패 기록 저장 실패".to_string() };
         }
-        if !self.fits(failure.binding()) {
+        if !held.fits(failure.binding()) {
             return FailureRecord::NotRecorded { said: "실패 시도의 결속이 지금 기록과 다르다".to_string() };
         }
-        let at = Desk::slot(failure.binding().event());
-        let old = self.records.facts[at].clone();
+        let at = Held::slot(failure.binding().event());
+        let old = held.records.facts[at].clone();
         let mut attempts = old.baseline().attempts().to_vec();
         attempts.push(NotArchived);
         let baseline = BaselineFacts::new(old.event(), ScopeChange, None, Unwritten, Unwritten, attempts);
-        self.records.facts[at] = EventCycleFacts::new(baseline, old.chain(), old.boundary(), old.issuer());
+        held.records.facts[at] = EventCycleFacts::new(baseline, old.chain(), old.boundary(), old.issuer());
         FailureRecord::Recorded
     }
 }
 
-fn failed(run: &RetryRun) -> (&FailureCause, &FailureRecord) {
+fn failed(run: &RetryRun) -> (&FailureCause, &AfterFailure) {
     match &run.outcome {
-        RetryOutcome::Failed { cause, record } => (cause, record),
+        RetryOutcome::Failed { cause, now } => (cause, now),
         other => panic!("실패로 끝나야 한다: {other:#?}"),
     }
 }
@@ -336,13 +395,19 @@ fn differences(cause: &FailureCause) -> (SeenAt, Vec<(String, DifferenceKind)>) 
     }
 }
 
-/// 실패한 뒤에도 적용 정책 P2 · 마지막 확정 세계 A1(P1) · 보관 대기가 그대로다.
-fn still_waiting(desk: &Desk, attempts: usize) {
-    let reading = read_scope_change(m(2), &desk.records.inputs()).expect("실패 뒤의 기록도 읽힌다");
-    assert_eq!(reading.applied().policy, p(2));
-    assert_eq!((reading.confirmed().world(), reading.confirmed().policy()), (a(1), p(1)));
-    assert_eq!(reading.standing(), EventStanding::Waiting { attempts });
-    assert_eq!(desk.records.registry.next_id(), 2, "세계 이름이 발급되지 않았다");
+/// 실패한 시도가 **다시 읽은 기록에서** 확인한 것: 적용 정책 P2 · 마지막 확정 세계 A1(확정 정책 P1) · 그 결속의 보관 대기. 그 뒤 실패 시도
+/// 기록을 청했고 그 답이 `record` 다. 세계 이름도 발급되지 않았다.
+fn still_waiting<'a>(now: &'a AfterFailure, desk: &Desk, attempts_at_start: usize) -> &'a FailureRecord {
+    let AfterFailure::StillWaiting { reading, record } = now else {
+        panic!("다시 읽은 기록에서 그 결속의 대기를 확인해야 한다: {now:#?}");
+    };
+    assert_eq!(reading.applied().policy, p(2), "보관 실패가 적용 정책을 P1 로 되돌리지 않는다");
+    assert_eq!((reading.confirmed().world(), reading.confirmed().policy()), (a(1), p(1)), "마지막 확정 세계는 A1, 확정 정책은 P1 이다");
+    assert_eq!(reading.standing(), EventStanding::Waiting { attempts: attempts_at_start });
+    let stored = desk.records();
+    assert_eq!(stored.registry.next_id(), 2, "세계 이름이 발급되지 않았다");
+    assert_eq!(stored.ledger.policies().len(), 2, "정책 원장은 그대로다");
+    record
 }
 
 // ── 성공 ───────────────────────────────────────────────────────────────────
@@ -350,16 +415,18 @@ fn still_waiting(desk: &Desk, attempts: usize) {
 #[test]
 fn an_explicit_retry_observes_archives_saves_and_confirms_only_from_the_reread_record() {
     let lab = Lab::new("confirm", 1);
-    let mut desk = lab.desk(Save::Store);
+    let desk = lab.desk(Save::Store);
     let (observes, captures) = (probe::observes(), probe::captures());
 
-    let run = lab.retry(2, &mut desk).expect("대기 사건의 재시도는 시작된다");
+    let run = lab.retry(2, &desk).expect("실행 전제가 확인된 대기 사건의 재시도는 시작된다");
 
     // 한 시도는 사건·적용 정책·확정 정책·world_before·지금 경계·발급기·그때의 시도 수에 묶였다.
     let binding = &run.binding;
     assert_eq!((binding.event(), binding.chain(), binding.applied(), binding.confirmed_policy()), (m(2), ch(1), p(2), p(1)));
     assert_eq!((binding.world_before(), binding.boundary(), binding.issuer(), binding.attempts_before()), (a(1), c(1), 2, 1));
     assert_eq!(run.before.standing(), EventStanding::Waiting { attempts: 1 });
+    // 대기 사건에 아직 없는 기준점 칸은 판단하지 않은 것으로 남지만 실행 전제의 미확인이 아니다 — 그것만 남은 읽기에서 시작했다.
+    assert_eq!(run.before.not_judged(), [Unjudged::BaselineSlotsNotWritten { event: m(2) }]);
 
     let RetryOutcome::Confirmed { commit, delta, reading } = &run.outcome else {
         panic!("확정이어야 한다: {:#?}", run.outcome);
@@ -368,15 +435,16 @@ fn an_explicit_retry_observes_archives_saves_and_confirms_only_from_the_reread_r
     assert_eq!((probe::observes() - observes, probe::captures() - captures), (1, 1));
     assert_eq!(desk.calls(), (1, 1, 0));
 
-    // 저장 단위 — 새 세계 이름 A2, 보관 경계 C1, 발급기 2.
+    // 저장 단위 — 새 세계 이름 A2, 보관 경계 C1, 발급기 2. 그 manifest 는 이 루트의 `.gil/` 창고에 놓였다.
+    let stored = desk.records();
     assert_eq!((commit.snapshot(), commit.issues_name()), (a(2), true));
-    assert_eq!(desk.records.registry.resolve(a(2)), Some(commit.manifest()));
+    assert_eq!(stored.registry.resolve(a(2)), Some(commit.manifest()));
     // 범위 변화 — 계속 추적한 src/* 둘만 견줬고, notes/* 는 새로 추적하며, data/* 는 견주지도 보관하지도 않았다.
     assert_eq!(delta.compared(), 2);
     assert!(delta.differences().is_empty());
     assert_eq!(delta.newly_tracked(), [path("notes/todo.md")]);
     assert_eq!(delta.not_compared(), [path("data/raw.csv")]);
-    let archived = lab.store.read_manifest(commit.manifest()).expect("보관한 manifest 가 창고에 있다");
+    let archived = lab.store.read_manifest(commit.manifest()).expect("보관한 manifest 가 이 루트의 창고에 있다");
     let paths: Vec<&str> = archived.paths().map(|path| path.as_str()).collect();
     assert_eq!(paths, ["notes/todo.md", "src/a.txt", "src/b.txt"]);
     assert!(lab.has_blob(b"todo"), "새로 추적하는 경로의 지금 내용이 최초 보관이다");
@@ -388,21 +456,26 @@ fn an_explicit_retry_observes_archives_saves_and_confirms_only_from_the_reread_r
         EventStanding::AlreadyConfirmed { snapshot: a(2), archived_at: c(1), archive_issuer: 2, attempts: 2 }
     );
     assert_eq!((reading.confirmed().world(), reading.confirmed().policy(), reading.applied().policy), (a(2), p(2), p(2)));
+    // 시작할 때 의존한 근거(A1, 확정 정책 P1, 그 유도 경로)가 다시 읽은 기록에서 사건보다 앞의 기록만으로 같은 값으로 다시 유도됐다.
+    let again = reading.world_before();
+    assert_eq!(again.approval, run.before.world_before().approval);
+    assert_eq!(again.second, SecondBasis::ArchiveBoundary { basis: run.before.confirmed().clone() });
+    assert_eq!((again.approval.world(), again.approval.policy()), (a(1), p(1)));
     assert_eq!(desk.attempts(2), [NotArchived, Archived]);
     // 기존 승인·정책·사건·기준점은 그대로다.
-    assert_eq!(desk.records.ledger, lab.records.ledger);
-    assert_eq!(desk.records.links, lab.records.links);
-    assert_eq!(desk.records.facts[0], lab.records.facts[0]);
-    assert_eq!(desk.records.worlds, lab.records.worlds);
-    assert_eq!(desk.records.registry.resolve(a(1)), lab.records.registry.resolve(a(1)));
+    assert_eq!(stored.ledger, lab.records.ledger);
+    assert_eq!(stored.links, lab.records.links);
+    assert_eq!(stored.facts[0], lab.records.facts[0]);
+    assert_eq!(stored.worlds, lab.records.worlds);
+    assert_eq!(stored.registry.resolve(a(1)), lab.records.registry.resolve(a(1)));
 }
 
 #[test]
 fn a_retry_after_interviews_closed_archives_at_the_boundary_stood_on_now() {
     // 승인은 C1 에서(발급기 2), 그 뒤 인터뷰 C2·C3 이 닫혔다. 지금 서 있는 경계는 C3, 발급기는 4 다(§6.3).
     let lab = Lab::with("later-boundary", &[P1_TEXT, P2_TEXT], &[(1, 2, 0)], 3);
-    let mut desk = lab.desk(Save::Store);
-    let run = lab.retry(2, &mut desk).expect("시작된다");
+    let desk = lab.desk(Save::Store);
+    let run = lab.retry(2, &desk).expect("시작된다");
     assert_eq!((run.binding.boundary(), run.binding.issuer()), (c(3), 4));
     assert_eq!((run.before.confirmed().world(), run.before.confirmed().policy()), (a(1), p(1)));
     let RetryOutcome::Confirmed { reading, .. } = &run.outcome else {
@@ -418,15 +491,79 @@ fn a_retry_after_interviews_closed_archives_at_the_boundary_stood_on_now() {
 fn the_same_tracked_world_reuses_its_name_and_the_event_keeps_its_own_policy() {
     // §5.8 「같은 세계」: P2 는 P1 의 규칙에 이 폴더에 없는 이름 하나만 더 제외한다 — 추적 세계가 A1 과 같다.
     let lab = Lab::with("same-world", &[P1_TEXT, b"notes/\nabsent/\n"], &[(1, 2, 0)], 1);
-    let mut desk = lab.desk(Save::Store);
-    let run = lab.retry(2, &mut desk).expect("시작된다");
+    let desk = lab.desk(Save::Store);
+    let run = lab.retry(2, &desk).expect("시작된다");
     let RetryOutcome::Confirmed { commit, reading, .. } = &run.outcome else {
         panic!("확정이어야 한다: {:#?}", run.outcome);
     };
     assert_eq!((commit.snapshot(), commit.issues_name()), (a(1), false), "같은 세계는 기존 이름을 다시 가리킨다(§5.5)");
-    assert_eq!(desk.records.registry.next_id(), 2);
-    // 같은 이름 A1 이지만 사건의 기준점으로서의 확정 정책은 P2 다.
+    assert_eq!(desk.records().registry.next_id(), 2);
+    // 같은 이름 A1 이지만 사건의 기준점으로서의 확정 정책은 P2 이고, 보관 전 근거의 확정 정책은 P1 그대로다.
     assert_eq!((reading.confirmed().world(), reading.confirmed().policy()), (a(1), p(2)));
+    assert_eq!((reading.world_before().approval.world(), reading.world_before().approval.policy()), (a(1), p(1)));
+}
+
+// ── 실행 전제 ──────────────────────────────────────────────────────────────
+
+#[test]
+fn a_waiting_record_whose_execution_prerequisites_are_not_confirmed_starts_nothing() {
+    let cases: [(&str, fn(&mut OwnedRecords), Vec<Unjudged>); 4] = [
+        (
+            "no-marks",
+            |records| records.marks = ScopeMarks::not_provided(),
+            vec![Unjudged::ArchiveHaltNotProvided, Unjudged::UnfinishedRestoreNotProvided],
+        ),
+        (
+            "no-halt-mark",
+            |records| records.marks = ScopeMarks { archive_halt: MarkSeen::NotProvided, unfinished_restore: MarkSeen::Absent },
+            vec![Unjudged::ArchiveHaltNotProvided],
+        ),
+        (
+            "no-restore-mark",
+            |records| records.marks = ScopeMarks { archive_halt: MarkSeen::Absent, unfinished_restore: MarkSeen::NotProvided },
+            vec![Unjudged::UnfinishedRestoreNotProvided],
+        ),
+        (
+            "no-review",
+            |records| records.worlds[1] = EventWorldFacts::new(m(2), ScopeChange, Written(None), Written(Some(a(1)))),
+            vec![Unjudged::ReviewCycleAbsent { event: m(2), written_null: true }],
+        ),
+    ];
+    for (label, withhold, expected) in cases {
+        let mut lab = Lab::new(label, 0);
+        withhold(&mut lab.records);
+        let desk = lab.desk(Save::Store);
+        let (observes, captures) = (probe::observes(), probe::captures());
+
+        // 읽기는 된다 — 유효한 대기이고, 판단하지 않은 것이 결과에 그대로 남는다.
+        let reading = read_scope_change(m(2), &lab.records.inputs()).expect("부분 읽기는 된다");
+        assert_eq!(reading.standing(), EventStanding::Waiting { attempts: 0 }, "{label}");
+        assert!(expected.iter().all(|entry| reading.not_judged().contains(entry)), "{label}: {:?}", reading.not_judged());
+
+        // 그러나 실행에 필요한 확인이 빠졌으므로 시도를 만들지 않는다 — 관측·객체 쓰기·상태 저장·실패 기록이 없다.
+        let Err(NotStarted::PrerequisitesUnconfirmed { reading: refused, unconfirmed }) = lab.retry(2, &desk) else {
+            panic!("{label}: 실행 전제를 확인하지 못한 입력에서는 시작하지 않는다");
+        };
+        assert_eq!(unconfirmed, expected, "{label}: 정상 부재(기준점 칸 없음)는 여기 들지 않는다");
+        assert_eq!(refused, reading, "{label}: 읽기의 한계는 그대로 돌려준다");
+        assert_eq!((probe::observes() - observes, probe::captures() - captures), (0, 0), "{label}");
+        assert_eq!(desk.calls(), (0, 0, 0), "{label}");
+        assert_eq!(desk.records().facts, lab.records.facts, "{label}");
+        assert!(!lab.has_blob(b"todo"), "{label}: 새로 추적할 파일을 창고에 두지 않았다");
+    }
+}
+
+#[test]
+fn a_reread_record_without_confirmed_prerequisites_is_not_a_confirmation() {
+    // 저장 경계는 저장 단위를 적었지만, 다시 읽기가 보관 중단 표식·미완 복원 흔적을 건네지 않는다.
+    let lab = Lab::new("reread-no-marks", 0);
+    let desk = lab.desk(Save::Store);
+    desk.set(|held| held.reread_without_marks = true);
+    let run = lab.retry(2, &desk).expect("시작된다");
+    let RetryOutcome::Unknown { why: UnknownWhy::PrerequisitesUnconfirmed { unconfirmed }, .. } = &run.outcome else {
+        panic!("확인되지 않은 전제의 기록으로 확정을 보고하지 않는다: {:#?}", run.outcome);
+    };
+    assert_eq!(unconfirmed, &[Unjudged::ArchiveHaltNotProvided, Unjudged::UnfinishedRestoreNotProvided]);
 }
 
 // ── 새로 관측한다 ──────────────────────────────────────────────────────────
@@ -434,23 +571,23 @@ fn the_same_tracked_world_reuses_its_name_and_the_event_keeps_its_own_policy() {
 #[test]
 fn every_explicit_retry_observes_anew_and_a_fixed_file_is_read_fresh() {
     let lab = Lab::new("fresh", 0);
-    let mut desk = lab.desk(Save::Store);
+    let desk = lab.desk(Save::Store);
     let (observes, captures) = (probe::observes(), probe::captures());
 
     // 계속 추적한 파일이 밖에서 바뀌었다 — 첫 시도는 보관 전 관측에서 멈춘다.
     write(&lab.root, "src/a.txt", b"changed outside");
-    let first = lab.retry(2, &mut desk).expect("시작된다");
-    let (cause, record) = failed(&first);
+    let first = lab.retry(2, &desk).expect("시작된다");
+    let (cause, now) = failed(&first);
     assert_eq!(differences(cause), (SeenAt::Observation, vec![("src/a.txt".to_string(), DifferenceKind::Modified)]));
-    assert_eq!(record, &FailureRecord::Recorded);
+    assert_eq!(still_waiting(now, &desk, 0), &FailureRecord::Recorded);
     assert_eq!((probe::observes() - observes, probe::captures() - captures), (1, 0), "보관으로 가지 않았다");
-    assert_eq!(desk.calls(), (0, 0, 1));
-    still_waiting(&desk, 1);
+    assert_eq!(desk.calls(), (0, 1, 1), "저장을 청하지 않았고, 지금 기록을 한 번 다시 읽은 뒤 실패 시도를 한 번 적었다");
+    assert_eq!(desk.attempts(2), [NotArchived]);
     assert!(!lab.has_blob(b"changed outside"), "미확정 변경의 내용을 창고에 두지 않았다");
 
     // 사용자가 정리했다. 같은 P2 로 다시 시도하면 처음부터 다시 관측한다 — 앞선 시도의 결과를 쓰지 않는다.
     write(&lab.root, "src/a.txt", b"alpha");
-    let second = lab.retry(2, &mut desk).expect("시작된다");
+    let second = lab.retry(2, &desk).expect("시작된다");
     assert_eq!((probe::observes() - observes, probe::captures() - captures), (2, 1));
     let RetryOutcome::Confirmed { reading, .. } = &second.outcome else {
         panic!("확정이어야 한다: {:#?}", second.outcome);
@@ -472,13 +609,13 @@ fn a_change_a_deletion_and_a_new_file_on_a_continuously_tracked_path_are_each_re
     ];
     for (label, disturb, (path, kind)) in cases {
         let lab = Lab::new(label, 0);
-        let mut desk = lab.desk(Save::Store);
+        let desk = lab.desk(Save::Store);
         disturb(&lab.root);
-        let run = lab.retry(2, &mut desk).expect("시작된다");
-        let (cause, _) = failed(&run);
+        let run = lab.retry(2, &desk).expect("시작된다");
+        let (cause, now) = failed(&run);
         assert_eq!(differences(cause), (SeenAt::Observation, vec![(path.to_string(), kind)]), "{label}");
-        assert_eq!(desk.calls(), (0, 0, 1), "{label}: 저장을 청하지 않았다");
-        still_waiting(&desk, 1);
+        assert_eq!(still_waiting(now, &desk, 0), &FailureRecord::Recorded, "{label}");
+        assert_eq!(desk.calls(), (0, 1, 1), "{label}: 저장을 청하지 않았다");
     }
 }
 
@@ -487,12 +624,12 @@ fn paths_outside_the_applied_scope_and_newly_tracked_paths_are_not_compared() {
     // data/ 는 적용 정책 P2 가 제외했다 — 그 안의 변경·삭제·새 파일은 미확정 변경이 아니고, 건드리지도 않는다.
     // notes/ 는 P1 이 제외했다가 P2 가 포함한다 — 비교할 과거 기준이 없고 지금 내용이 최초 보관이다.
     let lab = Lab::new("scope-effect", 0);
-    let mut desk = lab.desk(Save::Store);
+    let desk = lab.desk(Save::Store);
     write(&lab.root, "data/raw.csv", b"9,9,9");
     write(&lab.root, "data/extra.csv", b"extra");
     write(&lab.root, "notes/todo.md", b"rewritten");
     write(&lab.root, "notes/more.md", b"more");
-    let run = lab.retry(2, &mut desk).expect("시작된다");
+    let run = lab.retry(2, &desk).expect("시작된다");
     let RetryOutcome::Confirmed { commit, delta, .. } = &run.outcome else {
         panic!("확정이어야 한다: {:#?}", run.outcome);
     };
@@ -509,9 +646,9 @@ fn paths_outside_the_applied_scope_and_newly_tracked_paths_are_not_compared() {
 fn a_path_excluded_by_an_intermediate_board_is_newly_tracked_when_included_again() {
     // P1 은 data/ 를 추적했고, 적용됐지만 기준점이 없는 P2 가 제외했고, 적용 정책 P3 이 다시 포함한다(§5.8). M2 는 M3 으로 대체됐다.
     let through = Lab::with("reincluded", &[P1_TEXT, P2_TEXT, b"notes/\n"], &[(1, 2, 0), (1, 2, 0)], 1);
-    let mut desk = through.desk(Save::Store);
+    let desk = through.desk(Save::Store);
     write(&through.root, "data/raw.csv", b"changed while excluded");
-    let run = through.retry(3, &mut desk).expect("시작된다");
+    let run = through.retry(3, &desk).expect("시작된다");
     assert_eq!((run.binding.confirmed_policy(), run.binding.applied()), (p(1), p(3)));
     let RetryOutcome::Confirmed { delta, .. } = &run.outcome else {
         panic!("확정이어야 한다: {:#?}", run.outcome);
@@ -521,14 +658,14 @@ fn a_path_excluded_by_an_intermediate_board_is_newly_tracked_when_included_again
     assert!(through.has_blob(b"changed while excluded"));
     // 대체된 M2 는 다시 보관하지 않는다 — 시도를 만들지 않고 아무것도 부르지 않는다.
     let calls = desk.calls();
-    assert!(matches!(through.retry(2, &mut desk), Err(NotStarted::Replaced { .. })));
+    assert!(matches!(through.retry(2, &desk), Err(NotStarted::Replaced { .. })));
     assert_eq!(desk.calls(), calls);
 
     // 중간 판이 그 경로를 제외하지 않았다면 같은 변경은 계속 추적한 경로의 미확정 변경이다.
     let straight = Lab::with("kept-tracked", &[P1_TEXT, b"notes/\nnothing-here/\n", b"notes/\n"], &[(1, 2, 0), (1, 2, 0)], 1);
-    let mut desk = straight.desk(Save::Store);
+    let desk = straight.desk(Save::Store);
     write(&straight.root, "data/raw.csv", b"changed while tracked");
-    let run = straight.retry(3, &mut desk).expect("시작된다");
+    let run = straight.retry(3, &desk).expect("시작된다");
     let (cause, _) = failed(&run);
     assert_eq!(differences(cause), (SeenAt::Observation, vec![("data/raw.csv".to_string(), DifferenceKind::Modified)]));
 }
@@ -541,89 +678,170 @@ fn a_proposal_that_was_not_approved_does_not_narrow_the_comparison() {
     write(&lab.root, ".gilignore", proposal);
     lab.store.put_blob(proposal).expect("제안 원문을 창고에 둔다");
     write(&lab.root, "src/a.txt", b"hidden by the proposal?");
-    let mut desk = lab.desk(Save::Store);
-    let run = lab.retry(2, &mut desk).expect("시작된다");
-    let (cause, _) = failed(&run);
+    let desk = lab.desk(Save::Store);
+    let run = lab.retry(2, &desk).expect("시작된다");
+    let (cause, now) = failed(&run);
     assert_eq!(differences(cause), (SeenAt::Observation, vec![("src/a.txt".to_string(), DifferenceKind::Modified)]));
-    still_waiting(&desk, 1);
+    assert_eq!(still_waiting(now, &desk, 0), &FailureRecord::Recorded);
     assert_eq!(lab.file(".gilignore"), proposal, "정책 파일을 읽지도 쓰지도 않았다");
 }
 
 // ── 걸음마다: 검사 뒤의 변화 · 불안정 · 관측 불가 ───────────────────────────
 
-/// 기다리는 요청을 실제로 실행하고 그 보고로 한 걸음 나아간다.
-fn step(attempt: &mut RetryAttempt<'_>, lab: &Lab, desk: &mut Desk) -> RetryStep {
-    let report = attempt.perform(&lab.env(), desk).expect("끝나지 않은 시도다");
+/// 기다리는 요청을 이 시도의 대상에 실제로 실행하고 그 보고로 한 걸음 나아간다.
+fn step(attempt: &mut RetryAttempt<'_>) -> RetryStep {
+    let report = attempt.perform().expect("끝나지 않은 시도다");
     attempt.advance(report).expect("방금 낸 보고다")
+}
+
+/// 실패 사유가 정해진 뒤의 걸음 — 지금 기록을 다시 읽고, 그 결속의 대기를 확인한 뒤에만 실패 시도를 적고 끝난다.
+fn fail_through(attempt: &mut RetryAttempt<'_>) -> (FailureCause, AfterFailure) {
+    assert!(matches!(attempt.pending(), Some(RetryRequest::Reread { .. })), "실패 뒤에는 지금 기록을 다시 읽는다");
+    let RetryStep::Next(RetryRequest::RecordFailure { failure, .. }) = step(attempt) else {
+        panic!("그 결속의 대기를 확인한 뒤 실패 시도를 적는다");
+    };
+    let RetryStep::Done(RetryOutcome::Failed { cause, now }) = step(attempt) else {
+        panic!("실패로 끝난다");
+    };
+    assert_eq!(failure.cause(), &cause);
+    (cause, now)
 }
 
 #[test]
 fn a_change_between_the_check_and_the_capture_is_not_confirmed_even_though_objects_remain() {
     let lab = Lab::new("after-check", 0);
-    let mut desk = lab.desk(Save::Store);
-    let given = desk.records.clone();
-    let mut attempt = RetryAttempt::begin(m(2), given.inputs(), &lab.env()).expect("시작된다");
+    let desk = lab.desk(Save::Store);
+    let given = desk.records();
+    let mut boundary = desk.clone();
+    let mut attempt = RetryAttempt::begin(m(2), given.inputs(), &lab.root, &mut boundary).expect("시작된다");
 
-    assert!(matches!(step(&mut attempt, &lab, &mut desk), RetryStep::Next(RetryRequest::Capture { .. })), "앞선 검사는 통과했다");
+    assert!(matches!(step(&mut attempt), RetryStep::Next(RetryRequest::Capture { .. })), "앞선 검사는 통과했다");
     // 검사 뒤, 객체 확정 전에 계속 추적한 파일이 바뀐다.
     write(&lab.root, "src/a.txt", b"changed after the check");
-    let RetryStep::Next(RetryRequest::RecordFailure { failure, .. }) = step(&mut attempt, &lab, &mut desk) else {
-        panic!("capture 의 결과에도 같은 검사를 해야 한다");
-    };
-    assert_eq!(
-        differences(failure.cause()),
-        (SeenAt::Capture, vec![("src/a.txt".to_string(), DifferenceKind::Modified)])
-    );
-    assert!(matches!(step(&mut attempt, &lab, &mut desk), RetryStep::Done(RetryOutcome::Failed { .. })));
+    assert!(matches!(step(&mut attempt), RetryStep::Next(RetryRequest::Reread { .. })), "capture 의 결과에도 같은 검사를 한다");
+    let (cause, now) = fail_through(&mut attempt);
+    assert_eq!(differences(&cause), (SeenAt::Capture, vec![("src/a.txt".to_string(), DifferenceKind::Modified)]));
 
     // capture 가 둔 객체는 창고에 남았다. 그것은 성공이 아니다 — 이름도, 기준점도, 저장 요청도 없다.
     assert!(lab.has_blob(b"changed after the check"));
-    assert_eq!(desk.calls(), (0, 0, 1));
-    still_waiting(&desk, 1);
+    assert_eq!(desk.calls(), (0, 1, 1));
+    assert_eq!(still_waiting(&now, &desk, 0), &FailureRecord::Recorded);
 }
 
 #[test]
 fn an_observation_that_moves_between_its_two_scans_is_unstable_not_clean() {
     // ① 보관 전 관측이 흔들린다.
     let lab = Lab::new("unstable-observe", 0);
-    let mut desk = lab.desk(Save::Store);
+    let desk = lab.desk(Save::Store);
     let root = lab.root.clone();
     probe::between_next_scans(move || write(&root, "notes/todo.md", b"moved between scans"));
-    let run = lab.retry(2, &mut desk).expect("시작된다");
-    assert_eq!(failed(&run).0, &FailureCause::UnstableObservation { seen_at: SeenAt::Observation });
-    assert_eq!(desk.calls(), (0, 0, 1));
-    still_waiting(&desk, 1);
+    let run = lab.retry(2, &desk).expect("시작된다");
+    let (cause, now) = failed(&run);
+    assert_eq!(cause, &FailureCause::UnstableObservation { seen_at: SeenAt::Observation });
+    assert_eq!(still_waiting(now, &desk, 0), &FailureRecord::Recorded);
+    assert_eq!(desk.calls(), (0, 1, 1));
 
     // ② 객체를 확정하는 관측이 흔들린다 — 첫 훑기의 객체가 남아도 성공이 아니다.
     let lab = Lab::new("unstable-capture", 0);
-    let mut desk = lab.desk(Save::Store);
-    let given = desk.records.clone();
-    let mut attempt = RetryAttempt::begin(m(2), given.inputs(), &lab.env()).expect("시작된다");
-    assert!(matches!(step(&mut attempt, &lab, &mut desk), RetryStep::Next(RetryRequest::Capture { .. })));
+    let desk = lab.desk(Save::Store);
+    let given = desk.records();
+    let mut boundary = desk.clone();
+    let mut attempt = RetryAttempt::begin(m(2), given.inputs(), &lab.root, &mut boundary).expect("시작된다");
+    assert!(matches!(step(&mut attempt), RetryStep::Next(RetryRequest::Capture { .. })));
     let root = lab.root.clone();
     probe::between_next_scans(move || write(&root, "notes/todo.md", b"moved during capture"));
-    let RetryStep::Next(RetryRequest::RecordFailure { failure, .. }) = step(&mut attempt, &lab, &mut desk) else {
-        panic!("흔들린 보관은 실패다");
-    };
-    assert_eq!(failure.cause(), &FailureCause::UnstableObservation { seen_at: SeenAt::Capture });
+    assert!(matches!(step(&mut attempt), RetryStep::Next(RetryRequest::Reread { .. })), "흔들린 보관은 실패다");
+    let (cause, now) = fail_through(&mut attempt);
+    assert_eq!(cause, FailureCause::UnstableObservation { seen_at: SeenAt::Capture });
     assert!(lab.has_blob(b"todo"), "첫 훑기가 둔 객체는 미참조로 남는다");
-    assert!(matches!(step(&mut attempt, &lab, &mut desk), RetryStep::Done(RetryOutcome::Failed { .. })));
-    assert_eq!(desk.calls(), (0, 0, 1));
-    still_waiting(&desk, 1);
+    assert_eq!(desk.calls(), (0, 1, 1));
+    assert_eq!(still_waiting(&now, &desk, 0), &FailureRecord::Recorded);
 }
 
 #[test]
 fn an_observation_that_is_refused_is_not_treated_as_no_change() {
     // 추적 범위 안의 하위 정책 파일은 관측 전체를 막는다.
     let lab = Lab::new("refused", 0);
-    let mut desk = lab.desk(Save::Store);
+    let desk = lab.desk(Save::Store);
     write(&lab.root, "src/.gilignore", b"*.tmp\n");
-    let run = lab.retry(2, &mut desk).expect("시작된다");
-    let (cause, record) = failed(&run);
+    let run = lab.retry(2, &desk).expect("시작된다");
+    let (cause, now) = failed(&run);
     assert!(matches!(cause, FailureCause::ObservationRefused { seen_at: SeenAt::Observation, .. }), "{cause:#?}");
-    assert_eq!(record, &FailureRecord::Recorded);
-    assert_eq!(desk.calls(), (0, 0, 1));
-    still_waiting(&desk, 1);
+    assert_eq!(still_waiting(now, &desk, 0), &FailureRecord::Recorded);
+    assert_eq!(desk.calls(), (0, 1, 1));
+}
+
+// ── 한 시도의 실제 대상 ────────────────────────────────────────────────────
+
+/// 그림의 폴더와 같은 파일을 새 디렉터리에 둔다 — 내용은 같지만 다른 디렉터리다.
+fn lookalike(root: &Path) {
+    fs::create_dir_all(root.join(".gil")).expect("새 폴더를 만든다");
+    write(root, "src/a.txt", b"alpha");
+    write(root, "src/b.txt", b"beta");
+    write(root, "data/raw.csv", b"1,2,3");
+    write(root, "notes/todo.md", b"todo");
+}
+
+#[test]
+fn the_root_an_attempt_started_with_is_the_only_root_it_observes() {
+    let lab = Lab::new("root-bound", 0);
+    let desk = lab.desk(Save::Store);
+    let given = desk.records();
+    let mut boundary = desk.clone();
+    let mut attempt = RetryAttempt::begin(m(2), given.inputs(), &lab.root, &mut boundary).expect("시작된다");
+    let (observes, captures) = (probe::observes(), probe::captures());
+
+    // 시작한 뒤 같은 경로에 다른 디렉터리가 놓였다 — 내용이 같아 보여도 이 시도가 시작한 대상이 아니다.
+    let moved = lab.beside("moved");
+    fs::rename(&lab.root, &moved).expect("시험 루트를 옮긴다");
+    lookalike(&lab.root);
+
+    assert!(matches!(step(&mut attempt), RetryStep::Next(RetryRequest::Reread { .. })), "달라진 대상의 관측으로 나아가지 않는다");
+    let (cause, now) = fail_through(&mut attempt);
+    assert!(matches!(cause, FailureCause::TargetChanged { .. }), "{cause:#?}");
+    assert_eq!((probe::observes() - observes, probe::captures() - captures), (0, 0), "달라진 대상을 관측하지도 않았다");
+    assert_eq!(desk.calls(), (0, 1, 1), "저장을 청하지 않았다");
+    assert_eq!(still_waiting(&now, &desk, 0), &FailureRecord::Recorded);
+    // 새로 놓인 디렉터리에는 아무것도 쓰지 않았다.
+    assert!(!lab.root.join(".gil").join("artifacts").exists());
+}
+
+#[test]
+fn the_store_an_attempt_started_with_is_the_only_store_it_writes() {
+    let lab = Lab::new("store-bound", 0);
+    let desk = lab.desk(Save::Store);
+    let given = desk.records();
+    let mut boundary = desk.clone();
+    let mut attempt = RetryAttempt::begin(m(2), given.inputs(), &lab.root, &mut boundary).expect("시작된다");
+    assert!(matches!(step(&mut attempt), RetryStep::Next(RetryRequest::Capture { .. })), "관측과 검사는 통과했다");
+    let captures = probe::captures();
+
+    // 관측 뒤, 객체 확정 전에 창고 자리에 다른 디렉터리가 놓였다.
+    let artifacts = lab.root.join(".gil").join("artifacts");
+    fs::rename(&artifacts, lab.beside("artifacts-moved")).expect("시험 창고를 옮긴다");
+    fs::create_dir(&artifacts).expect("빈 폴더를 놓는다");
+
+    assert!(matches!(step(&mut attempt), RetryStep::Next(RetryRequest::Reread { .. })), "달라진 창고에 보관하지 않는다");
+    let (cause, now) = fail_through(&mut attempt);
+    assert!(matches!(cause, FailureCause::TargetChanged { .. }), "{cause:#?}");
+    assert_eq!(probe::captures() - captures, 0, "달라진 창고로 보관을 부르지 않았다");
+    assert_eq!(fs::read_dir(&artifacts).expect("빈 폴더를 읽는다").count(), 0, "새로 놓인 창고 자리에 아무것도 쓰지 않았다");
+    assert_eq!(desk.calls(), (0, 1, 1));
+    assert_eq!(still_waiting(&now, &desk, 0), &FailureRecord::Recorded);
+}
+
+#[test]
+fn a_root_without_its_store_is_not_a_target() {
+    // `.gil/` 의 객체 창고가 없는 폴더 — 이 시도의 대상으로 정하지 못한다. 아무것도 만들지 않는다.
+    let lab = Lab::new("no-store", 0);
+    let desk = lab.desk(Save::Store);
+    let empty = lab.beside("empty");
+    fs::create_dir(&empty).expect("빈 폴더를 만든다");
+    let given = desk.records();
+    let mut boundary = desk.clone();
+    assert!(matches!(run_retry(m(2), given.inputs(), &empty, &mut boundary), Err(NotStarted::Target { .. })));
+    assert_eq!(fs::read_dir(&empty).expect("빈 폴더를 읽는다").count(), 0);
+    assert_eq!(desk.calls(), (0, 0, 0));
 }
 
 // ── 저장 결과 ──────────────────────────────────────────────────────────────
@@ -631,13 +849,14 @@ fn an_observation_that_is_refused_is_not_treated_as_no_change() {
 #[test]
 fn a_confirmed_store_failure_keeps_the_policy_the_confirmed_world_and_the_wait() {
     let lab = Lab::new("not-stored", 0);
-    let mut desk = lab.desk(Save::Refuse);
-    let run = lab.retry(2, &mut desk).expect("시작된다");
-    let (cause, record) = failed(&run);
+    let desk = lab.desk(Save::Refuse);
+    let run = lab.retry(2, &desk).expect("시작된다");
+    let (cause, now) = failed(&run);
     assert!(matches!(cause, FailureCause::StateNotStored { .. }), "{cause:#?}");
-    assert_eq!(record, &FailureRecord::Recorded);
-    assert_eq!(desk.calls(), (1, 0, 1), "저장하지 않았다고 확인됐으므로 다시 읽지 않는다");
-    still_waiting(&desk, 1);
+    // 저장 경계가 저장하지 않았다고 답한 뒤 지금 기록을 다시 읽어, 적용 P2 / 마지막 확정 세계 A1(P1) / 기준점 없음을 확인했다.
+    assert_eq!(still_waiting(now, &desk, 0), &FailureRecord::Recorded);
+    assert_eq!(desk.calls(), (1, 1, 1));
+    assert_eq!(desk.attempts(2), [NotArchived]);
     // 객체는 창고에 놓였다. 그래도 기준점은 없다.
     assert!(lab.has_blob(b"todo"));
 }
@@ -645,23 +864,37 @@ fn a_confirmed_store_failure_keeps_the_policy_the_confirmed_world_and_the_wait()
 #[test]
 fn a_failure_whose_record_cannot_be_stored_is_still_a_failure() {
     let lab = Lab::new("unrecorded", 0);
-    let mut desk = lab.desk(Save::Store);
-    desk.record_fails = true;
+    let desk = lab.desk(Save::Store);
+    desk.set(|held| held.record_fails = true);
     write(&lab.root, "src/a.txt", b"changed outside");
-    let run = lab.retry(2, &mut desk).expect("시작된다");
-    let (cause, record) = failed(&run);
+    let run = lab.retry(2, &desk).expect("시작된다");
+    let (cause, now) = failed(&run);
     assert!(matches!(cause, FailureCause::UnconfirmedChange { .. }));
-    assert!(matches!(record, FailureRecord::NotRecorded { .. }));
-    assert_eq!(desk.calls(), (0, 0, 1));
-    // 시도 기록이 남지 않았다 — 기록이 없다는 사실이 성공을 뜻하지 않는다. 대기 그대로다.
-    still_waiting(&desk, 0);
+    // 시도 기록이 남지 않았다 — 기록이 없다는 사실이 성공을 뜻하지 않는다. 다시 읽은 기록은 P2 / A1(P1) / 대기 그대로다.
+    assert!(matches!(still_waiting(now, &desk, 0), FailureRecord::NotRecorded { .. }));
+    assert_eq!(desk.calls(), (0, 1, 1));
+    assert_eq!(desk.attempts(2), []);
+}
+
+#[test]
+fn a_failure_that_cannot_reread_the_record_does_not_say_the_event_still_waits() {
+    // 저장 경계가 저장하지 않았다고 답했고, 지금 기록은 다시 읽을 수 없다.
+    let lab = Lab::new("failed-unverified", 0);
+    let desk = lab.desk(Save::Refuse);
+    desk.set(|held| held.reread_fails = true);
+    let run = lab.retry(2, &desk).expect("시작된다");
+    let (cause, now) = failed(&run);
+    assert!(matches!(cause, FailureCause::StateNotStored { .. }), "{cause:#?}");
+    assert!(matches!(now, AfterFailure::NotVerified { why: UnknownWhy::RereadUnavailable { .. } }), "{now:#?}");
+    assert_eq!(desk.calls(), (1, 1, 0), "지금 기록을 확인하지 못했으므로 실패 시도를 덧붙이지 않았다");
+    assert_eq!(desk.attempts(2), []);
 }
 
 #[test]
 fn an_error_reported_after_the_store_is_confirmed_by_the_reread() {
     let lab = Lab::new("stored-then-error", 0);
-    let mut desk = lab.desk(Save::StoreButSayUncertain);
-    let run = lab.retry(2, &mut desk).expect("시작된다");
+    let desk = lab.desk(Save::StoreButSayUncertain);
+    let run = lab.retry(2, &desk).expect("시작된다");
     assert!(matches!(run.outcome, RetryOutcome::Confirmed { .. }), "{:#?}", run.outcome);
     assert_eq!(desk.calls(), (1, 1, 0));
 }
@@ -670,9 +903,9 @@ fn an_error_reported_after_the_store_is_confirmed_by_the_reread() {
 fn an_uncertain_store_that_cannot_be_reread_is_unknown_neither_success_nor_a_settled_wait() {
     for save in [Save::StoreButSayUncertain, Save::Store] {
         let lab = Lab::new("unknown", 0);
-        let mut desk = lab.desk(save);
-        desk.reread_fails = true;
-        let run = lab.retry(2, &mut desk).expect("시작된다");
+        let desk = lab.desk(save);
+        desk.set(|held| held.reread_fails = true);
+        let run = lab.retry(2, &desk).expect("시작된다");
         let RetryOutcome::Unknown { commit, why, .. } = &run.outcome else {
             panic!("결과 불명이어야 한다: {:#?}", run.outcome);
         };
@@ -685,21 +918,20 @@ fn an_uncertain_store_that_cannot_be_reread_is_unknown_neither_success_nor_a_set
 #[test]
 fn an_uncertain_answer_followed_by_a_reread_of_the_unchanged_wait_is_a_confirmed_failure() {
     let lab = Lab::new("uncertain-not-stored", 0);
-    let mut desk = lab.desk(Save::UncertainWithoutStoring);
-    let run = lab.retry(2, &mut desk).expect("시작된다");
-    let (cause, record) = failed(&run);
+    let desk = lab.desk(Save::UncertainWithoutStoring);
+    let run = lab.retry(2, &desk).expect("시작된다");
+    let (cause, now) = failed(&run);
     assert!(matches!(cause, FailureCause::StateNotStored { .. }), "{cause:#?}");
-    assert_eq!(record, &FailureRecord::Recorded);
-    assert_eq!(desk.calls(), (1, 1, 1));
-    still_waiting(&desk, 1);
+    assert_eq!(still_waiting(now, &desk, 0), &FailureRecord::Recorded);
+    assert_eq!(desk.calls(), (1, 1, 1), "저장 뒤의 다시 읽기 한 번으로 저장되지 않았음과 지금의 대기를 함께 확인했다");
 }
 
 #[test]
 fn a_stored_answer_alone_is_not_a_confirmation() {
     // 저장 경계가 저장했다고 답했지만 다시 읽은 기록은 앞선 대기 그대로다.
     let lab = Lab::new("said-stored", 0);
-    let mut desk = lab.desk(Save::SayStoredWithoutStoring);
-    let run = lab.retry(2, &mut desk).expect("시작된다");
+    let desk = lab.desk(Save::SayStoredWithoutStoring);
+    let run = lab.retry(2, &desk).expect("시작된다");
     assert!(
         matches!(&run.outcome, RetryOutcome::Unknown { why: UnknownWhy::StoredButStillWaiting, answer: SaveAnswer::Stored, .. }),
         "{:#?}",
@@ -712,8 +944,8 @@ fn a_stored_answer_alone_is_not_a_confirmation() {
 fn a_reread_record_that_is_not_this_attempts_unit_or_lost_history_is_not_a_confirmation() {
     // 다시 읽은 기록의 시도 수가 이 시도의 저장 단위와 다르다.
     let lab = Lab::new("other-unit", 0);
-    let mut desk = lab.desk(Save::StoreWithAnExtraFailure);
-    let run = lab.retry(2, &mut desk).expect("시작된다");
+    let desk = lab.desk(Save::StoreWithAnExtraFailure);
+    let run = lab.retry(2, &desk).expect("시작된다");
     assert!(
         matches!(
             &run.outcome,
@@ -725,8 +957,8 @@ fn a_reread_record_that_is_not_this_attempts_unit_or_lost_history_is_not_a_confi
 
     // 다시 읽은 기록에서 앞선 실패 시도가 사라졌다 — 이력을 보존하지 않는 저장은 확정으로 보고하지 않는다.
     let lab = Lab::new("lost-history", 1);
-    let mut desk = lab.desk(Save::StoreButForgetAttempts);
-    let run = lab.retry(2, &mut desk).expect("시작된다");
+    let desk = lab.desk(Save::StoreButForgetAttempts);
+    let run = lab.retry(2, &desk).expect("시작된다");
     assert!(
         matches!(&run.outcome, RetryOutcome::Unknown { why: UnknownWhy::HistoryNotKept { .. }, .. }),
         "{:#?}",
@@ -734,19 +966,116 @@ fn a_reread_record_that_is_not_this_attempts_unit_or_lost_history_is_not_a_confi
     );
 }
 
+#[test]
+fn a_reread_record_whose_lineage_basis_no_longer_stands_is_not_a_confirmation() {
+    // 승인은 C1 에서, 지금 경계는 C3 — 마지막 확정 세계 A1(P1)의 근거는 C3 → C2 → C1 → start 의 계승이다. 저장 경계는 이 시도의 저장
+    // 단위를 그대로 적었고 정책·사건 칸·기준점·시도·등록부도 그대로지만, 다시 읽은 기록에서는 그 경로 위 C2 의 저장 Exit 이 달라져 있다.
+    let lab = Lab::with("basis-bent", &[P1_TEXT, P2_TEXT], &[(1, 2, 0)], 3);
+    let desk = lab.desk(Save::StoreAndBendAnAncestor);
+    let run = lab.retry(2, &desk).expect("시작된다");
+    let stored = desk.records();
+    assert_eq!(stored.facts[1].baseline().snapshot(), Some(a(2)), "저장 단위는 적혀 있다");
+    assert_eq!(desk.attempts(2), [Archived]);
+    let RetryOutcome::Unknown { why: UnknownWhy::RereadUnreadable { problems }, answer: SaveAnswer::Stored, .. } = &run.outcome else {
+        panic!("근거가 다시 서지 않는 기록으로 확정을 보고하지 않는다: {:#?}", run.outcome);
+    };
+    assert!(
+        problems.iter().any(|problem| matches!(
+            problem,
+            ReadingProblem::PriorBasis { at: BasisAt::Archive, boundary, .. } if *boundary == c(3)
+        )),
+        "보관 경계 C3 의 앞선 근거가 서지 않는다고 말해야 한다: {problems:#?}"
+    );
+}
+
+// ── 오래된 시도와 지금 ─────────────────────────────────────────────────────
+
+#[test]
+fn an_older_attempt_that_fails_after_another_confirmed_reports_the_present_record_not_its_starting_one() {
+    let lab = Lab::new("stale", 0);
+    let desk = lab.desk(Save::Store);
+    let given = desk.records();
+
+    // 같은 옛 기록에서 시작해 둔 시도 — 아직 한 걸음도 실행하지 않았다.
+    let mut held = desk.clone();
+    let mut older = RetryAttempt::begin(m(2), given.inputs(), &lab.root, &mut held).expect("시작된다");
+    assert_eq!(older.before().standing(), EventStanding::Waiting { attempts: 0 });
+
+    // 그 사이 다른 명시 재시도가 확정했다.
+    let first = lab.retry(2, &desk).expect("시작된다");
+    assert!(matches!(first.outcome, RetryOutcome::Confirmed { .. }), "{:#?}", first.outcome);
+    let (calls, stored) = (desk.calls(), desk.records().facts);
+
+    // 오래된 시도를 끝까지 실행한다 — 저장 경계는 결속이 지금 기록과 다른 저장 단위를 적지 않는다.
+    while older.outcome().is_none() {
+        step(&mut older);
+    }
+    let Some(RetryOutcome::Failed { cause, now }) = older.outcome() else {
+        panic!("오래된 시도는 확정하지 못한다: {:#?}", older.outcome());
+    };
+    assert!(matches!(cause, FailureCause::StateNotStored { .. }), "{cause:#?}");
+    // 「이 시도가 저장하지 못했다」와 「지금 사건이 대기다」는 다르다 — 지금 기록은 이미 확정이고, 그 지금의 읽기를 돌려준다.
+    let AfterFailure::BindingGone { reading } = now else {
+        panic!("시작할 때의 대기가 그대로라고 말하지 않는다: {now:#?}");
+    };
+    assert_eq!(
+        reading.standing(),
+        EventStanding::AlreadyConfirmed { snapshot: a(2), archived_at: c(1), archive_issuer: 2, attempts: 1 }
+    );
+    assert_eq!((reading.confirmed().world(), reading.confirmed().policy(), reading.applied().policy), (a(2), p(2), p(2)));
+    // 중복 확정도, 실패 시도의 덧붙임도 없다 — 기준점과 시도 이력은 먼저 확정한 시도가 남긴 그대로다.
+    assert_eq!(desk.calls(), (calls.0 + 1, calls.1 + 1, calls.2), "저장 요청 한 번(거절됨)과 다시 읽기 한 번뿐이다");
+    assert_eq!(desk.records().facts, stored);
+    assert_eq!(desk.attempts(2), [Archived]);
+    assert_eq!(desk.records().registry.next_id(), 3);
+
+    // 그 뒤의 조회와 새 요청은 이미 확정으로 읽는다 — 다시 읽기가 새 시도로 이어지지 않았다.
+    assert!(matches!(lab.retry(2, &desk), Err(NotStarted::AlreadyConfirmed { .. })));
+    assert_eq!(desk.calls(), (calls.0 + 1, calls.1 + 1, calls.2));
+}
+
+#[test]
+fn an_older_attempt_that_fails_before_saving_does_not_append_to_a_record_another_attempt_confirmed() {
+    let lab = Lab::new("stale-early", 0);
+    let desk = lab.desk(Save::Store);
+    let given = desk.records();
+    let mut held = desk.clone();
+    let mut older = RetryAttempt::begin(m(2), given.inputs(), &lab.root, &mut held).expect("시작된다");
+
+    let first = lab.retry(2, &desk).expect("시작된다");
+    assert!(matches!(first.outcome, RetryOutcome::Confirmed { .. }), "{:#?}", first.outcome);
+    let calls = desk.calls();
+
+    // 그 뒤 계속 추적한 파일이 바뀌었다 — 오래된 시도는 관측에서 실패한다.
+    write(&lab.root, "src/a.txt", b"changed later");
+    while older.outcome().is_none() {
+        step(&mut older);
+    }
+    let Some(RetryOutcome::Failed { cause, now }) = older.outcome() else {
+        panic!("오래된 시도는 실패한다: {:#?}", older.outcome());
+    };
+    assert!(matches!(cause, FailureCause::UnconfirmedChange { seen_at: SeenAt::Observation, .. }), "{cause:#?}");
+    assert!(
+        matches!(now, AfterFailure::BindingGone { reading } if matches!(reading.standing(), EventStanding::AlreadyConfirmed { .. })),
+        "{now:#?}"
+    );
+    assert_eq!(desk.calls(), (calls.0, calls.1 + 1, calls.2), "다시 읽기 한 번뿐 — 저장 요청도 실패 기록 요청도 없다");
+    assert_eq!(desk.attempts(2), [Archived]);
+}
+
 // ── 시도를 만들지 않는 요청 ────────────────────────────────────────────────
 
 #[test]
 fn a_repeated_request_on_a_confirmed_event_makes_no_attempt_and_no_second_confirmation() {
     let lab = Lab::new("repeat", 0);
-    let mut desk = lab.desk(Save::Store);
-    let first = lab.retry(2, &mut desk).expect("시작된다");
+    let desk = lab.desk(Save::Store);
+    let first = lab.retry(2, &desk).expect("시작된다");
     assert!(matches!(first.outcome, RetryOutcome::Confirmed { .. }));
     let (calls, observes, captures) = (desk.calls(), probe::observes(), probe::captures());
-    let stored = desk.records.facts.clone();
+    let stored = desk.records().facts;
 
     for _ in 0..2 {
-        let Err(NotStarted::AlreadyConfirmed { reading }) = lab.retry(2, &mut desk) else {
+        let Err(NotStarted::AlreadyConfirmed { reading }) = lab.retry(2, &desk) else {
             panic!("이미 확정된 사건에는 시도를 만들지 않는다");
         };
         assert_eq!(
@@ -755,44 +1084,46 @@ fn a_repeated_request_on_a_confirmed_event_makes_no_attempt_and_no_second_confir
         );
     }
     assert_eq!((desk.calls(), probe::observes(), probe::captures()), (calls, observes, captures), "아무것도 다시 부르지 않았다");
-    assert_eq!(desk.records.facts, stored);
-    assert_eq!(desk.records.registry.next_id(), 3, "세계 이름이 다시 발급되지 않았다");
+    assert_eq!(desk.records().facts, stored);
+    assert_eq!(desk.records().registry.next_id(), 3, "세계 이름이 다시 발급되지 않았다");
 }
 
 #[test]
 fn queries_rebuilt_readings_and_out_of_scope_requests_call_no_observation_and_no_state() {
     let lab = Lab::new("queries", 1);
-    let mut desk = lab.desk(Save::Store);
+    let desk = lab.desk(Save::Store);
     let (observes, captures) = (probe::observes(), probe::captures());
 
     // 조회 — 몇 번을 읽어도, 같은 기록을 새로 복사해 읽어도(새 판정 인스턴스) 같은 읽기이고 아무것도 실행되지 않는다.
-    let first = read_scope_change(m(2), &desk.records.inputs()).expect("읽힌다");
+    let first = read_scope_change(m(2), &desk.records().inputs()).expect("읽힌다");
     for _ in 0..3 {
-        let copied = desk.records.clone();
+        let copied = desk.records();
         assert_eq!(read_scope_change(m(2), &copied.inputs()).expect("읽힌다"), first);
     }
     assert_eq!(first.standing(), EventStanding::Waiting { attempts: 1 });
 
     // 시작만 하고 실행하지 않은 시도 — 창고에서 원문과 기준 manifest 를 읽었을 뿐 관측도 저장 요청도 없다.
-    let given = desk.records.clone();
-    let idle = RetryAttempt::begin(m(2), given.inputs(), &lab.env()).expect("시작된다");
+    let given = desk.records();
+    let mut boundary = desk.clone();
+    let idle = RetryAttempt::begin(m(2), given.inputs(), &lab.root, &mut boundary).expect("시작된다");
     assert!(matches!(idle.pending(), Some(RetryRequest::Observe { .. })));
     assert_eq!(idle.outcome(), None);
     drop(idle);
 
     // 보관 중단 표식이 있다고 건넨 기록, 시작 사건, 없는 사건 — 읽기가 돌려준 갈래 그대로이며 시도를 만들지 않는다.
-    let mut halted = desk.records.clone();
+    let mut halted = desk.records();
     halted.marks = ScopeMarks { archive_halt: MarkSeen::Present, unfinished_restore: MarkSeen::Absent };
+    let mut boundary = desk.clone();
     assert_eq!(
-        run_retry(m(2), halted.inputs(), &lab.env(), &mut desk).unwrap_err(),
+        run_retry(m(2), halted.inputs(), &lab.root, &mut boundary).unwrap_err(),
         NotStarted::Reading(vec![ReadingProblem::OutOfScope(ScopeLimit::ArchiveHaltPresent)])
     );
-    assert!(matches!(lab.retry(1, &mut desk), Err(NotStarted::Reading(_))));
-    assert!(matches!(lab.retry(9, &mut desk), Err(NotStarted::Reading(_))));
+    assert!(matches!(lab.retry(1, &desk), Err(NotStarted::Reading(_))));
+    assert!(matches!(lab.retry(9, &desk), Err(NotStarted::Reading(_))));
 
     assert_eq!((probe::observes() - observes, probe::captures() - captures), (0, 0));
     assert_eq!(desk.calls(), (0, 0, 0));
-    assert_eq!(desk.records.facts, lab.records.facts);
+    assert_eq!(desk.records().facts, lab.records.facts);
 }
 
 #[test]
@@ -802,9 +1133,9 @@ fn a_retry_whose_policy_source_or_base_world_cannot_be_read_does_not_start() {
     let absent: &[u8] = b"never-stored/\n";
     lab.records.ledger =
         PolicyLedger::from_records(3, vec![record(1, P1_TEXT), record(2, absent)]).expect("시험 원장은 꼴이 맞다");
-    let mut desk = lab.desk(Save::Store);
+    let desk = lab.desk(Save::Store);
     let (observes, captures) = (probe::observes(), probe::captures());
-    let Err(NotStarted::PolicySource { policy, .. }) = lab.retry(2, &mut desk) else {
+    let Err(NotStarted::PolicySource { policy, .. }) = lab.retry(2, &desk) else {
         panic!("원문을 확인하지 못하면 시작하지 않는다");
     };
     assert_eq!(policy, p(2));
@@ -813,8 +1144,8 @@ fn a_retry_whose_policy_source_or_base_world_cannot_be_read_does_not_start() {
     let mut lab = Lab::new("no-base", 0);
     let nowhere = crate::ManifestAddress::from_parts("sha256", &[7u8; 32]).expect("꼴이 맞는 주소다");
     lab.records.registry = SnapshotRegistry::restore(2, vec![(1, nowhere)]).expect("시험 등록부는 꼴이 맞다");
-    let mut other = lab.desk(Save::Store);
-    let Err(NotStarted::BaseWorld { world, .. }) = lab.retry(2, &mut other) else {
+    let other = lab.desk(Save::Store);
+    let Err(NotStarted::BaseWorld { world, .. }) = lab.retry(2, &other) else {
         panic!("기준 manifest 를 읽지 못하면 시작하지 않는다");
     };
     assert_eq!(world, a(1));
@@ -828,10 +1159,11 @@ fn a_retry_whose_policy_source_or_base_world_cannot_be_read_does_not_start() {
 #[test]
 fn reports_of_another_attempt_another_step_or_a_closed_attempt_are_refused_and_change_nothing() {
     let lab = Lab::new("tickets", 0);
-    let mut desk = lab.desk(Save::Store);
-    let given = desk.records.clone();
-    let mut first = RetryAttempt::begin(m(2), given.inputs(), &lab.env()).expect("시작된다");
-    let mut second = RetryAttempt::begin(m(2), given.inputs(), &lab.env()).expect("같은 입력으로 시작한 다른 시도다");
+    let desk = lab.desk(Save::Store);
+    let given = desk.records();
+    let (mut one, mut two) = (desk.clone(), desk.clone());
+    let mut first = RetryAttempt::begin(m(2), given.inputs(), &lab.root, &mut one).expect("시작된다");
+    let mut second = RetryAttempt::begin(m(2), given.inputs(), &lab.root, &mut two).expect("같은 입력으로 시작한 다른 시도다");
 
     let Some(RetryRequest::Observe { ticket: first_ticket }) = first.pending() else { panic!("첫 요청은 관측이다") };
     let Some(RetryRequest::Observe { ticket: second_ticket }) = second.pending() else { panic!("첫 요청은 관측이다") };
@@ -839,12 +1171,9 @@ fn reports_of_another_attempt_another_step_or_a_closed_attempt_are_refused_and_c
 
     // 첫 시도의 관측 보고 — 실제 관측의 결과다. 같은 걸음을 다시 실행하라는 요청은 거절되고 관측도 다시 일어나지 않는다.
     let observes = probe::observes();
-    let observed = first.perform(&lab.env(), &mut desk).expect("끝나지 않은 시도다");
+    let observed = first.perform().expect("끝나지 않은 시도다");
     assert_eq!(observed.ticket(), first_ticket);
-    assert_eq!(
-        first.perform(&lab.env(), &mut desk).err(),
-        Some(RetryClosed::AlreadyPerformed { ticket: first_ticket })
-    );
+    assert_eq!(first.perform().err(), Some(RetryClosed::AlreadyPerformed { ticket: first_ticket }));
     assert_eq!(probe::observes() - observes, 1);
 
     // 다른 시도에 건네면 거절되고 그 시도는 그대로 관측을 기다린다 — 앞선 시도의 관측으로 새 관측을 생략할 수 없다.
@@ -867,7 +1196,7 @@ fn reports_of_another_attempt_another_step_or_a_closed_attempt_are_refused_and_c
     // 끝까지 간 뒤에는 어떤 보고도 받지 않고, 실행할 요청도 없다.
     let mut last = None;
     while first.outcome().is_none() {
-        let report = first.perform(&lab.env(), &mut desk).expect("끝나지 않은 시도다");
+        let report = first.perform().expect("끝나지 않은 시도다");
         last = Some(report.clone());
         first.advance(report).expect("방금 낸 보고다");
     }
@@ -876,23 +1205,8 @@ fn reports_of_another_attempt_another_step_or_a_closed_attempt_are_refused_and_c
     let last = last.expect("마지막 보고가 있다");
     assert_eq!(first.advance(last.clone()), Err(RetryOutOfOrder::AlreadyClosed { got: last.ticket() }));
     assert_eq!(first.advance(observed), Err(RetryOutOfOrder::AlreadyClosed { got: first_ticket }));
-    assert_eq!(first.perform(&lab.env(), &mut desk).err(), Some(RetryClosed::Finished));
+    assert_eq!(first.perform().err(), Some(RetryClosed::Finished));
     assert_eq!(first.outcome(), Some(&outcome), "끝난 시도의 결과는 바뀌지 않는다");
     assert_eq!(first.pending(), None);
-
-    // 첫 시도가 확정한 뒤, 같은 옛 입력으로 시작해 둔 두 번째 시도를 끝까지 실행해도 중복 확정이 되지 않는다. 저장 경계는 결속이
-    // 지금 기록과 다른 저장 단위를 적지 않았고, 기준점·시도 이력은 첫 시도가 남긴 그대로다.
-    let (saves, stored) = (desk.saves, desk.records.facts.clone());
-    while second.outcome().is_none() {
-        let report = second.perform(&lab.env(), &mut desk).expect("끝나지 않은 시도다");
-        second.advance(report).expect("방금 낸 보고다");
-    }
-    assert!(
-        matches!(second.outcome(), Some(RetryOutcome::Failed { cause: FailureCause::StateNotStored { .. }, .. })),
-        "{:#?}",
-        second.outcome()
-    );
-    assert_eq!(desk.saves, saves + 1);
-    assert_eq!(desk.records.facts, stored);
-    assert_eq!(desk.attempts(2), [Archived]);
+    assert_eq!(second.pending(), Some(RetryRequest::Observe { ticket: second_ticket }), "다른 시도는 그동안 한 걸음도 가지 않았다");
 }

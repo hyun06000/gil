@@ -63,7 +63,8 @@
 //!   이름이 들어 있고, 그 원문의 코드 줄은 따로 검사한다.
 //! - 보관 대기 사건의 명시 재시도(`baseline_retry`, 계약 §5.3·§5.4·§6.3)도 제품 저장 경로가 아니다. `tracking-policy` + Unix 에서만
 //!   컴파일되고, 기존 `observe_scoped`·`capture_scoped`·객체 창고와 호출자가 건넨 내부 저장 경계만 부르며 `state.yaml`·ProjectSession·CLI·
-//!   MCP·Monitor 에 닿지 않는다. 제품 경로가 그것을 부르지 않으므로 아래 검사에 그 이름이 들어 있고, 그 원문의 코드 줄은 따로 검사한다.
+//!   MCP·Monitor 에 닿지 않는다. 한 시도의 관측 루트·객체 창고·저장 경계는 시작할 때 한 번 정해지고 걸음마다 다시 받는 문이 없다.
+//!   제품 경로가 그것을 부르지 않으므로 아래 검사에 그 이름이 들어 있고, 그 원문의 코드 줄은 따로 검사한다.
 //! - 새 모듈은 `src/artifact/tracking_record/` 밖의 어떤 소스에서도 불리지 않는다 — **예외는 `tracking-policy` 개발 구성에서만
 //!   컴파일되는 구현 순서 4번의 연결 파일**(시작 준비 `src/start_prep/`, 형식 10/11 기록 `src/artifact/tracking_state.rs`, 그 재수출
 //!   블록 `start_policy`)뿐이며, 그 파일들이 실제로 그 기능 뒤에 있는지도 함께 본다(2026-11-23). 이 기능을 켠 빌드는 형식 10/11 을
@@ -816,7 +817,7 @@ fn no_product_source_calls_the_new_module() {
         "baseline_retry",
         "RetryAttempt",
         "run_retry",
-        "RetryEnv",
+        "AfterFailure",
         "BaselineState",
         "BaselineCommit",
         "AttemptBinding",
@@ -1365,6 +1366,13 @@ fn the_scope_change_reading_has_no_channel_to_observation_store_or_state_and_tak
         assert!(code.iter().any(|line| line.contains(call)), "기존 검사·선택을 같은 호출의 입력으로 불러야 한다: {call}");
     }
 
+    // 역사 경계(승인·보관)의 근거도 지금 경계와 같은 유도를 지난다 — B(T) 를 고르는 자리는 그 유도 하나뿐이다.
+    let picks: Vec<&&str> = code.iter().filter(|line| line.contains("select_boundary_world(")).collect();
+    assert_eq!(picks.len(), 1, "B(T) 선택은 한 유도 안에서만 불러야 한다: {picks:#?}");
+    for line in ["let basis = Derivation { inputs: &earlier, chain, start }", ".boundary(boundary)"] {
+        assert!(code.contains(&line), "역사 경계의 근거는 앞의 사건만 남긴 입력으로 같은 유도를 불러야 한다: {line}");
+    }
+
     // 읽기를 만드는 문은 하나이고, 호출자가 건네는 것은 대상 사건 이름과 한 입력 묶음뿐이다.
     let doors: Vec<&&str> = code.iter().filter(|line| line.contains("-> Result<ScopeChangeReading")).collect();
     assert_eq!(
@@ -1400,22 +1408,40 @@ fn the_baseline_retry_is_feature_gated_observes_for_real_and_reaches_no_product_
         "재시도 시험은 같은 기능 뒤에서만 짓는다"
     );
 
-    // 실제 관측·보관을 이 모듈이 그 자리에서 부른다 — 결과를 받아 통과시키기만 하는 문이 아니다.
+    // 실제 관측·보관·manifest 저장을 이 모듈이 **이 시도의 대상으로** 그 자리에서 부른다 — 결과를 받아 통과시키기만 하는 문이 아니다.
     for call in [
-        "Phase::Observing => ReportBody::Observed(observe_scoped(env.root, self.applied_policy())),",
-        "Phase::Capturing => ReportBody::Captured(capture_scoped(env.root, self.applied_policy(), env.store)),",
+        "observe_scoped(&targets.root, self.applied_policy()).map_err(Missed::Observe)",
+        "capture_scoped(&targets.root, self.applied_policy(), &targets.store).map_err(Missed::Observe)",
+        "targets.store.put_manifest(captured).map_err(|problem| Missed::Store(problem.to_string()))",
+        "Phase::Saving { commit, .. } => ReportBody::Saved(self.state.save_baseline(commit)),",
+        "Phase::Rereading { .. } | Phase::Checking { .. } => ReportBody::Reread(self.state.reread()),",
         "let delta = scope_delta(&span, &self.base, &world.manifest);",
     ] {
-        assert!(code.contains(&call), "실제 관측 경로와 범위 변화 검사를 불러야 한다: {call}");
+        assert!(code.contains(&call), "실제 관측 경로와 범위 변화 검사를 이 시도의 대상으로 불러야 한다: {call}");
     }
-    // 시도를 만드는 문은 읽기를 다시 실행하고, 확정 정책을 그 읽기에서만 얻는다.
+    // 시도를 만드는 문은 읽기를 다시 실행하고, 실행 전제를 확인하고, 확정 정책을 그 읽기에서만 얻고, 대상을 한 번 정한다.
     for line in [
-        "pub(crate) fn begin(event: EventName, inputs: RecordInputs<'a>, env: &RetryEnv<'_>) -> Result<RetryAttempt<'a>, NotStarted> {",
         "let before = read_scope_change(event, &inputs).map_err(NotStarted::Reading)?;",
+        "let unconfirmed = unconfirmed_prerequisites(&before);",
         "let confirmed_policy = before.confirmed().policy();",
+        "let targets = Targets::of(root).map_err(|said| NotStarted::Target { said })?;",
+        "let store = ObjectStore::at(&root.join(GIL_DIR));",
     ] {
-        assert!(code.contains(&line), "시도는 읽기가 유도한 값에서 시작해야 한다: {line}");
+        assert!(code.contains(&line), "시도는 읽기가 유도한 값과 한 번 정한 대상에서 시작해야 한다: {line}");
     }
+    // 대상(루트·객체 창고·저장 경계)을 받는 문은 시도를 시작하는 두 문뿐이다. 걸음을 실행하는 문은 대상을 받지 않는다.
+    assert!(code.contains(&"pub(crate) fn perform(&mut self) -> Result<RetryReport, RetryClosed> {"), "perform 은 대상을 받지 않는다");
+    let count = |wanted: &str| code.iter().filter(|line| **line == wanted).count();
+    assert_eq!(count("root: &Path,"), 2, "루트를 받는 문은 begin 과 run_retry 뿐이다");
+    assert_eq!(count("state: &'a mut dyn BaselineState,"), 2, "저장 경계는 begin 이 받아 시도가 지닌다(인자와 칸)");
+    assert_eq!(count("state: &mut dyn BaselineState,"), 1, "run_retry 가 받아 begin 에 건넨다");
+    let takes_targets: Vec<&&str> = code
+        .iter()
+        .filter(|line| line.contains("fn ") && line.contains('(') && line.contains(')'))
+        .filter(|line| line.contains("pub(crate)"))
+        .filter(|line| line.contains("&Path") || line.contains("ObjectStore") || line.contains("BaselineState"))
+        .collect();
+    assert!(takes_targets.is_empty(), "한 줄 서명의 공개 문이 대상을 다시 받는다: {takes_targets:#?}");
     // 보고의 내용과 표는 모듈 밖에서 만들 수 없다 — 칸이 비공개이고 만드는 공개 문이 없다.
     for private in ["enum ReportBody {", "ticket: AttemptTicket,", "body: ReportBody,", "attempt: u64,", "step: u32,"] {
         assert!(code.contains(&private), "비공개 칸이어야 한다: {private}");

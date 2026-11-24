@@ -46,10 +46,14 @@
 //!
 //! # world_before_ref 와 순환
 //!
-//! T8 의 두 비교 모두 **대상 사건보다 앞의 사건만 남긴 입력**에서 유도한 세계와 견준다. 대상 사건 자신의 기준점은 그 입력에 없으므로
-//! 「검사 대상 사건의 새 기준점으로 그 사건의 보관 전 근거를 채우는」 순환이 생기지 않는다. 앞선 사건의 기준점이 견주는 발급 번호
-//! (승인 때는 사건의 `next_cycle_id`, 보관 때는 `baseline.next_cycle_id`)보다 늦게 보관됐다고 적혀 있으면 선후를 정할 수 없으므로
-//! 성공으로 채우지 않는다. 대기 사건은 마지막 사건이라 지금 경계의 B(T) 가 곧 앞선 기록의 유도다.
+//! T8 의 두 비교 모두 **대상 사건보다 앞의 사건만 남긴 입력**에서, 지금 경계와 **같은 유도**(B(T) 와 그 확정 정책 — Interview 의 Entry
+//! 계승, Experiment 의 Exit 계보와 검증 ①·②, 보관 발급기 필터, start 기준점)로 얻은 세계와 견준다. 승인 경계·보관 경계에서 고른 Exit 의
+//! 근거가 서지 않으면 세계 이름이 같아도 일치로 치지 않는다. 대상 사건 자신과 그 뒤의 사건은 그 입력에 없으므로 「검사 대상 사건의 새
+//! 기준점으로 그 사건의 보관 전 근거를 채우는」 순환도, 뒤 사건의 판·기준점을 과거의 근거로 대입하는 일도 생기지 않는다. 지금 경계가 대상
+//! 사건의 기준점을 고른 경우에도 승인 경계와 보관 경계의 근거는 따로 유도한다. 앞선 사건의 기준점이 견주는 발급 번호(승인 때는 사건의
+//! `next_cycle_id`, 보관 때는 `baseline.next_cycle_id`)보다 늦게 보관됐다고 적혀 있으면 선후를 정할 수 없으므로 성공으로 채우지 않는다.
+//! 승인 경계의 근거와 두 번째 근거(대기면 지금 경계, 이미 확정이면 보관 경계)의 확정 정책이 다른 판이면 한 비교 근거가 아니므로 거절한다.
+//! 대기 사건은 마지막 사건이라 지금 경계의 유도가 곧 앞선 기록의 유도다.
 //!
 //! # 읽기 전용
 //!
@@ -259,30 +263,34 @@ pub(crate) enum EventStanding {
 }
 
 /// `world_before_ref` 의 두 번째 비교가 무엇이었는가(T8).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum SecondBasis {
-    /// 대기 사건 — 지금 서 있는 경계의 마지막 확정 세계와 같다.
+    /// 대기 사건 — 지금 서 있는 경계의 마지막 확정 세계와 같다. 그 근거는 읽기의 [`ScopeChangeReading::confirmed`] 다.
     CurrentBoundary { boundary: CycleRef },
-    /// 이미 확정된 사건 — 보관 경계의 앞선 기록으로 유도한 세계와 같다.
-    ArchiveBoundary { boundary: CycleRef },
+    /// 이미 확정된 사건 — 보관 경계에서 **대상 사건보다 앞의 기록만으로** 유도한 세계·확정 정책·유도 경로. 그 세계와 같다.
+    ArchiveBoundary { basis: ConfirmedWorld },
     /// 대체된 사건 — 보관하지 않았으므로 두 번째 비교가 없다.
     NoneForReplaced,
 }
 
-/// 대상 사건의 `world_before_ref` 와 그것을 견준 근거. 이 값이 있다면 적힌 비교는 모두 일치했다.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// 대상 사건의 `world_before_ref` 와 그것을 견준 근거. 이 값이 있다면 적힌 비교는 모두 일치했고, 근거마다 지금 경계와 같은 유도가 섰다.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WorldBefore {
     /// 사건에 적힌 `world_before_ref`.
     pub(crate) world: SnapshotRef,
-    /// 승인 경계 `after_cycle_ref` — 대상 사건보다 앞의 사건만으로 유도한 그 경계의 세계와 같았다.
-    pub(crate) approval_boundary: CycleRef,
+    /// 승인 경계 `after_cycle_ref` 에서 **대상 사건보다 앞의 기록만으로** 유도한 세계·확정 정책·유도 경로. 그 세계와 같다.
+    pub(crate) approval: ConfirmedWorld,
     pub(crate) second: SecondBasis,
 }
 
 /// 이번 호출이 **판단하지 않은** 칸 — 거절하지도 유효하다고 승인하지도 않았다.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Unjudged {
-    /// 3h 가 판단하지 않은 `null`·칸 없음의 사이클 참조(시작 사건의 `null` 경계는 이 읽기가 따로 확인하므로 여기 없다).
+    /// 기준점이 없는 사건의 `baseline.after_cycle_ref` 칸이 없다 — 3h 는 판단하지 않았지만, 같은 호출의 3e 가 「기준점이 없으면 보관
+    /// 경계·발급기 칸도 없다」를 확인했다. 보관 대기·대체된 사건의 **정상 부재**이며 확인이 빠진 것이 아니다.
+    BaselineSlotsNotWritten { event: EventName },
+    /// 3h 가 판단하지 않은 그 밖의 `null`·칸 없음의 사이클 참조 — 그 사건의 경계를 확인하지 못했다(시작 사건의 `null` 경계는 이 읽기가
+    /// 따로 확인하므로 여기 없다).
     CycleRefAbsent { event: EventName, field: CycleField, reading: RefReading },
     /// 실제 사이클 참조가 없어 3h 가 `chain_ref` 의 실재를 조회하지 않은 사건(시작 사건은 이 읽기가 따로 확인한다).
     ChainNotLookedUp { event: EventName },
@@ -352,8 +360,8 @@ impl ScopeChangeReading {
     }
 
     /// 대상 사건의 `world_before_ref` 와 견준 근거.
-    pub(crate) fn world_before(&self) -> WorldBefore {
-        self.world_before
+    pub(crate) fn world_before(&self) -> &WorldBefore {
+        &self.world_before
     }
 
     /// 기준 일치(§6.1) — 마지막 확정 세계의 확정 정책이 적용 정책과 같은 판인가. 다르다고 손상이 아니다.
@@ -504,8 +512,10 @@ pub(crate) enum ReadingProblem {
     WorldBeforeNotInRegistry { event: EventName, world: SnapshotRef },
     /// 대상 사건보다 앞의 기록만 남긴 입력을 세우지 못했다.
     PriorRecords { event: EventName },
-    /// 앞선 기록에서 그 경계의 세계를 고르지 못했다 — 그 실패 그대로.
-    PriorBasis { event: EventName, at: BasisAt, boundary: CycleRef, found: Vec<BoundaryWorldProblem> },
+    /// 앞선 기록에서 그 경계의 세계와 확정 정책을 지금 경계와 같은 유도로 얻지 못했다 — 그 유도의 실패 그대로.
+    PriorBasis { event: EventName, at: BasisAt, boundary: CycleRef, found: Vec<ReadingProblem> },
+    /// 승인 경계의 근거와 두 번째 근거의 확정 정책이 다른 판이다 — 세계 이름이 같아도 한 비교 근거가 아니다.
+    BasisPolicyDiffers { event: EventName, at: BasisAt, approval: PolicyName, second: PolicyName },
     /// 앞선 사건의 기준점이 견주는 발급 번호보다 늦게 보관됐다고 적혀 있다 — 선후를 정할 수 없다.
     PriorBaselineNotBefore { event: EventName, at: BasisAt, basis: EventName, archive_issuer: u32, bound: u32 },
     /// T8 — `world_before_ref` 가 유도한 세계와 다르다.
@@ -597,8 +607,12 @@ impl fmt::Display for ReadingProblem {
             }
             ReadingProblem::PriorBasis { event, at, boundary, found } => write!(
                 f,
-                "{event} 의 앞선 기록에서 {boundary} 의 세계({at:?})를 고르지 못했다: {}",
+                "{event} 의 앞선 기록에서 {boundary} 의 세계와 확정 정책({at:?})을 유도하지 못했다: {}",
                 listed(found)
+            ),
+            ReadingProblem::BasisPolicyDiffers { event, at, approval, second } => write!(
+                f,
+                "{event} 의 승인 경계 근거의 확정 정책 {approval} 과 두 번째 근거({at:?})의 확정 정책 {second} 이 다르다"
             ),
             ReadingProblem::PriorBaselineNotBefore { event, at, basis, archive_issuer, bound } => write!(
                 f,
@@ -794,18 +808,22 @@ impl Derivation<'_, '_> {
 
 // ── world_before_ref 의 근거 ───────────────────────────────────────────────
 
-/// 대상 사건(자리 `index`)보다 **앞의 사건만** 남긴 입력에서 `boundary` 의 세계를 고른다 — 기존 B(T) 선택 그대로.
+/// 대상 사건(자리 `index`)보다 **앞의 사건만** 남긴 입력에서 `boundary` 의 세계와 확정 정책을 **지금 경계와 같은 유도**로 얻는다.
 ///
-/// 대상 사건 자신과 그 뒤의 사건은 입력에 없으므로 그 기준점이 근거가 되지 않는다. 고른 것이 앞선 사건의 기준점이면 그 보관 발급기가
-/// `bound` 보다 크지 않아야 한다.
-fn prior_world(
+/// 앞의 사건만 남긴 원장·정책 연결·사이클 칸·보충 칸으로 한 입력 묶음을 세우고 [`Derivation::boundary`] 를 그대로 부른다 — B(T) 선택,
+/// Interview 의 Entry 계승, Experiment 의 Exit 계보와 검증 ①·②, 보관 발급기 필터, start 기준점이 모두 같은 코드다. 대상 사건 자신과 그
+/// 뒤의 사건은 입력에 없으므로 그 판·기준점이 근거가 되지 않는다. 고른 것이 앞선 사건의 기준점이면 그 보관 발급기가 `bound` 보다 크지
+/// 않아야 한다.
+fn prior_basis(
     inputs: &RecordInputs<'_>,
+    chain: &Chain,
+    start: StartLink,
     index: usize,
     event: EventName,
     boundary: CycleRef,
     bound: u32,
     at: BasisAt,
-) -> Result<SnapshotRef, Problems> {
+) -> Result<ConfirmedWorld, Problems> {
     let unbuildable = || vec![ReadingProblem::PriorRecords { event }];
     // 3c 가 성공했으므로 앞의 사건들이 도입한 판은 P1 … 대상 사건의 policy_before 다(T3·도입 순서).
     let boards = inputs.links.events()[index].before().map_or(0, |policy| policy.number());
@@ -814,14 +832,24 @@ fn prior_world(
         .map_err(|_| unbuildable())?;
     let links = EventPolicyLinks::from_links(event.number(), inputs.links.events()[..index].to_vec())
         .map_err(|_| unbuildable())?;
-    let chosen = select_boundary_world(boundary, &ledger, &links, &inputs.facts[..index], inputs.chains, inputs.registry)
+    let earlier = RecordInputs {
+        ledger: &ledger,
+        links: &links,
+        facts: &inputs.facts[..index],
+        worlds: &inputs.worlds[..index],
+        chains: inputs.chains,
+        registry: inputs.registry,
+        marks: inputs.marks,
+    };
+    let basis = Derivation { inputs: &earlier, chain, start }
+        .boundary(boundary)
         .map_err(|found| vec![ReadingProblem::PriorBasis { event, at, boundary, found }])?;
-    if let BoundarySource::EventBaseline { event: basis, archive_issuer, .. } = chosen.source()
-        && archive_issuer > bound
+    if let Some(PolicyStep::EventBaseline { event: basis_event, archive_issuer, .. }) = basis.path.first()
+        && *archive_issuer > bound
     {
-        return one(ReadingProblem::PriorBaselineNotBefore { event, at, basis, archive_issuer, bound });
+        return one(ReadingProblem::PriorBaselineNotBefore { event, at, basis: *basis_event, archive_issuer: *archive_issuer, bound });
     }
-    Ok(chosen.world())
+    Ok(basis)
 }
 
 /// 대상 사건의 `review_cycle_ref` — 실제 참조면 같은 Chain 의 닫힌 Interview 이고 승인 발급 번호보다 앞인지 본다.
@@ -1003,25 +1031,51 @@ pub(crate) fn read_scope_change(event: EventName, inputs: &RecordInputs<'_>) -> 
     if registry.resolve(recorded).is_none() {
         problems.push(ReadingProblem::WorldBeforeNotInRegistry { event, world: recorded });
     }
-    let mut compare = |at: BasisAt, boundary: CycleRef, derived: Result<SnapshotRef, Problems>| match derived {
-        Ok(derived) if derived == recorded => {}
-        Ok(derived) => problems.push(ReadingProblem::WorldBeforeDiffers { event, at, boundary, recorded, derived }),
-        Err(found) => problems.extend(found),
+    // 근거마다 지금 경계와 같은 유도를 하고, 그 세계를 world_before_ref 와 견준다.
+    let differs = |at: BasisAt, boundary: CycleRef, derived: SnapshotRef| {
+        (derived != recorded).then_some(ReadingProblem::WorldBeforeDiffers { event, at, boundary, recorded, derived })
     };
-    compare(BasisAt::Approval, approval, prior_world(inputs, index, event, approval, fact.issuer(), BasisAt::Approval));
-    let second = match standing {
+    let approval_basis = match prior_basis(inputs, chain, start, index, event, approval, fact.issuer(), BasisAt::Approval) {
+        Ok(basis) => {
+            problems.extend(differs(BasisAt::Approval, approval, basis.world));
+            Some(basis)
+        }
+        Err(found) => {
+            problems.extend(found);
+            None
+        }
+    };
+    // 두 번째 근거 — (비교한 자리, 그 확정 정책, 결과에 담을 값). 유도하지 못했으면 정책이 없다.
+    let (second_at, second_policy, second) = match standing {
         EventStanding::Waiting { .. } => {
-            // 대기 사건은 마지막 사건이고 기준점이 없으므로, 전체 입력의 B(T) 가 곧 앞선 기록의 유도다.
-            compare(BasisAt::CurrentBoundary, boundary, Ok(confirmed.world));
-            SecondBasis::CurrentBoundary { boundary }
+            // 대기 사건은 마지막 사건이고 기준점이 없으므로, 전체 입력의 지금 경계 유도가 곧 앞선 기록의 유도다.
+            problems.extend(differs(BasisAt::CurrentBoundary, boundary, confirmed.world));
+            (BasisAt::CurrentBoundary, Some(confirmed.policy), Some(SecondBasis::CurrentBoundary { boundary }))
         }
         EventStanding::AlreadyConfirmed { archived_at, archive_issuer, .. } => {
-            let derived = prior_world(inputs, index, event, archived_at, archive_issuer, BasisAt::Archive);
-            compare(BasisAt::Archive, archived_at, derived);
-            SecondBasis::ArchiveBoundary { boundary: archived_at }
+            match prior_basis(inputs, chain, start, index, event, archived_at, archive_issuer, BasisAt::Archive) {
+                Ok(basis) => {
+                    problems.extend(differs(BasisAt::Archive, archived_at, basis.world));
+                    (BasisAt::Archive, Some(basis.policy), Some(SecondBasis::ArchiveBoundary { basis }))
+                }
+                Err(found) => {
+                    problems.extend(found);
+                    (BasisAt::Archive, None, None)
+                }
+            }
         }
-        EventStanding::Replaced { .. } => SecondBasis::NoneForReplaced,
+        EventStanding::Replaced { .. } => (BasisAt::Approval, None, Some(SecondBasis::NoneForReplaced)),
     };
+    if let (Some(approval_basis), Some(second_policy)) = (&approval_basis, second_policy)
+        && approval_basis.policy != second_policy
+    {
+        problems.push(ReadingProblem::BasisPolicyDiffers {
+            event,
+            at: second_at,
+            approval: approval_basis.policy,
+            second: second_policy,
+        });
+    }
 
     // 대기 사건이 서 있을 수 있는 경계 — 승인 경계이거나 그 뒤에 연 사이클(T9 가 Interview 임을 본다).
     if let EventStanding::Waiting { .. } = standing {
@@ -1039,13 +1093,20 @@ pub(crate) fn read_scope_change(event: EventName, inputs: &RecordInputs<'_>) -> 
         Ok(None) => {}
         Err(problem) => problems.push(problem),
     }
-    if !problems.is_empty() {
+    let (Some(approval_basis), Some(second), true) = (approval_basis, second, problems.is_empty()) else {
+        debug_assert!(!problems.is_empty(), "근거를 유도하지 못했다면 그 갈래가 담겨 있다");
         return Err(problems);
-    }
+    };
+    let world_before = WorldBefore { world: recorded, approval: approval_basis, second };
     for (name, field, reading) in agreed.cycle_refs().not_judged() {
-        if name != start.event {
-            not_judged.push(Unjudged::CycleRefAbsent { event: name, field, reading });
+        if name == start.event {
+            continue;
         }
+        // 3e 의 성공: 기준점이 있으면 보관 경계 칸이 있다. 그래서 그 칸이 없다는 것은 기준점이 없는 사건의 정상 부재다.
+        not_judged.push(match (field, reading) {
+            (CycleField::BaselineAfterCycleRef, RefReading::UnwrittenNotJudged) => Unjudged::BaselineSlotsNotWritten { event: name },
+            _ => Unjudged::CycleRefAbsent { event: name, field, reading },
+        });
     }
     for name in agreed.cycle_refs().chains_not_looked_up() {
         if name != start.event {
@@ -1068,7 +1129,7 @@ pub(crate) fn read_scope_change(event: EventName, inputs: &RecordInputs<'_>) -> 
         applied,
         confirmed,
         standing,
-        world_before: WorldBefore { world: recorded, approval_boundary: approval, second },
+        world_before,
         not_judged,
     })
 }

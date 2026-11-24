@@ -155,10 +155,19 @@ fn waiting_after(later: u32) -> Case {
     Case::new(records(&[start(), change(2, 3, 4, Base::Waiting)]), &[(Some(3), Some(2))], story(1 + later))
 }
 
-/// 유도 경로를 견주기 쉬운 꼴로 — (걸음의 종류, 사이클 또는 사건의 번호, 세계, 그 걸음이 지닌 판).
+/// 지금 경계의 유도 경로.
 fn trail(reading: &ScopeChangeReading) -> Vec<(&'static str, u32, u32, Option<u32>)> {
-    reading
-        .confirmed()
+    trail_of(reading.confirmed())
+}
+
+/// (경계, 세계, 확정 정책)의 번호.
+fn basis(world: &ConfirmedWorld) -> (u32, u32, u32) {
+    (world.boundary().number(), world.world().number(), world.policy().number())
+}
+
+/// 유도 경로를 견주기 쉬운 꼴로 — (걸음의 종류, 사이클 또는 사건의 번호, 세계, 그 걸음이 지닌 판).
+fn trail_of(world: &ConfirmedWorld) -> Vec<(&'static str, u32, u32, Option<u32>)> {
+    world
         .path()
         .iter()
         .map(|step| match *step {
@@ -206,10 +215,11 @@ fn a_waiting_event_reads_as_applied_p2_confirmed_a2_under_p1_and_no_baseline() {
 
     // 사건의 기준점 — 없다. 유효한 대기다.
     assert_eq!(reading.standing(), EventStanding::Waiting { attempts: 1 });
-    assert_eq!(
-        reading.world_before(),
-        WorldBefore { world: a(2), approval_boundary: c(3), second: SecondBasis::CurrentBoundary { boundary: c(3) } }
-    );
+    // world_before_ref 의 근거 — 승인 경계 C3 에서 앞선 기록(M1 뿐)으로 한 유도도 지금 경계와 같은 세계·같은 확정 정책·같은 경로다.
+    let before = reading.world_before();
+    assert_eq!((before.world, &before.second), (a(2), &SecondBasis::CurrentBoundary { boundary: c(3) }));
+    assert_eq!(basis(&before.approval), (3, 2, 1));
+    assert_eq!(trail_of(&before.approval), trail(&reading));
     assert_eq!((reading.event(), reading.chain(), reading.issuer()), (m(2), ch(1), 4));
 }
 
@@ -251,6 +261,7 @@ fn interviews_closed_while_waiting_keep_the_confirmed_world_and_its_policy() {
     assert_eq!(reading.standing(), EventStanding::Waiting { attempts: 1 });
     assert_eq!(reading.issuer(), 6, "지금 보관한다면 baseline.next_cycle_id 는 6 이다");
     assert_eq!(reading.world_before().second, SecondBasis::CurrentBoundary { boundary: c(5) });
+    assert_eq!(basis(&reading.world_before().approval), (3, 2, 1), "승인 경계 C3 의 근거도 A2·P1 이다");
 }
 
 #[test]
@@ -270,9 +281,28 @@ fn an_event_archived_at_a_later_boundary_reads_as_confirmed_with_its_own_source(
     );
     assert!(reading.basis_agrees());
     // world_before_ref 는 승인 경계 C3 과 보관 경계 C5 의 **앞선 기록**(M1 뿐)으로 유도한 세계 A2 와 같다 — M2 자신의 기준점 A3 이 아니다.
+    // 지금 경계가 M2 의 기준점(P2)을 골랐어도 두 역사 경계의 근거는 같은 유도로 따로 섰고, 그 확정 정책은 P1 이다.
+    let before = reading.world_before();
+    assert_eq!(before.world, a(2));
+    assert_eq!(basis(&before.approval), (3, 2, 1));
     assert_eq!(
-        reading.world_before(),
-        WorldBefore { world: a(2), approval_boundary: c(3), second: SecondBasis::ArchiveBoundary { boundary: c(5) } }
+        trail_of(&before.approval),
+        [("interview", 3, 2, None), ("experiment", 2, 2, Some(1)), ("interview", 1, 1, None), ("start", 1, 1, Some(1))]
+    );
+    let SecondBasis::ArchiveBoundary { basis: archive } = &before.second else {
+        panic!("이미 확정된 사건의 두 번째 근거는 보관 경계다: {:?}", before.second);
+    };
+    assert_eq!(basis(archive), (5, 2, 1));
+    assert_eq!(
+        trail_of(archive),
+        [
+            ("interview", 5, 2, None),
+            ("interview", 4, 2, None),
+            ("interview", 3, 2, None),
+            ("experiment", 2, 2, Some(1)),
+            ("interview", 1, 1, None),
+            ("start", 1, 1, Some(1)),
+        ]
     );
 }
 
@@ -359,7 +389,7 @@ fn a_replaced_event_is_read_as_replaced_and_the_later_event_as_waiting() {
 
     let waiting = case.reading(3);
     assert_eq!(waiting.standing(), EventStanding::Waiting { attempts: 1 });
-    assert_eq!(waiting.world_before().approval_boundary, c(4));
+    assert_eq!(basis(&waiting.world_before().approval), (4, 2, 1), "M3 의 승인 경계 C4 의 근거 — 대체된 M2 의 판 P2 가 아니다");
 
     // 두 사건 모두 마지막 확정 세계는 A2, 확정 정책은 두 판 앞의 P1 이다.
     for reading in [&replaced, &waiting] {
@@ -394,12 +424,10 @@ fn what_was_not_judged_stays_visible_in_a_successful_reading() {
     let reading = case.reading(2);
     let not_judged = reading.not_judged();
     assert!(not_judged.contains(&Unjudged::ArchiveHaltNotProvided) && not_judged.contains(&Unjudged::UnfinishedRestoreNotProvided));
-    // 대기 사건의 baseline.after_cycle_ref 칸은 없다 — 3h 는 그것을 판단하지 않았고 그 사실이 남는다.
-    assert!(not_judged.contains(&Unjudged::CycleRefAbsent {
-        event: m(2),
-        field: CycleField::BaselineAfterCycleRef,
-        reading: RefReading::UnwrittenNotJudged,
-    }));
+    // 대기 사건의 baseline.after_cycle_ref 칸은 없다 — 3h 는 그것을 판단하지 않았고 그 사실이 남는다. 다만 그것은 기준점이 없는 사건의
+    // 정상 부재로 따로 적히며, 경계를 확인하지 못한 칸(CycleRefAbsent)과 섞이지 않는다.
+    assert!(not_judged.contains(&Unjudged::BaselineSlotsNotWritten { event: m(2) }));
+    assert!(!not_judged.iter().any(|entry| matches!(entry, Unjudged::CycleRefAbsent { .. })), "{not_judged:?}");
     // 시작 사건의 null 경계와 chain_ref 는 이 읽기가 따로 확인했으므로 판단하지 않은 목록에 없다.
     assert!(
         !not_judged.iter().any(|entry| matches!(
@@ -729,4 +757,90 @@ fn inputs_that_do_not_describe_one_event_list_are_refused() {
         partial.refused(2).as_slice(),
         [ReadingProblem::Inputs(found)] if matches!(found.as_slice(), [EventInputsProblem::CycleRefs(_)])
     ));
+}
+
+// ── 역사 경계의 근거 ───────────────────────────────────────────────────────
+
+#[test]
+fn a_historical_boundary_whose_basis_does_not_stand_is_refused_even_when_the_current_boundary_picks_the_events_own_baseline() {
+    // M2 는 C3 에서 승인하고 바로 보관했다(A3). 지금 경계 C3 의 B(T) 는 M2 자신의 기준점이라 C3 의 Exit 을 따라가지 않는다. 그러나 승인
+    // 경계와 보관 경계의 앞선 근거는 C3 의 Exit 이고, 그 근거의 Experiment C2 는 저장 Exit(A1)이 계보의 Verify(A2)와 다르다. 세계 이름만
+    // 보면 world_before_ref A1 = C3 의 Exit A1 이지만, 근거가 서지 않으므로 일치로 치지 않는다.
+    let bent = restored(&story(1)[0], |nodes| {
+        nodes[at(2)].exit = Some(a(1));
+        nodes[at(3)].entry = a(1);
+        nodes[at(3)].exit = Some(a(1));
+    })
+    .expect("Cycles::restore 가 받아들인다");
+    let case = Case::new(records(&[start(), change(2, 3, 4, kept(3, 3, 4))]), &[(Some(3), Some(1))], vec![bent]);
+    let problems = case.refused(2);
+    let unbased = |at: BasisAt| {
+        problems.iter().any(|problem| {
+            matches!(
+                problem,
+                ReadingProblem::PriorBasis { event, at: found_at, boundary, found }
+                    if (*event, *found_at, *boundary) == (m(2), at, c(3))
+                        && matches!(found.as_slice(), [ReadingProblem::ExitLineageDiffers { cycle, .. }] if *cycle == c(2))
+            )
+        })
+    };
+    assert!(unbased(BasisAt::Approval) && unbased(BasisAt::Archive), "{problems:#?}");
+    assert_eq!(problems.len(), 2, "{problems:#?}");
+}
+
+#[test]
+fn a_historical_basis_is_derived_from_earlier_records_only_and_keeps_its_own_confirmed_policy() {
+    // M2(P1→P2)는 C3 에서 승인, 대기 중 인터뷰 C4 가 닫힌 뒤 C4 에서 보관했다(A3, 발급기 5). 그 뒤 C5 가 그 기준점에서 열려 닫혔고,
+    // M3(P2→P3)을 C5 에서 승인했다(발급기 6, 대기).
+    let walked = restored(&story(3)[0], |nodes| {
+        nodes[at(5)].entry = a(3);
+        nodes[at(5)].exit = Some(a(3));
+    })
+    .expect("Cycles::restore 가 받아들인다");
+    let rows = [start(), change(2, 3, 4, kept(3, 4, 5)), change(3, 5, 6, Base::Waiting)];
+    let case = Case::new(records(&rows), &[(Some(3), Some(2)), (Some(5), Some(3))], vec![walked]);
+
+    // M2: 지금 경계 C5 의 확정 세계는 A3(P2)지만, M2 의 승인 경계 C3·보관 경계 C4 의 근거는 M2 보다 앞의 기록으로만 유도한 A2(P1)다 —
+    // M2 자신의 기준점도, 뒤의 M3 의 판 P3 도 과거의 근거가 되지 않는다.
+    let second = case.reading(2);
+    assert_eq!(basis(second.confirmed()), (5, 3, 2));
+    assert_eq!(trail(&second), [("interview", 5, 3, None), ("baseline", 2, 3, Some(2))]);
+    let before = second.world_before();
+    assert_eq!(basis(&before.approval), (3, 2, 1));
+    let SecondBasis::ArchiveBoundary { basis: archive } = &before.second else {
+        panic!("이미 확정된 사건의 두 번째 근거는 보관 경계다: {:?}", before.second);
+    };
+    assert_eq!(basis(archive), (4, 2, 1));
+    assert!(trail_of(archive).iter().all(|(kind, ..)| *kind != "baseline"), "{:?}", trail_of(archive));
+
+    // M3: 승인 경계 C5 의 근거는 앞선 M2 의 기준점에서 이어진 A3(P2)이고, 적용 정책 P3 이 아니다.
+    let third = case.reading(3);
+    assert_eq!(third.applied().policy, p(3));
+    assert_eq!(third.standing(), EventStanding::Waiting { attempts: 1 });
+    assert_eq!(basis(third.confirmed()), (5, 3, 2));
+    assert_eq!(basis(&third.world_before().approval), (5, 3, 2));
+    assert_eq!(trail_of(&third.world_before().approval), [("interview", 5, 3, None), ("baseline", 2, 3, Some(2))]);
+}
+
+#[test]
+fn the_same_world_name_under_another_confirmed_policy_is_not_one_basis() {
+    // M2 는 C3 에서 승인했고 인터뷰 C4 가 닫힌 뒤 C4 에서 보관했다 — 추적 세계가 같아 이름은 A2 그대로, 확정 정책은 P2 다. M3 은 그 뒤
+    // (발급기 5) C3 에서 승인됐다고 적혀 있고 world_before_ref 는 A2 다. 승인 경계 C3 의 근거는 A2(P1), 지금 경계 C4 의 근거는 A2(P2) —
+    // 세계 이름은 같지만 한 비교 근거가 아니다. 이 기록은 승인 경계보다 뒤의 경계에 서 있지도 않다.
+    let rows = [start(), change(2, 3, 4, kept(2, 4, 5)), change(3, 3, 5, Base::Waiting)];
+    let case = Case::new(records(&rows), &[(Some(3), Some(2)), (Some(3), Some(2))], story(2));
+    let problems = case.refused(3);
+    assert!(
+        problems.contains(&ReadingProblem::BasisPolicyDiffers {
+            event: m(3),
+            at: BasisAt::CurrentBoundary,
+            approval: p(1),
+            second: p(2),
+        }),
+        "{problems:#?}"
+    );
+    assert!(
+        !problems.iter().any(|problem| matches!(problem, ReadingProblem::WorldBeforeDiffers { .. })),
+        "세계 이름은 두 근거 모두 A2 다: {problems:#?}"
+    );
 }

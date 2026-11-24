@@ -97,15 +97,20 @@
 //!     ─read_scope_change─▶ ScopeChangeReading   같은 호출에서 3j·3g·B(T)·S(N)·Experiment Exit·Exit 계보를 다시 실행해 적용 정책(원장의 마지막 판과
 //!                                          그 출처) / 지금 닫힌 경계의 마지막 확정 세계와 확정 정책·유도 경로(Interview 는 Entry 의 출처에서 계승,
 //!                                          Experiment 는 P(T)·검증 ①·②, 뿌리는 start 기준점) / 사건의 대기·이미 확정·대체를 따로 읽는다.
-//!                                          world_before_ref 는 대상 사건보다 앞의 기록으로 유도한 세계와 견준다 (confirmed_world — 읽기 전용.
-//!                                          열린 사이클·후속 Chain·Chain 종료 경계·보관 중단은 범위 밖 결과, 실제 승인·개방 허가·제품 연결 아님)
+//!                                          world_before_ref 는 대상 사건보다 앞의 기록만으로, 승인 경계·보관 경계에서 지금 경계와 같은 유도를
+//!                                          해 얻은 세계·확정 정책과 견준다. 기준점이 없는 사건의 정상 부재와 확인하지 못한 칸을 따로 남긴다
+//!                                          (confirmed_world — 읽기 전용. 열린 사이클·후속 Chain·Chain 종료 경계·보관 중단은 범위 밖 결과, 실제
+//!                                          승인·개방 허가·제품 연결 아님)
 //!
-//! 대상 사건 + 같은 입력 묶음 + 격리 루트·ObjectStore + 호출자가 건넨 내부 저장 경계   (tracking-policy + Unix 에서만 컴파일)
-//!     ─RetryAttempt::begin / run_retry─▶ RetryOutcome   읽기를 다시 실행해 대기일 때만 한 시도를 시작하고, 구간의 원문을 창고에서 다시 읽어
-//!                                          3o 구간을 세운 뒤 observe_scoped → 범위 변화 검사(3n) → capture_scoped → 같은 검사 → manifest →
-//!                                          한 저장 단위 저장 → 다시 읽어 앞선 기록의 보존(3d·3i)과 이 시도의 저장 단위를 확인했을 때만 확정.
-//!                                          실패·결과 불명을 구분하고 다른 시도·다른 걸음·끝난 시도의 보고를 거절한다 (baseline_retry — 승인 저장·
-//!                                          정책 파일·state.yaml 저장·다음 실험 개방·복원 아님, 사람의 재시도 요청의 인증 아님)
+//! 대상 사건 + 같은 입력 묶음 + 격리 루트(객체 창고는 그 `.gil/`) + 호출자가 건넨 내부 저장 경계   (tracking-policy + Unix 에서만 컴파일)
+//!     ─RetryAttempt::begin / run_retry─▶ RetryOutcome   읽기를 다시 실행해 대기이고 실행 전제(보관 중단·미완 복원의 부재, review_cycle_ref,
+//!                                          다른 사건의 경계)가 확인됐을 때만 한 시도를 시작한다. 루트·창고·저장 경계는 그때 한 번 정해 시도가
+//!                                          지닌다. 구간의 원문을 그 창고에서 다시 읽어 3o 구간을 세운 뒤 observe_scoped → 범위 변화 검사(3n) →
+//!                                          capture_scoped → 같은 검사 → manifest → 한 저장 단위 저장 → 다시 읽어 앞선 기록의 보존(3d·3i), 이 시도의
+//!                                          저장 단위, 의존한 세계·확정 정책 근거의 재유도 일치를 확인했을 때만 확정. 실패한 시도는 지금 기록을 다시
+//!                                          읽어 「이 시도의 실패」와 「지금의 대기」를 따로 말하고, 결과 불명을 구분하며, 다른 시도·다른 걸음·끝난
+//!                                          시도의 보고를 거절한다 (baseline_retry — 승인 저장·정책 파일·state.yaml 저장·다음 실험 개방·복원 아님,
+//!                                          사람의 재시도 요청의 인증 아님)
 //! ```
 //!
 //! # 「형식이 맞다」는 「승인됐고 적용됐다」가 아니다
@@ -234,9 +239,9 @@ pub(crate) use baseline_record::{
 #[cfg(all(feature = "tracking-policy", unix))]
 #[allow(unused_imports)]
 pub(crate) use baseline_retry::{
-    AttemptBinding, AttemptTicket, BASELINE_RETRY_DOES_NOT_SHOW, BaselineCommit, BaselineState, DifferenceKind,
-    FailedAttempt, FailureCause, FailureRecord, NotStarted, OwnedRecords, PathDifference, RetryAttempt, RetryClosed,
-    RetryEnv, RetryOutOfOrder, RetryOutcome, RetryReport, RetryRequest, RetryRun, RetryStep, SaveAnswer, ScopeDelta,
+    AfterFailure, AttemptBinding, AttemptTicket, BASELINE_RETRY_DOES_NOT_SHOW, BaselineCommit, BaselineState,
+    DifferenceKind, FailedAttempt, FailureCause, FailureRecord, NotStarted, OwnedRecords, PathDifference, RetryAttempt,
+    RetryClosed, RetryOutOfOrder, RetryOutcome, RetryReport, RetryRequest, RetryRun, RetryStep, SaveAnswer, ScopeDelta,
     SeenAt, UnknownWhy, run_retry,
 };
 #[allow(unused_imports)]
