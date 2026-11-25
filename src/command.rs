@@ -583,7 +583,19 @@ fn open_step(ctx: &Invocation<'_>,
     let setup = if kind == crate::NodeKind::Verify {
         crate::project_resume::ensure(&session.root().map_err(say)?)
     } else { String::new() };
-    Ok(opened_step(session, opened) + &setup)
+    let mut receipt = opened_step(session, opened);
+    if kind == NodeKind::Synthesis && matches!(ctx.input, Input::Body(_)) {
+        let project = session.project();
+        let cycle = project.current_cycle();
+        let here = cycle.step_now_open().expect("just opened a Synthesis");
+        let refs: Vec<_> = cycle.steps().lineage(here).expect("open step lineage").into_iter()
+            .filter(|node| node.is_closed() && matches!(node.kind, NodeKind::Question | NodeKind::Interpretation))
+            .map(|node| cycle.step_ref(node.id).to_string()).collect();
+        receipt.push_str(&crate::mcp::synthesis_open_guidance(
+            cycle.step_ref(here), &refs, project.approved_plan().is_some(), project.exploration_contract(),
+        ));
+    }
+    Ok(receipt + &setup)
 }
 
 /// Cycle 하나를 연다 — **평범한 자식인지 갈래인지는 부르는 쪽이 이미 판정했다.**

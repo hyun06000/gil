@@ -19,6 +19,7 @@ mod native;
 mod surface;
 mod visuals;
 mod guidance;
+pub(crate) use guidance::synthesis_open_guidance;
 #[cfg(feature = "product-safety")]
 mod recovery;
 #[cfg(feature = "approved-plan")]
