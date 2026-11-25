@@ -53,8 +53,14 @@ impl Adapter {
         let input = self.records.join("request.json");
         serde_json::to_writer(File::create(&input)?, &request)?;
         // A regular input file prevents a writer/reader deadlock with a child that writes first.
+        // Long-running experiments may select a larger Verify window in their isolated harness.
+        let seconds = if next["workspace_writes"] == true {
+            std::env::var("GIL_BENCHMARK_VERIFY_SECONDS").ok()
+                .map(|value| value.parse::<u32>()).transpose()?.unwrap_or(120)
+        } else { 120 };
+        if seconds == 0 { return Err("Verify timeout must be positive".into()); }
         let mut child = Command::new("/usr/bin/timeout")
-            .args(["--kill-after=5s", "120s"])
+            .arg("--kill-after=5s").arg(format!("{seconds}s"))
             .arg(&self.executable)
             .current_dir(&self.workspace)
             .stdin(File::open(input)?)

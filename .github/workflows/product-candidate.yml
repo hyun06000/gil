@@ -55,9 +55,9 @@ on:
         required: false
         default: false
       harbor_model:
-        description: 'Model for the manually selected Harbor trial'
+        description: 'Harbor preset: CSV model or paired Terminal-Bench pilot'
         type: choice
-        options: [luna, qwen]
+        options: [luna, qwen, terminal-bench-pair]
         default: luna
       unsigned_preview_version:
         description: 'Optional X.Y.Z-preview.N stamp compiled into the Core; no publication or installation'
@@ -419,7 +419,7 @@ jobs:
           retention-days: 7
 
   harbor-benchmark:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.harbor_benchmark }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.harbor_benchmark && inputs.harbor_model != 'terminal-bench-pair' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     steps:
@@ -452,3 +452,68 @@ jobs:
             ${{ runner.temp }}/harbor-results/**/verifier/reward.txt
           retention-days: 7
           if-no-files-found: warn
+
+  terminal-bench:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.harbor_benchmark && inputs.harbor_model == 'terminal-bench-pair' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        arm: ['on', 'off']
+    env:
+      TB_ARM: ${{ matrix.arm }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Build static GIL for the task image
+        if: matrix.arm == 'on'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y musl-tools
+          rustup target add x86_64-unknown-linux-musl
+          cargo build --locked -p gil --features "$GIL_PRODUCT_FEATURES" --target x86_64-unknown-linux-musl --bin gil
+      - name: Install Harbor
+        run: |
+          python3 -m venv "$RUNNER_TEMP/harbor"
+          "$RUNNER_TEMP/harbor/bin/pip" install --quiet harbor==0.27.0
+      - name: Run and grade the pinned sound-change task
+        env:
+          GIL_HARBOR_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          TB_GIL_BINARY: ${{ github.workspace }}/target/x86_64-unknown-linux-musl/debug/gil
+          PYTHONUNBUFFERED: '1'
+        run: |
+          export PATH="$RUNNER_TEMP/harbor/bin:$PATH"
+          tools/benchmark/harbor/tb41/run.sh
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: tb41-${{ matrix.arm }}
+          path: ${{ runner.temp }}/tb41-${{ matrix.arm }}/${{ matrix.arm }}.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  comparison-dashboard:
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.harbor_benchmark && inputs.harbor_model == 'terminal-bench-pair' }}
+    needs: terminal-bench
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Collect arm reports and render the dashboard
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/pair" "$RUNNER_TEMP/dashboard"
+          gh run download "$GITHUB_RUN_ID" --pattern 'tb41-*' --dir "$RUNNER_TEMP/pair" || echo "Arm report unavailable"
+          python3 tools/benchmark/harbor/tb41/dashboard.py "$RUNNER_TEMP/pair" "$RUNNER_TEMP/dashboard"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: terminal-bench-dashboard
+          path: ${{ runner.temp }}/dashboard
+          retention-days: 7

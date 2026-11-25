@@ -59,3 +59,20 @@ default to Qwen. Set `GIL_HARBOR_MODEL=luna` and supply `GIL_HARBOR_API_KEY` to 
 In a [verified Luna run](https://github.com/hyun06000/gil/actions/runs/45570033791) the model
 made 11 calls (1,612 input and 249 output tokens), measured 13 ms and received reward 1.
 The estimated model cost for that trial was $0.0006212.
+
+## Terminal-Bench 4.1 paired CPU pilot
+
+Manually select **harbor_benchmark** and **terminal-bench-pair**, or dispatch
+`gh workflow run product-candidate.yml -f harbor_benchmark=true -f harbor_model=terminal-bench-pair`.
+Only the two Linux trial jobs and the report job run. The two arms independently solve the
+official v4.1.0 sound-change-cascade task at commit 4070d6cef56a7d20cb5dc98d5e10ada88a6b9440.
+Both see the same public training pairs and alignment summaries, can evaluate complete rule
+lists and submit their best ordered rules. The official separate verifier grades each submission.
+This task-specific pilot gives each arm 30 minutes of agent time, with no model call count
+or estimated dollar cap. A single paired observation is not a suite-level effect estimate.
+
+The GIL arm starts the product CLI and runs the shared solver in its open Verify step.
+The isolated worker can set `GIL_BENCHMARK_VERIFY_SECONDS` for that step; the default is 120.
+The plain arm directly invokes the same solver. Each call logs cumulative usage in its Linux job.
+Download `terminal-bench-dashboard` and open `index.html` for paired scores, time, tokens,
+estimated cost and the raw comparison measurements. An absent score is shown as missing.

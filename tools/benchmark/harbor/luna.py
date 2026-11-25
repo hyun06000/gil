@@ -14,7 +14,10 @@ BUDGET = 5000  # $0.005 per trial
 
 
 class Luna:
-    def __init__(self):
+    def __init__(self, *, max_calls=MAX_CALLS, budget=BUDGET, max_output=MAX_OUTPUT):
+        self.max_calls = max_calls
+        self.budget = budget
+        self.max_output = max_output
         self.key = os.environ["GIL_HARBOR_API_KEY"]
         self.calls = 0
         self.inputs = 0
@@ -23,15 +26,16 @@ class Luna:
 
     def ask(self, messages, choices):
         body = {"model": MODEL, "input": messages, "reasoning": {"effort": "none"},
-                "max_output_tokens": MAX_OUTPUT, "store": False, "service_tier": "default"}
+                "max_output_tokens": self.max_output, "store": False, "service_tier": "default"}
         if choices:
             body["text"] = {"format": {"type":"json_schema", "name":"selection", "strict":True,
                 "schema":{"type":"object", "properties":{"answer":{"type":"string", "enum":choices}},
                           "required":["answer"], "additionalProperties":False}}}
         data = json.dumps(body).encode()
         # Use bytes as a conservative token estimate, with margin for message formatting.
-        reservation = (len(data) + 256) * INPUT + MAX_OUTPUT * OUTPUT
-        if self.calls >= MAX_CALLS or self.reserved + reservation > BUDGET:
+        reservation = (len(data) + 256) * INPUT + self.max_output * OUTPUT
+        if ((self.max_calls is not None and self.calls >= self.max_calls) or
+                (self.budget is not None and self.reserved + reservation > self.budget)):
             raise RuntimeError("Luna per-trial cost or call limit reached before sending request")
         self.calls += 1
         self.reserved += reservation
