@@ -18,14 +18,20 @@ def model():
     return Llama(model_path=MODEL, n_threads=2, n_ctx=2048, verbose=False, seed=17)
 
 
-def infer(task, prompt, choices=()):
+def infer(task, prompt, choices=(), form=None):
     from llama_cpp import LlamaGrammar
     grammar = None
     if choices:
         grammar = LlamaGrammar.from_string("root ::= " + " | ".join(map(json.dumps, choices)), verbose=False)
+    elif form:
+        # This task has no numeric values in its brief. Measurements first become available in Verify.
+        # Constrain the surface format; the model still chooses the question and specification.
+        rule = ('root ::= ("Which " | "What " | "How ") words "?"' if form == "question"
+                else 'root ::= words "."')
+        grammar = LlamaGrammar.from_string(rule + "\nwords ::= [a-zA-Z_ ,./]+", verbose=False)
     result = model().create_chat_completion(
-        messages=[{"role":"system", "content":"You are a lab participant. Answer only the question in one concise English sentence. Follow the specified output format."},
-                  {"role":"user","content":f"Task: {task}\n{prompt}"}],
+        messages=[{"role":"system", "content":"You are planning and evaluating an experiment. The brief describes a goal. Follow the CURRENT INSTRUCTION. Before the experiment the data and numeric result are unknown. Write one short sentence."},
+                  {"role":"user","content":f"REFERENCE BRIEF:\n{task}\nCURRENT INSTRUCTION:\n{prompt}"}],
         temperature=0, max_tokens=80, grammar=grammar,
     )
     answer = result["choices"][0]["message"]["content"].strip()
@@ -47,28 +53,28 @@ def respond(req):
     steps = req["history"][-1]["steps"]
     def step(items, kind):
         return next(s for s in reversed(items) if s["kind"] == kind and s["report"])
-    def ask(prompt, choices=()):
-        return infer(task, prompt, choices)
+    def ask(prompt, choices=(), form=None):
+        return infer(task, prompt, choices, form)
     if n["action"] == "open":
         name = n["recommended"]
         return {"action":"open", "kind":name, "contract":f"objective: {name} for the supplied task\nnext_action: Complete {name} using task and history\ndone_when: Record the {name} result"}
     kind = n["kind"]
     if kind == "question":
-        question = ask("Ask one question about what the output must measure.")
-        return close(question=question, choices="Use the aggregation and column requested in the task.", response=ask(question))
+        question = ask("Ask the participant which statistic they want from the latency column.", form="question")
+        return close(question=question, choices="Use the aggregation and column requested in the task.", response=ask(f"Answer from the brief: {question} State the requested measurement, leaving its value unknown.", form="plan"))
     if kind == "interpretation":
         response = step(steps, "question")["report"]["response"]
-        return close(interpretation=ask(f"Participant answered: {response}. Interpret the requested calculation."), unresolved="none")
+        return close(interpretation=ask(f"Participant answered: {response}. Describe the calculation to perform in future tense.", form="plan"), unresolved="none")
     if kind == "synthesis":
         q, i = step(steps, "question"), step(steps, "interpretation")
-        spec = ask(f"Interpretation: {i['report']['interpretation']}. Write the experimental specification, naming input, exact statistic, and output.")
+        spec = ask(f"Interpretation: {i['report']['interpretation']}. Specify a procedure in the imperative: name the statistic, the column and the output file. No measurement has been made.", form="plan")
         decision = ask(f"Does this specification implement the task? {spec}\nAnswer accept or revise.", ["accept","revise"])
         return close(statement=spec, basis_refs=q["ref"]+"\n"+i["ref"], approved="benchmark_"+decision)
     spec = step(interview, "synthesis")["report"]["statement"]
     if kind == "define":
-        return close(problem=spec, success_condition=ask(f"Give a measurable success criterion for: {spec}"))
+        return close(problem=spec, success_condition=ask(f"Give a measurable success criterion for: {spec}", form="plan"))
     if kind == "hypothesis":
-        return close(hypothesis=ask(f"Propose a testable hypothesis for: {spec}"), rationale=spec, guardrail="Read the supplied latency column only.")
+        return close(hypothesis=ask(f"Propose a testable hypothesis about the method in this specification: {spec}", form="plan"), rationale=spec, guardrail="Read the supplied latency column only.")
     if kind == "verify":
         operation = ask(f"Select the CSV aggregation that implements this accepted specification: {spec}", list(OPERATIONS))
         with open("/case/latencies.csv") as f:
