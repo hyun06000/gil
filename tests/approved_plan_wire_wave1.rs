@@ -17,7 +17,7 @@ mod support;
 use serde_json::{Value, json};
 use std::path::Path;
 use support::*;
-#[cfg(all(feature = "product-safety", feature = "visual-authoring", any(target_os = "macos", windows)))]
+#[cfg(all(feature = "product-safety", feature = "visual-authoring", any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows)))]
 #[path = "support_wave1/revisit_cases.rs"]
 mod revisit_cases;
 
@@ -113,7 +113,7 @@ fn guarded_project_completes_approved_closing_without_outside_write_regressions(
     let settings = scratch("guard-closing-settings");
     let record = product_state_path(&root, &private_local_app_data(&settings));
     let mut r = Rig { root: root.clone(), record, scope: String::new(), c: Client::serve(&settings) };
-    let started = ok(r.model("gil_start", json!({})), "start");
+    let started = ok(r.model("gil_start", direct_start()), "start");
     as_item_queue_record(&r.record);
     auto_guard(&settings, json!({"hook_event_name":"PostToolUse","tool_name":"mcp__gil__gil_start","tool_input":{"project_root":root},"tool_response":started["result"]}));
     assert_eq!(auto_guard(&settings,json!({"hook_event_name":"Stop","last_assistant_message":"done"})),json!({}));
@@ -317,7 +317,7 @@ fn documented_proposal_opens_and_closes_with_schema_rejections_leaving_no_trace(
     let settings = scratch("documented-plan-settings");
     let record = product_state_path(&root, &private_local_app_data(&settings));
     let mut r = Rig { root: root.clone(), record, scope: String::new(), c: Client::serve(&settings) };
-    let started = ok(r.model("gil_start", json!({})), "start");
+    let started = ok(r.model("gil_start", direct_start()), "start");
     as_item_queue_record(&r.record);
     let next = &structured(&started)["next_call"];
     r.scope = next["arguments"]["scope_id"].as_str().unwrap().to_owned();
@@ -400,7 +400,7 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     }
 
     // start once; follow the returned show_gil_monitor; display stays unconfirmed.
-    let started = ok(r.model("gil_start", json!({})), "gil_start");
+    let started = ok(r.model("gil_start", direct_start()), "gil_start");
     as_item_queue_record(&r.record);
     let text = started["result"]["content"].as_array().unwrap().iter().filter_map(|c| c["text"].as_str()).collect::<String>();
     let at = text.find("show_gil_monitor(").expect("start names show_gil_monitor") + "show_gil_monitor(".len();
@@ -414,6 +414,16 @@ fn approval_contract_holds_over_the_real_stdio_process() {
 
     let (basis, synthesis) = r.ask_and_interpret();
     assert_eq!(synthesis, "step:C1/S3");
+
+    let assert_next = |rig: &mut Rig, expected: &str| {
+        let before = state(&root);
+        let status = said(&ok(rig.model("gil_status", json!({})), "status"));
+        let next = status.lines().find(|line| line.starts_with("다음:")).expect(&status);
+        assert!(next.contains(expected), "{next}");
+        assert!(rig.context_readonly().contains(expected));
+        assert_eq!(state(&root), before);
+    };
+    assert_next(&mut r, "gil_plan_propose");
 
     // bare approved:yes is refused and writes nothing; review without a proposal has no capability.
     let before = state(&root);
@@ -445,7 +455,7 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     let again = ok(r.model("gil_plan_propose", json!({"draft":d})), "propose again");
     assert_eq!(structured(&again)["proposal"]["digest"], structured(&first)["proposal"]["digest"]);
     let rev1 = r.read()["proposal"].clone();
-    assert!(r.context_readonly().contains("Monitor 버튼 응답을 기다린다"));
+    assert_next(&mut r, "Monitor 버튼 응답을 기다린다");
 
     // While the proposal waits for the Monitor button, closing the Synthesis is refused as an
     // approval state: the receipt sends the model to gil_plan_read, not back to its Report.
@@ -507,7 +517,7 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     let accepted = ok(r.app("gil_plan_decide", json!({"revision":2,"digest":rev2["digest"],"token":t2,"decision":"approve"})), "approve revision 2");
     assert_eq!(structured(&accepted)["proposal"]["receipt"]["decision"], "approve");
 
-    assert!(r.context_readonly().contains("close_report를 그대로 gil_close"));
+    assert_next(&mut r, "close_report를 그대로 gil_close");
 
     // duplicate approve idempotent; flip refused; no capability after receipt; no token in record
     let saved = state(&root);
@@ -751,7 +761,7 @@ fn misplaced_report_and_plan_extension_recover_from_exact_readonly_mcp_data() {
     let settings = scratch("plan-extension-recovery-settings");
     let record = product_state_path(&root, &private_local_app_data(&settings));
     let mut r = Rig { root: root.clone(), record, scope: String::new(), c: Client::serve(&settings) };
-    let started = ok(r.model("gil_start", json!({})), "start");
+    let started = ok(r.model("gil_start", direct_start()), "start");
     as_item_queue_record(&r.record);
     let next = &structured(&started)["next_call"];
     r.scope = next["arguments"]["scope_id"].as_str().unwrap().to_owned();

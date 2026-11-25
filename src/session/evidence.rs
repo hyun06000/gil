@@ -60,9 +60,18 @@ impl ProjectSession {
     /// These references are structural facts, not invented learning or retrospective reports.
     pub(super) fn link_learning(&self, mut report: Report) -> Result<Report, SessionError> {
         let cycle = self.project.current_cycle();
-        if cycle.kind() != CycleKind::Experiment { return Ok(report); }
         let Some(here) = cycle.step_now_open() else { return Ok(report); };
         let node = cycle.steps().node(here).expect("open step");
+        // A Question closes on the user's actual answer; an empty `response` is not one. This is
+        // a new-write rule like the lesson below: Reports already stored stay readable, so it is
+        // not a grammar constraint (the grammar also judges stored records on load). A missing
+        // field is left to the grammar, which names every missing field.
+        if node.kind == NodeKind::Question && report.get("response").is_some_and(|value| value.trim().is_empty()) {
+            return Err(SessionError::Action(ActionError::Cycle(crate::CycleError::Grammar(
+                crate::GrammarError::EmptyReportField { subject: crate::Subject::Step(NodeKind::Question), field: "response".into() },
+            ))));
+        }
+        if cycle.kind() != CycleKind::Experiment { return Ok(report); }
         let (text, field, source_kind) = match node.kind {
             NodeKind::Analysis => ("interpretation", "evidence.verify_ref", NodeKind::Verify),
             NodeKind::Outcome => ("lesson", "learning.analysis_ref", NodeKind::Analysis),

@@ -617,21 +617,23 @@ fn formats_without_a_transition_are_refused() {
     assert_eq!((read["status"].clone(), read["storage_format"].clone()), (json!("already_transitioned"), json!(8)), "{read}");
     assert_eq!(read["copies"], json!([]));
 
-    // Format 10 is unknown to this build.
+    // Format 10 is unknown to this build — or, in a tracking-policy build that reads 10/11, a format 10
+    // record without its required `tracking` block is invalid. Either way nothing is converted or changed.
     let root = common::scratch(&format!("transition-format-10-{}", std::process::id()));
     let state = root.join(gil::STATE_PATH);
     ProjectSession::start(common::spec(), &state).unwrap().commit().unwrap();
     let text = std::fs::read_to_string(&state).unwrap().replacen("format: 8", "format: 10", 1);
     std::fs::write(&state, text).unwrap();
     let ten = tree(&root);
-    assert_eq!(mcp.call(CHECK, json!({"project_root": root}))["result"]["structuredContent"]["code"], "unknown_format");
+    let expected = if cfg!(feature = "tracking-policy") { "record_invalid" } else { "unknown_format" };
+    assert_eq!(mcp.call(CHECK, json!({"project_root": root}))["result"]["structuredContent"]["code"], expected);
     drop(mcp);
     assert_eq!(tree(&root), ten);
     let _ = before;
 }
 
 /// Format 7 → 9 keeps the visual registry and the owner-only private storage.
-#[cfg(all(feature = "visual-authoring", any(all(target_os = "macos", target_arch = "aarch64"), windows)))]
+#[cfg(all(feature = "visual-authoring", any(all(target_os = "macos", target_arch = "aarch64"), all(target_os = "linux", target_arch = "x86_64"), windows)))]
 #[test]
 fn seven_to_nine_keeps_the_visual_registry_and_private_storage() {
     let root = std::env::temp_dir().join(format!("gil-transition-visual-{}", std::process::id()));
@@ -686,7 +688,7 @@ fn seven_to_nine_keeps_the_visual_registry_and_private_storage() {
     assert!(reread.current_existence().journey().ended_wills().iter().all(|e| e.result() == EndResult::Achieved));
 }
 
-#[cfg(all(feature = "visual-authoring", any(all(target_os = "macos", target_arch = "aarch64"), windows)))]
+#[cfg(all(feature = "visual-authoring", any(all(target_os = "macos", target_arch = "aarch64"), all(target_os = "linux", target_arch = "x86_64"), windows)))]
 fn product_state_path(root: &Path) -> PathBuf {
     #[cfg(windows)]
     {

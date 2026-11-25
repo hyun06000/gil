@@ -861,6 +861,31 @@ fn verify_requires_world_evidence_even_when_visuals_are_not_needed() {
     std::fs::remove_dir_all(root).unwrap(); std::fs::remove_dir_all(settings).unwrap();
 }
 
+/// The MCP close refuses an empty `response` like the CLI does (#245): the Question stays open,
+/// the record is unchanged, and the same Question closes with an actual answer.
+#[test]
+fn mcp_question_close_refuses_an_empty_response() {
+    use serde_json::json;
+    let at = scratch("mcp-empty-response");
+    started(&at);
+    let mut mcp = Client::serve_with(&scratch("mcp-empty-response-settings"));
+    mcp.initialize();
+    let opened = monitor_call(&mut mcp, "gil_open", json!({"project_root": at, "kind": "question",
+        "contract": "objective: 사용자의 목표를 확인한다\nnext_action: 무엇을 만들고 싶은지 묻는다\ndone_when: 사용자의 원문 응답을 얻는다\n"}));
+    assert_eq!(opened["structuredContent"]["ok"], true, "{opened}");
+    let state = at.join(gil::STATE_PATH);
+    let before = std::fs::read(&state).unwrap();
+    let refused = monitor_call(&mut mcp, "gil_close", json!({"project_root": at, "report": "question: Which sample?\nchoices: A / B\nresponse:\n"}));
+    assert_eq!(refused["isError"], true, "{refused}");
+    let problem = refused["structuredContent"]["problem"].as_str().unwrap();
+    assert!(problem.contains("response") && problem.contains("step:C1/S1"), "{problem}");
+    assert_eq!(std::fs::read(&state).unwrap(), before, "a refused close must not touch the project");
+    let closed = monitor_call(&mut mcp, "gil_close", json!({"project_root": at, "report": "question: Which sample?\nchoices: A / B\nresponse: A\n"}));
+    assert_eq!(closed["structuredContent"]["ok"], true, "{closed}");
+    mcp.eof();
+    std::fs::remove_dir_all(at).unwrap();
+}
+
 #[test]
 fn interview_assent_requires_outcome_and_separate_cycle_close_before_research() {
     use serde_json::{json, Value};
@@ -932,6 +957,33 @@ fn interview_assent_requires_outcome_and_separate_cycle_close_before_research() 
         std::fs::remove_dir_all(root).unwrap();
         std::fs::remove_dir_all(settings).unwrap();
     }
+}
+
+/// The MCP close refuses a Report that writes `response` twice (#243): the line numbers are named,
+/// the record is unchanged, and the same Question closes with one response.
+#[test]
+fn mcp_close_refuses_a_field_written_twice() {
+    use serde_json::json;
+    let at = scratch("mcp-duplicate-field");
+    started(&at);
+    let mut mcp = Client::serve_with(&scratch("mcp-duplicate-field-settings"));
+    mcp.initialize();
+    let opened = monitor_call(&mut mcp, "gil_open", json!({"project_root": at, "kind": "question",
+        "contract": "objective: 사용자의 목표를 확인한다\nnext_action: 무엇을 만들고 싶은지 묻는다\ndone_when: 사용자의 원문 응답을 얻는다\n"}));
+    assert_eq!(opened["structuredContent"]["ok"], true, "{opened}");
+    let state = at.join(gil::STATE_PATH);
+    let before = std::fs::read(&state).unwrap();
+    let refused = monitor_call(&mut mcp, "gil_close", json!({"project_root": at,
+        "report": "question: Which sample?\nchoices: A / B\nresponse: FIRST_ANSWER_A\nresponse: SECOND_ANSWER_B\n"}));
+    assert_eq!(refused["isError"], true, "{refused}");
+    let problem = refused["structuredContent"]["problem"].as_str().unwrap();
+    assert!(problem.contains("response") && problem.contains('4') && problem.contains('3'), "{problem}");
+    assert_eq!(std::fs::read(&state).unwrap(), before, "a refused close must not touch the project");
+    let closed = monitor_call(&mut mcp, "gil_close", json!({"project_root": at,
+        "report": "question: Which sample?\nchoices: A / B\nresponse: SECOND_ANSWER_B\n"}));
+    assert_eq!(closed["structuredContent"]["ok"], true, "{closed}");
+    mcp.eof();
+    std::fs::remove_dir_all(at).unwrap();
 }
 
 #[test]
@@ -1043,6 +1095,20 @@ fn companion_session_tracks_actual_project_use_and_stdio_eof() {
     std::fs::remove_dir_all(base).unwrap();
 }
 
+/// gil_revisit returns the working folder to the target Cycle's exit Snapshot: it can overwrite
+/// files and delete ones that Snapshot lacks, so it is not an additive-only change.
+#[test]
+fn gil_revisit_is_listed_as_destructive() {
+    let mut mcp = Client::serve();
+    mcp.initialize();
+    let got = mcp.request("tools/list", serde_json::json!({}));
+    let tools = got["result"]["tools"].as_array().expect("tools");
+    let revisit = tools.iter().find(|t| t["name"] == "gil_revisit").expect("gil_revisit");
+    assert_eq!(revisit["annotations"]["readOnlyHint"], false, "{revisit}");
+    assert_eq!(revisit["annotations"]["destructiveHint"], true, "{revisit}");
+    assert!(mcp.eof().0.success());
+}
+
 #[test]
 fn initialize_succeeds_and_says_who_is_answering() {
     let mut mcp = Client::serve();
@@ -1101,6 +1167,10 @@ fn tools_list_includes_handoff_and_preserves_the_read_only_app_boundary() {
     }
     expected.sort();
     assert_eq!(names, expected);
+    // gil_restore overwrites files and deletes ones the target Snapshot lacks: not additive-only.
+    let restore = tools.iter().find(|t| t["name"] == "gil_restore").unwrap();
+    assert_eq!(restore["annotations"]["readOnlyHint"], false, "{restore}");
+    assert_eq!(restore["annotations"]["destructiveHint"], true, "{restore}");
     for tool in tools.iter().filter(|t| t["name"]=="gil_report_visuals") {
         assert_eq!(tool["annotations"]["readOnlyHint"],true);
         assert_eq!(tool["_meta"]["ui"]["visibility"],serde_json::json!(["model"]));
@@ -1260,8 +1330,16 @@ fn monitor_uses_exact_scope_and_canonical_view_without_touching_project_bytes() 
     assert_eq!(hint["structuredContent"].as_object().unwrap().len(), 4);
     assert!(hint["structuredContent"]["revision"].is_string());
     assert!(hint["structuredContent"].get("view").is_none());
-    // A development binary is not an installation: no feed fetch, explicit state.
-    assert_eq!(hint["structuredContent"]["update"]["state"], "not_installed");
+    // A development binary is not an installation: no feed fetch, explicit state. Where the update
+    // feed has no entry for the platform at all (Linux), the state is `unavailable` with its reason,
+    // again without a fetch: the Monitor never offers an update it cannot name.
+    if cfg!(any(target_os = "macos", windows)) {
+        assert_eq!(hint["structuredContent"]["update"]["state"], "not_installed");
+    } else {
+        assert_eq!(hint["structuredContent"]["update"]["state"], "unavailable");
+        assert_eq!(hint["structuredContent"]["update"]["platform"], serde_json::Value::Null);
+        assert_eq!(hint["structuredContent"]["update"]["error"], "unsupported platform or no state directory");
+    }
     assert!(hint["structuredContent"]["update"]["latest"].is_null());
     assert_eq!(std::fs::read(at.join(gil::STATE_PATH)).unwrap(), state);
     assert_eq!(std::fs::read_to_string(at.join("work.txt")).unwrap(), "원문 세계");
@@ -1613,10 +1691,15 @@ fn binding_files(settings: &Path) -> usize {
         .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "json")).count()).unwrap_or(0)
 }
 
-#[cfg(all(feature="visual-authoring", any(all(target_os="macos", target_arch="aarch64"), windows)))]
+#[cfg(all(feature="visual-authoring", any(all(target_os="macos", target_arch="aarch64"), all(target_os = "linux", target_arch = "x86_64"), windows)))]
 #[test]
 fn visual_start_preserves_existing_and_partial_records_and_survives_response_loss() {
     use serde_json::json;
+    // A build that also holds the tracked-scope preparation starts an image-report project only on
+    // the explicit selection; every other build keeps the bare call. Refusals below stay bare.
+    fn new_visual(root: &Path) -> serde_json::Value {
+        if cfg!(all(feature = "tracking-policy", unix)) { json!({"project_root":root,"start_kind":"image_reports"}) } else { json!({"project_root":root}) }
+    }
     fn files(root: &Path) -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
         fn walk(root:&Path, path:&Path, out:&mut std::collections::BTreeMap<PathBuf,Vec<u8>>) {
             for entry in std::fs::read_dir(path).unwrap() {
@@ -1633,7 +1716,7 @@ fn visual_start_preserves_existing_and_partial_records_and_survives_response_los
     for kind in ["legacy", "visual", "partial", "unknown", "no-lock"] {
         let root=base.join(kind); std::fs::create_dir(&root).unwrap();
         if kind=="visual" {
-            assert_eq!(monitor_call(&mut mcp,"gil_start",json!({"project_root":root}))["structuredContent"]["ok"],true);
+            assert_eq!(monitor_call(&mut mcp,"gil_start",new_visual(&root))["structuredContent"]["ok"],true);
         } else if kind=="legacy" {
             let s=gil::ProjectSession::start(common::spec(),root.join(gil::STATE_PATH)).unwrap(); s.commit().unwrap();
         } else {
@@ -1658,7 +1741,7 @@ fn visual_start_preserves_existing_and_partial_records_and_survives_response_los
         assert_eq!(files(&root),before,"{kind}");
     }
     let root=base.join("response-lost"); std::fs::create_dir(&root).unwrap();
-    assert_eq!(monitor_call(&mut mcp,"gil_start",json!({"project_root":root}))["structuredContent"]["ok"],true);
+    assert_eq!(monitor_call(&mut mcp,"gil_start",new_visual(&root))["structuredContent"]["ok"],true);
     let before=files(&root);
     mcp.eof(); // Caller loses the receipt; new server must inspect, not restart.
     let mut mcp=Client::serve_with(&settings); mcp.initialize();
@@ -2131,6 +2214,71 @@ fn onedrive_environment_values_do_not_move_the_working_folder() {
     mcp.eof();
 }
 
+
+#[cfg(all(feature = "tracking-policy", unix))]
+#[test]
+fn headless_preparation_keeps_its_approval_boundary() {
+    use serde_json::json;
+    let at = scratch("headless-tracked");
+    let root = at.join("project");
+    std::fs::create_dir(&root).unwrap();
+    let mut client = Client::serve_with_env(&at.join("settings"), &[("GIL_MCP_DISPLAY", Path::new("headless"))]);
+    client.initialize();
+    let result = monitor_call(&mut client, "gil_start", json!({"project_root":root,"start_kind":"tracked_scope","locale":"en"}));
+    let record = &result["structuredContent"];
+    assert_eq!(record["phase"], "preparing", "{result}");
+    assert!(record["next"].as_str().unwrap().contains("gil_start_prepare"));
+    assert!(record.get("scope_id").is_none() && record.get("next_call").is_none());
+    assert!(!result["content"].to_string().contains("show_gil_monitor"));
+    assert!(!root.join(gil::STATE_PATH).exists());
+    client.eof();
+    std::fs::remove_dir_all(at).unwrap();
+}
+
+#[cfg(not(all(feature = "tracking-policy", not(feature = "visual-authoring"), unix)))]
+#[test]
+fn headless_start_and_reconnect_follow_the_record_without_requesting_display() {
+    use serde_json::json;
+    let at = scratch("headless-resume");
+    let root = at.join("project");
+    std::fs::create_dir(&root).unwrap();
+    let settings = at.join("settings");
+    let connect = || {
+        let mut client = Client::serve_with_env(&settings, &[("GIL_MCP_DISPLAY", Path::new("headless"))]);
+        let init = client.initialize();
+        assert!(init["result"]["instructions"].as_str().unwrap().contains("selected headless display"));
+        client
+    };
+    let args = json!({"project_root":root});
+    let mut create = args.clone();
+    create["locale"] = json!("en");
+    if cfg!(all(feature = "tracking-policy", feature = "visual-authoring", unix)) {
+        create["start_kind"] = json!("image_reports");
+    }
+    let mut client = connect();
+    let start = monitor_call(&mut client, "gil_start", create);
+    assert_eq!(start["structuredContent"]["ok"], true, "{start}");
+    let first = start["structuredContent"]["next_action"].as_str().unwrap();
+    assert!(first.contains("gil_open") && first.contains("question"), "{first}");
+    assert!(!start["content"].to_string().contains("show_gil_monitor"), "{start}");
+    assert!(start["structuredContent"].get("next_call").is_none());
+    client.eof();
+    let mut client = connect();
+    let resume = monitor_call(&mut client, "gil_context", args.clone());
+    assert_eq!(resume["structuredContent"]["next_action"], first);
+    assert!(!resume["content"].to_string().contains("show_gil_monitor"), "{resume}");
+    let opened = monitor_call(&mut client, "gil_open", json!({"project_root": root, "kind":"question",
+        "contract":"objective: identify the sample\nnext_action: ask which sample to use\ndone_when: the answer is recorded"}));
+    assert_eq!(opened["structuredContent"]["ok"], true, "{opened}");
+    client.eof();
+    let mut client = connect();
+    let resume = monitor_call(&mut client, "gil_context", args);
+    let next = resume["structuredContent"]["next_action"].as_str().unwrap();
+    assert!(next.contains("gil_close") && next.contains("wait"), "{next}");
+    assert!(!resume["content"].to_string().contains("show_gil_monitor"), "{resume}");
+    client.eof();
+    std::fs::remove_dir_all(at).unwrap();
+}
 
 #[test]
 fn monitor_presence_reopens_on_resume_and_close_but_not_while_visible_and_does_not_survive_restart() {

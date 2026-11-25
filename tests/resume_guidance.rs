@@ -233,3 +233,36 @@ fn saved_decisions_execution_and_chain_boundaries_survive_new_sessions() {
     checkpoint(&p, "chain-closed", &["마지막 닫힌 결과: chain:C1", "Synthetic final handoff", "gil_open(kind: chain)"], &["gil_close", "gil_open(kind: experiment)", "gil_open(kind: interview)"]);
     assert_eq!(p.approved_plan().unwrap().proposals[0], first_approval);
 }
+
+/// A new session finds the next call by its translated heading, not by position. In a resumed
+/// project with an open Step the saved-record summary comes first, so "the first bracketed block"
+/// would point at the summary; the workflow and the manual name the heading instead (#196).
+#[test]
+fn the_next_call_is_found_by_its_heading_even_after_the_resume_summary() {
+    let mut p = support::legacy("resume-heading");
+    opened(&mut p, NodeKind::Question);
+    let workflow = include_str!("../src/mcp/workflow.md");
+    let skill = include_str!("../plugins/gil-companion-prototype/skills/gil-companion/SKILL.md");
+    let manual = include_str!("../src/manual/topics/current.md");
+    for language in [Locale::Ko, Locale::En] {
+        locale::with(language, || {
+            let told = gil::context(&p);
+            let resume = told.find(locale::text("ctx.resume.heading").trim()).expect("resume summary");
+            let heading = format!("{}\n", locale::text("context.next_call_heading"));
+            let at = told.find(&heading).expect("next-call heading");
+            assert!(resume < at, "{language}: the summary precedes the next call: {told}");
+            let next = told[at + heading.len()..].lines().next().unwrap();
+            // The action under the heading is the open Question's, not the summary's.
+            assert!(next.contains("gil_close") && !told[resume..at].contains(next), "{language}: {next}");
+            // The heading the guidance names is the one Core writes, in this language.
+            let named = format!("`{}`", locale::text("context.next_call_heading"));
+            assert!(workflow.contains(&named) && skill.contains(&named), "{language}: {named}");
+        });
+    }
+    for text in [workflow, skill] {
+        assert!(!text.contains("first bracketed block"), "position-based rule is gone");
+        assert!(text.contains(locale::text_in(Locale::En, "ctx.resume.heading").trim()), "the summary heading is named as not the next call");
+    }
+    assert!(!manual.contains("첫 블록"));
+    assert!(manual.contains(locale::text_in(Locale::Ko, "context.next_call_heading")) && manual.contains(locale::text_in(Locale::Ko, "ctx.resume.heading").trim()));
+}

@@ -7,7 +7,9 @@ import {join, resolve} from 'node:path';
 import {Client} from '@modelcontextprotocol/sdk/client/index.js';
 import {StdioClientTransport} from '@modelcontextprotocol/sdk/client/stdio.js';
 
-export async function checkNativeOutputContract(binary, expectedVersion) {
+// `start` is merged into the one call that creates the project: a build with two kinds of new project
+// takes the explicit selection ({start_kind: 'image_reports'}); every other build keeps the bare call.
+export async function checkNativeOutputContract(binary, expectedVersion, start = {}) {
   const scratch = await realpath(await mkdtemp(join(tmpdir(), 'gil-sdk-output-')));
   const root = join(scratch, 'project');
   const home = join(scratch, 'home');
@@ -49,7 +51,7 @@ export async function checkNativeOutputContract(binary, expectedVersion) {
     assert.deepEqual(await readdir(ordinary), [], 'a plain project was enrolled by discovery');
     const custom = 'Existing project conventions\r\n';
     await writeFile(join(root, 'CLAUDE.md'), custom);
-    const started = await call('gil_start', {project_root:root});
+    const started = await call('gil_start', {project_root:root, ...start});
     assert.equal(started.structuredContent.ok, true);
     const guides = await Promise.all(['AGENTS.md','CLAUDE.md'].map(name => readFile(join(root,name),'utf8')));
     assert.ok(guides[1].startsWith(custom), 'existing Claude guidance was overwritten');

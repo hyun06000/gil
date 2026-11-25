@@ -65,11 +65,19 @@ pub const CHAIN_VISUAL_FORMAT: u32 = 7;
 pub const END_HISTORY_FORMAT: u32 = 8;
 /// Format 8 plus the visual registry; keeps the odd-format private-storage requirements.
 pub const END_HISTORY_VISUAL_FORMAT: u32 = 9;
+/// Format 8 plus the required `tracking` block (approved policy ledger, policy file sync base, management
+/// events). Read and written only by a `tracking-policy` build; created only by a Monitor-approved new start
+/// there (Storage Transition Contract §5, Artifact Model §3.6). No existing project is converted to it.
+pub const TRACKING_FORMAT: u32 = 10;
+/// Format 10 plus the visual registry; keeps the odd-format private-storage requirements.
+pub const TRACKING_VISUAL_FORMAT: u32 = 11;
 
 /// The largest format this build reads. Anything above is `UnknownFormat`, before any structure
 /// is interpreted, so a build that does not know a shape can never rewrite it.
 pub const fn newest_known_format() -> u32 {
-    if cfg!(feature = "will-end-history") {
+    if cfg!(feature = "tracking-policy") {
+        TRACKING_VISUAL_FORMAT
+    } else if cfg!(feature = "will-end-history") {
         END_HISTORY_VISUAL_FORMAT
     } else if cfg!(feature = "chain-core") {
         CHAIN_VISUAL_FORMAT
@@ -94,7 +102,7 @@ pub const fn transition_target(format: u32) -> Option<u32> {
 
 /// Formats that carry the visual registry and therefore the private-storage contract.
 pub const fn is_visual_format(format: u32) -> bool {
-    matches!(format, VISUAL_FORMAT | CHAIN_VISUAL_FORMAT | END_HISTORY_VISUAL_FORMAT)
+    matches!(format, VISUAL_FORMAT | CHAIN_VISUAL_FORMAT | END_HISTORY_VISUAL_FORMAT | TRACKING_VISUAL_FORMAT)
 }
 
 /// The format this Project is written in — **the Project's shape decides, not a setting.**
@@ -106,6 +114,10 @@ pub const fn is_visual_format(format: u32) -> bool {
 /// ```
 pub(crate) fn format_of(project: &Project) -> u32 {
     let visual = project.visual_state().is_some();
+    #[cfg(feature = "tracking-policy")]
+    if project.tracking().is_some() {
+        return if visual { TRACKING_VISUAL_FORMAT } else { TRACKING_FORMAT };
+    }
     match (project.current_chain().is_some(), project.records_end_results(), visual) {
         (true, true, false) => END_HISTORY_FORMAT,
         (true, true, true) => END_HISTORY_VISUAL_FORMAT,
@@ -337,6 +349,7 @@ pub(crate) fn declared_format(text: &str, path: &Path) -> Result<u32, StoreError
         FORMAT | VISUAL_FORMAT => Ok(head.format),
         CHAIN_FORMAT | CHAIN_VISUAL_FORMAT if cfg!(feature = "chain-core") => Ok(head.format),
         END_HISTORY_FORMAT | END_HISTORY_VISUAL_FORMAT if cfg!(feature = "will-end-history") => Ok(head.format),
+        TRACKING_FORMAT | TRACKING_VISUAL_FORMAT if cfg!(feature = "tracking-policy") => Ok(head.format),
         found if found < FORMAT => Err(StoreError::PreviousFormat {
             found,
             current: FORMAT,
@@ -391,7 +404,21 @@ pub(crate) fn load_text(rules: RuleSet, text: &str, path: &Path) -> Result<Proje
     // 자리를 열어 보게 된다.
     if let Some(gil) = path.parent() {
         verify_manifests(&project, &ObjectStore::for_project(gil, &project))?;
+        // 형식 10/11: 원문 객체·엔진·모든 보관 세계의 범위, 그리고 Monitor 승인 응답과의 연결.
+        #[cfg(all(feature = "tracking-policy", unix))]
+        if let Some(tracking) = project.tracking() {
+            tracking.check_objects(&ObjectStore::for_project(gil, &project), project.chains(), project.artifacts())
+                .map_err(|e| StoreError::Tracking(e.to_string()))?;
+            // P1 은 시작 준비 기록의, P2 이후는 범위 변경 제안 기록의 정확히 하나의 Monitor 승인 응답에 묶여 있다(§5.1).
+            let start = tracking.ledger().policies().first().expect("이 모양의 원장에는 P1 이 있다");
+            crate::start_prep::verify_started_approval(gil, start).map_err(StoreError::Tracking)?;
+            let standing = tracking.standing(project.chains(), project.artifacts())
+                .map_err(|e| StoreError::Tracking(e.to_string()))?;
+            crate::scope_change::verify_approvals(gil, tracking, &standing).map_err(StoreError::Tracking)?;
+        }
     }
+    #[cfg(all(feature = "tracking-policy", not(unix)))]
+    if project.tracking().is_some() { return Err(StoreError::Tracking("unsupported OS".into())); }
     Ok(project)
 }
 
@@ -456,7 +483,19 @@ impl StoredState {
         // A key is judged by its **presence**, not by its value: `done_wills: null` in format 8 is
         // still the forbidden key, and so is `ended_wills: null` in format 4–7. The list the format
         // requires must be present and must be a list — absent or `null` is refused alike.
-        let end_history = matches!(self.format, END_HISTORY_FORMAT | END_HISTORY_VISUAL_FORMAT);
+        let end_history = matches!(self.format, END_HISTORY_FORMAT | END_HISTORY_VISUAL_FORMAT | TRACKING_FORMAT | TRACKING_VISUAL_FORMAT);
+        // **10/11 ↔ `tracking`.** The block is required in 10/11 and exists nowhere else.
+        #[cfg(feature = "tracking-policy")]
+        let tracking = {
+            let wants = matches!(self.format, TRACKING_FORMAT | TRACKING_VISUAL_FORMAT);
+            match (wants, self.tracking) {
+                (true, Some(stored)) => Some(crate::artifact::TrackingState::from_stored(stored)
+                    .map_err(|e| StoreError::Tracking(e.to_string()))?),
+                (false, None) => None,
+                (true, None) => return Err(StoreError::Tracking(crate::locale::text("store.tracking.missing").into())),
+                (false, Some(_)) => return Err(StoreError::Tracking(crate::locale::text("store.tracking.forbidden").into())),
+            }
+        };
         for (name, existence) in &self.existences {
             let journey = &existence.journey;
             let (required, forbidden) = match end_history {
@@ -470,7 +509,8 @@ impl StoredState {
             }
         }
         let world = match (self.format, self.cycles, self.chains) {
-            (CHAIN_FORMAT | CHAIN_VISUAL_FORMAT | END_HISTORY_FORMAT | END_HISTORY_VISUAL_FORMAT, None, Some(stored)) => {
+            (CHAIN_FORMAT | CHAIN_VISUAL_FORMAT | END_HISTORY_FORMAT | END_HISTORY_VISUAL_FORMAT
+                | TRACKING_FORMAT | TRACKING_VISUAL_FORMAT, None, Some(stored)) => {
                 if stored.nodes.is_empty() || stored.next_id as usize != stored.nodes.len() + 1
                     || stored.current != format!("chain:C{}", stored.nodes.len()) {
                     return Err(StoreError::ChainState("serial Chain Current and allocator disagree".into()));
@@ -522,6 +562,17 @@ impl StoredState {
             states.insert(id.number(), ExistenceState);
         }
 
+        // 형식 10/11 은 추적 기록을 붙인 채로 복원한다 — Entry 규칙(공유 계약 §6.2)을 그 기록의 검사가 잰다.
+        #[cfg(feature = "tracking-policy")]
+        let mut project = match tracking {
+            Some(tracking) => Project::restore_tracked(world, existences, states, current, self.next_will_id, artifacts,
+                end_history, tracking)
+                .map_err(StoreError::NotWhole)?
+                .map_err(|e| StoreError::Tracking(e.to_string()))?,
+            None => Project::restore(world, existences, states, current, self.next_will_id, artifacts, end_history)
+                .map_err(StoreError::NotWhole)?,
+        };
+        #[cfg(not(feature = "tracking-policy"))]
         let mut project = Project::restore(
             world,
             existences,
@@ -758,6 +809,10 @@ struct StoredState {
     chains: Option<StoredChains>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     visuals: Option<StoredVisualState>,
+    /// 형식 10/11 의 필수 블록. 다른 형식에는 없다 — 이 칸이 없는 빌드는 모르는 칸으로 거절한다.
+    #[cfg(feature = "tracking-policy")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    tracking: Option<crate::artifact::StoredTracking>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1046,6 +1101,8 @@ impl From<&Project> for StoredState {
                 }).collect(),
             }),
             visuals: None,
+            #[cfg(feature = "tracking-policy")]
+            tracking: project.tracking().map(crate::artifact::TrackingState::to_stored),
             next_will_id: project.next_will_id(),
             current_existence_ref: current.to_string(),
             existences: existences
@@ -1248,6 +1305,9 @@ pub enum StoreError {
     ChainState(String),
     /// 종료 이력의 꼴이 선언한 형식과 맞지 않는다 — `done_wills`·`ended_wills` 의 혼용·누락.
     EndHistory(String),
+    /// 형식 10/11 의 `tracking` 블록이 없거나, 꼴·연결·객체·승인 응답과 맞지 않거나, 이 빌드가 다루지 않는 모양이다.
+    #[cfg_attr(not(feature = "tracking-policy"), allow(dead_code))]
+    Tracking(String),
     /// 저장된 것이 아직 없다. 잘못이 아니라 **아직 시작하지 않았다**는 사실이다.
     NotFound { path: String },
     /// 앞 형식의 파일을 만났다. 읽지 않고, 있다는 사실을 말한다.
@@ -1295,6 +1355,7 @@ impl fmt::Display for StoreError {
         match self {
             StoreError::ChainState(why) => f.write_str(&crate::tr!("store.chain_state", why = why)),
             StoreError::EndHistory(why) => f.write_str(&crate::tr!("store.end_history", why = why)),
+            StoreError::Tracking(why) => f.write_str(&crate::tr!("store.tracking", why = why)),
             StoreError::VisualState(reason) => f.write_str(&crate::tr!("store.visual_state", reason = reason)),
             StoreError::NotFound { path } => f.write_str(&crate::tr!("store.not_found", path = path)),
             StoreError::LegacyFormat { path } => f.write_str(&crate::tr!("store.legacy_format", path = path)),
@@ -1337,6 +1398,7 @@ impl std::error::Error for StoreError {
             StoreError::BadRef { source, .. } => Some(source),
             StoreError::Registry(source) => Some(source),
             StoreError::NotFound { .. }
+            | StoreError::Tracking(_)
             | StoreError::LegacyFormat { .. }
             | StoreError::UnknownFormat { .. }
             | StoreError::PreviousFormat { .. }
