@@ -188,7 +188,6 @@ fn opened(result: &CallToolResult) -> String {
     };
     let specific = text(key);
     match kind {
-        "verify" => format!("{specific}\n{}", crate::visual_report::image::limits_guidance()),
         // Cycle Model §5.1: a Question deepens the interview; an Interpretation sorts what the
         // answers confirmed from the agent's reading and what is still unknown.
         "question" => format!("{specific} {}", text("guide.interview_deepen")),
@@ -597,7 +596,8 @@ mod tests {
         }
         let mut verify = receipt("열었다: step:C8/S3 · verify\n");
         after("gil_open", &mut verify);
-        assert!(text(&verify).contains(&crate::visual_report::image::limits_guidance()));
+        assert!(text(&verify).contains("evidence_files"));
+        assert!(!text(&verify).contains("visuals.attachments"));
     }
 
     #[test]

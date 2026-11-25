@@ -584,6 +584,12 @@ fn open_step(ctx: &Invocation<'_>,
         crate::project_resume::ensure(&session.root().map_err(say)?)
     } else { String::new() };
     let mut receipt = opened_step(session, opened);
+    if kind == NodeKind::Verify && matches!(ctx.input, Input::Body(_)) && session.project().visual_state.is_some() {
+        receipt.push_str(text("guide.opened.verify_visual"));
+        receipt.push('\n');
+        receipt.push_str(&crate::visual_report::image::limits_guidance());
+        receipt.push('\n');
+    }
     if kind == NodeKind::Synthesis && matches!(ctx.input, Input::Body(_)) {
         let project = session.project();
         let cycle = project.current_cycle();

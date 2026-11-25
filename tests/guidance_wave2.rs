@@ -132,6 +132,12 @@ fn a_preserved_reinterview_request_never_hides_the_legal_next_call() {
     } else {
         assert!(!line.contains("plan_document"), "{line}");
     }
+    if !cfg!(feature = "visual-authoring") && !plan_profile {
+        let hint = hints(&opened);
+        assert!(!hint.contains("visuals.attachments") && !hint.contains("expected_owner") && !hint.contains("8192"), "{hint}");
+        std::fs::write(root.join("observation.txt"), "synthetic observed value: 3").unwrap();
+        ok(mcp.call("gil_close", &root, json!({"report": "execution: 1 + 2\nresult: 3\nevidence_files: observation.txt\n"})), "plain Verify close");
+    }
     mcp.done();
     std::fs::remove_dir_all(root).ok(); std::fs::remove_dir_all(settings).ok();
 }
