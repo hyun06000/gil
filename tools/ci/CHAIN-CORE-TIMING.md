@@ -207,7 +207,176 @@ Node 표기는 통과/건너뜀/실패. 단계 49는 이 변경이 더한 시험
   시험 실행 약 0.5초다. Windows 복원 경계를 먼저 실패시키는 진단 가치가 더 커 유지한다.
 - **스레드 수·대기 시간**: 전체 lib 시험의 `--test-threads=1`은 fork 기반 실행기의 잠금 상속 때문이다.
   바꾸지 않았다.
-- **job 분할·서버 종류 변경·플랫폼 삭제**: 대상 아님. 분할은 경과 시간을 줄여도 서버 대기·총 사용 시간·캐시
+- **job 분할·서버 종류 변경·플랫폼 삭제**: 2026-11-19에는 대상이 아니었다(job 분할은 2026-11-25에 §6으로 채택). 당시 판단: 분할은 경과 시간을 줄여도 서버 대기·총 사용 시간·캐시
   저장을 늘린다(특히 macOS arm64 배정 대기 5분 이상, 병합 후 main에서 미배정 취소).
 - **다른 연결기(`rust-lld`)**, **`registry/src` 캐시 제외**, **workflow 문구와 캐시 호환성 분리**: 측정하지
   않았다.
+
+## 6. 두 job으로 분할 (2026-11-25)
+
+Windows 실행이 중단된 뒤 PR 한 건의 대기 시간은 Chain job 하나가 정했다. 최근 성공 실행 기준으로 Chain은
+15~18분(run 45513817750: 1034초, 45510618707: 1065초, 45506764969: 905초), 같은 PR의 다른 workflow는
+6~9분(제품 후보 macOS 461~559초·Linux 412초, Preview 396~400초, 첫 시작 342~420초)이었다.
+
+분할은 기능 조합 경계에서만 한다. 기능 조합마다 `gil`을 따로 컴파일하므로 한 조합을 두 job에 걸치면 그
+컴파일이 두 번 든다. run 45513817750의 단계 시간(초)으로 나눈 결과:
+
+| job | 기능 조합(순서 그대로) | 기준 실행의 단계 합 |
+|---|---|---|
+| `chain-product` | 기능 없음(resume 측정), `chain-core`, `chain-core,visual-authoring,product-safety`, `approved-plan,visual-authoring,product-safety`(+ 그 빌드를 쓰는 Node 검사 두 단계), `approved-plan,visual-authoring,recovery-auto-approval`, Core 없는 Node 검사 전부, 캐시 정리 | 164 + 233 + 89 + 23 = 509 |
+| `chain-opt-in` | `exploration-flow,visual-authoring,product-safety`, `will-end-history`, `will-end-history,visual-authoring,product-safety`, `will-end-history,approved-plan,visual-authoring,product-safety` | 192 + 150 + 137 + 18 = 497 |
+
+준비(checkout·rustup·캐시 복원, 기준 실행 22초)는 두 job이 각각 한다. 위 단계 합으로 계산한 기대값은 job당
+약 9분이었다.
+
+**분할 뒤 실측** (PR #326, run 45518641566, 두 job 모두 성공, 배정 대기 4초, 동시에 시작): `chain-product`
+600초, `chain-opt-in` 591초. 분할 전 1034초에서 약 10분으로 줄었다. 이 실행은 workflow 파일이 바뀌어 정확한
+캐시 키가 없던 경우(접두사 복원 + 정리·저장)이고, 같은 단계가 기준 실행보다 느렸다(승인 프로필 lib 98→108초,
+end history lib 82→101초). 한 번의 실행이므로 서버 간 차이와 구분하지 못한다.
+
+바뀌지 않은 것: 단계 이름·명령·기능 조합·필터·`expect-tests` 최소 수(§4의 단계 5~56이 그대로 있고 순서만
+job별로 나뉨), 빌드 설정 두 값, 캐시 키 식과 저장 경로. 바뀐 것:
+
+- 빌드 설정과 Rust 버전은 workflow 수준 `env:`로 옮겨 두 job이 같은 값을 쓴다.
+- 의존성 캐시는 하나다. 두 job이 같은 키·접두사로 복원하고, `chain-product`만 정리 후 저장한다.
+  `chain-opt-in`은 같은 고정 커밋의 `actions/cache/restore`를 써서 저장을 시도하지 않는다(같은 키를 두 job이
+  저장하면 뒤쪽은 예약 실패 경고만 남긴다). 기능 조합은 외부 의존성을 바꾸지 않는다(선택 의존성 없음).
+- M4-R 조합(단계 34~36)은 탐색 조합 앞, 승인 프로필 뒤로 옮겼다. 제품 프로필 안에 끼지 않는 규칙은 같다.
+- job 제한 시간은 45분에서 30분으로 줄였다(45분은 Windows 실행 기준이었다).
+- job 이름이 `chain (macos-15, bash)`에서 `chain product profiles (macos-15)`·`chain opt-in profiles (macos-15)`로
+  바뀐다. main의 필수 검사는 `macos-arm64-preview` 하나라 보호 규칙은 영향을 받지 않는다.
+
+비용: macOS job이 PR당 4개에서 5개가 된다. 여러 PR이 겹치면 macOS 배정 대기가 길어질 수 있다(분할 전에도
+겹친 실행에서 305~621초 대기가 관측됨: run 45500007797, 45500007726, 45494238496). 총 사용 시간은 준비 한 번
+(약 20~40초)만큼 늘어난다. 세 job 분할은 job당 약 6분이 되지만 다른 workflow(8~9분)보다 짧아져 PR 대기
+시간은 더 줄지 않고 macOS job만 6개가 되므로 하지 않았다.
+
+`tools/ci/cache.test.mjs`가 job 두 개의 이름·서버, job별 기능 조합 순서, 두 job의 캐시 키·경로·준비 단계
+일치, 두 번째 job이 저장·정리를 하지 않음을 고정한다.
+
+## 7. Linux 기능 매트릭스 시험 운영 (2026-11-25, 추가만 함)
+
+macOS 동시 job 한도(계정당 5개로 관측) 때문에 macOS에서는 더 나눠도 대기가 줄지 않는다. 다음 단계는 OS와
+무관한 기능 검사를 Linux로 옮기는 것이며, 이 절은 그 첫 단계다: **macOS job은 그대로 두고** 같은 기능 조합을
+Linux(`ubuntu-24.04`)에서 조합당 한 행으로 나란히 돌려 통과 여부와 시간을 본다. macOS 축소는 이 결과를 본 뒤
+따로 결정한다.
+
+| 행 | 기능 조합 | lib | 통합 시험 |
+|---|---|---|---|
+| `chain-core` | `chain-core` | 없음(macOS와 같음) | Chain·Will 도메인 10개 + `revisit` 1건(정확한 이름) |
+| `development-product` | `chain-core,visual-authoring,product-safety` | `visual_start` 필터 | `visual_start`, `chain_resume_benchmark`, `mcp` |
+| `approval` | `approved-plan,visual-authoring,product-safety` | 전체 | 승인 wire·보존·Monitor fixture·Closing·문맥·안내 |
+| `exploration` | `exploration-flow,visual-authoring,product-safety` | 전체 | 탐색 4종·Closing·item-queue 유지 suite |
+| `end-history` | `will-end-history` | 전체 | end history·기존 Chain suite·`mcp`·형식 전환 |
+| `end-history-product` | `will-end-history,visual-authoring,product-safety` | 전체 | 형식 9·전환·이미지 보고 + 승인 프로필 Monitor fixture 1건 |
+
+- 각 행의 통합 시험은 macOS job이 같은 기능 조합으로 돌리는 suite만 쓴다(`cache.test.mjs`가 대조). 행마다
+  `expect-tests` 최소 수를 한 번 적용한다(macOS 단계별 최소 수의 합 이상). 단계별 이름은 Linux에서는 합쳐진다.
+- Linux에서 돌리지 않는 것: `manual`, `automatic_guard`, `write_guard`(macOS 유지 대상), macOS 제품 빌드를
+  읽는 Node 검사 두 단계, resume 측정(`run.mjs`), Core 없는 Node 검사(이미 macOS job에서 한 번 실행).
+- Linux 의존성 캐시는 macOS와 같은 키 식(`runner.os`로 구분)이고 한 행(`chain-core`)만 정리 후 저장한다.
+- 시험 분류의 근거(조건부 컴파일 문장과 시험 이름 기준, 시험 본문 전수 확인 아님): macOS 필수 84건,
+  두 OS 모두 약 497건, Linux만으로 충분 약 483건(통합 시험 1,073건 중).
+- **첫 Linux 실행** (run 45520042159, 커밋 6c570a4, 배정 대기 3~5초): 6개 행 성공 — `chain-core` 93초,
+  `development-product` 103초, `end-history` 108초, `approval` 125초, `end-history-product` 135초, `exploration`
+  147초. 의존성 캐시가 없던 첫 실행의 값이다. `recovery-approval` 행은 실패했다: `tests/recovery_approval_mode.rs`가
+  파일 전체에 `cfg(any(macOS, Windows))`가 걸려 Linux에서 0건이 되었고 `expect-tests`가 이를 통과로 세지 않았다.
+  이 조합(M4-R)은 Linux 행에서 빼고 macOS에 둔다.
+
+## 8. macOS 축소 (2026-11-25)
+
+§7의 Linux 행이 통과한 뒤(커밋 601c991의 실행에서 6개 행 모두 성공) macOS job 두 개를 `chain-macos` 하나로
+줄였다. 모든 기능 조합의 lib 전체와 통합 시험은 Linux 행이 돌리고, macOS에는 macOS가 필요한 것만 남긴다.
+
+근거는 시험 본문 전수조사다(저장소 밖 `gil-evidence/ci-os-sensitivity-audit-20261125/`, 시험 2,654건의 분류와
+근거 한 줄). 통합 시험 1,080건 중 macOS에서만 컴파일되는 것 19건, OS·파일시스템 동작에 결과가 걸린 것 131건,
+두 OS의 제품 코드가 다른 것 88건이며, 마지막 묶음의 64건은 이미지 보고 빌드에서 프로젝트를 시작하는 경로를
+지나가기만 한다(그 경로 자체는 `visual_start` 시험이 검증).
+
+| 기능 조합 | macOS에 남긴 검사 | macOS에서 뺀 검사(Linux 행이 실행) |
+|---|---|---|
+| 기능 없음 | resume 측정 | — |
+| `chain-core` | — | 도메인 suite 10개, `revisit` 1건 (조합 전체) |
+| `chain-core,visual-authoring,product-safety` | lib `visual_start`, `visual_start`, `chain_resume_benchmark`, `mcp`, 전체 컴파일 | — |
+| `approved-plan,visual-authoring,product-safety` | `approved_plan_wire_wave1`, `chain_recovery_preservation`, `closing_handoff`, `resume_guidance`, `manual`, `automatic_guard`, `write_guard`, OS에 닿는 lib 모듈(필터), resume 측정, 전체 컴파일, 제품 빌드를 읽는 Node 검사 2개 | lib 전체, `chain_monitor_fixtures`, `context`, `context_profiles`, 안내 suite 3개 |
+| `approved-plan,visual-authoring,recovery-auto-approval` | 세 단계 전부(통합 suite가 macOS·Windows에서만 컴파일) | — (Linux 행 없음) |
+| `exploration-flow,visual-authoring,product-safety` | — | 조합 전체(lib, suite 13개, `manual`, 전체 컴파일) |
+| `will-end-history` | `will_end_session`, `mcp`, `format_transition` | lib 전체, `will_end`, 도메인 suite 9개, `tracking_record_boundary`, 전체 컴파일 |
+| `will-end-history,visual-authoring,product-safety` | `will_end_visual`, `will_end_session`, `format_transition`, `visual_start`, `chain_resume_benchmark`, `mcp`, `chain_handoff`, `visual_attachment` | lib 전체, 전체 컴파일 |
+| `will-end-history,approved-plan,visual-authoring,product-safety` | — | `chain_monitor_fixtures` |
+| — | Core 없는 Node 검사 전부 | — |
+
+macOS에서 줄어든 검증(이 workflow 기준):
+
+- 조합별 lib 전체 실행 네 번이 없어졌다. lib에는 OS에 닿는 시험이 약 250건 있다. Preview job(기본 조합)과
+  제품 후보 job(`tracking-policy,exploration-flow,visual-authoring,product-safety`)은 macOS에서 lib 전체를 계속
+  돌린다. 승인 프로필에서는 OS에 닿는 모듈만 이름 필터로 한 번 돌린다(`restore::`, `lock::`, `install::`,
+  `launcher::`, `runtime_`, `visual_`, `internal_fs::`, `write_guard::`, `monitor::serve::`, `mcp::bindings::`,
+  `session::format_transition::`, `project_resume::`, `companion`). end history 단독 조합에서만 컴파일되는
+  OS 민감 lib 시험이 몇 건인지는 세지 않았다.
+- 탐색 조합은 이 workflow에서 macOS로 빌드하지 않는다. 같은 suite를 제품 후보 job이 macOS에서 제품 조합으로
+  돌린다(정확히 같은 조합은 아니다). 탐색 빌드의 `manual` 1단계는 macOS에서 빠졌다(`manual`은 승인 프로필로 남음).
+- "로직만 확인"으로 분류된 시험은 Linux에서만 돈다. 분류가 틀린 시험이 있으면 macOS 결함을 놓친다.
+  전수조사 뒤 본 세션이 본문을 다시 읽어 대조한 것은 3건이다.
+
+기존 단계 시간으로 계산한 기대 시간은 약 8분(job 한 개)이었다.
+
+**축소 뒤 실측** (PR #326, run 45521948764, 커밋 d66894e, 모든 job 성공):
+
+| job | 실행 시간 | 배정 대기 |
+|---|---|---|
+| `chain-macos` | 515초 | 132초 |
+| `chain-linux` `chain-core` | 63초 | 4초 |
+| `chain-linux` `development-product` | 81초 | 4초 |
+| `chain-linux` `end-history` | 104초 | 4초 |
+| `chain-linux` `exploration` | 125초 | 4초 |
+| `chain-linux` `approval` | 138초 | 4초 |
+| `chain-linux` `end-history-product` | 152초 | 3초 |
+
+- Chain workflow의 대기 시간은 분할 전 1034초 → 두 job 600초 → 515초(배정 대기 제외)가 되었고, macOS 사용 시간은
+  1034초 → 1191초(두 job 합) → 515초다. 한 번의 실행이며, 이 실행도 workflow 파일이 바뀌어 정확한 캐시 키가
+  없었다.
+- 이 실행의 macOS 배정 대기(Chain 132초, Preview 861초)는 같은 PR에 연달아 푸시해 취소된 실행들과 겹친 결과다.
+  일반 PR의 대기를 대표하지 않는다.
+- 두 번째 실행(run 45524783209, main 병합 뒤 커밋 0ccfe70, 모든 job 성공, 배정 대기 27초 이하)에서 `chain-macos`는
+  632초였다. 단계 구성은 같고 거의 모든 단계가 조금씩 더 걸렸다(승인 프로필 wire 35→53초, M4-R 세 단계
+  75→111초, lib 필터 91→102초). Linux 행은 56~118초였다. 따라서 `chain-macos`의 관측 범위는 515~632초이며,
+  두 job 구성(약 600초)보다 대기 시간이 짧다고 단정하지 않는다. 확실한 차이는 macOS job 수(5→4)와 macOS
+  사용 시간(두 job 합 1191초 → 515~632초)이다.
+- OS에 닿는 lib 모듈 필터 단계는 359건 통과·1건 무시, 91초였다. 최소 실행 수는 처음에 50으로 두었다가 이 실측을
+  보고 300으로 올렸다.
+
+## 9. macOS job의 경로 조건 (2026-11-25)
+
+`chain-macos`를 별도 workflow(`.github/workflows/chain-macos.yml`)로 옮기고, PR에서는 macOS에서 다르게 동작할 수
+있는 파일이 바뀔 때만 돌게 했다. OS와 무관한 로직만 바꾼 PR의 Chain 검사는 Linux 행(약 1~2분)으로 끝난다.
+
+PR에서 job을 시작하는 경로:
+
+- **OS 조건이 있는 소스 76개**: `cfg`에 `unix`, `windows`, `target_os`, `target_family`가 들어간 `src/**/*.rs`.
+  `tools/ci/cache.test.mjs`가 소스에서 이 목록을 다시 계산해 workflow의 목록과 다르면 실패한다. 새 파일에
+  `#[cfg(unix)]`를 넣고 목록에 더하지 않으면 그 시험(항상 도는 `chain-node` job)이 막는다.
+- **이 job이 돌리는 통합 시험 16개 파일**과 공용 지원 모듈(`tests/common`, `tests/support_wave1`,
+  `tests/guidance_support`, `tests/fixtures`).
+- `Cargo.toml`, `Cargo.lock`, macOS 빌드를 읽는 도구(`tools/manual-example-check`, `tools/chain-context-bench`,
+  `tools/chain-resume-benchmark`), `tools/ci`, workflow 파일 자신.
+
+경로 조건이 놓치는 경우와 그 대비:
+
+- OS 조건이 없는 파일의 변경이 macOS에서만 다른 결과를 내는 경우(예: 경로 문자열 처리, 임시 폴더 경로에
+  기대는 로직). PR에서는 잡지 못한다. **main에 병합된 뒤에는 소스·시험 변경마다 이 job이 돈다**(`push` 조건).
+  실패는 병합 뒤에 보이므로 PR을 막지 않는다.
+- Preview job(필수 검사)은 PR마다 macOS에서 기본 조합의 전체 시험을 그대로 돌린다.
+- `automatic_guard`, `write_guard`, M4-R 조합은 Linux 행이 없어 이 job에서만 돈다. 이 suite가 쓰는 OS 조건
+  없는 로직이 바뀌면 PR에서는 돌지 않고 main에서 돈다.
+
+함께 옮긴 것:
+
+- Core 프로세스를 띄우지 않는 Node 검사 9단계는 `chain-core.yml`의 `chain-node` job(`ubuntu-24.04`)으로 옮겼다.
+  조건부가 된 macOS job에 두면 대부분의 PR에서 돌지 않기 때문이다. Node는 제품 후보 Linux job과 같은 고정
+  배포본(v22.23.5, SHA-256 확인)을 쓴다. `chain-context-bench` 계약은 macOS 전용 조건을 떼고 Linux에서 돈다.
+- `manual` suite를 승인·탐색 조합의 Linux 행에 더했다(전수조사: 35건 모두 Linux에서 컴파일·실행). macOS job의
+  `manual` 단계는 그대로다.
+
+이 절을 쓰는 시점에 `chain-node` job과 Linux의 `manual`은 원격에서 실행된 적이 없다.
+
