@@ -217,6 +217,11 @@ pub fn rejection(tool: &Tool, input: &Value) -> String {
     if tool.name == "gil_close" {
         if let Some(hint) = unachieved_rejection(input) { return hint.into(); }
     }
+    // The outer argument is missing, not a field inside the body: say so before Core's Report
+    // grammar would describe it as missing Report fields.
+    if tool.name == "gil_close" && input.as_object().is_some_and(|object| !object.contains_key("report")) {
+        return "gil_close: 'report' is missing. Send project_root and the Report string for the current Step or Cycle in report. Include expected_owner and visuals when a typed close is required. This call was not executed. Nothing was closed. Read gil_help({project_root, topic: \"close\"}) for the current Report fields, then send one corrected call.".into();
+    }
     #[cfg(feature = "visual-authoring")]
     if tool.name == "gil_close" && input.get("expected_owner").is_some() && input.get("visuals").is_some() {
         return super::authoring::rejection(input);
@@ -388,6 +393,22 @@ mod tests {
             input.pointer_mut(pointer).unwrap().as_object_mut().unwrap().remove(field);
             assert!(!valid_input(propose, &input), "missing {pointer}/{field}");
         }
+    }
+    /// `report` is the one body every close carries. The catalog says so, the wire refuses a call
+    /// without it, and the refusal names the outer argument instead of Report fields.
+    #[test]
+    fn close_declares_report_required_and_names_it_when_missing() {
+        let close = tools().iter().find(|t| t.name == "gil_close").unwrap();
+        let required: Vec<&str> = close.input_schema.get("required").and_then(Value::as_array).unwrap()
+            .iter().filter_map(Value::as_str).collect();
+        assert!(required.contains(&"project_root") && required.contains(&"report"), "{required:?}");
+        let secret = if cfg!(windows) { "C:/synthetic/private" } else { "/synthetic/private" };
+        let missing = json!({"project_root": secret});
+        assert!(!valid_input(close, &missing));
+        let said = rejection(close, &missing);
+        assert!(said.contains("'report' is missing") && said.contains("Nothing was closed"), "{said}");
+        assert!(said.contains("Step or Cycle") && !said.contains(secret), "{said}");
+        assert!(valid_input(close, &json!({"project_root": secret, "report": ""})), "an empty body is Core's to judge");
     }
     #[test]
     fn visual_authoring_is_explicit_and_never_silently_dropped() {

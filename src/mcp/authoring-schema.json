@@ -39,7 +39,7 @@
         },"required":["attachments","uses"]
       }
     },
-    "required":["project_root"],
+    "required":["project_root","report"],
     "dependencies":{"visuals":["expected_owner","report"],"expected_owner":["visuals","report"]},
     "$defs": {
       "text":{"type":"string","minLength":1,"maxLength":4096},
