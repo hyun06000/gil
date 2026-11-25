@@ -60,8 +60,12 @@ fn interview_proposal_and_define_receipts_carry_the_deep_interview_and_smallest_
     let synthesis = support::step_ref(&opened, "synthesis");
     assert!(said(&opened).contains(&note("cmd.opened_synthesis_note")), "{}", said(&opened));
     let hint = hints(&opened);
-    assert!(hint.contains(ko("guide.propose_brief")), "{hint}");
-    assert!(hint.find(ko("guide.propose_brief")).unwrap() < hint.find("$.draft.synthesis.basis_refs").unwrap(), "the short proposal precedes the basis rules: {hint}");
+    if plan_profile {
+        assert!(hint.find(ko("guide.propose_brief")).unwrap() < hint.find("$.draft.synthesis.basis_refs").unwrap(), "{hint}");
+    } else {
+        assert!(!hint.contains("$.draft") && !hint.contains("gil_plan_propose"), "{hint}");
+        assert!(hint.contains(&format!("basis_refs: |\n  {}", basis.join("\n  "))), "{hint}");
+    }
     let line = first_call(&said(&ok(mcp.call("gil_context", &root, json!({})), "context")));
     assert!(line.contains(ko("guide.propose_brief")), "{line}");
     if plan_profile {

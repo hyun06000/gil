@@ -57,7 +57,8 @@ pub fn after(name: &str, result: &mut CallToolResult) {
         _ => return,
     };
     if matches!(name, "gil_open" | "gil_close" | "gil_context" | "gil_status") {
-        prepend(result, format!("{hint}\n{}", file_boundary(name)));
+        let boundary = file_boundary(name);
+        prepend(result, if hint.is_empty() { boundary } else { format!("{hint}\n{boundary}") });
     } else if name == "gil_start" {
         // The display handoff (exact show_gil_monitor call) stays the first block; this
         // imperative summary follows it so display recovery still precedes workflow guidance.
@@ -151,6 +152,20 @@ fn first_line_is_chain(said: &str, lead: &str) -> bool {
         .and_then(|line| line.split(" · ").next()).is_some_and(|r| r.trim().starts_with("chain:"))
 }
 
+pub(crate) fn synthesis_open_guidance(here: crate::StepRef, refs: &[String], plan: bool, exploration: bool) -> String {
+    let location = tr!("guide.opened.synthesis_location", here = here, cycle = here.cycle());
+    let rules = text("cycle.basis_refs_rules");
+    if plan {
+        let brief = if exploration { text("guide.propose_requirements") } else { text("guide.propose_brief") };
+        let specific = format!("{} {brief}", text("guide.opened.synthesis"));
+        let example = serde_json::json!({"basis_refs": refs.join("\n")});
+        tr!("guide.opened.synthesis_basis", specific = specific, location = location, rules = rules, example = example)
+    } else {
+        let basis = refs.join("\n  ");
+        format!("{}\n{location}{rules}\nbasis_refs: |\n  {basis}\n", text("ctx.next.synthesis"))
+    }
+}
+
 fn opened(result: &CallToolResult) -> String {
     let said = said(result);
     // The next Chain: its Opening Interview is open with no Step, and nothing of the previous
@@ -160,7 +175,7 @@ fn opened(result: &CallToolResult) -> String {
     let key = match kind {
         "question" => "guide.opened.question",
         "interpretation" => "guide.opened.interpretation",
-        "synthesis" => "guide.opened.synthesis",
+        "synthesis" => return String::new(), // The open receipt carries the project-specific guidance.
         "outcome" if said.contains("Interview") => "guide.opened.interview_outcome",
         "outcome" => "guide.opened.outcome",
         "define" => "guide.opened.define",
@@ -173,18 +188,6 @@ fn opened(result: &CallToolResult) -> String {
     };
     let specific = text(key);
     match kind {
-        "synthesis" => {
-            let here = said.lines().next().and_then(|line| line.strip_prefix(text("receipt.opened_lead")))
-                .and_then(|line| line.split(" · ").next()).and_then(|r| r.parse::<crate::StepRef>().ok());
-            let location = here.map(|r| tr!("guide.opened.synthesis_location", here = r, cycle = r.cycle())).unwrap_or_default();
-            let cycle = here.map(|r| r.cycle().id().to_string()).unwrap_or_else(|| "Cn".into());
-            let example = serde_json::json!({"basis_refs": format!("step:{cycle}/S1\nstep:{cycle}/S2")});
-            // Cycle Model §16: the proposal is short, with small items, before the basis rules.
-            // An exploration Chain proposes requirements, not an execution queue; its receipt says so.
-            let brief = if said.contains(text("receipt.marker.exploration")) { text("guide.propose_requirements") } else { text("guide.propose_brief") };
-            let specific = format!("{specific} {brief}");
-            tr!("guide.opened.synthesis_basis", specific = specific, location = location, rules = text("cycle.basis_refs_rules"), example = example)
-        },
         "verify" => format!("{specific}\n{}", crate::visual_report::image::limits_guidance()),
         // Cycle Model §5.1: a Question deepens the interview; an Interpretation sorts what the
         // answers confirmed from the agent's reading and what is still unknown.
@@ -588,9 +591,7 @@ mod tests {
 
     #[test]
     fn synthesis_and_verify_open_expose_authoring_constraints_before_close() {
-        let mut synthesis = receipt("열었다: step:C7/S9 · synthesis\n");
-        after("gil_open", &mut synthesis);
-        let hint = text(&synthesis);
+        let hint = super::synthesis_open_guidance("step:C7/S9".parse().unwrap(), &["step:C7/S5".into()], true, false);
         for needle in ["$.draft.synthesis.basis_refs", "step:C7/S9", "cycle:C7", "부모 사슬", "Question", "Interpretation", "중복 없이", "한 줄에 하나씩", "statement", "자동 이동"] {
             assert!(hint.contains(needle), "{hint}");
         }
@@ -609,7 +610,10 @@ mod tests {
             ("experiment", "gil_open(kind: define)", "verify를 먼저"),
         ] {
             let lead = if kind == "experiment" { "열었다: cycle:C2 · experiment · 부모 cycle:C1\n" } else { "열었다: step:C1/S1 · " };
-            let mut r = receipt(&format!("{lead}{}\n\n지금 할 일\n  …\n", if kind == "experiment" { "" } else { kind }));
+            let synthesis = if kind == "synthesis" {
+                super::synthesis_open_guidance("step:C1/S3".parse().unwrap(), &["step:C1/S1".into()], true, false)
+            } else { String::new() };
+            let mut r = receipt(&format!("{lead}{}\n\n지금 할 일\n  …\n{synthesis}", if kind == "experiment" { "" } else { kind }));
             after("gil_open", &mut r);
             let hint = text(&r);
             assert!(hint.contains(must), "{kind}: {hint}");
@@ -673,7 +677,7 @@ mod tests {
             assert!(interpretation.contains(needle), "{needle}: {interpretation}");
         }
 
-        let synthesis = open("synthesis");
+        let synthesis = super::synthesis_open_guidance("step:C1/S3".parse().unwrap(), &["step:C1/S1".into()], true, false);
         for needle in ["제안은 짧게", "목표·이번 범위·중요 제약", "수행·검증 가능한 문제 하나", "관측 가능한 완료 조건", "첫 항목이 된다", "basis_refs", "scope/items/synthesis 모양을 유지"] {
             assert!(synthesis.contains(needle), "{needle}: {synthesis}");
         }
