@@ -160,3 +160,46 @@ fn indent(text: &str) -> String {
         .collect::<Vec<_>>()
         .join("\n")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::SnapshotRef;
+
+    fn dirty() -> Result<WorldState, crate::SessionError> {
+        Ok(WorldState::Dirty { world: SnapshotRef::new(1).expect("A1"), changes: Vec::new() })
+    }
+
+    /// The dirty-world advice by what is open, in every feature profile (no project fixture):
+    /// only a non-Verify Step that is open together with an Active Will is said to stay open.
+    #[test]
+    fn dirty_advice_says_what_stays_open_only_when_a_step_and_its_will_are_open() {
+        let keeps = text("status.dirty_keeps_open");
+        let recovery = text(if cfg!(feature = "product-safety") { "status.dirty_product" } else { "status.dirty_dev" });
+
+        let question = world_nudge(Some(NodeKind::Question), true, dirty());
+        assert!(question.contains(recovery) && question.ends_with(keeps), "{question}");
+
+        // Before the first Step, and at a Cycle boundary: recovery advice, nothing "stays open".
+        let nothing_open = world_nudge(None, false, dirty());
+        assert!(nothing_open.contains(recovery) && !nothing_open.contains(keeps.trim()), "{nothing_open}");
+        assert!(nothing_open.ends_with("\n\n"), "the block still ends with one blank line: {nothing_open:?}");
+        // An Active Will without an open Step, or an open Step without one, is not "both open".
+        assert!(!world_nudge(None, true, dirty()).contains(keeps.trim()));
+        assert!(!world_nudge(Some(NodeKind::Question), false, dirty()).contains(keeps.trim()));
+
+        // A Verify confirms the changed world by closing: neither recovery nor "stays open".
+        let verify = world_nudge(Some(NodeKind::Verify), true, dirty());
+        assert!(verify.ends_with(text("status.dirty_verify")), "{verify}");
+        assert!(!verify.contains(recovery) && !verify.contains(keeps.trim()), "{verify}");
+    }
+
+    #[test]
+    fn a_clean_world_gets_no_dirty_advice_whatever_is_open() {
+        let clean = || Ok(WorldState::Clean { world: SnapshotRef::new(1).expect("A1") });
+        for (kind, will) in [(None, false), (Some(NodeKind::Question), true), (Some(NodeKind::Verify), true)] {
+            let said = world_nudge(kind, will, clean());
+            assert!(!said.contains(text("status.dirty_keeps_open").trim()) && !said.contains(text("status.dirty_verify").trim()), "{said}");
+        }
+    }
+}
