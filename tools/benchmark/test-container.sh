@@ -17,12 +17,12 @@ python3 - "$context" <<'PY'
 import json, pathlib, sys
 root = pathlib.Path(sys.argv[1])
 base = dict(goal="Sum the integers and compare to 15", numbers=[3, 5, 7], expected=15)
-for name, change in [('pass', {}), ('fail', {'expected': 4}), ('revision', {'revise':True}), ('human', {'decision': 'yes'}), ('empty', {'evidence':False})]:
+for name, change in [('pass', {}), ('fail', {'expected': 4}), ('revision', {'revise':True}), ('human', {'decision': 'yes'}), ('empty', {'evidence':False}), ('early', {'early_write':True})]:
     (root / (name+'.json')).write_text(json.dumps(dict(base, **change)))
 PY
 img=$(docker build -q "$context")
 docker run --rm --read-only --network none --user 65534:65534 --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp:rw,mode=1777 "$img" python /case/probe.py
-for case in pass fail revision human empty; do
+for case in pass fail revision human empty early; do
   code=0
   "$1" benchmark "$img" "/case/$case.json" /case/adapter >"$context/result" 2>"$context/error" || code=$?
   case "$case" in
@@ -42,6 +42,10 @@ verify = next(s for s in experiment['steps'] if s['kind']=='verify')['report']
 assert verify['result']=='15' and verify['evidence_files']=='observation.txt'
 assert experiment['report']['verdict']==r['verdict']
 PY
+      ;;
+    early)
+      test "$code" = 1
+      grep -q 'workspace changed outside an open Verify' "$context/error"
       ;;
     human|empty)
       test "$code" = 1

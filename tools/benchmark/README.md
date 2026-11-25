@@ -24,4 +24,4 @@ A run uses a fresh record directory outside its workspace. It refuses workspaces
 
 ## Container acceptance
 
-`tools/benchmark/test-container.sh target/debug/gil` runs the committed synthetic participant on Linux. It checks a passing and failing experiment, revision of a specification, rejection of human approval tokens, and refusal to close Verify without an evidence file. These checks exercise the protocol and Core transitions. Benchmark model scores require running the intended model adapter and task suite.
+`tools/benchmark/test-container.sh target/debug/gil` runs the committed synthetic participant on Linux. It first checks ordinary Linux MCP Monitor handoff and display-only headless MCP waiting for a response. It then checks a passing and failing experiment, revision of a specification, rejection of human approval tokens, and refusal to close Verify without an evidence file. These checks exercise the protocol and Core transitions. Benchmark model scores require running the intended model adapter and task suite.

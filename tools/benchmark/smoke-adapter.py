@@ -25,6 +25,8 @@ def close(**fields):
 
 if next_step["action"] == "open":
     name = next_step["recommended"]
+    if task.get("early_write"):
+        Path("too-early.txt").write_text("synthetic test")
     reply = {"action": "open", "kind": name, "contract":
              f"objective: {task['goal']}\nnext_action: Perform the {name} task\ndone_when: The {name} result is recorded"}
 elif kind == "question":

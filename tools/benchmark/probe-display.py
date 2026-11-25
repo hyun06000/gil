@@ -37,5 +37,12 @@ for mode in ("interactive", "headless"):
             assert fields["next_call"]["name"] == "show_gil_monitor", start
         else:
             assert "show_gil_monitor" not in json.dumps(start) and "next_action" in fields, start
+        request = {"name":"gil_open","arguments":{"project_root":str(root),"kind":"question",
+                   "contract":"objective: Learn the task\nnext_action: Ask the participant\ndone_when: Receive an answer"}}
+        assert send("tools/call", request, 3)["structuredContent"]["ok"]
+        context = send("tools/call", {"name":"gil_context","arguments":{"project_root":str(root)}}, 4)
+        if mode == "headless":
+            assert "wait" in context["structuredContent"]["next_action"], context
+        assert "benchmark_accept" not in json.dumps(context), context
         proc.stdin.close()
         assert proc.wait(timeout=15) == 0

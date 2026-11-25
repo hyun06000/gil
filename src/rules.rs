@@ -186,8 +186,7 @@ impl RuleSet {
     pub(crate) fn is_benchmark(&self) -> bool { self.benchmark }
 
     pub(crate) fn synthesis_acceptance(&self) -> &'static str {
-            if self.benchmark { return "benchmark_accept"; }
-        "yes"
+        if self.benchmark { "benchmark_accept" } else { "yes" }
     }
 
     pub(crate) fn supports_chain_closing(&self) -> bool {

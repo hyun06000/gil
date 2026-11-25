@@ -184,7 +184,7 @@ fn run(task: &Path, executable: &Path, workspace: &Path, records: &Path) -> Resu
     let mut session = ProjectSession::start_at(
         RuleSet::benchmark(),
         &workspace,
-        records.join("benchmark.yaml"),
+        records.join(".gil").join("benchmark.yaml"),
     )?;
     session.commit()?;
     let mut previous_error = None;
@@ -211,7 +211,11 @@ fn run(task: &Path, executable: &Path, workspace: &Path, records: &Path) -> Resu
         if next["action"] == "open" && next["recommended"].is_null() {
             return Err("the Core has no forward step for this benchmark run".into());
         }
+        let verify_open = next["workspace_writes"] == true;
         let reply = adapter.ask(session.project(), next, previous_error.as_deref())?;
+        if !verify_open && !matches!(session.world_state()?, crate::WorldState::Clean { .. }) {
+            return Err("workspace changed outside an open Verify".into());
+        }
         match apply(&mut session, reply) {
             Ok(()) => {
                 session.commit()?;
@@ -311,6 +315,34 @@ pub fn cli(args: &[String]) -> std::process::ExitCode {
         Err(err) => {
             eprintln!("Could not start benchmark container: {err}");
             ExitCode::FAILURE
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn only_explicit_benchmark_rules_accept_adapter_decisions() {
+        let interactive = RuleSet::from_yaml_str(crate::BUILTIN_SPEC).unwrap();
+        let benchmark = RuleSet::benchmark();
+        for (decision, human) in [
+            ("yes", true),
+            ("no", true),
+            ("benchmark_accept", false),
+            ("benchmark_revise", false),
+        ] {
+            let report = Report::new()
+                .with("statement", "Scope")
+                .with("basis_refs", "step:C1/S1")
+                .with("approved", decision);
+            let check = |rules: &RuleSet| {
+                rules
+                    .validate_close(CycleKind::Interview, NodeKind::Synthesis, &report)
+                    .is_ok()
+            };
+            assert_eq!(check(&interactive), human, "{decision}");
+            assert_eq!(check(&benchmark), !human, "{decision}");
         }
     }
 }
