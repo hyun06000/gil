@@ -1,0 +1,243 @@
+name: Chain checks that need macOS (no publication)
+# The macOS part of the Chain checks (tools/ci/CHAIN-CORE-TIMING.md §8-§9). On a pull request it
+# runs only when a file that can behave differently on macOS changes; a change of OS-neutral logic
+# is checked by every feature profile on Linux (chain-core.yml) and by the Preview job. After a
+# merge it runs on main for every source or test change, so a miss of the path list is reported
+# there. It is not a required check.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      # Source files that carry an OS condition (cfg on unix, windows, target_os or target_family).
+      # tools/ci/cache.test.mjs recomputes this list from the sources and refuses a difference.
+      - 'src/agent.rs'
+      - 'src/artifact/gilignore/tests.rs'
+      - 'src/artifact/gilignore/walk.rs'
+      - 'src/artifact/mod.rs'
+      - 'src/artifact/scoped.rs'
+      - 'src/artifact/store.rs'
+      - 'src/artifact/tracking_policy.rs'
+      - 'src/artifact/tracking_record/baseline_retry.rs'
+      - 'src/artifact/tracking_record/mod.rs'
+      - 'src/artifact/tracking_record/policy_file_read.rs'
+      - 'src/artifact/tracking_record/policy_file_read_tests.rs'
+      - 'src/artifact/tracking_record/policy_file_write.rs'
+      - 'src/bin/gil-launcher.rs'
+      - 'src/bin/gil-runtime-testbed.rs'
+      - 'src/command.rs'
+      - 'src/companion_discovery.rs'
+      - 'src/companion_ipc.rs'
+      - 'src/companion_ipc/wire.rs'
+      - 'src/companion_review.rs'
+      - 'src/install/claude.rs'
+      - 'src/install/codex.rs'
+      - 'src/install/file.rs'
+      - 'src/install/mod.rs'
+      - 'src/install/paths.rs'
+      - 'src/install/probe.rs'
+      - 'src/internal_fs.rs'
+      - 'src/launcher.rs'
+      - 'src/lib.rs'
+      - 'src/locale.rs'
+      - 'src/lock.rs'
+      - 'src/mcp.rs'
+      - 'src/mcp/actions.rs'
+      - 'src/mcp/authoring.rs'
+      - 'src/mcp/bindings.rs'
+      - 'src/mcp/migration.rs'
+      - 'src/mcp/monitor.rs'
+      - 'src/mcp/records.rs'
+      - 'src/mcp/start_kind.rs'
+      - 'src/mcp/surface.rs'
+      - 'src/mcp/transition.rs'
+      - 'src/mcp/update.rs'
+      - 'src/monitor/serve.rs'
+      - 'src/monitor/watch.rs'
+      - 'src/project_resume.rs'
+      - 'src/project_state.rs'
+      - 'src/recovery_mode.rs'
+      - 'src/restore/mod.rs'
+      - 'src/restore/preview.rs'
+      - 'src/restore/preview/tests.rs'
+      - 'src/root.rs'
+      - 'src/runtime_diagnostics.rs'
+      - 'src/runtime_launch.rs'
+      - 'src/runtime_launch_tests.rs'
+      - 'src/runtime_lock.rs'
+      - 'src/runtime_observe.rs'
+      - 'src/runtime_observe_tests_unix.rs'
+      - 'src/runtime_prepare.rs'
+      - 'src/runtime_prepare_tests.rs'
+      - 'src/runtime_select.rs'
+      - 'src/runtime_select_tests.rs'
+      - 'src/runtime_testbed.rs'
+      - 'src/runtime_verify.rs'
+      - 'src/session.rs'
+      - 'src/session/format_transition.rs'
+      - 'src/session/format_transition/tests.rs'
+      - 'src/session/revisit_recovery.rs'
+      - 'src/start_prep/tests.rs'
+      - 'src/store.rs'
+      - 'src/visual_migration.rs'
+      - 'src/visual_report.rs'
+      - 'src/visual_report/file.rs'
+      - 'src/visual_report/state_file.rs'
+      - 'src/visual_start.rs'
+      - 'src/visual_start_tests.rs'
+      - 'src/write_guard.rs'
+      - 'src/write_guard/automatic.rs'
+      # The integration suites this job runs, and the helpers they share.
+      - 'tests/approved_plan_wire_wave1.rs'
+      - 'tests/automatic_guard.rs'
+      - 'tests/chain_handoff.rs'
+      - 'tests/chain_recovery_preservation.rs'
+      - 'tests/chain_resume_benchmark.rs'
+      - 'tests/closing_handoff.rs'
+      - 'tests/format_transition.rs'
+      - 'tests/manual.rs'
+      - 'tests/mcp.rs'
+      - 'tests/recovery_approval_mode.rs'
+      - 'tests/resume_guidance.rs'
+      - 'tests/visual_attachment.rs'
+      - 'tests/visual_start.rs'
+      - 'tests/will_end_session.rs'
+      - 'tests/will_end_visual.rs'
+      - 'tests/write_guard.rs'
+      - 'tests/common/**'
+      - 'tests/support_wave1/**'
+      - 'tests/guidance_support/**'
+      - 'tests/fixtures/**'
+      # Build inputs, the Node checks that read this job's build, and the job itself.
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'tools/manual-example-check/**'
+      - 'tools/chain-context-bench/**'
+      - 'tools/chain-resume-benchmark/**'
+      - 'tools/ci/**'
+      - '.github/workflows/chain-macos.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'tools/ci/**'
+      - '.github/workflows/chain-macos.yml'
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+# CI-only build cost settings for the dev/test profiles (release is untouched; optimisation,
+# debug assertions, overflow checks and panic strategy keep their defaults). Line tables keep
+# file:line in panic backtraces but drop variable/type debuginfo; nothing here reuses the
+# incremental state, so it is not written. The debuginfo value changes the cached dependency
+# outputs and is part of the cache restore prefix; incremental state is never cached.
+# Measured in tools/ci/CHAIN-CORE-TIMING.md. Both jobs share these values and one dependency cache.
+env:
+  RUSTUP_TOOLCHAIN: 1.97.1
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  CARGO_INCREMENTAL: '0'
+defaults:
+  run:
+    shell: bash
+# What stays on macOS: tests compiled or meaningful only there, tests whose result depends on OS or
+# filesystem behaviour, the start path of an image-report project, the approved recovery, the M4-R
+# profile, and the checks that read the macOS build. Windows CI is paused.
+jobs:
+  chain-macos:
+    name: chain macos (macos-15)
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        env:
+          GIT_CONFIG_COUNT: 1
+          GIT_CONFIG_KEY_0: core.autocrlf
+          GIT_CONFIG_VALUE_0: 'false'
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install 1.97.1 --profile minimal
+      - name: Restore locked dependencies and compiler outputs
+        id: build_cache
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5, Node 24, pinned
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.npm
+            target/CACHEDIR.TAG
+            target/debug
+            target/aarch64-apple-darwin
+            target/x86_64-pc-windows-msvc
+            target/aarch64-pc-windows-msvc
+            target/plugin-core-build
+          key: ${{ runner.os }}-${{ runner.arch }}-chain-core-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-dev-debug-${{ env.CARGO_PROFILE_DEV_DEBUG }}-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-deps-v2-${{ hashFiles('.github/workflows/chain-macos.yml', 'tools/ci/prune-workspace-cache.mjs') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-chain-core-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-dev-debug-${{ env.CARGO_PROFILE_DEV_DEBUG }}-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-
+      - name: Default Core resume capture and measurement (synthetic, no model evaluation)
+        run: node tools/chain-resume-benchmark/run.mjs default "${{ runner.temp }}/gil-resume-default" target
+      - name: Private visual creation unit contracts
+        run: cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --lib visual_start
+      - name: Private visual creation integration
+        run: cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --test visual_start --test chain_resume_benchmark
+      - name: Complete native MCP roundtrip
+        run: cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --test mcp
+      - name: Compile all Core targets in the development product profile
+        run: cargo build --locked -p gil --all-targets --features chain-core,visual-authoring,product-safety
+      - name: Approval profile, M6-D contract over the real stdio process (Wave 1 E wire)
+        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test approved_plan_wire_wave1 --test chain_recovery_preservation
+      - name: After a Closing approval the receipts lead to the Chain Report with the approved verdict, never to an Experiment (real stdio process, restart, change request; synthetic)
+        run: node tools/ci/expect-tests.mjs 4 cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test closing_handoff
+      - name: Approval profile, library contracts of the modules that touch the OS (links, permissions, locks, install, launcher, runtime, image-report storage); the complete library runs on Linux
+        run: >-
+          node tools/ci/expect-tests.mjs 300 cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib -- restore:: lock:: install:: launcher:: runtime_ visual_ internal_fs:: write_guard:: monitor::serve:: mcp::bindings:: session::format_transition:: project_resume:: companion --test-threads=1
+      - name: Approval profile, resume guidance over a record that cannot be read (the next-call guidance suites run on Linux)
+        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test resume_guidance
+      - name: Manual help matches approval and recovery policies (Mac)
+        if: runner.os == 'macOS'
+        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test manual
+      - name: Approval profile resume capture and measurement (synthetic, no model evaluation)
+        run: node tools/chain-resume-benchmark/run.mjs product "${{ runner.temp }}/gil-resume-product" target
+      - name: Host guard scope and file protection in approval profile
+        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test automatic_guard --test write_guard -- --test-threads=1
+      - name: Compile the opt-in approval profile
+        run: cargo build --locked -p gil --all-targets --features approved-plan,visual-authoring,product-safety
+      - name: Manual example contracts over the real Core (Mac, synthetic inputs)
+        if: runner.os == 'macOS'
+        env:
+          GIL_EXAMPLE_CHECK_GIL: target/debug/gil
+        run: |
+          node tools/manual-example-check/check.mjs run --gil target/debug/gil --out "${{ runner.temp }}/gil-manual-examples"
+          node --test tools/manual-example-check/*.test.mjs
+      - name: Product context recovery measurement (Mac, synthetic approval)
+        if: runner.os == 'macOS'
+        env:
+          CHAIN_CONTEXT_BENCH_GIL_PRODUCT: target/debug/gil
+        run: node --test tools/chain-context-bench/*.test.mjs
+      - name: M4-R opt-in recovery approval mode, setting parser and read-only contracts (not a product profile)
+        run: cargo test --locked -p gil --features approved-plan,visual-authoring,recovery-auto-approval --lib recovery_mode
+      - name: M4-R opt-in recovery approval mode over the real stdio process (5 synthetic cases, no user project)
+        run: cargo test --locked -p gil --features approved-plan,visual-authoring,recovery-auto-approval --test recovery_approval_mode
+      - name: Compile all Core targets with opt-in recovery approval (not a product profile)
+        run: cargo build --locked -p gil --all-targets --features approved-plan,visual-authoring,recovery-auto-approval
+      - name: Unachieved end over real files, the CLI and the stdio process (evidence and dirty gates kept, save failure, resend, restart, read surfaces; synthetic, no model evaluation)
+        run: node tools/ci/expect-tests.mjs 7 cargo test --locked -p gil --features will-end-history --test will_end_session
+      - name: Native MCP roundtrip on format 8 (the Chain, Will and context suites of this profile run on Linux)
+        run: cargo test --locked -p gil --features will-end-history --test mcp
+      - name: Explicit 6 to 8 transition over the real stdio process (read-only check, relayed user approval bound to project, state and proposal, copy and save failures, resend; order 1b, synthetic)
+        run: node tools/ci/expect-tests.mjs 6 cargo test --locked -p gil --features will-end-history --test format_transition
+      - name: Format 9 unachieved end through the typed visual close over the real stdio process (null marker refused in both shapes, resend, restart; synthetic)
+        run: node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil --features will-end-history,visual-authoring,product-safety --test will_end_visual
+      - name: Unachieved end with product safety, the failure does not approve recovery (synthetic)
+        run: node tools/ci/expect-tests.mjs 7 cargo test --locked -p gil --features will-end-history,visual-authoring,product-safety --test will_end_session
+      - name: Explicit 6 to 8 and 7 to 9 transitions with the visual registry and product safety (private storage kept; order 1b, synthetic)
+        run: node tools/ci/expect-tests.mjs 7 cargo test --locked -p gil --features will-end-history,visual-authoring,product-safety --test format_transition
+      - name: Private visual creation, Chain handoff, attachments and the native MCP roundtrip on format 9 (synthetic)
+        run: cargo test --locked -p gil --features will-end-history,visual-authoring,product-safety --test visual_start --test chain_resume_benchmark --test mcp --test chain_handoff --test visual_attachment
+      - name: Keep dependency outputs in cache after verification and artifact upload
+        if: steps.build_cache.outputs.cache-hit != 'true'
+        run: node tools/ci/prune-workspace-cache.mjs

@@ -8,7 +8,7 @@ import {fileURLToPath} from 'node:url';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const cleaner = join(root, 'tools/ci/prune-workspace-cache.mjs');
-const workflows = ['codex-preview', 'chain-core', 'companion-native', 'windows-spike'];
+const workflows = ['codex-preview', 'chain-macos', 'companion-native', 'windows-spike'];
 const workflowText = name => readFileSync(join(root, `.github/workflows/${name}.yml`), 'utf8').replace(/\r\n/g, '\n');
 
 test('dependency caches are stable across source commits; only cache maintenance is conditional', () => {
@@ -25,9 +25,9 @@ test('dependency caches are stable across source commits; only cache maintenance
   }
 });
 
-/// The workflow-level `env:` of the Chain workflow as {NAME: value}; both Chain jobs inherit it.
-const chainJobEnv = () => {
-  const block = workflowText('chain-core').match(/\nenv:\n((?: {2}.*\n)+)/)?.[1] ?? '';
+/// The workflow-level `env:` of a Chain workflow as {NAME: value}; every job of it inherits it.
+const chainJobEnv = (name = 'chain-core') => {
+  const block = workflowText(name).match(/\nenv:\n((?: {2}.*\n)+)/)?.[1] ?? '';
   return Object.fromEntries([...block.matchAll(/^ {2}([A-Z0-9_]+): '?([^'\n]*)'?$/gm)].map(m => [m[1], m[2]]));
 };
 
@@ -36,7 +36,9 @@ test('Chain CI build-cost settings stay CI-only, never reach release or test sem
   assert.deepEqual(Object.keys(env).sort(), ['CARGO_INCREMENTAL', 'CARGO_PROFILE_DEV_DEBUG', 'RUSTUP_TOOLCHAIN']);
   assert.equal(env.CARGO_PROFILE_DEV_DEBUG, 'line-tables-only');
   assert.equal(env.CARGO_INCREMENTAL, '0');
-  const text = workflowText('chain-core');
+  assert.deepEqual(chainJobEnv('chain-macos'), env, 'the macOS and Linux Chain workflows build with the same settings');
+  for (const name of ['chain-core', 'chain-macos']) {
+  const text = workflowText(name);
   // No job or step sets its own environment block of build settings: the workflow-level one is the only source.
   assert.doesNotMatch(text, /^ {4,}(?:CARGO_|RUSTUP_)\w+:/m);
   // Optimisation, assertions, overflow checks, panic strategy, codegen flags and the release
@@ -49,6 +51,7 @@ test('Chain CI build-cost settings stay CI-only, never reach release or test sem
   const prefix = text.match(/^          restore-keys: \|\n {12}(.+)$/m)[1];
   for (const k of [key, prefix]) assert.match(k, /-rust-1\.97\.1-dev-debug-\$\{\{ env\.CARGO_PROFILE_DEV_DEBUG \}\}-\$\{\{ hashFiles\('Cargo\.lock'/);
   assert.ok(key.startsWith(prefix));
+  }
 });
 
 test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired runtime-update steps', () => {
@@ -65,14 +68,17 @@ test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired
   }
   assert.doesNotMatch(text, /windows-11-arm|codex-cli|runtime-testbed/);
   const chain = workflowText('chain-core');
-  // Windows test and build CI is paused: the Chain workflow is one macOS job and the Linux matrix.
-  const chainJobs = jobsOf(chain);
-  assert.deepEqual(chainJobs.map(j => j.name), ['chain-macos', 'chain-linux']);
-  const mac = chainJobs[0].block, linux = chainJobs[1].block;
+  // Windows test and build CI is paused: the Chain checks are the Linux matrix and the Node
+  // contracts in one workflow and one macOS job in a workflow of its own (it has its own path list).
+  const macWorkflow = workflowText('chain-macos');
+  const chainJobs = [...jobsOf(macWorkflow), ...jobsOf(chain)];
+  assert.deepEqual(chainJobs.map(j => j.name), ['chain-macos', 'chain-linux', 'chain-node']);
+  const mac = chainJobs[0].block, linux = chainJobs[1].block, node = chainJobs[2].block;
+  assert.match(node, /^    runs-on: ubuntu-24\.04$/m);
   assert.match(mac, /^    runs-on: macos-15$/m);
   assert.doesNotMatch(mac, /^\s+(?:strategy|matrix):/m);
   assert.match(linux, /^    runs-on: ubuntu-24\.04$/m);
-  assert.doesNotMatch(chain, /runner: windows-|runs-on: windows-|shell: pwsh/);
+  assert.doesNotMatch(chain + macWorkflow, /runner: windows-|runs-on: windows-|shell: pwsh/);
   // A guarded step (`node tools/ci/expect-tests.mjs <minimum> cargo test …`) is the same Cargo check.
   const macCargo = [...mac.matchAll(/(?:node tools\/ci\/expect-tests\.mjs \d+ )?cargo (test|build)[^\n]*?--features ([\w,-]+)([^\n]*)/g)]
     .map(m => ({kind: m[1], features: m[2], rest: m[3]}));
@@ -94,7 +100,7 @@ test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired
   // What stays on macOS alone: suites of macOS-only behaviour and the M4-R profile, whose
   // integration suite is compiled on macOS and Windows only. Nothing else may be missing on Linux:
   // every other integration suite macOS runs for a profile is in that profile's Linux row.
-  const MAC_ONLY = ['manual', 'automatic_guard', 'write_guard'];
+  const MAC_ONLY = ['automatic_guard', 'write_guard'];
   for (const row of rows) {
     assert.ok(row.minimum >= 1, row.group);
     for (const suite of row.suites) {
@@ -112,7 +118,7 @@ test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired
   const macRuns = (features, suite) => macCargo.some(c => c.kind === 'test' && c.features === features && new RegExp(`--test ${suite}\\b`).test(c.rest));
   for (const [features, suites] of [
     ['chain-core,visual-authoring,product-safety', ['visual_start', 'mcp']],
-    ['approved-plan,visual-authoring,product-safety', ['approved_plan_wire_wave1', 'chain_recovery_preservation', 'closing_handoff', 'resume_guidance', ...MAC_ONLY]],
+    ['approved-plan,visual-authoring,product-safety', ['approved_plan_wire_wave1', 'chain_recovery_preservation', 'closing_handoff', 'resume_guidance', 'manual', ...MAC_ONLY]],
     ['approved-plan,visual-authoring,recovery-auto-approval', ['recovery_approval_mode']],
     ['will-end-history', ['will_end_session', 'mcp', 'format_transition']],
     ['will-end-history,visual-authoring,product-safety', ['will_end_visual', 'will_end_session', 'format_transition', 'visual_start', 'mcp', 'chain_handoff', 'visual_attachment']],
@@ -123,7 +129,9 @@ test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired
   const cacheOf = block => block.match(/^          key: .+\n          restore-keys: \|\n.+$/m)?.[0];
   const paths = block => block.match(/\n          path: \|\n((?: {12}.*\n)+)/)?.[1];
   assert.ok(cacheOf(mac) && paths(mac));
-  assert.equal(cacheOf(linux), cacheOf(mac));
+  // The key expression is the same text; each workflow hashes its own file into it.
+  assert.equal(cacheOf(linux), cacheOf(mac).replaceAll('.github/workflows/chain-macos.yml', '.github/workflows/chain-core.yml'));
+  assert.ok(cacheOf(mac).includes(".github/workflows/chain-macos.yml'"));
   assert.equal(paths(linux), paths(mac));
   const pin = mac.match(/uses: actions\/cache@([0-9a-f]{40}) /)?.[1];
   assert.ok(pin && linux.includes(`uses: actions/cache/restore@${pin} `) && linux.includes(`uses: actions/cache/save@${pin} `));
@@ -132,7 +140,44 @@ test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired
   assert.equal((linux.match(/^        if: matrix\.save_cache && steps\.linux_cache\.outputs\.cache-hit != 'true'$/gm) || []).length, 2);
   assert.doesNotMatch(linux, /uses: actions\/cache@|build_cache/);
   for (const prepare of ['      - uses: actions/checkout@', "          GIT_CONFIG_VALUE_0: 'false'", '          persist-credentials: false', '      - run: rustup toolchain install 1.97.1 --profile minimal'])
-    for (const {name, block} of chainJobs) assert.ok(block.includes(prepare), `${name}: ${prepare}`);
+    for (const {name, block} of chainJobs.slice(0, 2)) assert.ok(block.includes(prepare), `${name}: ${prepare}`);
+  // The checks without a Core process run on Linux for every Chain change, never only when the
+  // macOS path list matches.
+  for (const step of ['Shared workflow text, Skill catalog and scenario evaluator contracts (pure Node, no Core process)', 'CI cache and ordering contracts',
+    'Manual example source and reporting contracts (no Core process)', 'Chain interview evaluator contracts (no model evaluation)', 'Chain interview synthetic fixture integrity',
+    'Chain closing evaluator and unapproved item-split model contracts', 'Chain closing synthetic fixture integrity (no model evaluation)', 'Resume measurement contracts',
+    'Context growth measurement contracts (Unix process fixtures)']) {
+    assert.ok(node.includes(`      - name: ${step}\n`), `chain-node: ${step}`);
+    assert.ok(!mac.includes(`      - name: ${step}\n`), `chain-macos no longer carries: ${step}`);
+  }
+  assert.doesNotMatch(node, /if: runner\.os/);
+});
+
+/// Rust sources under `dir`, repo-relative with forward slashes.
+const rustFiles = dir => readdirSync(join(root, dir), {withFileTypes: true}).flatMap(e =>
+  e.isDirectory() ? rustFiles(`${dir}/${e.name}`) : e.name.endsWith('.rs') ? [`${dir}/${e.name}`] : []);
+
+test('the macOS Chain job runs on a pull request exactly when a file that can behave differently on macOS changes', () => {
+  const text = workflowText('chain-macos');
+  const pull = text.match(/\non:\n  pull_request:\n    branches: \[main\]\n    paths:\n((?: {6}.*\n)+)/)?.[1];
+  assert.ok(pull, 'the pull-request path list');
+  const listed = [...pull.matchAll(/^      - '([^']+)'$/gm)].map(m => m[1]);
+  assert.equal(new Set(listed).size, listed.length, 'no path twice');
+  // Source: every file with an OS condition, and nothing else from src/. A new `#[cfg(unix)]` in a
+  // file that is not listed fails here, so the list cannot fall behind the code silently.
+  const osCondition = /cfg!?\((?:all\(|any\(|not\()*[^)]*\b(?:unix|windows|target_os|target_family)\b/;
+  const conditional = rustFiles('src').filter(f => osCondition.test(readFileSync(join(root, f), 'utf8'))).sort();
+  assert.deepEqual(listed.filter(p => p.startsWith('src/')).sort(), conditional);
+  // Tests: every integration suite the job runs, and the helpers they share.
+  const job = jobsOf(text)[0].block;
+  const suites = [...new Set([...job.matchAll(/cargo test [^\n]*/g)].flatMap(m => [...m[0].matchAll(/--test (\w+)/g)].map(t => t[1])))].sort();
+  assert.deepEqual(listed.filter(p => /^tests\/\w+\.rs$/.test(p)).sort(), suites.map(s => `tests/${s}.rs`));
+  for (const shared of ['tests/common/**', 'tests/support_wave1/**', 'tests/guidance_support/**', 'tests/fixtures/**', 'Cargo.toml', 'Cargo.lock',
+    'tools/manual-example-check/**', 'tools/chain-context-bench/**', 'tools/chain-resume-benchmark/**', 'tools/ci/**', '.github/workflows/chain-macos.yml'])
+    assert.ok(listed.includes(shared), shared);
+  // After a merge the job runs for every source or test change, so a miss of the list shows on main.
+  assert.match(text, /\n  push:\n    branches: \[main\]\n    paths:\n      - 'src\/\*\*'\n      - 'tests\/\*\*'\n      - 'Cargo\.toml'\n      - 'Cargo\.lock'\n/);
+  assert.match(text, /\n  workflow_dispatch:\n/);
   const companion = workflowText('companion-native');
   assert.doesNotMatch(companion, /windows-2025|windows-11-arm/);
   assert.match(companion, /paths:\n\s+- 'companion\/\*\*'/);

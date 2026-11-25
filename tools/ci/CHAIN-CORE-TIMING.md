@@ -346,3 +346,37 @@ macOS에서 줄어든 검증(이 workflow 기준):
 - OS에 닿는 lib 모듈 필터 단계는 359건 통과·1건 무시, 91초였다. 최소 실행 수는 처음에 50으로 두었다가 이 실측을
   보고 300으로 올렸다.
 
+## 9. macOS job의 경로 조건 (2026-11-25)
+
+`chain-macos`를 별도 workflow(`.github/workflows/chain-macos.yml`)로 옮기고, PR에서는 macOS에서 다르게 동작할 수
+있는 파일이 바뀔 때만 돌게 했다. OS와 무관한 로직만 바꾼 PR의 Chain 검사는 Linux 행(약 1~2분)으로 끝난다.
+
+PR에서 job을 시작하는 경로:
+
+- **OS 조건이 있는 소스 76개**: `cfg`에 `unix`, `windows`, `target_os`, `target_family`가 들어간 `src/**/*.rs`.
+  `tools/ci/cache.test.mjs`가 소스에서 이 목록을 다시 계산해 workflow의 목록과 다르면 실패한다. 새 파일에
+  `#[cfg(unix)]`를 넣고 목록에 더하지 않으면 그 시험(항상 도는 `chain-node` job)이 막는다.
+- **이 job이 돌리는 통합 시험 16개 파일**과 공용 지원 모듈(`tests/common`, `tests/support_wave1`,
+  `tests/guidance_support`, `tests/fixtures`).
+- `Cargo.toml`, `Cargo.lock`, macOS 빌드를 읽는 도구(`tools/manual-example-check`, `tools/chain-context-bench`,
+  `tools/chain-resume-benchmark`), `tools/ci`, workflow 파일 자신.
+
+경로 조건이 놓치는 경우와 그 대비:
+
+- OS 조건이 없는 파일의 변경이 macOS에서만 다른 결과를 내는 경우(예: 경로 문자열 처리, 임시 폴더 경로에
+  기대는 로직). PR에서는 잡지 못한다. **main에 병합된 뒤에는 소스·시험 변경마다 이 job이 돈다**(`push` 조건).
+  실패는 병합 뒤에 보이므로 PR을 막지 않는다.
+- Preview job(필수 검사)은 PR마다 macOS에서 기본 조합의 전체 시험을 그대로 돌린다.
+- `automatic_guard`, `write_guard`, M4-R 조합은 Linux 행이 없어 이 job에서만 돈다. 이 suite가 쓰는 OS 조건
+  없는 로직이 바뀌면 PR에서는 돌지 않고 main에서 돈다.
+
+함께 옮긴 것:
+
+- Core 프로세스를 띄우지 않는 Node 검사 9단계는 `chain-core.yml`의 `chain-node` job(`ubuntu-24.04`)으로 옮겼다.
+  조건부가 된 macOS job에 두면 대부분의 PR에서 돌지 않기 때문이다. Node는 제품 후보 Linux job과 같은 고정
+  배포본(v22.23.5, SHA-256 확인)을 쓴다. `chain-context-bench` 계약은 macOS 전용 조건을 떼고 Linux에서 돈다.
+- `manual` suite를 승인·탐색 조합의 Linux 행에 더했다(전수조사: 35건 모두 Linux에서 컴파일·실행). macOS job의
+  `manual` 단계는 그대로다.
+
+이 절을 쓰는 시점에 `chain-node` job과 Linux의 `manual`은 원격에서 실행된 적이 없다.
+
