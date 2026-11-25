@@ -2,8 +2,11 @@
 """GIL Interview and Experiment adapter for isolated coding tasks."""
 
 import json
+import os
 import re
 import sys
+from pathlib import Path
+from mailbox_client import MAIL, record
 from solver import APP, CHECKS, TASK, WORK, ask, solve, source
 
 
@@ -31,6 +34,72 @@ def cited_sources(task):
     return excerpts
 
 
+def interview_reads():
+    log = MAIL / "transcript.jsonl"
+    reads = []
+    if log.exists():
+        with log.open() as events:
+            for line in events:
+                event = json.loads(line)
+                if event.get("interview_read"):
+                    reads.append({key: event[key] for key in ("path", "offset", "result", "more")})
+    return reads
+
+
+def explore(task, stage, focus, cited, reads):
+    candidates = []
+    for directory, children, files in os.walk(APP):
+        children[:] = sorted(v for v in children if not v.startswith(".") and
+                             v not in ("node_modules", "__pycache__", "build", "dist"))
+        for name in sorted(files):
+            if name.startswith("."):
+                continue
+            path = Path(directory, name)
+            if not path.is_symlink() and path.is_file():
+                candidates.append(str(path.relative_to(APP)))
+            if len(candidates) == 120:
+                break
+        if len(candidates) == 120:
+            break
+
+    # Page through a selected file; a completed file need not be offered again.
+    offsets = {r["path"]: r["offset"] + 6000 if r["more"] else None for r in reads}
+    # Keep discovery within the existing time and context window for one GIL step.
+    for _ in range(3):
+        available = [name for name in candidates if offsets.get(name, 0) is not None]
+        if not available:
+            return
+        options = ["read " + name for name in available]
+        stop = "continue interview"
+        selection = ask(json.dumps({
+            "task": task, "stage": stage, "focus": focus, "provided_excerpts": list(cited),
+            "observed_pages": reads, "available_files": available,
+            "instruction": "Inspect public files that can change the question or roadmap. "
+                           "Choose a file to read its next page, or continue when evidence is sufficient. "
+                           "A filename alone does not establish its contents.",
+        }, ensure_ascii=False), options + [stop], stage=stage + "_read")
+        if selection == stop:
+            return
+        name = selection.removeprefix("read ")
+        if selection not in options:
+            raise ValueError("Invalid interview file selection")
+        start = offsets.get(name, 0)
+        try:
+            with source(name).open("rb") as handle:
+                handle.seek(start)
+                raw = handle.read(6001)
+            more = len(raw) > 6000
+            snippet = raw[:6000].decode("utf-8", errors="replace")
+            if b"\x00" in raw:
+                snippet, more = "[binary file]", False
+        except (OSError, ValueError, RuntimeError) as error:
+            snippet, more = str(error), False
+        page = {"path": name, "offset": start, "result": snippet, "more": more}
+        record(event="tool", id=ask.call_id, action="read", interview_read=True, **page)
+        reads.append(page)
+        offsets[name] = start + 6000 if more else None
+
+
 def close(**fields):
     def field(k, v):
         return k + ": |\n" + "".join("  " + line + "\n" for line in str(v).splitlines())
@@ -55,7 +124,8 @@ def reply(r):
             "read": "Read public task source", "write": "Replace permitted solution files",
             "check": CHECKS[TASK], "finish": "Hand submission to the independent verifier"}}
         if k in ("question", "interpretation", "synthesis"):
-            context["cited_source_excerpts"] = cited_sources(task)
+            context["cited_source_excerpts"] = cited
+            context["interview_reads"] = reads
         return ask(json.dumps(context, ensure_ascii=False) + "\nCurrent instruction: " + prompt,
                    choices, stage=k)
 
@@ -67,6 +137,12 @@ def reply(r):
             "contract": f"objective: Complete {k} for the task\nnext_action: Carry out {k} using collected evidence\ndone_when: Record the {k} report",
         }
     k = n["kind"]
+    if k in ("question", "interpretation", "synthesis"):
+        cited = cited_sources(task)
+        reads = interview_reads()
+        if k in ("question", "synthesis"):
+            focus = [s["report"] for s in steps if s["report"]][-2:]
+            explore(task, k, focus, cited, reads)
     if k == "question":
         previous = [s["report"] for s in steps if s["kind"] in ("interpretation", "synthesis") and s["report"]]
         q = model(

@@ -28,6 +28,9 @@ class InterviewTests(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name).resolve()
+        mail = patch.object(participant, "MAIL", self.root.parent / (self.root.name + "-absent"))
+        mail.start()
+        self.addCleanup(mail.stop)
         for target in (solver, participant):
             ctx = patch.object(target, "APP", self.root)
             ctx.start()
@@ -51,14 +54,31 @@ class InterviewTests(unittest.TestCase):
             self.assertIn("Output must round trip.", prompt)
             self.assertIn("g++", prompt)
         i = step("interpretation", interpretation="Round trip required", unresolved="Round trip untested")
-        with patch.object(participant, "ask", side_effect=["Draft roadmap", "revise"]) as model:
+        with patch.object(participant, "ask", side_effect=["continue interview", "Draft roadmap", "revise"]) as model:
             report = participant.reply(request("synthesis", [q, i]))["report"]
             self.assertIn("benchmark_revise", report)
-            self.assertTrue(all("Round trip untested" in c.args[0] for c in model.call_args_list))
-        with patch.object(participant, "ask", side_effect=["Clarify gap", "Pending"]) as model:
+            self.assertTrue(all("Round trip untested" in c.args[0] for c in model.call_args_list[1:]))
+        with patch.object(participant, "ask", side_effect=["continue interview", "Clarify gap", "Pending"]) as model:
             participant.reply(request("question", [q, i, step("synthesis", statement="Draft roadmap", approved="benchmark_revise")]))
             self.assertIn("Round trip untested", model.call_args_list[0].args[0])
             self.assertIn("Draft roadmap", model.call_args_list[0].args[0])
+
+    def test_reads_unmentioned_file_and_reuses_observation_in_roadmap(self):
+        import mailbox_client
+        (self.root / "codec.cpp").write_text("a" * 6000 + "END_POLICY")
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory)
+            with patch.object(mailbox_client, "MAIL", log), patch.object(participant, "MAIL", log):
+                with patch.object(participant, "ask", side_effect=["read codec.cpp", "read codec.cpp", "Question", "Answer"]) as model:
+                    model.call_id = "fixture"
+                    participant.reply(request("question", []))
+                    self.assertIn("END_POLICY", model.call_args_list[2].args[0])
+                reads = participant.interview_reads()
+                self.assertEqual([r["offset"] for r in reads], [0, 6000])
+                with patch.object(participant, "ask", side_effect=["Roadmap", "accept"]) as model:
+                    participant.reply(request("synthesis", [step("question", question="Q"), step("interpretation", unresolved="Gap")]))
+                    self.assertIn("END_POLICY", model.call_args_list[0].args[0])
+        self.assertEqual((self.root / "codec.cpp").read_text(), "a" * 6000 + "END_POLICY")
 
     def test_success_criteria_reach_verify_and_analysis(self):
         interview = [step("synthesis", statement="Codec roadmap")]
