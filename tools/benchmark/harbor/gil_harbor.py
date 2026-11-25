@@ -29,6 +29,9 @@ class GilAgent(BaseAgent):
         await environment.download_file("/work/project/observation.json", self.logs_dir / "observation.json")
 
     async def execute(self, environment, context):
+        return await self.run_worker(environment)
+
+    async def run_worker(self, environment):
         return await environment.exec(
             "chmod 644 /case/task.txt && "
             "setpriv --reuid=65534 --regid=65534 --clear-groups --no-new-privs "
@@ -42,10 +45,13 @@ class LunaAgent(GilAgent):
     def name():
         return "gil-gpt-5.6-luna"
 
-    async def execute(self, environment, context):
+    def model_client(self):
         from luna import Luna
-        client = Luna()
-        worker = asyncio.create_task(super().execute(environment, context))
+        return Luna()
+
+    async def execute(self, environment, context):
+        client = self.model_client()
+        worker = asyncio.create_task(self.run_worker(environment))
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 reply = Path(tmp) / "reply.json"
