@@ -2144,6 +2144,71 @@ fn onedrive_environment_values_do_not_move_the_working_folder() {
 }
 
 
+#[cfg(all(feature = "tracking-policy", unix))]
+#[test]
+fn headless_preparation_keeps_its_approval_boundary() {
+    use serde_json::json;
+    let at = scratch("headless-tracked");
+    let root = at.join("project");
+    std::fs::create_dir(&root).unwrap();
+    let mut client = Client::serve_with_env(&at.join("settings"), &[("GIL_MCP_DISPLAY", Path::new("headless"))]);
+    client.initialize();
+    let result = monitor_call(&mut client, "gil_start", json!({"project_root":root,"start_kind":"tracked_scope","locale":"en"}));
+    let record = &result["structuredContent"];
+    assert_eq!(record["phase"], "preparing", "{result}");
+    assert!(record["next"].as_str().unwrap().contains("gil_start_prepare"));
+    assert!(record.get("scope_id").is_none() && record.get("next_call").is_none());
+    assert!(!result["content"].to_string().contains("show_gil_monitor"));
+    assert!(!root.join(gil::STATE_PATH).exists());
+    client.eof();
+    std::fs::remove_dir_all(at).unwrap();
+}
+
+#[cfg(not(all(feature = "tracking-policy", not(feature = "visual-authoring"), unix)))]
+#[test]
+fn headless_start_and_reconnect_follow_the_record_without_requesting_display() {
+    use serde_json::json;
+    let at = scratch("headless-resume");
+    let root = at.join("project");
+    std::fs::create_dir(&root).unwrap();
+    let settings = at.join("settings");
+    let connect = || {
+        let mut client = Client::serve_with_env(&settings, &[("GIL_MCP_DISPLAY", Path::new("headless"))]);
+        let init = client.initialize();
+        assert!(init["result"]["instructions"].as_str().unwrap().contains("selected headless display"));
+        client
+    };
+    let args = json!({"project_root":root});
+    let mut create = args.clone();
+    create["locale"] = json!("en");
+    if cfg!(all(feature = "tracking-policy", feature = "visual-authoring", unix)) {
+        create["start_kind"] = json!("image_reports");
+    }
+    let mut client = connect();
+    let start = monitor_call(&mut client, "gil_start", create);
+    assert_eq!(start["structuredContent"]["ok"], true, "{start}");
+    let first = start["structuredContent"]["next_action"].as_str().unwrap();
+    assert!(first.contains("gil_open") && first.contains("question"), "{first}");
+    assert!(!start["content"].to_string().contains("show_gil_monitor"), "{start}");
+    assert!(start["structuredContent"].get("next_call").is_none());
+    client.eof();
+    let mut client = connect();
+    let resume = monitor_call(&mut client, "gil_context", args.clone());
+    assert_eq!(resume["structuredContent"]["next_action"], first);
+    assert!(!resume["content"].to_string().contains("show_gil_monitor"), "{resume}");
+    let opened = monitor_call(&mut client, "gil_open", json!({"project_root": root, "kind":"question",
+        "contract":"objective: identify the sample\nnext_action: ask which sample to use\ndone_when: the answer is recorded"}));
+    assert_eq!(opened["structuredContent"]["ok"], true, "{opened}");
+    client.eof();
+    let mut client = connect();
+    let resume = monitor_call(&mut client, "gil_context", args);
+    let next = resume["structuredContent"]["next_action"].as_str().unwrap();
+    assert!(next.contains("gil_close") && next.contains("wait"), "{next}");
+    assert!(!resume["content"].to_string().contains("show_gil_monitor"), "{resume}");
+    client.eof();
+    std::fs::remove_dir_all(at).unwrap();
+}
+
 #[test]
 fn monitor_presence_reopens_on_resume_and_close_but_not_while_visible_and_does_not_survive_restart() {
     use serde_json::{Value, json};

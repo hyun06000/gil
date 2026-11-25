@@ -1124,6 +1124,7 @@
   "start_prep.phase.policy_file_held": "最新提案的政策檔案效果為暫停,無法核准。",
   "start_prep.phase.sync_outcome_unrecorded": "已開始的 .gilignore 寫入結果未記錄;此提案不會再次套用。",
   "start_prep.phase.attempt_outcome_unrecorded": "套用嘗試的結果未記錄;此提案被保留,不會再次套用。",
+  "start_tool.headless_prepare": "說明追蹤範圍，並透過 gil_start_prepare 提交確切規則。等待使用者核准後再開始。",
   "start_prep.next.preparing": "說明追蹤與排除的對象以及對封存/還原的影響,然後用準確的規則文字呼叫 gil_start_prepare,再呼叫 show_gil_monitor(scope_id)。不要建立專案檔案。",
   "start_prep.next.awaiting_approval": "請使用者在 GIL Monitor 中審閱並核准準確的提案,然後等待。聊天同意不是核准。若 Monitor 無法使用,則保持等待核准。",
   "start_prep.next.changes_requested": "詢問要修改什麼,然後用 gil_start_prepare 準備新提案。",

@@ -142,3 +142,10 @@ marketplace 게시를 구분하며 [오픈소스 공개 준비 게이트](spec/G
 정식 출시 전에 닫는다. 비밀·서명 키는 source, 공개 로그 또는 artifact에 포함하지 않는다.
 첫 unsigned 시험판은 별도 승인된 제한 채널이며 [배포 계약](distribution/codex/RELEASE-macos.md)을
 따른다. 친구·테스터의 unsigned 인수를 서명·공증된 일반 공개판 통과로 표시하지 않는다.
+
+### Headless MCP runner
+
+Start the stdio server with `GIL_MCP_DISPLAY=headless gil mcp --serve` for a runner without an App renderer.
+After direct creation or reconnection, follow `structuredContent.next_action` (the recorded next action or wait).
+Tracked-scope preparation and plan or recovery approvals retain their existing human approval requirements.
+Omitting the environment setting keeps the desktop Monitor handoff.

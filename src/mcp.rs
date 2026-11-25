@@ -64,11 +64,16 @@ impl GilServer {
     /// Deployment/test adapter, not an MCP tool parameter. None discovers an installed cohort;
     /// existing Plugin installs with no cohort receipt remain opted out.
     pub fn with_companion_endpoint(endpoint: Option<std::path::PathBuf>) -> Self {
+        Self::with_display(endpoint, false)
+    }
+    fn with_display(endpoint: Option<std::path::PathBuf>, headless: bool) -> Self {
+        let mut monitor = Monitor::default();
+        monitor.headless = headless;
         Self { #[cfg(feature = "product-safety")] recovery_grants: Arc::new(recovery::Grants::default()),
             #[cfg(feature = "approved-plan")] plan_grants: Arc::new(plans::Grants::default()),
             #[cfg(all(feature = "tracking-policy", unix))] start_grants: Arc::new(start::Grants::default()),
             #[cfg(all(feature = "tracking-policy", unix))] scope_grants: Arc::new(scope::Grants::default()),
-            monitor: Arc::new(Monitor::default()), native_gate: Arc::new(Mutex::new(())),
+            monitor: Arc::new(monitor), native_gate: Arc::new(Mutex::new(())),
             companion_session: Arc::new(Mutex::new(crate::companion_ipc::McpSession::new(endpoint))) }
     }
     async fn dispatch_with_session(&self, name: String, mut input: Value) -> CallToolResult {
@@ -127,30 +132,38 @@ impl GilServer {
                 let at = root.clone();
                 let _ = tokio::task::spawn_blocking(move || locale::remember_start(std::path::Path::new(&at), chosen)).await;
             }
-            let prepared = monitor::run(move || monitor.prepare(&root)).await;
-            locale::with(locale, || {
-                if let Some(scope) = prepared.structured_content.as_ref()
-                    .filter(|_| prepared.is_error != Some(true))
-                    .and_then(|v| v["scope_id"].as_str()) {
-                    let call = format!("show_gil_monitor({})", serde_json::json!({"scope_id": scope}));
-                    // Some Hosts expose structuredContent without the surrounding text blocks.
-                    // Keep the CLI receipt intact, but carry the same prepared handoff there too.
-                    if let Some(fields) = result.structured_content.as_mut().and_then(serde_json::Value::as_object_mut) {
-                        fields.insert("next_call".into(), serde_json::json!({
-                            "name": "show_gil_monitor", "arguments": {"scope_id": scope}
-                        }));
-                    }
-                    // The handoff also closes the receipt, after the body's `Run: gil open` line, so the
-                    // last word of the start receipt is the one next call on every Host. `said` itself
-                    // stays byte-identical to the CLI receipt.
-                    result.content.push(ContentBlock::text(tr!("mcp.start_handoff", call = call)));
-                    guidance::prepend(&mut result, tr!("mcp.start_ok", call = call));
-                } else {
-                    let detail = prepared.structured_content.as_ref()
-                        .and_then(|v| v["said"].as_str()).unwrap_or(text("mcp.prepare_unknown"));
-                    guidance::prepend(&mut result, tr!("mcp.start_monitor_failed", detail = detail));
+            if self.monitor.headless {
+                let next = crate::locale::text_in(locale, "ctx.next.new_interview");
+                if let Some(fields) = result.structured_content.as_mut() {
+                    fields["next_action"] = serde_json::json!(next);
                 }
-            });
+                guidance::prepend(&mut result, next.to_string());
+            } else {
+                let prepared = monitor::run(move || monitor.prepare(&root)).await;
+                locale::with(locale, || {
+                    if let Some(scope) = prepared.structured_content.as_ref()
+                        .filter(|_| prepared.is_error != Some(true))
+                        .and_then(|v| v["scope_id"].as_str()) {
+                        let call = format!("show_gil_monitor({})", serde_json::json!({"scope_id": scope}));
+                        // Some Hosts expose structuredContent without the surrounding text blocks.
+                        // Keep the CLI receipt intact, but carry the same prepared handoff there too.
+                        if let Some(fields) = result.structured_content.as_mut().and_then(serde_json::Value::as_object_mut) {
+                            fields.insert("next_call".into(), serde_json::json!({
+                                "name": "show_gil_monitor", "arguments": {"scope_id": scope}
+                            }));
+                        }
+                        // The handoff also closes the receipt, after the body's `Run: gil open` line, so the
+                        // last word of the start receipt is the one next call on every Host. `said` itself
+                        // stays byte-identical to the CLI receipt.
+                        result.content.push(ContentBlock::text(tr!("mcp.start_handoff", call = call)));
+                        guidance::prepend(&mut result, tr!("mcp.start_ok", call = call));
+                    } else {
+                        let detail = prepared.structured_content.as_ref()
+                            .and_then(|v| v["said"].as_str()).unwrap_or(text("mcp.prepare_unknown"));
+                        guidance::prepend(&mut result, tr!("mcp.start_monitor_failed", detail = detail));
+                    }
+                });
+            }
         } else if name == "gil_monitor_prepare" && result.is_error != Some(true) {
             if let Some(scope) = result.structured_content.as_ref().and_then(|v| v["scope_id"].as_str()) {
                 let hint = locale::with(locale, || tr!("mcp.prepare_next", scope = serde_json::json!({"scope_id": scope})));
@@ -160,8 +173,8 @@ impl GilServer {
         // A preparation is not a project yet: its own answer carries the next step, so the
         // "this folder is now a GIL project" hint of a committed start is not added to it.
         let prepared_only = start_route == Some(start_kind::Route::Preparation) && succeeded;
-        if !prepared_only { locale::with(locale, || guidance::after(&name, &mut result)); }
-        if project_use && succeeded && name != "gil_start" && name != "gil_monitor_prepare" {
+        if !(prepared_only || self.monitor.headless && name == "gil_start" && succeeded) { locale::with(locale, || guidance::after(&name, &mut result)); }
+        if !self.monitor.headless && project_use && succeeded && name != "gil_start" && name != "gil_monitor_prepare" {
             let monitor = self.monitor.clone();
             let root = input["project_root"].as_str().unwrap_or_default().to_owned();
             let health = monitor::run(move || {
@@ -202,7 +215,7 @@ impl GilServer {
                 }
             });
         }
-        if project_use && succeeded {
+        if !self.monitor.headless && project_use && succeeded {
             let session = self.companion_session.clone();
             let _ = tokio::task::spawn_blocking(move || {
                 if let Ok(mut session) = session.lock() {
@@ -300,7 +313,8 @@ impl GilServer {
                 .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "mcp.visual_uncertain")));
         }
         if actions::NAMES.contains(&name.as_str()) {
-            return tokio::task::spawn_blocking(move || locale::with(locale, || actions::call(&name, &input))).await
+            let headless = self.monitor.headless;
+            return tokio::task::spawn_blocking(move || locale::with(locale, || actions::call(&name, &input, headless))).await
                 .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "mcp.action_unfinished")));
         }
         if matches!(name.as_str(), "gil_companion_status" | "show_gil_companion") {
@@ -360,14 +374,16 @@ impl ServerHandler for GilServer {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().enable_resources().build())
             .with_server_info(Implementation::new("gil", crate::CORE_VERSION))
-            .with_instructions(guidance::INSTRUCTIONS)
+            .with_instructions(if self.monitor.headless {
+                format!("This runner selected headless display. Automatic display instructions apply only to desktop sessions. Follow the receipt's next_action, including any wait for an answer or approval.\n\n{}", guidance::INSTRUCTIONS)
+            } else { guidance::INSTRUCTIONS.to_owned() })
     }
     fn get_tool(&self, name: &str) -> Option<Tool> {
-        surface::tools().iter().find(|t| t.name == name).cloned()
+        surface::connection_tools(self.monitor.headless).iter().find(|t| t.name == name).cloned()
     }
     async fn list_tools(&self, _: Option<PaginatedRequestParams>, _: RequestContext<RoleServer>) -> Result<ListToolsResult, ErrorData> {
         let mut result = ListToolsResult::default();
-        result.tools = surface::tools().to_vec();
+        result.tools = surface::connection_tools(self.monitor.headless).to_vec();
         Ok(result)
     }
     async fn call_tool(&self, request: CallToolRequestParams, _: RequestContext<RoleServer>) -> Result<CallToolResponse, ErrorData> {
@@ -401,9 +417,10 @@ pub fn serve_stdio() -> Result<(), String> {
         .map_err(|err| tr!("mcp.runtime_failed", err = err))?;
 
     runtime.block_on(async {
-        let server = GilServer::with_companion_endpoint(std::env::var_os(crate::companion_ipc::ENV_ENDPOINT).map(Into::into));
+        let headless = std::env::var("GIL_MCP_DISPLAY").as_deref() == Ok("headless");
+        let server = GilServer::with_display(std::env::var_os(crate::companion_ipc::ENV_ENDPOINT).map(Into::into), headless);
         let companion_session = server.companion_session.clone();
-        server.monitor.reap();
+        if !headless { server.monitor.reap(); }
         let service = match server.serve(rmcp::transport::stdio()).await {
             Ok(service) => service,
             // **손님이 말없이 떠난 것은 고장이 아니다.** Host 가 server 를 세워 두고

@@ -796,7 +796,7 @@ const SCOPE_CHANGE_CALL_SITES: [(&str, &str, &str); 4] = [
 /// 입력 검사.
 const MCP_SCOPE_ROUTE_SITES: [(&str, &str, &str); 6] = [
     (r#"mcp.rs"#, r#"struct GilServer"#, r#"scope_grants: Arc<scope::Grants>,"#),
-    (r#"mcp.rs"#, r#"impl GilServer :: fn with_companion_endpoint"#, r#"#[cfg(all(feature = "tracking-policy", unix))] scope_grants: Arc::new(scope::Grants::default()),"#),
+    (r#"mcp.rs"#, r#"impl GilServer :: fn with_display"#, r#"#[cfg(all(feature = "tracking-policy", unix))] scope_grants: Arc::new(scope::Grants::default()),"#),
     (r#"mcp.rs"#, r#"impl GilServer :: async fn dispatch"#, r#"if scope::NAMES.contains(&name.as_str()) {"#),
     (r#"mcp.rs"#, r#"impl GilServer :: async fn dispatch"#, r#"return tokio::task::spawn_blocking(move || locale::with(locale, || scope::call(&monitor, &grants, &name, input))).await"#),
     (r#"mcp/surface.rs"#, r#"fn tools"#, r#"let tools = super::scope::catalog(super::start::catalog(tools));"#),
