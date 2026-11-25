@@ -9,7 +9,11 @@ pub(crate) fn write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 /// First publication must never replace a concurrently created state entry.
 #[cfg(all(
     feature = "visual-authoring",
-    any(all(target_os = "macos", target_arch = "aarch64"), windows)
+    any(
+        all(target_os = "macos", target_arch = "aarch64"),
+        all(target_os = "linux", target_arch = "x86_64"),
+        windows
+    )
 ))]
 pub(crate) fn write_new(
     path: &Path,
@@ -140,7 +144,25 @@ fn write_inner(
                     )
                 }
             }
-            #[cfg(not(target_os = "macos"))]
+            // Linux: `renameat2(RENAME_NOREPLACE)` is the kernel's atomic "fail if the destination
+            // exists". It is called by number so the binary does not require the glibc 2.28 wrapper.
+            // A kernel or filesystem without it answers ENOSYS/EINVAL: that error is returned as is.
+            // There is no exists()+rename fallback, and the temporary entry stays for inspection.
+            #[cfg(target_os = "linux")]
+            {
+                const RENAME_NOREPLACE: libc::c_uint = 1;
+                unsafe {
+                    libc::syscall(
+                        libc::SYS_renameat2,
+                        dir.as_raw_fd(),
+                        temp.as_ptr(),
+                        dir.as_raw_fd(),
+                        target.as_ptr(),
+                        RENAME_NOREPLACE,
+                    ) as libc::c_int
+                }
+            }
+            #[cfg(not(any(target_os = "macos", target_os = "linux")))]
             {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Unsupported,

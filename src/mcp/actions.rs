@@ -55,7 +55,7 @@ fn positional(value: Option<&str>, what: &str, required: bool) -> Result<Option<
     Ok(Some(value.to_owned()))
 }
 
-pub fn call(name: &str, input: &Value) -> CallToolResult {
+pub fn call(name: &str, input: &Value, headless: bool) -> CallToolResult {
     let command = match name {
         "gil_status" => "status", "gil_context" => "context", "gil_story" => "story",
         "gil_help" => "help", "gil_start" => "start", "gil_open" => "open",
@@ -87,6 +87,17 @@ pub fn call(name: &str, input: &Value) -> CallToolResult {
         }
         out
     };
+    if headless && name == "gil_context" {
+        let root = Path::new(root.expect("validated root"));
+        return announce(match crate::command::headless_context(root) {
+            Ok((said, next)) => {
+                let mut out = result(true, Some(0), said, String::new());
+                if let Some(fields) = out.structured_content.as_mut() { fields["next_action"] = json!(next); }
+                out
+            }
+            Err(e) => annotate_code(result(false, Some(1), String::new(), format!("{e}\n")), &e),
+        });
+    }
     let mut args = vec![command.to_owned()];
     #[cfg(feature = "visual-authoring")]
     if matches!(name, "gil_status" | "gil_context") {
@@ -228,7 +239,7 @@ mod tests {
     }
     #[test]
     fn no_root_help_does_not_borrow_the_server_working_directory() {
-        let got = call("gil_help", &json!({}));
+        let got = call("gil_help", &json!({}), false);
         assert_eq!(got.is_error, Some(false));
         assert_eq!(got.structured_content.unwrap()["said"], crate::help_outside().unwrap());
     }

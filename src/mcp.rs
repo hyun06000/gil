@@ -12,6 +12,8 @@ mod presence;
 mod update;
 mod bindings;
 mod actions;
+// Which new-start contract a `gil_start` call takes (one binary may hold two).
+mod start_kind;
 mod hangul;
 mod native;
 mod surface;
@@ -30,6 +32,12 @@ mod migration;
 // Implementation order 1b: explicit 6 → 8 / 7 → 9 transition tools (development profile only).
 #[cfg(feature = "will-end-history")]
 mod transition;
+// Implementation order 4: start preparation and Monitor approval (tracking-policy development profile).
+#[cfg(all(feature = "tracking-policy", unix))]
+mod start;
+// Implementation order 5: scope change, baseline archive retry and archive halt (same development profile).
+#[cfg(all(feature = "tracking-policy", unix))]
+mod scope;
 #[cfg(all(feature = "visual-authoring", windows))]
 mod workspace;
 use monitor::Monitor;
@@ -41,6 +49,10 @@ pub struct GilServer {
     monitor: Arc<Monitor>,
     #[cfg(feature = "approved-plan")]
     plan_grants: Arc<plans::Grants>,
+    #[cfg(all(feature = "tracking-policy", unix))]
+    start_grants: Arc<start::Grants>,
+    #[cfg(all(feature = "tracking-policy", unix))]
+    scope_grants: Arc<scope::Grants>,
     native_gate: Arc<Mutex<()>>,
     companion_session: Arc<Mutex<crate::companion_ipc::McpSession>>,
 }
@@ -52,9 +64,16 @@ impl GilServer {
     /// Deployment/test adapter, not an MCP tool parameter. None discovers an installed cohort;
     /// existing Plugin installs with no cohort receipt remain opted out.
     pub fn with_companion_endpoint(endpoint: Option<std::path::PathBuf>) -> Self {
+        Self::with_display(endpoint, false)
+    }
+    fn with_display(endpoint: Option<std::path::PathBuf>, headless: bool) -> Self {
+        let mut monitor = Monitor::default();
+        monitor.headless = headless;
         Self { #[cfg(feature = "product-safety")] recovery_grants: Arc::new(recovery::Grants::default()),
             #[cfg(feature = "approved-plan")] plan_grants: Arc::new(plans::Grants::default()),
-            monitor: Arc::new(Monitor::default()), native_gate: Arc::new(Mutex::new(())),
+            #[cfg(all(feature = "tracking-policy", unix))] start_grants: Arc::new(start::Grants::default()),
+            #[cfg(all(feature = "tracking-policy", unix))] scope_grants: Arc::new(scope::Grants::default()),
+            monitor: Arc::new(monitor), native_gate: Arc::new(Mutex::new(())),
             companion_session: Arc::new(Mutex::new(crate::companion_ipc::McpSession::new(endpoint))) }
     }
     async fn dispatch_with_session(&self, name: String, mut input: Value) -> CallToolResult {
@@ -90,10 +109,18 @@ impl GilServer {
                 tokio::task::spawn_blocking(move || locale_for_call(&monitor, &for_name, &for_input)).await.unwrap_or(DEFAULT_LOCALE)
             }
         };
-        let mut result = self.dispatch(name.clone(), input.clone(), locale).await;
+        // The new-start contract of this call is decided once, here, from the explicit input and
+        // from what the (already resolved) folder holds. Deciding reads two entries and creates
+        // nothing; the same decision then selects the worker, the Monitor handoff and the hint.
+        let start_route = if name == "gil_start" {
+            let probe = input.clone();
+            Some(tokio::task::spawn_blocking(move || start_kind::route(&probe)).await.unwrap_or(start_kind::UNDECIDED))
+        } else { None };
+        let mut result = self.dispatch(name.clone(), input.clone(), locale, start_route).await;
         let succeeded = result.is_error != Some(true)
             && result.structured_content.as_ref().is_none_or(|v| v["ok"] != false);
-        if name == "gil_start" && succeeded
+        // A tracked-scope start is a preparation: its own tool prepares the Monitor scope (no Project yet).
+        if name == "gil_start" && succeeded && start_route == Some(start_kind::Route::Direct)
             && result.structured_content.as_ref().is_some_and(|v| v["ok"] == true) {
             // Creation is already committed. A display preparation failure must never turn
             // that success into a failed start or encourage a duplicate creation.
@@ -105,38 +132,49 @@ impl GilServer {
                 let at = root.clone();
                 let _ = tokio::task::spawn_blocking(move || locale::remember_start(std::path::Path::new(&at), chosen)).await;
             }
-            let prepared = monitor::run(move || monitor.prepare(&root)).await;
-            locale::with(locale, || {
-                if let Some(scope) = prepared.structured_content.as_ref()
-                    .filter(|_| prepared.is_error != Some(true))
-                    .and_then(|v| v["scope_id"].as_str()) {
-                    let call = format!("show_gil_monitor({})", serde_json::json!({"scope_id": scope}));
-                    // Some Hosts expose structuredContent without the surrounding text blocks.
-                    // Keep the CLI receipt intact, but carry the same prepared handoff there too.
-                    if let Some(fields) = result.structured_content.as_mut().and_then(serde_json::Value::as_object_mut) {
-                        fields.insert("next_call".into(), serde_json::json!({
-                            "name": "show_gil_monitor", "arguments": {"scope_id": scope}
-                        }));
-                    }
-                    // The handoff also closes the receipt, after the body's `Run: gil open` line, so the
-                    // last word of the start receipt is the one next call on every Host. `said` itself
-                    // stays byte-identical to the CLI receipt.
-                    result.content.push(ContentBlock::text(tr!("mcp.start_handoff", call = call)));
-                    guidance::prepend(&mut result, tr!("mcp.start_ok", call = call));
-                } else {
-                    let detail = prepared.structured_content.as_ref()
-                        .and_then(|v| v["said"].as_str()).unwrap_or(text("mcp.prepare_unknown"));
-                    guidance::prepend(&mut result, tr!("mcp.start_monitor_failed", detail = detail));
+            if self.monitor.headless {
+                let next = crate::locale::text_in(locale, "ctx.next.new_interview");
+                if let Some(fields) = result.structured_content.as_mut() {
+                    fields["next_action"] = serde_json::json!(next);
                 }
-            });
+                guidance::prepend(&mut result, next.to_string());
+            } else {
+                let prepared = monitor::run(move || monitor.prepare(&root)).await;
+                locale::with(locale, || {
+                    if let Some(scope) = prepared.structured_content.as_ref()
+                        .filter(|_| prepared.is_error != Some(true))
+                        .and_then(|v| v["scope_id"].as_str()) {
+                        let call = format!("show_gil_monitor({})", serde_json::json!({"scope_id": scope}));
+                        // Some Hosts expose structuredContent without the surrounding text blocks.
+                        // Keep the CLI receipt intact, but carry the same prepared handoff there too.
+                        if let Some(fields) = result.structured_content.as_mut().and_then(serde_json::Value::as_object_mut) {
+                            fields.insert("next_call".into(), serde_json::json!({
+                                "name": "show_gil_monitor", "arguments": {"scope_id": scope}
+                            }));
+                        }
+                        // The handoff also closes the receipt, after the body's `Run: gil open` line, so the
+                        // last word of the start receipt is the one next call on every Host. `said` itself
+                        // stays byte-identical to the CLI receipt.
+                        result.content.push(ContentBlock::text(tr!("mcp.start_handoff", call = call)));
+                        guidance::prepend(&mut result, tr!("mcp.start_ok", call = call));
+                    } else {
+                        let detail = prepared.structured_content.as_ref()
+                            .and_then(|v| v["said"].as_str()).unwrap_or(text("mcp.prepare_unknown"));
+                        guidance::prepend(&mut result, tr!("mcp.start_monitor_failed", detail = detail));
+                    }
+                });
+            }
         } else if name == "gil_monitor_prepare" && result.is_error != Some(true) {
             if let Some(scope) = result.structured_content.as_ref().and_then(|v| v["scope_id"].as_str()) {
                 let hint = locale::with(locale, || tr!("mcp.prepare_next", scope = serde_json::json!({"scope_id": scope})));
                 guidance::prepend(&mut result, hint);
             }
         }
-        locale::with(locale, || guidance::after(&name, &mut result));
-        if project_use && succeeded && name != "gil_start" && name != "gil_monitor_prepare" {
+        // A preparation is not a project yet: its own answer carries the next step, so the
+        // "this folder is now a GIL project" hint of a committed start is not added to it.
+        let prepared_only = start_route == Some(start_kind::Route::Preparation) && succeeded;
+        if !(prepared_only || self.monitor.headless && name == "gil_start" && succeeded) { locale::with(locale, || guidance::after(&name, &mut result)); }
+        if !self.monitor.headless && project_use && succeeded && name != "gil_start" && name != "gil_monitor_prepare" {
             let monitor = self.monitor.clone();
             let root = input["project_root"].as_str().unwrap_or_default().to_owned();
             let health = monitor::run(move || {
@@ -177,7 +215,7 @@ impl GilServer {
                 }
             });
         }
-        if project_use && succeeded {
+        if !self.monitor.headless && project_use && succeeded {
             let session = self.companion_session.clone();
             let _ = tokio::task::spawn_blocking(move || {
                 if let Ok(mut session) = session.lock() {
@@ -198,7 +236,16 @@ impl GilServer {
     }
     /// Every worker that produces user-facing text runs under `locale`; the receipt and the
     /// guidance that reads it therefore always speak the same language.
-    async fn dispatch(&self, name: String, input: Value, locale: Locale) -> CallToolResult {
+    async fn dispatch(&self, name: String, mut input: Value, locale: Locale, start_route: Option<start_kind::Route>) -> CallToolResult {
+        if name == "gil_start" {
+            // No route means the decision was not made for this call: start nothing.
+            match start_route.unwrap_or(start_kind::UNDECIDED) {
+                start_kind::Route::Refused { code, key } => return locale::with(locale, || start_kind::refusal(code, key)),
+                // The selection is consumed here; the direct start keeps its existing input.
+                start_kind::Route::Direct => { if let Some(fields) = input.as_object_mut() { fields.remove(start_kind::INPUT); } }
+                start_kind::Route::Preparation => {}
+            }
+        }
         if name == "gil_await_user" {
             return tokio::task::spawn_blocking(move || locale::with(locale, || match crate::write_guard::automatic::await_user(
                 input["project_root"].as_str().unwrap_or_default(), input["question"].as_str().unwrap_or_default()) {
@@ -214,6 +261,24 @@ impl GilServer {
             let monitor = self.monitor.clone(); let grants = self.recovery_grants.clone();
             return tokio::task::spawn_blocking(move || locale::with(locale, || recovery::call(&monitor, &grants, &name, input))).await
                 .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "mcp.revisit_uncertain")));
+        }
+        #[cfg(all(feature = "tracking-policy", unix))]
+        if start::NAMES.contains(&name.as_str()) && !(name == "gil_start" && start_route == Some(start_kind::Route::Direct)) {
+            let monitor = self.monitor.clone();
+            let grants = self.start_grants.clone();
+            return tokio::task::spawn_blocking(move || locale::with(locale, || {
+                if let Some((code, key)) = start_kind::other_record(&name, &input) { return start_kind::refusal(code, key); }
+                start::call(&monitor, &grants, &name, input)
+            })).await
+                .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "start_tool.uncertain")));
+        }
+        #[cfg(all(feature = "tracking-policy", unix))]
+        if scope::NAMES.contains(&name.as_str()) {
+            let monitor = self.monitor.clone();
+            let grants = self.scope_grants.clone();
+            // A lost task is not a refusal: the stored record decides. Read gil_scope_status instead of repeating.
+            return tokio::task::spawn_blocking(move || locale::with(locale, || scope::call(&monitor, &grants, &name, input))).await
+                .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "scope_tool.uncertain")));
         }
         #[cfg(feature = "approved-plan")]
         if name.starts_with("gil_plan_") {
@@ -248,7 +313,8 @@ impl GilServer {
                 .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "mcp.visual_uncertain")));
         }
         if actions::NAMES.contains(&name.as_str()) {
-            return tokio::task::spawn_blocking(move || locale::with(locale, || actions::call(&name, &input))).await
+            let headless = self.monitor.headless;
+            return tokio::task::spawn_blocking(move || locale::with(locale, || actions::call(&name, &input, headless))).await
                 .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "mcp.action_unfinished")));
         }
         if matches!(name.as_str(), "gil_companion_status" | "show_gil_companion") {
@@ -298,7 +364,7 @@ impl GilServer {
 fn locale_for_call(monitor: &Monitor, name: &str, input: &Value) -> Locale {
     let root = match input.get("project_root").and_then(Value::as_str) {
         Some(root) if std::path::Path::new(root).is_absolute() => Some(std::path::PathBuf::from(root)),
-        _ if name.starts_with("gil_monitor_") || matches!(name, "show_gil_monitor" | "gil_plan_review" | "gil_plan_decide" | "gil_revisit_review" | "gil_revisit_apply") =>
+        _ if name.starts_with("gil_monitor_") || name.starts_with("gil_scope_") || matches!(name, "show_gil_monitor" | "gil_plan_review" | "gil_plan_decide" | "gil_revisit_review" | "gil_revisit_apply" | "gil_start_review" | "gil_start_decide" | "gil_start_apply" | "gil_start_list") =>
             input.get("scope_id").and_then(Value::as_str).and_then(|scope| monitor.root(scope).ok()),
         _ => None,
     };
@@ -308,14 +374,16 @@ impl ServerHandler for GilServer {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().enable_resources().build())
             .with_server_info(Implementation::new("gil", crate::CORE_VERSION))
-            .with_instructions(guidance::INSTRUCTIONS)
+            .with_instructions(if self.monitor.headless {
+                format!("This runner selected headless display. Automatic display instructions apply only to desktop sessions. Follow the receipt's next_action, including any wait for an answer or approval.\n\n{}", guidance::INSTRUCTIONS)
+            } else { guidance::INSTRUCTIONS.to_owned() })
     }
     fn get_tool(&self, name: &str) -> Option<Tool> {
-        surface::tools().iter().find(|t| t.name == name).cloned()
+        surface::connection_tools(self.monitor.headless).iter().find(|t| t.name == name).cloned()
     }
     async fn list_tools(&self, _: Option<PaginatedRequestParams>, _: RequestContext<RoleServer>) -> Result<ListToolsResult, ErrorData> {
         let mut result = ListToolsResult::default();
-        result.tools = surface::tools().to_vec();
+        result.tools = surface::connection_tools(self.monitor.headless).to_vec();
         Ok(result)
     }
     async fn call_tool(&self, request: CallToolRequestParams, _: RequestContext<RoleServer>) -> Result<CallToolResponse, ErrorData> {
@@ -349,9 +417,10 @@ pub fn serve_stdio() -> Result<(), String> {
         .map_err(|err| tr!("mcp.runtime_failed", err = err))?;
 
     runtime.block_on(async {
-        let server = GilServer::with_companion_endpoint(std::env::var_os(crate::companion_ipc::ENV_ENDPOINT).map(Into::into));
+        let headless = std::env::var("GIL_MCP_DISPLAY").as_deref() == Ok("headless");
+        let server = GilServer::with_display(std::env::var_os(crate::companion_ipc::ENV_ENDPOINT).map(Into::into), headless);
         let companion_session = server.companion_session.clone();
-        server.monitor.reap();
+        if !headless { server.monitor.reap(); }
         let service = match server.serve(rmcp::transport::stdio()).await {
             Ok(service) => service,
             // **손님이 말없이 떠난 것은 고장이 아니다.** Host 가 server 를 세워 두고
@@ -386,6 +455,10 @@ mod tests {
     const RECORD_READ_SURFACE: [&str; 2] = ["gil_report_read", "gil_evidence_read"];
     /// 형식 6→8·7→9 명시적 전환의 점검·적용 — will-end-history 빌드에서만 등록된다(src/mcp/transition.rs).
     const TRANSITION_SURFACE: [&str; 2] = ["gil_format_transition_check", "gil_format_transition_apply"];
+    /// 구현 순서 5번(같은 Chain 범위 변경)의 일곱 도구 — 모델용 둘(제안·조회)과 App 전용 다섯. `tracking-policy` + Unix 빌드에서만
+    /// 등록된다(src/mcp/scope.rs). 그 모듈의 목록을 읽지 않고 **여기에 따로 고정한다**: 그 모듈은 그 구성에서만 컴파일되므로, 다른
+    /// 구성의 시험이 그 이름을 참조하면 컴파일되지 않는다(`if cfg!(..)` 는 꺼진 본문의 이름 해석을 없애지 않는다).
+    const SCOPE_SURFACE: [&str; 7] = ["gil_scope_propose", "gil_scope_status", "gil_scope_review", "gil_scope_decide", "gil_scope_retry", "gil_scope_halt", "gil_scope_release"];
 
     fn registered_names() -> Vec<String> {
         let mut names: Vec<String> = surface::tools().iter().map(|one| one.name.to_string()).collect();
@@ -420,9 +493,22 @@ mod tests {
             expected.extend(TRANSITION_SURFACE.iter().map(|s| s.to_string()));
         }
         if cfg!(feature = "product-safety") { expected.extend(["gil_revisit_apply".into(), "gil_revisit_review".into()]); }
+        if cfg!(all(feature = "tracking-policy", unix)) {
+            // `gil_start` 는 기본 표에 이미 있다 — 이 구성은 그 설명만 바꾸고 일곱 도구를 더한다.
+            expected.extend(["gil_start_prepare", "gil_start_status", "gil_start_apply", "gil_start_cancel", "gil_start_review", "gil_start_decide", "gil_start_list"]
+                .map(String::from));
+            // 구현 순서 5번의 일곱 도구 — 모델용 둘(제안·조회)과 App 전용 다섯.
+            expected.extend(SCOPE_SURFACE.iter().map(|s| s.to_string()));
+        }
         expected.push("gil_await_user".to_string());
         expected.sort();
-        assert_eq!(registered_names(), expected);
+        let registered = registered_names();
+        assert_eq!(registered, expected);
+        // 범위 변경 도구 각각의 등록 여부는 그 구성 조건과 정확히 같다 — 켜진 구성에서는 일곱이 모두 있고, 꺼진 구성에서는 하나도 없다.
+        let scope_enabled = cfg!(all(feature = "tracking-policy", unix));
+        for name in SCOPE_SURFACE {
+            assert_eq!(registered.iter().any(|one| one == name), scope_enabled, "{name} 의 등록 여부가 구성 조건과 다르다");
+        }
     }
 
     /// 기본 표 파일 자체에는 승인 계획 도구가 없다 — 승인 계획은 feature 가 더하는 것이지 기본 계약이 아니다.
@@ -432,7 +518,9 @@ mod tests {
         let mut names: Vec<&str> = catalog.iter().map(|t| t["name"].as_str().expect("name")).collect();
         names.sort();
         assert_eq!(names, DEFAULT_SURFACE);
-        for name in PLAN_MODEL_SURFACE.iter().chain(PLAN_APP_SURFACE.iter()).chain(VISUAL_SURFACE.iter()).chain(RECORD_READ_SURFACE.iter()) {
+        for name in PLAN_MODEL_SURFACE.iter().chain(PLAN_APP_SURFACE.iter()).chain(VISUAL_SURFACE.iter()).chain(RECORD_READ_SURFACE.iter())
+            .chain(SCOPE_SURFACE.iter())
+        {
             assert!(!names.contains(name), "{name} 이 기본 표에 들어왔다");
         }
     }

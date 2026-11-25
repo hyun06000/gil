@@ -85,6 +85,9 @@ pub fn where_now(session: &ProjectSession, state_is_elsewhere: bool) -> String {
     let world = session.world_state();
     let dirty = matches!(world, Ok(WorldState::Dirty { .. }));
     out.push_str(&world_nudge(session, world));
+    // 형식 10/11 의 보관 대기·보관 중단 — 적용 정책과 마지막 확정 세계를 따로 말한다. 그 밖의 상태에서는 아무것도 더하지 않는다.
+    #[cfg(feature = "tracking-policy")]
+    out.push_str(&session.project().tracking_note());
 
     // ⑥ 다음에 무엇을 할 수 있는가. **안내는 실행과 같은 자리에서 나온다.**
     match session.project().current_chain() {

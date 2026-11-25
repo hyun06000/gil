@@ -24,6 +24,13 @@ exploration-flow = ["approved-plan"]
 # Formats 4–7 keep their own shape and are never converted by reading or running them; a build
 # without this feature refuses 8/9 as an unknown format. Opt-in: no release profile enables it.
 will-end-history = ["chain-core"]
+# Implementation order 3–4 (Storage Transition Contract §5–§6, Artifact Model §3.6): projects STARTED by this
+# build go through a start preparation, an exact `.gilignore` proposal approved in the Monitor (app-only), and
+# an initial Snapshot captured with that approved policy, then write format 10 (`tracking` block). Existing
+# formats are never converted. Scope changes (order 5), latest-policy restore (order 6) and the 8 → 10
+# transition are not provided; restore/revisit refuse on format 10/11. Unix development profile only.
+# Opt-in: no release profile enables it.
+tracking-policy = ["will-end-history"]
 # Development-only authoring surface; no default format change or migration.
 visual-authoring = []
 # Product builds keep recording and read surfaces, but refuse destructive Artifact rollback until

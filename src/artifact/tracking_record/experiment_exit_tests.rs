@@ -46,7 +46,8 @@ mod common;
 
 // ── 체인 ───────────────────────────────────────────────────────────────────
 //
-// 아래의 `pub(super)` 도움 함수는 Exit 계보 검사(`exit_lineage_tests`)도 같은 체인을 쓰려고 연 것이다. 동작은 같다.
+// 아래의 `pub(super)` 도움 함수는 Exit 계보 검사(`exit_lineage_tests`)와 Verify 세계 유도(`verify_world_tests`)도 같은 체인·사건을 쓰려고
+// 연 것이다. 동작은 같다.
 
 /// 지금 서 있는 열린 Experiment 를 Define → Hypothesis → Verify(세계 `A<verify>` 확정) → Analysis → Outcome 으로 걷고 닫는다.
 /// `success` 는 `open_child`, `failure` 는 부모로의 `revisit` 을 적는다(공통 도움 함수 `cycle_report` 가 부모를 대상으로 고른다).
@@ -210,7 +211,7 @@ fn the_fixtures_are_what_the_picture_says() {
 
 // ── 사건: 한 행에서 두 부분 입력을 함께 뽑는다 ─────────────────────────────
 
-fn p(number: u32) -> PolicyName {
+pub(super) fn p(number: u32) -> PolicyName {
     PolicyName::new(number).expect("0 이 아니다")
 }
 
@@ -230,7 +231,7 @@ fn ledger_of(texts: &[&str]) -> PolicyLedger {
 }
 
 #[derive(Clone, Copy)]
-enum Base {
+pub(super) enum Base {
     /// 기준점 없음, 경계·발급기 칸 없음, 실패 시도 하나 — 보관 대기이거나 뒤 사건으로 대체됐다.
     Waiting,
     /// 기준점·`baseline` 경계(`None` = `null`)·`baseline.next_cycle_id` 를 함께 적고 `archived` 하나.
@@ -239,7 +240,7 @@ enum Base {
 
 /// 사건 원장의 한 기록 — 3c 입력과 3h 입력이 이 한 행에서 함께 나온다. 모든 사건의 `chain_ref` 는 `chain:C1` 이다.
 #[derive(Clone, Copy)]
-struct Row {
+pub(super) struct Row {
     kind: EventKind,
     before: Option<u32>,
     after: u32,
@@ -251,12 +252,12 @@ struct Row {
 }
 
 /// §5.1 예시의 `start` — `chain:C1`, 경계 `null`, `next_cycle_id: 1`, 기준점 A1(보관 경계 `null`, 발급기 1).
-fn start() -> Row {
+pub(super) fn start() -> Row {
     Row { kind: Start, before: None, after: 1, at: None, issuer: 1, base: Base::Fixed { snapshot: 1, boundary: None, issuer: 1 } }
 }
 
 /// `P<after - 1> → P<after>` 범위 변경 — 승인 경계 `at`, 승인 당시 발급기 `issuer`. `after = 1` 이면 기존 프로젝트의 첫 채택(없음 → P1).
-fn change(after: u32, at: u32, issuer: u32, base: Base) -> Row {
+pub(super) fn change(after: u32, at: u32, issuer: u32, base: Base) -> Row {
     Row { kind: ScopeChange, before: (after > 1).then(|| after - 1), after, at: Some(at), issuer, base }
 }
 
@@ -265,18 +266,18 @@ fn restore(policy: u32, at: u32, issuer: u32, base: Base) -> Row {
 }
 
 /// 경계 `boundary` 에서 발급기 `issuer` 일 때 보관한 기준점 `A<snapshot>`.
-fn kept(snapshot: u32, boundary: u32, issuer: u32) -> Base {
+pub(super) fn kept(snapshot: u32, boundary: u32, issuer: u32) -> Base {
     Base::Fixed { snapshot, boundary: Some(boundary), issuer }
 }
 
 /// 한 기록 목록과 그것이 도입한 판의 원장 — 셋은 같은 한 시점에서 뽑은 값이다.
-struct Records {
-    ledger: PolicyLedger,
-    links: EventPolicyLinks,
-    facts: Vec<EventCycleFacts>,
+pub(super) struct Records {
+    pub(super) ledger: PolicyLedger,
+    pub(super) links: EventPolicyLinks,
+    pub(super) facts: Vec<EventCycleFacts>,
 }
 
-fn records_with(texts: &[&str], rows: &[Row]) -> Records {
+pub(super) fn records_with(texts: &[&str], rows: &[Row]) -> Records {
     let links = rows
         .iter()
         .enumerate()
@@ -309,13 +310,13 @@ fn records_with(texts: &[&str], rows: &[Row]) -> Records {
 }
 
 /// 판마다 다른 원문 — 판 수는 판을 도입한 사건(`restore_result` 밖) 수다.
-fn records(rows: &[Row]) -> Records {
+pub(super) fn records(rows: &[Row]) -> Records {
     let introduced = rows.iter().filter(|row| row.kind != RestoreResult).count();
     let texts: Vec<String> = (1..=introduced).map(|n| format!("rule-{n}/\n")).collect();
     records_with(&texts.iter().map(String::as_str).collect::<Vec<_>>(), rows)
 }
 
-fn no_records() -> Records {
+pub(super) fn no_records() -> Records {
     Records { ledger: PolicyLedger::empty(), links: EventPolicyLinks::empty(), facts: Vec::new() }
 }
 
@@ -343,7 +344,7 @@ fn exit_and_policy(target: u32, records: &Records, chains: &[Chain]) -> (u32, Op
 }
 
 /// 기대값 — P(T) 의 사건 번호·종류·판 번호·승인 당시 발급기.
-fn applied(event: u32, kind: EventKind, policy: u32, next_cycle_id: u32) -> OpeningSelection {
+pub(super) fn applied(event: u32, kind: EventKind, policy: u32, next_cycle_id: u32) -> OpeningSelection {
     OpeningSelection::Applied { event: m(event), kind, policy: p(policy), next_cycle_id }
 }
 
@@ -379,7 +380,7 @@ fn without_events_each_closed_experiment_gives_its_own_exit_before_adoption() {
 /// | M2 | scope_change | P1 → P2 | C2·3 | A5 (C2·3) |
 /// | M3 | scope_change | P2 → P3 | C3·4 | A6 (C3·4) |
 /// | M4 | restore_result | P3 → P3 | C2·5 | A7 (C2·5) |
-fn changed_after_opening() -> Vec<Row> {
+pub(super) fn changed_after_opening() -> Vec<Row> {
     vec![start(), change(2, 2, 3, kept(5, 2, 3)), change(3, 3, 4, kept(6, 3, 4)), restore(3, 2, 5, kept(7, 2, 5))]
 }
 

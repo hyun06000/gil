@@ -57,7 +57,7 @@ No global/project/Plugin/Skill hooks or global instruction edits are part of thi
 1. A GIL project is not finished in chat. When continuing that project, follow the last receipt's next call **or wait**.
    Do not close a step before its completion condition is met. If no receipt exists yet, read
    `gil_context` once (existing project) or call `gil_start` once (new project).
-2. After `gil_start`: call the `show_gil_monitor(scope_id)` the receipt names, then
+2. In an explicitly headless session, follow the recorded next action or wait. On desktop after `gil_start`: call the `show_gil_monitor(scope_id)` the receipt names, then
    `gil_open(kind: question)` with `objective`, `next_action`, `done_when` in its `contract` string.
 3. A Question is answered by the user, not by you. Ask and wait. Close it only with the user's actual reply;
    never paste the original request as the answer. Synthesis needs explicit approval;
@@ -134,7 +134,7 @@ approval. Its new policy engine is not yet connected to product capture/restore;
 World records and the agent's recorded actions and learning must correspond in one version.
 This does not require author tracking, write hooks or a new Snapshot for every node.
 
-1. **Start and show.** Start a new project once. A successful `gil_start` receipt carries the exact
+1. **Start and show (desktop display mode).** Start a new project once. A successful `gil_start` receipt carries the exact
    next call, `show_gil_monitor({"scope_id": …})`, in its opening guidance and its final text block:
    `structuredContent.next_call` carries the same name and arguments for structured-only Hosts;
    that single call is the next call on every Host (Codex, Claude Desktop's Claude Code tab, Plugin or
@@ -154,6 +154,52 @@ This does not require author tracking, write hooks or a new Snapshot for every n
    and find the next-call heading in the reply's language (`[Call now]` in English, `[지금 바로 할 호출]`
    in Korean); the action under that heading is the next call, even when a resume summary such as
    `[Resume from saved records]` comes before it. Resume there instead of starting again.
+   **Start kind (only when the connected `gil_start` schema has a `start_kind` input with both
+   `tracked_scope` and `image_reports`).** The two are separate kinds of new project and a project is
+   never converted from one to the other. Before starting in a folder with no `.gil`, tell the user
+   both options with their limits as the tool description states them, and pass the user's own choice
+   as `start_kind`; never choose for the user. `tracked_scope` begins the start preparation below;
+   `image_reports` creates the project at once and its receipt names the `show_gil_monitor` call. If
+   `gil_start` answers `code: start_kind_required`, nothing was created: ask the user and call it once
+   more with their choice. Any other `start_kind` refusal changed nothing: report its words, read
+   `gil_context` or `gil_start_status` as it says, and do not try the other kind, edit `.gil` or
+   delete records to make the start pass. An existing project or preparation keeps its own kind.
+   **Start preparation (only when `gil_start` answers `phase: preparing`; development tracking-policy
+   builds).** No Chain, Cycle or Snapshot exists yet and no project file is archived. Explain, grouped by
+   folder, what will be tracked and excluded and the archive/restore impact; keep general and
+   secret-candidate recommendations preselected and project-specific ones unselected unless the user
+   chooses them (`.gitignore` is reference only). Call `gil_start_prepare` with the exact `.gilignore`
+   text, then `show_gil_monitor(scope_id)`, and wait for the user's button in the Monitor. Chat consent,
+   editing `.gilignore` or your own input is never approval; without a Monitor the start stays waiting.
+   Do not create project files while preparing. A nested `.gilignore` holds the start: explain it and
+   tidy it only with the user's consent. After a lost reply, restart or reconnect read `gil_start_status`
+   once; if it says `approved` but not started, ask the user to press the Monitor's retry button — no model
+   tool applies a start. A detected condition change (`scope_changed`, `condition_changed`, `policy_file_changed`) needs a new
+   proposal and approval; an unstable observation or a storage failure keeps the approval for a Monitor retry. On `combine_required` tell the user once that you will combine the approved rules and
+   the file now on disk (do not ask whether you may), write the combined text keeping the engine's
+   last-matching-rule order and send it with `combine_with_revision`; it needs its own Monitor approval.
+   Cancel only on the user's explicit request (`gil_start_cancel`); a closed app is not a cancel, and a
+   canceled preparation restarts only when the user explicitly asks. In such a project `gil_restore`
+   and revisits are refused until latest-policy restore exists; never work around them.
+   **Scope change (development tracking-policy builds; a started format-10 project).** Changing what is
+   tracked is reviewed in an Interview: discuss the reason, what becomes newly tracked or excluded and
+   the archive/restore impact, and write no project files. After that Interview is closed, call
+   `gil_scope_propose` with the exact new `.gilignore` text, then `show_gil_monitor(scope_id)`, and wait
+   for the user's decision in the Monitor. Approval applies the new policy the moment it is saved; the
+   policy-file sync and the baseline archive are separate results. Never describe a failed archive as
+   an unapplied policy, or a saved approval as an archived world. `gil_scope_status` reports three
+   distinct values: the applied policy, the last confirmed world with the policy that confirmed it, and
+   whether an event waits for its baseline archive. While it waits (baseline archive needed — next
+   Experiment on hold) an Experiment is refused and an ordinary Interview may be opened, carried through
+   and closed on its own decision. Do not approve a Chain-closing Synthesis (`chain_verdict` with
+   `approved: yes`) before the baseline is confirmed; Core refuses it. The archive retry, the archive
+   halt and its release are the user's Monitor buttons: no model tool performs them, and you never retry
+   after a reconnect, a restart or by repeating a request. While a halt marker is present every open and
+   close is refused: read the status, tell the user and wait. A release only removes the marker; wait
+   for the user's explicit next instruction. Unconfirmed changes on continuously tracked paths block an
+   approval even when the proposal would exclude those paths. On `held_three_way` or `base_undecided`
+   show the user the exact difference and do not work around it. After a lost reply read
+   `gil_scope_status` once instead of repeating an approval.
    **Keep the in-host MCP App present:** successful Project calls check recent App display reports.
    When a receipt supplies `show_gil_monitor(scope_id)` because the Monitor is absent/hidden/unknown,
    call it once before further work, without asking the user to open a Companion. For an explicit
@@ -1110,6 +1156,11 @@ the Monitor:
   vocabulary.
 - If the tools are unavailable, say the plugin MCP server is not connected. Do not reinterpret
   the GIL Monitor as something you can open another way.
+- The **Scope change** path above is a capability of the connected server, not of a build name: use
+  it only when the connected `tools/list` offers both `gil_scope_propose` and `gil_scope_status`. Do
+  not infer the capability from a development-build name or from the record format. When those tools
+  are absent, do not ask for that call, and do not ask for a tracking-scope approval through chat or
+  file edits instead.
 
 ## A note on persistent host surfaces
 
