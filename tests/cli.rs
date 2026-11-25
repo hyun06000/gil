@@ -1234,6 +1234,38 @@ fn the_whole_path_from_start_to_an_experiment_works_across_processes() {
 }
 
 #[test]
+fn experiment_setup_requires_a_problem_criterion_and_hypothesis_before_verify() {
+    let dir = scratch("cli-experiment-setup-fields");
+    bootstrap(&dir);
+    let path = dir.join(gil::STATE_PATH);
+    for (kind, body, fields) in [
+        ("define", DEFINE, &["problem", "success_condition"][..]),
+        ("hypothesis", HYPOTHESIS, &["hypothesis"][..]),
+    ] {
+        open_action(&dir, kind);
+        let before = std::fs::read(&path).unwrap();
+        for field in fields {
+            let original = body.lines().find(|line| line.starts_with(&format!("{field}:"))).unwrap();
+            let missing = body.replace(original, &format!("{field}:  \t　"));
+            let rejection = refused(&dir, &["close"], Some(&missing));
+            assert!(rejection.contains(field) && rejection.contains("비워 둘 수 없다"), "{rejection}");
+            assert_eq!(std::fs::read(&path).unwrap(), before);
+        }
+        let mut legacy = gil::load(common::spec(), &path).unwrap();
+        ok(&dir, &["close"], Some(body));
+
+        let mut old_report = gil::Report::parse(body).unwrap();
+        for field in fields { old_report = old_report.with(*field, ""); }
+        legacy.close_action_step(old_report).unwrap();
+        gil::save(&legacy, &path).unwrap();
+        let stored = std::fs::read(&path).unwrap();
+        ok(&dir, &["context"], None);
+        assert_eq!(std::fs::read(&path).unwrap(), stored);
+    }
+    open_action(&dir, "verify");
+}
+
+#[test]
 fn synthesis_requires_a_statement_on_new_closes_and_preserves_legacy_records() {
     let dir = scratch("cli-synthesis-statement");
     ok(&dir, &["start"], None);
