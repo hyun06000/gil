@@ -64,7 +64,8 @@ class LunaAgent(GilAgent):
                         raise RuntimeError(f"Harbor model mailbox failed: {packet.stderr}")
                     if packet.stdout and packet.stdout.strip():
                         req = json.loads(packet.stdout)
-                        answer = await asyncio.to_thread(client.ask, req["messages"], req["choices"])
+                        answer = await asyncio.to_thread(client.ask, req["messages"], req["choices"],
+                                                         editor=req.get("editor") is True)
                         reply.write_text(json.dumps({"answer":answer}))
                         await environment.upload_file(reply, "/work/model/reply.tmp")
                         published = await environment.exec("chmod 644 /work/model/reply.tmp && mv /work/model/reply.tmp /work/model/reply.json", user="root")

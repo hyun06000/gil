@@ -13,6 +13,43 @@ OUTPUT = 1.20
 BUDGET = 5000  # $0.005 per trial
 
 
+def editor_tool(name, description, properties):
+    return {
+        "type": "function", "name": name, "description": description, "strict": True,
+        "parameters": {"type": "object", "properties": properties,
+                       "required": list(properties), "additionalProperties": False},
+    }
+
+
+EDITOR_TOOLS = [
+    editor_tool("read", "Read a source file, starting at a character offset (zero for the beginning).",
+                {"path": {"type": "string"}, "offset": {"type": "integer"}}),
+    editor_tool("write", "Replace a writable source file with its complete content.",
+                {"path": {"type": "string"}, "content": {"type": "string"}}),
+    editor_tool("check", "Run the task's local build or smoke check.", {}),
+    editor_tool("finish", "Submit the edited and checked files.", {}),
+]
+
+
+def editor_answer(output):
+    calls = [item for item in output if item["type"] == "function_call"]
+    if len(calls) != 1:
+        raise ValueError("Expected exactly one editor call")
+    call = calls[0]
+    args = json.loads(call["arguments"])
+    for tool in EDITOR_TOOLS:
+        if tool["name"] == call["name"]:
+            properties = tool["parameters"]["properties"]
+            if not isinstance(args, dict) or args.keys() != properties.keys():
+                break
+            for key, schema in properties.items():
+                expected = int if schema["type"] == "integer" else str
+                if type(args[key]) is not expected:
+                    raise ValueError("Invalid editor argument type")
+            return json.dumps({"action": call["name"], **args}, ensure_ascii=False)
+    raise ValueError("Unknown editor tool or invalid arguments")
+
+
 class Luna:
     def __init__(self, *, max_calls=MAX_CALLS, budget=BUDGET, max_output=MAX_OUTPUT):
         self.max_calls = max_calls
@@ -24,10 +61,12 @@ class Luna:
         self.outputs = 0
         self.reserved = 0
 
-    def ask(self, messages, choices):
+    def ask(self, messages, choices, *, editor=False):
         body = {"model": MODEL, "input": messages, "reasoning": {"effort": "none"},
                 "max_output_tokens": self.max_output, "store": False, "service_tier": "default"}
-        if choices:
+        if editor:
+            body.update(tools=EDITOR_TOOLS, tool_choice="required", parallel_tool_calls=False)
+        elif choices:
             body["text"] = {"format": {"type":"json_schema", "name":"selection", "strict":True,
                 "schema":{"type":"object", "properties":{"answer":{"type":"string", "enum":choices}},
                           "required":["answer"], "additionalProperties":False}}}
@@ -57,6 +96,8 @@ class Luna:
         self.reserved += usage["input_tokens"] * INPUT + usage["output_tokens"] * OUTPUT - reservation
         if result["status"] != "completed":
             raise RuntimeError(f"Luna response status {result['status']}")
+        if editor:
+            return editor_answer(result["output"])
         answer = "".join(part["text"] for item in result["output"] if item["type"] == "message"
                          for part in item["content"] if part["type"] == "output_text").strip()
         if choices:

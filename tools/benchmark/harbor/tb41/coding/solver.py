@@ -40,6 +40,7 @@ def solve(task,plan=""):
         public.extend(str((Path(directory)/f).relative_to(APP)) for f in files)
         if len(public)>600: break
     history=[]; writes={}; checked=None; calls=0
+    first_write = first_check = None
     deadline=float(Path("/work/deadline").read_text())
     while time.time()<deadline-100:
         prompt=f"""{task}
@@ -47,7 +48,7 @@ def solve(task,plan=""):
 Public source files: {sorted(public)[:120]}
 Files you have edited: {list(writes)}
 Recent tool results: {json.dumps(history[-12:],ensure_ascii=False)[-35000:]}
-Work toward the full official task. Respond with one JSON object. Available actions:
+Work toward the full official task. Call exactly one of the supplied editor tools. Available actions:
 {{"action":"read","path":"relative/file","offset":0}} (next 9000 characters)
 {{"action":"write","path":"relative/file","content":"complete source file"}}
 {{"action":"check"}} (run task compiler/build/import smoke)
@@ -69,8 +70,12 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                 if not content.strip(): raise ValueError("empty source file")
                 path.parent.mkdir(parents=True,exist_ok=True); path.write_text(content)
                 writes[str(path.relative_to(APP))]=hashlib.sha256(path.read_bytes()).hexdigest()
+                if first_write is None:
+                    first_write = calls
                 checked=None; response="written"
             elif action=="check":
+                if first_check is None:
+                    first_check = calls
                 proc=subprocess.run(CHECKS[TASK],cwd=APP,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=100)
                 checked=proc.returncode
                 response=f"exit {checked}: "+proc.stdout.decode(errors="replace")[-3500:]
@@ -83,6 +88,7 @@ If a local check fails, use its output to fix the source. No remote tools or pri
         except (ValueError,OSError,TypeError,KeyError,AttributeError,subprocess.TimeoutExpired) as error:
             record(event="tool", id=ask.call_id, action=obj.get("action") if isinstance(obj, dict) else None, error=str(error))
             history.append(["error",str(error)])
-    obs={"files":writes,"check_exit":checked,"solver_calls":calls}
+    obs={"files":writes,"check_exit":checked,"solver_calls":calls,
+         "first_write_call":first_write,"first_check_call":first_check}
     (WORK/"observation.json").write_text(json.dumps(obs))
     return obs
