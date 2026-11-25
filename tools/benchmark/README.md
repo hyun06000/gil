@@ -25,3 +25,19 @@ A run uses a fresh record directory outside its workspace. It refuses workspaces
 ## Container acceptance
 
 `tools/benchmark/test-container.sh target/debug/gil` runs the committed synthetic participant on Linux. It first checks ordinary Linux MCP Monitor handoff and display-only headless MCP waiting for a response. It then checks a passing and failing experiment, revision of a specification, rejection of human approval tokens, and refusal to close Verify without an evidence file. These checks exercise the protocol and Core transitions. Benchmark model scores require running the intended model adapter and task suite.
+
+## One offline Harbor model trial
+
+Manually dispatch `product-candidate.yml` with the **harbor_benchmark** checkbox selected, or run
+`gh workflow run product-candidate.yml -f harbor_benchmark=true`. This choice runs only the benchmark
+job on Linux. Pull requests and ordinary product builds do not invoke the model. No model key is required.
+
+Harbor 0.27.0 starts a Docker trial with external networking disabled. Before the trial, the runner
+downloads hash-checked Qwen2.5-1.5B-Instruct Q4_K_M weights. The local model writes the interview
+responses, experimental specification and analysis. In Verify it chooses among four CSV aggregation
+tools; the adapter executes that operation on the supplied column and records the observation.
+The Harbor verifier independently computes the requested statistic and checks the submitted file,
+specification, Core reports and verdict. The workflow retains the synthetic trial results for seven days.
+
+On a Linux Docker host with Harbor 0.27.0 on PATH, pass a built product binary and a fresh output
+directory to `tools/benchmark/harbor/run.sh target/debug/gil /tmp/gil-harbor-run`.

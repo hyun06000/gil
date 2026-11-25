@@ -49,6 +49,11 @@ on:
       - '.github/workflows/product-candidate.yml'
   workflow_dispatch:
     inputs:
+      harbor_benchmark:
+        description: 'Run only the offline Harbor/Qwen GIL benchmark (one task)'
+        type: boolean
+        required: false
+        default: false
       unsigned_preview_version:
         description: 'Optional X.Y.Z-preview.N stamp compiled into the Core; no publication or installation'
         required: false
@@ -68,6 +73,7 @@ env:
 
 jobs:
   linux-x64-product:
+    if: ${{ !inputs.harbor_benchmark }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
@@ -243,6 +249,7 @@ jobs:
           retention-days: 7
 
   macos-arm64-product:
+    if: ${{ !inputs.harbor_benchmark }}
     runs-on: macos-15
     timeout-minutes: 90
     env:
@@ -375,3 +382,33 @@ jobs:
             target/product-macos-arm64/monitor-returned.html
           if-no-files-found: error
           retention-days: 7
+
+  harbor-benchmark:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.harbor_benchmark }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Build the product CLI and install Harbor in a temporary environment
+        run: |
+          cargo build --locked -p gil --features "$GIL_PRODUCT_FEATURES" --bin gil
+          python3 -m venv "$RUNNER_TEMP/harbor-venv"
+          "$RUNNER_TEMP/harbor-venv/bin/pip" install 'harbor==0.27.0'
+      - name: Run one offline Harbor trial and require verifier reward 1
+        run: |
+          export PATH="$RUNNER_TEMP/harbor-venv/bin:$PATH"
+          tools/benchmark/harbor/run.sh target/debug/gil "$RUNNER_TEMP/harbor-results"
+      - name: Preserve the trial record and verifier result
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: harbor-model-result
+          path: |
+            ${{ runner.temp }}/harbor-results/**/result.json
+            ${{ runner.temp }}/harbor-results/**/agent/gil-result.json
+            ${{ runner.temp }}/harbor-results/**/verifier/test-stdout.txt
+            ${{ runner.temp }}/harbor-results/**/verifier/reward.txt
+          retention-days: 7
+          if-no-files-found: warn
