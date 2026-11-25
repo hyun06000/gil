@@ -81,8 +81,17 @@ jobs:
         run: |
           # Fork-based launcher fixtures can inherit another parallel fixture's lock.
           # Keep assertions intact and run the native Core fixtures sequentially.
+          # The default profile runs every test it ran before, in parts (tools/ci/CHAIN-CORE-TIMING.md §10):
+          # three library groups stay one at a time (the fork-based launcher in runtime_*, the install
+          # lock tests, and the Monitor server tests with its watcher and signal handlers); the other
+          # library tests and the integration suites use the default test threads. --skip and the
+          # name filter take the same three names, so the two library runs are exact complements.
           case "$GIL_RUNTIME_PROFILE" in
-            default) cargo test --locked -p gil -- --test-threads=1 ;;
+            default) node tools/ci/expect-tests.mjs 1000 cargo test --locked -p gil --lib -- --skip runtime_ --skip install:: --skip monitor::serve::
+              node tools/ci/expect-tests.mjs 150 cargo test --locked -p gil --lib -- runtime_ install:: monitor::serve:: --test-threads=1
+              cargo test --locked -p gil --bins
+              cargo test --locked -p gil --test '*'
+              cargo test --locked -p gil --doc ;;
             visual-authoring) cargo test --locked -p gil --features visual-authoring -- --test-threads=1 ;;
             approved-plan) cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib --test context --test context_profiles --test guidance_wave1 --test guidance_wave2 --test approved_plan_wire_wave1 -- --test-threads=1 ;;
             exploration-flow) cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --lib -- --test-threads=1
