@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
-: "${GIL_HARBOR_API_KEY:?missing model credential}" "${TB_ARM:?choose on or off}"
+case "${TB_ARM:?choose a pair arm or submission control}" in
+  on|off) : "${GIL_HARBOR_API_KEY:?missing model credential}"; agent=tb_agent:SoundChangeAgent ;;
+  empty|reference) agent=audit_agent:Replay ;;
+  *) exit 2 ;;
+esac
 base=$(cd "$(dirname "$0")" && pwd)
 root=${RUNNER_TEMP:-/tmp}
 work=$(mktemp -d "$root/tb41.XXXXXXXX")
@@ -17,7 +21,8 @@ sed -i '/^\[environment\]$/a network_mode = "no-network"' "$task/task.toml"
 output="$root/tb41-$TB_ARM"
 mkdir "$output"
 export PYTHONPATH="$base:$base/.."
+if [[ $TB_ARM == reference ]]; then export TB_AUDIT_FIXTURES="$task/tests"; fi
 rc=0
-harbor run --path "$task" --agent-import-path tb_agent:SoundChangeAgent --env docker --agent-timeout-multiplier 0.0625 --jobs-dir "$output" --job-name pair || rc=$?
+harbor run --path "$task" --agent-import-path "$agent" --env docker --agent-timeout-multiplier 0.0625 --jobs-dir "$output" --job-name pair || rc=$?
 python3 "$base/report.py" "$output" "$TB_ARM"
 exit "$rc"

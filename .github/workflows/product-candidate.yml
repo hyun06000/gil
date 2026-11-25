@@ -57,7 +57,7 @@ on:
       harbor_model:
         description: 'Harbor preset: CSV model or paired Terminal-Bench pilot'
         type: choice
-        options: [luna, qwen, terminal-bench-pair]
+        options: [luna, qwen, terminal-bench-pair, terminal-bench-audit]
         default: luna
       unsigned_preview_version:
         description: 'Optional X.Y.Z-preview.N stamp compiled into the Core; no publication or installation'
@@ -419,7 +419,7 @@ jobs:
           retention-days: 7
 
   harbor-benchmark:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.harbor_benchmark && inputs.harbor_model != 'terminal-bench-pair' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.harbor_benchmark && (inputs.harbor_model == 'luna' || inputs.harbor_model == 'qwen') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     steps:
@@ -516,4 +516,28 @@ jobs:
         with:
           name: terminal-bench-dashboard
           path: ${{ runner.temp }}/dashboard
+          retention-days: 7
+
+  submission-audit:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.harbor_benchmark && inputs.harbor_model == 'terminal-bench-audit' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Run empty and reference submissions through the official verifier
+        run: |
+          python3 -m venv "$RUNNER_TEMP/harbor"
+          export PATH="$RUNNER_TEMP/harbor/bin:$PATH"
+          pip install --quiet harbor==0.27.0
+          TB_ARM=empty tools/benchmark/harbor/tb41/run.sh
+          TB_ARM=reference tools/benchmark/harbor/tb41/run.sh
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: submission-audit
+          path: |
+            ${{ runner.temp }}/tb41-empty/empty.json
+            ${{ runner.temp }}/tb41-reference/reference.json
           retention-days: 7

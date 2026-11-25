@@ -85,7 +85,8 @@ def solve(task, plan=""):
     score, errors, edits = evaluate(pairs, best)
     feedback = ""
     tries = 0
-    submit(best)
+    evaluated = 0
+    rejected_finishes = 0
     deadline = float(Path("/work/deadline").read_text())
     while time.time() < deadline - 95:
         offset = (tries * 13) % max(1, len(errors))
@@ -98,7 +99,7 @@ Exact matches: {score}/{len(pairs)}. Sample errors (proto, current prediction, t
 Frequent outstanding edits (source, target), count: {edits.most_common(20)}
 Previous attempt: {feedback}
 Return one JSON object. To test a revised complete list use {{"action":"evaluate","rules":[...]}}.
-To submit the best evaluated list use {{"action":"finish"}}. Improve where evidence supports a rule.
+First evaluate at least one nonempty rule list. To submit the best evaluated list use {{"action":"finish"}}. Improve where evidence supports a rule.
 Finish when further changes have no plausible basis. Output only JSON."""
         answer = ask(prompt)
         tries += 1
@@ -111,20 +112,30 @@ Finish when further changes have no plausible basis. Output only JSON."""
             )
             choice = json.loads(raw)
             if choice.get("action") == "finish":
+                if not best:
+                    rejected_finishes += 1
+                    raise ValueError("No nonempty candidate has been evaluated. Propose a rule from the training errors.")
                 break
             if choice.get("action") != "evaluate":
                 raise ValueError("Choose evaluate or finish")
             rules = validated(choice["rules"])
+            if not rules:
+                raise ValueError("An empty ordering is not a valid submission")
             candidate, misses, remaining = evaluate(pairs, rules)
+            evaluated += 1
             feedback = f"{candidate} correct with proposed list {json.dumps(rules, ensure_ascii=False)}"
-            if candidate > score or (candidate == score and not best and rules):
+            if not best or candidate > score:
                 score, errors, edits, best = candidate, misses, remaining, rules
                 submit(best)
             if score == len(pairs):
                 break
         except (KeyError, ValueError, TypeError, AttributeError) as exc:
             feedback = str(exc)
+    if not best:
+        raise RuntimeError("No valid candidate before the trial deadline")
     observation = {
+        "evaluated": evaluated,
+        "rejected_empty_finishes": rejected_finishes,
         "training_exact": score,
         "training_total": len(pairs),
         "solver_calls": tries,
