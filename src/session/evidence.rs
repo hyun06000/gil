@@ -66,6 +66,8 @@ impl ProjectSession {
         let required_text: &[&str] = match node.kind {
             NodeKind::Question => &["response"],
             NodeKind::Synthesis => &["statement"],
+            NodeKind::Define => &["problem", "success_condition"],
+            NodeKind::Hypothesis => &["hypothesis"],
             _ => &[],
         };
         for &field in required_text {
