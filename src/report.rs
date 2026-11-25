@@ -119,8 +119,10 @@ impl Report {
     /// 값을 조용히 줄이거나 바꾸는 자리는 이 함수 안에 없다.
     pub fn parse(text: &str) -> Result<Report, ReportSyntaxError> {
         let mut report = Report::new();
-        // 열려 있는 이름 마디: (들여쓰기, 여기까지의 이름 앞머리, 자식을 받았는가)
-        let mut names: Vec<(usize, String, bool)> = Vec::new();
+        // 열려 있는 이름 마디: (들여쓰기, 여기까지의 이름 앞머리, 자식을 받았는가, 연 줄)
+        let mut names: Vec<(usize, String, bool, usize)> = Vec::new();
+        // 이미 적힌 칸과 그 줄. 같은 칸이 다시 나오면 앞의 값을 조용히 덮지 않고 거절한다.
+        let mut seen: BTreeMap<String, usize> = BTreeMap::new();
         let mut block: Option<Block> = None;
         let mut blanks = 0;
 
@@ -157,8 +159,8 @@ impl Report {
             }
 
             // ② 얕아진 만큼 이름 마디를 닫는다.
-            while names.last().is_some_and(|(at, _, _)| indent <= *at) {
-                close_name(&mut names, &mut report);
+            while names.last().is_some_and(|(at, _, _, _)| indent <= *at) {
+                close_name(&mut names, &mut report, &mut seen)?;
             }
             if names.is_empty() && indent > 0 {
                 return Err(ReportSyntaxError {
@@ -181,15 +183,16 @@ impl Report {
                     detail: crate::tr!("report.bad_name", name = format!("{name:?}")),
                 });
             }
-            if let Some((_, _, got_child)) = names.last_mut() {
+            if let Some((_, _, got_child, _)) = names.last_mut() {
                 *got_child = true;
             }
-            let prefix = names.last().map(|(_, at, _)| at.as_str()).unwrap_or("");
+            let prefix = names.last().map(|(_, at, _, _)| at.as_str()).unwrap_or("");
             let full = format!("{prefix}{name}");
 
             // 값은 여기서부터 줄 끝까지다. 이 뒤로 아무것도 해석하지 않는다.
             let value = rest.strip_prefix(' ').unwrap_or(rest).trim_end();
             if value == BLOCK {
+                claim(&mut seen, &full, line)?;
                 block = Some(Block {
                     name: full,
                     lines: Vec::new(),
@@ -197,8 +200,9 @@ impl Report {
                     opened_at: indent,
                 });
             } else if value.is_empty() {
-                names.push((indent, format!("{full}."), false));
+                names.push((indent, format!("{full}."), false, line));
             } else {
+                claim(&mut seen, &full, line)?;
                 report.insert(full, value);
             }
         }
@@ -207,17 +211,39 @@ impl Report {
             report.insert(open.name, open.lines.join("\n"));
         }
         while !names.is_empty() {
-            close_name(&mut names, &mut report);
+            close_name(&mut names, &mut report, &mut seen)?;
         }
         Ok(report)
     }
 }
 
 /// 이름 마디를 닫는다. 자식을 하나도 못 받았으면 그건 **빈 값을 적은 칸**이었다.
-fn close_name(names: &mut Vec<(usize, String, bool)>, report: &mut Report) {
-    let (_, prefix, got_child) = names.pop().expect("부르는 쪽이 비지 않은 것을 확인했다");
+fn close_name(
+    names: &mut Vec<(usize, String, bool, usize)>,
+    report: &mut Report,
+    seen: &mut BTreeMap<String, usize>,
+) -> Result<(), ReportSyntaxError> {
+    let (_, prefix, got_child, line) = names.pop().expect("부르는 쪽이 비지 않은 것을 확인했다");
     if !got_child {
-        report.insert(prefix.trim_end_matches('.'), "");
+        let name = prefix.trim_end_matches('.');
+        claim(seen, name, line)?;
+        report.insert(name, "");
+    }
+    Ok(())
+}
+
+/// 칸 하나를 이 줄의 것으로 적는다. 이미 다른 줄에 적힌 칸이면 두 줄을 함께 말하고 거절한다 —
+/// 마지막 값만 남기면 어느 답이 제출됐는지 다음 세션이 알 수 없다.
+fn claim(seen: &mut BTreeMap<String, usize>, name: &str, line: usize) -> Result<(), ReportSyntaxError> {
+    match seen.get(name) {
+        Some(&first) => Err(ReportSyntaxError {
+            line,
+            detail: crate::tr!("report.duplicate_field", name = name, first = first),
+        }),
+        None => {
+            seen.insert(name.to_owned(), line);
+            Ok(())
+        }
     }
 }
 
