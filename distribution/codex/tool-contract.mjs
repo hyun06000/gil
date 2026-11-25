@@ -134,3 +134,51 @@ export function checkExplorationTools(tools, platform = process.platform) {
     }
   }
 }
+
+// The product build: every approved feature in one executable, with two kinds of new project.
+// Checked here: the selection input of gil_start, the tracked-scope preparation and scope tools
+// with their App-only approval boundary, the explicit format-transition pair, and — after those
+// additions are verified and set aside — the unchanged exploration/approved-plan/authoring surface.
+export function checkProductTools(tools, platform = process.platform) {
+  const model = {
+    gil_start_prepare: false, gil_start_status: true, gil_start_cancel: false,
+    gil_scope_propose: false, gil_scope_status: true,
+    gil_format_transition_check: true, gil_format_transition_apply: false,
+  };
+  const app = {
+    gil_start_review: true, gil_start_decide: false, gil_start_apply: false, gil_start_list: true,
+    gil_scope_review: null, gil_scope_decide: false, gil_scope_retry: false, gil_scope_halt: false, gil_scope_release: false,
+  };
+  for (const [name, read] of [...Object.entries(model), ...Object.entries(app)]) {
+    const found = tools.filter(t => t.name === name);
+    assert.equal(found.length, 1, `missing/duplicate ${name}`);
+    const tool = found[0];
+    assert.deepEqual(tool._meta?.ui?.visibility, [Object.hasOwn(app, name) ? 'app' : 'model'], `${name}: approval boundary`);
+    assert.equal(tool.inputSchema.additionalProperties, false, `${name}: closed input`);
+    assert.ok(tool.inputSchema.required.includes(Object.hasOwn(app, name) ? 'scope_id' : 'project_root'), `${name}: addressed by ${Object.hasOwn(app, name) ? 'scope' : 'root'}`);
+    if (read !== null && !name.startsWith('gil_format_transition_')) assert.equal(tool.annotations.readOnlyHint, read, `${name}: read-only hint`);
+    // No model tool carries an approval value: the capability exists only in App-only inputs.
+    if (!Object.hasOwn(app, name)) assert.ok(!Object.keys(tool.inputSchema.properties).includes('token'), `${name}: model tool with a capability input`);
+  }
+  for (const name of ['gil_start_decide', 'gil_start_apply', 'gil_scope_decide', 'gil_scope_retry', 'gil_scope_release']) {
+    assert.ok(tools.find(t => t.name === name).inputSchema.required.includes('token'), `${name}: requires the App capability`);
+  }
+  const rest = structuredClone(tools.filter(t => !Object.hasOwn(model, t.name) && !Object.hasOwn(app, t.name)));
+  const start = rest.find(t => t.name === 'gil_start');
+  assert.ok(start, 'gil_start');
+  const kind = start.inputSchema.properties.start_kind;
+  assert.deepEqual(kind?.enum, ['tracked_scope', 'image_reports'], 'both kinds of new project are selectable');
+  assert.equal(kind.type, 'string');
+  assert.deepEqual(start.inputSchema.required, ['project_root'], 'the selection is explicit input, not a schema default');
+  assert.equal(start.outputSchema, undefined, 'one tool answers a preparation or a receipt');
+  for (const hidden of ['format 9', 'format 10', 'format 11', 'tracking-policy', 'visual-authoring', 'exploration-flow']) {
+    assert.ok(!start.description.includes(hidden), `gil_start description exposes ${hidden}`);
+  }
+  delete start.inputSchema.properties.start_kind;
+  const close = rest.find(t => t.name === 'gil_close');
+  const unachieved = close.inputSchema.properties.unachieved_will;
+  assert.deepEqual({type: unachieved?.type, pattern: unachieved?.pattern}, {type: 'string', pattern: '^will:W[1-9][0-9]*$'},
+    'the unachieved end names one canonical Will');
+  if (!Object.hasOwn(authoring.close.properties ?? {}, 'unachieved_will')) delete close.inputSchema.properties.unachieved_will;
+  checkExplorationTools(rest, platform);
+}

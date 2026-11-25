@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {ARCHIVE_FLAGS, CLAUDE_MANIFEST, CORE, MANIFEST, hash, inventory, verifyPayload, verifyTree} from './artifact.mjs';
 import {compareVersion, validateRecord} from './update-policy.mjs';
 import {smoke} from './smoke.mjs';
-import {compatibility, developmentFeatures} from './compatibility.mjs';
+import {compatibility, developmentFeatures, startKinds} from './compatibility.mjs';
 
 const json = value => JSON.stringify(value, null, 2) + '\n';
 const sourceKeys = ['dirty', 'files', 'head', 'snapshot_sha256'];
@@ -42,6 +42,20 @@ Older approved-plan runtimes REFUSE exploration-marked records, even within form
 Downgrading the Plugin does not downgrade records; keep the exploration runtime for these test projects.
 No automatic requirement completion or provisional-answer store. Human closing approval remains required.
 Closed failure revisit requires the Monitor preservation-and-recovery button; general restore and Step revisit remain blocked.
+` : profile === 'product' ? `
+PRODUCT build: one executable with every currently approved feature; action surface 2, readable storage formats 4..11.
+A NEW project is one of two kinds, chosen by the user and never converted later:
+- tracked scope: the user approves the exact .gilignore in the GIL Monitor before anything is archived, and can
+  change the scope later with the same approval. Reports cannot hold image attachments; restoring or revisiting
+  work files is refused in such a project. New records use format 10.
+- image reports: reports can hold PNG visuals. Created at once on verified private local storage, observing the
+  whole folder; no tracked-scope approval. New records use format 9.
+No start writes format 11. Existing projects keep the kind and storage they were started with and are NOT
+automatically converted; format transitions stay explicit and per project. Older runtimes REFUSE these records,
+and downgrading the Plugin does not downgrade them: keep this runtime for projects it started.
+Approved plans, requirement-linked Experiments and original record reads are included. Human approval in the
+Monitor remains required where the contract says so; chat is never approval. Closed failure revisit requires the
+Monitor preservation-and-recovery button in an image-report project; general restore and Step revisit remain blocked.
 ` : profile === 'approved-plan' ? `
 EXPERIMENTAL approved-plan + visual-authoring; action surface 2, readable storage formats 4..7.
 New projects use a Chain and Monitor-approved plan (format 7). Existing records are NOT automatically converted.
@@ -80,11 +94,14 @@ export async function verifyUnsignedTree(root) {
   assert.ok([2, 3].includes(receipt.schema));
   assert.deepEqual(Object.keys(receipt).sort(), ['binary_origin', 'channel', 'files', 'platform', 'plugin',
     'publishable', 'schema', 'source', 'trust', 'version',
-    ...(receipt.schema === 3 ? ['runtime_profile', 'compatibility', 'migration'] : [])].sort());
+    ...(receipt.schema === 3 ? ['runtime_profile', 'compatibility', 'migration'] : []),
+    // Only the product build starts two kinds of new project; its receipt states what each one writes.
+    ...(receipt.schema === 3 && receipt.runtime_profile === 'product' ? ['start_kinds'] : [])].sort());
   if (receipt.schema === 3) {
-    assert.ok(['visual-authoring', 'approved-plan', 'exploration-flow'].includes(receipt.runtime_profile));
+    assert.ok(['visual-authoring', 'approved-plan', 'exploration-flow', 'product'].includes(receipt.runtime_profile));
     assert.deepEqual(receipt.compatibility, compatibility(receipt.runtime_profile));
     assert.equal(receipt.migration, 'requires_review');
+    assert.deepEqual(receipt.start_kinds, startKinds(receipt.runtime_profile), 'receipt and profile disagree on the kinds of new project');
   }
   assert.equal(receipt.channel, 'preview_unsigned');
   assert.equal(receipt.publishable, false, 'staging does not authorize publication');
@@ -124,6 +141,7 @@ export async function stageUnsigned({input, output, version, profile = 'default'
   const receipt = {schema: profile === 'default' ? 2 : 3, channel: 'preview_unsigned', publishable: false,
     ...(profile === 'default' ? {} : {runtime_profile: profile,
       compatibility: compatibility(profile), migration: 'requires_review'}),
+    ...(startKinds(profile) ? {start_kinds: startKinds(profile)} : {}),
     platform: before.platform, plugin: before.plugin, version, source: before.source,
     binary_origin: 'preserved_from_verified_development_tree; CI provenance review still required',
     trust: {...TRUST}, files: await inventory(output)};
@@ -185,13 +203,13 @@ export async function main(args = process.argv.slice(2)) {
     if (args.length === 2 && args[0] === 'verify') {
       const receipt = await verifyUnsignedTree(resolve(args[1]));
       console.log(json({integrity: 'passed', channel: receipt.channel, version: receipt.version, publishable: false}));
-    } else if ((args.length === 4 || (args.length === 5 && ['--visual-authoring', '--approved-plan', '--exploration-flow'].includes(args[4]))) && args[0] === 'prepare') {
+    } else if ((args.length === 4 || (args.length === 5 && ['--visual-authoring', '--approved-plan', '--exploration-flow', '--product'].includes(args[4]))) && args[0] === 'prepare') {
       const result = await prepare({input: resolve(args[1]), version: args[2], output: resolve(args[3]),
         profile: args.length === 5 ? args[4].slice(2) : 'default'});
       console.log(json({channel: result.channel, version: result.version, publishable: false,
         archive_sha256: result.archive_sha256, tools: result.smoke.tools}));
     } else {
-      console.error('Usage: unsigned-preview.mjs prepare <reviewed-tree> <X.Y.Z-preview.N> <new-output> [--visual-authoring|--approved-plan|--exploration-flow] | verify <tree>');
+      console.error('Usage: unsigned-preview.mjs prepare <reviewed-tree> <X.Y.Z-preview.N> <new-output> [--visual-authoring|--approved-plan|--exploration-flow|--product] | verify <tree>');
       return 2;
     }
     return 0;

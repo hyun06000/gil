@@ -49,7 +49,7 @@ impl Rig {
         let c = Client::serve(&settings);
         let record = product_state_path(&root, &private_local_app_data(&settings));
         let mut r = Rig { root, record, settings, scope: String::new(), c, last_close: String::new() };
-        ok(r.model("gil_start", json!({})), "start");
+        ok(r.model("gil_start", direct_start()), "start");
         r.prepare();
         r
     }

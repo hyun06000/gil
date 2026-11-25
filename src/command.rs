@@ -117,7 +117,11 @@ fn run(ctx: &Invocation<'_>, args: &[String]) -> Result<String, String> {
         }
         "context" => {
             let session = open_session(ctx)?;
-            Ok(format!("{}{}", context(session.project()), crate::project_resume::status(&session.root().map_err(say)?)))
+            let root = session.root().map_err(say)?;
+            // A CLI process starts in the default language; the resumed Project's remembered
+            // language decides how it is described, as it already does for the MCP call.
+            Ok(crate::locale::with(crate::locale::for_project(&root), ||
+                format!("{}{}", context(session.project()), crate::project_resume::status(&root))))
         }
         "monitor" => monitor(ctx, args.get(1)),
         "mcp" => mcp(args.get(1).map(String::as_str)),
@@ -259,6 +263,11 @@ fn say(err: SessionError) -> String {
 // ── 명령 ───────────────────────────────────────────────────────────────────
 
 fn start(ctx: &Invocation<'_>) -> Result<String, String> {
+    // tracking-policy 개발 구성: 최초 시작은 Monitor 승인을 거치는 준비 경로뿐이다(CLI 에는 Monitor 가 없다).
+    // 기존 전체 관측 시작으로 물러서지 않는다.
+    if cfg!(feature = "tracking-policy") {
+        return Err(text("cmd.start_tracking_monitor_only").into());
+    }
     // 위에 이미 기록이 있으면 여기서 새로 시작하지 않는다 — 그러면 한 프로젝트에
     // 기록이 둘이 되고, 어느 쪽에 적히는지는 서 있는 자리가 정하게 된다.
     match find_gil(ctx)? {
@@ -355,7 +364,7 @@ pub(crate) fn start_visual_action(root: &Path) -> Result<String, String> {
 
 /// Safe post-start inspection: no recovery, temporary-object reaping, or bootstrap lock.
 #[cfg(feature = "visual-authoring")]
-pub(crate) fn visual_read_action(root: &Path, command: &str) -> Result<String, String> {
+fn visual_read_session(root: &Path) -> Result<crate::ReadOnlySession, String> {
     #[cfg(windows)]
     let state = crate::project_state::state_for_root(root)?;
     #[cfg(not(windows))]
@@ -377,11 +386,27 @@ pub(crate) fn visual_read_action(root: &Path, command: &str) -> Result<String, S
     #[cfg(not(windows))]
     let session = ProjectSession::open_read_only(rules()?, &state)
         .map_err(|e| e.to_string())?;
+    Ok(session)
+}
+
+#[cfg(feature = "visual-authoring")]
+pub(crate) fn visual_read_action(root: &Path, command: &str) -> Result<String, String> {
+    let session = visual_read_session(root)?;
     match command {
         "status" => Ok(session.status_said()),
         "context" => Ok(format!("{}{}", context(session.project()), crate::project_resume::status(root))),
         _ => Err(text("cmd.visual.read_disallowed").into()),
     }
+}
+
+/// Both parts describe the same loaded revision, using the usual profile-specific read boundary.
+pub(crate) fn headless_context(root: &Path) -> Result<(String, String), String> {
+    #[cfg(feature = "visual-authoring")]
+    let session = visual_read_session(root)?;
+    #[cfg(not(feature = "visual-authoring"))]
+    let session = open_session(&Invocation { root: Root::Exact(root), input: Input::Body("") })?;
+    let project = session.project();
+    Ok((format!("{}{}", context(project), crate::project_resume::status(root)), crate::context::next_call(project)))
 }
 
 fn start_receipt(ctx: &Invocation<'_>, session: &ProjectSession) -> String {

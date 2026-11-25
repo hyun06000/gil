@@ -23,6 +23,30 @@ const START_SHAPE: &str = if cfg!(feature = "will-end-history") {
     "Cycles with the visual registry"
 };
 
+pub fn connection_tools(headless: bool) -> &'static [Tool] {
+    if !headless { return tools(); }
+    static HEADLESS: OnceLock<Vec<Tool>> = OnceLock::new();
+    HEADLESS.get_or_init(|| {
+        let mut catalog = tools().to_vec();
+        for tool in &mut catalog {
+            if !matches!(tool.name.as_ref(), "gil_start" | "gil_context") { continue; }
+            if let Some(schema) = &mut tool.output_schema {
+                let properties = std::sync::Arc::make_mut(schema).get_mut("properties").expect("receipt properties");
+                properties["next_action"] = json!({"type":"string","description":"Recorded next step or wait in a headless session."});
+            }
+            if tool.name == "gil_start" {
+                let kind = if super::start_kind::HAS_TRACKED && super::start_kind::HAS_IMAGES {
+                    " Choose start_kind explicitly on a new project: tracked_scope prepares a scope requiring the human's approval; image_reports creates an image-report project."
+                } else if super::start_kind::HAS_TRACKED {
+                    " Prepares tracked scope; the human must approve before the first archive."
+                } else { "" };
+                tool.description = Some(format!("Start the selected absolute project_root. The runner selected headless display. Follow the recorded next step; an approval or answer must still be supplied by its authorized source.{kind}").into());
+            }
+        }
+        catalog
+    })
+}
+
 pub fn tools() -> &'static [Tool] {
     static TOOLS: OnceLock<Vec<Tool>> = OnceLock::new();
     TOOLS.get_or_init(|| {
@@ -35,7 +59,7 @@ pub fn tools() -> &'static [Tool] {
             let tools = super::workspace::catalog(tools);
             let mut tools = tools;
             if let Some(start) = tools.iter_mut().find(|t| t.name == "gil_start") {
-                start.description = Some(format!("Development image-report creation: creates format {} ({}) {}", crate::store::newest_known_format(), START_SHAPE, "on verified private storage (macOS Apple Silicon; Windows private app data). Requires the user's explicitly selected absolute project_root. On Windows the working folder may remain in OneDrive: GIL records are kept separately under the current user's local app data, while file observation still targets project_root. An existing inline Windows record is copied byte-for-byte to that private store and verified before publication; the inline source is never changed or deleted. Success commits one Interview, zero Steps; does not open or confirm the Monitor. Unsupported platforms refuse, never fall back to format 4. Migrating existing format-4 records stays macOS-only.").into());
+                start.description = Some(format!("Development image-report creation: creates format {} ({}) {}", crate::store::newest_known_format(), START_SHAPE, "on verified private storage (macOS Apple Silicon; Linux x86-64 on a listed local filesystem: ext4, XFS, Btrfs, tmpfs, overlayfs; Windows private app data). Requires the user's explicitly selected absolute project_root. On Windows the working folder may remain in OneDrive: GIL records are kept separately under the current user's local app data, while file observation still targets project_root. An existing inline Windows record is copied byte-for-byte to that private store and verified before publication; the inline source is never changed or deleted. Success commits one Interview, zero Steps; does not open or confirm the Monitor. Unsupported platforms refuse, never fall back to format 4. Migrating existing format-4 records stays macOS-only.").into());
             }
             tools
         };
@@ -47,11 +71,17 @@ pub fn tools() -> &'static [Tool] {
         let tools = super::recovery::catalog(tools);
         #[cfg(feature = "will-end-history")]
         let tools = super::transition::catalog(unachieved_close(tools));
+        #[cfg(all(feature = "tracking-policy", unix))]
+        let tools = super::scope::catalog(super::start::catalog(tools));
+        // After both start descriptions: the selection input and, with two kinds, one description of both.
+        let tools = super::start_kind::catalog(tools);
         let mut tools = tools;
         tools.push(serde_json::from_str(include_str!("handoff-tool.json")).expect("handoff tool"));
         for tool in &mut tools {
             let hint = match tool.name.as_ref() {
                 "gil_context" => " Read the existing selected GIL project before file-producing tools in every new session, including requests to add charts to an existing report without saying GIL. Resume its actual plan and Step; do not append a new objective to an old Verify or repeat start. This read does not install project instructions or change Snapshots.",
+                "gil_start" if super::start_kind::HAS_TRACKED && super::start_kind::HAS_IMAGES => " Either kind adds local Codex/Claude continuity instructions while preserving existing bytes (before any proposal, or before the initial Snapshot); no Host hooks.",
+                "gil_start" if cfg!(all(feature = "tracking-policy", unix)) => " Preparation adds local Codex/Claude continuity instructions while preserving existing bytes, before any proposal; no Host hooks.",
                 "gil_start" => " Start adds local Codex/Claude continuity instructions while preserving existing bytes, before the initial Snapshot; no Host hooks. It also prepares the Monitor; the receipt names the exact show_gil_monitor({scope_id}) call, which is the only next call on every Host, before the first gil_open. Never repeat start after display failure.",
                 "gil_open" => " Choose one independently checkable objective and observable done_when. Perform it, then gil_close before another objective. Creating, modifying, deleting, moving or importing project Artifact files requires an actually open Experiment Verify, including DOCX/PDF/PNG generation and rendering. All other stages keep project files unchanged. GIL deliverables default to project_root during Verify, including scripts and renders; never choose scratchpad to evade an unfinished stage. Only when external creation is necessary, explain why and where before writing, explicitly disclose that GIL does not track those files, and do not claim them as GIL-verified delivery. Unrelated outside work and file-free web research remain allowed. An Interview Outcome judges the approved scope, not completion of the whole project.",
                 "gil_close" => " Call when done_when is met. Verify additionally requires actual saved evidence: Report.evidence_files lists project-relative paths, one per line. All must be nonempty Snapshot files; at least one must be new or changed. Chat-only results and visual not_needed/missing do not waive this. Visual evidence is a PNG of the real result (code-drawn plot or diagram, headless/ordinary browser screenshot, before/after table); AI-generated pictures never count. In visual-format projects a Verify that saved an image as evidence cannot declare not_needed, a one-word reason is refused, and Analysis and the Experiment Cycle Report must cite at least one asset the Verify attached. Analysis requires a nonblank interpretation; Outcome a nonblank lesson. Core links them to their actual evidence lineage. Follow the next receipt before more work.",
@@ -120,6 +150,10 @@ pub fn valid_input(tool: &Tool, input: &Value) -> bool {
     }
     #[cfg(feature = "product-safety")]
     if tool.name.starts_with("gil_revisit_") { return super::recovery::valid(tool.name.as_ref(), input); }
+    #[cfg(all(feature = "tracking-policy", unix))]
+    if super::start::NAMES.contains(&tool.name.as_ref()) { return super::start::valid(tool.name.as_ref(), input); }
+    #[cfg(all(feature = "tracking-policy", unix))]
+    if super::scope::NAMES.contains(&tool.name.as_ref()) { return super::scope::valid(tool.name.as_ref(), input); }
     #[cfg(feature = "approved-plan")]
     if tool.name.starts_with("gil_plan_") { return super::plans::valid(tool.name.as_ref(), input); }
     #[cfg(feature = "exploration-flow")]

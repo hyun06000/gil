@@ -6,15 +6,16 @@ impl ProjectSession {
     /// Unlike `start`, success is already committed. Any existing `.gil` entry is refused,
     /// including an empty directory or remnants of an interrupted attempt. Errors may leave
     /// partial storage or a fully published state: preserve it and inspect read-only; do not retry.
-    /// macOS Apple Silicon and Windows local fixed NTFS only until native publication is
-    /// verified on other platforms (Windows contract v0.1 §4 W1).
+    /// macOS Apple Silicon, Linux x86-64 (the listed local filesystems, see `reserve`) and Windows
+    /// local fixed NTFS only until native publication is verified on other platforms
+    /// (Windows contract v0.1 §4 W1).
     pub fn start_visual(rules: RuleSet, root: impl AsRef<Path>) -> Result<Self, SessionError> {
-        #[cfg(any(all(target_os = "macos", target_arch = "aarch64"), windows))]
+        #[cfg(any(all(target_os = "macos", target_arch = "aarch64"), all(target_os = "linux", target_arch = "x86_64"), windows))]
         {
             let root = root.as_ref();
             create(rules, root, root, true, &mut |_| Ok(()))
         }
-        #[cfg(not(any(all(target_os = "macos", target_arch = "aarch64"), windows)))]
+        #[cfg(not(any(all(target_os = "macos", target_arch = "aarch64"), all(target_os = "linux", target_arch = "x86_64"), windows)))]
         {
             let _ = (rules, root);
             Err(SessionError::Action(ActionError::Visual(
@@ -35,7 +36,7 @@ impl ProjectSession {
     }
 }
 
-#[cfg(any(all(target_os = "macos", target_arch = "aarch64"), windows))]
+#[cfg(any(all(target_os = "macos", target_arch = "aarch64"), all(target_os = "linux", target_arch = "x86_64"), windows))]
 fn create(
     rules: RuleSet,
     root: &Path,
@@ -48,14 +49,14 @@ fn create(
 
 impl ProjectSession {
     pub(crate) fn start_visual_guided(rules: RuleSet, root: &Path, storage_root: &Path) -> Result<Self, SessionError> {
-        #[cfg(any(all(target_os = "macos", target_arch = "aarch64"), windows))]
+        #[cfg(any(all(target_os = "macos", target_arch = "aarch64"), all(target_os = "linux", target_arch = "x86_64"), windows))]
         { create_inner(rules, root, storage_root, cfg!(not(windows)), &mut |_| Ok(()), true) }
-        #[cfg(not(any(all(target_os = "macos", target_arch = "aarch64"), windows)))]
+        #[cfg(not(any(all(target_os = "macos", target_arch = "aarch64"), all(target_os = "linux", target_arch = "x86_64"), windows)))]
         { let _ = storage_root; Self::start_visual(rules, root) }
     }
 }
 
-#[cfg(any(all(target_os = "macos", target_arch = "aarch64"), windows))]
+#[cfg(any(all(target_os = "macos", target_arch = "aarch64"), all(target_os = "linux", target_arch = "x86_64"), windows))]
 fn create_inner(rules: RuleSet, root: &Path, storage_root: &Path, _check_working_location: bool,
     checkpoint: &mut impl FnMut(&str) -> std::io::Result<()>, guidance: bool,
 ) -> Result<ProjectSession, SessionError> {
@@ -79,7 +80,7 @@ fn create_inner(rules: RuleSet, root: &Path, storage_root: &Path, _check_working
     }
     #[cfg(windows)]
     let reserved = reserve::Reserved::take(storage_root, _check_working_location).map_err(error)?;
-    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[cfg(not(windows))]
     let reserved = reserve::Reserved::take(storage_root).map_err(error)?;
     let gil = reserved.root.join(".gil");
     let identity = || reserved.identity();
@@ -90,6 +91,16 @@ fn create_inner(rules: RuleSet, root: &Path, storage_root: &Path, _check_working
     let state_path = gil.join("state.yaml");
     identity().map_err(error)?;
     initializable(&gil, &state_path)?;
+    // The entry reserved above was created empty by this call. In a build that also holds the
+    // tracked-scope preparation, that preparation may have begun here between the reservation and
+    // this lock (its request saw an empty folder). It is a record of the other kind: refuse and
+    // leave it exactly as it is. A build without that start is unchanged.
+    #[cfg(all(feature = "tracking-policy", unix))]
+    if std::fs::symlink_metadata(gil.join(crate::start_prep::PREP_DIR)).is_ok() {
+        return Err(error(std::io::Error::other(
+            "예약한 .gil 에 추적 범위 시작 준비가 먼저 기록됐다. 이미지 프로젝트를 만들지 않고 그 기록을 그대로 둔다",
+        )));
+    }
     let objects = ObjectStore::owner_only(&gil);
     if guidance { crate::project_resume::ensure(&root); }
     let world = capture(&root, &objects)?;
@@ -118,8 +129,10 @@ fn create_inner(rules: RuleSet, root: &Path, storage_root: &Path, _check_working
 }
 
 /// The reserved `.gil` entry plus the identity checks that guard the rest of creation.
-/// macOS: local mount, `mkdirat` reservation, no-follow descriptor, dev/ino identity.
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+/// macOS and Linux: local storage check, `mkdirat` reservation, no-follow descriptor, dev/ino
+/// identity. Only the storage check differs by platform; Linux has no `MNT_LOCAL`, so it is not
+/// borrowed from macOS.
+#[cfg(any(all(target_os = "macos", target_arch = "aarch64"), all(target_os = "linux", target_arch = "x86_64")))]
 mod reserve {
     use std::os::fd::{AsRawFd, FromRawFd};
     use std::os::unix::fs::MetadataExt;
@@ -140,16 +153,7 @@ mod reserve {
             if !parent.metadata()?.is_dir() {
                 return Err(std::io::Error::other("프로젝트 폴더가 아니다"));
             }
-            let mut filesystem = std::mem::MaybeUninit::<libc::statfs>::uninit();
-            if unsafe { libc::fstatfs(parent.as_raw_fd(), filesystem.as_mut_ptr()) } < 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            if unsafe { filesystem.assume_init() }.f_flags & (libc::MNT_LOCAL as u32) == 0 {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Unsupported,
-                    "이미지 프로젝트 생성은 로컬 파일 시스템에서만 검수됐다",
-                ));
-            }
+            local_storage(&parent)?;
             if unsafe { libc::mkdirat(parent.as_raw_fd(), c".gil".as_ptr(), 0o700) } < 0 {
                 return Err(std::io::Error::last_os_error());
             }
@@ -165,6 +169,14 @@ mod reserve {
             }
             let dir = unsafe { std::fs::File::from_raw_fd(fd) };
             let reserved = dir.metadata()?;
+            // Linux: the entry this call created must be the caller's and closed to group/other.
+            // A mismatch refuses and leaves the (empty) entry as it is; nothing is removed by name.
+            #[cfg(target_os = "linux")]
+            if !reserved.is_dir() || reserved.uid() != unsafe { libc::geteuid() } || reserved.mode() & 0o077 != 0 {
+                return Err(std::io::Error::other(
+                    "생성한 .gil 이 소유자 전용으로 확인되지 않아 그대로 두고 거절했다",
+                ));
+            }
             Ok(Self { root, parent, _dir: dir, dev: reserved.dev(), ino: reserved.ino() })
         }
         pub(super) fn identity(&self) -> std::io::Result<()> {
@@ -184,6 +196,41 @@ mod reserve {
         pub(super) fn sync_parent(&self) -> std::io::Result<()> {
             self.parent.sync_all()
         }
+    }
+
+    /// macOS: the mount holding the selected folder must be local (`MNT_LOCAL`).
+    #[cfg(target_os = "macos")]
+    fn local_storage(parent: &std::fs::File) -> std::io::Result<()> {
+        let mut filesystem = std::mem::MaybeUninit::<libc::statfs>::uninit();
+        if unsafe { libc::fstatfs(parent.as_raw_fd(), filesystem.as_mut_ptr()) } < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        if unsafe { filesystem.assume_init() }.f_flags & (libc::MNT_LOCAL as u32) == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "이미지 프로젝트 생성은 로컬 파일 시스템에서만 검수됐다",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Linux has no local-mount flag. The selected folder must sit on one of the filesystems
+    /// named here — an allow-list, read from the held descriptor, of local filesystems whose
+    /// no-replace rename, directory identity and `fsync` this creation relies on. Every other
+    /// type (network, FUSE, FAT-family, unknown) refuses before anything is created; nothing
+    /// falls back to a weaker publication. The list is a support scope, not a durability claim.
+    #[cfg(target_os = "linux")]
+    fn local_storage(parent: &std::fs::File) -> std::io::Result<()> {
+        crate::internal_fs::listed_local_filesystem(parent).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::Unsupported {
+                std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "이미지 프로젝트 생성은 검수 대상 로컬 파일 시스템(ext4·XFS·Btrfs·tmpfs·overlayfs)에서만 진행한다",
+                )
+            } else {
+                e
+            }
+        })
     }
 }
 
@@ -311,7 +358,7 @@ mod reserve {
     }
 }
 
-#[cfg(all(test, target_os = "macos", target_arch = "aarch64"))]
+#[cfg(all(test, any(all(target_os = "macos", target_arch = "aarch64"), all(target_os = "linux", target_arch = "x86_64"))))]
 #[path = "visual_start_tests.rs"]
 mod tests;
 #[cfg(all(test, windows))]

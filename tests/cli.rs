@@ -219,6 +219,32 @@ fn starting_twice_does_not_wipe_what_was_written() {
     assert!(told.contains("이야기가 설명 없이 읽히는가"), "적은 것이 사라졌다");
 }
 
+/// `gil context` 는 이어받는 Project 가 기억한 언어로 말한다 (#234). 루트에서도 그 아래
+/// 폴더에서도 같고, 읽기만 하므로 기록과 언어 설정은 그대로다. 기억이 없으면 기본 언어다.
+#[test]
+fn context_speaks_the_language_the_project_remembers() {
+    use gil::{Locale, locale::text_in};
+    for (tag, locale) in [("en", Locale::En), ("ja", Locale::Ja)] {
+        let dir = scratch(&format!("context-locale-{tag}"));
+        ok(&dir, &["start"], None);
+        let memory = dir.join(".gil").join(gil::locale::MEMORY_FILE);
+        std::fs::write(&memory, format!("{{\"schema_version\":1,\"start\":\"{tag}\"}}")).unwrap();
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        let before = (std::fs::read(dir.join(gil::STATE_PATH)).unwrap(), std::fs::read(&memory).unwrap());
+        for at in [dir.clone(), dir.join("src")] {
+            let told = ok(&at, &["context"], None);
+            assert!(told.contains(text_in(locale, "context.next_call_heading")), "{tag} {at:?}: {told}");
+            assert!(told.contains(text_in(locale, "ctx.resume.heading").trim()), "{tag} {at:?}: {told}");
+            assert!(!told.contains(text_in(Locale::Ko, "context.next_call_heading")), "{tag}: no Korean heading: {told}");
+        }
+        assert_eq!((std::fs::read(dir.join(gil::STATE_PATH)).unwrap(), std::fs::read(&memory).unwrap()), before, "{tag}: reading changed nothing");
+    }
+    // Without a remembered language the default (Korean) stays.
+    let dir = scratch("context-locale-default");
+    ok(&dir, &["start"], None);
+    assert!(ok(&dir, &["context"], None).contains(text_in(Locale::Ko, "context.next_call_heading")));
+}
+
 #[test]
 fn there_is_nothing_to_read_before_there_is_a_walk() {
     // 아직 시작하지 않은 것과 망가진 것은 다르다 — 그리고 무엇을 하면 되는지 말해야 한다.
@@ -381,6 +407,45 @@ fn walk_to_a_revisit(dir: &Path) {
              next_direction:\n  action: revisit\n  target_node_ref: step:C2/S4\n  reason: 가설부터 다시\n",
         ),
     );
+}
+
+/// 빈 `response` 는 사용자의 답이 아니다 (#245). 새 Question 닫기는 빈 값과 공백뿐인 값을 거절하고
+/// 기록을 그대로 둔다. 실제 답을 넣으면 같은 Question 이 닫힌다.
+#[test]
+fn a_question_does_not_close_on_an_empty_response() {
+    let dir = scratch("cli-empty-response");
+    ok(&dir, &["start"], None);
+    open_action(&dir, "question");
+    let before = std::fs::read(dir.join(gil::STATE_PATH)).unwrap();
+    for empty in ["response:\n", "response:    \n", "response: \t　\n"] {
+        let said = refused(&dir, &["close"], Some(&format!("question: 어느 표본인가\nchoices: A / B\n{empty}")));
+        assert!(said.contains("response") && said.contains("비워 둘 수 없다"), "{empty:?}: {said}");
+        assert!(said.contains("step:C1/S1"), "the refusal names the still-open Question: {said}");
+        assert_eq!(std::fs::read(dir.join(gil::STATE_PATH)).unwrap(), before, "{empty:?}: nothing was closed");
+    }
+    let closed = ok(&dir, &["close"], Some("question: 어느 표본인가\nchoices: A / B\nresponse: A\n"));
+    assert!(closed.contains("step:C1/S1"), "{closed}");
+}
+
+/// 이미 빈 `response` 로 저장된 Question 은 그대로 읽힌다 — 새 쓰기 규칙이 옛 기록을 무효로
+/// 만들지 않는다. 이어서 Interpretation 을 열 수 있다.
+#[test]
+fn a_question_stored_with_an_empty_response_stays_readable() {
+    use gil::{CycleKind, NodeKind};
+    let dir = scratch("cli-stored-empty-response");
+    ok(&dir, &["start"], None);
+    let path = dir.join(gil::STATE_PATH);
+    let mut project = gil::load(common::spec(), &path).unwrap();
+    common::opened(&mut project, NodeKind::Question);
+    // The domain API is not the user-facing close; it stands in for a record an older build wrote.
+    project.close_action_step(common::full_report(&common::spec(), CycleKind::Interview, NodeKind::Question).with("response", "")).unwrap();
+    gil::save(&project, &path).unwrap();
+    let stored = std::fs::read(&path).unwrap();
+    assert!(String::from_utf8_lossy(&stored).contains("response: ''"), "fixture stores an empty response");
+    ok(&dir, &["status"], None);
+    ok(&dir, &["context"], None);
+    assert_eq!(std::fs::read(&path).unwrap(), stored, "reading changed nothing");
+    assert!(open_action(&dir, "interpretation").contains("step:C1/S2"));
 }
 
 #[test]

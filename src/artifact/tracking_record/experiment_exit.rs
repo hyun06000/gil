@@ -127,9 +127,9 @@ struct Located {
     exit: SnapshotRef,
 }
 
-/// 대상을 소유한 체인에서 T 를 읽는다 — 체인 이름([`Chain::id`])·사이클 목록·종류·닫힘·Exit 만 읽는다. 소유 규칙은 P(T) 의 것과 같고
-/// 첫 항목을 고르지 않는다.
-fn locate(target: CycleRef, chains: &[Chain]) -> Result<Located, ExperimentExitProblem> {
+/// 건넨 목록에서 대상을 소유한 유일한 체인과 그 사이클 — 체인 이름([`Chain::id`])과 사이클 목록만 읽는다. 소유 규칙은 P(T) 의 것과
+/// 같고 첫 항목을 고르지 않는다. 같은 디렉터리의 Exit 계보 검사([`super::exit_lineage`])도 이 조회를 그대로 쓴다.
+pub(super) fn owned_cycle(target: CycleRef, chains: &[Chain]) -> Result<(ChainRef, &Cycle), TargetProblem> {
     let owners: Vec<(ChainRef, &Cycle)> = chains
         .iter()
         .filter_map(|chain| {
@@ -137,17 +137,23 @@ fn locate(target: CycleRef, chains: &[Chain]) -> Result<Located, ExperimentExitP
         })
         .collect();
     let (chain, cycle) = match owners.as_slice() {
-        [] => return Err(ExperimentExitProblem::Target(TargetProblem::NotFound { cycle: target })),
+        [] => return Err(TargetProblem::NotFound { cycle: target }),
         [(owner, cycle)] => (*owner, *cycle),
         _ => {
             let chains = owners.iter().map(|(chain, _)| *chain).collect();
-            return Err(ExperimentExitProblem::Target(TargetProblem::SeveralOwners { cycle: target, chains }));
+            return Err(TargetProblem::SeveralOwners { cycle: target, chains });
         }
     };
     let count = chains.iter().filter(|other| other.id() == chain).count();
     if count != 1 {
-        return Err(ExperimentExitProblem::Target(TargetProblem::OwnerChainRepeated { cycle: target, chain, count }));
+        return Err(TargetProblem::OwnerChainRepeated { cycle: target, chain, count });
     }
+    Ok((chain, cycle))
+}
+
+/// 대상을 소유한 체인에서 T 를 읽는다 — [`owned_cycle`] 의 소유 조회 뒤 종류·닫힘·Exit 만 읽는다.
+fn locate(target: CycleRef, chains: &[Chain]) -> Result<Located, ExperimentExitProblem> {
+    let (chain, cycle) = owned_cycle(target, chains).map_err(ExperimentExitProblem::Target)?;
     match cycle.kind() {
         CycleKind::Interview => return Err(ExperimentExitProblem::InterviewOutOfScope { cycle: target, chain }),
         CycleKind::Experiment => {}
