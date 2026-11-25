@@ -58,8 +58,10 @@ class InterviewTests(unittest.TestCase):
             report = participant.reply(request("synthesis", [q, i]))["report"]
             self.assertIn("benchmark_revise", report)
             self.assertTrue(all("Round trip untested" in c.args[0] for c in model.call_args_list[1:]))
-        with patch.object(participant, "ask", side_effect=["continue interview", "Clarify gap", "Pending"]) as model:
-            participant.reply(request("question", [q, i, step("synthesis", statement="Draft roadmap", approved="benchmark_revise")]))
+        with patch.object(participant, "ask", side_effect=["read contract.txt", "Clarify gap", "Pending"]) as model:
+            model.call_id = "fixture"
+            with patch.object(participant, "record"):
+                participant.reply(request("question", [q, i, step("synthesis", statement="Draft roadmap", approved="benchmark_revise")]))
             self.assertIn("Round trip untested", model.call_args_list[0].args[0])
             self.assertIn("Draft roadmap", model.call_args_list[0].args[0])
 
@@ -69,9 +71,11 @@ class InterviewTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             log = Path(directory)
             with patch.object(mailbox_client, "MAIL", log), patch.object(participant, "MAIL", log):
-                with patch.object(participant, "ask", side_effect=["read codec.cpp", "read codec.cpp", "Question", "Answer"]) as model:
+                with patch.object(participant, "ask", side_effect=["read codec.cpp", "read codec.cpp", "codec.cpp (byte 6000)", "Question", "Answer"]) as model:
                     model.call_id = "fixture"
-                    participant.reply(request("question", []))
+                    report = participant.reply(request("question", []))["report"]
+                    self.assertNotIn("continue interview", model.call_args_list[0].args[1])
+                    self.assertIn("Observed file: codec.cpp (byte 6000)", report)
                     self.assertIn("END_POLICY", model.call_args_list[2].args[0])
                 reads = participant.interview_reads()
                 self.assertEqual([r["offset"] for r in reads], [0, 6000])
@@ -79,6 +83,12 @@ class InterviewTests(unittest.TestCase):
                     participant.reply(request("synthesis", [step("question", question="Q"), step("interpretation", unresolved="Gap")]))
                     self.assertIn("END_POLICY", model.call_args_list[0].args[0])
         self.assertEqual((self.root / "codec.cpp").read_text(), "a" * 6000 + "END_POLICY")
+
+    def test_empty_project_question_cites_brief(self):
+        with patch.object(participant, "ask", side_effect=["What output?", "Unspecified"]) as model:
+            report = participant.reply(request("question", []))["report"]
+            self.assertIn("Task brief (no readable source observed)", report)
+            self.assertEqual(model.call_count, 2)
 
     def test_success_criteria_reach_verify_and_analysis(self):
         interview = [step("synthesis", statement="Codec roadmap")]

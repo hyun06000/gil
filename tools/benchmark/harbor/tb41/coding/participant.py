@@ -42,7 +42,9 @@ def interview_reads():
             for line in events:
                 event = json.loads(line)
                 if event.get("interview_read"):
-                    reads.append({key: event[key] for key in ("path", "offset", "result", "more")})
+                    page = {key: event[key] for key in ("path", "offset", "result", "more")}
+                    page["readable"] = event.get("readable", True)
+                    reads.append(page)
     return reads
 
 
@@ -71,19 +73,21 @@ def explore(task, stage, focus, cited, reads):
             return
         options = ["read " + name for name in available]
         stop = "continue interview"
+        can_stop = stage != "question" or any(page["readable"] for page in reads)
         selection = ask(json.dumps({
             "task": task, "stage": stage, "focus": focus, "provided_excerpts": list(cited),
             "observed_pages": reads, "available_files": available,
             "instruction": "Inspect public files that can change the question or roadmap. "
                            "Choose a file to read its next page, or continue when evidence is sufficient. "
                            "A filename alone does not establish its contents.",
-        }, ensure_ascii=False), options + [stop], stage=stage + "_read")
-        if selection == stop:
+        }, ensure_ascii=False), options + ([stop] if can_stop else []), stage=stage + "_read")
+        if can_stop and selection == stop:
             return
         name = selection.removeprefix("read ")
         if selection not in options:
             raise ValueError("Invalid interview file selection")
         start = offsets.get(name, 0)
+        readable = True
         try:
             with source(name).open("rb") as handle:
                 handle.seek(start)
@@ -91,10 +95,10 @@ def explore(task, stage, focus, cited, reads):
             more = len(raw) > 6000
             snippet = raw[:6000].decode("utf-8", errors="replace")
             if b"\x00" in raw:
-                snippet, more = "[binary file]", False
+                snippet, more, readable = "[binary file]", False, False
         except (OSError, ValueError, RuntimeError) as error:
-            snippet, more = str(error), False
-        page = {"path": name, "offset": start, "result": snippet, "more": more}
+            snippet, more, readable = str(error), False, False
+        page = {"path": name, "offset": start, "result": snippet, "more": more, "readable": readable}
         record(event="tool", id=ask.call_id, action="read", interview_read=True, **page)
         reads.append(page)
         offsets[name] = start + 6000 if more else None
@@ -145,11 +149,25 @@ def reply(r):
             explore(task, k, focus, cited, reads)
     if k == "question":
         previous = [s["report"] for s in steps if s["kind"] in ("interpretation", "synthesis") and s["report"]]
-        q = model(
-            "Ask a question whose answer changes implementation or how success can be established. "
-            "Compare brief, cited sources and actual tools. On revision target a remaining gap. "
-            "Previous interview findings: " + json.dumps(previous[-2:])
+        anchors = {f"{page['path']} (byte {page['offset']})": page["result"]
+                   for page in reads if page["readable"]}
+        if not anchors:
+            anchors = {f"{path} (byte 0)": excerpt["text"] for path, excerpt in cited.items()}
+        if anchors:
+            anchor = next(iter(anchors)) if len(anchors) == 1 else model(
+                "Select the observed page with a concrete fact, conflict or gap that most changes "
+                "the decision. Prior findings: " + json.dumps(previous[-2:]), list(anchors))
+            basis = "Observed file: " + anchor
+            instruction = ("State a specific observation from this page, then ask the question it raises. "
+                           "Distinguish current behavior from the requested behavior. Page: " + anchors[anchor])
+        else:
+            basis = "Task brief (no readable source observed)"
+            instruction = "Start from an explicit fact in the brief. Identify what cannot yet be observed."
+        question = model(
+            instruction + "\nAsk about a decision that changes implementation or verification. "
+            "On revision target a remaining gap. Previous interview findings: " + json.dumps(previous[-2:])
         )
+        q = basis + "\n" + question
         return close(
             question=q, choices="Resolve from supplied evidence or record as open.",
             response=model("Answer from the supplied evidence. Cite a source for confirmed facts. "
