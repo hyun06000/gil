@@ -478,3 +478,21 @@ PR에서 job을 시작하는 경로:
 만들어진 뒤의 PR에서는 없어야 하지만, 그 실행은 아직 재지 않았다. macOS 러너 동시 실행 한도(5) 아래에서 여러
 PR이 겹칠 때의 대기도 재지 않았다: 소스가 바뀌는 PR 하나가 여는 macOS 잡은 4개에서 6개가 되었다(Preview 2,
 chain-macos 2, 제품 후보 1, 첫 시작 1).
+
+## 12. 제품 후보·첫 시작의 macOS 잡은 macOS가 필요한 변경에서만 (2026-11-25)
+
+§11 뒤 소스가 바뀌는 PR 하나가 macOS 잡 6개를 열어 계정 한도(동시 5개)를 넘었고, 병합 직후 main 실행에서 세 잡이
+러너를 약 100초 기다렸다. 제품 후보(`macos-arm64-product`)와 첫 시작(`first-start-macos`)의 macOS 잡에 같은
+워크플로의 작은 Linux 잡 `macos-scope`를 앞세워, `tools/ci/needs-macos.mjs`가 PR의 바뀐 파일을 보고 실행 여부를 정한다.
+
+- macOS 잡이 도는 변경: OS 조건(`cfg`의 unix·windows·target_os·target_family)이 있는 소스(변경 전에 있었던 경우 포함),
+  지워지거나 이름이 바뀐 소스, 그 잡이 실행하는 통합 시험 파일과 공용 도우미, Cargo 파일, 그 잡의 패키징·UI 입력,
+  그 워크플로 파일. 판정할 수 없는 경우와 수동 실행은 항상 돈다.
+- 목록을 손으로 관리하지 않는다: OS 조건은 판정 시점의 소스에서, 통합 시험 목록은 워크플로의 잡 본문에서 읽는다.
+- macOS 잡이 건너뛴 변경은 Linux가 검사한다: 제품 후보는 같은 워크플로의 `linux-x64-product`가, 첫 시작의 두 기능
+  조합은 Chain 매트릭스의 새 두 행(`first-start`, `first-start-approval`: lib 전체와 `tracking_start`,
+  `tracking_scope_change`)이 맡는다. 이름별 정확한 개수 검사와 브라우저 검사는 macOS 잡에만 있다.
+
+일반 PR(OS 조건 없는 소스만 바뀜)이 여는 macOS 잡은 6개에서 2개(Preview의 두 잡)가 된다. 확인하지 못한 것: 첫 시작
+워크플로는 PR에서만 돌므로, OS 중립으로 판정한 변경이 macOS에서만 깨지는 경우를 main에서 다시 잡는 실행이 없다
+(제품 후보도 같다; Chain의 macOS 잡만 main에서 매번 돈다).

@@ -102,6 +102,18 @@ jobs:
             minimum: 15
             suites: will_end_visual will_end_session format_transition visual_start chain_resume_benchmark mcp chain_handoff visual_attachment
             extra: --features will-end-history,approved-plan,visual-authoring,product-safety --test chain_monitor_fixtures
+          # The first-start profiles (tools/ci/CHAIN-CORE-TIMING.md §12): their macOS job runs only
+          # when a file that can behave differently on macOS changes, so Linux checks every change.
+          - group: first-start
+            features: tracking-policy
+            lib: all
+            minimum: 10
+            suites: tracking_start tracking_scope_change
+          - group: first-start-approval
+            features: tracking-policy,approved-plan,visual-authoring,product-safety
+            lib: all
+            minimum: 10
+            suites: tracking_start tracking_scope_change
     env:
       FEATURES: ${{ matrix.features }}
       LIB: ${{ matrix.lib }}
