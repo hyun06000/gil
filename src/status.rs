@@ -81,8 +81,11 @@ pub fn where_now(session: &ProjectSession, state_is_elsewhere: bool) -> String {
         }
     }
 
-    // ⑤ 지금 세계는 기준과 같은가 — **짧은 nudge 하나.**
-    out.push_str(&world_nudge(session));
+    // ⑤ 지금 세계는 기준과 같은가 — **짧은 nudge 하나.** 한 번 관측한 것을 ⑥ 도 쓴다.
+    let world = session.world_state();
+    let dirty = matches!(world, Ok(WorldState::Dirty { .. }));
+    let open_kind = cycle.step_now_open().and_then(|at| cycle.steps().node(at)).map(|node| node.kind);
+    out.push_str(&world_nudge(open_kind, world));
     // 형식 10/11 의 보관 대기·보관 중단 — 적용 정책과 마지막 확정 세계를 따로 말한다. 그 밖의 상태에서는 아무것도 더하지 않는다.
     #[cfg(feature = "tracking-policy")]
     out.push_str(&session.project().tracking_note());
@@ -91,6 +94,10 @@ pub fn where_now(session: &ProjectSession, state_is_elsewhere: bool) -> String {
     match session.project().current_chain() {
         Some(chain) if chain.is_closed() => out.push_str(&tr!("status.chain_verdict", verdict = chain.report().unwrap().get("verdict").unwrap(), exit = chain.exit_snapshot().unwrap())),
         Some(chain) if chain.awaiting_report() => out.push_str(&chain.close_hint()),
+        // A non-Verify Step does not close while the files differ from its world (the close gate
+        // refuses it), so the next line must not offer the close the gate would refuse. An open
+        // Verify confirms the changed world by closing, so it keeps the ordinary next line.
+        _ if dirty && open_kind.is_some_and(|kind| kind != NodeKind::Verify) => out.push_str(text("status.next_after_dirty")),
         _ => out.push_str(&crate::context::next_moves_of(session.project())),
     }
     out
@@ -100,8 +107,8 @@ pub fn where_now(session: &ProjectSession, state_is_elsewhere: bool) -> String {
 ///
 /// **전체 목록도 내부 주소도 내지 않는다.** 공개 표면은 `snapshot:A*` 하나이고, 여기서
 /// 필요한 것은 네 가지 물음의 답뿐이다 — 기준·상태·확정 가능 여부·지금 밟을 수 있는 수.
-fn world_nudge(session: &ProjectSession) -> String {
-    let state = match session.world_state() {
+fn world_nudge(open_kind: Option<NodeKind>, world: Result<WorldState, crate::SessionError>) -> String {
+    let state = match world {
         Ok(state) => state,
         // 세계를 읽는 것 자체가 안 되면(창고 손상 등) status 를 통째로 실패시키지 않는다 —
         // 서 있는 자리는 이미 위에서 말했고, 그것은 여전히 참이다.
@@ -115,7 +122,7 @@ fn world_nudge(session: &ProjectSession) -> String {
         WorldState::Unknown { world, said } => tr!("status.world_unknown", world = world, why = indent(&said)),
         WorldState::Dirty { world, .. } => {
             let mut out = tr!("status.world_dirty", world = world);
-            out.push_str(match open_verify(session) {
+            out.push_str(match open_kind == Some(NodeKind::Verify) {
                 // 세계를 확정할 권한은 Verify 에만 있다(Artifact Model §5).
                 true => text("status.dirty_verify"),
                 // **밟을 수 있는 길만 말한다.** Interview 안에는 verify 가 없고, 이 Cycle 을
@@ -126,15 +133,6 @@ fn world_nudge(session: &ProjectSession) -> String {
             out
         }
     }
-}
-
-/// 지금 열려 있는 자리가 Verify 인가.
-fn open_verify(session: &ProjectSession) -> bool {
-    let cycle = session.project().cycles().current();
-    cycle
-        .step_now_open()
-        .and_then(|at| cycle.steps().node(at))
-        .is_some_and(|node| node.kind == NodeKind::Verify)
 }
 
 /// 여러 줄이면 첫 줄만 — `gil status` 는 세 줄로 답하는 자리다.
