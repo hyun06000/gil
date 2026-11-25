@@ -52,8 +52,9 @@ test('the profile-only exploration suites run behind the guard in the Linux row 
 });
 
 test('the guard keeps a long output whole and does not wait for a process the command left behind', () => {
-  // 20,000 lines exceed a pipe buffer; the background sleep outlives the command.
-  const script = 'i=0; while [ $i -lt 20000 ]; do echo "line $i of a long libtest listing"; i=$((i+1)); done; echo "test result: ok. 5 passed; 0 failed; 0 ignored;"; (sleep 30 &)';
+  // 20,000 lines exceed a pipe buffer; the background sleep outlives the command and keeps the
+  // command's stdout open (its stderr is closed, or this test's own stderr pipe would wait for it).
+  const script = 'i=0; while [ $i -lt 20000 ]; do echo "line $i of a long libtest listing"; i=$((i+1)); done; echo "test result: ok. 5 passed; 0 failed; 0 ignored;"; (sleep 30 2>/dev/null &)';
   const started = Date.now();
   const ran = spawnSync(process.execPath, [guard, '3', 'sh', '-c', script], {encoding: 'utf8', maxBuffer: 64 * 1024 * 1024});
   assert.equal(ran.status, 0, ran.stderr);
