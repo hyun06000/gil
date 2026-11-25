@@ -9,11 +9,20 @@ trap 'rm -rf "$scratch"' EXIT
 cp -R "$source_dir/latency" "$scratch/"
 context="$scratch/latency/environment"
 cp "$binary" "$context/gil"
-revision=91cad51170dc346986eccefdc2dd33a9da36ead9
-weights_hash=6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e
-curl --fail --location --silent --show-error --retry 3 "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/$revision/qwen2.5-1.5b-instruct-q4_k_m.gguf" -o "$context/model.gguf"
-echo "$weights_hash  $context/model.gguf" | sha256sum -c -
-PYTHONPATH="$source_dir" harbor run --path "$scratch/latency" --agent-import-path gil_harbor:GilAgent --env docker --jobs-dir "$output" --job-name benchmark
+case "${GIL_HARBOR_MODEL:-qwen}" in
+  luna)
+    : "${GIL_HARBOR_API_KEY:?Set the model key for the Luna trial}"
+    cp "$source_dir/luna.Dockerfile" "$context/Dockerfile"
+    agent=gil_harbor:LunaAgent ;;
+  qwen)
+    revision=91cad51170dc346986eccefdc2dd33a9da36ead9
+    weights_hash=6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e
+    curl --fail --location --silent --show-error --retry 3 "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/$revision/qwen2.5-1.5b-instruct-q4_k_m.gguf" -o "$context/model.gguf"
+    echo "$weights_hash  $context/model.gguf" | sha256sum -c -
+    agent=gil_harbor:GilAgent ;;
+  *) echo "Choose luna or qwen" >&2; exit 1 ;;
+esac
+PYTHONPATH="$source_dir" harbor run --path "$scratch/latency" --agent-import-path "$agent" --env docker --jobs-dir "$output" --job-name benchmark
 python3 - "$output" <<'PY'
 import json, sys
 from pathlib import Path

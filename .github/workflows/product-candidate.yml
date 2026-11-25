@@ -50,10 +50,15 @@ on:
   workflow_dispatch:
     inputs:
       harbor_benchmark:
-        description: 'Run only the offline Harbor/Qwen GIL benchmark (one task)'
+        description: 'Run only the Harbor GIL benchmark (one task)'
         type: boolean
         required: false
         default: false
+      harbor_model:
+        description: 'Model for the manually selected Harbor trial'
+        type: choice
+        options: [luna, qwen]
+        default: luna
       unsigned_preview_version:
         description: 'Optional X.Y.Z-preview.N stamp compiled into the Core; no publication or installation'
         required: false
@@ -396,7 +401,10 @@ jobs:
           cargo build --locked -p gil --features "$GIL_PRODUCT_FEATURES" --bin gil
           python3 -m venv "$RUNNER_TEMP/harbor-venv"
           "$RUNNER_TEMP/harbor-venv/bin/pip" install 'harbor==0.27.0'
-      - name: Run one offline Harbor trial and require verifier reward 1
+      - name: Run one isolated Harbor trial and require verifier reward 1
+        env:
+          GIL_HARBOR_MODEL: ${{ inputs.harbor_model }}
+          GIL_HARBOR_API_KEY: ${{ inputs.harbor_model == 'luna' && secrets.OPENAI_API_KEY || '' }}
         run: |
           export PATH="$RUNNER_TEMP/harbor-venv/bin:$PATH"
           tools/benchmark/harbor/run.sh target/debug/gil "$RUNNER_TEMP/harbor-results"
@@ -407,6 +415,7 @@ jobs:
           name: harbor-model-result
           path: |
             ${{ runner.temp }}/harbor-results/**/result.json
+            ${{ runner.temp }}/harbor-results/**/agent/luna-usage.json
             ${{ runner.temp }}/harbor-results/**/agent/observation.json
             ${{ runner.temp }}/harbor-results/**/agent/gil-result.json
             ${{ runner.temp }}/harbor-results/**/verifier/test-stdout.txt

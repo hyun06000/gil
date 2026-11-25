@@ -2,6 +2,8 @@
 """A local model supplies semantic decisions. The adapter exposes bounded CSV operations."""
 import csv
 import json
+import os
+import time
 import statistics
 import sys
 from functools import cache
@@ -19,6 +21,24 @@ def model():
 
 
 def infer(task, prompt, choices=(), form=None):
+    messages = [
+        {"role":"system", "content":"You are planning and evaluating an experiment. The brief describes a goal. Follow the CURRENT INSTRUCTION. Before the experiment the data and numeric result are unknown. Write one short sentence."},
+        {"role":"user", "content":f"REFERENCE BRIEF:\n{task}\nCURRENT INSTRUCTION:\n{prompt}"},
+    ]
+    if os.getenv("GIL_BENCHMARK_MODEL") == "luna":
+        mailbox = Path("/work/model")
+        draft = mailbox / "request.tmp"
+        draft.write_text(json.dumps({"messages": messages, "choices": choices}))
+        draft.replace(mailbox / "request.json")
+        reply = mailbox / "reply.json"
+        deadline = time.monotonic() + 75
+        while not reply.exists():
+            if time.monotonic() >= deadline:
+                raise TimeoutError("Host did not return a model response")
+            time.sleep(0.1)
+        answer = json.loads(reply.read_text())["answer"]
+        reply.unlink()
+        return answer
     from llama_cpp import LlamaGrammar
     grammar = None
     if choices:
@@ -30,8 +50,7 @@ def infer(task, prompt, choices=(), form=None):
                 else 'root ::= words "."')
         grammar = LlamaGrammar.from_string(rule + "\nwords ::= [a-zA-Z_ ,./]+", verbose=False)
     result = model().create_chat_completion(
-        messages=[{"role":"system", "content":"You are planning and evaluating an experiment. The brief describes a goal. Follow the CURRENT INSTRUCTION. Before the experiment the data and numeric result are unknown. Write one short sentence."},
-                  {"role":"user","content":f"REFERENCE BRIEF:\n{task}\nCURRENT INSTRUCTION:\n{prompt}"}],
+        messages=messages,
         temperature=0, max_tokens=80, grammar=grammar,
     )
     answer = result["choices"][0]["message"]["content"].strip()
