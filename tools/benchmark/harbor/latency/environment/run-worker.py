@@ -2,17 +2,19 @@
 import os
 from pathlib import Path
 import socket
+import ssl
 
 if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY") or os.isatty(0):
     raise SystemExit("Harbor worker requires a display-free, noninteractive session")
-# Harbor enforces no-network with a deny-all sidecar, so an interface may still exist.
+# Harbor redirects TCP to a transparent deny-all proxy. A local TCP handshake can succeed;
+# only an authenticated TLS handshake demonstrates contact with the remote download host.
 try:
-    connection = socket.create_connection(("huggingface.co", 443), timeout=4)
+    host = "huggingface.co"
+    with socket.create_connection((host, 443), timeout=4) as connection:
+        with ssl.create_default_context().wrap_socket(connection, server_hostname=host):
+            raise SystemExit("offline worker could authenticate the remote model download host")
 except OSError:
     pass
-else:
-    connection.close()
-    raise SystemExit("offline worker could reach the model download host")
 
 Path("/work/project").mkdir()
 with open("/work/result.json", "w") as result:
