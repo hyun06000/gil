@@ -733,6 +733,13 @@ pub fn next_moves(cycles: &Cycles) -> String {
 /// Cycle 의 문법만으로는 미달성 실험의 「새 가설 금지」를 알 수 없다. 프로젝트를 쥔 자리
 /// (`gil status`·`gil context`)는 이 문을 쓴다.
 pub fn next_moves_of(project: &Project) -> String {
+    let cycle = project.cycles().current();
+    let open = cycle.step_now_open().and_then(|at| cycle.steps().node(at));
+    if open.is_some_and(|node| node.kind == NodeKind::Synthesis)
+        && let Some(action) = plan_next_call(project, NodeKind::Synthesis)
+    {
+        return format!("{}: {action}\n", text("moves.next"));
+    }
     moves(project.cycles(), project.openable_here())
 }
 
