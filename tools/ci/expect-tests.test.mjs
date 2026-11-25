@@ -50,3 +50,16 @@ test('the profile-only exploration suites run behind the guard in the Linux row 
   assert.ok(Number(row[1]) >= 20);
   assert.match(chain, /run: \|\n(?: {10}.*\n)*? {10}node tools\/ci\/expect-tests\.mjs "\$MINIMUM" cargo test --locked -p gil --no-fail-fast --features "\$FEATURES" "\$\{tests\[@\]\}"\n/);
 });
+
+test('the guard keeps a long output whole and does not wait for a process the command left behind', () => {
+  // 20,000 lines exceed a pipe buffer; the background sleep outlives the command.
+  const script = 'i=0; while [ $i -lt 20000 ]; do echo "line $i of a long libtest listing"; i=$((i+1)); done; echo "test result: ok. 5 passed; 0 failed; 0 ignored;"; (sleep 30 &)';
+  const started = Date.now();
+  const ran = spawnSync(process.execPath, [guard, '3', 'sh', '-c', script], {encoding: 'utf8', maxBuffer: 64 * 1024 * 1024});
+  assert.equal(ran.status, 0, ran.stderr);
+  assert.ok(Date.now() - started < 20000, 'the guard returned when the command did, not when its child did');
+  const lines = ran.stdout.trimEnd().split('\n');
+  assert.equal(lines.length, 20002);
+  assert.equal(lines[19999], 'line 19999 of a long libtest listing');
+  assert.equal(lines.at(-1), 'expect-tests: 5 passed in 1 suite(s), 0 ignored (minimum 3)');
+});

@@ -9,6 +9,9 @@
 // through unchanged, keeps its exit code when it fails, and additionally fails when fewer than
 // <minimum> tests passed or the command printed no libtest summary at all.
 import {spawnSync} from 'node:child_process';
+import {closeSync, mkdtempSync, openSync, readFileSync, rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
 /// Sum of the `test result:` summaries in libtest output: {suites, passed, failed, ignored}.
@@ -39,13 +42,26 @@ function main(argv) {
     console.error('usage: node tools/ci/expect-tests.mjs <minimum >= 1> <command> [args...]');
     return 2;
   }
-  const ran = spawnSync(command[0], command.slice(1), {stdio: ['inherit', 'pipe', 'inherit'], encoding: 'utf8', maxBuffer: 256 * 1024 * 1024});
-  process.stdout.write(ran.stdout ?? '');
+  // The command writes to a file, not a pipe: a pipe stays open while any process a test left behind
+  // still holds it, and this wrapper then waited for that process after the tests had finished
+  // (25 s measured on the library run with the launcher fixtures, PR #331).
+  const dir = mkdtempSync(join(tmpdir(), 'gil-expect-tests-'));
+  const file = join(dir, 'stdout');
+  const out = openSync(file, 'w');
+  let ran, stdout = '';
+  try {
+    ran = spawnSync(command[0], command.slice(1), {stdio: ['inherit', out, 'inherit']});
+    stdout = readFileSync(file, 'utf8');
+  } finally {
+    closeSync(out);
+    rmSync(dir, {recursive: true, force: true});
+  }
+  process.stdout.write(stdout);
   if (ran.error) {
     console.error(`expect-tests: could not run ${command[0]}: ${ran.error.message}`);
     return 1;
   }
-  const total = tally(ran.stdout ?? '');
+  const total = tally(stdout);
   const problem = shortfall(minimum, ran.status, total);
   if (problem) {
     console.error(`expect-tests: not counted as a pass: ${problem}`);
@@ -56,5 +72,7 @@ function main(argv) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  process.exit(main(process.argv.slice(2)));
+  // exitCode, not exit(): exit() can end the process before a long output has been written, and the
+  // passing library run of 1113 tests left no line at all in the job log (PR #331).
+  process.exitCode = main(process.argv.slice(2));
 }
