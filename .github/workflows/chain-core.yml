@@ -106,7 +106,7 @@ jobs:
         run: node tools/ci/expect-tests.mjs 4 cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test closing_handoff
       - name: Approval profile, library contracts of the modules that touch the OS (links, permissions, locks, install, launcher, runtime, image-report storage); the complete library runs on Linux
         run: >-
-          node tools/ci/expect-tests.mjs 50 cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib -- restore:: lock:: install:: launcher:: runtime_ visual_ internal_fs:: write_guard:: monitor::serve:: mcp::bindings:: session::format_transition:: project_resume:: companion --test-threads=1
+          node tools/ci/expect-tests.mjs 300 cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib -- restore:: lock:: install:: launcher:: runtime_ visual_ internal_fs:: write_guard:: monitor::serve:: mcp::bindings:: session::format_transition:: project_resume:: companion --test-threads=1
       - name: Approval profile, resume guidance over a record that cannot be read (the next-call guidance suites run on Linux)
         run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test resume_guidance
       - name: Manual help matches approval and recovery policies (Mac)
