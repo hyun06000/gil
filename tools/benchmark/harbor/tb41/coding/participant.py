@@ -163,16 +163,39 @@ def reply(r):
         else:
             basis = "Task brief (no readable source observed)"
             instruction = "Start from an explicit fact in the brief. Identify what cannot yet be observed."
-        question = model(
-            instruction + "\nAsk about a decision that changes implementation or verification. "
-            "On revision target a remaining gap. Previous interview findings: " + json.dumps(previous[-2:])
-        )
-        q = basis + "\n" + question
-        return close(
-            question=q, choices="Resolve from supplied evidence or record as open.",
-            response=model("Answer from the supplied evidence. Cite a source for confirmed facts. "
-                           "Distinguish assumptions and missing evidence. Question: " + q),
-        )
+        findings = []
+        prompt = (instruction + "\nPropose one unresolved question and two plausible answers with "
+                  "different concrete implementation or verification consequences. Do not ask whether "
+                  "to follow an explicit requirement. On revision target a remaining gap. Prior findings: "
+                  + json.dumps(previous[-2:]))
+        for attempt in range(2):
+            question = model(prompt)
+            disposition = model(
+                "Check the proposed question against the brief and all supplied source contents. "
+                "Choose answered if evidence settles the decision, even if ignoring it would change code. "
+                "Choose immaterial if the alternatives require the same action or have unsupported premises. "
+                "Choose open only for a grounded unresolved decision whose alternatives change a specific "
+                "implementation or verification action. Candidate: " + question,
+                ["answered", "immaterial", "open"],
+            )
+            if disposition == "open":
+                response = model("For this open decision, cite what is known, identify missing evidence "
+                                 "and the next discriminating observation. Label any provisional choice "
+                                 "as an assumption. Question: " + question)
+                return close(question=basis + "\n" + question,
+                             choices="Compare the candidate alternatives against evidence.",
+                             response="\n".join(findings + [response]))
+            finding = model("Explain the classification " + disposition + " in one sentence. "
+                            "For a settled question cite the source and its answer; for an immaterial "
+                            "question identify the unchanged decision or unsupported premise. Candidate: "
+                            + question)
+            findings.append(disposition + ": " + finding)
+            prompt = (instruction + "\nPropose a different unresolved question with two plausible answers "
+                      "and a specific different action for each. Avoid these screened topics: "
+                      + json.dumps(findings) + "\nPrevious interview findings: " + json.dumps(previous[-2:]))
+        return close(question=basis + "\nNo decision-changing open question identified in this review.",
+                     choices="Carry the evidence review into synthesis.",
+                     response="\n".join(findings))
     if k == "interpretation":
         exchange = json.dumps(step("question")["report"])
         interpretation = model("Summarize confirmed requirements and the decisions supported by this exchange: " + exchange)

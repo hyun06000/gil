@@ -58,7 +58,7 @@ class InterviewTests(unittest.TestCase):
             report = participant.reply(request("synthesis", [q, i]))["report"]
             self.assertIn("benchmark_revise", report)
             self.assertTrue(all("Round trip untested" in c.args[0] for c in model.call_args_list[1:]))
-        with patch.object(participant, "ask", side_effect=["read contract.txt", "Clarify gap", "Pending"]) as model:
+        with patch.object(participant, "ask", side_effect=["read contract.txt", "Clarify gap", "open", "Pending"]) as model:
             model.call_id = "fixture"
             with patch.object(participant, "record"):
                 participant.reply(request("question", [q, i, step("synthesis", statement="Draft roadmap", approved="benchmark_revise")]))
@@ -71,7 +71,7 @@ class InterviewTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             log = Path(directory)
             with patch.object(mailbox_client, "MAIL", log), patch.object(participant, "MAIL", log):
-                with patch.object(participant, "ask", side_effect=["read codec.cpp", "read codec.cpp", "codec.cpp (byte 6000)", "Question", "Answer"]) as model:
+                with patch.object(participant, "ask", side_effect=["read codec.cpp", "read codec.cpp", "codec.cpp (byte 6000)", "Question", "open", "Answer"]) as model:
                     model.call_id = "fixture"
                     report = participant.reply(request("question", []))["report"]
                     self.assertNotIn("continue interview", model.call_args_list[0].args[1])
@@ -85,10 +85,28 @@ class InterviewTests(unittest.TestCase):
         self.assertEqual((self.root / "codec.cpp").read_text(), "a" * 6000 + "END_POLICY")
 
     def test_empty_project_question_cites_brief(self):
-        with patch.object(participant, "ask", side_effect=["What output?", "Unspecified"]) as model:
+        with patch.object(participant, "ask", side_effect=["What output?", "open", "Unspecified"]) as model:
             report = participant.reply(request("question", []))["report"]
             self.assertIn("Task brief (no readable source observed)", report)
-            self.assertEqual(model.call_count, 2)
+            self.assertEqual(model.call_count, 3)
+
+    def test_answered_candidate_becomes_finding(self):
+        with patch.object(participant, "ask", side_effect=[
+                "Require a round trip?", "answered", "Contract section 1 requires it.",
+                "Which representation?", "open", "Measure the two representations."]) as model:
+            report = participant.reply(request("question", []))["report"]
+            self.assertIn("Contract section 1", model.call_args_list[3].args[0])
+            self.assertIn("answered: Contract section 1", report)
+            self.assertIn("Which representation?", report)
+            self.assertNotIn("Require a round trip?", report)
+
+    def test_no_open_candidate_preserves_review(self):
+        with patch.object(participant, "ask", side_effect=[
+                "Candidate A", "answered", "Specified in brief.",
+                "Candidate B", "immaterial", "Equivalent actions."]):
+            report = participant.reply(request("question", []))["report"]
+            self.assertIn("No decision-changing open question", report)
+            self.assertIn("immaterial: Equivalent actions.", report)
 
     def test_success_criteria_reach_verify_and_analysis(self):
         interview = [step("synthesis", statement="Codec roadmap")]
