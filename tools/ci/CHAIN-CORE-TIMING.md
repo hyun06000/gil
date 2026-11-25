@@ -266,7 +266,6 @@ Linux(`ubuntu-24.04`)에서 조합당 한 행으로 나란히 돌려 통과 여�
 | `chain-core` | `chain-core` | 없음(macOS와 같음) | Chain·Will 도메인 10개 + `revisit` 1건(정확한 이름) |
 | `development-product` | `chain-core,visual-authoring,product-safety` | `visual_start` 필터 | `visual_start`, `chain_resume_benchmark`, `mcp` |
 | `approval` | `approved-plan,visual-authoring,product-safety` | 전체 | 승인 wire·보존·Monitor fixture·Closing·문맥·안내 |
-| `recovery-approval` | `approved-plan,visual-authoring,recovery-auto-approval` | `recovery_mode` 필터 | `recovery_approval_mode` |
 | `exploration` | `exploration-flow,visual-authoring,product-safety` | 전체 | 탐색 4종·Closing·item-queue 유지 suite |
 | `end-history` | `will-end-history` | 전체 | end history·기존 Chain suite·`mcp`·형식 전환 |
 | `end-history-product` | `will-end-history,visual-authoring,product-safety` | 전체 | 형식 9·전환·이미지 보고 + 승인 프로필 Monitor fixture 1건 |
@@ -278,5 +277,9 @@ Linux(`ubuntu-24.04`)에서 조합당 한 행으로 나란히 돌려 통과 여�
 - Linux 의존성 캐시는 macOS와 같은 키 식(`runner.os`로 구분)이고 한 행(`chain-core`)만 정리 후 저장한다.
 - 시험 분류의 근거(조건부 컴파일 문장과 시험 이름 기준, 시험 본문 전수 확인 아님): macOS 필수 84건,
   두 OS 모두 약 497건, Linux만으로 충분 약 483건(통합 시험 1,073건 중).
-- 이 절을 쓰는 시점에 Linux 행의 통과 여부와 시간은 측정되지 않았다.
+- **첫 Linux 실행** (run 45520042159, 커밋 6c570a4, 배정 대기 3~5초): 6개 행 성공 — `chain-core` 93초,
+  `development-product` 103초, `end-history` 108초, `approval` 125초, `end-history-product` 135초, `exploration`
+  147초. 의존성 캐시가 없던 첫 실행의 값이다. `recovery-approval` 행은 실패했다: `tests/recovery_approval_mode.rs`가
+  파일 전체에 `cfg(any(macOS, Windows))`가 걸려 Linux에서 0건이 되었고 `expect-tests`가 이를 통과로 세지 않았다.
+  이 조합(M4-R)은 Linux 행에서 빼고 macOS에 둔다.
 

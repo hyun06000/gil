@@ -247,7 +247,9 @@ jobs:
   # Trial (tools/ci/CHAIN-CORE-TIMING.md §7): the same feature profiles on Linux, one row per
   # profile, next to the macOS jobs above. Nothing is removed from macOS by this job. Each row runs
   # the Cargo checks the macOS jobs run for that profile, except the suites kept on macOS (manual,
-  # automatic_guard, write_guard) and the Node checks that read the macOS product build.
+  # automatic_guard, write_guard), the M4-R profile (tests/recovery_approval_mode.rs is compiled on
+  # macOS and Windows only: the first Linux run counted 0 tests) and the Node checks that read the
+  # macOS product build.
   chain-linux:
     name: chain linux (${{ matrix.group }})
     runs-on: ubuntu-24.04
@@ -273,11 +275,6 @@ jobs:
             lib: all
             minimum: 14
             suites: approved_plan_wire_wave1 chain_recovery_preservation chain_monitor_fixtures closing_handoff context context_profiles guidance_wave1 guidance_wave2 guidance_interview_chain resume_guidance
-          - group: recovery-approval
-            features: approved-plan,visual-authoring,recovery-auto-approval
-            lib: recovery_mode
-            minimum: 5
-            suites: recovery_approval_mode
           - group: exploration
             features: exploration-flow,visual-authoring,product-safety
             lib: all

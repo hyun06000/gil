@@ -105,7 +105,8 @@ test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired
   const rows = [...linux.matchAll(/^          - group: ([\w-]+)\n            features: ([\w,-]+)\n            lib: (\w+)\n            minimum: (\d+)\n            suites: ([\w ]+)\n/gm)];
   const macProfiles = [...groupsOf(chainJobs[0].block), ...groupsOf(chainJobs[1].block)];
   // The Monitor-fixture profile is one suite and rides on the last row as its extra check.
-  assert.deepEqual(rows.map(r => r[2]), macProfiles.slice(0, -1));
+  // The M4-R profile has no Linux row: its only integration suite is compiled on macOS and Windows.
+  assert.deepEqual(rows.map(r => r[2]), macProfiles.slice(0, -1).filter(f => !f.includes('recovery-auto-approval')));
   assert.ok(linux.includes(`            extra: --features ${macProfiles.at(-1)} --test chain_monitor_fixtures\n`));
   assert.equal((linux.match(/^          - group: /gm) || []).length, rows.length, 'every row has the full shape');
   for (const [, group, features, lib, minimum, suites] of rows) {
