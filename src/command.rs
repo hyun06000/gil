@@ -806,8 +806,7 @@ fn close_step(ctx: &Invocation<'_>, session: &mut Session, unachieved: Option<cr
         .expect("열려 있는 자리가 있다");
     let kind = node.kind;
     let here = cycle.step_ref(node.id);
-    let contract = cycle
-        .step_contract(node.id, kind)
+    let contract = step_contract(cycle)
         .expect("열린 자리의 종류는 문법이 선언한 것이다");
     let mut hint = skeleton_for(&contract, cycle, Some(ctx));
     if kind == crate::NodeKind::Verify && session.project().visual_state.is_some() {
@@ -1376,7 +1375,7 @@ fn no_project_yet(command: &str) -> String {
 /// 이미 있는 것이고, 없다면 그것은 `gil context` 의 몫이다.
 fn opened_step(session: &Session, opened: crate::Opened) -> String {
     let cycle = session.project().cycles().current();
-    let contract = cycle.contract_of_kind(opened.kind);
+    let contract = step_contract(cycle);
     let will = session
         .project()
         .active_will()
@@ -1621,10 +1620,10 @@ fn indent(text: &str) -> String {
 fn step_contract(cycle: &crate::Cycle) -> Option<CloseContract> {
     let walk = cycle.steps();
     let node = walk.node(walk.current()?)?;
-    match node.is_closed() {
-        true => None,
-        false => cycle.step_contract(node.id, node.kind),
-    }
+    if node.is_closed() { return None; }
+    let mut contract = cycle.step_contract(node.id, node.kind)?;
+    if node.kind == NodeKind::Verify { contract.include_evidence_files(); }
+    Some(contract)
 }
 
 /// Cycle 자신을 닫는 계약 — `outcome_ref` 는 **가리켜야 하는 그 주소**가 이미 정해져 있다.
