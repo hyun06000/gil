@@ -339,6 +339,13 @@ pub fn cli(args: &[String]) -> std::process::ExitCode {
 mod tests {
     use super::*;
     #[test]
+    fn benchmark_graph_can_be_saved_with_the_compiled_product_features() {
+        let first = crate::ManifestAddress::from_parts("sha256", &[0; 32]).unwrap();
+        let project = Project::start(RuleSet::benchmark(), first);
+        crate::store::encode(&project).expect("persist the initial benchmark Interview");
+    }
+
+    #[test]
     fn only_explicit_benchmark_rules_accept_adapter_decisions() {
         let interactive = RuleSet::from_yaml_str(crate::BUILTIN_SPEC).unwrap();
         let benchmark = RuleSet::benchmark();

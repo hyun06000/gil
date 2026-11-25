@@ -141,7 +141,7 @@ impl Project {
             next_will_id: FIRST_WILL,
             artifacts,
             // `will-end-history` 는 `chain-core` 를 포함한다 — 종료 이력은 Chain 형식에만 있다.
-            end_history: cfg!(feature = "will-end-history"),
+            end_history: use_chain && cfg!(feature = "will-end-history"),
             #[cfg(feature = "tracking-policy")]
             tracking: None,
         }

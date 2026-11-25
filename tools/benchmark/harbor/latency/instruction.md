@@ -1,0 +1,1 @@
+Read /case/latencies.csv. Report the median of the latency_ms column across all requests, in milliseconds. Write your numeric result and the statistic you used to observation.json. Use the GIL interview to specify the experiment before executing it.

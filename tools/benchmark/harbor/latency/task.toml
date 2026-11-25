@@ -1,0 +1,13 @@
+schema_version = "1.4"
+
+[agent]
+timeout_sec = 900
+
+[environment]
+network_mode = "no-network"
+cpus = 2
+memory_mb = 4096
+build_timeout_sec = 1500
+
+[verifier]
+timeout_sec = 60

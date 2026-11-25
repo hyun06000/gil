@@ -25,3 +25,37 @@ A run uses a fresh record directory outside its workspace. It refuses workspaces
 ## Container acceptance
 
 `tools/benchmark/test-container.sh target/debug/gil` runs the committed synthetic participant on Linux. It first checks ordinary Linux MCP Monitor handoff and display-only headless MCP waiting for a response. It then checks a passing and failing experiment, revision of a specification, rejection of human approval tokens, and refusal to close Verify without an evidence file. These checks exercise the protocol and Core transitions. Benchmark model scores require running the intended model adapter and task suite.
+
+## Run one model trial with Harbor
+
+Manually dispatch `product-candidate.yml` with **harbor_benchmark** selected. Pick
+`luna` (default) or `qwen`. The dispatch runs only the Linux benchmark job. PR checks and
+ordinary product builds do not invoke a model. For example:
+
+```sh
+gh workflow run product-candidate.yml -f harbor_benchmark=true -f harbor_model=luna
+```
+
+- **Luna** uses `gpt-5.6-luna` through the Responses API. Configure the repository Actions
+  secret `OPENAI_API_KEY`. The Harbor host sends short model prompts and choices, then returns
+  each answer through a file in the task container. The task has no API key or external model
+  connection. The host requests standard service, no reasoning and at most 128 output tokens
+  per call. It checks a 16-call limit and a conservative $0.005 estimated token budget before
+  each request. The seven-day artifact includes token usage and estimated cost at $0.20/M input
+  and $1.20/M output. Recheck these prices before a new evaluation campaign.
+- **Qwen** runs Qwen2.5-1.5B-Instruct Q4_K_M on the container CPU. The runner downloads its
+  hash-checked weights before the trial. This option requires no model key.
+
+Harbor 0.27.0 runs the same CSV task in a Docker container with outbound network access denied.
+The model answers the interview, proposes the operation and column for a structured specification,
+selects a CSV aggregation tool for Verify, and interprets the result. The verifier checks the
+question, pre-experiment claims, accepted specification, evidence file and reports against its
+own calculation. See the job artifact for the submitted observation and full Step history.
+
+On a Linux Docker host with Harbor 0.27.0 on PATH, pass a built product binary and a fresh output
+directory to `tools/benchmark/harbor/run.sh target/debug/gil /tmp/gil-harbor-run`. Local runs
+default to Qwen. Set `GIL_HARBOR_MODEL=luna` and supply `GIL_HARBOR_API_KEY` to select Luna.
+
+In a [verified Luna run](https://github.com/hyun06000/gil/actions/runs/45570033791) the model
+made 11 calls (1,612 input and 249 output tokens), measured 13 ms and received reward 1.
+The estimated model cost for that trial was $0.0006212.
