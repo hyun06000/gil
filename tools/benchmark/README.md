@@ -55,3 +55,7 @@ own calculation. See the job artifact for the submitted observation and full Ste
 On a Linux Docker host with Harbor 0.27.0 on PATH, pass a built product binary and a fresh output
 directory to `tools/benchmark/harbor/run.sh target/debug/gil /tmp/gil-harbor-run`. Local runs
 default to Qwen. Set `GIL_HARBOR_MODEL=luna` and supply `GIL_HARBOR_API_KEY` to select Luna.
+
+In a [verified Luna run](https://github.com/hyun06000/gil/actions/runs/45570033791) the model
+made 11 calls (1,612 input and 249 output tokens), measured 13 ms and received reward 1.
+The estimated model cost for that trial was $0.0006212.
