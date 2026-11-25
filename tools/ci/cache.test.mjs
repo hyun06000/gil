@@ -25,10 +25,10 @@ test('dependency caches are stable across source commits; only cache maintenance
   }
 });
 
-/// The job-level `env:` of the Chain workflow as {NAME: value}.
+/// The workflow-level `env:` of the Chain workflow as {NAME: value}; both Chain jobs inherit it.
 const chainJobEnv = () => {
-  const block = workflowText('chain-core').match(/\n    env:\n((?: {6}.*\n)+)/)?.[1] ?? '';
-  return Object.fromEntries([...block.matchAll(/^ {6}([A-Z0-9_]+): '?([^'\n]*)'?$/gm)].map(m => [m[1], m[2]]));
+  const block = workflowText('chain-core').match(/\nenv:\n((?: {2}.*\n)+)/)?.[1] ?? '';
+  return Object.fromEntries([...block.matchAll(/^ {2}([A-Z0-9_]+): '?([^'\n]*)'?$/gm)].map(m => [m[1], m[2]]));
 };
 
 test('Chain CI build-cost settings stay CI-only, never reach release or test semantics, and key the cache', () => {
@@ -37,6 +37,8 @@ test('Chain CI build-cost settings stay CI-only, never reach release or test sem
   assert.equal(env.CARGO_PROFILE_DEV_DEBUG, 'line-tables-only');
   assert.equal(env.CARGO_INCREMENTAL, '0');
   const text = workflowText('chain-core');
+  // No job or step sets its own environment block of build settings: the workflow-level one is the only source.
+  assert.doesNotMatch(text, /^ {4,}(?:CARGO_|RUSTUP_)\w+:/m);
   // Optimisation, assertions, overflow checks, panic strategy, codegen flags and the release
   // profile are never changed by CI, for the job or for a single step.
   assert.doesNotMatch(text, /CARGO_PROFILE_RELEASE|CARGO_PROFILE_\w+_(?:OPT_LEVEL|DEBUG_ASSERTIONS|OVERFLOW_CHECKS|PANIC|CODEGEN_UNITS|LTO|STRIP)|RUSTFLAGS|CARGO_BUILD|cargo [^\n]*(?:--release|--profile)/);
@@ -63,16 +65,35 @@ test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired
   }
   assert.doesNotMatch(text, /windows-11-arm|codex-cli|runtime-testbed/);
   const chain = workflowText('chain-core');
-  // Windows test and build CI is paused: the Chain matrix is the macOS row alone.
-  assert.equal(chain.match(/\n        include:\n((?: {10}.*\n)+)/)?.[1], '          - runner: macos-15\n            shell: bash\n');
-  assert.doesNotMatch(chain, /runner: windows-|shell: pwsh/);
+  // Windows test and build CI is paused: the Chain workflow is two macOS jobs, no matrix.
+  const chainJobs = jobsOf(chain);
+  assert.deepEqual(chainJobs.map(j => j.name), ['chain-product', 'chain-opt-in']);
+  for (const {name, block} of chainJobs) assert.match(block, /^    runs-on: macos-15$/m, name);
+  assert.doesNotMatch(chain, /runner: windows-|runs-on: windows-|shell: pwsh|matrix:/);
   // A guarded step (`node tools/ci/expect-tests.mjs <minimum> cargo test …`) is the same Cargo check.
-  const features = [...chain.matchAll(/run: (?:node tools\/ci\/expect-tests\.mjs \d+ )?cargo (?:test|build).*?--features ([\w,-]+)/g)].map(m => m[1]);
-  const groups = features.filter((f, i) => f !== features[i-1]);
-  // The opt-in profiles (exploration contract, M4-R, then the single end history alone and with
-  // the visual registry, then its Monitor fixtures in the approval profile) run after the product
-  // profiles, each as one contiguous group and never inside a product profile.
-  assert.deepEqual(groups, ['chain-core', 'chain-core,visual-authoring,product-safety', 'approved-plan,visual-authoring,product-safety', 'exploration-flow,visual-authoring,product-safety', 'approved-plan,visual-authoring,recovery-auto-approval', 'will-end-history', 'will-end-history,visual-authoring,product-safety', 'will-end-history,approved-plan,visual-authoring,product-safety']);
+  const groupsOf = block => {
+    const features = [...block.matchAll(/run: (?:node tools\/ci\/expect-tests\.mjs \d+ )?cargo (?:test|build).*?--features ([\w,-]+)/g)].map(m => m[1]);
+    return features.filter((f, i) => f !== features[i-1]);
+  };
+  // Each feature profile is one contiguous group in exactly one job, so no job compiles a profile
+  // another job also compiles. The product profiles come first in their job; the M4-R opt-in
+  // follows them there and never sits inside a product profile. The other opt-in profiles
+  // (exploration contract, the single end history alone and with the visual registry, then its
+  // Monitor fixtures in the approval profile) are the second job.
+  assert.deepEqual(groupsOf(chainJobs[0].block), ['chain-core', 'chain-core,visual-authoring,product-safety', 'approved-plan,visual-authoring,product-safety', 'approved-plan,visual-authoring,recovery-auto-approval']);
+  assert.deepEqual(groupsOf(chainJobs[1].block), ['exploration-flow,visual-authoring,product-safety', 'will-end-history', 'will-end-history,visual-authoring,product-safety', 'will-end-history,approved-plan,visual-authoring,product-safety']);
+  // Both jobs prepare the same way and read one dependency cache through the same key and prefix;
+  // only the first job saves it (the second uses the restore-only action and never prunes).
+  const cacheOf = block => block.match(/^          key: .+\n          restore-keys: \|\n.+$/m)?.[0];
+  assert.ok(cacheOf(chainJobs[0].block));
+  assert.equal(cacheOf(chainJobs[1].block), cacheOf(chainJobs[0].block));
+  const paths = block => block.match(/\n          path: \|\n((?: {12}.*\n)+)/)?.[1];
+  assert.equal(paths(chainJobs[1].block), paths(chainJobs[0].block));
+  const pin = chainJobs[0].block.match(/uses: actions\/cache@([0-9a-f]{40}) /)?.[1];
+  assert.ok(pin && chainJobs[1].block.includes(`uses: actions/cache/restore@${pin} `));
+  assert.doesNotMatch(chainJobs[1].block, /uses: actions\/cache@|run: node tools\/ci\/prune-workspace-cache|build_cache/);
+  for (const prepare of ['      - uses: actions/checkout@', "          GIT_CONFIG_VALUE_0: 'false'", '          persist-credentials: false', '      - run: rustup toolchain install 1.97.1 --profile minimal'])
+    for (const {name, block} of chainJobs) assert.ok(block.includes(prepare), `${name}: ${prepare}`);
   const companion = workflowText('companion-native');
   assert.doesNotMatch(companion, /windows-2025|windows-11-arm/);
   assert.match(companion, /paths:\n\s+- 'companion\/\*\*'/);

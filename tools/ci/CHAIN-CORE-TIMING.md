@@ -207,7 +207,44 @@ Node 표기는 통과/건너뜀/실패. 단계 49는 이 변경이 더한 시험
   시험 실행 약 0.5초다. Windows 복원 경계를 먼저 실패시키는 진단 가치가 더 커 유지한다.
 - **스레드 수·대기 시간**: 전체 lib 시험의 `--test-threads=1`은 fork 기반 실행기의 잠금 상속 때문이다.
   바꾸지 않았다.
-- **job 분할·서버 종류 변경·플랫폼 삭제**: 대상 아님. 분할은 경과 시간을 줄여도 서버 대기·총 사용 시간·캐시
+- **job 분할·서버 종류 변경·플랫폼 삭제**: 2026-11-19에는 대상이 아니었다(job 분할은 2026-11-25에 §6으로 채택). 당시 판단: 분할은 경과 시간을 줄여도 서버 대기·총 사용 시간·캐시
   저장을 늘린다(특히 macOS arm64 배정 대기 5분 이상, 병합 후 main에서 미배정 취소).
 - **다른 연결기(`rust-lld`)**, **`registry/src` 캐시 제외**, **workflow 문구와 캐시 호환성 분리**: 측정하지
   않았다.
+
+## 6. 두 job으로 분할 (2026-11-25)
+
+Windows 실행이 중단된 뒤 PR 한 건의 대기 시간은 Chain job 하나가 정했다. 최근 성공 실행 기준으로 Chain은
+15~18분(run 45513817750: 1034초, 45510618707: 1065초, 45506764969: 905초), 같은 PR의 다른 workflow는
+6~9분(제품 후보 macOS 461~559초·Linux 412초, Preview 396~400초, 첫 시작 342~420초)이었다.
+
+분할은 기능 조합 경계에서만 한다. 기능 조합마다 `gil`을 따로 컴파일하므로 한 조합을 두 job에 걸치면 그
+컴파일이 두 번 든다. run 45513817750의 단계 시간(초)으로 나눈 결과:
+
+| job | 기능 조합(순서 그대로) | 기준 실행의 단계 합 |
+|---|---|---|
+| `chain-product` | 기능 없음(resume 측정), `chain-core`, `chain-core,visual-authoring,product-safety`, `approved-plan,visual-authoring,product-safety`(+ 그 빌드를 쓰는 Node 검사 두 단계), `approved-plan,visual-authoring,recovery-auto-approval`, Core 없는 Node 검사 전부, 캐시 정리 | 164 + 233 + 89 + 23 = 509 |
+| `chain-opt-in` | `exploration-flow,visual-authoring,product-safety`, `will-end-history`, `will-end-history,visual-authoring,product-safety`, `will-end-history,approved-plan,visual-authoring,product-safety` | 192 + 150 + 137 + 18 = 497 |
+
+준비(checkout·rustup·캐시 복원, 기준 실행 22초)는 두 job이 각각 한다. 기대값은 job당 약 9분이며, 이는 위
+단계 합으로 계산한 값이지 분할 뒤 원격 실행의 측정값이 아니다. 측정값은 이 변경의 PR 실행에서 얻는다.
+
+바뀌지 않은 것: 단계 이름·명령·기능 조합·필터·`expect-tests` 최소 수(§4의 단계 5~56이 그대로 있고 순서만
+job별로 나뉨), 빌드 설정 두 값, 캐시 키 식과 저장 경로. 바뀐 것:
+
+- 빌드 설정과 Rust 버전은 workflow 수준 `env:`로 옮겨 두 job이 같은 값을 쓴다.
+- 의존성 캐시는 하나다. 두 job이 같은 키·접두사로 복원하고, `chain-product`만 정리 후 저장한다.
+  `chain-opt-in`은 같은 고정 커밋의 `actions/cache/restore`를 써서 저장을 시도하지 않는다(같은 키를 두 job이
+  저장하면 뒤쪽은 예약 실패 경고만 남긴다). 기능 조합은 외부 의존성을 바꾸지 않는다(선택 의존성 없음).
+- M4-R 조합(단계 34~36)은 탐색 조합 앞, 승인 프로필 뒤로 옮겼다. 제품 프로필 안에 끼지 않는 규칙은 같다.
+- job 제한 시간은 45분에서 30분으로 줄였다(45분은 Windows 실행 기준이었다).
+- job 이름이 `chain (macos-15, bash)`에서 `chain product profiles (macos-15)`·`chain opt-in profiles (macos-15)`로
+  바뀐다. main의 필수 검사는 `macos-arm64-preview` 하나라 보호 규칙은 영향을 받지 않는다.
+
+비용: macOS job이 PR당 4개에서 5개가 된다. 여러 PR이 겹치면 macOS 배정 대기가 길어질 수 있다(분할 전에도
+겹친 실행에서 305~621초 대기가 관측됨: run 45500007797, 45500007726, 45494238496). 총 사용 시간은 준비 한 번
+(약 20~40초)만큼 늘어난다. 세 job 분할은 job당 약 6분이 되지만 다른 workflow(8~9분)보다 짧아져 PR 대기
+시간은 더 줄지 않고 macOS job만 6개가 되므로 하지 않았다.
+
+`tools/ci/cache.test.mjs`가 job 두 개의 이름·서버, job별 기능 조합 순서, 두 job의 캐시 키·경로·준비 단계
+일치, 두 번째 job이 저장·정리를 하지 않음을 고정한다.
