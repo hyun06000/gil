@@ -104,7 +104,9 @@ test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired
   assert.equal((linux.match(/^          - group: /gm) || []).length, rows.length, 'every row has the full shape');
   assert.deepEqual(rows.map(r => [r.features, r.lib]), [['chain-core', 'none'], ['chain-core,visual-authoring,product-safety', 'visual_start'],
     ['approved-plan,visual-authoring,product-safety', 'all'], ['exploration-flow,visual-authoring,product-safety', 'all'],
-    ['will-end-history', 'all'], ['will-end-history,visual-authoring,product-safety', 'all']]);
+    ['will-end-history', 'all'], ['will-end-history,visual-authoring,product-safety', 'all'],
+    // The first-start profiles: their macOS job runs only for a change that needs macOS (needs-macos.mjs).
+    ['tracking-policy', 'all'], ['tracking-policy,approved-plan,visual-authoring,product-safety', 'all']]);
   assert.ok(linux.includes('            extra: --features will-end-history,approved-plan,visual-authoring,product-safety --test chain_monitor_fixtures\n'));
   // What stays on macOS alone: suites of macOS-only behaviour and the M4-R profile, whose
   // integration suite is compiled on macOS and Windows only. Nothing else may be missing on Linux:
