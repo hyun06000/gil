@@ -41,12 +41,12 @@ test('a failing command keeps its failure and no summary is not a pass', () => {
   assert.equal(spawnSync(process.execPath, [guard, '0', 'cargo'], {encoding: 'utf8'}).status, 2, 'a minimum of zero would defeat the guard');
 });
 
-test('the profile-only exploration suites run behind the guard on both runners', () => {
+test('the profile-only exploration suites run behind the guard in the Linux row of their profile', () => {
   const chain = readFileSync(join(root, '.github/workflows/chain-core.yml'), 'utf8').replace(/\r\n/g, '\n');
-  for (const [suite, minimum] of [['exploration_flow', 4], ['exploration_tools', 4], ['exploration_plan_panel', 1]]) {
-    const step = chain.split('      - name: ').find(s => s.includes(`--test ${suite}`) && s.includes('exploration-flow,visual-authoring,product-safety'));
-    assert.ok(step, `${suite} is wired into the Chain workflow`);
-    assert.match(step, new RegExp(`run: node tools/ci/expect-tests\\.mjs ${minimum} cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test ${suite}\\n`), suite);
-    assert.doesNotMatch(step, /if: runner\.os/, `${suite} runs on macOS and Windows`);
-  }
+  const row = chain.match(/^          - group: exploration\n            features: exploration-flow,visual-authoring,product-safety\n            lib: all\n            minimum: (\d+)\n            suites: ([\w ]+)\n/m);
+  assert.ok(row, 'the exploration profile has its Linux row');
+  for (const suite of ['exploration_flow', 'exploration_tools', 'exploration_evidence', 'exploration_plan_panel', 'closing_handoff']) assert.ok(row[2].split(' ').includes(suite), suite);
+  // 4 + 4 + 6 + 1 + 5: the minimums the separate macOS steps used to carry.
+  assert.ok(Number(row[1]) >= 20);
+  assert.match(chain, /run: \|\n(?: {10}.*\n)*? {10}node tools\/ci\/expect-tests\.mjs "\$MINIMUM" cargo test --locked -p gil --no-fail-fast --features "\$FEATURES" "\$\{tests\[@\]\}"\n/);
 });

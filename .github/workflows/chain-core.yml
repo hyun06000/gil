@@ -42,31 +42,72 @@ concurrency:
 
 permissions:
   contents: read
+# CI-only build cost settings for the dev/test profiles (release is untouched; optimisation,
+# debug assertions, overflow checks and panic strategy keep their defaults). Line tables keep
+# file:line in panic backtraces but drop variable/type debuginfo; nothing here reuses the
+# incremental state, so it is not written. The debuginfo value changes the cached dependency
+# outputs and is part of the cache restore prefix; incremental state is never cached.
+# Measured in tools/ci/CHAIN-CORE-TIMING.md. Both jobs share these values and one dependency cache.
+env:
+  RUSTUP_TOOLCHAIN: 1.97.1
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  CARGO_INCREMENTAL: '0'
+defaults:
+  run:
+    shell: bash
+# Every feature profile on Linux, one row per profile (tools/ci/CHAIN-CORE-TIMING.md §7-§9): the
+# complete library and every integration suite of the profile, except the suites that stay on
+# macOS alone (automatic_guard, write_guard), the M4-R profile (tests/recovery_approval_mode.rs is compiled on
+# macOS and Windows only: the first Linux run counted 0 tests) and the Node checks that read the
+# macOS product build.
 jobs:
-  chain:
+  chain-linux:
+    name: chain linux (${{ matrix.group }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-15
-            shell: bash
-    runs-on: ${{ matrix.runner }}
-    # The opt-in end-history steps add about 10 minutes on Windows (measured on PR #172: the job
-    # took 19-22 minutes before them and was cut at 30 while compiling their last profile).
-    timeout-minutes: 45
+          - group: chain-core
+            features: chain-core
+            lib: none
+            minimum: 5
+            suites: chains chain_closing chain_handoff cycles context context_profiles will walk resume_guidance will_end_unsupported
+            extra: --features chain-core --test revisit cumulative_context_survives_pending_new_branch_success_and_process_restart -- --exact
+            save_cache: true
+          - group: development-product
+            features: chain-core,visual-authoring,product-safety
+            lib: visual_start
+            minimum: 3
+            suites: visual_start chain_resume_benchmark mcp
+          - group: approval
+            features: approved-plan,visual-authoring,product-safety
+            lib: all
+            minimum: 14
+            suites: approved_plan_wire_wave1 chain_recovery_preservation chain_monitor_fixtures closing_handoff context context_profiles guidance_wave1 guidance_wave2 guidance_interview_chain resume_guidance manual
+          - group: exploration
+            features: exploration-flow,visual-authoring,product-safety
+            lib: all
+            minimum: 20
+            suites: exploration_flow exploration_tools exploration_evidence exploration_plan_panel closing_handoff approved_plan_wire_wave1 chain_recovery_preservation context context_profiles guidance_wave1 guidance_wave2 guidance_interview_chain resume_guidance manual
+          - group: end-history
+            features: will-end-history
+            lib: all
+            minimum: 33
+            suites: will_end will_end_session chains chain_closing chain_handoff cycles context context_profiles will walk resume_guidance mcp tracking_record_boundary format_transition
+          - group: end-history-product
+            features: will-end-history,visual-authoring,product-safety
+            lib: all
+            minimum: 15
+            suites: will_end_visual will_end_session format_transition visual_start chain_resume_benchmark mcp chain_handoff visual_attachment
+            extra: --features will-end-history,approved-plan,visual-authoring,product-safety --test chain_monitor_fixtures
     env:
-      RUSTUP_TOOLCHAIN: 1.97.1
-      # CI-only build cost settings for the dev/test profiles (release is untouched; optimisation,
-      # debug assertions, overflow checks and panic strategy keep their defaults). Line tables keep
-      # file:line in panic backtraces but drop variable/type debuginfo; nothing here reuses the
-      # incremental state, so it is not written. The debuginfo value changes the cached dependency
-      # outputs and is part of the cache restore prefix; incremental state is never cached.
-      # Measured in tools/ci/CHAIN-CORE-TIMING.md.
-      CARGO_PROFILE_DEV_DEBUG: line-tables-only
-      CARGO_INCREMENTAL: '0'
-    defaults:
-      run:
-        shell: ${{ matrix.shell }}
+      FEATURES: ${{ matrix.features }}
+      LIB: ${{ matrix.lib }}
+      MINIMUM: ${{ matrix.minimum }}
+      SUITES: ${{ matrix.suites }}
+      EXTRA: ${{ matrix.extra }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         env:
@@ -77,8 +118,8 @@ jobs:
           persist-credentials: false
       - run: rustup toolchain install 1.97.1 --profile minimal
       - name: Restore locked dependencies and compiler outputs
-        id: build_cache
-        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5, Node 24, pinned
+        id: linux_cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5, Node 24, pinned; restore only, one row saves below
         with:
           path: |
             ~/.cargo/registry
@@ -93,109 +134,72 @@ jobs:
           key: ${{ runner.os }}-${{ runner.arch }}-chain-core-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-dev-debug-${{ env.CARGO_PROFILE_DEV_DEBUG }}-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-deps-v2-${{ hashFiles('.github/workflows/chain-core.yml', 'tools/ci/prune-workspace-cache.mjs') }}
           restore-keys: |
             ${{ runner.os }}-${{ runner.arch }}-chain-core-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-dev-debug-${{ env.CARGO_PROFILE_DEV_DEBUG }}-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-
-      - name: Default Core resume capture and measurement (synthetic, no model evaluation)
-        run: node tools/chain-resume-benchmark/run.mjs default "${{ runner.temp }}/gil-resume-default" target
-      - name: Actual Chain, legacy preservation and domain regressions
-        run: cargo test --locked -p gil --features chain-core --test chains --test chain_closing --test chain_handoff --test cycles --test context --test context_profiles --test will --test walk --test resume_guidance
-      - name: A build without the end history refuses formats 8 and 9 untouched and never reads an unachieved request as a close (synthetic)
-        run: node tools/ci/expect-tests.mjs 4 cargo test --locked -p gil --features chain-core --test will_end_unsupported
-      - name: Repeated failure and branch context inside a Chain
-        run: cargo test --locked -p gil --features chain-core --test revisit cumulative_context_survives_pending_new_branch_success_and_process_restart -- --exact
-      - name: Private visual creation unit contracts
-        run: cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --lib visual_start
-      - name: Private visual creation integration
-        run: cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --test visual_start --test chain_resume_benchmark
-      - name: Complete native MCP roundtrip
-        run: cargo test --locked -p gil --features chain-core,visual-authoring,product-safety --test mcp
-      - name: Compile all Core targets in the development product profile
-        run: cargo build --locked -p gil --all-targets --features chain-core,visual-authoring,product-safety
-      - name: Native Windows recovery boundaries (pinned directories, links, journal cleanup)
-        if: runner.os == 'Windows'
-        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib restore::windows -- --test-threads=1
-      - name: Approval profile, M6-D contract over the real stdio process (Wave 1 E wire)
-        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test approved_plan_wire_wave1 --test chain_recovery_preservation --test chain_monitor_fixtures
-      - name: After a Closing approval the receipts lead to the Chain Report with the approved verdict, never to an Experiment (real stdio process, restart, change request; synthetic)
-        run: node tools/ci/expect-tests.mjs 4 cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test closing_handoff
-      - name: Approval profile, complete library contracts (plan domain, tool catalog, guidance, profile fixtures)
-        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib -- --test-threads=1
-      - name: Historical context projection stays readable without automatic approval migration
-        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test context --test context_profiles
-      - name: Approval profile, next-call guidance over in-memory state and the real receipt (Wave 1 C)
-        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test guidance_wave1 --test guidance_wave2 --test guidance_interview_chain --test resume_guidance
-      - name: Manual help matches approval and recovery policies (Mac)
-        if: runner.os == 'macOS'
-        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test manual
-      - name: Approval profile resume capture and measurement (synthetic, no model evaluation)
-        run: node tools/chain-resume-benchmark/run.mjs product "${{ runner.temp }}/gil-resume-product" target
-      - name: Host guard scope and file protection in approval profile
-        run: cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --test automatic_guard --test write_guard -- --test-threads=1
-      - name: Compile the opt-in approval profile
-        run: cargo build --locked -p gil --all-targets --features approved-plan,visual-authoring,product-safety
-      - name: Manual example contracts over the real Core (Mac, synthetic inputs)
-        if: runner.os == 'macOS'
-        env:
-          GIL_EXAMPLE_CHECK_GIL: target/debug/gil
+      - name: Library contracts of this profile (all, a name filter, or none as on macOS)
+        if: matrix.lib != 'none'
         run: |
-          node tools/manual-example-check/check.mjs run --gil target/debug/gil --out "${{ runner.temp }}/gil-manual-examples"
-          node --test tools/manual-example-check/*.test.mjs
-      - name: Product context recovery measurement (Mac, synthetic approval)
-        if: runner.os == 'macOS'
+          set -euo pipefail
+          if [ "$LIB" = all ]; then cargo test --locked -p gil --features "$FEATURES" --lib -- --test-threads=1
+          else node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil --features "$FEATURES" --lib "$LIB"; fi
+      - name: Integration suites of this profile over real files and the real stdio process (synthetic)
+        run: |
+          set -euo pipefail
+          tests=(); for suite in $SUITES; do tests+=(--test "$suite"); done
+          # --no-fail-fast: every failing suite is reported in one run; the step still fails on any of them.
+          node tools/ci/expect-tests.mjs "$MINIMUM" cargo test --locked -p gil --no-fail-fast --features "$FEATURES" "${tests[@]}"
+      - name: Compile all Core targets of this profile
+        run: cargo build --locked -p gil --all-targets --features "$FEATURES"
+      - name: The one check of this row that uses another filter or feature set
+        if: matrix.extra != ''
+        run: node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil $EXTRA
+      - name: Keep only dependency outputs for the Linux cache (one row saves it)
+        if: matrix.save_cache && steps.linux_cache.outputs.cache-hit != 'true'
+        run: node tools/ci/prune-workspace-cache.mjs
+      - name: Save the Linux dependency cache
+        if: matrix.save_cache && steps.linux_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5, Node 24, pinned
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.npm
+            target/CACHEDIR.TAG
+            target/debug
+            target/aarch64-apple-darwin
+            target/x86_64-pc-windows-msvc
+            target/aarch64-pc-windows-msvc
+            target/plugin-core-build
+          key: ${{ runner.os }}-${{ runner.arch }}-chain-core-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-dev-debug-${{ env.CARGO_PROFILE_DEV_DEBUG }}-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-deps-v2-${{ hashFiles('.github/workflows/chain-core.yml', 'tools/ci/prune-workspace-cache.mjs') }}
+  # Checks that start no Core process: workflow text, Skill catalog, evaluators, fixtures and the CI
+  # contracts themselves. They ran in the macOS job until it became conditional on its path list.
+  chain-node:
+    name: chain node contracts (ubuntu-24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         env:
-          CHAIN_CONTEXT_BENCH_GIL_PRODUCT: target/debug/gil
-        run: node --test tools/chain-context-bench/*.test.mjs
-      - name: Exploration contract, library contracts with the item-queue suite on unmarked Chains (opt-in, not a product profile)
-        run: cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --lib -- --test-threads=1
-      - name: Exploration contract over the real stdio process (requirement links, approved revisit, old Chains unchanged; synthetic)
-        run: node tools/ci/expect-tests.mjs 4 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_flow
-      - name: Exploration Chain tool and visual-report paths over the real stdio process (declaration, evidence, citation, restart, refusals; synthetic)
-        run: node tools/ci/expect-tests.mjs 4 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_tools
-      - name: Original-record reads from a requirement over the real stdio process (reports verbatim, paged and ranged reads of large Reports, stored evidence after revisit, restart, refusals, no writes; synthetic)
-        run: node tools/ci/expect-tests.mjs 6 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_evidence
-      - name: Approval-panel responses of an exploration Chain from the real stdio process match the kept file the panel test renders (synthetic; no screen)
-        run: node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_plan_panel
-      - name: Closing an exploration Chain with an unanswered requirement only as approved, then the explicit next Chain (real stdio process; synthetic)
-        run: node tools/ci/expect-tests.mjs 5 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test closing_handoff
-      - name: Item-queue Chains keep their contract in an exploration build (unmarked records over the real stdio process)
-        run: cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test approved_plan_wire_wave1 --test chain_recovery_preservation --test context --test context_profiles --test guidance_wave1 --test guidance_wave2 --test guidance_interview_chain --test resume_guidance
-      - name: Manual help names only the contracts the exploration build provides (Mac)
-        if: runner.os == 'macOS'
-        run: cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test manual
-      - name: Compile all Core targets with the opt-in exploration contract (not a product profile)
-        run: cargo build --locked -p gil --all-targets --features exploration-flow,visual-authoring,product-safety
-      - name: M4-R opt-in recovery approval mode, setting parser and read-only contracts (not a product profile)
-        run: cargo test --locked -p gil --features approved-plan,visual-authoring,recovery-auto-approval --lib recovery_mode
-      - name: M4-R opt-in recovery approval mode over the real stdio process (5 synthetic cases, no user project)
-        run: cargo test --locked -p gil --features approved-plan,visual-authoring,recovery-auto-approval --test recovery_approval_mode
-      - name: Compile all Core targets with opt-in recovery approval (not a product profile)
-        run: cargo build --locked -p gil --all-targets --features approved-plan,visual-authoring,recovery-auto-approval
-      - name: Single end history, domain and store contracts of new format-8 projects (opt-in, not a product profile; E1–E9, forged records incl. null list keys, formats 4 and 6 preserved; synthetic)
-        run: node tools/ci/expect-tests.mjs 17 cargo test --locked -p gil --features will-end-history --test will_end
-      - name: Unachieved end over real files, the CLI and the stdio process (evidence and dirty gates kept, save failure, resend, restart, read surfaces; synthetic, no model evaluation)
-        run: node tools/ci/expect-tests.mjs 7 cargo test --locked -p gil --features will-end-history --test will_end_session
-      - name: Existing Chain, Will, context and stdio suites on format 8
-        run: cargo test --locked -p gil --features will-end-history --test chains --test chain_closing --test chain_handoff --test cycles --test context --test context_profiles --test will --test walk --test resume_guidance --test mcp
-      - name: Policy-record types stay unwired on format 8 (formats 10/11 still unknown, a tracking block is refused; order 3a, synthetic)
-        run: node tools/ci/expect-tests.mjs 3 cargo test --locked -p gil --features will-end-history --test tracking_record_boundary
-      - name: Explicit 6 to 8 transition over the real stdio process (read-only check, relayed user approval bound to project, state and proposal, copy and save failures, resend; order 1b, synthetic)
-        run: node tools/ci/expect-tests.mjs 6 cargo test --locked -p gil --features will-end-history --test format_transition
-      - name: End history library contracts (tool surface offers the marker only here)
-        run: cargo test --locked -p gil --features will-end-history --lib -- --test-threads=1
-      - name: Compile all Core targets with the opt-in end history (not a product profile)
-        run: cargo build --locked -p gil --all-targets --features will-end-history
-      - name: End history with the visual registry (format 9) and product safety, library contracts including the typed close
-        run: cargo test --locked -p gil --features will-end-history,visual-authoring,product-safety --lib -- --test-threads=1
-      - name: Format 9 unachieved end through the typed visual close over the real stdio process (null marker refused in both shapes, resend, restart; synthetic)
-        run: node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil --features will-end-history,visual-authoring,product-safety --test will_end_visual
-      - name: Unachieved end with product safety, the failure does not approve recovery (synthetic)
-        run: node tools/ci/expect-tests.mjs 7 cargo test --locked -p gil --features will-end-history,visual-authoring,product-safety --test will_end_session
-      - name: Explicit 6 to 8 and 7 to 9 transitions with the visual registry and product safety (private storage kept; order 1b, synthetic)
-        run: node tools/ci/expect-tests.mjs 7 cargo test --locked -p gil --features will-end-history,visual-authoring,product-safety --test format_transition
-      - name: Private visual creation, Chain handoff, attachments and the native MCP roundtrip on format 9 (synthetic)
-        run: cargo test --locked -p gil --features will-end-history,visual-authoring,product-safety --test visual_start --test chain_resume_benchmark --test mcp --test chain_handoff --test visual_attachment
-      - name: Compile all Core targets with the end history in the development product profile (not a release profile)
-        run: cargo build --locked -p gil --all-targets --features will-end-history,visual-authoring,product-safety
-      - name: Monitor fixtures with the end history in the approval profile (the additive will_end field is checked, the committed product fixtures stay unchanged)
-        run: node tools/ci/expect-tests.mjs 2 cargo test --locked -p gil --features will-end-history,approved-plan,visual-authoring,product-safety --test chain_monitor_fixtures
+          GIT_CONFIG_COUNT: 1
+          GIT_CONFIG_KEY_0: core.autocrlf
+          GIT_CONFIG_VALUE_0: 'false'
+        with:
+          persist-credentials: false
+      - name: Install the exact Node.js v22.23.5 (official nodejs.org linux-x64 tarball, SHA-256 pinned)
+        env:
+          NODE_VERSION: v22.23.5
+          NODE_TARBALL_SHA256: c54118104acc524633b5abe106bbf44a53126ec8b4e5fa105cb92b5d7de8a1a1
+          NODE_DIR: ${{ runner.temp }}/gil-chain-node
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = x86_64
+          test ! -e "$NODE_DIR"
+          mkdir -p "$NODE_DIR"
+          name="node-$NODE_VERSION-linux-x64"
+          curl --fail --silent --show-error --proto '=https' --tlsv1.2 -o "$NODE_DIR/$name.tar.gz" "https://nodejs.org/dist/$NODE_VERSION/$name.tar.gz"
+          echo "$NODE_TARBALL_SHA256  $NODE_DIR/$name.tar.gz" | sha256sum -c -
+          tar -xzf "$NODE_DIR/$name.tar.gz" -C "$NODE_DIR"
+          test "$("$NODE_DIR/$name/bin/node" -v)" = "$NODE_VERSION"
+          echo "$NODE_DIR/$name/bin" >> "$GITHUB_PATH"
+      - run: rustup toolchain install 1.97.1 --profile minimal
       - name: Shared workflow text, Skill catalog and scenario evaluator contracts (pure Node, no Core process)
         run: node --test plugins/gil-companion-prototype/skill.test.mjs plugins/gil-companion-prototype/workflow.test.mjs tools/scenarios/proxy.test.mjs tools/scenarios/redact.test.mjs tools/scenarios/report.test.mjs tools/scenarios/rpc.test.mjs tools/scenarios/scorer-cli.test.mjs tools/scenarios/trace-score.test.mjs tools/scenarios/approval-link.test.mjs tools/scenarios/state-path.test.mjs
       - name: CI cache and ordering contracts
@@ -213,8 +217,4 @@ jobs:
       - name: Resume measurement contracts
         run: node --test tools/chain-resume-benchmark/*.test.mjs
       - name: Context growth measurement contracts (Unix process fixtures)
-        if: runner.os == 'macOS'
         run: node --test tools/chain-context-bench/*.test.mjs
-      - name: Keep dependency outputs in cache after verification and artifact upload
-        if: steps.build_cache.outputs.cache-hit != 'true'
-        run: node tools/ci/prune-workspace-cache.mjs
