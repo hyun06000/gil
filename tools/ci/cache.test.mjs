@@ -123,7 +123,20 @@ test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired
     ['will-end-history', ['will_end_session', 'mcp', 'format_transition']],
     ['will-end-history,visual-authoring,product-safety', ['will_end_visual', 'will_end_session', 'format_transition', 'visual_start', 'mcp', 'chain_handoff', 'visual_attachment']],
   ]) for (const suite of suites) assert.ok(macRuns(features, suite), `macOS keeps ${suite} with ${features}`);
-  assert.match(mac, /--features approved-plan,visual-authoring,product-safety --lib -- restore:: lock:: install:: [^\n]* --test-threads=1\n/);
+  // The OS-touching library modules run in two parts on macOS: the three groups that must run one
+  // at a time, and the rest with the default test threads. The Preview job splits its complete
+  // default library the same way; in both, --skip and the name filter take the same names, so
+  // the parts are exact complements and no test is dropped or run twice.
+  const SERIAL = ['runtime_', 'install::', 'monitor::serve::'];
+  const skips = SERIAL.map(n => `--skip ${n}`).join(' '), serial = `${SERIAL.join(' ')} --test-threads=1`;
+  assert.ok(mac.includes(`--features approved-plan,visual-authoring,product-safety --lib -- restore:: lock:: launcher:: visual_ internal_fs:: write_guard:: mcp::bindings:: session::format_transition:: project_resume:: companion ${skips}\n`));
+  assert.ok(mac.includes(`--features approved-plan,visual-authoring,product-safety --lib -- ${serial}\n`));
+  const preview = workflowText('codex-preview');
+  assert.ok(preview.includes(`default) node tools/ci/expect-tests.mjs 1000 cargo test --locked -p gil --lib -- ${skips}\n`));
+  assert.ok(preview.includes(`              node tools/ci/expect-tests.mjs 150 cargo test --locked -p gil --lib -- ${serial}\n`));
+  // Everything `cargo test -p gil` ran is still named: library, binaries, integration suites, doc tests.
+  for (const part of ['--bins', "--test '*'", '--doc']) assert.ok(preview.includes(`              cargo test --locked -p gil ${part}`), part);
+  assert.doesNotMatch(preview, /default\) cargo test --locked -p gil -- --test-threads=1/);
   // Both jobs prepare the same way and use one key expression and one path list (the caches differ
   // by runner OS). macOS restores and saves in one step; on Linux every row restores and one saves.
   const cacheOf = block => block.match(/^          key: .+\n          restore-keys: \|\n.+$/m)?.[0];
