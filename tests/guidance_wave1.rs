@@ -231,7 +231,8 @@ fn receipts_name_one_next_call_through_interview_and_into_an_experiment() {
 
     let opened = mcp.call("gil_open", &root, contract("synthesis"));
     let hint = hints(&opened);
-    assert!(hint.contains("명시적 동의가 있을 때만 gil_close") && hint.contains("기다리는 동안 프로젝트 파일을 변경하지 않는다"), "{hint}");
+    let consent = if plan_record { "명시적 동의가 있을 때만 gil_close" } else { "명시적으로 동의했을 때만 approved: yes" };
+    assert!(hint.contains(consent) && hint.contains("기다리는 동안 프로젝트 파일을 변경하지 않는다"), "{hint}");
     let basis = vec!["step:C1/S1".to_string(), "step:C1/S2".to_string()];
     let synthesis_report = if plan_record {
         // 승인 계획 프로필: 맨손 approved: yes 는 거절되고 아무것도 닫히지 않는다.

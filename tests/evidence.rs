@@ -111,11 +111,16 @@ fn raw_cli_cannot_close_chat_only_verify_and_can_recover_with_a_real_document() 
         child.stdin.take().unwrap().write_all(body.as_bytes()).unwrap();
         child.wait_with_output().unwrap()
     };
+    let help = Command::new(env!("CARGO_BIN_EXE_gil")).args(["close", "--help"]).current_dir(&root).output().unwrap();
+    assert!(help.status.success());
+    let help = String::from_utf8(help.stdout).unwrap();
+    assert!(help.lines().any(|line| line.trim_start().starts_with("evidence_files:")), "{help}");
+    fs::write(root.join("observed.txt"), "Synthetic input 1+1, observed 2.").unwrap();
     let refused = close("execution: inspected synthetic numbers\nresult: two\n");
     assert!(!refused.status.success());
+    assert!(String::from_utf8_lossy(&refused.stderr).lines().any(|line| line.trim_start().starts_with("evidence_files:")), "{refused:?}");
     assert!(String::from_utf8_lossy(&refused.stderr).contains("verify_evidence_required"));
     assert_eq!(fs::read(root.join(gil::STATE_PATH)).unwrap(), before);
-    fs::write(root.join("observed.txt"), "Synthetic input 1+1, observed 2.").unwrap();
     let accepted = close("execution: inspected synthetic numbers\nresult: two\nevidence_files: observed.txt\n");
     assert!(accepted.status.success(), "{}", String::from_utf8_lossy(&accepted.stderr));
     let s = ProjectSession::open_read_only(common::spec(), root.join(gil::STATE_PATH)).unwrap();
