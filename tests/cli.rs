@@ -1245,7 +1245,8 @@ fn synthesis_requires_a_statement_on_new_closes_and_preserves_legacy_records() {
     let path = dir.join(gil::STATE_PATH);
     let before = std::fs::read(&path).unwrap();
     let (_, fields) = SYNTHESIS.split_once('\n').unwrap();
-    for blank in ["", "  \t　"] {
+    for (blank, approved) in [("", "yes"), ("  \t　", "yes"), ("", "no")] {
+        let fields = fields.replace("approved: yes", &format!("approved: {approved}"));
         let rejected = refused(&dir, &["close"], Some(&format!("statement: {blank}\n{fields}")));
         assert!(rejected.contains("statement") && rejected.contains("비워 둘 수 없다"), "{rejected}");
         assert_eq!(std::fs::read(&path).unwrap(), before);
