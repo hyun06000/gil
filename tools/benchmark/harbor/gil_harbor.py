@@ -21,12 +21,9 @@ class GilAgent(BaseAgent):
             task.write_text(instruction)
             await environment.upload_file(task, "/case/task.txt")
         result = await environment.exec(
-            'test -z "${DISPLAY:-}" && '
-            'test "$(ls /sys/class/net)" = lo && '
             "chmod 644 /case/task.txt && "
             "setpriv --reuid=65534 --regid=65534 --clear-groups --no-new-privs "
-            "sh -c 'mkdir /work/project && gil benchmark --in-container "
-            "/case/task.txt /case/adapter.py /work/project /work/record > /work/result.json'",
+            "python /case/run-worker.py",
             timeout_sec=850, user="root",
         )
         if result.return_code != 0:

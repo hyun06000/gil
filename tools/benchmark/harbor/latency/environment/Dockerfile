@@ -7,5 +7,5 @@ FROM python:3.12-slim-trixie
 COPY --from=inference /wheels /wheels
 RUN pip install --no-index --find-links=/wheels llama-cpp-python==0.3.16 && rm -rf /wheels
 COPY gil /usr/local/bin/gil
-COPY model.gguf adapter.py latencies.csv /case/
+COPY model.gguf adapter.py run-worker.py latencies.csv /case/
 RUN chmod 755 /case/adapter.py && mkdir /work && chown 65534:65534 /work
