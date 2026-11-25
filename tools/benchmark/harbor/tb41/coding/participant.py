@@ -1,9 +1,34 @@
 #!/usr/bin/env python3
-"""GIL adapter for the public sound-change task. Solving takes place during Verify."""
+"""GIL Interview and Experiment adapter for isolated coding tasks."""
 
 import json
+import re
 import sys
-from solver import WORK, ask, solve
+from solver import APP, CHECKS, TASK, WORK, ask, solve, source
+
+
+def cited_sources(task):
+    """Read bounded excerpts of public files explicitly named in the brief."""
+    excerpts = {}
+    remaining = 24000
+    for match in re.finditer(r"`([^`\n]+)`|(?<![\w/])(/app/[\w./-]+)", task):
+        name = (match[1] or match[2]).rstrip(".,;:")
+        try:
+            path = source(name)
+            key = str(path.relative_to(APP))
+            if key in excerpts or not path.is_file() or not remaining:
+                continue
+            size = min(9000, remaining)
+            with path.open("rb") as handle:
+                raw = handle.read(size + 1)
+            if b"\x00" in raw:
+                continue
+            snippet = raw[:size].decode("utf-8", errors="replace")
+            excerpts[key] = {"text": snippet, "truncated": len(raw) > size}
+            remaining -= len(raw[:size])
+        except (ValueError, OSError, RuntimeError):
+            continue
+    return excerpts
 
 
 def close(**fields):
@@ -26,7 +51,13 @@ def reply(r):
         return next(s for s in reversed(history) if s["kind"] == kind and s["report"])
 
     def model(prompt, choices=()):
-        return ask(task + "\nCurrent instruction: " + prompt, choices, stage=n["kind"])
+        context = {"task": task, "available_tools": {
+            "read": "Read public task source", "write": "Replace permitted solution files",
+            "check": CHECKS[TASK], "finish": "Hand submission to the independent verifier"}}
+        if k in ("question", "interpretation", "synthesis"):
+            context["cited_source_excerpts"] = cited_sources(task)
+        return ask(json.dumps(context, ensure_ascii=False) + "\nCurrent instruction: " + prompt,
+                   choices, stage=k)
 
     if n["action"] == "open":
         k = n["recommended"]
@@ -37,30 +68,37 @@ def reply(r):
         }
     k = n["kind"]
     if k == "question":
+        previous = [s["report"] for s in steps if s["kind"] in ("interpretation", "synthesis") and s["report"]]
         q = model(
-            "Ask one short question clarifying the deliverable or success criterion."
+            "Ask a question whose answer changes implementation or how success can be established. "
+            "Compare brief, cited sources and actual tools. On revision target a remaining gap. "
+            "Previous interview findings: " + json.dumps(previous[-2:])
         )
         return close(
-            question=q,
-            choices="Derive the answer from the task brief.",
-            response=model("Answer from the brief: " + q),
+            question=q, choices="Resolve from supplied evidence or record as open.",
+            response=model("Answer from the supplied evidence. Cite a source for confirmed facts. "
+                           "Distinguish assumptions and missing evidence. Question: " + q),
         )
     if k == "interpretation":
-        return close(
-            interpretation=model(
-                "Interpret this participant answer in one sentence: "
-                + step("question")["report"]["response"]
-            ),
-            unresolved="none",
-        )
+        exchange = json.dumps(step("question")["report"])
+        interpretation = model("Summarize confirmed requirements and the decisions supported by this exchange: " + exchange)
+        gaps = model("Identify remaining uncertainties and how each can be resolved, including evidence "
+                     "the available check cannot provide. Say none only if justified. Exchange: "
+                     + exchange + "\nInterpretation: " + interpretation)
+        return close(interpretation=interpretation, unresolved=gaps)
     if k == "synthesis":
         q, i = step("question"), step("interpretation")
+        findings = json.dumps([s["report"] for s in steps if s["kind"] in ("question", "interpretation") and s["report"]])
         spec = model(
-            "Write an actionable experiment specification using only the available source read, write and check tools: "
-            + i["report"]["interpretation"]
+            "Build an ordered roadmap from the interview. For each material acceptance criterion give "
+            "its source, observable result, and evidence available locally or deferred to the verifier. "
+            "Keep open assumptions explicit and name the first action that can resolve each. Interview: " + findings
         )
         decision = model(
-            "Does this specification implement the task? " + spec, ["accept", "revise"]
+            "Review the roadmap against the interview, cited evidence, and actual tools. Revise if it "
+            "contradicts a source, drops an uncertainty, or promises unavailable local verification. "
+            "Explicitly deferred verification is acceptable. Interview: " + findings + "\nRoadmap: " + spec,
+            ["accept", "revise"]
         )
         return close(
             statement=spec,
@@ -75,11 +113,12 @@ def reply(r):
                 "Give an observable success condition for: " + spec
             ),
         )
+    criteria = step("define")["report"]["success_condition"] if n["cycle"] == "experiment" else ""
     if k == "hypothesis":
         return close(
             hypothesis=model(
                 "Suggest an experimentally testable implementation strategy for: "
-                + spec
+                + spec + "\nSuccess criteria: " + criteria
             ),
             rationale=spec,
             guardrail="Use the public task files and local tools.",
@@ -87,20 +126,28 @@ def reply(r):
     if k == "verify":
         hypothesis = step("hypothesis")["report"]["hypothesis"]
         obs = solve(
-            task, "Accepted specification: " + spec + "\nHypothesis: " + hypothesis
+            task, "Accepted specification: " + spec + "\nSuccess criteria: " + criteria + "\nHypothesis: " + hypothesis
         )
         return close(
-            execution="Edited the submission files in the task workspace and recorded the local check.",
+            execution="Recorded file receipts and the local check status in observation.json.",
             result=json.dumps(obs),
             evidence_files="observation.json",
         )
     if k == "analysis":
         obs = (WORK / "observation.json").read_text()
         analysis = model(
-            "Interpret this observed training result. The independent verifier has not run: "
-            + obs
+            "Assess each accepted criterion against concrete observations. Identify the check by its "
+            "actual command. Distinguish demonstrated, contradicted and unverified criteria. "
+            "File hashes demonstrate edits only. The independent verifier has not run. Roadmap: "
+            + spec + "\nCriteria: " + criteria + "\nObserved: " + obs
         )
-        achieved = bool(json.loads(obs)["files"]) and json.loads(obs)["check_exit"] == 0
+        observed = json.loads(obs)
+        achieved = bool(observed["files"]) and observed["check_exit"] == 0 and model(
+            "Choose demonstrated only if every material criterion has direct evidence. A missing, "
+            "deferred or contradicted criterion requires incomplete. Criteria: " + criteria
+            + "\nRoadmap: " + spec + "\nObserved: " + obs + "\nAssessment: " + analysis,
+            ["demonstrated", "incomplete"],
+        ) == "demonstrated"
         return close(
             hypothesis_fit=analysis,
             problem_solved="yes" if achieved else "partial",
