@@ -65,11 +65,15 @@ test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired
   }
   assert.doesNotMatch(text, /windows-11-arm|codex-cli|runtime-testbed/);
   const chain = workflowText('chain-core');
-  // Windows test and build CI is paused: the Chain workflow is two macOS jobs, no matrix.
-  const chainJobs = jobsOf(chain);
-  assert.deepEqual(chainJobs.map(j => j.name), ['chain-product', 'chain-opt-in']);
-  for (const {name, block} of chainJobs) assert.match(block, /^    runs-on: macos-15$/m, name);
-  assert.doesNotMatch(chain, /runner: windows-|runs-on: windows-|shell: pwsh|matrix:/);
+  // Windows test and build CI is paused: the Chain workflow is two macOS jobs and the Linux trial job.
+  const allChainJobs = jobsOf(chain);
+  assert.deepEqual(allChainJobs.map(j => j.name), ['chain-product', 'chain-opt-in', 'chain-linux']);
+  const chainJobs = allChainJobs.slice(0, 2), linux = allChainJobs[2].block;
+  for (const {name, block} of chainJobs) {
+    assert.match(block, /^    runs-on: macos-15$/m, name);
+    assert.doesNotMatch(block, /^\s+(?:strategy|matrix):/m, name);
+  }
+  assert.doesNotMatch(chain, /runner: windows-|runs-on: windows-|shell: pwsh/);
   // A guarded step (`node tools/ci/expect-tests.mjs <minimum> cargo test …`) is the same Cargo check.
   const groupsOf = block => {
     const features = [...block.matchAll(/run: (?:node tools\/ci\/expect-tests\.mjs \d+ )?cargo (?:test|build).*?--features ([\w,-]+)/g)].map(m => m[1]);
@@ -93,7 +97,33 @@ test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired
   assert.ok(pin && chainJobs[1].block.includes(`uses: actions/cache/restore@${pin} `));
   assert.doesNotMatch(chainJobs[1].block, /uses: actions\/cache@|run: node tools\/ci\/prune-workspace-cache|build_cache/);
   for (const prepare of ['      - uses: actions/checkout@', "          GIT_CONFIG_VALUE_0: 'false'", '          persist-credentials: false', '      - run: rustup toolchain install 1.97.1 --profile minimal'])
-    for (const {name, block} of chainJobs) assert.ok(block.includes(prepare), `${name}: ${prepare}`);
+    for (const {name, block} of allChainJobs) assert.ok(block.includes(prepare), `${name}: ${prepare}`);
+  // The Linux trial job: one row per feature profile of the macOS jobs, in the same order, each
+  // profile once. It restores and saves its own (Linux) cache through the same key expression and
+  // paths; one row alone prunes and saves. The suites kept on macOS are never listed for Linux.
+  assert.match(linux, /^    runs-on: ubuntu-24\.04$/m);
+  const rows = [...linux.matchAll(/^          - group: ([\w-]+)\n            features: ([\w,-]+)\n            lib: (\w+)\n            minimum: (\d+)\n            suites: ([\w ]+)\n/gm)];
+  const macProfiles = [...groupsOf(chainJobs[0].block), ...groupsOf(chainJobs[1].block)];
+  // The Monitor-fixture profile is one suite and rides on the last row as its extra check.
+  assert.deepEqual(rows.map(r => r[2]), macProfiles.slice(0, -1));
+  assert.ok(linux.includes(`            extra: --features ${macProfiles.at(-1)} --test chain_monitor_fixtures\n`));
+  assert.equal((linux.match(/^          - group: /gm) || []).length, rows.length, 'every row has the full shape');
+  for (const [, group, features, lib, minimum, suites] of rows) {
+    assert.ok(Number(minimum) >= 1, group);
+    for (const suite of suites.split(' ')) {
+      assert.ok(existsSync(join(root, 'tests', `${suite}.rs`)), `${group}: ${suite}`);
+      assert.ok(!['manual', 'automatic_guard', 'write_guard'].includes(suite), `${group}: ${suite} stays on macOS`);
+      // Nothing is invented for Linux: the macOS jobs run the same suite with the same features.
+      assert.match(chainJobs.map(j => j.block).join(''), new RegExp(`cargo test [^\\n]*--features ${features} [^\\n]*--test ${suite}\\b`), `${group}: ${suite}`);
+    }
+    if (lib !== 'none') assert.match(chainJobs.map(j => j.block).join(''), new RegExp(`--features ${features} --lib${lib === 'all' ? ' -- --test-threads=1' : ` ${lib}`}\\n`), group);
+  }
+  assert.equal(cacheOf(linux), cacheOf(chainJobs[0].block));
+  assert.equal((linux.match(/^          key: .+$/gm) || []).filter(k => k === cacheOf(linux).split('\n')[0]).length, 2, 'restore and save use one key');
+  assert.ok(linux.includes(`uses: actions/cache/restore@${pin} `) && linux.includes(`uses: actions/cache/save@${pin} `));
+  assert.equal((linux.match(/^            save_cache: true$/gm) || []).length, 1);
+  assert.equal((linux.match(/^        if: matrix\.save_cache && steps\.linux_cache\.outputs\.cache-hit != 'true'$/gm) || []).length, 2);
+  assert.doesNotMatch(linux, /uses: actions\/cache@|build_cache/);
   const companion = workflowText('companion-native');
   assert.doesNotMatch(companion, /windows-2025|windows-11-arm/);
   assert.match(companion, /paths:\n\s+- 'companion\/\*\*'/);

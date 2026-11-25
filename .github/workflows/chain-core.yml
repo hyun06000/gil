@@ -244,3 +244,120 @@ jobs:
         run: cargo build --locked -p gil --all-targets --features will-end-history,visual-authoring,product-safety
       - name: Monitor fixtures with the end history in the approval profile (the additive will_end field is checked, the committed product fixtures stay unchanged)
         run: node tools/ci/expect-tests.mjs 2 cargo test --locked -p gil --features will-end-history,approved-plan,visual-authoring,product-safety --test chain_monitor_fixtures
+  # Trial (tools/ci/CHAIN-CORE-TIMING.md §7): the same feature profiles on Linux, one row per
+  # profile, next to the macOS jobs above. Nothing is removed from macOS by this job. Each row runs
+  # the Cargo checks the macOS jobs run for that profile, except the suites kept on macOS (manual,
+  # automatic_guard, write_guard) and the Node checks that read the macOS product build.
+  chain-linux:
+    name: chain linux (${{ matrix.group }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: chain-core
+            features: chain-core
+            lib: none
+            minimum: 5
+            suites: chains chain_closing chain_handoff cycles context context_profiles will walk resume_guidance will_end_unsupported
+            extra: --features chain-core --test revisit cumulative_context_survives_pending_new_branch_success_and_process_restart -- --exact
+            save_cache: true
+          - group: development-product
+            features: chain-core,visual-authoring,product-safety
+            lib: visual_start
+            minimum: 3
+            suites: visual_start chain_resume_benchmark mcp
+          - group: approval
+            features: approved-plan,visual-authoring,product-safety
+            lib: all
+            minimum: 14
+            suites: approved_plan_wire_wave1 chain_recovery_preservation chain_monitor_fixtures closing_handoff context context_profiles guidance_wave1 guidance_wave2 guidance_interview_chain resume_guidance
+          - group: recovery-approval
+            features: approved-plan,visual-authoring,recovery-auto-approval
+            lib: recovery_mode
+            minimum: 5
+            suites: recovery_approval_mode
+          - group: exploration
+            features: exploration-flow,visual-authoring,product-safety
+            lib: all
+            minimum: 20
+            suites: exploration_flow exploration_tools exploration_evidence exploration_plan_panel closing_handoff approved_plan_wire_wave1 chain_recovery_preservation context context_profiles guidance_wave1 guidance_wave2 guidance_interview_chain resume_guidance
+          - group: end-history
+            features: will-end-history
+            lib: all
+            minimum: 33
+            suites: will_end will_end_session chains chain_closing chain_handoff cycles context context_profiles will walk resume_guidance mcp tracking_record_boundary format_transition
+          - group: end-history-product
+            features: will-end-history,visual-authoring,product-safety
+            lib: all
+            minimum: 15
+            suites: will_end_visual will_end_session format_transition visual_start chain_resume_benchmark mcp chain_handoff visual_attachment
+            extra: --features will-end-history,approved-plan,visual-authoring,product-safety --test chain_monitor_fixtures
+    env:
+      FEATURES: ${{ matrix.features }}
+      LIB: ${{ matrix.lib }}
+      MINIMUM: ${{ matrix.minimum }}
+      SUITES: ${{ matrix.suites }}
+      EXTRA: ${{ matrix.extra }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        env:
+          GIT_CONFIG_COUNT: 1
+          GIT_CONFIG_KEY_0: core.autocrlf
+          GIT_CONFIG_VALUE_0: 'false'
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install 1.97.1 --profile minimal
+      - name: Restore locked dependencies and compiler outputs
+        id: linux_cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5, Node 24, pinned; the Linux cache is saved by one row below
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.npm
+            target/CACHEDIR.TAG
+            target/debug
+            target/aarch64-apple-darwin
+            target/x86_64-pc-windows-msvc
+            target/aarch64-pc-windows-msvc
+            target/plugin-core-build
+          key: ${{ runner.os }}-${{ runner.arch }}-chain-core-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-dev-debug-${{ env.CARGO_PROFILE_DEV_DEBUG }}-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-deps-v2-${{ hashFiles('.github/workflows/chain-core.yml', 'tools/ci/prune-workspace-cache.mjs') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-chain-core-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-dev-debug-${{ env.CARGO_PROFILE_DEV_DEBUG }}-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-
+      - name: Library contracts of this profile (all, a name filter, or none as on macOS)
+        if: matrix.lib != 'none'
+        run: |
+          set -euo pipefail
+          if [ "$LIB" = all ]; then cargo test --locked -p gil --features "$FEATURES" --lib -- --test-threads=1
+          else node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil --features "$FEATURES" --lib "$LIB"; fi
+      - name: Integration suites of this profile over real files and the real stdio process (synthetic)
+        run: |
+          set -euo pipefail
+          tests=(); for suite in $SUITES; do tests+=(--test "$suite"); done
+          # --no-fail-fast: every failing suite is reported in one run; the step still fails on any of them.
+          node tools/ci/expect-tests.mjs "$MINIMUM" cargo test --locked -p gil --no-fail-fast --features "$FEATURES" "${tests[@]}"
+      - name: Compile all Core targets of this profile
+        run: cargo build --locked -p gil --all-targets --features "$FEATURES"
+      - name: The one check of this row that uses another filter or feature set
+        if: matrix.extra != ''
+        run: node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil $EXTRA
+      - name: Keep only dependency outputs for the Linux cache (one row saves it)
+        if: matrix.save_cache && steps.linux_cache.outputs.cache-hit != 'true'
+        run: node tools/ci/prune-workspace-cache.mjs
+      - name: Save the Linux dependency cache
+        if: matrix.save_cache && steps.linux_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5, Node 24, pinned
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.npm
+            target/CACHEDIR.TAG
+            target/debug
+            target/aarch64-apple-darwin
+            target/x86_64-pc-windows-msvc
+            target/aarch64-pc-windows-msvc
+            target/plugin-core-build
+          key: ${{ runner.os }}-${{ runner.arch }}-chain-core-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-dev-debug-${{ env.CARGO_PROFILE_DEV_DEBUG }}-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-deps-v2-${{ hashFiles('.github/workflows/chain-core.yml', 'tools/ci/prune-workspace-cache.mjs') }}

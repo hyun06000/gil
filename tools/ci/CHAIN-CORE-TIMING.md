@@ -226,8 +226,13 @@ Windows 실행이 중단된 뒤 PR 한 건의 대기 시간은 Chain job 하나�
 | `chain-product` | 기능 없음(resume 측정), `chain-core`, `chain-core,visual-authoring,product-safety`, `approved-plan,visual-authoring,product-safety`(+ 그 빌드를 쓰는 Node 검사 두 단계), `approved-plan,visual-authoring,recovery-auto-approval`, Core 없는 Node 검사 전부, 캐시 정리 | 164 + 233 + 89 + 23 = 509 |
 | `chain-opt-in` | `exploration-flow,visual-authoring,product-safety`, `will-end-history`, `will-end-history,visual-authoring,product-safety`, `will-end-history,approved-plan,visual-authoring,product-safety` | 192 + 150 + 137 + 18 = 497 |
 
-준비(checkout·rustup·캐시 복원, 기준 실행 22초)는 두 job이 각각 한다. 기대값은 job당 약 9분이며, 이는 위
-단계 합으로 계산한 값이지 분할 뒤 원격 실행의 측정값이 아니다. 측정값은 이 변경의 PR 실행에서 얻는다.
+준비(checkout·rustup·캐시 복원, 기준 실행 22초)는 두 job이 각각 한다. 위 단계 합으로 계산한 기대값은 job당
+약 9분이었다.
+
+**분할 뒤 실측** (PR #326, run 45518641566, 두 job 모두 성공, 배정 대기 4초, 동시에 시작): `chain-product`
+600초, `chain-opt-in` 591초. 분할 전 1034초에서 약 10분으로 줄었다. 이 실행은 workflow 파일이 바뀌어 정확한
+캐시 키가 없던 경우(접두사 복원 + 정리·저장)이고, 같은 단계가 기준 실행보다 느렸다(승인 프로필 lib 98→108초,
+end history lib 82→101초). 한 번의 실행이므로 서버 간 차이와 구분하지 못한다.
 
 바뀌지 않은 것: 단계 이름·명령·기능 조합·필터·`expect-tests` 최소 수(§4의 단계 5~56이 그대로 있고 순서만
 job별로 나뉨), 빌드 설정 두 값, 캐시 키 식과 저장 경로. 바뀐 것:
@@ -248,3 +253,30 @@ job별로 나뉨), 빌드 설정 두 값, 캐시 키 식과 저장 경로. 바�
 
 `tools/ci/cache.test.mjs`가 job 두 개의 이름·서버, job별 기능 조합 순서, 두 job의 캐시 키·경로·준비 단계
 일치, 두 번째 job이 저장·정리를 하지 않음을 고정한다.
+
+## 7. Linux 기능 매트릭스 시험 운영 (2026-11-25, 추가만 함)
+
+macOS 동시 job 한도(계정당 5개로 관측) 때문에 macOS에서는 더 나눠도 대기가 줄지 않는다. 다음 단계는 OS와
+무관한 기능 검사를 Linux로 옮기는 것이며, 이 절은 그 첫 단계다: **macOS job은 그대로 두고** 같은 기능 조합을
+Linux(`ubuntu-24.04`)에서 조합당 한 행으로 나란히 돌려 통과 여부와 시간을 본다. macOS 축소는 이 결과를 본 뒤
+따로 결정한다.
+
+| 행 | 기능 조합 | lib | 통합 시험 |
+|---|---|---|---|
+| `chain-core` | `chain-core` | 없음(macOS와 같음) | Chain·Will 도메인 10개 + `revisit` 1건(정확한 이름) |
+| `development-product` | `chain-core,visual-authoring,product-safety` | `visual_start` 필터 | `visual_start`, `chain_resume_benchmark`, `mcp` |
+| `approval` | `approved-plan,visual-authoring,product-safety` | 전체 | 승인 wire·보존·Monitor fixture·Closing·문맥·안내 |
+| `recovery-approval` | `approved-plan,visual-authoring,recovery-auto-approval` | `recovery_mode` 필터 | `recovery_approval_mode` |
+| `exploration` | `exploration-flow,visual-authoring,product-safety` | 전체 | 탐색 4종·Closing·item-queue 유지 suite |
+| `end-history` | `will-end-history` | 전체 | end history·기존 Chain suite·`mcp`·형식 전환 |
+| `end-history-product` | `will-end-history,visual-authoring,product-safety` | 전체 | 형식 9·전환·이미지 보고 + 승인 프로필 Monitor fixture 1건 |
+
+- 각 행의 통합 시험은 macOS job이 같은 기능 조합으로 돌리는 suite만 쓴다(`cache.test.mjs`가 대조). 행마다
+  `expect-tests` 최소 수를 한 번 적용한다(macOS 단계별 최소 수의 합 이상). 단계별 이름은 Linux에서는 합쳐진다.
+- Linux에서 돌리지 않는 것: `manual`, `automatic_guard`, `write_guard`(macOS 유지 대상), macOS 제품 빌드를
+  읽는 Node 검사 두 단계, resume 측정(`run.mjs`), Core 없는 Node 검사(이미 macOS job에서 한 번 실행).
+- Linux 의존성 캐시는 macOS와 같은 키 식(`runner.os`로 구분)이고 한 행(`chain-core`)만 정리 후 저장한다.
+- 시험 분류의 근거(조건부 컴파일 문장과 시험 이름 기준, 시험 본문 전수 확인 아님): macOS 필수 84건,
+  두 OS 모두 약 497건, Linux만으로 충분 약 483건(통합 시험 1,073건 중).
+- 이 절을 쓰는 시점에 Linux 행의 통과 여부와 시간은 측정되지 않았다.
+
