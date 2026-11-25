@@ -39,8 +39,11 @@ concurrency:
 permissions:
   contents: read
 
+# Two macOS jobs run side by side (tools/ci/CHAIN-CORE-TIMING.md §11): the library tests with the
+# packaging checks, and the binaries, integration suites and doc tests with the complete compile.
+# Both restore one dependency cache; the library job, which also builds the release Core, saves it.
 jobs:
-  macos-arm64-preview:
+  preview-library:
     runs-on: macos-15
     timeout-minutes: 45
     env:
@@ -75,32 +78,28 @@ jobs:
           npm ci --prefix mcp-app
           npm ci --prefix plugins/gil-companion-prototype
           cargo fetch --locked
-      - name: Core and shared UI regression for selected profile
+      - name: Core library regression for selected profile
         env:
           GIL_RUNTIME_PROFILE: ${{ inputs.runtime_profile || 'default' }}
         run: |
           # Fork-based launcher fixtures can inherit another parallel fixture's lock.
           # Keep assertions intact and run the native Core fixtures sequentially.
-          # The default profile runs every test it ran before, in parts (tools/ci/CHAIN-CORE-TIMING.md §10):
-          # three library groups stay one at a time (the fork-based launcher in runtime_*, the install
-          # lock tests, and the Monitor server tests with its watcher and signal handlers); the other
-          # library tests and the integration suites use the default test threads. --skip and the
+          # The default profile runs every test `cargo test -p gil` ran, in parts (tools/ci/CHAIN-CORE-TIMING.md
+          # §10-§11): this job runs the library, the suites job runs the binaries, the integration
+          # suites and the doc tests. Three library groups stay one at a time (the fork-based launcher
+          # in runtime_*, the install lock tests, and the Monitor server tests with its watcher and
+          # signal handlers); the other library tests use the default test threads. --skip and the
           # name filter take the same three names, so the two library runs are exact complements.
+          # A manually selected profile runs whole in this job, as before.
           case "$GIL_RUNTIME_PROFILE" in
             default) node tools/ci/expect-tests.mjs 1000 cargo test --locked -p gil --lib -- --skip runtime_ --skip install:: --skip monitor::serve::
-              node tools/ci/expect-tests.mjs 150 cargo test --locked -p gil --lib -- runtime_ install:: monitor::serve:: --test-threads=1
-              cargo test --locked -p gil --bins
-              cargo test --locked -p gil --test '*'
-              cargo test --locked -p gil --doc ;;
+              node tools/ci/expect-tests.mjs 150 cargo test --locked -p gil --lib -- runtime_ install:: monitor::serve:: --test-threads=1 ;;
             visual-authoring) cargo test --locked -p gil --features visual-authoring -- --test-threads=1 ;;
             approved-plan) cargo test --locked -p gil --features approved-plan,visual-authoring,product-safety --lib --test context --test context_profiles --test guidance_wave1 --test guidance_wave2 --test approved_plan_wire_wave1 -- --test-threads=1 ;;
             exploration-flow) cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --lib -- --test-threads=1
               node tools/ci/expect-tests.mjs 20 cargo test --locked -p gil --features exploration-flow,visual-authoring,product-safety --test exploration_flow --test exploration_tools --test exploration_evidence --test exploration_plan_panel --test closing_handoff ;;
             *) exit 2 ;;
           esac
-          node --test ui/layout.test.mjs mcp-app/*.test.mjs plugins/gil-companion-prototype/*.test.mjs
-      - name: Compile all default Core targets
-        run: cargo build --locked -p gil --all-targets
       - name: Packaging regression tests
         run: node --test distribution/codex/*.test.mjs distribution/compliance/notices.test.mjs
       - name: Offline context metrics and documentation link checks
@@ -169,3 +168,69 @@ jobs:
       - name: Keep dependency outputs in cache after verification and artifact upload
         if: steps.build_cache.outputs.cache-hit != 'true'
         run: node tools/ci/prune-workspace-cache.mjs
+  preview-suites:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      RUSTUP_TOOLCHAIN: 1.97.1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Restore locked dependencies and compiler outputs
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5, Node 24, pinned
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.npm
+            target/CACHEDIR.TAG
+            target/debug
+            target/aarch64-apple-darwin
+            target/x86_64-pc-windows-msvc
+            target/aarch64-pc-windows-msvc
+            target/plugin-core-build
+          key: ${{ runner.os }}-${{ runner.arch }}-codex-preview-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-deps-v2-${{ hashFiles('.github/workflows/codex-preview.yml', 'tools/ci/prune-workspace-cache.mjs') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-codex-preview-${{ matrix.target || matrix.os || 'native' }}-${{ matrix.profile || inputs.runtime_profile || 'default' }}-rust-1.97.1-${{ hashFiles('Cargo.lock', '**/package-lock.json') }}-
+      - name: Check build machine (never a user installation requirement)
+        run: |
+          test "$(uname -m)" = arm64
+          node -e 'if (Number(process.versions.node.split(".")[0]) < 22) process.exit(1)'
+          rustup toolchain install 1.97.1 --profile minimal --target aarch64-apple-darwin
+          npm ci --prefix mcp-app
+          npm ci --prefix plugins/gil-companion-prototype
+          cargo fetch --locked
+      - name: Core binaries, integration suites, doc tests and shared UI regression
+        env:
+          GIL_RUNTIME_PROFILE: ${{ inputs.runtime_profile || 'default' }}
+        run: |
+          # The rest of the default profile (the library runs in the other job). The integration
+          # suites use the default test threads.
+          case "$GIL_RUNTIME_PROFILE" in
+            default) cargo test --locked -p gil --bins
+              cargo test --locked -p gil --test '*'
+              cargo test --locked -p gil --doc ;;
+            visual-authoring|approved-plan|exploration-flow) echo "the selected profile runs whole in the library job" ;;
+            *) exit 2 ;;
+          esac
+          node --test ui/layout.test.mjs mcp-app/*.test.mjs plugins/gil-companion-prototype/*.test.mjs
+      - name: Compile all default Core targets
+        run: cargo build --locked -p gil --all-targets
+  # The required check. It passes only when both jobs passed; a cancelled or failed job fails it
+  # (a skipped required check would count as passed, so it always runs).
+  macos-arm64-preview:
+    runs-on: ubuntu-24.04
+    needs: [preview-library, preview-suites]
+    if: always()
+    timeout-minutes: 5
+    env:
+      LIBRARY: ${{ needs.preview-library.result }}
+      SUITES: ${{ needs.preview-suites.result }}
+    steps:
+      - name: Both Preview jobs passed
+        run: |
+          echo "library and packaging: $LIBRARY; suites: $SUITES"
+          test "$LIBRARY" = success
+          test "$SUITES" = success

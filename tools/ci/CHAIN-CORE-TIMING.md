@@ -450,3 +450,31 @@ PR에서 job을 시작하는 경로:
 개선폭을 단정하지 않고, 판단은 단계 안의 구간 시간으로 했다. `chain-macos`의 OS 민감 lib은 한 단계 91~102초에서
 두 단계 41초 + 43초가 되었다(첫 단계에 그 조합의 lib 컴파일이 포함된다).
 
+
+## 11. Preview와 chain-macos를 각각 macOS 잡 둘로 (2026-11-25)
+
+두 워크플로 모두 시간의 대부분이 컴파일이라(Preview 시험 단계 221초 중 컴파일 약 105초, chain-macos는 기능 조합
+다섯 개를 차례로 컴파일) 시험 스레드로는 더 줄지 않는다. 검사는 하나도 빼지 않고 잡만 나눴다.
+
+- **Preview**: `preview-library`(lib 시험, 패키징 검사, release 빌드, 산출물, CI 계약; 캐시 저장)와
+  `preview-suites`(bins·통합 시험·doc 시험, 공용 UI 시험, `cargo build --all-targets`; 캐시 복원만).
+  필수 검사 `macos-arm64-preview`는 같은 이름의 작은 Linux 잡으로 남아 두 잡이 모두 성공해야 통과한다.
+  건너뛴 필수 검사는 통과로 계산되므로 `if: always()`로 항상 실행한다. 저장소 보호 설정은 바꾸지 않았다.
+- **chain-macos**: `chain-macos-profiles`(default resume, 개발 제품, M4-R, 형식 9; 캐시 저장)와
+  `chain-macos-approval`(승인 조합과 그 빌드를 읽는 검사, 형식 8; 캐시 복원만).
+
+**첫 원격 실행** (PR #336, 커밋 시점의 run 45563538334 · 45563538260, 모든 검사 통과):
+
+| | 기존 (main run 45543507426 · 45543507506) | 이번 |
+|---|---|---|
+| Preview: 시작부터 필수 검사 통과까지 | 374초 (한 잡) | 301초 |
+| `preview-library` | — | 277초 (배정 대기 19초, 캐시 저장 29초 포함) |
+| `preview-suites` | — | 231초 |
+| chain-macos: 시작부터 마지막 잡 끝까지 | 605초 (한 잡) | 277초 |
+| `chain-macos-profiles` | — | 237초 |
+| `chain-macos-approval` | — | 258초 (배정 대기 19초) |
+
+`preview-library`의 캐시 저장 29초는 워크플로 파일이 바뀐 직후라 키가 맞지 않아 생겼다. main에서 캐시가 한 번
+만들어진 뒤의 PR에서는 없어야 하지만, 그 실행은 아직 재지 않았다. macOS 러너 동시 실행 한도(5) 아래에서 여러
+PR이 겹칠 때의 대기도 재지 않았다: 소스가 바뀌는 PR 하나가 여는 macOS 잡은 4개에서 6개가 되었다(Preview 2,
+chain-macos 2, 제품 후보 1, 첫 시작 1).
