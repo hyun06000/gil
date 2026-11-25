@@ -21,8 +21,10 @@ files=obs.get("files",{}); receipts={}
 for name,digest in files.items():
     f=folder/"artifacts/app"/name
     receipts[name]=f.is_file() and hashlib.sha256(f.read_bytes()).hexdigest()==digest
+last_check = obs.get("last_check") or {}
+checked_submission = bool(receipts) and all(receipts.values()) and last_check.get("files") == files
 error=(d.get("exception_info") or {}).get("exception_type")
-r={"task":task,"arm":arm,"usage":u,"observation":obs,"receipts":receipts,"checks":{c["name"]:c["status"] for c in checks},"seconds":t,"rewards":(d.get("verifier_result") or {}).get("rewards"),"error":error}
+r={"task":task,"arm":arm,"usage":u,"observation":obs,"receipts":receipts,"checked_submission":checked_submission,"checks":{c["name"]:c["status"] for c in checks},"seconds":t,"rewards":(d.get("verifier_result") or {}).get("rewards"),"error":error}
 (root/(arm+".json")).write_text(json.dumps(r,indent=2))
 print(json.dumps(r),flush=True)
 if error:
