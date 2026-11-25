@@ -111,6 +111,17 @@ impl CloseContract {
         })
     }
 
+    /// The session checks evidence against the filesystem on every new Verify close.
+    /// Add that requirement to the displayed Report without changing the grammar for stored Reports.
+    pub(crate) fn include_evidence_files(&mut self) {
+        if !self.fields.iter().any(|field| field.name == "evidence_files") {
+            self.fields.push(FieldContract {
+                name: "evidence_files".into(), non_empty: true, values: Vec::new(),
+                branches: Vec::new(), not_yet: Vec::new(),
+            });
+        }
+    }
+
     pub fn subject(&self) -> &str {
         &self.subject
     }
