@@ -271,6 +271,7 @@ mod chain;
 pub use chain::{Chain, ChainError};
 
 pub mod approved_plan;
+pub mod benchmark;
 
 #[cfg(all(test, feature = "approved-plan"))]
 #[path = "../tests/common/mod.rs"]
