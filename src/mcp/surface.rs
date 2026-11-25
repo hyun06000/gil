@@ -220,7 +220,7 @@ pub fn rejection(tool: &Tool, input: &Value) -> String {
     // The outer argument is missing, not a field inside the body: say so before Core's Report
     // grammar would describe it as missing Report fields.
     if tool.name == "gil_close" && input.as_object().is_some_and(|object| !object.contains_key("report")) {
-        return "gil_close: 'report' is missing. Every close sends the Report STRING of the open step in report, in addition to project_root (and to expected_owner/visuals when that step needs the typed close). This call was not executed. Nothing was closed. Read gil_help({project_root, topic: \"close\"}) for the current Report fields, then send one corrected call.".into();
+        return "gil_close: 'report' is missing. Send project_root and the Report string for the current Step or Cycle in report. Include expected_owner and visuals when a typed close is required. This call was not executed. Nothing was closed. Read gil_help({project_root, topic: \"close\"}) for the current Report fields, then send one corrected call.".into();
     }
     #[cfg(feature = "visual-authoring")]
     if tool.name == "gil_close" && input.get("expected_owner").is_some() && input.get("visuals").is_some() {
@@ -407,7 +407,7 @@ mod tests {
         assert!(!valid_input(close, &missing));
         let said = rejection(close, &missing);
         assert!(said.contains("'report' is missing") && said.contains("Nothing was closed"), "{said}");
-        assert!(!said.contains(secret), "{said}");
+        assert!(said.contains("Step or Cycle") && !said.contains(secret), "{said}");
         assert!(valid_input(close, &json!({"project_root": secret, "report": ""})), "an empty body is Core's to judge");
     }
     #[test]
