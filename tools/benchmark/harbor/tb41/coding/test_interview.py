@@ -108,6 +108,21 @@ class InterviewTests(unittest.TestCase):
             self.assertIn("No decision-changing open question", report)
             self.assertIn("immaterial: Equivalent actions.", report)
 
+    def test_calendar_hours_do_not_establish_rounding_direction(self):
+        page = {"path": "calendar", "offset": 0, "result": "openTimeUtc=09:00"}
+        candidate = {"claim": "Weekend rolls forward", "path": "calendar", "quote": "openTimeUtc=09:00"}
+        with patch.object(participant, "ask", side_effect=[json.dumps([candidate]), "insufficient"]) as model:
+            self.assertEqual(participant.reviewed_promotions(model, "Direction unknown", [page], []), [])
+        for old, quote in [([], "next opening"), ([page["result"]], page["result"])]:
+            with patch.object(participant, "ask", return_value=json.dumps([dict(candidate, quote=quote)])) as model:
+                self.assertEqual(participant.reviewed_promotions(model, "Direction unknown", [page], old), [])
+                self.assertEqual(model.call_count, 1)
+        page["result"] = "Weekend rolls forward to next opening"
+        candidate["quote"] = page["result"]
+        with patch.object(participant, "ask", side_effect=[json.dumps([candidate]), "supported"]) as model:
+            self.assertEqual(participant.reviewed_promotions(model, "Direction unknown", [page], []),
+                             [dict(candidate, offset=0)])
+
     def test_success_criteria_reach_verify_and_analysis(self):
         interview = [step("synthesis", statement="Codec roadmap")]
         experiment = [step("define", success_condition="Bytes round trip"), step("hypothesis", hypothesis="Encode then decode")]

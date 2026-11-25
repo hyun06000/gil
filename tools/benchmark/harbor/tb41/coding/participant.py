@@ -104,6 +104,40 @@ def explore(task, stage, focus, cited, reads):
         offsets[name] = start + 6000 if more else None
 
 
+def reviewed_promotions(model, findings, new_pages, prior_texts):
+    """Accept only new, attributable text that directly resolves the stated uncertainty."""
+    if not new_pages:
+        return []
+    proposal = model(
+        "Compare the unresolved interview decisions with these newly inspected pages. "
+        "Return a JSON array only. For each decision directly settled by new evidence return "
+        '{"claim":"precise resolved decision","path":"exact path","quote":"exact decisive substring"}. '
+        "Use [] when the text only describes related fields or the evidence was already available. "
+        "Implementation preference, model agreement and proposed tests are not evidence. Interview: "
+        + findings + "\nNew pages: " + json.dumps(new_pages))
+    try:
+        items = json.loads(proposal)
+    except ValueError:
+        return []
+    approved = []
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict):
+            continue
+        claim, path, quote = (item.get(k) for k in ("claim", "path", "quote"))
+        if not all(isinstance(v, str) and v.strip() for v in (claim, path, quote)):
+            continue
+        page = next((p for p in new_pages if p["path"] == path and quote in p["result"]), None)
+        if page is None or any(quote in text for text in prior_texts):
+            continue
+        verdict = model("Does the quoted passage in its context establish the entire claim and "
+                        "distinguish it from the competing interpretation? Mere compatibility is insufficient. "
+                        + json.dumps({"claim": claim, "quote": quote, "context": page["result"]}),
+                        ["supported", "insufficient"])
+        if verdict == "supported":
+            approved.append({"claim": claim, "path": path, "offset": page["offset"], "quote": quote})
+    return approved
+
+
 def close(**fields):
     def field(k, v):
         return k + ": |\n" + "".join("  " + line + "\n" for line in str(v).splitlines())
@@ -144,6 +178,7 @@ def reply(r):
     if k in ("question", "interpretation", "synthesis"):
         cited = cited_sources(task)
         reads = interview_reads()
+        prior_read_count = len(reads)
         if k in ("question", "synthesis"):
             focus = [s["report"] for s in steps if s["report"]][-2:]
             explore(task, k, focus, cited, reads)
@@ -206,19 +241,25 @@ def reply(r):
     if k == "synthesis":
         q, i = step("question"), step("interpretation")
         findings = json.dumps([s["report"] for s in steps if s["kind"] in ("question", "interpretation") and s["report"]])
+        new_pages = [p for p in reads[prior_read_count:] if p["readable"]]
+        prior_texts = [p["result"] for p in reads[:prior_read_count]] + [p["text"] for p in cited.values()] + [task]
+        promotions = reviewed_promotions(model, findings, new_pages, prior_texts)
+        evidence_rule = ("Every prior open decision or provisional choice stays provisional except "
+                         "these individually verified promotions: " + json.dumps(promotions)
+                         + ". A working choice may be used with a named future check. ")
         spec = model(
-            "Build an ordered roadmap from the interview. For each material acceptance criterion give "
+            evidence_rule + "Build an ordered roadmap from the interview. For each material acceptance criterion give "
             "its source, observable result, and evidence available locally or deferred to the verifier. "
             "Keep open assumptions explicit and name the first action that can resolve each. Interview: " + findings
         )
         decision = model(
-            "Review the roadmap against the interview, cited evidence, and actual tools. Revise if it "
+            evidence_rule + "Reject any unsupported change of status. Review the roadmap against the interview, cited evidence, and actual tools. Revise if it "
             "contradicts a source, drops an uncertainty, or promises unavailable local verification. "
             "Explicitly deferred verification is acceptable. Interview: " + findings + "\nRoadmap: " + spec,
             ["accept", "revise"]
         )
         return close(
-            statement=spec,
+            statement=spec + "\nEvidence accepted for changes of status: " + json.dumps(promotions),
             basis_refs=q["ref"] + "\n" + i["ref"],
             approved="benchmark_" + decision,
         )
