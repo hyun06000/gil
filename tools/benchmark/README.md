@@ -76,3 +76,11 @@ The isolated worker can set `GIL_BENCHMARK_VERIFY_SECONDS` for that step; the de
 The plain arm directly invokes the same solver. Each call logs cumulative usage in its Linux job.
 Download `terminal-bench-dashboard` and open `index.html` for paired scores, time, tokens,
 estimated cost and the raw comparison measurements. An absent score is shown as missing.
+
+The verifier uses all-pass aggregation, including a nonempty ordering and exact train and hidden
+matches. The first pilot submitted empty orderings. The solver now requires an evaluated nonempty
+candidate before it accepts finish. Each new report checks the rule count and order from Harbor's
+collected files and records both SHA-256 digests and official criterion statuses.
+For a model-free transport check, dispatch the same workflow with `harbor_model=terminal-bench-audit`
+and `harbor_benchmark=true`. It runs empty and official reference controls in separate environments.
+Only the reference control receives reference files. No API key is supplied to the job.

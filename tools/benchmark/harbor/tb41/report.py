@@ -54,12 +54,21 @@ print(json.dumps(result), flush=True)
 submission = result["submission"]
 if arm in ("reference", "empty"):
     expected = int(arm == "reference")
-    if (result["error"] or rewards.get("reward") != expected
-            or not submission.get("checks") or "ordering_count" not in submission
-            or bool(submission["ordering_count"]) != bool(expected) or not submission["ordering_matches"]):
+    if (
+        result["error"]
+        or rewards.get("reward") != expected
+        or not submission.get("checks")
+        or "ordering_count" not in submission
+        or bool(submission["ordering_count"]) != bool(expected)
+        or not submission["ordering_matches"]
+    ):
         raise SystemExit("Official verifier or submission transport failed the control")
     raise SystemExit(0)
-if not submission.get("ordering_matches") or not submission.get("rule_count") or submission["rule_count"] != obs.get("rules"):
+if (
+    not submission.get("ordering_matches")
+    or not submission.get("rule_count")
+    or submission["rule_count"] != obs.get("rules")
+):
     raise SystemExit("Missing or inconsistent collected submission")
 if result["error"] or not rewards or not usage or not obs or (arm == "on" and not gil):
     if trial.get("exception_info"):

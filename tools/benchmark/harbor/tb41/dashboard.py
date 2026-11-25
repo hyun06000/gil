@@ -22,6 +22,8 @@ a, b = arm("off"), arm("on")
 
 
 def metric(data, key):
+    if key == "rules" and "rule_count" in data.get("submission", {}):
+        return data["submission"]["rule_count"]
     if key == "score":
         rewards = data.get("rewards", {})
         return rewards.get("reward", rewards.get("reward_score"))
@@ -99,6 +101,16 @@ page += (
     + "</tbody></table></div>"
 )
 page += "<footer><p>CPU 과제 1개 · 조건별 1회 · 동일한 모델과 훈련 도구 · 30분 시간 예산 · 모델 호출 횟수 상한 없음. 공식 검증 점수는 분리된 채점기에서 계산하며 훈련 정확도는 에이전트가 실행 중 관측한 값입니다.</p>"
+if any(r.get("training", {}).get("rules") == 0 for r in (a, b)):
+    page += "<p><b>빈 제출이 포함된 실행입니다.</b> 공식 채점기는 규칙 적용 순서가 비어 있으면 0점을 줍니다. 이 결과만으로 모델의 규칙 추론 능력을 비교하기 어렵습니다.</p>"
+for data, label in ((a, "GIL 끔"), (b, "GIL 켬")):
+    receipt = data.get("submission", {})
+    if receipt.get("checks"):
+        checks = "".join(
+            f"<li>{esc(name)} · {esc(status)}</li>"
+            for name, status in receipt["checks"].items()
+        )
+        page += f"<details><summary>{label} 제출 파일과 채점 항목</summary><p>규칙 {esc(receipt.get('rule_count'))}개 · 순서 {esc(receipt.get('ordering_count'))}개</p><ul>{checks}</ul></details>"
 if steps:
     page += (
         "<details><summary>GIL 진행 단계</summary><p>" + esc(steps) + "</p></details>"

@@ -9,6 +9,7 @@ from pathlib import Path
 
 MAIL = Path("/work/model")
 WORK = Path("/work/project")
+DEADLINE = Path("/work/deadline")
 
 
 def ask(prompt, choices=()):
@@ -87,7 +88,7 @@ def solve(task, plan=""):
     tries = 0
     evaluated = 0
     rejected_finishes = 0
-    deadline = float(Path("/work/deadline").read_text())
+    deadline = float(DEADLINE.read_text())
     while time.time() < deadline - 95:
         offset = (tries * 13) % max(1, len(errors))
         sample = (errors[offset:] + errors[:offset])[:22]
@@ -114,7 +115,9 @@ Finish when further changes have no plausible basis. Output only JSON."""
             if choice.get("action") == "finish":
                 if not best:
                     rejected_finishes += 1
-                    raise ValueError("No nonempty candidate has been evaluated. Propose a rule from the training errors.")
+                    raise ValueError(
+                        "No nonempty candidate has been evaluated. Propose a rule from the training errors."
+                    )
                 break
             if choice.get("action") != "evaluate":
                 raise ValueError("Choose evaluate or finish")
