@@ -60,15 +60,29 @@ def respond(req):
         return {"action":"open", "kind":name, "contract":f"objective: {name} for the supplied task\nnext_action: Complete {name} using task and history\ndone_when: Record the {name} result"}
     kind = n["kind"]
     if kind == "question":
-        question = ask("Ask the participant which statistic they want from the latency column.", form="question")
+        past = [s["report"]["statement"] for s in steps if s["kind"] == "synthesis" and s["report"]]
+        prompt = "Ask the participant which statistic they want from the latency column."
+        if past:
+            prompt += f" Clarify what the previous proposal missed: {past[-1]}"
+        question = ask(prompt, form="question")
         return close(question=question, choices="Use the aggregation and column requested in the task.", response=ask(f"Answer from the brief: {question} State the requested measurement, leaving its value unknown.", form="plan"))
     if kind == "interpretation":
         response = step(steps, "question")["report"]["response"]
         return close(interpretation=ask(f"Participant answered: {response}. Describe the calculation to perform in future tense.", form="plan"), unresolved="none")
     if kind == "synthesis":
         q, i = step(steps, "question"), step(steps, "interpretation")
-        spec = ask(f"Interpretation: {i['report']['interpretation']}. Specify a procedure in the imperative: name the statistic, the column and the output file. No measurement has been made.", form="plan")
-        decision = ask(f"Does this specification implement the task? {spec}\nAnswer accept or revise.", ["accept","revise"])
+        # Choose a structured experiment from the supported measurement tools. The independent
+        # Harbor verifier retains the expected operation and the actual sample values.
+        ops = list(OPERATIONS) + ["unknown"]
+        interpretation = i["report"]["interpretation"]
+        proposed = ask(f"Interview interpretation: {interpretation}. Which aggregation should the specification request?", ops)
+        column = ask("Select the data column named by the brief.", ["latency_ms", "request_id", "unknown"])
+        requested = ask("Which statistical operation does the original brief explicitly require?", ops)
+        decision = "accept" if proposed == requested and proposed != "unknown" and column != "unknown" else "revise"
+        spec = f"Compute the {proposed} of the {column} column across all requests and write the observation to observation.json."
+        print(f"Synthesis proposed={proposed} requested={requested} column={column} decision={decision}", file=sys.stderr)
+        if decision == "revise" and sum(s["kind"] == "synthesis" and bool(s["report"]) for s in steps) >= 2:
+            raise ValueError("Model could not resolve the requested aggregation after three proposals")
         return close(statement=spec, basis_refs=q["ref"]+"\n"+i["ref"], approved="benchmark_"+decision)
     spec = step(interview, "synthesis")["report"]["statement"]
     if kind == "define":
