@@ -881,6 +881,7 @@
   "ref.wrong_letter": "{text} 는 {expected} 로 시작해야 한다",
   "ref.zero_not_allowed": "{text} 는 0 을 쓸 수 없는 종류다 — 0 은 초기 revision(J0)과 초기 Existence State(ES0)의 것이다",
   "report.bad_name": "{name} 는 칸 이름으로 쓸 수 없다 — 이름에 빈칸이 없어야 한다",
+  "report.duplicate_field": "{name} 칸이 다시 나왔다 — 처음 적은 곳은 {first}번째 줄이다. 한 칸에는 값 하나만 적는다. 어느 값이 맞는지 정해 하나만 남기고, 여러 줄이면 `{name}: |` 로 연다",
   "report.dangling_indent": "이 줄의 들여쓰기가 어디에도 붙지 않는다 — 여러 줄 값이라면 윗줄을 `이름: |` 로 열어라",
   "report.line": "{line}번째 줄: {detail}",
   "report.no_name": "칸 이름이 없다 — `이름: 값` 꼴이어야 한다",

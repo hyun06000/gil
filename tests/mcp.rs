@@ -915,6 +915,33 @@ fn interview_assent_requires_outcome_and_separate_cycle_close_before_research() 
     }
 }
 
+/// The MCP close refuses a Report that writes `response` twice (#243): the line numbers are named,
+/// the record is unchanged, and the same Question closes with one response.
+#[test]
+fn mcp_close_refuses_a_field_written_twice() {
+    use serde_json::json;
+    let at = scratch("mcp-duplicate-field");
+    started(&at);
+    let mut mcp = Client::serve_with(&scratch("mcp-duplicate-field-settings"));
+    mcp.initialize();
+    let opened = monitor_call(&mut mcp, "gil_open", json!({"project_root": at, "kind": "question",
+        "contract": "objective: 사용자의 목표를 확인한다\nnext_action: 무엇을 만들고 싶은지 묻는다\ndone_when: 사용자의 원문 응답을 얻는다\n"}));
+    assert_eq!(opened["structuredContent"]["ok"], true, "{opened}");
+    let state = at.join(gil::STATE_PATH);
+    let before = std::fs::read(&state).unwrap();
+    let refused = monitor_call(&mut mcp, "gil_close", json!({"project_root": at,
+        "report": "question: Which sample?\nchoices: A / B\nresponse: FIRST_ANSWER_A\nresponse: SECOND_ANSWER_B\n"}));
+    assert_eq!(refused["isError"], true, "{refused}");
+    let problem = refused["structuredContent"]["problem"].as_str().unwrap();
+    assert!(problem.contains("response") && problem.contains('4') && problem.contains('3'), "{problem}");
+    assert_eq!(std::fs::read(&state).unwrap(), before, "a refused close must not touch the project");
+    let closed = monitor_call(&mut mcp, "gil_close", json!({"project_root": at,
+        "report": "question: Which sample?\nchoices: A / B\nresponse: SECOND_ANSWER_B\n"}));
+    assert_eq!(closed["structuredContent"]["ok"], true, "{closed}");
+    mcp.eof();
+    std::fs::remove_dir_all(at).unwrap();
+}
+
 #[test]
 fn start_hands_off_a_prepared_monitor_without_a_second_prepare_or_extra_step() {
     use serde_json::json;

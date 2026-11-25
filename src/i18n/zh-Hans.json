@@ -881,6 +881,7 @@
   "ref.wrong_letter": "{text} 必须以 {expected} 开头",
   "ref.zero_not_allowed": "{text} 是不能使用 0 的种类 — 0 属于初始 revision（J0）和初始 Existence State（ES0）",
   "report.bad_name": "{name} 不能作为字段名 — 名称中不能有空格",
+  "report.duplicate_field": "字段 {name} 再次出现 — 第一次写在第 {first} 行。一个字段只写一个值。确定哪个值正确并只保留它；多行时用 `{name}: |` 打开",
   "report.dangling_indent": "这一行的缩进没有依附任何内容 — 若是多行值，用 `名称: |` 打开上一行",
   "report.line": "第 {line} 行: {detail}",
   "report.no_name": "没有字段名 — 形式必须是 `名称: 值`",

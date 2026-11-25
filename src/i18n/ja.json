@@ -881,6 +881,7 @@
   "ref.wrong_letter": "{text} は {expected} で始まらなければならない",
   "ref.zero_not_allowed": "{text} は 0 を使えない種類だ — 0 は初期 revision（J0）と初期 Existence State（ES0）のものだ",
   "report.bad_name": "{name} は欄の名前に使えない — 名前に空白があってはならない",
+  "report.duplicate_field": "{name} 欄がもう一度出てきた — 最初に書いたのは {first} 行目だ。一つの欄には値を一つだけ書く。どちらの値が正しいか決めて一つだけ残し、複数行なら `{name}: |` で開く",
   "report.dangling_indent": "この行のインデントがどこにも付いていない — 複数行の値なら上の行を `名前: |` で開く",
   "report.line": "{line} 行目: {detail}",
   "report.no_name": "欄の名前がない — `名前: 値` の形でなければならない",
