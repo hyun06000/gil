@@ -47,9 +47,11 @@ use ExitLineageVerdict::{Differs, Matches};
 mod common;
 
 // ── 체인 ───────────────────────────────────────────────────────────────────
+//
+// 아래의 `pub(super)` 도움 함수는 Verify 세계 유도(`verify_world_tests`)도 같은 걷기·체인을 쓰려고 연 것이다. 동작은 같다.
 
 /// 지금 서 있는 자리에서 `kind` 를 열고 닫는다(Verify·Outcome 이 아닌 Step).
-fn walk(cycle: &mut Cycle, kind: NodeKind) -> NodeId {
+pub(super) fn walk(cycle: &mut Cycle, kind: NodeKind) -> NodeId {
     cycle.open_step(kind).unwrap_or_else(|err| panic!("{kind} 를 열지 못했다: {err}"));
     let report = common::full_report(cycle.rules(), cycle.kind(), kind);
     cycle.close_step(report).unwrap_or_else(|err| panic!("{kind} 를 닫지 못했다: {err}"));
@@ -57,7 +59,7 @@ fn walk(cycle: &mut Cycle, kind: NodeKind) -> NodeId {
 }
 
 /// Verify 를 열고 세계 `A<world>` 를 확정하며 닫는다.
-fn verify(cycle: &mut Cycle, world: u32) -> NodeId {
+pub(super) fn verify(cycle: &mut Cycle, world: u32) -> NodeId {
     cycle.open_step(NodeKind::Verify).expect("Verify 를 연다");
     let report = common::full_report(cycle.rules(), cycle.kind(), NodeKind::Verify);
     cycle.close_verify_step(report, a(world)).expect("Verify 를 닫는다");
@@ -65,7 +67,7 @@ fn verify(cycle: &mut Cycle, world: u32) -> NodeId {
 }
 
 /// Outcome 을 `verdict` 로 닫는다. `revisit` 이 있으면 그 자리로 되돌아간다고 적고, 없으면 Cycle 경계로 간다고 적는다.
-fn outcome(cycle: &mut Cycle, verdict: &str, revisit: Option<NodeId>) -> NodeId {
+pub(super) fn outcome(cycle: &mut Cycle, verdict: &str, revisit: Option<NodeId>) -> NodeId {
     cycle.open_step(NodeKind::Outcome).expect("Outcome 을 연다");
     let mut report = common::full_report(cycle.rules(), cycle.kind(), NodeKind::Outcome)
         .with("verdict", verdict)
@@ -90,7 +92,7 @@ fn close_success(cycles: &mut Cycles, last: NodeId) {
 }
 
 /// 위 그림의 `branching` — 모두 기존 전이 함수로 걸어 만든다.
-fn branching() -> Vec<Chain> {
+pub(super) fn branching() -> Vec<Chain> {
     let mut cycles = Cycles::start_at(rules(), x1(), a(1), 1);
     close_interview(&mut cycles, "open_child");
     cycles.open_child(CycleKind::Experiment, x1()).expect("승인된 인터뷰 뒤 C2 를 연다");

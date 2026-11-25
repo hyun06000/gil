@@ -58,6 +58,9 @@ pub fn alias_exe(env: &Env) -> Result<PathBuf, String> {
 /// `%LOCALAPPDATA%\Programs\gil\gil.exe` — the one path Hosts register. macOS gets the
 /// equivalent under Application Support so the same code can be exercised there; the macOS
 /// user channel itself is still the Plugin/archive described in the install guide.
+/// Linux: `~/.local/share/gil/bin/gil`, the per-user data location (the XDG default, spelled
+/// from `$HOME` only so the registered path does not move with a session variable). The folder
+/// holds this executable and its `install.json` and nothing else; no administrator rights.
 pub fn fixed_exe(env: &Env) -> Result<PathBuf, String> {
     if env.packaged {
         alias_exe(env)
@@ -67,8 +70,12 @@ pub fn fixed_exe(env: &Env) -> Result<PathBuf, String> {
     } else if cfg!(target_os = "macos") {
         let home = env.home.as_ref().ok_or("HOME is not set")?;
         Ok(home.join("Library").join("Application Support").join("GIL").join("bin").join("gil"))
+    } else if cfg!(target_os = "linux") {
+        let home = env.home.as_ref().ok_or("HOME is not set")?;
+        if !home.is_absolute() { return Err("HOME is not an absolute path".into()); }
+        Ok(home.join(".local").join("share").join("gil").join("bin").join("gil"))
     } else {
-        Err("gil install supports Windows (and macOS for development) only".into())
+        Err("gil install supports Windows and Linux (and macOS for development) only".into())
     }
 }
 
@@ -170,6 +177,18 @@ mod tests {
         let env = Env { codex_home: Some(custom.clone()), ..env };
         assert_eq!(codex_config(&env), Some(custom.join("config.toml")));
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// Linux has a per-user fixed path and no Claude Desktop settings folder to discover: a macOS
+    /// or Windows location is never reported there as an installed Host.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_places_the_core_under_the_users_data_folder_and_needs_an_absolute_home() {
+        let env = Env { home: Some(PathBuf::from("/home/someone")), ..Env::default() };
+        assert_eq!(fixed_exe(&env).unwrap(), PathBuf::from("/home/someone/.local/share/gil/bin/gil"));
+        assert_eq!(install_log(&env).unwrap(), PathBuf::from("/home/someone/.local/share/gil/bin/install-log.txt"));
+        assert!(fixed_exe(&Env::default()).is_err(), "no HOME, no guess");
+        assert!(fixed_exe(&Env { home: Some(PathBuf::from("relative")), ..Env::default() }).is_err());
     }
 
     #[test]

@@ -135,6 +135,10 @@ Chain의 첫 Cycle은 반드시 Interview Cycle이다.
 Existence가 소유한 Interview Cycle을 첫 Cycle로 연다. 사용자 Relation과 목표를 CLI 설정값으로
 미리 받지 않고 이 Interview 안에서 처음 형성한다.
 
+2026-11-23 개발 구성 `tracking-policy` 에서는 그 앞에 **시작 준비**가 선다(Artifact Model §3.6 「시작 대화의 범위 승인과
+최초 보관」). 준비는 Chain·Cycle·Step 이 아니며 추적 범위의 Monitor 승인과 그 정책의 최초 보관이 끝난 뒤에만 위 규칙대로
+첫 Chain 과 첫 Interview 가 같은 저장으로 열린다. 준비 중의 대화·제안·취소는 Interview 의 Step 이나 보고서로 소급 기록하지 않는다.
+
 ```text
 Chain Entry
     ↓

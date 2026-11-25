@@ -177,6 +177,29 @@ fn permissions_mtime_and_empty_directories_are_not_dirty() {
 
 // ── ② dirty 일 때 지금 밟을 수 있는 수 ───────────────────────────────────
 
+/// `다음:` 으로 시작하는 마지막 안내 — 출력 끝의 그 한 줄.
+fn next_line(said: &str) -> String {
+    said.lines().rev().find(|line| line.starts_with("다음")).unwrap_or_else(|| panic!("다음 줄이 없다: {said}")).to_string()
+}
+
+/// 파일 변경이 남은 열린 Question 에서 `다음:` 은 그 자리를 바로 닫으라고 하지 않는다 (#235) —
+/// 닫기는 같은 변경에 거절되기 때문이다. 같은 Question 이 clean 이면 평소대로 닫기를 안내한다.
+#[test]
+fn a_dirty_question_is_not_told_to_close_first() {
+    let dir = started("dirty-question-next", &[("sample.txt", "원래")]);
+    let clean = next_line(&status(&dir));
+    assert!(clean.contains("여기를 먼저 닫는다"), "{clean}");
+    write(&dir, "sample.txt", "바꿨다");
+    let dirty = next_line(&status(&dir));
+    assert!(!dirty.contains("여기를 먼저 닫는다"), "the close gate would refuse this: {dirty}");
+    assert!(dirty.contains("먼저 정리") && dirty.contains("gil close"), "{dirty}");
+    // The close the old line offered is indeed refused while the change remains.
+    let refused = run(&dir, &["close"], Some("question: q\nchoices: A / B\nresponse: A\n"));
+    assert!(!refused.status.success());
+    write(&dir, "sample.txt", "원래");
+    assert_eq!(next_line(&status(&dir)), clean, "back to clean, back to the ordinary line");
+}
+
 #[test]
 fn a_dirty_verify_is_told_that_closing_it_confirms_the_world() {
     let dir = bare("dirty-verify");
@@ -192,6 +215,8 @@ fn a_dirty_verify_is_told_that_closing_it_confirms_the_world() {
 
     assert!(block.contains("상태: dirty"), "{block}");
     assert!(block.contains("이 Verify 를 닫으면"), "{block}");
+    // A Verify confirms the changed world by closing, so its next line still offers the close.
+    assert!(next_line(&status(&dir)).contains("여기를 먼저 닫는다"));
     assert!(block.contains("Snapshot 으로 확정한다"), "{block}");
     // **되돌리라고 하지 않는다.** 여기서는 확정이 정상적인 길이다.
     assert!(!block.contains("gil restore"), "확정할 수 있는 자리에 복원을 권했다: {block}");

@@ -812,10 +812,15 @@ mod chain_profile_tests {
     fn chain_format_projects_are_refused_before_backup_and_source_stays_unchanged() {
         let (root, backup) = chain_project();
         let before = fs::read(root.join(STATE_PATH)).unwrap();
+        // Where the migration contract applies (macOS Apple Silicon) the format is what refuses. On every
+        // other platform the tool refuses for the platform before it reads the format: still a refusal,
+        // still before any backup, and the source is equally untouched.
+        let reason = if cfg!(all(target_os = "macos", target_arch = "aarch64")) { "only format 4" } else { "not accepted on this platform" };
         let said = precheck(&root).err().map(|e| e.to_string()).expect("precheck refuses");
-        assert!(said.contains("only format 4"), "{said}");
+        assert!(said.contains(reason), "{said}");
+        // The Core `prepare` behind that preflight must refuse as well, whatever it names first there.
         let said = prepare(&root, &backup).err().map(|e| e.to_string()).expect("prepare refuses");
-        assert!(said.contains("only format 4"), "{said}");
+        if cfg!(all(target_os = "macos", target_arch = "aarch64")) { assert!(said.contains(reason), "{said}"); }
         assert!(!backup.exists(), "a refused prepare must not leave a backup");
         assert_eq!(fs::read(root.join(STATE_PATH)).unwrap(), before);
         assert!(status(&root, &backup, "0000").is_err() || status(&root, &backup, "0000").unwrap() == "not_applied");

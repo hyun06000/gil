@@ -755,9 +755,41 @@ mod dir_names_tests {
     }
 }
 
-#[cfg(all(test, unix))]
+// These fixtures are written for the platforms where the runtime store's protection can be verified
+// (macOS: owner, exact mode and no extended ACL; Windows: its own checks). On Linux the extended-ACL
+// check is not implemented and the observer therefore blocks every root — fail closed, see
+// `tests_linux` below. Running the fixtures there would only assert that refusal 46 times
+// under other names, so they are not compiled for Linux; that is not a pass of them on Linux.
+#[cfg(all(test, unix, not(target_os = "linux")))]
 #[path = "runtime_observe_tests_unix.rs"]
 mod tests_unix;
+
+/// Linux: the runtime store is never accepted, because one of its protection checks cannot be made
+/// here. A correctly owned, mode-0700 root is still blocked, nothing below it is read, the verdict
+/// is `Blocked`, and observing leaves the folder as it was. Not a weaker pass, and not a fallback.
+#[cfg(all(test, target_os = "linux"))]
+mod tests_linux {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn a_correctly_protected_root_is_still_blocked_because_the_acl_check_cannot_be_made() {
+        let base = std::fs::canonicalize(std::env::temp_dir()).unwrap().join(format!("gil-observe-linux-{}-{}", std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::set_permissions(&base, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let root = base.join("runtime-v1");
+        std::fs::create_dir(&root).unwrap();
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::write(root.join("store.json"), b"{}").unwrap();
+        let (observed, verdict) = observe_and_judge(&root);
+        assert!(observed.observation.blocked.iter().any(|reason| reason.contains("not counted as a pass")), "{observed:?}");
+        assert!(matches!(verdict.state, crate::runtime_state::State::Blocked { .. }), "{verdict:?}");
+        assert_eq!(std::fs::read(root.join("store.json")).unwrap(), b"{}");
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1, "observing created or removed an entry");
+        let _ = std::fs::remove_dir_all(base);
+    }
+}
 #[cfg(all(test, windows))]
 #[path = "runtime_observe_tests_windows.rs"]
 mod tests_windows;

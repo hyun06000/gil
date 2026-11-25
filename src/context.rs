@@ -53,6 +53,9 @@ pub fn context(project: &Project) -> String {
     resume::write(&mut out, project);
     out.push_str(&format!("\n{}\n{}\n", text("context.next_call_heading"), next_call(project)));
     out.push_str(text("ctx.file_scope"));
+    // 형식 10/11 의 보관 대기·보관 중단 — 세 값을 따로 말한다. 그 밖의 상태에서는 아무것도 더하지 않는다.
+    #[cfg(feature = "tracking-policy")]
+    out.push_str(&project.tracking_note());
     if let Some(plan) = project.approved_plan() {
         let chain = project.current_chain().unwrap();
         out.push_str(text("ctx.plan_profile"));

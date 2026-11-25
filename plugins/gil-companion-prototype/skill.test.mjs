@@ -6,7 +6,7 @@
 // 않고, 도구 응답을 화면 성공으로 단정하는 문장이 다시 들어오지 않는다는 사실이다.
 //
 //   1. Skill 이 부르는 도구 이름은 전부 실제 20개 tool 표에 있다 — feature 전용 도구(이관·시각
-//      작성·승인 계획)는 각자의 실제 catalog 와 조건 절에서만, 정확한 이름으로 확인한다.
+//      작성·승인 계획·범위 변경)는 각자의 실제 catalog 와 조건 절에서만, 정확한 이름으로 확인한다.
 //   2. 시작 요청 하나가 start → prepare → show → 첫 Interview 순서로 이어진다.
 //   3. 시작 성공·Monitor 데이터 준비·실제 화면을 가르고, 화면은 사용자 확인 전까지 미확인이다.
 //   4. 이미 시작된 Project 의 거절 문구가 Core 가 실제로 말하는 글자와 같다.
@@ -80,6 +80,45 @@ const recordReads = () => {
   return names;
 };
 
+/**
+ * 같은 Chain 범위 변경 도구(구현 순서 5번) — `src/mcp/scope.rs` 가 `tracking-policy` + Unix 빌드에서만 등록한다.
+ * 기대값은 **이 시험이 따로 가진다**: 전체 일곱, 그 가운데 App 전용(Monitor 버튼) 다섯, 모델용 둘. 그 파일의 `NAMES`·`APP_NAMES`
+ * 선언과 `catalog` 의 등록 항목(이름과 app 칸)을 읽어 이 기대값과 견준다. 선언을 찾지 못하거나 하나라도 다르면 실패한다 —
+ * 접두어로 통과시키는 길은 없다.
+ */
+const SCOPE_ALL = ["gil_scope_propose", "gil_scope_status", "gil_scope_review", "gil_scope_decide", "gil_scope_retry", "gil_scope_halt", "gil_scope_release"];
+const SCOPE_APP = ["gil_scope_review", "gil_scope_decide", "gil_scope_retry", "gil_scope_halt", "gil_scope_release"];
+const SCOPE_MODEL = ["gil_scope_propose", "gil_scope_status"];
+const SCOPE_GATE = '#[cfg(all(feature = "tracking-policy", unix))]';
+const scopeCatalog = () => {
+  const rust = readFileSync(join(REPO, "src", "mcp", "scope.rs"), "utf8");
+  const declared = (constant) => {
+    const found = rust.match(new RegExp(`pub\\(super\\) const ${constant}: &\\[&str\\] =\\s*&\\[([^\\]]*)\\];`));
+    assert.ok(found, `scope.rs 의 ${constant} 선언을 읽지 못했다`);
+    return [...found[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  };
+  const names = declared("NAMES"), app = declared("APP_NAMES");
+  assert.deepEqual(names, SCOPE_ALL, "scope.rs 의 NAMES 가 기대한 일곱 이름과 다르다");
+  assert.deepEqual(app, SCOPE_APP, "scope.rs 의 APP_NAMES 가 기대한 App 전용 다섯 이름과 다르다");
+  // catalog 의 등록 항목 — (이름, 설명, 입력, app, read). 이름과 app 칸을 읽어 가시성 구분을 선언과 견준다.
+  const body = rust.slice(rust.indexOf("pub(super) fn catalog("), rust.indexOf("#[cfg(test)]"));
+  const starts = [...body.matchAll(/\n\s*\("(gil_[a-z_]+)",\n/g)];
+  const rows = starts.map((start, at) => {
+    const row = body.slice(start.index, at + 1 < starts.length ? starts[at + 1].index : body.indexOf("\n    ] {")).trimEnd();
+    const flags = row.match(/(true|false),\s*(true|false)\),$/);
+    assert.ok(flags, `scope catalog 의 ${start[1]} 항목에서 app/read 칸을 읽지 못했다`);
+    return { name: start[1], app: flags[1] === "true" };
+  });
+  assert.deepEqual(rows.map((row) => row.name), SCOPE_ALL, "scope catalog 의 등록 항목이 기대한 일곱 이름과 다르다");
+  assert.deepEqual(rows.filter((row) => row.app).map((row) => row.name), SCOPE_APP, "scope catalog 의 App 전용 항목이 기대와 다르다");
+  assert.deepEqual(rows.filter((row) => !row.app).map((row) => row.name), SCOPE_MODEL, "scope catalog 의 모델용 항목이 기대와 다르다");
+  assert.ok(body.includes('"visibility":if app {vec!["app"]} else {vec!["model"]}'), "scope catalog 의 가시성 규칙이 바뀌었다 — 이 시험도 함께 고친다");
+  return { names, app, model: names.filter((name) => !app.includes(name)) };
+};
+/** Skill 이 모델에게 시켜도 되는 범위 도구인가 — 선언된 모델용 정확한 두 이름뿐이다. */
+const scopeModelTool = (name, scope) => scope.names.includes(name) && !scope.app.includes(name) && SCOPE_MODEL.includes(name);
+const SCOPE_CAPABILITY = /use\s+it\s+only\s+when\s+the\s+connected\s+`tools\/list`\s+offers\s+both\s+`gil_scope_propose`\s+and\s+`gil_scope_status`/;
+
 test("Skill 이 부르는 도구 이름은 전부 실제 tool 표에 있다", () => {
   assert.equal(TOOLS.length, 20);
   const named = new Set([...SKILL.matchAll(/`((?:gil|show_gil)_[a-z_]+)(?:\(|`)/g)].map((m) => m[1]));
@@ -130,6 +169,30 @@ test("Skill 이 부르는 도구 이름은 전부 실제 tool 표에 있다", ()
       assert.match(SKILL, /`truncated: true`\s+left\s+part\s+out[\s\S]{0,200}left\s+out\s+never\s+means\s+absent/, "생략과 이어 읽기의 뜻이 Skill 에 없다");
       continue;
     }
+    if (name.startsWith("gil_start_")) {
+      // tracking-policy development feature only (src/mcp/start.rs). Exact model-visible names, never the
+      // default catalog, used only under the condition that gil_start answered a start preparation; the
+      // App-only Monitor decision tools are never asked of the model.
+      const rust = readFileSync(join(REPO, "src", "mcp", "start.rs"), "utf8");
+      const names = rust.slice(rust.indexOf("pub(super) const NAMES"), rust.indexOf("pub(super) const APP_NAMES"));
+      const app = rust.slice(rust.indexOf("pub(super) const APP_NAMES"), rust.indexOf("#[derive(Debug, Default)]"));
+      assert.ok(names.includes(`"${name}"`), `Skill 이 start catalog 에 없는 도구를 부른다 — ${name}`);
+      assert.ok(!app.includes(`"${name}"`), `App 전용 시작 승인 도구를 모델에게 시켰다 — ${name}`);
+      assert.ok(!TOOLS.includes(name), `시작 준비 도구가 기본 tools.json 에 들어왔다 — ${name}`);
+      assert.match(SKILL, /only when `gil_start` answers `phase: preparing`; development tracking-policy\s+builds/, "시작 준비 도구의 사용 조건이 Skill 에 없다");
+      assert.match(SKILL, /Chat consent,\s+editing `\.gilignore` or your own input is never approval/, "대화·편집·에이전트 입력이 승인이 아니라는 문장이 Skill 에 없다");
+      continue;
+    }
+    if (name.startsWith("gil_scope_") && scopeCatalog().names.includes(name)) {
+      // tracking-policy + Unix development feature only (src/mcp/scope.rs). Never a prefix pass: a name that scope.rs
+      // does not declare falls through to the ordinary "no such tool" failure below. Of the declared seven only the
+      // two model-visible tools may be asked of the model, never from the default catalog, and only under the
+      // condition that the connected tools/list offers both.
+      assert.ok(scopeModelTool(name, scopeCatalog()), `App 전용 범위 도구(Monitor 버튼)를 모델에게 시켰다 — ${name}`);
+      assert.ok(!TOOLS.includes(name), `범위 변경 도구가 기본 tools.json 에 들어왔다 — ${name}`);
+      assert.match(SKILL, SCOPE_CAPABILITY, "범위 변경 도구의 사용 조건(tools/list 의 두 도구)이 Skill 에 없다");
+      continue;
+    }
     if (name === "gil_prepare_workspace") {
       // Windows development surface only (src/mcp/workspace.rs); mentioned solely in the
       // unsupported-location paragraph, which is entered only after that refusal code.
@@ -145,6 +208,41 @@ test("Skill 이 부르는 도구 이름은 전부 실제 tool 표에 있다", ()
   for (const owed of ["gil_start", "gil_monitor_prepare", "show_gil_monitor", "gil_open", "gil_context"]) {
     assert.ok(named.has(owed), `시작 흐름에 필요한 도구가 문서에 없다 — ${owed}`);
   }
+});
+
+test("범위 변경 도구는 기본 표에 없고, Skill 은 모델용 둘만 tools/list 조건 아래에서 부르며 App 전용 다섯을 시키지 않는다", () => {
+  const scope = scopeCatalog();
+  assert.deepEqual(scope.model, SCOPE_MODEL);
+  // 일곱 모두 기본 profile 표에 없다 — 이름으로도, 접두어로도.
+  for (const name of SCOPE_ALL) assert.ok(!TOOLS.includes(name), `범위 변경 도구가 기본 tools.json 에 들어왔다 — ${name}`);
+  assert.ok(TOOLS.every((name) => !name.startsWith("gil_scope_")), "기본 tools.json 에 gil_scope_* 이 있다");
+  // 그 모듈과 catalog 등록은 tracking-policy + Unix 에서만 컴파일된다.
+  const mcp = readFileSync(join(REPO, "src", "mcp.rs"), "utf8");
+  const surface = readFileSync(join(REPO, "src", "mcp", "surface.rs"), "utf8");
+  assert.ok(mcp.includes(`${SCOPE_GATE}\nmod scope;`), "MCP 범위 도구 모듈이 tracking-policy + unix 뒤에 있지 않다");
+  assert.match(surface, /#\[cfg\(all\(feature = "tracking-policy", unix\)\)\]\n\s*let tools = super::scope::catalog\(/, "범위 도구의 catalog 등록이 tracking-policy + unix 뒤에 있지 않다");
+  assert.equal(surface.split("super::scope::catalog(").length - 1, 1, "범위 도구의 catalog 등록은 한 곳이다");
+  // App 전용 다섯(Monitor 버튼)은 Skill 어디에도 나오지 않는다 — 이름으로도, 접두어 허용으로도.
+  for (const name of SCOPE_APP) assert.ok(!SKILL.includes(name), `App 전용 범위 도구를 Skill 이 부른다 — ${name}`);
+  assert.ok(!SKILL.includes("gil_scope_*"), "gil_scope_* 접두어를 통째로 드는 문장이 있다");
+  // Skill 이 드는 범위 도구는 정확히 모델용 둘이다.
+  const named = [...new Set([...SKILL.matchAll(/`(gil_scope_[a-z_]+)(?:\(|`)/g)].map((m) => m[1]))].sort();
+  assert.deepEqual(named, [...SCOPE_MODEL].sort(), "Skill 이 드는 범위 도구가 모델용 둘과 다르다");
+  // 허용 판정: 모델용 둘만 참이다. App 전용 다섯과 선언되지 않은 이름은 거짓 — 접두어가 같아도.
+  for (const name of SCOPE_MODEL) assert.equal(scopeModelTool(name, scope), true, name);
+  for (const name of [...SCOPE_APP, "gil_scope_anything", "gil_scope_", "gil_scope_propose_all"]) assert.equal(scopeModelTool(name, scope), false, name);
+  for (const name of ["gil_scope_anything", "gil_scope_propose_all"]) {
+    assert.ok(!scope.names.includes(name) && !TOOLS.includes(name), `선언되지 않은 이름은 「없는 도구」 실패로 간다 — ${name}`);
+  }
+  // 사용 조건: 연결된 tools/list 가 두 도구를 모두 줄 때만. 구성 이름·기록 형식으로 추정하지 않고, 없으면 우회를 요구하지 않는다.
+  assert.match(SKILL, SCOPE_CAPABILITY, "범위 변경 경로의 사용 조건이 Skill 에 없다");
+  assert.match(SKILL, /Do\s+not\s+infer\s+the\s+capability\s+from\s+a\s+development-build\s+name\s+or\s+from\s+the\s+record\s+format/, "구성 이름·기록 형식으로 추정하지 말라는 문장이 없다");
+  assert.match(SKILL, /When\s+those\s+tools\s+are\s+absent,\s+do\s+not\s+ask\s+for\s+that\s+call,\s+and\s+do\s+not\s+ask\s+for\s+a\s+tracking-scope\s+approval\s+through\s+chat\s+or\s+file\s+edits\s+instead/, "도구가 없을 때 우회를 요구하지 말라는 문장이 없다");
+  // 기존 의미는 그대로다: Monitor 승인, 명시 재시도·중단·해제는 사용자의 버튼, 잃은 응답 뒤에는 조회.
+  assert.match(SKILL, /wait\s+for\s+the\s+user's\s+decision\s+in\s+the\s+Monitor/);
+  assert.match(SKILL, /The\s+archive\s+retry,\s+the\s+archive\s+halt\s+and\s+its\s+release\s+are\s+the\s+user's\s+Monitor\s+buttons:\s+no\s+model\s+tool\s+performs\s+them/);
+  assert.match(SKILL, /A\s+release\s+only\s+removes\s+the\s+marker/);
+  assert.match(SKILL, /After\s+a\s+lost\s+reply\s+read\s+`gil_scope_status`\s+once\s+instead\s+of\s+repeating\s+an\s+approval/);
 });
 
 test("승인 계획 도구는 기본 표에 없고, Skill 은 모델용 셋만 capability 조건 아래에서 부르며 App 전용 결정 도구를 시키지 않는다", () => {
