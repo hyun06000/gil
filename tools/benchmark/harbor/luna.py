@@ -45,7 +45,12 @@ class Luna:
             with urllib.request.urlopen(request, timeout=60) as resp:
                 result = json.load(resp)
         except urllib.error.HTTPError as error:
-            raise RuntimeError(f"Luna API HTTP {error.code} on call {self.calls}") from None
+            try:
+                detail = json.loads(error.read()).get("error", {})
+                diagnostic = str(detail.get("message", "")).replace(self.key, "[redacted]")[:350]
+            except (ValueError, AttributeError):
+                diagnostic = "no structured error message"
+            raise RuntimeError(f"Luna API HTTP {error.code} on call {self.calls}: {diagnostic}") from None
         usage = result["usage"]
         self.inputs += usage["input_tokens"]
         self.outputs += usage["output_tokens"]
