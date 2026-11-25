@@ -7,7 +7,9 @@ d=json.loads(trial.read_text()); folder=trial.parent
 transcript = folder / "agent/transcript.jsonl"
 if transcript.is_file():
     import shutil
+    from transcript_view import render
     shutil.copyfile(transcript, root / "transcript.jsonl")
+    render(root)
 def load(path):
     f=folder/path
     return json.loads(f.read_text()) if f.exists() else {}

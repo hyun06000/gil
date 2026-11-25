@@ -594,5 +594,6 @@ jobs:
           path: |
             ${{ runner.temp }}/tb41-${{ matrix.arm }}/${{ matrix.arm }}.json
             ${{ runner.temp }}/tb41-${{ matrix.arm }}/transcript.jsonl
+            ${{ runner.temp }}/tb41-${{ matrix.arm }}/transcript.html
           if-no-files-found: warn
           retention-days: 7
