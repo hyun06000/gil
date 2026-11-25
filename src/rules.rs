@@ -163,10 +163,32 @@ pub const BUILTIN_SPEC: &str = include_str!(concat!(
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RuleSet {
+    #[serde(skip)]
+    benchmark: bool,
     cycle_kinds: BTreeMap<CycleKind, CycleRules>,
 }
 
 impl RuleSet {
+    pub(crate) fn benchmark() -> Self {
+        let mut rules = Self::from_yaml_str(BUILTIN_SPEC).expect("built-in grammar");
+        let synthesis = rules.cycle_kinds.get_mut(&CycleKind::Interview).unwrap()
+            .step_kinds.get_mut(&NodeKind::Synthesis).unwrap();
+        let decision = synthesis.field_constraints.get_mut("approved").unwrap();
+        decision.allowed_values = vec!["benchmark_accept".into(), "benchmark_revise".into()];
+        decision.value_descriptions = [
+            ("benchmark_accept".into(), "The benchmark adapter accepts the specification against the task.".into()),
+            ("benchmark_revise".into(), "The benchmark adapter requests another interview question.".into()),
+        ].into();
+        rules.benchmark = true;
+        rules
+    }
+
+    pub(crate) fn is_benchmark(&self) -> bool { self.benchmark }
+
+    pub(crate) fn synthesis_acceptance(&self) -> &'static str {
+        if self.benchmark { "benchmark_accept" } else { "yes" }
+    }
+
     pub(crate) fn supports_chain_closing(&self) -> bool {
         self.cycle_rules(CycleKind::Interview)
             .and_then(|rule| rule.field_constraints.get("next_direction.action"))

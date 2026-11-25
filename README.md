@@ -29,6 +29,10 @@ Interview Cycle을 연다. 설계상 사용자 Relation과 프로젝트 목표�
 않고 그 Interview 안에서 형성하며, 사용자와 Existence는 소유자와 도구가 아니라 프로젝트를
 함께 만드는 동등한 협력자다.
 
+Linux에서도 일반 MCP 세션은 사용자와 에이전트가 Monitor를 통해 상호작용한다.
+`GIL_MCP_DISPLAY=headless`는 화면 표시만 생략한다. 격리된 벤치마크에서 인터뷰와 첫 실험을
+자율 실행하려면 [벤치마크 모드](tools/benchmark/README.md)의 `gil benchmark` 명령을 명시적으로 선택한다.
+
 현재 구현은 dogfood 단계다. Bootstrap Interview, 여러 Cycle, 지속되는 Existence와 Will,
 format 4 Artifact Snapshot, dirty gate, 중단 복구 가능한 `gil restore`, 그리고 필요한 규칙
 하나만 조회하는 bundled Manual이 동작한다.

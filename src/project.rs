@@ -122,12 +122,13 @@ impl Project {
             .intern(first_world)
             .expect("빈 registry 의 첫 발급은 A1 이다");
 
+        let use_chain = cfg!(feature = "chain-core") && !rules.is_benchmark();
         Project {
             visual_state: None,
             world: {
-                let rules = if cfg!(feature = "chain-core") { rules.for_chain() } else { rules };
+                let rules = if use_chain { rules.for_chain() } else { rules };
                 let cycles = Cycles::start(rules, existence, first);
-                if cfg!(feature = "chain-core") {
+                if use_chain {
                     WorldGraph::Chains(vec![crate::Chain::start(cycles)])
                 } else { WorldGraph::Legacy(cycles) }
             },

@@ -353,7 +353,7 @@ impl Cycle {
         };
 
         let wanted = match approved {
-            YES => NodeKind::Outcome,
+            value if value == self.rules().synthesis_acceptance() => NodeKind::Outcome,
             _ => NodeKind::Question,
         };
         match kind == wanted {
@@ -612,7 +612,7 @@ impl Cycle {
             .into());
         }
         match node.report.as_ref().and_then(|report| report.get(APPROVED)) {
-            Some(YES) => Ok(()),
+            Some(value) if value == self.rules().synthesis_acceptance() => Ok(()),
             other => Err(SynthesisRefError::NotApproved {
                 approved: other.unwrap_or("").to_string(),
             }
