@@ -407,6 +407,7 @@ jobs:
           name: harbor-model-result
           path: |
             ${{ runner.temp }}/harbor-results/**/result.json
+            ${{ runner.temp }}/harbor-results/**/agent/observation.json
             ${{ runner.temp }}/harbor-results/**/agent/gil-result.json
             ${{ runner.temp }}/harbor-results/**/verifier/test-stdout.txt
             ${{ runner.temp }}/harbor-results/**/verifier/reward.txt

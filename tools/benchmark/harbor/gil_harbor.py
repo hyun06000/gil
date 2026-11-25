@@ -30,3 +30,4 @@ class GilAgent(BaseAgent):
         if result.return_code != 0:
             raise RuntimeError(f"GIL exited {result.return_code}: {result.stderr} {result.stdout}")
         await environment.download_file("/work/result.json", self.logs_dir / "gil-result.json")
+        await environment.download_file("/work/project/observation.json", self.logs_dir / "observation.json")
