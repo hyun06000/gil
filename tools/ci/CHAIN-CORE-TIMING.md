@@ -283,3 +283,41 @@ Linux(`ubuntu-24.04`)에서 조합당 한 행으로 나란히 돌려 통과 여�
   파일 전체에 `cfg(any(macOS, Windows))`가 걸려 Linux에서 0건이 되었고 `expect-tests`가 이를 통과로 세지 않았다.
   이 조합(M4-R)은 Linux 행에서 빼고 macOS에 둔다.
 
+## 8. macOS 축소 (2026-11-25)
+
+§7의 Linux 행이 통과한 뒤(커밋 601c991의 실행에서 6개 행 모두 성공) macOS job 두 개를 `chain-macos` 하나로
+줄였다. 모든 기능 조합의 lib 전체와 통합 시험은 Linux 행이 돌리고, macOS에는 macOS가 필요한 것만 남긴다.
+
+근거는 시험 본문 전수조사다(저장소 밖 `gil-evidence/ci-os-sensitivity-audit-20261125/`, 시험 2,654건의 분류와
+근거 한 줄). 통합 시험 1,080건 중 macOS에서만 컴파일되는 것 19건, OS·파일시스템 동작에 결과가 걸린 것 131건,
+두 OS의 제품 코드가 다른 것 88건이며, 마지막 묶음의 64건은 이미지 보고 빌드에서 프로젝트를 시작하는 경로를
+지나가기만 한다(그 경로 자체는 `visual_start` 시험이 검증).
+
+| 기능 조합 | macOS에 남긴 검사 | macOS에서 뺀 검사(Linux 행이 실행) |
+|---|---|---|
+| 기능 없음 | resume 측정 | — |
+| `chain-core` | — | 도메인 suite 10개, `revisit` 1건 (조합 전체) |
+| `chain-core,visual-authoring,product-safety` | lib `visual_start`, `visual_start`, `chain_resume_benchmark`, `mcp`, 전체 컴파일 | — |
+| `approved-plan,visual-authoring,product-safety` | `approved_plan_wire_wave1`, `chain_recovery_preservation`, `closing_handoff`, `resume_guidance`, `manual`, `automatic_guard`, `write_guard`, OS에 닿는 lib 모듈(필터), resume 측정, 전체 컴파일, 제품 빌드를 읽는 Node 검사 2개 | lib 전체, `chain_monitor_fixtures`, `context`, `context_profiles`, 안내 suite 3개 |
+| `approved-plan,visual-authoring,recovery-auto-approval` | 세 단계 전부(통합 suite가 macOS·Windows에서만 컴파일) | — (Linux 행 없음) |
+| `exploration-flow,visual-authoring,product-safety` | — | 조합 전체(lib, suite 13개, `manual`, 전체 컴파일) |
+| `will-end-history` | `will_end_session`, `mcp`, `format_transition` | lib 전체, `will_end`, 도메인 suite 9개, `tracking_record_boundary`, 전체 컴파일 |
+| `will-end-history,visual-authoring,product-safety` | `will_end_visual`, `will_end_session`, `format_transition`, `visual_start`, `chain_resume_benchmark`, `mcp`, `chain_handoff`, `visual_attachment` | lib 전체, 전체 컴파일 |
+| `will-end-history,approved-plan,visual-authoring,product-safety` | — | `chain_monitor_fixtures` |
+| — | Core 없는 Node 검사 전부 | — |
+
+macOS에서 줄어든 검증(이 workflow 기준):
+
+- 조합별 lib 전체 실행 네 번이 없어졌다. lib에는 OS에 닿는 시험이 약 250건 있다. Preview job(기본 조합)과
+  제품 후보 job(`tracking-policy,exploration-flow,visual-authoring,product-safety`)은 macOS에서 lib 전체를 계속
+  돌린다. 승인 프로필에서는 OS에 닿는 모듈만 이름 필터로 한 번 돌린다(`restore::`, `lock::`, `install::`,
+  `launcher::`, `runtime_`, `visual_`, `internal_fs::`, `write_guard::`, `monitor::serve::`, `mcp::bindings::`,
+  `session::format_transition::`, `project_resume::`, `companion`). end history 단독 조합에서만 컴파일되는
+  OS 민감 lib 시험이 몇 건인지는 세지 않았다.
+- 탐색 조합은 이 workflow에서 macOS로 빌드하지 않는다. 같은 suite를 제품 후보 job이 macOS에서 제품 조합으로
+  돌린다(정확히 같은 조합은 아니다). 탐색 빌드의 `manual` 1단계는 macOS에서 빠졌다(`manual`은 승인 프로필로 남음).
+- "로직만 확인"으로 분류된 시험은 Linux에서만 돈다. 분류가 틀린 시험이 있으면 macOS 결함을 놓친다.
+  전수조사 뒤 본 세션이 본문을 다시 읽어 대조한 것은 3건이다.
+
+기대 시간은 기존 단계 시간으로 계산해 약 8분(job 한 개)이다. 실측은 이 변경의 PR 실행에서 얻는다.
+

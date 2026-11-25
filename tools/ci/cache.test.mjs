@@ -65,66 +65,74 @@ test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired
   }
   assert.doesNotMatch(text, /windows-11-arm|codex-cli|runtime-testbed/);
   const chain = workflowText('chain-core');
-  // Windows test and build CI is paused: the Chain workflow is two macOS jobs and the Linux trial job.
-  const allChainJobs = jobsOf(chain);
-  assert.deepEqual(allChainJobs.map(j => j.name), ['chain-product', 'chain-opt-in', 'chain-linux']);
-  const chainJobs = allChainJobs.slice(0, 2), linux = allChainJobs[2].block;
-  for (const {name, block} of chainJobs) {
-    assert.match(block, /^    runs-on: macos-15$/m, name);
-    assert.doesNotMatch(block, /^\s+(?:strategy|matrix):/m, name);
-  }
+  // Windows test and build CI is paused: the Chain workflow is one macOS job and the Linux matrix.
+  const chainJobs = jobsOf(chain);
+  assert.deepEqual(chainJobs.map(j => j.name), ['chain-macos', 'chain-linux']);
+  const mac = chainJobs[0].block, linux = chainJobs[1].block;
+  assert.match(mac, /^    runs-on: macos-15$/m);
+  assert.doesNotMatch(mac, /^\s+(?:strategy|matrix):/m);
+  assert.match(linux, /^    runs-on: ubuntu-24\.04$/m);
   assert.doesNotMatch(chain, /runner: windows-|runs-on: windows-|shell: pwsh/);
   // A guarded step (`node tools/ci/expect-tests.mjs <minimum> cargo test …`) is the same Cargo check.
-  const groupsOf = block => {
-    const features = [...block.matchAll(/run: (?:node tools\/ci\/expect-tests\.mjs \d+ )?cargo (?:test|build).*?--features ([\w,-]+)/g)].map(m => m[1]);
-    return features.filter((f, i) => f !== features[i-1]);
-  };
-  // Each feature profile is one contiguous group in exactly one job, so no job compiles a profile
-  // another job also compiles. The product profiles come first in their job; the M4-R opt-in
-  // follows them there and never sits inside a product profile. The other opt-in profiles
-  // (exploration contract, the single end history alone and with the visual registry, then its
-  // Monitor fixtures in the approval profile) are the second job.
-  assert.deepEqual(groupsOf(chainJobs[0].block), ['chain-core', 'chain-core,visual-authoring,product-safety', 'approved-plan,visual-authoring,product-safety', 'approved-plan,visual-authoring,recovery-auto-approval']);
-  assert.deepEqual(groupsOf(chainJobs[1].block), ['exploration-flow,visual-authoring,product-safety', 'will-end-history', 'will-end-history,visual-authoring,product-safety', 'will-end-history,approved-plan,visual-authoring,product-safety']);
-  // Both jobs prepare the same way and read one dependency cache through the same key and prefix;
-  // only the first job saves it (the second uses the restore-only action and never prunes).
-  const cacheOf = block => block.match(/^          key: .+\n          restore-keys: \|\n.+$/m)?.[0];
-  assert.ok(cacheOf(chainJobs[0].block));
-  assert.equal(cacheOf(chainJobs[1].block), cacheOf(chainJobs[0].block));
-  const paths = block => block.match(/\n          path: \|\n((?: {12}.*\n)+)/)?.[1];
-  assert.equal(paths(chainJobs[1].block), paths(chainJobs[0].block));
-  const pin = chainJobs[0].block.match(/uses: actions\/cache@([0-9a-f]{40}) /)?.[1];
-  assert.ok(pin && chainJobs[1].block.includes(`uses: actions/cache/restore@${pin} `));
-  assert.doesNotMatch(chainJobs[1].block, /uses: actions\/cache@|run: node tools\/ci\/prune-workspace-cache|build_cache/);
-  for (const prepare of ['      - uses: actions/checkout@', "          GIT_CONFIG_VALUE_0: 'false'", '          persist-credentials: false', '      - run: rustup toolchain install 1.97.1 --profile minimal'])
-    for (const {name, block} of allChainJobs) assert.ok(block.includes(prepare), `${name}: ${prepare}`);
-  // The Linux trial job: one row per feature profile of the macOS jobs, in the same order, each
-  // profile once. It restores and saves its own (Linux) cache through the same key expression and
-  // paths; one row alone prunes and saves. The suites kept on macOS are never listed for Linux.
-  assert.match(linux, /^    runs-on: ubuntu-24\.04$/m);
-  const rows = [...linux.matchAll(/^          - group: ([\w-]+)\n            features: ([\w,-]+)\n            lib: (\w+)\n            minimum: (\d+)\n            suites: ([\w ]+)\n/gm)];
-  const macProfiles = [...groupsOf(chainJobs[0].block), ...groupsOf(chainJobs[1].block)];
-  // The Monitor-fixture profile is one suite and rides on the last row as its extra check.
-  // The M4-R profile has no Linux row: its only integration suite is compiled on macOS and Windows.
-  assert.deepEqual(rows.map(r => r[2]), macProfiles.slice(0, -1).filter(f => !f.includes('recovery-auto-approval')));
-  assert.ok(linux.includes(`            extra: --features ${macProfiles.at(-1)} --test chain_monitor_fixtures\n`));
+  const macCargo = [...mac.matchAll(/(?:node tools\/ci\/expect-tests\.mjs \d+ )?cargo (test|build)[^\n]*?--features ([\w,-]+)([^\n]*)/g)]
+    .map(m => ({kind: m[1], features: m[2], rest: m[3]}));
+  const macGroups = macCargo.map(c => c.features).filter((f, i, all) => f !== all[i-1]);
+  // Each feature profile is one contiguous group on macOS, so no profile is compiled twice there.
+  // The exploration contract and the Monitor-fixture profile are not built on macOS by this
+  // workflow at all (the product candidate job runs the exploration suites on macOS).
+  assert.deepEqual(macGroups, ['chain-core,visual-authoring,product-safety', 'approved-plan,visual-authoring,product-safety',
+    'approved-plan,visual-authoring,recovery-auto-approval', 'will-end-history', 'will-end-history,visual-authoring,product-safety']);
+  // Linux: one row per feature profile, the complete library where a profile has library
+  // contracts of its own, and the last row's extra check for the Monitor-fixture profile.
+  const rows = [...linux.matchAll(/^          - group: ([\w-]+)\n            features: ([\w,-]+)\n            lib: (\w+)\n            minimum: (\d+)\n            suites: ([\w ]+)\n/gm)]
+    .map(r => ({group: r[1], features: r[2], lib: r[3], minimum: Number(r[4]), suites: r[5].split(' ')}));
   assert.equal((linux.match(/^          - group: /gm) || []).length, rows.length, 'every row has the full shape');
-  for (const [, group, features, lib, minimum, suites] of rows) {
-    assert.ok(Number(minimum) >= 1, group);
-    for (const suite of suites.split(' ')) {
-      assert.ok(existsSync(join(root, 'tests', `${suite}.rs`)), `${group}: ${suite}`);
-      assert.ok(!['manual', 'automatic_guard', 'write_guard'].includes(suite), `${group}: ${suite} stays on macOS`);
-      // Nothing is invented for Linux: the macOS jobs run the same suite with the same features.
-      assert.match(chainJobs.map(j => j.block).join(''), new RegExp(`cargo test [^\\n]*--features ${features} [^\\n]*--test ${suite}\\b`), `${group}: ${suite}`);
+  assert.deepEqual(rows.map(r => [r.features, r.lib]), [['chain-core', 'none'], ['chain-core,visual-authoring,product-safety', 'visual_start'],
+    ['approved-plan,visual-authoring,product-safety', 'all'], ['exploration-flow,visual-authoring,product-safety', 'all'],
+    ['will-end-history', 'all'], ['will-end-history,visual-authoring,product-safety', 'all']]);
+  assert.ok(linux.includes('            extra: --features will-end-history,approved-plan,visual-authoring,product-safety --test chain_monitor_fixtures\n'));
+  // What stays on macOS alone: suites of macOS-only behaviour and the M4-R profile, whose
+  // integration suite is compiled on macOS and Windows only. Nothing else may be missing on Linux:
+  // every other integration suite macOS runs for a profile is in that profile's Linux row.
+  const MAC_ONLY = ['manual', 'automatic_guard', 'write_guard'];
+  for (const row of rows) {
+    assert.ok(row.minimum >= 1, row.group);
+    for (const suite of row.suites) {
+      assert.ok(existsSync(join(root, 'tests', `${suite}.rs`)), `${row.group}: ${suite}`);
+      assert.ok(!MAC_ONLY.includes(suite), `${row.group}: ${suite} stays on macOS`);
     }
-    if (lib !== 'none') assert.match(chainJobs.map(j => j.block).join(''), new RegExp(`--features ${features} --lib${lib === 'all' ? ' -- --test-threads=1' : ` ${lib}`}\\n`), group);
   }
-  assert.equal(cacheOf(linux), cacheOf(chainJobs[0].block));
+  for (const {kind, features, rest} of macCargo) {
+    if (kind !== 'test' || features.includes('recovery-auto-approval')) continue;
+    const row = rows.find(r => r.features === features);
+    assert.ok(row, `${features} has a Linux row`);
+    for (const [, suite] of rest.matchAll(/--test (\w+)/g)) assert.ok(MAC_ONLY.includes(suite) || row.suites.includes(suite), `${features}: ${suite} also runs on Linux`);
+  }
+  // macOS keeps the suites the audit found to need it (gil-evidence/ci-os-sensitivity-audit-20261125).
+  const macRuns = (features, suite) => macCargo.some(c => c.kind === 'test' && c.features === features && new RegExp(`--test ${suite}\\b`).test(c.rest));
+  for (const [features, suites] of [
+    ['chain-core,visual-authoring,product-safety', ['visual_start', 'mcp']],
+    ['approved-plan,visual-authoring,product-safety', ['approved_plan_wire_wave1', 'chain_recovery_preservation', 'closing_handoff', 'resume_guidance', ...MAC_ONLY]],
+    ['approved-plan,visual-authoring,recovery-auto-approval', ['recovery_approval_mode']],
+    ['will-end-history', ['will_end_session', 'mcp', 'format_transition']],
+    ['will-end-history,visual-authoring,product-safety', ['will_end_visual', 'will_end_session', 'format_transition', 'visual_start', 'mcp', 'chain_handoff', 'visual_attachment']],
+  ]) for (const suite of suites) assert.ok(macRuns(features, suite), `macOS keeps ${suite} with ${features}`);
+  assert.match(mac, /--features approved-plan,visual-authoring,product-safety --lib -- restore:: lock:: install:: [^\n]* --test-threads=1\n/);
+  // Both jobs prepare the same way and use one key expression and one path list (the caches differ
+  // by runner OS). macOS restores and saves in one step; on Linux every row restores and one saves.
+  const cacheOf = block => block.match(/^          key: .+\n          restore-keys: \|\n.+$/m)?.[0];
+  const paths = block => block.match(/\n          path: \|\n((?: {12}.*\n)+)/)?.[1];
+  assert.ok(cacheOf(mac) && paths(mac));
+  assert.equal(cacheOf(linux), cacheOf(mac));
+  assert.equal(paths(linux), paths(mac));
+  const pin = mac.match(/uses: actions\/cache@([0-9a-f]{40}) /)?.[1];
+  assert.ok(pin && linux.includes(`uses: actions/cache/restore@${pin} `) && linux.includes(`uses: actions/cache/save@${pin} `));
   assert.equal((linux.match(/^          key: .+$/gm) || []).filter(k => k === cacheOf(linux).split('\n')[0]).length, 2, 'restore and save use one key');
-  assert.ok(linux.includes(`uses: actions/cache/restore@${pin} `) && linux.includes(`uses: actions/cache/save@${pin} `));
   assert.equal((linux.match(/^            save_cache: true$/gm) || []).length, 1);
   assert.equal((linux.match(/^        if: matrix\.save_cache && steps\.linux_cache\.outputs\.cache-hit != 'true'$/gm) || []).length, 2);
   assert.doesNotMatch(linux, /uses: actions\/cache@|build_cache/);
+  for (const prepare of ['      - uses: actions/checkout@', "          GIT_CONFIG_VALUE_0: 'false'", '          persist-credentials: false', '      - run: rustup toolchain install 1.97.1 --profile minimal'])
+    for (const {name, block} of chainJobs) assert.ok(block.includes(prepare), `${name}: ${prepare}`);
   const companion = workflowText('companion-native');
   assert.doesNotMatch(companion, /windows-2025|windows-11-arm/);
   assert.match(companion, /paths:\n\s+- 'companion\/\*\*'/);
