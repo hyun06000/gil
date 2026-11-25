@@ -1234,6 +1234,35 @@ fn the_whole_path_from_start_to_an_experiment_works_across_processes() {
 }
 
 #[test]
+fn synthesis_requires_a_statement_on_new_closes_and_preserves_legacy_records() {
+    let dir = scratch("cli-synthesis-statement");
+    ok(&dir, &["start"], None);
+    for (kind, report) in [("question", QUESTION), ("interpretation", INTERPRETATION)] {
+        open_action(&dir, kind);
+        ok(&dir, &["close"], Some(report));
+    }
+    open_action(&dir, "synthesis");
+    let path = dir.join(gil::STATE_PATH);
+    let before = std::fs::read(&path).unwrap();
+    let (_, fields) = SYNTHESIS.split_once('\n').unwrap();
+    for (blank, approved) in [("", "yes"), ("  \t　", "yes"), ("", "no")] {
+        let fields = fields.replace("approved: yes", &format!("approved: {approved}"));
+        let rejected = refused(&dir, &["close"], Some(&format!("statement: {blank}\n{fields}")));
+        assert!(rejected.contains("statement") && rejected.contains("비워 둘 수 없다"), "{rejected}");
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+    }
+    let mut legacy = gil::load(common::spec(), &path).unwrap();
+    ok(&dir, &["close"], Some(SYNTHESIS));
+
+    legacy.close_action_step(gil::Report::parse(SYNTHESIS).unwrap().with("statement", "")).unwrap();
+    gil::save(&legacy, &path).unwrap();
+    let stored = std::fs::read(&path).unwrap();
+    ok(&dir, &["context"], None);
+    assert_eq!(std::fs::read(&path).unwrap(), stored);
+    open_action(&dir, "outcome");
+}
+
+#[test]
 fn an_interview_cannot_be_closed_before_a_synthesis_is_approved() {
     // 승인 없이는 판정을 열 수 없고, 판정이 없으면 Cycle 도 닫히지 않는다.
     let dir = scratch("cli-no-approval");
