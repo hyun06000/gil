@@ -49,7 +49,9 @@ elif kind == "verify":
 elif kind == "analysis":
     observed = int(Path("observation.txt").read_text())
     matched = observed == task["expected"]
-    reply = close(success_condition_met="yes" if matched else "no", guardrail_triggered="no",
+    reply = close(hypothesis_fit="supported" if matched else "contradicted",
+                  problem_solved="yes" if matched else "no",
+                  success_condition_met="yes" if matched else "no", guardrail_triggered="no",
                   interpretation=f"Observed {observed}, expected {task['expected']}")
 elif kind == "outcome":
     verdict = "success" if cycle == "interview" or int(Path("observation.txt").read_text()) == task["expected"] else "failure"
