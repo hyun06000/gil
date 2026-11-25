@@ -300,7 +300,9 @@ def reply(r):
             + spec + "\nCriteria: " + criteria + "\nObserved: " + obs
         )
         observed = json.loads(obs)
-        achieved = bool(observed["files"]) and observed["check_exit"] == 0 and model(
+        achieved = bool(observed["files"]) and observed["check_exit"] == 0 and all(
+            item["status"] == "demonstrated" for item in observed.get("checklist", [])
+        ) and model(
             "Choose demonstrated only if every material criterion has direct evidence. A missing, "
             "deferred or contradicted criterion requires incomplete. Criteria: " + criteria
             + "\nRoadmap: " + spec + "\nObserved: " + obs + "\nAssessment: " + analysis,
