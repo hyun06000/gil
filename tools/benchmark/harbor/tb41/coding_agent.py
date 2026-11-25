@@ -18,6 +18,14 @@ class CodeAgent(SoundChangeAgent):
         if os.environ["TB_ARM"]=="on":
             await environment.upload_file(os.environ["TB_GIL_BINARY"],"/case/gil")
 
+    async def run(self, instruction, environment, context):
+        try:
+            await super().run(instruction, environment, context)
+        finally:
+            exists = await environment.exec("test -f /work/model/transcript.jsonl", user="root")
+            if exists.return_code == 0:
+                await environment.download_file("/work/model/transcript.jsonl", self.logs_dir / "transcript.jsonl")
+
     async def run_worker(self, environment):
         arm=os.environ["TB_ARM"]; task=os.environ["TB_TASK"]
         assert arm in ("on","off") and task in TASKS

@@ -1,12 +1,20 @@
 import json
 import time
+import uuid
 from pathlib import Path
 MAIL = Path("/work/model")
 WORK = Path("/work/project")
 DEADLINE = Path("/work/deadline")
 
 
-def ask(prompt, choices=()):
+def record(**event):
+    with (MAIL / "transcript.jsonl").open("a") as log:
+        print(json.dumps({"time": time.time(), **event}, ensure_ascii=False), file=log)
+
+
+def ask(prompt, choices=(), stage="solver"):
+    ask.call_id = uuid.uuid4().hex
+    record(event="request", id=ask.call_id, stage=stage)
     messages = [
         {
             "role": "system",
@@ -24,6 +32,7 @@ def ask(prompt, choices=()):
             raise TimeoutError("Model relay timed out")
         time.sleep(0.1)
     answer = json.loads(reply.read_text())["answer"]
+    record(event="answer", id=ask.call_id, stage=stage, text=answer)
     reply.unlink()
     return answer
 

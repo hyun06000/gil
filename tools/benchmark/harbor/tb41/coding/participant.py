@@ -26,7 +26,7 @@ def reply(r):
         return next(s for s in reversed(history) if s["kind"] == kind and s["report"])
 
     def model(prompt, choices=()):
-        return ask(task + "\nCurrent instruction: " + prompt, choices)
+        return ask(task + "\nCurrent instruction: " + prompt, choices, stage=n["kind"])
 
     if n["action"] == "open":
         k = n["recommended"]

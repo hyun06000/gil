@@ -6,7 +6,7 @@ from pathlib import Path
 import subprocess
 import time
 
-from mailbox_client import ask
+from mailbox_client import ask, record
 
 WORK = Path("/work/project")
 APP = Path("/app")
@@ -55,6 +55,7 @@ Work toward the full official task. Respond with one JSON object. Available acti
 For vf2 use fast_networkx.py or a fast_networkx package. For ks use solution.cpp. For React work in src/.
 If a local check fails, use its output to fix the source. No remote tools or private test data."""
         answer=ask(prompt); calls+=1
+        obj = {}
         try:
             obj=json.loads(answer.strip().removeprefix("```json").removeprefix("```").removesuffix("```"))
             action=obj["action"]
@@ -73,10 +74,14 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                 proc=subprocess.run(CHECKS[TASK],cwd=APP,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=100)
                 checked=proc.returncode
                 response=f"exit {checked}: "+proc.stdout.decode(errors="replace")[-3500:]
-            elif action=="finish" and writes and checked is not None: break
+            elif action=="finish" and writes and checked is not None:
+                record(event="tool", id=ask.call_id, action=action, result="finished")
+                break
             else: raise ValueError("Write a nonempty submission, then run check before finish")
+            record(event="tool", id=ask.call_id, action=action, path=obj.get("path"), offset=obj.get("offset", 0), result=response[:3500], chars=len(response))
             history.append([action,obj.get("path"),response])
         except (ValueError,OSError,TypeError,KeyError,AttributeError,subprocess.TimeoutExpired) as error:
+            record(event="tool", id=ask.call_id, action=obj.get("action") if isinstance(obj, dict) else None, error=str(error))
             history.append(["error",str(error)])
     obs={"files":writes,"check_exit":checked,"solver_calls":calls}
     (WORK/"observation.json").write_text(json.dumps(obs))
