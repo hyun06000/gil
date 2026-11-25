@@ -149,8 +149,24 @@ fn apply(session: &mut ProjectSession, reply: Reply) -> Result<()> {
 /// Runs one task with a host-supplied adapter inside the benchmark container. The Core owns
 /// transitions and evidence. No Monitor or desktop project is opened.
 fn run(task: &Path, executable: &Path, workspace: &Path, records: &Path) -> Result<Value> {
-    if !cfg!(target_os = "linux") {
-        return Err("the benchmark worker runs inside a Linux container".into());
+    // A harness invoking the worker directly must apply the same process restrictions as Docker.
+    let status = fs::read_to_string("/proc/self/status")
+        .map_err(|_| "the benchmark worker requires a Linux container with procfs")?;
+    let field = |name: &str| {
+        status
+            .lines()
+            .find_map(|line| line.strip_prefix(name))
+            .map(str::trim)
+    };
+    let unprivileged_uid = field("Uid:")
+        .and_then(|ids| ids.split_whitespace().nth(1))
+        .and_then(|id| id.parse::<u32>().ok())
+        .is_some_and(|uid| uid != 0);
+    if !unprivileged_uid
+        || field("NoNewPrivs:") != Some("1")
+        || field("CapEff:").and_then(|hex| u64::from_str_radix(hex, 16).ok()) != Some(0)
+    {
+        return Err("the benchmark worker requires a non-root user, no effective capabilities, and no-new-privileges".into());
     }
     let workspace = workspace.canonicalize()?;
     let records = records

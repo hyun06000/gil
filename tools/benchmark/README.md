@@ -10,7 +10,7 @@ From a Docker host, run:
 gil benchmark my-benchmark-image /case/task.txt /case/my-agent
 ```
 
-The launcher creates a disposable, non-root, networkless container with a read-only image, temporary work and record directories, and no host bind mounts. Task assets needed by the agent can live in the image. The agent writes experiment files under its working directory. The controller emits the final Cycle Report and Step history as JSON. Exit 0 means the first Experiment reported success, 2 means it reported failure, and 1 means the run did not finish. The container is removed on exit. For an existing benchmark container the equivalent entrypoint is `gil benchmark --in-container TASK_FILE ADAPTER WORKSPACE NEW_RECORD_DIRECTORY`. That entrypoint relies on the harness for container isolation.
+The launcher creates a disposable, non-root, networkless container with a read-only image, temporary work and record directories, and no host bind mounts. Task assets needed by the agent can live in the image. The agent writes experiment files under its working directory. The controller emits the final Cycle Report and Step history as JSON. Exit 0 means the first Experiment reported success, 2 means it reported failure, and 1 means the run did not finish. The container is removed on exit. For an existing benchmark container the equivalent entrypoint is `gil benchmark --in-container TASK_FILE ADAPTER WORKSPACE NEW_RECORD_DIRECTORY`. That entrypoint relies on the harness for container isolation and checks the effective UID, capabilities and no-new-privileges flag in Linux procfs before creating records.
 
 ## Agent protocol
 
