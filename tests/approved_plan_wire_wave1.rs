@@ -415,6 +415,16 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     let (basis, synthesis) = r.ask_and_interpret();
     assert_eq!(synthesis, "step:C1/S3");
 
+    let assert_next = |rig: &mut Rig, expected: &str| {
+        let before = state(&root);
+        let status = said(&ok(rig.model("gil_status", json!({})), "status"));
+        let next = status.lines().find(|line| line.starts_with("다음:")).expect(&status);
+        assert!(next.contains(expected), "{next}");
+        assert!(rig.context_readonly().contains(expected));
+        assert_eq!(state(&root), before);
+    };
+    assert_next(&mut r, "gil_plan_propose");
+
     // bare approved:yes is refused and writes nothing; review without a proposal has no capability.
     let before = state(&root);
     refused(r.model("gil_close", json!({"report":format!("statement: 합성 범위\nbasis_refs: {}\napproved: yes\n", basis.join("\n"))})), "bare approved:yes");
@@ -445,7 +455,7 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     let again = ok(r.model("gil_plan_propose", json!({"draft":d})), "propose again");
     assert_eq!(structured(&again)["proposal"]["digest"], structured(&first)["proposal"]["digest"]);
     let rev1 = r.read()["proposal"].clone();
-    assert!(r.context_readonly().contains("Monitor 버튼 응답을 기다린다"));
+    assert_next(&mut r, "Monitor 버튼 응답을 기다린다");
 
     // While the proposal waits for the Monitor button, closing the Synthesis is refused as an
     // approval state: the receipt sends the model to gil_plan_read, not back to its Report.
@@ -507,7 +517,7 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     let accepted = ok(r.app("gil_plan_decide", json!({"revision":2,"digest":rev2["digest"],"token":t2,"decision":"approve"})), "approve revision 2");
     assert_eq!(structured(&accepted)["proposal"]["receipt"]["decision"], "approve");
 
-    assert!(r.context_readonly().contains("close_report를 그대로 gil_close"));
+    assert_next(&mut r, "close_report를 그대로 gil_close");
 
     // duplicate approve idempotent; flip refused; no capability after receipt; no token in record
     let saved = state(&root);
