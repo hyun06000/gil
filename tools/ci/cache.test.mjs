@@ -69,13 +69,14 @@ test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired
   assert.doesNotMatch(text, /windows-11-arm|codex-cli|runtime-testbed/);
   const chain = workflowText('chain-core');
   // Windows test and build CI is paused: the Chain checks are the Linux matrix and the Node
-  // contracts in one workflow and one macOS job in a workflow of its own (it has its own path list).
+  // contracts in one workflow and two macOS jobs in a workflow of its own (it has its own path list).
   const macWorkflow = workflowText('chain-macos');
-  const chainJobs = [...jobsOf(macWorkflow), ...jobsOf(chain)];
-  assert.deepEqual(chainJobs.map(j => j.name), ['chain-macos', 'chain-linux', 'chain-node']);
-  const mac = chainJobs[0].block, linux = chainJobs[1].block, node = chainJobs[2].block;
+  const macJobs = jobsOf(macWorkflow);
+  const chainJobs = [...macJobs, ...jobsOf(chain)];
+  assert.deepEqual(chainJobs.map(j => j.name), ['chain-macos-profiles', 'chain-macos-approval', 'chain-linux', 'chain-node']);
+  const mac = macJobs.map(j => j.block).join('\n'), linux = chainJobs[2].block, node = chainJobs[3].block;
   assert.match(node, /^    runs-on: ubuntu-24\.04$/m);
-  assert.match(mac, /^    runs-on: macos-15$/m);
+  for (const {name, block} of macJobs) assert.match(block, /^    runs-on: macos-15$/m, name);
   assert.doesNotMatch(mac, /^\s+(?:strategy|matrix):/m);
   assert.match(linux, /^    runs-on: ubuntu-24\.04$/m);
   assert.doesNotMatch(chain + macWorkflow, /runner: windows-|runs-on: windows-|shell: pwsh/);
@@ -83,11 +84,19 @@ test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired
   const macCargo = [...mac.matchAll(/(?:node tools\/ci\/expect-tests\.mjs \d+ )?cargo (test|build)[^\n]*?--features ([\w,-]+)([^\n]*)/g)]
     .map(m => ({kind: m[1], features: m[2], rest: m[3]}));
   const macGroups = macCargo.map(c => c.features).filter((f, i, all) => f !== all[i-1]);
-  // Each feature profile is one contiguous group on macOS, so no profile is compiled twice there.
+  // Each feature profile is one contiguous group in one macOS job, so no profile is compiled twice
+  // there. The two jobs run side by side: the first three groups in one, the last two in the other.
   // The exploration contract and the Monitor-fixture profile are not built on macOS by this
   // workflow at all (the product candidate job runs the exploration suites on macOS).
-  assert.deepEqual(macGroups, ['chain-core,visual-authoring,product-safety', 'approved-plan,visual-authoring,product-safety',
-    'approved-plan,visual-authoring,recovery-auto-approval', 'will-end-history', 'will-end-history,visual-authoring,product-safety']);
+  assert.deepEqual(macGroups, ['chain-core,visual-authoring,product-safety', 'approved-plan,visual-authoring,recovery-auto-approval',
+    'will-end-history,visual-authoring,product-safety', 'approved-plan,visual-authoring,product-safety', 'will-end-history']);
+  const groupsIn = block => [...new Set([...block.matchAll(/cargo (?:test|build)[^\n]*?--features ([\w,-]+)/g)].map(m => m[1]))];
+  assert.deepEqual(groupsIn(macJobs[0].block), macGroups.slice(0, 3));
+  assert.deepEqual(groupsIn(macJobs[1].block), macGroups.slice(3));
+  // The checks that read the approval build stay in the job that builds it.
+  for (const reads of ['GIL_EXAMPLE_CHECK_GIL: target/debug/gil', 'CHAIN_CONTEXT_BENCH_GIL_PRODUCT: target/debug/gil', 'run.mjs product ']) {
+    assert.ok(macJobs[1].block.includes(reads) && !macJobs[0].block.includes(reads), reads);
+  }
   // Linux: one row per feature profile, the complete library where a profile has library
   // contracts of its own, and the last row's extra check for the Monitor-fixture profile.
   const rows = [...linux.matchAll(/^          - group: ([\w-]+)\n            features: ([\w,-]+)\n            lib: (\w+)\n            minimum: (\d+)\n            suites: ([\w ]+)\n/gm)]
@@ -132,28 +141,54 @@ test('the Windows Core job keeps both x64 profiles, no ARM64 job, and no retired
   assert.ok(mac.includes(`--features approved-plan,visual-authoring,product-safety --lib -- restore:: lock:: launcher:: visual_ internal_fs:: write_guard:: mcp::bindings:: session::format_transition:: project_resume:: companion ${skips}\n`));
   assert.ok(mac.includes(`--features approved-plan,visual-authoring,product-safety --lib -- ${serial}\n`));
   const preview = workflowText('codex-preview');
-  assert.ok(preview.includes(`default) node tools/ci/expect-tests.mjs 1000 cargo test --locked -p gil --lib -- ${skips}\n`));
-  assert.ok(preview.includes(`              node tools/ci/expect-tests.mjs 150 cargo test --locked -p gil --lib -- ${serial}\n`));
-  // Everything `cargo test -p gil` ran is still named: library, binaries, integration suites, doc tests.
-  for (const part of ['--bins', "--test '*'", '--doc']) assert.ok(preview.includes(`              cargo test --locked -p gil ${part}`), part);
+  const previewJobs = jobsOf(preview);
+  assert.deepEqual(previewJobs.map(j => j.name), ['preview-library', 'preview-suites', 'macos-arm64-preview']);
+  const [library, suites, gate] = previewJobs.map(j => j.block);
+  assert.ok(library.includes(`default) node tools/ci/expect-tests.mjs 1000 cargo test --locked -p gil --lib -- ${skips}\n`));
+  assert.ok(library.includes(`              node tools/ci/expect-tests.mjs 150 cargo test --locked -p gil --lib -- ${serial} ;;\n`));
+  // Everything `cargo test -p gil` ran is still named: the library in one job; binaries,
+  // integration suites and doc tests in the other, which also compiles every default target.
+  assert.ok(suites.includes("default) cargo test --locked -p gil --bins\n              cargo test --locked -p gil --test '*'\n              cargo test --locked -p gil --doc ;;\n"));
+  assert.ok(suites.includes('        run: cargo build --locked -p gil --all-targets\n'));
   assert.doesNotMatch(preview, /default\) cargo test --locked -p gil -- --test-threads=1/);
+  // The required check keeps its name and passes only when both jobs passed. It always runs:
+  // a skipped required check counts as passed, so a failed or cancelled job must fail it.
+  assert.match(gate, /^    needs: \[preview-library, preview-suites\]\n    if: always\(\)$/m);
+  for (const [variable, job] of [['LIBRARY', 'preview-library'], ['SUITES', 'preview-suites']]) {
+    assert.ok(gate.includes(`      ${variable}: \${{ needs.${job}.result }}\n`), job);
+    assert.ok(gate.includes(`          test "$${variable}" = success\n`), job);
+  }
+  assert.doesNotMatch(gate, /continue-on-error|\|\|/);
+  for (const block of [library, suites]) assert.doesNotMatch(block, /^    (?:if|needs|continue-on-error):/m);
+  // One Preview job saves the dependency cache (the one that also builds the release Core); the
+  // other only restores it, with the same key and paths.
+  const previewPin = library.match(/uses: actions\/cache@([0-9a-f]{40}) /)?.[1];
+  assert.ok(previewPin && suites.includes(`uses: actions/cache/restore@${previewPin} `));
+  assert.doesNotMatch(suites, /uses: actions\/cache@|build_cache|prune-workspace-cache\.mjs\n/);
   // Both jobs prepare the same way and use one key expression and one path list (the caches differ
   // by runner OS). macOS restores and saves in one step; on Linux every row restores and one saves.
   const cacheOf = block => block.match(/^          key: .+\n          restore-keys: \|\n.+$/m)?.[0];
   const paths = block => block.match(/\n          path: \|\n((?: {12}.*\n)+)/)?.[1];
   assert.ok(cacheOf(mac) && paths(mac));
+  assert.equal(cacheOf(suites), cacheOf(library));
+  assert.equal(paths(suites), paths(library));
+  // The second macOS Chain job only restores the cache the first one saves.
+  assert.equal(cacheOf(macJobs[1].block), cacheOf(macJobs[0].block));
+  assert.equal(paths(macJobs[1].block), paths(macJobs[0].block));
+  assert.doesNotMatch(macJobs[1].block, /uses: actions\/cache@|build_cache|prune-workspace-cache\.mjs\n/);
   // The key expression is the same text; each workflow hashes its own file into it.
   assert.equal(cacheOf(linux), cacheOf(mac).replaceAll('.github/workflows/chain-macos.yml', '.github/workflows/chain-core.yml'));
   assert.ok(cacheOf(mac).includes(".github/workflows/chain-macos.yml'"));
   assert.equal(paths(linux), paths(mac));
   const pin = mac.match(/uses: actions\/cache@([0-9a-f]{40}) /)?.[1];
+  assert.ok(pin && macJobs[1].block.includes(`uses: actions/cache/restore@${pin} `));
   assert.ok(pin && linux.includes(`uses: actions/cache/restore@${pin} `) && linux.includes(`uses: actions/cache/save@${pin} `));
   assert.equal((linux.match(/^          key: .+$/gm) || []).filter(k => k === cacheOf(linux).split('\n')[0]).length, 2, 'restore and save use one key');
   assert.equal((linux.match(/^            save_cache: true$/gm) || []).length, 1);
   assert.equal((linux.match(/^        if: matrix\.save_cache && steps\.linux_cache\.outputs\.cache-hit != 'true'$/gm) || []).length, 2);
   assert.doesNotMatch(linux, /uses: actions\/cache@|build_cache/);
   for (const prepare of ['      - uses: actions/checkout@', "          GIT_CONFIG_VALUE_0: 'false'", '          persist-credentials: false', '      - run: rustup toolchain install 1.97.1 --profile minimal'])
-    for (const {name, block} of chainJobs.slice(0, 2)) assert.ok(block.includes(prepare), `${name}: ${prepare}`);
+    for (const {name, block} of chainJobs.slice(0, 3)) assert.ok(block.includes(prepare), `${name}: ${prepare}`);
   // The checks without a Core process run on Linux for every Chain change, never only when the
   // macOS path list matches.
   for (const step of ['Shared workflow text, Skill catalog and scenario evaluator contracts (pure Node, no Core process)', 'CI cache and ordering contracts',
@@ -182,7 +217,7 @@ test('the macOS Chain job runs on a pull request exactly when a file that can be
   const conditional = rustFiles('src').filter(f => osCondition.test(readFileSync(join(root, f), 'utf8'))).sort();
   assert.deepEqual(listed.filter(p => p.startsWith('src/')).sort(), conditional);
   // Tests: every integration suite the job runs, and the helpers they share.
-  const job = jobsOf(text)[0].block;
+  const job = jobsOf(text).map(j => j.block).join('\n');
   const suites = [...new Set([...job.matchAll(/cargo test [^\n]*/g)].flatMap(m => [...m[0].matchAll(/--test (\w+)/g)].map(t => t[1])))].sort();
   assert.deepEqual(listed.filter(p => /^tests\/\w+\.rs$/.test(p)).sort(), suites.map(s => `tests/${s}.rs`));
   for (const shared of ['tests/common/**', 'tests/support_wave1/**', 'tests/guidance_support/**', 'tests/fixtures/**', 'Cargo.toml', 'Cargo.lock',
