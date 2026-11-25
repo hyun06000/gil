@@ -53,4 +53,5 @@ PY
       if [[ $case == human ]]; then grep -q approved "$context/error"; else grep -q verify_evidence_required "$context/error"; fi
       ;;
   esac
+  echo "Passed benchmark case: $case"
 done

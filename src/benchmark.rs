@@ -83,7 +83,7 @@ impl Adapter {
 
 fn next_action(project: &Project) -> Value {
     let cycle = project.current_cycle();
-    let (contract, target, kind) = if let Some(id) = cycle.step_now_open() {
+    let (mut contract, target, kind) = if let Some(id) = cycle.step_now_open() {
         let kind = cycle.steps().node(id).unwrap().kind;
         (
             cycle.step_contract(id, kind).unwrap(),
@@ -116,10 +116,10 @@ fn next_action(project: &Project) -> Value {
             "recommended":recommended.map(|k| k.as_str()), "allowed":allowed.iter().map(|k| k.as_str()).collect::<Vec<_>>(),
             "contract_fields":["objective","next_action","done_when"]});
     };
-    let mut required = contract.field_names();
-    if kind == Some(NodeKind::Verify) && !required.contains(&"evidence_files") {
-        required.push("evidence_files");
+    if kind == Some(NodeKind::Verify) {
+        contract.include_evidence_files();
     }
+    let required = contract.field_names();
     let will = project.active_will().map(|w| json!({"objective":w.objective(),"next_action":w.next_action(),"done_when":w.done_when()}));
     json!({"action":"close", "target":target, "kind":kind.map(|k| k.as_str()).unwrap_or("cycle"),
         "cycle":cycle.kind().to_string(), "contract":will, "fields":required, "constraints":contract.constraints(""),
