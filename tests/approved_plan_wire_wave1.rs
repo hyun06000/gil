@@ -247,6 +247,12 @@ impl Rig {
         ok(self.model("gil_open", json!({"kind":"hypothesis","contract":CONTRACT})), "hypothesis");
         ok(self.model("gil_close", json!({"report":format!("hypothesis: 합성 자료만으로 항목 {item}을 확인할 수 있다\nrationale: 자료가 제공됐다\nguardrail: 외부 데이터를 쓰지 않는다\n")})), "close hypothesis");
         let v = ok(self.model("gil_open", json!({"kind":"verify","contract":CONTRACT})), "verify");
+        if cfg!(feature = "visual-authoring") {
+            let hint = blocks(&v);
+            for required in ["expected_owner", "visuals.attachments", "8192", "evidence_files"] {
+                assert!(hint.contains(required), "{required}: {hint}");
+            }
+        }
         step_ref(&v, "verify")
     }
     fn finish_experiment(&mut self, n: u32, item: &str, verify: &str, document: &str) {
