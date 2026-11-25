@@ -55,7 +55,11 @@ test('the suites are read from the job itself, and each such job is gated by the
   }
   // Every change the macOS jobs can skip is checked on Linux: the product job has its Linux twin in
   // the same workflow, the first-start profiles have their rows in the Chain matrix.
-  assert.match(workflow('product-candidate'), /\n  linux-x64-product:\n    runs-on: ubuntu-24\.04\n/);
+  const product = workflow('product-candidate');
+  for (const job of ['linux-x64-product', 'macos-scope']) {
+    assert.ok(product.includes(`  ${job}:\n    if: ${'$'}{{ !inputs.harbor_benchmark }}\n`), job);
+  }
+  assert.match(product, /\n  linux-x64-product:\n[^\n]+\n    runs-on: ubuntu-24\.04\n/);
   const chain = workflow('chain-core');
   for (const features of ['tracking-policy', 'tracking-policy,approved-plan,visual-authoring,product-safety'])
     assert.ok(chain.includes(`            features: ${features}\n            lib: all\n            minimum: 10\n            suites: tracking_start tracking_scope_change\n`), features);
