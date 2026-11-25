@@ -167,6 +167,8 @@ fn a_field_written_twice_is_refused_with_both_lines() {
         ("response: |\n  여러 줄\nresponse: 한 줄\n", 3, 1, "response"),
         ("response: 한 줄\nresponse: |\n  여러 줄\n", 2, 1, "response"),
         ("response:\nresponse: 값\n", 2, 1, "response"),
+        ("response: 값\nresponse:", 2, 1, "response"),
+        ("next_direction.action: revisit\nnext_direction:\n  action:", 3, 1, "next_direction.action"),
         ("next_direction:\n  action: close_cycle\nnext_direction.action: revisit\n", 3, 2, "next_direction.action"),
         ("next_direction:\n  action: close_cycle\nnext_direction:\n  action: revisit\n", 4, 2, "next_direction.action"),
     ] {
