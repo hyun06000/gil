@@ -87,6 +87,24 @@ class RunEditTests(unittest.TestCase):
         self.assertEqual((self.app / "README.md").read_text(), "not a submission file\n")
         self.assertEqual(self.tools()[4]["result"], "written; the file is in view as it is now")
 
+    def test_a_failed_edit_says_where_the_passage_went_wrong(self):
+        self.drive([
+            {"action": "edit", "path": NAME, "old": "def order(labels):   return sorted(labels)", "new": "x"},
+            {"action": "edit", "path": NAME, "old": "def order(labels):\n    return list(labels)", "new": "x"},
+            {"action": "edit", "path": NAME, "old": "    return sortd(labels)", "new": "x"},
+            {"action": "edit", "path": NAME, "old": "class Graph:", "new": "x"},
+            {"action": "edit", "path": NAME, "old": "labels", "new": "x"},
+            {"action": "write", "path": NAME, "content": ORIGINAL.replace("sorted(labels)", "sorted(labels, key=str.casefold)")},
+            {"action": "check"}, {"action": "finish"}])
+        errors = [e.get("error", "") for e in self.tools()[:5]]
+        self.assertIn("It matches except for spaces or line breaks", errors[0])
+        self.assertIn("Its first line is at line 1 of the file, but what follows there differs", errors[1])
+        self.assertIn("the closest line in the file is: return sorted(labels)", errors[2])
+        self.assertIn("No line of the file resembles its first line.", errors[3])
+        self.assertIn("occurs 2 times", errors[4])
+        self.assertIn("Include a neighbouring line so the passage is unique.", errors[4])
+        self.assertEqual((self.app / NAME).read_text(), ORIGINAL.replace("sorted(labels)", "sorted(labels, key=str.casefold)"))
+
     def test_a_refusal_repeated_says_so_and_the_request_states_the_time_left(self):
         self.drive([{"action": "edit", "path": "README.md", "old": "not", "new": "x"}] * 3 +
                    [{"action": "write", "path": NAME, "content": ORIGINAL.replace("sorted(labels)", "sorted(labels, key=str.casefold)")},

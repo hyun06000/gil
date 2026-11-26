@@ -1,4 +1,5 @@
 """Shared source-editing tools for the three pinned CPU tasks."""
+import difflib
 import hashlib
 import json
 import os
@@ -22,11 +23,15 @@ RESULTS_BUDGET = 60000
 OUTPUT_LIMIT = 12000    # characters kept from the end of a command's or check's output
 # Calls in a row that bring no new file text, no new file content and no new command result.
 STALL_WARNING = 2
+# What the model wrote to itself: the only memory of intent between requests, in either arm.
+NOTES_KEPT = 16
+NOTE_LIMIT = 400
 STALL_LIMIT = 12
 # What a submission may contain, in the words a refusal uses.
 WRITABLE = {
     "ks-solver-cpp": "solution.cpp and .hpp files other than oracle.hpp",
-    "react-lead-form": ".ts, .tsx and .css files under src/, outside src/spec/ and src/data/",
+    "react-lead-form": ".ts, .tsx and .css files under src/ (outside src/spec/ and src/data/), and package.json, "
+                       "tsconfig.json, vite.config.ts and index.html",
     "vf2-speedup-networkx": "fast_networkx.py and anything under fast_networkx/",
 }
 CHECKS = {
@@ -45,7 +50,9 @@ def source(name, write=False):
     if write:
         allowed = {
           "ks-solver-cpp": rel=="solution.cpp" or (rel.endswith(".hpp") and rel!="oracle.hpp"),
-          "react-lead-form": rel.startswith("src/") and not rel.startswith(("src/spec/","src/data/")) and rel.endswith((".ts",".tsx",".css")),
+          # The task collects these project files with src/ as the submission, and its verifier builds with them.
+          "react-lead-form": rel in ("package.json", "tsconfig.json", "vite.config.ts", "index.html") or (
+              rel.startswith("src/") and not rel.startswith(("src/spec/","src/data/")) and rel.endswith((".ts",".tsx",".css"))),
           "vf2-speedup-networkx": rel=="fast_networkx.py" or rel.startswith("fast_networkx/"),
         }
         if not allowed[TASK]:
@@ -147,6 +154,26 @@ class Stall:
         self.runs.add(state)
 
 
+def edit_hint(text, old, found):
+    """Where a passage that did not match once went wrong, so the next attempt is not the same guess."""
+    if found > 1:
+        return "Include a neighbouring line so the passage is unique."
+    if not old:
+        return "Give the passage to replace."
+    if " ".join(old.split()) in " ".join(text.split()):
+        return "It matches except for spaces or line breaks: copy the passage exactly as the file in view has it."
+    lines = text.splitlines()
+    first = next((line.strip() for line in old.splitlines() if line.strip()), "")
+    at = next((number for number, line in enumerate(lines, 1) if first and first in line), None)
+    if at:
+        return (f"Its first line is at line {at} of the file, but what follows there differs from your passage. "
+                "Use a shorter passage or write the whole file.")
+    close = difflib.get_close_matches(first, [line.strip() for line in lines], n=1, cutoff=0.6)
+    return ((f"No line contains its first line; the closest line in the file is: {close[0][:160]} " if close
+             else "No line of the file resembles its first line. ")
+            + "The file may have changed since you composed the passage: use what is in view now.")
+
+
 def text_of(data):
     # Match Path.read_text() universal newline semantics.
     return data.decode().replace("\r\n", "\n").replace("\r", "\n")
@@ -172,6 +199,7 @@ def solve(task,plan="", *, cycle=None, baseline=None, verify_ref=None, failed_ch
     history=[]; writes={}; checked=None; calls=0
     view = View()
     refusal = ["", 0]
+    notes = []
     stall = Stall((baseline or {}).get("files", {}))
     checkpoint = None
     if plan and cycle is None:
@@ -219,9 +247,14 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                        f"command result. After {STALL_LIMIT - stall.count} more, editing ends with the files as they are. "
                        "The full current text of every file you have read or written is above under 'Files in view': "
                        "reading one again returns nothing. Change a file, run something you have not run, or finish.")
+        prompt += ('\nEvery tool call takes "note": what the material in this request settled and what you do next. '
+                   "Each request is built anew: your notes, the files in view and the recent results are all that "
+                   "carries over, so put any conclusion you want to keep in the note.")
+        if notes:
+            prompt += "\nYour notes so far, oldest first: " + json.dumps(notes[-NOTES_KEPT:], ensure_ascii=False)
         if activity:
             prompt += activity.prompt(CHECKS[TASK], checked, stall.count)
-        answer=ask(prompt, notes=True) if activity else ask(prompt); calls+=1
+        answer=ask(prompt, notes=True); calls+=1
         obj = {}
         try:
             obj=json.loads(answer.strip().removeprefix("```json").removeprefix("```").removesuffix("```"))
@@ -233,8 +266,9 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                 stop = str(obj.get("reason") or "stopped")
                 calls -= 1
                 break
-            if activity:
-                activity.note(calls, action, obj.get("note"))
+            note = obj.get("note")
+            if isinstance(note, str) and note.strip():
+                notes.append({"call": calls, "action": action, "note": note.strip()[:NOTE_LIMIT]})
             if action=="read":
                 path=source(obj["path"])
                 start=max(0,int(obj.get("offset",0)))
@@ -259,7 +293,8 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                     text = path.read_text()
                     found = text.count(obj["old"]) if obj["old"] else 0
                     if found != 1:
-                        raise ValueError(f"old text occurs {found} times in {obj['path']}; it must occur exactly once")
+                        raise ValueError(f"old text occurs {found} times in {obj['path']}; it must occur exactly once. "
+                                         + edit_hint(text, obj["old"], found))
                     content = text.replace(obj["old"], obj["new"])
                 else:
                     content=obj["content"]
@@ -378,8 +413,7 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                 stop = "finished"
                 break
             else: raise ValueError("Write a nonempty submission, then run check before finish")
-            if activity:
-                activity_event["note"] = obj.get("note")
+            activity_event["note"] = obj.get("note")
             if action != "read":
                 logged = response
             record(event="tool", id=ask.call_id, action=action, path=obj.get("path"), offset=obj.get("offset", 0), result=logged[:3500], chars=len(logged), **activity_event)
@@ -398,12 +432,12 @@ If a local check fails, use its output to fix the source. No remote tools or pri
             stop = "stalled"
             break
     obs={"files":writes,"check_exit":checked,"solver_calls":calls,
-         "first_write_call":first_write,"first_check_call":first_check,"stop":stop}
+         "first_write_call":first_write,"first_check_call":first_check,"stop":stop,"notes":len(notes)}
     if cycle:
         (WORK/"verify-activity.json").write_text(json.dumps(activity.state(CHECKS[TASK], checked, stall.count)))
         obs.update(repeat_reads=activity.repeats, cycle=cycle, check_command=CHECKS[TASK], check_output=check_output,
                    regression=regression, local_baseline=not baseline and checked == 0 and bool(writes),
-                   refused_reads=activity.refused, notes=len(activity.notes))
+                   refused_reads=activity.refused)
     if checkpoint:
         obs["verified_checkpoint_restores"] = recoveries
     (WORK/"observation.json").write_text(json.dumps(obs))

@@ -32,7 +32,7 @@ class CodeAgent(SoundChangeAgent):
         assert task in TASKS
         cmd="mkdir -p /case /work/project /work/model && chown -R 65534:65534 /work && chown 65534:65534 /app"
         if task=="react-lead-form":
-            cmd+=" && chown -R 65534:65534 /app/src && mkdir -p /app/node_modules/.tmp /app/output && chown 65534:65534 /app/node_modules/.tmp /app/output"
+            cmd+=" && chown -R 65534:65534 /app/src && chown 65534:65534 /app/package.json /app/tsconfig.json /app/vite.config.ts /app/index.html && mkdir -p /app/node_modules/.tmp /app/output && chown 65534:65534 /app/node_modules/.tmp /app/output"
         status=await environment.exec(cmd,user="root")
         if status.return_code: raise RuntimeError(status.stdout or status.stderr)
         arm = os.environ["TB_ARM"]

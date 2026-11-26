@@ -67,8 +67,9 @@ class BudgetReached(RuntimeError):
 
 
 class Luna:
-    def __init__(self, *, max_calls=MAX_CALLS, budget=BUDGET, max_output=MAX_OUTPUT, reasoning="none", timeout=60, overrun=0.0):
+    def __init__(self, *, max_calls=MAX_CALLS, budget=BUDGET, max_output=MAX_OUTPUT, reasoning="none", timeout=60, overrun=0.0, stage_timeout=None):
         self.overrun = overrun
+        self.stage_timeout = stage_timeout
         self.reasoning = reasoning
         self.timeout = timeout
         self.max_calls = max_calls
@@ -104,9 +105,11 @@ class Luna:
         request = urllib.request.Request("https://api.openai.com/v1/responses", data=data, headers={
             "Authorization": "Bearer " + self.key, "Content-Type": "application/json"})
         result = None
-        for wait in (*RETRY_WAITS, None):
+        # The stages without the editor share the Core's 120 s turn: one short second try, not a long wait.
+        timeout = self.timeout if editor or self.stage_timeout is None else self.stage_timeout
+        for wait in (*(RETRY_WAITS if editor else (3,)), None):
             try:
-                with urllib.request.urlopen(request, timeout=self.timeout) as resp:
+                with urllib.request.urlopen(request, timeout=timeout) as resp:
                     result = json.load(resp)
                 break
             except urllib.error.HTTPError as error:

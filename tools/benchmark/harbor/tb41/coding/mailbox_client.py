@@ -32,7 +32,8 @@ def ask(prompt, choices=(), stage="solver", notes=False):
                                  "stage": stage, "last": getattr(ask, "last", None)}))
     draft.replace(MAIL / "request.json")
     reply = MAIL / "reply.json"
-    until = time.monotonic() + 300
+    # Longer than the host can take: three tries of 180 s with 25 s of waits for the editor, two of 45 s otherwise.
+    until = time.monotonic() + (600 if stage == "solver" else 110)
     while not reply.exists():
         if time.monotonic() > until:
             raise TimeoutError("Model relay timed out")

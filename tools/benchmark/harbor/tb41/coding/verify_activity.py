@@ -2,8 +2,6 @@
 import hashlib
 import json
 
-NOTES_KEPT = 16
-NOTE_LIMIT = 400
 
 
 def digest(data):
@@ -14,7 +12,6 @@ class VerifyActivity:
     def __init__(self, ref, baseline, failure):
         self.ref = ref
         self.files = {}
-        self.notes = []
         self.refused = 0
         for name, sha in baseline.items():
             self.version(name, sha)
@@ -45,10 +42,6 @@ class VerifyActivity:
         else:
             info["unchanged_writes"] = info.get("unchanged_writes", 0) + 1
 
-    def note(self, call, action, text):
-        if isinstance(text, str) and text.strip():
-            self.notes.append({"call": call, "action": action, "note": text.strip()[:NOTE_LIMIT]})
-
     def state(self, command, checked, stalled=0):
         return {"verify": self.ref, "files": self.files, "repeat_reads": self.repeats,
                 "refused_reads": self.refused, "stalled_calls": stalled,
@@ -56,12 +49,7 @@ class VerifyActivity:
                                 "pending": checked is None, "last_failure": self.failure}}
 
     def prompt(self, command, checked, stalled=0):
-        text = ('\nEvery tool call takes "note": what the material in this request settled and what you do next. '
-                "Each request is built anew: your notes, the files in view and the receipts below are all that "
-                "carries over, so put any conclusion you want to keep in the note.")
-        if self.notes:
-            text += "\nYour notes in this Verify, oldest first: " + json.dumps(self.notes[-NOTES_KEPT:], ensure_ascii=False)
-        return (text + "\nGIL Verify activity. Page offsets are character ranges [start,end). "
+        return ("\nGIL Verify activity. Page offsets are character ranges [start,end). "
                 "If you edited to address a failed check, run that check on the new version. "
                 "Only the listed local command is fixed; what you run yourself is evidence too, and criteria "
                 "nothing ran remain unverified.\n"

@@ -50,10 +50,11 @@ class EditorTests(unittest.TestCase):
         for editor, output, effort in ((True, [tool_call("check")], "medium"), (False, text, "none")):
             result = {"status": "completed", "output": output, "usage": {"input_tokens": 3, "output_tokens": 5}}
             with patch.dict("os.environ", {"GIL_HARBOR_API_KEY": "test"}), patch("urllib.request.urlopen", return_value=io.BytesIO(json.dumps(result).encode())) as send:
-                Luna(max_calls=None, budget=None, max_output=16000, reasoning="medium", timeout=240).ask([], [], editor=editor)
+                Luna(max_calls=None, budget=None, max_output=16000, reasoning="medium", timeout=240, stage_timeout=45).ask([], [], editor=editor)
             body = json.loads(send.call_args.args[0].data)
+            # A stage without the editor shares the Core's 120 s turn, so its request waits 45 s at most.
             self.assertEqual((body["reasoning"], body["max_output_tokens"], send.call_args.kwargs["timeout"]),
-                             ({"effort": effort}, 16000, 240))
+                             ({"effort": effort}, 16000, 240 if editor else 45))
         # The default client is unchanged.
         with patch.dict("os.environ", {"GIL_HARBOR_API_KEY": "test"}), patch("urllib.request.urlopen", return_value=io.BytesIO(json.dumps(result).encode())) as send:
             Luna().ask([], [])
@@ -78,7 +79,8 @@ class EditorTests(unittest.TestCase):
                     owner = getattr(cls, method).__qualname__.split(".")[0]
                     self.assertIn(owner, ("CodeAgent", "SoundChangeAgent"), f"{cls.__name__}.{method} fell back to {owner}")
             client = CodeAgent().model_client()
-            self.assertEqual((client.budget, client.max_calls, client.reasoning, client.max_output, client.overrun), (5_000_000, None, "medium", 16000, 0.2))
+            self.assertEqual((client.budget, client.max_calls, client.reasoning, client.max_output, client.overrun, client.timeout, client.stage_timeout),
+                             (5_000_000, None, "medium", 16000, 0.2, 180, 45))
             with patch.dict("os.environ", {"TB_BUDGET_USD": "0.75"}):
                 self.assertEqual(CodeAgent().model_client().budget, 750_000)
             for refused in ("0", "9", "-1"):

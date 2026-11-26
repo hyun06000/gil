@@ -60,7 +60,7 @@ class MemoryTests(unittest.TestCase):
                    f"open({str(self.runs)!r}, 'a').write('x'); from fast_networkx import order; "
                    "assert order(['B','a']) == ['a','B'], 'case order'"]
         baseline = {"files": {NAME: hashlib.sha256(source.encode()).hexdigest()}}
-        self.events, model = [], Script(step, noted=bool(cycle))
+        self.events, model = [], Script(step, noted=True)
         with patch.multiple(solver, APP=self.app, WORK=self.work, TASK=TASK, ask=model), \
                 patch.dict(solver.CHECKS, {TASK: command}), \
                 patch.object(solver, "record", side_effect=lambda **e: self.events.append(e)):
@@ -193,7 +193,7 @@ class MemoryTests(unittest.TestCase):
         self.assertEqual((obs["stop"], obs["solver_calls"]), ("finished", 41))
         self.assertFalse(any("calls in a row" in p for p in model.prompts))
 
-    def test_only_a_verify_carries_notes(self):
+    def test_both_arms_carry_notes_and_only_a_verify_carries_its_receipts(self):
         step = lambda n, p: [{"action": "read", "path": NAME, "offset": 0, "note": "sorted() has no key; add casefold next"},
                              {"action": "write", "path": NAME, "content": FIXED, "note": "wrote the casefold key; check it"},
                              {"action": "check", "note": "expect exit 0"},
@@ -204,12 +204,21 @@ class MemoryTests(unittest.TestCase):
         self.assertIn("wrote the casefold key; check it", model.prompts[3])
         self.assertEqual((obs["notes"], obs["refused_reads"], obs["repeat_reads"]), (4, 0, 0))
         self.assertEqual(self.tools("check")[0]["note"], "expect exit 0")
-        # The control takes no note flag, sends no note text and reports no Verify fields.
+        self.assertIn("GIL Verify activity", model.prompts[0])
+        # The control remembers its own notes in the same way; the Verify receipts are not its to carry.
         obs, model = self.run_solver(step, cycle=None)
-        self.assertEqual(model.flags, [{}] * 4)
-        self.assertFalse(any('"note"' in p or "GIL Verify" in p for p in model.prompts))
-        self.assertEqual(set(obs), {"files", "check_exit", "solver_calls", "first_write_call", "first_check_call", "stop"})
-        self.assertFalse(any("note" in e for e in self.events))
+        self.assertEqual(model.flags, [{"notes": True}] * 4)
+        self.assertIn("sorted() has no key; add casefold next", model.prompts[1])
+        self.assertIn("wrote the casefold key; check it", model.prompts[3])
+        self.assertFalse(any("GIL Verify" in p for p in model.prompts))
+        self.assertEqual(set(obs), {"files", "check_exit", "solver_calls", "first_write_call", "first_check_call", "stop", "notes"})
+        self.assertEqual((obs["notes"], self.tools("check")[0]["note"]), (4, "expect exit 0"))
+        # Notes are bounded: the oldest fall out of a request, and each is cut to its limit.
+        obs, model = self.run_solver(lambda n, p: {"action": "run", "command": f"echo {n}", "note": f"step {n} " + "x" * 900} if n <= 20 else
+                                     {"action": "write", "path": NAME, "content": FIXED} if n == 21 else
+                                     {"action": "check"} if n == 22 else {"action": "finish"}, cycle=None)
+        kept = json.loads(next(l for l in model.prompts[20].splitlines() if l.startswith("Your notes so far"))[len("Your notes so far, oldest first: "):])
+        self.assertEqual((len(kept), kept[0]["call"], len(kept[0]["note"])), (solver.NOTES_KEPT, 5, solver.NOTE_LIMIT))
 
 
 if __name__ == "__main__":
