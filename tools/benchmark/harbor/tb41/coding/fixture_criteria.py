@@ -88,7 +88,7 @@ def model(prompt, choices=(), stage="solver", notes=False, ledger=False):
         answer = json.dumps(LEDGER)
     elif stage == "define":
         assert "Choose the open criteria" in prompt
-        answer = json.dumps({"targets": [ID[TARGET[ref]]], "set_aside": {}})
+        answer = json.dumps({"targets": [ID[TARGET[ref]]]})
     elif stage == "hypothesis" and ref != "cycle:C2":
         assert "This step is text only" in prompt
         if (ref, attempt) == ("cycle:C3", 1):

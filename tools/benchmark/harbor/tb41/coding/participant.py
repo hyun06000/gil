@@ -233,20 +233,29 @@ def entry_ledger(cycles, parent, failed):
     return merged(items, (verify_result(failed) or {}).get("criteria") if failed else None)
 
 
+def json_of(answer):
+    return json.loads(answer.strip().removeprefix("```json").removeprefix("```").removesuffix("```"))
+
+
+def set_aside_by(cycle):
+    """Criteria the reflection that closed a failed Experiment judged not to describe the task."""
+    step = next((s for s in reversed((cycle or {}).get("steps") or []) if s["kind"] == "outcome" and s["report"]), None)
+    try:
+        found = json.loads(step["report"]["lesson"].split("\nSet aside: ", 1)[1]) if step else {}
+    except (ValueError, KeyError, IndexError):
+        return {}
+    return found if isinstance(found, dict) else {}
+
+
 def choose(model, ledger, entry, lesson):
-    """Which open criteria this Experiment takes, and which it sets aside: the model's judgement."""
+    """Which open criteria this Experiment takes: the model's judgement. The others stay open."""
     answer = model(
-        "Choose the open criteria this experiment takes on. Take those one coherent change can make hold; "
-        "leave the rest for later experiments. Set a criterion aside only when, against its source, its "
-        "wording or its probe cannot be right, and say why. Return JSON only: "
-        '{"targets": ["K1"], "set_aside": {"K2": "reason"}}. Ledger: '
+        "Choose the open criteria this experiment takes on: those one coherent change can make hold. "
+        "Every criterion you do not name stays open and is taken by a later experiment, so name only what "
+        'this one will do. Return JSON only: {"targets": ["K1", "K4"]}. Ledger: '
         + json.dumps(ledger.shown(entry), ensure_ascii=False) + ("\n" + lesson if lesson else ""))
     try:
-        picked = json.loads(answer.strip().removeprefix("```json").removeprefix("```").removesuffix("```"))
-        for key, reason in (picked.get("set_aside") or {}).items():
-            if key in ledger.items:
-                ledger.set_aside(key, reason)
-        targets = [key for key in picked.get("targets") or [] if key in ledger.open(entry)]
+        targets = [key for key in json_of(answer).get("targets") or [] if key in ledger.open(entry)]
     except (ValueError, AttributeError, TypeError):
         targets = []
     # An answer that names nothing usable leaves every open criterion to this experiment.
@@ -439,6 +448,10 @@ def reply(r):
         items = entry_ledger(cycles, parent, failed) or derive(model, task, spec)
         entry = digest((verify_result(parent) or {}).get("files") or {})
         ledger = Ledger(items) if items else None
+        # A criterion is set aside only by the reflection of an Experiment that failed on it.
+        for key, reason in set_aside_by(failed).items() if ledger else ():
+            if key in ledger.items:
+                ledger.set_aside(key, reason)
         targets = choose(model, ledger, entry, lesson) if ledger and ledger.open(entry) else []
         if targets:
             plan = {"targets": targets, "held_at_entry": ledger.having(entry, "holds"), "criteria": ledger.json()}
@@ -592,7 +605,19 @@ def reply(r):
                        "next_direction.target_node_ref": step("define")["ref"],
                        "next_direction.reason": "The hypothesis is doubted; the problem definition stands."},
                 )
-            return close(verdict="failure", lesson=reflection, **fields)
+            # The problem definition is doubted. If a criterion or its probe is what was wrong, the
+            # reflection names it, and the next Define leaves it out.
+            try:
+                wrong = json_of(model(
+                    "If your reflection found a criterion whose wording or probe cannot be right against its "
+                    'source, name it with the reason, as JSON only: {"K2": "reason"}. A criterion that is merely '
+                    "hard, unfinished or better done later is not wrong. Return {} when none is. Reflection: "
+                    + reflection))
+                wrong = {key: str(reason) for key, reason in wrong.items() if key in plan["targets"] or
+                         any(i["id"] == key for i in plan["criteria"])} if isinstance(wrong, dict) else {}
+            except (ValueError, AttributeError, TypeError):
+                wrong = {}
+            return close(verdict="failure", lesson=reflection + "\nSet aside: " + json.dumps(wrong, ensure_ascii=False), **fields)
         return close(
             verdict="success"
             if analysis["success_condition_met"] == "yes"

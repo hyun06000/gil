@@ -183,22 +183,29 @@ class ParticipantLedgerTests(unittest.TestCase):
             self.assertIn("List first every failure case", asked[0])
             self.assertIsNone(participant.derive(lambda prompt: "still not json", "task", "spec"))
 
-    def test_the_model_chooses_the_targets_and_what_to_set_aside_and_an_unusable_answer_leaves_every_open_criterion(self):
+    def test_the_model_chooses_the_targets_and_only_a_failed_experiment_s_reflection_sets_a_criterion_aside(self):
         entry = digest({NAME: "1"})
         asked = []
         def model(answer):
             return lambda prompt: asked.append(prompt) or answer
         ledger = Ledger(parse(json.dumps(RAW)))
-        picked = participant.choose(model(json.dumps({"targets": ["K3", "K9", "K3", "K4"], "set_aside": {"K1": "not in the sources"}})),
+        picked = participant.choose(model(json.dumps({"targets": ["K3", "K9", "K3", "K4"], "set_aside": {"K1": "later"}})),
                                     ledger, entry, "Earlier: K3 failed twice")
-        # Unknown ids, repeats and a criterion nothing local can show are not targets.
+        # Unknown ids, repeats and a criterion nothing local can show are not targets. What the
+        # choice does not name stays open: choosing cannot set anything aside.
         self.assertEqual(picked, ["K3"])
-        self.assertEqual(ledger.status("K1", entry), "set_aside")
+        self.assertEqual(ledger.open(entry), ["K1", "K2", "K3"])
         self.assertIn("Earlier: K3 failed twice", asked[0])
-        self.assertIn("Set a criterion aside only when", asked[0])
-        for unusable in ("no idea", "[]", json.dumps({"targets": []}), json.dumps({"targets": ["K1"]})):
+        self.assertIn("Every criterion you do not name stays open", asked[0])
+        for unusable in ("no idea", "[]", json.dumps({"targets": []}), json.dumps({"targets": ["K9"]})):
             with self.subTest(answer=unusable):
-                self.assertEqual(participant.choose(model(unusable), ledger, entry, ""), ["K2", "K3"])
+                self.assertEqual(participant.choose(model(unusable), ledger, entry, ""), ["K1", "K2", "K3"])
+        # The reflection that closed a failed Experiment may name a criterion as wrong; its record carries it.
+        closed = lambda lesson: {"steps": [{"kind": "outcome", "report": {"verdict": "failure", "lesson": lesson}}]}
+        self.assertEqual(participant.set_aside_by(closed('The probe was wrong.\nSet aside: {"K2": "the source allows a copy"}')),
+                         {"K2": "the source allows a copy"})
+        for none in (closed("No criterion was wrong.\nSet aside: {}"), closed("An older record"), {"steps": []}, None):
+            self.assertEqual(participant.set_aside_by(none), {})
 
     def test_an_experiment_starts_from_its_ancestor_s_ledger_with_the_abandoned_one_s_probes(self):
         held, lost = parse(json.dumps(RAW)), parse(json.dumps(RAW))
