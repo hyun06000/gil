@@ -12,13 +12,28 @@ class CodeAgent(SoundChangeAgent):
             cmd+=" && chown -R 65534:65534 /app/src && mkdir -p /app/node_modules/.tmp /app/output && chown 65534:65534 /app/node_modules/.tmp /app/output"
         status=await environment.exec(cmd,user="root")
         if status.return_code: raise RuntimeError(status.stdout or status.stderr)
-        for name in ("solver.py","participant.py","mailbox_client.py","checkpoint.py"):
+        arm = os.environ["TB_ARM"]
+        if arm not in {"on", "off"}:
+            raise ValueError("Unknown coding benchmark arm")
+        modules = ["solver.py", "mailbox_client.py"]
+        if arm == "on":
+            modules.extend(["participant.py", "checkpoint.py"])
+        for name in modules:
             await environment.upload_file(HERE/"coding"/name,"/case/"+name)
         if task == "vf2-speedup-networkx":
             await environment.upload_file(HERE/"coding"/"graph_smoke.py", "/case/graph_smoke.py")
         await environment.upload_file(HERE/"worker.py","/case/worker.py")
         if os.environ["TB_ARM"]=="on":
             await environment.upload_file(os.environ["TB_GIL_BINARY"],"/case/gil")
+        else:
+            status = await environment.exec(
+                "! command -v gil && test ! -e /case/gil && test ! -e /case/participant.py "
+                "&& test ! -e /case/checkpoint.py && test ! -e /work/record",
+                user="65534",
+            )
+            if status.return_code:
+                raise RuntimeError("GIL components found in the control environment")
+            print("Control preflight passed: no gil on PATH or in /case, no participant, checkpoint or project record.", flush=True)
 
     async def run(self, instruction, environment, context):
         try:

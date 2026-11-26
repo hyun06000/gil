@@ -6,7 +6,6 @@ from pathlib import Path
 import subprocess
 import time
 
-from checkpoint import Checkpoint
 from mailbox_client import ask, record
 
 WORK = Path("/work/project")
@@ -42,7 +41,10 @@ def solve(task,plan=""):
         public.extend(str((Path(directory)/f).relative_to(APP)) for f in files)
         if len(public)>600: break
     history=[]; writes={}; checked=None; calls=0
-    checkpoint = Checkpoint() if plan else None
+    checkpoint = None
+    if plan:
+        from checkpoint import Checkpoint
+        checkpoint = Checkpoint()
     recoveries = 0
     last_failure = ""
     first_write = first_check = None
