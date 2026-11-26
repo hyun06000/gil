@@ -555,7 +555,7 @@ jobs:
   three-cpu:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.harbor_benchmark && inputs.harbor_model == 'three-cpu' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 95
     strategy:
       fail-fast: false
       matrix:

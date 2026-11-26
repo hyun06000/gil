@@ -30,4 +30,4 @@ class CodeAgent(SoundChangeAgent):
         arm=os.environ["TB_ARM"]; task=os.environ["TB_TASK"]
         assert arm in ("on","off") and task in TASKS
         prep="chmod +x /case/participant.py /case/gil && " if arm=="on" else ""
-        return await environment.exec(prep+"chmod 644 /case/task.txt && setpriv --reuid=65534 --regid=65534 --clear-groups --no-new-privs env HOME=/tmp TB_TASK="+task+" python3 /case/worker.py "+arm,user="root",timeout_sec=1790)
+        return await environment.exec(prep+"chmod 644 /case/task.txt && setpriv --reuid=65534 --regid=65534 --clear-groups --no-new-privs env HOME=/tmp TB_EXTRA_SECONDS=1800 TB_TASK="+task+" python3 /case/worker.py "+arm,user="root",timeout_sec=3590)
