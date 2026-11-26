@@ -11,6 +11,9 @@ Path("/work/deadline").write_text(str(time.time() + 1735 + extra_seconds))
 if sys.argv[1] == "off":
     solve(Path("/case/task.txt").read_text())
 else:
+    from checkpoint import seed_submission
+    seed_submission()
+    os.environ["GIL_TB41_CYCLE_RECOVERY"] = "1"
     os.environ["GIL_BENCHMARK_VERIFY_SECONDS"] = str(1750 + extra_seconds)
     with open("/work/result.json", "w") as out:
         os.dup2(out.fileno(), 1)

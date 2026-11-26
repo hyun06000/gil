@@ -20,6 +20,7 @@ const MAX_REPLY: u64 = 1024 * 1024;
 enum Reply {
     Open { kind: NodeKind, contract: String },
     Close { report: String },
+    Projected,
 }
 
 fn fields(report: &Report) -> BTreeMap<&str, &str> {
@@ -35,12 +36,17 @@ fn history(project: &Project) -> Vec<Value> {
             json!({"ref":cycle.step_ref(n.id).to_string(), "kind":n.kind.as_str(), "report":n.report.as_ref().map(fields)})
         }).collect();
         json!({"ref":cycle.id().to_ref().to_string(), "kind":cycle.kind().to_string(),
+               "journey":cycle.journey().map(|j|j.to_string()),
+               "parent":cycle.parent().map(|id|id.to_ref().to_string()),
+               "revisit_from":cycle.revisit_from().map(|id|id.to_ref().to_string()),
+               "exit_world":cycle.exit_snapshot().map(|world|world.to_string()),
                "steps":steps, "report":cycle.report().map(fields)})
     }).collect()
 }
 
 struct Adapter {
     executable: PathBuf,
+    timeout: PathBuf,
     records: PathBuf,
     workspace: PathBuf,
     task: String,
@@ -66,7 +72,7 @@ impl Adapter {
         if seconds == 0 {
             return Err("Verify timeout must be positive".into());
         }
-        let mut child = Command::new("/usr/bin/timeout")
+        let mut child = Command::new(&self.timeout)
             .arg("--kill-after=5s")
             .arg(format!("{seconds}s"))
             .arg(&self.executable)
@@ -203,6 +209,7 @@ fn run(task: &Path, executable: &Path, workspace: &Path, records: &Path) -> Resu
     }
     let adapter = Adapter {
         executable: executable.canonicalize()?,
+        timeout: "/usr/bin/timeout".into(),
         records: records.clone(),
         workspace: workspace.clone(),
         task: fs::read_to_string(task)?,
@@ -217,6 +224,14 @@ fn run(task: &Path, executable: &Path, workspace: &Path, records: &Path) -> Resu
         records.join(".gil").join("benchmark.yaml"),
     )?;
     session.commit()?;
+    drive(
+        &mut session,
+        &adapter,
+        std::env::var_os("GIL_TB41_CYCLE_RECOVERY").is_some(),
+    )
+}
+
+fn drive(session: &mut ProjectSession, adapter: &Adapter, recovery: bool) -> Result<Value> {
     let mut previous_error = None;
     let mut turns = 0;
     loop {
@@ -224,6 +239,33 @@ fn run(task: &Path, executable: &Path, workspace: &Path, records: &Path) -> Resu
         if cycle.is_closed() {
             if cycle.kind() == CycleKind::Experiment {
                 let report = cycle.report().ok_or("closed Experiment has no Report")?;
+                if recovery
+                    && report.get("verdict") == Some("success")
+                    && report.get("benchmark_transition") == Some("verified_local_baseline")
+                {
+                    session.open_child_cycle(CycleKind::Experiment)?;
+                    session.commit()?;
+                    turns = 0;
+                    continue;
+                }
+                if recovery
+                    && report.get("verdict") == Some("failure")
+                    && report.get("benchmark_transition") == Some("observed_regression")
+                {
+                    let moved = session.revisit_cycle()?.moved;
+                    let project = json!({"action":"project", "failed":moved.from.to_string(),
+                        "target":moved.target.to_string(), "world":moved.target_world.to_string()});
+                    if !matches!(
+                        adapter.ask(session.project(), project, None)?,
+                        Reply::Projected
+                    ) {
+                        return Err("adapter did not confirm submission projection".into());
+                    }
+                    session.open_branch_cycle(CycleKind::Experiment)?;
+                    session.commit()?;
+                    turns = 0;
+                    continue;
+                }
                 return Ok(
                     json!({"authority":"benchmark_adapter", "verdict":report.get("verdict"),
                     "cycle":cycle.id().to_ref().to_string(), "report":fields(report), "history":history(session.project())}),
@@ -246,7 +288,7 @@ fn run(task: &Path, executable: &Path, workspace: &Path, records: &Path) -> Resu
         if !verify_open && !matches!(session.world_state()?, crate::WorldState::Clean { .. }) {
             return Err("workspace changed outside an open Verify".into());
         }
-        match apply(&mut session, reply) {
+        match apply(session, reply) {
             Ok(()) => {
                 session.commit()?;
                 previous_error = None;
@@ -357,6 +399,73 @@ mod tests {
         let first = crate::ManifestAddress::from_parts("sha256", &[0; 32]).unwrap();
         let project = Project::start(RuleSet::benchmark(), first);
         crate::store::encode(&project).expect("persist the initial benchmark Interview");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn closed_regression_restores_submission_and_branches_with_journey() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(format!("tb41-revisit-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let workspace = root.join("project");
+        let records = root.join("records");
+        for dir in [&workspace, &records, &root.join("app")] {
+            fs::create_dir(dir).unwrap();
+        }
+        let timeout = root.join("launch");
+        fs::write(&timeout, "#!/bin/sh\nshift 2\nexec \"$@\"\n").unwrap();
+        fs::set_permissions(&timeout, fs::Permissions::from_mode(0o755)).unwrap();
+        let adapter = Adapter {
+            executable: Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tools/benchmark/harbor/tb41/coding/fixture_revisit.py"),
+            timeout,
+            records: records.clone(),
+            workspace: workspace.clone(),
+            task: "Sort labels case-insensitively, retaining duplicates and original spelling."
+                .into(),
+        };
+        let mut session = ProjectSession::start_at(
+            RuleSet::benchmark(),
+            &workspace,
+            records.join(".gil/benchmark.yaml"),
+        )
+        .unwrap();
+        session.commit().unwrap();
+        let result = drive(&mut session, &adapter, true).unwrap();
+        let cycles = result["history"].as_array().unwrap();
+        assert_eq!(cycles.len(), 4);
+        assert_eq!(cycles[2]["report"]["verdict"], "failure");
+        assert!(cycles[2]["journey"].is_string());
+        assert_eq!(cycles[3]["revisit_from"], cycles[2]["ref"]);
+        assert_eq!(cycles[3]["parent"], cycles[1]["ref"]);
+        assert_eq!(result["verdict"], "success");
+        let log = fs::read_to_string(root.join("transcript.jsonl")).unwrap();
+        let events: Vec<Value> = log
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        let restored = events
+            .iter()
+            .find(|e| e["event"] == "cycle_restore_completed")
+            .unwrap();
+        assert_eq!(restored["world"], cycles[1]["exit_world"]);
+        let hashes = |index: usize| {
+            let verify = cycles[index]["steps"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|s| s["kind"] == "verify")
+                .unwrap();
+            let obs: Value =
+                serde_json::from_str(verify["report"]["result"].as_str().unwrap()).unwrap();
+            obs["files"]["fast_networkx.py"].clone()
+        };
+        let change = &restored["changes"]["fast_networkx.py"];
+        assert_eq!(change["failed"], hashes(2));
+        assert_eq!(change["restored"], hashes(1));
+        assert_ne!(hashes(3), hashes(1));
+        assert_ne!(hashes(3), hashes(2));
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

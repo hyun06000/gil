@@ -185,7 +185,25 @@ def close(**fields):
 
 def reply(r):
     n = r["next"]
+    if n["action"] == "project":
+        from checkpoint import project_submission
+        return project_submission(r, WORK, source, record)
     task = r["task"]
+    current = r["history"][-1]
+    cycles = {c.get("ref"): c for c in r["history"]}
+    parent = cycles.get(current.get("parent")) or {}
+    active = bool(os.environ.get("GIL_TB41_CYCLE_RECOVERY")) and n.get("cycle") == "experiment"
+    first = active and parent.get("kind") == "interview"
+    failed = cycles.get(current["revisit_from"]) if current.get("revisit_from") else None
+    lesson = ""
+    if failed:
+        evidence = {s["ref"]: s["report"][field] for s in failed["steps"]
+                    for kind, field in (("hypothesis", "hypothesis"), ("verify", "result"),
+                                        ("analysis", "interpretation")) if s["kind"] == kind}
+        lesson = ("Closed failed experiment " + failed["ref"] + " Journey " + failed["journey"] + "; restored " + parent["ref"]
+                  + " at " + parent["exit_world"] + ". Use the failed prediction and observed check "
+                  "to propose a different hypothesis and change the implementation. Evidence: "
+                  + json.dumps(evidence, ensure_ascii=False))
     steps = r["history"][-1]["steps"]
     interview = r["history"][0]["steps"]
 
@@ -289,10 +307,16 @@ def reply(r):
             approved="benchmark_" + decision,
         )
     spec = step("synthesis", interview)["report"]["statement"]
+    if first:
+        spec += "\nFirst milestone: produce a nonempty candidate that passes the available local check. Full task criteria remain for the next experiment and independent grading."
+    elif active:
+        spec += "\nContinue from the locally checked candidate. Inspect its files and address the remaining public requirements."
+    if lesson:
+        spec += "\n" + lesson
     if k == "define":
         return close(
             problem=spec,
-            success_condition=model(
+            success_condition="Edited submission passes " + json.dumps(CHECKS[TASK]) if first else model(
                 "Give an observable success condition for: " + spec
             ),
         )
@@ -308,8 +332,13 @@ def reply(r):
         )
     if k == "verify":
         hypothesis = step("hypothesis")["report"]["hypothesis"]
+        options = {}
+        if active:
+            options["cycle"] = current["ref"]
+            if not first:
+                options["baseline"] = json.loads(next(s for s in parent["steps"] if s["kind"] == "verify")["report"]["result"])
         obs = solve(
-            task, "Accepted specification: " + spec + "\nSuccess criteria: " + criteria + "\nHypothesis: " + hypothesis
+            task, "Accepted specification: " + spec + "\nSuccess criteria: " + criteria + "\nHypothesis: " + hypothesis, **options
         )
         return close(
             execution="Recorded file receipts and the local check status in observation.json.",
@@ -325,12 +354,16 @@ def reply(r):
             + spec + "\nCriteria: " + criteria + "\nObserved: " + obs
         )
         observed = json.loads(obs)
-        achieved = bool(observed["files"]) and observed["check_exit"] == 0 and model(
-            "Choose demonstrated only if every material criterion has direct evidence. A missing, "
-            "deferred or contradicted criterion requires incomplete. Criteria: " + criteria
-            + "\nRoadmap: " + spec + "\nObserved: " + obs + "\nAssessment: " + analysis,
-            ["demonstrated", "incomplete"],
-        ) == "demonstrated"
+        if first:
+            achieved = observed["local_baseline"]
+            analysis += "\nOnly the local check is assessed in this milestone. Full task behavior remains unverified."
+        else:
+            achieved = bool(observed["files"]) and observed["check_exit"] == 0 and model(
+                "Choose demonstrated only if every material criterion has direct evidence. A missing, "
+                "deferred or contradicted criterion requires incomplete. Criteria: " + criteria
+                + "\nRoadmap: " + spec + "\nObserved: " + obs + "\nAssessment: " + analysis,
+                ["demonstrated", "incomplete"],
+            ) == "demonstrated"
         return close(
             hypothesis_fit=analysis,
             problem_solved="yes" if achieved else "partial",
@@ -365,7 +398,13 @@ def reply(r):
         "next_direction.reason": "Preserve the measured outcome.",
     }
     if verdict == "failure":
-        direction["next_direction.target_cycle_ref"] = "cycle:C1"
+        direction["next_direction.target_cycle_ref"] = current.get("parent") or "cycle:C1"
+    if active:
+        obs = json.loads(step("verify")["report"]["result"])
+        if first and obs["local_baseline"]:
+            direction["benchmark_transition"] = "verified_local_baseline"
+        elif obs["regression"]:
+            direction["benchmark_transition"] = "observed_regression"
     return close(
         verdict=verdict,
         outcome_ref=outcome["ref"],

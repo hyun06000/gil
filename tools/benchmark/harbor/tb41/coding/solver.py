@@ -34,7 +34,7 @@ def source(name, write=False):
     return path
 
 
-def solve(task,plan=""):
+def solve(task,plan="", *, cycle=None, baseline=None):
     public=[]
     for directory,children,files in os.walk(APP):
         children[:]=[v for v in children if v not in ("node_modules",".git","__pycache__","build","dist")]
@@ -42,13 +42,21 @@ def solve(task,plan=""):
         if len(public)>600: break
     history=[]; writes={}; checked=None; calls=0
     checkpoint = None
-    if plan:
+    if plan and cycle is None:
         from checkpoint import Checkpoint
         checkpoint = Checkpoint()
+    if cycle:
+        from checkpoint import capture_file
+        record(event="verify_plan", cycle=cycle, plan=plan)
+        if baseline:
+            writes.update(baseline["files"])
+    check_output = ""
+    original_hashes = {}
+    regression = False
     recoveries = 0
     last_failure = ""
     first_write = first_check = None
-    deadline=float(Path("/work/deadline").read_text())
+    deadline=float((WORK.parent / "deadline").read_text())
     while time.time()<deadline-100:
         prompt=f"""{task}
 {plan}
@@ -77,10 +85,14 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                 path=source(obj["path"],True)
                 content=obj["content"]
                 if not content.strip(): raise ValueError("empty source file")
+                if cycle and path not in original_hashes:
+                    original_hashes[path] = hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
                 if checkpoint:
                     checkpoint.before_write(path)
                 path.parent.mkdir(parents=True,exist_ok=True); path.write_text(content)
                 writes[str(path.relative_to(APP))]=hashlib.sha256(path.read_bytes()).hexdigest()
+                if cycle:
+                    capture_file(WORK, APP, path)
                 if first_write is None:
                     first_write = calls
                 checked=None; response="written"
@@ -90,6 +102,16 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                 proc=subprocess.run(CHECKS[TASK],cwd=APP,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=100)
                 checked=proc.returncode
                 response=f"exit {checked}: "+proc.stdout.decode(errors="replace")[-3500:]
+                if cycle:
+                    for name, digest in writes.items():
+                        if hashlib.sha256(source(name, True).read_bytes()).hexdigest() != digest:
+                            raise RuntimeError(f'Submission changed during local check: {name}')
+                    check_output = response
+                    regression = bool(checked and baseline and any(
+                        writes.get(str(path.relative_to(APP))) != digest for path, digest in original_hashes.items()))
+                    if (not baseline and checked == 0 and writes) or regression:
+                        record(event="tool", id=ask.call_id, action="check", cycle=cycle, result=response)
+                        break
                 if checkpoint and checked == 0 and writes:
                     checkpoint.accept(writes)
                 elif checkpoint and checked != 0:
@@ -111,6 +133,9 @@ If a local check fails, use its output to fix the source. No remote tools or pri
             history.append(["error",str(error)])
     obs={"files":writes,"check_exit":checked,"solver_calls":calls,
          "first_write_call":first_write,"first_check_call":first_check}
+    if cycle:
+        obs.update(cycle=cycle, check_command=CHECKS[TASK], check_output=check_output,
+                   regression=regression, local_baseline=not baseline and checked == 0 and bool(writes))
     if checkpoint:
         obs["verified_checkpoint_restores"] = recoveries
     (WORK/"observation.json").write_text(json.dumps(obs))

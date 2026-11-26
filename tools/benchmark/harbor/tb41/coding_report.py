@@ -9,9 +9,10 @@ if transcript.is_file():
     from transcript_view import render
     shutil.copyfile(transcript, root / "transcript.jsonl")
     render(root)
-interruption = folder / "agent/gil-interrupted.tgz"
-if interruption.is_file():
-    shutil.copyfile(interruption, root / interruption.name)
+for name in ("gil-interrupted.tgz", "gil-cycles.tgz", "gil-result.json"):
+    artifact = folder / "agent" / name
+    if artifact.is_file():
+        shutil.copyfile(artifact, root / name)
 
 def load(path):
     f=folder/path

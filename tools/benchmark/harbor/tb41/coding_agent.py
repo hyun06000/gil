@@ -38,6 +38,14 @@ class CodeAgent(SoundChangeAgent):
     async def run(self, instruction, environment, context):
         try:
             await super().run(instruction, environment, context)
+            if os.environ["TB_ARM"] == "on":
+                result = await environment.exec(
+                    "cd /work && tar -czf /tmp/gil-cycles.tgz record project",
+                    user="65534",
+                )
+                if result.return_code:
+                    raise RuntimeError("Could not archive closed experiment worlds")
+                await environment.download_file("/tmp/gil-cycles.tgz", self.logs_dir / "gil-cycles.tgz")
         except Exception:
             if os.environ["TB_ARM"] == "on":
                 # Preserve the Core graph, its world objects and the last adapter request.
