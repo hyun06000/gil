@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import time
 
+from checkpoint import Checkpoint
 from mailbox_client import ask, record
 
 WORK = Path("/work/project")
@@ -41,6 +42,9 @@ def solve(task,plan=""):
         public.extend(str((Path(directory)/f).relative_to(APP)) for f in files)
         if len(public)>600: break
     history=[]; writes={}; checked=None; calls=0
+    checkpoint = Checkpoint() if plan else None
+    recoveries = 0
+    last_failure = ""
     first_write = first_check = None
     deadline=float(Path("/work/deadline").read_text())
     while time.time()<deadline-100:
@@ -56,6 +60,8 @@ Work toward the full official task. Call exactly one of the supplied editor tool
 {{"action":"finish"}} after editing the solution and checking it. An incomplete solution can be graded.
 For vf2 use fast_networkx.py or a fast_networkx package. For ks use solution.cpp. For React work in src/.
 If a local check fails, use its output to fix the source. No remote tools or private test data."""
+        if checkpoint and last_failure:
+            prompt += "\nLast failed experiment and recovery: " + last_failure
         answer=ask(prompt); calls+=1
         obj = {}
         try:
@@ -69,6 +75,8 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                 path=source(obj["path"],True)
                 content=obj["content"]
                 if not content.strip(): raise ValueError("empty source file")
+                if checkpoint:
+                    checkpoint.before_write(path)
                 path.parent.mkdir(parents=True,exist_ok=True); path.write_text(content)
                 writes[str(path.relative_to(APP))]=hashlib.sha256(path.read_bytes()).hexdigest()
                 if first_write is None:
@@ -80,6 +88,16 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                 proc=subprocess.run(CHECKS[TASK],cwd=APP,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=100)
                 checked=proc.returncode
                 response=f"exit {checked}: "+proc.stdout.decode(errors="replace")[-3500:]
+                if checkpoint and checked == 0 and writes:
+                    checkpoint.accept(writes)
+                elif checkpoint and checked != 0:
+                    def observe(event, changes):
+                        record(event=event, id=ask.call_id, changes=changes, failure=response)
+                    if checkpoint.restore(writes, APP, observe):
+                        recoveries += 1
+                        last_failure = response + "\nRestored the last locally passing submission. Try a different change addressing this failure."
+                        checked = None
+                        response = last_failure
             elif action=="finish" and writes and checked is not None:
                 record(event="tool", id=ask.call_id, action=action, result="finished")
                 break
@@ -91,5 +109,7 @@ If a local check fails, use its output to fix the source. No remote tools or pri
             history.append(["error",str(error)])
     obs={"files":writes,"check_exit":checked,"solver_calls":calls,
          "first_write_call":first_write,"first_check_call":first_check}
+    if checkpoint:
+        obs["verified_checkpoint_restores"] = recoveries
     (WORK/"observation.json").write_text(json.dumps(obs))
     return obs

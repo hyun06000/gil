@@ -1,4 +1,4 @@
-import json,sys,hashlib
+import json,sys,hashlib,shutil
 from datetime import datetime
 from pathlib import Path
 root,arm,task=sys.argv[1:]; root=Path(root)
@@ -6,10 +6,13 @@ trial,=root.glob("pair/*/result.json")
 d=json.loads(trial.read_text()); folder=trial.parent
 transcript = folder / "agent/transcript.jsonl"
 if transcript.is_file():
-    import shutil
     from transcript_view import render
     shutil.copyfile(transcript, root / "transcript.jsonl")
     render(root)
+interruption = folder / "agent/gil-interrupted.tgz"
+if interruption.is_file():
+    shutil.copyfile(interruption, root / interruption.name)
+
 def load(path):
     f=folder/path
     return json.loads(f.read_text()) if f.exists() else {}

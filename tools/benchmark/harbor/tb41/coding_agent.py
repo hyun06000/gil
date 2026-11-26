@@ -12,7 +12,7 @@ class CodeAgent(SoundChangeAgent):
             cmd+=" && chown -R 65534:65534 /app/src && mkdir -p /app/node_modules/.tmp /app/output && chown 65534:65534 /app/node_modules/.tmp /app/output"
         status=await environment.exec(cmd,user="root")
         if status.return_code: raise RuntimeError(status.stdout or status.stderr)
-        for name in ("solver.py","participant.py","mailbox_client.py"):
+        for name in ("solver.py","participant.py","mailbox_client.py","checkpoint.py"):
             await environment.upload_file(HERE/"coding"/name,"/case/"+name)
         if task == "vf2-speedup-networkx":
             await environment.upload_file(HERE/"coding"/"graph_smoke.py", "/case/graph_smoke.py")
@@ -23,6 +23,16 @@ class CodeAgent(SoundChangeAgent):
     async def run(self, instruction, environment, context):
         try:
             await super().run(instruction, environment, context)
+        except Exception:
+            if os.environ["TB_ARM"] == "on":
+                # Preserve the Core graph, its world objects and the last adapter request.
+                result = await environment.exec(
+                    "cd /work && test -d record && tar -czf /tmp/gil-interrupted.tgz record project",
+                    user="65534",
+                )
+                if result.return_code == 0:
+                    await environment.download_file("/tmp/gil-interrupted.tgz", self.logs_dir / "gil-interrupted.tgz")
+            raise
         finally:
             exists = await environment.exec("test -f /work/model/transcript.jsonl", user="root")
             if exists.return_code == 0:
