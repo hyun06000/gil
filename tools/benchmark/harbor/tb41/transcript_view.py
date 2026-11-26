@@ -25,6 +25,9 @@ def render(root):
         title = " · ".join(str(field) for field in fields if field)
         rows.append(f"<details><summary>{html.escape(title)}</summary>"
                     f"<h3>모델 응답</h3><pre>{html.escape(answer)}</pre>")
+        if messages := call["request"].get("messages"):
+            rows.append("<h3>모델 요청</h3><pre>" +
+                        html.escape(json.dumps(messages, ensure_ascii=False, indent=2)) + "</pre>")
         if tool:
             rows.append(f"<h3>도구 결과</h3><pre>{html.escape(result)}</pre>")
         rows.append("</details>")

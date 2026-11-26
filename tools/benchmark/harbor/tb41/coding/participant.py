@@ -300,7 +300,7 @@ def reply(r):
     if k == "hypothesis":
         return close(
             hypothesis=model(
-                "Suggest an experimentally testable implementation strategy for: "
+                "Use the working assumption and first action in the accepted specification to make one testable prediction. Identify the observation that would contradict it and whether that observation is available locally or only during grading. Accepted specification: "
                 + spec + "\nSuccess criteria: " + criteria
             ),
             rationale=spec,

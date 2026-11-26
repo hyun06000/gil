@@ -23,6 +23,10 @@ for name,digest in files.items():
     receipts[name]=f.is_file() and hashlib.sha256(f.read_bytes()).hexdigest()==digest
 error=(d.get("exception_info") or {}).get("exception_type")
 r={"task":task,"arm":arm,"usage":u,"observation":obs,"receipts":receipts,"checks":{c["name"]:c["status"] for c in checks},"seconds":t,"rewards":(d.get("verifier_result") or {}).get("rewards"),"error":error}
+if error:
+    message = str(d["exception_info"].get("exception_message", ""))
+    if message.startswith("Luna API HTTP "):
+        r["model_error"] = message[:500]
 (root/(arm+".json")).write_text(json.dumps(r,indent=2))
 print(json.dumps(r),flush=True)
 if error:

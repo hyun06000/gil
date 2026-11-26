@@ -14,7 +14,6 @@ def record(**event):
 
 def ask(prompt, choices=(), stage="solver"):
     ask.call_id = uuid.uuid4().hex
-    record(event="request", id=ask.call_id, stage=stage)
     messages = [
         {
             "role": "system",
@@ -22,6 +21,8 @@ def ask(prompt, choices=(), stage="solver"):
         },
         {"role": "user", "content": prompt},
     ]
+    record(event="request", id=ask.call_id, stage=stage,
+           **({"messages": messages} if stage == "hypothesis" else {}))
     draft = MAIL / "request.tmp"
     draft.write_text(json.dumps({"messages": messages, "choices": choices, "editor": stage == "solver"}))
     draft.replace(MAIL / "request.json")
