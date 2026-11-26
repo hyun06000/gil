@@ -22,6 +22,7 @@ on:
       - 'src/artifact/tracking_record/policy_file_read.rs'
       - 'src/artifact/tracking_record/policy_file_read_tests.rs'
       - 'src/artifact/tracking_record/policy_file_write.rs'
+      - 'src/benchmark.rs'
       - 'src/bin/gil-launcher.rs'
       - 'src/bin/gil-runtime-testbed.rs'
       - 'src/command.rs'
