@@ -58,13 +58,20 @@ class LunaAgent(GilAgent):
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 reply = Path(tmp) / "reply.json"
+                misses = 0
                 while not worker.done():
                     # Receive a request once. The adapter waits for its reply before posting another.
                     packet = await environment.exec(
                         "cd /work/model && if mv request.json pending.json 2>/dev/null; then cat pending.json; fi",
                         user="65534")
                     if packet.return_code != 0:
-                        raise RuntimeError(f"Harbor model mailbox failed: {packet.stderr}")
+                        # One failed exec into the container is not the end of the trial: look again.
+                        misses += 1
+                        if misses > 5:
+                            raise RuntimeError(f"Harbor model mailbox failed {misses} times: exit {packet.return_code} {packet.stdout} {packet.stderr}")
+                        await asyncio.sleep(1)
+                        continue
+                    misses = 0
                     if packet.stdout and packet.stdout.strip():
                         req = json.loads(packet.stdout)
                         from luna import BudgetReached

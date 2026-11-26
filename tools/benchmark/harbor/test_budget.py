@@ -36,6 +36,71 @@ class BudgetTests(unittest.TestCase):
                 client.ask([{"role": "user", "content": "analyse"}], [])
             self.assertEqual(send.call_count, 1)
 
+    def test_a_busy_provider_is_asked_again_and_a_refusal_is_not(self):
+        import urllib.error
+        text = [{"type": "message", "content": [{"type": "output_text", "text": "ok"}]}]
+        good = completed(text)
+
+        def http(code):
+            return urllib.error.HTTPError("https://api", code, "x", {}, io.BytesIO(b'{"error":{"message":"busy"}}'))
+
+        for failures, expected_calls in (([http(503)], 2), ([http(429), TimeoutError()], 3)):
+            replies = iter([*failures, None])
+            def send(*a, **k):
+                reply = next(replies)
+                if reply is None:
+                    return good()
+                raise reply
+            with patch.dict(os.environ, {"GIL_HARBOR_API_KEY": "test"}), patch("urllib.request.urlopen", side_effect=send) as api, \
+                    patch("time.sleep") as wait:
+                client = Luna(max_calls=None, budget=None)
+                self.assertEqual(client.ask([{"role": "user", "content": "x"}], []), "ok")
+            self.assertEqual((api.call_count, wait.call_count, client.calls), (expected_calls, expected_calls - 1, 1))
+        # Three busy replies end the trial with the last one; a 400 is never asked again.
+        for errors, sent in (([http(503)] * 3, 3), ([http(400)], 1)):
+            with patch.dict(os.environ, {"GIL_HARBOR_API_KEY": "test"}), patch("urllib.request.urlopen", side_effect=errors) as api, \
+                    patch("time.sleep"), self.assertRaisesRegex(RuntimeError, f"Luna API HTTP {errors[0].code} on call 1: busy"):
+                Luna(max_calls=None, budget=None).ask([{"role": "user", "content": "x"}], [])
+            self.assertEqual(api.call_count, sent)
+
+    def test_one_failed_look_into_the_container_is_tried_again(self):
+        base = types.ModuleType("harbor.agents.base")
+        base.BaseAgent = type("BaseAgent", (), {})
+        fake = {"harbor": types.ModuleType("harbor"), "harbor.agents": types.ModuleType("harbor.agents"), "harbor.agents.base": base}
+        with patch.dict(sys.modules, fake), tempfile.TemporaryDirectory() as temp:
+            import gil_harbor
+            looks = []
+
+            class Client:
+                calls = inputs = outputs = 0
+                def usage(self):
+                    return {}
+
+            class Agent(gil_harbor.LunaAgent):
+                logs_dir = Path(temp)
+                def model_client(self):
+                    return Client()
+                def __init__(self, failing):
+                    self.failing = failing
+                async def run_worker(self, environment):
+                    while len(looks) < self.failing + 2:
+                        await asyncio.sleep(0.01)
+                    return types.SimpleNamespace(return_code=0)
+
+            class Environment:
+                def __init__(self, failing):
+                    self.failing = failing
+                async def exec(self, command, **options):
+                    looks.append(command)
+                    bad = len(looks) <= self.failing
+                    return types.SimpleNamespace(return_code=1 if bad else 0, stdout="", stderr=None)
+
+            with patch("asyncio.sleep", side_effect=asyncio.sleep.__wrapped__ if hasattr(asyncio.sleep, "__wrapped__") else asyncio.sleep):
+                self.assertEqual(asyncio.run(Agent(3).execute(Environment(3), types.SimpleNamespace())).return_code, 0)
+                looks.clear()
+                with self.assertRaisesRegex(RuntimeError, "mailbox failed 6 times: exit 1"):
+                    asyncio.run(Agent(99).execute(Environment(99), types.SimpleNamespace()))
+
     def test_the_host_answers_an_editor_request_over_budget_with_a_stop_and_the_worker_ends_its_editing(self):
         base = types.ModuleType("harbor.agents.base")
         base.BaseAgent = type("BaseAgent", (), {})

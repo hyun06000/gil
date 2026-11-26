@@ -1,6 +1,7 @@
 """Host-only, budgeted Responses API client for one Harbor trial."""
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 
@@ -11,6 +12,8 @@ MAX_OUTPUT = 128
 INPUT = 0.20
 OUTPUT = 1.20
 BUDGET = 5000  # $0.005 per trial
+# Seconds to wait before asking again after a 429 or 5xx reply or a dropped connection.
+RETRY_WAITS = (5, 20)
 
 
 def editor_tool(name, description, properties):
@@ -100,10 +103,25 @@ class Luna:
         self.reserved += reservation
         request = urllib.request.Request("https://api.openai.com/v1/responses", data=data, headers={
             "Authorization": "Bearer " + self.key, "Content-Type": "application/json"})
-        try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as resp:
-                result = json.load(resp)
-        except urllib.error.HTTPError as error:
+        result = None
+        for wait in (*RETRY_WAITS, None):
+            try:
+                with urllib.request.urlopen(request, timeout=self.timeout) as resp:
+                    result = json.load(resp)
+                break
+            except urllib.error.HTTPError as error:
+                # The provider being busy or briefly down is not the trial's result: ask again.
+                if wait is not None and error.code in (429, 500, 502, 503, 504):
+                    time.sleep(wait)
+                    continue
+                failure = error
+                break
+            except (urllib.error.URLError, TimeoutError):
+                if wait is None:
+                    raise
+                time.sleep(wait)
+        if result is None:
+            error = failure
             try:
                 detail = json.loads(error.read()).get("error", {})
                 diagnostic = str(detail.get("message", "")).replace(self.key, "[redacted]")[:350]
