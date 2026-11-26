@@ -94,4 +94,8 @@ class LunaAgent(GilAgent):
                 await asyncio.gather(worker, return_exceptions=True)
             context.n_input_tokens = client.inputs
             context.n_output_tokens = client.outputs
+            usage = client.usage()
+            # An estimate from list prices, kept apart from any figure the provider bills.
+            context.cost_usd = usage.get("estimated_usd")
+            context.metadata = {"model": usage.get("model"), "model_calls": usage.get("calls"), "cost_is_estimate": True}
             (self.logs_dir / "luna-usage.json").write_text(json.dumps(client.usage()))

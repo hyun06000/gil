@@ -23,6 +23,12 @@ OUTPUT_LIMIT = 12000    # characters kept from the end of a command's or check's
 # Calls in a row that bring no new file text, no new file content and no new command result.
 STALL_WARNING = 2
 STALL_LIMIT = 12
+# What a submission may contain, in the words a refusal uses.
+WRITABLE = {
+    "ks-solver-cpp": "solution.cpp and .hpp files other than oracle.hpp",
+    "react-lead-form": ".ts, .tsx and .css files under src/, outside src/spec/ and src/data/",
+    "vf2-speedup-networkx": "fast_networkx.py and anything under fast_networkx/",
+}
 CHECKS = {
     "ks-solver-cpp": ["g++", "-O3", "-std=c++17", "-DKS_SOLVER_LIBRARY", "-I/app", "-c", "solution.cpp", "-o", "/tmp/ks.o"],
     "react-lead-form": ["npm", "run", "build"],
@@ -42,7 +48,10 @@ def source(name, write=False):
           "react-lead-form": rel.startswith("src/") and not rel.startswith(("src/spec/","src/data/")) and rel.endswith((".ts",".tsx",".css")),
           "vf2-speedup-networkx": rel=="fast_networkx.py" or rel.startswith("fast_networkx/"),
         }
-        if not allowed[TASK]: raise ValueError("Choose a writable source path for this task")
+        if not allowed[TASK]:
+            raise ValueError(f"{rel} is not part of the submission and cannot be changed by any tool. "
+                             f"Only these are graded and writable: {WRITABLE[TASK]}. Choose a writable source path "
+                             "or solve it inside those files.")
     return path
 
 
@@ -162,6 +171,7 @@ def solve(task,plan="", *, cycle=None, baseline=None, verify_ref=None, failed_ch
         if len(public)>600: break
     history=[]; writes={}; checked=None; calls=0
     view = View()
+    refusal = ["", 0]
     stall = Stall((baseline or {}).get("files", {}))
     checkpoint = None
     if plan and cycle is None:
@@ -202,6 +212,8 @@ For vf2 use fast_networkx.py or a fast_networkx package. For ks use solution.cpp
 If a local check fails, use its output to fix the source. No remote tools or private test data."""
         if checkpoint and last_failure:
             prompt += "\nLast failed experiment and recovery: " + last_failure
+        # The task text may name a longer allowance; this is the one that applies here.
+        prompt += f"\nTime left in this session: {max(0, int((deadline - 100 - time.time()) // 60))} minutes."
         if stall.count >= STALL_WARNING:
             prompt += (f"\n{stall.count} calls in a row brought no new file text, no new file content and no new "
                        f"command result. After {STALL_LIMIT - stall.count} more, editing ends with the files as they are. "
@@ -372,9 +384,14 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                 logged = response
             record(event="tool", id=ask.call_id, action=action, path=obj.get("path"), offset=obj.get("offset", 0), result=logged[:3500], chars=len(logged), **activity_event)
             history.append([action, obj.get("path") or obj.get("command"), response])
+            refusal = ["", 0]
         except (ValueError,OSError,TypeError,KeyError,AttributeError,subprocess.TimeoutExpired) as error:
-            record(event="tool", id=ask.call_id, action=obj.get("action") if isinstance(obj, dict) else None, error=str(error))
-            history.append(["error",str(error)])
+            message = str(error)
+            refusal = [message, refusal[1] + 1] if message == refusal[0] else [message, 1]
+            if refusal[1] > 1:
+                message += f" (refused {refusal[1]} times in a row with the same answer: repeating it will not change the result)"
+            record(event="tool", id=ask.call_id, action=obj.get("action") if isinstance(obj, dict) else None, error=message)
+            history.append(["error", message])
             stall.step(False)
         if stall.count >= STALL_LIMIT:
             record(event="verify_stalled" if cycle else "stalled", id=ask.call_id, cycle=cycle, calls=stall.count)

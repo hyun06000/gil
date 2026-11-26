@@ -22,7 +22,7 @@ case "${GIL_HARBOR_MODEL:-qwen}" in
     agent=gil_harbor:GilAgent ;;
   *) echo "Choose luna or qwen" >&2; exit 1 ;;
 esac
-PYTHONPATH="$source_dir" harbor run --path "$scratch/latency" --agent-import-path "$agent" --env docker --jobs-dir "$output" --job-name benchmark
+PYTHONPATH="$source_dir" harbor run --path "$scratch/latency" --agent "$agent" --env docker --jobs-dir "$output" --job-name benchmark
 python3 - "$output" <<'PY'
 import json, sys
 from pathlib import Path

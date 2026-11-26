@@ -23,6 +23,6 @@ mkdir "$output"
 export PYTHONPATH="$base:$base/.."
 if [[ $TB_ARM == reference ]]; then export TB_AUDIT_FIXTURES="$task/tests"; fi
 rc=0
-harbor run --path "$task" --agent-import-path "$agent" --env docker --agent-timeout-multiplier 0.0625 --jobs-dir "$output" --job-name pair || rc=$?
+harbor run --path "$task" --agent "$agent" --env docker --agent-timeout-multiplier 0.0625 --jobs-dir "$output" --job-name pair || rc=$?
 python3 "$base/report.py" "$output" "$TB_ARM"
 exit "$rc"

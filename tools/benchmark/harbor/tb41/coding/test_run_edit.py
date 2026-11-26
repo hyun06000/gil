@@ -82,9 +82,24 @@ class RunEditTests(unittest.TestCase):
         self.assertIn("occurs 2 times", errors[0])
         self.assertIn("occurs 0 times", errors[1])
         self.assertIn("occurs 0 times", errors[2])
-        self.assertIn("writable source path", errors[3])
+        self.assertIn("README.md is not part of the submission and cannot be changed by any tool. Only these are "
+                      "graded and writable: fast_networkx.py and anything under fast_networkx/.", errors[3])
         self.assertEqual((self.app / "README.md").read_text(), "not a submission file\n")
         self.assertEqual(self.tools()[4]["result"], "written; the file is in view as it is now")
+
+    def test_a_refusal_repeated_says_so_and_the_request_states_the_time_left(self):
+        self.drive([{"action": "edit", "path": "README.md", "old": "not", "new": "x"}] * 3 +
+                   [{"action": "write", "path": NAME, "content": ORIGINAL.replace("sorted(labels)", "sorted(labels, key=str.casefold)")},
+                    {"action": "edit", "path": "README.md", "old": "not", "new": "x"},
+                    {"action": "check"}, {"action": "finish"}])
+        errors = [e.get("error", "") for e in self.tools()]
+        self.assertNotIn("in a row", errors[0])
+        self.assertIn("(refused 2 times in a row with the same answer: repeating it will not change the result)", errors[1])
+        self.assertIn("(refused 3 times in a row", errors[2])
+        # A call that worked in between starts the count again.
+        self.assertNotIn("in a row", errors[4])
+        self.assertIn("refused 3 times in a row", self.prompts[3])
+        self.assertRegex(self.prompts[0], r"\nTime left in this session: [45] minutes\.")
 
     def test_submission_files_a_command_creates_changes_or_removes_are_recorded_and_need_a_new_check(self):
         obs = self.drive([

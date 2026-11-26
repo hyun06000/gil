@@ -25,6 +25,6 @@ if [[ $TB_TASK == react-lead-form ]]; then
   echo 'RUN command -v python3 || (apt-get update -qq && apt-get install -y -qq python3)' >> "$task/environment/Dockerfile"
 fi
 rc=0
-harbor run --path "$task" --agent-import-path "$agent" --env docker --agent-timeout-multiplier 0.125 --jobs-dir "$output" --job-name pair || rc=$?
-python3 "$base/coding_report.py" "$output" "$TB_ARM" "$TB_TASK"
+harbor run --path "$task" --agent "$agent" --env docker --agent-timeout-multiplier 0.125 --jobs-dir "$output" --job-name pair || rc=$?
+TB_UPSTREAM="$upstream" python3 "$base/coding_report.py" "$output" "$TB_ARM" "$TB_TASK"
 exit "$rc"

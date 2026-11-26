@@ -72,8 +72,11 @@ class BudgetTests(unittest.TestCase):
                 def live(self, request, answer, client):
                     shown.append(answer)
 
-            result = asyncio.run(Agent().execute(Environment(), types.SimpleNamespace()))
+            context = types.SimpleNamespace()
+            result = asyncio.run(Agent().execute(Environment(), context))
             self.assertEqual(result.return_code, 0)
+            # Harbor's own result carries the estimated cost, marked as an estimate.
+            self.assertEqual((context.cost_usd, context.metadata["cost_is_estimate"]), (0.5, True))
             self.assertEqual(uploaded, [{"answer": "", "stop": "budget"}])
             self.assertEqual(json.loads(shown[0]), {"action": "stop", "reason": "budget"})
             # A stage that cannot end in order still fails the trial, as before.
