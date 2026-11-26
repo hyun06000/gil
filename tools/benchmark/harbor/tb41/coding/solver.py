@@ -34,7 +34,7 @@ def source(name, write=False):
     return path
 
 
-def solve(task,plan="", *, cycle=None, baseline=None):
+def solve(task,plan="", *, cycle=None, baseline=None, verify_ref=None, failed_check=None):
     public=[]
     for directory,children,files in os.walk(APP):
         children[:]=[v for v in children if v not in ("node_modules",".git","__pycache__","build","dist")]
@@ -45,7 +45,10 @@ def solve(task,plan="", *, cycle=None, baseline=None):
     if plan and cycle is None:
         from checkpoint import Checkpoint
         checkpoint = Checkpoint()
+    activity = None
     if cycle:
+        from verify_activity import VerifyActivity, digest
+        activity = VerifyActivity(verify_ref or cycle, (baseline or {}).get("files", {}), failed_check)
         from checkpoint import capture_file
         record(event="verify_plan", cycle=cycle, plan=plan)
         if baseline:
@@ -72,41 +75,68 @@ For vf2 use fast_networkx.py or a fast_networkx package. For ks use solution.cpp
 If a local check fails, use its output to fix the source. No remote tools or private test data."""
         if checkpoint and last_failure:
             prompt += "\nLast failed experiment and recovery: " + last_failure
+        if activity:
+            prompt += activity.prompt(CHECKS[TASK], checked)
         answer=ask(prompt); calls+=1
         obj = {}
         try:
             obj=json.loads(answer.strip().removeprefix("```json").removeprefix("```").removesuffix("```"))
             action=obj["action"]
+            activity_event = {}
             if action=="read":
                 path=source(obj["path"])
                 start=max(0,int(obj.get("offset",0)))
-                response=path.read_text()[start:start+9000]
+                if activity:
+                    data = path.read_bytes()
+                    # Match Path.read_text() universal newline semantics.
+                    content = data.decode().replace("\r\n", "\n").replace("\r", "\n")
+                    response = content[start:start+9000]
+                    name = path.relative_to(APP).as_posix()
+                    count = activity.read(name, data, start, start + len(response), start + len(response) >= len(content))
+                    activity_event = {"read_count": count, "sha256": activity.files[name]["sha256"]}
+                else:
+                    response=path.read_text()[start:start+9000]
             elif action=="write":
                 path=source(obj["path"],True)
                 content=obj["content"]
                 if not content.strip(): raise ValueError("empty source file")
-                if cycle and path not in original_hashes:
-                    original_hashes[path] = hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
+                previous = None
+                if activity:
+                    previous = digest(path.read_bytes()) if path.exists() else None
+                    original_hashes.setdefault(path, previous)
                 if checkpoint:
                     checkpoint.before_write(path)
-                path.parent.mkdir(parents=True,exist_ok=True); path.write_text(content)
+                unchanged = bool(activity and previous == digest(content.encode()))
+                if not unchanged:
+                    path.parent.mkdir(parents=True,exist_ok=True); path.write_text(content)
                 writes[str(path.relative_to(APP))]=hashlib.sha256(path.read_bytes()).hexdigest()
                 if cycle:
                     capture_file(WORK, APP, path)
+                    activity.write(path.relative_to(APP).as_posix(), writes[str(path.relative_to(APP))], previous)
                 if first_write is None:
                     first_write = calls
-                checked=None; response="written"
+                if not unchanged:
+                    checked = None
+                    check_output = ""
+                response = "unchanged" if unchanged else "written"
             elif action=="check":
+                if activity:
+                    checked = None
+                    check_output = ""
                 if first_check is None:
                     first_check = calls
                 proc=subprocess.run(CHECKS[TASK],cwd=APP,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=100)
                 checked=proc.returncode
                 response=f"exit {checked}: "+proc.stdout.decode(errors="replace")[-3500:]
                 if cycle:
-                    for name, digest in writes.items():
-                        if hashlib.sha256(source(name, True).read_bytes()).hexdigest() != digest:
+                    for name, expected_hash in writes.items():
+                        if hashlib.sha256(source(name, True).read_bytes()).hexdigest() != expected_hash:
                             raise RuntimeError(f'Submission changed during local check: {name}')
                     check_output = response
+                    if checked:
+                        activity.failure = {"verify": activity.ref, "exit": checked, "output": response}
+                    else:
+                        activity.failure = None
                     regression = bool(checked and baseline and any(
                         writes.get(str(path.relative_to(APP))) != digest for path, digest in original_hashes.items()))
                     if (not baseline and checked == 0 and writes) or regression:
@@ -126,15 +156,21 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                 record(event="tool", id=ask.call_id, action=action, result="finished")
                 break
             else: raise ValueError("Write a nonempty submission, then run check before finish")
-            record(event="tool", id=ask.call_id, action=action, path=obj.get("path"), offset=obj.get("offset", 0), result=response[:3500], chars=len(response))
+            record(event="tool", id=ask.call_id, action=action, path=obj.get("path"), offset=obj.get("offset", 0), result=response[:3500], chars=len(response), **activity_event)
             history.append([action,obj.get("path"),response])
+            if activity and activity_event.get("read_count", 0) > 1:
+                # Keep the latest page, compact earlier copies in the sliding prompt.
+                for entry in history[-13:-1]:
+                    if len(entry) == 3 and entry[0] == "read" and entry[2] == response:
+                        entry[2] = "[page repeated below]"
         except (ValueError,OSError,TypeError,KeyError,AttributeError,subprocess.TimeoutExpired) as error:
             record(event="tool", id=ask.call_id, action=obj.get("action") if isinstance(obj, dict) else None, error=str(error))
             history.append(["error",str(error)])
     obs={"files":writes,"check_exit":checked,"solver_calls":calls,
          "first_write_call":first_write,"first_check_call":first_check}
     if cycle:
-        obs.update(cycle=cycle, check_command=CHECKS[TASK], check_output=check_output,
+        (WORK/"verify-activity.json").write_text(json.dumps(activity.state(CHECKS[TASK], checked)))
+        obs.update(repeat_reads=activity.repeats, cycle=cycle, check_command=CHECKS[TASK], check_output=check_output,
                    regression=regression, local_baseline=not baseline and checked == 0 and bool(writes))
     if checkpoint:
         obs["verified_checkpoint_restores"] = recoveries

@@ -36,13 +36,24 @@ def model(prompt, choices=(), stage="solver"):
     calls += 1
     model.call_id = ref + "-" + stage + "-" + str(calls)
     if stage == "solver":
-        if calls == 1:
-            if cycle["revisit_from"]:
-                assert source.read_text() == base
-                assert "lost duplicate label" in prompt and "sort the list directly" in prompt
-                code = fixed
+        if cycle["revisit_from"]:
+            state = json.loads(prompt.splitlines()[-1])
+            current = state["files"][source.name]
+            check = state["local_check"]
+            if check["current_exit"] == 0:
+                action = dict(action="finish")
+            elif current["written_here"]:
+                assert check["pending"] and "lost duplicate label" in check["last_failure"]["output"]
+                action = dict(action="check")
+            elif current["pages"].get("0", {}).get("reads", 0) >= 2:
+                assert source.read_text() == base and "sort the list directly" in prompt
+                assert check["last_failure"]["verify"].startswith("step:C3/")
+                action = dict(action="write", path=source.name, content=fixed)
             else:
-                code = base if ref == "cycle:C2" else bad
+                action = dict(action="read", path=source.name)
+            answer = json.dumps(action)
+        elif calls == 1:
+            code = base if ref == "cycle:C2" else bad
             answer = json.dumps(dict(action="write", path=source.name, content=code))
         else:
             answer = json.dumps(dict(action="check" if calls == 2 else "finish"))

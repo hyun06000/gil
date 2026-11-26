@@ -335,6 +335,12 @@ def reply(r):
         options = {}
         if active:
             options["cycle"] = current["ref"]
+            options["verify_ref"] = n["target"]
+            if failed:
+                old = next(s for s in reversed(failed["steps"]) if s["kind"] == "verify")
+                result = json.loads(old["report"]["result"])
+                options["failed_check"] = {"verify": old["ref"], "exit": result["check_exit"],
+                                           "output": result["check_output"]}
             if not first:
                 options["baseline"] = json.loads(next(s for s in parent["steps"] if s["kind"] == "verify")["report"]["result"])
         obs = solve(
@@ -343,7 +349,7 @@ def reply(r):
         return close(
             execution="Recorded file receipts and the local check status in observation.json.",
             result=json.dumps(obs),
-            evidence_files="observation.json",
+            evidence_files="observation.json\nverify-activity.json" if active else "observation.json",
         )
     if k == "analysis":
         obs = (WORK / "observation.json").read_text()
