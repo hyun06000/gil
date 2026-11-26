@@ -31,13 +31,21 @@ EDITOR_TOOLS = [
 ]
 
 
-def editor_answer(output):
+AFTER_REPEAT_TOOLS = [
+    editor_tool(tool["name"], tool["description"], {
+        **tool["parameters"]["properties"],
+        "question": {"type": "string", "description": "The specific unresolved task question addressed by this action."},
+    }) for tool in EDITOR_TOOLS
+]
+
+
+def editor_answer(output, tools=EDITOR_TOOLS):
     calls = [item for item in output if item["type"] == "function_call"]
     if len(calls) != 1:
         raise ValueError("Expected exactly one editor call")
     call = calls[0]
     args = json.loads(call["arguments"])
-    for tool in EDITOR_TOOLS:
+    for tool in tools:
         if tool["name"] == call["name"]:
             properties = tool["parameters"]["properties"]
             if not isinstance(args, dict) or args.keys() != properties.keys():
@@ -65,7 +73,8 @@ class Luna:
         body = {"model": MODEL, "input": messages, "reasoning": {"effort": "none"},
                 "max_output_tokens": self.max_output, "store": False, "service_tier": "default"}
         if editor:
-            body.update(tools=EDITOR_TOOLS, tool_choice="required", parallel_tool_calls=False)
+            active_tools = AFTER_REPEAT_TOOLS if editor == "after_repeat" else EDITOR_TOOLS
+            body.update(tools=active_tools, tool_choice="required", parallel_tool_calls=False)
         elif choices:
             body["text"] = {"format": {"type":"json_schema", "name":"selection", "strict":True,
                 "schema":{"type":"object", "properties":{"answer":{"type":"string", "enum":choices}},
@@ -97,7 +106,7 @@ class Luna:
         if result["status"] != "completed":
             raise RuntimeError(f"Luna response status {result['status']}")
         if editor:
-            return editor_answer(result["output"])
+            return editor_answer(result["output"], active_tools)
         answer = "".join(part["text"] for item in result["output"] if item["type"] == "message"
                          for part in item["content"] if part["type"] == "output_text").strip()
         if choices:

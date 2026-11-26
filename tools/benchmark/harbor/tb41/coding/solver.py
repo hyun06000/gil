@@ -33,6 +33,17 @@ def source(name, write=False):
     return path
 
 
+def read_page(path, start, seen, call):
+    raw = path.read_bytes()
+    version = hashlib.sha256(raw).hexdigest()
+    key = (path, version, start)
+    earlier = seen.get(key)
+    # Match read_text's universal-newline handling and character-based offsets.
+    content = raw.decode().replace("\r\n", "\n").replace("\r", "\n")
+    seen[key] = call
+    return content[start:start+9000], {"source_hash": version, "previous_read_call": earlier}
+
+
 def snapshot(names):
     digests = {}
     for name in names:
@@ -108,6 +119,8 @@ def solve(task,plan=""):
     # Preserve the existing post-solver window and allow for a pending model reply.
     edit_deadline = deadline - 100
     previous_item = None
+    seen_pages = {}
+    last_repeat = None
     while time.time() < edit_deadline - 85 - check_reserve:
         active = next((item for item in checklist if item["status"] == "pending"), None)
         if active is not previous_item:
@@ -133,7 +146,17 @@ Work toward the full official task. Call exactly one of the supplied editor tool
 {{"action":"finish"}} to review the current checklist item, or submit checked files when no item is pending.
 For vf2 use fast_networkx.py or a fast_networkx package. For ks use solution.cpp. For React work in src/.
 If a local check fails, use its output to fix the source. No remote tools or private test data."""
-        answer=ask(prompt); calls+=1
+        if last_repeat:
+            prompt += ("\nThe last read returned the same source version and range as editor call "
+                       + str(last_repeat) + ". Use the observation already in the tool results. "
+                       "Choose the next action and name the outstanding question it addresses. "
+                       "Another read is appropriate when you need a different observation.")
+            answer = ask(prompt, stage="solver_followup")
+        else:
+            answer = ask(prompt)
+        calls += 1
+        last_repeat = None
+        read_metadata = {}
         editor_id = ask.call_id
         obj = {}
         try:
@@ -142,7 +165,8 @@ If a local check fails, use its output to fix the source. No remote tools or pri
             if action=="read":
                 path=source(obj["path"])
                 start=max(0,int(obj.get("offset",0)))
-                response=path.read_text()[start:start+9000]
+                response, read_metadata = read_page(path, start, seen_pages, calls)
+                last_repeat = read_metadata["previous_read_call"]
             elif action=="write":
                 path=source(obj["path"],True)
                 content=obj["content"]
@@ -182,7 +206,7 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                 evidence.append([action, obj.get("path"), observed[:3000]])
                 evidence = evidence[-12:]
             record(event="tool", id=editor_id, action=action, path=obj.get("path"), offset=obj.get("offset", 0), result=response[:3500], chars=len(response),
-                   **({"check": receipt} if action == "check" else {}))
+                   **read_metadata, **({"check": receipt} if action == "check" else {}))
             history.append([action,obj.get("path"),response])
         except (ValueError,OSError,TypeError,KeyError,AttributeError,subprocess.TimeoutExpired) as error:
             record(event="tool", id=editor_id, action=obj.get("action") if isinstance(obj, dict) else None, error=str(error))

@@ -23,7 +23,7 @@ def ask(prompt, choices=(), stage="solver"):
         {"role": "user", "content": prompt},
     ]
     draft = MAIL / "request.tmp"
-    draft.write_text(json.dumps({"messages": messages, "choices": choices, "editor": stage == "solver"}))
+    draft.write_text(json.dumps({"messages": messages, "choices": choices, "editor": "after_repeat" if stage == "solver_followup" else stage == "solver"}))
     draft.replace(MAIL / "request.json")
     reply = MAIL / "reply.json"
     until = time.monotonic() + 85

@@ -65,7 +65,7 @@ class LunaAgent(GilAgent):
                     if packet.stdout and packet.stdout.strip():
                         req = json.loads(packet.stdout)
                         answer = await asyncio.to_thread(client.ask, req["messages"], req["choices"],
-                                                         editor=req.get("editor") is True)
+                                                         editor=req.get("editor", False))
                         reply.write_text(json.dumps({"answer":answer}))
                         await environment.upload_file(reply, "/work/model/reply.tmp")
                         published = await environment.exec("chmod 644 /work/model/reply.tmp && mv /work/model/reply.tmp /work/model/reply.json", user="root")

@@ -58,6 +58,21 @@ class FinalCheckTests(unittest.TestCase):
         self.assertTrue(obs["check_matches_submission"])
         self.assertEqual(obs["solver_calls"], len(actions))
 
+    def test_read_identity_uses_full_file_version_and_character_offset(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp, "source")
+            path.write_bytes(("한\r\n" + "x" * 9000 + "a").encode())
+            seen = {}
+            page, first = solver.read_page(path, 0, seen, 1)
+            self.assertTrue(page.startswith("한\n"))
+            self.assertIsNone(first["previous_read_call"])
+            self.assertIsNone(solver.read_page(path, 1, seen, 2)[1]["previous_read_call"])
+            self.assertEqual(solver.read_page(path, 0, seen, 3)[1]["previous_read_call"], 1)
+            path.write_bytes(path.read_bytes()[:-1] + b"b")
+            same_page, changed = solver.read_page(path, 0, seen, 4)
+            self.assertEqual(same_page, page)
+            self.assertIsNone(changed["previous_read_call"])
+
     def test_mutating_check_is_not_attributed_to_new_source(self):
         obs = self.run_case([{"action":"write","path":"src/a.ts","content":"a"}], ["sh","-c","echo b >> src/a.ts"])
         self.assertFalse(obs["check_matches_submission"])
