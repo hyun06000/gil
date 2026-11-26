@@ -21,7 +21,7 @@ RESULTS_KEPT = 30       # recent tool results in a request, within RESULTS_BUDGE
 RESULTS_BUDGET = 60000
 OUTPUT_LIMIT = 12000    # characters kept from the end of a command's or check's output
 # Calls in a row that bring no new file text, no new file content and no new command result.
-STALL_WARNING = 6
+STALL_WARNING = 2
 STALL_LIMIT = 12
 CHECKS = {
     "ks-solver-cpp": ["g++", "-O3", "-std=c++17", "-DKS_SOLVER_LIBRARY", "-I/app", "-c", "solution.cpp", "-o", "/tmp/ks.o"],
@@ -205,7 +205,8 @@ If a local check fails, use its output to fix the source. No remote tools or pri
         if stall.count >= STALL_WARNING:
             prompt += (f"\n{stall.count} calls in a row brought no new file text, no new file content and no new "
                        f"command result. After {STALL_LIMIT - stall.count} more, editing ends with the files as they are. "
-                       "Change a file, run something you have not run, or finish.")
+                       "The full current text of every file you have read or written is above under 'Files in view': "
+                       "reading one again returns nothing. Change a file, run something you have not run, or finish.")
         if activity:
             prompt += activity.prompt(CHECKS[TASK], checked, stall.count)
         answer=ask(prompt, notes=True) if activity else ask(prompt); calls+=1
@@ -214,6 +215,12 @@ If a local check fails, use its output to fix the source. No remote tools or pri
             obj=json.loads(answer.strip().removeprefix("```json").removeprefix("```").removesuffix("```"))
             action=obj["action"]
             activity_event = {}
+            if action == "stop":
+                # The host stopped asking the model (the trial's cost limit): what is on disk is what gets graded.
+                record(event="stopped", id=ask.call_id, cycle=cycle, reason=obj.get("reason"))
+                stop = str(obj.get("reason") or "stopped")
+                calls -= 1
+                break
             if activity:
                 activity.note(calls, action, obj.get("note"))
             if action=="read":

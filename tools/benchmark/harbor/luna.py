@@ -59,6 +59,10 @@ def editor_answer(output, tools=EDITOR_TOOLS):
     raise ValueError("Unknown editor tool or invalid arguments")
 
 
+class BudgetReached(RuntimeError):
+    """The trial's call or cost limit: no request was sent."""
+
+
 class Luna:
     def __init__(self, *, max_calls=MAX_CALLS, budget=BUDGET, max_output=MAX_OUTPUT, reasoning="none", timeout=60):
         self.reasoning = reasoning
@@ -85,9 +89,12 @@ class Luna:
         data = json.dumps(body).encode()
         # Use bytes as a conservative token estimate, with margin for message formatting.
         reservation = (len(data) + 256) * INPUT + self.max_output * OUTPUT
+        # Editor requests stop at the budget. The few short requests of the other stages may run a fifth
+        # past it, so a trial whose editing was stopped can still record its analysis and close.
+        limit = self.budget if editor or self.budget is None else self.budget * 1.2
         if ((self.max_calls is not None and self.calls >= self.max_calls) or
-                (self.budget is not None and self.reserved + reservation > self.budget)):
-            raise RuntimeError("Luna per-trial cost or call limit reached before sending request")
+                (limit is not None and self.reserved + reservation > limit)):
+            raise BudgetReached("Luna per-trial cost or call limit reached before sending request")
         self.calls += 1
         self.reserved += reservation
         request = urllib.request.Request("https://api.openai.com/v1/responses", data=data, headers={

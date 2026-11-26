@@ -37,7 +37,15 @@ def ask(prompt, choices=(), stage="solver", notes=False):
         if time.monotonic() > until:
             raise TimeoutError("Model relay timed out")
         time.sleep(0.1)
-    answer = json.loads(reply.read_text())["answer"]
+    packet = json.loads(reply.read_text())
+    if packet.get("stop"):
+        # The host will not ask the model again. Editing ends in order; any other stage cannot go on.
+        reply.unlink()
+        record(event="answer", id=ask.call_id, stage=stage, text="", stop=packet["stop"])
+        if stage != "solver":
+            raise RuntimeError("Model host stopped: " + packet["stop"])
+        return json.dumps({"action": "stop", "reason": packet["stop"]})
+    answer = packet["answer"]
     record(event="answer", id=ask.call_id, stage=stage, text=answer)
     reply.unlink()
     return answer

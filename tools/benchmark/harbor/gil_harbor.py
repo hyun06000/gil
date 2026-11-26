@@ -67,11 +67,20 @@ class LunaAgent(GilAgent):
                         raise RuntimeError(f"Harbor model mailbox failed: {packet.stderr}")
                     if packet.stdout and packet.stdout.strip():
                         req = json.loads(packet.stdout)
-                        answer = await asyncio.to_thread(client.ask, req["messages"], req["choices"],
-                                                         editor=req.get("editor") is True,
-                                                         notes=req.get("notes") is True)
+                        from luna import BudgetReached
+                        try:
+                            answer = await asyncio.to_thread(client.ask, req["messages"], req["choices"],
+                                                             editor=req.get("editor") is True,
+                                                             notes=req.get("notes") is True)
+                            packet = {"answer": answer}
+                        except BudgetReached:
+                            if req.get("editor") is not True:
+                                raise
+                            # Editing ends in order: the worker closes its step and the files on disk are graded.
+                            packet = {"answer": "", "stop": "budget"}
+                            answer = json.dumps({"action": "stop", "reason": "budget"})
                         self.live(req, answer, client)
-                        reply.write_text(json.dumps({"answer":answer}))
+                        reply.write_text(json.dumps(packet))
                         await environment.upload_file(reply, "/work/model/reply.tmp")
                         published = await environment.exec("chmod 644 /work/model/reply.tmp && mv /work/model/reply.tmp /work/model/reply.json", user="root")
                         if published.return_code != 0:
