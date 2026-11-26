@@ -30,7 +30,7 @@ class VerifyTests(unittest.TestCase):
             events = []
             with patch.multiple(solver, APP=app, WORK=work, TASK=task), patch.dict(solver.CHECKS, {task: command}), patch.object(solver, "record", side_effect=lambda **e: events.append(e)):
                 actions = iter([{"action": "write", "path": name, "content": broken}, {"action": "check"}])
-                def fail(_prompt):
+                def fail(_prompt, notes=False):
                     return json.dumps(next(actions))
                 fail.call_id = "failed"
                 with patch.object(solver, "ask", fail):
@@ -43,7 +43,7 @@ class VerifyTests(unittest.TestCase):
                 # The separate native Core integration test exercises the real revisit/projection.
                 path.write_text(original)
                 steps = []
-                def branch(prompt):
+                def branch(prompt, notes=False):
                     state = json.loads(prompt.splitlines()[-1])
                     check = state["local_check"]
                     self.assertEqual(check["command"], command)

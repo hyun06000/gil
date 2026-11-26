@@ -31,7 +31,7 @@ source = app / "fast_networkx.py"
 calls = 0
 
 
-def model(prompt, choices=(), stage="solver"):
+def model(prompt, choices=(), stage="solver", notes=False):
     global calls
     calls += 1
     model.call_id = ref + "-" + stage + "-" + str(calls)

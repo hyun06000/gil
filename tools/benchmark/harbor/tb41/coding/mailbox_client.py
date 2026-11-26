@@ -12,7 +12,7 @@ def record(**event):
         print(json.dumps({"time": time.time(), **event}, ensure_ascii=False), file=log)
 
 
-def ask(prompt, choices=(), stage="solver"):
+def ask(prompt, choices=(), stage="solver", notes=False):
     ask.call_id = uuid.uuid4().hex
     messages = [
         {
@@ -24,7 +24,7 @@ def ask(prompt, choices=(), stage="solver"):
     record(event="request", id=ask.call_id, stage=stage,
            **({"messages": messages} if stage == "hypothesis" else {}))
     draft = MAIL / "request.tmp"
-    draft.write_text(json.dumps({"messages": messages, "choices": choices, "editor": stage == "solver"}))
+    draft.write_text(json.dumps({"messages": messages, "choices": choices, "editor": stage == "solver", "notes": notes}))
     draft.replace(MAIL / "request.json")
     reply = MAIL / "reply.json"
     until = time.monotonic() + 85

@@ -56,6 +56,7 @@ def solve(task,plan="", *, cycle=None, baseline=None, verify_ref=None, failed_ch
     check_output = ""
     original_hashes = {}
     regression = False
+    stop = "deadline"
     recoveries = 0
     last_failure = ""
     first_write = first_check = None
@@ -77,12 +78,14 @@ If a local check fails, use its output to fix the source. No remote tools or pri
             prompt += "\nLast failed experiment and recovery: " + last_failure
         if activity:
             prompt += activity.prompt(CHECKS[TASK], checked)
-        answer=ask(prompt); calls+=1
+        answer=ask(prompt, notes=True) if activity else ask(prompt); calls+=1
         obj = {}
         try:
             obj=json.loads(answer.strip().removeprefix("```json").removeprefix("```").removesuffix("```"))
             action=obj["action"]
             activity_event = {}
+            if activity:
+                activity.note(calls, action, obj.get("note"))
             if action=="read":
                 path=source(obj["path"])
                 start=max(0,int(obj.get("offset",0)))
@@ -90,10 +93,9 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                     data = path.read_bytes()
                     # Match Path.read_text() universal newline semantics.
                     content = data.decode().replace("\r\n", "\n").replace("\r", "\n")
-                    response = content[start:start+9000]
+                    page = content[start:start+9000]
                     name = path.relative_to(APP).as_posix()
-                    count = activity.read(name, data, start, start + len(response), start + len(response) >= len(content))
-                    activity_event = {"read_count": count, "sha256": activity.files[name]["sha256"]}
+                    activity_event, response = activity.page(name, data, start, page, start + len(page) >= len(content))
                 else:
                     response=path.read_text()[start:start+9000]
             elif action=="write":
@@ -119,10 +121,13 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                     checked = None
                     check_output = ""
                 response = "unchanged" if unchanged else "written"
+            elif action=="check" and activity and checked is not None:
+                # No file changed since this result: running it again observes nothing new.
+                activity.progress(False)
+                response = "Not run again: no file changed since this check. " + check_output
             elif action=="check":
                 if activity:
-                    checked = None
-                    check_output = ""
+                    activity.progress(True)
                 if first_check is None:
                     first_check = calls
                 proc=subprocess.run(CHECKS[TASK],cwd=APP,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=100)
@@ -141,6 +146,7 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                         writes.get(str(path.relative_to(APP))) != digest for path, digest in original_hashes.items()))
                     if (not baseline and checked == 0 and writes) or regression:
                         record(event="tool", id=ask.call_id, action="check", cycle=cycle, result=response)
+                        stop = "regression" if regression else "local_baseline"
                         break
                 if checkpoint and checked == 0 and writes:
                     checkpoint.accept(writes)
@@ -154,24 +160,33 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                         response = last_failure
             elif action=="finish" and writes and checked is not None:
                 record(event="tool", id=ask.call_id, action=action, result="finished")
+                stop = "finished"
                 break
             else: raise ValueError("Write a nonempty submission, then run check before finish")
+            if activity:
+                activity_event["note"] = obj.get("note")
             record(event="tool", id=ask.call_id, action=action, path=obj.get("path"), offset=obj.get("offset", 0), result=response[:3500], chars=len(response), **activity_event)
-            history.append([action,obj.get("path"),response])
-            if activity and activity_event.get("read_count", 0) > 1:
-                # Keep the latest page, compact earlier copies in the sliding prompt.
-                for entry in history[-13:-1]:
-                    if len(entry) == 3 and entry[0] == "read" and entry[2] == response:
-                        entry[2] = "[page repeated below]"
+            if activity and action == "read" and not activity_event["held"]:
+                # The page itself travels under "Pages you hold"; the sliding results keep its receipt.
+                history.append([action, obj.get("path"), f"page [{start},{start + len(response)}) received"])
+            else:
+                history.append([action,obj.get("path"),response])
         except (ValueError,OSError,TypeError,KeyError,AttributeError,subprocess.TimeoutExpired) as error:
             record(event="tool", id=ask.call_id, action=obj.get("action") if isinstance(obj, dict) else None, error=str(error))
             history.append(["error",str(error)])
+            if activity:
+                activity.progress(False)
+        if activity and activity.stalled():
+            record(event="verify_stalled", id=ask.call_id, cycle=cycle, calls=activity.stall)
+            stop = "stalled"
+            break
     obs={"files":writes,"check_exit":checked,"solver_calls":calls,
          "first_write_call":first_write,"first_check_call":first_check}
     if cycle:
         (WORK/"verify-activity.json").write_text(json.dumps(activity.state(CHECKS[TASK], checked)))
         obs.update(repeat_reads=activity.repeats, cycle=cycle, check_command=CHECKS[TASK], check_output=check_output,
-                   regression=regression, local_baseline=not baseline and checked == 0 and bool(writes))
+                   regression=regression, local_baseline=not baseline and checked == 0 and bool(writes),
+                   stop=stop, refused_reads=activity.refused, notes=len(activity.notes))
     if checkpoint:
         obs["verified_checkpoint_restores"] = recoveries
     (WORK/"observation.json").write_text(json.dumps(obs))

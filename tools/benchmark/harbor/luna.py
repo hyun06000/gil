@@ -30,14 +30,19 @@ EDITOR_TOOLS = [
     editor_tool("finish", "Submit the edited and checked files.", {}),
 ]
 
+# GIL Verify asks for a note with every call: each request is built anew, so the note is what carries over.
+NOTE = {"note": {"type": "string", "description":
+                 "What the material in this request settled and what you do next (one or two sentences)."}}
+NOTED_TOOLS = [editor_tool(t["name"], t["description"], {**t["parameters"]["properties"], **NOTE}) for t in EDITOR_TOOLS]
 
-def editor_answer(output):
+
+def editor_answer(output, tools=EDITOR_TOOLS):
     calls = [item for item in output if item["type"] == "function_call"]
     if len(calls) != 1:
         raise ValueError("Expected exactly one editor call")
     call = calls[0]
     args = json.loads(call["arguments"])
-    for tool in EDITOR_TOOLS:
+    for tool in tools:
         if tool["name"] == call["name"]:
             properties = tool["parameters"]["properties"]
             if not isinstance(args, dict) or args.keys() != properties.keys():
@@ -61,11 +66,11 @@ class Luna:
         self.outputs = 0
         self.reserved = 0
 
-    def ask(self, messages, choices, *, editor=False):
+    def ask(self, messages, choices, *, editor=False, notes=False):
         body = {"model": MODEL, "input": messages, "reasoning": {"effort": "none"},
                 "max_output_tokens": self.max_output, "store": False, "service_tier": "default"}
         if editor:
-            body.update(tools=EDITOR_TOOLS, tool_choice="required", parallel_tool_calls=False)
+            body.update(tools=NOTED_TOOLS if notes else EDITOR_TOOLS, tool_choice="required", parallel_tool_calls=False)
         elif choices:
             body["text"] = {"format": {"type":"json_schema", "name":"selection", "strict":True,
                 "schema":{"type":"object", "properties":{"answer":{"type":"string", "enum":choices}},
@@ -97,7 +102,7 @@ class Luna:
         if result["status"] != "completed":
             raise RuntimeError(f"Luna response status {result['status']}")
         if editor:
-            return editor_answer(result["output"])
+            return editor_answer(result["output"], NOTED_TOOLS if notes else EDITOR_TOOLS)
         answer = "".join(part["text"] for item in result["output"] if item["type"] == "message"
                          for part in item["content"] if part["type"] == "output_text").strip()
         if choices:

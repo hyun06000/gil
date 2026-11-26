@@ -23,6 +23,22 @@ class EditorTests(unittest.TestCase):
             with self.subTest(output=output), self.assertRaises(ValueError):
                 editor_answer(output)
 
+    def test_a_verify_request_takes_a_note_with_every_call_and_the_control_request_takes_none(self):
+        noted = [tool_call("read", path="a.py", offset=0, note="look for the key")]
+        plain = [tool_call("read", path="a.py", offset=0)]
+        for notes, output, other in ((True, noted, plain), (False, plain, noted)):
+            result = {"status": "completed", "output": output, "usage": {"input_tokens": 3, "output_tokens": 5}}
+            with patch.dict("os.environ", {"GIL_HARBOR_API_KEY": "test"}), patch("urllib.request.urlopen", side_effect=lambda *a, **k: io.BytesIO(json.dumps(result).encode())) as send:
+                client = Luna(max_calls=None, budget=None)
+                answer = json.loads(client.ask([], [], editor=True, notes=notes))
+                result["output"] = other
+                with self.assertRaises(ValueError):
+                    client.ask([], [], editor=True, notes=notes)
+            self.assertEqual(answer.get("note"), "look for the key" if notes else None)
+            for tool in json.loads(send.call_args.args[0].data)["tools"]:
+                self.assertEqual("note" in tool["parameters"]["properties"], notes)
+                self.assertEqual(tool["parameters"]["required"], list(tool["parameters"]["properties"]))
+
     def test_editor_request_and_ordinary_messages(self):
         scenarios = [(True, [], [tool_call("write", path="x.ts", content="export {}")], "write"),
                      (False, [], [], "hello"), (False, ["accept"], [], "accept")]
