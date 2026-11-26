@@ -64,7 +64,8 @@ class BudgetReached(RuntimeError):
 
 
 class Luna:
-    def __init__(self, *, max_calls=MAX_CALLS, budget=BUDGET, max_output=MAX_OUTPUT, reasoning="none", timeout=60):
+    def __init__(self, *, max_calls=MAX_CALLS, budget=BUDGET, max_output=MAX_OUTPUT, reasoning="none", timeout=60, overrun=0.0):
+        self.overrun = overrun
         self.reasoning = reasoning
         self.timeout = timeout
         self.max_calls = max_calls
@@ -89,9 +90,9 @@ class Luna:
         data = json.dumps(body).encode()
         # Use bytes as a conservative token estimate, with margin for message formatting.
         reservation = (len(data) + 256) * INPUT + self.max_output * OUTPUT
-        # Editor requests stop at the budget. The few short requests of the other stages may run a fifth
-        # past it, so a trial whose editing was stopped can still record its analysis and close.
-        limit = self.budget if editor or self.budget is None else self.budget * 1.2
+        # Editor requests stop at the budget. A client may let the few short requests of the other stages
+        # run past it by `overrun`, so a trial whose editing was stopped can still record its analysis.
+        limit = self.budget if editor or self.budget is None else self.budget * (1 + self.overrun)
         if ((self.max_calls is not None and self.calls >= self.max_calls) or
                 (limit is not None and self.reserved + reservation > limit)):
             raise BudgetReached("Luna per-trial cost or call limit reached before sending request")

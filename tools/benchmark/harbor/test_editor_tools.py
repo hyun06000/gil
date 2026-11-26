@@ -78,7 +78,7 @@ class EditorTests(unittest.TestCase):
                     owner = getattr(cls, method).__qualname__.split(".")[0]
                     self.assertIn(owner, ("CodeAgent", "SoundChangeAgent"), f"{cls.__name__}.{method} fell back to {owner}")
             client = CodeAgent().model_client()
-            self.assertEqual((client.budget, client.max_calls, client.reasoning, client.max_output), (5_000_000, None, "medium", 16000))
+            self.assertEqual((client.budget, client.max_calls, client.reasoning, client.max_output, client.overrun), (5_000_000, None, "medium", 16000, 0.2))
             with patch.dict("os.environ", {"TB_BUDGET_USD": "0.75"}):
                 self.assertEqual(CodeAgent().model_client().budget, 750_000)
             for refused in ("0", "9", "-1"):

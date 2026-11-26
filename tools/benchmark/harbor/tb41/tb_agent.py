@@ -82,4 +82,5 @@ def coding_client():
     if not 0 < budget <= 5:
         raise ValueError("TB_BUDGET_USD must be above 0 and at most 5")
     # The client counts in millionths of a dollar.
-    return LoggedLuna(max_calls=None, budget=round(budget * 1_000_000), max_output=16000, reasoning="medium", timeout=240)
+    return LoggedLuna(max_calls=None, budget=round(budget * 1_000_000), max_output=16000, reasoning="medium", timeout=240,
+                      overrun=0.2)

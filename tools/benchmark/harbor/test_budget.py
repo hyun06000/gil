@@ -25,7 +25,7 @@ class BudgetTests(unittest.TestCase):
     def test_editor_requests_stop_at_the_budget_and_other_stages_may_run_a_fifth_past_it(self):
         text = [{"type": "message", "content": [{"type": "output_text", "text": "ok"}]}]
         with patch.dict(os.environ, {"GIL_HARBOR_API_KEY": "test"}), patch("urllib.request.urlopen", side_effect=completed(text)) as send:
-            client = Luna(max_calls=None, budget=1_000_000, max_output=100)
+            client = Luna(max_calls=None, budget=1_000_000, max_output=100, overrun=0.2)
             client.reserved = 1_000_000
             with self.assertRaises(BudgetReached):
                 client.ask([{"role": "user", "content": "edit"}], [], editor=True)
