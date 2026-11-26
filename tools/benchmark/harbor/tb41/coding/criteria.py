@@ -7,7 +7,6 @@ of asking for an opinion, and the next Experiment takes the items still open.
 import hashlib
 import json
 
-LIMIT = 20          # items in a ledger: what one request can show, not a rule of the Chain
 KINDS = ("failure", "invariant", "behaviour")
 
 
@@ -26,7 +25,7 @@ def parse(text):
     if not isinstance(raw, list) or not raw:
         raise ValueError("expected a non-empty JSON array of criteria")
     items = []
-    for entry in raw[:LIMIT]:
+    for entry in raw:
         if not isinstance(entry, dict):
             raise ValueError("every criterion is an object")
         requirement = entry.get("requirement")
@@ -35,9 +34,9 @@ def parse(text):
         kind = entry.get("kind") if entry.get("kind") in KINDS else "behaviour"
         probe = entry.get("probe")
         items.append({
-            "id": f"K{len(items) + 1}", "kind": kind, "requirement": requirement.strip()[:400],
-            "source": str(entry.get("source") or "").strip()[:300],
-            "plan": probe.strip()[:400] if isinstance(probe, str) and probe.strip() else None,
+            "id": f"K{len(items) + 1}", "kind": kind, "requirement": requirement.strip(),
+            "source": str(entry.get("source") or "").strip(),
+            "plan": probe.strip() if isinstance(probe, str) and probe.strip() else None,
             "status": "unrun", "command": None, "exit": None, "output": "", "digest": None, "failed_on": [],
         })
     return items
@@ -64,7 +63,7 @@ class Ledger:
     def record(self, key, command, code, output, current):
         item = self.items[key]
         item.update(status="holds" if code == 0 else "fails", command=command, exit=code,
-                    output=output[-600:], digest=current)
+                    output=output, digest=current)
         if code == 0:
             # A probe that passes settles a criterion that had been set aside.
             item.pop("set_aside", None)
@@ -74,7 +73,7 @@ class Ledger:
 
     def set_aside(self, key, reason):
         """A judgement made in Define: this criterion or its probe does not describe the task."""
-        self.items[key]["set_aside"] = str(reason).strip()[:300] or "set aside"
+        self.items[key]["set_aside"] = str(reason).strip() or "set aside"
 
     def having(self, current, *statuses):
         return [key for key in self.items if self.status(key, current) in statuses]
@@ -99,9 +98,9 @@ class Ledger:
             if item["source"]:
                 row["source"] = item["source"]
             if item["command"]:
-                row["probe"] = item["command"][:300]
+                row["probe"] = item["command"]
                 if status == "fails":
-                    row["output"] = item["output"][-300:]
+                    row["output"] = item["output"]
             elif item["plan"]:
                 row["probe_plan"] = item["plan"]
             if item["failed_on"]:

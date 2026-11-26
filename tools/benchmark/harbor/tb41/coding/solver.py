@@ -14,7 +14,6 @@ WORK = Path("/work/project")
 APP = Path("/app")
 TASK = os.environ["TB_TASK"]
 RUN_SECONDS = 100
-SWEEP_SECONDS = 240     # for running every stored probe again when a Verify ends
 # What one request can show. The model sees every file it has read, whole and current, instead of
 # the last few pages: a task that needs its specification and its own code side by side fits.
 PAGE = 60000            # characters of one file per read
@@ -219,8 +218,9 @@ LEDGER_RULES = (
     "observable result; for something that must not change, compare its bytes before and after; for a failure "
     "case, first create the failing condition (for example a path that cannot be written) and assert what must "
     "remain. Keep probe scripts under /tmp. Changing a submission file makes earlier results stale, and every "
-    "stored probe is run again on the final files when this step ends. This experiment succeeds when its targets "
-    "hold and nothing that held before is broken; the other open criteria are for later experiments.")
+    "stored probe is run again on the final files when this step ends. This experiment succeeds when a target "
+    "newly holds and nothing that held before is broken; finish when you judge it done, and the other open "
+    "criteria are for later experiments.")
 
 
 def solve(task,plan="", *, cycle=None, baseline=None, verify_ref=None, failed_check=None, criteria=None, targets=()):
@@ -250,7 +250,6 @@ def solve(task,plan="", *, cycle=None, baseline=None, verify_ref=None, failed_ch
     if cycle and criteria:
         from criteria import Ledger, digest as submission
         ledger = Ledger(criteria)
-    closing = False
     check_output = ""
     original_hashes = {}
     regression = False
@@ -401,7 +400,7 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                         first_write = calls
                 response = f"exit {code}: " + output[-OUTPUT_LIMIT:]
                 if criterion:
-                    held = ledger.record(criterion, command, code, output, submission(writes))
+                    held = ledger.record(criterion, command, code, output[-OUTPUT_LIMIT:], submission(writes))
                     response = f"criterion {criterion} {held} on the current files. " + response
                     activity_event["criterion"] = criterion
                     record(event="probe", id=ask.call_id, cycle=cycle, criterion=criterion, status=held, exit=code)
@@ -446,11 +445,6 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                         checked = None
                         response = last_failure
             elif action=="finish" and writes and checked is not None:
-                waiting = [key for key in targets if ledger and ledger.status(key, submission(writes)) != "holds"]
-                if waiting and not closing:
-                    closing = True
-                    raise ValueError(f"Targets not holding on the current files: {waiting}. Run their probes or fix what "
-                                     "they show. Calling finish again closes this experiment with them open.")
                 record(event="tool", id=ask.call_id, action=action, result="finished")
                 stop = "finished"
                 break
@@ -480,15 +474,16 @@ If a local check fails, use its output to fix the source. No remote tools or pri
             proc = subprocess.run(CHECKS[TASK], cwd=APP, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=100)
             checked = proc.returncode
             check_output = f"exit {checked}: " + proc.stdout.decode(errors="replace")[-OUTPUT_LIMIT:]
-        current, started, swept = submission(writes), time.time(), []
+        current, swept = submission(writes), []
         for key, item in ledger.items.items():
             if not item["command"] or (item["digest"] == current and item["status"] in ("holds", "fails")):
                 continue
-            if time.time() - started > SWEEP_SECONDS:
-                break
+            if time.time() >= deadline:
+                break   # the trial's time is over; what was not run again stays stale
             before = ledger.status(key, current)
-            code, output = run_command(item["command"], 60)
-            swept.append({"criterion": key, "before": before, "after": ledger.record(key, item["command"], code, output, current)})
+            code, output = run_command(item["command"], RUN_SECONDS)
+            swept.append({"criterion": key, "before": before,
+                          "after": ledger.record(key, item["command"], code, output[-OUTPUT_LIMIT:], current)})
         if submission(snapshot_of(writes)) != current:
             raise RuntimeError("A probe changed the submission during the final sweep")
         record(event="probe_sweep", cycle=cycle, results=swept)

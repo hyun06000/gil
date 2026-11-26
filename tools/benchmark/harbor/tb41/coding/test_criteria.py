@@ -34,7 +34,9 @@ class LedgerTests(unittest.TestCase):
                          [("K1", "behaviour", "unrun"), ("K2", "invariant", "unrun"), ("K3", "failure", "unrun"),
                           ("K4", "behaviour", "unrun"), ("K5", "behaviour", "unrun")])
         self.assertEqual((items[1]["source"], items[3]["plan"]), ("task: input", None))
-        self.assertEqual(len(parse(json.dumps([{"requirement": f"r{i}"} for i in range(40)]))), criteria.LIMIT)
+        # Nothing caps or shortens what the model listed.
+        long = [{"requirement": "r" * 900 + str(i), "source": "s" * 700, "probe": "p" * 900} for i in range(40)]
+        self.assertEqual([(len(i["requirement"]), len(i["source"]), len(i["plan"])) for i in parse(json.dumps(long))][::39], [(901, 700, 900), (902, 700, 900)])
         for bad, why in (("I think", "not a JSON array"), ("[]", "non-empty"), ('{"a":1}', "non-empty"),
                          ('["x"]', "is an object"), ('[{"kind":"failure"}]', "needs a requirement")):
             with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, why):
@@ -109,7 +111,7 @@ class VerifyLedgerTests(unittest.TestCase):
             {"action": "run", "command": "true", "criterion": "K9"},
             {"action": "edit", "path": NAME, "old": "'list'", "new": "'a list is required'"},
             {"action": "run", "command": KEEPS, "criterion": "K2"},
-            {"action": "check"}, {"action": "finish"}, {"action": "finish"}], criteria=items, targets=["K3", "K2"])
+            {"action": "check"}, {"action": "finish"}], criteria=items, targets=["K3", "K2"])
         tools = self.tools()
         self.assertTrue(tools[0]["result"].startswith("criterion K3 holds on the current files. exit 0"))
         self.assertEqual(tools[0]["criterion"], "K3")
@@ -119,32 +121,26 @@ class VerifyLedgerTests(unittest.TestCase):
         self.assertEqual(self.flags[0], {"notes": True, "ledger": True})
         self.assertIn("Targets of this experiment: ['K3', 'K2']", self.prompts[0])
         self.assertEqual((shown(self.prompts[1])["K3"]["status"], shown(self.prompts[4])["K3"]["status"]), ("holds", "stale"))
-        # K3 was seen on the earlier files only, so the first finish says so; the second closes the step.
-        self.assertIn("Targets not holding on the current files: ['K3']", tools[6]["error"])
-        self.assertEqual(obs["stop"], "finished")
+        # Finishing is the model's judgement: nothing holds it back, and the ledger says what it left.
+        self.assertEqual((tools[6]["result"], obs["stop"]), ("finished", "finished"))
         self.assertEqual(obs["swept"], [{"criterion": "K3", "before": "stale", "after": "holds"}])
 
-    def test_finish_is_refused_once_while_a_target_does_not_hold_and_the_closing_sweep_settles_what_went_stale(self):
+    def test_the_closing_sweep_settles_what_went_stale_and_leaves_what_was_never_probed(self):
         items = parse(json.dumps(RAW))
         obs = self.drive([
             {"action": "run", "command": REFUSES, "criterion": "K3"},
-            {"action": "check"},
-            {"action": "finish"},                                   # K2 has no result yet: refused
             {"action": "run", "command": KEEPS, "criterion": "K2"},
             {"action": "edit", "path": NAME, "old": "'list'", "new": "'a list is required'"},   # both go stale
-            {"action": "finish"},                                   # needs a check first
+            {"action": "finish"},                                   # the harness asks for a check after a change
             {"action": "check"},
-            {"action": "finish"},                                   # the stale targets: refused once more? no: once per Verify
-        ], criteria=items, targets=["K3", "K2"])
-        errors = [e.get("error", "") for e in self.tools()]
-        self.assertIn("Targets not holding on the current files: ['K2']", errors[2])
-        self.assertIn("Calling finish again closes this experiment with them open", errors[2])
-        self.assertIn("check before finish", errors[5])
+            {"action": "finish"},
+        ], criteria=items, targets=["K3", "K2", "K1"])
+        self.assertIn("check before finish", self.tools()[3]["error"])
         self.assertEqual(obs["stop"], "finished")
-        # Both stored probes were run again on the final files without a model call.
+        # Both stored probes were run again on the final files without a model call; K1 had none.
         self.assertEqual(obs["swept"], [{"criterion": "K2", "before": "stale", "after": "holds"},
                                         {"criterion": "K3", "before": "stale", "after": "holds"}])
-        self.assertEqual((obs["ledger"], obs["targets"]), ({"unrun": 1, "holds": 2, "unverifiable": 1}, ["K3", "K2"]))
+        self.assertEqual((obs["ledger"], obs["targets"]), ({"unrun": 1, "holds": 2, "unverifiable": 1}, ["K3", "K2", "K1"]))
         self.assertEqual(obs["submission_digest"], digest(obs["files"]))
         self.assertEqual(self.events[-1]["event"], "probe_sweep")
 
@@ -189,6 +185,9 @@ class ParticipantLedgerTests(unittest.TestCase):
         def model(answer):
             return lambda prompt: asked.append(prompt) or answer
         ledger = Ledger(parse(json.dumps(RAW)))
+        clock = patch.object(participant, "minutes_left", return_value=41.6)
+        clock.start()
+        self.addCleanup(clock.stop)
         picked = participant.choose(model(json.dumps({"targets": ["K3", "K9", "K3", "K4"], "set_aside": {"K1": "later"}})),
                                     ledger, entry, "Earlier: K3 failed twice")
         # Unknown ids, repeats and a criterion nothing local can show are not targets. What the
@@ -197,6 +196,8 @@ class ParticipantLedgerTests(unittest.TestCase):
         self.assertEqual(ledger.open(entry), ["K1", "K2", "K3"])
         self.assertIn("Earlier: K3 failed twice", asked[0])
         self.assertIn("Every criterion you do not name stays open", asked[0])
+        # The model is told the time left and judges with it; no threshold decides for it.
+        self.assertIn("About 42 minutes of the trial are left.", asked[0])
         for unusable in ("no idea", "[]", json.dumps({"targets": []}), json.dumps({"targets": ["K9"]})):
             with self.subTest(answer=unusable):
                 self.assertEqual(participant.choose(model(unusable), ledger, entry, ""), ["K1", "K2", "K3"])

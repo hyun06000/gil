@@ -7,7 +7,7 @@ import re
 import sys
 import time
 from pathlib import Path
-from criteria import LIMIT, Ledger, digest, parse
+from criteria import Ledger, digest, parse
 from mailbox_client import MAIL, record
 from solver import APP, CHECKS, TASK, WORK, ask, solve, source
 
@@ -175,9 +175,11 @@ def experiment_handoff(model, findings, evidence_rule):
         "accept" if outcome == "start" else "revise")
 
 
-# The trial's own resources end a Chain: time and model budget. Nothing in the Chain is counted;
-# where to go back to after a failure is judged in the reflection that closes the attempt.
-MINUTES_NEEDED = 8
+# Nothing in the Chain is counted or thresholded. Where to go back to after a failure is judged in
+# the reflection that closes the attempt, and whether there is time for another experiment is the
+# model's call too: it is told the minutes left. The Chain ends on its own only when a Verify
+# reports that the trial's time or model budget ran out.
+SPENT = ("budget", "deadline")
 
 
 def verify_result(cycle):
@@ -252,7 +254,8 @@ def choose(model, ledger, entry, lesson):
     answer = model(
         "Choose the open criteria this experiment takes on: those one coherent change can make hold. "
         "Every criterion you do not name stays open and is taken by a later experiment, so name only what "
-        'this one will do. Return JSON only: {"targets": ["K1", "K4"]}. Ledger: '
+        f"this one will do. About {minutes_left():.0f} minutes of the trial are left. "
+        'Return JSON only: {"targets": ["K1", "K4"]}. Ledger: '
         + json.dumps(ledger.shown(entry), ensure_ascii=False) + ("\n" + lesson if lesson else ""))
     try:
         targets = [key for key in json_of(answer).get("targets") or [] if key in ledger.open(entry)]
@@ -266,7 +269,7 @@ def derive(model, task, spec):
     """Splits the public requirements into ledger items; None when the model gives nothing usable."""
     request = (
         "List the criteria an independent grader could check for this task, using only the task text and the "
-        f"public files below. Return a JSON array only, with at most {LIMIT} objects of the form "
+        "public files below. Return a JSON array only, of objects of the form "
         '{"requirement": "one checkable statement", "kind": "failure" | "invariant" | "behaviour", '
         '"source": "file: short quote", "probe": "how a shell command in the task directory could show it '
         'holds (exit 0) or is violated (non-zero)" or null when nothing local can show it}. '
@@ -590,9 +593,10 @@ def reply(r):
                 "If the criteria and their probes still describe the right problem and a different change could "
                 "make the targets hold, the hypothesis was wrong. If the targets were badly chosen, a criterion "
                 "or its probe does not match its source, or the targets depend on work not yet done, the problem "
-                "definition was wrong. State which it is and what the evidence is. Analysis: "
+                f"definition was wrong. State which it is and what the evidence is. About {minutes_left():.0f} minutes "
+                "of the trial are left. Analysis: "
                 + analysis["interpretation"] + ("\n" + lesson if lesson else ""))
-            if minutes_left() >= MINUTES_NEEDED and obs.get("stop") != "budget" and model(
+            if obs.get("stop") not in SPENT and model(
                     "Choose where this experiment goes back to, as your reflection concluded. revise_hypothesis: "
                     "keep this problem definition and its targets, restore the files to what they were there and "
                     "try a different hypothesis. revise_problem: close this experiment as failed, restore the "
@@ -635,7 +639,7 @@ def reply(r):
         direction["next_direction.target_cycle_ref"] = current.get("parent") or "cycle:C1"
     if active:
         obs = json.loads(step("verify")["report"]["result"])
-        room = minutes_left() >= MINUTES_NEEDED and obs.get("stop") != "budget"
+        room = obs.get("stop") not in SPENT
         if first and obs["local_baseline"]:
             direction["benchmark_transition"] = "verified_local_baseline"
         elif obs["regression"] and not plan:

@@ -58,8 +58,7 @@ TARGET = {"cycle:C3": "failure", "cycle:C4": "invariant", "cycle:C5": "invariant
 probe = lambda kind, key: {"action": "run", "command": PROBES[key], "criterion": ID[kind], "note": f"probe {ID[kind]}"}
 SCRIPT = {
     ("cycle:C2", 0): [{"action": "write", "path": NAME, "content": BASE}, {"action": "check"}],
-    ("cycle:C3", 0): [{"action": "write", "path": NAME, "content": TRIED}, probe("failure", "K1"), {"action": "check"},
-                      {"action": "finish"}, {"action": "finish"}],
+    ("cycle:C3", 0): [{"action": "write", "path": NAME, "content": TRIED}, probe("failure", "K1"), {"action": "check"}, {"action": "finish"}],
     ("cycle:C3", 1): [{"action": "write", "path": NAME, "content": GUARDED}, probe("failure", "K1"), {"action": "check"}, {"action": "finish"}],
     ("cycle:C4", 0): [{"action": "write", "path": NAME, "content": UNGUARDED}, probe("invariant", "K2"), {"action": "check"}, {"action": "finish"}],
     ("cycle:C5", 0): [probe("invariant", "K2"), {"action": "check"}, {"action": "finish"}],
