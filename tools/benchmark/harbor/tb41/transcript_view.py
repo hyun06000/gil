@@ -10,7 +10,7 @@ def render(root):
     transitions = []
     for line in (root / "transcript.jsonl").read_text().splitlines():
         event = json.loads(line)
-        if event["event"] in ("verify_plan", "verify_stalled", "stalled", "cycle_restore_started", "cycle_restore_completed"):
+        if event["event"] in ("verify_plan", "verify_stalled", "stalled", "probe_sweep", "cycle_restore_started", "cycle_restore_completed"):
             transitions.append(event)
             continue
         calls.setdefault(event["id"], {})[event["event"]] = event

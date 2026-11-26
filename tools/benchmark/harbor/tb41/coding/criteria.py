@@ -7,10 +7,8 @@ of asking for an opinion, and the next Experiment takes the items still open.
 import hashlib
 import json
 
-LIMIT = 20          # items in a ledger
-TARGETS = 4         # items one Experiment takes on
-DISPUTE_NOTICE = 3  # failures on different submissions before the probe itself is questioned
-KINDS = ("failure", "invariant", "behaviour")   # the order in which open items are taken
+LIMIT = 20          # items in a ledger: what one request can show, not a rule of the Chain
+KINDS = ("failure", "invariant", "behaviour")
 
 
 def digest(files):
@@ -57,8 +55,8 @@ class Ledger:
         item = self.items[key]
         if item["plan"] is None and item["command"] is None:
             return "unverifiable"
-        if item.get("disputed"):
-            return "disputed"
+        if item.get("set_aside"):
+            return "set_aside"
         if item["status"] in ("holds", "fails") and item["digest"] != current:
             return "stale"
         return item["status"]
@@ -68,17 +66,15 @@ class Ledger:
         item.update(status="holds" if code == 0 else "fails", command=command, exit=code,
                     output=output[-600:], digest=current)
         if code == 0:
-            item.pop("disputed", None)
+            # A probe that passes settles a criterion that had been set aside.
+            item.pop("set_aside", None)
         elif current not in item["failed_on"]:
             item["failed_on"].append(current)
-            # A probe that keeps failing whatever the code does may be asserting the wrong thing.
-            if len(item["failed_on"]) > DISPUTE_NOTICE:
-                item["disputed"] = True
         return item["status"]
 
-    def questioned(self, key):
-        item = self.items[key]
-        return len(item["failed_on"]) >= DISPUTE_NOTICE and not item.get("disputed")
+    def set_aside(self, key, reason):
+        """A judgement made in Define: this criterion or its probe does not describe the task."""
+        self.items[key]["set_aside"] = str(reason).strip()[:300] or "set aside"
 
     def having(self, current, *statuses):
         return [key for key in self.items if self.status(key, current) in statuses]
@@ -92,12 +88,6 @@ class Ledger:
             status = self.status(key, current)
             found[status] = found.get(status, 0) + 1
         return found
-
-    def targets(self, current, skip=()):
-        """The open items one Experiment takes: failure cases first, then what must not change."""
-        ranked = sorted(self.open(current), key=lambda key: (key in skip, KINDS.index(self.items[key]["kind"]),
-                                                              int(key[1:])))
-        return ranked[:TARGETS]
 
     def shown(self, current, targets=()):
         rows = []
@@ -114,8 +104,10 @@ class Ledger:
                     row["output"] = item["output"][-300:]
             elif item["plan"]:
                 row["probe_plan"] = item["plan"]
-            if self.questioned(key):
-                row["notice"] = ("This probe failed on several different submissions. Compare what it asserts with "
-                                 "the source of the requirement; if the probe is wrong, run a corrected one.")
+            if item["failed_on"]:
+                # History for whoever judges next; no rule follows from the number.
+                row["failed_on_submissions"] = len(item["failed_on"])
+            if item.get("set_aside"):
+                row["set_aside"] = item["set_aside"]
             rows.append(row)
         return rows

@@ -50,28 +50,26 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(ledger.open(a), ["K1", "K2"])
         self.assertEqual(ledger.open(b), ["K1", "K2", "K3"])
         self.assertEqual(ledger.having(a, "holds"), ["K3"])
-        # Failure cases are taken first, then what must not change, then behaviour; skipped ones wait.
-        self.assertEqual(ledger.targets(b), ["K3", "K2", "K1"])
-        self.assertEqual(ledger.targets(b, {"K3"}), ["K2", "K1", "K3"])
         rows = {r["id"]: r for r in ledger.shown(a, ["K2"])}
         self.assertEqual((rows["K2"]["status"], rows["K2"]["target"], rows["K2"]["probe"]), ("fails", True, "cmd2"))
         self.assertEqual((rows["K1"]["probe_plan"], rows["K4"]["status"]), ("call it", "unverifiable"))
 
-    def test_a_probe_that_fails_on_every_submission_is_questioned_and_then_set_aside(self):
+    def test_no_count_decides_anything_and_setting_a_criterion_aside_is_a_judgement_that_a_passing_probe_undoes(self):
         ledger = Ledger(parse(json.dumps(RAW)))
-        versions = [digest({NAME: str(i)}) for i in range(5)]
-        for version in versions[:2]:
+        versions = [digest({NAME: str(i)}) for i in range(8)]
+        for version in versions:
             ledger.record("K1", "cmd", 1, "no", version)
-        ledger.record("K1", "cmd", 1, "no", versions[1])     # the same submission again counts once
-        self.assertFalse(ledger.questioned("K1"))
-        ledger.record("K1", "cmd", 1, "no", versions[2])
-        self.assertTrue(ledger.questioned("K1"))
-        self.assertIn("Compare what it asserts", ledger.shown(versions[2])[0]["notice"])
-        ledger.record("K1", "cmd", 1, "no", versions[3])
-        self.assertEqual((ledger.status("K1", versions[3]), "K1" in ledger.open(versions[3])), ("disputed", False))
-        # A corrected probe that passes settles it.
-        self.assertEqual(ledger.record("K1", "better", 0, "", versions[3]), "holds")
-        self.assertEqual(ledger.status("K1", versions[3]), "holds")
+        ledger.record("K1", "cmd", 1, "no", versions[-1])     # the same submission again is one failure
+        # Eight failures later the criterion is simply still failing; the history is shown, not acted on.
+        row = ledger.shown(versions[-1])[0]
+        self.assertEqual((ledger.status("K1", versions[-1]), row["failed_on_submissions"], "K1" in ledger.open(versions[-1])),
+                         ("fails", 8, True))
+        self.assertNotIn("notice", row)
+        ledger.set_aside("K1", "the probe asserts an order the source does not require")
+        self.assertEqual((ledger.status("K1", versions[-1]), "K1" in ledger.open(versions[-1])), ("set_aside", False))
+        self.assertIn("does not require", ledger.shown(versions[-1])[0]["set_aside"])
+        self.assertEqual(ledger.record("K1", "better", 0, "", versions[-1]), "holds")
+        self.assertEqual(ledger.status("K1", versions[-1]), "holds")
 
 
 class VerifyLedgerTests(unittest.TestCase):
@@ -184,6 +182,23 @@ class ParticipantLedgerTests(unittest.TestCase):
             self.assertIn("could not be used (not a JSON array", asked[1])
             self.assertIn("List first every failure case", asked[0])
             self.assertIsNone(participant.derive(lambda prompt: "still not json", "task", "spec"))
+
+    def test_the_model_chooses_the_targets_and_what_to_set_aside_and_an_unusable_answer_leaves_every_open_criterion(self):
+        entry = digest({NAME: "1"})
+        asked = []
+        def model(answer):
+            return lambda prompt: asked.append(prompt) or answer
+        ledger = Ledger(parse(json.dumps(RAW)))
+        picked = participant.choose(model(json.dumps({"targets": ["K3", "K9", "K3", "K4"], "set_aside": {"K1": "not in the sources"}})),
+                                    ledger, entry, "Earlier: K3 failed twice")
+        # Unknown ids, repeats and a criterion nothing local can show are not targets.
+        self.assertEqual(picked, ["K3"])
+        self.assertEqual(ledger.status("K1", entry), "set_aside")
+        self.assertIn("Earlier: K3 failed twice", asked[0])
+        self.assertIn("Set a criterion aside only when", asked[0])
+        for unusable in ("no idea", "[]", json.dumps({"targets": []}), json.dumps({"targets": ["K1"]})):
+            with self.subTest(answer=unusable):
+                self.assertEqual(participant.choose(model(unusable), ledger, entry, ""), ["K2", "K3"])
 
     def test_an_experiment_starts_from_its_ancestor_s_ledger_with_the_abandoned_one_s_probes(self):
         held, lost = parse(json.dumps(RAW)), parse(json.dumps(RAW))

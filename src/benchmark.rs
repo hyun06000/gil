@@ -287,6 +287,27 @@ fn drive(session: &mut ProjectSession, adapter: &Adapter, recovery: bool) -> Res
             session.commit()?;
             continue;
         }
+        // An Outcome may have written a way back inside this Cycle: to an earlier Step, where only
+        // a new Hypothesis can open. The Core steps there, and the world goes back to what that
+        // place requires, as it does for a Cycle. The record of the abandoned attempt stays.
+        // It is taken before the Cycle's own close: a declared way back is where the run goes.
+        if recovery && cycle.step_now_open().is_none() {
+            let from = cycle.id().to_ref().to_string();
+            if session.revisit_step().is_ok() {
+                session.restore()?;
+                let world = session.project().world_snapshot().to_string();
+                let project = json!({"action":"project", "failed":from, "target":from, "world":world});
+                if !matches!(
+                    adapter.ask(session.project(), project, None)?,
+                    Reply::Projected
+                ) {
+                    return Err("adapter did not confirm submission projection".into());
+                }
+                session.commit()?;
+                turns = 0;
+                continue;
+            }
+        }
         if turns == MAX_TURNS {
             break;
         }
@@ -518,6 +539,28 @@ mod tests {
             .collect();
         // C2 first submission, C3 gains a criterion, C4 breaks it, C5 branches from C3, C6 finishes.
         assert_eq!(verdicts, ["success", "success", "failure", "success", "success"]);
+        // Inside C3 the first hypothesis failed and reflection doubted the hypothesis: the Define
+        // stands, and a second hypothesis follows it in the same Cycle.
+        let kinds: Vec<_> = cycles[2]["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| s["kind"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            kinds,
+            [
+                "define", "hypothesis", "verify", "analysis", "outcome", "hypothesis", "verify",
+                "analysis", "outcome"
+            ]
+        );
+        let steps = cycles[2]["steps"].as_array().unwrap();
+        assert_eq!(steps[4]["report"]["verdict"], "failure");
+        assert_eq!(steps[4]["report"]["next_direction.action"], "revisit");
+        assert_eq!(steps[4]["report"]["next_direction.target_node_ref"], steps[0]["ref"]);
+        assert_eq!(steps[8]["report"]["verdict"], "success");
+        // C4's reflection doubted the problem definition: the Cycle itself closed as failed.
+        assert_eq!(cycles[3]["steps"].as_array().unwrap().len(), 5);
         assert_eq!(cycles[3]["parent"], cycles[2]["ref"]);
         assert_eq!(cycles[4]["parent"], cycles[2]["ref"]);
         assert_eq!(cycles[4]["revisit_from"], cycles[3]["ref"]);
@@ -529,7 +572,7 @@ mod tests {
                 .as_array()
                 .unwrap()
                 .iter()
-                .find(|s| s["kind"] == "verify")
+                .rfind(|s| s["kind"] == "verify")
                 .unwrap();
             serde_json::from_str(verify["report"]["result"].as_str().unwrap()).unwrap()
         };
@@ -544,8 +587,19 @@ mod tests {
         let last = observed(5);
         assert_eq!(last["ledger"], json!({"holds": 3}));
         assert_eq!(last["submission_digest"], observed(2)["submission_digest"]);
+        // The world went back twice: to C3's Define inside C3, and to C3's exit after C4.
         let log = fs::read_to_string(root.join("transcript.jsonl")).unwrap();
-        assert!(log.contains("cycle_restore_completed"));
+        let restores: Vec<Value> = log
+            .lines()
+            .map(|line| serde_json::from_str::<Value>(line).unwrap())
+            .filter(|e| e["event"] == "cycle_restore_completed")
+            .collect();
+        assert_eq!(restores.len(), 2);
+        assert_eq!(restores[0]["failed"], cycles[2]["ref"]);
+        assert_eq!(restores[0]["target"], cycles[2]["ref"]);
+        assert_eq!(restores[0]["world"], cycles[1]["exit_world"]);
+        assert_eq!(restores[1]["failed"], cycles[3]["ref"]);
+        assert_eq!(restores[1]["world"], cycles[2]["exit_world"]);
         fs::remove_dir_all(root).unwrap();
     }
 

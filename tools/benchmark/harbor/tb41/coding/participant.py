@@ -175,10 +175,9 @@ def experiment_handoff(model, findings, evidence_rule):
         "accept" if outcome == "start" else "revise")
 
 
-# A Chain stops opening Experiments when it runs short of time, of cycles, or of attempts from one place.
+# The trial's own resources end a Chain: time and model budget. Nothing in the Chain is counted;
+# where to go back to after a failure is judged in the reflection that closes the attempt.
 MINUTES_NEEDED = 8
-CYCLES = 10
-BRANCHES = 3
 
 
 def verify_result(cycle):
@@ -200,6 +199,29 @@ def ledger_plan(cycle):
     return plan if isinstance(plan, dict) and plan.get("criteria") else None
 
 
+def summary(result):
+    """What a Verify observed, without the ledger's full text."""
+    return {key: result.get(key) for key in ("stop", "check_exit", "regression", "targets", "ledger", "swept") if key in result}
+
+
+def merged(items, lost):
+    """Items as they stand in the world the run is in, with what an abandoned attempt learned:
+    its probes, and the submissions its criteria failed on."""
+    if items is None:
+        return lost
+    for item in items:
+        other = next((o for o in lost or [] if o["id"] == item["id"]), None)
+        if not other:
+            continue
+        item["failed_on"] = sorted(set(item["failed_on"]) | set(other["failed_on"]))
+        if other.get("set_aside"):
+            item["set_aside"] = other["set_aside"]
+        if not item["command"] and other["command"]:
+            # A probe written in the abandoned world still says how to look; its result is stale here.
+            item.update({key: other[key] for key in ("command", "exit", "output", "digest", "status")})
+    return items
+
+
 def entry_ledger(cycles, parent, failed):
     """The items an Experiment starts from: the nearest ancestor's ledger as it stood at its exit,
     with the probes and the failures of the Experiment that was just abandoned."""
@@ -208,20 +230,27 @@ def entry_ledger(cycles, parent, failed):
         result = verify_result(node)
         items = result.get("criteria") if result else None
         node = cycles.get(node.get("parent"))
-    lost = (verify_result(failed) or {}).get("criteria") if failed else None
-    if items is None:
-        return lost
-    for item in items:
-        other = next((o for o in lost or [] if o["id"] == item["id"]), None)
-        if not other:
-            continue
-        item["failed_on"] = sorted(set(item["failed_on"]) | set(other["failed_on"]))
-        if other.get("disputed"):
-            item["disputed"] = True
-        if not item["command"] and other["command"]:
-            # A probe written in the abandoned world still says how to look; its result is stale here.
-            item.update({key: other[key] for key in ("command", "exit", "output", "digest", "status")})
-    return items
+    return merged(items, (verify_result(failed) or {}).get("criteria") if failed else None)
+
+
+def choose(model, ledger, entry, lesson):
+    """Which open criteria this Experiment takes, and which it sets aside: the model's judgement."""
+    answer = model(
+        "Choose the open criteria this experiment takes on. Take those one coherent change can make hold; "
+        "leave the rest for later experiments. Set a criterion aside only when, against its source, its "
+        "wording or its probe cannot be right, and say why. Return JSON only: "
+        '{"targets": ["K1"], "set_aside": {"K2": "reason"}}. Ledger: '
+        + json.dumps(ledger.shown(entry), ensure_ascii=False) + ("\n" + lesson if lesson else ""))
+    try:
+        picked = json.loads(answer.strip().removeprefix("```json").removeprefix("```").removesuffix("```"))
+        for key, reason in (picked.get("set_aside") or {}).items():
+            if key in ledger.items:
+                ledger.set_aside(key, reason)
+        targets = [key for key in picked.get("targets") or [] if key in ledger.open(entry)]
+    except (ValueError, AttributeError, TypeError):
+        targets = []
+    # An answer that names nothing usable leaves every open criterion to this experiment.
+    return list(dict.fromkeys(targets)) or ledger.open(entry)
 
 
 def derive(model, task, spec):
@@ -276,13 +305,27 @@ def reply(r):
     if failed:
         evidence = {s["ref"]: s["report"][field] for s in failed["steps"]
                     for kind, field in (("hypothesis", "hypothesis"), ("verify", "result"),
-                                        ("analysis", "interpretation")) if s["kind"] == kind}
+                                        ("analysis", "interpretation"), ("outcome", "lesson")) if s["kind"] == kind and s["report"]}
+        for ref, text in evidence.items():
+            if ":" in ref and text.startswith("{"):
+                with_ledger = verify_result({"steps": [{"kind": "verify", "report": {"result": text}}]})
+                if with_ledger and "criteria" in with_ledger:
+                    evidence[ref] = json.dumps(summary(with_ledger))
         lesson = ("Closed failed experiment " + failed["ref"] + " Journey " + failed["journey"] + "; restored " + parent["ref"]
                   + " at " + parent["exit_world"] + ". Use the failed prediction and observed check "
                   "to propose a different hypothesis and change the implementation. Evidence: "
                   + json.dumps(evidence, ensure_ascii=False))
     steps = r["history"][-1]["steps"]
     interview = r["history"][0]["steps"]
+    # Hypotheses already tried under this Define. Each was abandoned by going back to the Define:
+    # the world returned to what it was there, and what the attempt found stays in the record.
+    abandoned = [s for s in steps if s["kind"] == "outcome" and s["report"] and s["report"].get("verdict") == "failure"]
+    if abandoned:
+        tried = {s["ref"]: s["report"][field] for s in steps
+                 for kind, field in (("hypothesis", "hypothesis"), ("analysis", "interpretation"), ("outcome", "lesson"))
+                 if s["kind"] == kind and s["report"]}
+        lesson += ("\nUnder this problem definition these hypotheses were tried and abandoned; the files are back as "
+                   "they were at the Define. Propose a different change. Record: " + json.dumps(tried, ensure_ascii=False))
 
     def step(kind, history=steps):
         return next(s for s in reversed(history) if s["kind"] == kind and s["report"])
@@ -396,10 +439,7 @@ def reply(r):
         items = entry_ledger(cycles, parent, failed) or derive(model, task, spec)
         entry = digest((verify_result(parent) or {}).get("files") or {})
         ledger = Ledger(items) if items else None
-        # Targets a branch from this place already failed on twice wait behind the others.
-        tried = [t for c in r["history"] if c.get("parent") == current.get("parent") and c is not current
-                 and (c.get("report") or {}).get("verdict") == "failure" for t in (ledger_plan(c) or {}).get("targets", [])]
-        targets = ledger.targets(entry, {t for t in tried if tried.count(t) >= 2}) if ledger else []
+        targets = choose(model, ledger, entry, lesson) if ledger and ledger.open(entry) else []
         if targets:
             plan = {"targets": targets, "held_at_entry": ledger.having(entry, "holds"), "criteria": ledger.json()}
             return close(
@@ -452,9 +492,14 @@ def reply(r):
                 options["failed_check"] = {"verify": old["ref"], "exit": result["check_exit"],
                                            "output": result["check_output"]}
             if not first:
-                options["baseline"] = json.loads(next(s for s in parent["steps"] if s["kind"] == "verify")["report"]["result"])
+                options["baseline"] = verify_result(parent)
             if plan:
-                options.update(criteria=plan["criteria"], targets=plan["targets"])
+                # The Define stands; an attempt abandoned under it leaves its probes and failures.
+                earlier = [verify_result({"steps": [s]}) for s in steps if s["kind"] == "verify" and s["report"]]
+                items = plan["criteria"]
+                for result in earlier:
+                    items = merged(items, (result or {}).get("criteria"))
+                options.update(criteria=items, targets=plan["targets"])
         obs = solve(
             task, "Accepted specification: " + spec + "\nSuccess criteria: " + criteria + "\nHypothesis: " + hypothesis, **options
         )
@@ -524,6 +569,30 @@ def reply(r):
                 **fields,
             )
         analysis = step("analysis")["report"]
+        if plan and analysis["success_condition_met"] != "yes":
+            # Reflection decides which layer was wrong. Either way the world goes back and the record stays.
+            obs = json.loads(step("verify")["report"]["result"])
+            reflection = model(
+                "This attempt did not meet its success condition. Reflect before choosing where to go back to. "
+                "If the criteria and their probes still describe the right problem and a different change could "
+                "make the targets hold, the hypothesis was wrong. If the targets were badly chosen, a criterion "
+                "or its probe does not match its source, or the targets depend on work not yet done, the problem "
+                "definition was wrong. State which it is and what the evidence is. Analysis: "
+                + analysis["interpretation"] + ("\n" + lesson if lesson else ""))
+            if minutes_left() >= MINUTES_NEEDED and obs.get("stop") != "budget" and model(
+                    "Choose where this experiment goes back to, as your reflection concluded. revise_hypothesis: "
+                    "keep this problem definition and its targets, restore the files to what they were there and "
+                    "try a different hypothesis. revise_problem: close this experiment as failed, restore the "
+                    "parent experiment's files and define a new problem. Reflection: " + reflection,
+                    ["revise_hypothesis", "revise_problem"]) == "revise_hypothesis":
+                return close(
+                    verdict="failure",
+                    lesson=reflection,
+                    **{"next_direction.action": "revisit",
+                       "next_direction.target_node_ref": step("define")["ref"],
+                       "next_direction.reason": "The hypothesis is doubted; the problem definition stands."},
+                )
+            return close(verdict="failure", lesson=reflection, **fields)
         return close(
             verdict="success"
             if analysis["success_condition_met"] == "yes"
@@ -541,19 +610,17 @@ def reply(r):
         direction["next_direction.target_cycle_ref"] = current.get("parent") or "cycle:C1"
     if active:
         obs = json.loads(step("verify")["report"]["result"])
-        room = minutes_left() >= MINUTES_NEEDED and len(r["history"]) < CYCLES and obs.get("stop") != "budget"
+        room = minutes_left() >= MINUTES_NEEDED and obs.get("stop") != "budget"
         if first and obs["local_baseline"]:
             direction["benchmark_transition"] = "verified_local_baseline"
-        elif obs["regression"]:
+        elif obs["regression"] and not plan:
             direction["benchmark_transition"] = "observed_regression"
         elif plan and obs.get("criteria") and room:
-            failures = sum(1 for c in r["history"] if c.get("parent") == current.get("parent")
-                           and (c.get("report") or {}).get("verdict") == "failure")
             if verdict == "success" and Ledger(obs["criteria"]).open(obs["submission_digest"]):
                 # Open criteria remain: the next Experiment continues from this world.
                 direction["benchmark_transition"] = "criteria_open"
-            elif verdict == "failure" and failures + 1 < BRANCHES:
-                # Nothing gained or something broken: go back to the parent's world and branch.
+            elif verdict == "failure":
+                # The reflection doubted the problem definition: back to the parent's world, and branch.
                 direction["benchmark_transition"] = "criteria_failed"
     return close(
         verdict=verdict,
