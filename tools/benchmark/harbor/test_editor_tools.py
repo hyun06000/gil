@@ -60,6 +60,30 @@ class EditorTests(unittest.TestCase):
         self.assertEqual(json.loads(send.call_args.args[0].data)["reasoning"], {"effort": "none"})
         self.assertEqual(send.call_args.kwargs["timeout"], 60)
 
+    def test_the_coding_agent_keeps_its_own_run_and_setup_and_its_model_has_a_cost_limit(self):
+        import sys, types
+        base = types.ModuleType("harbor.agents.base")
+        base.BaseAgent = type("BaseAgent", (), {})
+        with patch.dict(sys.modules, {"harbor": types.ModuleType("harbor"), "harbor.agents": types.ModuleType("harbor.agents"),
+                                      "harbor.agents.base": base}), \
+                patch.dict("os.environ", {"GIL_HARBOR_API_KEY": "test", "TB_ARM": "off", "TB_TASK": "react-lead-form"}):
+            sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent / "tb41"))
+            try:
+                from coding_agent import CodeAgent
+                from tb_agent import SoundChangeAgent
+            finally:
+                sys.path.pop(0)
+            for cls in (CodeAgent, SoundChangeAgent):
+                for method in ("setup", "run", "run_worker", "model_client"):
+                    owner = getattr(cls, method).__qualname__.split(".")[0]
+                    self.assertIn(owner, ("CodeAgent", "SoundChangeAgent"), f"{cls.__name__}.{method} fell back to {owner}")
+            client = CodeAgent().model_client()
+            self.assertEqual((client.budget, client.max_calls, client.reasoning, client.max_output), (1_500_000, None, "medium", 16000))
+            client.reserved = 1_500_000
+            with patch("urllib.request.urlopen") as send, self.assertRaisesRegex(RuntimeError, "limit"):
+                client.ask([{"role": "user", "content": "x"}], [], editor=True)
+            send.assert_not_called()
+
     def test_editor_request_and_ordinary_messages(self):
         scenarios = [(True, [], [tool_call("write", path="x.ts", content="export {}")], "write"),
                      (False, [], [], "hello"), (False, ["accept"], [], "accept")]

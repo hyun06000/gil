@@ -27,11 +27,6 @@ class SoundChangeAgent(LunaAgent):
     def model_client(self):
         return LoggedLuna(max_calls=None, budget=None, max_output=4096)
 
-
-def coding_client():
-    """The coding tasks' model: reasoning on, room for a whole file, and time for both."""
-    return LoggedLuna(max_calls=None, budget=None, max_output=16000, reasoning="medium", timeout=240)
-
     async def setup(self, environment):
         result = await environment.exec(
             "mkdir -p /case /work/project /work/model && chown -R 65534:65534 /work && touch /app/rules.json /app/ordering.txt && chown 65534:65534 /app/rules.json /app/ordering.txt",
@@ -75,3 +70,12 @@ def coding_client():
         await environment.download_file(
             "/work/project/observation.json", self.logs_dir / "observation.json"
         )
+
+
+def coding_client():
+    """The coding tasks' model: reasoning on, room for a whole file, and time for both.
+
+    One trial stops asking at an estimated 1.50 USD (the budget is in millionths of a dollar), so a
+    loop of empty calls in either arm ends on its own; what is on disk then is still graded.
+    """
+    return LoggedLuna(max_calls=None, budget=1_500_000, max_output=16000, reasoning="medium", timeout=240)
