@@ -18,7 +18,7 @@ class FinalCheckTests(unittest.TestCase):
             review_answers = iter(reviews)
             def ask(prompt, choices=(), stage="solver"):
                 if stage == "checklist":
-                    return "Implement library\nConnect caller\nVerify external behavior"
+                    return "edit | - | Implement library\nedit | 1 | Connect caller\nverify | 2 | Verify external behavior"
                 if stage == "checklist_review":
                     return next(review_answers)
                 action = next(responses)
@@ -41,6 +41,16 @@ class FinalCheckTests(unittest.TestCase):
         self.assertEqual(obs["last_check"]["trigger"], "model")
         self.assertEqual(obs["check_exit"], 1)
         self.assertTrue(obs["check_matches_submission"])
+
+    def test_independent_edit_can_precede_inspection_but_dependencies_hold(self):
+        items = solver.parse_checklist("inspect | - | Audit outputs\nedit | - | Normalize\nedit | 1 | Replace ledger")
+        self.assertEqual([i["id"] for i in solver.ready_items(items)], [1, 2])
+        items[0]["status"] = "deferred"
+        self.assertEqual([i["id"] for i in solver.ready_items(items)], [2])
+        items[0]["status"] = "demonstrated"
+        self.assertEqual([i["id"] for i in solver.ready_items(items)], [2, 3])
+        with self.assertRaises(ValueError):
+            solver.parse_checklist("edit | 1 | Self cycle")
 
     def test_verify_advances_without_erasing_earlier_review(self):
         write = {"action":"write","path":"src/a.ts","content":"first"}

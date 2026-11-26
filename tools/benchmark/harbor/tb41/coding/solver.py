@@ -72,17 +72,47 @@ def matches(receipt, files):
     return bool(receipt and files and all(files.values()) and receipt["files"] == files)
 
 
-def make_checklist(task, plan):
-    answer = ask(
-        "Turn the accepted roadmap into ordered, independently reviewable deliverables. "
-        "Use one concise criterion per line, implementation prerequisites first. Include every "
-        "required caller and behavioral contract. Separate implementation from external-only "
-        "verification. Return only the lines. Task: " + task + "\nRoadmap: " + plan,
-        stage="checklist")
-    criteria = dict.fromkeys(line.strip() for line in answer.splitlines() if line.strip())
-    if not criteria:
+def parse_checklist(answer):
+    items = []
+    for line in answer.strip().splitlines():
+        if not line.strip():
+            continue
+        kind, dependencies, criterion = (part.strip() for part in line.split("|", 2))
+        if kind not in ("edit", "inspect", "verify") or not criterion:
+            raise ValueError("Invalid criterion or work type")
+        requires = [] if dependencies == "-" else [int(v) for v in dependencies.split(",")]
+        if any(v < 1 or v > len(items) for v in requires):
+            raise ValueError("Prerequisites must refer to earlier rows")
+        items.append({"id": len(items) + 1, "criterion": criterion, "kind": kind,
+                      "requires": requires, "status": "pending"})
+    if not items:
         raise ValueError("Empty experiment checklist")
-    return [{"criterion": line, "status": "pending"} for line in criteria]
+    return items
+
+
+def make_checklist(task, plan):
+    prompt = (
+        "Convert the roadmap into independently reviewable criteria. Row order is advisory. "
+        "Only declare a prerequisite when its missing output or unresolved decision actually "
+        "prevents safe work on this item. General inspection never blocks unrelated edits. "
+        "Split a broad investigation into specific decisions if they affect different work. "
+        "Separate implementation from verification. Output plain lines without numbering, "
+        "headers or fences: kind | requires | criterion. kind is edit, inspect or verify. "
+        "requires is - or comma-separated 1-based earlier row numbers. "
+        "Task: " + task + "\nRoadmap: " + plan)
+    for attempt in range(2):
+        answer = ask(prompt, stage="checklist")
+        try:
+            return parse_checklist(answer)
+        except ValueError as error:
+            if attempt:
+                raise
+            prompt += "\nCorrect this format error: " + str(error) + "\nPrevious answer: " + answer
+
+
+def ready_items(items):
+    done = {item["id"] for item in items if item["status"] == "demonstrated"}
+    return [item for item in items if item["status"] == "pending" and done.issuperset(item["requires"])]
 
 
 def review_item(item, evidence, receipt):
@@ -119,10 +149,15 @@ def solve(task,plan=""):
     # Preserve the existing post-solver window and allow for a pending model reply.
     edit_deadline = deadline - 100
     previous_item = None
+    postponed = {}
     seen_pages = {}
     last_repeat = None
     while time.time() < edit_deadline - 85 - check_reserve:
-        active = next((item for item in checklist if item["status"] == "pending"), None)
+        ready = ready_items(checklist)
+        active = min(ready, key=lambda item: (postponed.get(item["id"], 0), item["kind"] != "edit",
+                                              item["id"]), default=None)
+        if not ready and any(item["status"] == "pending" for item in checklist):
+            break  # Remaining work has an unresolved prerequisite; keep it pending for Analysis.
         if active is not previous_item:
             evidence.clear()
             touched.clear()
@@ -131,6 +166,7 @@ def solve(task,plan=""):
         if checklist:
             focus = (f"Checklist: {json.dumps(checklist, ensure_ascii=False)}\n"
                      f"Current criterion: {active['criterion'] if active else 'final source check'}. "
+                     f"Ready item IDs: {[item['id'] for item in ready]}. Row order is advisory. "
                      "Work on the current criterion. Call finish to request its evidence review. "
                      "After all items have been reviewed, check the final files and finish.")
         prompt=f"""{task}
@@ -167,6 +203,8 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                 start=max(0,int(obj.get("offset",0)))
                 response, read_metadata = read_page(path, start, seen_pages, calls)
                 last_repeat = read_metadata["previous_read_call"]
+                if last_repeat and active and len(ready) > 1:
+                    postponed[active["id"]] = calls
             elif action=="write":
                 path=source(obj["path"],True)
                 content=obj["content"]
@@ -192,6 +230,8 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                     touched.update(current_receipt["files"])
                 active["sources"] = snapshot(touched)
                 response = active["status"] + ": " + active["assessment"]
+                if active["status"] == "pending" and len(ready) > 1:
+                    postponed[active["id"]] = calls
                 if active["status"] != "pending":
                     evidence.clear()
                     touched.clear()
@@ -206,7 +246,7 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                 evidence.append([action, obj.get("path"), observed[:3000]])
                 evidence = evidence[-12:]
             record(event="tool", id=editor_id, action=action, path=obj.get("path"), offset=obj.get("offset", 0), result=response[:3500], chars=len(response),
-                   **read_metadata, **({"check": receipt} if action == "check" else {}))
+                   **({"criterion_id": active["id"]} if active else {}), **read_metadata, **({"check": receipt} if action == "check" else {}))
             history.append([action,obj.get("path"),response])
         except (ValueError,OSError,TypeError,KeyError,AttributeError,subprocess.TimeoutExpired) as error:
             record(event="tool", id=editor_id, action=obj.get("action") if isinstance(obj, dict) else None, error=str(error))
