@@ -4,7 +4,8 @@ case "$TB_TASK" in
   react-lead-form|ks-solver-cpp|vf2-speedup-networkx) ;;
   *) exit 2 ;;
 esac
-agent=coding_agent:CodeAgent
+unset GIL_HARBOR_API_KEY
+agent=submission_regrade:FrozenSubmission
 base=$(cd "$(dirname "$0")" && pwd)
 root=${RUNNER_TEMP:-/tmp}
 work=$(mktemp -d "$root/tb41.XXXXXXXX")
