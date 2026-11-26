@@ -69,6 +69,11 @@ on:
         type: choice
         options: [both, 'on', 'off']
         default: both
+      cpu_budget_usd:
+        description: 'Three-CPU preset: estimated model cost at which one trial stops asking (USD)'
+        required: false
+        default: '5'
+        type: string
       unsigned_preview_version:
         description: 'Optional X.Y.Z-preview.N stamp compiled into the Core; no publication or installation'
         required: false
@@ -493,6 +498,7 @@ jobs:
           GIL_HARBOR_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           TB_GIL_BINARY: ${{ github.workspace }}/target/x86_64-unknown-linux-musl/debug/gil
           PYTHONUNBUFFERED: '1'
+          TB_BUDGET_USD: ${{ inputs.cpu_budget_usd }}
         run: |
           export PATH="$RUNNER_TEMP/harbor/bin:$PATH"
           tools/benchmark/harbor/tb41/run.sh

@@ -75,7 +75,11 @@ class SoundChangeAgent(LunaAgent):
 def coding_client():
     """The coding tasks' model: reasoning on, room for a whole file, and time for both.
 
-    One trial stops asking at an estimated 5 USD (the budget is in millionths of a dollar), so a
-    loop of empty calls in either arm ends on its own; what is on disk then is still graded.
+    One trial stops asking at an estimated TB_BUDGET_USD (5 USD unless the run names another limit),
+    so a loop of empty calls in either arm ends on its own; what is on disk then is still graded.
     """
-    return LoggedLuna(max_calls=None, budget=5_000_000, max_output=16000, reasoning="medium", timeout=240)
+    budget = float(os.environ.get("TB_BUDGET_USD") or 5)
+    if not 0 < budget <= 5:
+        raise ValueError("TB_BUDGET_USD must be above 0 and at most 5")
+    # The client counts in millionths of a dollar.
+    return LoggedLuna(max_calls=None, budget=round(budget * 1_000_000), max_output=16000, reasoning="medium", timeout=240)

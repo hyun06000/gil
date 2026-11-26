@@ -79,6 +79,11 @@ class EditorTests(unittest.TestCase):
                     self.assertIn(owner, ("CodeAgent", "SoundChangeAgent"), f"{cls.__name__}.{method} fell back to {owner}")
             client = CodeAgent().model_client()
             self.assertEqual((client.budget, client.max_calls, client.reasoning, client.max_output), (5_000_000, None, "medium", 16000))
+            with patch.dict("os.environ", {"TB_BUDGET_USD": "0.75"}):
+                self.assertEqual(CodeAgent().model_client().budget, 750_000)
+            for refused in ("0", "9", "-1"):
+                with patch.dict("os.environ", {"TB_BUDGET_USD": refused}), self.assertRaises(ValueError):
+                    CodeAgent().model_client()
             client.reserved = 5_000_000
             with patch("urllib.request.urlopen") as send, self.assertRaisesRegex(RuntimeError, "limit"):
                 client.ask([{"role": "user", "content": "x"}], [], editor=True)
