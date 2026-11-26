@@ -1,4 +1,5 @@
-"""What one GIL Verify carries from call to call: notes, held pages, and an end to calls that observe nothing new."""
+"""What a request carries from call to call: the files in view (both arms), an end to calls that
+observe nothing new (both arms), and the notes of a GIL Verify."""
 import hashlib
 import json
 import os
@@ -11,174 +12,204 @@ from unittest.mock import patch
 
 with patch.dict(os.environ, TB_TASK="vf2-speedup-networkx"):
     import solver
-import verify_activity
 
 NAME = "fast_networkx.py"
+SPEC = "SPEC.md"
 ORIGINAL = "def order(labels): return sorted(labels)\n"
+FIXED = "def order(labels): return sorted(labels, key=str.casefold)\n"
 TASK = "vf2-speedup-networkx"
 
 
+def view_of(prompt):
+    line = next(l for l in prompt.splitlines() if l.startswith("Files in view"))
+    return json.loads(line.split("brings nothing new): ", 1)[1])
+
+
+def results_of(prompt):
+    return json.loads(next(l for l in prompt.splitlines() if l.startswith("Recent tool results: "))[len("Recent tool results: "):])
+
+
 class Script:
-    """A scripted model: each step sees the prompt and returns one editor call."""
+    def __init__(self, step, noted):
+        self.step, self.prompts, self.flags, self.noted = step, [], [], noted
 
-    def __init__(self, step):
-        self.step, self.prompts, self.flags = step, [], []
-
-    def __call__(self, prompt, notes=False):
+    def __call__(self, prompt, **options):
         self.call_id = str(len(self.prompts))
         self.prompts.append(prompt)
-        self.flags.append(notes)
-        return json.dumps(self.step(len(self.prompts), prompt))
+        self.flags.append(options)
+        action = dict(self.step(len(self.prompts), prompt))
+        if not self.noted:
+            action.pop("note", None)
+        return json.dumps(action)
 
 
 class MemoryTests(unittest.TestCase):
-    def run_verify(self, step, *, cycle="cycle:C3", check=None, source=ORIGINAL):
+    def run_solver(self, step, *, cycle="cycle:C3", source=ORIGINAL, files=None):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         root = Path(temp.name).resolve()
-        self.app, work = root / "app", root / "project"
+        self.app, self.work = root / "app", root / "project"
         self.app.mkdir()
-        work.mkdir()
+        self.work.mkdir()
         (root / "deadline").write_text(str(time.time() + 300))
         (self.app / NAME).write_text(source)
+        for name, text in (files or {SPEC: "Sort ignoring case. Keep duplicates.\n"}).items():
+            (self.app / name).write_text(text)
         self.runs = root / "runs"
-        command = check or [sys.executable, "-B", "-c",
-                            f"open({str(self.runs)!r}, 'a').write('x'); from fast_networkx import order; "
-                            "assert order(['B','a']) == ['a','B'], 'case order'"]
+        command = [sys.executable, "-B", "-c",
+                   f"open({str(self.runs)!r}, 'a').write('x'); from fast_networkx import order; "
+                   "assert order(['B','a']) == ['a','B'], 'case order'"]
         baseline = {"files": {NAME: hashlib.sha256(source.encode()).hexdigest()}}
-        self.events, model = [], Script(step)
-        with patch.multiple(solver, APP=self.app, WORK=work, TASK=TASK, ask=model), \
+        self.events, model = [], Script(step, noted=bool(cycle))
+        with patch.multiple(solver, APP=self.app, WORK=self.work, TASK=TASK, ask=model), \
                 patch.dict(solver.CHECKS, {TASK: command}), \
                 patch.object(solver, "record", side_effect=lambda **e: self.events.append(e)):
             options = dict(cycle=cycle, baseline=baseline, verify_ref="step:C3/S3") if cycle else {}
             obs = solver.solve("Order labels ignoring case", **options)
         return obs, model
 
-    def test_a_note_and_a_read_page_stay_in_later_requests_and_the_same_page_is_not_sent_twice(self):
-        fixed = "def order(labels): return sorted(labels, key=str.casefold)\n"
+    def tools(self, action=None):
+        return [e for e in self.events if e.get("event") == "tool" and action in (None, e.get("action"))]
 
-        def step(n, prompt):
-            return [{"action": "read", "path": NAME, "offset": 0, "note": "sorted() has no key; add casefold next"},
-                    {"action": "read", "path": NAME, "offset": 0, "note": "second look"},
-                    {"action": "write", "path": NAME, "content": fixed, "note": "wrote the casefold key; check it"},
+    def test_every_file_read_stays_in_view_whole_and_current_in_both_arms(self):
+        for cycle in (None, "cycle:C3"):
+            with self.subTest(arm="on" if cycle else "off"):
+                obs, model = self.run_solver(lambda n, p: [
+                    {"action": "read", "path": SPEC, "offset": 0, "note": "the spec asks for case-insensitive order"},
+                    {"action": "read", "path": NAME, "offset": 0, "note": "sorted() has no key"},
+                    {"action": "read", "path": SPEC, "offset": 0, "note": "second look"},
+                    {"action": "edit", "path": NAME, "old": "sorted(labels)", "new": "sorted(labels, key=str.casefold)", "note": "add the key"},
                     {"action": "check", "note": "expect exit 0"},
-                    {"action": "finish", "note": "done"}][n - 1]
+                    {"action": "finish", "note": "done"}][n - 1], cycle=cycle)
+                prompts = model.prompts
+                self.assertEqual(view_of(prompts[0]), [])
+                # The specification and the code are in one request, side by side.
+                self.assertEqual([(p["path"], p["text"]) for p in view_of(prompts[2])],
+                                 [(SPEC, "Sort ignoring case. Keep duplicates.\n"), (NAME, ORIGINAL)])
+                # The results keep a receipt, not a second copy of the text.
+                self.assertEqual(results_of(prompts[2])[-1], ["read", NAME, f"Now in view: {NAME} [0,41) of 41 characters"])
+                self.assertEqual(prompts[2].count("def order(labels): return sorted(labels)"), 1)
+                # Reading a file in view again brings a refusal, and the file stays where it was.
+                reads = self.tools("read")
+                self.assertEqual([e["shown"] for e in reads], [False, False, True])
+                self.assertTrue(reads[2]["result"].startswith(f"Already in view and unchanged: {SPEC} [0,37)"))
+                self.assertEqual(reads[1]["result"], ORIGINAL)
+                # After the edit the view shows the new content without any read.
+                self.assertEqual({p["path"]: p["text"] for p in view_of(prompts[4])}[NAME], FIXED)
+                self.assertEqual(self.tools("edit")[0]["result"], "written; the file is in view as it is now")
+                self.assertEqual((obs["stop"], obs["check_exit"]), ("finished", 0))
 
-        obs, model = self.run_verify(step)
-        self.assertEqual(model.flags, [True] * 5)
-        self.assertNotIn("sorted(labels)", model.prompts[0])
-        # After one read the request carries the page and the note; the result list keeps only a receipt.
-        self.assertIn("sorted() has no key; add casefold next", model.prompts[1])
-        self.assertEqual(model.prompts[1].count(json.dumps(ORIGINAL)[1:-1]), 1)
-        self.assertIn('["read", "fast_networkx.py", "page [0,41) received"]', model.prompts[1])
-        # The second read of the same version and offset is answered without the text, which is still held.
-        reads = [e for e in self.events if e.get("action") == "read"]
-        self.assertEqual([e["held"] for e in reads], [False, True])
-        self.assertTrue(reads[1]["result"].startswith("Not sent again: fast_networkx.py [0,41)"))
-        self.assertEqual(model.prompts[2].count(json.dumps(ORIGINAL)[1:-1]), 1)
-        # A write replaces the version: its old page is dropped, the notes stay.
-        self.assertNotIn(json.dumps(ORIGINAL)[1:-1], model.prompts[3])
-        self.assertIn("wrote the casefold key; check it", model.prompts[4])
-        self.assertEqual((obs["stop"], obs["check_exit"], obs["refused_reads"], obs["repeat_reads"], obs["notes"]),
-                         ("finished", 0, 1, 1, 5))
-        self.assertEqual(self.events[-2]["note"], "expect exit 0")
+    def test_a_written_file_and_a_file_changed_by_a_command_are_in_view_without_a_read(self):
+        obs, model = self.run_solver(lambda n, p: [
+            {"action": "write", "path": NAME, "content": FIXED},
+            {"action": "run", "command": "printf '# generated\\n' >> fast_networkx.py"},
+            {"action": "read", "path": NAME, "offset": 0},   # nothing new: already shown as it is now
+            {"action": "run", "command": "rm fast_networkx.py && printf 'def order(l): return sorted(l, key=str.casefold)\\n' > fast_networkx.py"},
+            {"action": "check"}, {"action": "finish"}][n - 1], cycle=None)
+        self.assertEqual(view_of(model.prompts[1])[0]["text"], FIXED)
+        self.assertEqual(view_of(model.prompts[2])[0]["text"], FIXED + "# generated\n")
+        self.assertTrue(self.tools("read")[0]["shown"])
+        self.assertEqual(view_of(model.prompts[4])[0]["text"], "def order(l): return sorted(l, key=str.casefold)\n")
+        self.assertEqual(obs["stop"], "finished")
 
-    def test_calls_that_observe_nothing_new_are_warned_about_and_then_close_the_verify(self):
-        obs, model = self.run_verify(lambda n, prompt: {"action": "read", "path": NAME, "offset": 0, "note": f"look {n}"})
-        limit = verify_activity.STALL_LIMIT
-        # One new page, then `limit` refused reads; without the limit this loop runs to the deadline.
-        self.assertEqual(obs["solver_calls"], 1 + limit)
-        self.assertEqual((obs["stop"], obs["refused_reads"], obs["check_exit"], obs["first_write_call"]),
-                         ("stalled", limit, None, None))
-        self.assertEqual(self.events[-1]["event"], "verify_stalled")
-        warned = [i for i, p in enumerate(model.prompts) if "calls in a row brought no new page" in p]
-        self.assertEqual(warned, list(range(verify_activity.STALL_WARNING + 1, limit + 1)))
-        self.assertIn(f"After {limit - verify_activity.STALL_WARNING} more, this Verify closes", model.prompts[warned[0]])
-        # Notes are bounded: the oldest fall out of the request.
-        self.assertLessEqual(model.prompts[-1].count('"note": "look '), verify_activity.NOTES_KEPT)
+    def test_the_view_holds_many_files_at_once_and_drops_the_least_recently_touched_past_its_budget(self):
+        big = {f"part{i}.txt": f"{i}" * 50000 for i in range(6)}   # 300,000 characters, over the 240,000 budget
+        order = [f"part{i}.txt" for i in range(6)] + ["part0.txt"]
+        obs, model = self.run_solver(lambda n, p: {"action": "read", "path": order[n - 1], "offset": 0} if n <= 7 else
+                                     {"action": "write", "path": NAME, "content": FIXED} if n == 8 else
+                                     {"action": "check"} if n == 9 else {"action": "finish"}, cycle=None, files=big)
+        # Four files (200,000 characters) fit; the fifth pushed the first out, so reading it again shows it.
+        self.assertEqual([p["path"] for p in view_of(model.prompts[4])], ["part0.txt", "part1.txt", "part2.txt", "part3.txt"])
+        self.assertEqual([p["path"] for p in view_of(model.prompts[5])], ["part1.txt", "part2.txt", "part3.txt", "part4.txt"])
+        self.assertEqual([e["shown"] for e in self.tools("read")], [False] * 7)
+        self.assertLessEqual(sum(len(p["text"]) for p in view_of(model.prompts[7])), solver.VIEW_BUDGET)
+        # A file longer than one page is read by offset, and both pages are held.
+        long = "".join(f"line {i:06d}\n" for i in range(6000))    # 72,000 characters
+        obs, model = self.run_solver(lambda n, p: [{"action": "read", "path": NAME, "offset": 0},
+                                                   {"action": "read", "path": NAME, "offset": 60000},
+                                                   {"action": "check"}][min(n, 3) - 1], cycle=None, source=long)
+        self.assertEqual([(p["offset"], p["end"], p["chars"]) for p in view_of(model.prompts[2])], [(0, 60000, 72000), (60000, 72000, 72000)])
+
+    def test_results_are_kept_whole_or_not_at_all(self):
+        history = [["run", f"cmd {i}", "x" * 9000] for i in range(40)]
+        kept = solver.recent(history)
+        self.assertEqual(kept, history[-len(kept):])
+        self.assertLessEqual(len(json.dumps(kept)), solver.RESULTS_BUDGET)
+        self.assertEqual(len(kept), 6)
+        self.assertEqual(solver.recent([["run", "one", "y" * 200000]]), [["run", "one", "y" * 200000]])
+        self.assertEqual(len(solver.recent([["read", "a", "ok"]] * 50)), solver.RESULTS_KEPT)
+
+    def test_calls_that_observe_nothing_new_are_warned_about_and_then_end_the_editing_in_both_arms(self):
+        for cycle in (None, "cycle:C3"):
+            with self.subTest(arm="on" if cycle else "off"):
+                obs, model = self.run_solver(lambda n, p: {"action": "read", "path": NAME, "offset": 0, "note": f"look {n}"}, cycle=cycle)
+                limit = solver.STALL_LIMIT
+                # One new file, then `limit` reads that bring nothing; without the limit this runs to the deadline.
+                self.assertEqual((obs["solver_calls"], obs["stop"], obs["check_exit"], obs["first_write_call"]),
+                                 (1 + limit, "stalled", None, None))
+                self.assertEqual(self.events[-1]["event"], "verify_stalled" if cycle else "stalled")
+                warned = [i for i, p in enumerate(model.prompts) if "calls in a row brought no new file text" in p]
+                self.assertEqual(warned, list(range(solver.STALL_WARNING + 1, limit + 1)))
+                self.assertIn(f"After {limit - solver.STALL_WARNING} more, editing ends", model.prompts[warned[0]])
 
     def test_a_check_without_a_change_is_not_run_again_and_a_return_to_earlier_content_is_not_progress(self):
         other = "def order(labels): return sorted(labels, key=str.lower)\n"
 
         def step(n, prompt):
             if n <= 3:
-                return {"action": "check", "note": "is the baseline passing?"}
-            # Then alternate between two contents the Verify has already had.
-            return {"action": "write", "path": NAME, "content": other if n % 2 == 0 else ORIGINAL, "note": "try again"}
+                return {"action": "check"}
+            # Then alternate between two contents the session has already had.
+            return {"action": "write", "path": NAME, "content": other if n % 2 == 0 else ORIGINAL}
 
-        obs, model = self.run_verify(step)
-        # The baseline check ran once (it fails: 'B' sorts before 'a' without a key); two repeats were not run.
-        self.assertEqual(self.runs.read_text(), "x")
-        checks = [e for e in self.events if e.get("action") == "check"]
-        self.assertTrue(checks[1]["result"].startswith(
-            "Not run again: no file changed since this check. Change a file if a requirement is still open, "
-            "otherwise finish. exit 1"))
-        # Call 4 writes new content (progress); every later write returns to content already seen.
-        writes = [e for e in self.events if e.get("action") == "write"]
-        self.assertEqual(len(writes), 1 + verify_activity.STALL_LIMIT)
-        self.assertEqual(obs["stop"], "stalled")
+        for cycle in (None, "cycle:C3"):
+            with self.subTest(arm="on" if cycle else "off"):
+                obs, model = self.run_solver(step, cycle=cycle)
+                # The check ran once (it fails: 'B' sorts before 'a' without a key); two repeats were not run.
+                self.assertEqual(self.runs.read_text(), "x")
+                self.assertTrue(self.tools("check")[1]["result"].startswith(
+                    "Not run again: no file changed since this check. Change a file if a requirement is still open, "
+                    "otherwise finish. exit 1"))
+                # Call 4 writes new content (progress); every later write returns to content already seen.
+                self.assertEqual(len(self.tools("write")), 1 + solver.STALL_LIMIT)
+                self.assertEqual(obs["stop"], "stalled")
 
-    def test_a_new_page_a_new_content_or_a_fresh_check_each_restart_the_count(self):
-        long = "# pad\n" * 2000 + ORIGINAL  # two pages
-        contents = iter(f"def order(labels): return sorted(labels, key=str.casefold)  # {i}\n" for i in range(99))
+    def test_a_new_file_a_new_content_or_a_new_command_result_each_restart_the_count(self):
+        contents = iter(FIXED + f"# {i}\n" for i in range(99))
+        names = iter(f"note{i}.txt" for i in range(99))
 
         def step(n, prompt):
-            kind = n % 4
             if n > 40:
-                return {"action": "finish", "note": "enough"}
+                return {"action": "finish"}
+            kind = n % 4
             if kind == 1:
-                return {"action": "read", "path": NAME, "offset": 0, "note": "page one"}
+                return {"action": "read", "path": next(names), "offset": 0}
             if kind == 2:
-                return {"action": "read", "path": NAME, "offset": 9000, "note": "page two"}
+                return {"action": "run", "command": f"echo probe {n}"}
             if kind == 3:
-                return {"action": "write", "path": NAME, "content": "# pad\n" * 2000 + next(contents), "note": "edit"}
-            return {"action": "check", "note": "check the edit"}
+                return {"action": "write", "path": NAME, "content": next(contents)}
+            return {"action": "check"}
 
-        obs, model = self.run_verify(step, source=long)
-        self.assertEqual((obs["stop"], obs["solver_calls"], obs["refused_reads"]), ("finished", 41, 0))
+        obs, model = self.run_solver(step, cycle=None, files={f"note{i}.txt": f"note {i}\n" for i in range(12)})
+        self.assertEqual((obs["stop"], obs["solver_calls"]), ("finished", 41))
         self.assertFalse(any("calls in a row" in p for p in model.prompts))
-        # Both pages of the current version are held together.
-        self.assertIn('"offset": 0', model.prompts[2])
-        self.assertIn('"offset": 9000', model.prompts[2])
 
-    def test_held_pages_stay_within_the_budget_and_an_evicted_page_is_sent_again(self):
-        long = "".join(f"line {i:06d}\n" for i in range(4500))  # 54,000 characters, six pages
-        offsets = [0, 9000, 18000, 27000, 0]
-        obs, model = self.run_verify(lambda n, p: {"action": "read", "path": NAME, "offset": offsets[n - 1], "note": "scan"}
-                                     if n <= 5 else {"action": "finish", "note": "stop"}, source=long)
-        reads = [e for e in self.events if e.get("action") == "read"]
-        # The fourth page pushed the first out, so the fifth read returns its text again.
-        self.assertEqual([e["held"] for e in reads], [False] * 5)
-        self.assertEqual(reads[4]["chars"], 9000)
-        held = json.loads(model.prompts[5].split("returns no text): ")[1].splitlines()[0])
-        self.assertEqual([p["offset"] for p in held], [18000, 27000, 0])
-        self.assertLessEqual(sum(len(p["text"]) for p in held), verify_activity.PAGE_BUDGET)
-
-    def test_the_control_arm_is_unchanged(self):
-        seen = []
-
-        def plain(prompt):  # the control's model takes no note flag
-            plain.call_id = str(len(seen))
-            seen.append(prompt)
-            return json.dumps({"action": "read", "path": NAME, "offset": 0} if len(seen) <= 3 else
-                              {"action": "write", "path": NAME, "content": ORIGINAL} if len(seen) == 4 else
-                              {"action": "check"} if len(seen) == 5 else {"action": "finish"})
-
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp).resolve()
-            (root / "app").mkdir(); (root / "project").mkdir()
-            (root / "deadline").write_text(str(time.time() + 300))
-            (root / "app" / NAME).write_text(ORIGINAL)
-            events = []
-            with patch.multiple(solver, APP=root / "app", WORK=root / "project", TASK=TASK, ask=plain), \
-                    patch.dict(solver.CHECKS, {TASK: [sys.executable, "-c", "pass"]}), \
-                    patch.object(solver, "record", side_effect=lambda **e: events.append(e)):
-                obs = solver.solve("Order labels ignoring case")
-        self.assertEqual(set(obs), {"files", "check_exit", "solver_calls", "first_write_call", "first_check_call"})
-        self.assertFalse(any('"note"' in p or "Pages you hold" in p or "GIL Verify" in p for p in seen))
-        # Every repeated read is answered with the page, as before.
-        self.assertEqual(seen[3].count(json.dumps(ORIGINAL)[1:-1]), 3)
-        self.assertFalse(any("note" in e or "held" in e for e in events))
+    def test_only_a_verify_carries_notes(self):
+        step = lambda n, p: [{"action": "read", "path": NAME, "offset": 0, "note": "sorted() has no key; add casefold next"},
+                             {"action": "write", "path": NAME, "content": FIXED, "note": "wrote the casefold key; check it"},
+                             {"action": "check", "note": "expect exit 0"},
+                             {"action": "finish", "note": "done"}][n - 1]
+        obs, model = self.run_solver(step)
+        self.assertEqual(model.flags, [{"notes": True}] * 4)
+        self.assertIn("sorted() has no key; add casefold next", model.prompts[1])
+        self.assertIn("wrote the casefold key; check it", model.prompts[3])
+        self.assertEqual((obs["notes"], obs["refused_reads"], obs["repeat_reads"]), (4, 0, 0))
+        self.assertEqual(self.tools("check")[0]["note"], "expect exit 0")
+        # The control takes no note flag, sends no note text and reports no Verify fields.
+        obs, model = self.run_solver(step, cycle=None)
+        self.assertEqual(model.flags, [{}] * 4)
+        self.assertFalse(any('"note"' in p or "GIL Verify" in p for p in model.prompts))
+        self.assertEqual(set(obs), {"files", "check_exit", "solver_calls", "first_write_call", "first_check_call", "stop"})
+        self.assertFalse(any("note" in e for e in self.events))
 
 
 if __name__ == "__main__":

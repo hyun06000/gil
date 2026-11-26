@@ -84,7 +84,7 @@ class RunEditTests(unittest.TestCase):
         self.assertIn("occurs 0 times", errors[2])
         self.assertIn("writable source path", errors[3])
         self.assertEqual((self.app / "README.md").read_text(), "not a submission file\n")
-        self.assertEqual(self.tools()[4]["result"], "written")
+        self.assertEqual(self.tools()[4]["result"], "written; the file is in view as it is now")
 
     def test_submission_files_a_command_creates_changes_or_removes_are_recorded_and_need_a_new_check(self):
         obs = self.drive([
@@ -122,7 +122,6 @@ class RunEditTests(unittest.TestCase):
         self.assertFalse(marker.exists(), "a background process outlived its command")
 
     def test_inside_a_verify_a_command_s_changes_reach_the_core_mirror_and_repeats_count_as_no_progress(self):
-        import verify_activity
         same = {"action": "run", "command": "echo same", "note": "probe"}
         obs = self.drive([
             {"action": "run", "command": "printf 'def order(labels):\\n    return sorted(labels, key=str.casefold)\\n' > fast_networkx/__init__.py",
@@ -136,7 +135,7 @@ class RunEditTests(unittest.TestCase):
         self.assertEqual(state["files"][NAME]["previous_sha256"], sha(ORIGINAL))
         # The first `echo same` is new; the following identical runs on unchanged files are not.
         self.assertEqual((obs["stop"], obs["check_exit"]), ("stalled", 0))
-        self.assertEqual(obs["solver_calls"], 3 + verify_activity.STALL_LIMIT)
+        self.assertEqual(obs["solver_calls"], 3 + solver.STALL_LIMIT)
         self.assertEqual(self.tools()[2]["command"], "echo same")
 
 
