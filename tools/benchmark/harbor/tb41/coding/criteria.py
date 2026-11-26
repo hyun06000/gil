@@ -15,13 +15,28 @@ def digest(files):
     return hashlib.sha256(json.dumps(sorted(files.items())).encode()).hexdigest()
 
 
+def obj(**properties):
+    """A strict JSON schema object: every property required, nothing else allowed."""
+    return {"type": "object", "properties": properties, "required": list(properties), "additionalProperties": False}
+
+
+TEXT = {"type": "string"}
+# The shapes the participant asks the model for; the provider holds the answer to them.
+CRITERIA = obj(criteria={"type": "array", "items": obj(
+    requirement=TEXT, kind={"type": "string", "enum": list(KINDS)}, source=TEXT, probe={"type": ["string", "null"]})})
+TARGETS = obj(targets={"type": "array", "items": TEXT})
+SET_ASIDE = obj(set_aside={"type": "array", "items": obj(id=TEXT, reason=TEXT)})
+
+
 def parse(text):
-    """Items from a model's JSON array; ValueError says what to repair."""
+    """Items from a model's answer: the criteria object, or a bare array of them."""
     body = text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
     try:
         raw = json.loads(body)
     except ValueError as error:
         raise ValueError(f"not a JSON array: {error}") from None
+    if isinstance(raw, dict):
+        raw = raw.get("criteria")
     if not isinstance(raw, list) or not raw:
         raise ValueError("expected a non-empty JSON array of criteria")
     items = []

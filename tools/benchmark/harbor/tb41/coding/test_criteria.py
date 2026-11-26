@@ -169,21 +169,36 @@ class VerifyLedgerTests(unittest.TestCase):
 
 
 class ParticipantLedgerTests(unittest.TestCase):
-    def test_a_ledger_is_derived_with_one_repair_and_given_up_after_two_bad_answers(self):
-        answers = iter(["not json", json.dumps(RAW)])
+    def test_a_ledger_is_asked_for_once_under_a_schema_and_an_unusable_answer_means_no_ledger(self):
         asked = []
+        def model(answer):
+            return lambda prompt, schema=None: asked.append((prompt, schema)) or answer
         with patch.object(participant, "cited_sources", return_value={}):
-            items = participant.derive(lambda prompt: asked.append(prompt) or next(answers), "task", "spec")
+            items = participant.derive(model(json.dumps({"criteria": RAW})), "task", "spec")
             self.assertEqual([i["id"] for i in items], ["K1", "K2", "K3", "K4"])
-            self.assertIn("could not be used (not a JSON array", asked[1])
-            self.assertIn("List first every failure case", asked[0])
-            self.assertIsNone(participant.derive(lambda prompt: "still not json", "task", "spec"))
+            self.assertEqual(asked[0][1], criteria.CRITERIA)
+            self.assertIn("List first every failure case", asked[0][0])
+            self.assertNotIn("at most", asked[0][0])
+            # Nothing is asked twice: the provider holds the shape, and what cannot be used is not a ledger.
+            self.assertIsNone(participant.derive(model("still not json"), "task", "spec"))
+            self.assertIsNone(participant.derive(model(json.dumps({"criteria": []})), "task", "spec"))
+            self.assertEqual(len(asked), 3)
+        # The schemas are strict: every property required and nothing else allowed, at every level.
+        def strict(schema):
+            if schema.get("type") == "object":
+                self.assertEqual((schema["required"], schema["additionalProperties"]), (list(schema["properties"]), False))
+                for child in schema["properties"].values():
+                    strict(child)
+            elif schema.get("type") == "array":
+                strict(schema["items"])
+        for schema in (criteria.CRITERIA, criteria.TARGETS, criteria.SET_ASIDE):
+            strict(schema)
 
     def test_the_model_chooses_the_targets_and_only_a_failed_experiment_s_reflection_sets_a_criterion_aside(self):
         entry = digest({NAME: "1"})
         asked = []
         def model(answer):
-            return lambda prompt: asked.append(prompt) or answer
+            return lambda prompt, schema=None: asked.append(prompt) or answer
         ledger = Ledger(parse(json.dumps(RAW)))
         clock = patch.object(participant, "minutes_left", return_value=41.6)
         clock.start()

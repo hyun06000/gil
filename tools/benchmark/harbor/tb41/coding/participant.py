@@ -7,15 +7,27 @@ import re
 import sys
 import time
 from pathlib import Path
-from criteria import Ledger, digest, parse
+from criteria import CRITERIA, SET_ASIDE, TARGETS, Ledger, digest, parse
 from mailbox_client import MAIL, record
-from solver import APP, CHECKS, TASK, WORK, ask, solve, source
+from solver import APP, CHECKS, PAGE, TASK, VIEW_BUDGET, WORK, ask, solve, source
+
+# No step of the Chain is counted. How long to look, how many questions to screen and how often to
+# rewrite a draft are the model's judgement; what a request can carry is the harness's page and
+# view size, shared with the editor. The one outside limit is the time the Core gives a step.
+STARTED = time.monotonic()
+
+
+def step_time_allows():
+    """Whether this step has used less of its window than it has left. Without a window, always."""
+    window = os.environ.get("GIL_BENCHMARK_STEP_SECONDS")
+    spent = time.monotonic() - STARTED
+    return not window or spent < float(window) - spent
 
 
 def cited_sources(task):
-    """Read bounded excerpts of public files explicitly named in the brief."""
+    """Read the public files explicitly named in the brief, as far as one request can carry them."""
     excerpts = {}
-    remaining = 24000
+    remaining = VIEW_BUDGET
     for match in re.finditer(r"`([^`\n]+)`|(?<![\w/])(/app/[\w./-]+)", task):
         name = (match[1] or match[2]).rstrip(".,;:")
         try:
@@ -23,7 +35,7 @@ def cited_sources(task):
             key = str(path.relative_to(APP))
             if key in excerpts or not path.is_file() or not remaining:
                 continue
-            size = min(9000, remaining)
+            size = min(PAGE, remaining)
             with path.open("rb") as handle:
                 raw = handle.read(size + 1)
             if b"\x00" in raw:
@@ -61,15 +73,11 @@ def explore(task, stage, focus, cited, reads):
             path = Path(directory, name)
             if not path.is_symlink() and path.is_file():
                 candidates.append(str(path.relative_to(APP)))
-            if len(candidates) == 120:
-                break
-        if len(candidates) == 120:
-            break
 
     # Page through a selected file; a completed file need not be offered again.
-    offsets = {r["path"]: r["offset"] + 6000 if r["more"] else None for r in reads}
-    # Keep discovery within the existing time and context window for one GIL step.
-    for _ in range(3):
+    offsets = {r["path"]: r["offset"] + PAGE if r["more"] else None for r in reads}
+    # The model reads until it judges the evidence sufficient; only the step's own time ends it sooner.
+    while step_time_allows():
         available = [name for name in candidates if offsets.get(name, 0) is not None]
         if not available:
             return
@@ -93,9 +101,9 @@ def explore(task, stage, focus, cited, reads):
         try:
             with source(name).open("rb") as handle:
                 handle.seek(start)
-                raw = handle.read(6001)
-            more = len(raw) > 6000
-            snippet = raw[:6000].decode("utf-8", errors="replace")
+                raw = handle.read(PAGE + 1)
+            more = len(raw) > PAGE
+            snippet = raw[:PAGE].decode("utf-8", errors="replace")
             if b"\x00" in raw:
                 snippet, more, readable = "[binary file]", False, False
         except (OSError, ValueError, RuntimeError) as error:
@@ -103,7 +111,7 @@ def explore(task, stage, focus, cited, reads):
         page = {"path": name, "offset": start, "result": snippet, "more": more, "readable": readable}
         record(event="tool", id=ask.call_id, action="read", interview_read=True, **page)
         reads.append(page)
-        offsets[name] = start + 6000 if more else None
+        offsets[name] = start + PAGE if more else None
 
 
 def reviewed_promotions(model, findings, new_pages, prior_texts):
@@ -148,7 +156,7 @@ def experiment_handoff(model, findings, evidence_rule):
         "A spec can authorize a trial before the hypothesis is verified. Do not claim it succeeded. "
         + evidence_rule + " Interview: " + findings)
     spec = model(instructions)
-    for attempt in range(2):
+    while True:
         review = model(
             "Review readiness to START this isolated experiment. Give a short concrete decision basis. "
             "If work can start, identify the reversible choice, first action and how to evaluate it. "
@@ -165,11 +173,11 @@ def experiment_handoff(model, findings, evidence_rule):
             "Do not require completed code or hidden verifier results to authorize a first trial. "
             + evidence_rule + " Interview: " + findings + "\nDraft: " + spec + "\nReview: " + review,
             ["start", "clarify", "rewrite"])
-        if outcome != "rewrite":
+        # A defective draft is rewritten for as long as the review asks for it and the step has time.
+        if outcome != "rewrite" or not step_time_allows():
             break
-        if attempt == 0:
-            spec = model(instructions + "\nRepair this draft using the review. Draft: " + spec
-                         + "\nReview: " + review)
+        spec = model(instructions + "\nRepair this draft using the review. Draft: " + spec
+                     + "\nReview: " + review)
     # Preserve the contract: a still-defective draft has no approval.
     return spec + "\nHandoff review (" + outcome + "): " + review, (
         "accept" if outcome == "start" else "revise")
@@ -255,8 +263,8 @@ def choose(model, ledger, entry, lesson):
         "Choose the open criteria this experiment takes on: those one coherent change can make hold. "
         "Every criterion you do not name stays open and is taken by a later experiment, so name only what "
         f"this one will do. About {minutes_left():.0f} minutes of the trial are left. "
-        'Return JSON only: {"targets": ["K1", "K4"]}. Ledger: '
-        + json.dumps(ledger.shown(entry), ensure_ascii=False) + ("\n" + lesson if lesson else ""))
+        'Answer as {"targets": ["K1", "K4"]}. Ledger: '
+        + json.dumps(ledger.shown(entry), ensure_ascii=False) + ("\n" + lesson if lesson else ""), schema=TARGETS)
     try:
         targets = [key for key in json_of(answer).get("targets") or [] if key in ledger.open(entry)]
     except (ValueError, AttributeError, TypeError):
@@ -269,22 +277,20 @@ def derive(model, task, spec):
     """Splits the public requirements into ledger items; None when the model gives nothing usable."""
     request = (
         "List the criteria an independent grader could check for this task, using only the task text and the "
-        "public files below. Return a JSON array only, of objects of the form "
-        '{"requirement": "one checkable statement", "kind": "failure" | "invariant" | "behaviour", '
-        '"source": "file: short quote", "probe": "how a shell command in the task directory could show it '
-        'holds (exit 0) or is violated (non-zero)" or null when nothing local can show it}. '
+        'public files below, as {"criteria": [...]}. Each has a requirement (one checkable statement), a kind '
+        "(failure, invariant or behaviour), a source (file: short quote) and a probe: how a shell command in "
+        "the task directory could show it holds (exit 0) or is violated (non-zero), or null when nothing "
+        "local can show it. "
         "List first every failure case the sources describe (what must happen when a write, an input or a "
         "dependency fails) as kind failure, then everything that must stay unchanged as kind invariant, then "
         "ordinary behaviour. A criterion names an observable result. Roadmap: " + spec
         + "\nPublic files named by the task: " + json.dumps(cited_sources(task), ensure_ascii=False))
-    answer = model(request)
-    for _ in range(2):
-        try:
-            return parse(answer)
-        except ValueError as error:
-            answer = model(request + "\nYour previous answer could not be used (" + str(error)
-                           + "). Return the JSON array only.")
-    return None
+    # The provider holds the answer to the schema. An answer that still cannot be used leaves the
+    # Experiment without a ledger rather than being asked for again.
+    try:
+        return parse(model(request, schema=CRITERIA))
+    except ValueError:
+        return None
 
 
 def minutes_left():
@@ -342,7 +348,7 @@ def reply(r):
     def step(kind, history=steps):
         return next(s for s in reversed(history) if s["kind"] == kind and s["report"])
 
-    def model(prompt, choices=()):
+    def model(prompt, choices=(), schema=None):
         context = {"task": task, "available_tools": {
             "read": "Read public task source", "write": "Replace permitted solution files",
             "edit": "Replace one passage of a permitted solution file",
@@ -351,8 +357,9 @@ def reply(r):
         if k in ("question", "interpretation", "synthesis"):
             context["cited_source_excerpts"] = cited
             context["interview_reads"] = reads
+        shaped = {"schema": schema} if schema else {}
         return ask(json.dumps(context, ensure_ascii=False) + "\nCurrent instruction: " + prompt,
-                   choices, stage=k)
+                   choices, stage=k, **shaped)
 
     if n["action"] == "open":
         k = n["recommended"]
@@ -367,7 +374,7 @@ def reply(r):
         reads = interview_reads()
         prior_read_count = len(reads)
         if k in ("question", "synthesis"):
-            focus = [s["report"] for s in steps if s["report"]][-2:]
+            focus = [s["report"] for s in steps if s["report"]]
             explore(task, k, focus, cited, reads)
     if k == "question":
         previous = [s["report"] for s in steps if s["kind"] in ("interpretation", "synthesis") and s["report"]]
@@ -378,7 +385,7 @@ def reply(r):
         if anchors:
             anchor = next(iter(anchors)) if len(anchors) == 1 else model(
                 "Select the observed page with a concrete fact, conflict or gap that most changes "
-                "the decision. Prior findings: " + json.dumps(previous[-2:]), list(anchors))
+                "the decision. Prior findings: " + json.dumps(previous), list(anchors))
             basis = "Observed file: " + anchor
             instruction = ("State a specific observation from this page, then ask the question it raises. "
                            "Distinguish current behavior from the requested behavior. Page: " + anchors[anchor])
@@ -389,8 +396,8 @@ def reply(r):
         prompt = (instruction + "\nPropose one unresolved question and two plausible answers with "
                   "different concrete implementation or verification consequences. Do not ask whether "
                   "to follow an explicit requirement. On revision target a remaining gap. Prior findings: "
-                  + json.dumps(previous[-2:]))
-        for attempt in range(2):
+                  + json.dumps(previous))
+        while True:
             question = model(prompt)
             disposition = model(
                 "Check the proposed question against the brief and all supplied source contents. "
@@ -412,9 +419,16 @@ def reply(r):
                             "question identify the unchanged decision or unsupported premise. Candidate: "
                             + question)
             findings.append(disposition + ": " + finding)
+            # Whether another question is worth asking is judged from what was screened so far.
+            if not step_time_allows() or model(
+                    "The candidate was screened out. Judge from the brief, the source contents and the screened "
+                    "topics whether another decision remains that is open and would change a specific "
+                    "implementation or verification action. Screened: " + json.dumps(findings),
+                    ["another question", "no open question remains"]) != "another question":
+                break
             prompt = (instruction + "\nPropose a different unresolved question with two plausible answers "
                       "and a specific different action for each. Avoid these screened topics: "
-                      + json.dumps(findings) + "\nPrevious interview findings: " + json.dumps(previous[-2:]))
+                      + json.dumps(findings) + "\nPrevious interview findings: " + json.dumps(previous))
         return close(question=basis + "\nNo decision-changing open question identified in this review.",
                      choices="Carry the evidence review into synthesis.",
                      response="\n".join(findings))
@@ -612,13 +626,14 @@ def reply(r):
             # The problem definition is doubted. If a criterion or its probe is what was wrong, the
             # reflection names it, and the next Define leaves it out.
             try:
-                wrong = json_of(model(
+                named = json_of(model(
                     "If your reflection found a criterion whose wording or probe cannot be right against its "
-                    'source, name it with the reason, as JSON only: {"K2": "reason"}. A criterion that is merely '
-                    "hard, unfinished or better done later is not wrong. Return {} when none is. Reflection: "
-                    + reflection))
-                wrong = {key: str(reason) for key, reason in wrong.items() if key in plan["targets"] or
-                         any(i["id"] == key for i in plan["criteria"])} if isinstance(wrong, dict) else {}
+                    'source, name it with the reason, as {"set_aside": [{"id": "K2", "reason": "..."}]}. A criterion '
+                    "that is merely hard, unfinished or better done later is not wrong. Leave the list empty when "
+                    "none is. Reflection: " + reflection, schema=SET_ASIDE)).get("set_aside") or []
+                known = {i["id"] for i in plan["criteria"]}
+                wrong = {entry["id"]: str(entry.get("reason") or "") for entry in named
+                         if isinstance(entry, dict) and entry.get("id") in known}
             except (ValueError, AttributeError, TypeError):
                 wrong = {}
             return close(verdict="failure", lesson=reflection + "\nSet aside: " + json.dumps(wrong, ensure_ascii=False), **fields)

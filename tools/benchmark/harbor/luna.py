@@ -86,13 +86,16 @@ class Luna:
         self.outputs = 0
         self.reserved = 0
 
-    def ask(self, messages, choices, *, editor=False, notes=False, ledger=False):
+    def ask(self, messages, choices, *, editor=False, notes=False, ledger=False, schema=None):
         # Reasoning applies to editor requests only: the other stages share the Core's 120 s turn limit.
         body = {"model": MODEL, "input": messages, "reasoning": {"effort": self.reasoning if editor else "none"},
                 "max_output_tokens": self.max_output, "store": False, "service_tier": "default"}
         if editor:
             tools = LEDGER_TOOLS if ledger else NOTED_TOOLS if notes else EDITOR_TOOLS
             body.update(tools=tools, tool_choice="required", parallel_tool_calls=False)
+        elif schema:
+            # The shape of the answer is the API's to guarantee, so nothing has to be asked twice.
+            body["text"] = {"format": {"type": "json_schema", "name": "answer", "strict": True, "schema": schema}}
         elif choices:
             body["text"] = {"format": {"type":"json_schema", "name":"selection", "strict":True,
                 "schema":{"type":"object", "properties":{"answer":{"type":"string", "enum":choices}},

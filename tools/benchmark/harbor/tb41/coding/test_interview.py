@@ -38,11 +38,13 @@ class InterviewTests(unittest.TestCase):
 
     def test_cites_public_files_only_and_marks_partial_text(self):
         (self.root / "contract.txt").write_text("a" * 9500)
+        (self.root / "large.txt").write_text("b" * (solver.PAGE + 5))
         (self.root / "outside").symlink_to(self.root.parent)
-        refs = participant.cited_sources("Use `contract.txt`, `outside`, `/etc/passwd` and `../missing`.")
-        self.assertEqual(list(refs), ["contract.txt"])
-        self.assertTrue(refs["contract.txt"]["truncated"])
-        self.assertEqual(len(refs["contract.txt"]["text"]), 9000)
+        refs = participant.cited_sources("Use `contract.txt`, `large.txt`, `outside`, `/etc/passwd` and `../missing`.")
+        self.assertEqual(list(refs), ["contract.txt", "large.txt"])
+        # A named file is carried whole; only what one request cannot carry is marked partial.
+        self.assertEqual((refs["contract.txt"]["truncated"], len(refs["contract.txt"]["text"])), (False, 9500))
+        self.assertEqual((refs["large.txt"]["truncated"], len(refs["large.txt"]["text"])), (True, solver.PAGE))
 
     def test_interview_and_revision_keep_evidence_and_gaps(self):
         (self.root / "contract.txt").write_text("Output must round trip.")
@@ -67,22 +69,22 @@ class InterviewTests(unittest.TestCase):
 
     def test_reads_unmentioned_file_and_reuses_observation_in_roadmap(self):
         import mailbox_client
-        (self.root / "codec.cpp").write_text("a" * 6000 + "END_POLICY")
+        (self.root / "codec.cpp").write_text("a" * solver.PAGE + "END_POLICY")
         with tempfile.TemporaryDirectory() as directory:
             log = Path(directory)
             with patch.object(mailbox_client, "MAIL", log), patch.object(participant, "MAIL", log):
-                with patch.object(participant, "ask", side_effect=["read codec.cpp", "read codec.cpp", "codec.cpp (byte 6000)", "Question", "open", "Answer"]) as model:
+                with patch.object(participant, "ask", side_effect=["read codec.cpp", "read codec.cpp", f"codec.cpp (byte {solver.PAGE})", "Question", "open", "Answer"]) as model:
                     model.call_id = "fixture"
                     report = participant.reply(request("question", []))["report"]
                     self.assertNotIn("continue interview", model.call_args_list[0].args[1])
-                    self.assertIn("Observed file: codec.cpp (byte 6000)", report)
+                    self.assertIn(f"Observed file: codec.cpp (byte {solver.PAGE})", report)
                     self.assertIn("END_POLICY", model.call_args_list[2].args[0])
                 reads = participant.interview_reads()
-                self.assertEqual([r["offset"] for r in reads], [0, 6000])
+                self.assertEqual([r["offset"] for r in reads], [0, solver.PAGE])
                 with patch.object(participant, "ask", side_effect=["Roadmap", "First action available", "start"]) as model:
                     participant.reply(request("synthesis", [step("question", question="Q"), step("interpretation", unresolved="Gap")]))
                     self.assertIn("END_POLICY", model.call_args_list[0].args[0])
-        self.assertEqual((self.root / "codec.cpp").read_text(), "a" * 6000 + "END_POLICY")
+        self.assertEqual((self.root / "codec.cpp").read_text(), "a" * solver.PAGE + "END_POLICY")
 
     def test_rewrite_stays_in_synthesis_and_provisional_trial_starts(self):
         replies = iter(["Cannot implement now", "No plan", "rewrite",
@@ -93,12 +95,16 @@ class InterviewTests(unittest.TestCase):
         self.assertIn("Handoff review (start)", statement)
 
     def test_unrepaired_draft_or_blocking_conflict_is_not_approved(self):
-        for replies in (["Draft", "Which conflicting output type is required?", "clarify"],
-                        ["Bad", "Missing action", "rewrite", "Bad again", "Still missing action", "rewrite"]):
+        # A draft is rewritten for as long as its review asks; here the step's time ends it after four.
+        endless = ["Bad", "Missing action", "rewrite"] + ["Bad again", "Still missing action", "rewrite"] * 4
+        for replies, time_for in ((["Draft", "Which conflicting output type is required?", "clarify"], []),
+                                  (endless, [True, True, True, True, False])):
             answers = iter(replies)
-            statement, decision = participant.experiment_handoff(lambda *args: next(answers), "Gap", "")
+            with patch.object(participant, "step_time_allows", side_effect=time_for):
+                statement, decision = participant.experiment_handoff(lambda *args: next(answers), "Gap", "")
             self.assertEqual(decision, "revise")
             self.assertIn(replies[-2], statement)
+            self.assertEqual(next(answers, None), None, "every scripted reply was asked for")
 
     def test_empty_project_question_cites_brief(self):
         with patch.object(participant, "ask", side_effect=["What output?", "open", "Unspecified"]) as model:
@@ -108,21 +114,28 @@ class InterviewTests(unittest.TestCase):
 
     def test_answered_candidate_becomes_finding(self):
         with patch.object(participant, "ask", side_effect=[
-                "Require a round trip?", "answered", "Contract section 1 requires it.",
+                "Require a round trip?", "answered", "Contract section 1 requires it.", "another question",
                 "Which representation?", "open", "Measure the two representations."]) as model:
             report = participant.reply(request("question", []))["report"]
-            self.assertIn("Contract section 1", model.call_args_list[3].args[0])
+            # Whether to ask again was the model's choice, made from what was screened.
+            self.assertEqual(model.call_args_list[3].args[1], ["another question", "no open question remains"])
+            self.assertIn("answered: Contract section 1", model.call_args_list[3].args[0])
+            self.assertIn("Contract section 1", model.call_args_list[4].args[0])
             self.assertIn("answered: Contract section 1", report)
             self.assertIn("Which representation?", report)
             self.assertNotIn("Require a round trip?", report)
 
     def test_no_open_candidate_preserves_review(self):
         with patch.object(participant, "ask", side_effect=[
-                "Candidate A", "answered", "Specified in brief.",
-                "Candidate B", "immaterial", "Equivalent actions."]):
+                "Candidate A", "answered", "Specified in brief.", "another question",
+                "Candidate B", "immaterial", "Equivalent actions.", "another question",
+                "Candidate C", "answered", "Also in the brief.", "no open question remains"]) as model:
             report = participant.reply(request("question", []))["report"]
             self.assertIn("No decision-changing open question", report)
             self.assertIn("immaterial: Equivalent actions.", report)
+            # Three candidates were screened: the review ends when the model judges none remains.
+            self.assertIn("answered: Also in the brief.", report)
+            self.assertEqual(model.call_count, 12)
 
     def test_calendar_hours_do_not_establish_rounding_direction(self):
         page = {"path": "calendar", "offset": 0, "result": "openTimeUtc=09:00"}

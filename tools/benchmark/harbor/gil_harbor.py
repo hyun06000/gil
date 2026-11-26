@@ -79,7 +79,8 @@ class LunaAgent(GilAgent):
                             answer = await asyncio.to_thread(client.ask, req["messages"], req["choices"],
                                                              editor=req.get("editor") is True,
                                                              notes=req.get("notes") is True,
-                                                             ledger=req.get("ledger") is True)
+                                                             ledger=req.get("ledger") is True,
+                                                             schema=req.get("schema"))
                             packet = {"answer": answer}
                         except BudgetReached:
                             if req.get("editor") is not True:

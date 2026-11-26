@@ -108,6 +108,17 @@ class EditorTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 client.ask([], [], editor=True, notes=True)
 
+    def test_a_request_with_a_schema_asks_the_provider_to_hold_the_answer_to_it(self):
+        schema = {"type": "object", "properties": {"targets": {"type": "array", "items": {"type": "string"}}},
+                  "required": ["targets"], "additionalProperties": False}
+        text = [{"type": "message", "content": [{"type": "output_text", "text": '{"targets": ["K1"]}'}]}]
+        result = {"status": "completed", "output": text, "usage": {"input_tokens": 3, "output_tokens": 5}}
+        with patch.dict("os.environ", {"GIL_HARBOR_API_KEY": "test"}), patch("urllib.request.urlopen", return_value=io.BytesIO(json.dumps(result).encode())) as send:
+            self.assertEqual(Luna(max_calls=None, budget=None).ask([], [], schema=schema), '{"targets": ["K1"]}')
+        body = json.loads(send.call_args.args[0].data)
+        self.assertEqual(body["text"], {"format": {"type": "json_schema", "name": "answer", "strict": True, "schema": schema}})
+        self.assertNotIn("tools", body)
+
     def test_editor_request_and_ordinary_messages(self):
         scenarios = [(True, [], [tool_call("write", path="x.ts", content="export {}")], "write"),
                      (False, [], [], "hello"), (False, ["accept"], [], "accept")]

@@ -69,7 +69,7 @@ ENTRY = {("cycle:C3", 0): BASE, ("cycle:C3", 1): BASE, ("cycle:C4", 0): GUARDED,
 calls = 0
 
 
-def model(prompt, choices=(), stage="solver", notes=False, ledger=False):
+def model(prompt, choices=(), stage="solver", notes=False, ledger=False, schema=None):
     global calls
     calls += 1
     model.call_id = ref + "-" + stage + "-" + str(calls)
@@ -84,9 +84,10 @@ def model(prompt, choices=(), stage="solver", notes=False, ledger=False):
         answer = json.dumps(SCRIPT[ref, attempt][calls - 1])
     elif stage == "define" and "List the criteria" in prompt:
         assert ref == "cycle:C3", "the ledger is derived once and inherited afterwards"
-        answer = json.dumps(LEDGER)
+        assert schema == criteria.CRITERIA
+        answer = json.dumps({"criteria": LEDGER})
     elif stage == "define":
-        assert "Choose the open criteria" in prompt
+        assert "Choose the open criteria" in prompt and schema == criteria.TARGETS
         answer = json.dumps({"targets": [ID[TARGET[ref]]]})
     elif stage == "hypothesis" and ref != "cycle:C2":
         assert "This step is text only" in prompt
