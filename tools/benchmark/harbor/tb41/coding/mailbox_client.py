@@ -8,6 +8,10 @@ DEADLINE = Path("/work/deadline")
 
 
 def record(**event):
+    if event.get("event") == "tool":
+        # The next request carries what the last call did, so the host can show it while the trial runs.
+        ask.last = {k: (v[:300] if isinstance(v, str) else v) for k, v in event.items()
+                    if k in ("action", "path", "offset", "command", "error", "result", "note")}
     with (MAIL / "transcript.jsonl").open("a") as log:
         print(json.dumps({"time": time.time(), **event}, ensure_ascii=False), file=log)
 
@@ -24,7 +28,8 @@ def ask(prompt, choices=(), stage="solver", notes=False):
     record(event="request", id=ask.call_id, stage=stage,
            **({"messages": messages} if stage == "hypothesis" else {}))
     draft = MAIL / "request.tmp"
-    draft.write_text(json.dumps({"messages": messages, "choices": choices, "editor": stage == "solver", "notes": notes}))
+    draft.write_text(json.dumps({"messages": messages, "choices": choices, "editor": stage == "solver", "notes": notes,
+                                 "stage": stage, "last": getattr(ask, "last", None)}))
     draft.replace(MAIL / "request.json")
     reply = MAIL / "reply.json"
     until = time.monotonic() + 300

@@ -49,6 +49,9 @@ class LunaAgent(GilAgent):
         from luna import Luna
         return Luna()
 
+    def live(self, request, answer, client):
+        """Called on the host after every model reply; a trial may show or keep it as it happens."""
+
     async def execute(self, environment, context):
         client = self.model_client()
         worker = asyncio.create_task(self.run_worker(environment))
@@ -67,6 +70,7 @@ class LunaAgent(GilAgent):
                         answer = await asyncio.to_thread(client.ask, req["messages"], req["choices"],
                                                          editor=req.get("editor") is True,
                                                          notes=req.get("notes") is True)
+                        self.live(req, answer, client)
                         reply.write_text(json.dumps({"answer":answer}))
                         await environment.upload_file(reply, "/work/model/reply.tmp")
                         published = await environment.exec("chmod 644 /work/model/reply.tmp && mv /work/model/reply.tmp /work/model/reply.json", user="root")

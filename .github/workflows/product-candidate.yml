@@ -602,5 +602,6 @@ jobs:
             ${{ runner.temp }}/tb41-${{ matrix.arm }}/transcript.jsonl
             ${{ runner.temp }}/tb41-${{ matrix.arm }}/transcript.html
             ${{ runner.temp }}/tb41-${{ matrix.arm }}/gil-interrupted.tgz
+            ${{ runner.temp }}/tb41-${{ matrix.arm }}/pair/*/agent/live.jsonl
           if-no-files-found: warn
           retention-days: 7
