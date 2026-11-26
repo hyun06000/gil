@@ -9,10 +9,9 @@ if transcript.is_file():
     from transcript_view import render
     shutil.copyfile(transcript, root / "transcript.jsonl")
     render(root)
-for name in ("gil-interrupted.tgz", "gil-cycles.tgz", "gil-result.json"):
-    artifact = folder / "agent" / name
-    if artifact.is_file():
-        shutil.copyfile(artifact, root / name)
+interruption = folder / "agent/gil-interrupted.tgz"
+if interruption.is_file():
+    shutil.copyfile(interruption, root / interruption.name)
 
 def load(path):
     f=folder/path
@@ -27,6 +26,8 @@ for name,digest in files.items():
     receipts[name]=f.is_file() and hashlib.sha256(f.read_bytes()).hexdigest()==digest
 error=(d.get("exception_info") or {}).get("exception_type")
 r={"task":task,"arm":arm,"usage":u,"observation":obs,"receipts":receipts,"checks":{c["name"]:c["status"] for c in checks},"seconds":t,"rewards":(d.get("verifier_result") or {}).get("rewards"),"error":error}
+if arm == "on":
+    r["gil"] = load("agent/gil-result.json")
 if error:
     message = str(d["exception_info"].get("exception_message", ""))
     if message.startswith("Luna API HTTP "):
