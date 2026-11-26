@@ -7,8 +7,12 @@ import sys
 
 def render(root):
     calls = {}
+    transitions = []
     for line in (root / "transcript.jsonl").read_text().splitlines():
         event = json.loads(line)
+        if event["event"] in ("verify_plan", "cycle_restore_started", "cycle_restore_completed"):
+            transitions.append(event)
+            continue
         calls.setdefault(event["id"], {})[event["event"]] = event
 
     rows = []
@@ -31,6 +35,10 @@ def render(root):
         if tool:
             rows.append(f"<h3>도구 결과</h3><pre>{html.escape(result)}</pre>")
         rows.append("</details>")
+
+    for event in transitions:
+        rows.append("<details><summary>" + html.escape(event["event"]) + "</summary><pre>"
+                    + html.escape(json.dumps(event, ensure_ascii=False, indent=2)) + "</pre></details>")
 
     head = """<!doctype html><html lang="ko"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">

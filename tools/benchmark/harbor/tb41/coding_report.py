@@ -8,7 +8,6 @@ transcript = folder / "agent/transcript.jsonl"
 if transcript.is_file():
     from transcript_view import render
     shutil.copyfile(transcript, root / "transcript.jsonl")
-    render(root)
 interruption = folder / "agent/gil-interrupted.tgz"
 if interruption.is_file():
     shutil.copyfile(interruption, root / interruption.name)
@@ -34,6 +33,8 @@ if error:
         r["model_error"] = message[:500]
 (root/(arm+".json")).write_text(json.dumps(r,indent=2))
 print(json.dumps(r),flush=True)
+if transcript.is_file():
+    render(root)
 if error:
     print(str(d["exception_info"].get("exception_message",""))[-2000:],flush=True)
 if error or not r["rewards"] or not receipts or not all(receipts.values()): sys.exit(1)
