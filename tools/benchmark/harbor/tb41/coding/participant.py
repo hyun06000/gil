@@ -138,6 +138,41 @@ def reviewed_promotions(model, findings, new_pages, prior_texts):
     return approved
 
 
+def experiment_handoff(model, findings, evidence_rule):
+    instructions = (
+        "Write a prospective experiment plan. Implementation and execution happen later in Verify. "
+        "State the deliverable, binding constraints, reversible working assumption, first available "
+        "action, what observation could disprove the assumption, and what is deferred to grading. "
+        "A spec can authorize a trial before the hypothesis is verified. Do not claim it succeeded. "
+        + evidence_rule + " Interview: " + findings)
+    spec = model(instructions)
+    for attempt in range(2):
+        review = model(
+            "Review readiness to START this isolated experiment. Give a short concrete decision basis. "
+            "If work can start, identify the reversible choice, first action and how to evaluate it. "
+            "Hidden grading details and unresolved method choices can remain provisional. If work "
+            "cannot start, name the conflicting requirements or missing input and one specific "
+            "interview question that could resolve it. A draft that asks to implement now, asserts "
+            "unsupported facts or contains no plan needs rewriting here. "
+            + evidence_rule + " Interview: " + findings + "\nDraft: " + spec)
+        outcome = model(
+            "Classify readiness. start = feasible first action consistent with known constraints, "
+            "with unresolved choices explicitly provisional. clarify = missing input or conflicting "
+            "requirement prevents any valid reversible first action AND another interview question "
+            "can resolve it. rewrite = a defective draft that can be fixed with existing information. "
+            "Do not require completed code or hidden verifier results to authorize a first trial. "
+            + evidence_rule + " Interview: " + findings + "\nDraft: " + spec + "\nReview: " + review,
+            ["start", "clarify", "rewrite"])
+        if outcome != "rewrite":
+            break
+        if attempt == 0:
+            spec = model(instructions + "\nRepair this draft using the review. Draft: " + spec
+                         + "\nReview: " + review)
+    # Preserve the contract: a still-defective draft has no approval.
+    return spec + "\nHandoff review (" + outcome + "): " + review, (
+        "accept" if outcome == "start" else "revise")
+
+
 def close(**fields):
     def field(k, v):
         return k + ": |\n" + "".join("  " + line + "\n" for line in str(v).splitlines())
@@ -247,17 +282,7 @@ def reply(r):
         evidence_rule = ("Every prior open decision or provisional choice stays provisional except "
                          "these individually verified promotions: " + json.dumps(promotions)
                          + ". A working choice may be used with a named future check. ")
-        spec = model(
-            evidence_rule + "Build an ordered roadmap from the interview. For each material acceptance criterion give "
-            "its source, observable result, and evidence available locally or deferred to the verifier. "
-            "Keep open assumptions explicit and name the first action that can resolve each. Interview: " + findings
-        )
-        decision = model(
-            evidence_rule + "Reject any unsupported change of status. Review the roadmap against the interview, cited evidence, and actual tools. Revise if it "
-            "contradicts a source, drops an uncertainty, or promises unavailable local verification. "
-            "Explicitly deferred verification is acceptable. Interview: " + findings + "\nRoadmap: " + spec,
-            ["accept", "revise"]
-        )
+        spec, decision = experiment_handoff(model, findings, evidence_rule)
         return close(
             statement=spec + "\nEvidence accepted for changes of status: " + json.dumps(promotions),
             basis_refs=q["ref"] + "\n" + i["ref"],

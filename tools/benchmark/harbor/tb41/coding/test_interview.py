@@ -54,7 +54,7 @@ class InterviewTests(unittest.TestCase):
             self.assertIn("Output must round trip.", prompt)
             self.assertIn("g++", prompt)
         i = step("interpretation", interpretation="Round trip required", unresolved="Round trip untested")
-        with patch.object(participant, "ask", side_effect=["continue interview", "Draft roadmap", "revise"]) as model:
+        with patch.object(participant, "ask", side_effect=["continue interview", "Draft roadmap", "Missing required codec mode.", "clarify"]) as model:
             report = participant.reply(request("synthesis", [q, i]))["report"]
             self.assertIn("benchmark_revise", report)
             self.assertTrue(all("Round trip untested" in c.args[0] for c in model.call_args_list[1:]))
@@ -79,10 +79,26 @@ class InterviewTests(unittest.TestCase):
                     self.assertIn("END_POLICY", model.call_args_list[2].args[0])
                 reads = participant.interview_reads()
                 self.assertEqual([r["offset"] for r in reads], [0, 6000])
-                with patch.object(participant, "ask", side_effect=["Roadmap", "accept"]) as model:
+                with patch.object(participant, "ask", side_effect=["Roadmap", "First action available", "start"]) as model:
                     participant.reply(request("synthesis", [step("question", question="Q"), step("interpretation", unresolved="Gap")]))
                     self.assertIn("END_POLICY", model.call_args_list[0].args[0])
         self.assertEqual((self.root / "codec.cpp").read_text(), "a" * 6000 + "END_POLICY")
+
+    def test_rewrite_stays_in_synthesis_and_provisional_trial_starts(self):
+        replies = iter(["Cannot implement now", "No plan", "rewrite",
+                        "Try a reversible mesh size and compare refinement", "Can start", "start"])
+        statement, decision = participant.experiment_handoff(lambda *args: next(replies), "Unknown mesh", "")
+        self.assertEqual(decision, "accept")
+        self.assertIn("reversible mesh", statement)
+        self.assertIn("Handoff review (start)", statement)
+
+    def test_unrepaired_draft_or_blocking_conflict_is_not_approved(self):
+        for replies in (["Draft", "Which conflicting output type is required?", "clarify"],
+                        ["Bad", "Missing action", "rewrite", "Bad again", "Still missing action", "rewrite"]):
+            answers = iter(replies)
+            statement, decision = participant.experiment_handoff(lambda *args: next(answers), "Gap", "")
+            self.assertEqual(decision, "revise")
+            self.assertIn(replies[-2], statement)
 
     def test_empty_project_question_cites_brief(self):
         with patch.object(participant, "ask", side_effect=["What output?", "open", "Unspecified"]) as model:
