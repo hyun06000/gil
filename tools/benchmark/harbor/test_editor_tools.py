@@ -80,7 +80,7 @@ class EditorTests(unittest.TestCase):
                     self.assertIn(owner, ("CodeAgent", "SoundChangeAgent"), f"{cls.__name__}.{method} fell back to {owner}")
             client = CodeAgent().model_client()
             self.assertEqual((client.budget, client.max_calls, client.reasoning, client.max_output, client.overrun, client.timeout, client.stage_timeout),
-                             (5_000_000, None, "medium", 16000, 0.2, 180, 45))
+                             (5_000_000, None, "medium", 16000, 0.2, 180, 100))
             with patch.dict("os.environ", {"TB_BUDGET_USD": "0.75"}):
                 self.assertEqual(CodeAgent().model_client().budget, 750_000)
             for refused in ("0", "9", "-1"):
@@ -90,6 +90,23 @@ class EditorTests(unittest.TestCase):
             with patch("urllib.request.urlopen") as send, self.assertRaisesRegex(RuntimeError, "limit"):
                 client.ask([{"role": "user", "content": "x"}], [], editor=True)
             send.assert_not_called()
+
+    def test_only_a_ledger_request_names_a_criterion_and_only_on_run(self):
+        from luna import EDITOR_TOOLS, LEDGER_TOOLS, NOTED_TOOLS
+        names = lambda tools: {t["name"]: list(t["parameters"]["properties"]) for t in tools}
+        self.assertEqual(names(LEDGER_TOOLS)["run"], ["command", "note", "criterion"])
+        self.assertEqual({k: v for k, v in names(LEDGER_TOOLS).items() if k != "run"},
+                         {k: v for k, v in names(NOTED_TOOLS).items() if k != "run"})
+        self.assertFalse(any("criterion" in v for v in list(names(NOTED_TOOLS).values()) + list(names(EDITOR_TOOLS).values())))
+        probe = [tool_call("run", command="make test", note="probe", criterion="K3")]
+        result = {"status": "completed", "output": probe, "usage": {"input_tokens": 3, "output_tokens": 5}}
+        with patch.dict("os.environ", {"GIL_HARBOR_API_KEY": "test"}), patch("urllib.request.urlopen", side_effect=lambda *a, **k: io.BytesIO(json.dumps(result).encode())) as send:
+            client = Luna(max_calls=None, budget=None)
+            self.assertEqual(json.loads(client.ask([], [], editor=True, notes=True, ledger=True))["criterion"], "K3")
+            self.assertEqual(json.loads(send.call_args.args[0].data)["tools"], LEDGER_TOOLS)
+            # The same reply is not a valid call where no ledger was offered.
+            with self.assertRaises(ValueError):
+                client.ask([], [], editor=True, notes=True)
 
     def test_editor_request_and_ordinary_messages(self):
         scenarios = [(True, [], [tool_call("write", path="x.ts", content="export {}")], "write"),

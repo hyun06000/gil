@@ -14,6 +14,7 @@ WORK = Path("/work/project")
 APP = Path("/app")
 TASK = os.environ["TB_TASK"]
 RUN_SECONDS = 100
+SWEEP_SECONDS = 240     # for running every stored probe again when a Verify ends
 # What one request can show. The model sees every file it has read, whole and current, instead of
 # the last few pages: a task that needs its specification and its own code side by side fits.
 PAGE = 60000            # characters of one file per read
@@ -60,6 +61,11 @@ def source(name, write=False):
                              f"Only these are graded and writable: {WRITABLE[TASK]}. Choose a writable source path "
                              "or solve it inside those files.")
     return path
+
+
+def snapshot_of(files):
+    """The hashes of the named submission files as they are on disk now (absent files left out)."""
+    return {name: hashlib.sha256((APP / name).read_bytes()).hexdigest() for name in files if (APP / name).is_file()}
 
 
 def snapshot():
@@ -190,7 +196,34 @@ def recent(history):
     return kept[::-1]
 
 
-def solve(task,plan="", *, cycle=None, baseline=None, verify_ref=None, failed_check=None):
+def run_command(command, limit):
+    """Runs a shell command in the task directory; nothing it starts outlives it."""
+    proc = subprocess.Popen(["sh", "-c", command], cwd=APP, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, start_new_session=True)
+    try:
+        output, _ = proc.communicate(timeout=limit)
+        code = proc.returncode
+    except subprocess.TimeoutExpired:
+        os.killpg(proc.pid, signal.SIGKILL)
+        output, _ = proc.communicate()
+        code = f"none, stopped after {limit} s"
+    else:
+        try: os.killpg(proc.pid, signal.SIGKILL)
+        except OSError: pass
+    return code, output.decode(errors="replace")
+
+
+LEDGER_RULES = (
+    "\nCriteria ledger of this Chain. A criterion holds only when a command run with its id exits 0 on the files "
+    "as they are now. Write each probe so that it exits non-zero when the requirement is violated: assert the "
+    "observable result; for something that must not change, compare its bytes before and after; for a failure "
+    "case, first create the failing condition (for example a path that cannot be written) and assert what must "
+    "remain. Keep probe scripts under /tmp. Changing a submission file makes earlier results stale, and every "
+    "stored probe is run again on the final files when this step ends. This experiment succeeds when its targets "
+    "hold and nothing that held before is broken; the other open criteria are for later experiments.")
+
+
+def solve(task,plan="", *, cycle=None, baseline=None, verify_ref=None, failed_check=None, criteria=None, targets=()):
     public=[]
     for directory,children,files in os.walk(APP):
         children[:]=[v for v in children if v not in ("node_modules",".git","__pycache__","build","dist")]
@@ -213,6 +246,11 @@ def solve(task,plan="", *, cycle=None, baseline=None, verify_ref=None, failed_ch
         record(event="verify_plan", cycle=cycle, plan=plan)
         if baseline:
             writes.update(baseline["files"])
+    ledger = None
+    if cycle and criteria:
+        from criteria import Ledger, digest as submission
+        ledger = Ledger(criteria)
+    closing = False
     check_output = ""
     original_hashes = {}
     regression = False
@@ -252,9 +290,12 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                    "carries over, so put any conclusion you want to keep in the note.")
         if notes:
             prompt += "\nYour notes so far, oldest first: " + json.dumps(notes[-NOTES_KEPT:], ensure_ascii=False)
+        if ledger:
+            prompt += (LEDGER_RULES + f"\nTargets of this experiment: {list(targets)}\n"
+                       + json.dumps(ledger.shown(submission(writes), targets), ensure_ascii=False))
         if activity:
             prompt += activity.prompt(CHECKS[TASK], checked, stall.count)
-        answer=ask(prompt, notes=True); calls+=1
+        answer=ask(prompt, notes=True, ledger=True) if ledger else ask(prompt, notes=True); calls+=1
         obj = {}
         try:
             obj=json.loads(answer.strip().removeprefix("```json").removeprefix("```").removesuffix("```"))
@@ -329,19 +370,10 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                 if checkpoint:
                     for name in before:
                         checkpoint.before_write(APP / name)
-                proc = subprocess.Popen(["sh", "-c", command], cwd=APP, stdout=subprocess.PIPE,
-                                        stderr=subprocess.STDOUT, start_new_session=True)
-                try:
-                    output, _ = proc.communicate(timeout=RUN_SECONDS)
-                    code = proc.returncode
-                except subprocess.TimeoutExpired:
-                    os.killpg(proc.pid, signal.SIGKILL)
-                    output, _ = proc.communicate()
-                    code = f"none, stopped after {RUN_SECONDS} s"
-                else:
-                    # Nothing the command left in the background outlives it.
-                    try: os.killpg(proc.pid, signal.SIGKILL)
-                    except OSError: pass
+                criterion = (obj.get("criterion") or "").strip() if ledger else ""
+                if criterion and criterion not in ledger.items:
+                    raise ValueError(f"{criterion} is not a criterion of the ledger; use one of {list(ledger.items)} or leave it empty")
+                code, output = run_command(command, RUN_SECONDS)
                 after = snapshot()
                 changed = sorted(n for n in before.keys() | after.keys() if before.get(n) != after.get(n))
                 for name in changed:
@@ -367,7 +399,12 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                     check_output = ""
                     if first_write is None:
                         first_write = calls
-                response = f"exit {code}: " + output.decode(errors="replace")[-OUTPUT_LIMIT:]
+                response = f"exit {code}: " + output[-OUTPUT_LIMIT:]
+                if criterion:
+                    held = ledger.record(criterion, command, code, output, submission(writes))
+                    response = f"criterion {criterion} {held} on the current files. " + response
+                    activity_event["criterion"] = criterion
+                    record(event="probe", id=ask.call_id, cycle=cycle, criterion=criterion, status=held, exit=code)
                 if changed:
                     response += f"\nSubmission files changed by this command: {changed}"
                 activity_event["command"] = command
@@ -409,6 +446,11 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                         checked = None
                         response = last_failure
             elif action=="finish" and writes and checked is not None:
+                waiting = [key for key in targets if ledger and ledger.status(key, submission(writes)) != "holds"]
+                if waiting and not closing:
+                    closing = True
+                    raise ValueError(f"Targets not holding on the current files: {waiting}. Run their probes or fix what "
+                                     "they show. Calling finish again closes this experiment with them open.")
                 record(event="tool", id=ask.call_id, action=action, result="finished")
                 stop = "finished"
                 break
@@ -431,6 +473,25 @@ If a local check fails, use its output to fix the source. No remote tools or pri
             record(event="verify_stalled" if cycle else "stalled", id=ask.call_id, cycle=cycle, calls=stall.count)
             stop = "stalled"
             break
+    if ledger:
+        # The final files are what counts: the local check and every stored probe are run on them
+        # again, without the model.
+        if checked is None and writes:
+            proc = subprocess.run(CHECKS[TASK], cwd=APP, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=100)
+            checked = proc.returncode
+            check_output = f"exit {checked}: " + proc.stdout.decode(errors="replace")[-OUTPUT_LIMIT:]
+        current, started, swept = submission(writes), time.time(), []
+        for key, item in ledger.items.items():
+            if not item["command"] or (item["digest"] == current and item["status"] in ("holds", "fails")):
+                continue
+            if time.time() - started > SWEEP_SECONDS:
+                break
+            before = ledger.status(key, current)
+            code, output = run_command(item["command"], 60)
+            swept.append({"criterion": key, "before": before, "after": ledger.record(key, item["command"], code, output, current)})
+        if submission(snapshot_of(writes)) != current:
+            raise RuntimeError("A probe changed the submission during the final sweep")
+        record(event="probe_sweep", cycle=cycle, results=swept)
     obs={"files":writes,"check_exit":checked,"solver_calls":calls,
          "first_write_call":first_write,"first_check_call":first_check,"stop":stop,"notes":len(notes)}
     if cycle:
@@ -438,6 +499,10 @@ If a local check fails, use its output to fix the source. No remote tools or pri
         obs.update(repeat_reads=activity.repeats, cycle=cycle, check_command=CHECKS[TASK], check_output=check_output,
                    regression=regression, local_baseline=not baseline and checked == 0 and bool(writes),
                    refused_reads=activity.refused)
+    if ledger:
+        current = submission(writes)
+        obs.update(criteria=ledger.json(), targets=list(targets), submission_digest=current,
+                   ledger=ledger.counts(current), swept=swept)
     if checkpoint:
         obs["verified_checkpoint_restores"] = recoveries
     (WORK/"observation.json").write_text(json.dumps(obs))

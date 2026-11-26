@@ -16,7 +16,7 @@ def record(**event):
         print(json.dumps({"time": time.time(), **event}, ensure_ascii=False), file=log)
 
 
-def ask(prompt, choices=(), stage="solver", notes=False):
+def ask(prompt, choices=(), stage="solver", notes=False, ledger=False):
     ask.call_id = uuid.uuid4().hex
     messages = [
         {
@@ -28,12 +28,12 @@ def ask(prompt, choices=(), stage="solver", notes=False):
     record(event="request", id=ask.call_id, stage=stage,
            **({"messages": messages} if stage == "hypothesis" else {}))
     draft = MAIL / "request.tmp"
-    draft.write_text(json.dumps({"messages": messages, "choices": choices, "editor": stage == "solver", "notes": notes,
+    draft.write_text(json.dumps({"messages": messages, "choices": choices, "editor": stage == "solver", "notes": notes, "ledger": ledger,
                                  "stage": stage, "last": getattr(ask, "last", None)}))
     draft.replace(MAIL / "request.json")
     reply = MAIL / "reply.json"
     # Longer than the host can take: three tries of 180 s with 25 s of waits for the editor, two of 45 s otherwise.
-    until = time.monotonic() + (600 if stage == "solver" else 110)
+    until = time.monotonic() + (600 if stage == "solver" else 230)
     while not reply.exists():
         if time.monotonic() > until:
             raise TimeoutError("Model relay timed out")

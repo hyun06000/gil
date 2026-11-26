@@ -10,8 +10,8 @@ HERE = Path(__file__).resolve().parent
 
 
 class LoggedLuna(Luna):
-    def ask(self, messages, choices, *, editor=False, notes=False):
-        result = super().ask(messages, choices, editor=editor, notes=notes)
+    def ask(self, messages, choices, *, editor=False, notes=False, ledger=False):
+        result = super().ask(messages, choices, editor=editor, notes=notes, ledger=ledger)
         print(
             f"[{os.environ['TB_ARM']}] Luna call {self.calls} | input {self.inputs} | output {self.outputs} | estimated USD {self.usage()['estimated_usd']:.5f}",
             flush=True,
@@ -83,4 +83,4 @@ def coding_client():
         raise ValueError("TB_BUDGET_USD must be above 0 and at most 5")
     # The client counts in millionths of a dollar.
     return LoggedLuna(max_calls=None, budget=round(budget * 1_000_000), max_output=16000, reasoning="medium", timeout=180,
-                      overrun=0.2, stage_timeout=45)
+                      overrun=0.2, stage_timeout=100)

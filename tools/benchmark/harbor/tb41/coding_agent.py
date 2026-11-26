@@ -40,7 +40,7 @@ class CodeAgent(SoundChangeAgent):
             raise ValueError("Unknown coding benchmark arm")
         modules = ["solver.py", "mailbox_client.py"]
         if arm == "on":
-            modules.extend(["participant.py", "checkpoint.py", "verify_activity.py"])
+            modules.extend(["participant.py", "checkpoint.py", "verify_activity.py", "criteria.py"])
         for name in modules:
             await environment.upload_file(HERE/"coding"/name,"/case/"+name)
         if task == "vf2-speedup-networkx":
@@ -51,7 +51,8 @@ class CodeAgent(SoundChangeAgent):
         else:
             status = await environment.exec(
                 "! command -v gil && test ! -e /case/gil && test ! -e /case/participant.py "
-                "&& test ! -e /case/checkpoint.py && test ! -e /case/verify_activity.py && test ! -e /work/record",
+                "&& test ! -e /case/checkpoint.py && test ! -e /case/verify_activity.py && test ! -e /case/criteria.py "
+                "&& test ! -e /work/record",
                 user="65534",
             )
             if status.return_code:

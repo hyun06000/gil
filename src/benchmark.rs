@@ -59,18 +59,20 @@ impl Adapter {
         let input = self.records.join("request.json");
         serde_json::to_writer(File::create(&input)?, &request)?;
         // A regular input file prevents a writer/reader deadlock with a child that writes first.
-        // Long-running experiments may select a larger Verify window in their isolated harness.
-        let seconds = if next["workspace_writes"] == true {
-            std::env::var("GIL_BENCHMARK_VERIFY_SECONDS")
-                .ok()
-                .map(|value| value.parse::<u32>())
-                .transpose()?
-                .unwrap_or(120)
+        // Long-running experiments may select a larger window in their isolated harness: one for
+        // Verify, one for the steps that write no file.
+        let window = if next["workspace_writes"] == true {
+            "GIL_BENCHMARK_VERIFY_SECONDS"
         } else {
-            120
+            "GIL_BENCHMARK_STEP_SECONDS"
         };
+        let seconds = std::env::var(window)
+            .ok()
+            .map(|value| value.parse::<u32>())
+            .transpose()?
+            .unwrap_or(120);
         if seconds == 0 {
-            return Err("Verify timeout must be positive".into());
+            return Err("the step timeout must be positive".into());
         }
         let mut child = Command::new(&self.timeout)
             .arg("--kill-after=5s")
@@ -239,18 +241,28 @@ fn drive(session: &mut ProjectSession, adapter: &Adapter, recovery: bool) -> Res
         if cycle.is_closed() {
             if cycle.kind() == CycleKind::Experiment {
                 let report = cycle.report().ok_or("closed Experiment has no Report")?;
+                // A successful Experiment is the parent of the next one when the adapter says work
+                // remains: a first checked submission, or criteria of its ledger still open.
                 if recovery
                     && report.get("verdict") == Some("success")
-                    && report.get("benchmark_transition") == Some("verified_local_baseline")
+                    && matches!(
+                        report.get("benchmark_transition"),
+                        Some("verified_local_baseline" | "criteria_open")
+                    )
                 {
                     session.open_child_cycle(CycleKind::Experiment)?;
                     session.commit()?;
                     turns = 0;
                     continue;
                 }
+                // A failed Experiment has no child. The run goes back to the world its report names
+                // and branches from there: after a local regression, or when it gained no criterion.
                 if recovery
                     && report.get("verdict") == Some("failure")
-                    && report.get("benchmark_transition") == Some("observed_regression")
+                    && matches!(
+                        report.get("benchmark_transition"),
+                        Some("observed_regression" | "criteria_failed")
+                    )
                 {
                     let moved = session.revisit_cycle()?.moved;
                     let project = json!({"action":"project", "failed":moved.from.to_string(),
@@ -465,6 +477,75 @@ mod tests {
         assert_eq!(change["restored"], hashes(1));
         assert_ne!(hashes(3), hashes(1));
         assert_ne!(hashes(3), hashes(2));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_criteria_ledger_chain_continues_after_success_and_branches_from_the_parent_after_failure() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(format!("tb41-criteria-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let workspace = root.join("project");
+        let records = root.join("records");
+        for dir in [&workspace, &records, &root.join("app")] {
+            fs::create_dir(dir).unwrap();
+        }
+        let timeout = root.join("launch");
+        fs::write(&timeout, "#!/bin/sh\nshift 2\nexec \"$@\"\n").unwrap();
+        fs::set_permissions(&timeout, fs::Permissions::from_mode(0o755)).unwrap();
+        let adapter = Adapter {
+            executable: Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tools/benchmark/harbor/tb41/coding/fixture_criteria.py"),
+            timeout,
+            records: records.clone(),
+            workspace: workspace.clone(),
+            task: "Order labels ignoring case. Keep duplicates. Leave the input unchanged. Refuse a value that is not a list."
+                .into(),
+        };
+        let mut session = ProjectSession::start_at(
+            RuleSet::benchmark(),
+            &workspace,
+            records.join(".gil/benchmark.yaml"),
+        )
+        .unwrap();
+        session.commit().unwrap();
+        let result = drive(&mut session, &adapter, true).unwrap();
+        let cycles = result["history"].as_array().unwrap();
+        let verdicts: Vec<_> = cycles[1..]
+            .iter()
+            .map(|c| c["report"]["verdict"].as_str().unwrap())
+            .collect();
+        // C2 first submission, C3 gains a criterion, C4 breaks it, C5 branches from C3, C6 finishes.
+        assert_eq!(verdicts, ["success", "success", "failure", "success", "success"]);
+        assert_eq!(cycles[3]["parent"], cycles[2]["ref"]);
+        assert_eq!(cycles[4]["parent"], cycles[2]["ref"]);
+        assert_eq!(cycles[4]["revisit_from"], cycles[3]["ref"]);
+        assert_eq!(cycles[5]["parent"], cycles[4]["ref"]);
+        assert!(cycles[5]["revisit_from"].is_null());
+        assert_eq!(result["verdict"], "success");
+        let observed = |index: usize| -> Value {
+            let verify = cycles[index]["steps"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|s| s["kind"] == "verify")
+                .unwrap();
+            serde_json::from_str(verify["report"]["result"].as_str().unwrap()).unwrap()
+        };
+        // The abandoned Experiment's own probe held; the sweep of the stored probes found the break.
+        let lost = observed(3);
+        assert_eq!(lost["swept"][0]["before"], "stale");
+        assert_eq!(lost["swept"][0]["after"], "fails");
+        assert_eq!(lost["ledger"]["fails"], 1);
+        // The branch starts from the parent's bytes and ends with every criterion holding on one submission.
+        assert_eq!(observed(4)["files"], observed(2)["files"]);
+        assert_ne!(lost["files"], observed(2)["files"]);
+        let last = observed(5);
+        assert_eq!(last["ledger"], json!({"holds": 3}));
+        assert_eq!(last["submission_digest"], observed(2)["submission_digest"]);
+        let log = fs::read_to_string(root.join("transcript.jsonl")).unwrap();
+        assert!(log.contains("cycle_restore_completed"));
         fs::remove_dir_all(root).unwrap();
     }
 

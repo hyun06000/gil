@@ -41,6 +41,11 @@ EDITOR_TOOLS = [
 NOTE = {"note": {"type": "string", "description":
                  "What the material in this request settled and what you do next (one or two sentences)."}}
 NOTED_TOOLS = [editor_tool(t["name"], t["description"], {**t["parameters"]["properties"], **NOTE}) for t in EDITOR_TOOLS]
+# A GIL Verify with a criteria ledger says which criterion a command probes.
+CRITERION = {"criterion": {"type": "string", "description":
+                           "Id of the criterion this command probes, such as K3; an empty string when it is not a probe."}}
+LEDGER_TOOLS = [editor_tool(t["name"], t["description"], {**t["parameters"]["properties"], **CRITERION})
+                if t["name"] == "run" else t for t in NOTED_TOOLS]
 
 
 def editor_answer(output, tools=EDITOR_TOOLS):
@@ -81,12 +86,13 @@ class Luna:
         self.outputs = 0
         self.reserved = 0
 
-    def ask(self, messages, choices, *, editor=False, notes=False):
+    def ask(self, messages, choices, *, editor=False, notes=False, ledger=False):
         # Reasoning applies to editor requests only: the other stages share the Core's 120 s turn limit.
         body = {"model": MODEL, "input": messages, "reasoning": {"effort": self.reasoning if editor else "none"},
                 "max_output_tokens": self.max_output, "store": False, "service_tier": "default"}
         if editor:
-            body.update(tools=NOTED_TOOLS if notes else EDITOR_TOOLS, tool_choice="required", parallel_tool_calls=False)
+            tools = LEDGER_TOOLS if ledger else NOTED_TOOLS if notes else EDITOR_TOOLS
+            body.update(tools=tools, tool_choice="required", parallel_tool_calls=False)
         elif choices:
             body["text"] = {"format": {"type":"json_schema", "name":"selection", "strict":True,
                 "schema":{"type":"object", "properties":{"answer":{"type":"string", "enum":choices}},
@@ -138,7 +144,7 @@ class Luna:
         if result["status"] != "completed":
             raise RuntimeError(f"Luna response status {result['status']}")
         if editor:
-            return editor_answer(result["output"], NOTED_TOOLS if notes else EDITOR_TOOLS)
+            return editor_answer(result["output"], tools)
         answer = "".join(part["text"] for item in result["output"] if item["type"] == "message"
                          for part in item["content"] if part["type"] == "output_text").strip()
         if choices:

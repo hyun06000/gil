@@ -5,7 +5,9 @@ import json
 import os
 import re
 import sys
+import time
 from pathlib import Path
+from criteria import LIMIT, Ledger, digest, parse
 from mailbox_client import MAIL, record
 from solver import APP, CHECKS, TASK, WORK, ask, solve, source
 
@@ -173,6 +175,81 @@ def experiment_handoff(model, findings, evidence_rule):
         "accept" if outcome == "start" else "revise")
 
 
+# A Chain stops opening Experiments when it runs short of time, of cycles, or of attempts from one place.
+MINUTES_NEEDED = 8
+CYCLES = 10
+BRANCHES = 3
+
+
+def verify_result(cycle):
+    """The observation a closed Verify left in its report, or None."""
+    step = next((s for s in reversed(cycle.get("steps") or []) if s["kind"] == "verify" and s["report"]), None)
+    try:
+        return json.loads(step["report"]["result"]) if step else None
+    except (ValueError, KeyError):
+        return None
+
+
+def ledger_plan(cycle):
+    """What a ledger Experiment committed to in its Define: targets, what held at entry, the items."""
+    step = next((s for s in reversed(cycle.get("steps") or []) if s["kind"] == "define" and s["report"]), None)
+    try:
+        plan = json.loads(step["report"]["success_condition"].split("\nLedger: ", 1)[1]) if step else None
+    except (ValueError, KeyError, IndexError):
+        return None
+    return plan if isinstance(plan, dict) and plan.get("criteria") else None
+
+
+def entry_ledger(cycles, parent, failed):
+    """The items an Experiment starts from: the nearest ancestor's ledger as it stood at its exit,
+    with the probes and the failures of the Experiment that was just abandoned."""
+    items, node = None, parent
+    while node and items is None:
+        result = verify_result(node)
+        items = result.get("criteria") if result else None
+        node = cycles.get(node.get("parent"))
+    lost = (verify_result(failed) or {}).get("criteria") if failed else None
+    if items is None:
+        return lost
+    for item in items:
+        other = next((o for o in lost or [] if o["id"] == item["id"]), None)
+        if not other:
+            continue
+        item["failed_on"] = sorted(set(item["failed_on"]) | set(other["failed_on"]))
+        if other.get("disputed"):
+            item["disputed"] = True
+        if not item["command"] and other["command"]:
+            # A probe written in the abandoned world still says how to look; its result is stale here.
+            item.update({key: other[key] for key in ("command", "exit", "output", "digest", "status")})
+    return items
+
+
+def derive(model, task, spec):
+    """Splits the public requirements into ledger items; None when the model gives nothing usable."""
+    request = (
+        "List the criteria an independent grader could check for this task, using only the task text and the "
+        f"public files below. Return a JSON array only, with at most {LIMIT} objects of the form "
+        '{"requirement": "one checkable statement", "kind": "failure" | "invariant" | "behaviour", '
+        '"source": "file: short quote", "probe": "how a shell command in the task directory could show it '
+        'holds (exit 0) or is violated (non-zero)" or null when nothing local can show it}. '
+        "List first every failure case the sources describe (what must happen when a write, an input or a "
+        "dependency fails) as kind failure, then everything that must stay unchanged as kind invariant, then "
+        "ordinary behaviour. A criterion names an observable result. Roadmap: " + spec
+        + "\nPublic files named by the task: " + json.dumps(cited_sources(task), ensure_ascii=False))
+    answer = model(request)
+    for _ in range(2):
+        try:
+            return parse(answer)
+        except ValueError as error:
+            answer = model(request + "\nYour previous answer could not be used (" + str(error)
+                           + "). Return the JSON array only.")
+    return None
+
+
+def minutes_left():
+    return (float((WORK.parent / "deadline").read_text()) - time.time()) / 60
+
+
 def close(**fields):
     def field(k, v):
         return k + ": |\n" + "".join("  " + line + "\n" for line in str(v).splitlines())
@@ -315,6 +392,23 @@ def reply(r):
         spec += "\nContinue from the locally checked candidate. Inspect its files and address the remaining public requirements."
     if lesson:
         spec += "\n" + lesson
+    if k == "define" and active and not first:
+        items = entry_ledger(cycles, parent, failed) or derive(model, task, spec)
+        entry = digest((verify_result(parent) or {}).get("files") or {})
+        ledger = Ledger(items) if items else None
+        # Targets a branch from this place already failed on twice wait behind the others.
+        tried = [t for c in r["history"] if c.get("parent") == current.get("parent") and c is not current
+                 and (c.get("report") or {}).get("verdict") == "failure" for t in (ledger_plan(c) or {}).get("targets", [])]
+        targets = ledger.targets(entry, {t for t in tried if tried.count(t) >= 2}) if ledger else []
+        if targets:
+            plan = {"targets": targets, "held_at_entry": ledger.having(entry, "holds"), "criteria": ledger.json()}
+            return close(
+                problem=spec + "\nThis experiment takes these open criteria: "
+                + json.dumps([{"id": t, "requirement": ledger.items[t]["requirement"]} for t in targets], ensure_ascii=False),
+                success_condition="On the final files at least one target holds that did not hold at entry, the local "
+                "check passes, and no criterion that held at entry fails. Each is shown by its probe exiting 0."
+                "\nLedger: " + json.dumps(plan, ensure_ascii=False),
+            )
     if k == "define":
         return close(
             problem=spec,
@@ -322,7 +416,21 @@ def reply(r):
                 "Give an observable success condition for: " + spec
             ),
         )
+    plan = ledger_plan(current) if active and not first else None
     criteria = step("define")["report"]["success_condition"] if n["cycle"] == "experiment" else ""
+    if k == "hypothesis" and plan:
+        chosen = [i for i in plan["criteria"] if i["id"] in plan["targets"]]
+        return close(
+            hypothesis=model(
+                "This step is text only: files are read, changed and probed in the Verify that follows, where "
+                "the editor tools are available. For the target criteria below, state the change you expect to "
+                "make them hold and, for each, the probe result that would show the expectation wrong. "
+                "Targets: " + json.dumps([{key: i[key] for key in ("id", "kind", "requirement", "source", "plan")}
+                                         for i in chosen], ensure_ascii=False)
+                + ("\n" + lesson if lesson else "")),
+            rationale=spec,
+            guardrail="Use the public task files and local tools. No criterion that held at entry may fail.",
+        )
     if k == "hypothesis":
         return close(
             hypothesis=model(
@@ -345,6 +453,8 @@ def reply(r):
                                            "output": result["check_output"]}
             if not first:
                 options["baseline"] = json.loads(next(s for s in parent["steps"] if s["kind"] == "verify")["report"]["result"])
+            if plan:
+                options.update(criteria=plan["criteria"], targets=plan["targets"])
         obs = solve(
             task, "Accepted specification: " + spec + "\nSuccess criteria: " + criteria + "\nHypothesis: " + hypothesis, **options
         )
@@ -362,6 +472,28 @@ def reply(r):
             + spec + "\nCriteria: " + criteria + "\nObserved: " + obs
         )
         observed = json.loads(obs)
+        if plan and observed.get("criteria"):
+            # The ledger decides; the model explains.
+            ledger, now = Ledger(observed["criteria"]), observed["submission_digest"]
+            gained = [t for t in plan["targets"] if ledger.status(t, now) == "holds"]
+            broken = [h for h in plan["held_at_entry"] if ledger.status(h, now) == "fails"]
+            achieved = bool(observed["files"]) and observed["check_exit"] == 0 and bool(gained) and not broken
+            verdict = {"targets_holding": gained,
+                       "targets_not_holding": {t: ledger.status(t, now) for t in plan["targets"] if t not in gained},
+                       "held_at_entry_now_failing": broken, "local_check_exit": observed["check_exit"],
+                       "ledger": ledger.counts(now), "open": ledger.open(now)}
+            analysis = "Ledger verdict (computed from probe results on the final files): " + json.dumps(verdict) + "\n" + model(
+                "The ledger verdict below was computed from commands run on the final files and is not yours to "
+                "re-judge. Explain in a few sentences why each target that does not hold failed or was not "
+                "probed, what the next experiment should change, and which criteria no local probe can show. "
+                "Verdict: " + json.dumps(verdict) + "\nLedger: " + json.dumps(ledger.shown(now, plan["targets"]), ensure_ascii=False))
+            return close(
+                hypothesis_fit=analysis,
+                problem_solved="yes" if achieved else "partial",
+                success_condition_met="yes" if achieved else "no",
+                guardrail_triggered="yes" if broken else "no",
+                interpretation=analysis,
+            )
         if first:
             achieved = observed["local_baseline"]
             analysis += "\nOnly the local check is assessed in this milestone. Full task behavior remains unverified."
@@ -409,10 +541,20 @@ def reply(r):
         direction["next_direction.target_cycle_ref"] = current.get("parent") or "cycle:C1"
     if active:
         obs = json.loads(step("verify")["report"]["result"])
+        room = minutes_left() >= MINUTES_NEEDED and len(r["history"]) < CYCLES and obs.get("stop") != "budget"
         if first and obs["local_baseline"]:
             direction["benchmark_transition"] = "verified_local_baseline"
         elif obs["regression"]:
             direction["benchmark_transition"] = "observed_regression"
+        elif plan and obs.get("criteria") and room:
+            failures = sum(1 for c in r["history"] if c.get("parent") == current.get("parent")
+                           and (c.get("report") or {}).get("verdict") == "failure")
+            if verdict == "success" and Ledger(obs["criteria"]).open(obs["submission_digest"]):
+                # Open criteria remain: the next Experiment continues from this world.
+                direction["benchmark_transition"] = "criteria_open"
+            elif verdict == "failure" and failures + 1 < BRANCHES:
+                # Nothing gained or something broken: go back to the parent's world and branch.
+                direction["benchmark_transition"] = "criteria_failed"
     return close(
         verdict=verdict,
         outcome_ref=outcome["ref"],

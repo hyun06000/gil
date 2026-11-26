@@ -93,8 +93,7 @@ def project_submission(request, work, source, record):
             raise RuntimeError(f"Submission differs from failed Verify: {name}")
         if before != after:
             changes[name] = {"failed": before, "restored": after}
-    if not changes:
-        raise ValueError("Revisit requires a changed submission")
+    # An Experiment that gained nothing may have changed nothing: the world is already the parent's.
     record(event="cycle_restore_started", changes=changes, **next_action)
     for name, hashes in changes.items():
         actual = source(name, True)

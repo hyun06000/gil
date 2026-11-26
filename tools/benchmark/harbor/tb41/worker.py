@@ -15,6 +15,8 @@ else:
     seed_submission()
     os.environ["GIL_TB41_CYCLE_RECOVERY"] = "1"
     os.environ["GIL_BENCHMARK_VERIFY_SECONDS"] = str(1750 + extra_seconds)
+    # The steps without the editor may make a few model calls of up to 100 s each.
+    os.environ["GIL_BENCHMARK_STEP_SECONDS"] = "450"
     with open("/work/result.json", "w") as out:
         os.dup2(out.fileno(), 1)
     os.execv(
