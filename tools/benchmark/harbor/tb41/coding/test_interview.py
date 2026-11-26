@@ -123,6 +123,17 @@ class InterviewTests(unittest.TestCase):
             self.assertEqual(participant.reviewed_promotions(model, "Direction unknown", [page], []),
                              [dict(candidate, offset=0)])
 
+    def test_analysis_rechecks_changed_evidence_without_destroying_progress(self):
+        (self.root / "lib.cpp").write_text("int solve(){return 3;}")
+        progress = [{"criterion": c, "status": "demonstrated", "sources": {"lib.cpp": "old"}}
+                    for c in ("Signature exists", "Accuracy threshold")]
+        observed = {"files": {"lib.cpp": "new"}, "verify_progress": progress}
+        result = participant.analysis_checklist(observed, lambda prompt: json.dumps([
+            {"index": 0, "path": "lib.cpp", "quote": "int solve()", "reason": "Signature exists"},
+            {"index": 1, "path": "lib.cpp", "quote": "nonexistent test result", "reason": "Passed"}]))
+        self.assertEqual([item["status"] for item in result], ["demonstrated", "recheck"])
+        self.assertEqual(progress[1]["status"], "demonstrated")
+
     def test_success_criteria_reach_verify_and_analysis(self):
         interview = [step("synthesis", statement="Codec roadmap")]
         experiment = [step("define", success_condition="Bytes round trip"), step("hypothesis", hypothesis="Encode then decode")]

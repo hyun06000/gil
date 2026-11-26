@@ -42,19 +42,19 @@ class FinalCheckTests(unittest.TestCase):
         self.assertEqual(obs["check_exit"], 1)
         self.assertTrue(obs["check_matches_submission"])
 
-    def test_finish_advances_items_and_reopens_changed_source(self):
+    def test_verify_advances_without_erasing_earlier_review(self):
         write = {"action":"write","path":"src/a.ts","content":"first"}
         finish = {"action":"finish"}
         check = {"action":"check"}
         actions = [write, check, finish, finish, dict(write, content="changed"),
-                   {"action":"read","path":"src/a.ts"}, finish,
+                   {"action":"read","path":"src/a.ts"},
                    dict(write, path="src/caller.ts"), finish, finish, check, finish]
         reviews = ["Library present", "demonstrated", "Caller is missing", "pending",
-                   "Library inspected again", "demonstrated", "Caller connected", "demonstrated",
+                   "Caller connected", "demonstrated",
                    "Only verifier exercises behavior", "deferred"]
         obs = self.run_case(actions, ["true"], "accepted plan", reviews)
-        self.assertEqual([i["status"] for i in obs["checklist"]], ["demonstrated", "demonstrated", "deferred"])
-        self.assertEqual(obs["checklist"][0]["assessment"], "Library inspected again")
+        self.assertEqual([i["status"] for i in obs["verify_progress"]], ["demonstrated", "demonstrated", "deferred"])
+        self.assertEqual(obs["verify_progress"][0]["assessment"], "Library present")
         self.assertTrue(obs["check_matches_submission"])
         self.assertEqual(obs["solver_calls"], len(actions))
 

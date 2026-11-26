@@ -151,10 +151,6 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                 writes[str(path.relative_to(APP))]=hashlib.sha256(path.read_bytes()).hexdigest()
                 if first_write is None:
                     first_write = calls
-                name = str(path.relative_to(APP))
-                for item in checklist:
-                    if name in item.get("sources", {}) and item["sources"][name] != writes[name]:
-                        item.update(status="pending", assessment="Source changed since review")
                 response="written"
             elif action=="check":
                 if first_check is None:
@@ -196,7 +192,7 @@ If a local check fails, use its output to fix the source. No remote tools or pri
         receipt = check_sources(writes, "finalization", min(100, max(1, deadline - time.time() - 85)))
         files = snapshot(writes)
     current = matches(receipt, files)
-    obs={"checklist": checklist, "files":files,"check_exit":receipt["exit"] if current else None,"solver_calls":calls,
+    obs={"verify_progress": checklist, "files":files,"check_exit":receipt["exit"] if current else None,"solver_calls":calls,
          "last_check": receipt, "check_matches_submission": current,
          "first_write_call":first_write,"first_check_call":first_check}
     (WORK/"observation.json").write_text(json.dumps(obs))

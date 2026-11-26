@@ -138,6 +138,49 @@ def reviewed_promotions(model, findings, new_pages, prior_texts):
     return approved
 
 
+def analysis_checklist(observed, model):
+    # Verify reviews stay attached to the version they assessed. Only Analysis issues verdicts.
+    decisions = []
+    changed_items = {}
+    for index, item in enumerate(observed.get("verify_progress", [])):
+        changed = [name for name, digest in item.get("sources", {}).items()
+                   if name in observed["files"] and observed["files"][name] != digest]
+        status = item["status"]
+        if status == "demonstrated" and changed:
+            status = "recheck"
+            changed_items[index] = changed
+        decisions.append({"criterion": item["criterion"], "status": status,
+                          "reason": item.get("assessment", "No completed local review"),
+                          "changed_sources": changed})
+    if not changed_items:
+        return decisions
+    excerpts = {}
+    for paths in changed_items.values():
+        for name in paths:
+            if name not in excerpts:
+                with source(name).open(errors="replace") as stream:
+                    excerpts[name] = stream.read(12000)
+    answer = model("Recheck only the listed items against the final source excerpts. "
+                   "Return a JSON array of {index,path,quote,reason} for static criteria directly "
+                   "demonstrated by an exact final-source quotation. For behavior requiring execution, "
+                   "missing context or uncertainty omit the item. An omission keeps it marked recheck. "
+                   + json.dumps({"items": {k: decisions[k] for k in changed_items},
+                                 "final_sources": excerpts}))
+    try:
+        proposals = json.loads(answer)
+    except ValueError:
+        return decisions
+    for proposal in proposals if isinstance(proposals, list) else []:
+        if not isinstance(proposal, dict):
+            continue
+        index, path, quote, reason = (proposal.get(k) for k in ("index", "path", "quote", "reason"))
+        if (type(index) is int and path in changed_items.get(index, []) and
+                isinstance(quote, str) and quote.strip() and quote in excerpts[path] and
+                isinstance(reason, str) and reason.strip()):
+            decisions[index].update(status="demonstrated", reason=reason, path=path, quote=quote)
+    return decisions
+
+
 def close(**fields):
     def field(k, v):
         return k + ": |\n" + "".join("  " + line + "\n" for line in str(v).splitlines())
@@ -293,15 +336,16 @@ def reply(r):
         )
     if k == "analysis":
         obs = (WORK / "observation.json").read_text()
+        observed = json.loads(obs)
+        decisions = analysis_checklist(observed, model)
         analysis = model(
             "Assess each accepted criterion against concrete observations. Identify the check by its "
             "actual command. Distinguish demonstrated, contradicted and unverified criteria. "
             "File hashes demonstrate edits only. The independent verifier has not run. Roadmap: "
-            + spec + "\nCriteria: " + criteria + "\nObserved: " + obs
+            + spec + "\nCriteria: " + criteria + "\nObserved: " + obs + "\nAnalysis checklist: " + json.dumps(decisions)
         )
-        observed = json.loads(obs)
         achieved = bool(observed["files"]) and observed["check_exit"] == 0 and all(
-            item["status"] == "demonstrated" for item in observed.get("checklist", [])
+            item["status"] == "demonstrated" for item in decisions
         ) and model(
             "Choose demonstrated only if every material criterion has direct evidence. A missing, "
             "deferred or contradicted criterion requires incomplete. Criteria: " + criteria
@@ -309,7 +353,7 @@ def reply(r):
             ["demonstrated", "incomplete"],
         ) == "demonstrated"
         return close(
-            hypothesis_fit=analysis,
+            hypothesis_fit=json.dumps({"analysis": analysis, "checklist": decisions}, ensure_ascii=False),
             problem_solved="yes" if achieved else "partial",
             success_condition_met="yes" if achieved else "no",
             guardrail_triggered="no",

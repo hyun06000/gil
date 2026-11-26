@@ -25,6 +25,13 @@ last_check = obs.get("last_check") or {}
 checked_submission = bool(receipts) and all(receipts.values()) and last_check.get("files") == files
 error=(d.get("exception_info") or {}).get("exception_type")
 r={"task":task,"arm":arm,"usage":u,"observation":obs,"receipts":receipts,"checked_submission":checked_submission,"checks":{c["name"]:c["status"] for c in checks},"seconds":t,"rewards":(d.get("verifier_result") or {}).get("rewards"),"error":error}
+for cycle in load("agent/gil-result.json").get("history", []):
+    for step in cycle["steps"]:
+        if step["kind"] == "analysis" and step["report"]:
+            try:
+                r["analysis_checklist"] = json.loads(step["report"]["hypothesis_fit"])["checklist"]
+            except (ValueError, KeyError, TypeError):
+                pass  # Older adapters stored a prose assessment.
 (root/(arm+".json")).write_text(json.dumps(r,indent=2))
 print(json.dumps(r),flush=True)
 if error:
