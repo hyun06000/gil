@@ -14,7 +14,8 @@ TASK = os.environ["TB_TASK"]
 CHECKS = {
     "ks-solver-cpp": ["g++", "-O3", "-std=c++17", "-DKS_SOLVER_LIBRARY", "-I/app", "-c", "solution.cpp", "-o", "/tmp/ks.o"],
     "react-lead-form": ["npm", "run", "build"],
-    "vf2-speedup-networkx": ["python3", "-c", "import fast_networkx as f; g=f.Graph(); g.add_edge(1,2); assert f.vf2pp_is_isomorphic(g,g); print('import and graph smoke passed')"],
+    "vf2-speedup-networkx": ["python3", "-B", "-c",
+                             "import runpy; runpy.run_path('/case/graph_smoke.py', run_name='__main__')"],
 }
 
 

@@ -14,6 +14,8 @@ class CodeAgent(SoundChangeAgent):
         if status.return_code: raise RuntimeError(status.stdout or status.stderr)
         for name in ("solver.py","participant.py","mailbox_client.py"):
             await environment.upload_file(HERE/"coding"/name,"/case/"+name)
+        if task == "vf2-speedup-networkx":
+            await environment.upload_file(HERE/"coding"/"graph_smoke.py", "/case/graph_smoke.py")
         await environment.upload_file(HERE/"worker.py","/case/worker.py")
         if os.environ["TB_ARM"]=="on":
             await environment.upload_file(os.environ["TB_GIL_BINARY"],"/case/gil")
