@@ -75,7 +75,7 @@ class SoundChangeAgent(LunaAgent):
 def coding_client():
     """The coding tasks' model: reasoning on, room for a whole file, and time for both.
 
-    One trial stops asking at an estimated 1.50 USD (the budget is in millionths of a dollar), so a
+    One trial stops asking at an estimated 5 USD (the budget is in millionths of a dollar), so a
     loop of empty calls in either arm ends on its own; what is on disk then is still graded.
     """
-    return LoggedLuna(max_calls=None, budget=1_500_000, max_output=16000, reasoning="medium", timeout=240)
+    return LoggedLuna(max_calls=None, budget=5_000_000, max_output=16000, reasoning="medium", timeout=240)

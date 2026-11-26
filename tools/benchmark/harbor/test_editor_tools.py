@@ -78,8 +78,8 @@ class EditorTests(unittest.TestCase):
                     owner = getattr(cls, method).__qualname__.split(".")[0]
                     self.assertIn(owner, ("CodeAgent", "SoundChangeAgent"), f"{cls.__name__}.{method} fell back to {owner}")
             client = CodeAgent().model_client()
-            self.assertEqual((client.budget, client.max_calls, client.reasoning, client.max_output), (1_500_000, None, "medium", 16000))
-            client.reserved = 1_500_000
+            self.assertEqual((client.budget, client.max_calls, client.reasoning, client.max_output), (5_000_000, None, "medium", 16000))
+            client.reserved = 5_000_000
             with patch("urllib.request.urlopen") as send, self.assertRaisesRegex(RuntimeError, "limit"):
                 client.ask([{"role": "user", "content": "x"}], [], editor=True)
             send.assert_not_called()
