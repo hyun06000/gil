@@ -57,8 +57,18 @@ on:
       harbor_model:
         description: 'Harbor preset: CSV model or paired Terminal-Bench pilot'
         type: choice
-        options: [luna, qwen, terminal-bench-pair, terminal-bench-audit]
+        options: [luna, qwen, terminal-bench-pair, terminal-bench-audit, three-cpu]
         default: luna
+      cpu_task:
+        description: 'Three-CPU preset: optional single-task selection'
+        type: choice
+        options: [all, ks-solver-cpp, vf2-speedup-networkx, react-lead-form]
+        default: all
+      cpu_arm:
+        description: 'Three-CPU preset: optional single arm'
+        type: choice
+        options: [both, 'on', 'off']
+        default: both
       unsigned_preview_version:
         description: 'Optional X.Y.Z-preview.N stamp compiled into the Core; no publication or installation'
         required: false
@@ -540,4 +550,51 @@ jobs:
           path: |
             ${{ runner.temp }}/tb41-empty/empty.json
             ${{ runner.temp }}/tb41-reference/reference.json
+          retention-days: 7
+
+  three-cpu:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.harbor_benchmark && inputs.harbor_model == 'three-cpu' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 95
+    strategy:
+      fail-fast: false
+      matrix:
+        arm: ${{ fromJSON(inputs.cpu_arm == 'on' && '["on"]' || inputs.cpu_arm == 'off' && '["off"]' || '["on","off"]') }}
+        task: ${{ fromJSON(inputs.cpu_task == 'ks-solver-cpp' && '["ks-solver-cpp"]' || inputs.cpu_task == 'vf2-speedup-networkx' && '["vf2-speedup-networkx"]' || inputs.cpu_task == 'react-lead-form' && '["react-lead-form"]' || '["react-lead-form","ks-solver-cpp","vf2-speedup-networkx"]') }}
+    env:
+      TB_TASK: ${{ matrix.task }}
+      TB_ARM: ${{ matrix.arm }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Build static GIL for the task image
+        if: matrix.arm == 'on'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y musl-tools
+          rustup target add x86_64-unknown-linux-musl
+          cargo build --locked -p gil --features "$GIL_PRODUCT_FEATURES" --target x86_64-unknown-linux-musl --bin gil
+      - name: Install Harbor
+        run: |
+          python3 -m venv "$RUNNER_TEMP/harbor"
+          "$RUNNER_TEMP/harbor/bin/pip" install --quiet harbor==0.27.0
+      - name: Run and grade the pinned CPU task
+        env:
+          GIL_HARBOR_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          TB_GIL_BINARY: ${{ github.workspace }}/target/x86_64-unknown-linux-musl/debug/gil
+          PYTHONUNBUFFERED: '1'
+        run: |
+          export PATH="$RUNNER_TEMP/harbor/bin:$PATH"
+          tools/benchmark/harbor/tb41/coding_run.sh
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: cpu-${{ matrix.task }}-${{ matrix.arm }}
+          path: |
+            ${{ runner.temp }}/tb41-${{ matrix.arm }}/${{ matrix.arm }}.json
+            ${{ runner.temp }}/tb41-${{ matrix.arm }}/transcript.jsonl
+            ${{ runner.temp }}/tb41-${{ matrix.arm }}/transcript.html
+            ${{ runner.temp }}/tb41-${{ matrix.arm }}/gil-interrupted.tgz
+          if-no-files-found: warn
           retention-days: 7
