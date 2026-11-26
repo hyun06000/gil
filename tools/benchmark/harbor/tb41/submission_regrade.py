@@ -1,6 +1,4 @@
 """Grade frozen submission bytes. This adapter has no model client or editor."""
-import base64
-import gzip
 import hashlib
 import json
 import os
@@ -23,10 +21,7 @@ class FrozenSubmission(BaseAgent):
         pass
 
     async def run(self, instruction, environment, context):
-        # On this grading-only branch the optional string dispatch field carries the
-        # compressed bundle. No transcript, private tests or reference files are uploaded.
-        event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
-        payload = json.loads(gzip.decompress(base64.b64decode(event["inputs"]["unsigned_preview_version"])))
+        payload = json.loads(Path(os.environ["TB_LOCAL_SUBMISSION_BUNDLE"]).read_text())
         if payload["source_run"] != 45871560079:
             raise ValueError("Unexpected source measurement")
         task = os.environ["TB_TASK"]
