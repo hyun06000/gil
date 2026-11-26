@@ -1,15 +1,38 @@
+import json
 import os
-from tb_agent import HERE, SoundChangeAgent
+from tb_agent import HERE, SoundChangeAgent, coding_client
 
 TASKS={"ks-solver-cpp","react-lead-form","vf2-speedup-networkx"}
 
 class CodeAgent(SoundChangeAgent):
+    def model_client(self):
+        return coding_client()
+
+    def live(self, request, answer, client):
+        # One line per call in the job log, and a host-side copy that is uploaded even when the run is cancelled.
+        entry = {"call": client.calls, "stage": request.get("stage"), "last": request.get("last"),
+                 "answer": answer, "usd": round(client.usage()["estimated_usd"], 5)}
+        with (self.logs_dir / "live.jsonl").open("a") as log:
+            print(json.dumps(entry, ensure_ascii=False), file=log)
+        shown = answer
+        try:
+            call = json.loads(answer)
+            if isinstance(call, dict) and "action" in call:
+                call = {k: v for k, v in call.items() if k not in ("content", "new", "old")}
+                shown = json.dumps(call, ensure_ascii=False)
+        except ValueError:
+            pass
+        last = request.get("last") or {}
+        result = last.get("error") and "ERROR " + last["error"] or last.get("result") or ""
+        one = lambda text: " ".join(str(text).split())
+        print(f"[{os.environ['TB_ARM']}] {client.calls} {request.get('stage')} | before: {one(result)[:160]} | now: {one(shown)[:300]}", flush=True)
+
     async def setup(self,environment):
         task=os.environ["TB_TASK"]
         assert task in TASKS
         cmd="mkdir -p /case /work/project /work/model && chown -R 65534:65534 /work && chown 65534:65534 /app"
         if task=="react-lead-form":
-            cmd+=" && chown -R 65534:65534 /app/src && mkdir -p /app/node_modules/.tmp /app/output && chown 65534:65534 /app/node_modules/.tmp /app/output"
+            cmd+=" && chown -R 65534:65534 /app/src && chown 65534:65534 /app/package.json /app/tsconfig.json /app/vite.config.ts /app/index.html && mkdir -p /app/node_modules/.tmp /app/output && chown 65534:65534 /app/node_modules/.tmp /app/output"
         status=await environment.exec(cmd,user="root")
         if status.return_code: raise RuntimeError(status.stdout or status.stderr)
         arm = os.environ["TB_ARM"]

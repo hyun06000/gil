@@ -25,6 +25,18 @@ for name,digest in files.items():
     receipts[name]=f.is_file() and hashlib.sha256(f.read_bytes()).hexdigest()==digest
 error=(d.get("exception_info") or {}).get("exception_type")
 r={"task":task,"arm":arm,"usage":u,"observation":obs,"receipts":receipts,"checks":{c["name"]:c["status"] for c in checks},"seconds":t,"rewards":(d.get("verifier_result") or {}).get("rewards"),"error":error}
+# These runs are internal measurements, not Terminal-Bench scores: say how they differ from the published setup.
+import os
+r["conditions"] = {
+    "internal_measurement": True,
+    "task_commit": os.environ.get("TB_UPSTREAM"),
+    "agent_timeout_multiplier": 0.125,
+    "task_toml_edited": 'network_mode = "no-network" added under [environment]',
+    "dockerfile_edited": "python3 installed in the task image" if task == "react-lead-form" else None,
+    "trials_per_condition_in_this_job": 1,
+    "cost_limit_usd": os.environ.get("TB_BUDGET_USD") or "5",
+    "official_metric": "rewards.reward (binary); the count of passed checks is our own supplementary reading",
+}
 if arm == "on":
     r["gil"] = load("agent/gil-result.json")
 if error:

@@ -69,6 +69,16 @@ on:
         type: choice
         options: [both, 'on', 'off']
         default: both
+      cpu_trials:
+        description: 'Three-CPU preset: independent trials per task and arm'
+        type: choice
+        options: ['1', '3', '5']
+        default: '1'
+      cpu_budget_usd:
+        description: 'Three-CPU preset: estimated model cost at which one trial stops asking (USD)'
+        required: false
+        default: '5'
+        type: string
       unsigned_preview_version:
         description: 'Optional X.Y.Z-preview.N stamp compiled into the Core; no publication or installation'
         required: false
@@ -560,6 +570,7 @@ jobs:
       fail-fast: false
       matrix:
         arm: ${{ fromJSON(inputs.cpu_arm == 'on' && '["on"]' || inputs.cpu_arm == 'off' && '["off"]' || '["on","off"]') }}
+        trial: ${{ fromJSON(inputs.cpu_trials == '5' && '[1,2,3,4,5]' || inputs.cpu_trials == '3' && '[1,2,3]' || '[1]') }}
         task: ${{ fromJSON(inputs.cpu_task == 'ks-solver-cpp' && '["ks-solver-cpp"]' || inputs.cpu_task == 'vf2-speedup-networkx' && '["vf2-speedup-networkx"]' || inputs.cpu_task == 'react-lead-form' && '["react-lead-form"]' || '["react-lead-form","ks-solver-cpp","vf2-speedup-networkx"]') }}
     env:
       TB_TASK: ${{ matrix.task }}
@@ -584,17 +595,19 @@ jobs:
           GIL_HARBOR_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           TB_GIL_BINARY: ${{ github.workspace }}/target/x86_64-unknown-linux-musl/debug/gil
           PYTHONUNBUFFERED: '1'
+          TB_BUDGET_USD: ${{ inputs.cpu_budget_usd }}
         run: |
           export PATH="$RUNNER_TEMP/harbor/bin:$PATH"
           tools/benchmark/harbor/tb41/coding_run.sh
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: cpu-${{ matrix.task }}-${{ matrix.arm }}
+          name: cpu-${{ matrix.task }}-${{ matrix.arm }}${{ matrix.trial != 1 && format('-t{0}', matrix.trial) || '' }}
           path: |
             ${{ runner.temp }}/tb41-${{ matrix.arm }}/${{ matrix.arm }}.json
             ${{ runner.temp }}/tb41-${{ matrix.arm }}/transcript.jsonl
             ${{ runner.temp }}/tb41-${{ matrix.arm }}/transcript.html
             ${{ runner.temp }}/tb41-${{ matrix.arm }}/gil-interrupted.tgz
+            ${{ runner.temp }}/tb41-${{ matrix.arm }}/pair/*/agent/live.jsonl
           if-no-files-found: warn
           retention-days: 7

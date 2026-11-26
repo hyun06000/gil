@@ -1,6 +1,7 @@
 """Host-only, budgeted Responses API client for one Harbor trial."""
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 
@@ -11,6 +12,8 @@ MAX_OUTPUT = 128
 INPUT = 0.20
 OUTPUT = 1.20
 BUDGET = 5000  # $0.005 per trial
+# Seconds to wait before asking again after a 429 or 5xx reply or a dropped connection.
+RETRY_WAITS = (5, 20)
 
 
 def editor_tool(name, description, properties):
@@ -26,18 +29,27 @@ EDITOR_TOOLS = [
                 {"path": {"type": "string"}, "offset": {"type": "integer"}}),
     editor_tool("write", "Replace a writable source file with its complete content.",
                 {"path": {"type": "string"}, "content": {"type": "string"}}),
+    editor_tool("edit", "Replace one passage of a writable source file. The old text must occur exactly once.",
+                {"path": {"type": "string"}, "old": {"type": "string"}, "new": {"type": "string"}}),
+    editor_tool("run", "Run a shell command in the task directory, without network, and return its exit status and output.",
+                {"command": {"type": "string"}}),
     editor_tool("check", "Run the task's local build or smoke check.", {}),
     editor_tool("finish", "Submit the edited and checked files.", {}),
 ]
 
+# GIL Verify asks for a note with every call: each request is built anew, so the note is what carries over.
+NOTE = {"note": {"type": "string", "description":
+                 "What the material in this request settled and what you do next (one or two sentences)."}}
+NOTED_TOOLS = [editor_tool(t["name"], t["description"], {**t["parameters"]["properties"], **NOTE}) for t in EDITOR_TOOLS]
 
-def editor_answer(output):
+
+def editor_answer(output, tools=EDITOR_TOOLS):
     calls = [item for item in output if item["type"] == "function_call"]
     if len(calls) != 1:
         raise ValueError("Expected exactly one editor call")
     call = calls[0]
     args = json.loads(call["arguments"])
-    for tool in EDITOR_TOOLS:
+    for tool in tools:
         if tool["name"] == call["name"]:
             properties = tool["parameters"]["properties"]
             if not isinstance(args, dict) or args.keys() != properties.keys():
@@ -50,8 +62,16 @@ def editor_answer(output):
     raise ValueError("Unknown editor tool or invalid arguments")
 
 
+class BudgetReached(RuntimeError):
+    """The trial's call or cost limit: no request was sent."""
+
+
 class Luna:
-    def __init__(self, *, max_calls=MAX_CALLS, budget=BUDGET, max_output=MAX_OUTPUT):
+    def __init__(self, *, max_calls=MAX_CALLS, budget=BUDGET, max_output=MAX_OUTPUT, reasoning="none", timeout=60, overrun=0.0, stage_timeout=None):
+        self.overrun = overrun
+        self.stage_timeout = stage_timeout
+        self.reasoning = reasoning
+        self.timeout = timeout
         self.max_calls = max_calls
         self.budget = budget
         self.max_output = max_output
@@ -61,11 +81,12 @@ class Luna:
         self.outputs = 0
         self.reserved = 0
 
-    def ask(self, messages, choices, *, editor=False):
-        body = {"model": MODEL, "input": messages, "reasoning": {"effort": "none"},
+    def ask(self, messages, choices, *, editor=False, notes=False):
+        # Reasoning applies to editor requests only: the other stages share the Core's 120 s turn limit.
+        body = {"model": MODEL, "input": messages, "reasoning": {"effort": self.reasoning if editor else "none"},
                 "max_output_tokens": self.max_output, "store": False, "service_tier": "default"}
         if editor:
-            body.update(tools=EDITOR_TOOLS, tool_choice="required", parallel_tool_calls=False)
+            body.update(tools=NOTED_TOOLS if notes else EDITOR_TOOLS, tool_choice="required", parallel_tool_calls=False)
         elif choices:
             body["text"] = {"format": {"type":"json_schema", "name":"selection", "strict":True,
                 "schema":{"type":"object", "properties":{"answer":{"type":"string", "enum":choices}},
@@ -73,17 +94,37 @@ class Luna:
         data = json.dumps(body).encode()
         # Use bytes as a conservative token estimate, with margin for message formatting.
         reservation = (len(data) + 256) * INPUT + self.max_output * OUTPUT
+        # Editor requests stop at the budget. A client may let the few short requests of the other stages
+        # run past it by `overrun`, so a trial whose editing was stopped can still record its analysis.
+        limit = self.budget if editor or self.budget is None else self.budget * (1 + self.overrun)
         if ((self.max_calls is not None and self.calls >= self.max_calls) or
-                (self.budget is not None and self.reserved + reservation > self.budget)):
-            raise RuntimeError("Luna per-trial cost or call limit reached before sending request")
+                (limit is not None and self.reserved + reservation > limit)):
+            raise BudgetReached("Luna per-trial cost or call limit reached before sending request")
         self.calls += 1
         self.reserved += reservation
         request = urllib.request.Request("https://api.openai.com/v1/responses", data=data, headers={
             "Authorization": "Bearer " + self.key, "Content-Type": "application/json"})
-        try:
-            with urllib.request.urlopen(request, timeout=60) as resp:
-                result = json.load(resp)
-        except urllib.error.HTTPError as error:
+        result = None
+        # The stages without the editor share the Core's 120 s turn: one short second try, not a long wait.
+        timeout = self.timeout if editor or self.stage_timeout is None else self.stage_timeout
+        for wait in (*(RETRY_WAITS if editor else (3,)), None):
+            try:
+                with urllib.request.urlopen(request, timeout=timeout) as resp:
+                    result = json.load(resp)
+                break
+            except urllib.error.HTTPError as error:
+                # The provider being busy or briefly down is not the trial's result: ask again.
+                if wait is not None and error.code in (429, 500, 502, 503, 504):
+                    time.sleep(wait)
+                    continue
+                failure = error
+                break
+            except (urllib.error.URLError, TimeoutError):
+                if wait is None:
+                    raise
+                time.sleep(wait)
+        if result is None:
+            error = failure
             try:
                 detail = json.loads(error.read()).get("error", {})
                 diagnostic = str(detail.get("message", "")).replace(self.key, "[redacted]")[:350]
@@ -97,7 +138,7 @@ class Luna:
         if result["status"] != "completed":
             raise RuntimeError(f"Luna response status {result['status']}")
         if editor:
-            return editor_answer(result["output"])
+            return editor_answer(result["output"], NOTED_TOOLS if notes else EDITOR_TOOLS)
         answer = "".join(part["text"] for item in result["output"] if item["type"] == "message"
                          for part in item["content"] if part["type"] == "output_text").strip()
         if choices:

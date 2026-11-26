@@ -49,24 +49,45 @@ class LunaAgent(GilAgent):
         from luna import Luna
         return Luna()
 
+    def live(self, request, answer, client):
+        """Called on the host after every model reply; a trial may show or keep it as it happens."""
+
     async def execute(self, environment, context):
         client = self.model_client()
         worker = asyncio.create_task(self.run_worker(environment))
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 reply = Path(tmp) / "reply.json"
+                misses = 0
                 while not worker.done():
                     # Receive a request once. The adapter waits for its reply before posting another.
                     packet = await environment.exec(
                         "cd /work/model && if mv request.json pending.json 2>/dev/null; then cat pending.json; fi",
                         user="65534")
                     if packet.return_code != 0:
-                        raise RuntimeError(f"Harbor model mailbox failed: {packet.stderr}")
+                        # One failed exec into the container is not the end of the trial: look again.
+                        misses += 1
+                        if misses > 5:
+                            raise RuntimeError(f"Harbor model mailbox failed {misses} times: exit {packet.return_code} {packet.stdout} {packet.stderr}")
+                        await asyncio.sleep(1)
+                        continue
+                    misses = 0
                     if packet.stdout and packet.stdout.strip():
                         req = json.loads(packet.stdout)
-                        answer = await asyncio.to_thread(client.ask, req["messages"], req["choices"],
-                                                         editor=req.get("editor") is True)
-                        reply.write_text(json.dumps({"answer":answer}))
+                        from luna import BudgetReached
+                        try:
+                            answer = await asyncio.to_thread(client.ask, req["messages"], req["choices"],
+                                                             editor=req.get("editor") is True,
+                                                             notes=req.get("notes") is True)
+                            packet = {"answer": answer}
+                        except BudgetReached:
+                            if req.get("editor") is not True:
+                                raise
+                            # Editing ends in order: the worker closes its step and the files on disk are graded.
+                            packet = {"answer": "", "stop": "budget"}
+                            answer = json.dumps({"action": "stop", "reason": "budget"})
+                        self.live(req, answer, client)
+                        reply.write_text(json.dumps(packet))
                         await environment.upload_file(reply, "/work/model/reply.tmp")
                         published = await environment.exec("chmod 644 /work/model/reply.tmp && mv /work/model/reply.tmp /work/model/reply.json", user="root")
                         if published.return_code != 0:
@@ -80,4 +101,8 @@ class LunaAgent(GilAgent):
                 await asyncio.gather(worker, return_exceptions=True)
             context.n_input_tokens = client.inputs
             context.n_output_tokens = client.outputs
+            usage = client.usage()
+            # An estimate from list prices, kept apart from any figure the provider bills.
+            context.cost_usd = usage.get("estimated_usd")
+            context.metadata = {"model": usage.get("model"), "model_calls": usage.get("calls"), "cost_is_estimate": True}
             (self.logs_dir / "luna-usage.json").write_text(json.dumps(client.usage()))

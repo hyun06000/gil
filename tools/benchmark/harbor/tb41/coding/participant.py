@@ -213,6 +213,8 @@ def reply(r):
     def model(prompt, choices=()):
         context = {"task": task, "available_tools": {
             "read": "Read public task source", "write": "Replace permitted solution files",
+            "edit": "Replace one passage of a permitted solution file",
+            "run": "Run a shell command in the task directory without network (build, execute, time, own test scripts)",
             "check": CHECKS[TASK], "finish": "Hand submission to the independent verifier"}}
         if k in ("question", "interpretation", "synthesis"):
             context["cited_source_excerpts"] = cited

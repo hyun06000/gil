@@ -10,7 +10,7 @@ def render(root):
     transitions = []
     for line in (root / "transcript.jsonl").read_text().splitlines():
         event = json.loads(line)
-        if event["event"] in ("verify_plan", "cycle_restore_started", "cycle_restore_completed"):
+        if event["event"] in ("verify_plan", "verify_stalled", "stalled", "cycle_restore_started", "cycle_restore_completed"):
             transitions.append(event)
             continue
         calls.setdefault(event["id"], {})[event["event"]] = event
@@ -32,6 +32,8 @@ def render(root):
         if messages := call["request"].get("messages"):
             rows.append("<h3>모델 요청</h3><pre>" +
                         html.escape(json.dumps(messages, ensure_ascii=False, indent=2)) + "</pre>")
+        if tool.get("note"):
+            rows.append(f"<h3>모델 메모</h3><pre>{html.escape(tool['note'])}</pre>")
         if tool:
             rows.append(f"<h3>도구 결과</h3><pre>{html.escape(result)}</pre>")
         rows.append("</details>")
