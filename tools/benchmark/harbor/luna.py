@@ -26,6 +26,10 @@ EDITOR_TOOLS = [
                 {"path": {"type": "string"}, "offset": {"type": "integer"}}),
     editor_tool("write", "Replace a writable source file with its complete content.",
                 {"path": {"type": "string"}, "content": {"type": "string"}}),
+    editor_tool("edit", "Replace one passage of a writable source file. The old text must occur exactly once.",
+                {"path": {"type": "string"}, "old": {"type": "string"}, "new": {"type": "string"}}),
+    editor_tool("run", "Run a shell command in the task directory, without network, and return its exit status and output.",
+                {"command": {"type": "string"}}),
     editor_tool("check", "Run the task's local build or smoke check.", {}),
     editor_tool("finish", "Submit the edited and checked files.", {}),
 ]
@@ -56,7 +60,9 @@ def editor_answer(output, tools=EDITOR_TOOLS):
 
 
 class Luna:
-    def __init__(self, *, max_calls=MAX_CALLS, budget=BUDGET, max_output=MAX_OUTPUT):
+    def __init__(self, *, max_calls=MAX_CALLS, budget=BUDGET, max_output=MAX_OUTPUT, reasoning="none", timeout=60):
+        self.reasoning = reasoning
+        self.timeout = timeout
         self.max_calls = max_calls
         self.budget = budget
         self.max_output = max_output
@@ -67,7 +73,8 @@ class Luna:
         self.reserved = 0
 
     def ask(self, messages, choices, *, editor=False, notes=False):
-        body = {"model": MODEL, "input": messages, "reasoning": {"effort": "none"},
+        # Reasoning applies to editor requests only: the other stages share the Core's 120 s turn limit.
+        body = {"model": MODEL, "input": messages, "reasoning": {"effort": self.reasoning if editor else "none"},
                 "max_output_tokens": self.max_output, "store": False, "service_tier": "default"}
         if editor:
             body.update(tools=NOTED_TOOLS if notes else EDITOR_TOOLS, tool_choice="required", parallel_tool_calls=False)
@@ -86,7 +93,7 @@ class Luna:
         request = urllib.request.Request("https://api.openai.com/v1/responses", data=data, headers={
             "Authorization": "Bearer " + self.key, "Content-Type": "application/json"})
         try:
-            with urllib.request.urlopen(request, timeout=60) as resp:
+            with urllib.request.urlopen(request, timeout=self.timeout) as resp:
                 result = json.load(resp)
         except urllib.error.HTTPError as error:
             try:

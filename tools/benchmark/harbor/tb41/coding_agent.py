@@ -1,9 +1,12 @@
 import os
-from tb_agent import HERE, SoundChangeAgent
+from tb_agent import HERE, SoundChangeAgent, coding_client
 
 TASKS={"ks-solver-cpp","react-lead-form","vf2-speedup-networkx"}
 
 class CodeAgent(SoundChangeAgent):
+    def model_client(self):
+        return coding_client()
+
     async def setup(self,environment):
         task=os.environ["TB_TASK"]
         assert task in TASKS

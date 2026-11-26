@@ -110,7 +110,9 @@ class MemoryTests(unittest.TestCase):
         # The baseline check ran once (it fails: 'B' sorts before 'a' without a key); two repeats were not run.
         self.assertEqual(self.runs.read_text(), "x")
         checks = [e for e in self.events if e.get("action") == "check"]
-        self.assertTrue(checks[1]["result"].startswith("Not run again: no file changed since this check. exit 1"))
+        self.assertTrue(checks[1]["result"].startswith(
+            "Not run again: no file changed since this check. Change a file if a requirement is still open, "
+            "otherwise finish. exit 1"))
         # Call 4 writes new content (progress); every later write returns to content already seen.
         writes = [e for e in self.events if e.get("action") == "write"]
         self.assertEqual(len(writes), 1 + verify_activity.STALL_LIMIT)

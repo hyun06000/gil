@@ -27,7 +27,7 @@ def ask(prompt, choices=(), stage="solver", notes=False):
     draft.write_text(json.dumps({"messages": messages, "choices": choices, "editor": stage == "solver", "notes": notes}))
     draft.replace(MAIL / "request.json")
     reply = MAIL / "reply.json"
-    until = time.monotonic() + 85
+    until = time.monotonic() + 300
     while not reply.exists():
         if time.monotonic() > until:
             raise TimeoutError("Model relay timed out")

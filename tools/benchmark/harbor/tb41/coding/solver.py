@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import time
 
@@ -11,6 +12,7 @@ from mailbox_client import ask, record
 WORK = Path("/work/project")
 APP = Path("/app")
 TASK = os.environ["TB_TASK"]
+RUN_SECONDS = 100
 CHECKS = {
     "ks-solver-cpp": ["g++", "-O3", "-std=c++17", "-DKS_SOLVER_LIBRARY", "-I/app", "-c", "solution.cpp", "-o", "/tmp/ks.o"],
     "react-lead-form": ["npm", "run", "build"],
@@ -34,6 +36,23 @@ def source(name, write=False):
     return path
 
 
+def snapshot():
+    """Hashes of the files a submission may contain, as they are on disk now."""
+    found = {}
+    for directory, children, files in os.walk(APP):
+        children[:] = [c for c in children if c not in (".git", "node_modules", "__pycache__")]
+        for name in files:
+            path = Path(directory, name)
+            if path.is_symlink() or not path.is_file():
+                continue
+            try:
+                source(str(path), True)
+            except ValueError:
+                continue
+            found[path.relative_to(APP).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return found
+
+
 def solve(task,plan="", *, cycle=None, baseline=None, verify_ref=None, failed_check=None):
     public=[]
     for directory,children,files in os.walk(APP):
@@ -41,6 +60,7 @@ def solve(task,plan="", *, cycle=None, baseline=None, verify_ref=None, failed_ch
         public.extend(str((Path(directory)/f).relative_to(APP)) for f in files)
         if len(public)>600: break
     history=[]; writes={}; checked=None; calls=0
+    ran = set()
     checkpoint = None
     if plan and cycle is None:
         from checkpoint import Checkpoint
@@ -70,6 +90,8 @@ Recent tool results: {json.dumps(history[-12:],ensure_ascii=False)[-35000:]}
 Work toward the full official task. Call exactly one of the supplied editor tools. Available actions:
 {{"action":"read","path":"relative/file","offset":0}} (next 9000 characters)
 {{"action":"write","path":"relative/file","content":"complete source file"}}
+{{"action":"edit","path":"relative/file","old":"text that occurs exactly once in the file","new":"its replacement"}}
+{{"action":"run","command":"shell command"}} (sh in /app, no network, {RUN_SECONDS} s limit: build, execute or time anything, including the task's own commands and test scripts you write under /tmp; submission files it changes are recorded)
 {{"action":"check"}} (run task compiler/build/import smoke)
 {{"action":"finish"}} after editing the solution and checking it. An incomplete solution can be graded.
 For vf2 use fast_networkx.py or a fast_networkx package. For ks use solution.cpp. For React work in src/.
@@ -98,9 +120,16 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                     activity_event, response = activity.page(name, data, start, page, start + len(page) >= len(content))
                 else:
                     response=path.read_text()[start:start+9000]
-            elif action=="write":
+            elif action in ("write", "edit"):
                 path=source(obj["path"],True)
-                content=obj["content"]
+                if action == "edit":
+                    text = path.read_text()
+                    found = text.count(obj["old"]) if obj["old"] else 0
+                    if found != 1:
+                        raise ValueError(f"old text occurs {found} times in {obj['path']}; it must occur exactly once")
+                    content = text.replace(obj["old"], obj["new"])
+                else:
+                    content=obj["content"]
                 if not content.strip(): raise ValueError("empty source file")
                 previous = None
                 if activity:
@@ -121,10 +150,59 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                     checked = None
                     check_output = ""
                 response = "unchanged" if unchanged else "written"
+            elif action=="run":
+                command = obj["command"]
+                if not command.strip(): raise ValueError("empty command")
+                before = snapshot()
+                if checkpoint:
+                    for name in before:
+                        checkpoint.before_write(APP / name)
+                proc = subprocess.Popen(["sh", "-c", command], cwd=APP, stdout=subprocess.PIPE,
+                                        stderr=subprocess.STDOUT, start_new_session=True)
+                try:
+                    output, _ = proc.communicate(timeout=RUN_SECONDS)
+                    code = proc.returncode
+                except subprocess.TimeoutExpired:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                    output, _ = proc.communicate()
+                    code = f"none, stopped after {RUN_SECONDS} s"
+                else:
+                    # Nothing the command left in the background outlives it.
+                    try: os.killpg(proc.pid, signal.SIGKILL)
+                    except OSError: pass
+                after = snapshot()
+                changed = sorted(n for n in before.keys() | after.keys() if before.get(n) != after.get(n))
+                for name in changed:
+                    path = APP / name
+                    if name in after:
+                        writes[name] = after[name]
+                        if checkpoint and checkpoint.passed is not None and name not in before:
+                            checkpoint.before.setdefault(path, None)
+                        if cycle:
+                            capture_file(WORK, APP, path)
+                            activity.write(name, after[name], before.get(name))
+                    else:
+                        writes.pop(name, None)
+                        if cycle:
+                            (WORK / "submission" / name).unlink(missing_ok=True)
+                state = (command, tuple(sorted(after.items())))
+                if activity and not changed:
+                    activity.progress(state not in ran)
+                ran.add(state)
+                if changed:
+                    checked = None
+                    check_output = ""
+                    if first_write is None:
+                        first_write = calls
+                response = f"exit {code}: " + output.decode(errors="replace")[-3500:]
+                if changed:
+                    response += f"\nSubmission files changed by this command: {changed}"
+                activity_event["command"] = command
             elif action=="check" and activity and checked is not None:
                 # No file changed since this result: running it again observes nothing new.
                 activity.progress(False)
-                response = "Not run again: no file changed since this check. " + check_output
+                response = ("Not run again: no file changed since this check. Change a file if a requirement is still "
+                            "open, otherwise finish. " + check_output)
             elif action=="check":
                 if activity:
                     activity.progress(True)

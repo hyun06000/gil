@@ -39,6 +39,27 @@ class EditorTests(unittest.TestCase):
                 self.assertEqual("note" in tool["parameters"]["properties"], notes)
                 self.assertEqual(tool["parameters"]["required"], list(tool["parameters"]["properties"]))
 
+    def test_run_and_edit_calls_are_accepted_and_only_editor_requests_reason(self):
+        self.assertEqual(json.loads(editor_answer([tool_call("run", command="make")])), {"action": "run", "command": "make"})
+        self.assertEqual(json.loads(editor_answer([tool_call("edit", path="a.py", old="x", new="y")])),
+                         {"action": "edit", "path": "a.py", "old": "x", "new": "y"})
+        for output in ([tool_call("run")], [tool_call("run", command=3)], [tool_call("edit", path="a.py", old="x")]):
+            with self.subTest(output=output), self.assertRaises(ValueError):
+                editor_answer(output)
+        text = [{"type": "message", "content": [{"type": "output_text", "text": "ok"}]}]
+        for editor, output, effort in ((True, [tool_call("check")], "medium"), (False, text, "none")):
+            result = {"status": "completed", "output": output, "usage": {"input_tokens": 3, "output_tokens": 5}}
+            with patch.dict("os.environ", {"GIL_HARBOR_API_KEY": "test"}), patch("urllib.request.urlopen", return_value=io.BytesIO(json.dumps(result).encode())) as send:
+                Luna(max_calls=None, budget=None, max_output=16000, reasoning="medium", timeout=240).ask([], [], editor=editor)
+            body = json.loads(send.call_args.args[0].data)
+            self.assertEqual((body["reasoning"], body["max_output_tokens"], send.call_args.kwargs["timeout"]),
+                             ({"effort": effort}, 16000, 240))
+        # The default client is unchanged.
+        with patch.dict("os.environ", {"GIL_HARBOR_API_KEY": "test"}), patch("urllib.request.urlopen", return_value=io.BytesIO(json.dumps(result).encode())) as send:
+            Luna().ask([], [])
+        self.assertEqual(json.loads(send.call_args.args[0].data)["reasoning"], {"effort": "none"})
+        self.assertEqual(send.call_args.kwargs["timeout"], 60)
+
     def test_editor_request_and_ordinary_messages(self):
         scenarios = [(True, [], [tool_call("write", path="x.ts", content="export {}")], "write"),
                      (False, [], [], "hello"), (False, ["accept"], [], "accept")]

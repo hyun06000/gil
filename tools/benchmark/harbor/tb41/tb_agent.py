@@ -27,6 +27,11 @@ class SoundChangeAgent(LunaAgent):
     def model_client(self):
         return LoggedLuna(max_calls=None, budget=None, max_output=4096)
 
+
+def coding_client():
+    """The coding tasks' model: reasoning on, room for a whole file, and time for both."""
+    return LoggedLuna(max_calls=None, budget=None, max_output=16000, reasoning="medium", timeout=240)
+
     async def setup(self, environment):
         result = await environment.exec(
             "mkdir -p /case /work/project /work/model && chown -R 65534:65534 /work && touch /app/rules.json /app/ordering.txt && chown 65534:65534 /app/rules.json /app/ordering.txt",
