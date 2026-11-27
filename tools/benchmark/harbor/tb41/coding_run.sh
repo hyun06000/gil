@@ -49,7 +49,7 @@ if [[ $TB_ARM == codex-gil ]]; then
   chmod -R a+rX "$kit"
   printf '{"mcpServers":{"gil":{"command":"python3","args":["/gil/gil_proxy.py","/gil/gil","/app","/logs/agent"]}}}\n' > "$work/gil.mcp.json"
   OPENAI_API_KEY="$GIL_HARBOR_API_KEY" harbor run --path "$task" --agent codex --model "openai/${TB_CODEX_MODEL:-gpt-5.6-luna}" \
-    --mcp-config "$work/gil.mcp.json" --mounts "[\"$kit:/gil:ro\"]" \
+    --mcp-config "$work/gil.mcp.json" --mounts "[{\"type\":\"bind\",\"source\":\"$kit\",\"target\":\"/gil\",\"read_only\":true}]" \
     --ak "prompt_template_path=$base/coding/codex_gil_prompt.md.j2" \
     --env docker --agent-timeout-multiplier 0.125 --jobs-dir "$output" --job-name pair || rc=$?
   TB_UPSTREAM="$upstream" python3 "$base/coding_report.py" "$output" "$TB_ARM" "$TB_TASK" || echo "coding_report could not summarise the codex-gil trial"
