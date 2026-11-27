@@ -318,7 +318,9 @@ def define_states(model, ledger, targets, lesson):
         "give, and does not call the solution to produce them. Where the requirement is that something must not "
         "change, the starting state contains that something (existing records, a stale file) and the probe "
         "compares bytes. Where it is about a failure, the probe creates the failing condition. It restores "
-        "what it touched in the task directory, and prints what differed when it fails. "
+        "what it touched in the task directory, and prints what differed when it fails. It is run exactly as "
+        "written and nobody can repair it afterwards, so whatever helper it writes must run with the tooling and "
+        "module system the project's own commands already use. "
         'Answer as {"probes": [{"id": "K1", "state": "...", "probe": "..."}]}. Targets: '
         + json.dumps([{key: ledger.items[t][key] for key in ("id", "kind", "requirement", "source")} for t in targets],
                      ensure_ascii=False)
@@ -669,14 +671,18 @@ def reply(r):
                 "still describes the right problem (its states and probes match their sources) and a different "
                 "method could bring the states about, the hypothesis was wrong. If a state or its probe does not "
                 "match its source, the targets were badly chosen, or they depend on work not yet done, the problem "
-                f"definition was wrong. State which it is and what the evidence is. About {minutes_left():.0f} minutes "
+                "definition was wrong. A probe that fails for a reason of its own belongs to the problem definition "
+                "too: if it stops before it reaches what it is meant to observe, or fails the same way whatever the "
+                "method was, no other hypothesis can mend it, because only the problem definition can change a probe. "
+                f"State which it is and what the evidence is. About {minutes_left():.0f} minutes "
                 "of the trial are left. Analysis: "
                 + analysis["interpretation"] + ("\n" + lesson if lesson else ""))
             if obs.get("stop") not in SPENT and model(
                     "Choose where this experiment goes back to, as your reflection concluded. revise_hypothesis: "
                     "keep this problem definition and its targets, restore the files to what they were there and "
                     "try a different hypothesis. revise_problem: close this experiment as failed, restore the "
-                    "parent experiment's files and define a new problem. Reflection: " + reflection,
+                    "parent experiment's files and define the problem again, with new states and probes. A defect "
+                    "in a probe is mended only there. Reflection: " + reflection,
                     ["revise_hypothesis", "revise_problem"]) == "revise_hypothesis":
                 return close(
                     verdict="failure",
