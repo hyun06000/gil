@@ -101,3 +101,15 @@ GIL_MCP_DISPLAY=headless GIL_MCP_APPROVAL=unattended gil mcp --serve
 - `gil_start` adds `AGENTS.md` and `CLAUDE.md` to the project root and the record lives under `.gil` (or the private store the start names). None of these belong in a graded submission.
 
 `tests/unattended_session.rs` walks this path over the real process with scripted calls. It does not show that a model follows the receipts.
+
+### The `mcp` arm of the three-CPU preset
+
+`cpu_arm: mcp` runs the same stand-in agent as the control arm (`tb41/coding/solver.py`) with that server connected (`tb41/coding/gil_mcp.py`):
+
+- The project folder is the task folder itself (`/app`). The first request carries one line from the user asking for a GIL project there with `start_kind: tracked_scope`.
+- The model gets the server's instructions in the system message and every model tool of the server beside the editor tools, plus `say` to speak to the user. The two runner tools are never in its list.
+- The stand-in user is a fixed policy, not a model: it approves whatever a receipt lists in `awaiting_user`, for the digest it read, and answers anything said to it with "the task statement is everything; go with your recommendation".
+- When the worker ends, `.gil`, `.gilignore`, `AGENTS.md` and `CLAUDE.md` are moved out of `/app` to `/work/gil-record` (uploaded as `gil-record.tgz`), unless the task itself shipped a file of that name. The host repeats the move if the worker did not reach its end.
+- The benchmark-only path of the `on` arm (participant, checkpoint, criteria ledger, `gil benchmark`) is not part of this arm.
+
+`tb41/coding/test_gil_mcp.py` drives this arm with a scripted model against a product-feature binary (`GIL_TEST_BINARY`). No run with a real model has been made.

@@ -36,17 +36,21 @@ class CodeAgent(SoundChangeAgent):
         status=await environment.exec(cmd,user="root")
         if status.return_code: raise RuntimeError(status.stdout or status.stderr)
         arm = os.environ["TB_ARM"]
-        if arm not in {"on", "off"}:
+        if arm not in {"on", "off", "mcp"}:
             raise ValueError("Unknown coding benchmark arm")
         modules = ["solver.py", "mailbox_client.py"]
         if arm == "on":
             modules.extend(["participant.py", "checkpoint.py", "verify_activity.py", "criteria.py"])
+        if arm == "mcp":
+            # The product's MCP server and the client that connects the stand-in agent to it. Nothing of the
+            # benchmark-only GIL path (participant, checkpoint, ledger) is in this arm.
+            modules.append("gil_mcp.py")
         for name in modules:
             await environment.upload_file(HERE/"coding"/name,"/case/"+name)
         if task == "vf2-speedup-networkx":
             await environment.upload_file(HERE/"coding"/"graph_smoke.py", "/case/graph_smoke.py")
         await environment.upload_file(HERE/"worker.py","/case/worker.py")
-        if os.environ["TB_ARM"]=="on":
+        if arm in ("on", "mcp"):
             await environment.upload_file(os.environ["TB_GIL_BINARY"],"/case/gil")
         else:
             status = await environment.exec(
@@ -73,12 +77,21 @@ class CodeAgent(SoundChangeAgent):
                     await environment.download_file("/tmp/gil-interrupted.tgz", self.logs_dir / "gil-interrupted.tgz")
             raise
         finally:
+            if os.environ["TB_ARM"] == "mcp":
+                # The project record GIL kept in the task folder, taken out of the submission by the worker
+                # (or still in place if the worker did not reach its end).
+                kept = await environment.exec(
+                    "cd /work && mkdir -p gil-record && for f in .gil .gilignore AGENTS.md CLAUDE.md; do "
+                    "if [ -e /app/$f ] && [ ! -e gil-record/$f ]; then mv /app/$f gil-record/; fi; done; "
+                    "tar -czf /tmp/gil-record.tgz gil-record", user="root")
+                if kept.return_code == 0:
+                    await environment.download_file("/tmp/gil-record.tgz", self.logs_dir / "gil-record.tgz")
             exists = await environment.exec("test -f /work/model/transcript.jsonl", user="root")
             if exists.return_code == 0:
                 await environment.download_file("/work/model/transcript.jsonl", self.logs_dir / "transcript.jsonl")
 
     async def run_worker(self, environment):
         arm=os.environ["TB_ARM"]; task=os.environ["TB_TASK"]
-        assert arm in ("on","off") and task in TASKS
-        prep="chmod +x /case/participant.py /case/gil && " if arm=="on" else ""
+        assert arm in ("on","off","mcp") and task in TASKS
+        prep="chmod +x /case/participant.py /case/gil && " if arm=="on" else "chmod +x /case/gil && " if arm=="mcp" else ""
         return await environment.exec(prep+"chmod 644 /case/task.txt && setpriv --reuid=65534 --regid=65534 --clear-groups --no-new-privs env HOME=/tmp TB_EXTRA_SECONDS=1800 TB_TASK="+task+" python3 /case/worker.py "+arm,user="root",timeout_sec=3590)

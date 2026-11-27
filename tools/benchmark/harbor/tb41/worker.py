@@ -10,6 +10,11 @@ extra_seconds = int(os.environ.get("TB_EXTRA_SECONDS", "0"))
 Path("/work/deadline").write_text(str(time.time() + 1735 + extra_seconds))
 if sys.argv[1] == "off":
     solve(Path("/case/task.txt").read_text())
+elif sys.argv[1] == "mcp":
+    # The same stand-in agent, with the product's GIL MCP server connected and the project in the task folder.
+    from gil_mcp import Gil
+    from solver import APP
+    solve(Path("/case/task.txt").read_text(), gil=Gil("/case/gil", APP, record="/work/gil-record"))
 else:
     from checkpoint import seed_submission
     seed_submission()

@@ -11,6 +11,10 @@ if transcript.is_file():
 interruption = folder / "agent/gil-interrupted.tgz"
 if interruption.is_file():
     shutil.copyfile(interruption, root / interruption.name)
+# The mcp arm's project record, taken out of the task folder before grading.
+kept = folder / "agent/gil-record.tgz"
+if kept.is_file():
+    shutil.copyfile(kept, root / kept.name)
 
 def load(path):
     f=folder/path

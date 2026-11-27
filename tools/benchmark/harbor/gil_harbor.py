@@ -80,7 +80,8 @@ class LunaAgent(GilAgent):
                                                              editor=req.get("editor") is True,
                                                              notes=req.get("notes") is True,
                                                              ledger=req.get("ledger") is True,
-                                                             schema=req.get("schema"))
+                                                             schema=req.get("schema"),
+                                                             **({"connected": req["tools"]} if req.get("tools") else {}))
                             packet = {"answer": answer}
                         except BudgetReached:
                             if req.get("editor") is not True:

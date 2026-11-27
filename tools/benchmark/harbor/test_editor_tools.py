@@ -139,3 +139,18 @@ class EditorTests(unittest.TestCase):
                 else:
                     self.assertNotIn("tools", body)
                     self.assertEqual(answer, expected)
+
+
+class ConnectedToolTests(unittest.TestCase):
+    """Tools of a server connected for the trial are offered beside the editor's and come back as its calls."""
+    SERVER = [{"type": "function", "name": "gil_open", "strict": False, "description": "", "parameters": {"type": "object"}},
+              {"type": "function", "name": "say", "strict": True, "description": "",
+               "parameters": {"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"], "additionalProperties": False}}]
+
+    def test_a_server_tool_keeps_its_name_and_arguments_and_an_editor_tool_is_unchanged(self):
+        opened = json.loads(editor_answer([tool_call("gil_open", project_root="/app", kind="question")], connected=self.SERVER))
+        self.assertEqual(opened, {"action": "gil", "tool": "gil_open", "arguments": {"project_root": "/app", "kind": "question"}})
+        self.assertEqual(json.loads(editor_answer([tool_call("say", message="hello")], connected=self.SERVER)), {"action": "say", "message": "hello"})
+        self.assertEqual(json.loads(editor_answer([tool_call("run", command="make")], connected=self.SERVER)), {"action": "run", "command": "make"})
+        with self.assertRaises(ValueError):
+            editor_answer([tool_call("gil_open", project_root="/app")])

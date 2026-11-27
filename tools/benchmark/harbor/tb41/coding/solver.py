@@ -241,10 +241,10 @@ def run_probe(key, script):
         path.unlink(missing_ok=True)
 
 
-def solve(task,plan="", *, cycle=None, baseline=None, verify_ref=None, failed_check=None, criteria=None, targets=(), scope=None):
+def solve(task,plan="", *, cycle=None, baseline=None, verify_ref=None, failed_check=None, criteria=None, targets=(), scope=None, gil=None):
     public=[]
     for directory,children,files in os.walk(APP):
-        children[:]=[v for v in children if v not in ("node_modules",".git","__pycache__","build","dist")]
+        children[:]=[v for v in children if v not in ("node_modules",".git","__pycache__","build","dist",".gil")]
         public.extend(str((Path(directory)/f).relative_to(APP)) for f in files)
         if len(public)>600: break
     history=[]; writes={}; checked=None; calls=0
@@ -322,7 +322,14 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                        + json.dumps(ledger.shown(submission(writes), targets), ensure_ascii=False))
         if activity:
             prompt += activity.prompt(CHECKS[TASK], checked, stall.count)
-        answer=ask(prompt, notes=True, ledger=True) if ledger else ask(prompt, notes=True); calls+=1
+        if gil:
+            # The product's MCP server is connected: its tools are offered beside the editor's, and the
+            # user who asked for a GIL project is the stand-in the runner plays.
+            prompt += ("\n" + gil.opening + "\nBesides the editor tools you may call any GIL tool, or `say` to "
+                       "speak to the user. Still exactly one tool call per request.")
+            answer = ask(prompt, notes=True, tools=gil.tools, system=gil.system); calls += 1
+        else:
+            answer=ask(prompt, notes=True, ledger=True) if ledger else ask(prompt, notes=True); calls+=1
         obj = {}
         try:
             obj=json.loads(answer.strip().removeprefix("```json").removeprefix("```").removesuffix("```"))
@@ -337,7 +344,30 @@ If a local check fails, use its output to fix the source. No remote tools or pri
             note = obj.get("note")
             if isinstance(note, str) and note.strip():
                 notes.append({"call": calls, "action": action, "note": note.strip()[:NOTE_LIMIT]})
-            if action=="read":
+            if gil and action == "gil":
+                # A call to the GIL server; what it records and what the user then decided comes back as the result.
+                before = snapshot()
+                response = gil.call(obj["tool"], obj["arguments"])
+                # GIL may have returned files to an earlier world: what is on disk is what counts.
+                after = snapshot()
+                changed = sorted(n for n in before.keys() | after.keys() if before.get(n) != after.get(n))
+                for name in changed:
+                    if name in after:
+                        writes[name] = after[name]
+                        stall.write(name, after[name], before.get(name))
+                    else:
+                        writes.pop(name, None)
+                if changed:
+                    checked = None
+                    check_output = ""
+                    response += f"\nSubmission files changed by this call: {changed}"
+                logged = response
+                obj = {**obj, "path": obj["tool"]}
+                stall.step(True)
+            elif gil and action == "say":
+                response = logged = gil.say(obj["message"])
+                stall.step(True)
+            elif action=="read":
                 path=source(obj["path"])
                 start=max(0,int(obj.get("offset",0)))
                 data = path.read_bytes()
@@ -539,6 +569,8 @@ If a local check fails, use its output to fix the source. No remote tools or pri
         current = submission(writes)
         obs.update(criteria=ledger.json(), targets=list(targets), submission_digest=current,
                    ledger=ledger.counts(current), swept=swept, entry=entry, outside_hypothesis=outside)
+    if gil:
+        obs["gil"] = gil.close()
     if checkpoint:
         obs["verified_checkpoint_restores"] = recoveries
     (WORK/"observation.json").write_text(json.dumps(obs))

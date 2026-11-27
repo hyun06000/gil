@@ -47,12 +47,18 @@ LEDGER_TOOLS = NOTED_TOOLS + [editor_tool(
     {"criterion": {"type": "string", "description": "Id of the criterion, such as K3."}, **NOTE})]
 
 
-def editor_answer(output, tools=EDITOR_TOOLS):
+def editor_answer(output, tools=EDITOR_TOOLS, connected=()):
     calls = [item for item in output if item["type"] == "function_call"]
     if len(calls) != 1:
         raise ValueError("Expected exactly one editor call")
     call = calls[0]
     args = json.loads(call["arguments"])
+    for tool in connected:
+        if tool["name"] == call["name"]:
+            # A tool of a connected server: its own schema is the server's to enforce.
+            if tool.get("strict"):
+                return json.dumps({"action": call["name"], **args}, ensure_ascii=False)
+            return json.dumps({"action": "gil", "tool": call["name"], "arguments": args}, ensure_ascii=False)
     for tool in tools:
         if tool["name"] == call["name"]:
             properties = tool["parameters"]["properties"]
@@ -84,13 +90,14 @@ class Luna:
         self.outputs = 0
         self.reserved = 0
 
-    def ask(self, messages, choices, *, editor=False, notes=False, ledger=False, schema=None):
+    def ask(self, messages, choices, *, editor=False, notes=False, ledger=False, schema=None, connected=None):
         # Reasoning applies to editor requests only: the other stages share the Core's 120 s turn limit.
         body = {"model": MODEL, "input": messages, "reasoning": {"effort": self.reasoning},
                 "max_output_tokens": self.max_output, "store": False, "service_tier": "default"}
         if editor:
             tools = LEDGER_TOOLS if ledger else NOTED_TOOLS if notes else EDITOR_TOOLS
-            body.update(tools=tools, tool_choice="required", parallel_tool_calls=False)
+            # Tools of a server connected for this trial are offered beside the editor's.
+            body.update(tools=tools + list(connected or ()), tool_choice="required", parallel_tool_calls=False)
         elif schema:
             # The shape of the answer is the API's to guarantee, so nothing has to be asked twice.
             body["text"] = {"format": {"type": "json_schema", "name": "answer", "strict": True, "schema": schema}}
@@ -143,7 +150,7 @@ class Luna:
         if result["status"] != "completed":
             raise RuntimeError(f"Luna response status {result['status']}")
         if editor:
-            return editor_answer(result["output"], tools)
+            return editor_answer(result["output"], tools, connected or ())
         answer = "".join(part["text"] for item in result["output"] if item["type"] == "message"
                          for part in item["content"] if part["type"] == "output_text").strip()
         if choices:
