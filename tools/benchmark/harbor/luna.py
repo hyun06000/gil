@@ -71,9 +71,8 @@ class BudgetReached(RuntimeError):
 
 
 class Luna:
-    def __init__(self, *, max_calls=MAX_CALLS, budget=BUDGET, max_output=MAX_OUTPUT, reasoning="none", timeout=60, overrun=0.0, stage_timeout=None):
+    def __init__(self, *, max_calls=MAX_CALLS, budget=BUDGET, max_output=MAX_OUTPUT, reasoning="none", timeout=60, overrun=0.0):
         self.overrun = overrun
-        self.stage_timeout = stage_timeout
         self.reasoning = reasoning
         self.timeout = timeout
         self.max_calls = max_calls
@@ -85,9 +84,9 @@ class Luna:
         self.outputs = 0
         self.reserved = 0
 
-    def ask(self, messages, choices, *, editor=False, notes=False, ledger=False, schema=None, reason=False):
+    def ask(self, messages, choices, *, editor=False, notes=False, ledger=False, schema=None):
         # Reasoning applies to editor requests only: the other stages share the Core's 120 s turn limit.
-        body = {"model": MODEL, "input": messages, "reasoning": {"effort": self.reasoning if editor or reason else "none"},
+        body = {"model": MODEL, "input": messages, "reasoning": {"effort": self.reasoning},
                 "max_output_tokens": self.max_output, "store": False, "service_tier": "default"}
         if editor:
             tools = LEDGER_TOOLS if ledger else NOTED_TOOLS if notes else EDITOR_TOOLS
@@ -113,12 +112,9 @@ class Luna:
         request = urllib.request.Request("https://api.openai.com/v1/responses", data=data, headers={
             "Authorization": "Bearer " + self.key, "Content-Type": "application/json"})
         result = None
-        # The stages without the editor share the Core's 120 s turn: one short second try, not a long wait.
-        # A request that reasons (the editor, a problem definition, a hypothesis) gets the long wait.
-        timeout = self.timeout if editor or reason or self.stage_timeout is None else self.stage_timeout
-        for wait in (*(RETRY_WAITS if editor or reason else (3,)), None):
+        for wait in (*RETRY_WAITS, None):
             try:
-                with urllib.request.urlopen(request, timeout=timeout) as resp:
+                with urllib.request.urlopen(request, timeout=self.timeout) as resp:
                     result = json.load(resp)
                 break
             except urllib.error.HTTPError as error:

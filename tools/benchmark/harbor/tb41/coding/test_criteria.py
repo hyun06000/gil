@@ -214,8 +214,8 @@ class ParticipantLedgerTests(unittest.TestCase):
         self.asked = []
 
     def model(self, answer):
-        def ask(prompt, choices=(), schema=None, reason=False):
-            self.asked.append({"prompt": prompt, "schema": schema, "reason": reason})
+        def ask(prompt, choices=(), schema=None):
+            self.asked.append({"prompt": prompt, "schema": schema})
             return answer
         return ask
 
@@ -246,7 +246,7 @@ class ParticipantLedgerTests(unittest.TestCase):
         self.assertEqual((defined, ledger.items["K3"]["probe"], ledger.items["K3"]["state"]), (["K3"], REFUSES, "a string is refused with TypeError"))
         self.assertEqual((ledger.items["K2"]["probe"], ledger.items["K1"]["probe"]), (None, None))
         asked = self.asked[0]
-        self.assertEqual((asked["schema"], asked["reason"]), (criteria.PROBES, True))
+        self.assertEqual(asked["schema"], criteria.PROBES)
         for phrase in ("fixed here, before any method is chosen", "the way an outside party would",
                        "does not call the solution to produce them", "the starting state contains that something"):
             self.assertIn(phrase, asked["prompt"])

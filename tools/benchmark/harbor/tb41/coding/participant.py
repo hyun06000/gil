@@ -322,7 +322,7 @@ def define_states(model, ledger, targets, lesson):
         'Answer as {"probes": [{"id": "K1", "state": "...", "probe": "..."}]}. Targets: '
         + json.dumps([{key: ledger.items[t][key] for key in ("id", "kind", "requirement", "source")} for t in targets],
                      ensure_ascii=False)
-        + ("\n" + lesson if lesson else ""), schema=PROBES, reason=True)
+        + ("\n" + lesson if lesson else ""), schema=PROBES)
     try:
         written = loads(answer).get("probes") or []
     except (ValueError, AttributeError, TypeError):
@@ -391,7 +391,7 @@ def reply(r):
     def step(kind, history=steps):
         return next(s for s in reversed(history) if s["kind"] == kind and s["report"])
 
-    def model(prompt, choices=(), schema=None, reason=False):
+    def model(prompt, choices=(), schema=None):
         context = {"task": task, "available_tools": {
             "read": "Read public task source", "write": "Replace permitted solution files",
             "edit": "Replace one passage of a permitted solution file",
@@ -400,7 +400,7 @@ def reply(r):
         if k in SOURCED:
             context["cited_source_excerpts"] = cited
             context["interview_reads"] = reads
-        shaped = {key: value for key, value in (("schema", schema), ("reason", reason)) if value}
+        shaped = {"schema": schema} if schema else {}
         return ask(json.dumps(context, ensure_ascii=False) + "\nCurrent instruction: " + prompt,
                    choices, stage=k, **shaped)
 
@@ -549,7 +549,7 @@ def reply(r):
                 'Answer as {"method": "...", "files": ["relative/path"]}. Targets: '
                 + json.dumps([{key: i[key] for key in ("id", "kind", "requirement", "state", "probe")} for i in chosen],
                              ensure_ascii=False)
-                + ("\n" + lesson if lesson else ""), schema=HYPOTHESIS, reason=True))
+                + ("\n" + lesson if lesson else ""), schema=HYPOTHESIS))
             method, files = str(said["method"]), [str(name) for name in said["files"]]
         except (ValueError, KeyError, TypeError):
             method, files = "No method was stated.", []

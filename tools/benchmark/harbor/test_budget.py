@@ -61,11 +61,6 @@ class BudgetTests(unittest.TestCase):
                     patch("time.sleep"), self.assertRaisesRegex(RuntimeError, f"Luna API HTTP {errors[0].code} on call 1: busy"):
                 Luna(max_calls=None, budget=None).ask([{"role": "user", "content": "x"}], [], editor=True)
             self.assertEqual(api.call_count, sent)
-        # A stage without the editor gets one short second try, so its turn stays inside the Core's limit.
-        with patch.dict(os.environ, {"GIL_HARBOR_API_KEY": "test"}), patch("urllib.request.urlopen", side_effect=[http(503), http(503)]) as api, \
-                patch("time.sleep") as wait, self.assertRaisesRegex(RuntimeError, "HTTP 503"):
-            Luna(max_calls=None, budget=None).ask([{"role": "user", "content": "x"}], [])
-        self.assertEqual((api.call_count, wait.call_args.args), (2, (3,)))
 
     def test_one_failed_look_into_the_container_is_tried_again(self):
         base = types.ModuleType("harbor.agents.base")

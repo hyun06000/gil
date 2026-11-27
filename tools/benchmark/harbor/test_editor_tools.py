@@ -39,7 +39,7 @@ class EditorTests(unittest.TestCase):
                 self.assertEqual("note" in tool["parameters"]["properties"], notes)
                 self.assertEqual(tool["parameters"]["required"], list(tool["parameters"]["properties"]))
 
-    def test_run_and_edit_calls_are_accepted_and_only_editor_requests_reason(self):
+    def test_run_and_edit_calls_are_accepted_and_every_request_of_a_reasoning_client_reasons(self):
         self.assertEqual(json.loads(editor_answer([tool_call("run", command="make")])), {"action": "run", "command": "make"})
         self.assertEqual(json.loads(editor_answer([tool_call("edit", path="a.py", old="x", new="y")])),
                          {"action": "edit", "path": "a.py", "old": "x", "new": "y"})
@@ -47,14 +47,15 @@ class EditorTests(unittest.TestCase):
             with self.subTest(output=output), self.assertRaises(ValueError):
                 editor_answer(output)
         text = [{"type": "message", "content": [{"type": "output_text", "text": "ok"}]}]
-        for editor, output, effort in ((True, [tool_call("check")], "medium"), (False, text, "none")):
+        # Whatever the stage, a client set to reason does: a GIL trial's interview, definition, analysis
+        # and reflection get the same effort and the same wait as editing.
+        for editor, output, effort in ((True, [tool_call("check")], "medium"), (False, text, "medium")):
             result = {"status": "completed", "output": output, "usage": {"input_tokens": 3, "output_tokens": 5}}
             with patch.dict("os.environ", {"GIL_HARBOR_API_KEY": "test"}), patch("urllib.request.urlopen", return_value=io.BytesIO(json.dumps(result).encode())) as send:
-                Luna(max_calls=None, budget=None, max_output=16000, reasoning="medium", timeout=240, stage_timeout=45).ask([], [], editor=editor)
+                Luna(max_calls=None, budget=None, max_output=16000, reasoning="medium", timeout=240).ask([], [], editor=editor)
             body = json.loads(send.call_args.args[0].data)
-            # A stage without the editor shares the Core's 120 s turn, so its request waits 45 s at most.
             self.assertEqual((body["reasoning"], body["max_output_tokens"], send.call_args.kwargs["timeout"]),
-                             ({"effort": effort}, 16000, 240 if editor else 45))
+                             ({"effort": effort}, 16000, 240))
         # The default client is unchanged.
         with patch.dict("os.environ", {"GIL_HARBOR_API_KEY": "test"}), patch("urllib.request.urlopen", return_value=io.BytesIO(json.dumps(result).encode())) as send:
             Luna().ask([], [])
@@ -79,8 +80,8 @@ class EditorTests(unittest.TestCase):
                     owner = getattr(cls, method).__qualname__.split(".")[0]
                     self.assertIn(owner, ("CodeAgent", "SoundChangeAgent"), f"{cls.__name__}.{method} fell back to {owner}")
             client = CodeAgent().model_client()
-            self.assertEqual((client.budget, client.max_calls, client.reasoning, client.max_output, client.overrun, client.timeout, client.stage_timeout),
-                             (5_000_000, None, "medium", 16000, 0.2, 180, 100))
+            self.assertEqual((client.budget, client.max_calls, client.reasoning, client.max_output, client.overrun, client.timeout),
+                             (5_000_000, None, "medium", 16000, 0.2, 180))
             with patch.dict("os.environ", {"TB_BUDGET_USD": "0.75"}):
                 self.assertEqual(CodeAgent().model_client().budget, 750_000)
             for refused in ("0", "9", "-1"):
@@ -108,14 +109,6 @@ class EditorTests(unittest.TestCase):
             self.assertEqual(json.loads(send.call_args.args[0].data)["tools"], LEDGER_TOOLS)
             with self.assertRaises(ValueError):
                 client.ask([], [], editor=True, notes=True)
-
-    def test_a_request_that_reasons_outside_the_editor_gets_the_effort_and_the_long_wait(self):
-        text = [{"type": "message", "content": [{"type": "output_text", "text": "{}"}]}]
-        result = {"status": "completed", "output": text, "usage": {"input_tokens": 3, "output_tokens": 5}}
-        for reason, effort, wait in ((True, "medium", 180), (False, "none", 100)):
-            with patch.dict("os.environ", {"GIL_HARBOR_API_KEY": "test"}), patch("urllib.request.urlopen", return_value=io.BytesIO(json.dumps(result).encode())) as send:
-                Luna(max_calls=None, budget=None, reasoning="medium", timeout=180, stage_timeout=100).ask([], [], reason=reason)
-            self.assertEqual((json.loads(send.call_args.args[0].data)["reasoning"], send.call_args.kwargs["timeout"]), ({"effort": effort}, wait))
 
     def test_a_request_with_a_schema_asks_the_provider_to_hold_the_answer_to_it(self):
         schema = {"type": "object", "properties": {"targets": {"type": "array", "items": {"type": "string"}}},

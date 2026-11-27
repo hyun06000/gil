@@ -69,7 +69,7 @@ ENTRY = {("cycle:C3", 0): BASE, ("cycle:C3", 1): BASE, ("cycle:C4", 0): GUARDED,
 calls = 0
 
 
-def model(prompt, choices=(), stage="solver", notes=False, ledger=False, schema=None, reason=False):
+def model(prompt, choices=(), stage="solver", notes=False, ledger=False, schema=None):
     global calls
     calls += 1
     model.call_id = ref + "-" + stage + "-" + str(calls)
@@ -91,8 +91,8 @@ def model(prompt, choices=(), stage="solver", notes=False, ledger=False, schema=
             assert f"Candidates: {NEXT['cycle:C3' if ref == 'cycle:C4' else 'cycle:C5']}" in prompt, prompt[-300:]
         answer = json.dumps({"targets": [TARGET[ref]]})
     elif schema == criteria.PROBES:
-        # Define fixes the state and its probe before any method exists; it reasons to write them.
-        assert stage == "define" and reason
+        # Define fixes the state and its probe before any method exists.
+        assert stage == "define"
         key = TARGET[ref]
         answer = json.dumps({"probes": [{"id": key, "state": "the requirement is observable from outside", "probe": PROBES[key]}]})
     elif schema == criteria.HYPOTHESIS:
