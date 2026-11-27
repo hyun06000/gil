@@ -27,7 +27,18 @@ SAY = {"type": "function", "name": "say", "strict": True,
        "description": "Say something to the user or ask the user a question, and get the reply.",
        "parameters": {"type": "object", "properties": {"message": {"type": "string"}},
                       "required": ["message"], "additionalProperties": False}}
-RESULT_LIMIT = 12000
+RESULT_LIMIT = 24000
+
+
+def shortened(text):
+    """A long GIL answer keeps both ends. A receipt opens with its guidance, but gil_context ends with what
+    matters most: the Cycles left behind by going back with their lessons, the current Cycle, and where the
+    agent stands. Cutting the end off hid every earlier failure from the agent (found 2026-11-27)."""
+    if len(text) <= RESULT_LIMIT:
+        return text
+    head = RESULT_LIMIT // 4
+    tail = RESULT_LIMIT - head
+    return f"{text[:head]}\n[… {len(text) - RESULT_LIMIT} characters left out here …]\n{text[-tail:]}"
 
 
 class Server:
@@ -101,8 +112,7 @@ class Gil:
         if not isinstance(arguments, dict):
             raise ValueError("Tool arguments must be an object")
         refused, text, structured = self.server.call(name, arguments)
-        # GIL puts its guidance first, so a long receipt keeps its beginning.
-        said = ("REFUSED: " if refused else "") + text[:RESULT_LIMIT]
+        said = ("REFUSED: " if refused else "") + shortened(text)
         answered = self.answer(structured.get("awaiting_user") or [])
         self.log.append({"tool": name, "refused": refused, "answered": answered})
         if answered:

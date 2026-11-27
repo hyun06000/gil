@@ -174,6 +174,16 @@ class McpArmTests(unittest.TestCase):
         self.assertTrue((self.app / "node_modules/.bin/pkg").is_symlink())
 
 
+class ShortenedTests(unittest.TestCase):
+    def test_a_long_answer_keeps_its_end_where_the_context_puts_earlier_failures(self):
+        text = "guidance " * 4000 + "Cycles left behind by revisiting: lesson of cycle:C3"
+        kept = gil_mcp.shortened(text)
+        self.assertLessEqual(len(kept), gil_mcp.RESULT_LIMIT + 80)
+        self.assertTrue(kept.startswith("guidance") and kept.endswith("lesson of cycle:C3"))
+        self.assertIn("characters left out here", kept)
+        self.assertEqual(gil_mcp.shortened("short"), "short")
+
+
 class ControlArmTests(unittest.TestCase):
     def test_without_a_connected_server_the_request_names_no_gil_tool_and_no_user_line(self):
         with tempfile.TemporaryDirectory() as temp:
