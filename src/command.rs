@@ -910,7 +910,18 @@ fn close_step(ctx: &Invocation<'_>, session: &mut Session, unachieved: Option<cr
         with_help(&Refusal::Session(&err), said)
     })?;
     write(&session)?;
-    Ok(closed_step(session, &closed))
+    let mut receipt = closed_step(session, &closed);
+    // After the Outcome the one thing left is the Cycle Report. Its shape, with the verdict and the
+    // direction that verdict allows already written, goes with this receipt: a failed Experiment
+    // took two or three refused closes to find them (2026-11-27).
+    #[cfg(feature = "approved-plan")]
+    if closed.kind == NodeKind::Outcome && session.project().exploration_contract()
+        && matches!(ctx, Invocation { root: Root::Exact(_), input: Input::Body(_) })
+        && let Some(contract) = session.project().cycles().current().close_contract() {
+        let cycle = session.project().cycles().current();
+        receipt.push_str(&format!("{}{}\n", text("cmd.closed_outcome_cycle_shape"), skeleton_for(&contract, cycle, Some(ctx), Some(session.project()))));
+    }
+    Ok(receipt)
 }
 
 fn close_cycle(ctx: &Invocation<'_>, session: &mut Session) -> Result<String, String> {
@@ -1754,6 +1765,25 @@ fn exploration_fields(report: &mut serde_json::Value, subject: &str, project: Op
         }
         if subject.contains("outcome") && project.current_cycle().kind() == CycleKind::Experiment {
             fields.insert("changed".into(), "on failure: what this Experiment changed in the files".into());
+            // An Outcome step never goes back by itself: it hands on to the Cycle Report.
+            fields.insert("next_direction.action".into(), "close_cycle".into());
+            fields.insert("verdict".into(), "success | failure".into());
+        }
+        // The Cycle Report repeats the Outcome's verdict, and the verdict decides the direction: a
+        // failure goes back to the Cycle this one was opened from, a success hands on.
+        let cycle = project.current_cycle();
+        if subject.starts_with("cycle:") && cycle.kind() == CycleKind::Experiment
+            && let Some(verdict) = cycle.steps().nodes().iter().rev().filter(|node| node.kind == NodeKind::Outcome)
+                .find_map(|node| node.report.as_ref()).and_then(|report| report.get("verdict")) {
+            fields.insert("verdict".into(), verdict.into());
+            if verdict == "failure" {
+                fields.insert("next_direction.action".into(), "revisit".into());
+                if let Some(parent) = cycle.parent() {
+                    fields.insert("next_direction.target_cycle_ref".into(), parent.to_ref().to_string().into());
+                }
+            } else {
+                fields.insert("next_direction.action".into(), "open_child".into());
+            }
         }
         if subject.contains("analysis") {
             for answer in ["problem_solved", "success_condition_met"] { fields.insert(answer.into(), "true | false".into()); }

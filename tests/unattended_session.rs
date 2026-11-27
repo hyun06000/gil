@@ -94,7 +94,9 @@ fn interview_sending(r: &mut Rig, ids: &[&str], listed: usize) {
     assert_eq!(structured(&done)["pending"], json!([]));
     let read = r.read();
     assert_eq!(read["proposal"]["receipt"]["source"], "unattended_runner");
-    let closed = ok(r.model("gil_close", json!({"report":read["close_report"]})), "close synthesis");
+    // The answered Synthesis closes with the Report GIL holds, whatever words the agent sends.
+    let _ = &read;
+    let closed = ok(r.c.request("tools/call", json!({"name":"gil_close","arguments":{"project_root":r.root,"report":{"statement":"내 말로 다시 쓴 것"}}})), "close synthesis");
     assert!(awaiting(&closed).is_null(), "{closed}");
     let outcome = ok(r.model("gil_open", json!({"kind":"outcome","contract":CONTRACT})), "open outcome");
     let outcome_ref = step_ref(&outcome, "outcome");
@@ -265,7 +267,15 @@ fn tracked_failure(label: &str) -> (Rig, std::collections::BTreeMap<String, Vec<
         ok(r.model("gil_open", json!({"kind":"analysis","contract":CONTRACT})), "analysis");
         ok(r.model("gil_close", json!({"report":analysis_report(failed)})), "close analysis");
         let outcome = step_ref(&ok(r.model("gil_open", json!({"kind":"outcome","contract":CONTRACT})), "outcome"), "outcome");
-        ok(r.model("gil_close", json!({"report":outcome_report(failed)})), "close outcome");
+        let judged = everything(&ok(r.model("gil_close", json!({"report":outcome_report(failed)})), "close outcome"));
+        // The Outcome's receipt carries the Cycle Report with the verdict and its direction filled in.
+        if let Some(target) = fails_back_to {
+            for filled in ["\\\"verdict\\\": \\\"failure\\\"", "\\\"next_direction.action\\\": \\\"revisit\\\"", &format!("\\\"next_direction.target_cycle_ref\\\": \\\"{target}\\\"")] {
+                assert!(judged.contains(filled), "{filled} is not in the Outcome receipt: {judged}");
+            }
+        } else {
+            assert!(judged.contains("\\\"next_direction.action\\\": \\\"open_child\\\""), "{judged}");
+        }
         ok(r.model("gil_close", json!({"report":cycle_report(n, &outcome, fails_back_to)})), "close experiment");
         n
     };

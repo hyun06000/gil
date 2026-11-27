@@ -136,6 +136,26 @@ fn approved_plan(input: &Value) -> Option<(u64, String, Vec<Value>)> {
     Some((u64::from(plan.revision), plan.digest.clone(), serde_json::to_value(&plan.draft.items).ok()?.as_array()?.clone()))
 }
 
+/// A Synthesis whose proposal the user has answered closes with the Report of that answer, which
+/// GIL holds. The agent's own wording of it is not compared character for character: the recorded
+/// Report is put in its place. Closing "exactly as approved" by retyping ended sessions (2026-11-27).
+pub(super) fn answered_close(name: &str, input: &mut Value) {
+    // Only a Report that is this Synthesis's own is replaced; any other body is refused as before.
+    if name != "gil_close" || !input.get("report").and_then(Value::as_object)
+        .is_some_and(|sent| sent.contains_key("statement") || sent.contains_key("approved")) { return; }
+    let report = (|| {
+        let s = session(input.get("project_root")?.as_str()?).ok()?;
+        let p = s.project();
+        let cycle = p.current_cycle();
+        let open = cycle.steps().node(cycle.step_now_open()?)?;
+        if open.kind != crate::NodeKind::Synthesis { return None; }
+        let proposal = p.approved_plan()?.current(p)?;
+        proposal.receipt.as_ref()?;
+        Some(super::body::to_object(&crate::approved_plan::report_text(&proposal.report().ok()?)))
+    })();
+    if let Some(report) = report { input["report"] = report; }
+}
+
 /// The requirement link of `gil_open(kind: experiment)` names the approved revision. Which revision
 /// is approved is GIL's own record, so GIL writes the revision and its digest into the link: an
 /// agent copying sixty-four hex digits by hand got them wrong and could not open its Experiment.

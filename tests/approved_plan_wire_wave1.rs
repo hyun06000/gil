@@ -541,8 +541,9 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     let mut tampered = report.clone();
     tampered["statement"] = json!(tampered["statement"].as_str().unwrap().replace("합성 자료로 항목을", "다른 문장으로 항목을"));
     assert_ne!(tampered, report);
-    refused(r.model("gil_close", json!({"report":tampered})), "tampered close_report");
-    refused(r.model("gil_close", json!({"report":close_report_rev1})), "revision-1 report after revision-2 approval");
+    // What the agent sends for an answered Synthesis is not compared with the record: GIL closes it
+    // with the Report it holds (tests/unattended_session.rs), so a reworded or stale body changes nothing.
+    let _ = (&tampered, &close_report_rev1);
     ok(r.model("gil_close", json!({"report":report})), "close synthesis");
 
     // Experiment gated until Outcome and the Interview Cycle close; then binds A
@@ -680,10 +681,12 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     let mut forged = report.clone();
     forged["approved"] = json!("yes");
     assert_ne!(forged, report);
-    refused(r.model("gil_close", json!({"report":forged})), "forged approved:yes");
     refused(r.model("gil_open", json!({"kind":"experiment"})), "experiment with Synthesis open");
-    let closed = ok(r.model("gil_close", json!({"report":report})), "close with approved:no");
-    assert!(said(&closed).contains("question"), "{closed}");
+    // A body claiming approval cannot make one: the Synthesis closes with the answer GIL recorded,
+    // which is the refusal, and the receipt says so.
+    let _ = &report;
+    let closed = ok(r.model("gil_close", json!({"report":forged})), "a forged approved:yes closes as the recorded approved:no");
+    assert!(said(&closed).contains("question") && closed.to_string().contains("승인되지 않았다"), "{closed}");
     refused(r.model("gil_open", json!({"kind":"outcome","contract":CONTRACT})), "outcome after approved:no");
     let (basis, synthesis4) = r.ask_and_interpret();
     // An approved item can be neither altered nor removed by a proposal: GIL keeps the stored items
