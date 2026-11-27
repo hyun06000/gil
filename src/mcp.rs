@@ -442,10 +442,6 @@ impl ServerHandler for GilServer {
     async fn call_tool(&self, request: CallToolRequestParams, _: RequestContext<RoleServer>) -> Result<CallToolResponse, ErrorData> {
         let tool = self.get_tool(&request.name).ok_or_else(|| ErrorData::invalid_params("Unknown GIL tool", None))?;
         let mut input = Value::Object(request.arguments.unwrap_or_default());
-        #[cfg(feature = "approved-plan")]
-        plans::link(&request.name, &mut input);
-        #[cfg(feature = "approved-plan")]
-        plans::answered_close(&request.name, &mut input);
         body::accept(&request.name, &mut input).map_err(|said| ErrorData::invalid_params(said, None))?;
         #[cfg(feature = "approved-plan")]
         plans::accept(&request.name, &mut input).map_err(|said| ErrorData::invalid_params(said, None))?;

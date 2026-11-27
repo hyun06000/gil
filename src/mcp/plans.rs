@@ -89,27 +89,16 @@ const ITEM_SHAPE: &str = "{id, part_of, question, observation, command, source}"
 /// Turns the items of a proposal from the wire shape into the stored one. `Err` is the wire refusal.
 pub(super) fn accept(name: &str, input: &mut Value) -> Result<(), String> {
     if name != "gil_plan_propose" { return Ok(()); }
-    let approved = approved_plan(input).map(|(_, _, items)| items);
+    let approved = approved_plan(input);
     let listed = (|| session(input.get("project_root")?.as_str()?).ok()?.project().listed_major_problems())();
     let Some(items) = input.pointer_mut("/draft/items").and_then(Value::as_array_mut) else { return Ok(()); };
     let wrong = |why: &str| format!("gil_plan_propose: every item is exactly {ITEM_SHAPE}, all nonblank strings. {why} observation is the ONE observation that decides the question; if a problem needs more than one, it is more than one item. command is the command that makes that observation here, with what is in this environment — if no command here can make it yet, making the means to observe it is an item of its own that comes first; do not leave out what the work is judged by. source quotes the sentence of the user's request the problem comes from. Nothing was recorded; correct the items and send the call once more.");
-    // An approved item cannot be redefined, so its text is GIL's to keep, not the agent's to retype:
-    // an item sent under an approved id stands for the stored one, and approved items left out are
-    // carried over. Asking for a character-exact copy of every item ended sessions on one stray
-    // space (2026-11-27).
-    let stored = approved.unwrap_or_default();
     // The first plan of a Chain is a tree: the major problems its Interpretation listed, each split
-    // into leaves. `part_of` is a leaf's path from its major problem down.
-    let majors = if stored.is_empty() { listed.as_deref().map(crate::approved_plan::major_problems).unwrap_or_default() } else { Vec::new() };
+    // into leaves. `part_of` is a leaf's path from its major problem down. Later proposals are
+    // checked by the Core against the approved items as they were.
+    let majors = if approved.is_none() { listed.as_deref().map(crate::approved_plan::major_problems).unwrap_or_default() } else { Vec::new() };
     let tree = |why: &str| format!("gil_plan_propose: the plan is a tree. The Interpretation listed these major problems: {}. Every item is a leaf under one of them: write its path in part_of, the major problem first and any branches after it (\"M2 > timestamps > rollover\"), and every major problem needs at least one leaf. Split a major problem into branches, and a branch again, until ONE observation decides each leaf. {why} Nothing was recorded; correct the items and send the call once more.", majors.join(", "));
-    let named = |item: &Value| item.get("id").and_then(Value::as_str).map(str::to_owned);
-    let sent: Vec<String> = items.iter().filter_map(named).collect();
-    let mut merged: Vec<Value> = stored.iter().filter(|item| named(item).is_some_and(|id| !sent.contains(&id))).cloned().collect();
     for item in items.iter_mut() {
-        if let Some(kept) = stored.iter().find(|kept| named(kept).is_some() && named(kept) == named(item)) {
-            merged.push(kept.clone());
-            continue;
-        }
         let Some(fields) = item.as_object_mut() else { return Err(wrong("An item is not an object.")); };
         if fields.contains_key("done_when") { return Err(wrong("done_when is not a field: write observation.")); }
         for field in ["id", "question", "observation", "command", "source"] {
@@ -128,61 +117,21 @@ pub(super) fn accept(name: &str, input: &mut Value) -> Result<(), String> {
         }
         let observation = fields.remove("observation").expect("checked");
         fields.insert("done_when".into(), observation);
-        merged.push(item.clone());
     }
-    if let Some(bare) = majors.iter().find(|major| !merged.iter().any(|item| item.get("part_of").and_then(Value::as_str).map(crate::approved_plan::major_of) == Some(major.as_str()))) {
+    if let Some(bare) = majors.iter().find(|major| !items.iter().any(|item| item.get("part_of").and_then(Value::as_str).map(crate::approved_plan::major_of) == Some(major.as_str()))) {
         return Err(tree(&format!("Major problem {bare} has no leaf.")));
-    }
-    *items = merged;
-    // The checklist of a later proposal is the list just put together, in its order.
-    if !stored.is_empty() {
-        let ids = items.iter().filter_map(named).collect::<Vec<_>>().join("\n");
-        if let Some(synthesis) = input.pointer_mut("/draft/synthesis").and_then(Value::as_object_mut) {
-            synthesis.insert("exploration_checklist".into(), ids.into());
-        }
     }
     Ok(())
 }
 
-/// The approved revision of the project a call names: its revision, digest and items as stored.
-fn approved_plan(input: &Value) -> Option<(u64, String, Vec<Value>)> {
+/// The approved revision of the project a call names, if its Chain has one.
+fn approved_plan(input: &Value) -> Option<u64> {
     let s = session(input.get("project_root")?.as_str()?).ok()?;
     let p = s.project();
     let plan = p.approved_plan()?.active(p.current_chain()?)?;
-    Some((u64::from(plan.revision), plan.digest.clone(), serde_json::to_value(&plan.draft.items).ok()?.as_array()?.clone()))
+    Some(u64::from(plan.revision))
 }
 
-/// A Synthesis whose proposal the user has answered closes with the Report of that answer, which
-/// GIL holds. The agent's own wording of it is not compared character for character: the recorded
-/// Report is put in its place. Closing "exactly as approved" by retyping ended sessions (2026-11-27).
-pub(super) fn answered_close(name: &str, input: &mut Value) {
-    // Only a Report that is this Synthesis's own is replaced; any other body is refused as before.
-    if name != "gil_close" || !input.get("report").and_then(Value::as_object)
-        .is_some_and(|sent| sent.contains_key("statement") || sent.contains_key("approved")) { return; }
-    let report = (|| {
-        let s = session(input.get("project_root")?.as_str()?).ok()?;
-        let p = s.project();
-        let cycle = p.current_cycle();
-        let open = cycle.steps().node(cycle.step_now_open()?)?;
-        if open.kind != crate::NodeKind::Synthesis { return None; }
-        let proposal = p.approved_plan()?.current(p)?;
-        proposal.receipt.as_ref()?;
-        Some(super::body::to_object(&crate::approved_plan::report_text(&proposal.report().ok()?)))
-    })();
-    if let Some(report) = report { input["report"] = report; }
-}
-
-/// The requirement link of `gil_open(kind: experiment)` names the approved revision. Which revision
-/// is approved is GIL's own record, so GIL writes the revision and its digest into the link: an
-/// agent copying sixty-four hex digits by hand got them wrong and could not open its Experiment.
-pub(super) fn link(name: &str, input: &mut Value) {
-    if name != "gil_open" || input.get("kind").and_then(Value::as_str) != Some("experiment") { return; }
-    if !input.get("contract").is_some_and(Value::is_object) { return; }
-    let Some((revision, digest, _)) = approved_plan(input) else { return; };
-    let contract = input["contract"].as_object_mut().expect("checked");
-    contract.insert("plan_revision".into(), revision.to_string().into());
-    contract.insert("plan_digest".into(), digest.into());
-}
 
 /// The stored name of an item's observation, as the model reads it.
 fn observation_named(value: &mut Value) {

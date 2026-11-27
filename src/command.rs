@@ -624,15 +624,6 @@ fn open_step(ctx: &Invocation<'_>,
         crate::project_resume::ensure(&session.root().map_err(say)?)
     } else { String::new() };
     let mut receipt = opened_step(session, opened);
-    // The Report this step closes with, in the shape to send, before the agent writes it: shown only
-    // after a refusal, every step cost one refused close to learn its fields (2026-11-27).
-    #[cfg(feature = "approved-plan")]
-    if session.project().exploration_contract() && matches!(ctx, Invocation { root: Root::Exact(_), input: Input::Body(_) })
-        && let Some(contract) = step_contract(session.project().cycles().current()) {
-        let shape = skeleton_for(&contract, session.project().cycles().current(), Some(ctx), Some(session.project()));
-        let lead = receipt.find('\n').map_or(receipt.len(), |at| at + 1);
-        receipt.insert_str(lead, &format!("{}{shape}\n", text("cmd.opened_report_shape")));
-    }
     // The approved plan document a Verify must keep beside its evidence is saved by GIL itself, byte
     // for byte: an agent that retypes it cannot be relied on to reproduce it. Opening is already
     // durable; a failed save changes nothing about it and the receipt says what to do instead.
@@ -910,18 +901,7 @@ fn close_step(ctx: &Invocation<'_>, session: &mut Session, unachieved: Option<cr
         with_help(&Refusal::Session(&err), said)
     })?;
     write(&session)?;
-    let mut receipt = closed_step(session, &closed);
-    // After the Outcome the one thing left is the Cycle Report. Its shape, with the verdict and the
-    // direction that verdict allows already written, goes with this receipt: a failed Experiment
-    // took two or three refused closes to find them (2026-11-27).
-    #[cfg(feature = "approved-plan")]
-    if closed.kind == NodeKind::Outcome && session.project().exploration_contract()
-        && matches!(ctx, Invocation { root: Root::Exact(_), input: Input::Body(_) })
-        && let Some(contract) = session.project().cycles().current().close_contract() {
-        let cycle = session.project().cycles().current();
-        receipt.push_str(&format!("{}{}\n", text("cmd.closed_outcome_cycle_shape"), skeleton_for(&contract, cycle, Some(ctx), Some(session.project()))));
-    }
-    Ok(receipt)
+    Ok(closed_step(session, &closed))
 }
 
 fn close_cycle(ctx: &Invocation<'_>, session: &mut Session) -> Result<String, String> {
@@ -1493,9 +1473,6 @@ fn opened_step(session: &Session, opened: crate::Opened) -> String {
     #[cfg(feature = "approved-plan")]
     if session.project().exploration_contract() {
         match opened.kind {
-            // The files went back with each failure; what was tried and learned did not. It is put
-            // before the agent where the next problem and the next method are written.
-            crate::NodeKind::Define | crate::NodeKind::Hypothesis => out.push_str(&left_behind(session.project())),
             crate::NodeKind::Verify => out.push_str(text("guide.verify_change")),
             crate::NodeKind::Outcome if cycle.kind() == CycleKind::Experiment => out.push_str(text("guide.outcome_changed")),
             _ => {}
@@ -1731,29 +1708,6 @@ fn cycle_contract(cycle: &crate::Cycle) -> Option<CloseContract> {
 fn skeleton_of(contract: &CloseContract, cycle: &crate::Cycle) -> String {
     skeleton_for(contract, cycle, None, None)
 }
-/// The failed Experiments of this Chain, each with what it tried, what it changed and what it
-/// learned, as its own Reports recorded them. Empty when there is none.
-#[cfg(feature = "approved-plan")]
-fn left_behind(project: &crate::Project) -> String {
-    let brief = |value: Option<&str>| -> String {
-        let text = value.unwrap_or("").split_whitespace().collect::<Vec<_>>().join(" ");
-        let cut: String = text.chars().take(360).collect();
-        if cut.len() < text.len() { format!("{cut}…") } else { cut }
-    };
-    let mut out = String::new();
-    for cycle in project.cycles().nodes().iter().filter(|cycle| cycle.kind() == CycleKind::Experiment && cycle.is_closed()
-        && cycle.report().and_then(|report| report.get("verdict")) == Some("failure")) {
-        let report_of = |kind: NodeKind| cycle.steps().nodes().iter().rev().find(|node| node.kind == kind).and_then(|node| node.report.as_ref());
-        let field = |kind: NodeKind, name: &str| brief(report_of(kind).and_then(|report| report.get(name)));
-        out.push_str(&tr!("cmd.left_behind_one", cycle = cycle.id().to_ref(),
-            problem = field(NodeKind::Define, "problem"), hypothesis = field(NodeKind::Hypothesis, "hypothesis"),
-            change = field(NodeKind::Hypothesis, "change"), changed = field(NodeKind::Outcome, "changed"),
-            unverified = field(NodeKind::Analysis, "unverified"), lesson = field(NodeKind::Outcome, "lesson")));
-    }
-    if out.is_empty() { return out; }
-    format!("{}{out}", text("cmd.left_behind_head"))
-}
-
 /// The fields an exploration Chain asks of a Verify and an Analysis beyond the grammar's own, shown
 /// in the skeleton a refusal carries: an agent rewrites its Report from that skeleton, so a field
 /// that is required but missing from it is left out again and again.

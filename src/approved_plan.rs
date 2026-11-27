@@ -619,6 +619,12 @@ impl Draft {
                 || i.question.trim().is_empty()
                 || i.done_when.trim().is_empty()
             {
+                // Which of the things this check covers went wrong is said, starting with the id:
+                // an id such as "M1.1" was refused seven times in a row under one sentence that
+                // named neither the item nor the rule (2026-11-28).
+                if i.id.is_empty() || !i.id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-') {
+                    return Err(bad(&crate::tr!("plan.err.item_id", id = format!("{:?}", i.id))));
+                }
                 return Err(bad(crate::locale::text("plan.err.item_fields")));
             }
         }

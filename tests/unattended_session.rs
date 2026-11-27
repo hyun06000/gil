@@ -75,10 +75,8 @@ fn interview_sending(r: &mut Rig, ids: &[&str], listed: usize) {
         basis.push(step_ref(&opened, kind));
         // Only the Interview that draws the first plan lays the work out from the top.
         if kind == "interpretation" && first {
-            // The Interpretation is asked what judges the work, its hardest part and what cannot be
-            // observed here; the opening receipt shows the three fields and a close without them is refused.
-            let shown = everything(&opened);
-            for field in ["major_problems", "anti_goals", "edge_cases", "hardest", "not_observable_here"] { assert!(shown.contains(field), "{field} is not in the opening receipt: {shown}"); }
+            // The Interpretation lays the work out from the top; a close without those fields is
+            // refused, and the refusal shows them.
             let bare = refused(r.c.request("tools/call", json!({"name":"gil_close","arguments":{"project_root":r.root,"report":{"interpretation":"정리했다","unresolved":"없음"}}})), "an Interpretation without the three answers");
             assert!(everything(&bare).contains("major_problems"), "{bare}");
             let unnamed = refused(r.c.request("tools/call", json!({"name":"gil_close","arguments":{"project_root":r.root,"report":{"interpretation":"정리했다","unresolved":"없음",
@@ -120,9 +118,9 @@ fn interview_sending(r: &mut Rig, ids: &[&str], listed: usize) {
     assert_eq!(structured(&done)["pending"], json!([]));
     let read = r.read();
     assert_eq!(read["proposal"]["receipt"]["source"], "unattended_runner");
-    // The answered Synthesis closes with the Report GIL holds, whatever words the agent sends.
-    let _ = &read;
-    let closed = ok(r.c.request("tools/call", json!({"name":"gil_close","arguments":{"project_root":r.root,"report":{"statement":"내 말로 다시 쓴 것"}}})), "close synthesis");
+    // The Synthesis closes with the approved Report, as gil_plan_read returns it; other words are refused.
+    refused(r.c.request("tools/call", json!({"name":"gil_close","arguments":{"project_root":r.root,"report":{"statement":"내 말로 다시 쓴 것"}}})), "a Synthesis closed in other words");
+    let closed = ok(r.model("gil_close", json!({"report":read["close_report"]})), "close synthesis");
     assert!(awaiting(&closed).is_null(), "{closed}");
     let outcome = ok(r.model("gil_open", json!({"kind":"outcome","contract":CONTRACT})), "open outcome");
     let outcome_ref = step_ref(&outcome, "outcome");
@@ -293,15 +291,7 @@ fn tracked_failure(label: &str) -> (Rig, std::collections::BTreeMap<String, Vec<
         ok(r.model("gil_open", json!({"kind":"analysis","contract":CONTRACT})), "analysis");
         ok(r.model("gil_close", json!({"report":analysis_report(failed)})), "close analysis");
         let outcome = step_ref(&ok(r.model("gil_open", json!({"kind":"outcome","contract":CONTRACT})), "outcome"), "outcome");
-        let judged = everything(&ok(r.model("gil_close", json!({"report":outcome_report(failed)})), "close outcome"));
-        // The Outcome's receipt carries the Cycle Report with the verdict and its direction filled in.
-        if let Some(target) = fails_back_to {
-            for filled in ["\\\"verdict\\\": \\\"failure\\\"", "\\\"next_direction.action\\\": \\\"revisit\\\"", &format!("\\\"next_direction.target_cycle_ref\\\": \\\"{target}\\\"")] {
-                assert!(judged.contains(filled), "{filled} is not in the Outcome receipt: {judged}");
-            }
-        } else {
-            assert!(judged.contains("\\\"next_direction.action\\\": \\\"open_child\\\""), "{judged}");
-        }
+        ok(r.model("gil_close", json!({"report":outcome_report(failed)})), "close outcome");
         ok(r.model("gil_close", json!({"report":cycle_report(n, &outcome, fails_back_to)})), "close experiment");
         n
     };
@@ -349,14 +339,9 @@ fn a_tracked_scope_project_goes_back_inside_its_approved_scope_and_leaves_exclud
     assert_eq!(r.open_experiment("R1"), 4);
     assert_eq!(r.read()["current_experiment"]["revisit_from"], "cycle:C3");
 
-    // The files went back; what the failed Experiment tried, changed and learned is put before the
-    // agent where the next problem and the next method are written.
-    let define = everything(&ok(r.model("gil_open", json!({"kind":"define","contract":CONTRACT})), "define after going back"));
-    for kept in ["cycle:C3", "the fixture's files", "원인 위치와 복원 기준점"] { assert!(define.contains(kept), "{kept} is not in the Define receipt: {define}"); }
-    assert!(!define.contains("cycle:C2\\n    "), "a successful Experiment is not listed as left behind: {define}");
+    ok(r.model("gil_open", json!({"kind":"define","contract":CONTRACT})), "define after going back");
     ok(r.model("gil_close", json!({"report":{"problem":"형식이 깨진 까닭을 좁힌다","success_condition":"app.py 가 합의한 형식으로 출력한다"}})), "close define");
-    let hypothesis = everything(&ok(r.model("gil_open", json!({"kind":"hypothesis","contract":CONTRACT})), "hypothesis after going back"));
-    assert!(hypothesis.contains("cycle:C3") && hypothesis.contains("change"), "{hypothesis}");
+    ok(r.model("gil_open", json!({"kind":"hypothesis","contract":CONTRACT})), "hypothesis after going back");
     // A Hypothesis says what it will change: an Experiment that only checks is refused, and the
     // skeleton the refusal carries has the field.
     let bare = refused(r.c.request("tools/call", json!({"name":"gil_close","arguments":{"project_root":r.root,"report":{"hypothesis":"출력 줄을 고치면 된다","rationale":"줄이 하나다","guardrail":"다른 파일은 두지 않는다"}}})), "a Hypothesis without its change");
@@ -414,54 +399,38 @@ fn the_saved_plan_document_follows_the_revision_a_new_interview_approved() {
     assert!(second != first && second.contains("R2"), "the document of revision 2 replaced GIL's earlier save");
 }
 
-/// What GIL itself holds, the agent does not retype: a later proposal sends only its new items and
-/// the approved ones are kept, and the requirement link's revision and digest are GIL's to write.
-/// Character-exact copies of both ended sessions in refusal loops (2026-11-27).
+/// Two refusals say what is wrong in words an agent can act on: an item id outside the allowed
+/// characters is named with the rule, and an evidence file that is not there is said to be not there.
 #[cfg(all(feature = "tracking-policy", unix))]
 #[test]
-fn approved_items_and_the_plan_digest_are_kept_by_gil_not_copied_by_the_agent() {
-    let mut r = rig("unattended-kept-by-gil", &[("data/in.txt", "input\n")], json!({"start_kind":"tracked_scope"}));
+fn a_bad_item_id_and_a_missing_evidence_file_are_refused_in_plain_words() {
+    let mut r = rig("unattended-plain-refusals", &[("data/in.txt", "input\n")], json!({"start_kind":"tracked_scope"}));
     ok(r.model("gil_start_prepare", json!({"rules":"node_modules/\n"})), "prepare");
     let waits = pending(&mut r);
     ok(decide(&mut r, "start", &waits[0]["digest"], "approve"), "runner approves the start");
-    interview(&mut r, &["R1"]);
-    let stored = r.read()["active_plan"]["items"][0].clone();
+    let mut basis = Vec::new();
+    for (kind, report) in [("question", QUESTION), ("interpretation", INTERPRETATION)] {
+        basis.push(step_ref(&ok(r.model("gil_open", json!({"kind":kind,"contract":CONTRACT})), kind), kind));
+        ok(r.model("gil_close", json!({"report":report})), kind);
+    }
+    ok(r.model("gil_open", json!({"kind":"synthesis","contract":CONTRACT})), "synthesis");
+    let dotted = everything(&refused(r.model("gil_plan_propose", json!({"draft":draft(&["M1.1"], &basis, &[])})), "an id with a dot"));
+    assert!(dotted.contains("M1.1") && dotted.contains("M1-1"), "{dotted}");
+    let proposed = ok(r.model("gil_plan_propose", json!({"draft":draft(&["R1"], &basis, &[])})), "propose");
+    assert_eq!(awaiting(&proposed), json!(["plan"]));
+    let waits = pending(&mut r);
+    ok(decide(&mut r, "plan", &waits[0]["digest"], "approve"), "runner approves the plan");
+    let read = r.read();
+    ok(r.model("gil_close", json!({"report":read["close_report"]})), "close synthesis");
+    let outcome = step_ref(&ok(r.model("gil_open", json!({"kind":"outcome","contract":CONTRACT})), "open outcome"), "outcome");
+    let synthesis = read["proposal"]["synthesis_ref"].as_str().unwrap().to_owned();
+    ok(r.model("gil_close", json!({"report":format!("verdict: success\nlesson: 합의한 요구를 기록했다\nsynthesis_ref: {synthesis}\nnext_direction.action: close_cycle\nnext_direction.reason: 승인된 요구를 탐색한다\n")})), "close outcome");
+    ok(r.model("gil_close", json!({"report":format!("verdict: success\noutcome_ref: {outcome}\nhandoff_summary: 승인받았다\nnext_direction.action: open_child\nnext_direction.reason: 다음 단계로 간다\n")})), "close interview");
 
-    // A link whose digest was mistyped still opens the Experiment of the approved revision.
-    let mut link = r.read()["experiment_link"].clone();
-    link["requirement_id"] = json!("R1");
-    link["plan_digest"] = json!("1376ad96 mistyped");
-    link["plan_revision"] = json!("7");
-    for field in ["relevance", "readiness", "uncertainty"] { link[field] = json!("시험"); }
-    let opened = ok(r.c.request("tools/call", json!({"name":"gil_open","arguments":{"project_root":r.root,"kind":"experiment","contract":link}})), "an Experiment with a mistyped digest");
-    let c2 = cycle_number(&opened);
-    // The opening receipt of a step shows the Report it closes with, exploration fields included.
-    ok(r.model("gil_open", json!({"kind":"define","contract":CONTRACT})), "define");
-    ok(r.model("gil_close", json!({"report":{"problem":"입력 파일이 있는가?","success_condition":"data/in.txt 를 읽을 수 있다"}})), "close define");
-    let hypothesis = everything(&ok(r.model("gil_open", json!({"kind":"hypothesis","contract":CONTRACT})), "hypothesis"));
-    for field in ["gil_close", "\\\"change\\\"", "\\\"hypothesis\\\"", "\\\"guardrail\\\""] { assert!(hypothesis.contains(field), "{field} is not in the opening receipt: {hypothesis}"); }
-    ok(r.model("gil_close", json!({"report":{"hypothesis":"읽으면 된다","change":"none","rationale":"파일이 있다","guardrail":"다른 파일은 두지 않는다"}})), "close hypothesis");
-    let verify = everything(&ok(r.model("gil_open", json!({"kind":"verify","contract":CONTRACT})), "verify"));
-    for field in ["\\\"command\\\"", "\\\"observed\\\"", "\\\"evidence_files\\\""] { assert!(verify.contains(field), "{field} is not in the opening receipt: {verify}"); }
-    // A file that is not there is said to be not there.
+    r.open_experiment("R1");
+    r.open_verify("R1", "입력 파일이 있는가?");
     let missing = everything(&refused(r.model("gil_close", json!({"report":{"execution":"봤다","result":"있다","command":"cat data/in.txt","observed":"input","plan_document":PLAN_DOCUMENT,"evidence_files":"evidence/gone.md"}})), "evidence that does not exist"));
-    assert!(missing.contains("evidence/gone.md") && missing.contains("There is no file") || missing.contains("파일이 없다"), "{missing}");
-    r.write("evidence/C2.md", "있다\n");
-    ok(r.model("gil_close", json!({"report":{"execution":"봤다","result":"있다","command":"cat data/in.txt","observed":"input","plan_document":PLAN_DOCUMENT,"evidence_files":"evidence/C2.md"}})), "close verify");
-    ok(r.model("gil_open", json!({"kind":"analysis","contract":CONTRACT})), "analysis");
-    ok(r.model("gil_close", json!({"report":analysis_report(false)})), "close analysis");
-    let outcome = step_ref(&ok(r.model("gil_open", json!({"kind":"outcome","contract":CONTRACT})), "outcome"), "outcome");
-    ok(r.model("gil_close", json!({"report":outcome_report(false)})), "close outcome");
-    ok(r.model("gil_close", json!({"report":cycle_report(c2, &outcome, None)})), "close experiment");
-
-    // A new Interview sends only the new problem; the approved one stays as stored, also when the
-    // agent sends its id again with other words.
-    ok(r.model("gil_open", json!({"kind":"interview"})), "a new Interview");
-    interview_sending(&mut r, &["R2"], 2);
-    let items = r.read()["active_plan"]["items"].clone();
-    assert_eq!(items.as_array().unwrap().len(), 2, "{items}");
-    assert_eq!(items[0], stored, "the approved item is kept byte for byte");
-    assert_eq!(items[1]["id"], "R2");
+    assert!(missing.contains("evidence/gone.md") && (missing.contains("There is no file") || missing.contains("파일이 없다")), "{missing}");
 }
 
 /// The skeleton a refused close shows carries every field the exploration contract asks for. An
