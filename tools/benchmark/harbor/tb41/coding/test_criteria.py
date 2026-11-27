@@ -281,7 +281,7 @@ class ParticipantLedgerTests(unittest.TestCase):
         self.assertEqual((ledger.items["K2"]["probe"], ledger.items["K1"]["probe"]), (None, None))
         asked = self.asked[0]
         self.assertEqual(asked["schema"], criteria.PROBES)
-        for phrase in ("fixed here, before any method is chosen", "the way an outside party would", "nobody can repair it afterwards",
+        for phrase in ("fixed here, before any method is chosen", "the way an outside party would", "nobody can repair it afterwards", "creates its helper files inside the task directory",
                        "does not call the solution to produce them", "the starting state contains that something"):
             self.assertIn(phrase, asked["prompt"])
 

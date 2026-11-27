@@ -402,7 +402,9 @@ def define_states(model, ledger, targets, lesson):
         "compares bytes. Where it is about a failure, the probe creates the failing condition. It restores "
         "what it touched in the task directory, and prints what differed when it fails. It is run exactly as "
         "written and nobody can repair it afterwards, so whatever helper it writes must run with the tooling and "
-        "module system the project's own commands already use. "
+        "module system the project's own commands already use. For that reason it creates its helper files "
+        "inside the task directory, beside the project's own files, and removes them when it ends; a helper "
+        "placed under /tmp is outside the project and its settings do not apply to it. "
         'Answer as {"probes": [{"id": "K1", "state": "...", "probe": "..."}]}. Targets: '
         + json.dumps([{key: ledger.items[t][key] for key in ("id", "kind", "requirement", "source")} for t in targets],
                      ensure_ascii=False)
