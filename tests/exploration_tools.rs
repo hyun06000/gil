@@ -342,15 +342,14 @@ fn a_failed_experiments_visual_evidence_survives_the_approved_revisit_and_stays_
     let failed_reads: Vec<Value> = [verify3.clone(), cycle(3)].iter().map(|owner| visuals_of(&mut r, owner)).collect();
     assert_eq!(failed_reads[0]["visuals"]["state"], "attached");
 
-    // Until the approved revisit nothing opens. Each refusal names the next step, and the step
-    // it finally names is the Monitor approval — the only recovery this build performs.
+    // Until the revisit nothing opens, and the refusal names it. The agent's own gil_revisit is the
+    // recovery: nobody approves it.
     let (record_before, world_before) = (record_bytes(&r.record), world(&r.root));
     let link = r.link("R1");
     let blocked = refused(r.model("gil_open", json!({"kind":"experiment","contract":link})), "the next Experiment before the revisit");
     assert!(everything(&blocked).contains("revisit"), "{blocked}");
-    let waiting = refused(r.model("gil_revisit", json!({})), "the model-side revisit without an approval");
-    assert!(everything(&waiting).contains("보존 후 되돌아가기") && everything(&waiting).contains("바꾸지 않았다"), "{waiting}");
-    assert!(r.context().contains("보존 후 되돌아가기"));
+    let context = r.context();
+    assert!(context.contains("gil_revisit") && context.contains("승인을 기다리지 않는다") && !context.contains("버튼"), "{context}");
     assert_eq!((record_bytes(&r.record), world(&r.root)), (record_before, world_before));
 
     // The revisit returns the whole tracked world: the image file is C2's again.

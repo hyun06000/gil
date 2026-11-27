@@ -253,12 +253,6 @@ impl Rig {
             &[&format!("attempt-{attempt}-result"), verdict],
         );
         if failure {
-            #[cfg(feature = "product-safety")]
-            {
-                let r = self.app("gil_revisit_review", json!({}));
-                self.app("gil_revisit_apply",json!({"digest":structured(&r)["digest"],"token":r["result"]["_meta"]["gil/revisitApprovalToken"]}));
-            }
-            #[cfg(not(feature = "product-safety"))]
             self.model("gil_revisit", json!({}));
         }
     }

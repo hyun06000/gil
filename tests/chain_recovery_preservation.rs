@@ -174,15 +174,17 @@ fn changes(view: &Value) -> BTreeMap<String, String> {
         .map(|c| (c["path"].as_str().unwrap().to_owned(), c["action"].as_str().unwrap().to_owned()))
         .collect()
 }
+/// The plan a declared revisit would carry out, as the App reads it. Nothing approves it; the
+/// second value is kept only so older call sites read unchanged.
 fn review(r: &mut Rig) -> (Value, String) {
     let response = ok(r.app("gil_revisit_review", json!({})), "recovery review");
-    let token = response["result"]["_meta"]["gil/revisitApprovalToken"].as_str().unwrap().to_owned();
-    assert!(!response["result"]["content"].to_string().contains(&token));
-    assert!(!structured(&response).to_string().contains(&token));
-    (structured(&response).clone(), token)
+    assert!(response["result"]["_meta"].is_null(), "no capability exists any more: {response}");
+    (structured(&response).clone(), String::new())
 }
-fn apply(r: &mut Rig, view: &Value, token: &str) -> Value {
-    r.app("gil_revisit_apply", json!({"digest":view["digest"],"token":token}))
+/// The agent goes back itself with `gil_revisit`.
+fn apply(r: &mut Rig, _view: &Value, _unused: &str) -> Value {
+    let root = r.root.clone();
+    revisit(&mut r.c, &root)
 }
 
 /// How the failing Experiment `C3` edits the world before its Verify closes.
@@ -285,14 +287,13 @@ fn recovery_in_a_chain_returns_to_the_successful_cycle_and_preserves_every_faile
     let stamps_before = untouched(&r);
 
     // The model cannot execute or bypass; review is read-only and lists exactly the differences.
-    refused(r.model("gil_revisit", json!({})), "model call without a durable approval");
     refused(r.model("gil_restore", json!({})), "general restore stays blocked");
     refused(r.model("gil_open", json!({"kind":"experiment"})), "no new branch before recovery");
     let (view, token) = review(&mut r);
     assert_eq!(record_bytes(&r.record), record_before, "review changed the record");
     assert_eq!(world(&r.root), world_at_c3, "review changed working files");
     assert!(!preserved_dir(&r).exists(), "review created an archive");
-    assert_eq!(view["state"], "awaiting_approval");
+    assert_eq!(view["state"], "ready");
     assert_eq!(view["from"], "cycle:C3");
     assert_eq!(view["target"], "cycle:C2");
     assert_eq!(view["policy"], "legacy-whole-tree-protected-difference-v1");
@@ -312,7 +313,7 @@ fn recovery_in_a_chain_returns_to_the_successful_cycle_and_preserves_every_faile
     for quiet in [".env", "scratch/cache.bin", ".gitignore", "evidence/C2-A.md", "plan/approved-plan.md"] {
         assert!(!listed.contains_key(quiet), "unchanged path {quiet} must not be listed");
     }
-    assert!(!view.to_string().contains(&token), "token leaked into the review view");
+    let _ = &token;
 
     let done = ok(apply(&mut r, &view, &token), "approved recovery");
     let done = structured(&done).clone();
@@ -358,18 +359,17 @@ fn recovery_in_a_chain_returns_to_the_successful_cycle_and_preserves_every_faile
     let approval: Value = serde_json::from_str(&approval_text).unwrap();
     assert_eq!(approval["state"], "approved");
     assert_eq!(approval["digest"], view["digest"]);
-    assert!(!approval_text.contains(&token), "token must not be persisted");
     // Provenance accompanies the unchanged approval and preserved-file contracts.
     let source_text = fs::read_to_string(archive.join("source.json")).unwrap();
     let source: Value = serde_json::from_str(&source_text).unwrap();
     assert_eq!(source["schema_version"], json!(1));
-    assert_eq!(source["approval_source"], "monitor_button");
-    assert_eq!(source["human_click"], json!(true));
+    // The agent's own gil_revisit started this recovery; no person clicked or approved anything.
+    assert_eq!(source["approval_source"], "agent_revisit");
+    assert_eq!(source["human_click"], json!(false));
     for field in ["digest", "pending_state_sha256", "from", "target"] {
         assert_eq!(source[field], view[field], "approval source must bind {field}");
     }
     assert!(source.get("setting").is_none(), "manual consent must not claim automatic settings");
-    assert!(!source_text.contains(&token), "token must not be persisted in approval source");
     let archive_names: Vec<String> = fs::read_dir(&archive).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
     assert!(archive_names.iter().all(|n| n == "files.json" || n == "approval.json" || n == "source.json" || n.starts_with("file-")), "{archive_names:?}");
     assert_eq!(archive_names.len(), world_at_c3.len() + 3);
@@ -455,7 +455,6 @@ fn after_completion_a_restart_is_a_no_op_and_a_later_file_is_refused_not_swept()
     let resumed = ok(r.model("gil_revisit", json!({})), "resume after restart");
     let receipt = said(&resumed);
     assert!(receipt.contains("\"state\": \"completed\"") || receipt.contains("\"state\":\"completed\""), "model receipt must report the completed recovery: {receipt}");
-    assert!(!receipt.contains(&token), "model receipt leaked the App token");
     assert_eq!(world(&r.root), world_at_c2);
     assert_eq!(record_bytes(&r.record), record_after);
     assert_eq!(files_under(&preserved_dir(&r)), archive, "resume rewrote or added archive files");

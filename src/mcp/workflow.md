@@ -358,7 +358,7 @@ This does not require author tracking, write hooks or a new Snapshot for every n
    | The open Experiment Step's contracted action cannot be carried out (schema offers `unachieved_will`, format 8/9 only) | Write what was done, what blocked it and what stays unverified in the Report (Verify: save it and list it in `evidence_files`), then `gil_close` with `unachieved_will: <active Will>`. Continue with the remaining Steps; Outcome is `failure` · `close_cycle` |
    | Outcome is closed but the Experiment Cycle is still open | `gil_close` with the Cycle Report |
    | Cycle closed `success` | `gil_open` the next Experiment (next independent question; exploration contract: linked to the same or another approved requirement — the success completed no requirement) or Interview. When no work remains and the project has a Chain, the Closing Interview and Chain Report follow; a chat summary alone never completes the project, and that Interview's first message shows the result before asking to close |
-   | Cycle closed `failure` · `revisit` | When the Core receipt requires Monitor approval, open Monitor and wait for the user's “Preserve and revisit” (보존 후 되돌아가기) button after reviewing file changes; do not call App-only tools or invent consent. After confirmed recovery, `gil_open` a new Cycle. Otherwise follow the connected Core receipt; never bypass a product refusal |
+   | Cycle closed `failure` · `revisit` | Call `gil_revisit` once: it preserves the changed files, returns the working folder to the target world and moves the position. No approval is awaited and no person takes part. After the recovery, `gil_open` a new Cycle. Follow the connected Core receipt; never bypass a product refusal |
 
    A closed Hypothesis or a prepared Verify contract does not mean Verify is open. Do not change
    project files first and then open Verify to record work already performed. This also applies between
@@ -416,8 +416,8 @@ This does not require author tracking, write hooks or a new Snapshot for every n
      Hypothesis in the same Experiment, an in-Experiment revisit and `success` are refused. Try
      again in the next Experiment after the recovery. An Experiment without an unachieved end
      keeps its ordinary repetition (next Hypothesis, sibling revisit).
-   - The failure verdict is not a recovery approval and closes no Chain: the existing Monitor
-     approval, target checks and product recovery limits apply unchanged.
+   - The failure verdict does not go back by itself and closes no Chain: `gil_revisit` carries the
+     declared revisit out, and its target checks and product recovery limits apply unchanged.
    Include `evidence_files` in its Report: 1–32 unique safe project-relative file paths. Every
    listed file must be nonempty in the Snapshot, and at least one must be new or changed from the
    baseline. One file: `evidence_files: evidence/result.md`. Multiple files use this Report syntax:
@@ -608,7 +608,7 @@ This does not require author tracking, write hooks or a new Snapshot for every n
      evidence to leave an unfinished Step. If the item cannot be finished, close truthfully with an
      interruption observation or, where the record supports it, an unachieved end (rule 4). After
      a `failure` · `revisit` close, show the preserved
-     partial results before the Monitor recovery removes them from the folder (they stay in the
+     partial results before the recovery removes them from the folder (they stay in the
      Snapshot and the preserved location). Keeping the partial results in place and continuing is
      not a recorded transition yet, and cancelling, splitting or replacing an approved item is not
      either: the next plan keeps the interrupted item verbatim and adds or reorders items. A large
@@ -686,7 +686,7 @@ This does not require author tracking, write hooks or a new Snapshot for every n
    | Plan decision or save result uncertain | `gil_plan_read`; never assume approval or re-propose blindly. Three states differ: approval still needed (wait), approval recorded (`receipt.decision`), save result unknown (read again; do not re-propose) |
    | Approved earlier, proposal edited since | Read the current revision/digest and receipt with gil_plan_read. Do not infer that the old approval is gone from history: it remains bound to its original revision/digest and does not approve the edited revision. Wait only if the current revision has no decision |
    | Asked to re-interview during an Experiment | The request is preserved and closes nothing; keep following each receipt's next call and close the Cycle only when its receipt offers the Cycle Report, then `gil_open` Interview |
-   | `gil_revisit` refused | If Monitor approval is required, show Monitor and wait for its button. If protected files differ or the platform is unsupported, preserve files and report the limitation. Never edit records, fake success or loop restore. A durably approved interrupted recovery can be resumed by `gil_revisit` when the receipt explicitly says so |
+   | `gil_revisit` refused | Read the reason. If files changed outside a Verify, return them with `gil_restore` and call `gil_revisit` again. If protected files differ or the platform is unsupported, preserve files and report the limitation. Never edit records, fake success or repeat the same call without resolving the reason. An interrupted recovery is resumed by calling `gil_revisit` again |
    | Refused `evidence_files` | Save truthful evidence while Verify is open, then resubmit the close |
    | Monitor cannot be shown | Report it and continue the recorded step; the record is unaffected |
 

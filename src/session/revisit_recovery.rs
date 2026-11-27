@@ -63,37 +63,11 @@ impl ProjectSession {
         crate::recovery_mode::read(&self.state_path).view()
     }
 
-    pub(crate) fn approve_revisit(&mut self, digest: &str) -> Result<Value, String> {
-        self.approve_revisit_from(digest, ApprovalSource::MonitorButton)
-    }
-
-    /// The same approval with the channel it came through.
-    #[cfg_attr(not(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows)), allow(unused_variables))]
-    pub(crate) fn approve_revisit_from(&mut self, digest: &str, source: ApprovalSource) -> Result<Value, String> {
-        #[cfg(all(feature = "tracking-policy", not(unix)))]
-        if self.project.tracking().is_some() {
-            return Err(crate::locale::text("session.tracking_unsupported.revisit").into());
-        }
-        #[cfg(not(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows)))]
-        {
-            let _ = digest;
-            Err("이 플랫폼의 승인 복원은 아직 제공하지 않는다".into())
-        }
-        #[cfg(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows))]
-        {
-            self.recovery_place()?;
-            let plan = self.recovery_plan()?;
-            if plan.view["digest"].as_str() != Some(digest) {
-                return Err("복원 계획이 바뀌었다. 변경 목록을 다시 확인하고 승인한다".into());
-            }
-            self.apply_recovery(plan, source)
-        }
-    }
-
-    /// A model/CLI call may only resume a durable approval, never create one — unless this
-    /// Project carries a valid automatic setting (opt-in build): then the Core itself approves a
-    /// freshly checked plan and records that setting as the source. A pending recovery is always
-    /// resumed from its stored approval, whatever the setting says now.
+    /// `gil revisit` after a closed failure: the agent that wrote the revisit in its reflection goes
+    /// back by calling this. Nobody approves it — a person takes part in the Interview, not in
+    /// returning the world (2026-11-27 decision; the Monitor button was a legacy of the first
+    /// product). The plan, its refusals, the preserved originals and the resumption are unchanged.
+    /// A recovery already started is resumed from its stored record.
     pub(crate) fn resume_revisit(&mut self) -> Result<Value, String> {
         #[cfg(all(feature = "tracking-policy", not(unix)))]
         if self.project.tracking().is_some() {
@@ -111,7 +85,8 @@ impl ProjectSession {
                 if let Some(setting) = crate::recovery_mode::read(&self.state_path).automatic {
                     return self.automatic_revisit(setting);
                 }
-                return Err("Monitor의 되돌아가기 변경 목록을 확인하고 ‘보존 후 되돌아가기’를 눌러야 한다. 파일과 기록은 바꾸지 않았다".into());
+                let plan = self.recovery_plan()?;
+                return self.apply_recovery(plan, ApprovalSource::AgentRevisit);
             }
             let plan = self.recovery_plan()?;
             let dir = archive(self, &plan.key, false).map_err(error)?;
@@ -140,10 +115,8 @@ impl ProjectSession {
 /// follows the stored approval and never rewrites it.
 #[cfg_attr(not(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows)), allow(dead_code))]
 pub(crate) enum ApprovalSource {
-    /// The user's Monitor button through the App-only `gil_revisit_apply`.
-    MonitorButton,
-    /// The runner of an unattended session, through the tool the model is not given.
-    UnattendedRunner,
+    /// The agent's own `gil revisit`, which carries out the revisit its Cycle Report declared.
+    AgentRevisit,
     /// A valid per-Project automatic setting of this exact edition (opt-in build).
     #[cfg(feature = "recovery-auto-approval")]
     AutomaticSetting(crate::recovery_mode::AutomaticSetting),
@@ -160,11 +133,10 @@ impl ApprovalSource {
                 "pending_state_sha256":plan.key,"digest":plan.view["digest"],
                 "from":plan.view["from"],"target":plan.view["target"],
                 "human_click":source == "monitor_button",
-                "notice":"승인 출처 기록이다. 복구 계획은 approval.json, 원본은 files.json이 가리킨다. 사람의 신원 인증을 뜻하지 않는다."})
+                "notice":"이 복구를 시작한 출처의 기록이다. 복구 계획은 approval.json, 원본은 files.json이 가리킨다. agent_revisit 은 에이전트의 gil revisit 이며 사람의 승인을 뜻하지 않는다."})
         };
         match self {
-            ApprovalSource::MonitorButton => Some(base(crate::approval_source::MONITOR)),
-            ApprovalSource::UnattendedRunner => Some(base(crate::approval_source::UNATTENDED)),
+            ApprovalSource::AgentRevisit => Some(base("agent_revisit")),
             #[cfg(feature = "recovery-auto-approval")]
             ApprovalSource::AutomaticSetting(setting) => {
                 let mut v = base("automatic_setting");
@@ -364,7 +336,7 @@ impl ProjectSession {
         };
         let encoded = store::encode(&next).map_err(error)?;
         let key = hash(&encoded);
-        let mut view = json!({"supported":true,"state":if resumed && observed == target {"completed"} else if resumed {"resumable"} else {"awaiting_approval"},
+        let mut view = json!({"supported":true,"state":if resumed && observed == target {"completed"} else if resumed {"resumable"} else {"ready"},
             "from":from.to_ref().to_string(),"target":next.current_cycle().id().to_ref().to_string(),
             "before_world":before_world.to_string(),"target_world":world.to_string(),"changes":changes,
             "archive":gil_dir(&self.state_path).map_err(error)?.canonicalize().map_err(error)?.join("revisit-preserved").join(&key).to_string_lossy(),"pending_state_sha256":key,
@@ -372,7 +344,7 @@ impl ProjectSession {
             "notice":"실패 기록·Snapshot·배움은 유지한다. 교체·제외되는 기존 파일은 보존본을 만든 뒤 대상 세계로 복원한다. 새 Cycle은 별도로 연다."});
         // Resumption is the same approved operation, not a new proposal.
         let mut bound = view.clone();
-        bound["state"] = json!("awaiting_approval");
+        bound["state"] = json!("ready");
         view["digest"] = json!(hash(serde_json::to_vec(&bound).map_err(error)?));
         Ok(Recovery {
             next,
@@ -472,7 +444,7 @@ impl ProjectSession {
                     c"source.json",
                     &serde_json::to_vec_pretty(&record).map_err(error)?,
                 )?,
-                None => return Err("저장된 승인이 없어 재개할 수 없다. 새 승인은 Monitor 또는 유효한 자동 설정에서만 만든다".into()),
+                None => return Err("저장된 복구 기록이 없어 재개할 수 없다. gil revisit 으로 복구를 새로 시작한다".into()),
             }
         }
         guarded::fsync(&dir).map_err(error)?;

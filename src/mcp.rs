@@ -49,8 +49,6 @@ use monitor::Monitor;
 
 #[derive(Debug, Clone)]
 pub struct GilServer {
-    #[cfg(feature = "product-safety")]
-    recovery_grants: Arc<recovery::Grants>,
     monitor: Arc<Monitor>,
     #[cfg(feature = "approved-plan")]
     plan_grants: Arc<plans::Grants>,
@@ -58,7 +56,6 @@ pub struct GilServer {
     start_grants: Arc<start::Grants>,
     #[cfg(all(feature = "tracking-policy", unix))]
     scope_grants: Arc<scope::Grants>,
-    unattended_asked: Arc<unattended::Asked>,
     native_gate: Arc<Mutex<()>>,
     companion_session: Arc<Mutex<crate::companion_ipc::McpSession>>,
 }
@@ -77,11 +74,9 @@ impl GilServer {
         let mut monitor = Monitor::default();
         monitor.headless = headless;
         monitor.unattended = headless && unattended;
-        Self { #[cfg(feature = "product-safety")] recovery_grants: Arc::new(recovery::Grants::default()),
-            #[cfg(feature = "approved-plan")] plan_grants: Arc::new(plans::Grants::default()),
+        Self { #[cfg(feature = "approved-plan")] plan_grants: Arc::new(plans::Grants::default()),
             #[cfg(all(feature = "tracking-policy", unix))] start_grants: Arc::new(start::Grants::default()),
             #[cfg(all(feature = "tracking-policy", unix))] scope_grants: Arc::new(scope::Grants::default()),
-            unattended_asked: Arc::new(unattended::Asked::default()),
             monitor: Arc::new(monitor), native_gate: Arc::new(Mutex::new(())),
             companion_session: Arc::new(Mutex::new(crate::companion_ipc::McpSession::new(endpoint))) }
     }
@@ -241,13 +236,9 @@ impl GilServer {
         // Unattended: say what now waits for the user, read from the stored records after this call.
         if self.monitor.unattended && !unattended::NAMES.contains(&name.as_str()) {
             if let Some(root) = input.get("project_root").and_then(Value::as_str).map(std::path::PathBuf::from).filter(|root| root.is_absolute()) {
-                let asked = self.unattended_asked.clone();
-                // A refused gil_revisit is the model asking for a recovery only the user can approve.
-                let asks_recovery = name == "gil_revisit" && !succeeded;
                 let waits = tokio::task::spawn_blocking(move || {
                     let Ok(root) = root.canonicalize() else { return Vec::new() };
-                    if asks_recovery { asked.revisit(&root); }
-                    unattended::pending(&root, &asked)
+                    unattended::pending(&root)
                 }).await.unwrap_or_default();
                 if let Some((said, subjects)) = unattended::note(&waits) {
                     if let Some(fields) = result.structured_content.as_mut().and_then(Value::as_object_mut) {
@@ -275,8 +266,7 @@ impl GilServer {
             }
         }
         if unattended::NAMES.contains(&name.as_str()) {
-            let asked = self.unattended_asked.clone();
-            return tokio::task::spawn_blocking(move || locale::with(locale, || unattended::call(&asked, &name, input))).await
+            return tokio::task::spawn_blocking(move || locale::with(locale, || unattended::call(&name, input))).await
                 .unwrap_or_else(|_| actions::refusal("The unattended answer did not finish. Read gil_unattended_review before deciding again."));
         }
         if name == "gil_await_user" {
@@ -291,8 +281,8 @@ impl GilServer {
         }
         #[cfg(feature = "product-safety")]
         if name.starts_with("gil_revisit_") {
-            let monitor = self.monitor.clone(); let grants = self.recovery_grants.clone();
-            return tokio::task::spawn_blocking(move || locale::with(locale, || recovery::call(&monitor, &grants, &name, input))).await
+            let monitor = self.monitor.clone();
+            return tokio::task::spawn_blocking(move || locale::with(locale, || recovery::call(&monitor, &name, input))).await
                 .unwrap_or_else(|_| actions::refusal(locale::text_in(locale, "mcp.revisit_uncertain")));
         }
         #[cfg(all(feature = "tracking-policy", unix))]
@@ -543,7 +533,7 @@ mod tests {
         if cfg!(feature = "will-end-history") {
             expected.extend(TRANSITION_SURFACE.iter().map(|s| s.to_string()));
         }
-        if cfg!(feature = "product-safety") { expected.extend(["gil_revisit_apply".into(), "gil_revisit_review".into()]); }
+        if cfg!(feature = "product-safety") { expected.push("gil_revisit_review".into()); }
         if cfg!(all(feature = "tracking-policy", unix)) {
             // `gil_start` 는 기본 표에 이미 있다 — 이 구성은 그 설명만 바꾸고 일곱 도구를 더한다.
             expected.extend(["gil_start_prepare", "gil_start_status", "gil_start_apply", "gil_start_cancel", "gil_start_review", "gil_start_decide", "gil_start_list"]

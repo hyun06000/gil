@@ -14,15 +14,16 @@
 //! button. The mode is chosen only by the environment of the process, never by a tool input, a
 //! project file or the absence of a display, and it does not carry over to another session.
 //!
-//! Covered: the tracked-scope start proposal, the plan proposal of an open Synthesis, and the
-//! recovery of a closed failed Experiment. Scope changes, baseline retries and archive halts have
-//! no answer here and keep waiting.
+//! Covered: the tracked-scope start proposal and the plan proposal of an open Synthesis — the two
+//! things a user decides. Going back after a failure and restoring a changed world need no answer:
+//! the agent's own gil_revisit and gil_restore carry them out. Scope changes, baseline retries and
+//! archive halts have no answer here and keep waiting.
 // A build without one of the three approvals keeps this module whole; the absent subject answers "nothing waits".
-#![cfg_attr(not(all(feature = "product-safety", feature = "approved-plan", feature = "tracking-policy", unix)), allow(dead_code, unused_variables, unreachable_code))]
+#![cfg_attr(not(all(feature = "approved-plan", feature = "tracking-policy", unix)), allow(dead_code, unused_variables, unreachable_code))]
 use rmcp::model::{CallToolResult, Tool};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::{collections::BTreeSet, path::{Path, PathBuf}, sync::Mutex};
+use std::path::{Path, PathBuf};
 
 pub(super) const ENV: &str = "GIL_MCP_APPROVAL";
 pub(super) const MODE: &str = "unattended";
@@ -33,23 +34,12 @@ pub(super) const NAMES: &[&str] = &[REVIEW, DECIDE];
 /// What the model reads first in this mode. It overrides the display prose of the shared workflow.
 pub(super) const PREFACE: &str = "This session is unattended: there is no Monitor, no screen and no display tool. Wherever the workflow below or a receipt names the Monitor, a Monitor button, show_gil_monitor, gil_monitor_* or fullscreen, read it as: the user's decision is given outside this conversation and arrives recorded. Never try to open, prepare or check a display. When a receipt lists awaiting_user, say what you proposed, end your turn and call nothing else; when you are continued, read gil_context (or gil_start_status before the project has started, gil_plan_read for a plan) and follow the recorded state. Chat consent and your own input are still never approval, and you have no tool that approves anything.";
 
-/// Roots whose model asked for a recovery this process has not yet seen answered.
-#[derive(Debug, Default)]
-pub(super) struct Asked(Mutex<BTreeSet<PathBuf>>);
-impl Asked {
-    pub(super) fn revisit(&self, root: &Path) {
-        if let Ok(mut asked) = self.0.lock() { asked.insert(root.to_owned()); }
-    }
-    fn has(&self, root: &Path) -> bool { self.0.lock().is_ok_and(|asked| asked.contains(root)) }
-    fn done(&self, root: &Path) { if let Ok(mut asked) = self.0.lock() { asked.remove(root); } }
-}
-
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Review { project_root: String }
 #[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-enum Subject { Start, Plan, Revisit }
+enum Subject { Start, Plan }
 #[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 enum Decision { Approve, RequestChanges }
@@ -90,16 +80,8 @@ fn plan_session(root: &Path) -> Result<crate::ProjectSession, String> {
     crate::ProjectSession::open_plan_editor(root, &state).map_err(|e| e.to_string())
 }
 
-#[cfg(feature = "product-safety")]
-fn recovery(root: &Path) -> Option<Value> {
-    let state = crate::project_state::state_for_root(root).ok()?;
-    let rules = crate::RuleSet::builtin().ok()?;
-    let session = crate::ProjectSession::open_read_only_at(rules, root, &state).ok()?;
-    session.revisit_review().ok().filter(|view| view["digest"].is_string())
-}
-
 /// Everything that waits for the user in this project, read from the stored records. Writes nothing.
-pub(super) fn pending(root: &Path, asked: &Asked) -> Vec<Value> {
+pub(super) fn pending(root: &Path) -> Vec<Value> {
     #[allow(unused_mut)]
     let mut waits: Vec<Value> = Vec::new();
     #[cfg(all(feature = "tracking-policy", unix))]
@@ -117,16 +99,6 @@ pub(super) fn pending(root: &Path, asked: &Asked) -> Vec<Value> {
                 "synthesis_ref":proposal.synthesis_ref, "draft":proposal.draft}));
         }
     }
-    // A recovery plan exists whenever a closed failure can be revisited. It waits for the user only
-    // once the model asked for it; the runner never offers a recovery nobody requested.
-    #[cfg(feature = "product-safety")]
-    if asked.has(root) {
-        match recovery(root) {
-            Some(view) => waits.push(json!({"subject":"revisit", "digest":view["digest"], "plan":view})),
-            None => asked.done(root),
-        }
-    }
-    let _ = asked;
     waits
 }
 
@@ -138,12 +110,12 @@ pub(super) fn note(waits: &[Value]) -> Option<(String, Value)> {
         json!(subjects)))
 }
 
-pub(super) fn call(asked: &Asked, name: &str, input: Value) -> CallToolResult {
+pub(super) fn call(name: &str, input: Value) -> CallToolResult {
     let run = || -> Result<Value, String> {
         if name == REVIEW {
             let request: Review = serde_json::from_value(input).map_err(|e| e.to_string())?;
             let root = root_of(&request.project_root)?;
-            return Ok(json!({"ok":true, "approval_source":crate::approval_source::UNATTENDED, "pending":pending(&root, asked)}));
+            return Ok(json!({"ok":true, "approval_source":crate::approval_source::UNATTENDED, "pending":pending(&root)}));
         }
         let request: Decide = serde_json::from_value(input).map_err(|e| e.to_string())?;
         let root = root_of(&request.project_root)?;
@@ -176,21 +148,8 @@ pub(super) fn call(asked: &Asked, name: &str, input: Value) -> CallToolResult {
             }
             #[cfg(not(feature = "approved-plan"))]
             Subject::Plan => return Err(stale()),
-            #[cfg(feature = "product-safety")]
-            Subject::Revisit => {
-                if !approve { return Err("A recovery is approved or left alone; there is no other answer to record. Nothing was changed.".into()); }
-                if !asked.has(&root) { return Err(stale()); }
-                let state = crate::project_state::state_for_root(&root).map_err(|e| e.to_string())?;
-                let rules = crate::RuleSet::builtin().map_err(|e| e.to_string())?;
-                let mut session = crate::ProjectSession::open_at(rules, &root, &state).map_err(|e| e.to_string())?;
-                let done = session.approve_revisit_from(&request.digest, crate::session::ApprovalSource::UnattendedRunner)?;
-                asked.done(&root);
-                done
-            }
-            #[cfg(not(feature = "product-safety"))]
-            Subject::Revisit => return Err(stale()),
         };
-        Ok(json!({"ok":true, "approval_source":crate::approval_source::UNATTENDED, "result":result, "pending":pending(&root, asked)}))
+        Ok(json!({"ok":true, "approval_source":crate::approval_source::UNATTENDED, "result":result, "pending":pending(&root)}))
     };
     match run() {
         Ok(value) => CallToolResult::structured(value),
@@ -207,10 +166,10 @@ pub(super) fn catalog(tools: &[Tool]) -> Vec<Tool> {
     let mut kept: Vec<Tool> = tools.iter().filter(|tool| !display(tool.name.as_ref()) && !app_only(tool)).cloned().collect();
     let root = json!({"type":"string","description":"The absolute project folder of this run."});
     for (name, description, properties, required, read) in [
-        (REVIEW, "Runner-only, never given to the model: read what waits for the user in this unattended session, exactly as stored (start proposal, plan proposal, requested recovery plan). Writes nothing and approves nothing.",
+        (REVIEW, "Runner-only, never given to the model: read what waits for the user in this unattended session, exactly as stored (start proposal, plan proposal). Writes nothing and approves nothing.",
             json!({"project_root":root}), vec!["project_root"], true),
-        (DECIDE, "Runner-only, never given to the model: record the answer of whoever stands in for the user, for the exact digest gil_unattended_review returned. The record marks the approval unattended_runner, never a Monitor button. A recovery (subject revisit) can only be approved, and only after the model asked for it.",
-            json!({"project_root":root,"subject":{"type":"string","enum":["start","plan","revisit"]},"digest":{"type":"string"},
+        (DECIDE, "Runner-only, never given to the model: record the answer of whoever stands in for the user, for the exact digest gil_unattended_review returned. The record marks the approval unattended_runner, never a Monitor button.",
+            json!({"project_root":root,"subject":{"type":"string","enum":["start","plan"]},"digest":{"type":"string"},
                 "decision":{"type":"string","enum":["approve","request_changes"]}}),
             vec!["project_root","subject","digest","decision"], false),
     ] {

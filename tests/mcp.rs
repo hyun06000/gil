@@ -1163,13 +1163,14 @@ fn tools_list_includes_handoff_and_preserves_the_read_only_app_boundary() {
         }
     }
     if cfg!(feature="product-safety") {
-        expected.extend(["gil_revisit_review", "gil_revisit_apply"]);
-        for name in ["gil_revisit_review", "gil_revisit_apply"] {
-            let tool = tools.iter().find(|t| t["name"] == name).unwrap();
-            assert_eq!(tool["_meta"]["ui"]["visibility"], serde_json::json!(["app"]));
-            assert_eq!(tool["inputSchema"]["additionalProperties"], false);
-            assert_eq!(tool["annotations"]["destructiveHint"], name == "gil_revisit_apply");
-        }
+        // The plan of a declared revisit is a read for the App. Nothing approves or applies it there:
+        // the agent's own gil_revisit carries it out.
+        expected.push("gil_revisit_review");
+        assert!(!names.contains(&"gil_revisit_apply"), "no approval tool exists for a recovery");
+        let tool = tools.iter().find(|t| t["name"] == "gil_revisit_review").unwrap();
+        assert_eq!(tool["_meta"]["ui"]["visibility"], serde_json::json!(["app"]));
+        assert_eq!(tool["inputSchema"]["additionalProperties"], false);
+        assert_eq!((&tool["annotations"]["readOnlyHint"], &tool["annotations"]["destructiveHint"]), (&serde_json::json!(true), &serde_json::json!(false)));
     }
     expected.sort();
     assert_eq!(names, expected);

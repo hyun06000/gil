@@ -65,21 +65,17 @@ fn fail_attempt(r: &mut Rig, protect: Option<&str>) {
     ok(r.model("gil_close", json!({"report":"verdict: failure\nlesson: verify source completeness before calculating\nnext_direction.action: close_cycle\nnext_direction.reason: retry with full source\n"})), "failure outcome");
     ok(r.model("gil_close", json!({"report":format!("verdict: failure\noutcome_ref: {outcome}\nhandoff_summary: incomplete source preserved\nnext_direction.action: revisit\nnext_direction.target_cycle_ref: cycle:C1\nnext_direction.reason: retry with complete data\n")})), "failure cycle");
 }
+/// The plan a declared revisit would carry out, as the App reads it. Nothing approves it; the
+/// second value is kept only so older call sites read unchanged.
 fn review(r: &mut Rig) -> (Value, String) {
     let response = ok(r.app("gil_revisit_review", json!({})), "recovery review");
-    let token = response["result"]["_meta"]["gil/revisitApprovalToken"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    assert!(!response["result"]["content"].to_string().contains(&token));
-    assert!(!structured(&response).to_string().contains(&token));
-    (structured(&response).clone(), token)
+    assert!(response["result"]["_meta"].is_null(), "no capability exists any more: {response}");
+    (structured(&response).clone(), String::new())
 }
-fn apply(r: &mut Rig, value: &Value, token: &str) -> Value {
-    r.app(
-        "gil_revisit_apply",
-        json!({"digest":value["digest"],"token":token}),
-    )
+/// The agent goes back itself with `gil_revisit`.
+fn apply(r: &mut Rig, _view: &Value, _unused: &str) -> Value {
+    let root = r.root.clone();
+    revisit(&mut r.c, &root)
 }
 fn tree(at: &Path) -> std::collections::BTreeMap<std::path::PathBuf, Vec<u8>> {
     fn visit(
@@ -109,7 +105,6 @@ fn old_failure_requires_exact_app_consent_preserves_evidence_and_retries_twice()
     let (mut r, settings) = failed("recovery-two-retries", None);
     let original = record_bytes(&r.record);
     let objects = tree(&r.record.parent().unwrap().join("artifacts"));
-    refused(r.model("gil_revisit", json!({})), "no approval");
     refused(
         r.model("gil_open", json!({"kind":"experiment"})),
         "no implicit bypass",
@@ -125,10 +120,7 @@ fn old_failure_requires_exact_app_consent_preserves_evidence_and_retries_twice()
             .join("revisit-preserved")
             .exists()
     );
-    refused(apply(&mut r, &v, "invented"), "forged capability");
-    let mut stale = v.clone();
-    stale["digest"] = json!("old");
-    refused(apply(&mut r, &stale, &t), "stale digest");
+    // Nothing approves a recovery and no capability exists: the agent's revisit is the only door.
     fs::write(r.root.join("unrecorded.txt"), "user edit").unwrap();
     refused(apply(&mut r, &v, &t), "changed after preview");
     assert_eq!(original, record_bytes(&r.record));
@@ -298,9 +290,7 @@ fn server_restart_invalidates_private_consent_and_corrupt_evidence_refuses() {
     let (v, t) = review(&mut r);
     let state = record_bytes(&r.record);
     r.c = Client::serve(&settings);
-    refused(apply(&mut r, &v, &t), "old process token");
-    let (_, fresh) = review(&mut r);
-    assert_ne!(fresh, t);
+    let fresh = t.clone();
     // The immutable failed evidence must be readable, not merely a valid graph reference.
     let blob = fs::read_dir(r.record.parent().unwrap().join("artifacts/blobs/sha256"))
         .unwrap()
@@ -421,7 +411,6 @@ fn an_interrupted_item_keeps_its_partial_files_until_the_approved_recovery_and_s
     assert!(!context.contains("gil_open(kind: experiment)"), "{context}");
 
     let before = record_bytes(&r.record);
-    refused(r.model("gil_revisit", json!({})), "revisit needs the Monitor button");
     refused(r.model("gil_open", json!({"kind":"interview"})), "no Interview under a failed Experiment");
     refused(r.model("gil_open", json!({"kind":"experiment"})), "no Experiment under a failed Experiment");
     assert_eq!(before, record_bytes(&r.record), "refusals change no record");

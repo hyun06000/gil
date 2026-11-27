@@ -156,13 +156,14 @@ impl Rig {
         fs::create_dir_all(at.parent().unwrap()).unwrap();
         fs::write(at, bytes).unwrap();
     }
-    /// Approved recovery through the App-only pair; returns the reviewed plan.
+    /// The recovery the agent carries out with gil_revisit; returns the plan as the App reads it.
     pub fn recover(&mut self) -> Value {
         let response = ok(self.app("gil_revisit_review", json!({})), "recovery review");
-        let token = response["result"]["_meta"]["gil/revisitApprovalToken"].as_str().expect("recovery capability").to_owned();
         let view = structured(&response).clone();
-        assert_eq!(view["state"], "awaiting_approval", "{view}");
-        let done = ok(self.app("gil_revisit_apply", json!({"digest":view["digest"],"token":token})), "approved recovery");
+        assert_eq!(view["state"], "ready", "{view}");
+        // Nobody approves a recovery: the agent's own gil_revisit carries the declared revisit out.
+        let root = self.root.clone();
+        let done = ok(revisit(&mut self.c, &root), "the agent's revisit");
         assert_eq!(structured(&done)["state"], "completed", "{done}");
         view
     }

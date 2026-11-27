@@ -160,7 +160,6 @@ fn a_failure_restores_work_and_outputs_through_the_approved_revisit_before_a_new
     let link = r.link("R1");
     let bypass = refused(r.model("gil_open", json!({"kind":"experiment","contract":link.clone()})), "next experiment before the revisit");
     assert!(!bypass.to_string().contains("열었다:"), "{bypass}");
-    refused(r.model("gil_revisit", json!({})), "model call without a durable approval");
     refused(r.model("gil_restore", json!({})), "general restore stays blocked");
     assert_eq!(record_bytes(&r.record), record_before);
     assert_eq!(world(&r.root), world_at_c3);
@@ -224,7 +223,6 @@ fn a_failure_that_leaves_no_file_difference_still_takes_the_recorded_revisit() {
 
     let link = r.link("R1");
     refused(r.model("gil_open", json!({"kind":"experiment","contract":link})), "no shortcut when nothing would change");
-    refused(r.model("gil_revisit", json!({})), "the approval is still required");
     let view = r.recover();
     assert_eq!(view["changes"], json!([]), "{view}");
     assert_eq!((view["from"].as_str(), view["target"].as_str()), (Some("cycle:C4"), Some("cycle:C2")));

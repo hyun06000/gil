@@ -275,6 +275,7 @@ def solve(task,plan="", *, cycle=None, baseline=None, verify_ref=None, failed_ch
         if len(public)>600: break
     history=[]; writes={}; checked=None; calls=0
     made = set()   # project files beside the submission that this session created (mcp arm only)
+    gil_answers = set()   # GIL calls with the answers they returned, to tell a repeated reading from progress
     view = View()
     refusal = ["", 0]
     notes = []
@@ -395,8 +396,12 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                     response += f"\nSubmission files changed by this call: {changed}"
                 logged = response
                 obj = {**obj, "path": obj["tool"]}
-                # A refused call recorded nothing and moved nothing: sending it again is no progress either.
-                stall.step(bool(changed) or not response.startswith("REFUSED: "))
+                # A refused call recorded nothing and moved nothing, and the same call returning the same
+                # answer told nothing new: neither is progress, as with a file read again unchanged.
+                answer_seen = (obj["tool"], json.dumps(obj["arguments"], sort_keys=True), response)
+                fresh = answer_seen not in gil_answers
+                gil_answers.add(answer_seen)
+                stall.step(bool(changed) or (fresh and not response.startswith("REFUSED: ")))
             elif gil and action == "say":
                 response = logged = gil.say(obj["message"])
                 stall.step(True)

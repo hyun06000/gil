@@ -580,7 +580,8 @@ mod tests {
         let mut r = receipt("닫았다: cycle:C3 · experiment · failure\n기록됨: journey:J9 (판은 늘지 않는다)\n\n다음\n  적어 둔 조상으로 되돌아간다 — 그 자리의 Artifact 세계가 함께 복원된다\n\n실행\n  gil revisit\n");
         after("gil_close", &mut r);
         let hint = text(&r);
-        if cfg!(feature = "product-safety") { assert!(hint.contains("버튼을 기다린다"), "{hint}"); }
+        // Nobody approves going back: the product build tells the agent to call gil_revisit itself.
+        if cfg!(feature = "product-safety") { assert!(hint.contains("gil_revisit 을 한 번 불러") && hint.contains("승인을 기다리지 않는다") && !hint.contains("버튼"), "{hint}"); }
         else { assert!(hint.contains("gil_revisit(인수 없음)") && hint.contains("사용자에게 알린"), "{hint}"); }
         // M6-E: partial results are shown before the restore; no keep-files transition is promised.
         assert!(hint.contains(crate::locale::text("guide.interrupt_partial_results")), "{hint}");

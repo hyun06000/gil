@@ -48,8 +48,6 @@ mod evidence;
 pub(crate) mod format_transition;
 #[cfg(feature = "product-safety")]
 mod revisit_recovery;
-#[cfg(feature = "product-safety")]
-pub(crate) use revisit_recovery::ApprovalSource;
 // Read-only: a closed Verify's declared evidence from its own Snapshot (exploration profile).
 #[cfg(feature = "exploration-flow")]
 mod stored_evidence;

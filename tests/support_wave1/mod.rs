@@ -325,3 +325,17 @@ pub fn verify_args(root: &Path, step: &str, report: &str) -> Value {
         json!({"project_root":root,"report":report})
     }
 }
+
+/// The agent's `gil_revisit` after a closed failure: nobody approves it. The recovery's own result
+/// (state, changes, archive, approval_source) is printed in the receipt; it is lifted into
+/// `structuredContent` here so a test reads it as one value. A refusal is returned as it came.
+pub fn revisit(c: &mut Client, root: &Path) -> Value {
+    let mut frame = c.call("gil_revisit", json!({"project_root": root}));
+    if is_ok(&frame) {
+        let said = frame["result"]["structuredContent"]["said"].as_str().unwrap_or_default().to_owned();
+        if let Some(result) = said.lines().find(|line| line.starts_with('{')).and_then(|line| serde_json::from_str::<Value>(line).ok()) {
+            frame["result"]["structuredContent"] = result;
+        }
+    }
+    frame
+}

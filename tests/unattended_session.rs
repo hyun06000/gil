@@ -5,11 +5,11 @@
 //!
 //! - the tool list carries no display tool and no App tool, and the two runner tools are marked
 //!   for the runner; a server started without the choice does not have them at all;
-//! - a plan proposal, a requested recovery and (tracked-scope builds) a start proposal are answered
-//!   through the runner tools for the exact digest read, and every such record says
+//! - a plan proposal and (tracked-scope builds) a start proposal — the two things a user decides —
+//!   are answered through the runner tools for the exact digest read, and every such record says
 //!   `unattended_runner`, never a Monitor button;
-//! - the model's receipts say what waits for the user, a recovery waits only after the model asked
-//!   for it, and a wrong digest or an unrequested recovery records nothing;
+//! - the model's receipts say what waits for the user, and a wrong digest records nothing;
+//! - going back after a failure waits for nobody: the agent's own gil_revisit carries it out;
 //! - the choice without a headless display serves nothing.
 //! - a tracked-scope project goes back inside its approved scope: tracked files return to the target
 //!   Cycle's world while excluded paths, a link inside an excluded folder and the policy file stay
@@ -151,7 +151,7 @@ fn the_choice_without_a_headless_display_serves_nothing() {
 }
 
 #[test]
-fn a_plan_and_a_requested_recovery_are_answered_by_the_runner_and_recorded_as_unattended() {
+fn a_plan_is_answered_by_the_runner_and_the_agent_goes_back_by_itself() {
     let mut r = rig("unattended-flow", &[("data/dates.csv", "id,date\n1,2026-01-02\n2,02/01/2026\n")], direct_start());
     assert_eq!(pending(&mut r), Vec::<Value>::new(), "a fresh project waits for nothing");
     interview(&mut r, &["R1"]);
@@ -166,33 +166,27 @@ fn a_plan_and_a_requested_recovery_are_answered_by_the_runner_and_recorded_as_un
         files: &[("evidence/C3.md", "2행을 변환하지 못했다\n"), ("data/dates.csv", "broken\n")], evidence: "evidence/C3.md", fails_back_to: Some("cycle:C2") });
     assert_ne!(world(&r.root), world_at_c2);
 
-    // A recovery plan exists, but nobody asked for it: the runner is offered nothing and can approve nothing.
+    // Going back is the agent's own act: nothing waits for the user, and the runner has no answer to give.
     assert_eq!(pending(&mut r), Vec::<Value>::new());
-    let (record_before, world_before) = (record_bytes(&r.record), world(&r.root));
-    refused(decide(&mut r, "revisit", &json!("0".repeat(64)), "approve"), "a recovery the model did not ask for");
-    assert_eq!((record_bytes(&r.record), world(&r.root)), (record_before.clone(), world_before.clone()));
-
-    // The model asks. Its refusal says the decision is the user's and that it waits outside.
-    let asked = refused(r.model("gil_revisit", json!({})), "the model-side revisit without an approval");
-    assert_eq!(awaiting(&asked), json!(["revisit"]), "{asked}");
-    assert!(everything(&asked).contains("no Monitor") && everything(&asked).contains("바꾸지 않았다"), "{asked}");
-    assert_eq!((record_bytes(&r.record), world(&r.root)), (record_before, world_before));
-    let waits = pending(&mut r);
-    assert_eq!(waits.len(), 1, "{waits:?}");
-    let plan = &waits[0]["plan"];
-    assert_eq!((waits[0]["subject"].as_str(), plan["from"].as_str(), plan["target"].as_str()), (Some("revisit"), Some("cycle:C3"), Some("cycle:C2")));
-    refused(decide(&mut r, "revisit", &waits[0]["digest"], "request_changes"), "any answer but approval");
-    let done = ok(decide(&mut r, "revisit", &waits[0]["digest"], "approve"), "runner approves the recovery");
-    let result = &structured(&done)["result"];
-    assert_eq!((result["state"].as_str(), result["approval_source"].as_str()), (Some("completed"), Some("unattended_runner")), "{done}");
-    assert_eq!(structured(&done)["pending"], json!([]));
+    rpc_error(decide(&mut r, "revisit", &json!("0".repeat(64)), "approve"), "a recovery is not a subject the runner answers");
+    let context = r.context();
+    assert!(context.contains("gil_revisit") && !context.contains("버튼"), "{context}");
+    let root = r.root.clone();
+    let done = ok(revisit(&mut r.c, &root), "the agent goes back");
+    let plan = structured(&done).clone();
+    assert!(awaiting(&done).is_null(), "{done}");
+    assert_eq!((plan["state"].as_str(), plan["from"].as_str(), plan["target"].as_str(), plan["approval_source"].as_str()),
+        (Some("completed"), Some("cycle:C3"), Some("cycle:C2"), Some("agent_revisit")), "{done}");
 
     // The world is C2's again, the failed files are preserved, and the source record names no click.
     assert_eq!(world(&r.root), world_at_c2);
     let preserved = PathBuf::from(plan["archive"].as_str().unwrap());
     let source: Value = serde_json::from_slice(&fs::read(preserved.join("source.json")).unwrap()).unwrap();
-    assert_eq!((source["approval_source"].as_str(), source["human_click"].as_bool()), (Some("unattended_runner"), Some(false)), "{source}");
-    refused(decide(&mut r, "revisit", &waits[0]["digest"], "approve"), "the same recovery twice");
+    assert_eq!((source["approval_source"].as_str(), source["human_click"].as_bool()), (Some("agent_revisit"), Some(false)), "{source}");
+    // The same call again finds the recovery done and changes nothing.
+    let again = ok(revisit(&mut r.c, &root), "the same revisit again");
+    assert_eq!(structured(&again)["state"], "completed", "{again}");
+    assert_eq!(world(&r.root), world_at_c2);
 
     // The model continues from the recorded state: the next Experiment branches from the failure.
     assert_eq!(r.open_experiment("R1"), 4);
@@ -273,17 +267,13 @@ fn a_tracked_scope_project_goes_back_inside_its_approved_scope_and_leaves_exclud
     let (mut r, world_at_c2) = tracked_failure("unattended-tracked-recovery");
     let rules = RULES;
 
-    let asked = refused(r.model("gil_revisit", json!({})), "the model asks for the recovery");
-    assert_eq!(awaiting(&asked), json!(["revisit"]), "{asked}");
-    let waits = pending(&mut r);
-    assert_eq!(waits.len(), 1, "{waits:?}");
-    let plan = &waits[0]["plan"];
-    assert_eq!((plan["from"].as_str(), plan["target"].as_str(), plan["policy"].as_str()), (Some("cycle:C3"), Some("cycle:C2"), Some("approved-tracking-policy-scope-v1")), "{plan}");
+    let root = r.root.clone();
+    let done = ok(revisit(&mut r.c, &root), "the agent goes back");
+    let plan = structured(&done).clone();
+    assert_eq!((plan["state"].as_str(), plan["from"].as_str(), plan["target"].as_str(), plan["policy"].as_str()), (Some("completed"), Some("cycle:C3"), Some("cycle:C2"), Some("approved-tracking-policy-scope-v1")), "{plan}");
     let mut listed: Vec<(&str, &str)> = plan["changes"].as_array().unwrap().iter().map(|c| (c["path"].as_str().unwrap(), c["action"].as_str().unwrap())).collect();
     listed.sort();
     assert_eq!(listed, [("app.py", "replace"), ("evidence/C3.md", "preserve"), ("lib/new.py", "preserve")], "only tracked paths are in the plan");
-    let done = ok(decide(&mut r, "revisit", &waits[0]["digest"], "approve"), "runner approves the recovery");
-    assert_eq!(structured(&done)["result"]["state"], "completed", "{done}");
 
     // Tracked files are C2's again. Excluded paths keep what C3 left there; the policy file is untouched.
     let now = world(&r.root);
@@ -320,15 +310,12 @@ fn a_tracked_scope_recovery_interrupted_by_process_death_rolls_back_and_resumes(
     let crashing: Vec<(&str, &str)> = UNATTENDED.iter().copied().chain([("GIL_RESTORE_CRASH", "after-first-apply")]).collect();
     let (exit, noise) = std::mem::replace(&mut r.c, Client::serve_with_env(&r.settings, &crashing)).eof();
     assert!(exit.success() && noise.is_empty(), "{exit:?} {noise:?}");
-    refused(r.model("gil_revisit", json!({})), "the model asks for the recovery");
-    let waits = pending(&mut r);
-    r.c.call_expecting_crash("gil_unattended_decide", json!({"project_root":r.root,"subject":"revisit","digest":waits[0]["digest"],"decision":"approve"}));
+    r.c.call_expecting_crash("gil_revisit", json!({"project_root":r.root}));
     assert_ne!(world(&r.root), world_at_c3, "the restore had started when the process died");
 
     r.c = Client::serve_with_env(&r.settings, UNATTENDED);
-    // The approval is durable. The model's next command first rolls the half-done restore back —
-    // by the touched paths alone, since the whole folder cannot be observed — and then resumes it.
-    // No new answer is needed and none is offered.
+    // The started recovery is durable. The model's next gil_revisit first rolls the half-done restore
+    // back — by the touched paths alone, since the whole folder cannot be observed — and then resumes it.
     let resumed = ok(r.model("gil_revisit", json!({})), "resume the approved recovery");
     assert!(awaiting(&resumed).is_null(), "{resumed}");
     assert_eq!(pending(&mut r), Vec::<Value>::new());
