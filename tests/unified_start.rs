@@ -221,6 +221,11 @@ fn tracked_scope_archives_nothing_before_the_monitor_approval_and_nothing_turns_
         "visuals": {"attachments": [], "uses": []}}));
     assert!(attach.get("error").is_some() || !is_ok(&attach), "{attach}");
     assert!(attach.to_string().contains("visual_upgrade_required"), "the refusal names the missing image-report storage: {attach}");
+    // The refusal names the close this project does take. It must not ask for corrected visuals:
+    // a model that was told to fix them resent the same close until its budget ended (2026-11-27).
+    let said = attach.to_string();
+    assert!(said.contains("{project_root, report}") && said.contains("visuals 를 고쳐 다시 보내도 같은 거절이다"), "{attach}");
+    assert!(!said.contains("아래 이유대로 visuals"), "{attach}");
     let visuals = c.call("gil_report_visuals", json!({"project_root": r, "owner": {"kind": "cycle", "ref": "cycle:C1"}}));
     assert!(is_ok(&visuals), "{visuals}");
     assert_eq!(sc(&visuals)["visuals"]["uses"], json!([]), "a tracked-scope project holds no visuals: {visuals}");

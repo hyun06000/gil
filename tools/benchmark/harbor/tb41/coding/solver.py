@@ -363,7 +363,8 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                     response += f"\nSubmission files changed by this call: {changed}"
                 logged = response
                 obj = {**obj, "path": obj["tool"]}
-                stall.step(True)
+                # A refused call recorded nothing and moved nothing: sending it again is no progress either.
+                stall.step(bool(changed) or not response.startswith("REFUSED: "))
             elif gil and action == "say":
                 response = logged = gil.say(obj["message"])
                 stall.step(True)

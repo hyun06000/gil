@@ -250,6 +250,10 @@ fn fail_with(code: &str, reason: Option<String>) -> CallToolResult {
         "Report 문법 오류로 실행하지 않았고 아무 단계도 닫히지 않았다. report는 '이름: 값' 텍스트다. 한 파일은 'evidence_files: evidence/result.md'처럼 같은 줄에 적는다. 여러 파일은 'evidence_files: |\n  evidence/one.md\n  evidence/two.md'처럼 |와 들여쓰기를 쓴다. 실제 저장한 경로만 적는다. 현재 대상이 여전히 열려 있으면 Report 문법을 고쳐 같은 gil_close를 한 번 제출한다. typed 입력의 expected_owner와 visuals도 함께 유지한다."
     } else if code == "unachieved_refused" {
         crate::locale::text("mcp.unachieved_refused")
+    } else if code == "visual_upgrade_required" {
+        // The project has no visual registry (a tracked-scope project, or an older format). Nothing about
+        // `visuals` can be corrected into an accepted close: the only close this project takes is the plain one.
+        "이 프로젝트는 보고서에 이미지를 보관하지 않는 종류다. 닫힌 것은 없다. visuals 를 고쳐 다시 보내도 같은 거절이다. visuals 와 expected_owner 를 빼고 같은 Report 를 {project_root, report} 만으로 gil_close 에 한 번 다시 보낸다. 이미지를 만들었다면 Verify 의 evidence_files 에 그 파일 경로를 적어 파일 증거로 남길 수 있다. 첨부·인용은 이 프로젝트에 없다. 프로젝트를 다른 종류로 바꾸거나 기록을 고치지 않는다."
     } else if code.starts_with("visual_") {
         "시각 자료 계약이 거절했다. 닫힌 것은 없다. 아래 이유대로 visuals(선언·첨부·인용)를 고쳐 같은 gil_close를 한 번 다시 보낸다. 규칙은 gil_help topic report/visuals 에 있다."
     } else {

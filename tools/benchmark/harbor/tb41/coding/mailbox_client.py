@@ -10,7 +10,9 @@ DEADLINE = Path("/work/deadline")
 def record(**event):
     if event.get("event") == "tool":
         # The next request carries what the last call did, so the host can show it while the trial runs.
-        ask.last = {k: (v[:300] if isinstance(v, str) else v) for k, v in event.items()
+        # A GIL receipt names its reason after its opening guidance, so those keep more of their text.
+        keep = 1500 if event.get("action") in ("gil", "say") else 300
+        ask.last = {k: (v[:keep] if isinstance(v, str) else v) for k, v in event.items()
                     if k in ("action", "path", "offset", "command", "error", "result", "note")}
     with (MAIL / "transcript.jsonl").open("a") as log:
         print(json.dumps({"time": time.time(), **event}, ensure_ascii=False), file=log)
