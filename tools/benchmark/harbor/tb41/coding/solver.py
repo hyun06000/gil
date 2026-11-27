@@ -222,7 +222,8 @@ LEDGER_RULES = (
     "files the hypothesis names. You may correct mistakes made in carrying the method out. If the method itself "
     "turns out wrong or not enough, do not try another one here: finish, and say in your note what you found; "
     "the reflection after this step decides where to go back to. Every defined probe is run again on the final "
-    "files when this step ends.")
+    "files when this step ends. Under GIL, keep any file you create for looking at things inside the task "
+    "directory, where the project's own tooling and module settings apply, rather than under /tmp.")
 
 
 def run_probe(key, script):
@@ -290,7 +291,7 @@ Work toward the full official task. Call exactly one of the supplied editor tool
 {{"action":"read","path":"relative/file","offset":0}} (puts up to {PAGE} characters of the file in view)
 {{"action":"write","path":"relative/file","content":"complete source file"}}
 {{"action":"edit","path":"relative/file","old":"text that occurs exactly once in the file","new":"its replacement"}}
-{{"action":"run","command":"shell command"}} (sh in /app, no network, {RUN_SECONDS} s limit: build, execute or time anything, including the task's own commands and test scripts you write; keep any file you create for this inside the task directory, where the project's own tooling and module settings apply, not under /tmp; submission files it changes are recorded)
+{{"action":"run","command":"shell command"}} (sh in /app, no network, {RUN_SECONDS} s limit: build, execute or time anything, including the task's own commands and test scripts you write under /tmp; submission files it changes are recorded)
 {{"action":"check"}} (run task compiler/build/import smoke)
 {{"action":"finish"}} after editing the solution and checking it. An incomplete solution can be graded.
 For vf2 use fast_networkx.py or a fast_networkx package. For ks use solution.cpp. For React work in src/.

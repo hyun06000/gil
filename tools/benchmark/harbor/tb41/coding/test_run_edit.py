@@ -69,8 +69,6 @@ class RunEditTests(unittest.TestCase):
         # The request names both tools.
         self.assertIn('{"action":"edit","path":"relative/file","old":', self.prompts[0])
         self.assertIn('{"action":"run","command":"shell command"} (sh in /app, no network, 2 s limit', self.prompts[0])
-        # A file made for looking at things belongs in the project, where its tooling applies.
-        self.assertIn("keep any file you create for this inside the task directory", self.prompts[0])
 
     def test_edit_needs_exactly_one_occurrence_and_a_writable_path(self):
         self.drive([

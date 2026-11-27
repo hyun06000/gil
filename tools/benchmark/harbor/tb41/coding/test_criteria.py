@@ -160,6 +160,8 @@ class VerifyLedgerTests(unittest.TestCase):
         self.assertEqual(self.flags[0], {"notes": True, "ledger": True})
         self.assertIn("carries out the hypothesis above and nothing more", self.prompts[0])
         self.assertIn("You write no probe and change none", self.prompts[0])
+        # Where to put files is GIL's guidance, given only in a GIL Verify.
+        self.assertIn("Under GIL, keep any file you create for looking at things inside the task directory", self.prompts[0])
         # Before anything was done the target's probe was run on the entry files.
         self.assertEqual((obs["entry"], [e["event"] for e in self.events[:2]]), ({"K3": "fails"}, ["verify_plan", "probe_entry"]))
         self.assertTrue(tools[0]["result"].startswith("criterion K3 fails on the current files. exit 1: a string was accepted"))
@@ -225,7 +227,8 @@ class VerifyLedgerTests(unittest.TestCase):
                                   {"action": "check"}, {"action": "finish"}], cycle=cycle)
                 self.assertEqual(self.flags, [{"notes": True}] * 5)
                 self.assertIn("No criteria are defined for this session", self.tools()[1]["error"])
-                self.assertFalse(any("carries out the hypothesis above" in p or "Files the hypothesis names" in p for p in self.prompts))
+                self.assertFalse(any("carries out the hypothesis above" in p or "Files the hypothesis names" in p
+                                     or "Under GIL" in p for p in self.prompts))
                 self.assertFalse({"criteria", "targets", "swept", "ledger", "entry", "outside_hypothesis"} & set(obs))
                 self.assertFalse(any(e.get("event") in ("probe", "probe_sweep", "probe_entry") for e in self.events))
 
