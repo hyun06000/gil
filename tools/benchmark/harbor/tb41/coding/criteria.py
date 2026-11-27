@@ -1,8 +1,13 @@
 """The criteria ledger of a GIL benchmark Chain.
 
-Define splits the public requirements into items. Verify runs a command for an item, and the item
-holds only while that command exits 0 on the files as they are. Analysis reads the ledger instead
-of asking for an opinion, and the next Experiment takes the items still open.
+The ledger lists what the task requires. Each step of an Experiment has one part in it:
+
+- Define takes some criteria as its problem and writes, for each, the exact state that must hold
+  and a probe: a script that exits 0 exactly when that state holds. The probe is fixed there.
+- Hypothesis names the method that would bring those states about.
+- Verify carries the method out and runs the probes. It writes no probe and changes none.
+- Analysis reads the ledger: with the method carried out, do the states hold or not.
+- Reflection says why not and where to go back, or names the candidates for the next Experiment.
 """
 import hashlib
 import json
@@ -21,80 +26,97 @@ def obj(**properties):
 
 
 TEXT = {"type": "string"}
+LIST = {"type": "array", "items": TEXT}
+CRITERION = obj(requirement=TEXT, kind={"type": "string", "enum": list(KINDS)}, source=TEXT)
 # The shapes the participant asks the model for; the provider holds the answer to them.
-CRITERIA = obj(criteria={"type": "array", "items": obj(
-    requirement=TEXT, kind={"type": "string", "enum": list(KINDS)}, source=TEXT, probe={"type": ["string", "null"]})})
-TARGETS = obj(targets={"type": "array", "items": TEXT})
+CRITERIA = obj(criteria={"type": "array", "items": CRITERION})
+TARGETS = obj(targets=LIST)
+PROBES = obj(probes={"type": "array", "items": obj(id=TEXT, state=TEXT, probe=TEXT)})
+HYPOTHESIS = obj(method=TEXT, files=LIST)
+CANDIDATES = obj(candidates=LIST, new={"type": "array", "items": CRITERION})
 SET_ASIDE = obj(set_aside={"type": "array", "items": obj(id=TEXT, reason=TEXT)})
+
+
+def loads(text):
+    return json.loads(text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip())
+
+
+def item(number, entry):
+    requirement = entry.get("requirement") if isinstance(entry, dict) else None
+    if not isinstance(requirement, str) or not requirement.strip():
+        raise ValueError("every criterion is an object with a requirement")
+    return {
+        "id": f"K{number}", "kind": entry.get("kind") if entry.get("kind") in KINDS else "behaviour",
+        "requirement": requirement.strip(), "source": str(entry.get("source") or "").strip(),
+        # Written by the Define that takes the criterion as its problem.
+        "state": None, "probe": None,
+        "status": "unrun", "exit": None, "output": "", "digest": None, "failed_on": [],
+    }
 
 
 def parse(text):
     """Items from a model's answer: the criteria object, or a bare array of them."""
-    body = text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
     try:
-        raw = json.loads(body)
+        raw = loads(text)
     except ValueError as error:
-        raise ValueError(f"not a JSON array: {error}") from None
+        raise ValueError(f"not JSON: {error}") from None
     if isinstance(raw, dict):
         raw = raw.get("criteria")
     if not isinstance(raw, list) or not raw:
-        raise ValueError("expected a non-empty JSON array of criteria")
-    items = []
-    for entry in raw:
-        if not isinstance(entry, dict):
-            raise ValueError("every criterion is an object")
-        requirement = entry.get("requirement")
-        if not isinstance(requirement, str) or not requirement.strip():
-            raise ValueError("every criterion needs a requirement")
-        kind = entry.get("kind") if entry.get("kind") in KINDS else "behaviour"
-        probe = entry.get("probe")
-        items.append({
-            "id": f"K{len(items) + 1}", "kind": kind, "requirement": requirement.strip(),
-            "source": str(entry.get("source") or "").strip(),
-            "plan": probe.strip() if isinstance(probe, str) and probe.strip() else None,
-            "status": "unrun", "command": None, "exit": None, "output": "", "digest": None, "failed_on": [],
-        })
-    return items
+        raise ValueError("expected a non-empty list of criteria")
+    return [item(number, entry) for number, entry in enumerate(raw, 1)]
 
 
 class Ledger:
     def __init__(self, items):
-        self.items = {item["id"]: item for item in items}
+        self.items = {entry["id"]: entry for entry in items}
 
     def json(self):
         return list(self.items.values())
 
-    def status(self, key, current):
-        """What is known about an item for the submission named by `current`."""
-        item = self.items[key]
-        if item["plan"] is None and item["command"] is None:
-            return "unverifiable"
-        if item.get("set_aside"):
-            return "set_aside"
-        if item["status"] in ("holds", "fails") and item["digest"] != current:
-            return "stale"
-        return item["status"]
+    def add(self, entries):
+        """Requirements a reflection found the ledger lacked."""
+        added = []
+        for entry in entries:
+            try:
+                new = item(len(self.items) + 1, entry)
+            except ValueError:
+                continue
+            self.items[new["id"]] = new
+            added.append(new["id"])
+        return added
 
-    def record(self, key, command, code, output, current):
-        item = self.items[key]
-        item.update(status="holds" if code == 0 else "fails", command=command, exit=code,
-                    output=output, digest=current)
-        if code == 0:
-            # A probe that passes settles a criterion that had been set aside.
-            item.pop("set_aside", None)
-        elif current not in item["failed_on"]:
-            item["failed_on"].append(current)
-        return item["status"]
+    def define(self, key, state, probe):
+        """Define fixes what solved means for a criterion. An earlier result said nothing about this probe."""
+        self.items[key].update(state=state.strip(), probe=probe, status="unrun", exit=None, output="", digest=None)
+
+    def status(self, key, current):
+        """What is known about a criterion for the submission named by `current`."""
+        entry = self.items[key]
+        if entry.get("set_aside"):
+            return "set_aside"
+        if not entry["probe"]:
+            return "undefined"     # no Define has said yet what state would count
+        if entry["status"] in ("holds", "fails") and entry["digest"] != current:
+            return "stale"
+        return entry["status"]
+
+    def record(self, key, code, output, current):
+        entry = self.items[key]
+        entry.update(status="holds" if code == 0 else "fails", exit=code, output=output, digest=current)
+        if code != 0 and current not in entry["failed_on"]:
+            entry["failed_on"].append(current)
+        return entry["status"]
 
     def set_aside(self, key, reason):
-        """A judgement made in Define: this criterion or its probe does not describe the task."""
+        """A judgement of a reflection: this criterion does not describe the task."""
         self.items[key]["set_aside"] = str(reason).strip() or "set aside"
 
     def having(self, current, *statuses):
         return [key for key in self.items if self.status(key, current) in statuses]
 
     def open(self, current):
-        return self.having(current, "unrun", "fails", "stale")
+        return self.having(current, "undefined", "unrun", "fails", "stale")
 
     def counts(self, current):
         found = {}
@@ -105,23 +127,20 @@ class Ledger:
 
     def shown(self, current, targets=()):
         rows = []
-        for key, item in self.items.items():
+        for key, entry in self.items.items():
             status = self.status(key, current)
-            row = {"id": key, "kind": item["kind"], "requirement": item["requirement"], "status": status}
+            row = {"id": key, "kind": entry["kind"], "requirement": entry["requirement"], "status": status}
+            if entry["source"]:
+                row["source"] = entry["source"]
             if key in targets:
-                row["target"] = True
-            if item["source"]:
-                row["source"] = item["source"]
-            if item["command"]:
-                row["probe"] = item["command"]
-                if status == "fails":
-                    row["output"] = item["output"]
-            elif item["plan"]:
-                row["probe_plan"] = item["plan"]
-            if item["failed_on"]:
+                # The problem of this Experiment: the state that must hold and the probe that shows it.
+                row.update(target=True, state=entry["state"], probe=entry["probe"])
+            if status == "fails":
+                row["output"] = entry["output"]
+            if entry["failed_on"]:
                 # History for whoever judges next; no rule follows from the number.
-                row["failed_on_submissions"] = len(item["failed_on"])
-            if item.get("set_aside"):
-                row["set_aside"] = item["set_aside"]
+                row["failed_on_submissions"] = len(entry["failed_on"])
+            if entry.get("set_aside"):
+                row["set_aside"] = entry["set_aside"]
             rows.append(row)
         return rows

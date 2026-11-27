@@ -91,22 +91,31 @@ class EditorTests(unittest.TestCase):
                 client.ask([{"role": "user", "content": "x"}], [], editor=True)
             send.assert_not_called()
 
-    def test_only_a_ledger_request_names_a_criterion_and_only_on_run(self):
+    def test_only_a_ledger_request_can_run_a_fixed_probe_and_no_command_carries_a_criterion(self):
         from luna import EDITOR_TOOLS, LEDGER_TOOLS, NOTED_TOOLS
         names = lambda tools: {t["name"]: list(t["parameters"]["properties"]) for t in tools}
-        self.assertEqual(names(LEDGER_TOOLS)["run"], ["command", "note", "criterion"])
-        self.assertEqual({k: v for k, v in names(LEDGER_TOOLS).items() if k != "run"},
-                         {k: v for k, v in names(NOTED_TOOLS).items() if k != "run"})
-        self.assertFalse(any("criterion" in v for v in list(names(NOTED_TOOLS).values()) + list(names(EDITOR_TOOLS).values())))
-        probe = [tool_call("run", command="make test", note="probe", criterion="K3")]
+        self.assertEqual(names(LEDGER_TOOLS)["probe"], ["criterion", "note"])
+        self.assertEqual({k: v for k, v in names(LEDGER_TOOLS).items() if k != "probe"}, names(NOTED_TOOLS))
+        self.assertNotIn("probe", {**names(NOTED_TOOLS), **names(EDITOR_TOOLS)})
+        # A command is the model's own look at things; it cannot be credited to a criterion.
+        self.assertEqual(names(LEDGER_TOOLS)["run"], ["command", "note"])
+        probe = [tool_call("probe", criterion="K3", note="see where it stands")]
         result = {"status": "completed", "output": probe, "usage": {"input_tokens": 3, "output_tokens": 5}}
         with patch.dict("os.environ", {"GIL_HARBOR_API_KEY": "test"}), patch("urllib.request.urlopen", side_effect=lambda *a, **k: io.BytesIO(json.dumps(result).encode())) as send:
             client = Luna(max_calls=None, budget=None)
-            self.assertEqual(json.loads(client.ask([], [], editor=True, notes=True, ledger=True))["criterion"], "K3")
+            self.assertEqual(json.loads(client.ask([], [], editor=True, notes=True, ledger=True)),
+                             {"action": "probe", "criterion": "K3", "note": "see where it stands"})
             self.assertEqual(json.loads(send.call_args.args[0].data)["tools"], LEDGER_TOOLS)
-            # The same reply is not a valid call where no ledger was offered.
             with self.assertRaises(ValueError):
                 client.ask([], [], editor=True, notes=True)
+
+    def test_a_request_that_reasons_outside_the_editor_gets_the_effort_and_the_long_wait(self):
+        text = [{"type": "message", "content": [{"type": "output_text", "text": "{}"}]}]
+        result = {"status": "completed", "output": text, "usage": {"input_tokens": 3, "output_tokens": 5}}
+        for reason, effort, wait in ((True, "medium", 180), (False, "none", 100)):
+            with patch.dict("os.environ", {"GIL_HARBOR_API_KEY": "test"}), patch("urllib.request.urlopen", return_value=io.BytesIO(json.dumps(result).encode())) as send:
+                Luna(max_calls=None, budget=None, reasoning="medium", timeout=180, stage_timeout=100).ask([], [], reason=reason)
+            self.assertEqual((json.loads(send.call_args.args[0].data)["reasoning"], send.call_args.kwargs["timeout"]), ({"effort": effort}, wait))
 
     def test_a_request_with_a_schema_asks_the_provider_to_hold_the_answer_to_it(self):
         schema = {"type": "object", "properties": {"targets": {"type": "array", "items": {"type": "string"}}},

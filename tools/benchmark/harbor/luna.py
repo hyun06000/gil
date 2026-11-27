@@ -41,11 +41,10 @@ EDITOR_TOOLS = [
 NOTE = {"note": {"type": "string", "description":
                  "What the material in this request settled and what you do next (one or two sentences)."}}
 NOTED_TOOLS = [editor_tool(t["name"], t["description"], {**t["parameters"]["properties"], **NOTE}) for t in EDITOR_TOOLS]
-# A GIL Verify with a criteria ledger says which criterion a command probes.
-CRITERION = {"criterion": {"type": "string", "description":
-                           "Id of the criterion this command probes, such as K3; an empty string when it is not a probe."}}
-LEDGER_TOOLS = [editor_tool(t["name"], t["description"], {**t["parameters"]["properties"], **CRITERION})
-                if t["name"] == "run" else t for t in NOTED_TOOLS]
+# A GIL Verify with a criteria ledger can run the probe its Define fixed for a criterion.
+LEDGER_TOOLS = NOTED_TOOLS + [editor_tool(
+    "probe", "Run the probe that the problem definition fixed for a criterion, on the files as they are now.",
+    {"criterion": {"type": "string", "description": "Id of the criterion, such as K3."}, **NOTE})]
 
 
 def editor_answer(output, tools=EDITOR_TOOLS):
@@ -86,9 +85,9 @@ class Luna:
         self.outputs = 0
         self.reserved = 0
 
-    def ask(self, messages, choices, *, editor=False, notes=False, ledger=False, schema=None):
+    def ask(self, messages, choices, *, editor=False, notes=False, ledger=False, schema=None, reason=False):
         # Reasoning applies to editor requests only: the other stages share the Core's 120 s turn limit.
-        body = {"model": MODEL, "input": messages, "reasoning": {"effort": self.reasoning if editor else "none"},
+        body = {"model": MODEL, "input": messages, "reasoning": {"effort": self.reasoning if editor or reason else "none"},
                 "max_output_tokens": self.max_output, "store": False, "service_tier": "default"}
         if editor:
             tools = LEDGER_TOOLS if ledger else NOTED_TOOLS if notes else EDITOR_TOOLS
@@ -115,8 +114,9 @@ class Luna:
             "Authorization": "Bearer " + self.key, "Content-Type": "application/json"})
         result = None
         # The stages without the editor share the Core's 120 s turn: one short second try, not a long wait.
-        timeout = self.timeout if editor or self.stage_timeout is None else self.stage_timeout
-        for wait in (*(RETRY_WAITS if editor else (3,)), None):
+        # A request that reasons (the editor, a problem definition, a hypothesis) gets the long wait.
+        timeout = self.timeout if editor or reason or self.stage_timeout is None else self.stage_timeout
+        for wait in (*(RETRY_WAITS if editor or reason else (3,)), None):
             try:
                 with urllib.request.urlopen(request, timeout=timeout) as resp:
                     result = json.load(resp)

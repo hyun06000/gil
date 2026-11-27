@@ -10,8 +10,8 @@ HERE = Path(__file__).resolve().parent
 
 
 class LoggedLuna(Luna):
-    def ask(self, messages, choices, *, editor=False, notes=False, ledger=False, schema=None):
-        result = super().ask(messages, choices, editor=editor, notes=notes, ledger=ledger, schema=schema)
+    def ask(self, messages, choices, *, editor=False, notes=False, ledger=False, schema=None, reason=False):
+        result = super().ask(messages, choices, editor=editor, notes=notes, ledger=ledger, schema=schema, reason=reason)
         print(
             f"[{os.environ['TB_ARM']}] Luna call {self.calls} | input {self.inputs} | output {self.outputs} | estimated USD {self.usage()['estimated_usd']:.5f}",
             flush=True,

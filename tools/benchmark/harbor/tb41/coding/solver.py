@@ -4,8 +4,10 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shlex
 import signal
 import subprocess
+import tempfile
 import time
 
 from mailbox_client import ask, record
@@ -213,17 +215,25 @@ def run_command(command, limit):
 
 
 LEDGER_RULES = (
-    "\nCriteria ledger of this Chain. A criterion holds only when a command run with its id exits 0 on the files "
-    "as they are now. Write each probe so that it exits non-zero when the requirement is violated: assert the "
-    "observable result; for something that must not change, compare its bytes before and after; for a failure "
-    "case, first create the failing condition (for example a path that cannot be written) and assert what must "
-    "remain. Keep probe scripts under /tmp. Changing a submission file makes earlier results stale, and every "
-    "stored probe is run again on the final files when this step ends. This experiment succeeds when a target "
-    "newly holds and nothing that held before is broken; finish when you judge it done, and the other open "
-    "criteria are for later experiments.")
+    "\nThis Verify carries out the hypothesis above and nothing more. The problem was fixed in Define: for each "
+    "target, the state that must hold and the probe that shows it. You write no probe and change none; "
+    '{"action":"probe","criterion":"K1"} runs a target\'s probe on the files as they are now. Change only the '
+    "files the hypothesis names. You may correct mistakes made in carrying the method out. If the method itself "
+    "turns out wrong or not enough, do not try another one here: finish, and say in your note what you found; "
+    "the reflection after this step decides where to go back to. Every defined probe is run again on the final "
+    "files when this step ends.")
 
 
-def solve(task,plan="", *, cycle=None, baseline=None, verify_ref=None, failed_check=None, criteria=None, targets=()):
+def run_probe(key, script):
+    """Runs the probe Define wrote for a criterion, from a file of its own, in the task directory."""
+    folder = Path(tempfile.gettempdir()) / "gil-probes"
+    folder.mkdir(exist_ok=True)
+    path = folder / (key + ".sh")
+    path.write_text(script)
+    return run_command("sh " + shlex.quote(str(path)), RUN_SECONDS)
+
+
+def solve(task,plan="", *, cycle=None, baseline=None, verify_ref=None, failed_check=None, criteria=None, targets=(), scope=None):
     public=[]
     for directory,children,files in os.walk(APP):
         children[:]=[v for v in children if v not in ("node_modules",".git","__pycache__","build","dist")]
@@ -250,6 +260,9 @@ def solve(task,plan="", *, cycle=None, baseline=None, verify_ref=None, failed_ch
     if cycle and criteria:
         from criteria import Ledger, digest as submission
         ledger = Ledger(criteria)
+    # What the hypothesis did not name but the Verify changed all the same.
+    outside = []
+    entry = {}
     check_output = ""
     original_hashes = {}
     regression = False
@@ -290,7 +303,14 @@ If a local check fails, use its output to fix the source. No remote tools or pri
         if notes:
             prompt += "\nYour notes so far, oldest first: " + json.dumps(notes[-NOTES_KEPT:], ensure_ascii=False)
         if ledger:
-            prompt += (LEDGER_RULES + f"\nTargets of this experiment: {list(targets)}\n"
+            if not entry:
+                # Where the problem stands before anything is done: each target's probe on the entry files.
+                for key in targets:
+                    code, output = run_probe(key, ledger.items[key]["probe"])
+                    entry[key] = ledger.record(key, code, output[-OUTPUT_LIMIT:], submission(writes))
+                record(event="probe_entry", cycle=cycle, results=entry)
+            prompt += (LEDGER_RULES + f"\nFiles the hypothesis names: {sorted(scope) if scope is not None else 'not stated'}"
+                       f"\nTargets of this experiment: {list(targets)}\n"
                        + json.dumps(ledger.shown(submission(writes), targets), ensure_ascii=False))
         if activity:
             prompt += activity.prompt(CHECKS[TASK], checked, stall.count)
@@ -329,6 +349,10 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                 logged = response if shown else page["text"]
             elif action in ("write", "edit"):
                 path=source(obj["path"],True)
+                if scope is not None and path.relative_to(APP).as_posix() not in scope:
+                    raise ValueError(f"{path.relative_to(APP).as_posix()} is not a file the hypothesis names "
+                                     f"({sorted(scope)}). A method that needs it is a different hypothesis: finish and "
+                                     "say so in your note.")
                 if action == "edit":
                     text = path.read_text()
                     found = text.count(obj["old"]) if obj["old"] else 0
@@ -369,9 +393,6 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                 if checkpoint:
                     for name in before:
                         checkpoint.before_write(APP / name)
-                criterion = (obj.get("criterion") or "").strip() if ledger else ""
-                if criterion and criterion not in ledger.items:
-                    raise ValueError(f"{criterion} is not a criterion of the ledger; use one of {list(ledger.items)} or leave it empty")
                 code, output = run_command(command, RUN_SECONDS)
                 after = snapshot()
                 changed = sorted(n for n in before.keys() | after.keys() if before.get(n) != after.get(n))
@@ -399,14 +420,26 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                     if first_write is None:
                         first_write = calls
                 response = f"exit {code}: " + output[-OUTPUT_LIMIT:]
-                if criterion:
-                    held = ledger.record(criterion, command, code, output[-OUTPUT_LIMIT:], submission(writes))
-                    response = f"criterion {criterion} {held} on the current files. " + response
-                    activity_event["criterion"] = criterion
-                    record(event="probe", id=ask.call_id, cycle=cycle, criterion=criterion, status=held, exit=code)
+                if scope is not None:
+                    outside.extend(name for name in changed if name not in scope and name not in outside)
                 if changed:
                     response += f"\nSubmission files changed by this command: {changed}"
                 activity_event["command"] = command
+            elif action=="probe":
+                if not ledger:
+                    raise ValueError("No criteria are defined for this session")
+                criterion = str(obj.get("criterion") or "").strip()
+                if criterion not in ledger.items or not ledger.items[criterion]["probe"]:
+                    defined = [key for key, item in ledger.items.items() if item["probe"]]
+                    raise ValueError(f"{criterion or 'that'} has no probe; the defined ones are {defined}")
+                current = submission(writes)
+                fresh = ledger.status(criterion, current) not in ("holds", "fails")
+                code, output = run_probe(criterion, ledger.items[criterion]["probe"])
+                held = ledger.record(criterion, code, output[-OUTPUT_LIMIT:], current)
+                stall.step(fresh)
+                response = f"criterion {criterion} {held} on the current files. exit {code}: " + output[-OUTPUT_LIMIT:]
+                activity_event["criterion"] = criterion
+                record(event="probe", id=ask.call_id, cycle=cycle, criterion=criterion, status=held, exit=code)
             elif action=="check" and checked is not None and check_output:
                 # No file changed since this result: running it again observes nothing new.
                 stall.step(False)
@@ -468,7 +501,7 @@ If a local check fails, use its output to fix the source. No remote tools or pri
             stop = "stalled"
             break
     if ledger:
-        # The final files are what counts: the local check and every stored probe are run on them
+        # The final files are what counts: the local check and every defined probe are run on them
         # again, without the model.
         if checked is None and writes:
             proc = subprocess.run(CHECKS[TASK], cwd=APP, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=100)
@@ -476,14 +509,14 @@ If a local check fails, use its output to fix the source. No remote tools or pri
             check_output = f"exit {checked}: " + proc.stdout.decode(errors="replace")[-OUTPUT_LIMIT:]
         current, swept = submission(writes), []
         for key, item in ledger.items.items():
-            if not item["command"] or (item["digest"] == current and item["status"] in ("holds", "fails")):
+            if not item["probe"] or item.get("set_aside") or (item["digest"] == current and item["status"] in ("holds", "fails")):
                 continue
             if time.time() >= deadline:
                 break   # the trial's time is over; what was not run again stays stale
             before = ledger.status(key, current)
-            code, output = run_command(item["command"], RUN_SECONDS)
+            code, output = run_probe(key, item["probe"])
             swept.append({"criterion": key, "before": before,
-                          "after": ledger.record(key, item["command"], code, output[-OUTPUT_LIMIT:], current)})
+                          "after": ledger.record(key, code, output[-OUTPUT_LIMIT:], current)})
         if submission(snapshot_of(writes)) != current:
             raise RuntimeError("A probe changed the submission during the final sweep")
         record(event="probe_sweep", cycle=cycle, results=swept)
@@ -497,7 +530,7 @@ If a local check fails, use its output to fix the source. No remote tools or pri
     if ledger:
         current = submission(writes)
         obs.update(criteria=ledger.json(), targets=list(targets), submission_digest=current,
-                   ledger=ledger.counts(current), swept=swept)
+                   ledger=ledger.counts(current), swept=swept, entry=entry, outside_hypothesis=outside)
     if checkpoint:
         obs["verified_checkpoint_restores"] = recoveries
     (WORK/"observation.json").write_text(json.dumps(obs))

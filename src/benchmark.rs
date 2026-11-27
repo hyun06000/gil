@@ -581,6 +581,11 @@ mod tests {
         assert_eq!(lost["swept"][0]["before"], "stale");
         assert_eq!(lost["swept"][0]["after"], "fails");
         assert_eq!(lost["ledger"]["fails"], 1);
+        // The probe of its own target was fixed in Define and held from the start.
+        assert_eq!(lost["entry"], json!({"K2": "holds"}));
+        // In C3 the target did not hold before either hypothesis and held after the second.
+        assert_eq!(observed(2)["entry"], json!({"K3": "fails"}));
+        assert_eq!(observed(2)["ledger"]["holds"], 1);
         // The branch starts from the parent's bytes and ends with every criterion holding on one submission.
         assert_eq!(observed(4)["files"], observed(2)["files"]);
         assert_ne!(lost["files"], observed(2)["files"]);
