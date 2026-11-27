@@ -537,8 +537,10 @@ pub(crate) const PLAN_DOCUMENT_PATH: &str = "plan/approved-plan.md";
 
 /// Saves the bound plan document at [`PLAN_DOCUMENT_PATH`] and says what was done. Never follows a
 /// link and never replaces a file that holds something else: then the agent is told to save it.
+/// A file that holds the document of another revision of this project's plan is GIL's own earlier
+/// save — a new Interview approved a new revision since — and is replaced with the bound one.
 #[cfg(feature = "approved-plan")]
-fn save_plan_document(root: &std::path::Path, document: &str) -> String {
+fn save_plan_document(root: &std::path::Path, document: &str, revisions: &[String]) -> String {
     let at = root.join(PLAN_DOCUMENT_PATH);
     let folder = at.parent().expect("a path with a folder");
     let plain_folder = match std::fs::symlink_metadata(folder) {
@@ -547,7 +549,10 @@ fn save_plan_document(root: &std::path::Path, document: &str) -> String {
         Err(_) => false,
     };
     let saved = plain_folder && match std::fs::symlink_metadata(&at) {
-        Ok(found) => found.file_type().is_file() && std::fs::read(&at).is_ok_and(|bytes| bytes == document.as_bytes()),
+        Ok(found) => found.file_type().is_file() && std::fs::read(&at).is_ok_and(|bytes| {
+            bytes == document.as_bytes()
+                || (revisions.iter().any(|earlier| earlier.as_bytes() == bytes) && std::fs::write(&at, document).is_ok())
+        }),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             use std::io::Write;
             std::fs::OpenOptions::new().write(true).create_new(true).open(&at)
@@ -624,7 +629,7 @@ fn open_step(ctx: &Invocation<'_>,
     // durable; a failed save changes nothing about it and the receipt says what to do instead.
     #[cfg(feature = "approved-plan")]
     if kind == NodeKind::Verify && let Some(document) = session.project().plan_document() {
-        receipt.push_str(&save_plan_document(&session.root().map_err(say)?, &document));
+        receipt.push_str(&save_plan_document(&session.root().map_err(say)?, &document, &session.project().plan_documents()));
         receipt.push('\n');
     }
     if kind == NodeKind::Verify && matches!(ctx.input, Input::Body(_)) && session.project().visual_state.is_some() {

@@ -865,6 +865,11 @@ impl Project {
             .iter()
             .find(|i| i.id == e.item_id)
     }
+    /// The documents of every plan revision this project has proposed. GIL saves the bound one when
+    /// a Verify opens; a file holding one of the others is an earlier save of its own.
+    pub(crate) fn plan_documents(&self) -> Vec<String> {
+        self.approved_plan().map(|state| state.proposals.iter().map(Proposal::document).collect()).unwrap_or_default()
+    }
     pub fn plan_document(&self) -> Option<String> {
         let state = self.approved_plan()?;
         let e = state

@@ -338,3 +338,26 @@ fn a_tracked_scope_recovery_interrupted_by_process_death_rolls_back_and_resumes(
     assert_eq!((now[".env"].as_slice(), now["node_modules/added.js"].as_slice(), now[".gilignore"].as_slice()), (&b"KEY=changed-during-c3\n"[..], &b"3\n"[..], RULES.as_bytes()));
     assert_eq!(r.open_experiment("R1"), 4);
 }
+
+/// A new Interview approves a second revision of the plan. The plan document GIL saved for the
+/// first revision is its own file: the next Verify finds the second revision's document there.
+#[test]
+fn the_saved_plan_document_follows_the_revision_a_new_interview_approved() {
+    let mut r = rig("unattended-plan-revision", &[("data/in.txt", "input\n")], direct_start());
+    interview(&mut r, &["R1"]);
+    let c2 = r.open_experiment("R1");
+    r.run(c2, &Run { requirement: "R1", problem: "입력 파일이 있는가?", files: &[("evidence/C2.md", "있다\n")], evidence: "evidence/C2.md", fails_back_to: None });
+    let first = fs::read_to_string(r.root.join(PLAN_DOCUMENT)).unwrap();
+
+    // The list changes only in an Interview; the files stay as they are.
+    ok(r.model("gil_open", json!({"kind":"interview"})), "a new Interview");
+    interview(&mut r, &["R1", "R2"]);
+    assert_eq!(fs::read_to_string(r.root.join(PLAN_DOCUMENT)).unwrap(), first, "an Interview changes no file");
+    assert_eq!(r.read()["active_plan"]["revision"], 2);
+
+    // open_verify itself checks that the saved file is the bound document, here revision 2's.
+    let c4 = r.open_experiment("R2");
+    r.run(c4, &Run { requirement: "R2", problem: "두 번째 항목을 확인할 수 있는가?", files: &[("evidence/C4.md", "확인했다\n")], evidence: "evidence/C4.md", fails_back_to: None });
+    let second = fs::read_to_string(r.root.join(PLAN_DOCUMENT)).unwrap();
+    assert!(second != first && second.contains("R2"), "the document of revision 2 replaced GIL's earlier save");
+}
