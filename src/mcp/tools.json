@@ -721,7 +721,7 @@
         },
         "contract": {
           "type": "string",
-          "description": "Body text passed to GIL on stdin, exactly as written. GIL validates it."
+          "description": "Body text passed to GIL on stdin, exactly as written. GIL validates it. One field per line, each name at the very beginning of its line with no space before it, for example \"objective: ...\\nnext_action: ...\\ndone_when: ...\". A line that starts with a space is read as the continuation of a multi-line value and is refused when no such value is open."
         }
       },
       "required": [

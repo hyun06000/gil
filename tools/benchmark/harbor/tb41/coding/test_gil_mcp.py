@@ -111,7 +111,12 @@ class McpArmTests(unittest.TestCase):
             yield call("gil_open", kind="verify", contract=CONTRACT)
             _, _, read = gil.server.call("gil_plan_read", {"project_root": root})
             yield {"action": "write", "path": NAME, "content": "def order(labels):\n    return sorted(labels, key=str.casefold)\n", "note": "n"}
-            yield {"action": "run", "command": f"mkdir -p plan evidence && cat > {PLAN} <<'DOC'\n{read['document']}DOC\necho passed > evidence/C2.md", "note": "n"}
+            # The plan document and the evidence are project files beside the submission: the write tool takes them.
+            said = yield {"action": "write", "path": PLAN, "content": read["document"], "note": "n"}
+            seen["plan_file"] = said.get("result") or said.get("error")
+            yield {"action": "write", "path": "evidence/C2.md", "content": "passed\n", "note": "n"}
+            said = yield {"action": "write", "path": "README.md", "content": "overwritten\n", "note": "n"}
+            seen["task_file"] = said.get("error")
             yield {"action": "check", "note": "n"}
             said = yield call("gil_close", report=f"execution: 고치고 검사했다\nresult: 통과\nplan_document: {PLAN}\nevidence_files: evidence/C2.md\n")
             seen["verify"] = said["result"]
@@ -132,6 +137,10 @@ class McpArmTests(unittest.TestCase):
         self.assertIn("plan approved", seen["plan"])
         self.assertIn("go with your recommendation", seen["reply"])
         self.assertNotIn("REFUSED", seen["verify"])
+        self.assertIn("Wrote project file plan/approved-plan.md", seen["plan_file"])
+        self.assertIn("not part of the submission", seen["task_file"])
+        self.assertEqual((self.app / "README.md").read_text(), "the task's own file\n")
+        self.assertNotIn(PLAN, obs["files"])
         # What GIL added is out of the submission folder and kept apart; the task's own files remain.
         left = sorted(p.name for p in self.app.iterdir())
         self.assertEqual(left, ["README.md", "evidence", "fast_networkx", "node_modules", "plan"])

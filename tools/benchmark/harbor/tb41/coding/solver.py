@@ -65,6 +65,23 @@ def source(name, write=False):
     return path
 
 
+def kept_file(name, made):
+    """The path of a project file beside the submission that the agent may write: one that does not exist yet
+    or that this session created. A submission file, a task file and GIL's own record are not such files."""
+    path = (APP / name).resolve()
+    if not path.is_relative_to(APP) or {"node_modules", ".git", ".gil"} & set(path.parts):
+        return None
+    rel = path.relative_to(APP).as_posix()
+    try:
+        source(name, True)
+        return None
+    except ValueError:
+        pass
+    if rel in (".gilignore", "AGENTS.md", "CLAUDE.md") or (path.exists() and rel not in made):
+        return None
+    return path
+
+
 def snapshot_of(files):
     """The hashes of the named submission files as they are on disk now (absent files left out)."""
     return {name: hashlib.sha256((APP / name).read_bytes()).hexdigest() for name in files if (APP / name).is_file()}
@@ -248,6 +265,7 @@ def solve(task,plan="", *, cycle=None, baseline=None, verify_ref=None, failed_ch
         public.extend(str((Path(directory)/f).relative_to(APP)) for f in files)
         if len(public)>600: break
     history=[]; writes={}; checked=None; calls=0
+    made = set()   # project files beside the submission that this session created (mcp arm only)
     view = View()
     refusal = ["", 0]
     notes = []
@@ -326,7 +344,9 @@ If a local check fails, use its output to fix the source. No remote tools or pri
             # The product's MCP server is connected: its tools are offered beside the editor's, and the
             # user who asked for a GIL project is the stand-in the runner plays.
             prompt += ("\n" + gil.opening + "\nBesides the editor tools you may call any GIL tool, or `say` to "
-                       "speak to the user. Still exactly one tool call per request.")
+                       "speak to the user. Still exactly one tool call per request. Files GIL asks you to keep beside "
+                       "the solution (a plan document, evidence) are ordinary project files: create them with write, "
+                       "for example under plan/ or evidence/. They are not graded.")
             answer = ask(prompt, notes=True, tools=gil.tools, system=gil.system); calls += 1
         else:
             answer=ask(prompt, notes=True, ledger=True) if ledger else ask(prompt, notes=True); calls+=1
@@ -386,6 +406,23 @@ If a local check fails, use its output to fix the source. No remote tools or pri
                     activity_event["read_count"] = activity.read(name, data, start, page["end"], page["end"] >= len(content), shown)
                 # The transcript keeps the start of what the model was shown.
                 logged = response if shown else page["text"]
+            elif gil and action in ("write", "edit") and kept_file(obj["path"], made):
+                # A file GIL asks for beside the submission (a plan document, evidence). It is not graded and
+                # not tracked as a submission file; the agent may write only such files it created itself.
+                path = kept_file(obj["path"], made)
+                if action == "edit":
+                    text = path.read_text()
+                    found = text.count(obj["old"]) if obj["old"] else 0
+                    if found != 1:
+                        raise ValueError(f"old text occurs {found} times in {obj['path']}; it must occur exactly once.")
+                    content = text.replace(obj["old"], obj["new"])
+                else:
+                    content = obj["content"]
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content)
+                made.add(path.relative_to(APP).as_posix())
+                stall.step(True)
+                response = logged = f"Wrote project file {path.relative_to(APP).as_posix()} ({len(content)} characters). It is not a submission file."
             elif action in ("write", "edit"):
                 path=source(obj["path"],True)
                 if scope is not None and path.relative_to(APP).as_posix() not in scope:

@@ -883,7 +883,7 @@
   "ref.zero_not_allowed": "{text} is a kind that cannot use 0 — 0 belongs to the initial revision (J0) and the initial Existence State (ES0)",
   "report.bad_name": "{name} cannot be a field name — a name must contain no spaces",
   "report.duplicate_field": "the field {name} appears again — it was first written on line {first}. A field takes one value. Decide which value is right and keep only that one; for several lines open it with `{name}: |`",
-  "report.dangling_indent": "This line's indentation attaches to nothing — for a multi-line value, open the line above with `name: |`",
+  "report.dangling_indent": "This line's indentation attaches to nothing — for a multi-line value, open the line above with `name: |`. If it is a new field, remove the spaces before its name: a field starts at the beginning of its line",
   "report.line": "Line {line}: {detail}",
   "report.no_name": "No field name — the shape must be `name: value`",
   "report.tab_indent": "The indentation contains a tab — indent with spaces",
