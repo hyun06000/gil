@@ -1343,9 +1343,9 @@ mod tests {
         let todo = topic.section("지금 할 일").expect("지금 할 일");
         let example = topic.section("올바른 예").expect("올바른 예");
         if cfg!(feature = "product-safety") {
-            for text in [todo, example, topic.summary()] {
-                assert!(!text.contains("gil restore"), "거부되는 명령을 권한다:\n{text}");
-            }
+            // 제품 구성은 추적 범위를 승인받은 프로젝트에서만 복원한다. 그 길과, 복원이 거절되는 프로젝트의 길을 둘 다 적는다.
+            assert!(todo.contains("추적 범위를 승인받은 프로젝트") && todo.contains("gil restore") && example.contains("gil restore"), "{todo}");
+            assert!(!todo.contains("사용자에게 확인") && !todo.contains("사람이 정리"), "오염된 세계의 복원에 사람은 개입하지 않는다:\n{todo}");
             for must in ["프로젝트 밖의 새 보존 위치로 옮긴다", "다음 Experiment 의 Verify", "evidence_files", "기준 내용으로 되돌린다", "gil close"] {
                 assert!(todo.contains(must), "{must} 가 없다:\n{todo}");
             }

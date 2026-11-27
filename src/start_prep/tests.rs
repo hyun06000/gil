@@ -462,12 +462,21 @@ fn after_start_change_detection_and_verify_capture_use_the_approved_policy() {
     fs::write(root.join(".env"), "TOKEN=other\n").unwrap();
     fs::write(root.join(".gilignore"), "node_modules/\n.env\n# user edit\n").unwrap();
     assert!(matches!(open(&root).world_state().unwrap(), crate::WorldState::Clean { .. }));
+    let baseline = fs::read_to_string(root.join("README.md")).unwrap();
     fs::write(root.join("README.md"), "tracked change\n").unwrap();
+    fs::write(root.join("stray.txt"), "made outside a Verify\n").unwrap();
     assert!(matches!(open(&root).world_state().unwrap(), crate::WorldState::Dirty { .. }));
-    // 최신 정책 복원은 아직 없다 — 실행 전에 거절하고 아무것도 바꾸지 않는다.
-    let err = open(&root).restore().unwrap_err();
-    assert!(matches!(err, crate::SessionError::TrackingUnsupported { .. }), "{err}");
-    assert_eq!(fs::read_to_string(root.join("README.md")).unwrap(), "tracked change\n");
+    // 세계를 고칠 수 있는 곳은 Verify 뿐이다. 그 밖에서 바뀐 추적 파일은 복원이 기준 세계로 되돌린다 — 승인 없이, 범위 안에서만.
+    let done = open(&root).restore().unwrap();
+    assert!(!done.no_op && done.replaced == 1 && done.deleted == 1, "{done:?}");
+    assert_eq!(fs::read_to_string(root.join("README.md")).unwrap(), baseline);
+    assert!(!root.join("stray.txt").exists());
+    assert!(matches!(open(&root).world_state().unwrap(), crate::WorldState::Clean { .. }));
+    // 제외한 경로와 정책 파일은 그대로다: 복원은 그것을 만들지도 바꾸지도 지우지도 않는다.
+    assert_eq!(fs::read_to_string(root.join("node_modules/pkg/index.js")).unwrap(), "changed\n");
+    assert_eq!(fs::read_to_string(root.join(".env")).unwrap(), "TOKEN=other\n");
+    assert_eq!(fs::read_to_string(root.join(".gilignore")).unwrap(), "node_modules/\n.env\n# user edit\n");
+    assert!(open(&root).restore().unwrap().no_op, "a clean world has nothing to restore");
 }
 
 #[test]

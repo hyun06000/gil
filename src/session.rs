@@ -759,6 +759,11 @@ impl ProjectSession {
     ///
     /// 논리 상태는 하나도 바뀌지 않는다. `state.yaml` 도 저장하지 않는다.
     pub fn restore(&self) -> Result<Restored, SessionError> {
+        // 형식 10/11: 적용 정책의 범위 안에서만 되돌린다. 그 길이 없는 플랫폼에서는 실행 전에 거절한다.
+        #[cfg(all(feature = "tracking-policy", unix))]
+        if self.project.tracking().is_some() {
+            return self.restore_tracked();
+        }
         self.refuse_on_tracking("session.tracking_unsupported.restore")?;
         let world = self.project.world_snapshot();
         let address = self
@@ -782,6 +787,34 @@ impl ProjectSession {
             &target,
         )
         .map_err(SessionError::Restore)
+    }
+
+    /// 승인된 추적 범위 안의 파일만 기준 세계로 되돌린다. 제외한 경로와 루트 `.gilignore` 는 만들지도 바꾸지도 지우지도 않는다.
+    ///
+    /// 세계를 고칠 수 있는 곳은 Verify 뿐이다. 그 밖에서 바뀐 세계는 이 복원으로 되돌리고, 열린 Verify 안에서 부르면 그 Verify 가
+    /// 아직 확정하지 않은 변경을 버린다. 승인도 사람도 거치지 않는다 — 부르는 것이 복원 의사다. 버린 내용은 보존하지 않는다.
+    /// 기준 세계가 적용 정책으로 확정된 것일 때만 한다: 기준점 보관을 기다리는 중이거나 범위가 바뀐 뒤 아직 확정된 세계가 없으면
+    /// 무엇이 「추적 파일의 기준 내용」인지 정해지지 않았으므로 아무것도 바꾸기 전에 거절한다.
+    #[cfg(all(feature = "tracking-policy", unix))]
+    fn restore_tracked(&self) -> Result<Restored, SessionError> {
+        let refuse = |said: String| SessionError::TrackingUnsupported { said };
+        self.project.refuse_while_halted().map_err(refuse)?;
+        if self.project.cycles().pending_revisit().is_some() {
+            return Err(refuse(crate::locale::text("session.tracked_restore.pending_revisit").into()));
+        }
+        let standing = self.project.tracking_standing().expect("추적 정책 기록이 있다").map_err(|e| refuse(e.to_string()))?;
+        let agrees = standing.confirmed.as_ref().is_some_and(|confirmed| confirmed.policy == standing.applied.policy);
+        if standing.waiting.is_some() || !agrees {
+            return Err(refuse(crate::locale::text("session.tracked_restore.no_basis").into()));
+        }
+        let policy = self.approved_policy()?.expect("추적 정책 기록이 있다");
+        let world = self.project.world_snapshot();
+        let address = self.project.world_manifest(world).ok_or(SessionError::UnknownWorld { world })?.clone();
+        let store = self.store()?;
+        let target = store.read_manifest(&address).map_err(|source| SessionError::Manifest { world, said: source.to_string() })?;
+        restore::run_observed(&self.root()?, &gil_dir(&self.state_path)?, &store, world, &target, None,
+            &|root| artifact::observe_scoped(root, &policy).map(|seen| seen.manifest).map_err(|e| e.to_string()))
+            .map_err(SessionError::Restore)
     }
 
     /// 지금 폴더가 **구조적으로 유도한 기준 세계**와 같은가.

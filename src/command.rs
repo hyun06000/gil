@@ -12,7 +12,6 @@ use crate::{
     SessionError, StoreError, context, render_monitor_html,
     render_monitor_text, story_of, with_help,
 };
-#[cfg(not(feature = "product-safety"))]
 use crate::Usage;
 use crate::locale::text;
 use crate::tr;
@@ -929,13 +928,17 @@ fn close_cycle(ctx: &Invocation<'_>, session: &mut Session) -> Result<String, St
 /// 인수를 받지 않는다. 목표는 지금 위치가 이미 정했고(Artifact Model §8.1), 파일을 골라
 /// 되돌리는 것은 **부분 복원**이라 어느 Snapshot 에도 속하지 않는 세계를 만든다.
 /// 확인 절차도 두지 않는다 — 안전성은 물어보는 데서 오지 않고 원자성에서 온다(§8.8).
-#[cfg(feature = "product-safety")]
-fn restore(_ctx: &Invocation<'_>, _extra: Option<&String>) -> Result<String, String> {
-    Err(product_artifact_rollback_refusal("restore"))
-}
-
-#[cfg(not(feature = "product-safety"))]
 fn restore(ctx: &Invocation<'_>, extra: Option<&String>) -> Result<String, String> {
+    // A product build restores only where the tracked scope is approved: there the files a restore
+    // may touch are exactly the tracked ones. A whole-folder project is still refused before anything.
+    #[cfg(feature = "product-safety")]
+    {
+        #[cfg(all(feature = "tracking-policy", unix))]
+        let tracked = open_session(ctx).is_ok_and(|session| session.project().tracking().is_some());
+        #[cfg(not(all(feature = "tracking-policy", unix)))]
+        let tracked = false;
+        if !tracked { return Err(product_artifact_rollback_refusal("restore")); }
+    }
     if let Some(extra) = extra {
         // Domain 명령이 서기 전의 거절도 복구할 Topic 이 있다 — 사용법 하나면 풀린다.
         return Err(with_help(
@@ -970,7 +973,6 @@ fn restore(ctx: &Invocation<'_>, extra: Option<&String>) -> Result<String, Strin
 ///
 /// 개별 파일 목록을 기본 출력에 늘어놓지 않는다. 되돌린 파일이 수백 개일 때 그 목록은
 /// 다음 수를 가린다. raw manifest·blob 주소도 내보이지 않는다 — 공개 표면은 `snapshot:A*` 다.
-#[cfg(not(feature = "product-safety"))]
 fn restored(session: &Session, done: &crate::Restored) -> String {
     let mut out = match done.no_op {
         true => tr!("cmd.restore_noop", world = done.world),

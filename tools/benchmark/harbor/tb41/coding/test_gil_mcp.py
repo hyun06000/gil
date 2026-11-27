@@ -119,6 +119,18 @@ class McpArmTests(unittest.TestCase):
             yield {"action": "check", "note": "n"}
             said = yield call("gil_close", report={"execution": "고치고 검사했다", "result": "통과", "plan_document": PLAN, "evidence_files": "evidence/C2.md"})
             seen["verify"] = said["result"]
+            yield call("gil_open", kind="analysis", contract=CONTRACT)
+            yield call("gil_close", report={"hypothesis_fit": "yes", "problem_solved": "yes", "success_condition_met": "yes", "guardrail_triggered": "no", "interpretation": "검사가 통과했다"})
+            said = yield call("gil_open", kind="outcome", contract=CONTRACT)
+            outcome = __import__("re").search(r"step:C\d+/S\d+", said["result"]).group(0)
+            yield call("gil_close", report={"verdict": "success", "lesson": "키 함수로 풀렸다", "next_direction.action": "close_cycle", "next_direction.reason": "판정을 마쳤다"})
+            said = yield call("gil_close", report={"verdict": "success", "outcome_ref": outcome, "handoff_summary": "C2 의 관측을 남겼다", "next_direction.action": "open_child", "next_direction.reason": "다음을 정한다"})
+            seen["cycle"] = said["result"]
+            # A file changed outside a Verify makes the world dirty; the agent restores it itself.
+            yield {"action": "run", "command": "echo stray > evidence/stray.md && printf 'x = 1\n' >> fast_networkx/__init__.py", "note": "n"}
+            said = yield call("gil_restore")
+            seen["restore"] = said["result"]
+            yield {"action": "check", "note": "n"}
             yield {"action": "finish", "note": "n"}
 
         obs = self.drive(script)
@@ -136,6 +148,17 @@ class McpArmTests(unittest.TestCase):
         self.assertIn("plan approved", seen["plan"])
         self.assertIn("go with your recommendation", seen["reply"])
         self.assertNotIn("REFUSED", seen["verify"])
+        # Nothing in the harness holds finish back; the user's first line says when to call it, and the
+        # result records whether a Cycle was left open.
+        self.assertIn("do not call finish while a GIL step or Cycle is still open", first["prompt"])
+        self.assertIsNone(obs["gil"]["open_at_end"])
+        self.assertNotIn("REFUSED", seen["cycle"])
+        # The restore needed no approval, put the tracked files back and dropped the stray one.
+        self.assertNotIn("REFUSED", seen["restore"])
+        self.assertIn("Submission files changed by this call", seen["restore"])
+        self.assertFalse((self.app / "evidence/stray.md").exists())
+        self.assertIn("casefold", (self.app / NAME).read_text())
+        self.assertNotIn("x = 1", (self.app / NAME).read_text())
         self.assertTrue(seen["plan_file"], "the plan document GIL saved is the approved one")
         self.assertIn("not part of the submission", seen["task_file"])
         self.assertEqual((self.app / "README.md").read_text(), "the task's own file\n")

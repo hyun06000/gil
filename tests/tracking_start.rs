@@ -112,9 +112,19 @@ fn the_monitor_approved_start_commits_once_over_the_real_stdio_process() {
     let shown = c.call("show_gil_monitor", json!({"scope_id": scope}));
     assert!(sc(&shown).get("view").is_some(), "정식 시작 뒤에는 그래프 view: {shown}");
     assert_eq!(sc(&shown)["tracking"]["policy"], "policy:P1");
-    // 정식 시작 뒤 되돌아가기·복원은 최신 정책 복원이 없어 실행 전에 거절된다.
+    // 정식 시작 뒤의 복원은 승인 없이 추적 범위 안에서 한다. 바뀐 것이 없으면 아무것도 하지 않고, 논리 상태는 그대로다.
     let restore = c.call("gil_restore", json!({"project_root": r}));
-    assert!(is_error(&restore) || sc(&restore)["ok"] == false, "{restore}");
+    assert!(!is_error(&restore) && sc(&restore)["ok"] == true, "{restore}");
+    assert_eq!(std::fs::read_to_string(root.join(".gil/state.yaml")).unwrap(), state);
+    // Verify 밖에서 바뀐 추적 파일은 그 복원이 기준 세계로 되돌린다. 제외한 경로는 그대로다.
+    let tracked = std::fs::read_dir(&root).unwrap().filter_map(Result::ok).map(|e| e.path())
+        .find(|p| p.is_file() && !p.file_name().unwrap().to_string_lossy().starts_with('.') && !["AGENTS.md", "CLAUDE.md"].contains(&p.file_name().unwrap().to_str().unwrap()))
+        .expect("a tracked file at the root");
+    let baseline = std::fs::read(&tracked).unwrap();
+    std::fs::write(&tracked, b"changed outside a Verify\n").unwrap();
+    let restore = c.call("gil_restore", json!({"project_root": r}));
+    assert!(!is_error(&restore) && sc(&restore)["ok"] == true, "{restore}");
+    assert_eq!(std::fs::read(&tracked).unwrap(), baseline, "{}", tracked.display());
     assert_eq!(std::fs::read_to_string(root.join(".gil/state.yaml")).unwrap(), state);
 }
 

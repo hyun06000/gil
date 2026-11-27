@@ -495,8 +495,8 @@ fn the_dirty_topic_never_points_at_a_path_that_cannot_be_walked() {
 
     let todo = section(&said, "지금 할 일");
     if cfg!(feature = "product-safety") {
-        // restore 가 거부되는 빌드는 그 명령을 권하지 않고, 사람이 할 수 있는 정리를 말한다.
-        assert!(!todo.contains("gil restore"), "{todo}");
+        // 제품 구성은 추적 범위를 승인받은 프로젝트에서 복원하고, 그 밖의 프로젝트에서는 직접 기준 세계에 맞춘다.
+        assert!(todo.contains("gil restore") && todo.contains("추적 범위를 승인받은 프로젝트"), "{todo}");
         assert!(todo.contains("프로젝트 밖의 새 보존 위치로 옮긴다"), "{todo}");
     } else {
         assert!(todo.contains("gil restore"), "{todo}");
@@ -854,7 +854,7 @@ fn the_suggestion_shows_addresses_and_summaries_but_never_a_body() {
 
     let said = ok(&dir, &["help"]);
     // 요약은 있고 본문 절은 없다.
-    let expected = if cfg!(feature = "product-safety") { "변경을 사람이 정리해" } else { "기준 세계를 복원한 뒤" };
+    let expected = if cfg!(feature = "product-safety") { "변경을 기준 세계로 되돌린 뒤" } else { "기준 세계를 복원한 뒤" };
     assert!(said.contains(expected), "{said}");
     for body in ["[언제 읽는가]", "[지금 할 일]", "[불변식]", "[흔한 실패]"] {
         assert!(!said.contains(body), "본문을 펼쳤다: {said}");

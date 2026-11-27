@@ -375,7 +375,8 @@ mod tests {
         assert!(hint.starts_with("GIL 거절: 닫힌 것은 없다."), "{hint}");
         assert!(hint.contains("dirty 거절이면:"), "{hint}");
         if cfg!(feature = "product-safety") {
-            assert!(!hint.contains("gil restore") && !hint.contains("gil_restore"), "{hint}");
+            // 추적 범위를 승인받은 프로젝트의 복원과, 복원이 거절되는 프로젝트의 정리를 둘 다 말한다.
+            assert!(hint.contains("gil_restore") && hint.contains("추적 범위를 승인받은 프로젝트"), "{hint}");
             assert!(hint.contains("프로젝트 밖의 새 보존 위치로 옮기고") && hint.contains("다음 Experiment의 Verify"), "{hint}");
         } else {
             assert!(hint.contains("gil_restore"), "{hint}");
