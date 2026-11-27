@@ -856,7 +856,7 @@ fn close_step(ctx: &Invocation<'_>, session: &mut Session, unachieved: Option<cr
     let here = cycle.step_ref(node.id);
     let contract = step_contract(cycle)
         .expect("열린 자리의 종류는 문법이 선언한 것이다");
-    let mut hint = skeleton_for(&contract, cycle, Some(ctx));
+    let mut hint = skeleton_for(&contract, cycle, Some(ctx), Some(session.project()));
     if kind == crate::NodeKind::Verify && session.project().visual_state.is_some() {
         hint.push_str(&typed_verify_hint(session.project(), here));
     }
@@ -909,7 +909,7 @@ fn close_cycle(ctx: &Invocation<'_>, session: &mut Session) -> Result<String, St
     let here = cycle.id().to_ref();
     let kind = cycle.kind();
     let contract = cycle.close_contract().expect("문법이 이 Cycle Kind 를 선언했다");
-    let hint = skeleton_for(&contract, cycle, Some(ctx));
+    let hint = skeleton_for(&contract, cycle, Some(ctx), Some(session.project()));
 
     let report = read_report(ctx, &hint)?;
     let closed = session.close_cycle(report).map_err(|err| {
@@ -1322,7 +1322,7 @@ fn close_help(ctx: &Invocation<'_>) -> Result<String, String> {
     let Some(contract) = contract else {
         return Ok(text("cmd.help_no_contract").to_string());
     };
-    let mut skeleton = skeleton_for(&contract, cycle, Some(ctx));
+    let mut skeleton = skeleton_for(&contract, cycle, Some(ctx), Some(session.project()));
     if session.project().visual_state.is_some() {
         if let Some(id) = cycle.step_now_open().filter(|id| cycle.steps().node(*id).is_some_and(|n| n.kind == NodeKind::Verify)) {
             skeleton.push_str(&typed_verify_hint(session.project(), cycle.step_ref(id)));
@@ -1692,9 +1692,28 @@ fn cycle_contract(cycle: &crate::Cycle) -> Option<CloseContract> {
 
 /// 그 계약의 골격. Cycle Report 의 `outcome_ref` 만 값을 미리 채워 준다.
 fn skeleton_of(contract: &CloseContract, cycle: &crate::Cycle) -> String {
-    skeleton_for(contract, cycle, None)
+    skeleton_for(contract, cycle, None, None)
 }
-fn skeleton_for(contract: &CloseContract, cycle: &crate::Cycle, ctx: Option<&Invocation<'_>>) -> String {
+/// The fields an exploration Chain asks of a Verify and an Analysis beyond the grammar's own, shown
+/// in the skeleton a refusal carries: an agent rewrites its Report from that skeleton, so a field
+/// that is required but missing from it is left out again and again.
+fn exploration_fields(report: &mut serde_json::Value, subject: &str, project: Option<&crate::Project>) {
+    #[cfg(feature = "approved-plan")]
+    if let (Some(project), Some(fields)) = (project.filter(|p| p.exploration_contract()), report.as_object_mut()) {
+        if subject.contains("verify") {
+            fields.insert("command".into(), "…".into());
+            fields.insert("observed".into(), "…".into());
+            if project.plan_document().is_some() { fields.insert("plan_document".into(), PLAN_DOCUMENT_PATH.into()); }
+        }
+        if subject.contains("analysis") {
+            for answer in ["problem_solved", "success_condition_met"] { fields.insert(answer.into(), "true | false".into()); }
+            fields.insert("unverified".into(), "none | what was not seen".into());
+        }
+    }
+    let _ = (report, subject, project);
+}
+
+fn skeleton_for(contract: &CloseContract, cycle: &crate::Cycle, ctx: Option<&Invocation<'_>>, project: Option<&crate::Project>) -> String {
     let last = cycle
         .steps()
         .current()
@@ -1706,8 +1725,11 @@ fn skeleton_for(contract: &CloseContract, cycle: &crate::Cycle, ctx: Option<&Inv
         _ => None,
     };
     let mut hint = match ctx {
-        Some(Invocation { root: Root::Exact(root), input: Input::Body(_) }) => tr!("cmd.skeleton_mcp",
-            json = serde_json::to_string_pretty(&serde_json::json!({"project_root":root,"report":crate::mcp::body::to_object(&contract.report_body(fill))})).unwrap()),
+        Some(Invocation { root: Root::Exact(root), input: Input::Body(_) }) => {
+            let mut report = crate::mcp::body::to_object(&contract.report_body(fill));
+            exploration_fields(&mut report, contract.subject(), project);
+            tr!("cmd.skeleton_mcp", json = serde_json::to_string_pretty(&serde_json::json!({"project_root":root,"report":report})).unwrap())
+        }
         _ => contract.skeleton(fill),
     };
     if contract.subject().contains("outcome") {

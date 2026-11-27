@@ -361,3 +361,32 @@ fn the_saved_plan_document_follows_the_revision_a_new_interview_approved() {
     let second = fs::read_to_string(r.root.join(PLAN_DOCUMENT)).unwrap();
     assert!(second != first && second.contains("R2"), "the document of revision 2 replaced GIL's earlier save");
 }
+
+/// The skeleton a refused close shows carries every field the exploration contract asks for. An
+/// agent rewrites its Report from that skeleton: a required field missing from it was left out in
+/// dozens of consecutive closes (2026-11-27).
+#[cfg(all(feature = "tracking-policy", unix))]
+#[test]
+fn a_refused_verify_or_analysis_shows_the_fields_the_exploration_contract_asks_for() {
+    let mut r = rig("unattended-skeleton", &[("data/in.txt", "input\n")], json!({"start_kind":"tracked_scope"}));
+    ok(r.model("gil_start_prepare", json!({"rules":"node_modules/\n"})), "prepare");
+    let waits = pending(&mut r);
+    ok(decide(&mut r, "start", &waits[0]["digest"], "approve"), "runner approves the start");
+    interview(&mut r, &["R1"]);
+    r.open_experiment("R1");
+    let verify = r.open_verify("R1", "입력 파일이 있는가?");
+    r.write("evidence/C2.md", "있다\n");
+    let _ = &verify;
+    let bare = refused(r.c.request("tools/call", json!({"name":"gil_close","arguments":{"project_root":r.root,"report":{"execution":"봤다","result":"있다","evidence_files":"evidence/C2.md"}}})), "a Verify without what it ran");
+    let shown = everything(&bare);
+    for field in ["\\\"command\\\"", "\\\"observed\\\"", "plan/approved-plan.md"] { assert!(shown.contains(field), "{field} is not in the skeleton: {shown}"); }
+    ok(r.model("gil_close", json!({"report":{"execution":"봤다","result":"있다","command":"cat data/in.txt","observed":"input","plan_document":PLAN_DOCUMENT,"evidence_files":"evidence/C2.md"}})), "close verify");
+    ok(r.model("gil_open", json!({"kind":"analysis","contract":CONTRACT})), "analysis");
+    let hedged = refused(r.model("gil_close", json!({"report":{"hypothesis_fit":"yes","problem_solved":true,"success_condition_met":true,"unverified":"the rest was not checked","guardrail_triggered":"no","interpretation":"봤다"}})), "true beside something unverified");
+    let shown = everything(&hedged);
+    assert!(shown.contains("unverified") && shown.contains("true | false"), "{shown}");
+    ok(r.model("gil_close", json!({"report":{"hypothesis_fit":"yes","problem_solved":false,"success_condition_met":false,"unverified":"the rest was not checked","guardrail_triggered":"no","interpretation":"봤다"}})), "false beside something unverified");
+    // An Outcome cannot call that a success, and the Chain cannot be proposed closed as one.
+    ok(r.model("gil_open", json!({"kind":"outcome","contract":CONTRACT})), "outcome");
+    refused(r.model("gil_close", json!({"report":outcome_report(false)})), "success after a false Analysis");
+}
