@@ -64,7 +64,9 @@ fn awaiting(frame: &Value) -> Value { structured(frame)["awaiting_user"].clone()
 fn everything(frame: &Value) -> String { frame["result"]["content"].to_string() }
 
 /// The opening Interview up to an approved, closed plan, answered by the runner.
-fn interview(r: &mut Rig, ids: &[&str]) {
+fn interview(r: &mut Rig, ids: &[&str]) { interview_sending(r, ids, ids.len()) }
+/// The same, sending only `ids` as items; `listed` is how many the proposal then holds.
+fn interview_sending(r: &mut Rig, ids: &[&str], listed: usize) {
     let mut basis = Vec::new();
     for (kind, report) in [("question", QUESTION), ("interpretation", INTERPRETATION)] {
         let opened = ok(r.model("gil_open", json!({"kind":kind,"contract":CONTRACT})), kind);
@@ -83,7 +85,7 @@ fn interview(r: &mut Rig, ids: &[&str]) {
     let waits = pending(r);
     assert_eq!(waits.len(), 1, "{waits:?}");
     assert_eq!((waits[0]["subject"].as_str(), waits[0]["synthesis_ref"].as_str()), (Some("plan"), Some(synthesis.as_str())));
-    assert_eq!(waits[0]["draft"]["items"].as_array().unwrap().len(), ids.len(), "the runner reads the exact proposal");
+    assert_eq!(waits[0]["draft"]["items"].as_array().unwrap().len(), listed, "the runner reads the exact proposal");
     let before = record_bytes(&r.record);
     refused(decide(r, "plan", &json!("0".repeat(64)), "approve"), "an answer for a digest that does not wait");
     assert_eq!(record_bytes(&r.record), before, "a stale answer recorded something");
@@ -374,6 +376,56 @@ fn the_saved_plan_document_follows_the_revision_a_new_interview_approved() {
     r.run(c4, &Run { requirement: "R2", problem: "두 번째 항목을 확인할 수 있는가?", files: &[("evidence/C4.md", "확인했다\n")], evidence: "evidence/C4.md", fails_back_to: None });
     let second = fs::read_to_string(r.root.join(PLAN_DOCUMENT)).unwrap();
     assert!(second != first && second.contains("R2"), "the document of revision 2 replaced GIL's earlier save");
+}
+
+/// What GIL itself holds, the agent does not retype: a later proposal sends only its new items and
+/// the approved ones are kept, and the requirement link's revision and digest are GIL's to write.
+/// Character-exact copies of both ended sessions in refusal loops (2026-11-27).
+#[cfg(all(feature = "tracking-policy", unix))]
+#[test]
+fn approved_items_and_the_plan_digest_are_kept_by_gil_not_copied_by_the_agent() {
+    let mut r = rig("unattended-kept-by-gil", &[("data/in.txt", "input\n")], json!({"start_kind":"tracked_scope"}));
+    ok(r.model("gil_start_prepare", json!({"rules":"node_modules/\n"})), "prepare");
+    let waits = pending(&mut r);
+    ok(decide(&mut r, "start", &waits[0]["digest"], "approve"), "runner approves the start");
+    interview(&mut r, &["R1"]);
+    let stored = r.read()["active_plan"]["items"][0].clone();
+
+    // A link whose digest was mistyped still opens the Experiment of the approved revision.
+    let mut link = r.read()["experiment_link"].clone();
+    link["requirement_id"] = json!("R1");
+    link["plan_digest"] = json!("1376ad96 mistyped");
+    link["plan_revision"] = json!("7");
+    for field in ["relevance", "readiness", "uncertainty"] { link[field] = json!("시험"); }
+    let opened = ok(r.c.request("tools/call", json!({"name":"gil_open","arguments":{"project_root":r.root,"kind":"experiment","contract":link}})), "an Experiment with a mistyped digest");
+    let c2 = cycle_number(&opened);
+    // The opening receipt of a step shows the Report it closes with, exploration fields included.
+    ok(r.model("gil_open", json!({"kind":"define","contract":CONTRACT})), "define");
+    ok(r.model("gil_close", json!({"report":{"problem":"입력 파일이 있는가?","success_condition":"data/in.txt 를 읽을 수 있다"}})), "close define");
+    let hypothesis = everything(&ok(r.model("gil_open", json!({"kind":"hypothesis","contract":CONTRACT})), "hypothesis"));
+    for field in ["gil_close", "\\\"change\\\"", "\\\"hypothesis\\\"", "\\\"guardrail\\\""] { assert!(hypothesis.contains(field), "{field} is not in the opening receipt: {hypothesis}"); }
+    ok(r.model("gil_close", json!({"report":{"hypothesis":"읽으면 된다","change":"none","rationale":"파일이 있다","guardrail":"다른 파일은 두지 않는다"}})), "close hypothesis");
+    let verify = everything(&ok(r.model("gil_open", json!({"kind":"verify","contract":CONTRACT})), "verify"));
+    for field in ["\\\"command\\\"", "\\\"observed\\\"", "\\\"evidence_files\\\""] { assert!(verify.contains(field), "{field} is not in the opening receipt: {verify}"); }
+    // A file that is not there is said to be not there.
+    let missing = everything(&refused(r.model("gil_close", json!({"report":{"execution":"봤다","result":"있다","command":"cat data/in.txt","observed":"input","plan_document":PLAN_DOCUMENT,"evidence_files":"evidence/gone.md"}})), "evidence that does not exist"));
+    assert!(missing.contains("evidence/gone.md") && missing.contains("There is no file") || missing.contains("파일이 없다"), "{missing}");
+    r.write("evidence/C2.md", "있다\n");
+    ok(r.model("gil_close", json!({"report":{"execution":"봤다","result":"있다","command":"cat data/in.txt","observed":"input","plan_document":PLAN_DOCUMENT,"evidence_files":"evidence/C2.md"}})), "close verify");
+    ok(r.model("gil_open", json!({"kind":"analysis","contract":CONTRACT})), "analysis");
+    ok(r.model("gil_close", json!({"report":analysis_report(false)})), "close analysis");
+    let outcome = step_ref(&ok(r.model("gil_open", json!({"kind":"outcome","contract":CONTRACT})), "outcome"), "outcome");
+    ok(r.model("gil_close", json!({"report":outcome_report(false)})), "close outcome");
+    ok(r.model("gil_close", json!({"report":cycle_report(c2, &outcome, None)})), "close experiment");
+
+    // A new Interview sends only the new problem; the approved one stays as stored, also when the
+    // agent sends its id again with other words.
+    ok(r.model("gil_open", json!({"kind":"interview"})), "a new Interview");
+    interview_sending(&mut r, &["R2"], 2);
+    let items = r.read()["active_plan"]["items"].clone();
+    assert_eq!(items.as_array().unwrap().len(), 2, "{items}");
+    assert_eq!(items[0], stored, "the approved item is kept byte for byte");
+    assert_eq!(items[1]["id"], "R2");
 }
 
 /// The skeleton a refused close shows carries every field the exploration contract asks for. An

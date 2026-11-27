@@ -579,7 +579,10 @@ If a local check fails, use its output to fix the source. No remote tools or pri
             if action != "read":
                 logged = response
             record(event="tool", id=ask.call_id, action=action, path=obj.get("path"), offset=obj.get("offset", 0), result=logged[:3500], chars=len(logged), **activity_event)
-            history.append([action, obj.get("path") or obj.get("command"), response])
+            # What the model sent goes back with what it got: a request is built anew each time, and an
+            # answer that says "fix the field you sent" cannot be acted on without the thing sent.
+            sent = {k: v for k, v in obj.items() if k in ("arguments", "message", "old", "new", "criterion")}
+            history.append([action, obj.get("path") or obj.get("command"), *([sent] if sent else []), response])
             refusal = ["", 0]
         except (ValueError,OSError,TypeError,KeyError,AttributeError,subprocess.TimeoutExpired) as error:
             message = str(error)
@@ -587,7 +590,7 @@ If a local check fails, use its output to fix the source. No remote tools or pri
             if refusal[1] > 1:
                 message += f" (refused {refusal[1]} times in a row with the same answer: repeating it will not change the result)"
             record(event="tool", id=ask.call_id, action=obj.get("action") if isinstance(obj, dict) else None, error=message)
-            history.append(["error", message])
+            history.append(["error", {k: v for k, v in obj.items() if k != "note"} if isinstance(obj, dict) else None, message])
             stall.step(False)
         if stall.count >= STALL_LIMIT:
             record(event="verify_stalled" if cycle else "stalled", id=ask.call_id, cycle=cycle, calls=stall.count)

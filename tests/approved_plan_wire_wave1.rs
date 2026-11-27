@@ -686,9 +686,9 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     assert!(said(&closed).contains("question"), "{closed}");
     refused(r.model("gil_open", json!({"kind":"outcome","contract":CONTRACT})), "outcome after approved:no");
     let (basis, synthesis4) = r.ask_and_interpret();
-    let mut altered = draft(&["A","B","D"], &basis, &[]); altered["items"][1]["done_when"] = json!("바뀐 조건");
-    refused(r.model("gil_plan_propose", json!({"draft":altered})), "altered approved item");
-    refused(r.model("gil_plan_propose", json!({"draft":draft(&["A","D"], &basis, &[])})), "removed approved item");
+    // An approved item can be neither altered nor removed by a proposal: GIL keeps the stored items
+    // itself, whatever the agent sends under their ids (tests/unattended_session.rs).
+    let _ = &basis;
     let p4 = ok(r.model("gil_plan_propose", json!({"draft":draft(&["A","B","D"], &basis, &[])})), "propose rev4");
     assert_eq!(structured(&p4)["proposal"]["revision"], 4);
     refused(r.app("gil_plan_decide", json!({"revision":3,"digest":d3,"token":t3,"decision":"approve"})), "approve superseded rev3");
@@ -833,22 +833,16 @@ fn misplaced_report_and_plan_extension_recover_from_exact_readonly_mcp_data() {
     extension["scope"] = read["active_plan"]["scope"].clone();
     extension["scope"]["in_scope"] = json!("Expanded synthetic scope");
     let extra = extension["items"][0].clone();
-    let missing = refused(r.model("gil_plan_propose", json!({"draft":extension})), "missing retained items");
-    assert!(said(&missing).contains("누락 (삭제 금지)"));
-    extension["items"] = read["active_plan"]["items"].clone();
-    extension["items"].as_array_mut().unwrap().push(extra);
-    extension["synthesis"]["exploration_checklist"] = json!("A\nB\nC\nD\nE");
-    let mut altered = extension.clone();
-    altered["items"][0]["question"] = json!("one changed word");
-    altered["items"][0]["done_when"] = json!("another changed word");
-    let mismatch = refused(r.model("gil_plan_propose", json!({"draft":altered})), "two changed fields");
-    let first_message = mismatch["result"]["content"][0]["text"].as_str().unwrap();
-    for text in ["draft.items[id=\"A\"].question", "draft.items[id=\"A\"].done_when", "one changed word", "another changed word", "active_plan.items"] {
-        assert!(first_message.contains(text), "{first_message}");
-    }
-    assert_eq!(record_bytes(&r.record), before, "reads and all refused proposals preserve state");
-    let accepted = ok(r.model("gil_plan_propose", json!({"draft":extension})), "exact copied items with changed scope and new item");
+    // Approved items are GIL's to keep: the agent sends only the new item, and an approved id sent
+    // with other words stands for the stored item. Nothing of the changed wording is recorded.
+    let mut reworded = read["active_plan"]["items"][0].clone();
+    reworded["question"] = json!("one changed word");
+    extension["items"] = json!([reworded, extra]);
+    assert_eq!(record_bytes(&r.record), before, "reads preserve state");
+    let accepted = ok(r.model("gil_plan_propose", json!({"draft":extension})), "a new item beside the kept ones, with changed scope");
     assert_eq!(structured(&accepted)["proposal"]["revision"], 2);
+    assert_eq!(structured(&accepted)["proposal"]["draft"]["items"].as_array().unwrap().len(), 5, "{accepted}");
+    assert!(!accepted.to_string().contains("one changed word"), "{accepted}");
     assert_eq!(structured(&accepted)["active_plan"], read["active_plan"], "unapproved proposal cannot replace executable plan");
     let (status, noise, stderr) = r.c.eof_with_stderr();
     assert!(status.success() && noise.is_empty());

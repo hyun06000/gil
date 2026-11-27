@@ -624,6 +624,15 @@ fn open_step(ctx: &Invocation<'_>,
         crate::project_resume::ensure(&session.root().map_err(say)?)
     } else { String::new() };
     let mut receipt = opened_step(session, opened);
+    // The Report this step closes with, in the shape to send, before the agent writes it: shown only
+    // after a refusal, every step cost one refused close to learn its fields (2026-11-27).
+    #[cfg(feature = "approved-plan")]
+    if session.project().exploration_contract() && matches!(ctx, Invocation { root: Root::Exact(_), input: Input::Body(_) })
+        && let Some(contract) = step_contract(session.project().cycles().current()) {
+        let shape = skeleton_for(&contract, session.project().cycles().current(), Some(ctx), Some(session.project()));
+        let lead = receipt.find('\n').map_or(receipt.len(), |at| at + 1);
+        receipt.insert_str(lead, &format!("{}{shape}\n", text("cmd.opened_report_shape")));
+    }
     // The approved plan document a Verify must keep beside its evidence is saved by GIL itself, byte
     // for byte: an agent that retypes it cannot be relied on to reproduce it. Opening is already
     // durable; a failed save changes nothing about it and the receipt says what to do instead.

@@ -18,7 +18,7 @@ Steps: question → interpretation → (another question only if something that 
 - Synthesis: propose the plan with `gil_plan_propose({project_root, draft: {scope, items, synthesis}})`. `items` are the problems to solve, made as small as they can be: each is `{id, question, observation, command, source}`, where `observation` is the ONE observation that decides the question, `command` is the command that makes that observation here with what this environment has, and `source` quotes the sentence of the request it comes from. If no command here can make an observation, it cannot be made: write an item that can be observed, or tell the user what cannot be checked. A problem that one observation cannot decide is more than one item. Every sentence of the request that asks for something should have its item. Once approved, `gil_plan_read.close_report` is the Report to close the Synthesis with, unchanged.
 - Outcome, then the Cycle Report with `next_direction.action: open_child`.
 
-The list of problems changes only in an Interview. To change it later, open a new Interview at a Cycle boundary (`gil_open(kind: interview)`) and propose again, copying the existing items unchanged and adding new ones. A new Interview keeps the files as they are.
+The list of problems changes only in an Interview. To change it later, open a new Interview at a Cycle boundary (`gil_open(kind: interview)`) and propose again with only the new items: the approved items stay as they are without being sent, and an approved item cannot be rewritten. A new Interview keeps the files as they are.
 
 ### Experiment
 
@@ -39,4 +39,4 @@ Only a Verify may change project files. If a close is refused because files chan
 
 ### Ending
 
-When every problem of the plan has an Experiment that closed as success, open a closing Interview (a Chain cannot be proposed closed as success before that; what could not be solved closes it as failure): its Synthesis proposal keeps the items and adds `chain_verdict` (success or failure). After approval close the Synthesis, the Outcome and the Cycle Report with `next_direction.action: close_chain`, then the Chain Report. Read what earlier steps recorded with `gil_report_read` and `gil_evidence_read`; `gil_help` opens the manual topic a refusal names.
+When every problem of the plan has an Experiment that closed as success, open a closing Interview (a Chain cannot be proposed closed as success before that; what could not be solved closes it as failure): its Synthesis proposal sends `items: []` (the approved items are kept by GIL) and adds `chain_verdict` (success or failure). After approval close the Synthesis, the Outcome and the Cycle Report with `next_direction.action: close_chain`, then the Chain Report. Read what earlier steps recorded with `gil_report_read` and `gil_evidence_read`; `gil_help` opens the manual topic a refusal names.

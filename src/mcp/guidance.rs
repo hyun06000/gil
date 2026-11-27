@@ -758,7 +758,7 @@ mod tests {
         let mut result = super::super::actions::refusal("draft.items[id=A].question: mismatch");
         after("gil_plan_propose", &mut result);
         assert!(text(&result).starts_with("draft.items[id=A].question"));
-        assert!(text(&result).contains("active_plan.items"));
+        assert!(text(&result).contains("gil_plan_propose"));
         assert!(!text(&result).contains("scope 5칸"));
     }
     #[test]

@@ -89,9 +89,22 @@ const ITEM_SHAPE: &str = "{id, question, observation, command, source}";
 /// Turns the items of a proposal from the wire shape into the stored one. `Err` is the wire refusal.
 pub(super) fn accept(name: &str, input: &mut Value) -> Result<(), String> {
     if name != "gil_plan_propose" { return Ok(()); }
+    let approved = approved_plan(input).map(|(_, _, items)| items);
     let Some(items) = input.pointer_mut("/draft/items").and_then(Value::as_array_mut) else { return Ok(()); };
     let wrong = |why: &str| format!("gil_plan_propose: every item is exactly {ITEM_SHAPE}, all nonblank strings. {why} observation is the ONE observation that decides the question; if a problem needs more than one, it is more than one item. command is the command that makes that observation here, with what is in this environment — if no command here can make it, the observation cannot be made: rewrite the item to one that can, or tell the user what cannot be checked. source quotes the sentence of the user's request the problem comes from. Nothing was recorded; correct the items and send the call once more.");
-    for item in items {
+    // An approved item cannot be redefined, so its text is GIL's to keep, not the agent's to retype:
+    // an item sent under an approved id stands for the stored one, and approved items left out are
+    // carried over. Asking for a character-exact copy of every item ended sessions on one stray
+    // space (2026-11-27).
+    let stored = approved.unwrap_or_default();
+    let named = |item: &Value| item.get("id").and_then(Value::as_str).map(str::to_owned);
+    let sent: Vec<String> = items.iter().filter_map(named).collect();
+    let mut merged: Vec<Value> = stored.iter().filter(|item| named(item).is_some_and(|id| !sent.contains(&id))).cloned().collect();
+    for item in items.iter_mut() {
+        if let Some(kept) = stored.iter().find(|kept| named(kept).is_some() && named(kept) == named(item)) {
+            merged.push(kept.clone());
+            continue;
+        }
         let Some(fields) = item.as_object_mut() else { return Err(wrong("An item is not an object.")); };
         if fields.contains_key("done_when") { return Err(wrong("done_when is not a field: write observation.")); }
         for field in ["id", "question", "observation", "command", "source"] {
@@ -102,8 +115,37 @@ pub(super) fn accept(name: &str, input: &mut Value) -> Result<(), String> {
         if fields.len() != 5 { return Err(wrong("An item has a field besides these five.")); }
         let observation = fields.remove("observation").expect("checked");
         fields.insert("done_when".into(), observation);
+        merged.push(item.clone());
+    }
+    *items = merged;
+    // The checklist of a later proposal is the list just put together, in its order.
+    if !stored.is_empty() {
+        let ids = items.iter().filter_map(named).collect::<Vec<_>>().join("\n");
+        if let Some(synthesis) = input.pointer_mut("/draft/synthesis").and_then(Value::as_object_mut) {
+            synthesis.insert("exploration_checklist".into(), ids.into());
+        }
     }
     Ok(())
+}
+
+/// The approved revision of the project a call names: its revision, digest and items as stored.
+fn approved_plan(input: &Value) -> Option<(u64, String, Vec<Value>)> {
+    let s = session(input.get("project_root")?.as_str()?).ok()?;
+    let p = s.project();
+    let plan = p.approved_plan()?.active(p.current_chain()?)?;
+    Some((u64::from(plan.revision), plan.digest.clone(), serde_json::to_value(&plan.draft.items).ok()?.as_array()?.clone()))
+}
+
+/// The requirement link of `gil_open(kind: experiment)` names the approved revision. Which revision
+/// is approved is GIL's own record, so GIL writes the revision and its digest into the link: an
+/// agent copying sixty-four hex digits by hand got them wrong and could not open its Experiment.
+pub(super) fn link(name: &str, input: &mut Value) {
+    if name != "gil_open" || input.get("kind").and_then(Value::as_str) != Some("experiment") { return; }
+    if !input.get("contract").is_some_and(Value::is_object) { return; }
+    let Some((revision, digest, _)) = approved_plan(input) else { return; };
+    let contract = input["contract"].as_object_mut().expect("checked");
+    contract.insert("plan_revision".into(), revision.to_string().into());
+    contract.insert("plan_digest".into(), digest.into());
 }
 
 /// The stored name of an item's observation, as the model reads it.
