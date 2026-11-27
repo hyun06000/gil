@@ -109,9 +109,9 @@ def model(prompt, choices=(), stage="solver", notes=False, ledger=False, schema=
         answer = json.dumps({"candidates": NEXT[ref], "new": []})
     elif schema == criteria.SET_ASIDE:
         answer = json.dumps({"set_aside": []})
-    elif "revise_hypothesis" in choices:
+    elif "new_hypothesis" in choices:
         # Reflection: in C3 the method was wrong; in C4 the experiment broke what the Chain had gained.
-        answer = "revise_hypothesis" if ref == "cycle:C3" else "revise_problem"
+        answer = "new_hypothesis" if ref == "cycle:C3" else "new_problem_definition"
     elif choices:
         answer = next((v for v in ["open", "start", "demonstrated", "continue interview"] if v in choices), choices[0])
     else:

@@ -679,23 +679,28 @@ def reply(r):
             # Reflection decides which layer was wrong. Either way the world goes back and the record stays.
             obs = json.loads(step("verify")["report"]["result"])
             reflection = model(
-                "The problem was not solved. Reflect: why not, and where to go back to. If the problem definition "
-                "still describes the right problem (its states and probes match their sources) and a different "
-                "method could bring the states about, the hypothesis was wrong. If a state or its probe does not "
-                "match its source, the targets were badly chosen, or they depend on work not yet done, the problem "
-                "definition was wrong. A probe that fails for a reason of its own belongs to the problem definition "
-                "too: if it stops before it reaches what it is meant to observe, or fails the same way whatever the "
-                "method was, no other hypothesis can mend it, because only the problem definition can change a probe. "
+                "The problem was not solved. Reflect: why not, and where to go back to. There are two places, and "
+                "they differ in what gets written again. Going back to this experiment's Define keeps its problem "
+                "definition (targets, states, probes) and writes only a new hypothesis. Going back to the parent "
+                "experiment writes this experiment's problem definition again: its targets, its states and its "
+                "probes. The task itself is the same in both; only what this experiment set out to show changes. "
+                "So: if the states and probes match their sources and a different method could bring the states "
+                "about, the hypothesis was wrong. If a state or its probe does not match its source, the targets "
+                "were badly chosen, or they depend on work not yet done, the problem definition was wrong. A probe "
+                "that fails for a reason of its own belongs to the problem definition too: if it stops before it "
+                "reaches what it is meant to observe, or fails the same way whatever the method was, no new "
+                "hypothesis can mend it, because a probe is written only in a problem definition. "
                 f"State which it is and what the evidence is. About {minutes_left():.0f} minutes "
                 "of the trial are left. Analysis: "
                 + analysis["interpretation"] + ("\n" + lesson if lesson else ""))
             if obs.get("stop") not in SPENT and model(
-                    "Choose where this experiment goes back to, as your reflection concluded. revise_hypothesis: "
-                    "keep this problem definition and its targets, restore the files to what they were there and "
-                    "try a different hypothesis. revise_problem: close this experiment as failed, restore the "
-                    "parent experiment's files and define the problem again, with new states and probes. A defect "
-                    "in a probe is mended only there. Reflection: " + reflection,
-                    ["revise_hypothesis", "revise_problem"]) == "revise_hypothesis":
+                    "Choose where this experiment goes back to, as your reflection concluded. new_hypothesis: go "
+                    "back to this experiment's Define; its targets, states and probes stand, the files return to "
+                    "what they were there, and only a different hypothesis is written. new_problem_definition: go "
+                    "back to the parent experiment; its files are restored, and this experiment's targets, states "
+                    "and probes are written again for the same task. A defect in a probe is mended only this way. "
+                    "Reflection: " + reflection,
+                    ["new_hypothesis", "new_problem_definition"]) == "new_hypothesis":
                 return close(
                     verdict="failure",
                     lesson=reflection,
