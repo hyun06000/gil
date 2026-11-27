@@ -14,6 +14,7 @@ pub fn objects(name: &str, mut arguments: Value) -> Value {
                     item.insert("observation".into(), observation);
                     item.entry("source").or_insert_with(|| json!("the synthetic request of this test"));
                     item.entry("command").or_insert_with(|| json!("cat evidence/result.md"));
+                    item.entry("part_of").or_insert_with(|| json!("M1"));
                 }
             }
         }
@@ -41,7 +42,8 @@ pub fn objects(name: &str, mut arguments: Value) -> Value {
             // A Hypothesis names its change, and a failed Experiment's Outcome what it changed.
             // An Interpretation names what judges the work, its hardest part and what cannot be observed here.
             if fields.contains_key("interpretation") && !fields.contains_key("hypothesis_fit") && !fields.contains_key("evidence.verify_ref") {
-                for (field, value) in [("graded_by", "the fixture's check"), ("hardest", "nothing in a fixture"), ("not_observable_here", "none")] {
+                for (field, value) in [("major_problems", "M1: the fixture's result — judged by the fixture's check"), ("anti_goals", "none in a fixture"),
+                    ("edge_cases", "none in a fixture"), ("hardest", "nothing in a fixture"), ("not_observable_here", "none")] {
                     fields.entry(field).or_insert_with(|| json!(value));
                 }
             }
@@ -83,6 +85,7 @@ pub fn as_stored(mut value: Value) -> Value {
                     if let Some(observation) = fields.remove("observation") { fields.insert("done_when".into(), observation); }
                     fields.remove("source");
                     fields.remove("command");
+                    fields.remove("part_of");
                 }
                 fields.values_mut().for_each(walk);
             }

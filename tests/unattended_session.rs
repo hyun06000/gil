@@ -67,23 +67,41 @@ fn everything(frame: &Value) -> String { frame["result"]["content"].to_string() 
 fn interview(r: &mut Rig, ids: &[&str]) { interview_sending(r, ids, ids.len()) }
 /// The same, sending only `ids` as items; `listed` is how many the proposal then holds.
 fn interview_sending(r: &mut Rig, ids: &[&str], listed: usize) {
+    // The Interview that draws the Chain's first plan; later ones add to it or close the Chain.
+    let first = r.read()["active_plan"].is_null();
     let mut basis = Vec::new();
     for (kind, report) in [("question", QUESTION), ("interpretation", INTERPRETATION)] {
         let opened = ok(r.model("gil_open", json!({"kind":kind,"contract":CONTRACT})), kind);
         basis.push(step_ref(&opened, kind));
-        if kind == "interpretation" {
+        // Only the Interview that draws the first plan lays the work out from the top.
+        if kind == "interpretation" && first {
             // The Interpretation is asked what judges the work, its hardest part and what cannot be
             // observed here; the opening receipt shows the three fields and a close without them is refused.
             let shown = everything(&opened);
-            for field in ["graded_by", "hardest", "not_observable_here"] { assert!(shown.contains(field), "{field} is not in the opening receipt: {shown}"); }
+            for field in ["major_problems", "anti_goals", "edge_cases", "hardest", "not_observable_here"] { assert!(shown.contains(field), "{field} is not in the opening receipt: {shown}"); }
             let bare = refused(r.c.request("tools/call", json!({"name":"gil_close","arguments":{"project_root":r.root,"report":{"interpretation":"정리했다","unresolved":"없음"}}})), "an Interpretation without the three answers");
-            assert!(everything(&bare).contains("graded_by"), "{bare}");
+            assert!(everything(&bare).contains("major_problems"), "{bare}");
+            let unnamed = refused(r.c.request("tools/call", json!({"name":"gil_close","arguments":{"project_root":r.root,"report":{"interpretation":"정리했다","unresolved":"없음",
+                "major_problems":"구현과 검증","anti_goals":"없음","edge_cases":"없음","hardest":"없음","not_observable_here":"none"}}})), "major problems without names");
+            assert!(everything(&unnamed).contains("M1:"), "{unnamed}");
         }
         let closed = ok(r.model("gil_close", json!({"report":report})), kind);
         assert!(awaiting(&closed).is_null(), "nothing waits for the user yet: {closed}");
     }
     let opened = ok(r.model("gil_open", json!({"kind":"synthesis","contract":CONTRACT})), "synthesis");
     let synthesis = step_ref(&opened, "synthesis");
+    if first {
+        // The first plan is a tree under the major problems the Interpretation listed: the receipt
+        // puts them back, and a leaf that hangs under none of them is refused by name.
+        assert!(everything(&opened).contains("M1: the fixture's result"), "{opened}");
+        let mut loose = draft(ids, &basis, &[]);
+        loose["items"] = json!(ids.iter().map(|id| json!({"id":id,"question":"q","observation":"o","command":"true","source":"s"})).collect::<Vec<_>>());
+        let no_path = r.c.request("tools/call", json!({"name":"gil_plan_propose","arguments":{"project_root":r.root,"draft":loose.clone()}}));
+        assert!(no_path["error"]["message"].as_str().is_some_and(|said| said.contains("part_of") && said.contains("M1")), "{no_path}");
+        for item in loose["items"].as_array_mut().unwrap() { item["part_of"] = json!("M7 > elsewhere"); }
+        let elsewhere = r.c.request("tools/call", json!({"name":"gil_plan_propose","arguments":{"project_root":r.root,"draft":loose}}));
+        assert!(elsewhere["error"]["message"].as_str().is_some_and(|said| said.contains("M1")), "{elsewhere}");
+    }
     let proposed = ok(r.model("gil_plan_propose", json!({"draft":draft(ids, &basis, &[])})), "propose");
     assert_eq!(awaiting(&proposed), json!(["plan"]), "{proposed}");
     assert!(everything(&proposed).contains("no Monitor"), "{proposed}");

@@ -87,16 +87,22 @@ impl ProjectSession {
                 ))));
             }
         }
-        // Exploration contract: before the problems are listed, the Interpretation says what will
-        // finally judge the work, which part is most likely to fail, and what cannot be observed
-        // here together with how the means to observe it will be made. A plan drawn without these
-        // listed what was easy to check and left out what the work is judged by (2026-11-27).
+        // Exploration contract: the Interview that draws the first plan lays the work out from the
+        // top before anything is listed. Its Interpretation names the major problems (each with
+        // what judges it), what would make the work a failure although it runs, the inputs and
+        // conditions the request implies without spelling out, the part most likely to fail, and
+        // what cannot be observed here together with how the means to observe it will be made.
+        // A plan drawn straight from the request listed what was easy to check and left out what
+        // the work is judged by (2026-11-27).
         #[cfg(feature = "approved-plan")]
-        if node.kind == NodeKind::Interpretation && self.project.exploration_contract() {
-            for field in ["graded_by", "hardest", "not_observable_here"] {
+        if node.kind == NodeKind::Interpretation && self.project.exploration_contract() && !self.project.plan_approved_in_chain() {
+            for field in ["major_problems", "anti_goals", "edge_cases", "hardest", "not_observable_here"] {
                 if report.get(field).is_none_or(|value| value.trim().is_empty()) {
                     return Err(SessionError::Evidence(crate::tr!("evidence.interpretation_field", field = field)));
                 }
+            }
+            if crate::approved_plan::major_problems(report.get("major_problems").unwrap_or("")).is_empty() {
+                return Err(SessionError::Evidence(crate::locale::text("evidence.major_problems_shape").into()));
             }
         }
         if cycle.kind() != CycleKind::Experiment { return Ok(report); }

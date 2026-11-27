@@ -39,6 +39,22 @@ pub struct Item {
     /// The command that makes the observation in this environment. Absent in older plans.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub command: String,
+    /// Where this problem hangs in the tree the Interview drew: the major problem it belongs to and
+    /// any branches under it, written as a path (`M2 > timestamps > rollover`). Absent in older plans.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub part_of: String,
+}
+
+/// The names of the major problems an Interpretation listed, one per line as `M<number>: …`.
+pub fn major_problems(listed: &str) -> Vec<String> {
+    listed.lines().filter_map(|line| {
+        let name = line.trim_start_matches(|c: char| c == '-' || c == '*' || c.is_whitespace()).split(':').next()?.trim();
+        (name.len() > 1 && name.starts_with('M') && name[1..].chars().all(|c| c.is_ascii_digit())).then(|| name.to_owned())
+    }).collect()
+}
+/// The major problem a path names: its first part.
+pub fn major_of(part_of: &str) -> &str {
+    part_of.split(['>', '/']).next().unwrap_or("").trim()
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -750,6 +766,16 @@ impl Project {
             source: source.into(),
         });
         Ok(p.clone())
+    }
+    /// Whether this Chain already has an approved plan: the Interview now open is then a later one.
+    pub fn plan_approved_in_chain(&self) -> bool {
+        self.approved_plan().zip(self.current_chain()).is_some_and(|(state, chain)| state.active(chain).is_some())
+    }
+    /// The major problems the nearest closed Interpretation of the current Cycle listed, as written.
+    pub fn listed_major_problems(&self) -> Option<String> {
+        let cycle = self.current_cycle();
+        cycle.steps().nodes().iter().rev().filter(|node| node.kind == NodeKind::Interpretation)
+            .find_map(|node| node.report.as_ref()?.get("major_problems").map(str::to_owned))
     }
     pub(crate) fn check_plan_close(&self, kind: NodeKind, report: &Report) -> Result<(), String> {
         let Some(s) = self.approved_plan() else {

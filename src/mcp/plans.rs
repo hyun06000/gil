@@ -84,12 +84,13 @@ fn session(root: &str) -> Result<ProjectSession, String> {
 /// them. The App's review keeps the stored text it displays.
 /// A plan item as a model writes and reads it: `observation` is the one observation that decides
 /// the question (stored as `done_when`), `source` the sentence of the request it comes from.
-const ITEM_SHAPE: &str = "{id, question, observation, command, source}";
+const ITEM_SHAPE: &str = "{id, part_of, question, observation, command, source}";
 
 /// Turns the items of a proposal from the wire shape into the stored one. `Err` is the wire refusal.
 pub(super) fn accept(name: &str, input: &mut Value) -> Result<(), String> {
     if name != "gil_plan_propose" { return Ok(()); }
     let approved = approved_plan(input).map(|(_, _, items)| items);
+    let listed = (|| session(input.get("project_root")?.as_str()?).ok()?.project().listed_major_problems())();
     let Some(items) = input.pointer_mut("/draft/items").and_then(Value::as_array_mut) else { return Ok(()); };
     let wrong = |why: &str| format!("gil_plan_propose: every item is exactly {ITEM_SHAPE}, all nonblank strings. {why} observation is the ONE observation that decides the question; if a problem needs more than one, it is more than one item. command is the command that makes that observation here, with what is in this environment — if no command here can make it yet, making the means to observe it is an item of its own that comes first; do not leave out what the work is judged by. source quotes the sentence of the user's request the problem comes from. Nothing was recorded; correct the items and send the call once more.");
     // An approved item cannot be redefined, so its text is GIL's to keep, not the agent's to retype:
@@ -97,6 +98,10 @@ pub(super) fn accept(name: &str, input: &mut Value) -> Result<(), String> {
     // carried over. Asking for a character-exact copy of every item ended sessions on one stray
     // space (2026-11-27).
     let stored = approved.unwrap_or_default();
+    // The first plan of a Chain is a tree: the major problems its Interpretation listed, each split
+    // into leaves. `part_of` is a leaf's path from its major problem down.
+    let majors = if stored.is_empty() { listed.as_deref().map(crate::approved_plan::major_problems).unwrap_or_default() } else { Vec::new() };
+    let tree = |why: &str| format!("gil_plan_propose: the plan is a tree. The Interpretation listed these major problems: {}. Every item is a leaf under one of them: write its path in part_of, the major problem first and any branches after it (\"M2 > timestamps > rollover\"), and every major problem needs at least one leaf. Split a major problem into branches, and a branch again, until ONE observation decides each leaf. {why} Nothing was recorded; correct the items and send the call once more.", majors.join(", "));
     let named = |item: &Value| item.get("id").and_then(Value::as_str).map(str::to_owned);
     let sent: Vec<String> = items.iter().filter_map(named).collect();
     let mut merged: Vec<Value> = stored.iter().filter(|item| named(item).is_some_and(|id| !sent.contains(&id))).cloned().collect();
@@ -112,10 +117,21 @@ pub(super) fn accept(name: &str, input: &mut Value) -> Result<(), String> {
                 return Err(wrong(&format!("An item has no {field}.")));
             }
         }
-        if fields.len() != 5 { return Err(wrong("An item has a field besides these five.")); }
+        let placed = fields.get("part_of").and_then(Value::as_str).is_some_and(|path| !path.trim().is_empty());
+        if fields.len() != 5 + usize::from(fields.contains_key("part_of")) { return Err(wrong("An item has a field besides these.")); }
+        // A leaf hangs under a major problem the Interpretation listed.
+        if !majors.is_empty() {
+            let under = fields.get("part_of").and_then(Value::as_str).map(crate::approved_plan::major_of).unwrap_or("");
+            if !placed || !majors.iter().any(|major| major == under) {
+                return Err(tree(&format!("Item {:?} has no part_of under a major problem.", fields.get("id").and_then(Value::as_str).unwrap_or(""))));
+            }
+        }
         let observation = fields.remove("observation").expect("checked");
         fields.insert("done_when".into(), observation);
         merged.push(item.clone());
+    }
+    if let Some(bare) = majors.iter().find(|major| !merged.iter().any(|item| item.get("part_of").and_then(Value::as_str).map(crate::approved_plan::major_of) == Some(major.as_str()))) {
+        return Err(tree(&format!("Major problem {bare} has no leaf.")));
     }
     *items = merged;
     // The checklist of a later proposal is the list just put together, in its order.
@@ -234,7 +250,7 @@ fn exploration_view(value: &mut Value, p: &Project, state: &crate::approved_plan
             "selection":e.selection})
     };
     let requirements: Vec<Value> = active.map(|a| a.draft.items.iter().map(|i| json!({
-        "id":i.id, "question":i.question, "done_when":i.done_when, "source":i.source, "command":i.command,
+        "id":i.id, "question":i.question, "done_when":i.done_when, "source":i.source, "command":i.command, "part_of":i.part_of,
         "experiments":state.linked(&i.id).map(experiment).collect::<Vec<_>>()})).collect()).unwrap_or_default();
     let here = p.current_cycle().id().to_ref().to_string();
     let fields = value.as_object_mut().expect("plan view is an object");
@@ -358,9 +374,9 @@ pub(super) fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
     let draft = json!({"type":"object", "additionalProperties":false, "required":["scope","items","synthesis"], "properties":{
         "scope":{"type":"object","additionalProperties":false,"required":["goal","in_scope","out_of_scope","constraints","success_criteria"],"properties":{
             "goal":string,"in_scope":string,"out_of_scope":string,"constraints":string,"success_criteria":string}},
-        "items":{"type":"array","minItems":1,"maxItems":64,"description":"The problems to solve, as small as they can be made: each one decidable by ONE observation. Do not bundle several features or cases into one item.","items":{"type":"object","additionalProperties":false,"required":["id","question","observation","command","source"],"properties":{"id":string,"question":{"type":"string","description":"One yes/no question about one behaviour."},
+        "items":{"type":"array","minItems":1,"maxItems":64,"description":"The problems to solve, as small as they can be made: each one decidable by ONE observation. Do not bundle several features or cases into one item.","items":{"type":"object","additionalProperties":false,"required":["id","question","observation","command","source"],"properties":{"id":string,"part_of":{"type":"string","description":"The item's place in the tree: the major problem (M1, M2, … as the Interpretation listed them) first, then any branches under it, as a path such as \"M2 > timestamps > rollover\"."},"question":{"type":"string","description":"One yes/no question about one behaviour."},
             "observation":{"type":"string","description":"The ONE observation that decides the question: one command and what it shows, or one thing to look at. If deciding takes more than one observation, split the item."},
-            "command":{"type":"string","description":"The command that makes that observation in this environment, with what is available here. If none can, the observation cannot be made: write an item that can be observed."},
+            "command":{"type":"string","description":"The command that makes that observation in this environment: one that can actually be run, not a placeholder. If nothing here can make the observation yet, the item that builds the means to make it comes first."},
             "source":{"type":"string","description":"The sentence of the user's request this problem comes from, quoted."}}}},
         "synthesis":{"type":"object","additionalProperties":{"type":"string"},"required":["statement","basis_refs","exploration_checklist"],"properties":{
             "statement":{"type":"string","description":"Proposed agreement. Explain previous-cycle/external background here; it does not replace current Interview basis_refs."},

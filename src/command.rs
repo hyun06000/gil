@@ -1470,6 +1470,11 @@ fn opened_step(session: &Session, opened: crate::Opened) -> String {
     #[cfg(feature = "approved-plan")]
     if opened.kind == crate::NodeKind::Synthesis && session.project().exploration_contract() {
         out.push_str(&tr!("cmd.opened_synthesis_requirements", marker = text("receipt.marker.exploration")));
+        // The tree is drawn from the top: the major problems the Interpretation listed are put back
+        // here, to be split one by one until a single observation decides each leaf.
+        if !session.project().plan_approved_in_chain() && let Some(listed) = session.project().listed_major_problems() {
+            out.push_str(&tr!("cmd.opened_synthesis_tree", majors = indent(listed.trim())));
+        }
     }
     #[cfg(feature = "approved-plan")]
     if opened.kind == crate::NodeKind::Define && session.project().exploration_contract() {
@@ -1760,10 +1765,12 @@ fn exploration_fields(report: &mut serde_json::Value, subject: &str, project: Op
             fields.insert("observed".into(), "…".into());
             if project.plan_document().is_some() { fields.insert("plan_document".into(), PLAN_DOCUMENT_PATH.into()); }
         }
-        if subject.contains("interpretation") {
-            fields.insert("graded_by".into(), "what finally judges this work as done, in the request's own words".into());
+        if subject.contains("interpretation") && !project.plan_approved_in_chain() {
+            fields.insert("major_problems".into(), "M1: <a result the request asks for> — judged by <what shows it is done>\nM2: …".into());
+            fields.insert("anti_goals".into(), "what would make this a failure even though it runs".into());
+            fields.insert("edge_cases".into(), "inputs and conditions the request implies but does not spell out, one per line".into());
             fields.insert("hardest".into(), "the part most likely to fail, and why".into());
-            fields.insert("not_observable_here".into(), "none | what cannot be observed here yet, and how you will make the means to observe it".into());
+            fields.insert("not_observable_here".into(), "none | what cannot be observed here yet, and the means you will build to observe it".into());
         }
         if subject.contains("hypothesis") {
             fields.insert("change".into(), "what you will change, in which files".into());

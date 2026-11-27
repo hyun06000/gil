@@ -80,7 +80,7 @@ class McpArmTests(unittest.TestCase):
             seen["start"] = said.get("result") or self.fail(str(self.events[-3:]))
             basis = []
             for kind, report in (("question", {"question": "무엇을 원하는가", "choices": "없음", "response": "과제 설명대로"}),
-                                 ("interpretation", {"interpretation": "대소문자를 무시해 정렬한다", "unresolved": "없음", "graded_by": "정렬 검사가 통과한다", "hardest": "대소문자가 섞인 이름", "not_observable_here": "none"})):
+                                 ("interpretation", {"interpretation": "대소문자를 무시해 정렬한다", "unresolved": "없음", "major_problems": "M1: 이름이 대소문자 무시로 정렬된다 — judged by 정렬 검사가 통과한다", "anti_goals": "없음", "edge_cases": "대소문자가 섞인 이름", "hardest": "대소문자가 섞인 이름", "not_observable_here": "none"})):
                 said = yield call("gil_open", kind=kind, contract=CONTRACT)
                 basis.append(__import__("re").search(r"step:C\d+/S\d+", said["result"]).group(0))
                 if kind == "question":
@@ -92,7 +92,7 @@ class McpArmTests(unittest.TestCase):
                 "scope": {"goal": "대소문자 무시 정렬", "in_scope": "order", "out_of_scope": "그 밖", "constraints": "없음", "success_criteria": "검사 통과"},
                 "items": [{"id": "R1", "question": "order 가 대소문자를 무시하는가", "observation": "order(['B','a']) 가 ['a','B'] 를 돌려준다",
                            "command": "python3 -c \"from fast_networkx import order; print(order(['B','a']))\"",
-                           "source": "Order labels ignoring case"}],
+                           "source": "Order labels ignoring case", "part_of": "M1 > ordering"}],
                 "synthesis": {"statement": "order 를 고친다", "basis_refs": "\n".join(basis), "exploration_checklist": "R1"}})
             seen["plan"] = said["result"]
             # The scripted model reads the server directly where a model would read the tool result.

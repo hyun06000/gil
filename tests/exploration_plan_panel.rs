@@ -64,7 +64,7 @@ fn links(view: &Value) -> Vec<(String, String)> {
 fn text(id: &str) -> Value {
     // The App reads the stored item: its deciding observation under `done_when`, and the source the wire recorded.
     json!({"id":id, "question":format!("항목 {id}을 합성 자료로 확인한다"), "done_when":format!("evidence 파일에 항목 {id} 결과가 저장된다"),
-        "source":"the synthetic request of this test", "command":"cat evidence/result.md"})
+        "source":"the synthetic request of this test", "command":"cat evidence/result.md", "part_of":"M1"})
 }
 
 #[test]
@@ -107,7 +107,7 @@ fn the_review_response_keeps_every_approved_requirement_text_while_the_current_e
     assert_eq!((&moved["pending"], &moved["retry_pending"]), (&json!([]), &json!([])));
     for id in ["R1", "R2"] {
         let one = requirement(&moved, id);
-        assert_eq!(json!({"id":one["id"], "question":one["question"], "done_when":one["done_when"], "source":one["source"], "command":one["command"]}), text(id), "the server still carries the approved text of {id}");
+        assert_eq!(json!({"id":one["id"], "question":one["question"], "done_when":one["done_when"], "source":one["source"], "command":one["command"], "part_of":one["part_of"]}), text(id), "the server still carries the approved text of {id}");
     }
     let r1: Vec<_> = requirement(&moved, "R1")["experiments"].as_array().unwrap().iter().map(|e| (e["cycle_ref"].as_str().unwrap(), e["state"].as_str().unwrap(), e["verdict"].as_str())).collect();
     assert_eq!(r1, vec![("cycle:C2", "closed", Some("success")), ("cycle:C3", "closed", Some("failure"))]);
@@ -122,7 +122,7 @@ fn the_review_response_keeps_every_approved_requirement_text_while_the_current_e
     assert_eq!((&interview["proposal"], &interview["current_item"]), (&Value::Null, &Value::Null));
     assert_eq!(interview["current_cycle"], json!({"ref":"cycle:C5", "state":"open"}));
     assert_eq!(interview["pending"], json!([]));
-    assert_eq!(interview["requirements"].as_array().unwrap().iter().map(|one| json!({"id":one["id"], "question":one["question"], "done_when":one["done_when"], "source":one["source"], "command":one["command"]})).collect::<Vec<_>>(), vec![text("R1"), text("R2")]);
+    assert_eq!(interview["requirements"].as_array().unwrap().iter().map(|one| json!({"id":one["id"], "question":one["question"], "done_when":one["done_when"], "source":one["source"], "command":one["command"], "part_of":one["part_of"]})).collect::<Vec<_>>(), vec![text("R1"), text("R2")]);
 
     // A new proposal adds R3. It is not approved text: `requirements` stays the approved revision.
     let mut basis = Vec::new();
@@ -158,7 +158,7 @@ fn the_review_response_keeps_every_approved_requirement_text_while_the_current_e
     assert_eq!((&third["proposal"], &third["active_revision"]), (&Value::Null, &json!(2)));
     assert_eq!(third["current_item"], text("R3"));
     assert_eq!(third["executed_cycles"].as_array().unwrap().iter().map(|e| e["revision"].as_u64().unwrap()).collect::<Vec<_>>(), vec![1, 1, 1, 2]);
-    assert_eq!(third["requirements"].as_array().unwrap().iter().map(|one| json!({"id":one["id"], "question":one["question"], "done_when":one["done_when"], "source":one["source"], "command":one["command"]})).collect::<Vec<_>>(), vec![text("R1"), text("R2"), text("R3")]);
+    assert_eq!(third["requirements"].as_array().unwrap().iter().map(|one| json!({"id":one["id"], "question":one["question"], "done_when":one["done_when"], "source":one["source"], "command":one["command"], "part_of":one["part_of"]})).collect::<Vec<_>>(), vec![text("R1"), text("R2"), text("R3")]);
 
     let packet = json!({
         "source": "tests/exploration_plan_panel.rs: gil_plan_review structuredContent of the real exploration-flow Core, unmodified. Synthetic harness input; never a person's approval.",
