@@ -418,8 +418,9 @@ def reply(r):
         cited = cited_sources(task)
         reads = interview_reads()
         prior_read_count = len(reads)
-        # A problem definition looks at the public files first, as a question does.
-        if k in ("question", "synthesis") or (k == "define" and active and not first):
+        # Looking at the public files is the interview's act. A problem definition and a hypothesis
+        # only write, from what the record already holds.
+        if k in ("question", "synthesis"):
             focus = [s["report"] for s in steps if s["report"]]
             explore(task, k, focus, cited, reads)
     if k == "question":
