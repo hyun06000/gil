@@ -532,6 +532,36 @@ fn open_with(ctx: &Invocation<'_>, mut session: Session, name: Option<&String>) 
     }
 }
 
+/// Where GIL saves the approved plan document when a Verify opens.
+#[cfg(feature = "approved-plan")]
+pub(crate) const PLAN_DOCUMENT_PATH: &str = "plan/approved-plan.md";
+
+/// Saves the bound plan document at [`PLAN_DOCUMENT_PATH`] and says what was done. Never follows a
+/// link and never replaces a file that holds something else: then the agent is told to save it.
+#[cfg(feature = "approved-plan")]
+fn save_plan_document(root: &std::path::Path, document: &str) -> String {
+    let at = root.join(PLAN_DOCUMENT_PATH);
+    let folder = at.parent().expect("a path with a folder");
+    let plain_folder = match std::fs::symlink_metadata(folder) {
+        Ok(found) => found.file_type().is_dir(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => std::fs::create_dir(folder).is_ok(),
+        Err(_) => false,
+    };
+    let saved = plain_folder && match std::fs::symlink_metadata(&at) {
+        Ok(found) => found.file_type().is_file() && std::fs::read(&at).is_ok_and(|bytes| bytes == document.as_bytes()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            use std::io::Write;
+            std::fs::OpenOptions::new().write(true).create_new(true).open(&at)
+                .and_then(|mut file| { file.write_all(document.as_bytes())?; file.sync_all() }).is_ok()
+        }
+        Err(_) => false,
+    };
+    match saved {
+        true => tr!("cmd.plan_document_saved", path = PLAN_DOCUMENT_PATH),
+        false => tr!("cmd.plan_document_not_saved", path = PLAN_DOCUMENT_PATH),
+    }
+}
+
 fn open_step(ctx: &Invocation<'_>,
     session: &mut Session,
     name: Option<&String>,
@@ -584,6 +614,14 @@ fn open_step(ctx: &Invocation<'_>,
         crate::project_resume::ensure(&session.root().map_err(say)?)
     } else { String::new() };
     let mut receipt = opened_step(session, opened);
+    // The approved plan document a Verify must keep beside its evidence is saved by GIL itself, byte
+    // for byte: an agent that retypes it cannot be relied on to reproduce it. Opening is already
+    // durable; a failed save changes nothing about it and the receipt says what to do instead.
+    #[cfg(feature = "approved-plan")]
+    if kind == NodeKind::Verify && let Some(document) = session.project().plan_document() {
+        receipt.push_str(&save_plan_document(&session.root().map_err(say)?, &document));
+        receipt.push('\n');
+    }
     if kind == NodeKind::Verify && matches!(ctx.input, Input::Body(_)) && session.project().visual_state.is_some() {
         receipt.push_str(text("guide.opened.verify_visual"));
         receipt.push('\n');

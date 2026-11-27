@@ -111,9 +111,9 @@ class McpArmTests(unittest.TestCase):
             yield call("gil_open", kind="verify", contract=CONTRACT)
             _, _, read = gil.server.call("gil_plan_read", {"project_root": root})
             yield {"action": "write", "path": NAME, "content": "def order(labels):\n    return sorted(labels, key=str.casefold)\n", "note": "n"}
-            # The plan document and the evidence are project files beside the submission: the write tool takes them.
-            said = yield {"action": "write", "path": PLAN, "content": read["document"], "note": "n"}
-            seen["plan_file"] = said.get("result") or said.get("error")
+            # GIL saved the plan document itself when the Verify opened. Evidence is a project file beside the
+            # submission: the write tool takes it.
+            seen["plan_file"] = (self.app / PLAN).read_text() == read["document"]
             yield {"action": "write", "path": "evidence/C2.md", "content": "passed\n", "note": "n"}
             said = yield {"action": "write", "path": "README.md", "content": "overwritten\n", "note": "n"}
             seen["task_file"] = said.get("error")
@@ -137,7 +137,7 @@ class McpArmTests(unittest.TestCase):
         self.assertIn("plan approved", seen["plan"])
         self.assertIn("go with your recommendation", seen["reply"])
         self.assertNotIn("REFUSED", seen["verify"])
-        self.assertIn("Wrote project file plan/approved-plan.md", seen["plan_file"])
+        self.assertTrue(seen["plan_file"], "the plan document GIL saved is the approved one")
         self.assertIn("not part of the submission", seen["task_file"])
         self.assertEqual((self.app / "README.md").read_text(), "the task's own file\n")
         self.assertNotIn(PLAN, obs["files"])

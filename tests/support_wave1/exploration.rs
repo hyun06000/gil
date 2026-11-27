@@ -125,7 +125,9 @@ impl Rig {
         ok(self.model("gil_open", json!({"kind":"hypothesis","contract":CONTRACT})), "hypothesis");
         ok(self.model("gil_close", json!({"report":"hypothesis: 합성 자료만으로 판정할 수 있다\nrationale: 자료가 제공됐다\nguardrail: 외부 데이터를 쓰지 않는다\n"})), "close hypothesis");
         let v = ok(self.model("gil_open", json!({"kind":"verify","contract":CONTRACT})), "verify");
-        self.write(PLAN_DOCUMENT, &document);
+        // Opening the Verify saved the approved document itself, byte for byte, and said where.
+        assert_eq!(fs::read_to_string(self.root.join(PLAN_DOCUMENT)).expect("GIL saved the plan document"), document);
+        assert!(v["result"]["content"].to_string().contains(PLAN_DOCUMENT), "the receipt names the saved path: {v}");
         step_ref(&v, "verify")
     }
     /// Walks one already-open Experiment to its Cycle Report.
