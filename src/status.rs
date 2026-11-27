@@ -85,7 +85,7 @@ pub fn where_now(session: &ProjectSession, state_is_elsewhere: bool) -> String {
     let world = session.world_state();
     let dirty = matches!(world, Ok(WorldState::Dirty { .. }));
     let open_kind = cycle.step_now_open().and_then(|at| cycle.steps().node(at)).map(|node| node.kind);
-    out.push_str(&world_nudge(open_kind, world));
+    out.push_str(&world_nudge(open_kind, session.project().active_will().is_some(), world));
     // 형식 10/11 의 보관 대기·보관 중단 — 적용 정책과 마지막 확정 세계를 따로 말한다. 그 밖의 상태에서는 아무것도 더하지 않는다.
     #[cfg(feature = "tracking-policy")]
     out.push_str(&session.project().tracking_note());
@@ -107,7 +107,7 @@ pub fn where_now(session: &ProjectSession, state_is_elsewhere: bool) -> String {
 ///
 /// **전체 목록도 내부 주소도 내지 않는다.** 공개 표면은 `snapshot:A*` 하나이고, 여기서
 /// 필요한 것은 네 가지 물음의 답뿐이다 — 기준·상태·확정 가능 여부·지금 밟을 수 있는 수.
-fn world_nudge(open_kind: Option<NodeKind>, world: Result<WorldState, crate::SessionError>) -> String {
+fn world_nudge(open_kind: Option<NodeKind>, has_active_will: bool, world: Result<WorldState, crate::SessionError>) -> String {
     let state = match world {
         Ok(state) => state,
         // 세계를 읽는 것 자체가 안 되면(창고 손상 등) status 를 통째로 실패시키지 않는다 —
@@ -122,13 +122,19 @@ fn world_nudge(open_kind: Option<NodeKind>, world: Result<WorldState, crate::Ses
         WorldState::Unknown { world, said } => tr!("status.world_unknown", world = world, why = indent(&said)),
         WorldState::Dirty { world, .. } => {
             let mut out = tr!("status.world_dirty", world = world);
-            out.push_str(match open_kind == Some(NodeKind::Verify) {
+            if open_kind == Some(NodeKind::Verify) {
                 // 세계를 확정할 권한은 Verify 에만 있다(Artifact Model §5).
-                true => text("status.dirty_verify"),
-                // **밟을 수 있는 길만 말한다.** Interview 안에는 verify 가 없고, 이 Cycle 을
-                // 닫는 것도 같은 gate 에 막힌다 — 그러니 먼저 되돌리는 수뿐이다.
-                false if cfg!(feature = "product-safety") => text("status.dirty_product"),
-                false => text("status.dirty_dev"),
+                out.push_str(text("status.dirty_verify"));
+                return out;
+            }
+            // **밟을 수 있는 길만 말한다.** Interview 안에는 verify 가 없고, 이 Cycle 을
+            // 닫는 것도 같은 gate 에 막힌다 — 그러니 먼저 되돌리는 수뿐이다.
+            out.push_str(text(if cfg!(feature = "product-safety") { "status.dirty_product" } else { "status.dirty_dev" }));
+            // Say that the Step and its Will stay open only when both exist: before the first
+            // Step opens there is nothing to keep open, and saying so reads as an open Question.
+            out.push_str(match open_kind.is_some() && has_active_will {
+                true => text("status.dirty_keeps_open"),
+                false => "\n",
             });
             out
         }
@@ -153,4 +159,47 @@ fn indent(text: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::SnapshotRef;
+
+    fn dirty() -> Result<WorldState, crate::SessionError> {
+        Ok(WorldState::Dirty { world: SnapshotRef::new(1).expect("A1"), changes: Vec::new() })
+    }
+
+    /// The dirty-world advice by what is open, in every feature profile (no project fixture):
+    /// only a non-Verify Step that is open together with an Active Will is said to stay open.
+    #[test]
+    fn dirty_advice_says_what_stays_open_only_when_a_step_and_its_will_are_open() {
+        let keeps = text("status.dirty_keeps_open");
+        let recovery = text(if cfg!(feature = "product-safety") { "status.dirty_product" } else { "status.dirty_dev" });
+
+        let question = world_nudge(Some(NodeKind::Question), true, dirty());
+        assert!(question.contains(recovery) && question.ends_with(keeps), "{question}");
+
+        // Before the first Step, and at a Cycle boundary: recovery advice, nothing "stays open".
+        let nothing_open = world_nudge(None, false, dirty());
+        assert!(nothing_open.contains(recovery) && !nothing_open.contains(keeps.trim()), "{nothing_open}");
+        assert!(nothing_open.ends_with("\n\n"), "the block still ends with one blank line: {nothing_open:?}");
+        // An Active Will without an open Step, or an open Step without one, is not "both open".
+        assert!(!world_nudge(None, true, dirty()).contains(keeps.trim()));
+        assert!(!world_nudge(Some(NodeKind::Question), false, dirty()).contains(keeps.trim()));
+
+        // A Verify confirms the changed world by closing: neither recovery nor "stays open".
+        let verify = world_nudge(Some(NodeKind::Verify), true, dirty());
+        assert!(verify.ends_with(text("status.dirty_verify")), "{verify}");
+        assert!(!verify.contains(recovery) && !verify.contains(keeps.trim()), "{verify}");
+    }
+
+    #[test]
+    fn a_clean_world_gets_no_dirty_advice_whatever_is_open() {
+        let clean = || Ok(WorldState::Clean { world: SnapshotRef::new(1).expect("A1") });
+        for (kind, will) in [(None, false), (Some(NodeKind::Question), true), (Some(NodeKind::Verify), true)] {
+            let said = world_nudge(kind, will, clean());
+            assert!(!said.contains(text("status.dirty_keeps_open").trim()) && !said.contains(text("status.dirty_verify").trim()), "{said}");
+        }
+    }
 }

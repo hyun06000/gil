@@ -234,6 +234,33 @@ fn a_dirty_non_verify_step_is_told_to_restore_first() {
     assert!(block.contains("그대로 열린 채 남는다"), "{block}");
 }
 
+/// 첫 Step 을 열기 전에는 열린 채 남을 Step 도 Active Will 도 없다 (#237). 파일 변경의 복구
+/// 안내는 그대로 주되, 무언가 열려 있다고 말하지 않는다. 같은 변경을 첫 Question 을 연 뒤에
+/// 보면 그때는 실제로 열린 Step 과 Will 이 남는다고 말한다.
+#[test]
+fn before_the_first_step_status_does_not_say_a_step_stays_open() {
+    let dir = bare("dirty-before-first-step");
+    write(&dir, "sample.txt", "원래");
+    ok(&dir, &["start"]);
+    write(&dir, "sample.txt", "바꿨다");
+    let before = fs::read(dir.join(gil::STATE_PATH)).unwrap();
+    let said = status(&dir);
+    let block = world_block(&said);
+    // The recovery advice itself stays; product-safety builds give their own (no restore).
+    let recovery = if cfg!(feature = "product-safety") { "restore)를 거부한다" } else { "`gil restore` 로 기준 세계를 복원한다" };
+    assert!(block.contains("상태: dirty") && block.contains(recovery), "{block}");
+    assert!(!block.contains("그대로 열린 채 남는다"), "nothing is open yet: {said}");
+    assert!(said.contains("걸린 행동이 없다"), "{said}");
+    assert_eq!(fs::read(dir.join(gil::STATE_PATH)).unwrap(), before, "status reads only");
+
+    write(&dir, "sample.txt", "원래");
+    let out = run(&dir, &["open", "question"], Some("objective: a\nnext_action: b\ndone_when: c\n"));
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    write(&dir, "sample.txt", "바꿨다");
+    let block = world_block(&status(&dir));
+    assert!(block.contains("그대로 열린 채 남는다"), "now a Step and its Will are open: {block}");
+}
+
 #[test]
 fn an_interview_is_never_told_to_go_somewhere_it_cannot_reach() {
     // Interview 에는 verify 가 없고, 이 Cycle 을 닫는 것도 같은 gate 에 막힌다.
