@@ -67,7 +67,7 @@ on:
       cpu_arm:
         description: 'Three-CPU preset: optional single arm'
         type: choice
-        options: [both, 'on', 'off', 'mcp']
+        options: [both, 'on', 'off', 'mcp', 'codex']
         default: both
       cpu_trials:
         description: 'Three-CPU preset: independent trials per task and arm'
@@ -577,7 +577,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arm: ${{ fromJSON(inputs.cpu_arm == 'on' && '["on"]' || inputs.cpu_arm == 'off' && '["off"]' || inputs.cpu_arm == 'mcp' && '["mcp"]' || '["on","off"]') }}
+        arm: ${{ fromJSON(inputs.cpu_arm == 'on' && '["on"]' || inputs.cpu_arm == 'off' && '["off"]' || inputs.cpu_arm == 'mcp' && '["mcp"]' || inputs.cpu_arm == 'codex' && '["codex"]' || '["on","off"]') }}
         trial: ${{ fromJSON(inputs.cpu_trials == '5' && '[1,2,3,4,5]' || inputs.cpu_trials == '3' && '[1,2,3]' || '[1]') }}
         task: ${{ fromJSON(inputs.cpu_task == 'ks-solver-cpp' && '["ks-solver-cpp"]' || inputs.cpu_task == 'vf2-speedup-networkx' && '["vf2-speedup-networkx"]' || inputs.cpu_task == 'react-lead-form' && '["react-lead-form"]' || '["react-lead-form","ks-solver-cpp","vf2-speedup-networkx"]') }}
     env:
@@ -588,7 +588,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Build static GIL for the task image
-        if: matrix.arm != 'off'
+        if: matrix.arm != 'off' && matrix.arm != 'codex'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y musl-tools
@@ -618,5 +618,13 @@ jobs:
             ${{ runner.temp }}/tb41-${{ matrix.arm }}/gil-interrupted.tgz
             ${{ runner.temp }}/tb41-${{ matrix.arm }}/gil-record.tgz
             ${{ runner.temp }}/tb41-${{ matrix.arm }}/pair/*/agent/live.jsonl
+            ${{ runner.temp }}/tb41-${{ matrix.arm }}/pair/*/result.json
+            ${{ runner.temp }}/tb41-${{ matrix.arm }}/pair/*/*.log
+            ${{ runner.temp }}/tb41-${{ matrix.arm }}/pair/*/agent/*.json
+            ${{ runner.temp }}/tb41-${{ matrix.arm }}/pair/*/agent/*.jsonl
+            ${{ runner.temp }}/tb41-${{ matrix.arm }}/pair/*/agent/*.txt
+            ${{ runner.temp }}/tb41-${{ matrix.arm }}/pair/*/agent/*.log
+            ${{ runner.temp }}/tb41-${{ matrix.arm }}/pair/*/agent/sessions/**
+            ${{ runner.temp }}/tb41-${{ matrix.arm }}/pair/*/verifier/**
           if-no-files-found: warn
           retention-days: 7
