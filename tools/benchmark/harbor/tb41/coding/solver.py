@@ -511,7 +511,7 @@ If a local check fails, use its output to fix the source. No remote tools or pri
             check_output = f"exit {checked}: " + proc.stdout.decode(errors="replace")[-OUTPUT_LIMIT:]
         current, swept = submission(writes), []
         for key, item in ledger.items.items():
-            if not item["probe"] or item.get("set_aside") or (item["digest"] == current and item["status"] in ("holds", "fails")):
+            if not item["probe"] or (item["digest"] == current and item["status"] in ("holds", "fails")):
                 continue
             if time.time() >= deadline:
                 break   # the trial's time is over; what was not run again stays stale

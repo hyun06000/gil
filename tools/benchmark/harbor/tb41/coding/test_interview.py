@@ -56,10 +56,15 @@ class InterviewTests(unittest.TestCase):
             self.assertIn("Output must round trip.", prompt)
             self.assertIn("g++", prompt)
         i = step("interpretation", interpretation="Round trip required", unresolved="Round trip untested")
-        with patch.object(participant, "ask", side_effect=["continue interview", "Draft roadmap", "Missing required codec mode.", "clarify"]) as model:
+        listed = json.dumps({"criteria": [{"requirement": "bytes round trip", "kind": "behaviour", "source": "contract.txt", "same_as": ""}]})
+        with patch.object(participant, "ask", side_effect=["continue interview", "Draft roadmap", "Missing required codec mode.", "clarify", listed]) as model:
             report = participant.reply(request("synthesis", [q, i]))["report"]
             self.assertIn("benchmark_revise", report)
-            self.assertTrue(all("Round trip untested" in c.args[0] for c in model.call_args_list[1:]))
+            self.assertTrue(all("Round trip untested" in c.args[0] for c in model.call_args_list[1:4]))
+            # The interview's last act is to number the problems: the list is part of its Synthesis.
+            self.assertIn("Write the numbered list of problems", model.call_args_list[4].args[0])
+            self.assertIn("This is the first list", model.call_args_list[4].args[0])
+            self.assertIn('Criteria: [{"id": "K1", "kind": "behaviour", "requirement": "bytes round trip"', report)
         with patch.object(participant, "ask", side_effect=["read contract.txt", "Clarify gap", "open", "Pending"]) as model:
             model.call_id = "fixture"
             with patch.object(participant, "record"):
@@ -81,7 +86,7 @@ class InterviewTests(unittest.TestCase):
                     self.assertIn("END_POLICY", model.call_args_list[2].args[0])
                 reads = participant.interview_reads()
                 self.assertEqual([r["offset"] for r in reads], [0, solver.PAGE])
-                with patch.object(participant, "ask", side_effect=["Roadmap", "First action available", "start"]) as model:
+                with patch.object(participant, "ask", side_effect=["Roadmap", "First action available", "start", "no list"]) as model:
                     participant.reply(request("synthesis", [step("question", question="Q"), step("interpretation", unresolved="Gap")]))
                     self.assertIn("END_POLICY", model.call_args_list[0].args[0])
         self.assertEqual((self.root / "codec.cpp").read_text(), "a" * solver.PAGE + "END_POLICY")

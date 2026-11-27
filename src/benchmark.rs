@@ -243,6 +243,23 @@ fn drive(session: &mut ProjectSession, adapter: &Adapter, recovery: bool) -> Res
                 let report = cycle.report().ok_or("closed Experiment has no Report")?;
                 // A successful Experiment is the parent of the next one when the adapter says work
                 // remains: a first checked submission, or criteria of its ledger still open.
+                // A reflection may ask for the list of problems to be written again. That is not a
+                // going back: a new Interview opens, and the world stays as it is at that moment.
+                // After a failure the run first goes back to the parent, as a failure always does,
+                // and the Interview opens there.
+                let next_kind = match report.get("benchmark_transition") {
+                    Some("interview_open" | "interview_after_failure") => CycleKind::Interview,
+                    _ => CycleKind::Experiment,
+                };
+                if recovery
+                    && report.get("verdict") == Some("success")
+                    && report.get("benchmark_transition") == Some("interview_open")
+                {
+                    session.open_child_cycle(next_kind)?;
+                    session.commit()?;
+                    turns = 0;
+                    continue;
+                }
                 if recovery
                     && report.get("verdict") == Some("success")
                     && matches!(
@@ -261,7 +278,7 @@ fn drive(session: &mut ProjectSession, adapter: &Adapter, recovery: bool) -> Res
                     && report.get("verdict") == Some("failure")
                     && matches!(
                         report.get("benchmark_transition"),
-                        Some("observed_regression" | "criteria_failed")
+                        Some("observed_regression" | "criteria_failed" | "interview_after_failure")
                     )
                 {
                     let moved = session.revisit_cycle()?.moved;
@@ -273,7 +290,7 @@ fn drive(session: &mut ProjectSession, adapter: &Adapter, recovery: bool) -> Res
                     ) {
                         return Err("adapter did not confirm submission projection".into());
                     }
-                    session.open_branch_cycle(CycleKind::Experiment)?;
+                    session.open_branch_cycle(next_kind)?;
                     session.commit()?;
                     turns = 0;
                     continue;
@@ -537,8 +554,24 @@ mod tests {
             .iter()
             .map(|c| c["report"]["verdict"].as_str().unwrap())
             .collect();
-        // C2 first submission, C3 gains a criterion, C4 breaks it, C5 branches from C3, C6 finishes.
-        assert_eq!(verdicts, ["success", "success", "failure", "success", "success"]);
+        // C2 first submission, C3 solves a number, C4 breaks it, C5 branches from C3, C6 solves the
+        // last number, C7 is a new Interview that writes the list again, C8 solves what it added.
+        assert_eq!(
+            verdicts,
+            ["success", "success", "failure", "success", "success", "success", "success"]
+        );
+        let kinds_of_cycles: Vec<_> = cycles.iter().map(|c| c["kind"].as_str().unwrap()).collect();
+        assert_eq!(
+            kinds_of_cycles,
+            [
+                "interview", "experiment", "experiment", "experiment", "experiment", "experiment",
+                "interview", "experiment"
+            ]
+        );
+        // The new Interview is a child of the solved Experiment, not a going back.
+        assert_eq!(cycles[6]["parent"], cycles[5]["ref"]);
+        assert!(cycles[6]["revisit_from"].is_null());
+        assert_eq!(cycles[7]["parent"], cycles[6]["ref"]);
         // Inside C3 the first hypothesis failed and reflection doubted the hypothesis: the Define
         // stands, and a second hypothesis follows it in the same Cycle.
         let kinds: Vec<_> = cycles[2]["steps"]
@@ -578,9 +611,10 @@ mod tests {
         };
         // The abandoned Experiment's own probe held; the sweep of the stored probes found the break.
         let lost = observed(3);
-        assert_eq!(lost["swept"][0]["before"], "stale");
+        assert_eq!(lost["swept"][0]["before"], "solved");
         assert_eq!(lost["swept"][0]["after"], "fails");
-        assert_eq!(lost["ledger"]["fails"], 1);
+        // K3 had been crossed off by C3's Analysis; here it is found broken.
+        assert_eq!(lost["ledger"]["broken"], 1);
         // The probe of its own target was fixed in Define and held from the start.
         assert_eq!(lost["entry"], json!({"K2": "holds"}));
         // In C3 the target did not hold before either hypothesis and held after the second.
@@ -590,8 +624,14 @@ mod tests {
         assert_eq!(observed(4)["files"], observed(2)["files"]);
         assert_ne!(lost["files"], observed(2)["files"]);
         let last = observed(5);
-        assert_eq!(last["ledger"], json!({"holds": 3}));
+        assert_eq!(last["ledger"], json!({"solved": 2, "holds": 1}));
         assert_eq!(last["submission_digest"], observed(2)["submission_digest"]);
+        // The Interview changed no file: the Experiment after it starts from the same submission,
+        // with the three numbers it kept still crossed off, and solves the one it added.
+        let after = observed(7);
+        assert_eq!(after["files"], last["files"]);
+        assert_eq!(after["entry"], json!({"K4": "holds"}));
+        assert_eq!(after["ledger"], json!({"solved": 3, "holds": 1}));
         // The world went back twice: to C3's Define inside C3, and to C3's exit after C4.
         let log = fs::read_to_string(root.join("transcript.jsonl")).unwrap();
         let restores: Vec<Value> = log

@@ -1,13 +1,17 @@
 """The criteria ledger of a GIL benchmark Chain.
 
-The ledger lists what the task requires. Each step of an Experiment has one part in it:
+The ledger is the numbered list of problems the task poses. Each step has one part in it:
 
-- Define takes some criteria as its problem and writes, for each, the exact state that must hold
-  and a probe: a script that exits 0 exactly when that state holds. The probe is fixed there.
+- The Interview writes the list: it numbers the problems to be solved. A later Interview may
+  write it again, keeping what still stands.
+- Define takes some numbers as the problem of one Experiment and writes, for each, the exact state
+  that must hold and a probe: a script that exits 0 exactly when that state holds.
 - Hypothesis names the method that would bring those states about.
 - Verify carries the method out and runs the probes. It writes no probe and changes none.
-- Analysis reads the ledger: with the method carried out, do the states hold or not.
-- Reflection says why not and where to go back, or names the candidates for the next Experiment.
+- Analysis says whether, with the method carried out, the problem is solved, and crosses the
+  solved numbers off.
+- Reflection says why not and where to go back; or names the candidates for the next Experiment;
+  or, when the list itself has to be written again, asks for a new Interview.
 """
 import hashlib
 import json
@@ -27,14 +31,16 @@ def obj(**properties):
 
 TEXT = {"type": "string"}
 LIST = {"type": "array", "items": TEXT}
-CRITERION = obj(requirement=TEXT, kind={"type": "string", "enum": list(KINDS)}, source=TEXT)
+# same_as names the number this problem had in the list before, when an Interview keeps it; else "".
+CRITERION = obj(requirement=TEXT, kind={"type": "string", "enum": list(KINDS)}, source=TEXT, same_as=TEXT)
 # The shapes the participant asks the model for; the provider holds the answer to them.
 CRITERIA = obj(criteria={"type": "array", "items": CRITERION})
 TARGETS = obj(targets=LIST)
 PROBES = obj(probes={"type": "array", "items": obj(id=TEXT, state=TEXT, probe=TEXT)})
 HYPOTHESIS = obj(method=TEXT, files=LIST)
-CANDIDATES = obj(candidates=LIST, new={"type": "array", "items": CRITERION})
-SET_ASIDE = obj(set_aside={"type": "array", "items": obj(id=TEXT, reason=TEXT)})
+# What a reflection decides after a solved Experiment: the next candidates, or the reason the list
+# must be written again by a new Interview ("" when it need not be). Neither ends the Chain.
+NEXT = obj(candidates=LIST, new_interview=TEXT)
 
 
 def loads(text):
@@ -51,11 +57,17 @@ def item(number, entry):
         # Written by the Define that takes the criterion as its problem.
         "state": None, "probe": None,
         "status": "unrun", "exit": None, "output": "", "digest": None, "failed_on": [],
+        # Set by the Analysis of the Experiment that solved it.
+        "solved_in": None,
     }
 
 
-def parse(text):
-    """Items from a model's answer: the criteria object, or a bare array of them."""
+KEPT = ("state", "probe", "status", "exit", "output", "digest", "failed_on", "solved_in")
+
+
+def parse(text, previous=()):
+    """The numbered list from an Interview's answer. A problem that names the number it had in the
+    previous list keeps what was written and found about it there."""
     try:
         raw = loads(text)
     except ValueError as error:
@@ -64,7 +76,16 @@ def parse(text):
         raw = raw.get("criteria")
     if not isinstance(raw, list) or not raw:
         raise ValueError("expected a non-empty list of criteria")
-    return [item(number, entry) for number, entry in enumerate(raw, 1)]
+    before = {entry["id"]: entry for entry in previous}
+    items = []
+    for number, entry in enumerate(raw, 1):
+        new = item(number, entry)
+        old = before.pop(str(entry.get("same_as") or "").strip(), None)
+        if old:
+            new.update({key: old[key] for key in KEPT})
+            new["was"] = old["id"]
+        items.append(new)
+    return items
 
 
 class Ledger:
@@ -74,18 +95,6 @@ class Ledger:
     def json(self):
         return list(self.items.values())
 
-    def add(self, entries):
-        """Requirements a reflection found the ledger lacked."""
-        added = []
-        for entry in entries:
-            try:
-                new = item(len(self.items) + 1, entry)
-            except ValueError:
-                continue
-            self.items[new["id"]] = new
-            added.append(new["id"])
-        return added
-
     def define(self, key, state, probe):
         """Define fixes what solved means for a criterion. An earlier result said nothing about this probe."""
         self.items[key].update(state=state.strip(), probe=probe, status="unrun", exit=None, output="", digest=None)
@@ -93,13 +102,13 @@ class Ledger:
     def status(self, key, current):
         """What is known about a criterion for the submission named by `current`."""
         entry = self.items[key]
-        if entry.get("set_aside"):
-            return "set_aside"
         if not entry["probe"]:
             return "undefined"     # no Define has said yet what state would count
-        if entry["status"] in ("holds", "fails") and entry["digest"] != current:
-            return "stale"
-        return entry["status"]
+        seen = entry["status"] if entry["digest"] == current or entry["status"] == "unrun" else "stale"
+        if entry["solved_in"]:
+            # Crossed off. It stays so unless its probe now fails on these files.
+            return "broken" if seen == "fails" else "solved"
+        return seen
 
     def record(self, key, code, output, current):
         entry = self.items[key]
@@ -108,9 +117,10 @@ class Ledger:
             entry["failed_on"].append(current)
         return entry["status"]
 
-    def set_aside(self, key, reason):
-        """A judgement of a reflection: this criterion does not describe the task."""
-        self.items[key]["set_aside"] = str(reason).strip() or "set aside"
+    def cross_off(self, keys, experiment):
+        """Analysis found these solved by this Experiment."""
+        for key in keys:
+            self.items[key]["solved_in"] = experiment
 
     def having(self, current, *statuses):
         return [key for key in self.items if self.status(key, current) in statuses]
@@ -140,7 +150,7 @@ class Ledger:
             if entry["failed_on"]:
                 # History for whoever judges next; no rule follows from the number.
                 row["failed_on_submissions"] = len(entry["failed_on"])
-            if entry.get("set_aside"):
-                row["set_aside"] = entry["set_aside"]
+            if entry["solved_in"]:
+                row["solved_in"] = entry["solved_in"]
             rows.append(row)
         return rows

@@ -21,10 +21,10 @@ GUARDED = "def order(labels):\n    if not isinstance(labels, list):\n        rai
 PY = sys.executable + " -B -c "
 REFUSES = PY + "\"import sys\nfrom fast_networkx import order\ntry:\n    order('ab')\nexcept TypeError:\n    sys.exit(0)\nprint('a string was accepted')\nsys.exit(1)\""
 KEEPS = PY + "\"from fast_networkx import order\nl=['b','A']\norder(l)\nassert l == ['b','A']\""
-RAW = [{"requirement": "duplicates are kept", "kind": "behaviour", "source": "task"},
-       {"requirement": "the input is not modified", "kind": "invariant", "source": "task: input"},
-       {"requirement": "a non-list is refused", "kind": "failure", "source": "task"},
-       {"requirement": "it is fast on the hidden cases", "kind": "behaviour", "source": ""}]
+RAW = [{"requirement": "duplicates are kept", "kind": "behaviour", "source": "task", "same_as": ""},
+       {"requirement": "the input is not modified", "kind": "invariant", "source": "task: input", "same_as": ""},
+       {"requirement": "a non-list is refused", "kind": "failure", "source": "task", "same_as": ""},
+       {"requirement": "it is fast on the hidden cases", "kind": "behaviour", "source": "", "same_as": ""}]
 
 
 def ledger_with(**probes):
@@ -69,24 +69,37 @@ class LedgerTests(unittest.TestCase):
         ledger.define("K3", "a string and a tuple are refused", REFUSES + " # and more")
         self.assertEqual((ledger.status("K3", a), ledger.items["K3"]["failed_on"]), ("unrun", []))
 
-    def test_no_count_decides_anything_and_setting_aside_is_a_judgement(self):
-        ledger = ledger_with(K1=KEEPS)
+    def test_analysis_crosses_a_number_off_and_it_stays_so_unless_its_probe_then_fails(self):
+        ledger = ledger_with(K3=REFUSES, K1=KEEPS)
+        a, b = digest({NAME: "1"}), digest({NAME: "2"})
+        ledger.record("K3", 0, "", a)
+        ledger.cross_off(["K3"], "cycle:C3")
+        # Crossed off: not open, on these files or on changed ones it has not been looked at on.
+        self.assertEqual((ledger.status("K3", a), ledger.status("K3", b), "K3" in ledger.open(b)), ("solved", "solved", False))
+        self.assertEqual((ledger.having(b, "solved"), ledger.shown(b)[2]["solved_in"]), (["K3"], "cycle:C3"))
+        ledger.record("K3", 1, "a string was accepted", b)
+        self.assertEqual((ledger.status("K3", b), ledger.having(b, "broken")), ("broken", ["K3"]))
+        # No count decides anything: eight failures later an open problem is simply still failing.
         versions = [digest({NAME: str(i)}) for i in range(8)]
         for version in versions:
             ledger.record("K1", 1, "no", version)
-        ledger.record("K1", 1, "no", versions[-1])     # the same submission again is one failure
-        row = ledger.shown(versions[-1])[0]
-        self.assertEqual((ledger.status("K1", versions[-1]), row["failed_on_submissions"], "K1" in ledger.open(versions[-1])),
-                         ("fails", 8, True))
-        ledger.set_aside("K1", "the source does not require this order")
-        self.assertEqual((ledger.status("K1", versions[-1]), "K1" in ledger.open(versions[-1])), ("set_aside", False))
-        self.assertIn("does not require", ledger.shown(versions[-1])[0]["set_aside"])
+        self.assertEqual((ledger.status("K1", versions[-1]), ledger.shown(versions[-1])[0]["failed_on_submissions"]), ("fails", 8))
 
-    def test_a_reflection_can_add_requirements_the_ledger_lacked(self):
-        ledger = ledger_with()
-        added = ledger.add([{"requirement": "an empty list gives an empty list", "kind": "behaviour", "source": "task"},
-                            {"kind": "failure"}, "not an object"])
-        self.assertEqual((added, ledger.items["K5"]["requirement"], len(ledger.items)), (["K5"], "an empty list gives an empty list", 5))
+    def test_a_later_interview_writes_the_list_again_and_keeps_what_it_says_is_the_same(self):
+        old = ledger_with(K3=REFUSES)
+        a = digest({NAME: "1"})
+        old.record("K3", 0, "", a)
+        old.cross_off(["K3"], "cycle:C3")
+        again = [dict(RAW[2], same_as="K3"), dict(RAW[0], requirement="duplicates are kept in their original spelling", same_as=""),
+                 {"requirement": "an empty list gives an empty list", "kind": "behaviour", "source": "task", "same_as": "K9"}]
+        items = parse(json.dumps({"criteria": again}), old.json())
+        # The kept problem has a new number and everything written and found about it; the others start unsolved.
+        self.assertEqual([(i["id"], i.get("was"), i["solved_in"], i["probe"]) for i in items],
+                         [("K1", "K3", "cycle:C3", REFUSES), ("K2", None, None, None), ("K3", None, None, None)])
+        self.assertEqual(Ledger(items).status("K1", a), "solved")
+        # What the new list leaves out is gone, and an old number can be kept once only.
+        twice = parse(json.dumps({"criteria": [dict(RAW[2], same_as="K3"), dict(RAW[2], same_as="K3")]}), old.json())
+        self.assertEqual([i["solved_in"] for i in twice], ["cycle:C3", None])
 
     def test_every_schema_is_strict(self):
         def strict(schema):
@@ -96,10 +109,11 @@ class LedgerTests(unittest.TestCase):
                     strict(child)
             elif schema.get("type") == "array":
                 strict(schema["items"])
-        for schema in (criteria.CRITERIA, criteria.TARGETS, criteria.PROBES, criteria.HYPOTHESIS, criteria.CANDIDATES, criteria.SET_ASIDE):
+        for schema in (criteria.CRITERIA, criteria.TARGETS, criteria.PROBES, criteria.HYPOTHESIS, criteria.NEXT):
             strict(schema)
         self.assertEqual(list(criteria.PROBES["properties"]["probes"]["items"]["properties"]), ["id", "state", "probe"])
         self.assertEqual(list(criteria.HYPOTHESIS["properties"]), ["method", "files"])
+        self.assertEqual(list(criteria.NEXT["properties"]), ["candidates", "new_interview"])
 
 
 class VerifyLedgerTests(unittest.TestCase):
@@ -219,14 +233,24 @@ class ParticipantLedgerTests(unittest.TestCase):
             return answer
         return ask
 
-    def test_a_ledger_is_asked_for_once_under_a_schema_and_an_unusable_answer_means_no_ledger(self):
-        items = participant.derive(self.model(json.dumps({"criteria": RAW})), "task", "spec")
+    def test_the_interview_writes_the_numbered_list_once_under_a_schema_and_later_from_the_existing_one(self):
+        items = participant.write_list(self.model(json.dumps({"criteria": RAW})), "spec", None, [])
         self.assertEqual([i["id"] for i in items], ["K1", "K2", "K3", "K4"])
         self.assertEqual(self.asked[0]["schema"], criteria.CRITERIA)
         self.assertIn("List first every failure case", self.asked[0]["prompt"])
-        self.assertIsNone(participant.derive(self.model("still not json"), "task", "spec"))
-        self.assertIsNone(participant.derive(self.model(json.dumps({"criteria": []})), "task", "spec"))
-        self.assertEqual(len(self.asked), 3)
+        self.assertIn("This is the first list", self.asked[0]["prompt"])
+        # Nothing is asked twice: what cannot be used is not a list.
+        self.assertIsNone(participant.write_list(self.model("still not json"), "spec", None, []))
+        self.assertEqual(len(self.asked), 2)
+        old = ledger_with(K3=REFUSES)
+        old.record("K3", 0, "", digest({NAME: "1"}))
+        old.cross_off(["K3"], "cycle:C3")
+        record = [{"experiment": "cycle:C3", "problems": ["K3"], "verdict": "success", "crossed_off": ["K3"], "reflection": "solved"}]
+        again = participant.write_list(self.model(json.dumps({"criteria": [dict(RAW[2], same_as="K3")]})), "spec", old.json(), record)
+        self.assertEqual((again[0]["id"], again[0]["solved_in"]), ("K1", "cycle:C3"))
+        asked = self.asked[-1]["prompt"]
+        for phrase in ("A list exists already", "what was defined and found about it is kept", '"solved_in": "cycle:C3"', '"experiment": "cycle:C3"'):
+            self.assertIn(phrase, asked)
 
     def test_define_chooses_its_problem_from_the_candidates_and_fixes_state_and_probe_before_any_method(self):
         ledger, entry = ledger_with(), digest({NAME: "1"})
@@ -259,28 +283,47 @@ class ParticipantLedgerTests(unittest.TestCase):
             self.assertEqual(participant.scope_of("Nothing to change.\nFiles: []"), set())
             self.assertIsNone(participant.scope_of("An older hypothesis with no file list"))
         closed = lambda lesson: {"steps": [{"kind": "outcome", "report": {"verdict": "x", "lesson": lesson}}]}
-        self.assertEqual(participant.noted(closed('Solved.\nCandidates: {"candidates": ["K2"], "new": []}\nmore'), "Candidates"),
-                         {"candidates": ["K2"], "new": []})
-        self.assertEqual(participant.noted(closed('The probe was wrong.\nSet aside: {"K2": "the source allows a copy"}'), "Set aside"),
-                         {"K2": "the source allows a copy"})
-        for none in (closed("No label here"), closed("Candidates: not json"), {"steps": []}, None):
-            self.assertEqual(participant.noted(none, "Candidates"), {})
+        self.assertEqual(participant.noted(closed('Solved.\nNext: {"candidates": ["K2"], "new_interview": ""}\nmore'), "Next"),
+                         {"candidates": ["K2"], "new_interview": ""})
+        self.assertEqual(participant.noted(closed('Not solved.\nWay back: {"to": "new_interview", "reason": "the list misreads the task"}'), "Way back"),
+                         {"to": "new_interview", "reason": "the list misreads the task"})
+        for none in (closed("No label here"), closed("Next: not json"), {"steps": []}, None):
+            self.assertEqual(participant.noted(none, "Next"), {})
+        analysed = lambda text: {"steps": [{"kind": "analysis", "report": {"interpretation": text}}]}
+        self.assertEqual(participant.crossed_off(analysed('Ledger verdict ...\nexplanation\nCrossed off: ["K3", "K1"]')), ["K3", "K1"])
+        self.assertEqual(participant.crossed_off(analysed("an older analysis")), [])
 
-    def test_an_experiment_starts_from_its_ancestor_s_ledger_with_what_the_abandoned_one_left(self):
+    def test_an_experiment_starts_from_its_interview_s_list_or_its_parent_s_with_what_was_crossed_off(self):
         a, b = digest({NAME: "1"}), digest({NAME: "2"})
         held, lost = ledger_with(K3=REFUSES), ledger_with(K3=REFUSES, K2=KEEPS)
         held.record("K3", 0, "", a)
         lost.record("K3", 1, "", b)
         lost.record("K2", 0, "", b)
-        result = lambda ledger: {"steps": [{"kind": "verify", "report": {"result": json.dumps({"criteria": ledger.json()})}}]}
-        cycles = {"cycle:C3": {**result(held), "parent": "cycle:C2"}, "cycle:C2": {"steps": [], "parent": None}}
-        items = {i["id"]: i for i in participant.entry_ledger(cycles, cycles["cycle:C3"], result(lost))}
-        # What held in the world the run went back to still holds there; the lost world's failure is remembered.
-        self.assertEqual((items["K3"]["status"], items["K3"]["digest"], items["K3"]["failed_on"]), ("holds", a, [b]))
+        listed = parse(json.dumps({"criteria": RAW}))
+        def experiment(ledger, crossed, parent):
+            return {"kind": "experiment", "parent": parent, "steps": [
+                {"kind": "verify", "report": {"result": json.dumps({"criteria": ledger.json(), "files": {NAME: "1"}})}},
+                {"kind": "analysis", "report": {"interpretation": "verdict\nCrossed off: " + json.dumps(crossed)}}]}
+        interview = {"kind": "interview", "ref": "cycle:C1", "parent": None, "steps": [
+            {"kind": "synthesis", "report": {"statement": "Plan.\nCriteria: " + json.dumps(listed)}}]}
+        cycles = {"cycle:C1": interview,
+                  "cycle:C2": {"kind": "experiment", "ref": "cycle:C2", "parent": "cycle:C1", "steps": [
+                      {"kind": "verify", "report": {"result": json.dumps({"files": {NAME: "1"}})}}]},
+                  "cycle:C3": {**experiment(held, ["K3"], "cycle:C2"), "ref": "cycle:C3"}}
+        # Under an Interview (even with a first milestone in between) the list is the one it wrote.
+        self.assertEqual([i["id"] for i in participant.entry_ledger(cycles, cycles["cycle:C2"], None)], ["K1", "K2", "K3", "K4"])
+        self.assertEqual(participant.entry_ledger(cycles, interview, None), listed)
+        # Under an Experiment it is that Experiment's list, with what its Analysis crossed off.
+        items = {i["id"]: i for i in participant.entry_ledger(cycles, cycles["cycle:C3"], {**experiment(lost, [], "cycle:C3")})}
+        self.assertEqual((items["K3"]["solved_in"], items["K3"]["failed_on"]), ("cycle:C3", [b]))
         # A definition only the abandoned Experiment made is kept; its result is stale in the restored world.
         self.assertEqual((items["K2"]["probe"], Ledger(list(items.values())).status("K2", a)), (KEEPS, "stale"))
-        self.assertEqual(participant.entry_ledger(cycles, cycles["cycle:C2"], result(lost))[2]["failed_on"], [b])
-        self.assertIsNone(participant.entry_ledger(cycles, cycles["cycle:C2"], None))
+        # The files a Cycle left are its own last Verify's, or the nearest before it when it changed nothing.
+        self.assertEqual(participant.exit_result(cycles, interview), None)
+        later = {"kind": "interview", "ref": "cycle:C4", "parent": "cycle:C3", "steps": []}
+        self.assertEqual(participant.exit_result({**cycles, "cycle:C4": later}, later)["files"], {NAME: "1"})
+        self.assertIs(participant.latest_interview({**cycles, "cycle:C4": later}, later, interview), later)
+        self.assertIs(participant.latest_interview(cycles, cycles["cycle:C3"], None), interview)
 
 
 if __name__ == "__main__":

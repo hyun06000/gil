@@ -7,7 +7,7 @@ import re
 import sys
 import time
 from pathlib import Path
-from criteria import CANDIDATES, CRITERIA, HYPOTHESIS, PROBES, SET_ASIDE, TARGETS, Ledger, digest, loads, parse
+from criteria import CRITERIA, HYPOTHESIS, NEXT, PROBES, TARGETS, Ledger, digest, loads, parse
 from mailbox_client import MAIL, record
 from solver import APP, CHECKS, PAGE, TASK, VIEW_BUDGET, WORK, ask, solve, source
 
@@ -229,7 +229,7 @@ def summary(result):
 
 def merged(items, lost):
     """Items as they stand in the world the run is in, with what an abandoned attempt left:
-    the submissions its criteria failed on, and what its reflection set aside."""
+    the submissions its problems failed on, and what it defined."""
     if items is None:
         return lost
     for item in items:
@@ -237,23 +237,85 @@ def merged(items, lost):
         if not other:
             continue
         item["failed_on"] = sorted(set(item["failed_on"]) | set(other["failed_on"]))
-        if other.get("set_aside"):
-            item["set_aside"] = other["set_aside"]
         if not item["probe"] and other["probe"]:
             # A definition made in the abandoned world still says what solved would mean; its result is stale here.
             item.update({key: other[key] for key in ("state", "probe", "exit", "output", "digest", "status")})
     return items
 
 
-def entry_ledger(cycles, parent, failed):
-    """The items an Experiment starts from: the nearest ancestor's ledger as it stood at its exit,
-    with what the Experiment that was just abandoned left."""
-    items, node = None, parent
-    while node and items is None:
-        result = verify_result(node)
-        items = result.get("criteria") if result else None
+def lineage(cycles, node):
+    """A Cycle and the Cycles above it, nearest first. A record whose parents do not lead upward ends there."""
+    seen = []
+    while node and not any(node is other for other in seen):
+        seen.append(node)
+        yield node
         node = cycles.get(node.get("parent"))
-    return merged(items, (verify_result(failed) or {}).get("criteria") if failed else None)
+
+
+def exit_result(cycles, node):
+    """What the files were when a Cycle closed: its own last Verify, or, for a Cycle that changed
+    nothing (an Interview), the nearest one before it."""
+    for above in lineage(cycles, node):
+        result = verify_result(above)
+        if result:
+            return result
+    return None
+
+
+def latest_interview(cycles, node, root):
+    """The Interview an Experiment works under: the nearest one above it."""
+    for above in lineage(cycles, node):
+        if above.get("kind") == "interview":
+            return above
+    return root
+
+
+def interview_list(cycle):
+    """The numbered list an Interview wrote in its Synthesis; None when it wrote none."""
+    step = next((s for s in reversed(cycle.get("steps") or []) if s["kind"] == "synthesis" and s["report"]), None)
+    try:
+        items = json.loads(step["report"]["statement"].split("\nCriteria: ", 1)[1].splitlines()[0]) if step else None
+    except (ValueError, KeyError, IndexError):
+        return None
+    return items if isinstance(items, list) and items else None
+
+
+def crossed_off(cycle):
+    """The numbers the Analysis of an Experiment crossed off."""
+    step = next((s for s in reversed(cycle.get("steps") or []) if s["kind"] == "analysis" and s["report"]), None)
+    try:
+        found = json.loads(step["report"]["interpretation"].split("\nCrossed off: ", 1)[1].splitlines()[0]) if step else []
+    except (ValueError, KeyError, IndexError):
+        return []
+    return found if isinstance(found, list) else []
+
+
+def entry_ledger(cycles, parent, failed):
+    """The list an Experiment starts from. Directly under an Interview it is the list that Interview
+    wrote. Otherwise it is the parent's list as it stood when the parent closed, with what the
+    parent's Analysis crossed off and what an Experiment abandoned from here left."""
+    for node in lineage(cycles, parent):
+        if node.get("kind") == "interview":
+            return interview_list(node)
+        result = verify_result(node)
+        if result and result.get("criteria"):
+            ledger = Ledger(result["criteria"])
+            ledger.cross_off([key for key in crossed_off(node) if key in ledger.items], node["ref"])
+            return merged(ledger.json(), (verify_result(failed) or {}).get("criteria") if failed else None)
+    return None
+
+
+def chain_record(history):
+    """What the Experiments so far set out to solve and how each ended, for an Interview that writes the list again."""
+    record = []
+    for cycle in history:
+        plan = ledger_plan(cycle) if cycle.get("kind") == "experiment" else None
+        if not plan:
+            continue
+        outcome = next((s["report"] for s in reversed(cycle["steps"]) if s["kind"] == "outcome" and s["report"]), {})
+        record.append({"experiment": cycle["ref"], "problems": plan["targets"], "verdict": (cycle.get("report") or {}).get("verdict"),
+                       "crossed_off": crossed_off(cycle), "reflection": outcome.get("lesson")})
+    return record
 
 
 def noted(cycle, label):
@@ -297,19 +359,28 @@ def choose(model, ledger, entry, lesson, pool):
     return list(dict.fromkeys(targets)) or list(pool)
 
 
-def derive(model, task, spec):
-    """Splits the public requirements into ledger items; None when the model gives nothing usable."""
+def write_list(model, spec, previous, record):
+    """The Interview numbers the problems to be solved. When a list exists already, the Interview
+    writes it again and says which problems it keeps."""
     request = (
-        "List the criteria an independent grader could check for this task, using only the task text and the "
-        'public files below, as {"criteria": [...]}. Each has a requirement (one checkable statement naming an '
-        "observable result), a kind (failure, invariant or behaviour) and a source (file: short quote). "
-        "List first every failure case the sources describe (what must happen when a write, an input or a "
-        "dependency fails) as kind failure, then everything that must stay unchanged as kind invariant, then "
-        "ordinary behaviour. Roadmap: " + spec)
-    # The provider holds the answer to the schema. An answer that still cannot be used leaves the
-    # Experiment without a ledger rather than being asked for again.
+        "Write the numbered list of problems this task poses: what an independent grader could check, using "
+        'only the task text and the public files read in this interview, as {"criteria": [...]}. Each has a '
+        "requirement (one checkable statement naming an observable result), a kind (failure, invariant or "
+        "behaviour), a source (file: short quote) and same_as. List first every failure case the sources "
+        "describe (what must happen when a write, an input or a dependency fails) as kind failure, then "
+        "everything that must stay unchanged as kind invariant, then ordinary behaviour. Roadmap: " + spec)
+    if previous:
+        request += (
+            "\nA list exists already, and the experiments below worked from it. Write the list again in the light "
+            "of what they found. For a problem you keep as it is, set same_as to its number in the existing list: "
+            "what was defined and found about it is kept, including that it was solved. Set same_as to an empty "
+            "string for a problem that is new or that you state differently; it starts unsolved. Leave out what "
+            "the task does not require. Existing list: " + json.dumps(Ledger(previous).shown(None), ensure_ascii=False)
+            + "\nExperiments: " + json.dumps(record, ensure_ascii=False))
+    else:
+        request += '\nThis is the first list: set same_as to an empty string everywhere.'
     try:
-        return parse(model(request, schema=CRITERIA))
+        return parse(model(request, schema=CRITERIA), previous or ())
     except ValueError:
         return None
 
@@ -370,9 +441,11 @@ def reply(r):
     task = r["task"]
     current = r["history"][-1]
     cycles = {c.get("ref"): c for c in r["history"]}
-    parent = cycles.get(current.get("parent")) or {}
+    # A record that names no parent has none: a Cycle is not its own parent.
+    parent = (cycles.get(current.get("parent")) if current.get("parent") else None) or {}
     active = bool(os.environ.get("GIL_TB41_CYCLE_RECOVERY")) and n.get("cycle") == "experiment"
-    first = active and parent.get("kind") == "interview"
+    # The first Experiment of the Chain stands directly under the root Interview: nothing is submitted yet.
+    first = active and parent.get("kind") == "interview" and not parent.get("parent")
     failed = cycles.get(current["revisit_from"]) if current.get("revisit_from") else None
     lesson = ""
     if failed:
@@ -389,7 +462,7 @@ def reply(r):
                   "to propose a different hypothesis and change the implementation. Evidence: "
                   + json.dumps(evidence, ensure_ascii=False))
     steps = r["history"][-1]["steps"]
-    interview = r["history"][0]["steps"]
+    interview = latest_interview(cycles, current, r["history"][0])["steps"]
     # Hypotheses already tried under this Define. Each was abandoned by going back to the Define:
     # the world returned to what it was there, and what the attempt found stays in the record.
     abandoned = [s for s in steps if s["kind"] == "outcome" and s["report"] and s["report"].get("verdict") == "failure"]
@@ -413,10 +486,18 @@ def reply(r):
         if k in SOURCED:
             context["cited_source_excerpts"] = cited
             context["interview_reads"] = reads
+        if n.get("cycle") == "interview" and reopened:
+            # An Interview opened in the middle of a Chain: why, and what the experiments found.
+            context["why_this_interview_was_opened"] = reopened
+            context["experiments_so_far"] = chain_record(r["history"])
         shaped = {"schema": schema} if schema else {}
         return ask(json.dumps(context, ensure_ascii=False) + "\nCurrent instruction: " + prompt,
                    choices, stage=k, **shaped)
 
+    # Why a later Interview was opened: the reflection that asked for it wrote the reason down.
+    asked_by = failed or parent
+    reopened = (noted(asked_by, "Next").get("new_interview") or noted(asked_by, "Way back").get("reason")
+                if n.get("cycle") == "interview" and asked_by else None)
     if n["action"] == "open":
         k = n["recommended"]
         return {
@@ -507,12 +588,21 @@ def reply(r):
                          "these individually verified promotions: " + json.dumps(promotions)
                          + ". A working choice may be used with a named future check. ")
         spec, decision = experiment_handoff(model, findings, evidence_rule)
+        # The Interview numbers the problems. A later Interview writes the list again from the one
+        # the Chain was working from.
+        before = (exit_result(cycles, asked_by) or {}).get("criteria") if asked_by else None
+        if before and not failed:
+            crossed = Ledger(before)
+            crossed.cross_off([key for key in crossed_off(asked_by) if key in crossed.items], asked_by["ref"])
+            before = crossed.json()
+        listed = write_list(model, spec, before, chain_record(r["history"]))
         return close(
-            statement=spec + "\nEvidence accepted for changes of status: " + json.dumps(promotions),
+            statement=spec + "\nEvidence accepted for changes of status: " + json.dumps(promotions)
+            + ("\nCriteria: " + json.dumps(listed, ensure_ascii=False) if listed else ""),
             basis_refs=q["ref"] + "\n" + i["ref"],
             approved="benchmark_" + decision,
         )
-    spec = step("synthesis", interview)["report"]["statement"]
+    spec = step("synthesis", interview)["report"]["statement"].split("\nCriteria: ")[0]
     if first:
         spec += "\nFirst milestone: produce a nonempty candidate that passes the available local check. Full task criteria remain for the next experiment and independent grading."
     elif active:
@@ -520,27 +610,22 @@ def reply(r):
     if lesson:
         spec += "\n" + lesson
     if k == "define" and active and not first:
-        items = entry_ledger(cycles, parent, failed) or derive(model, task, spec)
-        entry = digest((verify_result(parent) or {}).get("files") or {})
+        items = entry_ledger(cycles, parent, failed)
+        entry = digest((exit_result(cycles, parent) or {}).get("files") or {})
         ledger = Ledger(items) if items else None
         if ledger:
-            # What the reflections before this one decided: a failed Experiment may have set a
-            # criterion aside; a solved one named the candidates for this Experiment.
-            for key, reason in noted(failed, "Set aside").items():
-                if key in ledger.items:
-                    ledger.set_aside(key, reason)
-            said = noted(parent, "Candidates")
-            added = ledger.add(said.get("new") or [])
-            pool = [key for key in (said.get("candidates") or []) + added if key in ledger.open(entry)] or ledger.open(entry)
+            # The reflection of a solved parent named the candidates for this Experiment.
+            named = noted(parent, "Next").get("candidates") or []
+            pool = [key for key in named if key in ledger.open(entry)] or ledger.open(entry)
             targets = define_states(model, ledger, choose(model, ledger, entry, lesson, pool), lesson) if pool else []
             if targets:
-                plan = {"targets": targets, "held_at_entry": ledger.having(entry, "holds"), "criteria": ledger.json()}
+                plan = {"targets": targets, "held_at_entry": ledger.having(entry, "solved"), "criteria": ledger.json()}
                 return close(
                     problem=spec + "\nThis experiment solves: "
                     + json.dumps([{key: ledger.items[t][key] for key in ("id", "requirement", "state")} for t in targets],
                                  ensure_ascii=False),
                     success_condition="Solved when, on the final files, every target's probe exits 0, the local check "
-                    "passes, and no criterion that held at entry fails. The probes are fixed in this definition."
+                    "passes, and no problem already crossed off fails. The probes are fixed in this definition."
                     "\nLedger: " + json.dumps(plan, ensure_ascii=False),
                 )
     if k == "define":
@@ -593,7 +678,7 @@ def reply(r):
                 options["failed_check"] = {"verify": old["ref"], "exit": result["check_exit"],
                                            "output": result["check_output"]}
             if not first:
-                options["baseline"] = verify_result(parent)
+                options["baseline"] = exit_result(cycles, parent)
             if plan:
                 # The Define stands; an attempt abandoned under it leaves its probes and failures.
                 earlier = [verify_result({"steps": [s]}) for s in steps if s["kind"] == "verify" and s["report"]]
@@ -623,13 +708,15 @@ def reply(r):
         if plan and observed.get("criteria"):
             # With the hypothesis carried out, is the problem solved? The ledger says; the model explains.
             ledger, now = Ledger(observed["criteria"]), observed["submission_digest"]
-            unsolved = {t: ledger.status(t, now) for t in plan["targets"] if ledger.status(t, now) != "holds"}
-            broken = [h for h in plan["held_at_entry"] if ledger.status(h, now) == "fails"]
+            unsolved = {t: ledger.status(t, now) for t in plan["targets"] if ledger.status(t, now) not in ("holds", "solved")}
+            broken = ledger.having(now, "broken")
             outside = observed.get("outside_hypothesis") or []
             achieved = bool(observed["files"]) and observed["check_exit"] == 0 and not unsolved and not broken and not outside
-            verdict = {"solved": achieved, "targets_holding": [t for t in plan["targets"] if t not in unsolved],
+            # Analysis crosses off what this Experiment solved; a problem half solved is not crossed off.
+            crossed = [t for t in plan["targets"] if not ledger.items[t]["solved_in"]] if achieved else []
+            verdict = {"solved": achieved, "crossed_off": crossed, "targets_holding": [t for t in plan["targets"] if t not in unsolved],
                        "targets_not_holding": unsolved, "targets_at_entry": observed.get("entry"),
-                       "held_at_entry_now_failing": broken, "changed_outside_the_hypothesis": outside,
+                       "crossed_off_before_and_now_failing": broken, "changed_outside_the_hypothesis": outside,
                        "local_check_exit": observed["check_exit"], "ledger": ledger.counts(now), "open": ledger.open(now)}
             analysis = "Ledger verdict (computed from probe results on the final files): " + json.dumps(verdict) + "\n" + model(
                 "The verdict below was computed from the probes of the problem definition, run on the final files "
@@ -638,6 +725,7 @@ def reply(r):
                 "propose what to do next: that is the reflection's. Verdict: " + json.dumps(verdict)
                 + "\nHypothesis: " + step("hypothesis")["report"]["hypothesis"]
                 + "\nLedger: " + json.dumps(ledger.shown(now, plan["targets"]), ensure_ascii=False))
+            analysis += "\nCrossed off: " + json.dumps(crossed)
             return close(
                 hypothesis_fit=analysis,
                 problem_solved="yes" if achieved else "no",
@@ -679,28 +767,33 @@ def reply(r):
             # Reflection decides which layer was wrong. Either way the world goes back and the record stays.
             obs = json.loads(step("verify")["report"]["result"])
             reflection = model(
-                "The problem was not solved. Reflect: why not, and where to go back to. There are two places, and "
-                "they differ in what gets written again. Going back to this experiment's Define keeps its problem "
-                "definition (targets, states, probes) and writes only a new hypothesis. Going back to the parent "
-                "experiment writes this experiment's problem definition again: its targets, its states and its "
-                "probes. The task itself is the same in both; only what this experiment set out to show changes. "
-                "So: if the states and probes match their sources and a different method could bring the states "
-                "about, the hypothesis was wrong. If a state or its probe does not match its source, the targets "
-                "were badly chosen, or they depend on work not yet done, the problem definition was wrong. A probe "
-                "that fails for a reason of its own belongs to the problem definition too: if it stops before it "
-                "reaches what it is meant to observe, or fails the same way whatever the method was, no new "
-                "hypothesis can mend it, because a probe is written only in a problem definition. "
+                "The problem was not solved. Reflect: why not, and where to go from here. There are three places, "
+                "and they differ in what gets written again. (1) This experiment's Define: its problem definition "
+                "(targets, states, probes) stands and only a new hypothesis is written. (2) The parent experiment: "
+                "this experiment's problem definition is written again, with its targets, states and probes. "
+                "(3) A new interview: the numbered list of problems itself is written again. The task is the same "
+                "in all three. So: if the states and probes match their sources and a different method could "
+                "bring the states about, the hypothesis was wrong. If a state or its probe does not match its "
+                "source, the targets were badly chosen, or they depend on work not yet done, the problem "
+                "definition was wrong. A probe that fails for a reason of its own belongs to the problem "
+                "definition too: if it stops before it reaches what it is meant to observe, or fails the same "
+                "way whatever the method was, no new hypothesis can mend it, because a probe is written only in a "
+                "problem definition. If the list is what is wrong (it misreads the task, lacks something the "
+                "task requires, or a problem crossed off earlier now fails and you can say what differs between "
+                "then and now), the list has to be written again. "
                 f"State which it is and what the evidence is. About {minutes_left():.0f} minutes "
                 "of the trial are left. Analysis: "
                 + analysis["interpretation"] + ("\n" + lesson if lesson else ""))
-            if obs.get("stop") not in SPENT and model(
-                    "Choose where this experiment goes back to, as your reflection concluded. new_hypothesis: go "
-                    "back to this experiment's Define; its targets, states and probes stand, the files return to "
-                    "what they were there, and only a different hypothesis is written. new_problem_definition: go "
-                    "back to the parent experiment; its files are restored, and this experiment's targets, states "
-                    "and probes are written again for the same task. A defect in a probe is mended only this way. "
-                    "Reflection: " + reflection,
-                    ["new_hypothesis", "new_problem_definition"]) == "new_hypothesis":
+            way = None if obs.get("stop") in SPENT else model(
+                "Choose where this experiment goes from here, as your reflection concluded. new_hypothesis: back to "
+                "this experiment's Define; its targets, states and probes stand, the files return to what they "
+                "were there, and only a different hypothesis is written. new_problem_definition: back to the "
+                "parent experiment; its files are restored, and this experiment's targets, states and probes are "
+                "written again for the same task. A defect in a probe is mended only this way. new_interview: "
+                "back to the parent experiment, its files restored, and from there a new interview writes the "
+                "numbered list of problems again. Reflection: " + reflection,
+                ["new_hypothesis", "new_problem_definition", "new_interview"])
+            if way == "new_hypothesis":
                 return close(
                     verdict="failure",
                     lesson=reflection,
@@ -708,38 +801,31 @@ def reply(r):
                        "next_direction.target_node_ref": step("define")["ref"],
                        "next_direction.reason": "The hypothesis is doubted; the problem definition stands."},
                 )
-            # The problem definition is doubted. If a criterion or its probe is what was wrong, the
-            # reflection names it, and the next Define leaves it out.
-            try:
-                named = loads(model(
-                    "If your reflection found a criterion whose wording or probe cannot be right against its "
-                    'source, name it with the reason, as {"set_aside": [{"id": "K2", "reason": "..."}]}. A criterion '
-                    "that is merely hard, unfinished or better done later is not wrong. Leave the list empty when "
-                    "none is. Reflection: " + reflection, schema=SET_ASIDE)).get("set_aside") or []
-                known = {i["id"] for i in plan["criteria"]}
-                wrong = {entry["id"]: str(entry.get("reason") or "") for entry in named
-                         if isinstance(entry, dict) and entry.get("id") in known}
-            except (ValueError, AttributeError, TypeError):
-                wrong = {}
-            return close(verdict="failure", lesson=reflection + "\nSet aside: " + json.dumps(wrong, ensure_ascii=False), **fields)
+            # The Cycle closes as failed. Where the run goes after going back is written down for it.
+            return close(verdict="failure", lesson=reflection + "\nWay back: "
+                         + json.dumps({"to": way, "reason": reflection if way == "new_interview" else ""}, ensure_ascii=False), **fields)
         lesson_learned = analysis["interpretation"]
         if plan:
-            # Solved. The reflection names the candidates for the next Experiment; none ends the Chain.
+            # Solved. The reflection judges what comes next: candidates for the next Experiment, a new
+            # Interview when the list itself has to be written again, or nothing more.
             obs = json.loads(step("verify")["report"]["result"])
             ledger, now = Ledger(obs["criteria"]), obs["submission_digest"]
+            ledger.cross_off([key for key in crossed_off(current) if key in ledger.items], current["ref"])
             try:
                 said = loads(model(
-                    "The problem of this experiment is solved. Decide the candidates for the next experiment: the "
-                    "open criteria worth taking next, and any requirement of the task that the ledger lacks (new). "
-                    "Leave both empty when nothing worth doing remains or the time left does not allow another "
-                    f"experiment. About {minutes_left():.0f} minutes of the trial are left. "
-                    'Answer as {"candidates": ["K5"], "new": [{"requirement": "...", "kind": "failure", "source": "..."}]}. '
-                    "Ledger: " + json.dumps(ledger.shown(now), ensure_ascii=False), schema=CANDIDATES))
+                    "The problem of this experiment is solved and its numbers are crossed off. Decide what comes "
+                    "next. Usually: candidates, the open problems worth taking in the next experiment. If instead "
+                    "the list itself has to be written again (it misreads the task or lacks something the task "
+                    "requires), give the reason in new_interview and a new interview will write it; otherwise "
+                    "leave new_interview empty. Leave both empty when nothing worth doing remains or the time left "
+                    f"does not allow another experiment. About {minutes_left():.0f} minutes of the trial are left. "
+                    'Answer as {"candidates": ["K5"], "new_interview": ""}. '
+                    "Ledger: " + json.dumps(ledger.shown(now), ensure_ascii=False), schema=NEXT))
                 picked = {"candidates": [key for key in said.get("candidates") or [] if key in ledger.open(now)],
-                          "new": [entry for entry in said.get("new") or [] if isinstance(entry, dict)]}
+                          "new_interview": str(said.get("new_interview") or "").strip()}
             except (ValueError, AttributeError, TypeError):
-                picked = {"candidates": [], "new": []}
-            lesson_learned += "\nCandidates: " + json.dumps(picked, ensure_ascii=False)
+                picked = {"candidates": [], "new_interview": ""}
+            lesson_learned += "\nNext: " + json.dumps(picked, ensure_ascii=False)
         return close(
             verdict="success"
             if analysis["success_condition_met"] == "yes"
@@ -763,12 +849,18 @@ def reply(r):
         elif obs["regression"] and not plan:
             direction["benchmark_transition"] = "observed_regression"
         elif plan and obs.get("criteria") and room:
-            said = noted(current, "Candidates")
-            if verdict == "success" and (said.get("candidates") or said.get("new")):
+            said, back = noted(current, "Next"), noted(current, "Way back")
+            if verdict == "success" and said.get("new_interview"):
+                # The list has to be written again: a new Interview opens on the world as it is.
+                direction["benchmark_transition"] = "interview_open"
+            elif verdict == "success" and said.get("candidates"):
                 # The reflection named candidates: the next Experiment continues from this world.
                 direction["benchmark_transition"] = "criteria_open"
-            elif verdict == "failure":
-                # The reflection doubted the problem definition: back to the parent's world, and branch.
+            elif verdict == "failure" and back.get("to") == "new_interview":
+                # Back to the parent's world, and from there a new Interview.
+                direction["benchmark_transition"] = "interview_after_failure"
+            elif verdict == "failure" and back.get("to") == "new_problem_definition":
+                # Back to the parent's world, and a new Experiment defines the problem again.
                 direction["benchmark_transition"] = "criteria_failed"
     return close(
         verdict=verdict,

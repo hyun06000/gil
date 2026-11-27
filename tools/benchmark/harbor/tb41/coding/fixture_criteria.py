@@ -7,7 +7,9 @@ hypothesis, and the run goes back to C3's Define with the files as they were the
 hypothesis solves it, and reflection names the invariant as the next candidate. C4 solves the
 invariant with a method that breaks the failure case, which the closing run of every probe sees;
 reflection doubts the problem definition, C4 closes as failed and the Core restores C3's world.
-C5 branches from C3 and solves the invariant; C6 solves the rest and names no candidate.
+C5 branches from C3 and solves the invariant; C6 solves the last number. Its reflection judges
+that the list lacks a requirement and asks for a new interview: C7 opens on the files as they are,
+writes the list again keeping the three solved numbers and adding one, and C8 solves that one.
 """
 import json
 import os
@@ -34,14 +36,18 @@ py = sys.executable + " -B -c "
 solver.CHECKS[solver.TASK] = [sys.executable, "-B", "-c", "from fast_networkx import order; assert order(['a','B']) == ['a','B']"]
 # Parsed ids follow the order of the derived array: K1 behaviour, K2 invariant, K3 failure.
 LEDGER = [
-    {"requirement": "labels are ordered ignoring case and duplicates are kept", "kind": "behaviour", "source": "task: ordering"},
-    {"requirement": "the list passed in is not modified", "kind": "invariant", "source": "task: input"},
-    {"requirement": "a value that is not a list is refused with TypeError", "kind": "failure", "source": "task: input"},
+    {"requirement": "labels are ordered ignoring case and duplicates are kept", "kind": "behaviour", "source": "task: ordering", "same_as": ""},
+    {"requirement": "the list passed in is not modified", "kind": "invariant", "source": "task: input", "same_as": ""},
+    {"requirement": "a value that is not a list is refused with TypeError", "kind": "failure", "source": "task: input", "same_as": ""},
 ]
+# The second interview keeps the three numbers and adds what the first list lacked.
+REWRITTEN = [dict(entry, same_as=f"K{number}") for number, entry in enumerate(LEDGER, 1)] + [
+    {"requirement": "an empty list gives an empty list", "kind": "behaviour", "source": "task: ordering", "same_as": ""}]
 PROBES = {
     "K1": py + "\"from fast_networkx import order\nassert order(['b', 'A', 'b']) == ['A', 'b', 'b']\"",
     "K2": py + "\"from fast_networkx import order\nlabels = ['b', 'A']\norder(labels)\nassert labels == ['b', 'A']\"",
     "K3": py + "\"import sys\nfrom fast_networkx import order\ntry:\n    order('ab')\nexcept TypeError:\n    sys.exit(0)\nsys.exit(1)\"",
+    "K4": py + "\"from fast_networkx import order\nassert order([]) == []\"",
 }
 BASE = "def order(labels):\n    return sorted(labels, key=str.casefold)\n"
 TRIED = "def order(labels):\n    labels = list(labels)\n    return sorted(labels, key=str.casefold)\n"
@@ -52,8 +58,9 @@ cycle = request["history"][-1]
 ref = cycle["ref"]
 # Hypotheses already abandoned under this Define.
 attempt = sum(1 for s in cycle["steps"] if s["kind"] == "outcome" and s["report"])
-TARGET = {"cycle:C3": "K3", "cycle:C4": "K2", "cycle:C5": "K2", "cycle:C6": "K1"}
-NEXT = {"cycle:C3": ["K2"], "cycle:C5": ["K1"], "cycle:C6": []}
+TARGET = {"cycle:C3": "K3", "cycle:C4": "K2", "cycle:C5": "K2", "cycle:C6": "K1", "cycle:C8": "K4"}
+NEXT = {"cycle:C3": ["K2"], "cycle:C5": ["K1"], "cycle:C6": [], "cycle:C8": []}
+LACKING = "the list says nothing about an empty list of labels"
 probe = lambda key: {"action": "probe", "criterion": key, "note": f"run the probe of {key}"}
 write = lambda content: {"action": "write", "path": NAME, "content": content}
 SCRIPT = {
@@ -63,9 +70,12 @@ SCRIPT = {
     ("cycle:C4", 0): [write(UNGUARDED), probe("K2"), {"action": "check"}, {"action": "finish"}],
     ("cycle:C5", 0): [probe("K2"), {"action": "check"}, {"action": "finish"}],
     ("cycle:C6", 0): [probe("K1"), {"action": "check"}, {"action": "finish"}],
+    ("cycle:C8", 0): [probe("K4"), {"action": "check"}, {"action": "finish"}],
 }
 # What the files must be when an attempt starts: every going back restored them.
-ENTRY = {("cycle:C3", 0): BASE, ("cycle:C3", 1): BASE, ("cycle:C4", 0): GUARDED, ("cycle:C5", 0): GUARDED, ("cycle:C6", 0): GUARDED}
+ENTRY = {("cycle:C3", 0): BASE, ("cycle:C3", 1): BASE, ("cycle:C4", 0): GUARDED, ("cycle:C5", 0): GUARDED, ("cycle:C6", 0): GUARDED,
+         # The new interview was not a going back: the files are what they were when it opened.
+         ("cycle:C8", 0): GUARDED}
 calls = 0
 
 
@@ -82,8 +92,11 @@ def model(prompt, choices=(), stage="solver", notes=False, ledger=False, schema=
             assert "carries out the hypothesis above and nothing more" in prompt
         answer = json.dumps(SCRIPT[ref, attempt][calls - 1])
     elif schema == criteria.CRITERIA:
-        assert (stage, ref) == ("define", "cycle:C3"), "the ledger is derived once and inherited afterwards"
-        answer = json.dumps({"criteria": LEDGER})
+        # The interview numbers the problems; no other step writes the list.
+        assert stage == "synthesis" and ref in ("cycle:C1", "cycle:C7"), (stage, ref)
+        if ref == "cycle:C7":
+            assert "A list exists already" in prompt and LACKING in prompt and '"solved_in": "cycle:C6"' in prompt
+        answer = json.dumps({"criteria": REWRITTEN if ref == "cycle:C7" else LEDGER})
     elif schema == criteria.TARGETS:
         assert stage == "define"
         if ref in ("cycle:C4", "cycle:C6"):
@@ -101,14 +114,16 @@ def model(prompt, choices=(), stage="solver", notes=False, ledger=False, schema=
             # The Define stands; the new hypothesis is told what the abandoned one found.
             assert "these hypotheses were tried and abandoned" in prompt and "targets_not_holding" in prompt
         if ref == "cycle:C5":
-            assert "Closed failed experiment cycle:C4" in prompt and "held_at_entry_now_failing" in prompt
+            assert "Closed failed experiment cycle:C4" in prompt and "crossed_off_before_and_now_failing" in prompt
         changes = ref in ("cycle:C3", "cycle:C4")
+        if ref == "cycle:C8":
+            # The numbers kept by the second interview are still crossed off.
+            assert json.loads(cycle["steps"][0]["report"]["success_condition"].split("\nLedger: ", 1)[1])["held_at_entry"] == ["K1", "K2", "K3"]
         answer = json.dumps({"method": f"Attempt {attempt}: change order() so the defined state holds.", "files": [NAME] if changes else []})
-    elif schema == criteria.CANDIDATES:
+    elif schema == criteria.NEXT:
         assert stage == "outcome"
-        answer = json.dumps({"candidates": NEXT[ref], "new": []})
-    elif schema == criteria.SET_ASIDE:
-        answer = json.dumps({"set_aside": []})
+        # After C6 nothing is open, and the reflection judges the list itself incomplete.
+        answer = json.dumps({"candidates": NEXT[ref], "new_interview": LACKING if ref == "cycle:C6" else ""})
     elif "new_hypothesis" in choices:
         # Reflection: in C3 the method was wrong; in C4 the experiment broke what the Chain had gained.
         answer = "new_hypothesis" if ref == "cycle:C3" else "new_problem_definition"
