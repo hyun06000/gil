@@ -79,6 +79,18 @@ fn session(root: &str) -> Result<ProjectSession, String> {
     let state = crate::project_state::state_for_root(root).map_err(|e| e.to_string())?;
     ProjectSession::open_plan_editor(root, &state).map_err(|e| e.to_string())
 }
+/// The view a model reads. The two bodies it sends on — the Synthesis Report to close with and the
+/// requirement link to open an Experiment with — are objects, as `gil_close` and `gil_open` take
+/// them. The App's review keeps the stored text it displays.
+fn model_view(p: &Project) -> Value {
+    let mut value = view(p);
+    for field in ["close_report", "experiment_link"] {
+        if let Some(text) = value.get(field).and_then(Value::as_str).map(str::to_owned) {
+            value[field] = super::body::to_object(&text);
+        }
+    }
+    value
+}
 fn view(p: &Project) -> Value {
     let Some(state) = p.approved_plan() else {
         return json!({"supported":false});
@@ -179,7 +191,7 @@ pub(super) fn call(monitor: &Monitor, grants: &Grants, name: &str, input: Value)
                 let mut s = session(&r.project_root)?;
                 s.project_mut().propose_plan(r.draft)?;
                 s.commit().map_err(|e| e.to_string())?;
-                Ok(CallToolResult::structured(view(s.project())))
+                Ok(CallToolResult::structured(model_view(s.project())))
             }
             "gil_plan_request_interview" => {
                 let r: RequestInterview =
@@ -187,12 +199,12 @@ pub(super) fn call(monitor: &Monitor, grants: &Grants, name: &str, input: Value)
                 let mut s = session(&r.project_root)?;
                 s.project_mut().request_plan_interview(r.reason)?;
                 s.commit().map_err(|e| e.to_string())?;
-                Ok(CallToolResult::structured(view(s.project())))
+                Ok(CallToolResult::structured(model_view(s.project())))
             }
             "gil_plan_read" => {
                 let r: Read = serde_json::from_value(input).map_err(|_| crate::locale::text("plan_tool.bad_read"))?;
                 let s = session(&r.project_root)?;
-                Ok(CallToolResult::structured(view(s.project())))
+                Ok(CallToolResult::structured(model_view(s.project())))
             }
             "gil_plan_review" => {
                 let r: Review = serde_json::from_value(input).map_err(|_| crate::locale::text("plan_tool.bad_review"))?;
@@ -449,7 +461,8 @@ mod tests {
         );
         let value = read.structured_content.unwrap();
         assert_eq!(value["proposal"]["receipt"]["decision"], "approve");
-        let report = crate::Report::parse(value["close_report"].as_str().unwrap()).unwrap();
+        // The model's view carries the Report as the object gil_close takes.
+        let report = crate::Report::parse(&super::super::body::to_text(value["close_report"].as_object().unwrap()).unwrap()).unwrap();
         let mut s = session(root.to_str().unwrap()).unwrap();
         s.close_step(report).unwrap();
         s.commit().unwrap();

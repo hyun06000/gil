@@ -119,6 +119,13 @@ fn the_tool_list_has_no_display_or_app_tool_and_marks_the_runner_tools() {
         assert!(tools.iter().any(|tool| tool["name"] == name), "{name} is missing");
     }
     assert_eq!(c.request("resources/list", json!({}))["result"]["resources"], json!([]));
+    // The two bodies are objects of string fields on the wire, in the list and in every refusal's skeleton.
+    for (name, field) in [("gil_open", "contract"), ("gil_close", "report")] {
+        let tool = tools.iter().find(|tool| tool["name"] == name).unwrap();
+        let property = &tool["inputSchema"]["properties"][field];
+        assert_eq!((property["type"].as_str(), &property["additionalProperties"]), (Some("object"), &json!({"type":"string"})), "{name}.{field}");
+        assert!(!tool["description"].as_str().unwrap().contains("STRING"), "{name} still describes a text body");
+    }
     // The removed tools are not merely hidden: they cannot be called here.
     for (name, args) in [("show_gil_monitor", json!({"scope_id":format!("project:{}", "0".repeat(64))})), ("gil_plan_review", json!({"scope_id":"x"}))] {
         rpc_error(c.call(name, args), name);

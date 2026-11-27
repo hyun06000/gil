@@ -12,6 +12,8 @@
 //! 합성 프로젝트만 쓴다. 실제 Host 화면과 모델 호출은 이 시험의 범위가 아니다.
 #![cfg(all(feature = "will-end-history", feature = "visual-authoring", not(feature = "approved-plan"), any(unix, windows)))]
 
+#[path = "body_shim.rs"]
+mod body_shim;
 mod common;
 use gil::{CycleKind, EndResult, NodeKind};
 use serde_json::{Value, json};
@@ -76,6 +78,7 @@ impl Mcp {
     }
 
     fn request(&mut self, method: &str, params: Value) -> Value {
+        let params = body_shim::tool_call(method, params);
         let id = self.next;
         self.next += 1;
         self.send(&json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}));

@@ -50,7 +50,7 @@ fn one_requirement_takes_two_small_defines_without_reapproval_and_reads_the_same
     assert_eq!(approved["contract"], "exploration");
     assert_eq!(approved["requirement_resolution"], "user_approved_closing_interview_only");
     assert!(approved["next"].as_str().unwrap().contains("requirement_id: R1 | R2"), "{approved}");
-    assert!(approved["experiment_link"].as_str().unwrap().contains(approved["active_plan"]["digest"].as_str().unwrap()));
+    assert_eq!(approved["experiment_link"]["plan_digest"], approved["active_plan"]["digest"], "the link is the object gil_open takes");
 
     // The link is required and checked; every refusal leaves the record as it was.
     let before = record_bytes(&r.record);

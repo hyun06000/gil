@@ -9,6 +9,8 @@
 //!   the child is killed on timeout/panic/drop, the record goes to an isolated scratch folder
 //!   (Windows: a scratch `LOCALAPPDATA`), and no user setting or record is touched.
 #![allow(dead_code)]
+#[path = "../body_shim.rs"]
+mod body_shim;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -177,6 +179,7 @@ impl Mcp {
         }
     }
     pub fn request(&mut self, method: &str, params: Value) -> Value {
+        let params = body_shim::tool_call(method, params);
         let id = self.next; self.next += 1;
         self.send(&json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}));
         let got = self.read();

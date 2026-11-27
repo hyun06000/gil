@@ -12,6 +12,8 @@
 //! 합성 프로젝트만 쓴다. 실제 모델 호출과 Host 화면은 이 시험의 범위가 아니다.
 #![cfg(all(feature = "will-end-history", not(feature = "approved-plan")))]
 
+#[path = "body_shim.rs"]
+mod body_shim;
 mod common;
 use gil::{ActionError, CycleKind, EndResult, NodeKind, ProjectSession, Report, SessionError, WillRef};
 use std::io::{BufRead, BufReader, Write};
@@ -330,6 +332,7 @@ impl Mcp {
     }
 
     fn request(&mut self, method: &str, params: serde_json::Value) -> serde_json::Value {
+        let params = body_shim::tool_call(method, params);
         let id = self.next;
         self.next += 1;
         self.send(&serde_json::json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}));

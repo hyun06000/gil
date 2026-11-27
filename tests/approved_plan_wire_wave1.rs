@@ -535,9 +535,13 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     assert!(!record.contains(&t1) && !record.contains(&t2), "capability written into the record");
 
     // close only with the exact close_report
-    let report = r.read()["close_report"].as_str().unwrap().to_owned();
-    assert!(report.contains("plan_revision") && report.contains("plan_digest"), "{report}");
-    refused(r.model("gil_close", json!({"report":report.replace("합성 자료로 항목을", "다른 문장으로 항목을")})), "tampered close_report");
+    // The model reads the Report to close with as the object gil_close takes.
+    let report = r.read()["close_report"].clone();
+    assert!(report["plan_revision"].is_string() && report["plan_digest"].is_string(), "{report}");
+    let mut tampered = report.clone();
+    tampered["statement"] = json!(tampered["statement"].as_str().unwrap().replace("합성 자료로 항목을", "다른 문장으로 항목을"));
+    assert_ne!(tampered, report);
+    refused(r.model("gil_close", json!({"report":tampered})), "tampered close_report");
     refused(r.model("gil_close", json!({"report":close_report_rev1})), "revision-1 report after revision-2 approval");
     ok(r.model("gil_close", json!({"report":report})), "close synthesis");
 
@@ -671,10 +675,10 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     let d3 = structured(&p3)["proposal"]["digest"].clone();
     ok(r.app("gil_plan_decide", json!({"revision":3,"digest":d3,"token":t3,"decision":"request_changes"})), "request_changes");
     let read = r.read();
-    let report = read["close_report"].as_str().unwrap().to_owned();
-    // close_report uses the block form for every field.
-    assert!(report.contains("approved: |\n  no\n"), "{report}");
-    let forged = report.replace("approved: |\n  no\n", "approved: |\n  yes\n");
+    let report = read["close_report"].clone();
+    assert_eq!(report["approved"], "no", "{report}");
+    let mut forged = report.clone();
+    forged["approved"] = json!("yes");
     assert_ne!(forged, report);
     refused(r.model("gil_close", json!({"report":forged})), "forged approved:yes");
     refused(r.model("gil_open", json!({"kind":"experiment"})), "experiment with Synthesis open");

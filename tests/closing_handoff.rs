@@ -319,8 +319,8 @@ fn a_change_request_on_a_closing_proposal_is_not_an_approval_and_closes_nothing(
     refused(r.model("gil_open", json!({"kind":"experiment"})), "Experiment while the Interview is open");
     assert_eq!(record_bytes(&r.record), before);
 
-    let report = structured(&read)["close_report"].as_str().unwrap().to_owned();
-    assert!(report.contains("approved: |\n  no"), "{report}");
+    let report = structured(&read)["close_report"].clone();
+    assert_eq!(report["approved"], "no", "{report}");
     let closed = ok(r.model("gil_close", json!({"report":report})), "close the declined synthesis");
     has(&guidance(&closed), &["승인되지 않았다", "gil_open(kind: question)"]);
     lacks(&blocks(&closed), &["Closing Interview 마무리", "Chain Report"]);

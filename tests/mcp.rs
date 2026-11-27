@@ -8,6 +8,8 @@
 //! 3. **깨끗한 stdout** — JSON-RPC frame 말고는 한 글자도 없다
 //! 4. **명시적 tool 표** — 기존 12개 + 읽기 전용 MCP App 7개, UI 쓰기 문은 없다
 
+#[path = "body_shim.rs"]
+mod body_shim;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -771,6 +773,7 @@ impl Client {
     }
 
     fn request(&mut self, method: &str, params: serde_json::Value) -> serde_json::Value {
+        let params = body_shim::tool_call(method, params);
         let id = self.next;
         self.next += 1;
         self.send(&serde_json::json!({
@@ -962,7 +965,7 @@ fn interview_assent_requires_outcome_and_separate_cycle_close_before_research() 
 /// The MCP close refuses a Report that writes `response` twice (#243): the line numbers are named,
 /// the record is unchanged, and the same Question closes with one response.
 #[test]
-fn mcp_close_refuses_a_field_written_twice() {
+fn mcp_close_takes_no_text_body_so_a_field_cannot_be_written_twice() {
     use serde_json::json;
     let at = scratch("mcp-duplicate-field");
     started(&at);
@@ -973,11 +976,14 @@ fn mcp_close_refuses_a_field_written_twice() {
     assert_eq!(opened["structuredContent"]["ok"], true, "{opened}");
     let state = at.join(gil::STATE_PATH);
     let before = std::fs::read(&state).unwrap();
-    let refused = monitor_call(&mut mcp, "gil_close", json!({"project_root": at,
-        "report": "question: Which sample?\nchoices: A / B\nresponse: FIRST_ANSWER_A\nresponse: SECOND_ANSWER_B\n"}));
-    assert_eq!(refused["isError"], true, "{refused}");
-    let problem = refused["structuredContent"]["problem"].as_str().unwrap();
-    assert!(problem.contains("response") && problem.contains('4') && problem.contains('3'), "{problem}");
+    // On the wire a Report is an object, where a name cannot occur twice. The text that wrote one
+    // twice is not a Report the grammar reads, so the test client sends it as it stands, and a text
+    // body is refused at the wire with the one sentence that names the object form.
+    let refused = mcp.request("tools/call", json!({"name": "gil_close", "arguments": {"project_root": at,
+        "report": "question: Which sample?\nchoices: A / B\nresponse: FIRST_ANSWER_A\nresponse: SECOND_ANSWER_B\n"}}));
+    let problem = refused["error"]["message"].as_str().unwrap_or_else(|| panic!("a text body must be a wire refusal: {refused}"));
+    assert!(problem.contains("object of string fields") && problem.contains("nothing was closed"), "{problem}");
+    assert!(!problem.contains("FIRST_ANSWER_A"), "the refusal echoes no body: {problem}");
     assert_eq!(std::fs::read(&state).unwrap(), before, "a refused close must not touch the project");
     let closed = monitor_call(&mut mcp, "gil_close", json!({"project_root": at,
         "report": "question: Which sample?\nchoices: A / B\nresponse: SECOND_ANSWER_B\n"}));

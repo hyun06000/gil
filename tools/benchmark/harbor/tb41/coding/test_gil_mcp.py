@@ -22,7 +22,7 @@ NAME = "fast_networkx/__init__.py"
 ORIGINAL = "def order(labels):\n    return sorted(labels)\n"
 CHECK = [sys.executable, "-B", "-c", "from fast_networkx import order; assert order(['B','a']) == ['a','B'], 'case order'"]
 BINARY = os.environ.get("GIL_TEST_BINARY")
-CONTRACT = "objective: 과제 범위를 합의한다\nnext_action: 사용자에게 묻는다\ndone_when: 사용자의 답을 받았다\n"
+CONTRACT = {"objective": "과제 범위를 합의한다", "next_action": "사용자에게 묻는다", "done_when": "사용자의 답을 받았다"}
 PLAN = "plan/approved-plan.md"
 
 
@@ -79,8 +79,8 @@ class McpArmTests(unittest.TestCase):
             said = yield call("gil_start_prepare", rules=rules)
             seen["start"] = said.get("result") or self.fail(str(self.events[-3:]))
             basis = []
-            for kind, report in (("question", "question: 무엇을 원하는가\nchoices: 없음\nresponse: 과제 설명대로\n"),
-                                 ("interpretation", "interpretation: 대소문자를 무시해 정렬한다\nunresolved: 없음\n")):
+            for kind, report in (("question", {"question": "무엇을 원하는가", "choices": "없음", "response": "과제 설명대로"}),
+                                 ("interpretation", {"interpretation": "대소문자를 무시해 정렬한다", "unresolved": "없음"})):
                 said = yield call("gil_open", kind=kind, contract=CONTRACT)
                 basis.append(__import__("re").search(r"step:C\d+/S\d+", said["result"]).group(0))
                 if kind == "question":
@@ -99,15 +99,14 @@ class McpArmTests(unittest.TestCase):
             synthesis = __import__("re").search(r"step:C\d+/S\d+", said["result"]).group(0)
             said = yield call("gil_open", kind="outcome", contract=CONTRACT)
             outcome = __import__("re").search(r"step:C\d+/S\d+", said["result"]).group(0)
-            yield call("gil_close", report=f"verdict: success\nlesson: 요구를 기록했다\nsynthesis_ref: {synthesis}\nnext_direction.action: close_cycle\nnext_direction.reason: 탐색한다\n")
-            yield call("gil_close", report=f"verdict: success\noutcome_ref: {outcome}\nhandoff_summary: 요구를 승인받았다\nnext_direction.action: open_child\nnext_direction.reason: 실험한다\n")
+            yield call("gil_close", report={"verdict": "success", "lesson": "요구를 기록했다", "synthesis_ref": synthesis, "next_direction.action": "close_cycle", "next_direction.reason": "탐색한다"})
+            yield call("gil_close", report={"verdict": "success", "outcome_ref": outcome, "handoff_summary": "요구를 승인받았다", "next_direction.action": "open_child", "next_direction.reason": "실험한다"})
             _, _, read = gil.server.call("gil_plan_read", {"project_root": root})
-            plan = read["active_plan"]
-            yield call("gil_open", kind="experiment", contract=f"plan_revision: {plan['revision']}\nplan_digest: {plan['digest']}\nrequirement_id: R1\nrelevance: 필요하다\nreadiness: 준비됐다\nuncertainty: 하나를 줄인다\n")
+            yield call("gil_open", kind="experiment", contract={**read["experiment_link"], "requirement_id": "R1", "relevance": "필요하다", "readiness": "준비됐다", "uncertainty": "하나를 줄인다"})
             yield call("gil_open", kind="define", contract=CONTRACT)
-            yield call("gil_close", report="problem: order 가 대소문자를 무시하는가?\nsuccess_condition: 검사가 통과한다. 그 밖은 성공이 아니다\n")
+            yield call("gil_close", report={"problem": "order 가 대소문자를 무시하는가?", "success_condition": "검사가 통과한다. 그 밖은 성공이 아니다"})
             yield call("gil_open", kind="hypothesis", contract=CONTRACT)
-            yield call("gil_close", report="hypothesis: casefold 로 정렬하면 된다\nrationale: 키 함수다\nguardrail: 다른 파일은 고치지 않는다\n")
+            yield call("gil_close", report={"hypothesis": "casefold 로 정렬하면 된다", "rationale": "키 함수다", "guardrail": "다른 파일은 고치지 않는다"})
             yield call("gil_open", kind="verify", contract=CONTRACT)
             _, _, read = gil.server.call("gil_plan_read", {"project_root": root})
             yield {"action": "write", "path": NAME, "content": "def order(labels):\n    return sorted(labels, key=str.casefold)\n", "note": "n"}
@@ -118,7 +117,7 @@ class McpArmTests(unittest.TestCase):
             said = yield {"action": "write", "path": "README.md", "content": "overwritten\n", "note": "n"}
             seen["task_file"] = said.get("error")
             yield {"action": "check", "note": "n"}
-            said = yield call("gil_close", report=f"execution: 고치고 검사했다\nresult: 통과\nplan_document: {PLAN}\nevidence_files: evidence/C2.md\n")
+            said = yield call("gil_close", report={"execution": "고치고 검사했다", "result": "통과", "plan_document": PLAN, "evidence_files": "evidence/C2.md"})
             seen["verify"] = said["result"]
             yield {"action": "finish", "note": "n"}
 

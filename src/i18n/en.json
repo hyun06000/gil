@@ -221,6 +221,7 @@
   "cmd.skeleton_close_chain": "close_chain is the Chain-closing direction of an approved Closing Interview.\n",
   "cmd.skeleton_cycle": "\nThis is a Cycle Report. Do not copy the Outcome Step's close_cycle. open_child only records that the next child Cycle may open; nothing runs automatically. The actual next gil_open kind follows the success receipt.\n",
   "cmd.skeleton_mcp": "gil_close input (fill … with actual observations):\n{json}",
+  "cmd.skeleton_mcp_open": "gil_open input (fill … for the present conversation and work):\n{json}",
   "cmd.skeleton_outcome": "\nThis is the Report of an Outcome Step. close_cycle is the direction to submit the Cycle Report separately after closing this Step. The Cycle itself does not close and the next Experiment does not open automatically. Read the contract at that time for the next Cycle Report's allowed values; do not copy close_cycle.\n",
   "cmd.spec_unreadable": "Could not read the bundled specification: {err}",
   "cmd.start_chain_line": "Chain: {id} · open · Entry {entry}\n",

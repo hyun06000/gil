@@ -592,7 +592,13 @@ fn open_step(ctx: &Invocation<'_>,
 
     // 실행형 자리는 **무엇을 하려는지 적지 않으면 열지 않는다.** 그 계약은 Report 와 같은
     // field 문법으로 stdin 에 오지만 Close Report 가 아니다 — 행동 계약이다.
-    let hint = contract_skeleton(kind);
+    // Over MCP the contract is an object, so the skeleton a refusal shows is that object.
+    let hint = match ctx {
+        Invocation { root: Root::Exact(root), input: Input::Body(_) } => tr!("cmd.skeleton_mcp_open",
+            json = serde_json::to_string_pretty(&serde_json::json!({"project_root":root, "kind":kind.as_str(),
+                "contract":{crate::OBJECTIVE:"…", crate::NEXT_ACTION:"…", crate::DONE_WHEN:"…"}})).unwrap()),
+        _ => contract_skeleton(kind),
+    };
     let contract = read_contract(ctx, &hint)?;
 
     let opened = session
@@ -1686,7 +1692,7 @@ fn skeleton_for(contract: &CloseContract, cycle: &crate::Cycle, ctx: Option<&Inv
     };
     let mut hint = match ctx {
         Some(Invocation { root: Root::Exact(root), input: Input::Body(_) }) => tr!("cmd.skeleton_mcp",
-            json = serde_json::to_string_pretty(&serde_json::json!({"project_root":root,"report":contract.report_body(fill)})).unwrap()),
+            json = serde_json::to_string_pretty(&serde_json::json!({"project_root":root,"report":crate::mcp::body::to_object(&contract.report_body(fill))})).unwrap()),
         _ => contract.skeleton(fill),
     };
     if contract.subject().contains("outcome") {

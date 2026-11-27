@@ -247,7 +247,7 @@ fn fail_with(code: &str, reason: Option<String>) -> CallToolResult {
     let said = if code == "verify_evidence_required" {
         "단계는 닫히지 않았다. Verify는 실제 저장한 비어 있지 않은 파일을 evidence_files에 상대 경로로 명시해야 하며, 적어도 하나는 이전 Snapshot보다 새롭거나 달라야 한다. 읽기만 한 작업도 관측 결과를 파일로 남긴다. Analysis의 interpretation과 Outcome의 lesson은 비어 있을 수 없고 실제 계보의 근거를 참조한다. gil_context로 현재 단계를 확인하고 누락된 증거·해석·배움을 보완한다."
     } else if code == "invalid_report" {
-        "Report 문법 오류로 실행하지 않았고 아무 단계도 닫히지 않았다. report는 '이름: 값' 텍스트다. 한 파일은 'evidence_files: evidence/result.md'처럼 같은 줄에 적는다. 여러 파일은 'evidence_files: |\n  evidence/one.md\n  evidence/two.md'처럼 |와 들여쓰기를 쓴다. 실제 저장한 경로만 적는다. 현재 대상이 여전히 열려 있으면 Report 문법을 고쳐 같은 gil_close를 한 번 제출한다. typed 입력의 expected_owner와 visuals도 함께 유지한다."
+        "Report 입력 오류로 실행하지 않았고 아무 단계도 닫히지 않았다. report는 문자열 칸들의 객체다. 한 파일은 {\"evidence_files\": \"evidence/result.md\"} 처럼 적고, 여러 파일은 {\"evidence_files\": \"evidence/one.md\\nevidence/two.md\"} 처럼 한 문자열 안에서 줄을 바꾼다. 실제 저장한 경로만 적는다. 현재 대상이 여전히 열려 있으면 칸을 고쳐 같은 gil_close를 한 번 제출한다. typed 입력의 expected_owner와 visuals도 함께 유지한다."
     } else if code == "unachieved_refused" {
         crate::locale::text("mcp.unachieved_refused")
     } else if code == "visual_upgrade_required" {

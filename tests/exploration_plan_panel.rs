@@ -42,7 +42,13 @@ fn review(r: &mut Rig, name: &str, kept: &mut Vec<Value>) -> Value {
     if let Some(secret) = token(&frame) {
         assert!(!view.to_string().contains(&secret), "{name}: the capability leaked into the view");
     }
-    assert_eq!(view, r.read(), "{name}: the App and the model read the same projection");
+    // The same projection, except the two bodies the model sends on: it reads those as the objects
+    // gil_close and gil_open take, while the App keeps the stored text.
+    let without_bodies = |mut value: Value| {
+        for field in ["close_report", "experiment_link"] { value.as_object_mut().unwrap().remove(field); }
+        value
+    };
+    assert_eq!(without_bodies(view.clone()), without_bodies(r.read()), "{name}: the App and the model read the same projection");
     kept.push(json!({"name":name, "review":view}));
     view
 }

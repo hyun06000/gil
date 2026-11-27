@@ -8,6 +8,8 @@
 //! Windows fixture helper tests/mcp.rs::product_state_path; nothing hard-codes `.gil/state.yaml`
 //! at the project root.
 #![allow(dead_code)]
+#[path = "../body_shim.rs"]
+mod body_shim;
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
@@ -190,6 +192,7 @@ impl Client {
         }
     }
     pub fn request(&mut self, method: &str, params: Value) -> Value {
+        let params = body_shim::tool_call(method, params);
         let id = self.next;
         self.next += 1;
         self.send(&json!({"jsonrpc":"2.0","id":id,"method":method,"params":params}));
@@ -214,6 +217,7 @@ impl Client {
         self.request("tools/call", json!({"name":name,"arguments":arguments}))
     }
     pub fn call_expecting_crash(&mut self, name: &str, arguments: Value) {
+        let arguments = body_shim::objects(name, arguments);
         let id = self.next; self.next += 1;
         self.send(&json!({"jsonrpc":"2.0","id":id,"method":"tools/call","params":{"name":name,"arguments":arguments}}));
         let deadline = std::time::Instant::now() + FRAME_TIMEOUT;

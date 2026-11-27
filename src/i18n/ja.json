@@ -221,6 +221,7 @@
   "cmd.skeleton_close_chain": "close_chain は承認された Closing Interview の Chain 終了方向だ。\n",
   "cmd.skeleton_cycle": "\nこれは Cycle Report だ。Outcome Step の close_cycle を複製しない。open_child は次の子 Cycle を開ける方向を記録するだけで、自動実行はしない。実際の次の gil_open の種類は成功レシートに従う。\n",
   "cmd.skeleton_mcp": "gil_close の入力（… を実際の観測で埋める）:\n{json}",
+  "cmd.skeleton_mcp_open": "gil_open 入力 (… を今の会話と作業に合わせて埋める):\n{json}",
   "cmd.skeleton_outcome": "\nこれは Outcome Step の Report だ。close_cycle はこの Step を閉じた後に Cycle Report を別途提出せよという方向だ。Cycle 自体は閉じず、次の Experiment も自動では開かない。次の Cycle Report の許される値はそのときの契約を読み、close_cycle を複製しない。\n",
   "cmd.spec_unreadable": "同梱の仕様を読めなかった: {err}",
   "cmd.start_chain_line": "Chain: {id} · open · Entry {entry}\n",

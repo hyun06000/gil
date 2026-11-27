@@ -221,6 +221,7 @@
   "cmd.skeleton_close_chain": "close_chain 是已核准的 Closing Interview 的 Chain 關閉方向。\n",
   "cmd.skeleton_cycle": "\n這是 Cycle Report。不要複製 Outcome Step 的 close_cycle。open_child 只記錄可以開啟下一個子 Cycle，不會自動執行任何東西。實際的下一個 gil_open 種類遵循成功回條。\n",
   "cmd.skeleton_mcp": "gil_close 輸入（把 … 填為實際觀察）:\n{json}",
+  "cmd.skeleton_mcp_open": "gil_open 輸入 (依目前對話和工作填寫 …):\n{json}",
   "cmd.skeleton_outcome": "\n這是 Outcome Step 的 Report。close_cycle 是在關閉此 Step 後另行提交 Cycle Report 的方向。Cycle 本身不會關閉，下一個 Experiment 也不會自動開啟。下一個 Cycle Report 的允許值請讀取當時的契約，不要複製 close_cycle。\n",
   "cmd.spec_unreadable": "無法讀取隨附的規格: {err}",
   "cmd.start_chain_line": "Chain: {id} · open · Entry {entry}\n",

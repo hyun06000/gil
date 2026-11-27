@@ -221,6 +221,7 @@
   "cmd.skeleton_close_chain": "close_chain은 승인된 Closing Interview의 Chain 종료 방향이다.\n",
   "cmd.skeleton_cycle": "\n이것은 Cycle Report다. Outcome Step의 close_cycle을 복사하지 않는다. open_child는 다음 자식 Cycle을 열 수 있는 방향만 기록하며 자동 실행하지 않는다. 실제 다음 gil_open 종류는 성공 receipt를 따른다.\n",
   "cmd.skeleton_mcp": "gil_close 입력 (…를 실제 관측으로 채운다):\n{json}",
+  "cmd.skeleton_mcp_open": "gil_open 입력 (…를 지금 대화와 작업에 맞게 채운다):\n{json}",
   "cmd.skeleton_outcome": "\n이것은 Outcome Step의 Report다. close_cycle은 이 Step을 닫은 뒤 Cycle Report를 별도로 제출하라는 방향이다. Cycle 자체가 닫히거나 다음 Experiment가 자동으로 열리지 않는다. 다음 Cycle Report의 허용 값은 그때의 계약을 읽고 close_cycle을 복사하지 않는다.\n",
   "cmd.spec_unreadable": "함께 실린 명세를 읽지 못했다: {err}",
   "cmd.start_chain_line": "Chain: {id} · open · Entry {entry}\n",

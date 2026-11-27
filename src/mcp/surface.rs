@@ -210,10 +210,10 @@ pub fn valid_input(tool: &Tool, input: &Value) -> bool {
 /// was closed. Field grammar itself stays with Core; this only describes the wire shape.
 pub fn rejection(tool: &Tool, input: &Value) -> String {
     if tool.name == "gil_close" && input.get("contract").is_some() {
-        return "gil_close: unknown field 'contract'. Use 'report' for the Report string; 'contract' belongs to gil_open. Keep the same body in report, preserving expected_owner/visuals when required. Nothing was closed. Read gil_help({project_root, topic: \"close\"}) for the current Report fields.".into();
+        return "gil_close: unknown field 'contract'. Use 'report' for the Report object of string fields; 'contract' belongs to gil_open. Keep the same body in report, preserving expected_owner/visuals when required. Nothing was closed. Read gil_help({project_root, topic: \"close\"}) for the current Report fields.".into();
     }
     if tool.name == "gil_open" && input.get("report").is_some() {
-        return "gil_open: unknown field 'report'. Use 'contract' for the action contract string (objective, next_action, done_when); 'report' belongs to gil_close. Nothing was opened.".into();
+        return "gil_open: unknown field 'report'. Use 'contract' for the action contract object {objective, next_action, done_when}; 'report' belongs to gil_close. Nothing was opened.".into();
     }
     if tool.name == "gil_close" {
         if let Some(hint) = unachieved_rejection(input) { return hint.into(); }
@@ -221,7 +221,7 @@ pub fn rejection(tool: &Tool, input: &Value) -> String {
     // The outer argument is missing, not a field inside the body: say so before Core's Report
     // grammar would describe it as missing Report fields.
     if tool.name == "gil_close" && input.as_object().is_some_and(|object| !object.contains_key("report")) {
-        return "gil_close: 'report' is missing. Send project_root and the Report string for the current Step or Cycle in report. Include expected_owner and visuals when a typed close is required. This call was not executed. Nothing was closed. Read gil_help({project_root, topic: \"close\"}) for the current Report fields, then send one corrected call.".into();
+        return "gil_close: 'report' is missing. Send project_root and the Report object (string fields) for the current Step or Cycle in report. Include expected_owner and visuals when a typed close is required. This call was not executed. Nothing was closed. Read gil_help({project_root, topic: \"close\"}) for the current Report fields, then send one corrected call.".into();
     }
     #[cfg(feature = "visual-authoring")]
     if tool.name == "gil_close" && input.get("expected_owner").is_some() && input.get("visuals").is_some() {

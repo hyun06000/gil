@@ -14,6 +14,8 @@
 //! (`session::format_transition::tests`). Host screens and model behavior are not measured here.
 #![cfg(all(feature = "will-end-history", not(feature = "approved-plan")))]
 
+#[path = "body_shim.rs"]
+mod body_shim;
 mod common;
 use gil::{EndResult, NodeKind, ProjectSession};
 use serde_json::{Value, json};
@@ -138,6 +140,7 @@ impl Mcp {
         stdin.flush().unwrap();
     }
     fn request(&mut self, method: &str, params: Value) -> Value {
+        let params = body_shim::tool_call(method, params);
         let id = self.next;
         self.next += 1;
         self.send(&json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}));
