@@ -13,6 +13,7 @@ pub fn objects(name: &str, mut arguments: Value) -> Value {
                 if let Some(observation) = item.remove("done_when") {
                     item.insert("observation".into(), observation);
                     item.entry("source").or_insert_with(|| json!("the synthetic request of this test"));
+                    item.entry("command").or_insert_with(|| json!("cat evidence/result.md"));
                 }
             }
         }
@@ -31,6 +32,14 @@ pub fn objects(name: &str, mut arguments: Value) -> Value {
                     Some("no") => { fields.insert(answer.into(), json!(false)); }
                     _ => {}
                 }
+            }
+            // The exploration contract asks a Verify what it ran and saw, and an Analysis what it left unverified.
+            if fields.contains_key("execution") && fields.contains_key("evidence_files") {
+                fields.entry("command").or_insert_with(|| json!("the fixture's write"));
+                fields.entry("observed").or_insert_with(|| json!("the fixture's file"));
+            }
+            if fields.contains_key("problem_solved") {
+                fields.entry("unverified").or_insert_with(|| json!("none"));
             }
             arguments[field] = Value::Object(fields);
         }
@@ -60,6 +69,7 @@ pub fn as_stored(mut value: Value) -> Value {
                 if fields.contains_key("id") && fields.contains_key("question") {
                     if let Some(observation) = fields.remove("observation") { fields.insert("done_when".into(), observation); }
                     fields.remove("source");
+                    fields.remove("command");
                 }
                 fields.values_mut().for_each(walk);
             }

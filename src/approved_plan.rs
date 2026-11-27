@@ -36,6 +36,9 @@ pub struct Item {
     /// before the field existed; an empty source is not stored, so their digests are unchanged.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub source: String,
+    /// The command that makes the observation in this environment. Absent in older plans.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub command: String,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -210,7 +213,7 @@ fn retained_items(previous: &[Item], proposed: &[Item]) -> Result<(), String> {
             differences.push(crate::tr!("plan.err.item_missing", id = preview(&old.id)));
             continue;
         };
-        for (field, stored, received) in [("question", &old.question, &new.question), ("done_when", &old.done_when, &new.done_when), ("source", &old.source, &new.source)] {
+        for (field, stored, received) in [("question", &old.question, &new.question), ("done_when", &old.done_when, &new.done_when), ("source", &old.source, &new.source), ("command", &old.command, &new.command)] {
             if stored != received {
                 differences.push(crate::tr!("plan.err.item_mismatch", id = preview(&old.id), field = field, stored = preview(stored), received = preview(received)));
             }
@@ -656,6 +659,19 @@ impl Project {
         let state = self
             .approved_plan()
             .ok_or_else(|| bad(crate::locale::text("plan.err.no_auto_migration")))?;
+        // Exploration contract: a Chain is proposed closed as a success only when every problem of
+        // the plan has an Experiment that closed as a success. Which Experiment served which
+        // problem is already in the record; whether its success was deserved is not judged here.
+        if state.exploration() && draft.synthesis.get("chain_verdict").map(String::as_str) == Some("success") {
+            let chain = self.current_chain().expect("an approved plan lives in a Chain");
+            let succeeded = |execution: &Execution| chain.cycles().nodes().iter()
+                .find(|cycle| cycle.id().to_ref().to_string() == execution.cycle_ref)
+                .is_some_and(|cycle| cycle.is_closed() && cycle.report().and_then(|report| report.get("verdict")) == Some("success"));
+            let open: Vec<&str> = draft.items.iter().filter(|item| !state.linked(&item.id).any(succeeded)).map(|item| item.id.as_str()).collect();
+            if !open.is_empty() {
+                return Err(bad(&crate::tr!("plan.err.closing_success_needs_experiments", ids = open.join(", "))));
+            }
+        }
         if let Some(last) = state.proposals.last().filter(|p| p.synthesis_ref == target) {
             if last.draft == draft {
                 return Ok(last.clone());

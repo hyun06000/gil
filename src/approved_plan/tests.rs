@@ -43,6 +43,7 @@ pub(crate) fn synthesis(p: &mut Project, ids: &[&str]) -> Draft {
                 question: format!("Question {id}"),
                 done_when: format!("Evidence {id}"),
                 source: String::new(),
+                command: String::new(),
             })
             .collect(),
         synthesis: report
@@ -389,7 +390,7 @@ fn editing_an_approved_open_proposal_preserves_old_receipt_but_requires_new_cons
 
 #[test]
 fn retained_item_diagnostics_bound_and_escape_values_without_weakening_equality() {
-    let previous: Vec<_> = (0..12).map(|i| Item {id:i.to_string(),question:"한글\n\"".repeat(1000),done_when:"d".into(),source:String::new()}).collect();
+    let previous: Vec<_> = (0..12).map(|i| Item {id:i.to_string(),question:"한글\n\"".repeat(1000),done_when:"d".into(),source:String::new(),command:String::new()}).collect();
     let mut proposed = previous.clone();
     for item in &mut proposed { item.question = "changed".into(); }
     let error = retained_items(&previous, &proposed).unwrap_err();
@@ -593,7 +594,7 @@ fn synthesis_draft_only(ids: &[&str]) -> Draft {
     report.insert("exploration_checklist".into(), ids.join("\n"));
     Draft {
         scope: Scope { goal: "g".into(), in_scope: "i".into(), out_of_scope: "o".into(), constraints: "c".into(), success_criteria: "s".into() },
-        items: ids.iter().map(|id| Item { id: (*id).into(), question: "q".into(), done_when: "d".into(), source: String::new() }).collect(),
+        items: ids.iter().map(|id| Item { id: (*id).into(), question: "q".into(), done_when: "d".into(), source: String::new(), command: String::new() }).collect(),
         synthesis: report,
     }
 }

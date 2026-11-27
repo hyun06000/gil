@@ -837,7 +837,7 @@ test('real Core, a new proposal: the rows are the exact proposal under review, n
 test('an incomplete exploration response gets no invented, borrowed or remembered requirement text', async () => {
   const blank = { id: 'R1', question: null, done_when: null, status: 'executed', cycle_ref: 'cycle:C3' };
   // The panel shows an item's id, question and deciding observation; the record's `source` is not shown.
-  const { source: _source, ...r2 } = core('moved-to-r2-open').current_item;
+  const { source: _source, command: _command, ...r2 } = core('moved-to-r2-open').current_item;
   const cases = {
     'no requirements field': v => { delete v.requirements; },
     'requirements is not a list': v => { v.requirements = { R1: v.requirements[0] }; },

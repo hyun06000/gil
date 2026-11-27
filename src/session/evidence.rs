@@ -16,6 +16,16 @@ impl ProjectSession {
                 return Err(refused(crate::tr!("evidence.field_required", field = field)));
             }
         }
+        // Exploration contract: a Verify says what it ran and what that showed. The Core cannot check
+        // that either is true; it makes the Analysis answer against a stated observation.
+        #[cfg(feature = "approved-plan")]
+        if self.project.exploration_contract() {
+            for field in ["command", "observed"] {
+                if report.get(field).is_none_or(|s| s.trim().is_empty()) {
+                    return Err(refused(crate::tr!("evidence.verify_ran", field = field)));
+                }
+            }
+        }
         let declared = report.get("evidence_files").unwrap_or("");
         let mut paths = BTreeSet::new();
         for line in declared.lines().filter(|s| !s.trim().is_empty()) {
@@ -90,6 +100,15 @@ impl ProjectSession {
                     if plain(report.get(field)).is_none() {
                         return Err(refused(crate::tr!("evidence.analysis_yes_no", field = field)));
                     }
+                }
+                // What the Define's condition asked for and was not seen. Saying that something is
+                // unverified and answering true is a contradiction the Core can read.
+                let unverified = report.get("unverified").map(str::trim).unwrap_or("");
+                if unverified.is_empty() {
+                    return Err(refused(crate::locale::text("evidence.unverified_required")));
+                }
+                if !unverified.eq_ignore_ascii_case("none") && ANSWERS.iter().any(|field| plain(report.get(field)) == Some("true")) {
+                    return Err(refused(crate::locale::text("evidence.unverified_but_true")));
                 }
             }
             if node.kind == NodeKind::Outcome && report.get("verdict") == Some("success") {

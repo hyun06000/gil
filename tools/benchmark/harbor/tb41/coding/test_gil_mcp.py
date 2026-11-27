@@ -91,6 +91,7 @@ class McpArmTests(unittest.TestCase):
             said = yield call("gil_plan_propose", draft={
                 "scope": {"goal": "대소문자 무시 정렬", "in_scope": "order", "out_of_scope": "그 밖", "constraints": "없음", "success_criteria": "검사 통과"},
                 "items": [{"id": "R1", "question": "order 가 대소문자를 무시하는가", "observation": "order(['B','a']) 가 ['a','B'] 를 돌려준다",
+                           "command": "python3 -c \"from fast_networkx import order; print(order(['B','a']))\"",
                            "source": "Order labels ignoring case"}],
                 "synthesis": {"statement": "order 를 고친다", "basis_refs": "\n".join(basis), "exploration_checklist": "R1"}})
             seen["plan"] = said["result"]
@@ -118,10 +119,10 @@ class McpArmTests(unittest.TestCase):
             said = yield {"action": "write", "path": "README.md", "content": "overwritten\n", "note": "n"}
             seen["task_file"] = said.get("error")
             yield {"action": "check", "note": "n"}
-            said = yield call("gil_close", report={"execution": "고치고 검사했다", "result": "통과", "plan_document": PLAN, "evidence_files": "evidence/C2.md"})
+            said = yield call("gil_close", report={"execution": "고치고 검사했다", "result": "통과", "command": "python3 -B -c ...", "observed": "exit 0", "plan_document": PLAN, "evidence_files": "evidence/C2.md"})
             seen["verify"] = said["result"]
             yield call("gil_open", kind="analysis", contract=CONTRACT)
-            yield call("gil_close", report={"hypothesis_fit": "yes", "problem_solved": True, "success_condition_met": True, "guardrail_triggered": "no", "interpretation": "검사가 통과했다"})
+            yield call("gil_close", report={"hypothesis_fit": "yes", "problem_solved": True, "success_condition_met": True, "unverified": "none", "guardrail_triggered": "no", "interpretation": "검사가 통과했다"})
             said = yield call("gil_open", kind="outcome", contract=CONTRACT)
             outcome = __import__("re").search(r"step:C\d+/S\d+", said["result"]).group(0)
             yield call("gil_close", report={"verdict": "success", "lesson": "키 함수로 풀렸다", "next_direction.action": "close_cycle", "next_direction.reason": "판정을 마쳤다"})

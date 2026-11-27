@@ -792,7 +792,7 @@ fn a_report_larger_than_one_answer_is_listed_in_pages_read_in_ranges_and_reassem
         analysis_extra: &extra, fails_back_to: None,
     });
     let mut expected: BTreeMap<String, String> = (0..6000).map(|n| (format!("obs{n:04}"), format!("값 {n}"))).collect();
-    for (name, value) in [("hypothesis_fit", "yes"), ("problem_solved", "true"), ("success_condition_met", "true"), ("guardrail_triggered", "no"),
+    for (name, value) in [("hypothesis_fit", "yes"), ("problem_solved", "true"), ("success_condition_met", "true"), ("unverified", "none"), ("guardrail_triggered", "no"),
         ("interpretation", "관측이 모두 기록됐다"), ("quoted", quoted.as_str()), (long_name.as_str(), "긴 이름의 칸"), ("evidence.verify_ref", run.verify.as_str())] {
         expected.insert(name.to_owned(), value.to_owned());
     }

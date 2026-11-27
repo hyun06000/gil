@@ -84,22 +84,22 @@ fn session(root: &str) -> Result<ProjectSession, String> {
 /// them. The App's review keeps the stored text it displays.
 /// A plan item as a model writes and reads it: `observation` is the one observation that decides
 /// the question (stored as `done_when`), `source` the sentence of the request it comes from.
-const ITEM_SHAPE: &str = "{id, question, observation, source}";
+const ITEM_SHAPE: &str = "{id, question, observation, command, source}";
 
 /// Turns the items of a proposal from the wire shape into the stored one. `Err` is the wire refusal.
 pub(super) fn accept(name: &str, input: &mut Value) -> Result<(), String> {
     if name != "gil_plan_propose" { return Ok(()); }
     let Some(items) = input.pointer_mut("/draft/items").and_then(Value::as_array_mut) else { return Ok(()); };
-    let wrong = |why: &str| format!("gil_plan_propose: every item is exactly {ITEM_SHAPE}, all nonblank strings. {why} observation is the ONE observation that decides the question — one command and what it shows, or one thing to look at; if a problem needs more than one, it is more than one item. source quotes the sentence of the user's request the problem comes from. Nothing was recorded; correct the items and send the call once more.");
+    let wrong = |why: &str| format!("gil_plan_propose: every item is exactly {ITEM_SHAPE}, all nonblank strings. {why} observation is the ONE observation that decides the question; if a problem needs more than one, it is more than one item. command is the command that makes that observation here, with what is in this environment — if no command here can make it, the observation cannot be made: rewrite the item to one that can, or tell the user what cannot be checked. source quotes the sentence of the user's request the problem comes from. Nothing was recorded; correct the items and send the call once more.");
     for item in items {
         let Some(fields) = item.as_object_mut() else { return Err(wrong("An item is not an object.")); };
         if fields.contains_key("done_when") { return Err(wrong("done_when is not a field: write observation.")); }
-        for field in ["id", "question", "observation", "source"] {
+        for field in ["id", "question", "observation", "command", "source"] {
             if fields.get(field).and_then(Value::as_str).is_none_or(|text| text.trim().is_empty()) {
                 return Err(wrong(&format!("An item has no {field}.")));
             }
         }
-        if fields.len() != 4 { return Err(wrong("An item has a field besides these four.")); }
+        if fields.len() != 5 { return Err(wrong("An item has a field besides these five.")); }
         let observation = fields.remove("observation").expect("checked");
         fields.insert("done_when".into(), observation);
     }
@@ -114,6 +114,7 @@ fn observation_named(value: &mut Value) {
                 if let Some(observation) = fields.remove("done_when") {
                     fields.insert("observation".into(), observation);
                     fields.entry("source").or_insert_with(|| json!(""));
+                    fields.entry("command").or_insert_with(|| json!(""));
                 }
             }
             fields.values_mut().for_each(observation_named);
@@ -171,7 +172,7 @@ fn exploration_view(value: &mut Value, p: &Project, state: &crate::approved_plan
             "selection":e.selection})
     };
     let requirements: Vec<Value> = active.map(|a| a.draft.items.iter().map(|i| json!({
-        "id":i.id, "question":i.question, "done_when":i.done_when, "source":i.source,
+        "id":i.id, "question":i.question, "done_when":i.done_when, "source":i.source, "command":i.command,
         "experiments":state.linked(&i.id).map(experiment).collect::<Vec<_>>()})).collect()).unwrap_or_default();
     let here = p.current_cycle().id().to_ref().to_string();
     let fields = value.as_object_mut().expect("plan view is an object");
@@ -295,8 +296,9 @@ pub(super) fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
     let draft = json!({"type":"object", "additionalProperties":false, "required":["scope","items","synthesis"], "properties":{
         "scope":{"type":"object","additionalProperties":false,"required":["goal","in_scope","out_of_scope","constraints","success_criteria"],"properties":{
             "goal":string,"in_scope":string,"out_of_scope":string,"constraints":string,"success_criteria":string}},
-        "items":{"type":"array","minItems":1,"maxItems":64,"description":"The problems to solve, as small as they can be made: each one decidable by ONE observation. Do not bundle several features or cases into one item.","items":{"type":"object","additionalProperties":false,"required":["id","question","observation","source"],"properties":{"id":string,"question":{"type":"string","description":"One yes/no question about one behaviour."},
+        "items":{"type":"array","minItems":1,"maxItems":64,"description":"The problems to solve, as small as they can be made: each one decidable by ONE observation. Do not bundle several features or cases into one item.","items":{"type":"object","additionalProperties":false,"required":["id","question","observation","command","source"],"properties":{"id":string,"question":{"type":"string","description":"One yes/no question about one behaviour."},
             "observation":{"type":"string","description":"The ONE observation that decides the question: one command and what it shows, or one thing to look at. If deciding takes more than one observation, split the item."},
+            "command":{"type":"string","description":"The command that makes that observation in this environment, with what is available here. If none can, the observation cannot be made: write an item that can be observed."},
             "source":{"type":"string","description":"The sentence of the user's request this problem comes from, quoted."}}}},
         "synthesis":{"type":"object","additionalProperties":{"type":"string"},"required":["statement","basis_refs","exploration_checklist"],"properties":{
             "statement":{"type":"string","description":"Proposed agreement. Explain previous-cycle/external background here; it does not replace current Interview basis_refs."},
