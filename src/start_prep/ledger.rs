@@ -130,7 +130,7 @@ pub(crate) struct Response {
     pub(crate) proposal_digest: String,
     /// `approve` | `request_changes`
     pub(crate) decision: String,
-    /// 언제나 `monitor_button`. 개인 신원 인증이 아니다.
+    /// `monitor_button`, 또는 무인 실행자가 답한 `unattended_runner`. 개인 신원 인증이 아니다.
     pub(crate) source: String,
 }
 

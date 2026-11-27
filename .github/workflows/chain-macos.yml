@@ -51,6 +51,7 @@ on:
       - 'src/mcp/start_kind.rs'
       - 'src/mcp/surface.rs'
       - 'src/mcp/transition.rs'
+      - 'src/mcp/unattended.rs'
       - 'src/mcp/update.rs'
       - 'src/monitor/serve.rs'
       - 'src/monitor/watch.rs'

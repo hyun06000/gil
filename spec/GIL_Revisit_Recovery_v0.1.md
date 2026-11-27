@@ -103,7 +103,8 @@ Artifact Model §3.6a의 일반 제품 복원 게이트를 완료했다고 주�
 `file-N`으로 저장하고 `files.json`에 경로·보관 이름·SHA-256을 적는다. `approval.json`은 승인한
 계획을 남기며 토큰은 담지 않는다. 자동 모드도 같은 원본 보존 보장을 지켜야 한다. 승인을 만든 호출은
 같은 폴더에 `source.json`을 함께 남긴다(`approval_source`: `monitor_button` 또는 `automatic_setting`과 설정의
-`revision`·SHA-256, `human_click`, `pending_state_sha256`·`digest`). 재개는 이 기록을 다시 쓰지 않으며,
+`revision`·SHA-256, `human_click`, `pending_state_sha256`·`digest`). 무인 MCP 세션(Cycle Model §20.2)의 실행자가
+답한 승인은 `unattended_runner`와 `human_click: false`로 남는다. 재개는 이 기록을 다시 쓰지 않으며,
 기록이 없는 과거 승인은 `unrecorded`로 보고한다. 파일은 private mode, no-follow 디렉터리 핸들로 원자적으로
 게시하고 fsync한다. 보존본은 transient rollback backup과 달리 자동 삭제하지 않는다.
 미완의 임시 보존 파일은 실행 권한이나 완료 증거가 아니다.

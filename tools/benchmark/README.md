@@ -1,6 +1,6 @@
 # Run one autonomous benchmark task
 
-Normal Linux sessions use the interactive Monitor workflow. Setting `GIL_MCP_DISPLAY=headless` selects display-free MCP and keeps its existing consent rules. Only explicitly invoking `gil benchmark` selects autonomous execution.
+Normal Linux sessions use the interactive Monitor workflow. Setting `GIL_MCP_DISPLAY=headless` selects display-free MCP and keeps its existing consent rules. Adding `GIL_MCP_APPROVAL=unattended` (with headless only) selects the unattended session described under "Unattended MCP session" below. Only explicitly invoking `gil benchmark` selects autonomous execution.
 
 Build the Linux binary with `cargo build --locked -p gil --release --bin gil`. In your Linux image, install that executable as `/usr/local/bin/gil`, include GNU `timeout` and put the task text and an executable benchmark agent adapter in the image. The adapter supplies the model or local inference implementation. The smoke adapter in this directory exercises a synthetic arithmetic task.
 
@@ -84,3 +84,20 @@ collected files and records both SHA-256 digests and official criterion statuses
 For a model-free transport check, dispatch the same workflow with `harbor_model=terminal-bench-audit`
 and `harbor_benchmark=true`. It runs empty and official reference controls in separate environments.
 Only the reference control receives reference files. No API key is supplied to the job.
+
+## Unattended MCP session
+
+To measure GIL through the same MCP tools a Codex user gets, with the `.gil` record in the task folder, the runner starts the server with no Monitor and answers for the user:
+
+```sh
+GIL_MCP_DISPLAY=headless GIL_MCP_APPROVAL=unattended gil mcp --serve
+```
+
+- The tool list has no display tool, no App tool and no Monitor resource. Two tools are marked `_meta.ui.visibility: ["runner"]`: `gil_unattended_review(project_root)` and `gil_unattended_decide(project_root, subject, digest, decision)`. The runner must keep them out of the tool list it gives the model; the server cannot tell the two callers apart.
+- When a model-facing receipt carries `awaiting_user` (`start`, `plan` or `revisit`), the runner reads the pending item, decides as the user's stand-in for that exact digest, and continues the model.
+- Every approval recorded this way is marked `unattended_runner`, never `monitor_button`.
+- A recovery can be approved only after the model asked for it with `gil_revisit`.
+- A `tracked_scope` project refuses restore and revisit in this build, so a run that must be able to go back starts with `start_kind: image_reports`.
+- `gil_start` adds `AGENTS.md` and `CLAUDE.md` to the project root and the record lives under `.gil` (or the private store the start names). None of these belong in a graded submission.
+
+`tests/unattended_session.rs` walks this path over the real process with scripted calls. It does not show that a model follows the receipts.

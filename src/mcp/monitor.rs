@@ -26,7 +26,7 @@ struct Entry {
 }
 
 #[derive(Debug)]
-pub struct Monitor { pub(super) headless: bool, entries: Mutex<BTreeMap<String, Entry>>, store: Store, epoch: String }
+pub struct Monitor { pub(super) headless: bool, pub(super) unattended: bool, entries: Mutex<BTreeMap<String, Entry>>, store: Store, epoch: String }
 
 impl Default for Monitor {
     fn default() -> Self { Self::with_store(Store::default()) }
@@ -80,7 +80,7 @@ impl Monitor {
         static SERIAL: AtomicU64 = AtomicU64::new(0);
         let time = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos();
         let unique = format!("{}-{time}-{}", std::process::id(), SERIAL.fetch_add(1, Ordering::Relaxed));
-        Self { headless: false, entries: Mutex::new(BTreeMap::new()), store,
+        Self { headless: false, unattended: false, entries: Mutex::new(BTreeMap::new()), store,
             epoch: format!("{:x}", Sha256::digest(unique.as_bytes())) }
     }
 

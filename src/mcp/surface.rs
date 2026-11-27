@@ -148,6 +148,7 @@ pub fn valid_input(tool: &Tool, input: &Value) -> bool {
             if !canonical { return false; }
         }
     }
+    if super::unattended::NAMES.contains(&tool.name.as_ref()) { return super::unattended::valid(tool.name.as_ref(), input); }
     #[cfg(feature = "product-safety")]
     if tool.name.starts_with("gil_revisit_") { return super::recovery::valid(tool.name.as_ref(), input); }
     #[cfg(all(feature = "tracking-policy", unix))]

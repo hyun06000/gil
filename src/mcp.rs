@@ -14,6 +14,8 @@ mod bindings;
 mod actions;
 // Which new-start contract a `gil_start` call takes (one binary may hold two).
 mod start_kind;
+// No Monitor and no person: the runner answers for the user (explicit environment choice only).
+mod unattended;
 mod hangul;
 mod native;
 mod surface;
@@ -54,6 +56,7 @@ pub struct GilServer {
     start_grants: Arc<start::Grants>,
     #[cfg(all(feature = "tracking-policy", unix))]
     scope_grants: Arc<scope::Grants>,
+    unattended_asked: Arc<unattended::Asked>,
     native_gate: Arc<Mutex<()>>,
     companion_session: Arc<Mutex<crate::companion_ipc::McpSession>>,
 }
@@ -65,15 +68,18 @@ impl GilServer {
     /// Deployment/test adapter, not an MCP tool parameter. None discovers an installed cohort;
     /// existing Plugin installs with no cohort receipt remain opted out.
     pub fn with_companion_endpoint(endpoint: Option<std::path::PathBuf>) -> Self {
-        Self::with_display(endpoint, false)
+        Self::with_display(endpoint, false, false)
     }
-    fn with_display(endpoint: Option<std::path::PathBuf>, headless: bool) -> Self {
+    /// `unattended` is honored only together with `headless`: a session with a screen has a person.
+    fn with_display(endpoint: Option<std::path::PathBuf>, headless: bool, unattended: bool) -> Self {
         let mut monitor = Monitor::default();
         monitor.headless = headless;
+        monitor.unattended = headless && unattended;
         Self { #[cfg(feature = "product-safety")] recovery_grants: Arc::new(recovery::Grants::default()),
             #[cfg(feature = "approved-plan")] plan_grants: Arc::new(plans::Grants::default()),
             #[cfg(all(feature = "tracking-policy", unix))] start_grants: Arc::new(start::Grants::default()),
             #[cfg(all(feature = "tracking-policy", unix))] scope_grants: Arc::new(scope::Grants::default()),
+            unattended_asked: Arc::new(unattended::Asked::default()),
             monitor: Arc::new(monitor), native_gate: Arc::new(Mutex::new(())),
             companion_session: Arc::new(Mutex::new(crate::companion_ipc::McpSession::new(endpoint))) }
     }
@@ -230,6 +236,25 @@ impl GilServer {
         if succeeded {
             if let Some((_, Some(note))) = normalized_note { guidance::prepend(&mut result, note); }
         }
+        // Unattended: say what now waits for the user, read from the stored records after this call.
+        if self.monitor.unattended && !unattended::NAMES.contains(&name.as_str()) {
+            if let Some(root) = input.get("project_root").and_then(Value::as_str).map(std::path::PathBuf::from).filter(|root| root.is_absolute()) {
+                let asked = self.unattended_asked.clone();
+                // A refused gil_revisit is the model asking for a recovery only the user can approve.
+                let asks_recovery = name == "gil_revisit" && !succeeded;
+                let waits = tokio::task::spawn_blocking(move || {
+                    let Ok(root) = root.canonicalize() else { return Vec::new() };
+                    if asks_recovery { asked.revisit(&root); }
+                    unattended::pending(&root, &asked)
+                }).await.unwrap_or_default();
+                if let Some((said, subjects)) = unattended::note(&waits) {
+                    if let Some(fields) = result.structured_content.as_mut().and_then(Value::as_object_mut) {
+                        fields.insert("awaiting_user".into(), subjects);
+                    }
+                    guidance::prepend(&mut result, said);
+                }
+            }
+        }
         result
     }
     pub fn status_said(root: &str) -> Result<String, String> {
@@ -246,6 +271,11 @@ impl GilServer {
                 start_kind::Route::Direct => { if let Some(fields) = input.as_object_mut() { fields.remove(start_kind::INPUT); } }
                 start_kind::Route::Preparation => {}
             }
+        }
+        if unattended::NAMES.contains(&name.as_str()) {
+            let asked = self.unattended_asked.clone();
+            return tokio::task::spawn_blocking(move || locale::with(locale, || unattended::call(&asked, &name, input))).await
+                .unwrap_or_else(|_| actions::refusal("The unattended answer did not finish. Read gil_unattended_review before deciding again."));
         }
         if name == "gil_await_user" {
             return tokio::task::spawn_blocking(move || locale::with(locale, || match crate::write_guard::automatic::await_user(
@@ -371,20 +401,29 @@ fn locale_for_call(monitor: &Monitor, name: &str, input: &Value) -> Locale {
     };
     root.as_deref().map(locale::for_project).unwrap_or(DEFAULT_LOCALE)
 }
+impl GilServer {
+    fn tools(&self) -> &'static [Tool] {
+        if !self.monitor.unattended { return surface::connection_tools(self.monitor.headless); }
+        static UNATTENDED: std::sync::OnceLock<Vec<Tool>> = std::sync::OnceLock::new();
+        UNATTENDED.get_or_init(|| unattended::catalog(surface::connection_tools(true)))
+    }
+}
 impl ServerHandler for GilServer {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().enable_resources().build())
             .with_server_info(Implementation::new("gil", crate::CORE_VERSION))
-            .with_instructions(if self.monitor.headless {
+            .with_instructions(if self.monitor.unattended {
+                format!("{}\n\n{}", unattended::PREFACE, guidance::INSTRUCTIONS)
+            } else if self.monitor.headless {
                 format!("This runner selected headless display. Automatic display instructions apply only to desktop sessions. Follow the receipt's next_action, including any wait for an answer or approval.\n\n{}", guidance::INSTRUCTIONS)
             } else { guidance::INSTRUCTIONS.to_owned() })
     }
     fn get_tool(&self, name: &str) -> Option<Tool> {
-        surface::connection_tools(self.monitor.headless).iter().find(|t| t.name == name).cloned()
+        self.tools().iter().find(|t| t.name == name).cloned()
     }
     async fn list_tools(&self, _: Option<PaginatedRequestParams>, _: RequestContext<RoleServer>) -> Result<ListToolsResult, ErrorData> {
         let mut result = ListToolsResult::default();
-        result.tools = surface::connection_tools(self.monitor.headless).to_vec();
+        result.tools = self.tools().to_vec();
         Ok(result)
     }
     async fn call_tool(&self, request: CallToolRequestParams, _: RequestContext<RoleServer>) -> Result<CallToolResponse, ErrorData> {
@@ -395,7 +434,8 @@ impl ServerHandler for GilServer {
     }
     async fn list_resources(&self, _: Option<PaginatedRequestParams>, _: RequestContext<RoleServer>) -> Result<ListResourcesResult, ErrorData> {
         let mut result = ListResourcesResult::default();
-        result.resources = vec![surface::resource()];
+        // The only resource is the Monitor App; an unattended session has none.
+        if !self.monitor.unattended { result.resources = vec![surface::resource()]; }
         Ok(result)
     }
     async fn read_resource(&self, request: ReadResourceRequestParams, _: RequestContext<RoleServer>) -> Result<ReadResourceResponse, ErrorData> {
@@ -419,7 +459,14 @@ pub fn serve_stdio() -> Result<(), String> {
 
     runtime.block_on(async {
         let headless = std::env::var("GIL_MCP_DISPLAY").as_deref() == Ok("headless");
-        let server = GilServer::with_display(std::env::var_os(crate::companion_ipc::ENV_ENDPOINT).map(Into::into), headless);
+        // Unattended approval is an explicit choice of whoever starts the process. Any other value,
+        // or the choice without a headless display, starts nothing instead of guessing.
+        let unattended = match std::env::var(unattended::ENV) {
+            Err(_) => false,
+            Ok(mode) if mode == unattended::MODE && headless => true,
+            Ok(_) => return Err(format!("{}={} requires GIL_MCP_DISPLAY=headless and is the only supported value. Nothing was served.", unattended::ENV, unattended::MODE)),
+        };
+        let server = GilServer::with_display(std::env::var_os(crate::companion_ipc::ENV_ENDPOINT).map(Into::into), headless, unattended);
         let companion_session = server.companion_session.clone();
         if !headless { server.monitor.reap(); }
         let service = match server.serve(rmcp::transport::stdio()).await {

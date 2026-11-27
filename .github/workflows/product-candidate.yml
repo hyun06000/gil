@@ -188,6 +188,9 @@ jobs:
       # including the approved recovery after a state save followed by process death (debug failpoint).
       - name: "[product] approval wire, product restore protection and closed-failure preservation over the real stdio process, at least 12 on Linux"
         run: node tools/ci/expect-tests.mjs 12 cargo test --locked -p gil --no-fail-fast --features "$GIL_PRODUCT_FEATURES" --test approved_plan_wire_wave1 --test chain_recovery_preservation
+      # No Monitor and no person: the runner's answers are recorded as unattended_runner, never as a Monitor button.
+      - name: "[product] unattended session over the real stdio process (4)"
+        run: node tools/ci/expect-tests.mjs 4 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test unattended_session
       - name: "[product] compile all Core targets (compile evidence only, not execution)"
         run: cargo build --locked -p gil --all-targets --features "$GIL_PRODUCT_FEATURES"
       # The Plugin's Core locator (core.test.mjs) finds the Core bundled for macOS or Windows and answers
@@ -384,6 +387,9 @@ jobs:
           node tools/ci/expect-tests.mjs 1 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test mcp visual_start_preserves_existing_and_partial_records_and_survives_response_loss -- --exact
       - name: "[product] approval wire, product restore protection and closed-failure preservation over the real stdio process, at least 15"
         run: node tools/ci/expect-tests.mjs 15 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test approved_plan_wire_wave1 --test chain_recovery_preservation
+      # No Monitor and no person: the runner's answers are recorded as unattended_runner, never as a Monitor button.
+      - name: "[product] unattended session over the real stdio process (4)"
+        run: node tools/ci/expect-tests.mjs 4 cargo test --locked -p gil --features "$GIL_PRODUCT_FEATURES" --test unattended_session
       - name: "[product] compile all Core targets (compile evidence only, not execution)"
         run: cargo build --locked -p gil --all-targets --features "$GIL_PRODUCT_FEATURES"
       - name: Prepare fresh output parent

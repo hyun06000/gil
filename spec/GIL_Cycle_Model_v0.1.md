@@ -1604,6 +1604,26 @@ Linux의 일반 MCP 세션은 사용자와 에이전트가 Monitor에서 상호�
 실행하고 근거 파일을 남긴다. 첫 Experiment를 닫으면 결과를 반환한다. 이 선택은 일반
 프로젝트의 승인 기록이나 다음 세션의 기본값으로 이어지지 않는다.
 
+**무인 MCP 세션(2026-11-27 사용자 결정).** 벤치마크처럼 사람도 Monitor도 없는 실행에서 제품과 같은
+MCP 도구와 `.gil` 기록을 그대로 쓰기 위해, 실행자는 MCP 프로세스의 환경에
+`GIL_MCP_DISPLAY=headless`와 `GIL_MCP_APPROVAL=unattended`를 함께 지정할 수 있다. 이 선택은 프로세스
+환경으로만 하며, 도구 입력·프로젝트 파일·디스플레이 유무로는 선택되지 않는다. headless 없이
+지정하거나 다른 값을 주면 아무것도 제공하지 않고 끝난다.
+
+- 도구 목록에는 화면을 띄우거나 조회하는 도구와 App 전용 도구가 없다. Monitor 자원도 없다.
+- 사용자의 결정은 실행자 전용 두 도구로 받는다. `gil_unattended_review(project_root)`는 사용자를
+  기다리는 것을 저장된 그대로 읽고, `gil_unattended_decide(project_root, subject, digest, decision)`는
+  읽은 바로 그 digest에 대한 답을 기록한다. 대상은 추적 범위 시작 제안(`start`), 열린 Synthesis의 계획
+  제안(`plan`), 닫힌 실패 Experiment의 복구(`revisit`)다.
+- 이 경로로 남는 승인의 출처는 모두 `unattended_runner`다. Monitor 버튼(`monitor_button`)으로
+  기록하지 않으며, 복구의 `source.json`은 `human_click: false`를 남긴다.
+- 복구는 모델이 `gil_revisit`으로 요청한 뒤에만 답할 수 있고, 승인만 기록할 수 있다.
+- 모델이 받는 응답은 사용자를 기다리는 것이 있을 때 `awaiting_user`에 그 대상을 싣는다.
+- 실행자 도구를 모델에게 주지 않는 것은 실행자의 책임이다. MCP 프로세스는 호출자를 구별하지 못한다.
+- 추적 범위 변경, 기준점 보관 재시도, 보관 중단과 해제는 이 경로에 답이 없고 계속 기다린다.
+- 안내문 본문과 일부 응답 문장에는 Monitor라는 말이 남아 있다. 세션 첫머리의 안내가 그것을
+  「사용자의 결정은 대화 밖에서 주어진다」로 읽도록 정한다.
+
 ## 21. 현재 결정하지 않는 것
 
 이 문서는 다음을 의도적으로 결정하지 않는다.

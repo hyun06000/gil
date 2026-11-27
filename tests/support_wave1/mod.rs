@@ -113,7 +113,7 @@ pub struct Client {
 }
 
 /// Build the isolated child environment. Only system essentials come from the parent.
-fn isolated_command(settings: &Path) -> Command {
+pub fn isolated_command(settings: &Path) -> Command {
     let home = private_home(settings);
     let local = private_local_app_data(settings);
     std::fs::create_dir_all(&home).expect("isolated home");

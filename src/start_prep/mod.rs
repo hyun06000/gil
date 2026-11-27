@@ -133,7 +133,7 @@ fn check_ledger(l: &Ledger) -> Result<(), String> {
     let mut answered = std::collections::BTreeSet::new();
     for r in &l.responses {
         let Some(p) = l.proposal(&r.proposal_digest) else { return bad("응답이 없는 제안을 가리킨다") };
-        if p.revision != r.revision || !answered.insert(&r.proposal_digest) || r.source != "monitor_button"
+        if p.revision != r.revision || !answered.insert(&r.proposal_digest) || !crate::approval_source::known(&r.source)
             || !matches!(r.decision.as_str(), "approve" | "request_changes") { return bad("응답"); }
     }
     let mut attempts = 0u32;
@@ -620,6 +620,11 @@ fn started_record(root: &Path) -> Result<Option<StartedRecord>, Refusal> {
 /// Monitor 버튼의 응답을 기록한다. **capability 확인은 부르는 MCP App 계층이 이미 했다** — 이 함수는 모델·CLI
 /// 경로에 노출하지 않는다. 같은 응답의 재전송은 같은 결과, 다른 응답은 거절. approve 면 곧바로 적용을 시도한다.
 pub(crate) fn decide(root: &Path, revision: u32, digest: &str, approve: bool) -> Result<Value, Refusal> {
+    decide_from(root, revision, digest, approve, crate::approval_source::MONITOR)
+}
+
+/// The same response with the channel it came through. Only the unattended runner tool names another source.
+pub(crate) fn decide_from(root: &Path, revision: u32, digest: &str, approve: bool, source: &str) -> Result<Value, Refusal> {
     let decision = if approve { "approve" } else { "request_changes" };
     {
         let gate = gate(root, false)?;
@@ -646,7 +651,7 @@ pub(crate) fn decide(root: &Path, revision: u32, digest: &str, approve: bool) ->
                 return Err(refuse("blocked", tr(if latest.blockers.is_empty() { "start_prep.policy_file_held" } else { "start_prep.blocked" })));
             }
             let mut after = before.clone();
-            after.responses.push(Response { revision, proposal_digest: digest.into(), decision: decision.into(), source: "monitor_button".into() });
+            after.responses.push(Response { revision, proposal_digest: digest.into(), decision: decision.into(), source: source.into() });
             save(&gate, Some(&before), &after)?;
         }
     }
@@ -695,7 +700,7 @@ fn apply_path(root: &Path, digest: &str) -> Result<Value, Refusal> {
     if before.latest().map(|p| &p.digest) != Some(&proposal.digest) {
         return Err(refuse("superseded", tr("start_prep.superseded")));
     }
-    if before.response(digest).is_none_or(|r| r.decision != "approve" || r.source != "monitor_button") {
+    if before.response(digest).is_none_or(|r| r.decision != "approve" || !crate::approval_source::known(&r.source)) {
         return Err(refuse("not_approved", tr("start_prep.not_approved")));
     }
     gate.initializable().map_err(session_refusal)?;
@@ -1233,7 +1238,7 @@ pub(crate) fn verify_started_approval(gil: &Path, record: &sp::PolicyRecord) -> 
     let proposals: Vec<&Proposal> = ledger.proposals.iter().filter(|p| p.digest == digest).collect();
     let responses: Vec<&Response> = ledger.responses.iter().filter(|r| r.proposal_digest == digest).collect();
     match (proposals.as_slice(), responses.as_slice()) {
-        ([p], [r]) if r.decision == "approve" && r.source == "monitor_button" && r.revision == p.revision
+        ([p], [r]) if r.decision == "approve" && crate::approval_source::known(&r.source) && r.revision == p.revision
             && p.rules_digest == record.rules().hex() && p.engine == record.engine().number()
             && p.blockers.is_empty() => Ok(()),
         _ => Err(tr("start_prep.load_approval_mismatch")),

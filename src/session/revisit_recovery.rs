@@ -57,6 +57,12 @@ impl ProjectSession {
     }
 
     pub(crate) fn approve_revisit(&mut self, digest: &str) -> Result<Value, String> {
+        self.approve_revisit_from(digest, ApprovalSource::MonitorButton)
+    }
+
+    /// The same approval with the channel it came through.
+    #[cfg_attr(not(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows)), allow(unused_variables))]
+    pub(crate) fn approve_revisit_from(&mut self, digest: &str, source: ApprovalSource) -> Result<Value, String> {
         #[cfg(feature = "tracking-policy")]
         if self.project.tracking().is_some() {
             return Err(crate::locale::text("session.tracking_unsupported.revisit").into());
@@ -73,7 +79,7 @@ impl ProjectSession {
             if plan.view["digest"].as_str() != Some(digest) {
                 return Err("복원 계획이 바뀌었다. 변경 목록을 다시 확인하고 승인한다".into());
             }
-            self.apply_recovery(plan, ApprovalSource::MonitorButton)
+            self.apply_recovery(plan, source)
         }
     }
 
@@ -129,6 +135,8 @@ impl ProjectSession {
 pub(crate) enum ApprovalSource {
     /// The user's Monitor button through the App-only `gil_revisit_apply`.
     MonitorButton,
+    /// The runner of an unattended session, through the tool the model is not given.
+    UnattendedRunner,
     /// A valid per-Project automatic setting of this exact edition (opt-in build).
     #[cfg(feature = "recovery-auto-approval")]
     AutomaticSetting(crate::recovery_mode::AutomaticSetting),
@@ -148,7 +156,8 @@ impl ApprovalSource {
                 "notice":"승인 출처 기록이다. 복구 계획은 approval.json, 원본은 files.json이 가리킨다. 사람의 신원 인증을 뜻하지 않는다."})
         };
         match self {
-            ApprovalSource::MonitorButton => Some(base("monitor_button")),
+            ApprovalSource::MonitorButton => Some(base(crate::approval_source::MONITOR)),
+            ApprovalSource::UnattendedRunner => Some(base(crate::approval_source::UNATTENDED)),
             #[cfg(feature = "recovery-auto-approval")]
             ApprovalSource::AutomaticSetting(setting) => {
                 let mut v = base("automatic_setting");

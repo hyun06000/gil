@@ -196,6 +196,7 @@ mod rules;
 mod session;
 #[cfg(feature = "product-safety")]
 mod recovery_mode;
+mod approval_source;
 mod store;
 // 구현 순서 4번 — 시작 준비·제안·Monitor 승인 응답·정식 시작 확정(`tracking-policy` 개발 구성).
 #[cfg(all(feature = "tracking-policy", unix))]

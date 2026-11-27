@@ -32,6 +32,9 @@ Interview Cycle을 연다. 설계상 사용자 Relation과 프로젝트 목표�
 Linux에서도 일반 MCP 세션은 사용자와 에이전트가 Monitor를 통해 상호작용한다.
 `GIL_MCP_DISPLAY=headless`는 화면 표시만 생략한다. 격리된 벤치마크에서 인터뷰와 첫 실험을
 자율 실행하려면 [벤치마크 모드](tools/benchmark/README.md)의 `gil benchmark` 명령을 명시적으로 선택한다.
+사람도 Monitor도 없는 실행에서 제품과 같은 MCP 도구를 그대로 쓰려면 실행자가
+`GIL_MCP_DISPLAY=headless`와 `GIL_MCP_APPROVAL=unattended`를 함께 지정한다. 이때 사용자의 승인은
+실행자가 모델에게 주지 않는 도구로 답하고, 그 기록에는 Monitor 버튼이 아니라 `unattended_runner`가 남는다.
 
 현재 구현은 dogfood 단계다. Bootstrap Interview, 여러 Cycle, 지속되는 Existence와 Will,
 format 4 Artifact Snapshot, dirty gate, 중단 복구 가능한 `gil restore`, 그리고 필요한 규칙

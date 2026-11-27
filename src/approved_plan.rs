@@ -434,7 +434,7 @@ impl PlanState {
             }
             if p.receipt
                 .as_ref()
-                .is_some_and(|r| r.source != "monitor_button")
+                .is_some_and(|r| !crate::approval_source::known(&r.source))
             {
                 return Err(bad(crate::locale::text("plan.err.input_path")));
             }
@@ -699,6 +699,17 @@ impl Project {
         digest: &str,
         decision: Decision,
     ) -> Result<Proposal, String> {
+        self.decide_plan_from(revision, digest, decision, crate::approval_source::MONITOR)
+    }
+    /// The same decision with the channel it came through (`crate::approval_source`).
+    #[cfg(feature = "approved-plan")]
+    pub(crate) fn decide_plan_from(
+        &mut self,
+        revision: u32,
+        digest: &str,
+        decision: Decision,
+        source: &str,
+    ) -> Result<Proposal, String> {
         let p = self
             .approved_plan()
             .and_then(|s| s.current(self))
@@ -715,7 +726,7 @@ impl Project {
         let p = self.plan_mut()?.proposals.last_mut().unwrap();
         p.receipt = Some(Receipt {
             decision,
-            source: "monitor_button".into(),
+            source: source.into(),
         });
         Ok(p.clone())
     }
