@@ -391,7 +391,8 @@ def define_states(model, ledger, targets, lesson):
     answer = model(
         "This is the problem definition. For each target criterion write (1) state: the exact state that must "
         "hold for it to count as solved, including the starting state it is observed from; (2) probe: a shell "
-        "script, run with bash in the task directory, that exits 0 exactly when that state holds and non-zero "
+        "script, saved as a file in the task directory and run from there with bash, that exits 0 exactly when "
+        "that state holds and non-zero "
         "otherwise. The probe is fixed here, before any method is chosen, and it judges whatever "
         "implementation follows. So it rests only on the public interface the task names (its commands, files "
         "and formats) and never on how a solution is built. It prepares its own starting state the way an "

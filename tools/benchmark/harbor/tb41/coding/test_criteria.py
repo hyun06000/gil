@@ -175,6 +175,16 @@ class VerifyLedgerTests(unittest.TestCase):
         self.assertEqual(obs["swept"], [{"criterion": "K2", "before": "unrun", "after": "holds"}])
         self.assertEqual((obs["stop"], obs["outside_hypothesis"]), ("finished", []))
 
+    def test_a_probe_runs_as_a_file_in_the_task_directory_and_leaves_nothing_there(self):
+        # The everyday opening of a script: go to where the script is, then use the project beside it.
+        beside = 'cd "$(dirname "$0")"\ntest -f fast_networkx.py || { echo "the project is not beside the probe"; exit 1; }\n' + KEEPS
+        ledger = ledger_with(K2=beside)
+        obs = self.drive([{"action": "probe", "criterion": "K2"}, {"action": "write", "path": NAME, "content": GUARDED},
+                          {"action": "check"}, {"action": "finish"}], criteria=ledger.json(), targets=["K2"], scope={NAME})
+        self.assertEqual((obs["entry"], obs["ledger"]["holds"]), ({"K2": "holds"}, 1))
+        self.assertEqual(sorted(p.name for p in self.app.iterdir()), ["fast_networkx", "fast_networkx.py"])
+        self.assertEqual(list(obs["files"]), [NAME])
+
     def test_verify_changes_only_the_files_the_hypothesis_names(self):
         ledger = ledger_with(K3=REFUSES)
         obs = self.drive([

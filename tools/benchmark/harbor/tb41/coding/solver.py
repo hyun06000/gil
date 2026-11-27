@@ -226,13 +226,18 @@ LEDGER_RULES = (
 
 
 def run_probe(key, script):
-    """Runs the probe Define wrote for a criterion, from a file of its own, in the task directory."""
-    folder = Path(tempfile.gettempdir()) / "gil-probes"
-    folder.mkdir(exist_ok=True)
-    path = folder / (key + ".sh")
+    """Runs the probe Define wrote for a criterion, as a file in the task directory and from there.
+
+    A script commonly starts by moving to its own folder; saved anywhere else it would look for the
+    project beside itself and not find it. The file is removed afterwards and is never part of a submission.
+    """
+    path = APP / f".gil-probe-{key}.sh"
     path.write_text(script)
-    # bash where the image has it: a probe written with its everyday constructs should not fail on the shell.
-    return run_command((shutil.which("bash") or "sh") + " " + shlex.quote(str(path)), RUN_SECONDS)
+    try:
+        # bash where the image has it: a probe written with its everyday constructs should not fail on the shell.
+        return run_command((shutil.which("bash") or "sh") + " " + shlex.quote(str(path)), RUN_SECONDS)
+    finally:
+        path.unlink(missing_ok=True)
 
 
 def solve(task,plan="", *, cycle=None, baseline=None, verify_ref=None, failed_check=None, criteria=None, targets=(), scope=None):
