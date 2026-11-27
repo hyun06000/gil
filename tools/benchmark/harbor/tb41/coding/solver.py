@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import shlex
+import shutil
 import signal
 import subprocess
 import tempfile
@@ -230,7 +231,8 @@ def run_probe(key, script):
     folder.mkdir(exist_ok=True)
     path = folder / (key + ".sh")
     path.write_text(script)
-    return run_command("sh " + shlex.quote(str(path)), RUN_SECONDS)
+    # bash where the image has it: a probe written with its everyday constructs should not fail on the shell.
+    return run_command((shutil.which("bash") or "sh") + " " + shlex.quote(str(path)), RUN_SECONDS)
 
 
 def solve(task,plan="", *, cycle=None, baseline=None, verify_ref=None, failed_check=None, criteria=None, targets=(), scope=None):

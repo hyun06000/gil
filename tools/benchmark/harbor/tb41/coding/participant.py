@@ -188,6 +188,16 @@ def experiment_handoff(model, findings, evidence_rule):
 # model's call too: it is told the minutes left. The Chain ends on its own only when a Verify
 # reports that the trial's time or model budget ran out.
 SPENT = ("budget", "deadline")
+# What each step does, and nothing else.
+ACTS = {
+    "question": "Ask the one open question the public files raise.",
+    "interpretation": "Say what the exchange settled and what stays uncertain.",
+    "synthesis": "Write the plan the experiments start from.",
+    "define": "Write which problem this experiment solves and the exact state that counts as solved.",
+    "hypothesis": "Write the method that would bring that state about.",
+    "analysis": "Say whether, with the hypothesis carried out, the problem was solved.",
+    "outcome": "Reflect: if it was not solved, why and where to go back; if it was, the candidates for the next experiment.",
+}
 # The steps whose requests carry the public sources read so far.
 SOURCED = ("question", "interpretation", "synthesis", "define", "hypothesis")
 
@@ -310,7 +320,7 @@ def define_states(model, ledger, targets, lesson):
     answer = model(
         "This is the problem definition. For each target criterion write (1) state: the exact state that must "
         "hold for it to count as solved, including the starting state it is observed from; (2) probe: a shell "
-        "script, run with sh in the task directory, that exits 0 exactly when that state holds and non-zero "
+        "script, run with bash in the task directory, that exits 0 exactly when that state holds and non-zero "
         "otherwise. The probe is fixed here, before any method is chosen, and it judges whatever "
         "implementation follows. So it rests only on the public interface the task names (its commands, files "
         "and formats) and never on how a solution is built. It prepares its own starting state the way an "
@@ -394,11 +404,12 @@ def reply(r):
         return next(s for s in reversed(history) if s["kind"] == kind and s["report"])
 
     def model(prompt, choices=(), schema=None):
-        context = {"task": task, "available_tools": {
-            "read": "Read public task source", "write": "Replace permitted solution files",
-            "edit": "Replace one passage of a permitted solution file",
-            "run": "Run a shell command in the task directory without network (build, execute, time, own test scripts)",
-            "check": CHECKS[TASK], "finish": "Hand submission to the independent verifier"}}
+        # Each step does one thing, and only Verify has tools. A step that writes is told so: with the
+        # tools listed here it announced inspections and wrote tool calls into its text.
+        context = {"task": task, "step": k, "act_of_this_step": ACTS.get(k, "Write this step's text."),
+                   "tools_in_this_step": "none: what you write is recorded as this step's text; reading, changing and "
+                                         "running happen only in Verify",
+                   "local_check_run_in_verify": CHECKS[TASK]}
         if k in SOURCED:
             context["cited_source_excerpts"] = cited
             context["interview_reads"] = reads
