@@ -22,11 +22,7 @@ REPLY = ("I have nothing to add to the task statement: it is everything I want. 
          "something, go with your recommendation. Do not wait for more from me.")
 OPENING = ("The user says: Let's do this as a GIL project. The project folder is {root} (use it as "
            "project_root). Start it with start_kind tracked_scope, and work on the task through GIL: the "
-           "interview, then experiments. I will approve what GIL asks me to approve. "
-           "One thing about finish: calling it ends the session at once, and the files as they are then go "
-           "straight to grading. So do not call finish while a GIL step or Cycle is still open. Call it only "
-           "when the work is really done: after the Chain's closing Interview, when everything agreed there has "
-           "been carried out and the Chain is closed.")
+           "interview, then experiments. I will approve what GIL asks me to approve.")
 SAY = {"type": "function", "name": "say", "strict": True,
        "description": "Say something to the user or ask the user a question, and get the reply.",
        "parameters": {"type": "object", "properties": {"message": {"type": "string"}},

@@ -157,7 +157,8 @@ pub(crate) fn synthesis_open_guidance(here: crate::StepRef, refs: &[String], pla
     let rules = text("cycle.basis_refs_rules");
     if plan {
         let brief = if exploration { text("guide.propose_requirements") } else { text("guide.propose_brief") };
-        let specific = format!("{} {brief}", text("guide.opened.synthesis"));
+        // The list of problems is written here: ask once more whether every item is atomic.
+        let specific = format!("{} {brief} {}", text("guide.opened.synthesis"), text("guide.interview_atomic"));
         let example = serde_json::json!({"basis_refs": refs.join("\n")});
         tr!("guide.opened.synthesis_basis", specific = specific, location = location, rules = rules, example = example)
     } else {
@@ -176,7 +177,8 @@ fn opened(result: &CallToolResult) -> String {
         "question" => "guide.opened.question",
         "interpretation" => "guide.opened.interpretation",
         "synthesis" => return String::new(), // The open receipt carries the project-specific guidance.
-        "outcome" if said.contains("Interview") => "guide.opened.interview_outcome",
+        // The Interview is about to end: the same question once more, with what to do if the answer is no.
+        "outcome" if said.contains("Interview") => return format!("{} {}", text("guide.opened.interview_outcome"), text("guide.interview_atomic_end")),
         "outcome" => "guide.opened.outcome",
         "define" => "guide.opened.define",
         "hypothesis" => "guide.opened.hypothesis",
@@ -239,6 +241,11 @@ fn closed(result: &CallToolResult) -> String {
         (_, Some(Next::Blocked)) => tr!("guide.closed.blocked"),
         // The generic sentence already carries the lead; wrapping it again repeated the lead.
         _ => return tr!("guide.closed.generic"),
+    };
+    // An Interview node closed: before the next one, ask whether the problems named so far are atomic.
+    let specific = match kind {
+        "question" | "interpretation" => format!("{specific} {}", text("guide.interview_atomic")),
+        _ => specific,
     };
     // A Cycle or Chain Report comes next: write it short. Execution finished: show the result first.
     let specific = match (kind, next.as_ref()) {

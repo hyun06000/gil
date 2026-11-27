@@ -232,6 +232,15 @@ def run_command(command, limit):
     return code, output.decode(errors="replace")
 
 
+# When to call finish, in the same words for every arm. It is the only thing that says the work is over.
+FINISH_RULE = (
+    "\nWhen to call finish: calling it ends the session at once, and the files as they are then go straight to "
+    "grading; nothing can be changed afterwards. Call finish only when every problem the task poses is solved "
+    "and you have checked the result. If GIL tools are among your tools, there is one more condition: do not call "
+    "finish while a GIL step or Cycle is still open. Call it after the Chain's closing Interview, when everything "
+    "agreed there has been carried out and the Chain is closed. If there are no GIL tools, do not use GIL: call "
+    "finish once all the problems are solved.")
+
 LEDGER_RULES = (
     "\nThis Verify carries out the hypothesis above and nothing more. The problem was fixed in Define: for each "
     "target, the state that must hold and the probe that shows it. You write no probe and change none; "
@@ -305,15 +314,18 @@ Public source files: {sorted(public)[:120]}
 Files you have edited: {list(writes)}
 Files in view, as they are on disk now (a file you write, edit or change by a command is updated here; reading one of these again brings nothing new): {json.dumps(view.shown(),ensure_ascii=False)}
 Recent tool results: {json.dumps(recent(history),ensure_ascii=False)}
-Work toward the full official task. Call exactly one of the supplied editor tools. Available actions:
+Call exactly one of the supplied editor tools. Available actions:
 {{"action":"read","path":"relative/file","offset":0}} (puts up to {PAGE} characters of the file in view)
 {{"action":"write","path":"relative/file","content":"complete source file"}}
 {{"action":"edit","path":"relative/file","old":"text that occurs exactly once in the file","new":"its replacement"}}
 {{"action":"run","command":"shell command"}} (sh in /app, no network, {RUN_SECONDS} s limit: build, execute or time anything, including the task's own commands and test scripts you write under /tmp; submission files it changes are recorded)
 {{"action":"check"}} (run task compiler/build/import smoke)
-{{"action":"finish"}} after editing the solution and checking it. An incomplete solution can be graded.
+{{"action":"finish"}} ends the session (see when to call it below).
 For vf2 use fast_networkx.py or a fast_networkx package. For ks use solution.cpp. For React work in src/.
 If a local check fails, use its output to fix the source. No remote tools or private test data."""
+        # Inside a Verify of the benchmark-only GIL path, finish ends that Verify, not the session.
+        prompt += FINISH_RULE if cycle is None else ("\nfinish ends this Verify: call it after editing and checking "
+                                                     "what this experiment set out to do.")
         if checkpoint and last_failure:
             prompt += "\nLast failed experiment and recovery: " + last_failure
         # The task text may name a longer allowance; this is the one that applies here.

@@ -150,7 +150,7 @@ class McpArmTests(unittest.TestCase):
         self.assertNotIn("REFUSED", seen["verify"])
         # Nothing in the harness holds finish back; the user's first line says when to call it, and the
         # result records whether a Cycle was left open.
-        self.assertIn("do not call finish while a GIL step or Cycle is still open", first["prompt"])
+        self.assertIn(solver.FINISH_RULE, first["prompt"])
         self.assertIsNone(obs["gil"]["open_at_end"])
         self.assertNotIn("REFUSED", seen["cycle"])
         # The restore needed no approval, put the tracked files back and dropped the stray one.
@@ -191,7 +191,9 @@ class ControlArmTests(unittest.TestCase):
                     patch.object(solver, "record", side_effect=lambda **e: None):
                 obs = solver.solve("Order labels ignoring case")
             self.assertEqual(asked[0][1], {})
-            self.assertNotIn("GIL", asked[0][0])
+            # The rule on finish is the same sentence in both arms; nothing else in the control request names GIL.
+            self.assertIn(solver.FINISH_RULE, asked[0][0])
+            self.assertNotIn("GIL", asked[0][0].replace(solver.FINISH_RULE, ""))
             self.assertNotIn("gil", obs)
 
 
