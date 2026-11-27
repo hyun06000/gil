@@ -197,7 +197,7 @@ fn a_plan_is_answered_by_the_runner_and_the_agent_goes_back_by_itself() {
 #[cfg(all(feature = "tracking-policy", unix))]
 #[test]
 fn a_tracked_scope_start_is_approved_by_the_runner_and_recorded_as_unattended() {
-    let mut r = rig("unattended-start", &[("app.py", "print('hi')\n")], json!({"start_kind":"tracked_scope"}));
+    let mut r = rig("unattended-start", &[("app.py", "print('hi')\n")], json!({"start_kind":"tracked_scope", "locale":"en"}));
     assert_eq!(pending(&mut r), Vec::<Value>::new(), "no proposal yet");
     let status = ok(r.model("gil_start_status", json!({})), "status");
     assert_eq!(structured(&status)["phase"], "preparing");
@@ -213,13 +213,24 @@ fn a_tracked_scope_start_is_approved_by_the_runner_and_recorded_as_unattended() 
     assert_eq!(structured(&done)["result"]["phase"], "started", "{done}");
     let status = ok(r.model("gil_start_status", json!({})), "status after the start");
     assert_eq!(structured(&status)["phase"], "started");
+    // The language named on gil_start holds through the preparation and after the start, in this
+    // process and in the next one: nothing falls back to the default language in between.
+    let hangul = |text: &str| text.chars().any(|c| ('가'..='힣').contains(&c));
+    // (The recommendation catalog inside the proposal is still written in Korean in the Core itself;
+    // that text is not from the language table and is not what this checks.)
+    for (what, frame) in [("prepare", &prepared), ("status", &status)] {
+        let said = format!("{} {}", structured(frame)["said"].as_str().unwrap_or_default(), structured(frame)["next"].as_str().unwrap_or_default());
+        assert!(!hangul(&said), "{what} does not speak the named language: {said}");
+    }
+    assert!(!hangul(&r.context()), "the started project speaks the named language");
     assert_eq!(structured(&status)["history"][0]["response"], json!({"decision":"approve","source":"unattended_runner"}));
     assert!(awaiting(&status).is_null(), "{status}");
     assert_eq!(fs::read_to_string(r.root.join(".gilignore")).unwrap(), rules, "the approved bytes are the policy file");
     // The started project reads back in a new process: the stored approval mark is accepted on load.
     let (exit, noise) = std::mem::replace(&mut r.c, Client::serve_with_env(&r.settings, UNATTENDED)).eof();
     assert!(exit.success() && noise.is_empty(), "{exit:?} {noise:?}");
-    assert!(r.context().contains("cycle:C1"));
+    let context = r.context();
+    assert!(context.contains("cycle:C1") && !hangul(&context), "{context}");
 }
 
 /// A tracked-scope project goes back inside its approved scope: the tracked files return to the

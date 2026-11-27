@@ -56,6 +56,8 @@ pub struct GilServer {
     start_grants: Arc<start::Grants>,
     #[cfg(all(feature = "tracking-policy", unix))]
     scope_grants: Arc<scope::Grants>,
+    /// The language named on a tracked-scope `gil_start`, by project root, until the started Project can remember it.
+    start_locales: Arc<Mutex<std::collections::BTreeMap<String, Locale>>>,
     native_gate: Arc<Mutex<()>>,
     companion_session: Arc<Mutex<crate::companion_ipc::McpSession>>,
 }
@@ -77,6 +79,7 @@ impl GilServer {
         Self { #[cfg(feature = "approved-plan")] plan_grants: Arc::new(plans::Grants::default()),
             #[cfg(all(feature = "tracking-policy", unix))] start_grants: Arc::new(start::Grants::default()),
             #[cfg(all(feature = "tracking-policy", unix))] scope_grants: Arc::new(scope::Grants::default()),
+            start_locales: Arc::default(),
             monitor: Arc::new(monitor), native_gate: Arc::new(Mutex::new(())),
             companion_session: Arc::new(Mutex::new(crate::companion_ipc::McpSession::new(endpoint))) }
     }
@@ -105,9 +108,24 @@ impl GilServer {
         // Project remembers (gil_start > latest App presence), else the Core default. Reading the
         // memory touches the record folder, so it runs on a worker like every other Core read.
         let explicit = if name == "gil_start" { input.get("locale").and_then(Value::as_str).map(Locale::normalize) } else { None };
-        let locale = match explicit {
-            Some(chosen) => chosen,
-            None => {
+        let root_named = input.get("project_root").and_then(Value::as_str).map(str::to_owned);
+        // A tracked-scope start is only a preparation: there is no Project yet to remember the
+        // language beside. Until one exists the choice is kept here, and written beside the
+        // record at the first call after the start was confirmed — so the preparation, the
+        // approval wait and the started project all speak the language the Agent named.
+        let waiting_choice = root_named.as_ref().and_then(|root| self.start_locales.lock().ok().and_then(|kept| kept.get(root).copied()));
+        let locale = match (explicit, waiting_choice) {
+            (Some(chosen), _) => chosen,
+            (None, Some(chosen)) => {
+                let (at, kept) = (root_named.clone().expect("a root has a waiting choice"), self.start_locales.clone());
+                let _ = tokio::task::spawn_blocking(move || {
+                    if locale::remember_start(std::path::Path::new(&at), chosen).is_ok() {
+                        if let Ok(mut kept) = kept.lock() { kept.remove(&at); }
+                    }
+                }).await;
+                chosen
+            }
+            (None, None) => {
                 let monitor = self.monitor.clone();
                 let (for_name, for_input) = (name.clone(), input.clone());
                 tokio::task::spawn_blocking(move || locale_for_call(&monitor, &for_name, &for_input)).await.unwrap_or(DEFAULT_LOCALE)
@@ -120,6 +138,9 @@ impl GilServer {
             let probe = input.clone();
             Some(tokio::task::spawn_blocking(move || start_kind::route(&probe)).await.unwrap_or(start_kind::UNDECIDED))
         } else { None };
+        if let (Some(chosen), Some(start_kind::Route::Preparation), Some(root)) = (explicit, start_route, root_named.as_ref()) {
+            if let Ok(mut kept) = self.start_locales.lock() { kept.insert(root.clone(), chosen); }
+        }
         let mut result = self.dispatch(name.clone(), input.clone(), locale, start_route).await;
         let succeeded = result.is_error != Some(true)
             && result.structured_content.as_ref().is_none_or(|v| v["ok"] != false);
