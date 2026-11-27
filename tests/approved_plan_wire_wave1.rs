@@ -700,12 +700,13 @@ fn approval_contract_holds_over_the_real_stdio_process() {
     assert!(read["reinterview_requests"].as_array().unwrap().is_empty());
     let _ = c4;
 
-    // inserted item D executes under revision 4; the stale revision-2 document is refused
+    // inserted item D executes under revision 4. The revision-2 document GIL saved earlier is its own
+    // file: opening this Verify replaced it with the bound revision's, so a stale one cannot be named.
     let (c5, document4) = r.open_experiment("D");
     assert!(document4.contains("Revision: 4"));
     let verify = r.walk_to_verify("D");
     std::fs::write(root.join(format!("evidence/C{c5}-D.md")), "pre").unwrap();
-    refused(r.c.call("gil_close", verify_args(&root, &verify, &format!("execution: 확인했다\nresult: 저장했다\nplan_document: plan/approved-plan.md\nevidence_files: evidence/C{c5}-D.md\n"))), "stale revision-2 document");
+    assert_eq!(std::fs::read_to_string(root.join("plan/approved-plan.md")).unwrap(), document4, "the bound revision's document replaced the earlier save");
     r.finish_experiment(c5, "D", &verify, &document4);
     let read = r.read();
     assert_eq!(read["executed_cycles"].as_array().unwrap().iter().map(|e| format!("{}@{}", e["item_id"].as_str().unwrap(), e["revision"])).collect::<Vec<_>>(), ["A@2", "B@2", "D@4"]);
