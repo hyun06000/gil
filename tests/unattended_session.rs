@@ -71,6 +71,14 @@ fn interview_sending(r: &mut Rig, ids: &[&str], listed: usize) {
     for (kind, report) in [("question", QUESTION), ("interpretation", INTERPRETATION)] {
         let opened = ok(r.model("gil_open", json!({"kind":kind,"contract":CONTRACT})), kind);
         basis.push(step_ref(&opened, kind));
+        if kind == "interpretation" {
+            // The Interpretation is asked what judges the work, its hardest part and what cannot be
+            // observed here; the opening receipt shows the three fields and a close without them is refused.
+            let shown = everything(&opened);
+            for field in ["graded_by", "hardest", "not_observable_here"] { assert!(shown.contains(field), "{field} is not in the opening receipt: {shown}"); }
+            let bare = refused(r.c.request("tools/call", json!({"name":"gil_close","arguments":{"project_root":r.root,"report":{"interpretation":"정리했다","unresolved":"없음"}}})), "an Interpretation without the three answers");
+            assert!(everything(&bare).contains("graded_by"), "{bare}");
+        }
         let closed = ok(r.model("gil_close", json!({"report":report})), kind);
         assert!(awaiting(&closed).is_null(), "nothing waits for the user yet: {closed}");
     }

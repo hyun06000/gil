@@ -1760,6 +1760,11 @@ fn exploration_fields(report: &mut serde_json::Value, subject: &str, project: Op
             fields.insert("observed".into(), "…".into());
             if project.plan_document().is_some() { fields.insert("plan_document".into(), PLAN_DOCUMENT_PATH.into()); }
         }
+        if subject.contains("interpretation") {
+            fields.insert("graded_by".into(), "what finally judges this work as done, in the request's own words".into());
+            fields.insert("hardest".into(), "the part most likely to fail, and why".into());
+            fields.insert("not_observable_here".into(), "none | what cannot be observed here yet, and how you will make the means to observe it".into());
+        }
         if subject.contains("hypothesis") {
             fields.insert("change".into(), "what you will change, in which files".into());
         }

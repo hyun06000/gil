@@ -443,6 +443,7 @@
   "guide.hypothesis_change": "  Hypothesis Report には change(何をどのファイルで変えるか)を書く。Experiment は確認するだけでなく、Define が固定した状態を作るものである。\n",
   "guide.verify_change": "  この Verify で Hypothesis の change を実際に行い、その後 command を実行して観測する。確認だけで閉じない: 状態が成り立たなければこの Verify の中で直して再実行する。\n",
   "guide.outcome_changed": "  verdict が failure なら、changed にこの Experiment がファイルで変えたものを書く。戻るとその変更はファイルから消え、この記録だけが次の仮説に伝わる。\n",
+  "evidence.interpretation_field": "Interpretation に {field} がない。問題の一覧を書く前に三つを書く。graded_by — この仕事が終わったかを最終的に判定するもの、依頼の言葉のまま。hardest — 最も失敗しやすい部分とその理由。not_observable_here — 今ここで観測できないものと、観測する手段を作る方法(自分で作るテスト入力、自分で書く基準実装、自分で用意する測定)、なければ none。仕事を判定するそれは計画の問題にならなければならない: まだ観測できないなら、観測できるようにすることが最初の問題であり、一覧から外す理由ではない。",
   "evidence.basis_ref": "{field} は現在の系譜の根拠 {expected} を指さなければならない",
   "evidence.empty_file": "{path} のファイルは空である。空のファイルは証拠ではない。この Verify でコマンドを実行し、その出力をそのファイルに保存する(例: `<コマンド> > {path} 2>&1`)。内容を自分で書き込まない。",
   "evidence.field_required": "{field} に実際の実行と観測結果を書く",

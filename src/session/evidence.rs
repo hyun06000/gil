@@ -87,6 +87,18 @@ impl ProjectSession {
                 ))));
             }
         }
+        // Exploration contract: before the problems are listed, the Interpretation says what will
+        // finally judge the work, which part is most likely to fail, and what cannot be observed
+        // here together with how the means to observe it will be made. A plan drawn without these
+        // listed what was easy to check and left out what the work is judged by (2026-11-27).
+        #[cfg(feature = "approved-plan")]
+        if node.kind == NodeKind::Interpretation && self.project.exploration_contract() {
+            for field in ["graded_by", "hardest", "not_observable_here"] {
+                if report.get(field).is_none_or(|value| value.trim().is_empty()) {
+                    return Err(SessionError::Evidence(crate::tr!("evidence.interpretation_field", field = field)));
+                }
+            }
+        }
         if cycle.kind() != CycleKind::Experiment { return Ok(report); }
         // Exploration contract: the Analysis answers the Define's one observation with a boolean,
         // true or false, and an Outcome is a success only when neither answer was false. The Core

@@ -443,6 +443,7 @@
   "guide.hypothesis_change": "  Hypothesis Report 填寫 change(將在哪些檔案中變更什麼)。Experiment 不只是檢查，而是要達成 Define 固定的狀態。\n",
   "guide.verify_change": "  在本 Verify 中實際做出 Hypothesis 的 change，然後執行 command 並觀測。不要只檢查就關閉: 若狀態不成立，就在本 Verify 內修正並再次執行。\n",
   "guide.outcome_changed": "  verdict 為 failure 時，在 changed 中寫出本 Experiment 在檔案中變更的內容。回訪會把該變更從檔案中移除，只有這條記錄傳給下一個假設。\n",
+  "evidence.interpretation_field": "Interpretation 缺少 {field}。在列出問題之前寫三件事。graded_by — 最終判定這項工作是否完成的東西，用請求的原話。hardest — 最容易失敗的部分及原因。not_observable_here — 現在這裡無法觀測的東西，以及如何造出觀測它的手段(自己建構的測試輸入、自己寫的參考實作、自己搭的量測)，沒有則寫 none。判定工作的那個東西必須成為計畫中的問題: 如果還無法觀測，使它可觀測就是第一個問題，而不是把它從清單中去掉的理由。",
   "evidence.basis_ref": "{field} 必須指向目前譜系的依據 {expected}",
   "evidence.empty_file": "{path} 處的檔案是空的，空檔案不是證據。在本 Verify 中執行命令並把輸出儲存到該檔案(例如 `<命令> > {path} 2>&1`)。不要自己寫入內容。",
   "evidence.field_required": "在 {field} 中寫下實際執行與觀察結果",

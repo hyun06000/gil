@@ -80,7 +80,7 @@ class McpArmTests(unittest.TestCase):
             seen["start"] = said.get("result") or self.fail(str(self.events[-3:]))
             basis = []
             for kind, report in (("question", {"question": "무엇을 원하는가", "choices": "없음", "response": "과제 설명대로"}),
-                                 ("interpretation", {"interpretation": "대소문자를 무시해 정렬한다", "unresolved": "없음"})):
+                                 ("interpretation", {"interpretation": "대소문자를 무시해 정렬한다", "unresolved": "없음", "graded_by": "정렬 검사가 통과한다", "hardest": "대소문자가 섞인 이름", "not_observable_here": "none"})):
                 said = yield call("gil_open", kind=kind, contract=CONTRACT)
                 basis.append(__import__("re").search(r"step:C\d+/S\d+", said["result"]).group(0))
                 if kind == "question":
