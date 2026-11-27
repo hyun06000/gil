@@ -1070,7 +1070,7 @@
   "walk.verify_needs_world": "S{at} 是 verify，没有观察到的世界就无法关闭 — 确定世界的是观察，不是 Report 的句子",
   "will.missing": "行动契约缺少 {fields} — 行动 Node 不会在不写明意图的情况下打开。\nGIL 只看 Node 种类，从不编造其内容。",
   "start_kind.required": "未创建任何内容。此 GIL 可以开始两种新项目,且项目不会从一种转换为另一种。请向用户说明两个选项及各自的限制,由用户选择,然后把用户的选择填入 start_kind 再次调用 gil_start。不要替用户选择,也不要修改 .gil 文件。",
-  "start_kind.summary.tracked_scope": "跟踪范围批准:用户在 GIL Monitor 中批准决定 GIL 跟踪并归档哪些文件的确切 .gilignore;以后可用同样的批准更改范围。批准之前不归档任何内容。限制:报告不能附带图片,且此类项目会拒绝恢复或回访工作文件。",
+  "start_kind.summary.tracked_scope": "跟踪范围批准:用户在 GIL Monitor 中批准决定 GIL 跟踪并归档哪些文件的确切 .gilignore;以后可用同样的批准更改范围。批准之前不归档任何内容。限制:报告不能附带图片,且从失败的实验回访只能通过用户批准的恢复进行,只恢复跟踪范围内的文件;如果回访位置之后跟踪范围发生过变化,则会拒绝。",
   "start_kind.summary.image_reports": "图片报告:报告可以包含 PNG 可视内容,可声明、引用并在 Monitor 中读取。项目立即创建,并在 GIL 的固定排除之外观测整个文件夹。限制:没有跟踪范围批准,也不能更改范围;需要经过验证的私有本地存储,其他位置会被拒绝。",
   "start_kind.unknown": "未创建任何内容。start_kind 必须是用户所选的 tracked_scope 或 image_reports。没有以其他种类代为开始。",
   "start_kind.unavailable": "未创建任何内容。此 GIL 不提供所请求种类的新项目,也没有以其他种类代为开始。请告诉用户此 GIL 提供哪一种。",

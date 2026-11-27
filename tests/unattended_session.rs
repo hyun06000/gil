@@ -11,6 +11,11 @@
 //! - the model's receipts say what waits for the user, a recovery waits only after the model asked
 //!   for it, and a wrong digest or an unrequested recovery records nothing;
 //! - the choice without a headless display serves nothing.
+//! - a tracked-scope project goes back inside its approved scope: tracked files return to the target
+//!   Cycle's world while excluded paths, a link inside an excluded folder and the policy file stay
+//!   as they are, and a recovery cut by process death rolls back and resumes.
+//!
+//! Not covered: a recovery after the tracked scope changed (refused by the Core; no test here).
 //!
 //! Scope of the evidence: synthetic tool-path checks. The runner calls are harness input standing
 //! in for a user; nothing here shows that a model follows the receipts or keeps the runner tools
@@ -214,4 +219,115 @@ fn a_tracked_scope_start_is_approved_by_the_runner_and_recorded_as_unattended() 
     let (exit, noise) = std::mem::replace(&mut r.c, Client::serve_with_env(&r.settings, UNATTENDED)).eof();
     assert!(exit.success() && noise.is_empty(), "{exit:?} {noise:?}");
     assert!(r.context().contains("cycle:C1"));
+}
+
+/// A tracked-scope project goes back inside its approved scope: the tracked files return to the
+/// target Cycle's world, and nothing the policy excludes — a dependency folder with a link in it,
+/// a secret file, the policy file itself — is created, changed or removed.
+#[cfg(all(feature = "tracking-policy", unix))]
+const RULES: &str = "node_modules/\n.env\n";
+
+/// A tracked-scope project after a successful C2 and a failed C3 that also touched excluded paths.
+#[cfg(all(feature = "tracking-policy", unix))]
+fn tracked_failure(label: &str) -> (Rig, std::collections::BTreeMap<String, Vec<u8>>) {
+    let rules = RULES;
+    let mut r = rig(label, &[("app.py", "print('hi')\n"), ("node_modules/pkg/index.js", "module.exports = 1\n"), (".env", "KEY=first\n")],
+        json!({"start_kind":"tracked_scope"}));
+    std::os::unix::fs::symlink("../pkg/index.js", { fs::create_dir_all(r.root.join("node_modules/.bin")).unwrap(); r.root.join("node_modules/.bin/pkg") }).unwrap();
+    ok(r.model("gil_start_prepare", json!({"rules":rules})), "prepare");
+    let waits = pending(&mut r);
+    ok(decide(&mut r, "start", &waits[0]["digest"], "approve"), "runner approves the start");
+    interview(&mut r, &["R1"]);
+
+    // C2 succeeds and leaves a tracked file. C3 changes tracked files, also touches excluded ones, and fails.
+    let experiment = |r: &mut Rig, files: &[(&str, &str)], evidence: &str, fails_back_to: Option<&str>| {
+        let n = r.open_experiment("R1");
+        r.open_verify("R1", "합의한 형식으로 출력하는가?");
+        for (path, bytes) in files { r.write(path, bytes); }
+        let failed = fails_back_to.is_some();
+        ok(r.model("gil_close", json!({"report":format!("execution: 합성 자료를 관측했다\nresult: 관측을 남겼다\nplan_document: {PLAN_DOCUMENT}\nevidence_files: {evidence}\n")})), "close verify");
+        ok(r.model("gil_open", json!({"kind":"analysis","contract":CONTRACT})), "analysis");
+        ok(r.model("gil_close", json!({"report":analysis_report(failed)})), "close analysis");
+        let outcome = step_ref(&ok(r.model("gil_open", json!({"kind":"outcome","contract":CONTRACT})), "outcome"), "outcome");
+        ok(r.model("gil_close", json!({"report":outcome_report(failed)})), "close outcome");
+        ok(r.model("gil_close", json!({"report":cycle_report(n, &outcome, fails_back_to)})), "close experiment");
+        n
+    };
+    assert_eq!(experiment(&mut r, &[("evidence/C2.md", "형식이 맞다\n"), ("app.py", "print('second')\n")], "evidence/C2.md", None), 2);
+    let world_at_c2 = world(&r.root);
+    assert_eq!(experiment(&mut r, &[("evidence/C3.md", "형식이 깨졌다\n"), ("app.py", "broken\n"), ("lib/new.py", "x = 1\n"),
+        (".env", "KEY=changed-during-c3\n"), ("node_modules/pkg/index.js", "module.exports = 3\n"), ("node_modules/added.js", "3\n")], "evidence/C3.md", Some("cycle:C2")), 3);
+    (r, world_at_c2)
+}
+
+#[cfg(all(feature = "tracking-policy", unix))]
+#[test]
+fn a_tracked_scope_project_goes_back_inside_its_approved_scope_and_leaves_excluded_paths_alone() {
+    let (mut r, world_at_c2) = tracked_failure("unattended-tracked-recovery");
+    let rules = RULES;
+
+    let asked = refused(r.model("gil_revisit", json!({})), "the model asks for the recovery");
+    assert_eq!(awaiting(&asked), json!(["revisit"]), "{asked}");
+    let waits = pending(&mut r);
+    assert_eq!(waits.len(), 1, "{waits:?}");
+    let plan = &waits[0]["plan"];
+    assert_eq!((plan["from"].as_str(), plan["target"].as_str(), plan["policy"].as_str()), (Some("cycle:C3"), Some("cycle:C2"), Some("approved-tracking-policy-scope-v1")), "{plan}");
+    let mut listed: Vec<(&str, &str)> = plan["changes"].as_array().unwrap().iter().map(|c| (c["path"].as_str().unwrap(), c["action"].as_str().unwrap())).collect();
+    listed.sort();
+    assert_eq!(listed, [("app.py", "replace"), ("evidence/C3.md", "preserve"), ("lib/new.py", "preserve")], "only tracked paths are in the plan");
+    let done = ok(decide(&mut r, "revisit", &waits[0]["digest"], "approve"), "runner approves the recovery");
+    assert_eq!(structured(&done)["result"]["state"], "completed", "{done}");
+
+    // Tracked files are C2's again. Excluded paths keep what C3 left there; the policy file is untouched.
+    let now = world(&r.root);
+    assert_eq!(now["app.py"], b"print('second')\n");
+    assert!(!now.contains_key("evidence/C3.md") && !now.contains_key("lib/new.py") && now.contains_key("evidence/C2.md"));
+    assert_eq!(now[".env"], b"KEY=changed-during-c3\n");
+    assert_eq!(now["node_modules/pkg/index.js"], b"module.exports = 3\n");
+    assert_eq!(now["node_modules/added.js"], b"3\n");
+    assert_eq!(now[".gilignore"], rules.as_bytes());
+    assert!(fs::symlink_metadata(r.root.join("node_modules/.bin/pkg")).unwrap().file_type().is_symlink());
+    for (path, bytes) in &world_at_c2 {
+        if !path.starts_with("node_modules/") && path != ".env" { assert_eq!(&now[path], bytes, "{path}"); }
+    }
+    // The replaced and removed tracked files are preserved; excluded files were never copied.
+    let preserved = PathBuf::from(plan["archive"].as_str().unwrap());
+    let mapping: Value = serde_json::from_slice(&fs::read(preserved.join("files.json")).unwrap()).unwrap();
+    let saved: Vec<&str> = mapping.as_array().unwrap().iter().map(|m| m["path"].as_str().unwrap()).collect();
+    assert!(saved.contains(&"app.py") && saved.contains(&"lib/new.py") && !saved.iter().any(|p| p.starts_with("node_modules/") || *p == ".env" || *p == ".gilignore"), "{saved:?}");
+    // The Chain goes on: the next Experiment branches from the failure, in a new process too.
+    let (exit, noise) = std::mem::replace(&mut r.c, Client::serve_with_env(&r.settings, UNATTENDED)).eof();
+    assert!(exit.success() && noise.is_empty(), "{exit:?} {noise:?}");
+    assert_eq!(r.open_experiment("R1"), 4);
+    assert_eq!(r.read()["current_experiment"]["revisit_from"], "cycle:C3");
+}
+
+/// The process dies after the first file of an approved tracked-scope recovery was replaced. The
+/// next process rolls the half-done restore back although the folder as a whole cannot be observed
+/// (the excluded dependency folder holds a link), and the same approval is then resumed by the model.
+#[cfg(all(feature = "tracking-policy", unix, debug_assertions))]
+#[test]
+fn a_tracked_scope_recovery_interrupted_by_process_death_rolls_back_and_resumes() {
+    let (mut r, world_at_c2) = tracked_failure("unattended-tracked-crash");
+    let world_at_c3 = world(&r.root);
+    let crashing: Vec<(&str, &str)> = UNATTENDED.iter().copied().chain([("GIL_RESTORE_CRASH", "after-first-apply")]).collect();
+    let (exit, noise) = std::mem::replace(&mut r.c, Client::serve_with_env(&r.settings, &crashing)).eof();
+    assert!(exit.success() && noise.is_empty(), "{exit:?} {noise:?}");
+    refused(r.model("gil_revisit", json!({})), "the model asks for the recovery");
+    let waits = pending(&mut r);
+    r.c.call_expecting_crash("gil_unattended_decide", json!({"project_root":r.root,"subject":"revisit","digest":waits[0]["digest"],"decision":"approve"}));
+    assert_ne!(world(&r.root), world_at_c3, "the restore had started when the process died");
+
+    r.c = Client::serve_with_env(&r.settings, UNATTENDED);
+    // The approval is durable. The model's next command first rolls the half-done restore back —
+    // by the touched paths alone, since the whole folder cannot be observed — and then resumes it.
+    // No new answer is needed and none is offered.
+    let resumed = ok(r.model("gil_revisit", json!({})), "resume the approved recovery");
+    assert!(awaiting(&resumed).is_null(), "{resumed}");
+    assert_eq!(pending(&mut r), Vec::<Value>::new());
+    let now = world(&r.root);
+    assert_eq!(now["app.py"], world_at_c2["app.py"]);
+    assert!(!now.contains_key("evidence/C3.md") && !now.contains_key("lib/new.py"));
+    assert_eq!((now[".env"].as_slice(), now["node_modules/added.js"].as_slice(), now[".gilignore"].as_slice()), (&b"KEY=changed-during-c3\n"[..], &b"3\n"[..], RULES.as_bytes()));
+    assert_eq!(r.open_experiment("R1"), 4);
 }

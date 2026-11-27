@@ -2,6 +2,13 @@
 //! No policy is retroactively assigned to a snapshot. Protected paths must be byte-identical;
 //! all other changes are previewed and the original bytes are durably retained before movement.
 //!
+//! Projects with an approved tracking policy (format 10/11, unix) recover inside the applied
+//! policy's scope instead: observation, plan, preservation, restore and verification see tracked
+//! paths only, so excluded paths and the root `.gilignore` are never created, changed, removed or
+//! copied. Only the ordinary case is taken — both the place left and the place returned to were
+//! confirmed under the applied policy; anything else needs a `restore_result` record that does not
+//! exist yet and is refused before any change (`tracked_scope`).
+//!
 //! M4-R approval modes: every approval record names its source — the Monitor button (manual) or
 //! a valid per-Project automatic setting (`crate::recovery_mode`, opt-in build). The automatic
 //! path runs the same plan, refusals, preservation and resumption as the manual one; it only
@@ -22,8 +29,8 @@ fn hash(bytes: impl AsRef<[u8]>) -> String {
 
 impl ProjectSession {
     pub(crate) fn revisit_review(&self) -> Result<Value, String> {
-        // 형식 10/11: 최신 승인 정책 기준 복원(구현 순서 6번)이 없으므로 whole-tree 복구 계획을 만들지 않는다.
-        #[cfg(feature = "tracking-policy")]
+        // 형식 10/11 은 승인 정책의 범위 안에서 복구한다(`tracked_scope`). 그 길이 없는 플랫폼에서는 계획을 만들지 않는다.
+        #[cfg(all(feature = "tracking-policy", not(unix)))]
         if self.project.tracking().is_some() {
             return Ok(json!({"supported":false,"reason":crate::locale::text("session.tracking_unsupported.revisit")}));
         }
@@ -63,7 +70,7 @@ impl ProjectSession {
     /// The same approval with the channel it came through.
     #[cfg_attr(not(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows)), allow(unused_variables))]
     pub(crate) fn approve_revisit_from(&mut self, digest: &str, source: ApprovalSource) -> Result<Value, String> {
-        #[cfg(feature = "tracking-policy")]
+        #[cfg(all(feature = "tracking-policy", not(unix)))]
         if self.project.tracking().is_some() {
             return Err(crate::locale::text("session.tracking_unsupported.revisit").into());
         }
@@ -88,7 +95,7 @@ impl ProjectSession {
     /// freshly checked plan and records that setting as the source. A pending recovery is always
     /// resumed from its stored approval, whatever the setting says now.
     pub(crate) fn resume_revisit(&mut self) -> Result<Value, String> {
-        #[cfg(feature = "tracking-policy")]
+        #[cfg(all(feature = "tracking-policy", not(unix)))]
         if self.project.tracking().is_some() {
             return Err(crate::locale::text("session.tracking_unsupported.revisit").into());
         }
@@ -191,7 +198,15 @@ struct Recovery {
     world: SnapshotRef,
     key: String,
     view: Value,
+    /// 형식 10/11 의 적용 정책. 있으면 관측·계획·복원이 모두 이 범위 안에서만 움직인다.
+    scope: Scope,
 }
+
+/// 복구의 범위. 추적 정책이 없는 형식과 그 길이 없는 빌드에서는 언제나 `None` 이다.
+#[cfg(all(feature = "tracking-policy", unix))]
+type Scope = Option<crate::artifact::start_policy::ApprovedPolicy>;
+#[cfg(not(all(feature = "tracking-policy", unix)))]
+type Scope = Option<std::convert::Infallible>;
 
 #[cfg(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), windows))]
 fn policy(store: &ObjectStore, manifest: &Manifest) -> Result<TrackingPolicy, String> {
@@ -262,8 +277,11 @@ impl ProjectSession {
         #[cfg(windows)]
         restore::check_windows_recovery(&root, &gil_dir(&self.state_path).map_err(error)?)
             .map_err(error)?;
-        let observed = artifact::observe(&root).map_err(error)?;
         let resumed = self.project.cycles().pending_revisit().is_some();
+        // 형식 10/11: 적용 정책의 범위 안만 본다. 범위 밖(제외한 경로, 루트 `.gilignore`)은 계획에 들어오지 않는다.
+        let scope = self.tracked_scope(&next, if resumed { world } else { before_world }, world)?;
+        let observe = || self.observe_for_recovery(&root, &scope);
+        let observed = observe()?;
         if observed != before && !(resumed && observed == target) {
             return Err(
                 "기록되지 않은 파일 변경이 있어 복원을 거절했다. 현재 파일은 보존한다".into(),
@@ -277,6 +295,8 @@ impl ProjectSession {
         let old_policy = policy(&store, &before)?;
         let target_policy = policy(&store, &target)?;
         let includes = |path: &str| -> Result<bool, String> {
+            // 승인 정책이 있으면 그것만이 범위의 근거다. `.gitignore`·기본 보호 목록으로 다시 거르지 않는다.
+            if scope.is_some() { return Ok(true); }
             Ok(defaults.includes_file(path)?
                 && defaults.includes_file(&path.to_ascii_lowercase())?
                 && old_policy.includes_file(path)?
@@ -335,16 +355,20 @@ impl ProjectSession {
                 .read_blob(&entry.content, &mut std::io::sink())
                 .map_err(error)?;
         }
-        if artifact::observe(&root).map_err(error)? != observed {
+        if observe()? != observed {
             return Err("검사 중 파일이 바뀌었다".into());
         }
+        let policy_label = match &scope {
+            Some(_) => "approved-tracking-policy-scope-v1",
+            None => "legacy-whole-tree-protected-difference-v1",
+        };
         let encoded = store::encode(&next).map_err(error)?;
         let key = hash(&encoded);
         let mut view = json!({"supported":true,"state":if resumed && observed == target {"completed"} else if resumed {"resumable"} else {"awaiting_approval"},
             "from":from.to_ref().to_string(),"target":next.current_cycle().id().to_ref().to_string(),
             "before_world":before_world.to_string(),"target_world":world.to_string(),"changes":changes,
             "archive":gil_dir(&self.state_path).map_err(error)?.canonicalize().map_err(error)?.join("revisit-preserved").join(&key).to_string_lossy(),"pending_state_sha256":key,
-            "policy":"legacy-whole-tree-protected-difference-v1",
+            "policy":policy_label,
             "notice":"실패 기록·Snapshot·배움은 유지한다. 교체·제외되는 기존 파일은 보존본을 만든 뒤 대상 세계로 복원한다. 새 Cycle은 별도로 연다."});
         // Resumption is the same approved operation, not a new proposal.
         let mut bound = view.clone();
@@ -357,7 +381,46 @@ impl ProjectSession {
             world,
             key,
             view,
+            scope,
         })
+    }
+
+    /// 형식 10/11 의 복구가 따르는 범위 — 적용 정책. 다른 형식은 `None`(전체 관측).
+    ///
+    /// 「방금 실패한 실험에서 그 조상으로」의 보통 경우만 받는다(공유 계약 §6.4): 지금 자리(`here`)와 돌아갈 자리(`there`)의 마지막
+    /// 확정 세계가 모두 **적용 정책으로** 확정된 것이어야 한다. 그 사이에 범위가 바뀌었거나 기준점 보관을 기다리는 중이면 결과 세계를
+    /// 적는 기록(`restore_result`)이 필요한데 그 기록은 아직 없으므로, 아무것도 바꾸기 전에 거절한다.
+    #[cfg(all(feature = "tracking-policy", unix))]
+    fn tracked_scope(&self, next: &Project, here: SnapshotRef, there: SnapshotRef) -> Result<Scope, String> {
+        let Some(now) = self.project.tracking_standing() else { return Ok(None) };
+        let now = now.map_err(error)?;
+        self.project.refuse_while_halted()?;
+        if let Some(event) = now.waiting {
+            return Err(format!("{event} 의 기준점 보관을 기다리는 중이라 되돌아가지 않았다. 보관이 확정된 뒤 다시 요청한다. 파일과 기록은 바꾸지 않았다"));
+        }
+        let after = next.tracking_standing().ok_or("추적 정책 기록 없음")?.map_err(error)?;
+        let applied = now.applied.policy;
+        let agrees = |standing: &crate::artifact::tracking::RecordStanding, world: SnapshotRef| {
+            standing.confirmed.as_ref().is_some_and(|confirmed| confirmed.world == world && confirmed.policy == applied)
+        };
+        if after.applied.policy != applied || !agrees(&now, here) || !agrees(&after, there) {
+            return Err(format!("지금 자리와 돌아갈 자리의 세계가 모두 적용 정책 {applied} 으로 확정된 경우에만 되돌아간다. 그 사이에 추적 범위가 바뀌었거나 다른 Chain 의 세계다. 이 경우의 복원 결과를 적는 기록은 이 빌드에 아직 없어, 아무것도 바꾸기 전에 거절했다. 파일과 기록은 그대로다"));
+        }
+        self.approved_policy().map_err(error)
+    }
+    #[cfg(not(all(feature = "tracking-policy", unix)))]
+    fn tracked_scope(&self, _next: &Project, _here: SnapshotRef, _there: SnapshotRef) -> Result<Scope, String> {
+        Ok(None)
+    }
+
+    /// 복구가 세계를 재는 한 가지 방법 — 범위가 있으면 그 안만, 없으면 폴더 전체.
+    fn observe_for_recovery(&self, root: &std::path::Path, scope: &Scope) -> Result<Manifest, String> {
+        #[cfg(all(feature = "tracking-policy", unix))]
+        if let Some(policy) = scope {
+            return artifact::observe_scoped(root, policy).map(|world| world.manifest).map_err(error);
+        }
+        let _ = scope;
+        artifact::observe(root).map_err(error)
     }
 
     fn apply_recovery(&mut self, plan: Recovery, source: ApprovalSource) -> Result<Value, String> {
@@ -415,7 +478,7 @@ impl ProjectSession {
         guarded::fsync(&dir).map_err(error)?;
         verify_approval(&dir, &plan)?;
         let root = self.root().map_err(error)?;
-        let now = artifact::observe(&root).map_err(error)?;
+        let now = self.observe_for_recovery(&root, &plan.scope)?;
         let pending = self.project.cycles().pending_revisit().is_some();
         if now != plan.before && !(pending && now == plan.target) {
             return Err("승인 후 파일이 바뀌었다. 현재 파일을 보존한다".into());
@@ -425,14 +488,29 @@ impl ProjectSession {
             self.project = plan.next;
         }
         super::failpoint::fail_at("recovery-after-state-save").map_err(error)?;
-        restore::run_with_expected(
+        // 범위가 있으면 복원도 같은 관측으로 계획하고 검증한다. Windows 의 제품 복구에는 추적 정책 형식이 없다.
+        #[cfg(not(all(windows, feature = "product-safety")))]
+        let scope = plan.scope.clone();
+        #[cfg(not(all(windows, feature = "product-safety")))]
+        let restored = restore::run_observed(
             &root,
             &gil_dir(&self.state_path).map_err(error)?,
             &store,
             plan.world,
             &plan.target,
             Some(&now),
-        )
+            &|root| self.observe_for_recovery(root, &scope),
+        );
+        #[cfg(all(windows, feature = "product-safety"))]
+        let restored = restore::run_with_expected(
+            &root,
+            &gil_dir(&self.state_path).map_err(error)?,
+            &store,
+            plan.world,
+            &plan.target,
+            Some(&now),
+        );
+        restored
         .map_err(|e| {
             format!("승인과 보존본은 저장됐다. gil_revisit으로 같은 복원을 재개한다: {e}")
         })?;

@@ -1070,7 +1070,7 @@
   "walk.verify_needs_world": "S{at} 是 verify，沒有觀察到的世界就無法關閉 — 確定世界的是觀察，不是 Report 的句子",
   "will.missing": "行動契約缺少 {fields} — 行動 Node 不會在不寫明意圖的情況下開啟。\nGIL 只看 Node 種類，從不捏造其內容。",
   "start_kind.required": "未建立任何內容。此 GIL 可以開始兩種新專案,且專案不會從一種轉換為另一種。請向使用者說明兩個選項及各自的限制,由使用者選擇,然後把使用者的選擇填入 start_kind 再次呼叫 gil_start。不要替使用者選擇,也不要修改 .gil 檔案。",
-  "start_kind.summary.tracked_scope": "追蹤範圍核准:使用者在 GIL Monitor 中核准決定 GIL 追蹤並封存哪些檔案的確切 .gilignore;之後可用同樣的核准變更範圍。核准之前不封存任何內容。限制:報告不能附帶圖片,且此類專案會拒絕還原或回訪工作檔案。",
+  "start_kind.summary.tracked_scope": "追蹤範圍核准:使用者在 GIL Monitor 中核准決定 GIL 追蹤並封存哪些檔案的確切 .gilignore;之後可用同樣的核准變更範圍。核准之前不封存任何內容。限制:報告不能附帶圖片,且從失敗的實驗回訪只能透過使用者核准的復原進行,只還原追蹤範圍內的檔案;如果回訪位置之後追蹤範圍變更過,則會拒絕。",
   "start_kind.summary.image_reports": "圖片報告:報告可以包含 PNG 視覺內容,可宣告、引用並在 Monitor 中讀取。專案立即建立,並在 GIL 的固定排除之外觀測整個資料夾。限制:沒有追蹤範圍核准,也不能變更範圍;需要經過驗證的私有本機儲存,其他位置會被拒絕。",
   "start_kind.unknown": "未建立任何內容。start_kind 必須是使用者所選的 tracked_scope 或 image_reports。沒有以其他種類代為開始。",
   "start_kind.unavailable": "未建立任何內容。此 GIL 不提供所要求種類的新專案,也沒有以其他種類代為開始。請告訴使用者此 GIL 提供哪一種。",

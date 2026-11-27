@@ -97,7 +97,7 @@ GIL_MCP_DISPLAY=headless GIL_MCP_APPROVAL=unattended gil mcp --serve
 - When a model-facing receipt carries `awaiting_user` (`start`, `plan` or `revisit`), the runner reads the pending item, decides as the user's stand-in for that exact digest, and continues the model.
 - Every approval recorded this way is marked `unattended_runner`, never `monitor_button`.
 - A recovery can be approved only after the model asked for it with `gil_revisit`.
-- A `tracked_scope` project refuses restore and revisit in this build, so a run that must be able to go back starts with `start_kind: image_reports`.
+- `start_kind: tracked_scope` fits a real project folder: an approved `.gilignore` keeps dependency folders (and the links inside them) out of the tracked world, and the approved recovery returns only tracked files. `image_reports` observes the whole folder and refuses to start where a link exists.
 - `gil_start` adds `AGENTS.md` and `CLAUDE.md` to the project root and the record lives under `.gil` (or the private store the start names). None of these belong in a graded submission.
 
 `tests/unattended_session.rs` walks this path over the real process with scripted calls. It does not show that a model follows the receipts.

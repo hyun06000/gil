@@ -227,6 +227,18 @@ pub(crate) fn run_with_expected(
     root: &Path, gil: &Path, store: &ObjectStore, world: SnapshotRef,
     target: &Manifest, expected: Option<&Manifest>,
 ) -> Result<Restored, RestoreFailure> {
+    run_observed(root, gil, store, world, target, expected, &|root| observe(root).map_err(|source| source.to_string()))
+}
+
+/// 세계를 재는 방법 — 전체 관측, 또는 승인 정책의 범위 안 관측(형식 10/11).
+pub(crate) type Observer<'a> = &'a dyn Fn(&Path) -> Result<Manifest, String>;
+
+/// 같은 복원을 **건넨 관측으로** 한다. 계획은 그 관측이 본 자리에서만 세우므로, 범위 밖의 파일은 만들지도 바꾸지도 지우지도 않는다.
+#[cfg(not(all(windows, feature = "product-safety")))]
+pub(crate) fn run_observed(
+    root: &Path, gil: &Path, store: &ObjectStore, world: SnapshotRef,
+    target: &Manifest, expected: Option<&Manifest>, observe: Observer<'_>,
+) -> Result<Restored, RestoreFailure> {
     let area = Area::at(gil);
 
     // ── preflight ─────────────────────────────────────────────────────────
@@ -235,9 +247,9 @@ pub(crate) fn run_with_expected(
     // 여기서 멈추고, 작업 폴더는 그대로다.
     verify_blobs(store, target, world)?;
 
-    let before = observe(root).map_err(|source| RestoreFailure::Observe {
+    let before = observe(root).map_err(|said| RestoreFailure::Observe {
         stage: Stage::Preflight,
-        said: source.to_string(),
+        said,
     })?;
     if expected.is_some_and(|approved| approved != &before) {
         return Err(RestoreFailure::Observe { stage: Stage::Preflight,
@@ -268,7 +280,7 @@ pub(crate) fn run_with_expected(
     //
     // 여기부터는 rollback 이 걸려 있다. 어느 길로 실패하든 실행 전 세계로 돌아간다.
     let mut made: Vec<PathBuf> = Vec::new();
-    match forward(root, store, &plan, target, &mut made) {
+    match forward(root, store, &plan, target, &mut made, observe) {
         Ok(()) => {
             commit(&area, &active)?;
             Ok(Restored {
@@ -391,6 +403,7 @@ fn forward(
     plan: &Plan,
     target: &Manifest,
     made: &mut Vec<PathBuf>,
+    observe: Observer<'_>,
 ) -> Result<(), RestoreFailure> {
     let mut applied = 0usize;
     for step in plan.steps() {
@@ -408,9 +421,9 @@ fn forward(
     failpoint::meddle("after-apply", root);
 
     // 결과가 정말 목표와 같은가 — **안정된 관측으로** 다시 본다.
-    let found = observe(root).map_err(|source| RestoreFailure::Observe {
+    let found = observe(root).map_err(|said| RestoreFailure::Observe {
         stage: Stage::Verify,
-        said: source.to_string(),
+        said,
     })?;
     match &found == target {
         true => Ok(()),
@@ -918,15 +931,33 @@ fn recover_active(root: &Path, area: &Area, active: &Path) -> Result<(), Restore
         then: Box::new(source),
     })?;
 
-    // 되돌린 결과가 실행 전 세계와 같은가.
-    let found = observe(root).map_err(|source| RestoreFailure::Observe {
-        stage: Stage::Recovery,
-        said: source.to_string(),
-    })?;
-    if found != plan.before_world() {
+    // 되돌린 결과가 실행 전 세계와 같은가. 견주는 것은 계획이 건드린 자리뿐이다.
+    let landed = match observe(root) {
+        Ok(found) => found == plan.before_world(),
+        // 폴더 전체를 관측할 수 없는 프로젝트가 있다 — 승인 정책이 제외한 자리(링크가 든 node_modules 등)는 전체 관측이 거절한다.
+        // 이 복구는 상태를 읽기 전에 돌아 정책을 모르므로, 그때는 계획이 건드린 자리만 직접 잰다. 견주는 내용은 같다.
+        #[cfg(unix)]
+        Err(_) => touched_as_before(root, &plan)?,
+        #[cfg(not(unix))]
+        Err(source) => return Err(RestoreFailure::Observe { stage: Stage::Recovery, said: source.to_string() }),
+    };
+    if !landed {
         return Err(RestoreFailure::RollbackDidNotLand);
     }
     finish(area, active)
+}
+
+/// 계획이 건드린 자리마다 지금 내용이 실행 전과 같은가 — 링크를 따라가지 않는 같은 읽기로 잰다.
+#[cfg(unix)]
+fn touched_as_before(root: &Path, plan: &Plan) -> Result<bool, RestoreFailure> {
+    let world = destination::World::open(root).map_err(|source| RestoreFailure::Observe { stage: Stage::Recovery, said: source.to_string() })?;
+    for step in plan.steps() {
+        let found = world.digest(&step.path).map_err(|source| RestoreFailure::Observe { stage: Stage::Recovery, said: source.to_string() })?;
+        if found.as_ref() != step.operation.before() {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 // ── 파일 연장 ──────────────────────────────────────────────────────────────

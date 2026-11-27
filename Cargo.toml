@@ -28,7 +28,7 @@ will-end-history = ["chain-core"]
 # build go through a start preparation, an exact `.gilignore` proposal approved in the Monitor (app-only), and
 # an initial Snapshot captured with that approved policy, then write format 10 (`tracking` block). Existing
 # formats are never converted. Scope changes (order 5), latest-policy restore (order 6) and the 8 → 10
-# transition are not provided; restore/revisit refuse on format 10/11. Unix development profile only.
+# transition are not provided; the approved recovery of a failed Experiment works inside the applied policy when the scope did not change in between; plain restore/revisit refuse on format 10/11. Unix development profile only.
 # Opt-in: no release profile enables it.
 tracking-policy = ["will-end-history"]
 # Development-only authoring surface; no default format change or migration.
