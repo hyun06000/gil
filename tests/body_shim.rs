@@ -38,6 +38,13 @@ pub fn objects(name: &str, mut arguments: Value) -> Value {
                 fields.entry("command").or_insert_with(|| json!("the fixture's write"));
                 fields.entry("observed").or_insert_with(|| json!("the fixture's file"));
             }
+            // A Hypothesis names its change, and a failed Experiment's Outcome what it changed.
+            if fields.contains_key("hypothesis") {
+                fields.entry("change").or_insert_with(|| json!("write the fixture's files"));
+            }
+            if fields.get("verdict").and_then(Value::as_str) == Some("failure") && fields.contains_key("lesson") && !fields.contains_key("outcome_ref") {
+                fields.entry("changed").or_insert_with(|| json!("the fixture's files"));
+            }
             if fields.contains_key("problem_solved") {
                 fields.entry("unverified").or_insert_with(|| json!("none"));
             }

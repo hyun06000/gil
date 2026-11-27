@@ -111,6 +111,17 @@ impl ProjectSession {
                     return Err(refused(crate::locale::text("evidence.unverified_but_true")));
                 }
             }
+            // A Hypothesis names the change it will make: an Experiment brings a state about, it does
+            // not only check whether the state already holds.
+            if node.kind == NodeKind::Hypothesis && report.get("change").is_none_or(|change| change.trim().is_empty()) {
+                return Err(refused(crate::locale::text("evidence.hypothesis_change")));
+            }
+            // Going back returns the files. What this Experiment changed is kept in words, so the
+            // next Hypothesis can build on it instead of finding it again.
+            if node.kind == NodeKind::Outcome && report.get("verdict") == Some("failure")
+                && report.get("changed").is_none_or(|changed| changed.trim().is_empty()) {
+                return Err(refused(crate::locale::text("evidence.outcome_changed")));
+            }
             if node.kind == NodeKind::Outcome && report.get("verdict") == Some("success") {
                 let analysis = cycle.steps().lineage(here).map_err(|e| refused(e.to_string()))?
                     .into_iter().rev().find(|n| n.kind == NodeKind::Analysis && n.is_closed()).and_then(|n| n.report.as_ref());

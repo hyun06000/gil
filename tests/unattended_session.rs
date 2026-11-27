@@ -310,6 +310,20 @@ fn a_tracked_scope_project_goes_back_inside_its_approved_scope_and_leaves_exclud
     assert!(exit.success() && noise.is_empty(), "{exit:?} {noise:?}");
     assert_eq!(r.open_experiment("R1"), 4);
     assert_eq!(r.read()["current_experiment"]["revisit_from"], "cycle:C3");
+
+    // The files went back; what the failed Experiment tried, changed and learned is put before the
+    // agent where the next problem and the next method are written.
+    let define = everything(&ok(r.model("gil_open", json!({"kind":"define","contract":CONTRACT})), "define after going back"));
+    for kept in ["cycle:C3", "the fixture's files", "원인 위치와 복원 기준점"] { assert!(define.contains(kept), "{kept} is not in the Define receipt: {define}"); }
+    assert!(!define.contains("cycle:C2\\n    "), "a successful Experiment is not listed as left behind: {define}");
+    ok(r.model("gil_close", json!({"report":{"problem":"형식이 깨진 까닭을 좁힌다","success_condition":"app.py 가 합의한 형식으로 출력한다"}})), "close define");
+    let hypothesis = everything(&ok(r.model("gil_open", json!({"kind":"hypothesis","contract":CONTRACT})), "hypothesis after going back"));
+    assert!(hypothesis.contains("cycle:C3") && hypothesis.contains("change"), "{hypothesis}");
+    // A Hypothesis says what it will change: an Experiment that only checks is refused, and the
+    // skeleton the refusal carries has the field.
+    let bare = refused(r.c.request("tools/call", json!({"name":"gil_close","arguments":{"project_root":r.root,"report":{"hypothesis":"출력 줄을 고치면 된다","rationale":"줄이 하나다","guardrail":"다른 파일은 두지 않는다"}}})), "a Hypothesis without its change");
+    assert!(everything(&bare).contains("\\\"change\\\""), "{bare}");
+    ok(r.c.request("tools/call", json!({"name":"gil_close","arguments":{"project_root":r.root,"report":{"hypothesis":"출력 줄을 고치면 된다","change":"app.py 의 print 줄","rationale":"줄이 하나다","guardrail":"다른 파일은 두지 않는다"}}})), "a Hypothesis with its change");
 }
 
 /// The process dies after the first file of an approved tracked-scope recovery was replaced. The
@@ -389,4 +403,7 @@ fn a_refused_verify_or_analysis_shows_the_fields_the_exploration_contract_asks_f
     // An Outcome cannot call that a success, and the Chain cannot be proposed closed as one.
     ok(r.model("gil_open", json!({"kind":"outcome","contract":CONTRACT})), "outcome");
     refused(r.model("gil_close", json!({"report":outcome_report(false)})), "success after a false Analysis");
+    // A failure says what it changed, because going back takes the change out of the files.
+    let bare = refused(r.c.request("tools/call", json!({"name":"gil_close","arguments":{"project_root":r.root,"report":{"verdict":"failure","lesson":"나머지는 보지 못했다","next_direction.action":"close_cycle","next_direction.reason":"판정을 마쳤다"}}})), "a failure without what it changed");
+    assert!(everything(&bare).contains("changed"), "{bare}");
 }

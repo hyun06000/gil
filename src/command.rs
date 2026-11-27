@@ -1465,6 +1465,18 @@ fn opened_step(session: &Session, opened: crate::Opened) -> String {
     if matches!(opened.kind, crate::NodeKind::Verify | crate::NodeKind::Analysis) && session.project().exploration_contract() {
         out.push_str(text("guide.report_fields"));
     }
+    #[cfg(feature = "approved-plan")]
+    if session.project().exploration_contract() {
+        match opened.kind {
+            // The files went back with each failure; what was tried and learned did not. It is put
+            // before the agent where the next problem and the next method are written.
+            crate::NodeKind::Define | crate::NodeKind::Hypothesis => out.push_str(&left_behind(session.project())),
+            crate::NodeKind::Verify => out.push_str(text("guide.verify_change")),
+            crate::NodeKind::Outcome if cycle.kind() == CycleKind::Experiment => out.push_str(text("guide.outcome_changed")),
+            _ => {}
+        }
+        if opened.kind == crate::NodeKind::Hypothesis { out.push_str(text("guide.hypothesis_change")); }
+    }
     if cycle.kind() == CycleKind::Interview {
         out.push_str(text("cmd.opened_interview_note"));
         // 실행된 Experiment 뒤의 Interview(Closing·재인터뷰)는 결과물을 먼저 보여 준다(Cycle Model §18).
@@ -1694,6 +1706,29 @@ fn cycle_contract(cycle: &crate::Cycle) -> Option<CloseContract> {
 fn skeleton_of(contract: &CloseContract, cycle: &crate::Cycle) -> String {
     skeleton_for(contract, cycle, None, None)
 }
+/// The failed Experiments of this Chain, each with what it tried, what it changed and what it
+/// learned, as its own Reports recorded them. Empty when there is none.
+#[cfg(feature = "approved-plan")]
+fn left_behind(project: &crate::Project) -> String {
+    let brief = |value: Option<&str>| -> String {
+        let text = value.unwrap_or("").split_whitespace().collect::<Vec<_>>().join(" ");
+        let cut: String = text.chars().take(360).collect();
+        if cut.len() < text.len() { format!("{cut}…") } else { cut }
+    };
+    let mut out = String::new();
+    for cycle in project.cycles().nodes().iter().filter(|cycle| cycle.kind() == CycleKind::Experiment && cycle.is_closed()
+        && cycle.report().and_then(|report| report.get("verdict")) == Some("failure")) {
+        let report_of = |kind: NodeKind| cycle.steps().nodes().iter().rev().find(|node| node.kind == kind).and_then(|node| node.report.as_ref());
+        let field = |kind: NodeKind, name: &str| brief(report_of(kind).and_then(|report| report.get(name)));
+        out.push_str(&tr!("cmd.left_behind_one", cycle = cycle.id().to_ref(),
+            problem = field(NodeKind::Define, "problem"), hypothesis = field(NodeKind::Hypothesis, "hypothesis"),
+            change = field(NodeKind::Hypothesis, "change"), changed = field(NodeKind::Outcome, "changed"),
+            unverified = field(NodeKind::Analysis, "unverified"), lesson = field(NodeKind::Outcome, "lesson")));
+    }
+    if out.is_empty() { return out; }
+    format!("{}{out}", text("cmd.left_behind_head"))
+}
+
 /// The fields an exploration Chain asks of a Verify and an Analysis beyond the grammar's own, shown
 /// in the skeleton a refusal carries: an agent rewrites its Report from that skeleton, so a field
 /// that is required but missing from it is left out again and again.
@@ -1704,6 +1739,12 @@ fn exploration_fields(report: &mut serde_json::Value, subject: &str, project: Op
             fields.insert("command".into(), "…".into());
             fields.insert("observed".into(), "…".into());
             if project.plan_document().is_some() { fields.insert("plan_document".into(), PLAN_DOCUMENT_PATH.into()); }
+        }
+        if subject.contains("hypothesis") {
+            fields.insert("change".into(), "what you will change, in which files".into());
+        }
+        if subject.contains("outcome") && project.current_cycle().kind() == CycleKind::Experiment {
+            fields.insert("changed".into(), "on failure: what this Experiment changed in the files".into());
         }
         if subject.contains("analysis") {
             for answer in ["problem_solved", "success_condition_met"] { fields.insert(answer.into(), "true | false".into()); }

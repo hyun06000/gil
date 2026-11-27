@@ -108,7 +108,7 @@ class McpArmTests(unittest.TestCase):
             yield call("gil_open", kind="define", contract=CONTRACT)
             yield call("gil_close", report={"problem": "order 가 대소문자를 무시하는가?", "success_condition": "검사가 통과한다. 그 밖은 성공이 아니다"})
             yield call("gil_open", kind="hypothesis", contract=CONTRACT)
-            yield call("gil_close", report={"hypothesis": "casefold 로 정렬하면 된다", "rationale": "키 함수다", "guardrail": "다른 파일은 고치지 않는다"})
+            yield call("gil_close", report={"hypothesis": "casefold 로 정렬하면 된다", "change": "fast_networkx/__init__.py 의 order 에 key=str.casefold 를 준다", "rationale": "키 함수다", "guardrail": "다른 파일은 고치지 않는다"})
             yield call("gil_open", kind="verify", contract=CONTRACT)
             _, _, read = gil.server.call("gil_plan_read", {"project_root": root})
             yield {"action": "write", "path": NAME, "content": "def order(labels):\n    return sorted(labels, key=str.casefold)\n", "note": "n"}
