@@ -426,7 +426,7 @@ impl ServerHandler for GilServer {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().enable_resources().build())
             .with_server_info(Implementation::new("gil", crate::CORE_VERSION))
             .with_instructions(if self.monitor.unattended {
-                format!("{}\n\n{}", unattended::PREFACE, guidance::INSTRUCTIONS)
+                unattended::INSTRUCTIONS.to_owned()
             } else if self.monitor.headless {
                 format!("This runner selected headless display. Automatic display instructions apply only to desktop sessions. Follow the receipt's next_action, including any wait for an answer or approval.\n\n{}", guidance::INSTRUCTIONS)
             } else { guidance::INSTRUCTIONS.to_owned() })

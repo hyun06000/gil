@@ -30,7 +30,9 @@ fn name_ok(name: &str) -> bool {
 pub(crate) fn to_text(fields: &Map<String, Value>) -> Result<String, &'static str> {
     let mut text = String::new();
     for (name, value) in fields {
-        let Some(value) = value.as_str() else { return Err("every field value is a string") };
+        // A boolean answer (an Analysis's problem_solved, for one) is written as its word.
+        let word = value.as_bool().map(|answer| if answer { "true" } else { "false" });
+        let Some(value) = word.or(value.as_str()) else { return Err("every field value is a string or a boolean") };
         if !name_ok(name) { return Err("a field name has no space and no colon") }
         // Space around a value is not content in the Report grammar; a block's first line also sets its width.
         let value = value.trim();
@@ -87,8 +89,8 @@ pub(super) fn present(tools: &[Tool]) -> Vec<Tool> {
         *property = match field {
             "contract" => json!({"type":"object", "additionalProperties":{"type":"string"},
                 "description":"The action contract of the step to open, as an object of string fields: {\"objective\": \"…\", \"next_action\": \"…\", \"done_when\": \"…\"}. For kind experiment in an exploration Chain it is the requirement link object gil_plan_read.experiment_link shows. Never one text with `name: value` lines. GIL validates the fields."}),
-            _ => json!({"type":"object", "additionalProperties":{"type":"string"},
-                "description":"The Report of the step or Cycle to close, as an object of string fields named as the current close contract names them (gil_help topic close, or the skeleton a refusal shows), for example {\"execution\": \"…\", \"result\": \"…\", \"evidence_files\": \"evidence/a.md\\nevidence/b.md\"}. A value with several lines is one string with line breaks; a dotted name such as next_direction.action is a key as it stands. Never one text with `name: value` lines."}),
+            _ => json!({"type":"object", "additionalProperties":{"type":["string","boolean"]},
+                "description":"The Report of the step or Cycle to close, as an object of string fields (a field that asks for true or false takes a JSON boolean) named as the current close contract names them (gil_help topic close, or the skeleton a refusal shows), for example {\"execution\": \"…\", \"result\": \"…\", \"evidence_files\": \"evidence/a.md\\nevidence/b.md\"}. A value with several lines is one string with line breaks; a dotted name such as next_direction.action is a key as it stands. Never one text with `name: value` lines."}),
         };
         serde_json::from_value(wire).expect("tool")
     }).collect()
@@ -120,9 +122,9 @@ mod tests {
             let mut input = json!({"project_root":"/p", "report":bad});
             assert!(accept("gil_close", &mut input).unwrap_err().contains("nothing was closed"));
         }
-        let mut ok = json!({"project_root":"/p", "report":{"verdict":"success"}});
+        let mut ok = json!({"project_root":"/p", "report":{"verdict":"success", "problem_solved":true, "success_condition_met":false}});
         accept("gil_close", &mut ok).unwrap();
-        assert_eq!(ok["report"], "verdict: success\n");
+        assert_eq!(ok["report"], "problem_solved: true\nsuccess_condition_met: false\nverdict: success\n", "a boolean is written as its word");
         let mut other = json!({"project_root":"/p", "draft":"untouched"});
         accept("gil_plan_propose", &mut other).unwrap();
         assert_eq!(other["draft"], "untouched");

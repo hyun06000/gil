@@ -31,8 +31,32 @@ pub(super) const REVIEW: &str = "gil_unattended_review";
 pub(super) const DECIDE: &str = "gil_unattended_decide";
 pub(super) const NAMES: &[&str] = &[REVIEW, DECIDE];
 
-/// What the model reads first in this mode. It overrides the display prose of the shared workflow.
-pub(super) const PREFACE: &str = "This session is unattended: there is no Monitor, no screen and no display tool. Wherever the workflow below or a receipt names the Monitor, a Monitor button, show_gil_monitor, gil_monitor_* or fullscreen, read it as: the user's decision is given outside this conversation and arrives recorded. Never try to open, prepare or check a display. When a receipt lists awaiting_user, say what you proposed, end your turn and call nothing else; when you are continued, read gil_context (or gil_start_status before the project has started, gil_plan_read for a plan) and follow the recorded state. Chat consent and your own input are still never approval, and you have no tool that approves anything.";
+/// The whole guidance of this mode. The shared workflow is written for a desktop session with a
+/// Monitor and is some seventeen thousand tokens long; an unattended agent pays for its guidance
+/// on every request, so it gets the same contract in the few rules it needs and nothing about a
+/// screen. Receipts and refusals still carry the detail of each step.
+pub(super) const INSTRUCTIONS: &str = include_str!("workflow_unattended.md");
+
+/// The tools an unattended agent is given, each with a description of one or two sentences. The
+/// shared catalog's descriptions repeat the workflow at length and name tools this mode does not
+/// have. A tool that is not listed here is not offered and cannot be called in this mode.
+const TOOLS: &[(&str, &str)] = &[
+    ("gil_start", "Start a GIL project in the given absolute project_root. start_kind tracked_scope prepares a start whose tracked files follow a .gilignore the user approves; locale sets the language of the answers."),
+    ("gil_start_prepare", "Propose the exact .gilignore text (rules) for a tracked-scope start. The user's decision arrives recorded."),
+    ("gil_start_status", "Read the state of a start preparation: preparing, awaiting_approval, changes_requested, approved or started. Writes nothing."),
+    ("gil_context", "Read where the project stands and the one next call. Read it whenever you are unsure, and at the start of a session on an existing project."),
+    ("gil_status", "Read the open step and whether the files match the recorded world. Writes nothing."),
+    ("gil_help", "Open one manual topic, or the one that fits the current place. topic close shows the fields of the Report the open step takes."),
+    ("gil_open", "Open the next step with its contract object {objective, next_action, done_when}, or open a Cycle (kind interview or experiment; an experiment takes the requirement link object gil_plan_read.experiment_link shows)."),
+    ("gil_close", "Close the open step or Cycle with its Report object. The fields are those the current place asks for; a refusal shows them. In a Verify, evidence_files names the files that hold what was observed. expected_owner and visuals belong only to a project that keeps image reports."),
+    ("gil_plan_propose", "In an open Interview Synthesis, propose the scope and the list of problems to solve: items of {id, question, observation, source}, each decidable by ONE observation. To extend a plan, copy its existing items unchanged and add new ones."),
+    ("gil_plan_read", "Read the proposal and its decision, the approved plan, which Experiments served which requirement, close_report (the Report to close an approved Synthesis with) and experiment_link (the contract to open an Experiment with)."),
+    ("gil_plan_request_interview", "Record, during an Experiment, that the list of problems needs to change. It changes nothing by itself: finish the Cycle, then open a new Interview."),
+    ("gil_revisit", "After an Experiment closed as failure with next_direction revisit: go back. The changed files are preserved and the tracked files return to the target Cycle's world. No approval. Then open a new Cycle."),
+    ("gil_restore", "Return the tracked files to the recorded world of the current place, discarding changes made outside a Verify (or an open Verify's unconfirmed changes). No approval."),
+    ("gil_report_read", "Read one stored Report by its reference, or how a Cycle sits in the Chain. Changes nothing."),
+    ("gil_evidence_read", "Read the stored bytes of a file a closed Verify named in evidence_files. Changes nothing."),
+];
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -163,7 +187,14 @@ pub(super) fn catalog(tools: &[Tool]) -> Vec<Tool> {
     let app_only = |tool: &Tool| serde_json::to_value(tool).ok()
         .is_some_and(|wire| wire["_meta"]["ui"]["visibility"] == json!(["app"]));
     let display = |name: &str| name.starts_with("gil_monitor_") || matches!(name, "show_gil_monitor" | "gil_companion_status" | "show_gil_companion");
-    let mut kept: Vec<Tool> = tools.iter().filter(|tool| !display(tool.name.as_ref()) && !app_only(tool)).cloned().collect();
+    let mut kept: Vec<Tool> = Vec::new();
+    for (name, description) in TOOLS {
+        // A tool this build does not have is simply absent; the schema is the build's own.
+        let Some(tool) = tools.iter().find(|tool| tool.name == *name && !display(tool.name.as_ref()) && !app_only(tool)) else { continue };
+        let mut tool = tool.clone();
+        tool.description = Some((*description).into());
+        kept.push(tool);
+    }
     let root = json!({"type":"string","description":"The absolute project folder of this run."});
     for (name, description, properties, required, read) in [
         (REVIEW, "Runner-only, never given to the model: read what waits for the user in this unattended session, exactly as stored (start proposal, plan proposal). Writes nothing and approves nothing.",

@@ -1452,6 +1452,10 @@ fn opened_step(session: &Session, opened: crate::Opened) -> String {
             out.push_str(&tr!("cmd.opened_define_requirement", marker = text("receipt.marker.exploration"), item = item.id));
         }
     }
+    #[cfg(feature = "approved-plan")]
+    if opened.kind == crate::NodeKind::Analysis && session.project().exploration_contract() {
+        out.push_str(text("cmd.opened_analysis_boolean"));
+    }
     if cycle.kind() == CycleKind::Interview {
         out.push_str(text("cmd.opened_interview_note"));
         // 실행된 Experiment 뒤의 Interview(Closing·재인터뷰)는 결과물을 먼저 보여 준다(Cycle Model §18).

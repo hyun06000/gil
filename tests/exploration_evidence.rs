@@ -409,7 +409,7 @@ fn a_requirement_leads_to_each_linked_experiments_original_reports_and_stored_ev
     // ── Analysis and Outcome: the interpretation and the lesson, with the links the Core recorded ──
     let analysis = fields(&report(&mut r, &second.analysis));
     assert_eq!(analysis["interpretation"], "관측한 행 수가 기준에 못 미친다");
-    assert_eq!((analysis["success_condition_met"].as_str(), analysis["evidence.verify_ref"].as_str()), ("no", second.verify.as_str()));
+    assert_eq!((analysis["success_condition_met"].as_str(), analysis["evidence.verify_ref"].as_str()), ("false", second.verify.as_str()));
     let outcome = fields(&report(&mut r, &second.outcome));
     assert_eq!(outcome["lesson"], "행이 충분하다는 가정이 관측과 어긋났다");
     assert_eq!((outcome["verdict"].as_str(), outcome["learning.analysis_ref"].as_str()), ("failure", second.analysis.as_str()));
@@ -792,7 +792,7 @@ fn a_report_larger_than_one_answer_is_listed_in_pages_read_in_ranges_and_reassem
         analysis_extra: &extra, fails_back_to: None,
     });
     let mut expected: BTreeMap<String, String> = (0..6000).map(|n| (format!("obs{n:04}"), format!("값 {n}"))).collect();
-    for (name, value) in [("hypothesis_fit", "yes"), ("problem_solved", "yes"), ("success_condition_met", "yes"), ("guardrail_triggered", "no"),
+    for (name, value) in [("hypothesis_fit", "yes"), ("problem_solved", "true"), ("success_condition_met", "true"), ("guardrail_triggered", "no"),
         ("interpretation", "관측이 모두 기록됐다"), ("quoted", quoted.as_str()), (long_name.as_str(), "긴 이름의 칸"), ("evidence.verify_ref", run.verify.as_str())] {
         expected.insert(name.to_owned(), value.to_owned());
     }

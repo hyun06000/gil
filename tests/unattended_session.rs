@@ -123,7 +123,9 @@ fn the_tool_list_has_no_display_or_app_tool_and_marks_the_runner_tools() {
     for (name, field) in [("gil_open", "contract"), ("gil_close", "report")] {
         let tool = tools.iter().find(|tool| tool["name"] == name).unwrap();
         let property = &tool["inputSchema"]["properties"][field];
-        assert_eq!((property["type"].as_str(), &property["additionalProperties"]), (Some("object"), &json!({"type":"string"})), "{name}.{field}");
+        // A Report field that asks for true or false takes a JSON boolean; a contract is strings only.
+        let values = if field == "report" { json!({"type":["string","boolean"]}) } else { json!({"type":"string"}) };
+        assert_eq!((property["type"].as_str(), &property["additionalProperties"]), (Some("object"), &values), "{name}.{field}");
         assert!(!tool["description"].as_str().unwrap().contains("STRING"), "{name} still describes a text body");
     }
     // The removed tools are not merely hidden: they cannot be called here.

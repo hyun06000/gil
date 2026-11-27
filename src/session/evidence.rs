@@ -78,13 +78,13 @@ impl ProjectSession {
             }
         }
         if cycle.kind() != CycleKind::Experiment { return Ok(report); }
-        // Exploration contract: the Analysis answers the Define's one observation with yes or no,
-        // and an Outcome is a success only when both answers were yes. The Core reads the two
-        // declared words; whether they are true is not something it can check.
+        // Exploration contract: the Analysis answers the Define's one observation with a boolean,
+        // true or false, and an Outcome is a success only when neither answer was false. The Core
+        // reads the two declared values; whether they are honest is not something it can check.
         #[cfg(feature = "approved-plan")]
         if self.project.exploration_contract() {
             const ANSWERS: [&str; 2] = ["problem_solved", "success_condition_met"];
-            fn plain(value: Option<&str>) -> Option<&str> { value.map(str::trim).filter(|answer| matches!(*answer, "yes" | "no")) }
+            fn plain(value: Option<&str>) -> Option<&str> { value.map(str::trim).filter(|answer| matches!(*answer, "true" | "false")) }
             if node.kind == NodeKind::Analysis {
                 for field in ANSWERS {
                     if plain(report.get(field)).is_none() {
@@ -95,7 +95,7 @@ impl ProjectSession {
             if node.kind == NodeKind::Outcome && report.get("verdict") == Some("success") {
                 let analysis = cycle.steps().lineage(here).map_err(|e| refused(e.to_string()))?
                     .into_iter().rev().find(|n| n.kind == NodeKind::Analysis && n.is_closed()).and_then(|n| n.report.as_ref());
-                if analysis.is_some_and(|analysis| ANSWERS.iter().any(|field| plain(analysis.get(field)) == Some("no"))) {
+                if analysis.is_some_and(|analysis| ANSWERS.iter().any(|field| plain(analysis.get(field)) == Some("false"))) {
                     return Err(refused(crate::locale::text("evidence.success_needs_yes")));
                 }
             }

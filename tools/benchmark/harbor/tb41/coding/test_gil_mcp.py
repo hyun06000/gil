@@ -121,7 +121,7 @@ class McpArmTests(unittest.TestCase):
             said = yield call("gil_close", report={"execution": "고치고 검사했다", "result": "통과", "plan_document": PLAN, "evidence_files": "evidence/C2.md"})
             seen["verify"] = said["result"]
             yield call("gil_open", kind="analysis", contract=CONTRACT)
-            yield call("gil_close", report={"hypothesis_fit": "yes", "problem_solved": "yes", "success_condition_met": "yes", "guardrail_triggered": "no", "interpretation": "검사가 통과했다"})
+            yield call("gil_close", report={"hypothesis_fit": "yes", "problem_solved": True, "success_condition_met": True, "guardrail_triggered": "no", "interpretation": "검사가 통과했다"})
             said = yield call("gil_open", kind="outcome", contract=CONTRACT)
             outcome = __import__("re").search(r"step:C\d+/S\d+", said["result"]).group(0)
             yield call("gil_close", report={"verdict": "success", "lesson": "키 함수로 풀렸다", "next_direction.action": "close_cycle", "next_direction.reason": "판정을 마쳤다"})
@@ -142,7 +142,8 @@ class McpArmTests(unittest.TestCase):
         self.assertIn("gil_open", names)
         self.assertIn("say", names)
         self.assertFalse([name for name in names if "unattended" in name or "monitor" in name])
-        self.assertIn("This session is unattended", first["system"])
+        self.assertIn("GIL in an unattended session", first["system"])
+        self.assertLess(len(first["system"]), 8000, "the guidance of an unattended session stays short")
         self.assertIn("Let's do this as a GIL project", first["prompt"])
         # The stand-in user approved the start and the plan, and answered the question by policy.
         self.assertIn("start approved", seen["start"])

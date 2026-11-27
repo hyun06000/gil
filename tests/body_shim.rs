@@ -23,6 +23,15 @@ pub fn objects(name: &str, mut arguments: Value) -> Value {
         if let Ok(report) = gil::Report::parse(text) {
             let fields: serde_json::Map<String, Value> = report.field_names()
                 .map(|name| (name.to_owned(), json!(report.get(name).unwrap_or_default()))).collect();
+            // Fixtures answer an Analysis with yes or no; an exploration Chain takes true or false.
+            let mut fields = fields;
+            for answer in ["problem_solved", "success_condition_met"] {
+                match fields.get(answer).and_then(Value::as_str) {
+                    Some("yes") => { fields.insert(answer.into(), json!(true)); }
+                    Some("no") => { fields.insert(answer.into(), json!(false)); }
+                    _ => {}
+                }
+            }
             arguments[field] = Value::Object(fields);
         }
     }
