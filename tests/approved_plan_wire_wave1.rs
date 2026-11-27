@@ -824,7 +824,7 @@ fn misplaced_report_and_plan_extension_recover_from_exact_readonly_mcp_data() {
     r.c = Client::serve(&settings);
     let read = r.read();
     assert!(read["document"].is_null() && read["proposal"].is_null());
-    assert_eq!(read["active_plan"]["items"], first["items"], "executed A is returned verbatim after restart");
+    assert_eq!(body_shim::as_stored(read["active_plan"]["items"].clone()), first["items"], "executed A is returned verbatim after restart");
     assert_eq!(read["active_plan"]["scope"], first["scope"]);
     assert_eq!(read["active_plan"]["revision"], 1);
     assert_eq!(read["pending"].as_array().unwrap().len(), 3);

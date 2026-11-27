@@ -9,7 +9,7 @@
 //! at the project root.
 #![allow(dead_code)]
 #[path = "../body_shim.rs"]
-mod body_shim;
+pub mod body_shim;
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};

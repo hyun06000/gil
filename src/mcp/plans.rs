@@ -82,8 +82,50 @@ fn session(root: &str) -> Result<ProjectSession, String> {
 /// The view a model reads. The two bodies it sends on — the Synthesis Report to close with and the
 /// requirement link to open an Experiment with — are objects, as `gil_close` and `gil_open` take
 /// them. The App's review keeps the stored text it displays.
+/// A plan item as a model writes and reads it: `observation` is the one observation that decides
+/// the question (stored as `done_when`), `source` the sentence of the request it comes from.
+const ITEM_SHAPE: &str = "{id, question, observation, source}";
+
+/// Turns the items of a proposal from the wire shape into the stored one. `Err` is the wire refusal.
+pub(super) fn accept(name: &str, input: &mut Value) -> Result<(), String> {
+    if name != "gil_plan_propose" { return Ok(()); }
+    let Some(items) = input.pointer_mut("/draft/items").and_then(Value::as_array_mut) else { return Ok(()); };
+    let wrong = |why: &str| format!("gil_plan_propose: every item is exactly {ITEM_SHAPE}, all nonblank strings. {why} observation is the ONE observation that decides the question — one command and what it shows, or one thing to look at; if a problem needs more than one, it is more than one item. source quotes the sentence of the user's request the problem comes from. Nothing was recorded; correct the items and send the call once more.");
+    for item in items {
+        let Some(fields) = item.as_object_mut() else { return Err(wrong("An item is not an object.")); };
+        if fields.contains_key("done_when") { return Err(wrong("done_when is not a field: write observation.")); }
+        for field in ["id", "question", "observation", "source"] {
+            if fields.get(field).and_then(Value::as_str).is_none_or(|text| text.trim().is_empty()) {
+                return Err(wrong(&format!("An item has no {field}.")));
+            }
+        }
+        if fields.len() != 4 { return Err(wrong("An item has a field besides these four.")); }
+        let observation = fields.remove("observation").expect("checked");
+        fields.insert("done_when".into(), observation);
+    }
+    Ok(())
+}
+
+/// The stored name of an item's observation, as the model reads it.
+fn observation_named(value: &mut Value) {
+    match value {
+        Value::Object(fields) => {
+            if fields.contains_key("id") && fields.contains_key("question") {
+                if let Some(observation) = fields.remove("done_when") {
+                    fields.insert("observation".into(), observation);
+                    fields.entry("source").or_insert_with(|| json!(""));
+                }
+            }
+            fields.values_mut().for_each(observation_named);
+        }
+        Value::Array(values) => values.iter_mut().for_each(observation_named),
+        _ => {}
+    }
+}
+
 fn model_view(p: &Project) -> Value {
     let mut value = view(p);
+    observation_named(&mut value);
     for field in ["close_report", "experiment_link"] {
         if let Some(text) = value.get(field).and_then(Value::as_str).map(str::to_owned) {
             value[field] = super::body::to_object(&text);
@@ -129,7 +171,7 @@ fn exploration_view(value: &mut Value, p: &Project, state: &crate::approved_plan
             "selection":e.selection})
     };
     let requirements: Vec<Value> = active.map(|a| a.draft.items.iter().map(|i| json!({
-        "id":i.id, "question":i.question, "done_when":i.done_when,
+        "id":i.id, "question":i.question, "done_when":i.done_when, "source":i.source,
         "experiments":state.linked(&i.id).map(experiment).collect::<Vec<_>>()})).collect()).unwrap_or_default();
     let here = p.current_cycle().id().to_ref().to_string();
     let fields = value.as_object_mut().expect("plan view is an object");
@@ -253,7 +295,9 @@ pub(super) fn catalog(mut tools: Vec<Tool>) -> Vec<Tool> {
     let draft = json!({"type":"object", "additionalProperties":false, "required":["scope","items","synthesis"], "properties":{
         "scope":{"type":"object","additionalProperties":false,"required":["goal","in_scope","out_of_scope","constraints","success_criteria"],"properties":{
             "goal":string,"in_scope":string,"out_of_scope":string,"constraints":string,"success_criteria":string}},
-        "items":{"type":"array","minItems":1,"maxItems":64,"items":{"type":"object","additionalProperties":false,"required":["id","question","done_when"],"properties":{"id":string,"question":string,"done_when":string}}},
+        "items":{"type":"array","minItems":1,"maxItems":64,"description":"The problems to solve, as small as they can be made: each one decidable by ONE observation. Do not bundle several features or cases into one item.","items":{"type":"object","additionalProperties":false,"required":["id","question","observation","source"],"properties":{"id":string,"question":{"type":"string","description":"One yes/no question about one behaviour."},
+            "observation":{"type":"string","description":"The ONE observation that decides the question: one command and what it shows, or one thing to look at. If deciding takes more than one observation, split the item."},
+            "source":{"type":"string","description":"The sentence of the user's request this problem comes from, quoted."}}}},
         "synthesis":{"type":"object","additionalProperties":{"type":"string"},"required":["statement","basis_refs","exploration_checklist"],"properties":{
             "statement":{"type":"string","description":"Proposed agreement. Explain previous-cycle/external background here; it does not replace current Interview basis_refs."},
             "basis_refs":{"type":"string","description":crate::cycle::BASIS_REFS_RULES,"examples":["step:C5/S1\nstep:C5/S2"]},

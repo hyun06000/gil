@@ -4,17 +4,19 @@
       "name": "approved-nothing-linked",
       "review": {
         "active_plan": {
-          "digest": "93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3",
+          "digest": "960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80",
           "items": [
             {
               "done_when": "evidence 파일에 항목 R1 결과가 저장된다",
               "id": "R1",
-              "question": "항목 R1을 합성 자료로 확인한다"
+              "question": "항목 R1을 합성 자료로 확인한다",
+              "source": "the synthetic request of this test"
             },
             {
               "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
               "id": "R2",
-              "question": "항목 R2을 합성 자료로 확인한다"
+              "question": "항목 R2을 합성 자료로 확인한다",
+              "source": "the synthetic request of this test"
             }
           ],
           "revision": 1,
@@ -37,18 +39,20 @@
         "current_item": null,
         "document": null,
         "executed_cycles": [],
-        "experiment_link": "plan_revision: 1\nplan_digest: 93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3\nrequirement_id: R1 | R2\nrelevance: …\nreadiness: …\nuncertainty: …",
-        "next": "승인 판 1의 요구: R1, R2. 탐색 계약에서는 항목이 자동으로 묶이지 않는다. 지금 판정할 수 있는 가장 작은 예/아니오 질문 하나를 정하고 gil_open(kind: experiment)의 contract에 요구 연결을 적어 연다: plan_revision: 1 · plan_digest: 93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3 · requirement_id: R1 | R2 · relevance: … · readiness: … · uncertainty: …. 목록 순서는 실행 순서가 아니며 relevance · readiness · uncertainty는 관측에 근거해 직접 적는다.\n이 Chain은 탐색 실행 계약(contract: exploration)이다. active_plan.items는 실행 순서가 아니라 승인된 요구다. Experiment는 experiment_link의 여섯 칸을 gil_open(kind: experiment)의 contract에 적어 열며 자동으로 묶이지 않는다. requirements는 요구별로 연결된 실험과 그 Cycle Report의 verdict를 기록 그대로 보여 준다. 실험의 success는 요구의 완료가 아니고, pending은 아직 실험이 연결되지 않은 요구일 뿐이다. 요구가 충족됐는지는 Closing Interview에서 사용자가 승인한다(requirement_resolution). 세분화·방법·순서 변경 때문에 새 제안을 만들지 않는다. 요구·범위·권한 자체를 바꿀 때만 Interview에서 active_plan.items 전체를 원문 그대로 복사해 새로 승인받는다. document는 Experiment를 열 때 연결된 승인 판의 UTF-8 원문이며 파일 저장은 실제 열린 Verify에서만 한다. Core는 relevance · readiness · uncertainty의 의미를 검증하지 않는다.",
+        "experiment_link": "plan_revision: 1\nplan_digest: 960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80\nrequirement_id: R1 | R2\nrelevance: …\nreadiness: …\nuncertainty: …",
+        "next": "승인 판 1의 요구: R1, R2. 탐색 계약에서는 항목이 자동으로 묶이지 않는다. 지금 판정할 수 있는 가장 작은 예/아니오 질문 하나를 정하고 gil_open(kind: experiment)의 contract에 요구 연결을 적어 연다: plan_revision: 1 · plan_digest: 960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80 · requirement_id: R1 | R2 · relevance: … · readiness: … · uncertainty: …. 목록 순서는 실행 순서가 아니며 relevance · readiness · uncertainty는 관측에 근거해 직접 적는다.\n이 Chain은 탐색 실행 계약(contract: exploration)이다. active_plan.items는 실행 순서가 아니라 승인된 요구다. Experiment는 experiment_link의 여섯 칸을 gil_open(kind: experiment)의 contract에 적어 열며 자동으로 묶이지 않는다. requirements는 요구별로 연결된 실험과 그 Cycle Report의 verdict를 기록 그대로 보여 준다. 실험의 success는 요구의 완료가 아니고, pending은 아직 실험이 연결되지 않은 요구일 뿐이다. 요구가 충족됐는지는 Closing Interview에서 사용자가 승인한다(requirement_resolution). 세분화·방법·순서 변경 때문에 새 제안을 만들지 않는다. 요구·범위·권한 자체를 바꿀 때만 Interview에서 active_plan.items 전체를 원문 그대로 복사해 새로 승인받는다. document는 Experiment를 열 때 연결된 승인 판의 UTF-8 원문이며 파일 저장은 실제 열린 Verify에서만 한다. Core는 relevance · readiness · uncertainty의 의미를 검증하지 않는다.",
         "pending": [
           {
             "done_when": "evidence 파일에 항목 R1 결과가 저장된다",
             "id": "R1",
-            "question": "항목 R1을 합성 자료로 확인한다"
+            "question": "항목 R1을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           },
           {
             "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
             "id": "R2",
-            "question": "항목 R2을 합성 자료로 확인한다"
+            "question": "항목 R2을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           }
         ],
         "proposal": null,
@@ -59,13 +63,15 @@
             "done_when": "evidence 파일에 항목 R1 결과가 저장된다",
             "experiments": [],
             "id": "R1",
-            "question": "항목 R1을 합성 자료로 확인한다"
+            "question": "항목 R1을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           },
           {
             "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
             "experiments": [],
             "id": "R2",
-            "question": "항목 R2을 합성 자료로 확인한다"
+            "question": "항목 R2을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           }
         ],
         "retry_pending": [],
@@ -76,17 +82,19 @@
       "name": "r1-open",
       "review": {
         "active_plan": {
-          "digest": "93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3",
+          "digest": "960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80",
           "items": [
             {
               "done_when": "evidence 파일에 항목 R1 결과가 저장된다",
               "id": "R1",
-              "question": "항목 R1을 합성 자료로 확인한다"
+              "question": "항목 R1을 합성 자료로 확인한다",
+              "source": "the synthetic request of this test"
             },
             {
               "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
               "id": "R2",
-              "question": "항목 R2을 합성 자료로 확인한다"
+              "question": "항목 R2을 합성 자료로 확인한다",
+              "source": "the synthetic request of this test"
             }
           ],
           "revision": 1,
@@ -121,9 +129,10 @@
         "current_item": {
           "done_when": "evidence 파일에 항목 R1 결과가 저장된다",
           "id": "R1",
-          "question": "항목 R1을 합성 자료로 확인한다"
+          "question": "항목 R1을 합성 자료로 확인한다",
+          "source": "the synthetic request of this test"
         },
-        "document": "# GIL approved plan\n\nRevision: 1\n\nSynthesis: step:C1/S3\n\nSHA-256: 93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3\n\n```json\n{\n  \"scope\": {\n    \"goal\": \"합성 자료 기반 항목별 보고서\",\n    \"in_scope\": \"제공된 합성 자료의 비교\",\n    \"out_of_scope\": \"실시간 데이터·실제 개인정보\",\n    \"constraints\": \"외부 네트워크 없음\",\n    \"success_criteria\": \"항목마다 파일 증거가 남는다\"\n  },\n  \"items\": [\n    {\n      \"id\": \"R1\",\n      \"question\": \"항목 R1을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R1 결과가 저장된다\"\n    },\n    {\n      \"id\": \"R2\",\n      \"question\": \"항목 R2을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R2 결과가 저장된다\"\n    }\n  ],\n  \"synthesis\": {\n    \"basis_refs\": \"step:C1/S1\\nstep:C1/S2\",\n    \"exploration_checklist\": \"R1\\nR2\",\n    \"statement\": \"합성 자료로 항목을 순서대로 확인하고 파일 증거를 남긴다\"\n  }\n}\n```\n",
+        "document": "# GIL approved plan\n\nRevision: 1\n\nSynthesis: step:C1/S3\n\nSHA-256: 960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80\n\n```json\n{\n  \"scope\": {\n    \"goal\": \"합성 자료 기반 항목별 보고서\",\n    \"in_scope\": \"제공된 합성 자료의 비교\",\n    \"out_of_scope\": \"실시간 데이터·실제 개인정보\",\n    \"constraints\": \"외부 네트워크 없음\",\n    \"success_criteria\": \"항목마다 파일 증거가 남는다\"\n  },\n  \"items\": [\n    {\n      \"id\": \"R1\",\n      \"question\": \"항목 R1을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R1 결과가 저장된다\",\n      \"source\": \"the synthetic request of this test\"\n    },\n    {\n      \"id\": \"R2\",\n      \"question\": \"항목 R2을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R2 결과가 저장된다\",\n      \"source\": \"the synthetic request of this test\"\n    }\n  ],\n  \"synthesis\": {\n    \"basis_refs\": \"step:C1/S1\\nstep:C1/S2\",\n    \"exploration_checklist\": \"R1\\nR2\",\n    \"statement\": \"합성 자료로 항목을 순서대로 확인하고 파일 증거를 남긴다\"\n  }\n}\n```\n",
         "executed_cycles": [
           {
             "cycle_ref": "cycle:C2",
@@ -136,13 +145,14 @@
             }
           }
         ],
-        "experiment_link": "plan_revision: 1\nplan_digest: 93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3\nrequirement_id: R1 | R2\nrelevance: …\nreadiness: …\nuncertainty: …",
+        "experiment_link": "plan_revision: 1\nplan_digest: 960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80\nrequirement_id: R1 | R2\nrelevance: …\nreadiness: …\nuncertainty: …",
         "next": "새 Experiment: gil_open(kind: define)에 행동 계약을 적어 연다. 확인할 질문 하나만 다룬다.\n이 Chain은 탐색 실행 계약(contract: exploration)이다. active_plan.items는 실행 순서가 아니라 승인된 요구다. Experiment는 experiment_link의 여섯 칸을 gil_open(kind: experiment)의 contract에 적어 열며 자동으로 묶이지 않는다. requirements는 요구별로 연결된 실험과 그 Cycle Report의 verdict를 기록 그대로 보여 준다. 실험의 success는 요구의 완료가 아니고, pending은 아직 실험이 연결되지 않은 요구일 뿐이다. 요구가 충족됐는지는 Closing Interview에서 사용자가 승인한다(requirement_resolution). 세분화·방법·순서 변경 때문에 새 제안을 만들지 않는다. 요구·범위·권한 자체를 바꿀 때만 Interview에서 active_plan.items 전체를 원문 그대로 복사해 새로 승인받는다. document는 Experiment를 열 때 연결된 승인 판의 UTF-8 원문이며 파일 저장은 실제 열린 Verify에서만 한다. Core는 relevance · readiness · uncertainty의 의미를 검증하지 않는다.\nrequirements[].experiments[].cycle_ref의 원문은 gil_report_read(owner: {kind: cycle, ref})로 열어 Step 주소와 Cycle Report를 받고, 그 Step 주소로 Report를 하나씩 읽는다. Verify가 적은 증거 파일은 gil_evidence_read가 그 Verify의 Snapshot에서 읽는다. 이 응답과 그 두 도구는 요구의 답을 종합하거나 판정하지 않는다.",
         "pending": [
           {
             "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
             "id": "R2",
-            "question": "항목 R2을 합성 자료로 확인한다"
+            "question": "항목 R2을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           }
         ],
         "proposal": null,
@@ -166,13 +176,15 @@
               }
             ],
             "id": "R1",
-            "question": "항목 R1을 합성 자료로 확인한다"
+            "question": "항목 R1을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           },
           {
             "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
             "experiments": [],
             "id": "R2",
-            "question": "항목 R2을 합성 자료로 확인한다"
+            "question": "항목 R2을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           }
         ],
         "retry_pending": [],
@@ -183,17 +195,19 @@
       "name": "r1-closed",
       "review": {
         "active_plan": {
-          "digest": "93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3",
+          "digest": "960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80",
           "items": [
             {
               "done_when": "evidence 파일에 항목 R1 결과가 저장된다",
               "id": "R1",
-              "question": "항목 R1을 합성 자료로 확인한다"
+              "question": "항목 R1을 합성 자료로 확인한다",
+              "source": "the synthetic request of this test"
             },
             {
               "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
               "id": "R2",
-              "question": "항목 R2을 합성 자료로 확인한다"
+              "question": "항목 R2을 합성 자료로 확인한다",
+              "source": "the synthetic request of this test"
             }
           ],
           "revision": 1,
@@ -228,9 +242,10 @@
         "current_item": {
           "done_when": "evidence 파일에 항목 R1 결과가 저장된다",
           "id": "R1",
-          "question": "항목 R1을 합성 자료로 확인한다"
+          "question": "항목 R1을 합성 자료로 확인한다",
+          "source": "the synthetic request of this test"
         },
-        "document": "# GIL approved plan\n\nRevision: 1\n\nSynthesis: step:C1/S3\n\nSHA-256: 93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3\n\n```json\n{\n  \"scope\": {\n    \"goal\": \"합성 자료 기반 항목별 보고서\",\n    \"in_scope\": \"제공된 합성 자료의 비교\",\n    \"out_of_scope\": \"실시간 데이터·실제 개인정보\",\n    \"constraints\": \"외부 네트워크 없음\",\n    \"success_criteria\": \"항목마다 파일 증거가 남는다\"\n  },\n  \"items\": [\n    {\n      \"id\": \"R1\",\n      \"question\": \"항목 R1을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R1 결과가 저장된다\"\n    },\n    {\n      \"id\": \"R2\",\n      \"question\": \"항목 R2을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R2 결과가 저장된다\"\n    }\n  ],\n  \"synthesis\": {\n    \"basis_refs\": \"step:C1/S1\\nstep:C1/S2\",\n    \"exploration_checklist\": \"R1\\nR2\",\n    \"statement\": \"합성 자료로 항목을 순서대로 확인하고 파일 증거를 남긴다\"\n  }\n}\n```\n",
+        "document": "# GIL approved plan\n\nRevision: 1\n\nSynthesis: step:C1/S3\n\nSHA-256: 960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80\n\n```json\n{\n  \"scope\": {\n    \"goal\": \"합성 자료 기반 항목별 보고서\",\n    \"in_scope\": \"제공된 합성 자료의 비교\",\n    \"out_of_scope\": \"실시간 데이터·실제 개인정보\",\n    \"constraints\": \"외부 네트워크 없음\",\n    \"success_criteria\": \"항목마다 파일 증거가 남는다\"\n  },\n  \"items\": [\n    {\n      \"id\": \"R1\",\n      \"question\": \"항목 R1을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R1 결과가 저장된다\",\n      \"source\": \"the synthetic request of this test\"\n    },\n    {\n      \"id\": \"R2\",\n      \"question\": \"항목 R2을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R2 결과가 저장된다\",\n      \"source\": \"the synthetic request of this test\"\n    }\n  ],\n  \"synthesis\": {\n    \"basis_refs\": \"step:C1/S1\\nstep:C1/S2\",\n    \"exploration_checklist\": \"R1\\nR2\",\n    \"statement\": \"합성 자료로 항목을 순서대로 확인하고 파일 증거를 남긴다\"\n  }\n}\n```\n",
         "executed_cycles": [
           {
             "cycle_ref": "cycle:C2",
@@ -243,13 +258,14 @@
             }
           }
         ],
-        "experiment_link": "plan_revision: 1\nplan_digest: 93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3\nrequirement_id: R1 | R2\nrelevance: …\nreadiness: …\nuncertainty: …",
-        "next": "Experiment가 success로 닫혔다. 이 성공은 승인 요구의 완료가 아니다(승인 판 1의 요구: R1, R2). 관측에 따라 다음 작은 질문을 같은 요구나 다른 승인 요구에 연결해 gil_open(kind: experiment)을 열거나(plan_revision: 1 · plan_digest: 93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3 · requirement_id: R1 | R2 · relevance: … · readiness: … · uncertainty: …), 요구별 답·근거·한계를 종합할 수 있으면 gil_open(kind: interview)으로 Closing Interview를 연다. 요구·범위·권한 자체를 바꿔야 하면 Define으로 위장하지 않고 Interview에서 합의한다. 결과물을 먼저 보여 준다: Closing Interview의 첫 메시지에서 만든 것과 용도, 실제 결과물과 확인 경로(파일 링크·주요 수치·실제 화면이나 저장된 캡처·바뀐 코드와 시험 결과), 검증 결과와 남은 한계를 제시한 뒤에 종료 여부를 묻는다. 파일 이름 나열이나 ‘완료’는 결과 제시가 아니다. 부분 결과·결과 없음은 사실대로 알리고, 기록된 증거를 읽어 보여 주며 새 파일을 만들지 않는다.\n이 Chain은 탐색 실행 계약(contract: exploration)이다. active_plan.items는 실행 순서가 아니라 승인된 요구다. Experiment는 experiment_link의 여섯 칸을 gil_open(kind: experiment)의 contract에 적어 열며 자동으로 묶이지 않는다. requirements는 요구별로 연결된 실험과 그 Cycle Report의 verdict를 기록 그대로 보여 준다. 실험의 success는 요구의 완료가 아니고, pending은 아직 실험이 연결되지 않은 요구일 뿐이다. 요구가 충족됐는지는 Closing Interview에서 사용자가 승인한다(requirement_resolution). 세분화·방법·순서 변경 때문에 새 제안을 만들지 않는다. 요구·범위·권한 자체를 바꿀 때만 Interview에서 active_plan.items 전체를 원문 그대로 복사해 새로 승인받는다. document는 Experiment를 열 때 연결된 승인 판의 UTF-8 원문이며 파일 저장은 실제 열린 Verify에서만 한다. Core는 relevance · readiness · uncertainty의 의미를 검증하지 않는다.\nrequirements[].experiments[].cycle_ref의 원문은 gil_report_read(owner: {kind: cycle, ref})로 열어 Step 주소와 Cycle Report를 받고, 그 Step 주소로 Report를 하나씩 읽는다. Verify가 적은 증거 파일은 gil_evidence_read가 그 Verify의 Snapshot에서 읽는다. 이 응답과 그 두 도구는 요구의 답을 종합하거나 판정하지 않는다.",
+        "experiment_link": "plan_revision: 1\nplan_digest: 960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80\nrequirement_id: R1 | R2\nrelevance: …\nreadiness: …\nuncertainty: …",
+        "next": "Experiment가 success로 닫혔다. 이 성공은 승인 요구의 완료가 아니다(승인 판 1의 요구: R1, R2). 관측에 따라 다음 작은 질문을 같은 요구나 다른 승인 요구에 연결해 gil_open(kind: experiment)을 열거나(plan_revision: 1 · plan_digest: 960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80 · requirement_id: R1 | R2 · relevance: … · readiness: … · uncertainty: …), 요구별 답·근거·한계를 종합할 수 있으면 gil_open(kind: interview)으로 Closing Interview를 연다. 요구·범위·권한 자체를 바꿔야 하면 Define으로 위장하지 않고 Interview에서 합의한다. 결과물을 먼저 보여 준다: Closing Interview의 첫 메시지에서 만든 것과 용도, 실제 결과물과 확인 경로(파일 링크·주요 수치·실제 화면이나 저장된 캡처·바뀐 코드와 시험 결과), 검증 결과와 남은 한계를 제시한 뒤에 종료 여부를 묻는다. 파일 이름 나열이나 ‘완료’는 결과 제시가 아니다. 부분 결과·결과 없음은 사실대로 알리고, 기록된 증거를 읽어 보여 주며 새 파일을 만들지 않는다.\n이 Chain은 탐색 실행 계약(contract: exploration)이다. active_plan.items는 실행 순서가 아니라 승인된 요구다. Experiment는 experiment_link의 여섯 칸을 gil_open(kind: experiment)의 contract에 적어 열며 자동으로 묶이지 않는다. requirements는 요구별로 연결된 실험과 그 Cycle Report의 verdict를 기록 그대로 보여 준다. 실험의 success는 요구의 완료가 아니고, pending은 아직 실험이 연결되지 않은 요구일 뿐이다. 요구가 충족됐는지는 Closing Interview에서 사용자가 승인한다(requirement_resolution). 세분화·방법·순서 변경 때문에 새 제안을 만들지 않는다. 요구·범위·권한 자체를 바꿀 때만 Interview에서 active_plan.items 전체를 원문 그대로 복사해 새로 승인받는다. document는 Experiment를 열 때 연결된 승인 판의 UTF-8 원문이며 파일 저장은 실제 열린 Verify에서만 한다. Core는 relevance · readiness · uncertainty의 의미를 검증하지 않는다.\nrequirements[].experiments[].cycle_ref의 원문은 gil_report_read(owner: {kind: cycle, ref})로 열어 Step 주소와 Cycle Report를 받고, 그 Step 주소로 Report를 하나씩 읽는다. Verify가 적은 증거 파일은 gil_evidence_read가 그 Verify의 Snapshot에서 읽는다. 이 응답과 그 두 도구는 요구의 답을 종합하거나 판정하지 않는다.",
         "pending": [
           {
             "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
             "id": "R2",
-            "question": "항목 R2을 합성 자료로 확인한다"
+            "question": "항목 R2을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           }
         ],
         "proposal": null,
@@ -273,13 +289,15 @@
               }
             ],
             "id": "R1",
-            "question": "항목 R1을 합성 자료로 확인한다"
+            "question": "항목 R1을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           },
           {
             "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
             "experiments": [],
             "id": "R2",
-            "question": "항목 R2을 합성 자료로 확인한다"
+            "question": "항목 R2을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           }
         ],
         "retry_pending": [],
@@ -290,17 +308,19 @@
       "name": "r1-failed",
       "review": {
         "active_plan": {
-          "digest": "93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3",
+          "digest": "960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80",
           "items": [
             {
               "done_when": "evidence 파일에 항목 R1 결과가 저장된다",
               "id": "R1",
-              "question": "항목 R1을 합성 자료로 확인한다"
+              "question": "항목 R1을 합성 자료로 확인한다",
+              "source": "the synthetic request of this test"
             },
             {
               "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
               "id": "R2",
-              "question": "항목 R2을 합성 자료로 확인한다"
+              "question": "항목 R2을 합성 자료로 확인한다",
+              "source": "the synthetic request of this test"
             }
           ],
           "revision": 1,
@@ -335,9 +355,10 @@
         "current_item": {
           "done_when": "evidence 파일에 항목 R1 결과가 저장된다",
           "id": "R1",
-          "question": "항목 R1을 합성 자료로 확인한다"
+          "question": "항목 R1을 합성 자료로 확인한다",
+          "source": "the synthetic request of this test"
         },
-        "document": "# GIL approved plan\n\nRevision: 1\n\nSynthesis: step:C1/S3\n\nSHA-256: 93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3\n\n```json\n{\n  \"scope\": {\n    \"goal\": \"합성 자료 기반 항목별 보고서\",\n    \"in_scope\": \"제공된 합성 자료의 비교\",\n    \"out_of_scope\": \"실시간 데이터·실제 개인정보\",\n    \"constraints\": \"외부 네트워크 없음\",\n    \"success_criteria\": \"항목마다 파일 증거가 남는다\"\n  },\n  \"items\": [\n    {\n      \"id\": \"R1\",\n      \"question\": \"항목 R1을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R1 결과가 저장된다\"\n    },\n    {\n      \"id\": \"R2\",\n      \"question\": \"항목 R2을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R2 결과가 저장된다\"\n    }\n  ],\n  \"synthesis\": {\n    \"basis_refs\": \"step:C1/S1\\nstep:C1/S2\",\n    \"exploration_checklist\": \"R1\\nR2\",\n    \"statement\": \"합성 자료로 항목을 순서대로 확인하고 파일 증거를 남긴다\"\n  }\n}\n```\n",
+        "document": "# GIL approved plan\n\nRevision: 1\n\nSynthesis: step:C1/S3\n\nSHA-256: 960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80\n\n```json\n{\n  \"scope\": {\n    \"goal\": \"합성 자료 기반 항목별 보고서\",\n    \"in_scope\": \"제공된 합성 자료의 비교\",\n    \"out_of_scope\": \"실시간 데이터·실제 개인정보\",\n    \"constraints\": \"외부 네트워크 없음\",\n    \"success_criteria\": \"항목마다 파일 증거가 남는다\"\n  },\n  \"items\": [\n    {\n      \"id\": \"R1\",\n      \"question\": \"항목 R1을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R1 결과가 저장된다\",\n      \"source\": \"the synthetic request of this test\"\n    },\n    {\n      \"id\": \"R2\",\n      \"question\": \"항목 R2을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R2 결과가 저장된다\",\n      \"source\": \"the synthetic request of this test\"\n    }\n  ],\n  \"synthesis\": {\n    \"basis_refs\": \"step:C1/S1\\nstep:C1/S2\",\n    \"exploration_checklist\": \"R1\\nR2\",\n    \"statement\": \"합성 자료로 항목을 순서대로 확인하고 파일 증거를 남긴다\"\n  }\n}\n```\n",
         "executed_cycles": [
           {
             "cycle_ref": "cycle:C2",
@@ -360,13 +381,14 @@
             }
           }
         ],
-        "experiment_link": "plan_revision: 1\nplan_digest: 93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3\nrequirement_id: R1 | R2\nrelevance: …\nreadiness: …\nuncertainty: …",
+        "experiment_link": "plan_revision: 1\nplan_digest: 960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80\nrequirement_id: R1 | R2\nrelevance: …\nreadiness: …\nuncertainty: …",
         "next": "Cycle 3이(가) failure·revisit으로 닫혔다. gil_revisit 을 한 번 불러 되돌아간다: 바뀐 파일은 보존한 뒤 대상 세계로 복원하며 승인을 기다리지 않는다. 복원 완료 후 gil_open으로 새 Cycle을 연다. 되돌아가기 전에 이 Cycle의 Verify evidence_files와 부분 결과를 사용자에게 먼저 보여 준다. 복원은 작업 폴더에서 그 파일을 치우지만 Snapshot과 보존 위치에는 남는다. 부분 결과를 그대로 두고 이어가는 전이는 아직 계약에 없다: 가짜 success나 기록 수정으로 대신하지 않고, 필요하면 사용자 결정 사항으로 알린다. 탐색 계약: 파일 변경이 없어도 되돌아가기를 생략하지 않는다. 복원 뒤에는 같은 승인 요구에 다른 작은 Define을 연결할 수 있다.\n이 Chain은 탐색 실행 계약(contract: exploration)이다. active_plan.items는 실행 순서가 아니라 승인된 요구다. Experiment는 experiment_link의 여섯 칸을 gil_open(kind: experiment)의 contract에 적어 열며 자동으로 묶이지 않는다. requirements는 요구별로 연결된 실험과 그 Cycle Report의 verdict를 기록 그대로 보여 준다. 실험의 success는 요구의 완료가 아니고, pending은 아직 실험이 연결되지 않은 요구일 뿐이다. 요구가 충족됐는지는 Closing Interview에서 사용자가 승인한다(requirement_resolution). 세분화·방법·순서 변경 때문에 새 제안을 만들지 않는다. 요구·범위·권한 자체를 바꿀 때만 Interview에서 active_plan.items 전체를 원문 그대로 복사해 새로 승인받는다. document는 Experiment를 열 때 연결된 승인 판의 UTF-8 원문이며 파일 저장은 실제 열린 Verify에서만 한다. Core는 relevance · readiness · uncertainty의 의미를 검증하지 않는다.\nrequirements[].experiments[].cycle_ref의 원문은 gil_report_read(owner: {kind: cycle, ref})로 열어 Step 주소와 Cycle Report를 받고, 그 Step 주소로 Report를 하나씩 읽는다. Verify가 적은 증거 파일은 gil_evidence_read가 그 Verify의 Snapshot에서 읽는다. 이 응답과 그 두 도구는 요구의 답을 종합하거나 판정하지 않는다.",
         "pending": [
           {
             "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
             "id": "R2",
-            "question": "항목 R2을 합성 자료로 확인한다"
+            "question": "항목 R2을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           }
         ],
         "proposal": null,
@@ -402,13 +424,15 @@
               }
             ],
             "id": "R1",
-            "question": "항목 R1을 합성 자료로 확인한다"
+            "question": "항목 R1을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           },
           {
             "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
             "experiments": [],
             "id": "R2",
-            "question": "항목 R2을 합성 자료로 확인한다"
+            "question": "항목 R2을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           }
         ],
         "retry_pending": [],
@@ -419,17 +443,19 @@
       "name": "moved-to-r2-open",
       "review": {
         "active_plan": {
-          "digest": "93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3",
+          "digest": "960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80",
           "items": [
             {
               "done_when": "evidence 파일에 항목 R1 결과가 저장된다",
               "id": "R1",
-              "question": "항목 R1을 합성 자료로 확인한다"
+              "question": "항목 R1을 합성 자료로 확인한다",
+              "source": "the synthetic request of this test"
             },
             {
               "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
               "id": "R2",
-              "question": "항목 R2을 합성 자료로 확인한다"
+              "question": "항목 R2을 합성 자료로 확인한다",
+              "source": "the synthetic request of this test"
             }
           ],
           "revision": 1,
@@ -464,9 +490,10 @@
         "current_item": {
           "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
           "id": "R2",
-          "question": "항목 R2을 합성 자료로 확인한다"
+          "question": "항목 R2을 합성 자료로 확인한다",
+          "source": "the synthetic request of this test"
         },
-        "document": "# GIL approved plan\n\nRevision: 1\n\nSynthesis: step:C1/S3\n\nSHA-256: 93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3\n\n```json\n{\n  \"scope\": {\n    \"goal\": \"합성 자료 기반 항목별 보고서\",\n    \"in_scope\": \"제공된 합성 자료의 비교\",\n    \"out_of_scope\": \"실시간 데이터·실제 개인정보\",\n    \"constraints\": \"외부 네트워크 없음\",\n    \"success_criteria\": \"항목마다 파일 증거가 남는다\"\n  },\n  \"items\": [\n    {\n      \"id\": \"R1\",\n      \"question\": \"항목 R1을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R1 결과가 저장된다\"\n    },\n    {\n      \"id\": \"R2\",\n      \"question\": \"항목 R2을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R2 결과가 저장된다\"\n    }\n  ],\n  \"synthesis\": {\n    \"basis_refs\": \"step:C1/S1\\nstep:C1/S2\",\n    \"exploration_checklist\": \"R1\\nR2\",\n    \"statement\": \"합성 자료로 항목을 순서대로 확인하고 파일 증거를 남긴다\"\n  }\n}\n```\n",
+        "document": "# GIL approved plan\n\nRevision: 1\n\nSynthesis: step:C1/S3\n\nSHA-256: 960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80\n\n```json\n{\n  \"scope\": {\n    \"goal\": \"합성 자료 기반 항목별 보고서\",\n    \"in_scope\": \"제공된 합성 자료의 비교\",\n    \"out_of_scope\": \"실시간 데이터·실제 개인정보\",\n    \"constraints\": \"외부 네트워크 없음\",\n    \"success_criteria\": \"항목마다 파일 증거가 남는다\"\n  },\n  \"items\": [\n    {\n      \"id\": \"R1\",\n      \"question\": \"항목 R1을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R1 결과가 저장된다\",\n      \"source\": \"the synthetic request of this test\"\n    },\n    {\n      \"id\": \"R2\",\n      \"question\": \"항목 R2을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R2 결과가 저장된다\",\n      \"source\": \"the synthetic request of this test\"\n    }\n  ],\n  \"synthesis\": {\n    \"basis_refs\": \"step:C1/S1\\nstep:C1/S2\",\n    \"exploration_checklist\": \"R1\\nR2\",\n    \"statement\": \"합성 자료로 항목을 순서대로 확인하고 파일 증거를 남긴다\"\n  }\n}\n```\n",
         "executed_cycles": [
           {
             "cycle_ref": "cycle:C2",
@@ -499,7 +526,7 @@
             }
           }
         ],
-        "experiment_link": "plan_revision: 1\nplan_digest: 93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3\nrequirement_id: R1 | R2\nrelevance: …\nreadiness: …\nuncertainty: …",
+        "experiment_link": "plan_revision: 1\nplan_digest: 960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80\nrequirement_id: R1 | R2\nrelevance: …\nreadiness: …\nuncertainty: …",
         "next": "새 Experiment: gil_open(kind: define)에 행동 계약을 적어 연다. 확인할 질문 하나만 다룬다.\n이 Chain은 탐색 실행 계약(contract: exploration)이다. active_plan.items는 실행 순서가 아니라 승인된 요구다. Experiment는 experiment_link의 여섯 칸을 gil_open(kind: experiment)의 contract에 적어 열며 자동으로 묶이지 않는다. requirements는 요구별로 연결된 실험과 그 Cycle Report의 verdict를 기록 그대로 보여 준다. 실험의 success는 요구의 완료가 아니고, pending은 아직 실험이 연결되지 않은 요구일 뿐이다. 요구가 충족됐는지는 Closing Interview에서 사용자가 승인한다(requirement_resolution). 세분화·방법·순서 변경 때문에 새 제안을 만들지 않는다. 요구·범위·권한 자체를 바꿀 때만 Interview에서 active_plan.items 전체를 원문 그대로 복사해 새로 승인받는다. document는 Experiment를 열 때 연결된 승인 판의 UTF-8 원문이며 파일 저장은 실제 열린 Verify에서만 한다. Core는 relevance · readiness · uncertainty의 의미를 검증하지 않는다.\nrequirements[].experiments[].cycle_ref의 원문은 gil_report_read(owner: {kind: cycle, ref})로 열어 Step 주소와 Cycle Report를 받고, 그 Step 주소로 Report를 하나씩 읽는다. Verify가 적은 증거 파일은 gil_evidence_read가 그 Verify의 Snapshot에서 읽는다. 이 응답과 그 두 도구는 요구의 답을 종합하거나 판정하지 않는다.",
         "pending": [],
         "proposal": null,
@@ -535,7 +562,8 @@
               }
             ],
             "id": "R1",
-            "question": "항목 R1을 합성 자료로 확인한다"
+            "question": "항목 R1을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           },
           {
             "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
@@ -554,7 +582,8 @@
               }
             ],
             "id": "R2",
-            "question": "항목 R2을 합성 자료로 확인한다"
+            "question": "항목 R2을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           }
         ],
         "retry_pending": [],
@@ -565,17 +594,19 @@
       "name": "r2-closed",
       "review": {
         "active_plan": {
-          "digest": "93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3",
+          "digest": "960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80",
           "items": [
             {
               "done_when": "evidence 파일에 항목 R1 결과가 저장된다",
               "id": "R1",
-              "question": "항목 R1을 합성 자료로 확인한다"
+              "question": "항목 R1을 합성 자료로 확인한다",
+              "source": "the synthetic request of this test"
             },
             {
               "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
               "id": "R2",
-              "question": "항목 R2을 합성 자료로 확인한다"
+              "question": "항목 R2을 합성 자료로 확인한다",
+              "source": "the synthetic request of this test"
             }
           ],
           "revision": 1,
@@ -610,9 +641,10 @@
         "current_item": {
           "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
           "id": "R2",
-          "question": "항목 R2을 합성 자료로 확인한다"
+          "question": "항목 R2을 합성 자료로 확인한다",
+          "source": "the synthetic request of this test"
         },
-        "document": "# GIL approved plan\n\nRevision: 1\n\nSynthesis: step:C1/S3\n\nSHA-256: 93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3\n\n```json\n{\n  \"scope\": {\n    \"goal\": \"합성 자료 기반 항목별 보고서\",\n    \"in_scope\": \"제공된 합성 자료의 비교\",\n    \"out_of_scope\": \"실시간 데이터·실제 개인정보\",\n    \"constraints\": \"외부 네트워크 없음\",\n    \"success_criteria\": \"항목마다 파일 증거가 남는다\"\n  },\n  \"items\": [\n    {\n      \"id\": \"R1\",\n      \"question\": \"항목 R1을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R1 결과가 저장된다\"\n    },\n    {\n      \"id\": \"R2\",\n      \"question\": \"항목 R2을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R2 결과가 저장된다\"\n    }\n  ],\n  \"synthesis\": {\n    \"basis_refs\": \"step:C1/S1\\nstep:C1/S2\",\n    \"exploration_checklist\": \"R1\\nR2\",\n    \"statement\": \"합성 자료로 항목을 순서대로 확인하고 파일 증거를 남긴다\"\n  }\n}\n```\n",
+        "document": "# GIL approved plan\n\nRevision: 1\n\nSynthesis: step:C1/S3\n\nSHA-256: 960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80\n\n```json\n{\n  \"scope\": {\n    \"goal\": \"합성 자료 기반 항목별 보고서\",\n    \"in_scope\": \"제공된 합성 자료의 비교\",\n    \"out_of_scope\": \"실시간 데이터·실제 개인정보\",\n    \"constraints\": \"외부 네트워크 없음\",\n    \"success_criteria\": \"항목마다 파일 증거가 남는다\"\n  },\n  \"items\": [\n    {\n      \"id\": \"R1\",\n      \"question\": \"항목 R1을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R1 결과가 저장된다\",\n      \"source\": \"the synthetic request of this test\"\n    },\n    {\n      \"id\": \"R2\",\n      \"question\": \"항목 R2을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R2 결과가 저장된다\",\n      \"source\": \"the synthetic request of this test\"\n    }\n  ],\n  \"synthesis\": {\n    \"basis_refs\": \"step:C1/S1\\nstep:C1/S2\",\n    \"exploration_checklist\": \"R1\\nR2\",\n    \"statement\": \"합성 자료로 항목을 순서대로 확인하고 파일 증거를 남긴다\"\n  }\n}\n```\n",
         "executed_cycles": [
           {
             "cycle_ref": "cycle:C2",
@@ -645,8 +677,8 @@
             }
           }
         ],
-        "experiment_link": "plan_revision: 1\nplan_digest: 93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3\nrequirement_id: R1 | R2\nrelevance: …\nreadiness: …\nuncertainty: …",
-        "next": "Experiment가 success로 닫혔다. 이 성공은 승인 요구의 완료가 아니다(승인 판 1의 요구: R1, R2). 관측에 따라 다음 작은 질문을 같은 요구나 다른 승인 요구에 연결해 gil_open(kind: experiment)을 열거나(plan_revision: 1 · plan_digest: 93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3 · requirement_id: R1 | R2 · relevance: … · readiness: … · uncertainty: …), 요구별 답·근거·한계를 종합할 수 있으면 gil_open(kind: interview)으로 Closing Interview를 연다. 요구·범위·권한 자체를 바꿔야 하면 Define으로 위장하지 않고 Interview에서 합의한다. 결과물을 먼저 보여 준다: Closing Interview의 첫 메시지에서 만든 것과 용도, 실제 결과물과 확인 경로(파일 링크·주요 수치·실제 화면이나 저장된 캡처·바뀐 코드와 시험 결과), 검증 결과와 남은 한계를 제시한 뒤에 종료 여부를 묻는다. 파일 이름 나열이나 ‘완료’는 결과 제시가 아니다. 부분 결과·결과 없음은 사실대로 알리고, 기록된 증거를 읽어 보여 주며 새 파일을 만들지 않는다.\n이 Chain은 탐색 실행 계약(contract: exploration)이다. active_plan.items는 실행 순서가 아니라 승인된 요구다. Experiment는 experiment_link의 여섯 칸을 gil_open(kind: experiment)의 contract에 적어 열며 자동으로 묶이지 않는다. requirements는 요구별로 연결된 실험과 그 Cycle Report의 verdict를 기록 그대로 보여 준다. 실험의 success는 요구의 완료가 아니고, pending은 아직 실험이 연결되지 않은 요구일 뿐이다. 요구가 충족됐는지는 Closing Interview에서 사용자가 승인한다(requirement_resolution). 세분화·방법·순서 변경 때문에 새 제안을 만들지 않는다. 요구·범위·권한 자체를 바꿀 때만 Interview에서 active_plan.items 전체를 원문 그대로 복사해 새로 승인받는다. document는 Experiment를 열 때 연결된 승인 판의 UTF-8 원문이며 파일 저장은 실제 열린 Verify에서만 한다. Core는 relevance · readiness · uncertainty의 의미를 검증하지 않는다.\nrequirements[].experiments[].cycle_ref의 원문은 gil_report_read(owner: {kind: cycle, ref})로 열어 Step 주소와 Cycle Report를 받고, 그 Step 주소로 Report를 하나씩 읽는다. Verify가 적은 증거 파일은 gil_evidence_read가 그 Verify의 Snapshot에서 읽는다. 이 응답과 그 두 도구는 요구의 답을 종합하거나 판정하지 않는다.",
+        "experiment_link": "plan_revision: 1\nplan_digest: 960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80\nrequirement_id: R1 | R2\nrelevance: …\nreadiness: …\nuncertainty: …",
+        "next": "Experiment가 success로 닫혔다. 이 성공은 승인 요구의 완료가 아니다(승인 판 1의 요구: R1, R2). 관측에 따라 다음 작은 질문을 같은 요구나 다른 승인 요구에 연결해 gil_open(kind: experiment)을 열거나(plan_revision: 1 · plan_digest: 960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80 · requirement_id: R1 | R2 · relevance: … · readiness: … · uncertainty: …), 요구별 답·근거·한계를 종합할 수 있으면 gil_open(kind: interview)으로 Closing Interview를 연다. 요구·범위·권한 자체를 바꿔야 하면 Define으로 위장하지 않고 Interview에서 합의한다. 결과물을 먼저 보여 준다: Closing Interview의 첫 메시지에서 만든 것과 용도, 실제 결과물과 확인 경로(파일 링크·주요 수치·실제 화면이나 저장된 캡처·바뀐 코드와 시험 결과), 검증 결과와 남은 한계를 제시한 뒤에 종료 여부를 묻는다. 파일 이름 나열이나 ‘완료’는 결과 제시가 아니다. 부분 결과·결과 없음은 사실대로 알리고, 기록된 증거를 읽어 보여 주며 새 파일을 만들지 않는다.\n이 Chain은 탐색 실행 계약(contract: exploration)이다. active_plan.items는 실행 순서가 아니라 승인된 요구다. Experiment는 experiment_link의 여섯 칸을 gil_open(kind: experiment)의 contract에 적어 열며 자동으로 묶이지 않는다. requirements는 요구별로 연결된 실험과 그 Cycle Report의 verdict를 기록 그대로 보여 준다. 실험의 success는 요구의 완료가 아니고, pending은 아직 실험이 연결되지 않은 요구일 뿐이다. 요구가 충족됐는지는 Closing Interview에서 사용자가 승인한다(requirement_resolution). 세분화·방법·순서 변경 때문에 새 제안을 만들지 않는다. 요구·범위·권한 자체를 바꿀 때만 Interview에서 active_plan.items 전체를 원문 그대로 복사해 새로 승인받는다. document는 Experiment를 열 때 연결된 승인 판의 UTF-8 원문이며 파일 저장은 실제 열린 Verify에서만 한다. Core는 relevance · readiness · uncertainty의 의미를 검증하지 않는다.\nrequirements[].experiments[].cycle_ref의 원문은 gil_report_read(owner: {kind: cycle, ref})로 열어 Step 주소와 Cycle Report를 받고, 그 Step 주소로 Report를 하나씩 읽는다. Verify가 적은 증거 파일은 gil_evidence_read가 그 Verify의 Snapshot에서 읽는다. 이 응답과 그 두 도구는 요구의 답을 종합하거나 판정하지 않는다.",
         "pending": [],
         "proposal": null,
         "reinterview_requests": [],
@@ -681,7 +713,8 @@
               }
             ],
             "id": "R1",
-            "question": "항목 R1을 합성 자료로 확인한다"
+            "question": "항목 R1을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           },
           {
             "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
@@ -700,7 +733,8 @@
               }
             ],
             "id": "R2",
-            "question": "항목 R2을 합성 자료로 확인한다"
+            "question": "항목 R2을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           }
         ],
         "retry_pending": [],
@@ -711,17 +745,19 @@
       "name": "interview-open",
       "review": {
         "active_plan": {
-          "digest": "93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3",
+          "digest": "960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80",
           "items": [
             {
               "done_when": "evidence 파일에 항목 R1 결과가 저장된다",
               "id": "R1",
-              "question": "항목 R1을 합성 자료로 확인한다"
+              "question": "항목 R1을 합성 자료로 확인한다",
+              "source": "the synthetic request of this test"
             },
             {
               "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
               "id": "R2",
-              "question": "항목 R2을 합성 자료로 확인한다"
+              "question": "항목 R2을 합성 자료로 확인한다",
+              "source": "the synthetic request of this test"
             }
           ],
           "revision": 1,
@@ -775,7 +811,7 @@
             }
           }
         ],
-        "experiment_link": "plan_revision: 1\nplan_digest: 93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3\nrequirement_id: R1 | R2\nrelevance: …\nreadiness: …\nuncertainty: …",
+        "experiment_link": "plan_revision: 1\nplan_digest: 960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80\nrequirement_id: R1 | R2\nrelevance: …\nreadiness: …\nuncertainty: …",
         "next": "새 Interview: gil_open(kind: question)에 행동 계약(objective · next_action · done_when)을 적어 첫 질문을 연다. gil_start나 Monitor 준비를 반복하지 않는다.\n이 Chain은 탐색 실행 계약(contract: exploration)이다. active_plan.items는 실행 순서가 아니라 승인된 요구다. Experiment는 experiment_link의 여섯 칸을 gil_open(kind: experiment)의 contract에 적어 열며 자동으로 묶이지 않는다. requirements는 요구별로 연결된 실험과 그 Cycle Report의 verdict를 기록 그대로 보여 준다. 실험의 success는 요구의 완료가 아니고, pending은 아직 실험이 연결되지 않은 요구일 뿐이다. 요구가 충족됐는지는 Closing Interview에서 사용자가 승인한다(requirement_resolution). 세분화·방법·순서 변경 때문에 새 제안을 만들지 않는다. 요구·범위·권한 자체를 바꿀 때만 Interview에서 active_plan.items 전체를 원문 그대로 복사해 새로 승인받는다. document는 Experiment를 열 때 연결된 승인 판의 UTF-8 원문이며 파일 저장은 실제 열린 Verify에서만 한다. Core는 relevance · readiness · uncertainty의 의미를 검증하지 않는다.\nrequirements[].experiments[].cycle_ref의 원문은 gil_report_read(owner: {kind: cycle, ref})로 열어 Step 주소와 Cycle Report를 받고, 그 Step 주소로 Report를 하나씩 읽는다. Verify가 적은 증거 파일은 gil_evidence_read가 그 Verify의 Snapshot에서 읽는다. 이 응답과 그 두 도구는 요구의 답을 종합하거나 판정하지 않는다.",
         "pending": [],
         "proposal": null,
@@ -811,7 +847,8 @@
               }
             ],
             "id": "R1",
-            "question": "항목 R1을 합성 자료로 확인한다"
+            "question": "항목 R1을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           },
           {
             "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
@@ -830,7 +867,8 @@
               }
             ],
             "id": "R2",
-            "question": "항목 R2을 합성 자료로 확인한다"
+            "question": "항목 R2을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           }
         ],
         "retry_pending": [],
@@ -841,17 +879,19 @@
       "name": "proposal-waiting",
       "review": {
         "active_plan": {
-          "digest": "93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3",
+          "digest": "960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80",
           "items": [
             {
               "done_when": "evidence 파일에 항목 R1 결과가 저장된다",
               "id": "R1",
-              "question": "항목 R1을 합성 자료로 확인한다"
+              "question": "항목 R1을 합성 자료로 확인한다",
+              "source": "the synthetic request of this test"
             },
             {
               "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
               "id": "R2",
-              "question": "항목 R2을 합성 자료로 확인한다"
+              "question": "항목 R2을 합성 자료로 확인한다",
+              "source": "the synthetic request of this test"
             }
           ],
           "revision": 1,
@@ -905,28 +945,31 @@
             }
           }
         ],
-        "experiment_link": "plan_revision: 1\nplan_digest: 93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3\nrequirement_id: R1 | R2\nrelevance: …\nreadiness: …\nuncertainty: …",
+        "experiment_link": "plan_revision: 1\nplan_digest: 960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80\nrequirement_id: R1 | R2\nrelevance: …\nreadiness: …\nuncertainty: …",
         "next": "제안 판 2이(가) Monitor 버튼 응답을 기다린다. 턴을 끝내고 기다린다. 그동안 프로젝트 파일 변경·재제안을 하지 않는다. 응답이 왔는지는 gil_plan_read로만 확인한다.\n이 Chain은 탐색 실행 계약(contract: exploration)이다. active_plan.items는 실행 순서가 아니라 승인된 요구다. Experiment는 experiment_link의 여섯 칸을 gil_open(kind: experiment)의 contract에 적어 열며 자동으로 묶이지 않는다. requirements는 요구별로 연결된 실험과 그 Cycle Report의 verdict를 기록 그대로 보여 준다. 실험의 success는 요구의 완료가 아니고, pending은 아직 실험이 연결되지 않은 요구일 뿐이다. 요구가 충족됐는지는 Closing Interview에서 사용자가 승인한다(requirement_resolution). 세분화·방법·순서 변경 때문에 새 제안을 만들지 않는다. 요구·범위·권한 자체를 바꿀 때만 Interview에서 active_plan.items 전체를 원문 그대로 복사해 새로 승인받는다. document는 Experiment를 열 때 연결된 승인 판의 UTF-8 원문이며 파일 저장은 실제 열린 Verify에서만 한다. Core는 relevance · readiness · uncertainty의 의미를 검증하지 않는다.\nrequirements[].experiments[].cycle_ref의 원문은 gil_report_read(owner: {kind: cycle, ref})로 열어 Step 주소와 Cycle Report를 받고, 그 Step 주소로 Report를 하나씩 읽는다. Verify가 적은 증거 파일은 gil_evidence_read가 그 Verify의 Snapshot에서 읽는다. 이 응답과 그 두 도구는 요구의 답을 종합하거나 판정하지 않는다.",
         "pending": [],
         "proposal": {
           "base_revision": 1,
-          "digest": "577a16458516ba9b774860bf5e62629a218eb7b8bd334c07e36278012dd315a6",
+          "digest": "cb3576b9e032593caa67aeaf3a46d8ef39d3c707c3bd98dd249f60bb8f46ea87",
           "draft": {
             "items": [
               {
                 "done_when": "evidence 파일에 항목 R1 결과가 저장된다",
                 "id": "R1",
-                "question": "항목 R1을 합성 자료로 확인한다"
+                "question": "항목 R1을 합성 자료로 확인한다",
+                "source": "the synthetic request of this test"
               },
               {
                 "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
                 "id": "R2",
-                "question": "항목 R2을 합성 자료로 확인한다"
+                "question": "항목 R2을 합성 자료로 확인한다",
+                "source": "the synthetic request of this test"
               },
               {
                 "done_when": "evidence 파일에 항목 R3 결과가 저장된다",
                 "id": "R3",
-                "question": "항목 R3을 합성 자료로 확인한다"
+                "question": "항목 R3을 합성 자료로 확인한다",
+                "source": "the synthetic request of this test"
               }
             ],
             "scope": {
@@ -978,7 +1021,8 @@
               }
             ],
             "id": "R1",
-            "question": "항목 R1을 합성 자료로 확인한다"
+            "question": "항목 R1을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           },
           {
             "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
@@ -997,7 +1041,8 @@
               }
             ],
             "id": "R2",
-            "question": "항목 R2을 합성 자료로 확인한다"
+            "question": "항목 R2을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           }
         ],
         "retry_pending": [],
@@ -1008,17 +1053,19 @@
       "name": "proposal-approved",
       "review": {
         "active_plan": {
-          "digest": "93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3",
+          "digest": "960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80",
           "items": [
             {
               "done_when": "evidence 파일에 항목 R1 결과가 저장된다",
               "id": "R1",
-              "question": "항목 R1을 합성 자료로 확인한다"
+              "question": "항목 R1을 합성 자료로 확인한다",
+              "source": "the synthetic request of this test"
             },
             {
               "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
               "id": "R2",
-              "question": "항목 R2을 합성 자료로 확인한다"
+              "question": "항목 R2을 합성 자료로 확인한다",
+              "source": "the synthetic request of this test"
             }
           ],
           "revision": 1,
@@ -1031,7 +1078,7 @@
           }
         },
         "active_revision": 1,
-        "close_report": "approved: |\n  yes\nbasis_refs: |\n  step:C5/S1\n  step:C5/S2\nexploration_checklist: |\n  R1\n  R2\n  R3\nplan_digest: |\n  577a16458516ba9b774860bf5e62629a218eb7b8bd334c07e36278012dd315a6\nplan_revision: |\n  2\nstatement: |\n  합성 자료로 항목을 순서대로 확인하고 파일 증거를 남긴다\n",
+        "close_report": "approved: |\n  yes\nbasis_refs: |\n  step:C5/S1\n  step:C5/S2\nexploration_checklist: |\n  R1\n  R2\n  R3\nplan_digest: |\n  cb3576b9e032593caa67aeaf3a46d8ef39d3c707c3bd98dd249f60bb8f46ea87\nplan_revision: |\n  2\nstatement: |\n  합성 자료로 항목을 순서대로 확인하고 파일 증거를 남긴다\n",
         "contract": "exploration",
         "current_cycle": {
           "ref": "cycle:C5",
@@ -1072,28 +1119,31 @@
             }
           }
         ],
-        "experiment_link": "plan_revision: 1\nplan_digest: 93108e1f5cefbc95284c10af64262661c87676005a91c89c55f63a1f96cc62f3\nrequirement_id: R1 | R2\nrelevance: …\nreadiness: …\nuncertainty: …",
+        "experiment_link": "plan_revision: 1\nplan_digest: 960a33ffa73aa7c33121217665e8abfd571096fcc2a5a7a15ba1af82e8f12c80\nrequirement_id: R1 | R2\nrelevance: …\nreadiness: …\nuncertainty: …",
         "next": "제안 판 2이(가) 승인됐다. gil_plan_read의 close_report를 그대로 gil_close에 넣어 Synthesis를 닫는다. 내용을 고치거나 다시 묻지 않는다.\n이 Chain은 탐색 실행 계약(contract: exploration)이다. active_plan.items는 실행 순서가 아니라 승인된 요구다. Experiment는 experiment_link의 여섯 칸을 gil_open(kind: experiment)의 contract에 적어 열며 자동으로 묶이지 않는다. requirements는 요구별로 연결된 실험과 그 Cycle Report의 verdict를 기록 그대로 보여 준다. 실험의 success는 요구의 완료가 아니고, pending은 아직 실험이 연결되지 않은 요구일 뿐이다. 요구가 충족됐는지는 Closing Interview에서 사용자가 승인한다(requirement_resolution). 세분화·방법·순서 변경 때문에 새 제안을 만들지 않는다. 요구·범위·권한 자체를 바꿀 때만 Interview에서 active_plan.items 전체를 원문 그대로 복사해 새로 승인받는다. document는 Experiment를 열 때 연결된 승인 판의 UTF-8 원문이며 파일 저장은 실제 열린 Verify에서만 한다. Core는 relevance · readiness · uncertainty의 의미를 검증하지 않는다.\nrequirements[].experiments[].cycle_ref의 원문은 gil_report_read(owner: {kind: cycle, ref})로 열어 Step 주소와 Cycle Report를 받고, 그 Step 주소로 Report를 하나씩 읽는다. Verify가 적은 증거 파일은 gil_evidence_read가 그 Verify의 Snapshot에서 읽는다. 이 응답과 그 두 도구는 요구의 답을 종합하거나 판정하지 않는다.",
         "pending": [],
         "proposal": {
           "base_revision": 1,
-          "digest": "577a16458516ba9b774860bf5e62629a218eb7b8bd334c07e36278012dd315a6",
+          "digest": "cb3576b9e032593caa67aeaf3a46d8ef39d3c707c3bd98dd249f60bb8f46ea87",
           "draft": {
             "items": [
               {
                 "done_when": "evidence 파일에 항목 R1 결과가 저장된다",
                 "id": "R1",
-                "question": "항목 R1을 합성 자료로 확인한다"
+                "question": "항목 R1을 합성 자료로 확인한다",
+                "source": "the synthetic request of this test"
               },
               {
                 "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
                 "id": "R2",
-                "question": "항목 R2을 합성 자료로 확인한다"
+                "question": "항목 R2을 합성 자료로 확인한다",
+                "source": "the synthetic request of this test"
               },
               {
                 "done_when": "evidence 파일에 항목 R3 결과가 저장된다",
                 "id": "R3",
-                "question": "항목 R3을 합성 자료로 확인한다"
+                "question": "항목 R3을 합성 자료로 확인한다",
+                "source": "the synthetic request of this test"
               }
             ],
             "scope": {
@@ -1148,7 +1198,8 @@
               }
             ],
             "id": "R1",
-            "question": "항목 R1을 합성 자료로 확인한다"
+            "question": "항목 R1을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           },
           {
             "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
@@ -1167,7 +1218,8 @@
               }
             ],
             "id": "R2",
-            "question": "항목 R2을 합성 자료로 확인한다"
+            "question": "항목 R2을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           }
         ],
         "retry_pending": [],
@@ -1178,22 +1230,25 @@
       "name": "reapproved-r3-open",
       "review": {
         "active_plan": {
-          "digest": "577a16458516ba9b774860bf5e62629a218eb7b8bd334c07e36278012dd315a6",
+          "digest": "cb3576b9e032593caa67aeaf3a46d8ef39d3c707c3bd98dd249f60bb8f46ea87",
           "items": [
             {
               "done_when": "evidence 파일에 항목 R1 결과가 저장된다",
               "id": "R1",
-              "question": "항목 R1을 합성 자료로 확인한다"
+              "question": "항목 R1을 합성 자료로 확인한다",
+              "source": "the synthetic request of this test"
             },
             {
               "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
               "id": "R2",
-              "question": "항목 R2을 합성 자료로 확인한다"
+              "question": "항목 R2을 합성 자료로 확인한다",
+              "source": "the synthetic request of this test"
             },
             {
               "done_when": "evidence 파일에 항목 R3 결과가 저장된다",
               "id": "R3",
-              "question": "항목 R3을 합성 자료로 확인한다"
+              "question": "항목 R3을 합성 자료로 확인한다",
+              "source": "the synthetic request of this test"
             }
           ],
           "revision": 2,
@@ -1228,9 +1283,10 @@
         "current_item": {
           "done_when": "evidence 파일에 항목 R3 결과가 저장된다",
           "id": "R3",
-          "question": "항목 R3을 합성 자료로 확인한다"
+          "question": "항목 R3을 합성 자료로 확인한다",
+          "source": "the synthetic request of this test"
         },
-        "document": "# GIL approved plan\n\nRevision: 2\n\nSynthesis: step:C5/S3\n\nSHA-256: 577a16458516ba9b774860bf5e62629a218eb7b8bd334c07e36278012dd315a6\n\n```json\n{\n  \"scope\": {\n    \"goal\": \"합성 자료 기반 항목별 보고서\",\n    \"in_scope\": \"제공된 합성 자료의 비교\",\n    \"out_of_scope\": \"실시간 데이터·실제 개인정보\",\n    \"constraints\": \"외부 네트워크 없음\",\n    \"success_criteria\": \"항목마다 파일 증거가 남는다\"\n  },\n  \"items\": [\n    {\n      \"id\": \"R1\",\n      \"question\": \"항목 R1을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R1 결과가 저장된다\"\n    },\n    {\n      \"id\": \"R2\",\n      \"question\": \"항목 R2을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R2 결과가 저장된다\"\n    },\n    {\n      \"id\": \"R3\",\n      \"question\": \"항목 R3을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R3 결과가 저장된다\"\n    }\n  ],\n  \"synthesis\": {\n    \"basis_refs\": \"step:C5/S1\\nstep:C5/S2\",\n    \"exploration_checklist\": \"R1\\nR2\\nR3\",\n    \"statement\": \"합성 자료로 항목을 순서대로 확인하고 파일 증거를 남긴다\"\n  }\n}\n```\n",
+        "document": "# GIL approved plan\n\nRevision: 2\n\nSynthesis: step:C5/S3\n\nSHA-256: cb3576b9e032593caa67aeaf3a46d8ef39d3c707c3bd98dd249f60bb8f46ea87\n\n```json\n{\n  \"scope\": {\n    \"goal\": \"합성 자료 기반 항목별 보고서\",\n    \"in_scope\": \"제공된 합성 자료의 비교\",\n    \"out_of_scope\": \"실시간 데이터·실제 개인정보\",\n    \"constraints\": \"외부 네트워크 없음\",\n    \"success_criteria\": \"항목마다 파일 증거가 남는다\"\n  },\n  \"items\": [\n    {\n      \"id\": \"R1\",\n      \"question\": \"항목 R1을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R1 결과가 저장된다\",\n      \"source\": \"the synthetic request of this test\"\n    },\n    {\n      \"id\": \"R2\",\n      \"question\": \"항목 R2을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R2 결과가 저장된다\",\n      \"source\": \"the synthetic request of this test\"\n    },\n    {\n      \"id\": \"R3\",\n      \"question\": \"항목 R3을 합성 자료로 확인한다\",\n      \"done_when\": \"evidence 파일에 항목 R3 결과가 저장된다\",\n      \"source\": \"the synthetic request of this test\"\n    }\n  ],\n  \"synthesis\": {\n    \"basis_refs\": \"step:C5/S1\\nstep:C5/S2\",\n    \"exploration_checklist\": \"R1\\nR2\\nR3\",\n    \"statement\": \"합성 자료로 항목을 순서대로 확인하고 파일 증거를 남긴다\"\n  }\n}\n```\n",
         "executed_cycles": [
           {
             "cycle_ref": "cycle:C2",
@@ -1273,7 +1329,7 @@
             }
           }
         ],
-        "experiment_link": "plan_revision: 2\nplan_digest: 577a16458516ba9b774860bf5e62629a218eb7b8bd334c07e36278012dd315a6\nrequirement_id: R1 | R2 | R3\nrelevance: …\nreadiness: …\nuncertainty: …",
+        "experiment_link": "plan_revision: 2\nplan_digest: cb3576b9e032593caa67aeaf3a46d8ef39d3c707c3bd98dd249f60bb8f46ea87\nrequirement_id: R1 | R2 | R3\nrelevance: …\nreadiness: …\nuncertainty: …",
         "next": "새 Experiment: gil_open(kind: define)에 행동 계약을 적어 연다. 확인할 질문 하나만 다룬다.\n이 Chain은 탐색 실행 계약(contract: exploration)이다. active_plan.items는 실행 순서가 아니라 승인된 요구다. Experiment는 experiment_link의 여섯 칸을 gil_open(kind: experiment)의 contract에 적어 열며 자동으로 묶이지 않는다. requirements는 요구별로 연결된 실험과 그 Cycle Report의 verdict를 기록 그대로 보여 준다. 실험의 success는 요구의 완료가 아니고, pending은 아직 실험이 연결되지 않은 요구일 뿐이다. 요구가 충족됐는지는 Closing Interview에서 사용자가 승인한다(requirement_resolution). 세분화·방법·순서 변경 때문에 새 제안을 만들지 않는다. 요구·범위·권한 자체를 바꿀 때만 Interview에서 active_plan.items 전체를 원문 그대로 복사해 새로 승인받는다. document는 Experiment를 열 때 연결된 승인 판의 UTF-8 원문이며 파일 저장은 실제 열린 Verify에서만 한다. Core는 relevance · readiness · uncertainty의 의미를 검증하지 않는다.\nrequirements[].experiments[].cycle_ref의 원문은 gil_report_read(owner: {kind: cycle, ref})로 열어 Step 주소와 Cycle Report를 받고, 그 Step 주소로 Report를 하나씩 읽는다. Verify가 적은 증거 파일은 gil_evidence_read가 그 Verify의 Snapshot에서 읽는다. 이 응답과 그 두 도구는 요구의 답을 종합하거나 판정하지 않는다.",
         "pending": [],
         "proposal": null,
@@ -1309,7 +1365,8 @@
               }
             ],
             "id": "R1",
-            "question": "항목 R1을 합성 자료로 확인한다"
+            "question": "항목 R1을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           },
           {
             "done_when": "evidence 파일에 항목 R2 결과가 저장된다",
@@ -1328,7 +1385,8 @@
               }
             ],
             "id": "R2",
-            "question": "항목 R2을 합성 자료로 확인한다"
+            "question": "항목 R2을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           },
           {
             "done_when": "evidence 파일에 항목 R3 결과가 저장된다",
@@ -1347,7 +1405,8 @@
               }
             ],
             "id": "R3",
-            "question": "항목 R3을 합성 자료로 확인한다"
+            "question": "항목 R3을 합성 자료로 확인한다",
+            "source": "the synthetic request of this test"
           }
         ],
         "retry_pending": [],

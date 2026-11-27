@@ -422,6 +422,8 @@ impl ServerHandler for GilServer {
         let tool = self.get_tool(&request.name).ok_or_else(|| ErrorData::invalid_params("Unknown GIL tool", None))?;
         let mut input = Value::Object(request.arguments.unwrap_or_default());
         body::accept(&request.name, &mut input).map_err(|said| ErrorData::invalid_params(said, None))?;
+        #[cfg(feature = "approved-plan")]
+        plans::accept(&request.name, &mut input).map_err(|said| ErrorData::invalid_params(said, None))?;
         if !surface::valid_input(&tool, &input) { return Err(ErrorData::invalid_params(surface::rejection(&tool, &input), None)); }
         Ok(self.dispatch_with_session(request.name.into_owned(), input).await.into())
     }

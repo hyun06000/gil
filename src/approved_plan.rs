@@ -30,7 +30,12 @@ pub struct Scope {
 pub struct Item {
     pub id: String,
     pub question: String,
+    /// The one observation that decides the question. On the MCP wire it is named `observation`.
     pub done_when: String,
+    /// The sentence of the user's request this problem comes from, quoted. Absent in plans written
+    /// before the field existed; an empty source is not stored, so their digests are unchanged.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub source: String,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -205,7 +210,7 @@ fn retained_items(previous: &[Item], proposed: &[Item]) -> Result<(), String> {
             differences.push(crate::tr!("plan.err.item_missing", id = preview(&old.id)));
             continue;
         };
-        for (field, stored, received) in [("question", &old.question, &new.question), ("done_when", &old.done_when, &new.done_when)] {
+        for (field, stored, received) in [("question", &old.question, &new.question), ("done_when", &old.done_when, &new.done_when), ("source", &old.source, &new.source)] {
             if stored != received {
                 differences.push(crate::tr!("plan.err.item_mismatch", id = preview(&old.id), field = field, stored = preview(stored), received = preview(received)));
             }

@@ -90,7 +90,8 @@ class McpArmTests(unittest.TestCase):
             yield call("gil_open", kind="synthesis", contract=CONTRACT)
             said = yield call("gil_plan_propose", draft={
                 "scope": {"goal": "대소문자 무시 정렬", "in_scope": "order", "out_of_scope": "그 밖", "constraints": "없음", "success_criteria": "검사 통과"},
-                "items": [{"id": "R1", "question": "order 가 대소문자를 무시하는가", "done_when": "검사가 통과한다"}],
+                "items": [{"id": "R1", "question": "order 가 대소문자를 무시하는가", "observation": "order(['B','a']) 가 ['a','B'] 를 돌려준다",
+                           "source": "Order labels ignoring case"}],
                 "synthesis": {"statement": "order 를 고친다", "basis_refs": "\n".join(basis), "exploration_checklist": "R1"}})
             seen["plan"] = said["result"]
             # The scripted model reads the server directly where a model would read the tool result.
