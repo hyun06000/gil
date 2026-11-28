@@ -23,6 +23,8 @@ REPLY = ("I have nothing to add to the task statement: it is everything I want. 
 OPENING = ("The user says: Let's do this as a GIL project. The project folder is {root} (use it as "
            "project_root). Start it with start_kind tracked_scope, and work on the task through GIL: the "
            "interview, then experiments. I will approve what GIL asks me to approve.")
+# How the unattended server begins the paragraph that says a decision of the user is awaited.
+AWAITING = "Awaiting the user's decision"
 SAY = {"type": "function", "name": "say", "strict": True,
        "description": "Say something to the user or ask the user a question, and get the reply.",
        "parameters": {"type": "object", "properties": {"message": {"type": "string"}},
@@ -116,8 +118,12 @@ class Gil:
         answered = self.answer(structured.get("awaiting_user") or [])
         self.log.append({"tool": name, "refused": refused, "answered": answered})
         if answered:
-            said = ("The user has now decided: " + "; ".join(answered) + ". Read the recorded state and go on. "
-                    "The receipt below was written before that decision.\n" + said)
+            # The receipt was written while the decision was still awaited and tells the agent to end
+            # its turn and wait. The decision has been given in the meantime, so that paragraph is
+            # taken out: an agent that obeyed it ended the whole session after two calls (2026-11-28).
+            said = "\n".join(line for line in said.split("\n") if not line.startswith(AWAITING))
+            said = ("The user has now decided: " + "; ".join(answered) + ". Nothing is awaited any more: do not end "
+                    "your turn, go on with the next step now. The receipt below was written before that decision.\n" + said)
         return said
 
     def answer(self, subjects):

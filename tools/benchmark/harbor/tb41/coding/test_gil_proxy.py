@@ -55,6 +55,9 @@ class ProxyTests(unittest.TestCase):
         # What GIL put before the user was answered by the stand-in, in the same call.
         self.assertFalse(refused, said)
         self.assertIn("start approved", said)
+        # The decision is in: nothing in the answer tells the agent to end its turn and wait.
+        self.assertNotIn("end your turn and call nothing", said)
+        self.assertIn("do not end your turn", said)
         self.assertIn("nothing to add", self.call("say", message="What do you want?")[1])
         self.assertFalse(self.call("gil_open", project_root=root, kind="question", contract=CONTRACT)[0])
         # The model cannot approve for the user.
