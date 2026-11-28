@@ -127,6 +127,60 @@ pub(super) fn pending(root: &Path) -> Vec<Value> {
 }
 
 /// The line a model-facing receipt gets while something waits. Names subjects only.
+/// What every receipt repeats although this session's instructions already say it once. A session
+/// that reads its instructions does not need them again with each of a few hundred answers: in a
+/// measured trial they were most of what an opening receipt carried (2026-11-28).
+const REPEATED: [&str; 6] = ["guide.file_boundary.rules", "guide.file_boundary.applicability", "cmd.opened_boundary",
+    "cmd.opened_no_artifacts", "cmd.opened_verify_evidence", "cmd.opened_verify_do"];
+
+fn without_repeats(said: &str) -> String {
+    let mut out = said.to_owned();
+    for locale in crate::locale::Locale::ALL {
+        for key in REPEATED {
+            let repeated = crate::locale::text_in(locale, key);
+            if repeated.is_empty() || repeated.contains('{') { continue; }
+            out = out.replace(repeated, "").replace(repeated.trim(), "");
+        }
+    }
+    // What the removals leave behind: lines holding only spaces, and runs of empty lines.
+    let mut lines: Vec<&str> = Vec::new();
+    for line in out.lines().map(str::trim_end) {
+        if line.is_empty() && lines.last().is_some_and(|last| last.is_empty()) { continue; }
+        lines.push(line);
+    }
+    lines.join("\n").trim().to_owned() + if out.ends_with('\n') { "\n" } else { "" }
+}
+
+/// The answer as this session's model reads it: the same facts, said once.
+///
+/// - The texts of [`REPEATED`] are left out of every receipt.
+/// - A plan view names each approved item's text once, in `active_plan.items`. `pending` lists
+///   ids, `requirements` keeps each item's id, place in the tree and linked Experiments, and
+///   `executed_cycles` (the same links again) is left out.
+pub(super) fn concise(name: &str, result: &mut CallToolResult) {
+    let before = result.structured_content.as_ref().map(Value::to_string);
+    if let Some(fields) = result.structured_content.as_mut().and_then(Value::as_object_mut) {
+        if name.starts_with("gil_plan_") {
+            if let Some(pending) = fields.get_mut("pending").and_then(Value::as_array_mut) {
+                for item in pending { if let Some(id) = item.get("id").cloned() { *item = id; } }
+            }
+            if let Some(requirements) = fields.get_mut("requirements").and_then(Value::as_array_mut) {
+                for requirement in requirements.iter_mut().filter_map(Value::as_object_mut) {
+                    for text in ["question", "observation", "done_when", "command", "source"] { requirement.remove(text); }
+                }
+            }
+            fields.remove("executed_cycles");
+        }
+        if let Some(said) = fields.get("said").and_then(Value::as_str).map(without_repeats) { fields.insert("said".into(), said.into()); }
+    }
+    let after = result.structured_content.as_ref().map(Value::to_string);
+    result.content = result.content.iter().map(|block| match block.as_text() {
+        Some(said) if Some(&said.text) == before.as_ref() => rmcp::model::ContentBlock::text(after.clone().unwrap_or_default()),
+        Some(said) => rmcp::model::ContentBlock::text(without_repeats(&said.text)),
+        None => block.clone(),
+    }).collect();
+}
+
 pub(super) fn note(waits: &[Value]) -> Option<(String, Value)> {
     if waits.is_empty() { return None; }
     let subjects: Vec<&str> = waits.iter().filter_map(|wait| wait["subject"].as_str()).collect();

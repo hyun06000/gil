@@ -254,6 +254,19 @@ impl GilServer {
         if succeeded {
             if let Some((_, Some(note))) = normalized_note { guidance::prepend(&mut result, note); }
         }
+        // Unattended: the answer says each thing once, and at a Cycle boundary names the link the next
+        // Experiment opens with, so that the whole plan is not read again for a revision and a digest.
+        if self.monitor.unattended && !unattended::NAMES.contains(&name.as_str()) {
+            unattended::concise(&name, &mut result);
+            #[cfg(feature = "approved-plan")]
+            if succeeded && matches!(name.as_str(), "gil_close" | "gil_revisit") {
+                if let Some(root) = input.get("project_root").and_then(Value::as_str).map(str::to_owned) {
+                    if let Ok(Some(link)) = tokio::task::spawn_blocking(move || plans::next_link(&root)).await {
+                        result.content.push(rmcp::model::ContentBlock::text(link));
+                    }
+                }
+            }
+        }
         // Unattended: say what now waits for the user, read from the stored records after this call.
         if self.monitor.unattended && !unattended::NAMES.contains(&name.as_str()) {
             if let Some(root) = input.get("project_root").and_then(Value::as_str).map(std::path::PathBuf::from).filter(|root| root.is_absolute()) {

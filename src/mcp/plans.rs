@@ -133,6 +133,21 @@ fn approved_plan(input: &Value) -> Option<u64> {
 }
 
 
+/// At a closed Cycle with an approved plan: the requirement link the next Experiment opens with,
+/// in one line. `None` anywhere else.
+pub(super) fn next_link(root: &str) -> Option<String> {
+    let s = session(root).ok()?;
+    let p = s.project();
+    if !p.exploration_contract() || !p.current_cycle().is_closed() { return None; }
+    let chain = p.current_chain()?;
+    let state = p.approved_plan()?;
+    let plan = state.active(chain)?;
+    let ids = |items: &[crate::approved_plan::Item]| items.iter().map(|item| item.id.as_str()).collect::<Vec<_>>().join(", ");
+    let unopened = state.pending(chain);
+    Some(format!("Next Experiment, without reading the plan again: gil_open(kind: experiment, contract: {{plan_revision: \"{}\", plan_digest: \"{}\", requirement_id: <one item id>, relevance: …, readiness: …, uncertainty: …}}). Items with no Experiment yet: {}. All items: {}.",
+        plan.revision, plan.digest, if unopened.is_empty() { "none".to_owned() } else { ids(&unopened.iter().map(|item| (*item).clone()).collect::<Vec<_>>()) }, ids(&plan.draft.items)))
+}
+
 /// The stored name of an item's observation, as the model reads it.
 fn observation_named(value: &mut Value) {
     match value {

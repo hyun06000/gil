@@ -399,6 +399,41 @@ fn the_saved_plan_document_follows_the_revision_a_new_interview_approved() {
     assert!(second != first && second.contains("R2"), "the document of revision 2 replaced GIL's earlier save");
 }
 
+/// An unattended session reads its instructions once, so its answers do not repeat them: an opening
+/// receipt carries the step's own content, a plan view names each item's text once, and a closed
+/// Experiment names the link the next one opens with (2026-11-28: a plan read was 28,000 characters
+/// and was read fourteen times in one trial).
+#[cfg(all(feature = "tracking-policy", unix))]
+#[test]
+fn answers_say_each_thing_once() {
+    let mut r = rig("unattended-concise", &[("data/in.txt", "input\n")], json!({"start_kind":"tracked_scope"}));
+    ok(r.model("gil_start_prepare", json!({"rules":"node_modules/\n"})), "prepare");
+    let waits = pending(&mut r);
+    ok(decide(&mut r, "start", &waits[0]["digest"], "approve"), "runner approves the start");
+    interview(&mut r, &["R1", "R2"]);
+    let read = r.read();
+    assert_eq!(read["pending"], json!(["R1", "R2"]), "pending lists ids");
+    assert!(read["requirements"][0]["question"].is_null() && read["requirements"][0]["id"] == "R1", "{}", read["requirements"]);
+    assert!(read["active_plan"]["items"][0]["question"].is_string() && read["executed_cycles"].is_null());
+
+    let n = r.open_experiment("R1");
+    let define = everything(&ok(r.model("gil_open", json!({"kind":"define","contract":CONTRACT})), "define"));
+    for repeated in ["GIL 훅은 설치하지", "진행 경계", "installs no hooks", "Progress boundary"] { assert!(!define.contains(repeated), "{repeated} is repeated in a receipt: {define}"); }
+    ok(r.model("gil_close", json!({"report":{"problem":"입력 파일이 있는가?","success_condition":"data/in.txt 를 읽을 수 있다"}})), "close define");
+    ok(r.model("gil_open", json!({"kind":"hypothesis","contract":CONTRACT})), "hypothesis");
+    ok(r.model("gil_close", json!({"report":{"hypothesis":"읽으면 된다","change":"none","rationale":"파일이 있다","guardrail":"다른 파일은 두지 않는다"}})), "close hypothesis");
+    ok(r.model("gil_open", json!({"kind":"verify","contract":CONTRACT})), "verify");
+    r.write("evidence/C.md", "있다\n");
+    ok(r.model("gil_close", json!({"report":{"execution":"봤다","result":"있다","command":"cat data/in.txt","observed":"input","plan_document":PLAN_DOCUMENT,"evidence_files":"evidence/C.md"}})), "close verify");
+    ok(r.model("gil_open", json!({"kind":"analysis","contract":CONTRACT})), "analysis");
+    ok(r.model("gil_close", json!({"report":analysis_report(false)})), "close analysis");
+    let outcome = step_ref(&ok(r.model("gil_open", json!({"kind":"outcome","contract":CONTRACT})), "outcome"), "outcome");
+    ok(r.model("gil_close", json!({"report":outcome_report(false)})), "close outcome");
+    let closed = everything(&ok(r.model("gil_close", json!({"report":cycle_report(n, &outcome, None)})), "close experiment"));
+    let digest = read["active_plan"]["digest"].as_str().unwrap();
+    assert!(closed.contains(digest) && closed.contains("Items with no Experiment yet: R2"), "the next link is not in the closing receipt: {closed}");
+}
+
 /// Two refusals say what is wrong in words an agent can act on: an item id outside the allowed
 /// characters is named with the rule, and an evidence file that is not there is said to be not there.
 #[cfg(all(feature = "tracking-policy", unix))]
