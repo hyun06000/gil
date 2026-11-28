@@ -512,7 +512,7 @@ fn open_with(ctx: &Invocation<'_>, mut session: Session, name: Option<&String>) 
                 "gil close",
             ))
         }
-        Place::CloseThisChain => Err(session.project().current_chain().unwrap().close_hint()),
+        Place::CloseThisChain => Err(chain_hint(session.project())),
         Place::CloseThisCycle => Err(refusal(
             text("cmd.not_open_place"),
             text("cmd.cycle_judged.why"),
@@ -807,11 +807,20 @@ fn close(ctx: &Invocation<'_>, extra: &[String]) -> Result<String, String> {
         Place::CloseThisStep => close_step(ctx, &mut session, unachieved),
         Place::CloseThisCycle => close_cycle(ctx, &mut session),
         Place::CloseThisChain => {
-            let hint = session.project().current_chain().unwrap().close_hint();
+            let hint = chain_hint(session.project());
             let report = read_report(ctx, &hint)?;
             let id = session.close_chain(report).map_err(|err| format!("{err}\n{hint}"))?;
             write(&session)?;
-            Ok(tr!("cmd.closed_chain", lead = text("receipt.closed_lead"), id = id, verdict = session.project().current_chain().unwrap().report().unwrap().get("verdict").unwrap()))
+            let chain = session.project().current_chain().unwrap();
+            let report = chain.report().unwrap();
+            let mut said = tr!("cmd.closed_chain", lead = text("receipt.closed_lead"), id = id, verdict = report.get("verdict").unwrap());
+            match report.get("next_direction.action") {
+                Some("open_chain") => said.push_str(text("cmd.closed_chain_next.open_chain")),
+                Some("revisit") => said.push_str(&tr!("cmd.closed_chain_next.revisit", target = report.get("next_direction.target_cycle_ref").unwrap_or(""))),
+                Some("end") => said.push_str(text("cmd.closed_chain_next.end")),
+                _ => {}
+            }
+            Ok(said)
         },
         Place::Step(openable) => Err(refusal(
             text("cmd.nothing_to_close"),
@@ -1299,7 +1308,7 @@ fn close_help(ctx: &Invocation<'_>) -> Result<String, String> {
         Place::CloseThisStep => step_contract(cycle),
         Place::CloseThisCycle => cycle_contract(cycle),
         Place::CloseThisChain => {
-            let hint = session.project().current_chain().unwrap().close_hint();
+            let hint = chain_hint(session.project());
             return Ok(if matches!(ctx.input, Input::Body(_)) {
                 hint.replacen(&format!("{}.", text("receipt.marker.chain_report")), text("cmd.chain_report_mcp"), 1)
             } else { hint });
@@ -1370,7 +1379,7 @@ fn open_help(ctx: &Invocation<'_>) -> Result<String, String> {
             out.push_str(text("cmd.help_close_first"));
             Ok(out)
         }
-        Place::CloseThisChain => Ok(session.project().current_chain().unwrap().close_hint()),
+        Place::CloseThisChain => Ok(chain_hint(session.project())),
         Place::CloseThisCycle => Ok(text("cmd.help_not_open_cycle").to_string()),
         Place::Nothing(why) => Ok(tr!("cmd.help_not_open_nothing", why = why)),
         // 실행형 Step — **행동 계약이 필요하다.**
@@ -1708,6 +1717,36 @@ fn cycle_contract(cycle: &crate::Cycle) -> Option<CloseContract> {
 fn skeleton_of(contract: &CloseContract, cycle: &crate::Cycle) -> String {
     skeleton_for(contract, cycle, None, None)
 }
+/// The Chain Report as it is to be written here: the grammar's own fields, and under the exploration
+/// contract the shared form (analysis, reflection, direction) with what the record shows per item.
+fn chain_hint(project: &crate::Project) -> String {
+    let mut hint = project.current_chain().unwrap().close_hint();
+    #[cfg(feature = "approved-plan")]
+    if project.exploration_contract() {
+        hint.push_str(text("chain.close_hint_more"));
+        hint.push_str(&chain_ledger(project));
+    }
+    hint
+}
+
+/// What the record shows for each item of the Chain's plan: the Experiments linked to it and how
+/// each was judged. Facts for the Chain Report's analysis; the judgment stays the agent's.
+#[cfg(feature = "approved-plan")]
+fn chain_ledger(project: &crate::Project) -> String {
+    let Some((state, chain)) = project.approved_plan().zip(project.current_chain()) else { return String::new() };
+    let Some(plan) = state.active(chain) else { return String::new() };
+    let mut lines = String::new();
+    for item in &plan.draft.items {
+        let judged: Vec<String> = state.linked(&item.id).filter_map(|link| {
+            let cycle = chain.cycles().nodes().iter().find(|cycle| cycle.id().to_ref().to_string() == link.cycle_ref)?;
+            Some(format!("{} {}", link.cycle_ref, cycle.report().and_then(|report| report.get("verdict")).unwrap_or("open")))
+        }).collect();
+        let place = if item.part_of.is_empty() { String::new() } else { format!(" [{}]", item.part_of) };
+        lines.push_str(&format!("  {}{place}: {}\n", item.id, if judged.is_empty() { "no Experiment".to_owned() } else { judged.join(", ") }));
+    }
+    tr!("chain.close_ledger", lines = lines)
+}
+
 /// The fields an exploration Chain asks of a Verify and an Analysis beyond the grammar's own, shown
 /// in the skeleton a refusal carries: an agent rewrites its Report from that skeleton, so a field
 /// that is required but missing from it is left out again and again.
@@ -1733,7 +1772,7 @@ fn exploration_fields(report: &mut serde_json::Value, subject: &str, project: Op
             fields.insert("changed".into(), "on failure: what this Experiment changed in the files".into());
             // An Outcome step never goes back by itself: it hands on to the Cycle Report.
             fields.insert("next_direction.action".into(), "close_cycle".into());
-            fields.insert("verdict".into(), "success | failure".into());
+            fields.insert("verdict".into(), "success | failure | inconclusive".into());
         }
         // The Cycle Report repeats the Outcome's verdict, and the verdict decides the direction: a
         // failure goes back to the Cycle this one was opened from, a success hands on.
@@ -1742,6 +1781,8 @@ fn exploration_fields(report: &mut serde_json::Value, subject: &str, project: Op
             && let Some(verdict) = cycle.steps().nodes().iter().rev().filter(|node| node.kind == NodeKind::Outcome)
                 .find_map(|node| node.report.as_ref()).and_then(|report| report.get("verdict")) {
             fields.insert("verdict".into(), verdict.into());
+            fields.insert("analysis".into(), "what was established and what was not, against the Define".into());
+            fields.insert("reflection".into(), "why it went that way; what you would do differently".into());
             if verdict == "failure" {
                 fields.insert("next_direction.action".into(), "revisit".into());
                 if let Some(parent) = cycle.parent() {
@@ -1752,7 +1793,7 @@ fn exploration_fields(report: &mut serde_json::Value, subject: &str, project: Op
             }
         }
         if subject.contains("analysis") {
-            for answer in ["problem_solved", "success_condition_met"] { fields.insert(answer.into(), "true | false".into()); }
+            for answer in ["problem_solved", "success_condition_met"] { fields.insert(answer.into(), "true | false | unknown".into()); }
             fields.insert("unverified".into(), "none | what was not seen".into());
         }
     }

@@ -102,6 +102,9 @@ pub struct FieldConstraint {
     pub allowed_values_when: BTreeMap<String, BTreeMap<String, Vec<String>>>,
 }
 
+/// The verdict of an Experiment whose result could not be judged.
+pub const INCONCLUSIVE: &str = "inconclusive";
+
 impl FieldConstraint {
     /// 다른 칸의 값까지 본 뒤 **지금 이 Report 에서** 이 칸이 가질 수 있는 값.
     ///
@@ -202,6 +205,23 @@ impl RuleSet {
             if let Some(description) = rule.not_yet.remove("close_chain") {
                 rule.allowed_values.push("close_chain".into());
                 rule.value_descriptions.insert("close_chain".into(), description);
+            }
+        }
+        // A result that could not be judged is not a failure. Inside a Chain an Experiment has a
+        // third verdict for it, and that verdict hands on to a follow-up Cycle instead of going back.
+        fn third(fields: &mut BTreeMap<String, FieldConstraint>, said: &str, then: &str) {
+            if let Some(verdict) = fields.get_mut("verdict").filter(|rule| !rule.allowed_values.iter().any(|v| v == INCONCLUSIVE)) {
+                verdict.allowed_values.push(INCONCLUSIVE.into());
+                verdict.value_descriptions.insert(INCONCLUSIVE.into(), said.into());
+            }
+            if let Some(action) = fields.get_mut("next_direction.action") {
+                action.allowed_values_when.entry("verdict".into()).or_default().insert(INCONCLUSIVE.into(), vec![then.into()]);
+            }
+        }
+        if let Some(rule) = self.cycle_kinds.get_mut(&CycleKind::Experiment) {
+            third(&mut rule.field_constraints, "This Cycle could not judge its Define's condition: what would decide it was not observed (Cycle-level verdict)", "open_child");
+            if let Some(outcome) = rule.step_kinds.get_mut(&NodeKind::Outcome) {
+                third(&mut outcome.field_constraints, "The condition could be neither confirmed nor refuted by what was observed (Step-level verdict)", "close_cycle");
             }
         }
         self

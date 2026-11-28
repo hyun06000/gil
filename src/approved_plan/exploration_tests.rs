@@ -301,7 +301,8 @@ fn a_revisit_target_in_another_chain_is_refused_by_name_and_changes_nothing() {
     let outcome = h::opened(&mut p, NodeKind::Outcome);
     p.close_action_step(h::full_report(p.current_cycle().rules(), CycleKind::Interview, NodeKind::Outcome).with("synthesis_ref", &approved.synthesis_ref)).unwrap();
     p.close_cycle(h::cycle_report(p.current_cycle(), "success", h::step_id(&p, outcome)).with("next_direction.action", "close_chain")).unwrap();
-    p.close_chain(Report::new().with("verdict", "failure").with("closing_synthesis_ref", &approved.synthesis_ref).with("handoff_summary", "R1 미해결")).unwrap();
+    p.close_chain(Report::new().with("verdict", "failure").with("closing_synthesis_ref", &approved.synthesis_ref).with("handoff_summary", "R1 미해결")
+        .with("analysis", "R1 미해결").with("reflection", "없음").with("next_direction.action", "open_chain").with("next_direction.reason", "새 주제")).unwrap();
     p.open_child_chain().unwrap();
     let d = synthesis(&mut p, &["N1"]);
     approve_close(&mut p, d);

@@ -725,6 +725,17 @@ impl ProjectSession {
     pub fn close_cycle(&mut self, report: Report) -> Result<ClosedCycle, SessionError> {
         let cycle = self.project.cycles().current();
         self.require_clean(Gate::Cycle(cycle.id().to_ref()))?;
+        // Exploration contract: an Experiment's Cycle Report and the Chain Report are one form.
+        // Beside the verdict and the direction each says what was and was not established
+        // (analysis) and why it went that way (reflection).
+        #[cfg(feature = "approved-plan")]
+        if self.project.exploration_contract() && cycle.kind() == crate::CycleKind::Experiment {
+            for field in crate::chain::REFLECTIVE {
+                if report.get(field).is_none_or(|value| value.trim().is_empty()) {
+                    return Err(SessionError::Evidence(crate::tr!("evidence.report_field", field = field)));
+                }
+            }
+        }
         self.project
             .close_cycle(report)
             .map_err(SessionError::Action)

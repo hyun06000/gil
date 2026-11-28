@@ -377,6 +377,7 @@ fn a_requirement_leads_to_each_linked_experiments_original_reports_and_stored_ev
     // The Cycle Report as it was written, the failure's revisit declaration included.
     let wrote = fields(&cycle);
     assert_eq!(wrote, BTreeMap::from([
+        ("analysis".to_string(), "the fixture's result".to_string()), ("reflection".to_string(), "nothing to change in a fixture".to_string()),
         ("verdict".to_string(), "failure".to_string()), ("outcome_ref".to_string(), second.outcome.clone()),
         ("handoff_summary".to_string(), format!("C{}의 관측과 한계를 남겼다", &second.cycle["cycle:C".len()..])),
         ("next_direction.action".to_string(), "revisit".to_string()), ("next_direction.target_cycle_ref".to_string(), first.cycle.clone()),
@@ -725,7 +726,10 @@ fn a_chain_without_the_marker_keeps_its_responses_and_is_read_from_the_chain_aft
     // … the Chain Report read by its own address names where it was judged and what it handed on …
     let earlier = report(&mut r, "chain:C1");
     assert_eq!((earlier["chain"]["ref"].as_str(), earlier["chain"]["state"].as_str()), (Some("chain:C1"), Some("closed")));
-    assert_eq!(fields(&earlier), BTreeMap::from([("verdict".to_string(), "failure".to_string()), ("closing_synthesis_ref".to_string(), closing.clone()), ("handoff_summary".to_string(), "A는 확인했고 B는 남았다".to_string())]));
+    assert_eq!(fields(&earlier), BTreeMap::from([("verdict".to_string(), "failure".to_string()), ("closing_synthesis_ref".to_string(), closing.clone()), ("handoff_summary".to_string(), "A는 확인했고 B는 남았다".to_string()),
+        // The shared form of a Cycle Report and a Chain Report, as the fixture shim fills it.
+        ("analysis".to_string(), "the fixture's result".to_string()), ("reflection".to_string(), "nothing to change in a fixture".to_string()),
+        ("next_direction.action".to_string(), "end".to_string()), ("next_direction.reason".to_string(), "the fixture ends here".to_string())]));
     let found: Vec<(&str, &str, &Value)> = earlier["cycles"].as_array().unwrap().iter()
         .map(|c| (c["ref"].as_str().unwrap(), c["kind"].as_str().unwrap(), &c["plan_link"])).collect();
     assert_eq!(found[1], (run.cycle.as_str(), "experiment", &json!({"plan_revision":1,"plan_digest":digest,"item_id":"A"})), "{found:?}");

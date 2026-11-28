@@ -2,6 +2,11 @@
 //! Cycle lineage lives inside the container; it is not Chain ownership.
 use crate::{ChainRef, CycleKind, CycleRef, Cycles, ExistenceRef, Report, SnapshotRef, StepRef};
 
+/// What an Experiment's Cycle Report and a Chain Report both say beside verdict and direction.
+pub const REFLECTIVE: [&str; 2] = ["analysis", "reflection"];
+/// The direction fields of a Chain Report.
+const DIRECTION: [&str; 3] = ["next_direction.action", "next_direction.reason", "next_direction.target_cycle_ref"];
+
 #[derive(Debug, Clone)]
 pub struct Chain {
     id: ChainRef,
@@ -95,6 +100,21 @@ impl Chain {
             return Err(ChainError::AlreadyClosed);
         }
         self.check_report(&report)?;
+        // Under the exploration contract the Chain Report carries what an Experiment's Cycle
+        // Report carries: the analysis, the reflection and what follows. Checked when the Report
+        // is submitted, so Chains closed before this form existed still load.
+        if self.approved_plan.as_ref().is_some_and(|plan| plan.exploration()) {
+            for field in REFLECTIVE.iter().chain(&DIRECTION[..2]) {
+                if report.get(field).is_none_or(|value| value.trim().is_empty()) {
+                    return Err(ChainError::Invalid(match *field {
+                        "analysis" => "analysis must not be empty: say for each major problem whether it was solved, not solved or could not be judged",
+                        "reflection" => "reflection must not be empty: say why it went this way and what you would do differently",
+                        "next_direction.action" => "next_direction.action must be end, open_chain or revisit",
+                        _ => "next_direction.reason must not be empty: for a failure that ends, say why nothing more is tried",
+                    }));
+                }
+            }
+        }
         self.report = Some(report);
         Ok(())
     }
@@ -133,15 +153,50 @@ impl Chain {
         {
             return Err(invalid("handoff_summary must not be empty"));
         }
-        if report
-            .field_names()
-            .any(|key| !["verdict", "closing_synthesis_ref", "handoff_summary"].contains(&key))
+        if report.field_names().any(|key| !["verdict", "closing_synthesis_ref", "handoff_summary"].contains(&key)
+            && !REFLECTIVE.contains(&key) && !DIRECTION.contains(&key))
         {
             return Err(invalid(
-                "Chain Report accepts only verdict, closing_synthesis_ref and handoff_summary",
+                "Chain Report accepts verdict, closing_synthesis_ref, handoff_summary, analysis, reflection and next_direction (action, reason, target_cycle_ref)",
             ));
         }
+        // What follows the Chain is written with it, as a Cycle Report writes what follows the Cycle.
+        match report.get("next_direction.action") {
+            None | Some("end" | "open_chain") => {
+                if report.has("next_direction.target_cycle_ref") {
+                    return Err(invalid("next_direction.target_cycle_ref belongs to revisit only"));
+                }
+            }
+            Some("revisit") => {
+                if report.get("verdict") != Some("failure") {
+                    return Err(invalid("a Chain goes back only when its verdict is failure; a success ends or opens a new Chain"));
+                }
+                if self.revisit_world_of(report).is_none() {
+                    return Err(invalid("revisit needs next_direction.target_cycle_ref: a closed Cycle of this Chain (cycle:C<number>) whose world the next Chain starts from"));
+                }
+            }
+            Some(_) => return Err(invalid("next_direction.action of a Chain Report is end, open_chain or revisit")),
+        }
         Ok(())
+    }
+
+    /// The world a Chain Report's `revisit` names: the Exit of a closed Cycle this Chain owns.
+    fn revisit_world_of(&self, report: &Report) -> Option<SnapshotRef> {
+        let target: CycleRef = report.get("next_direction.target_cycle_ref")?.parse().ok()?;
+        self.cycles.nodes().iter().find(|cycle| cycle.id().to_ref() == target && cycle.is_closed())?.exit_snapshot()
+    }
+
+    /// **The world the Chain after this one starts from.** Its Exit, unless its Report goes back:
+    /// then the world of the Cycle it named. The Chain itself stays closed as it was judged; only
+    /// the world returns (every going back returns the world and lets the self move on).
+    pub fn successor_entry(&self) -> Option<SnapshotRef> {
+        let report = self.report.as_ref()?;
+        if report.get("next_direction.action") == Some("revisit") { return self.revisit_world_of(report); }
+        self.exit_snapshot()
+    }
+    /// The direction a closed Chain's Report wrote, if it wrote one.
+    pub fn declared_action(&self) -> Option<&str> {
+        self.report.as_ref()?.get("next_direction.action")
     }
 
     pub(crate) fn validate_state(

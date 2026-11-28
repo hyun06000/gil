@@ -112,7 +112,7 @@ impl ProjectSession {
         #[cfg(feature = "approved-plan")]
         if self.project.exploration_contract() {
             const ANSWERS: [&str; 2] = ["problem_solved", "success_condition_met"];
-            fn plain(value: Option<&str>) -> Option<&str> { value.map(str::trim).filter(|answer| matches!(*answer, "true" | "false")) }
+            fn plain(value: Option<&str>) -> Option<&str> { value.map(str::trim).filter(|answer| matches!(*answer, "true" | "false" | "unknown")) }
             if node.kind == NodeKind::Analysis {
                 for field in ANSWERS {
                     if plain(report.get(field)).is_none() {
@@ -125,8 +125,13 @@ impl ProjectSession {
                 if unverified.is_empty() {
                     return Err(refused(crate::locale::text("evidence.unverified_required")));
                 }
-                if !unverified.eq_ignore_ascii_case("none") && ANSWERS.iter().any(|field| plain(report.get(field)) == Some("true")) {
+                let nothing_left = unverified.eq_ignore_ascii_case("none");
+                if !nothing_left && ANSWERS.iter().any(|field| plain(report.get(field)) == Some("true")) {
                     return Err(refused(crate::locale::text("evidence.unverified_but_true")));
+                }
+                // unknown says the deciding observation was not made; then what was not seen is named.
+                if nothing_left && ANSWERS.iter().any(|field| plain(report.get(field)) == Some("unknown")) {
+                    return Err(refused(crate::locale::text("evidence.unknown_needs_unverified")));
                 }
             }
             // A Hypothesis names the change it will make: an Experiment brings a state about, it does
@@ -140,11 +145,22 @@ impl ProjectSession {
                 && report.get("changed").is_none_or(|changed| changed.trim().is_empty()) {
                 return Err(refused(crate::locale::text("evidence.outcome_changed")));
             }
-            if node.kind == NodeKind::Outcome && report.get("verdict") == Some("success") {
+            // The verdict follows what the Analysis answered. A success needs both answers true. A
+            // failure needs something that was seen not to hold: a result nobody could judge is
+            // not a failed method, and going back would throw away work nothing has shown to be
+            // wrong. That case is inconclusive, and what follows it is a further Cycle that makes
+            // the missing observation.
+            if node.kind == NodeKind::Outcome {
                 let analysis = cycle.steps().lineage(here).map_err(|e| refused(e.to_string()))?
                     .into_iter().rev().find(|n| n.kind == NodeKind::Analysis && n.is_closed()).and_then(|n| n.report.as_ref());
-                if analysis.is_some_and(|analysis| ANSWERS.iter().any(|field| plain(analysis.get(field)) == Some("false"))) {
-                    return Err(refused(crate::locale::text("evidence.success_needs_yes")));
+                if let Some(analysis) = analysis {
+                    let any = |answer: &str| ANSWERS.iter().any(|field| plain(analysis.get(field)) == Some(answer));
+                    match report.get("verdict") {
+                        Some("success") if any("false") || any("unknown") => return Err(refused(crate::locale::text("evidence.success_needs_yes"))),
+                        Some("failure") if !any("false") && any("unknown") => return Err(refused(crate::locale::text("evidence.failure_needs_false"))),
+                        Some(crate::rules::INCONCLUSIVE) if any("false") || !any("unknown") => return Err(refused(crate::locale::text("evidence.inconclusive_needs_unknown"))),
+                        _ => {}
+                    }
                 }
             }
         }

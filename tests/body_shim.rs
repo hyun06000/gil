@@ -53,6 +53,15 @@ pub fn objects(name: &str, mut arguments: Value) -> Value {
             if fields.get("verdict").and_then(Value::as_str) == Some("failure") && fields.contains_key("lesson") && !fields.contains_key("outcome_ref") {
                 fields.entry("changed").or_insert_with(|| json!("the fixture's files"));
             }
+            // An Experiment's Cycle Report and a Chain Report say what was established and why.
+            if fields.contains_key("outcome_ref") || fields.contains_key("closing_synthesis_ref") {
+                fields.entry("analysis").or_insert_with(|| json!("the fixture's result"));
+                fields.entry("reflection").or_insert_with(|| json!("nothing to change in a fixture"));
+            }
+            if fields.contains_key("closing_synthesis_ref") {
+                fields.entry("next_direction.action").or_insert_with(|| json!("end"));
+                fields.entry("next_direction.reason").or_insert_with(|| json!("the fixture ends here"));
+            }
             if fields.contains_key("problem_solved") {
                 fields.entry("unverified").or_insert_with(|| json!("none"));
             }

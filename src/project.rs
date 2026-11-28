@@ -258,10 +258,9 @@ impl Project {
         id.number().checked_add(1).ok_or(ChainError::IdExhausted)?;
         let first = parent.cycles().next_name();
         first.checked_add(1).ok_or(ChainError::IdExhausted)?;
-        let cycles = Cycles::start_at(parent.cycles().rules().clone(), self.current_existence_ref(),
-            parent.exit_snapshot().unwrap(), first);
-        let mut chain = crate::Chain::restore(id, self.current_existence_ref(), parent.exit_snapshot().unwrap(),
-            Some(parent.id()), cycles);
+        let entry = parent.successor_entry().unwrap();
+        let cycles = Cycles::start_at(parent.cycles().rules().clone(), self.current_existence_ref(), entry, first);
+        let mut chain = crate::Chain::restore(id, self.current_existence_ref(), entry, Some(parent.id()), cycles);
         // The profile is inherited: a Chain without a ledger is followed by one without, and
         // no approval is copied. The execution contract is not inherited — it is this build's
         // contract for Chains it opens, so a closed item-queue Chain may be followed by an
@@ -320,7 +319,7 @@ impl Project {
                     && !chain.approved_plan.as_ref().is_some_and(|plan| plan.exploration()) {
                     return Err(Invalid("Chain execution contract cannot return to the item queue"));
                 }
-                if !parent.is_closed() || parent.exit_snapshot() != Some(chain.entry_snapshot())
+                if !parent.is_closed() || parent.successor_entry() != Some(chain.entry_snapshot())
                     || chain.cycles().nodes()[0].id().raw() != parent.cycles().next_name() {
                     return Err(Invalid("successor must inherit a closed parent's Exit and global Cycle allocator"));
                 }
@@ -353,6 +352,11 @@ impl Project {
     /// dirty 판정·Cycle Exit·훗날의 restore 가 **같은 함수**를 쓴다 — 두 자리에 적으면
     /// 한쪽이 낡고, 그러면 「닫을 수 있다」와 「되돌아갈 곳」이 서로 다른 세계를 가리킨다.
     pub fn world_snapshot(&self) -> SnapshotRef {
+        // A Chain closed with `revisit` asks for the world of the Cycle it named: the folder is
+        // dirty against it until it is restored, and the next Chain starts from it.
+        if let Some(world) = self.current_chain().filter(|chain| chain.declared_action() == Some("revisit")).and_then(|chain| chain.successor_entry()) {
+            return world;
+        }
         let cycle = self.cycles().current();
         // 닫힌 경계 T 에서 관리 사건이 기준점을 보관했으면 그 경계의 세계는 그 기준점이다 — B(T)(공유 계약 §6.1). 과거의 Exit 은
         // 그대로 두고 사건이 그 옆에 선다. 사건이 없으면 현행 그대로 T 의 Exit 이다.

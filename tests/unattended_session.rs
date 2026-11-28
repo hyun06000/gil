@@ -434,6 +434,91 @@ fn answers_say_each_thing_once() {
     assert!(closed.contains(digest) && closed.contains("Items with no Experiment yet: R2"), "the next link is not in the closing receipt: {closed}");
 }
 
+/// A result that could not be judged is not a failure: it closes as inconclusive, keeps the files and
+/// hands on to a follow-up Experiment. An Experiment's Cycle Report and the Chain Report are one
+/// form (analysis, reflection, direction). A failed Chain may go back: the Chain stays closed, the
+/// files return to the world of the Cycle it named, and the next Chain starts from there.
+#[cfg(all(feature = "tracking-policy", unix))]
+#[test]
+fn an_unjudged_result_hands_on_and_a_failed_chain_goes_back_to_a_named_world() {
+    let mut r = rig("unattended-report-form", &[("app.py", "print('first')\n")], json!({"start_kind":"tracked_scope"}));
+    ok(r.model("gil_start_prepare", json!({"rules":"node_modules/\n"})), "prepare");
+    let waits = pending(&mut r);
+    ok(decide(&mut r, "start", &waits[0]["digest"], "approve"), "runner approves the start");
+    interview(&mut r, &["R1"]);
+    let raw = |r: &mut Rig, report: Value| r.c.request("tools/call", json!({"name":"gil_close","arguments":{"project_root":r.root,"report":report}}));
+    let verify = |r: &mut Rig, n: u32, app: &str| {
+        r.open_verify("R1", "합의한 형식으로 출력하는가?");
+        r.write("app.py", app);
+        r.write(&format!("evidence/C{n}.md"), "관측\n");
+        ok(r.model("gil_close", json!({"report":format!("execution: 관측했다\nresult: 남겼다\nplan_document: {PLAN_DOCUMENT}\nevidence_files: evidence/C{n}.md\n")})), "close verify");
+        ok(r.model("gil_open", json!({"kind":"analysis","contract":CONTRACT})), "analysis");
+    };
+
+    // C2: the deciding observation could not be made.
+    let c2 = r.open_experiment("R1");
+    verify(&mut r, c2, "print('second')\n");
+    let unnamed = refused(raw(&mut r, json!({"hypothesis_fit":"모른다","problem_solved":"unknown","success_condition_met":"unknown","unverified":"none","guardrail_triggered":"no","interpretation":"잴 수단이 없었다"})), "unknown with nothing unverified");
+    assert!(everything(&unnamed).contains("unverified"), "{unnamed}");
+    ok(raw(&mut r, json!({"hypothesis_fit":"모른다","problem_solved":"unknown","success_condition_met":"unknown","unverified":"속도를 잴 기준 구현이 없었다","guardrail_triggered":"no","interpretation":"잴 수단이 없었다"})), "an Analysis that could not judge");
+    let outcome = step_ref(&ok(r.model("gil_open", json!({"kind":"outcome","contract":CONTRACT})), "outcome"), "outcome");
+    let as_failure = refused(raw(&mut r, json!({"verdict":"failure","lesson":"못 쟀다","changed":"app.py","next_direction.action":"close_cycle","next_direction.reason":"판정"})), "an unjudged result called a failure");
+    assert!(everything(&as_failure).contains("inconclusive"), "{as_failure}");
+    ok(raw(&mut r, json!({"verdict":"inconclusive","lesson":"기준 구현부터 만들어야 잴 수 있다","next_direction.action":"close_cycle","next_direction.reason":"판정"})), "an inconclusive Outcome");
+    let bare = refused(raw(&mut r, json!({"verdict":"inconclusive","outcome_ref":outcome,"handoff_summary":"못 쟀다","next_direction.action":"open_child","next_direction.reason":"후속"})), "a Cycle Report without analysis");
+    assert!(everything(&bare).contains("analysis"), "{bare}");
+    refused(raw(&mut r, json!({"verdict":"inconclusive","outcome_ref":outcome,"handoff_summary":"못 쟀다","analysis":"판정 못 함","reflection":"수단부터","next_direction.action":"revisit","next_direction.target_cycle_ref":"cycle:C1","next_direction.reason":"되돌아감"})), "going back from an unjudged result");
+    ok(raw(&mut r, json!({"verdict":"inconclusive","outcome_ref":outcome,"handoff_summary":"못 쟀다","analysis":"출력은 봤고 속도는 판정하지 못했다","reflection":"잴 수단을 먼저 만들었어야 했다","next_direction.action":"open_child","next_direction.reason":"빠진 관측을 하는 후속 실험"})), "an inconclusive Cycle hands on");
+    assert_eq!(fs::read_to_string(r.root.join("app.py")).unwrap(), "print('second')\n", "the files stay");
+
+    // C3: the follow-up, which succeeds and changes the file again.
+    let c3 = r.open_experiment("R1");
+    assert_eq!(c3, c2 + 1);
+    verify(&mut r, c3, "print('third')\n");
+    ok(r.model("gil_close", json!({"report":analysis_report(false)})), "close analysis");
+    let outcome = step_ref(&ok(r.model("gil_open", json!({"kind":"outcome","contract":CONTRACT})), "outcome"), "outcome");
+    ok(r.model("gil_close", json!({"report":outcome_report(false)})), "close outcome");
+    ok(r.model("gil_close", json!({"report":cycle_report(c3, &outcome, None)})), "close experiment");
+
+    // The closing Interview judges the Chain a failure, and its Report goes back to C2's world.
+    ok(r.model("gil_open", json!({"kind":"interview"})), "closing Interview");
+    let mut basis = Vec::new();
+    for (kind, report) in [("question", QUESTION), ("interpretation", INTERPRETATION)] {
+        basis.push(step_ref(&ok(r.model("gil_open", json!({"kind":kind,"contract":CONTRACT})), kind), kind));
+        ok(r.model("gil_close", json!({"report":report})), kind);
+    }
+    let synthesis = step_ref(&ok(r.model("gil_open", json!({"kind":"synthesis","contract":CONTRACT})), "synthesis"), "synthesis");
+    ok(r.model("gil_plan_propose", json!({"draft":draft(&["R1"], &basis, &[("chain_verdict", "failure")])})), "closing proposal");
+    let waits = pending(&mut r);
+    ok(decide(&mut r, "plan", &waits[0]["digest"], "approve"), "runner approves the closing");
+    let read = r.read();
+    ok(r.model("gil_close", json!({"report":read["close_report"]})), "close synthesis");
+    let outcome = step_ref(&ok(r.model("gil_open", json!({"kind":"outcome","contract":CONTRACT})), "open outcome"), "outcome");
+    ok(r.model("gil_close", json!({"report":format!("verdict: success\nlesson: 닫기로 했다\nsynthesis_ref: {synthesis}\nnext_direction.action: close_cycle\nnext_direction.reason: 닫는다\n")})), "close outcome");
+    let hint = everything(&ok(r.model("gil_close", json!({"report":format!("verdict: success\noutcome_ref: {outcome}\nhandoff_summary: 닫는다\nnext_direction.action: close_chain\nnext_direction.reason: 닫는다\n")})), "close the closing Interview"));
+    let _ = hint;
+    let chain = |action: Value| json!({"verdict":"failure","closing_synthesis_ref":synthesis,"handoff_summary":"형식은 맞췄고 속도는 풀지 못했다",
+        "analysis":"R1: 출력은 풀림, 속도는 판단할 수 없음(C2)","reflection":"측정 수단 없이 구현부터 했다","next_direction.action":action,"next_direction.reason":"C2 의 세계에서 다시 간다"});
+    let no_form = refused(raw(&mut r, json!({"verdict":"failure","closing_synthesis_ref":synthesis,"handoff_summary":"끝"})), "a Chain Report without the form");
+    assert!(everything(&no_form).contains("analysis"), "{no_form}");
+    let shown = everything(&no_form);
+    assert!(shown.contains("R1") && shown.contains("inconclusive") && shown.contains("open_chain"), "the hint shows the form and what the record holds: {shown}");
+    refused(raw(&mut r, chain(json!("revisit"))), "going back without naming a Cycle");
+    let mut back = chain(json!("revisit"));
+    back["next_direction.target_cycle_ref"] = json!(format!("cycle:C{c2}"));
+    let closed = everything(&ok(raw(&mut r, back), "the Chain goes back"));
+    assert!(closed.contains("gil_restore") && closed.contains(&format!("cycle:C{c2}")), "{closed}");
+
+    // The files are ahead of the named world until restored; the next Chain then starts from it.
+    assert_eq!(fs::read_to_string(r.root.join("app.py")).unwrap(), "print('third')\n");
+    refused(r.model("gil_open", json!({"kind":"chain"})), "a new Chain before the files went back");
+    ok(r.model("gil_restore", json!({})), "the files go back");
+    assert_eq!(fs::read_to_string(r.root.join("app.py")).unwrap(), "print('second')\n", "C2's world");
+    assert!(!r.root.join(format!("evidence/C{c3}.md")).exists(), "what C3 added is gone from the folder");
+    ok(r.model("gil_open", json!({"kind":"chain"})), "the next Chain");
+    ok(r.model("gil_open", json!({"kind":"question","contract":CONTRACT})), "its Interview goes on from a clean folder");
+}
+
 /// Two refusals say what is wrong in words an agent can act on: an item id outside the allowed
 /// characters is named with the rule, and an evidence file that is not there is said to be not there.
 #[cfg(all(feature = "tracking-policy", unix))]
